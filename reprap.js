@@ -165,7 +165,7 @@ function init ()
 	{
 		var div = document.createElement ('div');
 		div['class'] = 'temp';
-		document.getElementById ('body').appendChild (div);
+		document.getElementById ('temps').appendChild (div);
 		div.appendChild (document.createTextNode ('E' + e));
 		var temp_input = document.createElement ('input');
 		temp_input.type = 'text';

@@ -8,7 +8,8 @@ import re
 import glib
 
 a = argparse.ArgumentParser ()
-a.add_argument ('--port', default = '/dev/ttyUSB0', help = 'serial port')
+a.add_argument ('--serial', default = '/dev/ttyACM0', help = 'serial port')
+a.add_argument ('--network', default = 'reprap|RepRap 3D printer', help = 'network port')
 args = a.parse_args ()
 
 
@@ -16,12 +17,17 @@ class Server:
 	# Boring stuff {{{
 	def __init__ (self, port):	# {{{
 		self.port = serial.Serial (port, baudrate = 115200, timeout = 2)
-		assert self.port.readline ().strip () == 'start' or self.port.readline ().strip () == 'start'
+		for i in range (5):
+			if self.port.readline ().strip () == 'start':
+				break
+		else:
+			raise AssertionError ("printer doesn't start")
 		glib.io_add_watch (self.port.fileno (), glib.IO_IN | glib.IO_PRI, lambda fd, cond: self.serial_data ())
 		self.lineno = 0
 		self.f_factor = 1.
-		self.f_min = 12000.
+		self.f_min = 0.
 		self.f_max = 120000.
+		self.printing = False
 		self.sdbusy = False
 		self.sdstarted = False
 		self.relpos = False
@@ -85,8 +91,10 @@ class Server:
 		return True
 	# }}}
 	def send (self, line, retries = 10):	# {{{
+		if ';' in line:
+			line = line[:line.index (';')]
 		line = line.strip ()
-		if line == '' or line.startswith (';'):
+		if line == '':
 			return ''
 		line = line.upper ()
 		words = line.split ()
@@ -102,7 +110,7 @@ class Server:
 				elif f > self.f_max:
 					f = self.f_max
 				del codes['F']
-				line = words[0] + ' '.join (['%s%f' % (x, codes[x]) for x in codes]) + ' F%f' % f
+				line = words[0] + ' '.join (['%s%f' % (x, float (codes[x])) for x in codes]) + ' F%f' % f
 				codes['F'] = True	# The only important thing is that it is defined.
 			if 'E' in codes:
 				codes['E'] = float (codes['E']) * self.flow[self.currentextruder]
@@ -171,7 +179,7 @@ class Server:
 				self.x = 0.
 				self.y = 0.
 				self.z = 0.
-				for e in self.extruders:
+				for e in range (self.extruders):
 					self.e[e] = 0.
 			else:
 				if 'X' in codes:
@@ -193,14 +201,13 @@ class Server:
 			checksum ^= ord (x)
 		self.port.write ('%s*%d\n' % (ln, checksum))
 		reply = self.port.readline ()
-		while reply.startswith ('//'):
-			reply = self.port.readline ()
 		while not reply.startswith ('ok'):
 			if reply.strip () == 'wait':
 				break
-			if retries == 0:
-				return None
-			retries -= 1
+			if not reply.startswith ('//'):
+				if retries == 0:
+					return None
+				retries -= 1
 			reply = self.port.readline ()
 		else:
 			return reply[2:].strip ()
@@ -314,7 +321,7 @@ class Server:
 			self.send ('M104 S%f' % degrees)
 			self.send ('T%d' % current)
 	# }}}
-	def bed (self, degrees):	# {{{
+	def bed_temperature (self, degrees):	# {{{
 		self.send ('M140 S%f' % degrees)
 	# }}}
 	# }}}
@@ -339,8 +346,12 @@ class Server:
 		# Stuff that can be changed by G-Code or by itself.
 		state = self.send ('M105')
 		if 'B:' not in state:
-			state = self.port.readline ()
-			assert 'B:' in state
+			for i in range (5):
+				state = self.port.readline ()
+				if 'B:' in state:
+					break
+			else:
+				raise AssertionError ('No usable reply to request for machine temperature')
 		temps = {}
 		for x in re.findall ('[BT](?:\d*)?:(?:\d|\.)+', state):
 			k, v = x.split (':')
@@ -362,9 +373,10 @@ class Server:
 		self.send (self.lines.pop (0))
 		return True
 	# }}}
-	def print (self, file):	# {{{
+	def fileprint (self, file):	# {{{
 		assert not self.printing
 		self.lines = file.split ('\n')
+		print 'printing file of %d lines' % len (self.lines)
 		self.nextline = 0
 		self.printing = True
 		glib.idle_add (self.do_next_line)
@@ -375,7 +387,7 @@ class Server:
 	# }}}
 	# }}}
 
-serverobj = Server (args.port)
-server = network.RPCServer ('reprap|RepRap 3D printer server', lambda socket: serverobj)
+serverobj = Server (args.serial)
+server = network.RPCServer (args.network, lambda socket: serverobj)
 #network.bgloop ()
 glib.MainLoop ().run ()

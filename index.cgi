@@ -10,6 +10,10 @@ query = cgi.FieldStorage ()
 request = query.getfirst ('request', None)
 if request is None:
 	sys.stdout.write ('Content-Type: text/html;charset=UTF-8\n\n')
+	action = query.getfirst ('action', None)
+	if action == 'print':
+		reprap = network.RPCSocket ('reprap|')
+		reprap.fileprint (query['file'].file.read ())
 	sys.stdout.write (open ('reprap.html').read ())
 	sys.exit (0)
 
@@ -38,7 +42,7 @@ elif request == 'extrude':
 	reprap.extrude (float (query.getfirst ('amount')))
 	reprap.wait ()
 	print ('ok')
-elif request == 'feedrate':
+elif request == 'feedfactor':
 	reprap.feedfactor (float (query.getfirst ('factor')))
 	print ('ok')
 elif request == 'feedmin':
@@ -51,19 +55,16 @@ elif request == 'flowrate':
 	reprap.flow (float (query.getfirst ('factor')), float (query.getfirst ('extruder', 0)))
 	print ('ok')
 elif request == 'bed':
-	reprap.bed (float (query.getfirst ('temperature')))
+	reprap.bed_temperature (float (query.getfirst ('temperature')))
 	reprap.wait ()
 	print ('ok')
 elif request == 'temperature':
-	reprap.temperature (float (query.getfirst ('temperature'), float (query.getfirst ('extruder', 0))))
+	reprap.temperature (float (query.getfirst ('temperature')), float (query.getfirst ('extruder', 0)))
 	reprap.wait ()
 	print ('ok')
 elif request == 'config':
 	print json.dumps (reprap.get_config ())
 elif request == 'state':
 	print json.dumps (reprap.get_state ())
-elif request == 'print':
-	reprap.print (query.getfirst ('file'))
-	print ('ok')
 else:
 	print ('unknown command')
