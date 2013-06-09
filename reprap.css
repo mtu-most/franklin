@@ -1,0 +1,26 @@
+#viewcontainer {
+	position: absolute;
+	left: 20%;
+	top: 0px;
+	right: 0px;
+	bottom: 0px;
+	object-fit: contain;
+}
+
+#view {
+	border: 1px solid black;
+}
+
+input {
+	width: 3%;
+}
+
+button.wide {
+	display: block;
+	width: 15%;
+}
+
+button.temp {
+	display: inline;
+	width: 5%;
+}

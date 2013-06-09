@@ -1,0 +1,28 @@
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+		<title>RepRap control interface</title>
+		<style type="text/css"></style>
+		<link href="reprap.css" rel="stylesheet"/>
+		<script type="text/javascript" src="reprap.js"></script>
+	</head>
+	<body onload='init ();'>
+		<form action="" enctype="multipart/form-data">
+			<div id='viewcontainer'>
+				<canvas id='view' width='800' height='600' onmousemove='move (event);' onclick='clik (event);'></canvas>
+				<p>X: <span id='x_label'>-</span> Y: <span id='y_label'>-</span> Z: <span id='z_label'>-</span></p>
+			</div>
+			<button class="wide" type="button" onclick="send ('home');">home all</button>
+			<button class="wide" type="button" onclick="send ('home&z=1');">home z</button>
+			<button class="wide" type="button" onclick="send ('sleep');">motors off</button>
+			<button class="wide" type="button" onclick="extrude (1);">extrude</button>
+			<button class="wide" type="button" onclick="extrude (-1);">retract</button>
+			<div>Feedrate:<input type="text" id="feedrate"/><button class="temp" type="button" onclick="update_feedrate ();">Update</button><span id="current_feedrate">-</span></div>
+			<div id="temps">
+				<div class="temp">Bed<input type="text" id="bed"/><button class="temp" type="button" onclick="setbed ();">Update</button><span id="current_bed">-</span>/<span id="target_bed">-</span></div>
+			</div>
+			File:<input type="file" name="file"/>
+			<button type="submit" name="request" value="print">Print</button>
+		</form>
+	</body>
+</html>
