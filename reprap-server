@@ -16,13 +16,6 @@ args = a.parse_args ()
 class Server:
 	# Boring stuff {{{
 	def __init__ (self, port):	# {{{
-		self.port = serial.Serial (port, baudrate = 115200, timeout = 2)
-		for i in range (5):
-			if self.port.readline ().strip () == 'start':
-				break
-		else:
-			raise AssertionError ("printer doesn't start")
-		glib.io_add_watch (self.port.fileno (), glib.IO_IN | glib.IO_PRI, lambda fd, cond: self.serial_data ())
 		self.lineno = 0
 		self.f_factor = 1.
 		self.f_min = 0.
@@ -32,13 +25,25 @@ class Server:
 		self.sdstarted = False
 		self.relpos = False
 		self.erelpos = False
-		info = self.send ('M115')
-		assert info is not None
-		e = re.findall ('EXTRUDER_COUNT:(\d*)', info)
-		if len (e) == 0:
-			l = self.port.readline ()
-			e = re.findall ('EXTRUDER_COUNT:(\d*)', l)
-		self.extruders = int (e[0])
+		if port == '':
+			self.port = None
+			self.extruders = 4
+		else:
+			self.port = serial.Serial (port, baudrate = 115200, timeout = 2)
+			for i in range (5):
+				if self.port.readline ().strip () == 'start':
+					break
+			else:
+				raise AssertionError ("printer doesn't start")
+			glib.io_add_watch (self.port.fileno (), glib.IO_IN | glib.IO_PRI, lambda fd, cond: self.serial_data ())
+			info = self.send ('M115')
+			assert info is not None
+			e = re.findall ('EXTRUDER_COUNT:(\d*)', info)
+			if len (e) == 0:
+				l = self.port.readline ()
+				e = re.findall ('EXTRUDER_COUNT:(\d*)', l)
+			self.extruders = int (e[0])
+		self.extruding = [0] * self.extruders
 		self.e = [None] * self.extruders
 		self.flow = [1.] * self.extruders
 		self.temp = [None] * self.extruders
@@ -59,30 +64,6 @@ class Server:
 			self.send ('G92 X0 Y0 Z0 E0')
 			self.send ('M104 S0')
 		self.send ('M140 S0')
-	# }}}
-	def _get_pos (self):	# {{{
-		currentextruder = self.currentextruder
-		if self.currentextruder != 0:
-			self.send ('T0')
-		pos = re.match ('^.*?\s*X:(.*?)\s*Y:(.*?)\s*Z:(.*?)\s*E:(.*?)\s*$', self.send ('M114'))
-		if pos is None:
-			pos = re.match ('^.*?\s*X:(.*?)\s*Y:(.*?)\s*Z:(.*?)\s*E:(.*?)\s*$', self.port.readline ())
-		self.x = float (pos.group (1))
-		self.y = float (pos.group (2))
-		self.z = float (pos.group (3))
-		self.e[0] = float (pos.group (4))
-		self.temp[0] = 0
-		self.f = 0
-		self.send ('M105')
-		if self.extruders > 1:
-			for e in range (1, self.extruders):
-				self.send ('T%d' % e)
-				pos = re.match ('^.*?\s*X:(.*?)\s*Y:(.*?)\s*Z:(.*?)\s*E:(.*?)\s*$', self.send ('M114'))
-				if pos is None:
-					pos = re.match ('^.*?\s*X:(.*?)\s*Y:(.*?)\s*Z:(.*?)\s*E:(.*?)\s*$', self.port.readline ())
-				self.e[e] = float (pos.group (4))
-				self.send ('M105')
-			self.send ('T%d' % currentextruder)
 	# }}}
 	def serial_data (self):	# {{{
 		line = self.port.readline ().strip ()
@@ -199,6 +180,8 @@ class Server:
 		ln = 'N%d %s' % (self.lineno, line)
 		for x in ln:
 			checksum ^= ord (x)
+		if not self.port:
+			return ''
 		self.port.write ('%s*%d\n' % (ln, checksum))
 		reply = self.port.readline ()
 		while not reply.startswith ('ok'):
@@ -301,13 +284,30 @@ class Server:
 	def wait (self):	# {{{
 		self.send ('G4 P0')
 	# }}}
-	def extrude (self, mm, extruder = 0):	# {{{
-		if extruder != self.currentextruder:
-			self.send ('T%d' % extruder)
-		if self.erelpos:
-			self.send ('G1 E%f' % mm)
-		else:
-			self.send ('G1 E%f' % (self.e[self.currentextruder] + mm))
+	def extrude (self, direction, extruder = 0):	# {{{
+		assert not self.printing
+		oldnum = self.numextruding
+		if (self.extruding[extruder] != 0) != (direction != 0):
+			self.numextruding += 1 if direction != 0 else -1
+		self.extruding[extruder] = direction
+		if oldnum == 0 and self.numextruding > 0:
+			glib.idle_add (self.do_extrude)
+	# }}}
+	def do_extrude (self):	# {{{
+		currentextruder = self.currentextruder
+		for e in range (self.extruders):
+			if self.extruding[e] == 0:
+				continue
+			if self.currentextruder != e:
+				self.send ('T%d' % e)
+			if self.erelpos:
+				self.send ('G1 E%d' % self.extruding[e])
+			else:
+				self.send ('G1 E%f' % (self.e[e] + self.extruding[e]))
+			self.send ('G4 P0')
+		if currentextruder != self.currentextruder:
+			self.send ('T%d' % currentextruder)
+		return self.numextruding > 0
 	# }}}
 	# }}}
 	# Temperature {{{
@@ -335,8 +335,8 @@ class Server:
 	def feedmax (self, value): # {{{
 		self.f_max = value
 	# }}}
-	def flow (self, factor, extruder = 0): # {{{
-		self.flow[extruder] = factor
+	def flowrate (self, factor, extruder = 0): # {{{
+		self.flow[int (extruder)] = factor
 	# }}}
 	def get_config (self):	# {{{
 		# Stuff that cannot be changed by G-Code.
@@ -344,18 +344,21 @@ class Server:
 	# }}}
 	def get_state (self):	# {{{
 		# Stuff that can be changed by G-Code or by itself.
-		state = self.send ('M105')
-		if 'B:' not in state:
-			for i in range (5):
-				state = self.port.readline ()
-				if 'B:' in state:
-					break
-			else:
-				raise AssertionError ('No usable reply to request for machine temperature')
-		temps = {}
-		for x in re.findall ('[BT](?:\d*)?:(?:\d|\.)+', state):
-			k, v = x.split (':')
-			temps[k] = float (v)
+		if not self.port:
+			temps = {'B': 45, 'T0': 100, 'T1': 123, 'T2': 23, 'T3': 15}
+		else:
+			state = self.send ('M105')
+			if 'B:' not in state:
+				for i in range (5):
+					state = self.port.readline ()
+					if 'B:' in state:
+						break
+				else:
+					raise AssertionError ('No usable reply to request for machine temperature')
+			temps = {}
+			for x in re.findall ('[BT](?:\d*)?:(?:\d|\.)+', state):
+				k, v = x.split (':')
+				temps[k] = float (v)
 		etemps = [None] * self.extruders
 		if self.extruders > 0:
 			for e in range (self.extruders):

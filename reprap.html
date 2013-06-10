@@ -6,23 +6,31 @@
 		<link href="reprap.css" rel="stylesheet"/>
 		<script type="text/javascript" src="reprap.js"></script>
 	</head>
-	<body onload='init ();'>
-		<form action="" enctype="multipart/form-data" method="post">
-			<div id='viewcontainer'>
-				<canvas id='view' width='800' height='600' onmousemove='move (event);' onclick='clik (event);'></canvas>
-				<p>X: <span id='x_label'>-</span> Y: <span id='y_label'>-</span> Z: <span id='z_label'>-</span></p>
-			</div>
-			<button class="wide" type="button" onclick="send ('home');">home all</button>
-			<button class="wide" type="button" onclick="send ('home&z=1');">home z</button>
-			<button class="wide" type="button" onclick="send ('sleep');">motors off</button>
-			<button class="wide" type="button" onclick="extrude (1);">extrude</button>
-			<button class="wide" type="button" onclick="extrude (-1);">retract</button>
-			<div>Feedrate:<input type="text" id="feedrate"/><button class="temp" type="button" onclick="update_feedrate ();">Update</button><span id="current_feedrate">-</span></div>
-			<div id="temps">
-				<div class="temp">Bed<input type="text" id="bed"/><button class="temp" type="button" onclick="setbed ();">Update</button><span id="current_bed">-</span>/<span id="target_bed">-</span></div>
-			</div>
-			File:<input type="file" name="file"/>
-			<button type="submit" name="action" value="print">Print</button>
-		</form>
+	<body onload='init ()'>
+		<p id="debug"></p>
+		<p>
+			<button type="button" onclick="send ('stop')">Stop</button>
+			<button type="button" onclick="send ('home')">Home all</button>
+			<button type="button" onclick="send ('home&z=1')">Home Z</button>
+			<button type="button" onclick="send ('sleep')">Motors off</button>
+			<button type="button" onclick="refresh ()">Refresh</button>
+		</p>
+		<p>
+			<label for="printfile">Print file</label>
+			<input type="file" id="printfile" onchange="printfile_cb ()"/>
+			<label for="printsd">Print with SD</label>
+			<input type="file" id="printsd" onchange="printsd_cb ()"/>
+		</p>
+		<table id="table">
+			<tr>
+				<td>Bed:</td>
+				<td id="bedtemp">50°C</td>
+				<td><input type="text" id="bedtarget" value="0" onchange="set_bedtarget ()"/></td>
+				<td id="position" colspan="2">X:- Y:- Z:-</td>
+				<td>Speed factor:</td>
+				<td><input type="text" id="speed" value="1" onchange="set_speed ()"/></td>
+			</tr>
+		</table>
+		<canvas id='view' width='800' height='600' onmousemove='move (event)' onclick='clik (event)'></canvas>
 	</body>
 </html>

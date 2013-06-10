@@ -1,5 +1,20 @@
 // vim: set foldmethod=indent :
 
+var canvas, position, table;
+var printer_pos, self_pos;
+var temp, temptarget, flowfactor;
+var bedtemp, bedtarget;
+var speed;
+var printfile, printsd;
+
+function debug (text)
+{
+	var t = document.createTextNode (text);
+	var p = document.createElement ('p');
+	p.appendChild (t);
+	document.getElementById ('debug').appendChild (p);
+}
+
 function dump (obj)
 {
 	var s = '';
@@ -17,16 +32,18 @@ function set_text (element, text)
 function send (request)
 {
 	r = new XMLHttpRequest ();
-	r.open ('GET', '?request=' + request, false);
-	r.send ();
+	if (request.constructor == String)
+	{
+		r.open ('GET', '?request=' + request, false);
+		r.send ();
+	}
+	else
+	{
+		r.open ('POST', '', false);
+		r.send (request);
+	}
 	return r.response;
 }
-
-var canvas;
-var printer_pos, self_pos;
-var temp_current, temp_target;
-var current_bed, target_bed, bed_input;
-var feedrate_input, feedrate_label;
 
 function line (p0, p1)
 {
@@ -41,8 +58,8 @@ function toPixel (pos)
 
 function move (e)
 {
-	var x = e.layerX;
-	var y = e.layerY;
+	var x = e.layerX - canvas.canvas.offsetLeft;
+	var y = e.layerY - canvas.canvas.offsetTop;
 	if (e.shiftKey)
 	{
 		// x = 50 + X * 2.5 + Y; y = 590 - Y - Z * 3
@@ -125,78 +142,123 @@ function update ()
 	canvas.stroke ();
 }
 
-function timed_update ()
+function refresh ()
 {
-	var info = JSON.parse (send ("config"));
-	set_text (feedrate_label, info.feedfactor);
-	var info = JSON.parse (send ("state"));
-	target_bed.text = info.bed_target;
-	current_bed.text = info.bed_current;
-	set_text (target_bed, info.bed_target);
-	set_text (current_bed, info.bed_current);
+	var config = JSON.parse (send ("config"));
+	var state = JSON.parse (send ("state"));
+	speed.value = config.feedfactor;
+	bedtarget.value = state.bed_target;
+	set_text (bedtemp, state.bed_current + '°C');
 	for (var e = 0; e < extruders; ++e)
 	{
-		set_text (temp_target[e], info.temperature_target[e]);
-		set_text (temp_current[e], info.temperature_current[e]);
+		flowfactor[e].value = config.flowfactor[e];
+		temptarget[e].value = state.temperature_target[e];
+		set_text (temp[e], state.temperature_current[e] + '°C');
 	}
-	printer_pos = info.position;
-	set_text (x_label, info.position[0]);
-	set_text (y_label, info.position[1]);
-	set_text (z_label, info.position[2]);
+	printer_pos = state.position;
+	set_text (position, 'X:' + state.position[0] + ' Y:' + state.position[1] + ' Z:' + state.position[2]);
 	update ();
 }
 
 function init ()
 {
 	canvas = document.getElementById ('view').getContext ('2d');
-	canvas.fillStyle = '#fff';
+	canvas.fillStyle = '#ff8';
 	printer_pos = [0, 0, 0];
 	self_pos = [0, 0, 0];
-	current_bed = document.getElementById ('current_bed');
-	target_bed = document.getElementById ('target_bed');
-	bed_input = document.getElementById ('bed');
-	feedrate_label = document.getElementById ('current_feedrate');
-	feedrate_input = document.getElementById ('feedrate');
+	bedtemp = document.getElementById ('bedtemp');
+	bedtarget = document.getElementById ('bedtarget');
+	speed = document.getElementById ('speed');
+	position = document.getElementById ('position');
+	table = document.getElementById ('table');
+	printfile = document.getElementById ('printfile');
+	printsd = document.getElementById ('printsd');
 	var info = JSON.parse (send ("config"));
 	extruders = info.extruders;
-	temp_current = [];
-	temp_target = [];
+	temp = [];
+	temptarget = [];
+	flowfactor = [];
+	function texttd (text)
+	{
+		var ret = document.createElement ('td');
+		ret.appendChild (document.createTextNode (text));
+		return ret;
+	}
+	function input (e, request, arg)
+	{
+		var ret = document.createElement ('input');
+		ret.type = 'text';
+		ret.onchange = function () { send (request + '&' + arg + '=' + this.value + '&extruder=' + e); }
+		return ret;
+	}
+	function extrudebox (e, request, label, dir)
+	{
+		var ret = document.createElement ('td');
+		var input = document.createElement ('input');
+		ret.appendChild (input);
+		ret.appendChild (document.createTextNode (label));
+		input.type = 'checkbox';
+		input.onchange = function ()
+		{
+			if (!input.checked)
+			{
+				send ('extrude&dir=0&extruder=' + e);
+			}
+			else
+			{
+				input.other.firstChild.checked = false;
+				send ('extrude&dir=' + dir + '&extruder=' + e);
+			}
+		}
+		return ret;
+	}
 	for (var e = 0; e < extruders; ++e)
 	{
-		var div = document.createElement ('div');
-		div['class'] = 'temp';
-		document.getElementById ('temps').appendChild (div);
-		div.appendChild (document.createTextNode ('E' + e));
-		var temp_input = document.createElement ('input');
-		temp_input.type = 'text';
-		div.appendChild (temp_input);
-		var element = document.createElement ('button');
-		element['class'] = 'temp';
-		element.type = 'button';
-		element.onclick = function () { send ('temperature&temperature=' + this.input.value + '&extruder=' + this.e); }
-		element.input = temp_input;
-		element.e = e;
-		element.appendChild (document.createTextNode ('Update'));
-		div.appendChild (element);
-		temp_current.push (document.createElement ('span'));
-		temp_current[e].appendChild (document.createTextNode ('-'));
-		div.appendChild (temp_current[e]);
-		div.appendChild (document.createTextNode ('/'));
-		temp_target.push (document.createElement ('span'));
-		temp_target[e].appendChild (document.createTextNode ('-'));
-		div.appendChild (temp_target[e]);
+		var tr = document.createElement ('tr');
+		table.appendChild (tr);
+		tr.appendChild (texttd ('Extruder ' + e + ':'));
+		temp.push (texttd ('-°C'));
+		tr.appendChild (temp[e]);
+		temptarget.push (input (e, 'temperature', 'temperature'));
+		tr.appendChild (temptarget[e]);
+		var extrude = extrudebox (e, 'extrude', 'Extrude', 1);
+		var retract = extrudebox (e, 'retract', 'Retract', -1);
+		extrude.firstChild.other = retract;
+		retract.firstChild.other = extrude;
+		tr.appendChild (extrude);
+		tr.appendChild (retract);
+		tr.appendChild (texttd ('Flow factor:'));
+		flowfactor.push (input (e, 'flowrate', 'factor'));
+		tr.appendChild (flowfactor[e]);
 	}
-	timed_update ();
+	refresh ();
 	update ();
-	setInterval (timed_update, 2000);
+	//setInterval (timed_update, 2000);
 }
 
-function setbed ()
+function set_bedtarget ()
 {
-	send ('bed&temperature=' + bed_input.value);
+	send ('bed&temperature=' + bedtarget.value);
 }
 
 function update_feedrate ()
 {
 	send ('feedfactor&factor=' + feedrate_input.value);
+}
+
+function printfile_cb ()
+{
+	var fd = new FormData ();
+	fd.append ('action', 'print');
+	fd.append ('file', printfile.files[0]);
+	send (fd);
+}
+
+function printsd_cb ()
+{
+}
+
+function set_speed ()
+{
+	send ('feedfactor&factor=' + speed.value);
 }
