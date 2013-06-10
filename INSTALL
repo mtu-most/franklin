@@ -1,0 +1,18 @@
+Installation instructions.
+
+1. If you're not running a webserver, install apache2
+2. Make sure the "userdir" module is enabled:
+	$ sudo a2enmod userdir
+3. If it doesn't exist yet, create a directory named public_html in your home directory.
+4. Put the directory containing this source into it.
+5. Download https://raw.github.com/wijnen/python-network/master/network.py and put it into this directory.
+
+The above only needs to be done once.  Now to actually run the server, do:
+
+6. Run reprap-server.  If your printer is not on /dev/ttyACM0, provide its serial port using the --port argument.
+
+Then to use it, open a browser and go to http://localhost/~username/most-reprap/.  Fill in your own username.
+
+Please let me know what you think at wijnen@debian.org.
+
+Enjoy. :-)
