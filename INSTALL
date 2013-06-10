@@ -1,5 +1,6 @@
 Installation instructions.
 
+0. Install python-avahi.
 1. If you're not running a webserver, install apache2
 2. Make sure the "userdir" module is enabled:
 	$ sudo a2enmod userdir
