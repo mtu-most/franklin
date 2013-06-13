@@ -20,6 +20,7 @@ class Server:
 		self.f_factor = 1.
 		self.f_min = 0.
 		self.f_max = 120000.
+		self.numextruding = 0
 		self.printing = False
 		self.sdbusy = False
 		self.sdstarted = False
@@ -300,6 +301,7 @@ class Server:
 				continue
 			if self.currentextruder != e:
 				self.send ('T%d' % e)
+			self.send ('G1 F%f' % (self.f_max / 10))
 			if self.erelpos:
 				self.send ('G1 E%d' % self.extruding[e])
 			else:
@@ -312,7 +314,6 @@ class Server:
 	# }}}
 	# Temperature {{{
 	def temperature (self, degrees, extruder = 0):	# {{{
-		print degrees
 		if extruder == self.currentextruder:
 			self.send ('M104 S%f' % degrees)
 		else:

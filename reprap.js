@@ -29,7 +29,7 @@ function set_text (element, text)
 	element.replaceChild (document.createTextNode (text), element.firstChild);
 }
 
-function send (request)
+function send (request, check_return = true)
 {
 	r = new XMLHttpRequest ();
 	if (request.constructor == String)
@@ -42,7 +42,10 @@ function send (request)
 		r.open ('POST', '', false);
 		r.send (request);
 	}
-	return r.response;
+	if (check_return && r.response.trim () != 'ok')
+		alert ('Error response on command "' + request + '": ' + r.response);
+	else
+		return r.response;
 }
 
 function line (p0, p1)
@@ -144,19 +147,26 @@ function update ()
 
 function refresh ()
 {
-	var config = JSON.parse (send ("config"));
-	var state = JSON.parse (send ("state"));
-	speed.value = config.feedfactor;
-	bedtarget.value = state.bed_target;
-	set_text (bedtemp, state.bed_current + '°C');
-	for (var e = 0; e < extruders; ++e)
+	try
 	{
-		flowfactor[e].value = config.flowfactor[e];
-		temptarget[e].value = state.temperature_target[e];
-		set_text (temp[e], state.temperature_current[e] + '°C');
+		var config = JSON.parse (send ("config", false));
+		var state = JSON.parse (send ("state", false));
+		speed.value = config.feedfactor;
+		bedtarget.value = state.bed_target;
+		set_text (bedtemp, state.bed_current + '°C');
+		for (var e = 0; e < extruders; ++e)
+		{
+			flowfactor[e].value = config.flowfactor[e];
+			temptarget[e].value = state.temperature_target[e];
+			set_text (temp[e], state.temperature_current[e] + '°C');
+		}
+		printer_pos = state.position;
+		set_text (position, 'X:' + state.position[0] + ' Y:' + state.position[1] + ' Z:' + state.position[2]);
 	}
-	printer_pos = state.position;
-	set_text (position, 'X:' + state.position[0] + ' Y:' + state.position[1] + ' Z:' + state.position[2]);
+	catch (e)
+	{
+		alert ('error refreshing: ' + e);
+	}
 	update ();
 }
 
@@ -173,7 +183,7 @@ function init ()
 	table = document.getElementById ('table');
 	printfile = document.getElementById ('printfile');
 	printsd = document.getElementById ('printsd');
-	var info = JSON.parse (send ("config"));
+	var info = JSON.parse (send ("config", false));
 	extruders = info.extruders;
 	temp = [];
 	temptarget = [];
@@ -249,7 +259,7 @@ function update_feedrate ()
 function printfile_cb ()
 {
 	var fd = new FormData ();
-	fd.append ('action', 'print');
+	fd.append ('request', 'print');
 	fd.append ('file', printfile.files[0]);
 	send (fd);
 }

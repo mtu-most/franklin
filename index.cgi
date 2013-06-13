@@ -35,7 +35,7 @@ elif request == 'sleep':
 	reprap.wait ()
 	print ('ok')
 elif request == 'extrude':
-	reprap.extrude (float (query.getfirst ('dir')), float (query.getfirst ('extruder', 0)))
+	reprap.extrude (float (query.getfirst ('dir')), int (query.getfirst ('extruder', 0)))
 	reprap.wait ()
 	print ('ok')
 elif request == 'feedfactor':
