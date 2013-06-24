@@ -45,7 +45,8 @@ class Server:
 				e = re.findall ('EXTRUDER_COUNT:(\d*)', l)
 			self.extruders = int (e[0])
 		self.extruding = [0] * self.extruders
-		self.e = [None] * self.extruders
+		self.e = 0.
+		self.diameters = [[3., .5]] * self.extruders
 		self.flow = [1.] * self.extruders
 		self.temp = [None] * self.extruders
 		self.bed = None
@@ -131,9 +132,9 @@ class Server:
 					self.z = float (codes['Z'])
 			if 'E' in codes:
 				if self.erelpos:
-					self.e[self.currentextruder] += codes['E']
+					self.e += codes['E']
 				else:
-					self.e[self.currentextruder] = codes['E']
+					self.e = codes['E']
 			if 'F' in codes:
 				self.f = f
 		elif words[0] == 'G28':
@@ -157,12 +158,11 @@ class Server:
 			self.relpos = True
 		elif words[0] == 'G92':
 			# set position
-			if len (codes) == 1:
+			if len (codes) == 0:
 				self.x = 0.
 				self.y = 0.
 				self.z = 0.
-				for e in range (self.extruders):
-					self.e[e] = 0.
+				self.e = 0.
 			else:
 				if 'X' in codes:
 					self.x = float (codes['X'])
@@ -171,7 +171,7 @@ class Server:
 				if 'Z' in codes:
 					self.z = float (codes['Z'])
 				if 'E' in codes:
-					self.e[self.currentextruder] = float (codes['E'])
+					self.e = float (codes['E'])
 		return ret
 	# }}}
 	def _send_impl (self, line, retries):	# {{{
@@ -240,31 +240,35 @@ class Server:
 	# }}}
 	# }}}
 	# Movement {{{
-	def move (self, x = None, y = None, z = None):	# {{{
-		if x is None:
-			x = 0
-		if y is None:
-			y = 0
-		if z is None:
-			z = 0
-		self.send ('G1 F%f' % self.f_max)
-		if self.relpos:
-			self.send ('G1 X%f Y%f Z%f' % (x, y, z))
-		else:
-			self.send ('G1 X%f Y%f Z%f' % (self.x + x, self.y + y, self.z + z))
+	def move (self, x = None, y = None, z = None, e = None):	# {{{
+		self.goto (None if x is None else self.x + x, None if y is None else self.y + y, None if z is None else self.z + z, e)
 	# }}}
-	def goto (self, x = None, y = None, z = None):	# {{{
+	def goto (self, x = None, y = None, z = None, e = None):	# {{{
 		if x is None:
 			x = self.x
 		if y is None:
 			y = self.y
 		if z is None:
 			z = self.z
-		self.send ('G1 F%f' % self.f_max)
-		if self.relpos:
-			self.send ('G1 X%f Y%f Z%f' % (x - self.x, y - self.y, z - self.z))
+		if e is None or all ([t == 0 for t in e]):
+			self.send ('G1 F%f' % self.f_max)
+			if self.relpos:
+				self.send ('G1 X%f Y%f Z%f' % (x - self.x, y - self.y, z - self.z))
+			else:
+				self.send ('G1 X%f Y%f Z%f' % (x, y, z))
 		else:
-			self.send ('G1 X%f Y%f Z%f' % (x, y, z))
+			self.send ('G1 F%f' % (self.f_max / 50))
+			which = [t != 0 for t in e]
+			assert sum (which) == 1
+			w = which.index (True)
+			distance = ((x - self.x) ** 2 + (y - self.y) ** 2 + (z - self.z) ** 2) ** .5
+			amount = e[w] * distance * self.diameters[w][1] ** 2 / self.diameters[w][0] ** 2
+			if not self.erelpos:
+				amount += self.e
+			if self.relpos:
+				self.send ('G1 X%f Y%f Z%f E%f' % (x - self.x, y - self.y, z - self.z, amount))
+			else:
+				self.send ('G1 X%f Y%f Z%f E%f' % (x, y, z, amount))
 	# }}}
 	def home (self, only_z = False):	# {{{
 		if only_z:
@@ -305,7 +309,7 @@ class Server:
 			if self.erelpos:
 				self.send ('G1 E%d' % self.extruding[e])
 			else:
-				self.send ('G1 E%f' % (self.e[e] + self.extruding[e]))
+				self.send ('G1 E%f' % (self.e + self.extruding[e]))
 			self.send ('G4 P0')
 		if currentextruder != self.currentextruder:
 			self.send ('T%d' % currentextruder)
@@ -336,12 +340,18 @@ class Server:
 	def feedmax (self, value): # {{{
 		self.f_max = value
 	# }}}
+	def filament_diameter (self, mm, extruder = 0): # {{{
+		self.diameters[extruder][0] = mms
+	# }}}
+	def nozzle_diameter (self, mm, extruder = 0): # {{{
+		self.diameters[extruder][1] = mms
+	# }}}
 	def flowrate (self, factor, extruder = 0): # {{{
 		self.flow[int (extruder)] = factor
 	# }}}
 	def get_config (self):	# {{{
 		# Stuff that cannot be changed by G-Code.
-		return {'feedmin': self.f_min, 'feedfactor': self.f_factor, 'flowfactor': self.flow, 'feedmax': self.f_max, 'extruders': self.extruders}
+		return {'feedmin': self.f_min, 'feedfactor': self.f_factor, 'flowfactor': self.flow, 'feedmax': self.f_max, 'extruders': self.extruders, 'diameter': self.diameters}
 	# }}}
 	def get_state (self):	# {{{
 		# Stuff that can be changed by G-Code or by itself.

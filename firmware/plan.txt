@@ -1,0 +1,41 @@
+Firmware tasks:
+
+- keep bed temperature constant
+- keep extruder temperatures constant
+- move x, y, z, e+ motors (goto and home)
+- accept commands from serial or usb
+
+Simplified temperature control:
+Tf = Tthermistor - C * filament velocity.
+C can be configured.
+
+
+Temperature:
+
+heater ----> thermistor and filament
+
+When filament flows, heat is extracted.
+Always, heat is radiated.
+
+Extracted power = (soortelijke warmte filament * dichtheid filament) * flow of filament (mm^3/s) * temperature of filament (K) = C0 * (A * v) * Tf
+Radiated power = sigma*T^4-sigma*T0^4 = C1 * (To^4-T0^4)
+Added heat = P
+
+If setup is calibrated, all except T0 are known.  Given equilibrium, T0 can be
+computed from the heat that is added to the setup (which is equal to the total
+lost heat).
+
+P = C0 * A * v * Tf + C1 * (To^4 - T0^4)
+
+Tf: target temperature.
+P: calibrated value of full power times the fraction that is applied.
+C0: calibrated constant.
+C1: calibrated constant.
+To: surface temperature; must be computed from calibration somehow.
+T0: outside temperature; cannot be known.
+A: surface of filament; passed in as diameter.
+v: speed of filament; calibrated with steps/mm.
+
+Assume slow response; have a ring buffer for prepared heat pulses.  Send more heat depending on expected outcome, not on current measurement.
+
+

@@ -23,7 +23,8 @@ if request == 'move':
 	reprap.wait ()
 	print ('ok')
 if request == 'goto':
-	reprap.goto (x = float (query.getfirst ('x')), y = float (query.getfirst ('y')), z = float (query.getfirst ('z')))
+	e = [1 if x == '1' else 0 for x in query.getfirst ('e')]
+	reprap.goto (x = float (query.getfirst ('x')), y = float (query.getfirst ('y')), z = float (query.getfirst ('z')), e = e)
 	reprap.wait ()
 	print ('ok')
 elif request == 'home':

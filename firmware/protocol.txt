@@ -1,0 +1,40 @@
+Commands from host to firmware:
+
+- goto f0,f1,x,y,z,e* (with optional callback) (fxyz is always abs, e always rel)
+- home x+/y+/z (with optional callback)
+- motor-sleep x+/y+/z+/e*
+- run-extruder
+- temperature b/e* (with optional callback)
+- get all settings
+- change all settings
+- pause (unbuffered)
+
+00: goto axes, f0?, f1?, x?, y?, z?, extruders?
+01: goto axes, f0?, f1?, x?, y?, z?, extruders? with callback
+02: home 01xyz, f0?, f1?
+03: home 01xyz, f0?, f1? with callback
+04: disable motor current
+05: run extruder num, f
+06: stop extruder num
+07: set temperature axis, value
+08: unset temperature axis
+09: read-current-temperature axis
+0a: save all settings
+0b: reload all settings
+0c: get-settings axis
+0d: change-settings axis
+
+fc: request response arg=version
+fd: pause everything (no-op if already paused)
+fe: continue (no-op if not paused)
+ff: abort everything (possible after or without pause).
+
+
+Responses from firmware to host:
+read temperature response.
+get all settings response.
+startup (fc) response: ok or wrong-version.
+
+Asynchronous events from firmware to host:
+done goto
+done home

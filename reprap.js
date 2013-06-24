@@ -4,7 +4,7 @@ var canvas, position, table;
 var printer_pos, self_pos;
 var temp, temptarget, flowfactor;
 var bedtemp, bedtarget;
-var speed;
+var speed, drawing;
 var printfile, printsd;
 
 function debug (text)
@@ -89,12 +89,24 @@ function move (e)
 		self_pos[1] = 200;
 	if (self_pos[2] > 100)
 		self_pos[2] = 100;
+	if (e.ctrlKey)
+		extrudes = '1';
+	else
+		extrudes = '0';
+	if (drawing)
+	{
+		printer_pos[0] = self_pos[0];
+		printer_pos[1] = self_pos[1];
+		printer_pos[2] = self_pos[2];
+		send ('goto&x=' + self_pos[0] + '&y=' + self_pos[1] + '&z=' + self_pos[2] + '&e=' + extrudes);
+	}
 	update ();
 }
 
-function clik (e)
+function mouseclick (e)
 {
-	send ('goto&x=' + self_pos[0] + '&y=' + self_pos[1] + '&z=' + self_pos[2]);
+	drawing = !drawing;
+	move (e)
 }
 
 function marker (pos)
