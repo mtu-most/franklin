@@ -33,31 +33,43 @@ union ReadFloat {
 	uint8_t b[sizeof (float)];
 };
 
-enum SingleByteCommands {	// Protocol layer and out of band commands.  See serial.cc for computation of command values.
-				// to host		to firmware
-	ACK = 0x40,		// ack long packet	ack reply
-	NACK = 0xe1,		// incorrect checksum	incorrect checksum
-	EVENT = 0xd2,		// target reached	target reached ack
-	PAUSE = 0x73,		// ack;wait		stop motors; don't clear queue; don't sleep motors; keep temperatures
-	CONTINUE = 0xf4,	// ready		unpause
-	STALL = 0x55,		// wrong packet		clear queue; stop and sleep motors; temperatures off
-	SYNC = 0x66,		// sync response	request sync response
-	UNUSED = 0xc7		// unused		unused
+enum SingleByteCommands {	// See serial.cc for computation of command values.
+// These bytes (except RESET) are sent in reply to a received packet only.
+	ACK = 0x80,		// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	NACK = 0xe1,		// Incorrect checksum.
+	ACKWAIT = 0xd2,		// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
+	STALL = 0xb3,		// Packet properly received, but not accepted; don't resend packet unmodified.
+	RESET = 0xf4,		// Emergency reset: clear queue, stop and sleep motors, temperatures off.  (Never sent to host.)  Typically sent 3 times with 5 ms pauses in between.
+	// The following codes have proper checksum correction, but aren't used.  If new commands are added, they should use these codes.
+	UNUSED1 = 0x95,		// Unused code.
+	UNUSED2 = 0xa6,		// Unused code.
+	UNUSED3 = 0xc7		// Unused code.
 };
 
 enum Command {
-	BEGIN,		// 4 byte: 0 (preferred protocol version). Reply: 4 byte: 0 (protocol version).
-	GOTO,		// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values
-	GOTOCB,		// same.
-	RUN,		// 1 byte: which channel (b0-5); on/off (b7 = 1/0); direction (b6)
-	SLEEP,		// 1 byte: which channel (b0-5); on/off (b7 = 1/0)
-	SETTEMP,	// 1 byte: which channel; 4 bytes: target
-	WAITTEMP,	// 1-2 byte: which channels; 8 bytes per channel: lower limit, upper limit
-	READTEMP,	// 1 byte: which channel.  Reply: 4 byte: value.
+	// from host
+	BEGIN,		// 4 byte: 0 (preferred protocol version). Reply: START.
+	GOTO,		// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values.
+	GOTOCB,		// same.  Reply (later): MOVECB.
+	RUN,		// 1 byte: which channel (b0-6); on/off (b7 = 1/0).  4 byte: speed.
+	SLEEP,		// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
+	SETTEMP,	// 1 byte: which channel; 4 bytes: target.
+	WAITTEMP,	// 1-2 byte: which channels; 8 bytes per channel: lower limit, upper limit.  Any of those channels will trigger the reply.  Reply (later): TEMPCB.
+	READTEMP,	// 1 byte: which channel.  Reply: TEMP.
 	LOAD,		// 1 byte: which channel.
 	SAVE,		// 1 byte: which channel.
-	READ,		// 1 byte: which channel.  Reply: n bytes: data.
-	WRITE		// 1 byte: which channel; n bytes: data.
+	READ,		// 1 byte: which channel.  Reply: DATA.
+	WRITE,		// 1 byte: which channel; n bytes: data.
+	PAUSE,		// 1 byte: 0: not pause; 1: pause.
+	PING,		// 1 byte: code.  Reply: PONG.
+	// to host
+	START,		// 4 byte: 0 (protocol version).
+	TEMP,		// 1 byte: requested channel; 4 byte: requested channel's temperature.
+	DATA,		// 1 byte: requested channel; n byte: requested data.
+	MOVECB,		// 1 byte: 0 (because commands must not have 0 or 2 byte arguments).
+	TEMPCB,		// 1 byte: which channel.
+	CONTINUE,	// 1 byte: 0 (because commands must not have 0 or 2 byte arguments).
+	PONG,		// 1 byte: PING argument.
 };
 
 struct Object

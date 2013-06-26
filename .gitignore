@@ -1,3 +1,4 @@
 network.py
 gui.py
 *.pyc
+firmware/build-mega2560

@@ -5,25 +5,20 @@
 // Ack: 1 byte.
 // Nack: 1 byte.
 
-// The first byte of a packet is the flip-flop and length: f0llllll
-// All other commands have bit 6 set, so they cannot be mistaken for a packet.
-// They have 4 bit data and 3 bit parity: p1ppdddd
+// The first byte of a packet is the length: 0lllllll
+// The second byte of a packet is the flipflop and the command (fccccccc)
+// All other commands have bit 7 set, so they cannot be mistaken for a packet.
+// They have 4 bit data and 3 bit parity: 1pppdddd
 // Codes (defined in firmware.hh):
-// ack:		0000	-> 0x40	0100
+// ack:		0000	-> 0x80	1000
 // nack:	0001	-> 0xe1	1110
-// event:	0010	-> 0xd2	1101
-// pause:	0011	-> 0x73	0111
-// continue:	0100	-> 0xf4	1111
-// stall:	0101	-> 0x55	0101
-// sync:	0110	-> 0x66	0110
+// ackwait:	0010	-> 0xd2	1101
+// stall:	0011	-> 0xb3	1011
+// reset:	0100	-> 0xf4	1111
+// unused:	0101	-> 0x95	1001
+// unused:	0110	-> 0xa6	1010
 // unused:	0111	-> 0xc7	1100
-// static const uint8_t MASK1[3] = {0x8f, 0x2d, 0x1e}
-// reply is the arrival notification.  It doesn't really belong there, but
-// the system requires a synchronous and asynchronous buffer.  The asynchronous
-// buffer only needs to be able to send arrival notifications, so it doesn't
-// really need to exist, if those are sent as 1 byte.
-// Because it doesn't have 0/1-encoding, the host cannot respond with ack.  It
-// must therefore respond to it with the same single byte.
+// static const uint8_t MASK1[3] = {0x4f, 0x2d, 0x1e}
 
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
