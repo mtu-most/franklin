@@ -24,11 +24,20 @@ float Temp::read ()
 void loop ()
 {
 	serial ();
-	for (uint8_t t = 0; t < MAXOBJECT; ++t)
+	for (uint8_t t = 0; t < FLAG_EXTRUDER0 + num_extruders; ++t)
 	{
+		// Only spend time if it may be useful.
 		if (!temps[t] || temps[t]->target < 0 || temps[t]->power_pin == 255 || temps[t]->thermistor_pin == 255)
 			continue;
 		float temp = temps[t]->read ();
+		// First of all, if an alarm should be triggered, do so.
+		if (!isnan (temps[t]->min_limit) && temps[t]->min_limit < temp || !isnan (temps[t]->max_limit) && temps[t]->max_limit > temp)
+		{
+			temps[t]->min_limit = NAN;
+			temps[t]->max_limit = NAN;
+			which_tempscbs |= (1 << t);
+			try_send_next ();
+		}
 		unsigned long long current_time = millis ();
 		uint16_t dt = current_time - temps[t]->last_time;
 		uint16_t shift_dt = current_time - temps[t]->last_shift_time;
@@ -63,7 +72,7 @@ void loop ()
 			temps[t]->is_on = false;
 		}
 	}
-	for (uint8_t m = 0; m < MAXOBJECT; ++m)
+	for (uint8_t m = 0; m < FLAG_EXTRUDER0 + num_extruders; ++m)
 	{
 		if (!motors[m] || motors[m]->steps_done >= motors[m]->steps_total)
 		{
@@ -104,7 +113,7 @@ void loop ()
 		{
 			// Hit endstop; abort current move and notify host (TODO).
 			axis[a].motor.continuous = false;	// Stop continuous move only for the motor that hits the switch.
-			for (uint8_t m = 0; m < MAXOBJECT; ++m)
+			for (uint8_t m = 0; m < FLAG_EXTRUDER0 + num_extruders; ++m)
 			{
 				if (!motors[m])
 					continue;

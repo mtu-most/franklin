@@ -16,7 +16,7 @@ if request is None:
 
 sys.stdout.write ('Content-Type: text/plain;charset=UTF-8\n\n')
 
-reprap = network.RPCSocket ('reprap|')
+reprap = network.RPCSocket ('reprap|', tls = None)
 
 if request == 'move':
 	reprap.goto (x = float (query.getfirst ('x')), y = float (query.getfirst ('y')), z = float (query.getfirst ('z')))

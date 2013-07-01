@@ -13,7 +13,7 @@ static void write_8 (uint16_t &address, uint8_t data, bool eeprom)
 {
 	if (eeprom)
 		EEPROM.write (address++, data);
-	outcommand[address++] = data;
+	reply[address++] = data;
 }
 
 static uint16_t read_16 (uint16_t &address, bool eeprom)
@@ -137,6 +137,22 @@ void setup ()
 	motors_busy = 0;
 	queue_start = 0;
 	queue_end = 0;
+	num_movecbs = 0;
+	continue_cb = false;
+	which_tempcbs = 0;
+	pause_all = false;
+	last_packet = NULL;
+	out_busy = false;
+	reply_ready = false;
+	// Prepare asynchronous command buffers.
+	movecb_buffer[0] = 3;
+	movecb_buffer[1] = CMD_MOVECB;
+	movecb_buffer[2] = 0;
+	tempcb_buffer[0] = 3;
+	tempcb_buffer[1] = CMD_TEMPCB;
+	continue_buffer[0] = 3;
+	continue_buffer[1] = CMD_CONTINUE;
+	continue_buffer[2] = 0;
 	for (uint8_t i = 0; i < MAXOBJECT; ++i)
 	{
 		if (i < 3)
@@ -189,5 +205,5 @@ void setup ()
 		objects[o]->address = address;
 		objects[o]->load (address, true);
 	}
-	Serial.write (SYNC);
+	Serial.write (CMD_INIT);
 }

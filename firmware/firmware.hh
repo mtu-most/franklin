@@ -4,7 +4,9 @@
 #include <Arduino.h>
 #include <math.h>
 
-#define QUEUE_LENGTH 100	// Number of items which can be in the queue.
+#define QUEUE_LENGTH_LOG2 8
+#define QUEUE_LENGTH (1 << QUEUE_LENGTH_LOG2)	// Number of items which can be in the queue.
+#define QUEUE_LENGTH_MASK ((1 << QUEUE_LENGTH_LOG2) - 1)	// Mask to use for circular queue.
 #define MAXOBJECT 16		// Total number of objects.  From Extruder 0 on, these are all extruders.
 
 #define FLAG_X 0
@@ -35,41 +37,43 @@ union ReadFloat {
 
 enum SingleByteCommands {	// See serial.cc for computation of command values.
 // These bytes (except RESET) are sent in reply to a received packet only.
-	ACK = 0x80,		// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	NACK = 0xe1,		// Incorrect checksum.
-	ACKWAIT = 0xd2,		// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
-	STALL = 0xb3,		// Packet properly received, but not accepted; don't resend packet unmodified.
-	RESET = 0xf4,		// Emergency reset: clear queue, stop and sleep motors, temperatures off.  (Never sent to host.)  Typically sent 3 times with 5 ms pauses in between.
-	// The following codes have proper checksum correction, but aren't used.  If new commands are added, they should use these codes.
-	UNUSED1 = 0x95,		// Unused code.
-	UNUSED2 = 0xa6,		// Unused code.
-	UNUSED3 = 0xc7		// Unused code.
+	CMD_ACK = 0x80,		// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_NACK = 0xe1,	// Incorrect checksum.
+	CMD_ACKWAIT = 0xd2,	// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
+	CMD_STALL = 0xb3,	// Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_RESET = 0xf4,	// Emergency reset: clear queue, stop and sleep motors, temperatures off.  (Never sent to host.)  Typically sent 3 times with 5 ms pauses in between.
+	CMD_INIT = 0x95,	// Printer started and is ready for commands.
+	CMD_ACKRESET = 0xa6,	// Reset received.
+	// The following code has proper checksum correction, but isn't used.  If a new commands is added, it should use this code.
+	CMD_UNUSED = 0xc7	// Unused code.
 };
 
 enum Command {
 	// from host
-	BEGIN,		// 4 byte: 0 (preferred protocol version). Reply: START.
-	GOTO,		// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values.
-	GOTOCB,		// same.  Reply (later): MOVECB.
-	RUN,		// 1 byte: which channel (b0-6); on/off (b7 = 1/0).  4 byte: speed.
-	SLEEP,		// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
-	SETTEMP,	// 1 byte: which channel; 4 bytes: target.
-	WAITTEMP,	// 1-2 byte: which channels; 8 bytes per channel: lower limit, upper limit.  Any of those channels will trigger the reply.  Reply (later): TEMPCB.
-	READTEMP,	// 1 byte: which channel.  Reply: TEMP.
-	LOAD,		// 1 byte: which channel.
-	SAVE,		// 1 byte: which channel.
-	READ,		// 1 byte: which channel.  Reply: DATA.
-	WRITE,		// 1 byte: which channel; n bytes: data.
-	PAUSE,		// 1 byte: 0: not pause; 1: pause.
-	PING,		// 1 byte: code.  Reply: PONG.
+	CMD_BEGIN,	// 4 byte: 0 (preferred protocol version). Reply: START.
+	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values.
+	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
+	CMD_RUN,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).  4 byte: speed.
+	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
+	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target.
+	CMD_WAITTEMP,	// 1-2 byte: which channels; 8 bytes per channel: lower limit, upper limit.  Any of those channels will trigger the reply.  Reply (later): TEMPCB.
+	CMD_READTEMP,	// 1 byte: which channel.  Reply: TEMP.
+	CMD_LOAD,	// 1 byte: which channel.
+	CMD_SAVE,	// 1 byte: which channel.
+	CMD_READ,	// 1 byte: which channel.  Reply: DATA.
+	CMD_WRITE,	// 1 byte: which channel; n bytes: data.
+	CMD_PAUSE,	// 1 byte: 0: not pause; 1: pause.
+	CMD_PING,	// 1 byte: code.  Reply: PONG.
 	// to host
-	START,		// 4 byte: 0 (protocol version).
-	TEMP,		// 1 byte: requested channel; 4 byte: requested channel's temperature.
-	DATA,		// 1 byte: requested channel; n byte: requested data.
-	MOVECB,		// 1 byte: 0 (because commands must not have 0 or 2 byte arguments).
-	TEMPCB,		// 1 byte: which channel.
-	CONTINUE,	// 1 byte: 0 (because commands must not have 0 or 2 byte arguments).
-	PONG,		// 1 byte: PING argument.
+		// responses to host requests; only one active at a time.
+	CMD_START,	// 4 byte: 0 (protocol version).
+	CMD_TEMP,	// 1 byte: requested channel; 4 byte: requested channel's temperature.
+	CMD_DATA,	// 1 byte: requested channel; n byte: requested data.
+	CMD_PONG,	// 1 byte: PING argument.
+		// asynchronous events.
+	CMD_MOVECB,	// 1 byte: 0 (because commands must not have 0 or 2 byte arguments).  Counter for how many should be sent.
+	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
+	CMD_CONTINUE,	// 1 byte: 0 (because commands must not have 0 or 2 byte arguments).  Bool flag if it needs to be sent.
 };
 
 struct Object
@@ -94,6 +98,8 @@ struct Temp : public Object
 	uint16_t buffer_delay;			// time for the buffer to shift one slot, in ms.
 	uint8_t power_pin;
 	uint8_t thermistor_pin;
+	float min_alarm;			// NAN, or the temperature at which to trigger the callback.
+	float max_alarm;			// NAN, or the temperature at which to trigger the callback.
 	unsigned long long last_time;		// Counter to keep track of how much action should be taken.
 	unsigned long long last_shift_time;	// Counter to keep track of how much action should be taken.
 	bool is_on;				// If the heater is currently on.
@@ -153,7 +159,10 @@ struct MoveCommand
 #define COMMAND_LEN_MASK (COMMAND_SIZE - 1)
 EXTERN char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
-EXTERN char outcommand[COMMAND_SIZE];
+EXTERN char reply[COMMAND_SIZE];
+EXTERN char movecb_buffer[4];
+EXTERN char tempcb_buffer[4];
+EXTERN char continue_buffer[4];
 EXTERN Temp bed;
 EXTERN uint16_t bed_address;
 EXTERN Axis axis[3];
@@ -165,16 +174,21 @@ EXTERN Temp *temps[MAXOBJECT];
 EXTERN Object *objects[MAXOBJECT];
 EXTERN MoveCommand queue[QUEUE_LENGTH];
 EXTERN uint8_t queue_start, queue_end;
-EXTERN uint8_t num_cbs;	// number of event notifications waiting to be sent out.
+EXTERN uint8_t num_movecbs;	// number of event notifications waiting to be sent out.
+EXTERN bool continue_cb;	// is a continue event waiting to be sent out?
+EXTERN uint32_t which_tempcbs;	// bitmask of waiting temp cbs.
 EXTERN bool pause_all;
+EXTERN bool out_busy;
+EXTERN bool reply_ready;
+EXTERN char *last_packet;
 
 uint16_t bed_load (bool eeprom);
 void bed_save (bool eeprom);
 void serial ();	// Handle commands from serial.
-void send_notification ();
 void packet ();	// A command packet has arrived; handle it.
-void send_packet ();
+void send_packet (char *the_packet);
 void next_move ();
+void try_send_next ();
 
 void setup ();
 void loop ();	// Do stuff which needs doing: moving motors and adjusting heaters.

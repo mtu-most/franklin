@@ -22,7 +22,6 @@
 
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
-static bool sent_notification = false;
 static unsigned long long last_millis = 0;
 
 // Parity masks for decoding.
@@ -33,21 +32,12 @@ static const uint8_t MASK[5][4] = {
 	{0x95, 0x6c, 0xd5, 0x43},
 	{0x4b, 0xdc, 0xe2, 0x83}};
 
-void send_notification ()
-{
-	if (!num_cbs++)
-	{
-		Serial.write (EVENT);
-		sent_notification = true;
-	}
-}
-
 // There is serial data available.
 void serial ()
 {
 	if (command_end > 0 && millis () >= last_millis + 2)
 	{
-		Serial.write (NACK);
+		Serial.write (CMD_NACK);
 		command_end = 0;
 	}
 	while (command_end == 0)
@@ -58,33 +48,17 @@ void serial ()
 		// If this is a 1-byte command, handle it.
 		switch (command[0])
 		{
-		case ACK:
+		case CMD_ACK:
 			// Ack: everything was ok; flip the flipflop.
 			ff_out ^= 0x80;
+			out_busy = false;
+			try_send_next ();
 			continue;
-		case NACK:
+		case CMD_NACK:
 			// Nack: the host didn't properly receive the notification: resend.
-			if (sent_notification)
-				Serial.write (EVENT);
-			else
-				send_packet ();
+			send_packet (last_packet);
 			continue;
-		case EVENT:
-			// Server has seen arrival notification.
-			if (!--num_cbs)
-				sent_notification = false;
-			else
-				Serial.write (EVENT);
-			continue;
-		case PAUSE:
-			pause_all = true;
-			Serial.write (ACK);
-			continue;
-		case CONTINUE:
-			pause_all = false;
-			Serial.write (ACK);
-			continue;
-		case STALL:
+		case CMD_RESET:
 			// Emergency reset.
 			queue_start = 0;
 			queue_end = 0;
@@ -106,13 +80,7 @@ void serial ()
 					}
 				}
 			}
-			Serial.write (ACK);
-			continue;
-		case SYNC:
-			Serial.write (SYNC);
-			continue;
-		case UNUSED:
-			Serial.write (STALL);
+			Serial.write (CMD_ACKRESET);
 			continue;
 		default:
 			break;
@@ -138,7 +106,7 @@ void serial ()
 	// Size must be good.
 	if (command[0] < 2 || command[0] == 4)
 	{
-		Serial.write (NACK);
+		Serial.write (CMD_NACK);
 		return;
 	}
 	// Checksum must be good.
@@ -148,7 +116,7 @@ void serial ()
 		uint8_t sum = command[len + t];
 		if ((sum & 0x7) != (t & 0x7))
 		{
-			Serial.write (NACK);
+			Serial.write (CMD_NACK);
 			return;
 		}
 		for (uint8_t bit = 0; bit < 5; ++bit)
@@ -161,37 +129,51 @@ void serial ()
 			check ^= check >> 1;
 			if (check & 1)
 			{
-				Serial.write (NACK);
+				Serial.write (CMD_NACK);
 				return;
 			}
 		}
 	}
 	// Packet is good.
 	// Flip-flop must have good state.
-	if ((command[0] & 0x80) != ff_in)
+	if ((command[1] & 0x80) != ff_in)
 	{
 		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
 		// Resend the ack, but don't do anything (the action has already been taken).
-		Serial.write (ACK);
+		Serial.write (CMD_ACK);
 		return;
 	}
 	// Right: update flip-flop and send ack.
 	ff_in ^= 0x80;
+	// Clear flag for easier parsing.
+	command[1] &= ~0x80;
 	packet ();
 }
 
-// Send packet to host.
-void send_packet ()
+// Command sending method:
+// When sending a command:
+// - fill appropriate command buffer
+// - set flag to signal data is ready
+// - call try_send_next
+//
+// When ACK is received:
+// - call try_send_next
+//
+// When NACK is received:
+// - call send_packet to resend the last packet
+
+// Set checksum bytes.
+static void prepare_packet (char *the_packet)
 {
 	// Set flipflop bit.
-	outcommand[0] &= ~0xc0;
-	outcommand[0] ^= ff_out;
+	the_packet[1] &= ~0x80;
+	the_packet[1] ^= ff_out;
 	// Compute the checksums.  This doesn't work for size in (1, 2, 4), so
 	// the protocol doesn't allow those.
 	// For size % 3 != 0, the first checksums are part of the data for the
 	// last checksum.  This means they must have been filled in at that
 	// point.  (This is also the reason (1, 2, 4) are not allowed.)
-	uint8_t cmd_len = outcommand[0] & COMMAND_LEN_MASK;
+	uint8_t cmd_len = the_packet[0] & COMMAND_LEN_MASK;
 	for (uint8_t t = 0; t < (cmd_len + 2) / 3; ++t)
 	{
 		uint8_t sum = t & 7;
@@ -199,7 +181,7 @@ void send_packet ()
 		{
 			uint8_t check = 0;
 			for (uint8_t p = 0; p < 3; ++p)
-				check ^= outcommand[3 * t + p] & MASK[bit][p];
+				check ^= the_packet[3 * t + p] & MASK[bit][p];
 			check ^= sum & MASK[bit][3];
 			check ^= check >> 4;
 			check ^= check >> 2;
@@ -207,8 +189,59 @@ void send_packet ()
 			if (check & 1)
 				sum |= 1 << (bit + 3);
 		}
-		outcommand[outcommand[0] + t] = sum;
+		the_packet[the_packet[0] + t] = sum;
 	}
+}
+
+// Send packet to host.
+void send_packet (char *the_packet)
+{
+	last_packet = the_packet;
 	for (uint8_t t = 0; t < cmd_len + (cmd_len + 2) / 3; ++t)
-		Serial.write (outcommand[t]);
+		Serial.write (the_packet[t]);
+	out_busy = true;
+}
+
+// Call send_packet if we can.
+void try_send_next ()
+{
+	if (out_busy)
+	{
+		// Still busy sending other packet.
+		return;
+	}
+	if (num_movecbs > 0)
+	{
+		prepare_packet (movecb_buffer);
+		send_packet (movecb_buffer);
+		--num_movecbs;
+		return;
+	}
+	if (which_tempcbs != 0)
+	{
+		for (uint8_t w = 0; w < FLAG_EXTRUDER0 + num_extruders; ++w)
+		{
+			if (which_tempcbs & (1 << w))
+				break;
+		}
+		tempcb_buffer[2] = w;
+		prepare_packet (tempcb_buffer);
+		send_packet (movecb_buffer);
+		which_tempcbs &= ~(1 << w);
+		return;
+	}
+	if (reply_ready)
+	{
+		prepare_packet (reply);
+		send_packet (reply);
+		reply_ready = false;
+		return;
+	}
+	if (continue_cb)
+	{
+		prepare_packet (continue_buffer);
+		send_packet (continue_buffer);
+		continue_cb = false;
+		return;
+	}
 }
