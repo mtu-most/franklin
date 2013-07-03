@@ -31,11 +31,11 @@ void loop ()
 			continue;
 		float temp = temps[t]->read ();
 		// First of all, if an alarm should be triggered, do so.
-		if (!isnan (temps[t]->min_limit) && temps[t]->min_limit < temp || !isnan (temps[t]->max_limit) && temps[t]->max_limit > temp)
+		if (!isnan (temps[t]->min_alarm) && temps[t]->min_alarm < temp || !isnan (temps[t]->max_alarm) && temps[t]->max_alarm > temp)
 		{
-			temps[t]->min_limit = NAN;
-			temps[t]->max_limit = NAN;
-			which_tempscbs |= (1 << t);
+			temps[t]->min_alarm = NAN;
+			temps[t]->max_alarm = NAN;
+			which_tempcbs |= (1 << t);
 			try_send_next ();
 		}
 		unsigned long long current_time = millis ();

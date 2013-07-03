@@ -22,6 +22,7 @@ void packet ()
 	switch (command[1])
 	{
 	case CMD_BEGIN:	// begin: request response
+	{
 		Serial.write (CMD_ACK);
 		reply[0] = 6;
 		reply[1] = CMD_START;
@@ -32,8 +33,10 @@ void packet ()
 		reply_ready = true;
 		try_send_next ();
 		return;
+	}
 	case CMD_GOTO:	// goto
 	case CMD_GOTOCB:	// goto with callback
+	{
 		if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
 		{
 			Serial.write (CMD_STALL);
@@ -56,11 +59,13 @@ void packet ()
 				queue[queue_end].data[ch] = NAN;
 		}
 		queue[queue_end].cb = command[1] == CMD_GOTOCB;
-		queue_end = (queue_end + 1) & QUEUE_MASK;
+		queue_end = (queue_end + 1) & QUEUE_LENGTH_MASK;
 		if (motors_busy == 0)
 			next_move ();
 		break;
+	}
 	case CMD_RUN:	// run motor
+	{
 		which = get_which ();
 		if (!motors[which])
 		{
@@ -78,7 +83,9 @@ void packet ()
 			motors[which]->continuous = false;
 		Serial.write (CMD_ACK);
 		return;
+	}
 	case CMD_SLEEP:	// disable motor current
+	{
 		which = get_which ();
 		if (!motors[which])
 		{
@@ -88,7 +95,9 @@ void packet ()
 		digitalWrite (motors[which]->sleep_pin, command[2] & 0x80 ? LOW : HIGH);
 		Serial.write (CMD_ACK);
 		return;
+	}
 	case CMD_SETTEMP:	// set target temperature and enable control
+	{
 		which = get_which ();
 		if (!temps[which])
 		{
@@ -98,7 +107,9 @@ void packet ()
 		temps[which]->target = get_float (3);
 		Serial.write (CMD_ACK);
 		return;
+	}
 	case CMD_WAITTEMP:	// wait for one or more temperature sensors to reach their target
+	{
 		uint8_t const num = FLAG_EXTRUDER0 + num_extruders;
 		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;
 		uint8_t t = 0;
@@ -111,21 +122,23 @@ void packet ()
 				ReadFloat f;
 				for (uint8_t i = 0; i < sizeof (float); ++i)
 					f.b[i] = command[offset + i + t * 2 * sizeof (float)];
-				temps[ch].min_alarm = f.f;
+				temps[ch]->min_alarm = f.f;
 				for (uint8_t i = 0; i < sizeof (float); ++i)
 					f.b[i] = command[offset + i + (t * 2 + 1) * sizeof (float)];
-				temps[ch].max_alarm = f.f;
+				temps[ch]->max_alarm = f.f;
 				t += 1;
 			}
 			else
 			{
-				temps[ch].min_alarm = NAN;
-				temps[ch].max_alarm = NAN;
+				temps[ch]->min_alarm = NAN;
+				temps[ch]->max_alarm = NAN;
 			}
 		}
 		Serial.write (CMD_ACK);
 		return;
+	}
 	case CMD_READTEMP:	// read temperature
+	{
 		which = get_which ();
 		if (!temps[which])
 		{
@@ -143,7 +156,9 @@ void packet ()
 		reply_ready = true;
 		try_send_next ();
 		return;
+	}
 	case CMD_LOAD:	// reload settings from eeprom
+	{
 		which = get_which ();
 		if (!objects[which])
 		{
@@ -154,7 +169,9 @@ void packet ()
 		objects[which]->load (addr, true);
 		Serial.write (CMD_ACK);
 		return;
+	}
 	case CMD_SAVE:	// save settings to eeprom
+	{
 		which = get_which ();
 		if (!objects[which])
 		{
@@ -165,7 +182,9 @@ void packet ()
 		objects[which]->save (addr, true);
 		Serial.write (CMD_ACK);
 		return;
+	}
 	case CMD_READ:	// reply settings to host
+	{
 		which = get_which ();
 		if (!objects[which])
 		{
@@ -181,7 +200,9 @@ void packet ()
 		reply_ready = true;
 		try_send_next ();
 		return;
+	}
 	case CMD_WRITE:	// change settings from host
+	{
 		which = get_which ();
 		if (!objects[which])
 		{
@@ -192,18 +213,25 @@ void packet ()
 		objects[which]->save (addr, false);
 		Serial.write (CMD_ACK);
 		return;
+	}
 	case CMD_PAUSE:
+	{
 		pause_all = command[2] != 0;
 		Serial.write (CMD_ACK);
 		return;
+	}
 	case CMD_PING:
+	{
 		reply[0] = 3;
 		reply[1] = CMD_PONG;
 		reply[2] = command[2];
 		reply_ready = true;
 		try_send_next ();
+	}
 	default:
+	{
 		Serial.write (CMD_STALL);
 		return;
+	}
 	}
 }

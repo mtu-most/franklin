@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <math.h>
 
-#define QUEUE_LENGTH_LOG2 8
+#define QUEUE_LENGTH_LOG2 6
 #define QUEUE_LENGTH (1 << QUEUE_LENGTH_LOG2)	// Number of items which can be in the queue.
 #define QUEUE_LENGTH_MASK ((1 << QUEUE_LENGTH_LOG2) - 1)	// Mask to use for circular queue.
 #define MAXOBJECT 16		// Total number of objects.  From Extruder 0 on, these are all extruders.
@@ -53,7 +53,7 @@ enum Command {
 	CMD_BEGIN,	// 4 byte: 0 (preferred protocol version). Reply: START.
 	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values.
 	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
-	CMD_RUN,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).  4 byte: speed.
+	CMD_RUN,	// 1 byte: which channel (b0-6).  4 byte: speed (0 means off).
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
 	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target.
 	CMD_WAITTEMP,	// 1-2 byte: which channels; 8 bytes per channel: lower limit, upper limit.  Any of those channels will trigger the reply.  Reply (later): TEMPCB.

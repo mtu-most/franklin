@@ -10,14 +10,14 @@
 // All other commands have bit 7 set, so they cannot be mistaken for a packet.
 // They have 4 bit data and 3 bit parity: 1pppdddd
 // Codes (defined in firmware.hh):
-// ack:		0000	-> 0x80	1000
-// nack:	0001	-> 0xe1	1110
-// ackwait:	0010	-> 0xd2	1101
-// stall:	0011	-> 0xb3	1011
-// reset:	0100	-> 0xf4	1111
-// unused:	0101	-> 0x95	1001
-// unused:	0110	-> 0xa6	1010
-// unused:	0111	-> 0xc7	1100
+// 	0000	-> 0x80	1000
+// 	0001	-> 0xe1	1110
+// 	0010	-> 0xd2	1101
+// 	0011	-> 0xb3	1011
+// 	0100	-> 0xf4	1111
+// 	0101	-> 0x95	1001
+// 	0110	-> 0xa6	1010
+// 	0111	-> 0xc7	1100
 // static const uint8_t MASK1[3] = {0x4f, 0x2d, 0x1e}
 
 static uint8_t ff_in = 0;
@@ -197,6 +197,7 @@ static void prepare_packet (char *the_packet)
 void send_packet (char *the_packet)
 {
 	last_packet = the_packet;
+	uint8_t cmd_len = the_packet[0] & COMMAND_LEN_MASK;
 	for (uint8_t t = 0; t < cmd_len + (cmd_len + 2) / 3; ++t)
 		Serial.write (the_packet[t]);
 	out_busy = true;
@@ -222,12 +223,14 @@ void try_send_next ()
 		for (uint8_t w = 0; w < FLAG_EXTRUDER0 + num_extruders; ++w)
 		{
 			if (which_tempcbs & (1 << w))
+			{
+				tempcb_buffer[2] = w;
+				which_tempcbs &= ~(1 << w);
 				break;
+			}
 		}
-		tempcb_buffer[2] = w;
 		prepare_packet (tempcb_buffer);
 		send_packet (movecb_buffer);
-		which_tempcbs &= ~(1 << w);
 		return;
 	}
 	if (reply_ready)
