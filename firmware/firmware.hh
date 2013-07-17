@@ -71,9 +71,10 @@ enum Command {
 	CMD_DATA,	// 1 byte: requested channel; n byte: requested data.
 	CMD_PONG,	// 1 byte: PING argument.
 		// asynchronous events.
-	CMD_MOVECB,	// 1 byte: 0 (because commands must not have 0 or 2 byte arguments).  Counter for how many should be sent.
+	CMD_MOVECB,	// 1 byte: number of movecb events.
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
 	CMD_CONTINUE,	// 1 byte: 0 (because commands must not have 0 or 2 byte arguments).  Bool flag if it needs to be sent.
+	CMD_LIMIT,	// 1 byte: which channel.
 };
 
 struct Object
@@ -116,7 +117,7 @@ struct Motor : public Object
 	uint8_t dir_pin;
 	uint8_t sleep_pin;
 	float steps_per_mm;
-	unsigned long long start_time, end_time;	// ms.
+	unsigned long long start_time;	// ms.
 	float f1, f0;	// steps per ms.
 	uint16_t steps_total;
 	uint16_t steps_done;
@@ -160,6 +161,7 @@ struct MoveCommand
 EXTERN char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
 EXTERN char reply[COMMAND_SIZE];
+EXTERN char limitcb_buffer[4];
 EXTERN char movecb_buffer[4];
 EXTERN char tempcb_buffer[4];
 EXTERN char continue_buffer[4];
@@ -177,6 +179,7 @@ EXTERN uint8_t queue_start, queue_end;
 EXTERN uint8_t num_movecbs;	// number of event notifications waiting to be sent out.
 EXTERN bool continue_cb;	// is a continue event waiting to be sent out?
 EXTERN uint32_t which_tempcbs;	// bitmask of waiting temp cbs.
+EXTERN uint8_t limits_hit;	// bitmask of waiting limit hit cbs.
 EXTERN bool pause_all;
 EXTERN bool out_busy;
 EXTERN bool reply_ready;

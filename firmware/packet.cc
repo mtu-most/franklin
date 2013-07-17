@@ -58,7 +58,8 @@ void packet ()
 			else
 				queue[queue_end].data[ch] = NAN;
 		}
-		queue[queue_end].cb = command[1] == CMD_GOTOCB;
+		// Set cb in next record, because it will be read when queue_start has already been incremented.
+		queue[(queue_end + 1) & QUEUE_LENGTH_MASK].cb = command[1] == CMD_GOTOCB;
 		queue_end = (queue_end + 1) & QUEUE_LENGTH_MASK;
 		if (motors_busy == 0)
 			next_move ();

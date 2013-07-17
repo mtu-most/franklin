@@ -211,11 +211,27 @@ void try_send_next ()
 		// Still busy sending other packet.
 		return;
 	}
+	if (limits_hit != 0)
+	{
+		for (uint8_t w = 0; w < 8; ++w)
+		{
+			if (limits_hit & (1 << w))
+			{
+				limitcb_buffer[2] = w;
+				limits_hit &= ~(1 << w);
+				break;
+			}
+		}
+		prepare_packet (limitcb_buffer);
+		send_packet (limitcb_buffer);
+		return;
+	}
 	if (num_movecbs > 0)
 	{
+		movecb_buffer[2] = num_movecbs;
 		prepare_packet (movecb_buffer);
 		send_packet (movecb_buffer);
-		--num_movecbs;
+		num_movecbs = 0;
 		return;
 	}
 	if (which_tempcbs != 0)
@@ -230,7 +246,7 @@ void try_send_next ()
 			}
 		}
 		prepare_packet (tempcb_buffer);
-		send_packet (movecb_buffer);
+		send_packet (tempcb_buffer);
 		return;
 	}
 	if (reply_ready)

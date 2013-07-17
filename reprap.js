@@ -157,29 +157,38 @@ function update ()
 	canvas.stroke ();
 }
 
+function refresh_temps ()
+{
+	var config = JSON.parse (send ("config", false));
+	var state = JSON.parse (send ("state", false));
+	set_text (bedtemp, state.bed_current + '°C');
+	for (var e = 0; e < extruders; ++e)
+		set_text (temp[e], state.temperature_current[e] + '°C');
+	printer_pos = state.position;
+	set_text (position, 'X:' + state.position[0] + ' Y:' + state.position[1] + ' Z:' + state.position[2]);
+	update ();
+	return [config, state];
+}
+
 function refresh ()
 {
 	try
 	{
-		var config = JSON.parse (send ("config", false));
-		var state = JSON.parse (send ("state", false));
+		cs = refresh_temps ();
+		var config = cs[0];
+		var state = cs[1];
 		speed.value = config.feedfactor;
 		bedtarget.value = state.bed_target;
-		set_text (bedtemp, state.bed_current + '°C');
 		for (var e = 0; e < extruders; ++e)
 		{
 			flowfactor[e].value = config.flowfactor[e];
 			temptarget[e].value = state.temperature_target[e];
-			set_text (temp[e], state.temperature_current[e] + '°C');
 		}
-		printer_pos = state.position;
-		set_text (position, 'X:' + state.position[0] + ' Y:' + state.position[1] + ' Z:' + state.position[2]);
 	}
 	catch (e)
 	{
 		alert ('error refreshing: ' + e);
 	}
-	update ();
 }
 
 function init ()
@@ -255,7 +264,7 @@ function init ()
 	}
 	refresh ();
 	update ();
-	//setInterval (timed_update, 2000);
+	setInterval (refresh_temps, 1000);
 }
 
 function set_bedtarget ()

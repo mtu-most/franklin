@@ -24,6 +24,7 @@ float Temp::read ()
 void loop ()
 {
 	serial ();
+	unsigned long long current_time = millis ();
 	for (uint8_t t = 0; t < FLAG_EXTRUDER0 + num_extruders; ++t)
 	{
 		// Only spend time if it may be useful.
@@ -38,7 +39,6 @@ void loop ()
 			which_tempcbs |= (1 << t);
 			try_send_next ();
 		}
-		unsigned long long current_time = millis ();
 		uint16_t dt = current_time - temps[t]->last_time;
 		uint16_t shift_dt = current_time - temps[t]->last_shift_time;
 		temps[t]->last_time = current_time;
@@ -74,26 +74,22 @@ void loop ()
 	}
 	for (uint8_t m = 0; m < FLAG_EXTRUDER0 + num_extruders; ++m)
 	{
-		if (!motors[m] || motors[m]->steps_done >= motors[m]->steps_total)
+		if (!motors[m])
+		       continue;
+		if (motors[m]->steps_done >= motors[m]->steps_total)
 		{
 			if (!motors[m]->continuous)
-				motors[m]->f = 0;
-			else
+				continue;
+			float t = current_time - motors[m]->start_time;
+			if (t * motors[m]->f1 >= 1)
 			{
-				motors[m]->f = motors[m]->f0;
-				unsigned long long time = millis ();
-				float t = time - motors[m]->start_time;
-				if (t * motors[m]->f >= 1)
-				{
-					SET (motors[m]->step_pin);
-					motors[m]->start_time += 1 / motors[m]->f;
-					RESET (motors[m]->step_pin);
-				}
+				SET (motors[m]->step_pin);
+				motors[m]->start_time += 1 / motors[m]->f1;
+				RESET (motors[m]->step_pin);
 			}
 			continue;
 		}
-		unsigned long long time = millis ();
-		float t = time - motors[m]->start_time;
+		float t = current_time - motors[m]->start_time;
 		float a = (motors[m]->f1 * motors[m]->f1 - motors[m]->f0 * motors[m]->f0) / 4;
 		motors[m]->f = 2 * a * t + motors[m]->f0;
 		float now = a * t * t + motors[m]->f0 * t;
@@ -102,8 +98,17 @@ void loop ()
 			SET (motors[m]->step_pin);
 			++motors[m]->steps_done;
 			if (motors[m]->steps_done >= motors[m]->steps_total)
+			{
 				if (!--motors_busy)
+				{
+					if (queue[queue_start].cb)
+					{
+						++num_movecbs;
+						try_send_next ();
+					}
 					next_move ();
+				}
+			}
 			RESET (motors[m]->step_pin);
 		}
 	}
@@ -111,7 +116,7 @@ void loop ()
 	{
 		if (axis[a].motor.positive && !GET (axis[a].limit_max_pin, true) || !axis[a].motor.positive && !GET (axis[a].limit_min_pin, true))
 		{
-			// Hit endstop; abort current move and notify host (TODO).
+			// Hit endstop; abort current move and notify host.
 			axis[a].motor.continuous = false;	// Stop continuous move only for the motor that hits the switch.
 			for (uint8_t m = 0; m < FLAG_EXTRUDER0 + num_extruders; ++m)
 			{
@@ -119,6 +124,8 @@ void loop ()
 					continue;
 				motors[m]->steps_total = 0;
 			}
+			limits_hit |= (1 << m);
+			try_send_next ();
 		}
 	}
 	for (uint8_t e = 0; e < num_extruders; ++e)
