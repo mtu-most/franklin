@@ -124,7 +124,7 @@ void loop ()
 					continue;
 				motors[m]->steps_total = 0;
 			}
-			limits_hit |= (1 << m);
+			limits_hit |= (1 << a);
 			try_send_next ();
 		}
 	}

@@ -109,32 +109,23 @@ void packet ()
 		Serial.write (CMD_ACK);
 		return;
 	}
-	case CMD_WAITTEMP:	// wait for one or more temperature sensors to reach their target
+	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
 	{
 		uint8_t const num = FLAG_EXTRUDER0 + num_extruders;
-		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;
-		uint8_t t = 0;
-		for (uint8_t ch = 0; ch < num; ++ch)
+		uint8_t ch = command[2];
+		if (ch >= num || !temps[ch])
 		{
-			if (!temps[ch])
-				continue;
-			if (command[2 + (ch >> 3)] & (1 << (ch & 0x7)))
-			{
-				ReadFloat f;
-				for (uint8_t i = 0; i < sizeof (float); ++i)
-					f.b[i] = command[offset + i + t * 2 * sizeof (float)];
-				temps[ch]->min_alarm = f.f;
-				for (uint8_t i = 0; i < sizeof (float); ++i)
-					f.b[i] = command[offset + i + (t * 2 + 1) * sizeof (float)];
-				temps[ch]->max_alarm = f.f;
-				t += 1;
-			}
-			else
-			{
-				temps[ch]->min_alarm = NAN;
-				temps[ch]->max_alarm = NAN;
-			}
+			Serial.write (CMD_STALL);
+			return;
 		}
+		ReadFloat min, max;
+		for (uint8_t i = 0; i < sizeof (float); ++i)
+		{
+			min.b[i] = command[3 + i];
+			max.b[i] = command[3 + i + sizeof (float)];
+		}
+		temps[ch]->min_alarm = min.f;
+		temps[ch]->max_alarm = max.f;
 		Serial.write (CMD_ACK);
 		return;
 	}
@@ -192,11 +183,10 @@ void packet ()
 			Serial.write (CMD_STALL);
 			return;
 		}
-		addr = 3;
+		addr = 2;
 		objects[which]->load (addr, false);
 		reply[0] = addr;
 		reply[1] = CMD_DATA;
-		reply[2] = which;
 		Serial.write (CMD_ACK);
 		reply_ready = true;
 		try_send_next ();

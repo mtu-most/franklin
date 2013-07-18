@@ -56,7 +56,7 @@ enum Command {
 	CMD_RUN,	// 1 byte: which channel (b0-6).  4 byte: speed (0 means off).
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
 	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target.
-	CMD_WAITTEMP,	// 1-2 byte: which channels; 8 bytes per channel: lower limit, upper limit.  Any of those channels will trigger the reply.  Reply (later): TEMPCB.
+	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit.  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
 	CMD_READTEMP,	// 1 byte: which channel.  Reply: TEMP.
 	CMD_LOAD,	// 1 byte: which channel.
 	CMD_SAVE,	// 1 byte: which channel.
@@ -68,7 +68,7 @@ enum Command {
 		// responses to host requests; only one active at a time.
 	CMD_START,	// 4 byte: 0 (protocol version).
 	CMD_TEMP,	// 1 byte: requested channel; 4 byte: requested channel's temperature.
-	CMD_DATA,	// 1 byte: requested channel; n byte: requested data.
+	CMD_DATA,	// n byte: requested data.
 	CMD_PONG,	// 1 byte: PING argument.
 		// asynchronous events.
 	CMD_MOVECB,	// 1 byte: number of movecb events.
