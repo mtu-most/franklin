@@ -6,6 +6,7 @@ var temp, temptarget, flowfactor;
 var bedtemp, bedtarget;
 var speed, drawing;
 var printfile, printsd;
+var do_refresh = false;
 
 function debug (text)
 {
@@ -187,7 +188,7 @@ function refresh ()
 	}
 	catch (e)
 	{
-		alert ('error refreshing: ' + e);
+		//alert ('error refreshing: ' + e);
 	}
 }
 
@@ -264,7 +265,7 @@ function init ()
 	}
 	refresh ();
 	update ();
-	setInterval (refresh_temps, 1000);
+	//setInterval (refresh_temps, 1000);
 }
 
 function set_bedtarget ()
@@ -292,4 +293,14 @@ function printsd_cb ()
 function set_speed ()
 {
 	send ('feedfactor&factor=' + speed.value);
+}
+
+function change_refresh ()
+{
+	if (do_refresh)
+		clearInterval (do_refresh);
+	if (document.getElementById ('refresh').checked == true)
+		do_refresh = setInterval (refresh, 2000);
+	else
+		do_refresh = false;
 }

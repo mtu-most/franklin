@@ -12,7 +12,7 @@
 			<button type="button" onclick="send ('home')">Home all</button>
 			<button type="button" onclick="send ('home&z=1')">Home Z</button>
 			<button type="button" onclick="send ('sleep')">Motors off</button>
-			<button type="button" onclick="refresh ()">Refresh</button>
+			<input type="checkbox" id='refresh' onchange="change_refresh ()"/>Refresh
 			<label for="printfile">Print file</label>
 			<input type="file" id="printfile" onchange="printfile_cb ()"/>
 			<label for="printsd">Print with SD</label>
