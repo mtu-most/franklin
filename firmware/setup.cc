@@ -120,6 +120,9 @@ void Extruder::save (uint16_t &addr, bool eeprom)
 void bed_load (uint16_t &addr, bool eeprom)
 {
 	num_extruders = read_16 (addr, eeprom);
+	// If num_extruders is an invalid value, the eeprom is probably not initialized; use 1 as default.
+	if (num_extruders > MAXOBJECT - FLAG_EXTRUDER0)
+		num_extruders = 1;
 	bed.load (addr, eeprom);
 }
 
@@ -140,6 +143,7 @@ void setup ()
 	num_movecbs = 0;
 	continue_cb = false;
 	which_tempcbs = 0;
+	limits_hit = 0;
 	pause_all = false;
 	last_packet = NULL;
 	out_busy = false;
@@ -196,6 +200,8 @@ void setup ()
 		temps[t]->last_shift_time = time;
 		temps[t]->is_on = false;
 		temps[t]->extra_loss = 0;
+		temps[t]->min_alarm = NAN;
+		temps[t]->max_alarm = NAN;
 	}
 	uint16_t address = 0;
 	for (uint8_t o = 0; o < MAXOBJECT; ++o)
@@ -203,7 +209,10 @@ void setup ()
 		if (!objects[o])
 			continue;
 		objects[o]->address = address;
-		objects[o]->load (address, true);
+		if (o == FLAG_BED)
+			bed_load (address, true);
+		else
+			objects[o]->load (address, true);
 	}
 	Serial.write (CMD_INIT);
 }

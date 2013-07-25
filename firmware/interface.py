@@ -4,11 +4,14 @@
 import serial
 import time
 import math
+import struct
 # }}}
 
-class printer: # {{{
+class Printer: # {{{
 	# Internal stuff.  {{{
 	# Constants.  {{{
+	# Serial timeout for normal communication in seconds.
+	default_timeout = .1
 	# Masks for computing checksums.
 	mask = [	[0xc0, 0xc3, 0xff, 0x09],
 			[0x38, 0x3a, 0x7e, 0x13],
@@ -18,37 +21,36 @@ class printer: # {{{
 	# Single-byte commands.
 	single = { 'ACK': '\x80', 'NACK': '\xe1', 'ACKWAIT': '\xd2', 'STALL': '\xb3', 'RESET': '\xf4', 'INIT': '\x95', 'ACKRESET': '\xa6', 'UNUSED': '\xc7' }
 	command = {
-			'BEGIN': 0,
-			'GOTO': 1,
-			'GOTOCB': 2,
-			'RUN': 3,
-			'SLEEP': 4,
-			'SETTEMP': 5,
-			'WAITTEMP': 6,
-			'READTEMP': 7,
-			'LOAD': 8,
-			'SAVE': 9,
-			'READ': 10,
-			'WRITE': 11,
-			'PAUSE': 12,
-			'PING': 13}
+			'BEGIN': 0x00,
+			'GOTO': 0x01,
+			'GOTOCB': 0x02,
+			'RUN': 0x03,
+			'SLEEP': 0x04,
+			'SETTEMP': 0x05,
+			'WAITTEMP': 0x06,
+			'READTEMP': 0x07,
+			'LOAD': 0x08,
+			'SAVE': 0x09,
+			'READ': 0x0a,
+			'WRITE': 0x0b,
+			'PAUSE': 0x0c,
+			'PING': 0x0d}
 	rcommand = {
-			'START': 14,
-			'TEMP': 15,
-			'DATA': 16,
-			'PONG': 17,
-			'MOVECB': 18,
-			'TEMPCB': 19,
-			'CONTINUE': 20,
-			'LIMIT': 21}
+			'START': '\x0e',
+			'TEMP': '\x0f',
+			'DATA': '\x10',
+			'PONG': '\x11',
+			'MOVECB': '\x12',
+			'TEMPCB': '\x13',
+			'CONTINUE': '\x14',
+			'LIMIT': '\x15'}
 	# }}}
 	def __init__ (self, port = '/dev/ttyACM0'): # {{{
 		self.printer = serial.Serial (port, baudrate = 115200, timeout = .01)
-		self.printer.readall ()
+		self.printer.readall ()	# flush buffer.
 		self.printer.setTimeout (2)
 		assert self.printer.read () == self.single['INIT']
-		self.printer.setTimeout (.01)
-		self.begin ()
+		self.printer.setTimeout (Printer.default_timeout)
 		self.ff_in = False
 		self.ff_out = False
 		self.limits = set ()
@@ -56,24 +58,25 @@ class printer: # {{{
 		self.movewait = 0
 		self.tempwait = set ()
 		self.num_extruders = 0
-		self.bed = Temp ()
+		self.begin ()
+		self.bed = Printer.Temp ()
 		self.bed_read (self.read (5))
 		self.axis = []
 		for a in range (3):
-			self.axis.append (Axis ())
+			self.axis.append (Printer.Axis ())
 			self.axis[a].read (self.read (a))
-		self.extruder = [self.Extruder () for t in range (10)]
+		self.extruder = [Printer.Extruder () for t in range (10)]
 		for e in range (self.num_extruders):
 			self.extruder[e].read (self.read (6 + e))
 	# }}}
-	def make_packet (data): # {{{
+	def make_packet (self, data): # {{{
 		data = chr (len (data) + 1) + data
 		for t in range ((len (data) + 2) / 3):
 			check = t & 0x7
 			for bit in range (5):
-				sum = check & mask[bit][3]
+				sum = check & Printer.mask[bit][3]
 				for byte in range (3):
-					sum ^= ord (data[3 * t + byte]) & mask[bit][byte]
+					sum ^= ord (data[3 * t + byte]) & Printer.mask[bit][byte]
 				sum ^= sum >> 4
 				sum ^= sum >> 2
 				sum ^= sum >> 1
@@ -83,7 +86,7 @@ class printer: # {{{
 		#print ' '.join (['%02x' % ord (x) for x in data])
 		return data
 	# }}}
-	def parse_packet (data): # {{{
+	def parse_packet (self, data): # {{{
 		#print ' '.join (['%02x' % ord (x) for x in data])
 		if (ord (data[0]) + 2) / 3 != (len (data) + 3) / 4:
 			return None
@@ -96,7 +99,7 @@ class printer: # {{{
 			for bit in range (5):
 				sum = 0
 				for byte in range (4):
-					sum ^= ord (r[byte]) & mask[bit][byte]
+					sum ^= ord (r[byte]) & Printer.mask[bit][byte]
 				sum ^= sum >> 4
 				sum ^= sum >> 2
 				sum ^= sum >> 1
@@ -112,9 +115,11 @@ class printer: # {{{
 		events = 0
 		ready = 0
 		while True:
+			print ('writing %s' % repr (data));
 			self.printer.write (data)
 			while True:
 				r = self.printer.read (1)
+				print ('read %s' % repr (r))
 				if r == self.single['ACK']:
 					return	# Done.
 				if r == self.single['NACK']:
@@ -128,16 +133,22 @@ class printer: # {{{
 				assert r != self.single['ACKRESET']	# This should only happen after we request it.
 				assert r != self.single['UNUSED']	# This must not be used at all.
 				if (ord (r) & 0x80) != 0:
+					print ('writing %s' % repr (self.single['NACK']));
 					self.printer.write (self.single['NACK'])
 					continue
 				# Regular packet received.  Must be asynchronous; handle it.
-				assert self.recv_packet (r, True) == ''
+				print repr (r)
+				reply = self.recv_packet (r, True)
+				print repr (reply)
+				assert reply == ''
 	# }}}
 	def recv_packet (self, buffer = '', want_any = False): # {{{
 		while True:
 			while len (buffer) < 1:
 				r = self.printer.read (1)
+				print ('read %s' % repr (r))
 				if r == '':
+					print ('writing %s' % repr (self.single['NACK']));
 					self.printer.write (self.single['NACK'])
 					continue
 				assert r != self.single['INIT']	# This should be handled more gracefully.  TODO.
@@ -146,7 +157,9 @@ class printer: # {{{
 			length = ((ord (buffer[0]) + 2) / 3) * 4
 			while len (buffer) < length:
 				r = self.printer.read (length - len (buffer))
+				print ('read %s' % repr (r))
 				if r == '':
+					print ('writing %s' % repr (self.single['NACK']));
 					self.printer.write (self.single['NACK'])
 					buffer = ''
 					break	# Start over.
@@ -155,14 +168,16 @@ class printer: # {{{
 				# Entire buffer has been received.
 				data = self.parse_packet (buffer)
 				if data is None:
+					print ('writing %s' % repr (self.single['NACK']));
 					self.printer.write (self.single['NACK'])
 					buffer = ''
-					break	# Start over.
+					continue	# Start over.
 				if bool (ord (data[0]) & 0x80) != self.ff_in:
 					# This was a retry of the previous packet; accept it and retry.
+					print ('writing %s' % repr (self.single['ACK']));
 					self.printer.write (self.single['ACK'])
 					buffer = ''
-					break	# Start over.
+					continue	# Start over.
 				# Packet successfully received.
 				# Clear the flip flop.
 				data = chr (ord (data[0]) & ~0x80) + data[1:]
@@ -176,35 +191,35 @@ class printer: # {{{
 					if want_any:
 						return ''
 					buffer = ''
-					break	# Start over.
+					continue	# Start over.
 				if data[0] == self.rcommand['TEMPCB']:
 					assert ord (data[0]) in self.tempwait
 					self.tempwait.remove (ord (data[0]))
 					if want_any:
 						return ''
 					buffer = ''
-					break	# Start over.
+					continue	# Start over.
 				if data[0] == self.rcommand['CONTINUE']:
 					self.wait = False
 					if want_any:
 						return ''
 					buffer = ''
-					break	# Start over.
+					continue	# Start over.
 				if data[0] == self.rcommand['LIMIT']:
 					self.limits.add (ord (data[1]))
 					if want_any:
 						return ''
 					buffer = ''
-					break	# Start over.
+					continue	# Start over.
 				return data
 	# }}}
 	def block (self, timout = 30): # {{{
 		self.printer.setTimeout (timeout)
 		r = self.printer.read ()
+		print ('read %s' % repr (r))
 		assert r != ''
-		self.printer.setTimeout (.01)
+		self.printer.setTimeout (Printer.default_timeout)
 		assert self.recv_packet (r, True) == ''
-	# }}}
 	# }}}
 	# Config stuff.  {{{
 	class Temp: # {{{
@@ -223,7 +238,7 @@ class printer: # {{{
 	# }}}
 	class Axis: # {{{
 		def __init__ (self):
-			self.motor = Motor ()
+			self.motor = Printer.Motor ()
 		def read (self, data):
 			data = self.motor.read (data)
 			self.limit_min_pin, self.limit_max_pin = struct.unpack ('<BB', data)
@@ -232,8 +247,8 @@ class printer: # {{{
 	# }}}
 	class Extruder: # {{{
 		def __init__ (self):
-			self.motor = Motor ()
-			self.temp = Temp ()
+			self.motor = Printer.Motor ()
+			self.temp = Printer.Temp ()
 		def read (self, data):
 			data = self.motor.read (data)
 			data = self.temp.read (data)
@@ -252,13 +267,14 @@ class printer: # {{{
 	# Internal commands.  {{{
 	def begin (self): # {{{
 		self.send_packet (struct.pack ('<Bf', self.command['BEGIN'], 0))
-		assert struct.unpack ('<Bf', self.recv_packet ()) == (self.command['START'], 0.0)
+		assert struct.unpack ('<Bf', self.recv_packet ()) == (ord (self.rcommand['START']), 0.0)
 	# }}}
 	def read (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['READ'], channel))
 		p = self.recv_packet ()
-		assert p[0] = self.rcommand['DATA']
+		assert p[0] == self.rcommand['DATA']
 		return p[1:]
+	# }}}
 	# }}}
 	# }}}
 	# Useful commands.  {{{
@@ -415,3 +431,5 @@ class printer: # {{{
 	# }}}
 	# }}}
 # }}}
+
+p = Printer ()

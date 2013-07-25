@@ -184,7 +184,10 @@ void packet ()
 			return;
 		}
 		addr = 2;
-		objects[which]->load (addr, false);
+		if (which == FLAG_BED)
+			bed_save (addr, false);
+		else
+			objects[which]->save (addr, false);
 		reply[0] = addr;
 		reply[1] = CMD_DATA;
 		Serial.write (CMD_ACK);
@@ -201,7 +204,10 @@ void packet ()
 			return;
 		}
 		addr = 3;
-		objects[which]->save (addr, false);
+		if (which == FLAG_BED)
+			bed_load (addr, false);
+		else
+			objects[which]->load (addr, false);
 		Serial.write (CMD_ACK);
 		return;
 	}

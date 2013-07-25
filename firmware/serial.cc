@@ -32,7 +32,7 @@ static const uint8_t MASK[5][4] = {
 	{0x95, 0x6c, 0xd5, 0x43},
 	{0x4b, 0xdc, 0xe2, 0x83}};
 
-// There is serial data available.
+// There may be serial data available.
 void serial ()
 {
 	if (command_end > 0 && millis () >= last_millis + 2)
@@ -45,6 +45,8 @@ void serial ()
 		if (!Serial.available ())
 			return;
 		command[0] = Serial.read ();
+		// Echo any received byte.
+		//Serial.write (command[0]);
 		// If this is a 1-byte command, handle it.
 		switch (command[0])
 		{
@@ -211,21 +213,6 @@ void try_send_next ()
 		// Still busy sending other packet.
 		return;
 	}
-	if (limits_hit != 0)
-	{
-		for (uint8_t w = 0; w < 8; ++w)
-		{
-			if (limits_hit & (1 << w))
-			{
-				limitcb_buffer[2] = w;
-				limits_hit &= ~(1 << w);
-				break;
-			}
-		}
-		prepare_packet (limitcb_buffer);
-		send_packet (limitcb_buffer);
-		return;
-	}
 	if (num_movecbs > 0)
 	{
 		movecb_buffer[2] = num_movecbs;
@@ -261,6 +248,21 @@ void try_send_next ()
 		prepare_packet (continue_buffer);
 		send_packet (continue_buffer);
 		continue_cb = false;
+		return;
+	}
+	if (limits_hit != 0)
+	{
+		for (uint8_t w = 0; w < 8; ++w)
+		{
+			if (limits_hit & (1 << w))
+			{
+				limitcb_buffer[2] = w;
+				limits_hit &= ~(1 << w);
+				break;
+			}
+		}
+		prepare_packet (limitcb_buffer);
+		send_packet (limitcb_buffer);
 		return;
 	}
 }

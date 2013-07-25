@@ -185,8 +185,8 @@ EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
 
-uint16_t bed_load (bool eeprom);
-void bed_save (bool eeprom);
+void bed_load (uint16_t &addr, bool eeprom);
+void bed_save (uint16_t &addr, bool eeprom);
 void serial ();	// Handle commands from serial.
 void packet ();	// A command packet has arrived; handle it.
 void send_packet (char *the_packet);
