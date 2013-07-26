@@ -61,6 +61,10 @@ void packet ()
 		// Set cb in next record, because it will be read when queue_start has already been incremented.
 		queue[(queue_end + 1) & QUEUE_LENGTH_MASK].cb = command[1] == CMD_GOTOCB;
 		queue_end = (queue_end + 1) & QUEUE_LENGTH_MASK;
+		if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
+			Serial.write (CMD_ACKWAIT);
+		else
+			Serial.write (CMD_ACK);
 		if (motors_busy == 0)
 			next_move ();
 		break;

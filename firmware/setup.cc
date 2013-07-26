@@ -135,6 +135,7 @@ void bed_save (uint16_t &addr, bool eeprom)
 void setup ()
 {
 	// Initialize volatile variables.
+	debug = 0;
 	Serial.begin (115200);
 	command_end = 0;
 	motors_busy = 0;
@@ -189,6 +190,7 @@ void setup ()
 		if (!motors[m])
 			continue;
 		motors[m]->steps_total = 0;
+		motors[m]->steps_done = 0;
 		motors[m]->continuous = false;
 	}
 	for (uint8_t t = 0; t < MAXOBJECT; ++t)

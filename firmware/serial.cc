@@ -95,10 +95,11 @@ void serial ()
 		return;
 	if (len + command_end > COMMAND_SIZE)
 		len = COMMAND_SIZE - command_end;
-	uint8_t cmd_len = (((command[0] & COMMAND_LEN_MASK) + 2) / 3) * 4;
+	uint8_t cmd_len = command[0] & COMMAND_LEN_MASK;
+	cmd_len += (cmd_len + 2) / 3;
 	if (command_end + len > cmd_len)
 		len = cmd_len - command_end;
-	Serial.readBytes (&command[command_end], len);
+	Serial.readBytes (reinterpret_cast <char *> (&command[command_end]), len);
 	last_millis = millis ();
 	command_end += len;
 	if (command_end < cmd_len)
@@ -191,7 +192,7 @@ static void prepare_packet (char *the_packet)
 			if (check & 1)
 				sum |= 1 << (bit + 3);
 		}
-		the_packet[the_packet[0] + t] = sum;
+		the_packet[cmd_len + t] = sum;
 	}
 }
 

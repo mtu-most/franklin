@@ -12,6 +12,8 @@ class Printer: # {{{
 	# Constants.  {{{
 	# Serial timeout for normal communication in seconds.
 	default_timeout = .1
+	# Maximum number of extruders.
+	MAXEXTRUDER = 10
 	# Masks for computing checksums.
 	mask = [	[0xc0, 0xc3, 0xff, 0x09],
 			[0x38, 0x3a, 0x7e, 0x13],
@@ -60,13 +62,13 @@ class Printer: # {{{
 		self.num_extruders = 0
 		self.begin ()
 		self.bed = Printer.Temp ()
-		self.bed_read (self.read (5))
 		self.axis = []
 		for a in range (3):
 			self.axis.append (Printer.Axis ())
 			self.axis[a].read (self.read (a))
-		self.extruder = [Printer.Extruder () for t in range (10)]
-		for e in range (self.num_extruders):
+		self.bed_read (self.read (5))
+		self.extruder = [Printer.Extruder () for t in range (Printer.MAXEXTRUDER)]
+		for e in range (Printer.MAXEXTRUDER):
 			self.extruder[e].read (self.read (6 + e))
 	# }}}
 	def make_packet (self, data): # {{{
@@ -88,7 +90,7 @@ class Printer: # {{{
 	# }}}
 	def parse_packet (self, data): # {{{
 		#print ' '.join (['%02x' % ord (x) for x in data])
-		if (ord (data[0]) + 2) / 3 != (len (data) + 3) / 4:
+		if ord (data[0]) + (ord (data[0]) + 2) / 3 != len (data):
 			return None
 		length = ord (data[0])
 		checksum = data[length:]
@@ -115,11 +117,13 @@ class Printer: # {{{
 		events = 0
 		ready = 0
 		while True:
-			print ('writing %s' % repr (data));
+			#print ('writing %s' % repr (data));
 			self.printer.write (data)
 			while True:
 				r = self.printer.read (1)
-				print ('read %s' % repr (r))
+				#print ('read %s' % repr (r))
+				if r == '':
+					break	# Packet was not received.  Break from this loop to resend it.
 				if r == self.single['ACK']:
 					return	# Done.
 				if r == self.single['NACK']:
@@ -133,33 +137,33 @@ class Printer: # {{{
 				assert r != self.single['ACKRESET']	# This should only happen after we request it.
 				assert r != self.single['UNUSED']	# This must not be used at all.
 				if (ord (r) & 0x80) != 0:
-					print ('writing %s' % repr (self.single['NACK']));
+					#print ('writing %s (1)' % repr (self.single['NACK']));
 					self.printer.write (self.single['NACK'])
 					continue
 				# Regular packet received.  Must be asynchronous; handle it.
-				print repr (r)
+				#print repr (r)
 				reply = self.recv_packet (r, True)
-				print repr (reply)
+				#print repr (reply)
 				assert reply == ''
 	# }}}
 	def recv_packet (self, buffer = '', want_any = False): # {{{
 		while True:
 			while len (buffer) < 1:
 				r = self.printer.read (1)
-				print ('read %s' % repr (r))
+				#print ('read %s' % repr (r))
 				if r == '':
-					print ('writing %s' % repr (self.single['NACK']));
+					#print ('writing %s (2)' % repr (self.single['NACK']));
 					self.printer.write (self.single['NACK'])
 					continue
 				assert r != self.single['INIT']	# This should be handled more gracefully.  TODO.
 				assert (ord (r) & 0x80) == 0	# This must not happen.
 				buffer += r
-			length = ((ord (buffer[0]) + 2) / 3) * 4
+			length = ord (buffer[0]) + (ord (buffer[0]) + 2) / 3
 			while len (buffer) < length:
 				r = self.printer.read (length - len (buffer))
-				print ('read %s' % repr (r))
+				#print ('read %s (%d/%d)' % (repr (r), len (r) + len (buffer), length))
 				if r == '':
-					print ('writing %s' % repr (self.single['NACK']));
+					#print ('writing %s (3)' % repr (self.single['NACK']));
 					self.printer.write (self.single['NACK'])
 					buffer = ''
 					break	# Start over.
@@ -168,17 +172,19 @@ class Printer: # {{{
 				# Entire buffer has been received.
 				data = self.parse_packet (buffer)
 				if data is None:
-					print ('writing %s' % repr (self.single['NACK']));
+					#print ('writing %s (4)' % repr (self.single['NACK']));
 					self.printer.write (self.single['NACK'])
 					buffer = ''
 					continue	# Start over.
 				if bool (ord (data[0]) & 0x80) != self.ff_in:
 					# This was a retry of the previous packet; accept it and retry.
-					print ('writing %s' % repr (self.single['ACK']));
+					#print ('writing %s' % repr (self.single['ACK']));
 					self.printer.write (self.single['ACK'])
 					buffer = ''
 					continue	# Start over.
 				# Packet successfully received.
+				#print ('writing %s' % repr (self.single['ACK']));
+				self.printer.write (self.single['ACK'])
 				# Clear the flip flop.
 				data = chr (ord (data[0]) & ~0x80) + data[1:]
 				# Flip it.
@@ -216,7 +222,7 @@ class Printer: # {{{
 	def block (self, timout = 30): # {{{
 		self.printer.setTimeout (timeout)
 		r = self.printer.read ()
-		print ('read %s' % repr (r))
+		#print ('read %s' % repr (r))
 		assert r != ''
 		self.printer.setTimeout (Printer.default_timeout)
 		assert self.recv_packet (r, True) == ''
@@ -224,10 +230,10 @@ class Printer: # {{{
 	# Config stuff.  {{{
 	class Temp: # {{{
 		def read (self, data):
-			self.temp, self.T0, self.adc0, self.radiation, self.power, self.buffer_delay, self.power_pin, self.thermistor_pin = struct.unpack ('<fffffHBB', data[:24])
+			self.beta, self.T0, self.adc0, self.radiation, self.power, self.buffer_delay, self.power_pin, self.thermistor_pin = struct.unpack ('<fffffHBB', data[:24])
 			return data[24:]
 		def write (self):
-			return struct.pack ('<fffffHBB', self.temp, self.T0, self.adc0, self.radiation, self.power, self.buffer_delay, self.power_pin, self.thermistor_pin)
+			return struct.pack ('<fffffHBB', self.beta, self.T0, self.adc0, self.radiation, self.power, self.buffer_delay, self.power_pin, self.thermistor_pin)
 	# }}}
 	class Motor: # {{{
 		def read (self, data):
@@ -258,6 +264,7 @@ class Printer: # {{{
 	# }}}
 	def bed_read (self, data): # {{{
 		self.num_extruders = struct.unpack ('<H', data[:2])[0]
+		print 'num extruders: %d (%s)' % (self.num_extruders, ' '.join ('%02x' % ord (a) for a in data))
 		assert self.bed.read (data[2:]) == ''
 	# }}}
 	def bed_write (self): # {{{
@@ -328,6 +335,10 @@ class Printer: # {{{
 		else:
 			self.tempwait.add (channel)
 	# }}}
+	def blocktemps (self): # {{{
+		while len (self.tempwait) > 0:
+			self.block ()
+	# }}}
 	def readtemp (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['READTEMP'], channel))
 		return struct.unpack ('<f', self.recv_packet ())[0]
@@ -339,11 +350,17 @@ class Printer: # {{{
 		elif channel == 5:
 			self.bed_read (self.read (channel))
 		else:
-			assert 6 <= channel < self.num_extruders
+			assert 6 <= channel < Printer.MAXEXTRUDER
 			self.extruder[channel - 6].read (self.read (channel))
 	# }}}
 	def save (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['SAVE'], channel))
+	# }}}
+	def save_all (self): # {{{
+		for i in range (6 + Printer.MAXEXTRUDER):
+			if i not in (3, 4):
+				print ('saving %d' % i)
+				self.save (i)
 	# }}}
 	def write (self, channel): # {{{
 		if channel < 3:
@@ -351,9 +368,15 @@ class Printer: # {{{
 		elif channel == 5:
 			data = self.bed_write ()
 		else:
-			assert 6 <= channel < self.num_extruders
+			assert 6 <= channel < 6 + Printer.MAXEXTRUDER
 			data = self.extruder[channel - 6].write ()
 		self.send_packet (struct.pack ('<BB', self.command['WRITE'], channel) + data)
+	# }}}
+	def write_all (self): # {{{
+		for i in range (6 + Printer.MAXEXTRUDER):
+			if i not in (3, 4):
+				print ('writing %d' % i)
+				self.write (i)
 	# }}}
 	def pause (self, pausing = True): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['PAUSE'], pausing))
@@ -432,4 +455,26 @@ class Printer: # {{{
 	# }}}
 # }}}
 
-p = Printer ()
+if __name__ == '__main__':
+	p = Printer ()
+	p.set_ramps_pins ()
+	# Set up everything for calibration.
+	p.num_extruders = 0
+	for a in range (3):
+		p.axis[a].motor.steps_per_mm = 1
+	p.bed.beta = 1
+	p.bed.T0 = 0
+	p.bed.adc0 = 0
+	p.bed.radiation = 0
+	p.bed.power = 0
+	p.bed.buffer_delay = 1
+	for e in range (Printer.MAXEXTRUDER):
+		p.extruder[e].temp.beta = 1
+		p.extruder[e].temp.T0 = 0
+		p.extruder[e].temp.adc0 = 0
+		p.extruder[e].temp.radiation = 0
+		p.extruder[e].temp.power = 0
+		p.extruder[e].temp.buffer_delay = 1
+		p.extruder[e].motor.steps_per_mm = 1
+	p.write_all ()
+	#p.save_all ()

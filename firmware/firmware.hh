@@ -158,7 +158,7 @@ struct MoveCommand
 #define COMMAND_SIZE_LOG2 7
 #define COMMAND_SIZE (1 << COMMAND_SIZE_LOG2)
 #define COMMAND_LEN_MASK (COMMAND_SIZE - 1)
-EXTERN char command[COMMAND_SIZE];
+EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
 EXTERN char reply[COMMAND_SIZE];
 EXTERN char limitcb_buffer[4];
@@ -184,6 +184,8 @@ EXTERN bool pause_all;
 EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
+
+EXTERN int debug;
 
 void bed_load (uint16_t &addr, bool eeprom);
 void bed_save (uint16_t &addr, bool eeprom);
