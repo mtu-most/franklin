@@ -12,7 +12,11 @@ static uint8_t read_8 (uint16_t &address, bool eeprom)
 static void write_8 (uint16_t &address, uint8_t data, bool eeprom)
 {
 	if (eeprom)
+	{
+		debug ("EEPROM[%x] = %x", address, data);
 		EEPROM.write (address++, data);
+		return;
+	}
 	reply[address++] = data;
 }
 
@@ -119,7 +123,8 @@ void Extruder::save (uint16_t &addr, bool eeprom)
 
 void bed_load (uint16_t &addr, bool eeprom)
 {
-	num_extruders = read_16 (addr, eeprom);
+	num_extruders = read_8 (addr, eeprom);
+	debug ("addr: %x, num_extruders: %d", addr, num_extruders);
 	// If num_extruders is an invalid value, the eeprom is probably not initialized; use 1 as default.
 	if (num_extruders > MAXOBJECT - FLAG_EXTRUDER0)
 		num_extruders = 1;
@@ -128,14 +133,13 @@ void bed_load (uint16_t &addr, bool eeprom)
 
 void bed_save (uint16_t &addr, bool eeprom)
 {
-	write_16 (addr, num_extruders, eeprom);
+	write_8 (addr, num_extruders, eeprom);
 	bed.save (addr, eeprom);
 }
 
 void setup ()
 {
 	// Initialize volatile variables.
-	debug = 0;
 	Serial.begin (115200);
 	command_end = 0;
 	motors_busy = 0;

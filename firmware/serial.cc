@@ -35,9 +35,9 @@ static const uint8_t MASK[5][4] = {
 // There may be serial data available.
 void serial ()
 {
-	if (command_end > 0 && millis () >= last_millis + 2)
+	if (command_end > 0 && millis () >= last_millis + 100)
 	{
-		Serial.write (CMD_NACK);
+		// Command not finished; ignore it and wait for next.
 		command_end = 0;
 	}
 	while (command_end == 0)
@@ -45,8 +45,7 @@ void serial ()
 		if (!Serial.available ())
 			return;
 		command[0] = Serial.read ();
-		// Echo any received byte.
-		//Serial.write (command[0]);
+		debug ("received: %x", command[0]);
 		// If this is a 1-byte command, handle it.
 		switch (command[0])
 		{
@@ -58,7 +57,9 @@ void serial ()
 			continue;
 		case CMD_NACK:
 			// Nack: the host didn't properly receive the notification: resend.
-			send_packet (last_packet);
+			// Unless the last packet was already received; in that case ignore the NACK.
+			if (out_busy)
+				send_packet (last_packet);
 			continue;
 		case CMD_RESET:
 			// Emergency reset.
@@ -92,7 +93,10 @@ void serial ()
 	}
 	int len = Serial.available ();
 	if (len == 0)
+	{
+		debug ("no more data available now");
 		return;
+	}
 	if (len + command_end > COMMAND_SIZE)
 		len = COMMAND_SIZE - command_end;
 	uint8_t cmd_len = command[0] & COMMAND_LEN_MASK;
@@ -100,10 +104,14 @@ void serial ()
 	if (command_end + len > cmd_len)
 		len = cmd_len - command_end;
 	Serial.readBytes (reinterpret_cast <char *> (&command[command_end]), len);
+	debug ("read %d bytes", len);
 	last_millis = millis ();
 	command_end += len;
 	if (command_end < cmd_len)
+	{
+		debug ("not done yet; %d of %d received.", command_end, cmd_len);
 		return;
+	}
 	command_end = 0;
 	// Check packet integrity.
 	// Size must be good.
@@ -138,11 +146,13 @@ void serial ()
 		}
 	}
 	// Packet is good.
+	debug ("good");
 	// Flip-flop must have good state.
 	if ((command[1] & 0x80) != ff_in)
 	{
 		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
 		// Resend the ack, but don't do anything (the action has already been taken).
+		debug ("duplicate");
 		Serial.write (CMD_ACK);
 		return;
 	}
@@ -168,6 +178,7 @@ void serial ()
 // Set checksum bytes.
 static void prepare_packet (char *the_packet)
 {
+	debug ("prepare");
 	// Set flipflop bit.
 	the_packet[1] &= ~0x80;
 	the_packet[1] ^= ff_out;
@@ -199,6 +210,7 @@ static void prepare_packet (char *the_packet)
 // Send packet to host.
 void send_packet (char *the_packet)
 {
+	debug ("send");
 	last_packet = the_packet;
 	uint8_t cmd_len = the_packet[0] & COMMAND_LEN_MASK;
 	for (uint8_t t = 0; t < cmd_len + (cmd_len + 2) / 3; ++t)
@@ -209,13 +221,16 @@ void send_packet (char *the_packet)
 // Call send_packet if we can.
 void try_send_next ()
 {
+	debug ("try send");
 	if (out_busy)
 	{
+		debug ("still busy");
 		// Still busy sending other packet.
 		return;
 	}
 	if (num_movecbs > 0)
 	{
+		debug ("movecb %d", num_movecbs);
 		movecb_buffer[2] = num_movecbs;
 		prepare_packet (movecb_buffer);
 		send_packet (movecb_buffer);
@@ -224,6 +239,7 @@ void try_send_next ()
 	}
 	if (which_tempcbs != 0)
 	{
+		debug ("tempcb %d", which_tempcbs);
 		for (uint8_t w = 0; w < FLAG_EXTRUDER0 + num_extruders; ++w)
 		{
 			if (which_tempcbs & (1 << w))
@@ -239,6 +255,7 @@ void try_send_next ()
 	}
 	if (reply_ready)
 	{
+		debug ("reply %x %d", reply[1], reply[0]);
 		prepare_packet (reply);
 		send_packet (reply);
 		reply_ready = false;
@@ -246,6 +263,7 @@ void try_send_next ()
 	}
 	if (continue_cb)
 	{
+		debug ("continue");
 		prepare_packet (continue_buffer);
 		send_packet (continue_buffer);
 		continue_cb = false;
@@ -253,6 +271,7 @@ void try_send_next ()
 	}
 	if (limits_hit != 0)
 	{
+		debug ("limit");
 		for (uint8_t w = 0; w < 8; ++w)
 		{
 			if (limits_hit & (1 << w))
@@ -266,4 +285,5 @@ void try_send_next ()
 		send_packet (limitcb_buffer);
 		return;
 	}
+	debug ("nothing to send?!");
 }

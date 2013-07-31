@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <math.h>
 
-#define QUEUE_LENGTH_LOG2 6
+#define QUEUE_LENGTH_LOG2 4
 #define QUEUE_LENGTH (1 << QUEUE_LENGTH_LOG2)	// Number of items which can be in the queue.
 #define QUEUE_LENGTH_MASK ((1 << QUEUE_LENGTH_LOG2) - 1)	// Mask to use for circular queue.
 #define MAXOBJECT 16		// Total number of objects.  From Extruder 0 on, these are all extruders.
@@ -19,7 +19,7 @@
 // Maximum number of extruders supported by this board.  This is not the number
 // of extruders available; that is a normal variable defined below (and
 // changable in eeprom).
-#define MAX_EXTRUDER MAXOBJECT - FLAG_EXTRUDER0
+#define MAX_EXTRUDER (MAXOBJECT - FLAG_EXTRUDER0)
 
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
@@ -45,7 +45,7 @@ enum SingleByteCommands {	// See serial.cc for computation of command values.
 	CMD_INIT = 0x95,	// Printer started and is ready for commands.
 	CMD_ACKRESET = 0xa6,	// Reset received.
 	// The following code has proper checksum correction, but isn't used.  If a new commands is added, it should use this code.
-	CMD_UNUSED = 0xc7	// Unused code.
+	CMD_DEBUG = 0xc7	// Debug message; a nul-terminated message follows (no checksum; no resend).
 };
 
 enum Command {
@@ -185,8 +185,7 @@ EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
 
-EXTERN int debug;
-
+void debug (char const *fmt, ...);
 void bed_load (uint16_t &addr, bool eeprom);
 void bed_save (uint16_t &addr, bool eeprom);
 void serial ();	// Handle commands from serial.

@@ -7,11 +7,15 @@ import math
 import struct
 # }}}
 
+def dprint (x, data):
+	#print ('%s: %s' % (x, ' '.join (['%02x' % ord (c) for c in data])))
+	pass
+
 class Printer: # {{{
 	# Internal stuff.  {{{
 	# Constants.  {{{
 	# Serial timeout for normal communication in seconds.
-	default_timeout = .1
+	default_timeout = 2
 	# Maximum number of extruders.
 	MAXEXTRUDER = 10
 	# Masks for computing checksums.
@@ -21,7 +25,7 @@ class Printer: # {{{
 			[0x95, 0x6c, 0xd5, 0x43],
 			[0x4b, 0xdc, 0xe2, 0x83]]
 	# Single-byte commands.
-	single = { 'ACK': '\x80', 'NACK': '\xe1', 'ACKWAIT': '\xd2', 'STALL': '\xb3', 'RESET': '\xf4', 'INIT': '\x95', 'ACKRESET': '\xa6', 'UNUSED': '\xc7' }
+	single = { 'ACK': '\x80', 'NACK': '\xe1', 'ACKWAIT': '\xd2', 'STALL': '\xb3', 'RESET': '\xf4', 'INIT': '\x95', 'ACKRESET': '\xa6', 'DEBUG': '\xc7' }
 	command = {
 			'BEGIN': 0x00,
 			'GOTO': 0x01,
@@ -51,7 +55,15 @@ class Printer: # {{{
 		self.printer = serial.Serial (port, baudrate = 115200, timeout = .01)
 		self.printer.readall ()	# flush buffer.
 		self.printer.setTimeout (2)
-		assert self.printer.read () == self.single['INIT']
+		r = self.printer.read ()
+		self.printer.setTimeout (Printer.default_timeout)
+		while True:
+			if r == self.single['DEBUG']:
+				self.handle_debug ()
+				r = self.printer.read ()
+				continue
+			assert r == self.single['INIT']
+			break
 		self.printer.setTimeout (Printer.default_timeout)
 		self.ff_in = False
 		self.ff_out = False
@@ -117,13 +129,17 @@ class Printer: # {{{
 		events = 0
 		ready = 0
 		while True:
-			#print ('writing %s' % repr (data));
+			dprint ('(1) writing', data);
 			self.printer.write (data)
 			while True:
 				r = self.printer.read (1)
-				#print ('read %s' % repr (r))
+				if r != self.single['DEBUG']:
+					dprint ('(1) read', r)
 				if r == '':
 					break	# Packet was not received.  Break from this loop to resend it.
+				if r == self.single['DEBUG']:
+					self.handle_debug ()
+					continue
 				if r == self.single['ACK']:
 					return	# Done.
 				if r == self.single['NACK']:
@@ -135,9 +151,8 @@ class Printer: # {{{
 				assert r != self.single['RESET']	# This should only be sent to the firmware, not to the host.
 				assert r != self.single['INIT']		# This means the printer has reset; that shouldn't happen (but should be handled better; TODO).
 				assert r != self.single['ACKRESET']	# This should only happen after we request it.
-				assert r != self.single['UNUSED']	# This must not be used at all.
 				if (ord (r) & 0x80) != 0:
-					#print ('writing %s (1)' % repr (self.single['NACK']));
+					dprint ('writing (1)', self.single['NACK']);
 					self.printer.write (self.single['NACK'])
 					continue
 				# Regular packet received.  Must be asynchronous; handle it.
@@ -150,10 +165,14 @@ class Printer: # {{{
 		while True:
 			while len (buffer) < 1:
 				r = self.printer.read (1)
-				#print ('read %s' % repr (r))
+				if r != self.single['DEBUG']:
+					dprint ('(3) read', r)
 				if r == '':
-					#print ('writing %s (2)' % repr (self.single['NACK']));
+					dprint ('writing (2)', self.single['NACK']);
 					self.printer.write (self.single['NACK'])
+					continue
+				if r == self.single['DEBUG']:
+					self.handle_debug ()
 					continue
 				assert r != self.single['INIT']	# This should be handled more gracefully.  TODO.
 				assert (ord (r) & 0x80) == 0	# This must not happen.
@@ -161,9 +180,9 @@ class Printer: # {{{
 			length = ord (buffer[0]) + (ord (buffer[0]) + 2) / 3
 			while len (buffer) < length:
 				r = self.printer.read (length - len (buffer))
-				#print ('read %s (%d/%d)' % (repr (r), len (r) + len (buffer), length))
+				dprint ('read (%d/%d)' % (len (r) + len (buffer), length), r)
 				if r == '':
-					#print ('writing %s (3)' % repr (self.single['NACK']));
+					dprint ('writing (3)', self.single['NACK']);
 					self.printer.write (self.single['NACK'])
 					buffer = ''
 					break	# Start over.
@@ -172,18 +191,18 @@ class Printer: # {{{
 				# Entire buffer has been received.
 				data = self.parse_packet (buffer)
 				if data is None:
-					#print ('writing %s (4)' % repr (self.single['NACK']));
+					dprint ('writing (4)', self.single['NACK']);
 					self.printer.write (self.single['NACK'])
 					buffer = ''
 					continue	# Start over.
 				if bool (ord (data[0]) & 0x80) != self.ff_in:
 					# This was a retry of the previous packet; accept it and retry.
-					#print ('writing %s' % repr (self.single['ACK']));
+					dprint ('(2) writing', self.single['ACK']);
 					self.printer.write (self.single['ACK'])
 					buffer = ''
 					continue	# Start over.
 				# Packet successfully received.
-				#print ('writing %s' % repr (self.single['ACK']));
+				dprint ('(3) writing', self.single['ACK']);
 				self.printer.write (self.single['ACK'])
 				# Clear the flip flop.
 				data = chr (ord (data[0]) & ~0x80) + data[1:]
@@ -222,10 +241,19 @@ class Printer: # {{{
 	def block (self, timout = 30): # {{{
 		self.printer.setTimeout (timeout)
 		r = self.printer.read ()
-		#print ('read %s' % repr (r))
+		dprint ('(2) read', r)
 		assert r != ''
 		self.printer.setTimeout (Printer.default_timeout)
 		assert self.recv_packet (r, True) == ''
+	# }}}
+	def handle_debug (self): # {{{
+		s = ''
+		while True:
+			r = self.printer.read (1)
+			if r in ('', '\0'):
+				break
+			s += r
+		print ('Debug: %s' % s)
 	# }}}
 	# Config stuff.  {{{
 	class Temp: # {{{
@@ -263,12 +291,12 @@ class Printer: # {{{
 			return self.motor.write () + self.temp.write () + struct.pack ('<fff', self.filament_heat, self.nozzle_size, self.filament_size)
 	# }}}
 	def bed_read (self, data): # {{{
-		self.num_extruders = struct.unpack ('<H', data[:2])[0]
-		print 'num extruders: %d (%s)' % (self.num_extruders, ' '.join ('%02x' % ord (a) for a in data))
-		assert self.bed.read (data[2:]) == ''
+		self.num_extruders = struct.unpack ('<B', data[:1])[0]
+		dprint ('num extruders: %d' % self.num_extruders, data)
+		assert self.bed.read (data[1:]) == ''
 	# }}}
 	def bed_write (self): # {{{
-		return struct.pack ('<H', self.num_extruders) + self.bed.write ()
+		return struct.pack ('<B', self.num_extruders) + self.bed.write ()
 	# }}}
 	# }}}
 	# Internal commands.  {{{
@@ -341,7 +369,9 @@ class Printer: # {{{
 	# }}}
 	def readtemp (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['READTEMP'], channel))
-		return struct.unpack ('<f', self.recv_packet ())[0]
+		ret = self.recv_packet ()
+		assert ret[0] == self.rcommand['TEMP']
+		return struct.unpack ('<f', ret[1:])[0]
 	# }}}
 	def load (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['LOAD'], channel))
@@ -375,7 +405,7 @@ class Printer: # {{{
 	def write_all (self): # {{{
 		for i in range (6 + Printer.MAXEXTRUDER):
 			if i not in (3, 4):
-				print ('writing %d' % i)
+				print ('(4) writing %d' % i)
 				self.write (i)
 	# }}}
 	def pause (self, pausing = True): # {{{
@@ -383,7 +413,7 @@ class Printer: # {{{
 	# }}}
 	def ping (self, arg = 0): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['PING'], arg))
-		assert struct.unpack ('<BB', self.recv_packet ()) == (self.command['PONG'], arg)
+		assert struct.unpack ('<BB', self.recv_packet ()) == (ord (self.rcommand['PONG']), arg)
 	# }}}
 	# }}}
 	# Presets.  {{{
@@ -455,26 +485,56 @@ class Printer: # {{{
 	# }}}
 # }}}
 
-if __name__ == '__main__':
+if __name__ == '__main__': # {{{
 	p = Printer ()
-	p.set_ramps_pins ()
-	# Set up everything for calibration.
-	p.num_extruders = 0
-	for a in range (3):
-		p.axis[a].motor.steps_per_mm = 1
-	p.bed.beta = 1
-	p.bed.T0 = 0
-	p.bed.adc0 = 0
-	p.bed.radiation = 0
-	p.bed.power = 0
-	p.bed.buffer_delay = 1
-	for e in range (Printer.MAXEXTRUDER):
-		p.extruder[e].temp.beta = 1
-		p.extruder[e].temp.T0 = 0
-		p.extruder[e].temp.adc0 = 0
-		p.extruder[e].temp.radiation = 0
-		p.extruder[e].temp.power = 0
-		p.extruder[e].temp.buffer_delay = 1
-		p.extruder[e].motor.steps_per_mm = 1
-	p.write_all ()
-	#p.save_all ()
+	if False:
+		# Set everything up for calibration.
+		p.set_ramps_pins ()
+		p.num_extruders = 2
+		# X and Y: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
+		p.axis[0].motor.steps_per_mm = (200 * 16.) / (5 * 12)	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
+		p.axis[1].motor.steps_per_mm = (200 * 16.) / (5 * 12)
+		# Z: 1.25 mm per revolution; 200 steps per revolution; 16 microsteps per step.
+		p.axis[2].motor.steps_per_mm = (200 * 16.) / 1.25
+		p.bed.beta = 1
+		p.bed.T0 = 0
+		p.bed.adc0 = 0	# Debugging: ignore T0 and beta, return raw counts.
+		p.bed.radiation = 0
+		p.bed.power = 0
+		p.bed.buffer_delay = 1
+		for e in range (Printer.MAXEXTRUDER):
+			p.extruder[e].temp.beta = 1
+			p.extruder[e].temp.T0 = 0
+			p.extruder[e].temp.adc0 = 0	# Debugging: ignore T0 and beta, return raw counts.
+			p.extruder[e].temp.radiation = 0
+			p.extruder[e].temp.power = 0
+			p.extruder[e].temp.buffer_delay = 1
+			# Different per hobbed bolt and possibly per filament; must be measured.
+			# However, as an estimate:
+			# Small gear has 9 teeth; large gear 47.  Radius of hobbing is approximately 3.2 mm (20/2pi).
+			p.extruder[e].motor.steps_per_mm = 835 #(200 * 16.) / ((9. / 47) * 20)
+		p.write_all ()
+		p.save_all ()
+		p.bed_read (p.read (5))
+	else:
+		# Display current settings.
+		print ('num extruders: %d' % p.num_extruders)
+		print ('bed pins: %d %d' % (p.bed.power_pin, p.bed.thermistor_pin))
+		print ('bed settings: %f %f %f %f %f %d' % (p.bed.beta, p.bed.T0, p.bed.adc0, p.bed.radiation, p.bed.power, p.bed.buffer_delay))
+		for a in range (3):
+			print ('Axis %d:' % a)
+			print ('\tlimit pins: %d %d' % (p.axis[a].limit_min_pin, p.axis[a].limit_max_pin))
+			print ('\tmotor pins: %d %d %d' % (p.axis[a].motor.step_pin, p.axis[a].motor.dir_pin, p.axis[a].motor.sleep_pin))
+			print ('\tmotor steps per mm: %d' % p.axis[a].motor.steps_per_mm)
+		for e in range (Printer.MAXEXTRUDER):
+			print ('extruder %d' % e)
+			print ('\ttemp pins: %d %d' % (p.extruder[e].temp.power_pin, p.extruder[e].temp.thermistor_pin))
+			print ('\ttemp settings: %f %f %f %f %f %d' % (p.extruder[e].temp.beta, p.extruder[e].temp.T0, p.extruder[e].temp.adc0, p.extruder[e].temp.radiation, p.extruder[e].temp.power, p.extruder[e].temp.buffer_delay))
+			print ('\tmotor pins: %d %d %d' % (p.extruder[e].motor.step_pin, p.extruder[e].motor.dir_pin, p.extruder[e].motor.sleep_pin))
+			print ('\tmotor steps per mm: %d' % p.extruder[e].motor.steps_per_mm)
+		for i in range (5, 16):
+			print ('temp: %f' % p.readtemp (i))
+		p.run (6, 1)
+		p.run (7, 2)
+		p.run (8, 2)
+# }}}

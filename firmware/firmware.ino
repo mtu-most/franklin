@@ -6,14 +6,75 @@
 
 float Temp::read () {
 	if (thermistor_pin >= 255)
-		return -1;
+		return NAN;
 	uint16_t adc = analogRead (thermistor_pin);
 	// adc = adc0 * exp (-beta * (T - T0))
 	// so
 	//	adc/adc0 = exp (-beta * (T-T0))
 	//	ln (adc/adc0) = -beta*(T-T0)
 	//	T = -ln(adc/adc0)/beta+T0
-	return -log (adc / adc0) / beta + T0;
+	if (adc0 > 0)
+		return -log (adc / adc0) / beta + T0;
+	// adc0 <= 0 is used for debugging: return raw value.
+	return adc;
+}
+
+void debug (char const *fmt, ...) {
+	va_list ap;
+	va_start (ap, fmt);
+	Serial.write (CMD_DEBUG);
+	for (char const *p = fmt; *p; ++p) {
+		if (*p == '%') {
+			++p;
+			switch (*p) {
+			case 0: {
+				Serial.write ('%');
+				--p;
+				break;
+			}
+			case '%': {
+				Serial.write ('%');
+				break;
+			}
+			case 'd': {
+				int arg = va_arg (ap, int);
+				Serial.print (arg, DEC);
+				break;
+			}
+			case 'x': {
+				int arg = va_arg (ap, int);
+				Serial.print (arg, HEX);
+				break;
+			}
+			case 'f': {
+				float arg = va_arg (ap, float);
+				Serial.print (arg);
+				break;
+			}
+			case 's': {
+				char const *arg = va_arg (ap, char const *);
+				Serial.print (arg);
+				break;
+			}
+			case 'c': {
+				char arg = va_arg (ap, char);
+				Serial.write (arg);
+				break;
+			}
+			default: {
+				Serial.write ('%');
+				Serial.write (*p);
+				break;
+			}
+			}
+		}
+		else {
+			Serial.write (*p);
+		}
+	}
+	va_end (ap);
+	Serial.write (0);
+	Serial.flush ();
 }
 
 void loop () {
@@ -95,6 +156,7 @@ void loop () {
 	}
 	for (uint8_t a = 0; a < 3; ++a) {	// Periodic axis stuff: endstop checking.
 		if (axis[a].motor.steps_total > axis[a].motor.steps_done && (axis[a].motor.positive && !GET (axis[a].limit_max_pin, true) || !axis[a].motor.positive && !GET (axis[a].limit_min_pin, true))) {
+			debug ("hit");
 			// Hit endstop; abort current move and notify host.
 			axis[a].motor.continuous = false;	// Stop continuous move only for the motor that hits the switch.
 			for (uint8_t m = 0; m < FLAG_EXTRUDER0 + num_extruders; ++m) {
