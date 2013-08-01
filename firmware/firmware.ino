@@ -77,12 +77,33 @@ void debug (char const *fmt, ...) {
 	Serial.flush ();
 }
 
+float predict (Temp *temp, float energy, float added, float convection) {	// Predict the temperature after one step, given current and added energy
+	float rt4 = roomtemperature * roomtemperature;
+	rt4 *= rt4;
+	// Radiation is supposed to go with T ** 4, so expect that.
+	float temp4 = energy * energy;
+	temp4 *= temp4;
+	// Store "current" temperature.
+	float current_temp = energy;
+	// Radiation balance.
+	energy -= temp4 * temp->radiation;
+	energy += rt4 * temp->radiation;
+	// Convection balance.
+	energy -= current_temp * convection;
+	energy += roomtemperature * convection;
+	// Heater energy.
+	energy += added;
+	// Extruded material heat loss (assuming extrusion is constant during buffer time).
+	energy -= temp->extra_loss * energy;
+	return energy;
+}
+
 void loop () {
 	serial ();
 	unsigned long long current_time = millis ();
 	for (uint8_t t = 0; t < FLAG_EXTRUDER0 + num_extruders; ++t) {	// Periodic temps stuff: temperature regulation.
 		// Only spend time if it may be useful.
-		if (!temps[t] || temps[t]->target < 0 || temps[t]->power_pin == 255 || temps[t]->thermistor_pin == 255)
+		if (!temps[t] || isnan (temps[t]->target) || temps[t]->power_pin >= 255 || temps[t]->thermistor_pin >= 255)
 			continue;
 		float temp = temps[t]->read ();
 		// First of all, if an alarm should be triggered, do so.
@@ -93,6 +114,8 @@ void loop () {
 			try_send_next ();
 		}
 		uint16_t dt = current_time - temps[t]->last_time;
+		if (dt == 0)
+			continue;
 		uint16_t shift_dt = current_time - temps[t]->last_shift_time;
 		temps[t]->last_time = current_time;
 		if (temps[t]->is_on)
@@ -100,18 +123,18 @@ void loop () {
 		while (shift_dt >= temps[t]->buffer_delay && temps[t]->buffer_delay != 0) {
 			temps[t]->last_shift_time += temps[t]->buffer_delay;
 			shift_dt -= temps[t]->buffer_delay;
+			// Adjust convection: predicted - (last_temp - roomtemp) * convection = temp.
+			float predicted = predict (temps[t], temps[t]->last_temp, temps[t]->buffer[3], 0);
+			temps[t]->convection = (predicted - temp) / (temps[t]->last_temp - roomtemperature);
+			temps[t]->last_temp = temp;
 			for (uint8_t b = 3; b > 0; --b)
 				temps[t]->buffer[b] = temps[t]->buffer[b - 1];
 			temps[t]->buffer[0] = 0;
 		}
+		// Predict temperature when heat that would be added now would reach the sensor.
 		float energy = temp;
-		for (int8_t b = 3; b >= 0; --b) {
-			// Radiation is supposed to go with T ** 4, so expect that.
-			float temp2 = energy * energy;
-			energy -= temps[t]->extra_loss * energy;
-			energy -= temp2 * temp2 * temps[t]->radiation;
-			energy += temps[t]->buffer[b];
-		}
+		for (int8_t b = 3; b >= 0; --b)
+			energy = predict (temps[t], energy, temps[t]->buffer[b], temps[t]->convection);
 		if (energy < temps[t]->target) {
 			SET (temps[t]->power_pin);
 			temps[t]->is_on = true;

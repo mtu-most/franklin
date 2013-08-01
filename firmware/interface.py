@@ -16,8 +16,6 @@ class Printer: # {{{
 	# Constants.  {{{
 	# Serial timeout for normal communication in seconds.
 	default_timeout = 2
-	# Maximum number of extruders.
-	MAXEXTRUDER = 10
 	# Masks for computing checksums.
 	mask = [	[0xc0, 0xc3, 0xff, 0x09],
 			[0x38, 0x3a, 0x7e, 0x13],
@@ -56,11 +54,13 @@ class Printer: # {{{
 		self.printer.readall ()	# flush buffer.
 		self.printer.setTimeout (2)
 		r = self.printer.read ()
+		dprint ('read (0)', r)
 		self.printer.setTimeout (Printer.default_timeout)
 		while True:
 			if r == self.single['DEBUG']:
 				self.handle_debug ()
 				r = self.printer.read ()
+				dprint ('read (0)', r)
 				continue
 			assert r == self.single['INIT']
 			break
@@ -71,16 +71,17 @@ class Printer: # {{{
 		self.wait = False
 		self.movewait = 0
 		self.tempwait = set ()
-		self.num_extruders = 0
-		self.begin ()
 		self.bed = Printer.Temp ()
 		self.axis = []
+		self.begin ()
+		self.maxobject = struct.unpack ('<B', self.read (0))[0]
+		self.num_extruders, self.roomtemperature = struct.unpack ('<Bf', self.read (1))
 		for a in range (3):
 			self.axis.append (Printer.Axis ())
-			self.axis[a].read (self.read (a))
-		self.bed_read (self.read (5))
-		self.extruder = [Printer.Extruder () for t in range (Printer.MAXEXTRUDER)]
-		for e in range (Printer.MAXEXTRUDER):
+			self.axis[a].read (self.read (2 + a))
+		self.bed.read (self.read (5))
+		self.extruder = [Printer.Extruder () for t in range (self.maxobject - 6)]
+		for e in range (self.maxobject - 6):
 			self.extruder[e].read (self.read (6 + e))
 	# }}}
 	def make_packet (self, data): # {{{
@@ -253,7 +254,7 @@ class Printer: # {{{
 			if r in ('', '\0'):
 				break
 			s += r
-		print ('Debug: %s' % s)
+		#print ('Debug: %s' % s)
 	# }}}
 	# Config stuff.  {{{
 	class Temp: # {{{
@@ -265,10 +266,10 @@ class Printer: # {{{
 	# }}}
 	class Motor: # {{{
 		def read (self, data):
-			self.step_pin, self.dir_pin, self.sleep_pin, self.steps_per_mm = struct.unpack ('<BBBf', data[:7])
-			return data[7:]
+			self.step_pin, self.dir_pin, self.sleep_pin, self.steps_per_mm, self.max_f = struct.unpack ('<BBBff', data[:11])
+			return data[11:]
 		def write (self):
-			return struct.pack ('<BBBf', self.step_pin, self.dir_pin, self.sleep_pin, self.steps_per_mm)
+			return struct.pack ('<BBBff', self.step_pin, self.dir_pin, self.sleep_pin, self.steps_per_mm, self.max_f)
 	# }}}
 	class Axis: # {{{
 		def __init__ (self):
@@ -290,13 +291,6 @@ class Printer: # {{{
 		def write (self):
 			return self.motor.write () + self.temp.write () + struct.pack ('<fff', self.filament_heat, self.nozzle_size, self.filament_size)
 	# }}}
-	def bed_read (self, data): # {{{
-		self.num_extruders = struct.unpack ('<B', data[:1])[0]
-		dprint ('num extruders: %d' % self.num_extruders, data)
-		assert self.bed.read (data[1:]) == ''
-	# }}}
-	def bed_write (self): # {{{
-		return struct.pack ('<B', self.num_extruders) + self.bed.write ()
 	# }}}
 	# }}}
 	# Internal commands.  {{{
@@ -375,38 +369,40 @@ class Printer: # {{{
 	# }}}
 	def load (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['LOAD'], channel))
-		if channel < 3:
-			self.axis[channel].read (self.read (channel))
+		if channel == 1:
+			self.num_extruders, self.roomtemperature = struct.unpack ('<Bf', self.read (1))
+		elif 2 <= channel < 5:
+			self.axis[channel - 2].read (self.read (channel))
 		elif channel == 5:
-			self.bed_read (self.read (channel))
+			self.bed.read (self.read (channel))
 		else:
-			assert 6 <= channel < Printer.MAXEXTRUDER
+			assert 6 <= channel < self.maxobject
 			self.extruder[channel - 6].read (self.read (channel))
 	# }}}
 	def save (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['SAVE'], channel))
 	# }}}
 	def save_all (self): # {{{
-		for i in range (6 + Printer.MAXEXTRUDER):
-			if i not in (3, 4):
-				print ('saving %d' % i)
-				self.save (i)
+		for i in range (1, self.maxobject):
+			print ('saving %d' % i)
+			self.save (i)
 	# }}}
 	def write (self, channel): # {{{
-		if channel < 3:
-			data = self.axis[channel].write ()
+		if channel == 1:
+			data = struct.pack ('<Bf', self.num_extruders, self.roomtemperature)
+		elif 2 <= channel < 5:
+			data = self.axis[channel - 2].write ()
 		elif channel == 5:
-			data = self.bed_write ()
+			data = self.bed.write ()
 		else:
-			assert 6 <= channel < 6 + Printer.MAXEXTRUDER
+			assert 6 <= channel < self.maxobject
 			data = self.extruder[channel - 6].write ()
 		self.send_packet (struct.pack ('<BB', self.command['WRITE'], channel) + data)
 	# }}}
 	def write_all (self): # {{{
-		for i in range (6 + Printer.MAXEXTRUDER):
-			if i not in (3, 4):
-				print ('(4) writing %d' % i)
-				self.write (i)
+		for i in range (1, self.maxobject):
+			print ('(4) writing %d' % i)
+			self.write (i)
 	# }}}
 	def pause (self, pausing = True): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['PAUSE'], pausing))
@@ -491,18 +487,23 @@ if __name__ == '__main__': # {{{
 		# Set everything up for calibration.
 		p.set_ramps_pins ()
 		p.num_extruders = 2
+		p.roomtemperature = 25
 		# X and Y: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
 		p.axis[0].motor.steps_per_mm = (200 * 16.) / (5 * 12)	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
 		p.axis[1].motor.steps_per_mm = (200 * 16.) / (5 * 12)
 		# Z: 1.25 mm per revolution; 200 steps per revolution; 16 microsteps per step.
 		p.axis[2].motor.steps_per_mm = (200 * 16.) / 1.25
+		# Don't limit the number of steps per millisecond.
+		p.axis[0].motor.max_f = float ('inf')
+		p.axis[1].motor.max_f = float ('inf')
+		p.axis[2].motor.max_f = float ('inf')
 		p.bed.beta = 1
 		p.bed.T0 = 0
 		p.bed.adc0 = 0	# Debugging: ignore T0 and beta, return raw counts.
 		p.bed.radiation = 0
 		p.bed.power = 0
 		p.bed.buffer_delay = 1
-		for e in range (Printer.MAXEXTRUDER):
+		for e in range (p.maxobject - 6):
 			p.extruder[e].temp.beta = 1
 			p.extruder[e].temp.T0 = 0
 			p.extruder[e].temp.adc0 = 0	# Debugging: ignore T0 and beta, return raw counts.
@@ -515,10 +516,11 @@ if __name__ == '__main__': # {{{
 			p.extruder[e].motor.steps_per_mm = 835 #(200 * 16.) / ((9. / 47) * 20)
 		p.write_all ()
 		p.save_all ()
-		p.bed_read (p.read (5))
 	else:
 		# Display current settings.
+		print ('max objects: %d' % p.maxobject)
 		print ('num extruders: %d' % p.num_extruders)
+		print ('room temperature: %f' % p.roomtemperature)
 		print ('bed pins: %d %d' % (p.bed.power_pin, p.bed.thermistor_pin))
 		print ('bed settings: %f %f %f %f %f %d' % (p.bed.beta, p.bed.T0, p.bed.adc0, p.bed.radiation, p.bed.power, p.bed.buffer_delay))
 		for a in range (3):
@@ -526,13 +528,13 @@ if __name__ == '__main__': # {{{
 			print ('\tlimit pins: %d %d' % (p.axis[a].limit_min_pin, p.axis[a].limit_max_pin))
 			print ('\tmotor pins: %d %d %d' % (p.axis[a].motor.step_pin, p.axis[a].motor.dir_pin, p.axis[a].motor.sleep_pin))
 			print ('\tmotor steps per mm: %d' % p.axis[a].motor.steps_per_mm)
-		for e in range (Printer.MAXEXTRUDER):
+		for e in range (p.maxobject - 6):
 			print ('extruder %d' % e)
 			print ('\ttemp pins: %d %d' % (p.extruder[e].temp.power_pin, p.extruder[e].temp.thermistor_pin))
 			print ('\ttemp settings: %f %f %f %f %f %d' % (p.extruder[e].temp.beta, p.extruder[e].temp.T0, p.extruder[e].temp.adc0, p.extruder[e].temp.radiation, p.extruder[e].temp.power, p.extruder[e].temp.buffer_delay))
 			print ('\tmotor pins: %d %d %d' % (p.extruder[e].motor.step_pin, p.extruder[e].motor.dir_pin, p.extruder[e].motor.sleep_pin))
 			print ('\tmotor steps per mm: %d' % p.extruder[e].motor.steps_per_mm)
-		for i in range (5, 16):
+		for i in range (5, p.maxobject):
 			print ('temp: %f' % p.readtemp (i))
 		p.run (6, 1)
 		p.run (7, 2)

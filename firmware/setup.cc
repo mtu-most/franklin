@@ -79,6 +79,7 @@ void Motor::load (uint16_t &addr, bool eeprom)
 	dir_pin = read_8 (addr, eeprom);
 	sleep_pin = read_8 (addr, eeprom);
 	steps_per_mm = read_float (addr, eeprom);
+	max_f = read_float (addr, eeprom);
 }
 
 void Motor::save (uint16_t &addr, bool eeprom)
@@ -87,6 +88,32 @@ void Motor::save (uint16_t &addr, bool eeprom)
 	write_8 (addr, dir_pin, eeprom);
 	write_8 (addr, sleep_pin, eeprom);
 	write_float (addr, steps_per_mm, eeprom);
+	write_float (addr, max_f, eeprom);
+}
+
+void Constants::load (uint16_t &addr, bool eeprom)
+{
+	// This function must not be called.
+}
+
+void Constants::save (uint16_t &addr, bool eeprom)
+{
+	write_8 (addr, MAXOBJECT, eeprom);
+}
+
+void Variables::load (uint16_t &addr, bool eeprom)
+{
+	num_extruders = read_8 (addr, eeprom);
+	roomtemperature = read_float (addr, eeprom);
+	// If num_extruders is an invalid value, the eeprom is probably not initialized; use 1 as default.
+	if (num_extruders > MAXOBJECT - FLAG_EXTRUDER0)
+		num_extruders = 1;
+}
+
+void Variables::save (uint16_t &addr, bool eeprom)
+{
+	write_8 (addr, num_extruders, eeprom);
+	write_float (addr, roomtemperature, eeprom);
 }
 
 void Axis::load (uint16_t &addr, bool eeprom)
@@ -121,22 +148,6 @@ void Extruder::save (uint16_t &addr, bool eeprom)
 	write_float (addr, filament_size, eeprom);
 }
 
-void bed_load (uint16_t &addr, bool eeprom)
-{
-	num_extruders = read_8 (addr, eeprom);
-	debug ("addr: %x, num_extruders: %d", addr, num_extruders);
-	// If num_extruders is an invalid value, the eeprom is probably not initialized; use 1 as default.
-	if (num_extruders > MAXOBJECT - FLAG_EXTRUDER0)
-		num_extruders = 1;
-	bed.load (addr, eeprom);
-}
-
-void bed_save (uint16_t &addr, bool eeprom)
-{
-	write_8 (addr, num_extruders, eeprom);
-	bed.save (addr, eeprom);
-}
-
 void setup ()
 {
 	// Initialize volatile variables.
@@ -164,11 +175,23 @@ void setup ()
 	continue_buffer[2] = 0;
 	for (uint8_t i = 0; i < MAXOBJECT; ++i)
 	{
-		if (i < 3)
+		if (i == 0)
 		{
-			motors[i] = &axis[i].motor;
+			motors[i] = NULL;
 			temps[i] = NULL;
-			objects[i] = &axis[i];
+			objects[i] = &constants;
+		}
+		else if (i == 1)
+		{
+			motors[i] = NULL;
+			temps[i] = NULL;
+			objects[i] = &variables;
+		}
+		else if (i < 5)
+		{
+			motors[i] = &axis[i - 2].motor;
+			temps[i] = NULL;
+			objects[i] = &axis[i - 2];
 		}
 		else if (i == FLAG_BED)
 		{
@@ -176,17 +199,11 @@ void setup ()
 			temps[i] = &bed;
 			objects[i] = &bed;
 		}
-		else if (i >= FLAG_EXTRUDER0)
+		else
 		{
 			motors[i] = &extruder[i - FLAG_EXTRUDER0].motor;
 			temps[i] = &extruder[i - FLAG_EXTRUDER0].temp;
 			objects[i] = &extruder[i - FLAG_EXTRUDER0];
-		}
-		else
-		{
-			motors[i] = NULL;
-			temps[i] = NULL;
-			objects[i] = NULL;
 		}
 	}
 	for (uint8_t m = 0; m < MAXOBJECT; ++m)
@@ -208,17 +225,14 @@ void setup ()
 		temps[t]->extra_loss = 0;
 		temps[t]->min_alarm = NAN;
 		temps[t]->max_alarm = NAN;
+		temps[t]->last_temp = NAN;
 	}
 	uint16_t address = 0;
-	for (uint8_t o = 0; o < MAXOBJECT; ++o)
+	objects[0]->address = address;	// Not used, but initialized anyway.
+	for (uint8_t o = 1; o < MAXOBJECT; ++o)
 	{
-		if (!objects[o])
-			continue;
 		objects[o]->address = address;
-		if (o == FLAG_BED)
-			bed_load (address, true);
-		else
-			objects[o]->load (address, true);
+		objects[o]->load (address, true);
 	}
 	Serial.write (CMD_INIT);
 }

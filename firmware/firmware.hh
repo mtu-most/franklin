@@ -9,11 +9,11 @@
 #define QUEUE_LENGTH_MASK ((1 << QUEUE_LENGTH_LOG2) - 1)	// Mask to use for circular queue.
 #define MAXOBJECT 16		// Total number of objects.  From Extruder 0 on, these are all extruders.
 
-#define FLAG_X 0
-#define FLAG_Y 1
-#define FLAG_Z 2
-#define FLAG_F0 3
-#define FLAG_F1 4
+#define FLAG_F0 0
+#define FLAG_F1 1
+#define FLAG_X 2
+#define FLAG_Y 3
+#define FLAG_Z 4
 #define FLAG_BED 5
 #define FLAG_EXTRUDER0 6
 // Maximum number of extruders supported by this board.  This is not the number
@@ -82,41 +82,50 @@ struct Object
 	uint16_t address;
 	virtual void load (uint16_t &address, bool eeprom) = 0;
 	virtual void save (uint16_t &address, bool eeprom) = 0;
+	virtual ~Object () {}
 };
 
 // All temperatures are in Kelvin.  Negative temperature target means heater is off.
 // Energy unit is chosen such that the heat capacity of the extruder is 1, so the energy is equal to the temperature.
 struct Temp : public Object
 {
-	Temp *next;
-	float beta;				// beta value of thermistor; adc = adc0 * exp (-beta * (T - T0))
+	// Thermistor-resistor calibration; adc = adc0 * exp (-beta * (T - T0)).
+	float beta;				// beta value of thermistor
 	float T0;				// temperature of calibration point.
 	float adc0;				// adc reading of calibration point.
-	float target;				// target temperature.
-	float radiation;			// factor for how much this thing radiates E = T ** 4 * radiation for each buffer shift.
-	float power;				// energy that is added per ms if heater is on.
-	float buffer[4];			// history of added energy.
+	// Temperature balance calibration.
+	float radiation;			// factor for how much this thing radiates E = T ** 4 * radiation for each buffer_delay ms.
+	float convection;			// factor for how much this thing loses through convection E = T * convection for each buffer_delay ms.
+	float power;				// energy that is added per ms while heater is on.
 	uint16_t buffer_delay;			// time for the buffer to shift one slot, in ms.
+	// Pins.
 	uint8_t power_pin;
 	uint8_t thermistor_pin;
+	// Volatile variables.
+	float target;				// target temperature; NAN to disable.
 	float min_alarm;			// NAN, or the temperature at which to trigger the callback.
 	float max_alarm;			// NAN, or the temperature at which to trigger the callback.
+	// Internal variables.
+	float last_temp;			// temperature at last buffer shift.
+	float buffer[4];			// history of added energy.
 	unsigned long long last_time;		// Counter to keep track of how much action should be taken.
 	unsigned long long last_shift_time;	// Counter to keep track of how much action should be taken.
 	bool is_on;				// If the heater is currently on.
 	float extra_loss;			// extra lost energy per buffer shift; used to compensate for extrusion loss.
+	// Functions.
 	float read ();				// Read current temperature.
 	virtual void load (uint16_t &addr, bool eeprom);
 	virtual void save (uint16_t &addr, bool eeprom);
+	virtual ~Temp () {}
 };
 
 struct Motor : public Object
 {
-	Motor *next;
 	uint8_t step_pin;
 	uint8_t dir_pin;
 	uint8_t sleep_pin;
 	float steps_per_mm;
+	float max_f;	// maximum value for f (steps/ms).
 	unsigned long long start_time;	// ms.
 	float f1, f0;	// steps per ms.
 	uint16_t steps_total;
@@ -126,6 +135,21 @@ struct Motor : public Object
 	float f;	// current flowrate (steps/ms); used to communicate from extruder motor to extruder temp.
 	virtual void load (uint16_t &addr, bool eeprom);
 	virtual void save (uint16_t &addr, bool eeprom);
+	virtual ~Motor () {}
+};
+
+struct Constants : public Object
+{
+	virtual void load (uint16_t &addr, bool eeprom);	// NI
+	virtual void save (uint16_t &addr, bool eeprom);
+	virtual ~Constants () {}
+};
+
+struct Variables : public Object
+{
+	virtual void load (uint16_t &addr, bool eeprom);
+	virtual void save (uint16_t &addr, bool eeprom);
+	virtual ~Variables () {}
 };
 
 struct Axis : public Object
@@ -135,6 +159,7 @@ struct Axis : public Object
 	uint8_t limit_max_pin;
 	virtual void load (uint16_t &addr, bool eeprom);
 	virtual void save (uint16_t &addr, bool eeprom);
+	virtual ~Axis () {}
 };
 
 struct Extruder : public Object
@@ -147,6 +172,7 @@ struct Extruder : public Object
 	float capacity;		// heat capacity of filament in [energy]/mm/K
 	virtual void load (uint16_t &addr, bool eeprom);
 	virtual void save (uint16_t &addr, bool eeprom);
+	virtual ~Extruder () {}
 };
 
 struct MoveCommand
@@ -158,6 +184,10 @@ struct MoveCommand
 #define COMMAND_SIZE_LOG2 7
 #define COMMAND_SIZE (1 << COMMAND_SIZE_LOG2)
 #define COMMAND_LEN_MASK (COMMAND_SIZE - 1)
+// Code 1 variables
+EXTERN uint8_t num_extruders;
+EXTERN float roomtemperature;
+// Other variables.
 EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
 EXTERN char reply[COMMAND_SIZE];
@@ -165,10 +195,10 @@ EXTERN char limitcb_buffer[4];
 EXTERN char movecb_buffer[4];
 EXTERN char tempcb_buffer[4];
 EXTERN char continue_buffer[4];
-EXTERN Temp bed;
-EXTERN uint16_t bed_address;
+EXTERN Constants constants;
+EXTERN Variables variables;
 EXTERN Axis axis[3];
-EXTERN uint8_t num_extruders;
+EXTERN Temp bed;
 EXTERN Extruder extruder[MAX_EXTRUDER];
 EXTERN uint8_t motors_busy;
 EXTERN Motor *motors[MAXOBJECT];
@@ -186,8 +216,6 @@ EXTERN bool reply_ready;
 EXTERN char *last_packet;
 
 void debug (char const *fmt, ...);
-void bed_load (uint16_t &addr, bool eeprom);
-void bed_save (uint16_t &addr, bool eeprom);
 void serial ();	// Handle commands from serial.
 void packet ();	// A command packet has arrived; handle it.
 void send_packet (char *the_packet);

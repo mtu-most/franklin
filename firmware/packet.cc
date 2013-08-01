@@ -60,9 +60,16 @@ void packet ()
 			else
 				queue[queue_end].data[ch] = NAN;
 		}
+		float f0 = queue[queue_end].data[FLAG_F0];
+		float f1 = queue[queue_end].data[FLAG_F1];
+		if (isnan (f0) || isnan (f1) || f0 < 0 || f1 < 0 || f0 == 0 && f1 == 0)
+		{
+			Serial.write (CMD_STALL);
+			return;
+		}
 		// Set cb in next record, because it will be read when queue_start has already been incremented.
-		queue[(queue_end + 1) & QUEUE_LENGTH_MASK].cb = command[1] == CMD_GOTOCB;
 		queue_end = (queue_end + 1) & QUEUE_LENGTH_MASK;
+		queue[queue_end].cb = command[1] == CMD_GOTOCB;
 		if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
 			Serial.write (CMD_ACKWAIT);
 		else
@@ -164,16 +171,13 @@ void packet ()
 	{
 		debug ("CMD_LOAD");
 		which = get_which ();
-		if (!objects[which])
+		if (which < 1 || which >= MAXOBJECT)
 		{
 			Serial.write (CMD_STALL);
 			return;
 		}
 		addr = objects[which]->address;
-		if (which == FLAG_BED)
-			bed_save (addr, true);
-		else
-			objects[which]->load (addr, true);
+		objects[which]->load (addr, true);
 		Serial.write (CMD_ACK);
 		return;
 	}
@@ -181,16 +185,13 @@ void packet ()
 	{
 		debug ("CMD_SAVE");
 		which = get_which ();
-		if (!objects[which])
+		if (which < 1 || which >= MAXOBJECT)
 		{
 			Serial.write (CMD_STALL);
 			return;
 		}
 		addr = objects[which]->address;
-		if (which == FLAG_BED)
-			bed_save (addr, true);
-		else
-			objects[which]->save (addr, true);
+		objects[which]->save (addr, true);
 		Serial.write (CMD_ACK);
 		return;
 	}
@@ -198,16 +199,13 @@ void packet ()
 	{
 		debug ("CMD_READ");
 		which = get_which ();
-		if (!objects[which])
+		if (which < 0 || which >= MAXOBJECT)
 		{
 			Serial.write (CMD_STALL);
 			return;
 		}
 		addr = 2;
-		if (which == FLAG_BED)
-			bed_save (addr, false);
-		else
-			objects[which]->save (addr, false);
+		objects[which]->save (addr, false);
 		reply[0] = addr;
 		reply[1] = CMD_DATA;
 		Serial.write (CMD_ACK);
@@ -219,16 +217,13 @@ void packet ()
 	{
 		debug ("CMD_WRITE");
 		which = get_which ();
-		if (!objects[which])
+		if (which < 1 || which >= MAXOBJECT)
 		{
 			Serial.write (CMD_STALL);
 			return;
 		}
 		addr = 3;
-		if (which == FLAG_BED)
-			bed_load (addr, false);
-		else
-			objects[which]->load (addr, false);
+		objects[which]->load (addr, false);
 		Serial.write (CMD_ACK);
 		return;
 	}
