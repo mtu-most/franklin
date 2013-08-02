@@ -77,7 +77,7 @@ void Motor::load (uint16_t &addr, bool eeprom)
 {
 	step_pin = read_8 (addr, eeprom);
 	dir_pin = read_8 (addr, eeprom);
-	sleep_pin = read_8 (addr, eeprom);
+	enable_pin = read_8 (addr, eeprom);
 	steps_per_mm = read_float (addr, eeprom);
 	max_f = read_float (addr, eeprom);
 }
@@ -86,7 +86,7 @@ void Motor::save (uint16_t &addr, bool eeprom)
 {
 	write_8 (addr, step_pin, eeprom);
 	write_8 (addr, dir_pin, eeprom);
-	write_8 (addr, sleep_pin, eeprom);
+	write_8 (addr, enable_pin, eeprom);
 	write_float (addr, steps_per_mm, eeprom);
 	write_float (addr, max_f, eeprom);
 }
@@ -165,6 +165,9 @@ void setup ()
 	out_busy = false;
 	reply_ready = false;
 	// Prepare asynchronous command buffers.
+	limitcb_buffer[0] = 3;
+	limitcb_buffer[1] = CMD_LIMIT;
+	limitcb_buffer[2] = 0;
 	movecb_buffer[0] = 3;
 	movecb_buffer[1] = CMD_MOVECB;
 	movecb_buffer[2] = 0;
@@ -214,11 +217,11 @@ void setup ()
 		motors[m]->steps_done = 0;
 		motors[m]->continuous = false;
 	}
+	unsigned long time = micros ();
 	for (uint8_t t = 0; t < MAXOBJECT; ++t)
 	{
 		if (!temps[t])
 			continue;
-		unsigned long long time = millis ();
 		temps[t]->last_time = time;
 		temps[t]->last_shift_time = time;
 		temps[t]->is_on = false;

@@ -8,7 +8,7 @@ import struct
 # }}}
 
 def dprint (x, data):
-	#print ('%s: %s' % (x, ' '.join (['%02x' % ord (c) for c in data])))
+	print ('%s: %s' % (x, ' '.join (['%02x' % ord (c) for c in data])))
 	pass
 
 class Printer: # {{{
@@ -266,10 +266,10 @@ class Printer: # {{{
 	# }}}
 	class Motor: # {{{
 		def read (self, data):
-			self.step_pin, self.dir_pin, self.sleep_pin, self.steps_per_mm, self.max_f = struct.unpack ('<BBBff', data[:11])
+			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f = struct.unpack ('<BBBff', data[:11])
 			return data[11:]
 		def write (self):
-			return struct.pack ('<BBBff', self.step_pin, self.dir_pin, self.sleep_pin, self.steps_per_mm, self.max_f)
+			return struct.pack ('<BBBff', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f)
 	# }}}
 	class Axis: # {{{
 		def __init__ (self):
@@ -316,21 +316,23 @@ class Printer: # {{{
 			p = chr (self.command['GOTO'])
 		targets = [0] * (((6 + self.num_extruders - 1) >> 3) + 1)
 		args = ''
+		if f0 is None:
+			f0 = float ('inf')
+		if f1 is None:
+			f1 = f0
+		targets[0] |= 1 << 0
+		targets[0] |= 1 << 1
+		args += struct.pack ('<f', f0)
+		args += struct.pack ('<f', f1)
 		if x is not None:
-			targets[0] |= 1 << 0
+			targets[0] |= 1 << 2
 			args += struct.pack ('<f', x)
 		if y is not None:
-			targets[0] |= 1 << 1
+			targets[0] |= 1 << 3
 			args += struct.pack ('<f', y)
 		if z is not None:
-			targets[0] |= 1 << 2
-			args += struct.pack ('<f', z)
-		if f0 is not None:
-			targets[0] |= 1 << 3
-			args += struct.pack ('<f', f0)
-		if f1 is not None:
 			targets[0] |= 1 << 4
-			args += struct.pack ('<f', f1)
+			args += struct.pack ('<f', z)
 		if e is not None:
 			targets[0] |= 1 << (6 + which)
 			args += struct.pack ('<f', e)
@@ -412,87 +414,87 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	# Presets.  {{{
-	def set_ramps_pins (self): # {{{
+	def set_ramps_pins (self, max_limits = False): # {{{
 		self.axis[0].limit_min_pin = 3
-		self.axis[0].limit_max_pin = 2
+		self.axis[0].limit_max_pin = 2 if max_limits else 255
 		self.axis[0].motor.step_pin = 54
 		self.axis[0].motor.dir_pin = 55
-		self.axis[0].motor.sleep_pin = 38
+		self.axis[0].motor.enable_pin = 38
 		self.axis[1].limit_min_pin = 14
-		self.axis[1].limit_max_pin = 15
+		self.axis[1].limit_max_pin = 15 if max_limits else 255
 		self.axis[1].motor.step_pin = 60
 		self.axis[1].motor.dir_pin = 61
-		self.axis[1].motor.sleep_pin = 56
+		self.axis[1].motor.enable_pin = 56
 		self.axis[2].limit_min_pin = 18
-		self.axis[2].limit_max_pin = 19
+		self.axis[2].limit_max_pin = 19 if max_limits else 255
 		self.axis[2].motor.step_pin = 46
 		self.axis[2].motor.dir_pin = 48
-		self.axis[2].motor.sleep_pin = 62
+		self.axis[2].motor.enable_pin = 62
 		self.bed.power_pin = 8
 		self.bed.thermistor_pin = 14
 		self.extruder[0].temp.power_pin = 10
 		self.extruder[0].temp.thermistor_pin = 13
 		self.extruder[0].motor.step_pin = 26
 		self.extruder[0].motor.dir_pin = 28
-		self.extruder[0].motor.sleep_pin = 24
+		self.extruder[0].motor.enable_pin = 24
 		self.extruder[1].temp.power_pin = 9
 		self.extruder[1].temp.thermistor_pin = 15
 		self.extruder[1].motor.step_pin = 36
 		self.extruder[1].motor.dir_pin = 34
-		self.extruder[1].motor.sleep_pin = 30
+		self.extruder[1].motor.enable_pin = 30
 		for e in range (2, 10):
 			self.extruder[e].temp.power_pin = 255
 			self.extruder[e].temp.thermistor_pin = 255
 			self.extruder[e].motor.step_pin = 255
 			self.extruder[e].motor.dir_pin = 255
-			self.extruder[e].motor.sleep_pin = 255
+			self.extruder[e].motor.enable_pin = 255
 	# }}}
 	def set_melzi_pins (self): # {{{
 		self.axis[0].limit_min_pin = 18
 		self.axis[0].limit_max_pin = 255
 		self.axis[0].motor.step_pin = 15
 		self.axis[0].motor.dir_pin = 21
-		self.axis[0].motor.sleep_pin = 14
+		self.axis[0].motor.enable_pin = 14
 		self.axis[1].limit_min_pin = 19
 		self.axis[1].limit_max_pin = 255
 		self.axis[1].motor.step_pin = 22
 		self.axis[1].motor.dir_pin = 23
-		self.axis[1].motor.sleep_pin = 14
+		self.axis[1].motor.enable_pin = 14
 		self.axis[2].limit_min_pin = 20
 		self.axis[2].limit_max_pin = 255
 		self.axis[2].motor.step_pin = 3
 		self.axis[2].motor.dir_pin = 2
-		self.axis[2].motor.sleep_pin = 26
+		self.axis[2].motor.enable_pin = 26
 		self.bed.power_pin = 10
 		self.bed.thermistor_pin = 6
 		self.extruder[0].temp.power_pin = 13
 		self.extruder[0].temp.thermistor_pin = 7
 		self.extruder[0].motor.step_pin = 1
 		self.extruder[0].motor.dir_pin = 0
-		self.extruder[0].motor.sleep_pin = 14
+		self.extruder[0].motor.enable_pin = 14
 		for e in range (1, 10):
 			self.extruder[e].temp.power_pin = 255
 			self.extruder[e].temp.thermistor_pin = 255
 			self.extruder[e].motor.step_pin = 255
 			self.extruder[e].motor.dir_pin = 255
-			self.extruder[e].motor.sleep_pin = 255
+			self.extruder[e].motor.enable_pin = 255
 	# }}}
 	# }}}
 # }}}
 
 if __name__ == '__main__': # {{{
 	p = Printer ()
-	if True:
+	if False:
 		# Set everything up for calibration.
 		p.set_ramps_pins ()
 		p.num_extruders = 2
-		p.roomtemperature = 25
+		p.roomtemperature = 25.
 		# X and Y: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
 		p.axis[0].motor.steps_per_mm = (200 * 16.) / (5 * 12)	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
 		p.axis[1].motor.steps_per_mm = (200 * 16.) / (5 * 12)
 		# Z: 1.25 mm per revolution; 200 steps per revolution; 16 microsteps per step.
 		p.axis[2].motor.steps_per_mm = (200 * 16.) / 1.25
-		# Don't limit the number of steps per millisecond.
+		# Don't limit the number of steps per microsecond.
 		p.axis[0].motor.max_f = float ('inf')
 		p.axis[1].motor.max_f = float ('inf')
 		p.axis[2].motor.max_f = float ('inf')
@@ -501,14 +503,14 @@ if __name__ == '__main__': # {{{
 		p.bed.adc0 = 0	# Debugging: ignore T0 and beta, return raw counts.
 		p.bed.radiation = 0
 		p.bed.power = 0
-		p.bed.buffer_delay = 1
+		p.bed.buffer_delay = .001
 		for e in range (p.maxobject - 6):
 			p.extruder[e].temp.beta = 1
 			p.extruder[e].temp.T0 = 0
 			p.extruder[e].temp.adc0 = 0	# Debugging: ignore T0 and beta, return raw counts.
 			p.extruder[e].temp.radiation = 0
 			p.extruder[e].temp.power = 0
-			p.extruder[e].temp.buffer_delay = 1
+			p.extruder[e].temp.buffer_delay = .001
 			# Different per hobbed bolt and possibly per filament; must be measured.
 			# However, as an estimate:
 			# Small gear has 9 teeth; large gear 47.  Radius of hobbing is approximately 3.2 mm (20/2pi).
@@ -526,16 +528,26 @@ if __name__ == '__main__': # {{{
 		for a in range (3):
 			print ('Axis %d:' % a)
 			print ('\tlimit pins: %d %d' % (p.axis[a].limit_min_pin, p.axis[a].limit_max_pin))
-			print ('\tmotor pins: %d %d %d' % (p.axis[a].motor.step_pin, p.axis[a].motor.dir_pin, p.axis[a].motor.sleep_pin))
+			print ('\tmotor pins: %d %d %d' % (p.axis[a].motor.step_pin, p.axis[a].motor.dir_pin, p.axis[a].motor.enable_pin))
 			print ('\tmotor steps per mm: %f' % p.axis[a].motor.steps_per_mm)
 			print ('\tmotor max steps per ms: %f' % p.axis[a].motor.max_f)
 		for e in range (p.maxobject - 6):
 			print ('extruder %d' % e)
 			print ('\ttemp pins: %d %d' % (p.extruder[e].temp.power_pin, p.extruder[e].temp.thermistor_pin))
 			print ('\ttemp settings: %f %f %f %f %f %d' % (p.extruder[e].temp.beta, p.extruder[e].temp.T0, p.extruder[e].temp.adc0, p.extruder[e].temp.radiation, p.extruder[e].temp.power, p.extruder[e].temp.buffer_delay))
-			print ('\tmotor pins: %d %d %d' % (p.extruder[e].motor.step_pin, p.extruder[e].motor.dir_pin, p.extruder[e].motor.sleep_pin))
+			print ('\tmotor pins: %d %d %d' % (p.extruder[e].motor.step_pin, p.extruder[e].motor.dir_pin, p.extruder[e].motor.enable_pin))
 			print ('\tmotor steps per mm: %f' % p.extruder[e].motor.steps_per_mm)
 			print ('\tmotor max steps per ms: %f' % p.extruder[e].motor.max_f)
 		for i in range (5, p.maxobject):
 			print ('temp: %f' % p.readtemp (i))
+		p.goto (f0 = 3.5, x = -100, cb = True)
+		while p.movewait > 0:
+		#p.run (2, -100)
+		#while len (p.limits) == 0:
+			p.recv_packet (want_any = True)
+		#for i in range (20):
+		#	p.sleep (2, True)
+		#	time.sleep (1)
+		#	p.sleep (2, False)
+		#	time.sleep (1)
 # }}}

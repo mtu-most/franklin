@@ -87,12 +87,20 @@ void packet ()
 			Serial.write (CMD_STALL);
 			return;
 		}
-		if (command[2] & 0x80)
+		ReadFloat f;
+		for (uint8_t i = 0; i < sizeof (float); ++i) {
+			f.b[i] = command[3 + i];
+		}
+		if (f.f != 0)
 		{
-			motors[which]->positive = command[2] & 0x40;
-			digitalWrite (motors[which]->dir_pin, motors[which]->positive ? HIGH : LOW);
-			digitalWrite (motors[which]->sleep_pin, HIGH);
+			motors[which]->positive = f.f > 0;
+			if (motors[which]->positive)
+				SET (motors[which]->dir_pin);
+			else
+				RESET (motors[which]->dir_pin);
+			RESET (motors[which]->enable_pin);
 			motors[which]->continuous = true;
+			motors[which]->f1 = (motors[which]->positive ? f.f : -f.f) * motors[which]->steps_per_mm;	// [mm/s] -> [steps/s]
 		}
 		else
 			motors[which]->continuous = false;
@@ -108,7 +116,10 @@ void packet ()
 			Serial.write (CMD_STALL);
 			return;
 		}
-		digitalWrite (motors[which]->sleep_pin, command[2] & 0x80 ? LOW : HIGH);
+		if (command[2] & 0x80)
+			SET (motors[which]->enable_pin);
+		else
+			RESET (motors[which]->enable_pin);
 		Serial.write (CMD_ACK);
 		return;
 	}

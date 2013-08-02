@@ -22,7 +22,7 @@
 
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
-static unsigned long long last_millis = 0;
+static unsigned long last_micros = 0;
 
 // Parity masks for decoding.
 static const uint8_t MASK[5][4] = {
@@ -35,7 +35,7 @@ static const uint8_t MASK[5][4] = {
 // There may be serial data available.
 void serial ()
 {
-	if (command_end > 0 && millis () >= last_millis + 100)
+	if (command_end > 0 && micros () >= last_micros + 100000)
 	{
 		// Command not finished; ignore it and wait for next.
 		command_end = 0;
@@ -71,14 +71,14 @@ void serial ()
 				{
 					motors[o]->steps_total = 0;
 					motors[o]->continuous = false;
-					digitalWrite (motors[o]->sleep_pin, LOW);
+					SET (motors[o]->enable_pin);
 				}
 				if (temps[o])
 				{
 					temps[o]->target = NAN;
 					if (temps[o]->is_on)
 					{
-						digitalWrite (temps[o]->power_pin, LOW);
+						RESET (temps[o]->power_pin);
 						temps[o]->is_on = false;
 					}
 				}
@@ -89,7 +89,7 @@ void serial ()
 			break;
 		}
 		command_end = 1;
-		last_millis = millis ();
+		last_micros = micros ();
 	}
 	int len = Serial.available ();
 	if (len == 0)
@@ -105,7 +105,7 @@ void serial ()
 		len = cmd_len - command_end;
 	Serial.readBytes (reinterpret_cast <char *> (&command[command_end]), len);
 	debug ("read %d bytes", len);
-	last_millis = millis ();
+	last_micros = micros ();
 	command_end += len;
 	if (command_end < cmd_len)
 	{
@@ -228,6 +228,22 @@ void try_send_next ()
 		// Still busy sending other packet.
 		return;
 	}
+	if (limits_hit != 0)
+	{
+		debug ("limit %d", num_movecbs);
+		for (uint8_t w = 0; w < 8; ++w)
+		{
+			if (limits_hit & (1 << w))
+			{
+				limitcb_buffer[2] = w;
+				limits_hit &= ~(1 << w);
+				break;
+			}
+		}
+		prepare_packet (limitcb_buffer);
+		send_packet (limitcb_buffer);
+		return;
+	}
 	if (num_movecbs > 0)
 	{
 		debug ("movecb %d", num_movecbs);
@@ -267,22 +283,6 @@ void try_send_next ()
 		prepare_packet (continue_buffer);
 		send_packet (continue_buffer);
 		continue_cb = false;
-		return;
-	}
-	if (limits_hit != 0)
-	{
-		debug ("limit");
-		for (uint8_t w = 0; w < 8; ++w)
-		{
-			if (limits_hit & (1 << w))
-			{
-				limitcb_buffer[2] = w;
-				limits_hit &= ~(1 << w);
-				break;
-			}
-		}
-		prepare_packet (limitcb_buffer);
-		send_packet (limitcb_buffer);
 		return;
 	}
 	debug ("nothing to send?!");

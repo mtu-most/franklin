@@ -26,9 +26,9 @@
 #define EXTERN extern
 #endif
 
-#define SET(pin) do { if ((pin) < 255) digitalWrite ((pin), HIGH); } while (0)
-#define RESET(pin) do { if ((pin) < 255) digitalWrite ((pin), LOW); } while (0)
-#define GET(pin, _default) ((pin) < 255 ? digitalRead (pin) : _default)
+#define SET(pin) do { if ((pin) < 255) { pinMode (pin, OUTPUT); digitalWrite ((pin), HIGH); } } while (0)
+#define RESET(pin) do { if ((pin) < 255) { pinMode (pin, OUTPUT); digitalWrite ((pin), LOW); } } while (0)
+#define GET(pin, _default) ((pin) < 255 ? pinMode (pin, INPUT_PULLUP), digitalRead (pin) : _default)
 
 union ReadFloat {
 	float f;
@@ -51,13 +51,13 @@ enum SingleByteCommands {	// See serial.cc for computation of command values.
 enum Command {
 	// from host
 	CMD_BEGIN,	// 4 byte: 0 (preferred protocol version). Reply: START.
-	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values.
+	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].
 	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
-	CMD_RUN,	// 1 byte: which channel (b0-6).  4 byte: speed (0 means off).
+	CMD_RUN,	// 1 byte: which channel (b0-6).  4 byte: speed [mm/s] (0 means off).
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
-	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target.
-	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit.  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
-	CMD_READTEMP,	// 1 byte: which channel.  Reply: TEMP.
+	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [degrees C].
+	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [degrees C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
+	CMD_READTEMP,	// 1 byte: which channel.  Reply: TEMP. [degrees C]
 	CMD_LOAD,	// 1 byte: which channel.
 	CMD_SAVE,	// 1 byte: which channel.
 	CMD_READ,	// 1 byte: which channel.  Reply: DATA.
@@ -67,7 +67,7 @@ enum Command {
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_START,	// 4 byte: 0 (protocol version).
-	CMD_TEMP,	// 1 byte: requested channel; 4 byte: requested channel's temperature.
+	CMD_TEMP,	// 1 byte: requested channel; 4 byte: requested channel's temperature. [degrees C]
 	CMD_DATA,	// n byte: requested data.
 	CMD_PONG,	// 1 byte: PING argument.
 		// asynchronous events.
@@ -90,14 +90,14 @@ struct Object
 struct Temp : public Object
 {
 	// Thermistor-resistor calibration; adc = adc0 * exp (-beta * (T - T0)).
-	float beta;				// beta value of thermistor
-	float T0;				// temperature of calibration point.
-	float adc0;				// adc reading of calibration point.
+	float beta;				// beta value of thermistor [/degrees C]
+	float T0;				// temperature of calibration point. [degrees C]
+	float adc0;				// adc reading of calibration point. [counts]
 	// Temperature balance calibration.
 	float radiation;			// factor for how much this thing radiates E = T ** 4 * radiation for each buffer_delay ms.
 	float convection;			// factor for how much this thing loses through convection E = T * convection for each buffer_delay ms.
-	float power;				// energy that is added per ms while heater is on.
-	uint16_t buffer_delay;			// time for the buffer to shift one slot, in ms.
+	float power;				// energy that is added per s while heater is on.
+	uint16_t buffer_delay;			// time for the buffer to shift one slot, [us].
 	// Pins.
 	uint8_t power_pin;
 	uint8_t thermistor_pin;
@@ -108,8 +108,8 @@ struct Temp : public Object
 	// Internal variables.
 	float last_temp;			// temperature at last buffer shift.
 	float buffer[4];			// history of added energy.
-	unsigned long long last_time;		// Counter to keep track of how much action should be taken.
-	unsigned long long last_shift_time;	// Counter to keep track of how much action should be taken.
+	unsigned long last_time;		// Counter to keep track of how much action should be taken. [us]
+	unsigned long last_shift_time;		// Counter to keep track of how much action should be taken. [us]
 	bool is_on;				// If the heater is currently on.
 	float extra_loss;			// extra lost energy per buffer shift; used to compensate for extrusion loss.
 	// Functions.
@@ -123,16 +123,16 @@ struct Motor : public Object
 {
 	uint8_t step_pin;
 	uint8_t dir_pin;
-	uint8_t sleep_pin;
+	uint8_t enable_pin;
 	float steps_per_mm;
-	float max_f;	// maximum value for f (steps/ms).
-	unsigned long long start_time;	// ms.
-	float f1, f0;	// steps per ms.
+	float max_f;				// maximum value for f [steps/s].
+	unsigned long start_time;		// [us].
+	float f1, f0, a;			// [steps/s], [steps/s], [/s/s]
 	uint16_t steps_total;
 	uint16_t steps_done;
-	bool positive;	// direction of current movement.
-	bool continuous;	// whether the motor should move without scheduled end point.
-	float f;	// current flowrate (steps/ms); used to communicate from extruder motor to extruder temp.
+	bool positive;				// direction of current movement.
+	bool continuous;			// whether the motor should move without scheduled end point.
+	float f;				// current flowrate [steps/s]; used to communicate from extruder motor to extruder temp.
 	virtual void load (uint16_t &addr, bool eeprom);
 	virtual void save (uint16_t &addr, bool eeprom);
 	virtual ~Motor () {}
@@ -186,7 +186,7 @@ struct MoveCommand
 #define COMMAND_LEN_MASK (COMMAND_SIZE - 1)
 // Code 1 variables
 EXTERN uint8_t num_extruders;
-EXTERN float roomtemperature;
+EXTERN float roomtemperature;	//[degrees C]
 // Other variables.
 EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;

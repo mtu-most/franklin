@@ -9,7 +9,7 @@ void next_move ()
 	float f0 = queue[queue_start].data[FLAG_F0];
 	float f1 = queue[queue_start].data[FLAG_F1];
 	// Set up motors for moving.
-	unsigned long long time = millis ();
+	unsigned long time = micros ();
 	for (uint8_t m = 0; m < num; ++m)
 	{
 		float target = queue[queue_start].data[m];
@@ -28,11 +28,12 @@ void next_move ()
 			SET (motors[m]->dir_pin);
 		else
 			RESET (motors[m]->dir_pin);
+		RESET (motors[m]->enable_pin);
 		if (motors[m]->steps_total > 0)
 			++motors_busy;
 		// Check if f0 and f1 are acceptable; adjust as needed.
-		//motors[m]->max_f		steps/ms
-		//f0, f1			(fractie)/ms
+		//motors[m]->max_f		steps/s
+		//f0, f1			(fraction)/s
 		//motors[m]->steps_total	steps
 		if (f0 * motors[m]->steps_total > motors[m]->max_f)
 			f0 = motors[m]->max_f / motors[m]->steps_total;
@@ -46,7 +47,7 @@ void next_move ()
 		motors[m]->f0 = f0;
 		motors[m]->f1 = f1;
 		motors[m]->f = f0;
+		motors[m]->a = (motors[m]->f1 * motors[m]->f1 - motors[m]->f0 * motors[m]->f0) / 4;
 	}
 	queue_start = (queue_start + 1) & QUEUE_LENGTH_MASK;
 }
-
