@@ -254,7 +254,7 @@ class Printer: # {{{
 			if r in ('', '\0'):
 				break
 			s += r
-		#print ('Debug: %s' % s)
+		print ('Debug: %s' % s)
 	# }}}
 	# Config stuff.  {{{
 	class Temp: # {{{
@@ -290,7 +290,6 @@ class Printer: # {{{
 			self.filament_heat, self.nozzle_size, self.filament_size = struct.unpack ('<fff', data)
 		def write (self):
 			return self.motor.write () + self.temp.write () + struct.pack ('<fff', self.filament_heat, self.nozzle_size, self.filament_size)
-	# }}}
 	# }}}
 	# }}}
 	# Internal commands.  {{{
@@ -483,7 +482,7 @@ class Printer: # {{{
 
 if __name__ == '__main__': # {{{
 	p = Printer ()
-	if False:
+	if True:
 		# Set everything up for calibration.
 		p.set_ramps_pins ()
 		p.num_extruders = 2
@@ -514,6 +513,7 @@ if __name__ == '__main__': # {{{
 			# However, as an estimate:
 			# Small gear has 9 teeth; large gear 47.  Radius of hobbing is approximately 3.2 mm (20/2pi).
 			p.extruder[e].motor.steps_per_mm = 835 #(200 * 16.) / ((9. / 47) * 20)
+			p.extruder[e].motor.max_f = float ('inf')
 		p.write_all ()
 		p.save_all ()
 	else:
@@ -527,16 +527,15 @@ if __name__ == '__main__': # {{{
 			print ('Axis %d:' % a)
 			print ('\tlimit pins: %d %d' % (p.axis[a].limit_min_pin, p.axis[a].limit_max_pin))
 			print ('\tmotor pins: %d %d %d' % (p.axis[a].motor.step_pin, p.axis[a].motor.dir_pin, p.axis[a].motor.sleep_pin))
-			print ('\tmotor steps per mm: %d' % p.axis[a].motor.steps_per_mm)
+			print ('\tmotor steps per mm: %f' % p.axis[a].motor.steps_per_mm)
+			print ('\tmotor max steps per ms: %f' % p.axis[a].motor.max_f)
 		for e in range (p.maxobject - 6):
 			print ('extruder %d' % e)
 			print ('\ttemp pins: %d %d' % (p.extruder[e].temp.power_pin, p.extruder[e].temp.thermistor_pin))
 			print ('\ttemp settings: %f %f %f %f %f %d' % (p.extruder[e].temp.beta, p.extruder[e].temp.T0, p.extruder[e].temp.adc0, p.extruder[e].temp.radiation, p.extruder[e].temp.power, p.extruder[e].temp.buffer_delay))
 			print ('\tmotor pins: %d %d %d' % (p.extruder[e].motor.step_pin, p.extruder[e].motor.dir_pin, p.extruder[e].motor.sleep_pin))
-			print ('\tmotor steps per mm: %d' % p.extruder[e].motor.steps_per_mm)
+			print ('\tmotor steps per mm: %f' % p.extruder[e].motor.steps_per_mm)
+			print ('\tmotor max steps per ms: %f' % p.extruder[e].motor.max_f)
 		for i in range (5, p.maxobject):
 			print ('temp: %f' % p.readtemp (i))
-		p.run (6, 1)
-		p.run (7, 2)
-		p.run (8, 2)
 # }}}

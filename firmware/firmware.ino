@@ -77,7 +77,7 @@ void debug (char const *fmt, ...) {
 	Serial.flush ();
 }
 
-float predict (Temp *temp, float energy, float added, float convection) {	// Predict the temperature after one step, given current and added energy
+static float predict (Temp *temp, float energy, float added, float convection) {	// Predict the temperature after one step, given current and added energy
 	float rt4 = roomtemperature * roomtemperature;
 	rt4 *= rt4;
 	// Radiation is supposed to go with T ** 4, so expect that.
@@ -151,9 +151,16 @@ void loop () {
 			if (!motors[m]->continuous)
 				continue;
 			float t = current_time - motors[m]->start_time;
-			if (t * motors[m]->f1 >= 1) {
+			float f = motors[m]->f1;
+			if (f > motors[m]->max_f)
+				f = motors[m]->max_f;
+			if (t * f >= 1) {
 				SET (motors[m]->step_pin);
-				motors[m]->start_time += 1 / motors[m]->f1;
+				motors[m]->start_time += 1 / f;
+				if (t * f >= 2) {
+					// We're too slow to keep up; prevent catch-up attempts.
+					motors[m]->start_time = current_time;
+				}
 				RESET (motors[m]->step_pin);
 			}
 			continue;
