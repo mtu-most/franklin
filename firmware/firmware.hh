@@ -26,9 +26,11 @@
 #define EXTERN extern
 #endif
 
-#define SET(pin) do { if ((pin) < 255) { pinMode (pin, OUTPUT); digitalWrite ((pin), HIGH); } } while (0)
-#define RESET(pin) do { if ((pin) < 255) { pinMode (pin, OUTPUT); digitalWrite ((pin), LOW); } } while (0)
-#define GET(pin, _default) ((pin) < 255 ? pinMode (pin, INPUT_PULLUP), digitalRead (pin) : _default)
+#define SET_OUTPUT(pin) do { if ((pin) < 255) { pinMode (pin, OUTPUT); }} while (0)
+#define SET_INPUT(pin) do { if ((pin) < 255) { pinMode (pin, INPUT_PULLUP); }} while (0)
+#define SET(pin) do { if ((pin) < 255) { digitalWrite ((pin), HIGH); } } while (0)
+#define RESET(pin) do { if ((pin) < 255) { digitalWrite ((pin), LOW); } } while (0)
+#define GET(pin, _default) ((pin) < 255 ? digitalRead (pin) : _default)
 
 union ReadFloat {
 	float f;
@@ -111,7 +113,6 @@ struct Temp : public Object
 	unsigned long last_time;		// Counter to keep track of how much action should be taken. [us]
 	unsigned long last_shift_time;		// Counter to keep track of how much action should be taken. [us]
 	bool is_on;				// If the heater is currently on.
-	float extra_loss;			// extra lost energy per buffer shift; used to compensate for extrusion loss.
 	// Functions.
 	float read ();				// Read current temperature.
 	virtual void load (uint16_t &addr, bool eeprom);
@@ -215,14 +216,32 @@ EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
 
+// debug.cc
 void debug (char const *fmt, ...);
-void serial ();	// Handle commands from serial.
+
+// packet.cc
 void packet ();	// A command packet has arrived; handle it.
+
+// serial.cc
+void serial ();	// Handle commands from serial.
 void send_packet (char *the_packet);
-void next_move ();
 void try_send_next ();
 
+// move.cc
+void next_move ();
+
+// setup.cc
 void setup ();
+
+// firmware.ino
 void loop ();	// Do stuff which needs doing: moving motors and adjusting heaters.
+
+// storage.cc
+uint8_t read_8 (uint16_t &address, bool eeprom);
+void write_8 (uint16_t &address, uint8_t data, bool eeprom);
+uint16_t read_16 (uint16_t &address, bool eeprom);
+void write_16 (uint16_t &address, uint16_t data, bool eeprom);
+float read_float (uint16_t &address, bool eeprom);
+void write_float (uint16_t &address, float data, bool eeprom);
 
 #endif

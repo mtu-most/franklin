@@ -101,6 +101,13 @@ void packet ()
 			RESET (motors[which]->enable_pin);
 			motors[which]->continuous = true;
 			motors[which]->f1 = (motors[which]->positive ? f.f : -f.f) * motors[which]->steps_per_mm;	// [mm/s] -> [steps/s]
+			SET_OUTPUT (motors[which]->step_pin);
+			SET_OUTPUT (motors[which]->dir_pin);
+			SET_OUTPUT (motors[which]->enable_pin);
+			if (which >= 2 && which < 5) {
+				SET_INPUT (axis[which - 2].limit_min_pin);
+				SET_INPUT (axis[which - 2].limit_max_pin);
+			}
 		}
 		else
 			motors[which]->continuous = false;
@@ -133,6 +140,8 @@ void packet ()
 			return;
 		}
 		temps[which]->target = get_float (3);
+		SET_OUTPUT (temps[which]->power_pin);
+		SET_INPUT (temps[which]->thermistor_pin);
 		Serial.write (CMD_ACK);
 		return;
 	}

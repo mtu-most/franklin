@@ -1,0 +1,92 @@
+#!/usr/bin/python
+
+import interface
+import sys
+import time
+
+p = interface.Printer ()
+
+def test_one (axis, steps_per_s):
+	# Move to the limit switch; assume 3200 steps per revolution.
+	# This need not be right; we just need a safe estimate which gets us to the switch.
+	mm_per_s = 3200 / p.axis[axis].motor.steps_per_mm	# 1 revolution per second.
+	p.run (axis + 2, -mm_per_s)
+	while len (p.limits) == 0:
+		p.recv_packet (want_any = True)
+	p.limits = 0
+	# We're at the switch now; move away a small distance.
+	distance = 5.
+	p.goto (**{chr (ord ('x') + axis): distance, 'f0': mm_per_s / distance})
+	# Try moving to the switch again.
+	p.goto (**{chr (ord ('x') + axis): -2 * distance, 'f0': steps_per_s / p.axis[axis].motor.steps_per_mm / distance, 'cb': True})
+	while p.movewait > 0:
+		p.recv_packet (want_any = True)
+	ret = p.limits != 0
+	p.limits = 0
+	return ret
+
+def test (axis):
+	# Binary search for maximum steps per second.
+	assert p.axis[axis].limit_min_pin < 255
+	lower = 1.
+	upper = 10000.
+	# Find real upper bound.
+	while test_one (axis, upper):
+		lower = upper
+		upper *= 2
+	# Continue until we have a value within 1%.
+	while upper / lower - 1. > .01:
+		mid = (lower + upper) / 2
+		# Try this value.
+		if test_one (axis, mid):
+			lower = mid
+		else:
+			upper = mid
+	return upper
+
+def calibrate_temps (temps, channels):
+	cold = []
+	# Set up temp to return raw adc counts.
+	for temp, channel in zip (temps, channels):
+		temp.adc0 = 0
+		p.write (channel)
+		# Save cold count; set cold temperature later.
+		coldadc = sum ([p.readtemp (channel) for x in range (50)]) / 50
+	# Heat it for 10 seconds, then let it cool for 30 seconds
+	for temp, channel in zip (temps, channels):
+		p.settemp (channel, float ('inf'))
+	start = time.time ()
+	measure = [[[], []] for c in channels]
+	while time.time () < start + 10:
+		for channel in channels:
+			measure[channel][0].append ((time.time () - start, p.readtemp (channel)))
+	for channel in channels:
+		p.settemp (channel, float ('nan'))
+	split = time.time () - start
+	while time.time () < start + 40:
+		for channel in channels:
+			measure[channel][1].append ((time.time () - start, p.readtemp (channel)))
+	# determine alpha, beta, and radiation from last 30 seconds. (Is that possible?)
+	# determine buffer_delay and power from first 10 seconds.
+	# Step 1: dump all data to a file for manual inspection.
+	with open ('/tmp/dump', 'w') as f:
+		f.write ('# split: %f; channels: ' % split + ' '.join (['%d' % x for x in channels]) + '\n')
+		f.write ('\n'.join ([' '.join (['%f %f' % (measure[channel][0][row], measure[channel][1][row]) for channel in range (len (channels))]) for row in range (len (measure[0][0]))]) + '\n')
+
+# Start easy: motors with endstops.
+for a in range (3):
+	p.axis[a].motor.max_f = test (a) * .8	# Set it slightly lower, to be safe.
+	p.write (a + 2)
+	p.save (a + 2)
+
+
+# Then temperature sensors.
+temps = []
+channels = []
+if p.bed.thermistor_pin and p.bed.power_pin:
+	temps.append (p.bed)
+	channels.append (5)
+for e in range (p.num_extruders):
+	temps.append (p.extruder[e].temp, 6 + e)
+	channels.append (6 + e)
+calibrate_temps (temps, channels)

@@ -39,6 +39,13 @@ void next_move ()
 			f0 = motors[m]->max_f / motors[m]->steps_total;
 		if (f1 * motors[m]->steps_total > motors[m]->max_f)
 			f1 = motors[m]->max_f / motors[m]->steps_total;
+		SET_OUTPUT (motors[m]->step_pin);
+		SET_OUTPUT (motors[m]->dir_pin);
+		SET_OUTPUT (motors[m]->enable_pin);
+		if (m >= 2 && m < 5) {
+			SET_INPUT (axis[m - 2].limit_min_pin);
+			SET_INPUT (axis[m - 2].limit_max_pin);
+		}
 	}
 	for (uint8_t m = 0; m < num; ++m)
 	{
