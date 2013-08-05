@@ -6,19 +6,20 @@ import time
 
 p = interface.Printer ()
 
-def test_one (axis, steps_per_s):
+def test_one (axis, steps_per_s, use_min):
 	# Move to the limit switch; assume 3200 steps per revolution.
 	# This need not be right; we just need a safe estimate which gets us to the switch.
 	mm_per_s = 3200 / p.axis[axis].motor.steps_per_mm	# 1 revolution per second.
-	p.run (axis + 2, -mm_per_s)
+	s = -1 if use_min else 1
+	p.run (axis + 2, s * mm_per_s)
 	while len (p.limits) == 0:
 		p.recv_packet (want_any = True)
 	p.limits = 0
 	# We're at the switch now; move away a small distance.
 	distance = 5.
-	p.goto (**{chr (ord ('x') + axis): distance, 'f0': mm_per_s / distance})
+	p.goto (**{chr (ord ('x') + axis): -s * distance, 'f0': mm_per_s / distance})
 	# Try moving to the switch again.
-	p.goto (**{chr (ord ('x') + axis): -2 * distance, 'f0': steps_per_s / p.axis[axis].motor.steps_per_mm / distance, 'cb': True})
+	p.goto (**{chr (ord ('x') + axis): 2 * s * distance, 'f0': steps_per_s / p.axis[axis].motor.steps_per_mm / (2 * distance), 'cb': True})
 	while p.movewait > 0:
 		p.recv_packet (want_any = True)
 	ret = p.limits != 0
@@ -27,11 +28,11 @@ def test_one (axis, steps_per_s):
 
 def test (axis):
 	# Binary search for maximum steps per second.
-	assert p.axis[axis].limit_min_pin < 255
+	assert p.axis[axis].limit_min_pin < 255 or p.axis[axis].limit_max_pin < 255
 	lower = 1.
 	upper = 10000.
 	# Find real upper bound.
-	while test_one (axis, upper):
+	while test_one (axis, upper, p.axis[axis].limit_min_pin < 255):
 		lower = upper
 		upper *= 2
 	# Continue until we have a value within 1%.

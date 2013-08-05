@@ -6,7 +6,8 @@
 // I'd have liked to have a timer interrupt for these actions, but arduino doesn't allow it.
 
 static float predict (Temp *temp, Extruder *extruder, float energy, float added, float convection) {	// Predict the temperature after one step, given current and added energy
-	float rt4 = roomtemperature * roomtemperature;
+	float rt4 = roomtemperature + 273.15;
+	rt4 *= rt4;
 	rt4 *= rt4;
 	// Radiation is supposed to go with T ** 4, so expect that.
 	float temp4 = energy * energy;
@@ -18,7 +19,7 @@ static float predict (Temp *temp, Extruder *extruder, float energy, float added,
 	energy += rt4 * temp->radiation;
 	// Convection balance.
 	energy -= current_temp * convection;
-	energy += roomtemperature * convection;
+	energy += (roomtemperature + 273.15) * convection;
 	// Heater energy.
 	energy += added;
 	// Extruded material heat loss (assuming extrusion is constant during buffer time).
@@ -38,7 +39,7 @@ static void handle_temps (unsigned long current_time) {
 	temp_counter = 20;
 	// Only spend time if it may be useful.
 	if (temps[temp_current] && (!isnan (temps[temp_current]->target) || !isnan (temps[temp_current]->min_alarm) || !isnan (temps[temp_current]->max_alarm)) && temps[temp_current]->power_pin < 255 && temps[temp_current]->thermistor_pin < 255) {
-		float temp = temps[temp_current]->read ();
+		float temp = temps[temp_current]->read () + 273.15;
 		// First of all, if an alarm should be triggered, do so.
 		if (!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp || !isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp) {
 			temps[temp_current]->min_alarm = NAN;
@@ -60,7 +61,7 @@ static void handle_temps (unsigned long current_time) {
 			shift_dt -= temps[temp_current]->buffer_delay * 1000000.;
 			// Adjust convection: predicted - (last_temp - roomtemp) * convection = temp.
 			float predicted = predict (temps[temp_current], &extruder[temp_current], temps[temp_current]->last_temp, temps[temp_current]->buffer[3], 0);
-			temps[temp_current]->convection = (predicted - temp) / (temps[temp_current]->last_temp - roomtemperature);
+			temps[temp_current]->convection = (predicted - temp) / (temps[temp_current]->last_temp - roomtemperature - 273.15);
 			temps[temp_current]->last_temp = temp;
 			for (uint8_t b = 3; b > 0; --b)
 				temps[temp_current]->buffer[b] = temps[temp_current]->buffer[b - 1];

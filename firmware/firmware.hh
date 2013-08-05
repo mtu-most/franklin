@@ -91,10 +91,11 @@ struct Object
 // Energy unit is chosen such that the heat capacity of the extruder is 1, so the energy is equal to the temperature.
 struct Temp : public Object
 {
-	// Thermistor-resistor calibration; adc = adc0 * exp (-beta * (T - T0)).
+	// Thermistor-resistor calibration; R = alpha * exp (-beta * T).
+	// adc = maxadc * R / (R + R0)
+	float alpha;				// alpha value of thermistor. [adc counts]
 	float beta;				// beta value of thermistor [/degrees C]
-	float T0;				// temperature of calibration point. [degrees C]
-	float adc0;				// adc reading of calibration point. [counts]
+	float R0;				// value of resistor [ohm]
 	// Temperature balance calibration.
 	float radiation;			// factor for how much this thing radiates E = T ** 4 * radiation for each buffer_delay ms.
 	float convection;			// factor for how much this thing loses through convection E = T * convection for each buffer_delay ms.

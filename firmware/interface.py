@@ -259,10 +259,10 @@ class Printer: # {{{
 	# Config stuff.  {{{
 	class Temp: # {{{
 		def read (self, data):
-			self.beta, self.T0, self.adc0, self.radiation, self.power, self.buffer_delay, self.power_pin, self.thermistor_pin = struct.unpack ('<fffffHBB', data[:24])
+			self.alpha, self.beta, self.R0, self.radiation, self.power, self.buffer_delay, self.power_pin, self.thermistor_pin = struct.unpack ('<fffffHBB', data[:24])
 			return data[24:]
 		def write (self):
-			return struct.pack ('<fffffHBB', self.beta, self.T0, self.adc0, self.radiation, self.power, self.buffer_delay, self.power_pin, self.thermistor_pin)
+			return struct.pack ('<fffffHBB', self.alpha, self.beta, self.R0, self.radiation, self.power, self.buffer_delay, self.power_pin, self.thermistor_pin)
 	# }}}
 	class Motor: # {{{
 		def read (self, data):
@@ -414,67 +414,89 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	# Presets.  {{{
-	def set_ramps_pins (self, max_limits = False): # {{{
-		self.axis[0].limit_min_pin = 3
+	def set_ramps_pins (self, min_limits = None, max_limits = None): # {{{
+		if min_limits is None and max_limits is None:
+			min_limits = True
+			max_limits = False
+		elif min_limits is None:
+			min_limits = not max_limits
+		elif max_limits is None:
+			max_limits = not min_limits
+		self.axis[0].limit_min_pin = 3 if min_limits else 255
 		self.axis[0].limit_max_pin = 2 if max_limits else 255
 		self.axis[0].motor.step_pin = 54
 		self.axis[0].motor.dir_pin = 55
 		self.axis[0].motor.enable_pin = 38
-		self.axis[1].limit_min_pin = 14
+		self.axis[1].limit_min_pin = 14 if min_limits else 255
 		self.axis[1].limit_max_pin = 15 if max_limits else 255
 		self.axis[1].motor.step_pin = 60
 		self.axis[1].motor.dir_pin = 61
 		self.axis[1].motor.enable_pin = 56
-		self.axis[2].limit_min_pin = 18
+		self.axis[2].limit_min_pin = 18 if min_limits else 255
 		self.axis[2].limit_max_pin = 19 if max_limits else 255
 		self.axis[2].motor.step_pin = 46
 		self.axis[2].motor.dir_pin = 48
 		self.axis[2].motor.enable_pin = 62
 		self.bed.power_pin = 8
 		self.bed.thermistor_pin = 14
+		self.bed.R0 = 4700.
 		self.extruder[0].temp.power_pin = 10
 		self.extruder[0].temp.thermistor_pin = 13
+		self.extruder[0].R0 = 4700.
 		self.extruder[0].motor.step_pin = 26
 		self.extruder[0].motor.dir_pin = 28
 		self.extruder[0].motor.enable_pin = 24
 		self.extruder[1].temp.power_pin = 9
 		self.extruder[1].temp.thermistor_pin = 15
+		self.extruder[1].R0 = 4700.
 		self.extruder[1].motor.step_pin = 36
 		self.extruder[1].motor.dir_pin = 34
 		self.extruder[1].motor.enable_pin = 30
-		for e in range (2, 10):
+		for e in range (2, self.maxobject - 6):
 			self.extruder[e].temp.power_pin = 255
 			self.extruder[e].temp.thermistor_pin = 255
+			self.extruder[e].R0 = float ('nan')
 			self.extruder[e].motor.step_pin = 255
 			self.extruder[e].motor.dir_pin = 255
 			self.extruder[e].motor.enable_pin = 255
 	# }}}
-	def set_melzi_pins (self): # {{{
-		self.axis[0].limit_min_pin = 18
-		self.axis[0].limit_max_pin = 255
+	def set_melzi_pins (self, min_limits = None, max_limits = None): # {{{
+		if min_limits is None and max_limits is None:
+			min_limits = True
+			max_limits = False
+		elif min_limits is None:
+			min_limits = not max_limits
+		elif max_limits is None:
+			max_limits = not min_limits
+		assert not (max_limits and min_limits)
+		self.axis[0].limit_min_pin = 18 if min_limits else 255
+		self.axis[0].limit_max_pin = 18 if max_limits else 255
 		self.axis[0].motor.step_pin = 15
 		self.axis[0].motor.dir_pin = 21
 		self.axis[0].motor.enable_pin = 14
-		self.axis[1].limit_min_pin = 19
-		self.axis[1].limit_max_pin = 255
+		self.axis[1].limit_min_pin = 19 if min_limits else 255
+		self.axis[1].limit_max_pin = 19 if max_limits else 255
 		self.axis[1].motor.step_pin = 22
 		self.axis[1].motor.dir_pin = 23
 		self.axis[1].motor.enable_pin = 14
-		self.axis[2].limit_min_pin = 20
-		self.axis[2].limit_max_pin = 255
+		self.axis[2].limit_min_pin = 20 if min_limits else 255
+		self.axis[2].limit_max_pin = 20 if max_limits else 255
 		self.axis[2].motor.step_pin = 3
 		self.axis[2].motor.dir_pin = 2
 		self.axis[2].motor.enable_pin = 26
 		self.bed.power_pin = 10
 		self.bed.thermistor_pin = 6
+		self.bed.R0 = 4700
 		self.extruder[0].temp.power_pin = 13
 		self.extruder[0].temp.thermistor_pin = 7
+		self.extruder[0].temp.R0 = 4700
 		self.extruder[0].motor.step_pin = 1
 		self.extruder[0].motor.dir_pin = 0
 		self.extruder[0].motor.enable_pin = 14
-		for e in range (1, 10):
+		for e in range (1, self.maxmaxobject - 6):
 			self.extruder[e].temp.power_pin = 255
 			self.extruder[e].temp.thermistor_pin = 255
+			self.extruder[e].temp.R0 = float ('nan')
 			self.extruder[e].motor.step_pin = 255
 			self.extruder[e].motor.dir_pin = 255
 			self.extruder[e].motor.enable_pin = 255
@@ -498,16 +520,14 @@ if __name__ == '__main__': # {{{
 		p.axis[0].motor.max_f = float ('inf')
 		p.axis[1].motor.max_f = float ('inf')
 		p.axis[2].motor.max_f = float ('inf')
-		p.bed.beta = 1
-		p.bed.T0 = 0
-		p.bed.adc0 = 0	# Debugging: ignore T0 and beta, return raw counts.
+		p.bed.beta = 3700.
+		p.bed.alpha = 10e3 / math.exp (-p.bed.beta * 25)
 		p.bed.radiation = 0
 		p.bed.power = 0
 		p.bed.buffer_delay = .001
 		for e in range (p.maxobject - 6):
-			p.extruder[e].temp.beta = 1
-			p.extruder[e].temp.T0 = 0
-			p.extruder[e].temp.adc0 = 0	# Debugging: ignore T0 and beta, return raw counts.
+			p.extruder[e].temp.beta = 4000.
+			p.extruder[e].temp.alpha = 100e3 / math.exp (-p.extruder[e].temp.beta * 25)
 			p.extruder[e].temp.radiation = 0
 			p.extruder[e].temp.power = 0
 			p.extruder[e].temp.buffer_delay = .001
@@ -524,7 +544,7 @@ if __name__ == '__main__': # {{{
 		print ('num extruders: %d' % p.num_extruders)
 		print ('room temperature: %f' % p.roomtemperature)
 		print ('bed pins: %d %d' % (p.bed.power_pin, p.bed.thermistor_pin))
-		print ('bed settings: %f %f %f %f %f %d' % (p.bed.beta, p.bed.T0, p.bed.adc0, p.bed.radiation, p.bed.power, p.bed.buffer_delay))
+		print ('bed settings: %f %f %f %f %f %d' % (p.bed.alpha, p.bed.beta, p.bed.R0, p.bed.radiation, p.bed.power, p.bed.buffer_delay))
 		for a in range (3):
 			print ('Axis %d:' % a)
 			print ('\tlimit pins: %d %d' % (p.axis[a].limit_min_pin, p.axis[a].limit_max_pin))
@@ -534,7 +554,7 @@ if __name__ == '__main__': # {{{
 		for e in range (p.maxobject - 6):
 			print ('extruder %d' % e)
 			print ('\ttemp pins: %d %d' % (p.extruder[e].temp.power_pin, p.extruder[e].temp.thermistor_pin))
-			print ('\ttemp settings: %f %f %f %f %f %d' % (p.extruder[e].temp.beta, p.extruder[e].temp.T0, p.extruder[e].temp.adc0, p.extruder[e].temp.radiation, p.extruder[e].temp.power, p.extruder[e].temp.buffer_delay))
+			print ('\ttemp settings: %f %f %f %f %f %d' % (p.extruder[e].temp.alpha, p.extruder[e].temp.beta, p.extruder[e].temp.R0, p.extruder[e].temp.radiation, p.extruder[e].temp.power, p.extruder[e].temp.buffer_delay))
 			print ('\tmotor pins: %d %d %d' % (p.extruder[e].motor.step_pin, p.extruder[e].motor.dir_pin, p.extruder[e].motor.enable_pin))
 			print ('\tmotor steps per mm: %f' % p.extruder[e].motor.steps_per_mm)
 			print ('\tmotor max steps per ms: %f' % p.extruder[e].motor.max_f)
