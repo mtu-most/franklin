@@ -142,6 +142,10 @@ void packet ()
 		temps[which]->target = get_float (3);
 		SET_OUTPUT (temps[which]->power_pin);
 		SET_INPUT (temps[which]->thermistor_pin);
+		if (isnan (temps[which]->target)) {
+			// loop () doesn't handle it now, so it isn't disabled there.
+			RESET (temps[which]->power_pin);
+		}
 		Serial.write (CMD_ACK);
 		return;
 	}

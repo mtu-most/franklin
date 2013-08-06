@@ -134,16 +134,19 @@ static void handle_axis (unsigned long current_time) {
 	for (uint8_t axis_current = 0; axis_current < 3; ++axis_current) {
 		if ((!axis[axis_current].motor.continuous && axis[axis_current].motor.steps_total <= axis[axis_current].motor.steps_done) || (axis[axis_current].motor.positive ? !GET (axis[axis_current].limit_max_pin, false) : !GET (axis[axis_current].limit_min_pin, false)))
 			continue;
+		bool need_cb = axis[axis_current].motor.steps_total > axis[axis_current].motor.steps_done && queue[queue_start].cb;
 		debug ("hit %d", axis_current);
 		// Hit endstop; abort current move and notify host.
 		axis[axis_current].motor.continuous = false;	// Stop continuous move only for the motor that hits the switch.
 		for (uint8_t m = 0; m < FLAG_EXTRUDER0 + num_extruders; ++m) {
 			if (!motors[m])
 				continue;
+			if (motors[m]->steps_total > motors[m]->steps_done)
+				--motors_busy;
 			motors[m]->steps_total = 0;
 		}
 		limits_hit |= (1 << axis_current);
-		if (queue[queue_start].cb)
+		if (need_cb)
 			++num_movecbs;
 		try_send_next ();
 		next_move ();

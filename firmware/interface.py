@@ -8,14 +8,14 @@ import struct
 # }}}
 
 def dprint (x, data):
-	print ('%s: %s' % (x, ' '.join (['%02x' % ord (c) for c in data])))
+	#print ('%s: %s' % (x, ' '.join (['%02x' % ord (c) for c in data])))
 	pass
 
 class Printer: # {{{
 	# Internal stuff.  {{{
 	# Constants.  {{{
 	# Serial timeout for normal communication in seconds.
-	default_timeout = 2
+	default_timeout = 5
 	# Masks for computing checksums.
 	mask = [	[0xc0, 0xc3, 0xff, 0x09],
 			[0x38, 0x3a, 0x7e, 0x13],
@@ -254,7 +254,7 @@ class Printer: # {{{
 			if r in ('', '\0'):
 				break
 			s += r
-		print ('Debug: %s' % s)
+		#print ('Debug: %s' % s)
 	# }}}
 	# Config stuff.  {{{
 	class Temp: # {{{
@@ -341,7 +341,7 @@ class Printer: # {{{
 	def run (self, channel, speed):	# speed: float; 0 means off. # {{{
 		self.send_packet (struct.pack ('<BBf', self.command['RUN'], channel, speed))
 	# }}}
-	def sleep (self, channel, sleeping): # {{{
+	def sleep (self, channel, sleeping = True): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['SLEEP'], (channel & 0x7f) | (0x80 if sleeping else 0)))
 	# }}}
 	def settemp (self, channel, temp): # {{{
@@ -506,7 +506,7 @@ class Printer: # {{{
 
 if __name__ == '__main__': # {{{
 	p = Printer ()
-	if False:
+	if True:
 		# Set everything up for calibration.
 		p.set_ramps_pins ()
 		p.num_extruders = 2
@@ -521,13 +521,13 @@ if __name__ == '__main__': # {{{
 		p.axis[1].motor.max_f = float ('inf')
 		p.axis[2].motor.max_f = float ('inf')
 		p.bed.beta = 3700.
-		p.bed.alpha = 10e3 / math.exp (-p.bed.beta * 25)
+		p.bed.alpha = 0 #10e3 / math.exp (-p.bed.beta * 25)
 		p.bed.radiation = 0
 		p.bed.power = 0
 		p.bed.buffer_delay = .001
 		for e in range (p.maxobject - 6):
 			p.extruder[e].temp.beta = 4000.
-			p.extruder[e].temp.alpha = 100e3 / math.exp (-p.extruder[e].temp.beta * 25)
+			p.extruder[e].temp.alpha = 0 #100e3 / math.exp (-p.extruder[e].temp.beta * 25)
 			p.extruder[e].temp.radiation = 0
 			p.extruder[e].temp.power = 0
 			p.extruder[e].temp.buffer_delay = .001

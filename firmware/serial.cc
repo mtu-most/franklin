@@ -23,6 +23,7 @@
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
 static unsigned long last_micros = 0;
+static bool had_data = false;
 
 // Parity masks for decoding.
 static const uint8_t MASK[5][4] = {
@@ -35,15 +36,17 @@ static const uint8_t MASK[5][4] = {
 // There may be serial data available.
 void serial ()
 {
-	if (command_end > 0 && micros () >= last_micros + 100000)
+	if (!had_data && command_end > 0 && micros () >= last_micros + 100000)
 	{
 		// Command not finished; ignore it and wait for next.
 		command_end = 0;
 	}
+	had_data = false;
 	while (command_end == 0)
 	{
 		if (!Serial.available ())
 			return;
+		had_data = true;
 		command[0] = Serial.read ();
 		debug ("received: %x", command[0]);
 		// If this is a 1-byte command, handle it.
@@ -97,6 +100,7 @@ void serial ()
 		debug ("no more data available now");
 		return;
 	}
+	had_data = true;
 	if (len + command_end > COMMAND_SIZE)
 		len = COMMAND_SIZE - command_end;
 	uint8_t cmd_len = command[0] & COMMAND_LEN_MASK;

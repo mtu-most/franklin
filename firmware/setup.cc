@@ -77,7 +77,6 @@ void setup ()
 		temps[t]->last_time = time;
 		temps[t]->last_shift_time = time;
 		temps[t]->is_on = false;
-		temps[t]->extra_loss = 0;
 		temps[t]->min_alarm = NAN;
 		temps[t]->max_alarm = NAN;
 		temps[t]->last_temp = NAN;
