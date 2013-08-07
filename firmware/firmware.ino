@@ -5,82 +5,49 @@
 // Loop function handles all regular updates.
 // I'd have liked to have a timer interrupt for these actions, but arduino doesn't allow it.
 
-static float predict (Temp *temp, Extruder *extruder, float energy, float added, float convection) {	// Predict the temperature after one step, given current and added energy
-	float rt4 = roomtemperature + 273.15;
-	rt4 *= rt4;
-	rt4 *= rt4;
-	// Radiation is supposed to go with T ** 4, so expect that.
-	float temp4 = energy * energy;
-	temp4 *= temp4;
-	// Store "current" temperature.
-	float current_temp = energy;
-	// Radiation balance.
-	energy -= temp4 * temp->radiation;
-	energy += rt4 * temp->radiation;
-	// Convection balance.
-	energy -= current_temp * convection;
-	energy += (roomtemperature + 273.15) * convection;
-	// Heater energy.
-	energy += added;
-	// Extruded material heat loss (assuming extrusion is constant during buffer time).
-	if (extruder) {
-		float mm_per_s = extruder->motor.f / extruder->motor.steps_per_mm;
-		float mm_per_shift = mm_per_s * temp->buffer_delay / 1e6;
-		energy -= mm_per_shift * extruder->capacity * energy;
-	}
-	return energy;
-}
-
 static uint8_t temp_counter = 1;
 static uint8_t temp_current = 0;
 static void handle_temps (unsigned long current_time) {
 	if (--temp_counter)
 		return;
 	temp_counter = 20;
-	// Only spend time if it may be useful.
-	if (temps[temp_current] && (!isnan (temps[temp_current]->target) || !isnan (temps[temp_current]->min_alarm) || !isnan (temps[temp_current]->max_alarm)) && temps[temp_current]->power_pin < 255 && temps[temp_current]->thermistor_pin < 255) {
-		float temp = temps[temp_current]->read () + 273.15;
-		// First of all, if an alarm should be triggered, do so.
-		if (!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp || !isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp) {
-			temps[temp_current]->min_alarm = NAN;
-			temps[temp_current]->max_alarm = NAN;
-			which_tempcbs |= (1 << temp_current);
-			try_send_next ();
-		}
-		unsigned long dt = current_time - temps[temp_current]->last_time;
-		if (dt == 0) {
-			temp_current = (temp_current + 1) % (FLAG_EXTRUDER0 + num_extruders);
-			return;
-		}
-		unsigned long shift_dt = current_time - temps[temp_current]->last_shift_time;
-		temps[temp_current]->last_time = current_time;
-		if (temps[temp_current]->is_on)
-			temps[temp_current]->buffer[0] += temps[temp_current]->power * dt;
-		while (shift_dt >= temps[temp_current]->buffer_delay && temps[temp_current]->buffer_delay != 0) {
-			temps[temp_current]->last_shift_time += temps[temp_current]->buffer_delay * 1000000.;
-			shift_dt -= temps[temp_current]->buffer_delay * 1000000.;
-			// Adjust convection: predicted - (last_temp - roomtemp) * convection = temp.
-			float predicted = predict (temps[temp_current], &extruder[temp_current], temps[temp_current]->last_temp, temps[temp_current]->buffer[3], 0);
-			temps[temp_current]->convection = (predicted - temp) / (temps[temp_current]->last_temp - roomtemperature - 273.15);
-			temps[temp_current]->last_temp = temp;
-			for (uint8_t b = 3; b > 0; --b)
-				temps[temp_current]->buffer[b] = temps[temp_current]->buffer[b - 1];
-			temps[temp_current]->buffer[0] = 0;
-		}
-		// Predict temperature when heat that would be added now would reach the sensor.
-		float energy = temp;
-		for (int8_t b = 3; b >= 0; --b)
-			energy = predict (temps[temp_current], &extruder[temp_current], energy, temps[temp_current]->buffer[b], temps[temp_current]->convection);
-		if (energy < temps[temp_current]->target) {
-			SET (temps[temp_current]->power_pin);
-			temps[temp_current]->is_on = true;
-		}
-		else {
-			RESET (temps[temp_current]->power_pin);
-			temps[temp_current]->is_on = false;
-		}
-	}
 	temp_current = (temp_current + 1) % (FLAG_EXTRUDER0 + num_extruders);
+	while (!temps[temp_current] || (isnan (temps[temp_current]->target) && isnan (temps[temp_current]->min_alarm) && isnan (temps[temp_current]->max_alarm)) || temps[temp_current]->power_pin >= 255 || temps[temp_current]->thermistor_pin >= 255)
+		temp_current = (temp_current + 1) % (FLAG_EXTRUDER0 + num_extruders);
+	float temp = temps[temp_current]->read ();
+	// First of all, if an alarm should be triggered, do so.
+	if (!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp || !isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp) {
+		temps[temp_current]->min_alarm = NAN;
+		temps[temp_current]->max_alarm = NAN;
+		which_tempcbs |= (1 << temp_current);
+		try_send_next ();
+	}
+	unsigned long dt = current_time - temps[temp_current]->last_time;
+	if (dt == 0)
+		return;
+	temps[temp_current]->last_time = current_time;
+	float fdt = dt  * 1.0 / 1e6;
+	// Heater and core/shell transfer.
+	if (temps[temp_current]->is_on)
+		temps[temp_current]->core_T += temps[temp_current]->power / temps[temp_current]->core_C * fdt / 2;
+	float Q = temps[temp_current]->transfer * (temps[temp_current]->core_T - temps[temp_current]->shell_T) * fdt;
+	temps[temp_current]->core_T -= Q / temps[temp_current]->core_C;
+	temps[temp_current]->shell_T += Q / temps[temp_current]->shell_C;
+	if (temps[temp_current]->is_on)
+		temps[temp_current]->core_T += temps[temp_current]->power / temps[temp_current]->core_C * fdt / 2;
+	// Set shell to measured value.
+	temps[temp_current]->shell_T = temp;
+	// Add energy if required.
+	float E = temps[temp_current]->core_T * temps[temp_current]->core_C + temps[temp_current]->shell_T * temps[temp_current]->shell_C;
+	float T = E / (temps[temp_current]->core_C + temps[temp_current]->shell_C);
+	if (T < temps[temp_current]->target) {
+		SET (temps[temp_current]->power_pin);
+		temps[temp_current]->is_on = true;
+	}
+	else {
+		RESET (temps[temp_current]->power_pin);
+		temps[temp_current]->is_on = false;
+	}
 }
 
 static void handle_motors (unsigned long current_time) {

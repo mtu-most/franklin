@@ -139,7 +139,7 @@ void packet ()
 			Serial.write (CMD_STALL);
 			return;
 		}
-		temps[which]->target = get_float (3);
+		temps[which]->target = get_float (3) + 273.15;
 		SET_OUTPUT (temps[which]->power_pin);
 		SET_INPUT (temps[which]->thermistor_pin);
 		if (isnan (temps[which]->target)) {
@@ -165,8 +165,8 @@ void packet ()
 			min.b[i] = command[3 + i];
 			max.b[i] = command[3 + i + sizeof (float)];
 		}
-		temps[ch]->min_alarm = min.f;
-		temps[ch]->max_alarm = max.f;
+		temps[ch]->min_alarm = min.f + 273.15;
+		temps[ch]->max_alarm = max.f + 273.15;
 		Serial.write (CMD_ACK);
 		return;
 	}
@@ -181,7 +181,7 @@ void packet ()
 		}
 		Serial.write (CMD_ACK);
 		ReadFloat f;
-		f.f = temps[which]->read ();
+		f.f = temps[which]->read () + 273.15;
 		//debug ("read temp %f", f.f);
 		reply[0] = 2 + sizeof (float);
 		reply[1] = CMD_TEMP;

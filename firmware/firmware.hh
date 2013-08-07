@@ -91,28 +91,25 @@ struct Object
 // Energy unit is chosen such that the heat capacity of the extruder is 1, so the energy is equal to the temperature.
 struct Temp : public Object
 {
-	// Thermistor-resistor calibration; R = alpha * exp (-beta * T).
+	// Thermistor-resistor calibration; R = k * exp (-beta / T); k = R0 * exp(-beta/T0)
 	// adc = maxadc * R / (R + R0)
-	float alpha;				// alpha value of thermistor. [adc counts]
-	float beta;				// beta value of thermistor [/degrees C]
-	float R0;				// value of resistor [ohm]
+	// alpha = beta * log (k / R0)
+	float alpha;				// alpha value of thermistor.  [degrees C]
+	float beta;				// beta value of thermistor.  [degrees C]
 	// Temperature balance calibration.
-	float radiation;			// factor for how much this thing radiates E = T ** 4 * radiation for each buffer_delay ms.
-	float convection;			// factor for how much this thing loses through convection E = T * convection for each buffer_delay ms.
-	float power;				// energy that is added per s while heater is on.
-	uint16_t buffer_delay;			// time for the buffer to shift one slot, [us].
+	float power;				// added power while heater is on.  [W]
+	float core_C;				// heat capacity of the core.  [J/K]
+	float shell_C;				// heat capacity of the shell.  [J/K]
+	float transfer;				// heat transfer between core and shell.  [W/K]
 	// Pins.
 	uint8_t power_pin;
 	uint8_t thermistor_pin;
 	// Volatile variables.
-	float target;				// target temperature; NAN to disable.
-	float min_alarm;			// NAN, or the temperature at which to trigger the callback.
-	float max_alarm;			// NAN, or the temperature at which to trigger the callback.
+	float target;				// target temperature; NAN to disable. [degrees C]
+	float min_alarm;			// NAN, or the temperature at which to trigger the callback.  [degrees C]
+	float max_alarm;			// NAN, or the temperature at which to trigger the callback.  [degrees C]
 	// Internal variables.
-	float last_temp;			// temperature at last buffer shift.
-	float buffer[4];			// history of added energy.
-	unsigned long last_time;		// Counter to keep track of how much action should be taken. [us]
-	unsigned long last_shift_time;		// Counter to keep track of how much action should be taken. [us]
+	unsigned long last_time;		// last value of micros when this heater was handled.
 	bool is_on;				// If the heater is currently on.
 	// Functions.
 	float read ();				// Read current temperature.
