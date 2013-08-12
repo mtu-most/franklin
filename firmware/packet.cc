@@ -44,8 +44,8 @@ void packet ()
 			Serial.write (CMD_STALL);
 			return;
 		}
-		uint8_t const num = FLAG_EXTRUDER0 + num_extruders;
-		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;
+		uint8_t const num = TEMP0;
+		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
 		uint8_t t = 0;
 		for (uint8_t ch = 0; ch < num; ++ch)
 		{
@@ -60,8 +60,9 @@ void packet ()
 			else
 				queue[queue_end].data[ch] = NAN;
 		}
-		float f0 = queue[queue_end].data[FLAG_F0];
-		float f1 = queue[queue_end].data[FLAG_F1];
+		// f0 and f1 must be present and valid.
+		float f0 = queue[queue_end].data[F0];
+		float f1 = queue[queue_end].data[F1];
 		if (isnan (f0) || isnan (f1) || f0 < 0 || f1 < 0 || f0 == 0 && f1 == 0)
 		{
 			Serial.write (CMD_STALL);
@@ -82,7 +83,7 @@ void packet ()
 	{
 		debug ("CMD_RUN");
 		which = get_which ();
-		if (!motors[which])
+		if (!motors[which] || motors[which]->steps_total > motors[which]->steps_done)
 		{
 			Serial.write (CMD_STALL);
 			return;
@@ -100,14 +101,7 @@ void packet ()
 				RESET (motors[which]->dir_pin);
 			RESET (motors[which]->enable_pin);
 			motors[which]->continuous = true;
-			motors[which]->f1 = (motors[which]->positive ? f.f : -f.f) * motors[which]->steps_per_mm;	// [mm/s] -> [steps/s]
-			SET_OUTPUT (motors[which]->step_pin);
-			SET_OUTPUT (motors[which]->dir_pin);
-			SET_OUTPUT (motors[which]->enable_pin);
-			if (which >= 2 && which < 5) {
-				SET_INPUT (axis[which - 2].limit_min_pin);
-				SET_INPUT (axis[which - 2].limit_max_pin);
-			}
+			motors[which]->f = (motors[which]->positive ? f.f : -f.f) * motors[which]->steps_per_mm;	// [mm/s] -> [steps/s]
 		}
 		else
 			motors[which]->continuous = false;
@@ -140,8 +134,6 @@ void packet ()
 			return;
 		}
 		temps[which]->target = get_float (3) + 273.15;
-		SET_OUTPUT (temps[which]->power_pin);
-		SET_INPUT (temps[which]->thermistor_pin);
 		if (isnan (temps[which]->target)) {
 			// loop () doesn't handle it now, so it isn't disabled there.
 			RESET (temps[which]->power_pin);
@@ -152,7 +144,7 @@ void packet ()
 	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
 	{
 		debug ("CMD_WAITTEMP");
-		uint8_t const num = FLAG_EXTRUDER0 + num_extruders;
+		uint8_t const num = EXTRUDER0 + num_extruders;
 		uint8_t ch = command[2];
 		if (ch >= num || !temps[ch])
 		{

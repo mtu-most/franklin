@@ -11,9 +11,9 @@ static void handle_temps (unsigned long current_time) {
 	if (--temp_counter)
 		return;
 	temp_counter = 20;
-	temp_current = (temp_current + 1) % (FLAG_EXTRUDER0 + num_extruders);
+	temp_current = (temp_current + 1) % (EXTRUDER0 + num_extruders);
 	while (!temps[temp_current] || (isnan (temps[temp_current]->target) && isnan (temps[temp_current]->min_alarm) && isnan (temps[temp_current]->max_alarm)) || temps[temp_current]->power_pin >= 255 || temps[temp_current]->thermistor_pin >= 255)
-		temp_current = (temp_current + 1) % (FLAG_EXTRUDER0 + num_extruders);
+		temp_current = (temp_current + 1) % (EXTRUDER0 + num_extruders);
 	float temp = temps[temp_current]->read ();
 	// First of all, if an alarm should be triggered, do so.
 	if (!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp || !isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp) {
@@ -51,39 +51,35 @@ static void handle_temps (unsigned long current_time) {
 }
 
 static void handle_motors (unsigned long current_time) {
-	for (uint8_t m = 0; m < FLAG_EXTRUDER0 + num_extruders; ++m) {
+	for (uint8_t m = 0; m < TEMP0; ++m) {
 		if (!motors[m])
 		       continue;
 		if (motors[m]->steps_done >= motors[m]->steps_total) {
 			if (!motors[m]->continuous)
 				continue;
-			unsigned long t = current_time - motors[m]->start_time;
-			if (t <= 0)
+			if (current_time == last_time)
 				continue;
-			float f = motors[m]->f1;
-			if (f > motors[m]->max_f)
+			float f = motors[m]->f;
+			if (f > motors[m]->max_f) {
 				f = motors[m]->max_f;
-			if (t * f >= 1e6) {
-				SET (motors[m]->step_pin);
-				if (t * f < 2e6)
-					motors[m]->start_time += (unsigned long)(1e6 / f);
-				else {
-					// We're too slow to keep up; prevent catch-up attempts.
-					motors[m]->start_time = current_time;
-				}
-				RESET (motors[m]->step_pin);
+				motors[m]->f = f;
 			}
-			motors[m]->f = f;
+			if (int (current_time * f / 1e6) != int (last_time * f / 1e6)) {
+				SET (motors[m]->step_pin);
+				RESET (motors[m]->step_pin);
+				motors[m]->current_pos += motors[m]->positive ? 1 : -1;
+			}
 			continue;
 		}
-		float t = (current_time - motors[m]->start_time) / 1e6;
-		motors[m]->f = 2 * motors[m]->a * t + motors[m]->f0;
-		float now = motors[m]->a * t * t + motors[m]->f0 * t;
+		float t = (current_time - start_time) / 1e6;
+		motors[m]->f = 2 * motors[m]->a * t + f0;
+		float now = motors[m]->a * t * t + f0 * t;
 		unsigned steps = now * motors[m]->steps_total - motors[m]->steps_done;
 	        for (unsigned s = 0; s < steps; ++s) {
 			SET (motors[m]->step_pin);
 			++motors[m]->steps_done;
 			RESET (motors[m]->step_pin);
+			motors[m]->current_pos += motors[m]->positive ? 1 : -1;
 		}
 		if (motors[m]->steps_done >= motors[m]->steps_total) {
 			if (!--motors_busy) {
@@ -95,6 +91,7 @@ static void handle_motors (unsigned long current_time) {
 			}
 		}
 	}
+	last_time = current_time;
 }
 
 static void handle_axis (unsigned long current_time) {
@@ -105,14 +102,14 @@ static void handle_axis (unsigned long current_time) {
 		debug ("hit %d", axis_current);
 		// Hit endstop; abort current move and notify host.
 		axis[axis_current].motor.continuous = false;	// Stop continuous move only for the motor that hits the switch.
-		for (uint8_t m = 0; m < FLAG_EXTRUDER0 + num_extruders; ++m) {
+		for (uint8_t m = 0; m < EXTRUDER0 + num_extruders; ++m) {
 			if (!motors[m])
 				continue;
 			if (motors[m]->steps_total > motors[m]->steps_done)
 				--motors_busy;
 			motors[m]->steps_total = 0;
 		}
-		limits_hit |= (1 << axis_current);
+		limits_pos[axis_current] = axis[axis_current].motor.current_pos;
 		if (need_cb)
 			++num_movecbs;
 		try_send_next ();

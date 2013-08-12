@@ -7,19 +7,16 @@
 #define QUEUE_LENGTH_LOG2 4
 #define QUEUE_LENGTH (1 << QUEUE_LENGTH_LOG2)	// Number of items which can be in the queue.
 #define QUEUE_LENGTH_MASK ((1 << QUEUE_LENGTH_LOG2) - 1)	// Mask to use for circular queue.
-#define MAXOBJECT 16		// Total number of objects.  From Extruder 0 on, these are all extruders.
+#define MAXAXES 8		// Total number of supported axes (normally 3 are in use: x, y, z).
+#define MAXEXTRUDERS 8		// Total number of supported extruders.
+#define MAXTEMPS 8		// Total number of supported standalone temps (normally 1 is in use: bed).
+#define MAXOBJECT (MAXAXES + MAXEXTRUDERS + MAXTEMPS)		// Total number of supported objects.
 
-#define FLAG_F0 0
-#define FLAG_F1 1
-#define FLAG_X 2
-#define FLAG_Y 3
-#define FLAG_Z 4
-#define FLAG_BED 5
-#define FLAG_EXTRUDER0 6
-// Maximum number of extruders supported by this board.  This is not the number
-// of extruders available; that is a normal variable defined below (and
-// changable in eeprom).
-#define MAX_EXTRUDER (MAXOBJECT - FLAG_EXTRUDER0)
+#define F0 0
+#define F1 1
+#define AXIS0 2
+#define EXTRUDER0 (AXIS0 + num_axes)
+#define TEMP0 (EXTRUDER0 + num_extruders)
 
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
@@ -91,21 +88,22 @@ struct Object
 // Energy unit is chosen such that the heat capacity of the extruder is 1, so the energy is equal to the temperature.
 struct Temp : public Object
 {
-	// Thermistor-resistor calibration; R = k * exp (-beta / T); k = R0 * exp(-beta/T0)
-	// adc = maxadc * R / (R + R0)
-	// alpha = beta * log (k / R0)
-	float alpha;				// alpha value of thermistor.  [degrees C]
+	// See temp.c from definition of calibration constants.
+	float alpha;				// alpha value of thermistor.  [1]
 	float beta;				// beta value of thermistor.  [degrees C]
 	// Temperature balance calibration.
 	float power;				// added power while heater is on.  [W]
 	float core_C;				// heat capacity of the core.  [J/K]
 	float shell_C;				// heat capacity of the shell.  [J/K]
 	float transfer;				// heat transfer between core and shell.  [W/K]
+	float radiation;			// radiated power = radiation * (shell_T ** 4 - room_T ** 4) [W/K**4]
+	float convection;			// convected power = convection * (shell_T - room_T) [W/K]
 	// Pins.
 	uint8_t power_pin;
 	uint8_t thermistor_pin;
 	// Volatile variables.
 	float target;				// target temperature; NAN to disable. [degrees C]
+	float core_T, shell_T;			// current temperatures. [degrees C]
 	float min_alarm;			// NAN, or the temperature at which to trigger the callback.  [degrees C]
 	float max_alarm;			// NAN, or the temperature at which to trigger the callback.  [degrees C]
 	// Internal variables.
@@ -123,15 +121,15 @@ struct Motor : public Object
 	uint8_t step_pin;
 	uint8_t dir_pin;
 	uint8_t enable_pin;
-	float steps_per_mm;
+	float steps_per_mm;			// hardware calibration [steps/mm].
 	float max_f;				// maximum value for f [steps/s].
-	unsigned long start_time;		// [us].
-	float f1, f0, a;			// [steps/s], [steps/s], [/s/s]
-	uint16_t steps_total;
-	uint16_t steps_done;
+	float a;				// acceleration of current move [s**-2]
+	uint16_t steps_total;			// total number of steps for current move [steps].
+	uint16_t steps_done;			// finished number of steps for current move [steps].
 	bool positive;				// direction of current movement.
 	bool continuous;			// whether the motor should move without scheduled end point.
 	float f;				// current flowrate [steps/s]; used to communicate from extruder motor to extruder temp.
+	uint32_t current_pos;			// current distance from origin [steps].
 	virtual void load (uint16_t &addr, bool eeprom);
 	virtual void save (uint16_t &addr, bool eeprom);
 	virtual ~Motor () {}
@@ -156,6 +154,7 @@ struct Axis : public Object
 	Motor motor;
 	uint8_t limit_min_pin;
 	uint8_t limit_max_pin;
+	uint32_t current_pos;
 	virtual void load (uint16_t &addr, bool eeprom);
 	virtual void save (uint16_t &addr, bool eeprom);
 	virtual ~Axis () {}
@@ -185,30 +184,35 @@ struct MoveCommand
 #define COMMAND_LEN_MASK (COMMAND_SIZE - 1)
 // Code 1 variables
 EXTERN uint8_t num_extruders;
-EXTERN float roomtemperature;	//[degrees C]
+EXTERN uint8_t num_axes;
+EXTERN uint8_t num_temps;
+EXTERN float room_T;	//[degrees C]
 // Other variables.
 EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
 EXTERN char reply[COMMAND_SIZE];
-EXTERN char limitcb_buffer[4];
+EXTERN char limitcb_buffer[10];
 EXTERN char movecb_buffer[4];
 EXTERN char tempcb_buffer[4];
 EXTERN char continue_buffer[4];
 EXTERN Constants constants;
 EXTERN Variables variables;
-EXTERN Axis axis[3];
-EXTERN Temp bed;
-EXTERN Extruder extruder[MAX_EXTRUDER];
+EXTERN Axis axis[MAXAXES];
+EXTERN Temp temp[MAXTEMPS];
+EXTERN Extruder extruder[MAXEXTRUDERS];
 EXTERN uint8_t motors_busy;
+EXTERN unsigned long start_time;	// start time of current move [us]
+EXTERN unsigned long last_time;		// last time continuous move was handled [us]
+EXTERN float f0, f1;			// start and end f for current move [s**-1]
 EXTERN Motor *motors[MAXOBJECT];
 EXTERN Temp *temps[MAXOBJECT];
 EXTERN Object *objects[MAXOBJECT];
 EXTERN MoveCommand queue[QUEUE_LENGTH];
 EXTERN uint8_t queue_start, queue_end;
-EXTERN uint8_t num_movecbs;	// number of event notifications waiting to be sent out.
-EXTERN bool continue_cb;	// is a continue event waiting to be sent out?
-EXTERN uint32_t which_tempcbs;	// bitmask of waiting temp cbs.
-EXTERN uint8_t limits_hit;	// bitmask of waiting limit hit cbs.
+EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent out.
+EXTERN bool continue_cb;		// is a continue event waiting to be sent out?
+EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
+EXTERN uint32_t limits_pos[MAXAXES];	// position when limit switch was hit or NaN.
 EXTERN bool pause_all;
 EXTERN bool out_busy;
 EXTERN bool reply_ready;
@@ -239,6 +243,8 @@ uint8_t read_8 (uint16_t &address, bool eeprom);
 void write_8 (uint16_t &address, uint8_t data, bool eeprom);
 uint16_t read_16 (uint16_t &address, bool eeprom);
 void write_16 (uint16_t &address, uint16_t data, bool eeprom);
+uint32_t read_32 (uint16_t &address, bool eeprom);
+void write_32 (uint16_t &address, uint32_t data, bool eeprom);
 float read_float (uint16_t &address, bool eeprom);
 void write_float (uint16_t &address, float data, bool eeprom);
 

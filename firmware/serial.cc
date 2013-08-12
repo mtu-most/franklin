@@ -232,21 +232,21 @@ void try_send_next ()
 		// Still busy sending other packet.
 		return;
 	}
-	if (limits_hit != 0)
+	for (uint8_t w = 0; w < MAXAXES; ++w)
 	{
-		debug ("limit %d", num_movecbs);
-		for (uint8_t w = 0; w < 8; ++w)
+		if (!isnan (limits_pos[w]))
 		{
-			if (limits_hit & (1 << w))
-			{
-				limitcb_buffer[2] = w;
-				limits_hit &= ~(1 << w);
-				break;
-			}
+			debug ("limit %d", w);
+			limitcb_buffer[2] = w;
+			limitcb_buffer[3] = limits_pos[w] & 0xff;
+			limitcb_buffer[4] = (limits_pos[w] >> 8) & 0xff;
+			limitcb_buffer[5] = (limits_pos[w] >> 16) & 0xff;
+			limitcb_buffer[6] = (limits_pos[w] >> 24) & 0xff;
+			limits_pos[w] = NAN;
+			prepare_packet (limitcb_buffer);
+			send_packet (limitcb_buffer);
+			return;
 		}
-		prepare_packet (limitcb_buffer);
-		send_packet (limitcb_buffer);
-		return;
 	}
 	if (num_movecbs > 0)
 	{
@@ -260,7 +260,7 @@ void try_send_next ()
 	if (which_tempcbs != 0)
 	{
 		debug ("tempcb %d", which_tempcbs);
-		for (uint8_t w = 0; w < FLAG_EXTRUDER0 + num_extruders; ++w)
+		for (uint8_t w = 0; w < EXTRUDER0 + num_extruders; ++w)
 		{
 			if (which_tempcbs & (1 << w))
 			{
