@@ -9,7 +9,7 @@ void Temp::load (uint16_t &addr, bool eeprom)
 	power_pin = read_8 (addr, eeprom);
 	thermistor_pin = read_8 (addr, eeprom);
 	SET_OUTPUT (power_pin);
-	SET_INPUT (thermistor_pin);
+	SET_INPUT_NOPULLUP (thermistor_pin);
 }
 
 void Temp::save (uint16_t &addr, bool eeprom)
@@ -41,11 +41,11 @@ float Temp::read () {
 	// T = beta / (ln (R / k))
 	// T = beta / (ln ((Rs / (1 / (maxadc/adc) - 1)) / k))
 	// T = beta / (ln (Rs / k) - ln (maxadc/adc - 1))
-	// k := Rc * exp (-beta / Tc) (using calibrated Rc, Tc)
 	// beta := ln (R0/R1) / (1/T0 - 1/T1) (using calibrated R0, R1, T0, T1)
+	// k := Rc * exp (-beta / Tc) (using calibrated Rc, Tc)
 	// alpha := ln (Rs / k) (using series resistance Rs from hardware)
 	if (!isnan (alpha))
-		return beta / (alpha - log (1024. / adc - 1));
+		return beta / (alpha - log (1024. / adc - 1)) - 273.15;
 	// alpha == NaN is used for calibration: return raw value.
 	return adc;
 }

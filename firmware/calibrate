@@ -16,12 +16,13 @@ def test_one (axis, steps_per_s, use_min, slow):
 	p.limits.clear ()
 	# We're at the switch now; move away a small distance.
 	distance = min (slow, 100)
-	p.goto (**{chr (ord ('x') + axis): -s * distance, 'f0': slow / distance})
+	p.goto (axes = {axis: -s * distance}, f0 = slow / distance)
 	# Try moving to the switch again.
-	p.goto (**{chr (ord ('x') + axis): 1.03 * s * distance, 'f0': steps_per_s / p.axis[axis].motor.steps_per_mm / (1.03 * distance), 'cb': True})
+	p.goto (axes = {axis: 1.03 * s * distance}, f0 = steps_per_s / p.axis[axis].motor.steps_per_mm / (1.03 * distance), cb = True)
 	while p.movewait > 0:
 		p.recv_packet (want_any = True)
 	ret = len (p.limits) != 0
+	print p.limits.values ()
 	p.limits.clear ()
 	return ret
 
@@ -77,7 +78,7 @@ def calibrate_temps (temps, channels):
 		f.write ('\n'.join ([' '.join (['%f %f' % measure[channel][row] for channel in range (len (channels))]) for row in range (len (measure[0]))]) + '\n')
 
 # Start easy: motors with endstops.
-if False:
+if True:
 	# Move z out of the way.
 	p.run (4, -p.axis[2].motor.steps_per_mm)
 	while len (p.limits) == 0:

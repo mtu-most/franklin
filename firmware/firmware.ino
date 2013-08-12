@@ -12,8 +12,17 @@ static void handle_temps (unsigned long current_time) {
 		return;
 	temp_counter = 20;
 	temp_current = (temp_current + 1) % (EXTRUDER0 + num_extruders);
-	while (!temps[temp_current] || (isnan (temps[temp_current]->target) && isnan (temps[temp_current]->min_alarm) && isnan (temps[temp_current]->max_alarm)) || temps[temp_current]->power_pin >= 255 || temps[temp_current]->thermistor_pin >= 255)
-		temp_current = (temp_current + 1) % (EXTRUDER0 + num_extruders);
+	uint8_t i;
+	for (i = 0; i < TEMP0 + num_temps; ++i) {
+		uint8_t next = (temp_current + i) % (TEMP0 + num_temps);
+	       if (temps[next] && (!isnan (temps[next]->target) || !isnan (temps[next]->min_alarm) || !isnan (temps[next]->max_alarm)) && temps[next]->power_pin < 255 && (temps[next]->thermistor_pin < 255 || temps[next]->target > 0 && isinf (temps[next]->target))) {
+		       temp_current = next;
+		       break;
+	       }
+	}
+	// If there is no temperature handling to do; return.
+	if (i >= TEMP0 + num_temps)
+		return;
 	float temp = temps[temp_current]->read ();
 	// First of all, if an alarm should be triggered, do so.
 	if (!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp || !isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp) {
@@ -95,8 +104,8 @@ static void handle_motors (unsigned long current_time) {
 }
 
 static void handle_axis (unsigned long current_time) {
-	for (uint8_t axis_current = 0; axis_current < 3; ++axis_current) {
-		if ((!axis[axis_current].motor.continuous && axis[axis_current].motor.steps_total <= axis[axis_current].motor.steps_done) || (axis[axis_current].motor.positive ? !GET (axis[axis_current].limit_max_pin, false) : !GET (axis[axis_current].limit_min_pin, false)))
+	for (uint8_t axis_current = 0; axis_current < num_axes; ++axis_current) {
+		if (axis[axis_current].motor.steps_total <= axis[axis_current].motor.steps_done && !axis[axis_current].motor.continuous || (axis[axis_current].motor.positive ? !GET (axis[axis_current].limit_max_pin, false) : !GET (axis[axis_current].limit_min_pin, false)))
 			continue;
 		bool need_cb = axis[axis_current].motor.steps_total > axis[axis_current].motor.steps_done && queue[queue_start].cb;
 		debug ("hit %d", axis_current);

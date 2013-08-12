@@ -10,7 +10,7 @@
 #define MAXAXES 8		// Total number of supported axes (normally 3 are in use: x, y, z).
 #define MAXEXTRUDERS 8		// Total number of supported extruders.
 #define MAXTEMPS 8		// Total number of supported standalone temps (normally 1 is in use: bed).
-#define MAXOBJECT (MAXAXES + MAXEXTRUDERS + MAXTEMPS)		// Total number of supported objects.
+#define MAXOBJECT (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS)		// Total number of supported objects.
 
 #define F0 0
 #define F1 1
@@ -25,6 +25,7 @@
 
 #define SET_OUTPUT(pin) do { if ((pin) < 255) { pinMode (pin, OUTPUT); }} while (0)
 #define SET_INPUT(pin) do { if ((pin) < 255) { pinMode (pin, INPUT_PULLUP); }} while (0)
+#define SET_INPUT_NOPULLUP(pin) do { if ((pin) < 255) { pinMode (pin, INPUT); }} while (0)
 #define SET(pin) do { if ((pin) < 255) { digitalWrite ((pin), HIGH); } } while (0)
 #define RESET(pin) do { if ((pin) < 255) { digitalWrite ((pin), LOW); } } while (0)
 #define GET(pin, _default) ((pin) < 255 ? digitalRead (pin) : _default)
@@ -212,7 +213,7 @@ EXTERN uint8_t queue_start, queue_end;
 EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent out.
 EXTERN bool continue_cb;		// is a continue event waiting to be sent out?
 EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
-EXTERN uint32_t limits_pos[MAXAXES];	// position when limit switch was hit or NaN.
+EXTERN float limits_pos[MAXAXES];	// position when limit switch was hit or NaN.
 EXTERN bool pause_all;
 EXTERN bool out_busy;
 EXTERN bool reply_ready;

@@ -54,29 +54,26 @@ void setup ()
 		temps[i] = &extruder[e].temp;
 		objects[i] = &extruder[e];
 	}
-	for (uint8_t t = 0; t < MAXAXES; ++t, ++i)
+	for (uint8_t t = 0; t < MAXTEMPS; ++t, ++i)
 	{
 		motors[i] = NULL;
 		temps[i] = &temp[t];
 		objects[i] = &temp[t];
 	}
-	for (uint8_t m = 0; m < MAXOBJECT; ++m)
-	{
-		if (!motors[m])
-			continue;
-		motors[m]->steps_total = 0;
-		motors[m]->steps_done = 0;
-		motors[m]->continuous = false;
-	}
 	unsigned long time = micros ();
-	for (uint8_t t = 0; t < MAXOBJECT; ++t)
+	for (uint8_t o = 0; o < MAXOBJECT; ++o)
 	{
-		if (!temps[t])
-			continue;
-		temps[t]->last_time = time;
-		temps[t]->is_on = false;
-		temps[t]->min_alarm = NAN;
-		temps[t]->max_alarm = NAN;
+		if (motors[o]) {
+			motors[o]->steps_total = 0;
+			motors[o]->steps_done = 0;
+			motors[o]->continuous = false;
+		}
+		if (temps[o]) {
+			temps[o]->last_time = time;
+			temps[o]->is_on = false;
+			temps[o]->min_alarm = NAN;
+			temps[o]->max_alarm = NAN;
+		}
 	}
 	uint16_t address = 0;
 	objects[F0]->address = address;	// Not used, but initialized anyway.
@@ -85,7 +82,7 @@ void setup ()
 		objects[o]->address = address;
 		objects[o]->load (address, true);
 	}
-	if (address > EEsize)
+	if (address - 1 > E2END)
 		debug ("Warning: data doesn't fit in EEPROM; decrease MAXAXES, MAXEXTRUDERS, or MAXTEMPS and reflash the firmware!");
 	Serial.write (CMD_INIT);
 }

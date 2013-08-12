@@ -238,10 +238,12 @@ void try_send_next ()
 		{
 			debug ("limit %d", w);
 			limitcb_buffer[2] = w;
-			limitcb_buffer[3] = limits_pos[w] & 0xff;
-			limitcb_buffer[4] = (limits_pos[w] >> 8) & 0xff;
-			limitcb_buffer[5] = (limits_pos[w] >> 16) & 0xff;
-			limitcb_buffer[6] = (limits_pos[w] >> 24) & 0xff;
+			ReadFloat f;
+			f.f = limits_pos[w];
+			limitcb_buffer[3] = f.b[0];
+			limitcb_buffer[4] = f.b[1];
+			limitcb_buffer[5] = f.b[2];
+			limitcb_buffer[6] = f.b[3];
 			limits_pos[w] = NAN;
 			prepare_packet (limitcb_buffer);
 			send_packet (limitcb_buffer);
