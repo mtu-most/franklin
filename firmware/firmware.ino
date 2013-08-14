@@ -76,7 +76,8 @@ static void handle_motors (unsigned long current_time) {
 			if (int (current_time * f / 1e6) != int (last_time * f / 1e6)) {
 				SET (motors[m]->step_pin);
 				RESET (motors[m]->step_pin);
-				motors[m]->current_pos += motors[m]->positive ? 1 : -1;
+				if (m >= 2 && m < num_axes)
+					axis[m - 2].current_pos += (motors[m]->positive ? 1 : -1);
 			}
 			continue;
 		}
@@ -88,7 +89,9 @@ static void handle_motors (unsigned long current_time) {
 			SET (motors[m]->step_pin);
 			++motors[m]->steps_done;
 			RESET (motors[m]->step_pin);
-			motors[m]->current_pos += motors[m]->positive ? 1 : -1;
+			if (m >= 2 && m < num_axes) {
+				axis[m - 2].current_pos += (motors[m]->positive ? 1 : -1);
+			}
 		}
 		if (motors[m]->steps_done >= motors[m]->steps_total) {
 			if (!--motors_busy) {
@@ -108,7 +111,7 @@ static void handle_axis (unsigned long current_time) {
 		if (axis[axis_current].motor.steps_total <= axis[axis_current].motor.steps_done && !axis[axis_current].motor.continuous || (axis[axis_current].motor.positive ? !GET (axis[axis_current].limit_max_pin, false) : !GET (axis[axis_current].limit_min_pin, false)))
 			continue;
 		bool need_cb = axis[axis_current].motor.steps_total > axis[axis_current].motor.steps_done && queue[queue_start].cb;
-		debug ("hit %d", axis_current);
+		debug ("hit %d", int (axis_current));
 		// Hit endstop; abort current move and notify host.
 		axis[axis_current].motor.continuous = false;	// Stop continuous move only for the motor that hits the switch.
 		for (uint8_t m = 0; m < EXTRUDER0 + num_extruders; ++m) {
@@ -118,7 +121,7 @@ static void handle_axis (unsigned long current_time) {
 				--motors_busy;
 			motors[m]->steps_total = 0;
 		}
-		limits_pos[axis_current] = axis[axis_current].motor.current_pos;
+		limits_pos[axis_current] = axis[axis_current].current_pos;
 		if (need_cb)
 			++num_movecbs;
 		try_send_next ();

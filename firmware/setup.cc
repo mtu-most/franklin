@@ -46,7 +46,7 @@ void setup ()
 		motors[i] = &axis[a].motor;
 		temps[i] = NULL;
 		objects[i] = &axis[a];
-		limits_pos[a] = NAN;
+		limits_pos[a] = MAXLONG;
 	}
 	for (uint8_t e = 0; e < MAXEXTRUDERS; ++e, ++i)
 	{

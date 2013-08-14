@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# vim: set foldmethod=marker :
 
 import interface
 import sys
@@ -6,48 +7,54 @@ import time
 
 p = interface.Printer ()
 
-def test_one (axis, steps_per_s, use_min, slow):
-	# Move to the limit switch; assume 3200 steps per revolution.
-	# This need not be right; we just need a safe estimate which gets us to the switch.
+def test_one (axis, steps_per_s, use_min, slow): # {{{
+	# Move to the limit switch at slow speed.
 	s = -1 if use_min else 1
+	p.limits.clear ()
 	p.run (axis + 2, s * slow)
 	while len (p.limits) == 0:
 		p.recv_packet (want_any = True)
+	print 'start', p.limits.values ()
 	p.limits.clear ()
 	# We're at the switch now; move away a small distance.
-	distance = min (slow, 100)
-	p.goto (axes = {axis: -s * distance}, f0 = slow / distance)
-	# Try moving to the switch again.
-	p.goto (axes = {axis: 1.03 * s * distance}, f0 = steps_per_s / p.axis[axis].motor.steps_per_mm / (1.03 * distance), cb = True)
+	distance = min (slow / p.axis[axis].motor.steps_per_mm, 100)	# Move one second or 100 mm, whichever is less.
+	p.axis[axis].set_current_pos (0)
+	p.goto (axes = {axis: -s * distance}, f0 = slow / (distance * p.axis[axis].motor.steps_per_mm))
+	# Try moving to the switch again (actually 10 mm through it).
+	p.goto (axes = {axis: 10 * s}, f0 = steps_per_s / ((distance + 10) * p.axis[axis].motor.steps_per_mm), cb = True)
 	while p.movewait > 0:
 		p.recv_packet (want_any = True)
 	ret = len (p.limits) != 0
 	print p.limits.values ()
 	p.limits.clear ()
 	return ret
+# }}}
 
-def test (axis):
+def test (axis): # {{{
 	# Binary search for maximum steps per second.
 	assert p.axis[axis].limit_min_pin < 255 or p.axis[axis].limit_max_pin < 255
 	lower = 3200. # 1 revolution per second
 	upper = 10000.
 	# Find real upper bound.
-	while test_one (axis, upper, p.axis[axis].limit_min_pin < 255, lower * .8 / p.axis[axis].motor.steps_per_mm):
+	while test_one (axis, upper, p.axis[axis].limit_min_pin < 255, lower * .2):
 		lower = upper
 		upper *= 2
+	slow = lower * .2
+	lower /= 1.5	# Just to be sure.
 	upper *= 1.5	# Just to be sure.
 	# Continue until we have a value within .1%.
 	while upper / lower - 1. > .001:
 		mid = (lower + upper) / 2
 		# Try this value.
-		if test_one (axis, mid, p.axis[axis].limit_min_pin < 255, lower * .8 / p.axis[axis].motor.steps_per_mm):
+		if test_one (axis, mid, p.axis[axis].limit_min_pin < 255, slow):
 			lower = (mid + lower) / 2
 		else:
 			upper = (mid + upper) / 2
 	print ('result for axis %d: %f mm/s' % (axis, upper / p.axis[axis].motor.steps_per_mm))
 	return upper
+# }}}
 
-def calibrate_temps (temps, channels):
+def calibrate_temps (temps, channels): # {{{
 	cold = []
 	# Set up temp to return raw adc counts.
 	for temp, channel in zip (temps, channels):
@@ -76,26 +83,29 @@ def calibrate_temps (temps, channels):
 	with open ('/tmp/dump', 'w') as f:
 		f.write ('# split: %f; channels: ' % split + ' '.join (['%d' % x for x in channels]) + '\n')
 		f.write ('\n'.join ([' '.join (['%f %f' % measure[channel][row] for channel in range (len (channels))]) for row in range (len (measure[0]))]) + '\n')
+# }}}
 
-# Start easy: motors with endstops.
+# Start easy: motors with endstops. {{{
 if True:
 	# Move z out of the way.
 	p.run (4, -p.axis[2].motor.steps_per_mm)
 	while len (p.limits) == 0:
 		p.recv_packet (want_any = True)
-	p.goto (z = 4, f0 = p.axis[2].motor.steps_per_mm / 4, cb = True)
+	p.axis[2].set_current_pos (0)
+	p.goto (axes = {2: 4}, f0 = 1. / 4, cb = True)
 	while p.movewait != 0:
 		p.recv_packet (want_any = True)
-	p.sleep (4)
-	for a in range (3):
-		p.axis[a].motor.max_f = float ('nan')	# Discard old max speed.
-		p.write (a + 2)
+	p.sleep (2 + 2)
+	for a in range (p.num_axes):
+		p.axis[a].motor.max_f = float ('inf')	# Discard old max speed.
+		p.write_axis (a)
 		p.axis[a].motor.max_f = test (a) * .8	# Set it slightly lower, to be safe.
 		p.sleep (a + 2)
-		p.write (a + 2)
-		p.save (a + 2)
+		p.write_axis (a)
+		p.save_axis (a)
+# }}}
 
-# Then temperature sensors.
+# Then temperature sensors. {{{
 if False:
 	temps = []
 	channels = []
@@ -106,3 +116,4 @@ if False:
 		temps.append (p.extruder[e].temp)
 		channels.append (6 + e)
 	calibrate_temps (temps, channels)
+# }}}

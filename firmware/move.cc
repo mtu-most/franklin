@@ -17,9 +17,10 @@ void next_move () {
 			axis[a].motor.steps_total = 0;
 			continue;
 		}
-		int32_t diff = int32_t (target * axis[a].motor.steps_per_mm + .5) - axis[a].motor.current_pos;
+		int32_t diff = int32_t (target * axis[a].motor.steps_per_mm) - axis[a].current_pos;
+		debug ("current %ld", &axis[a].current_pos);
 		axis[a].motor.steps_total = abs (diff);
-		axis[a].motor.positive = target > 0;
+		axis[a].motor.positive = diff > 0;
 	}
 	for (uint8_t e = 0; e < num_extruders; ++e) {
 		float target = queue[queue_start].data[EXTRUDER0 + e];
@@ -49,6 +50,7 @@ void next_move () {
 		if (f1 * motors[m]->steps_total > motors[m]->max_f)
 			f1 = motors[m]->max_f / motors[m]->steps_total;
 	}
+	debug ("f: %f", &f0);
 	for (uint8_t m = 0; m < num; ++m) {	// Set flow rates to determined (limited) values.
 		if (!motors[m] || motors[m]->steps_total == 0)
 			continue;

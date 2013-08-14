@@ -76,7 +76,7 @@ class Printer: # {{{
 		self.begin ()
 		self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBB', self.read (0))
 		self.num_axes, self.num_extruders, self.num_temps, self.room_T = struct.unpack ('<BBBf', self.read (1))
-		self.axis = [Printer.Axis () for t in range (self.maxaxes)]
+		self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
 		for a in range (self.maxaxes):
 			self.axis[a].read (self.read (2 + a))
 		self.extruder = [Printer.Extruder () for t in range (self.maxextruders)]
@@ -234,7 +234,7 @@ class Printer: # {{{
 					buffer = ''
 					continue	# Start over.
 				if data[0] == self.rcommand['LIMIT']:
-					self.limits[ord (data[1])] = struct.unpack ('<f', data[2:])[0]
+					self.limits[ord (data[1])] = struct.unpack ('<l', data[2:])[0]
 					if want_any:
 						return ''
 					buffer = ''
@@ -256,7 +256,7 @@ class Printer: # {{{
 			if r in ('', '\0'):
 				break
 			s += r
-		#print ('Debug: %s' % s)
+		print ('Debug: %s' % s)
 	# }}}
 	# Config stuff.  {{{
 	class Temp: # {{{
@@ -274,13 +274,21 @@ class Printer: # {{{
 			return struct.pack ('<BBBff', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f)
 	# }}}
 	class Axis: # {{{
-		def __init__ (self):
+		def __init__ (self, printer, id):
+			self.printer = printer
+			self.id = id
 			self.motor = Printer.Motor ()
 		def read (self, data):
 			data = self.motor.read (data)
-			self.limit_min_pin, self.limit_max_pin, self.current_pos = struct.unpack ('<BBL', data)
+			self.limit_min_pin, self.limit_max_pin, self.current_pos = struct.unpack ('<BBl', data)
 		def write (self):
-			return self.motor.write () + struct.pack ('<BBL', self.limit_min_pin, self.limit_max_pin, self.current_pos)
+			return self.motor.write () + struct.pack ('<BBl', self.limit_min_pin, self.limit_max_pin, self.current_pos)
+		def set_current_pos (self, pos):
+			self.current_pos = pos
+			self.printer.write_axis (self.id)
+		def get_current_pos (self):
+			# Don't update the stored value; it may be in the middle of a move.
+			return struct.unpack ('<BBl', self.printer.read (2 + self.id)[-6:])[2]
 	# }}}
 	class Extruder: # {{{
 		def __init__ (self):
@@ -337,6 +345,7 @@ class Printer: # {{{
 			assert axis < self.num_axes
 			targets[(axis + 2) >> 3] |= 1 << ((axis + 2) & 0x7)
 			args += struct.pack ('<f', axes[axis])
+			self.axis[axis].current_pos = axes[axis]	# Assume move has completed.
 		if e is not None:
 			targets[(2 + self.num_axes + which) >> 3] |= 1 << ((2 + self.num_axes + which) & 0x7)
 			args += struct.pack ('<f', e)
@@ -372,6 +381,18 @@ class Printer: # {{{
 		assert ret[0] == self.rcommand['TEMP']
 		return struct.unpack ('<f', ret[1:])[0]
 	# }}}
+	def load_variables (self): # {{{
+		self.load (1)
+	# }}}
+	def load_axis (self, which): # {{{
+		self.load (2 + which)
+	# }}}
+	def load_extruder (self, which): # {{{
+		self.load (2 + self.maxaxes + which)
+	# }}}
+	def load_temp (self, which): # {{{
+		self.load (2 + self.maxaxes + self.maxextruders + which)
+	# }}}
 	def load (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['LOAD'], channel))
 		if channel == 1:
@@ -384,6 +405,23 @@ class Printer: # {{{
 			assert channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps
 			self.temp[channel - 2 - self.maxaxes - self.maxextruders].read (self.read (channel))
 	# }}}
+	def load_all (self): # {{{
+		for i in range (1, 2 + self.maxaxes + self.maxextruders + self.maxtemps):
+			print ('loading %d' % i)
+			self.load (i)
+	# }}}
+	def save_variables (self): # {{{
+		self.save (1)
+	# }}}
+	def save_axis (self, which): # {{{
+		self.save (2 + which)
+	# }}}
+	def save_extruder (self, which): # {{{
+		self.save (2 + self.maxaxes + which)
+	# }}}
+	def save_temp (self, which): # {{{
+		self.save (2 + self.maxaxes + self.maxextruders + which)
+	# }}}
 	def save (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['SAVE'], channel))
 	# }}}
@@ -392,17 +430,31 @@ class Printer: # {{{
 			print ('saving %d' % i)
 			self.save (i)
 	# }}}
+	def write_variables (self): # {{{
+		data = struct.pack ('<BBBf', self.num_axes, self.num_extruders, self.num_temps, self.room_T)
+		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 1) + data)
+	# }}}
+	def write_axis (self, which): # {{{
+		data = self.axis[which].write ()
+		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + which) + data)
+	# }}}
+	def write_extruder (self, which): # {{{
+		data = self.extruder[which].write ()
+		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + which) + data)
+	# }}}
+	def write_temp (self, which): # {{{
+		data = self.temp[which].write ()
+		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + self.maxextruders + which) + data)
+	# }}}
 	def write (self, channel): # {{{
 		if channel == 1:
-			data = struct.pack ('<BBBf', self.num_axes, self.num_extruders, self.num_temps, self.room_T)
+			self.write_variables ()
 		elif 2 <= channel < 2 + self.maxaxes:
-			data = self.axis[channel - 2].write ()
+			self.write_axis (channel - 2)
 		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
-			data = self.extruder[channel - 2 - self.maxaxes].write ()
+			self.write_extruder (channel - 2 - self.maxaxes)
 		else:
-			assert channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps
-			data = self.temp[channel - 2 - self.maxaxes - self.maxextruders].write ()
-		self.send_packet (struct.pack ('<BB', self.command['WRITE'], channel) + data)
+			self.write_temp (channel - 2 - self.maxaxes - self.maxextruders)
 	# }}}
 	def write_all (self): # {{{
 		for i in range (1, 2 + self.maxaxes + self.maxextruders + self.maxtemps):
@@ -543,7 +595,7 @@ if __name__ == '__main__': # {{{
 		for e in range (p.maxextruders):
 			p.extruder[e].temp.beta = 3885.0342279785623
 			p.extruder[e].temp.alpha = 10.056909432214743
-			p.extruder[e].temp.radiation = 0
+			p.extruder[e].temp.radiation = float ('nan')
 			p.extruder[e].temp.power = 12. ** 2 / 5.4
 			# Different per hobbed bolt and possibly per filament; must be measured.
 			# However, as an estimate:
@@ -553,11 +605,11 @@ if __name__ == '__main__': # {{{
 		for t in range (p.maxtemps):
 			p.temp[t].beta = float ('nan')
 			p.temp[t].alpha = float ('nan')
-			p.temp[t].radiation = 0
-			p.temp[t].power = 0
+			p.temp[t].radiation = float ('nan')
+			p.temp[t].power = float ('nan')
 		p.temp[0].beta = 3700.
-		p.temp[0].alpha = 0
-		p.temp[0].radiation = 0
+		p.temp[0].alpha = 11.7
+		p.temp[0].radiation = float ('nan')
 		p.temp[0].power = 12. ** 2 / 1.6
 		p.write_all ()
 		p.save_all ()
@@ -580,11 +632,14 @@ if __name__ == '__main__': # {{{
 			print ('\tmotor pins: %d %d %d' % (p.extruder[e].motor.step_pin, p.extruder[e].motor.dir_pin, p.extruder[e].motor.enable_pin))
 			print ('\tmotor steps per mm: %f' % p.extruder[e].motor.steps_per_mm)
 			print ('\tmotor max steps per ms: %f' % p.extruder[e].motor.max_f)
+			#p.extruder[e].temp.alpha = float ('nan')
 		for t in range (p.maxtemps):
 			print ('temp %d' % t)
 			print ('\tpins: %d %d' % (p.temp[t].power_pin, p.temp[t].thermistor_pin))
 			print ('\tsettings: %f %f %f %f' % (p.temp[t].alpha, p.temp[t].beta, p.temp[t].radiation, p.temp[t].power))
+			#p.temp[t].alpha = float ('nan')
 		for i in range (2 + p.maxaxes, 2 + p.maxaxes + p.maxextruders + p.maxtemps):
+			p.write (i)
 			print ('temp %d: %f' % (i, p.readtemp (i)))
 		p.goto (f0 = 3.5, axes = [-100], cb = True)
 		while p.movewait > 0:

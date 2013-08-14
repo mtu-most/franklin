@@ -45,7 +45,7 @@ float Temp::read () {
 	// k := Rc * exp (-beta / Tc) (using calibrated Rc, Tc)
 	// alpha := ln (Rs / k) (using series resistance Rs from hardware)
 	if (!isnan (alpha))
-		return beta / (alpha - log (1024. / adc - 1)) - 273.15;
+		return beta / (alpha - log (1024. / adc - 1));
 	// alpha == NaN is used for calibration: return raw value.
 	return adc;
 }

@@ -23,7 +23,7 @@ void packet ()
 	{
 	case CMD_BEGIN:	// begin: request response
 	{
-		debug ("CMD_BEGIN");
+		//debug ("CMD_BEGIN");
 		Serial.write (CMD_ACK);
 		reply[0] = 6;
 		reply[1] = CMD_START;
@@ -38,7 +38,7 @@ void packet ()
 	case CMD_GOTO:	// goto
 	case CMD_GOTOCB:	// goto with callback
 	{
-		debug ("CMD_GOTO(CB)");
+		//debug ("CMD_GOTO(CB)");
 		if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
 		{
 			Serial.write (CMD_STALL);
@@ -81,7 +81,7 @@ void packet ()
 	}
 	case CMD_RUN:	// run motor
 	{
-		debug ("CMD_RUN");
+		//debug ("CMD_RUN");
 		which = get_which ();
 		if (!motors[which] || motors[which]->steps_total > motors[which]->steps_done)
 		{
@@ -110,7 +110,7 @@ void packet ()
 	}
 	case CMD_SLEEP:	// disable motor current
 	{
-		debug ("CMD_SLEEP");
+		//debug ("CMD_SLEEP");
 		which = get_which ();
 		if (!motors[which])
 		{
@@ -126,7 +126,7 @@ void packet ()
 	}
 	case CMD_SETTEMP:	// set target temperature and enable control
 	{
-		debug ("CMD_SETTEMP");
+		//debug ("CMD_SETTEMP");
 		which = get_which ();
 		if (!temps[which])
 		{
@@ -143,7 +143,7 @@ void packet ()
 	}
 	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
 	{
-		debug ("CMD_WAITTEMP");
+		//debug ("CMD_WAITTEMP");
 		uint8_t const num = EXTRUDER0 + num_extruders;
 		uint8_t ch = command[2];
 		if (ch >= num || !temps[ch])
@@ -164,7 +164,7 @@ void packet ()
 	}
 	case CMD_READTEMP:	// read temperature
 	{
-		debug ("CMD_READTEMP");
+		//debug ("CMD_READTEMP");
 		which = get_which ();
 		if (!temps[which])
 		{
@@ -173,8 +173,8 @@ void packet ()
 		}
 		Serial.write (CMD_ACK);
 		ReadFloat f;
-		f.f = temps[which]->read () + 273.15;
-		//debug ("read temp %f", f.f);
+		f.f = temps[which]->read () - 273.15;
+		////debug ("read temp %f", f.f);
 		reply[0] = 2 + sizeof (float);
 		reply[1] = CMD_TEMP;
 		for (uint8_t b = 0; b < sizeof (float); ++b)
@@ -185,7 +185,7 @@ void packet ()
 	}
 	case CMD_LOAD:	// reload settings from eeprom
 	{
-		debug ("CMD_LOAD");
+		//debug ("CMD_LOAD");
 		which = get_which ();
 		if (which < 1 || which >= MAXOBJECT)
 		{
@@ -199,7 +199,7 @@ void packet ()
 	}
 	case CMD_SAVE:	// save settings to eeprom
 	{
-		debug ("CMD_SAVE");
+		//debug ("CMD_SAVE");
 		which = get_which ();
 		if (which < 1 || which >= MAXOBJECT)
 		{
@@ -213,7 +213,7 @@ void packet ()
 	}
 	case CMD_READ:	// reply settings to host
 	{
-		debug ("CMD_READ");
+		//debug ("CMD_READ");
 		which = get_which ();
 		if (which < 0 || which >= MAXOBJECT)
 		{
@@ -231,8 +231,8 @@ void packet ()
 	}
 	case CMD_WRITE:	// change settings from host
 	{
-		debug ("CMD_WRITE");
 		which = get_which ();
+		//debug ("CMD_WRITE %d", which);
 		if (which < 1 || which >= MAXOBJECT)
 		{
 			Serial.write (CMD_STALL);
@@ -245,14 +245,14 @@ void packet ()
 	}
 	case CMD_PAUSE:
 	{
-		debug ("CMD_PAUSE");
+		//debug ("CMD_PAUSE");
 		pause_all = command[2] != 0;
 		Serial.write (CMD_ACK);
 		return;
 	}
 	case CMD_PING:
 	{
-		debug ("CMD_PING");
+		//debug ("CMD_PING");
 		Serial.write (CMD_ACK);
 		reply[0] = 3;
 		reply[1] = CMD_PONG;

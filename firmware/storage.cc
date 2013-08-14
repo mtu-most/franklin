@@ -12,7 +12,7 @@ void write_8 (uint16_t &address, uint8_t data, bool eeprom)
 {
 	if (eeprom)
 	{
-		debug ("EEPROM[%x] = %x", address, data);
+		//debug ("EEPROM[%x] = %x", address, data);
 		EEPROM.write (address++, data);
 		return;
 	}

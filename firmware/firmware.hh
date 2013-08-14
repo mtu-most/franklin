@@ -18,6 +18,8 @@
 #define EXTRUDER0 (AXIS0 + num_axes)
 #define TEMP0 (EXTRUDER0 + num_extruders)
 
+#define MAXLONG (int32_t ((~uint32_t (0)) >> 1))
+
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
 #define EXTERN extern
@@ -32,6 +34,7 @@
 
 union ReadFloat {
 	float f;
+	uint32_t l;
 	uint8_t b[sizeof (float)];
 };
 
@@ -130,7 +133,6 @@ struct Motor : public Object
 	bool positive;				// direction of current movement.
 	bool continuous;			// whether the motor should move without scheduled end point.
 	float f;				// current flowrate [steps/s]; used to communicate from extruder motor to extruder temp.
-	uint32_t current_pos;			// current distance from origin [steps].
 	virtual void load (uint16_t &addr, bool eeprom);
 	virtual void save (uint16_t &addr, bool eeprom);
 	virtual ~Motor () {}
@@ -213,7 +215,7 @@ EXTERN uint8_t queue_start, queue_end;
 EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent out.
 EXTERN bool continue_cb;		// is a continue event waiting to be sent out?
 EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
-EXTERN float limits_pos[MAXAXES];	// position when limit switch was hit or NaN.
+EXTERN uint32_t limits_pos[MAXAXES];	// position when limit switch was hit or MAXLONG;
 EXTERN bool pause_all;
 EXTERN bool out_busy;
 EXTERN bool reply_ready;
