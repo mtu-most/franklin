@@ -11,6 +11,7 @@ void setup ()
 	num_movecbs = 0;
 	continue_cb = false;
 	which_tempcbs = 0;
+	have_msg = false;
 	pause_all = false;
 	last_packet = NULL;
 	out_busy = false;

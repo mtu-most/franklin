@@ -69,8 +69,9 @@ static void handle_motors (unsigned long current_time) {
 			if (current_time == last_time)
 				continue;
 			float f = motors[m]->f;
-			if (f > motors[m]->max_f) {
-				f = motors[m]->max_f;
+			float max_f = (motors[m]->positive ? motors[m]->max_f_pos : motors[m]->max_f_neg);
+			if (f > max_f) {
+				f = max_f;
 				motors[m]->f = f;
 			}
 			if (int (current_time * f / 1e6) != int (last_time * f / 1e6)) {

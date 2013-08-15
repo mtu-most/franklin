@@ -174,7 +174,7 @@ void packet ()
 		Serial.write (CMD_ACK);
 		ReadFloat f;
 		f.f = temps[which]->read () - 273.15;
-		////debug ("read temp %f", f.f);
+		//debug ("read temp %f", f.f);
 		reply[0] = 2 + sizeof (float);
 		reply[1] = CMD_TEMP;
 		for (uint8_t b = 0; b < sizeof (float); ++b)

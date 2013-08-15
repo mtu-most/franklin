@@ -12,6 +12,9 @@
 #define MAXTEMPS 8		// Total number of supported standalone temps (normally 1 is in use: bed).
 #define MAXOBJECT (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS)		// Total number of supported objects.
 
+#define MSGBUFSIZE 127	// Buffer size for messages; cannot be larger than 127.
+#define MAXMSGLEN ((MSGBUFSIZE / 4 * 3) + ((MSGBUFSIZE % 4 == 0) ? 0 : (MSGBUFSIZE % 4) - 1))
+
 #define F0 0
 #define F1 1
 #define AXIS0 2
@@ -78,6 +81,7 @@ enum Command {
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
 	CMD_CONTINUE,	// 1 byte: 0 (because commands must not have 0 or 2 byte arguments).  Bool flag if it needs to be sent.
 	CMD_LIMIT,	// 1 byte: which channel.
+	CMD_MESSAGE,	// 4 byte: code; n byte: string: message with no defined meaning; code may be used for a protocol.
 };
 
 struct Object
@@ -126,7 +130,7 @@ struct Motor : public Object
 	uint8_t dir_pin;
 	uint8_t enable_pin;
 	float steps_per_mm;			// hardware calibration [steps/mm].
-	float max_f;				// maximum value for f [steps/s].
+	float max_f_neg, max_f_pos;		// maximum value for f in positive and negative direction [steps/s].
 	float a;				// acceleration of current move [s**-2]
 	uint16_t steps_total;			// total number of steps for current move [steps].
 	uint16_t steps_done;			// finished number of steps for current move [steps].
@@ -216,6 +220,8 @@ EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent
 EXTERN bool continue_cb;		// is a continue event waiting to be sent out?
 EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
 EXTERN uint32_t limits_pos[MAXAXES];	// position when limit switch was hit or MAXLONG;
+EXTERN bool have_msg;
+EXTERN char msg_buffer[MSGBUFSIZE];
 EXTERN bool pause_all;
 EXTERN bool out_busy;
 EXTERN bool reply_ready;

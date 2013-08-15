@@ -18,7 +18,6 @@ void next_move () {
 			continue;
 		}
 		int32_t diff = int32_t (target * axis[a].motor.steps_per_mm) - axis[a].current_pos;
-		debug ("current %ld", &axis[a].current_pos);
 		axis[a].motor.steps_total = abs (diff);
 		axis[a].motor.positive = diff > 0;
 	}
@@ -45,12 +44,12 @@ void next_move () {
 		//motors[m]->max_f		steps/s
 		//f0, f1			(fraction)/s
 		//motors[m]->steps_total	steps
-		if (f0 * motors[m]->steps_total > motors[m]->max_f)
-			f0 = motors[m]->max_f / motors[m]->steps_total;
-		if (f1 * motors[m]->steps_total > motors[m]->max_f)
-			f1 = motors[m]->max_f / motors[m]->steps_total;
+		float max_f = (motors[m]->positive ? motors[m]->max_f_pos : motors[m]->max_f_neg);
+		if (f0 * motors[m]->steps_total > max_f)
+			f0 = max_f / motors[m]->steps_total;
+		if (f1 * motors[m]->steps_total > max_f)
+			f1 = max_f / motors[m]->steps_total;
 	}
-	debug ("f: %f", &f0);
 	for (uint8_t m = 0; m < num; ++m) {	// Set flow rates to determined (limited) values.
 		if (!motors[m] || motors[m]->steps_total == 0)
 			continue;

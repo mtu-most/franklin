@@ -47,7 +47,8 @@ class Printer: # {{{
 			'MOVECB': '\x12',
 			'TEMPCB': '\x13',
 			'CONTINUE': '\x14',
-			'LIMIT': '\x15'}
+			'LIMIT': '\x15',
+			'MESSAGE': '\x16'}
 	# }}}
 	def __init__ (self, port = '/dev/ttyACM0'): # {{{
 		self.printer = serial.Serial (port, baudrate = 115200, timeout = .01)
@@ -239,6 +240,10 @@ class Printer: # {{{
 						return ''
 					buffer = ''
 					continue	# Start over.
+				if data[0] == self.rcommand['MESSAGE']:
+					self.messages.append ((struct.unpack ('<l', data[1:5])[0], data[5:]))
+					print ('Message: %d %s' % self.messages[-1])
+					continue	# Start over.
 				return data
 	# }}}
 	def block (self, timout = 30): # {{{
@@ -268,10 +273,10 @@ class Printer: # {{{
 	# }}}
 	class Motor: # {{{
 		def read (self, data):
-			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f = struct.unpack ('<BBBff', data[:11])
+			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f_neg, self.max_f_pos = struct.unpack ('<BBBfff', data[:11])
 			return data[11:]
 		def write (self):
-			return struct.pack ('<BBBff', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f)
+			return struct.pack ('<BBBfff', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f_neg, self.max_f_pos)
 	# }}}
 	class Axis: # {{{
 		def __init__ (self, printer, id):
@@ -584,8 +589,8 @@ if __name__ == '__main__': # {{{
 		p.num_temps = 1
 		p.room_T = 25.
 		for a in range (p.maxaxes):
-			# Don't limit the number of steps per microsecond during calibration.
-			p.axis[a].motor.max_f = float ('inf')
+			p.axis[a].motor.max_f_neg = float ('inf')
+			p.axis[a].motor.max_f_pos = float ('inf')
 			p.axis[a].motor.steps_per_mm = float ('nan')
 		# X and Y: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
 		p.axis[0].motor.steps_per_mm = (200 * 16.) / (5 * 12)	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
@@ -601,7 +606,8 @@ if __name__ == '__main__': # {{{
 			# However, as an estimate:
 			# Small gear has 9 teeth; large gear 47.  Radius of hobbing is approximately 3.2 mm (20/2pi).
 			p.extruder[e].motor.steps_per_mm = 835 #(200 * 16.) / ((9. / 47) * 20)
-			p.extruder[e].motor.max_f = float ('inf')
+			p.extruder[e].motor.max_f_neg = float ('inf')
+			p.extruder[e].motor.max_f_pos = float ('inf')
 		for t in range (p.maxtemps):
 			p.temp[t].beta = float ('nan')
 			p.temp[t].alpha = float ('nan')
@@ -624,14 +630,14 @@ if __name__ == '__main__': # {{{
 			print ('\tlimit pins: %d %d' % (p.axis[a].limit_min_pin, p.axis[a].limit_max_pin))
 			print ('\tmotor pins: %d %d %d' % (p.axis[a].motor.step_pin, p.axis[a].motor.dir_pin, p.axis[a].motor.enable_pin))
 			print ('\tmotor steps per mm: %f' % p.axis[a].motor.steps_per_mm)
-			print ('\tmotor max steps per ms: %f' % p.axis[a].motor.max_f)
+			print ('\tmotor max steps per ms: %f, %f' % p.axis[a].motor.max_f_neg, p.axis[a].motor.max_f_pos)
 		for e in range (p.maxextruders):
 			print ('extruder %d' % e)
 			print ('\ttemp pins: %d %d' % (p.extruder[e].temp.power_pin, p.extruder[e].temp.thermistor_pin))
 			print ('\ttemp settings: %f %f %f %f' % (p.extruder[e].temp.alpha, p.extruder[e].temp.beta, p.extruder[e].temp.radiation, p.extruder[e].temp.power))
 			print ('\tmotor pins: %d %d %d' % (p.extruder[e].motor.step_pin, p.extruder[e].motor.dir_pin, p.extruder[e].motor.enable_pin))
 			print ('\tmotor steps per mm: %f' % p.extruder[e].motor.steps_per_mm)
-			print ('\tmotor max steps per ms: %f' % p.extruder[e].motor.max_f)
+			print ('\tmotor max steps per ms: %f, %f' % p.extruder[e].motor.max_f_neg, p.extruder[e].motor.max_f_pos)
 			#p.extruder[e].temp.alpha = float ('nan')
 		for t in range (p.maxtemps):
 			print ('temp %d' % t)

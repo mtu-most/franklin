@@ -7,11 +7,11 @@ import time
 
 p = interface.Printer ()
 
-def test_one (axis, steps_per_s, use_min, slow): # {{{
+def test_one (axis, steps_per_s, use_min, slow, back): # {{{
 	# Move to the limit switch at slow speed.
 	s = -1 if use_min else 1
 	p.limits.clear ()
-	p.run (axis + 2, s * slow)
+	p.run (axis + 2, float ('inf') if back else s * slow)
 	while len (p.limits) == 0:
 		p.recv_packet (want_any = True)
 	print 'start', p.limits.values ()
@@ -19,15 +19,19 @@ def test_one (axis, steps_per_s, use_min, slow): # {{{
 	# We're at the switch now; move away a small distance.
 	distance = min (slow / p.axis[axis].motor.steps_per_mm, 100)	# Move one second or 100 mm, whichever is less.
 	p.axis[axis].set_current_pos (0)
-	p.goto (axes = {axis: -s * distance}, f0 = slow / (distance * p.axis[axis].motor.steps_per_mm))
-	# Try moving to the switch again (actually 10 mm through it).
-	p.goto (axes = {axis: 10 * s}, f0 = steps_per_s / ((distance + 10) * p.axis[axis].motor.steps_per_mm), cb = True)
+	epsilon = min (distance / 2, 20)
+	if back:
+		p.goto (axes = {axis: -s * distance}, f0 = steps_per_s / (distance * p.axis[axis].motor.steps_per_mm))
+		# Try moving to the switch again (actually epsilon mm before it).
+		p.goto (axes = {axis: -s * epsilon}, cb = True)
+	else:
+		p.goto (axes = {axis: -s * distance}, f0 = slow / (distance * p.axis[axis].motor.steps_per_mm))
+		# Try moving to the switch again (actually epsilon mm through it).
+		p.goto (axes = {axis: epsilon * s}, f0 = steps_per_s / ((distance + epsilon) * p.axis[axis].motor.steps_per_mm), cb = True)
 	while p.movewait > 0:
 		p.recv_packet (want_any = True)
-	ret = len (p.limits) != 0
 	print p.limits.values ()
-	p.limits.clear ()
-	return ret
+	return len (p.limits) != 0
 # }}}
 
 def test (axis): # {{{
@@ -36,7 +40,7 @@ def test (axis): # {{{
 	lower = 3200. # 1 revolution per second
 	upper = 10000.
 	# Find real upper bound.
-	while test_one (axis, upper, p.axis[axis].limit_min_pin < 255, lower * .2):
+	while test_one (axis, upper, p.axis[axis].limit_min_pin < 255, lower * .2, False):
 		lower = upper
 		upper *= 2
 	slow = lower * .2
@@ -46,12 +50,28 @@ def test (axis): # {{{
 	while upper / lower - 1. > .001:
 		mid = (lower + upper) / 2
 		# Try this value.
-		if test_one (axis, mid, p.axis[axis].limit_min_pin < 255, slow):
+		if test_one (axis, mid, p.axis[axis].limit_min_pin < 255, slow, False):
 			lower = (mid + lower) / 2
 		else:
 			upper = (mid + upper) / 2
-	print ('result for axis %d: %f mm/s' % (axis, upper / p.axis[axis].motor.steps_per_mm))
-	return upper
+	upper1 = upper
+	# Then find the value for other direction.
+	lower = slow / .2
+	upper = lower * 2
+	while test_one (axis, upper, p.axis[axis].limit_min_pin < 255, lower * .2, True):
+		lower = upper
+		upper *= 2
+	lower /= 1.5	# Just to be sure.
+	upper *= 1.5	# Just to be sure.
+	while upper / lower - 1. > .001:
+		mid = (lower + upper) / 2
+		# Try this value.
+		if test_one (axis, mid, p.axis[axis].limit_min_pin < 255, slow, True):
+			lower = (mid + lower) / 2
+		else:
+			upper = (mid + upper) / 2
+	print ('result for axis %d: %f, %f mm/s' % (axis, upper1 / p.axis[axis].motor.steps_per_mm, upper / p.axis[axis].motor.steps_per_mm))
+	return upper1, upper
 # }}}
 
 def calibrate_temps (temps, channels): # {{{
@@ -97,9 +117,10 @@ if True:
 		p.recv_packet (want_any = True)
 	p.sleep (2 + 2)
 	for a in range (p.num_axes):
-		p.axis[a].motor.max_f = float ('inf')	# Discard old max speed.
+		p.axis[a].motor.max_f_neg = float ('inf')	# Discard old max speed.
+		p.axis[a].motor.max_f_pos = float ('inf')	# Discard old max speed.
 		p.write_axis (a)
-		p.axis[a].motor.max_f = test (a) * .8	# Set it slightly lower, to be safe.
+		p.axis[a].motor.max_f_neg, p.axis[a].motor.max_f_pos = test (a) * .8	# Set it slightly lower, to be safe.
 		p.sleep (a + 2)
 		p.write_axis (a)
 		p.save_axis (a)

@@ -6,7 +6,8 @@ void Motor::load (uint16_t &addr, bool eeprom)
 	dir_pin = read_8 (addr, eeprom);
 	enable_pin = read_8 (addr, eeprom);
 	steps_per_mm = read_float (addr, eeprom);
-	max_f = read_float (addr, eeprom);
+	max_f_neg = read_float (addr, eeprom);
+	max_f_pos = read_float (addr, eeprom);
 	SET_OUTPUT (step_pin);
 	SET_OUTPUT (dir_pin);
 	SET_OUTPUT (enable_pin);
@@ -19,5 +20,6 @@ void Motor::save (uint16_t &addr, bool eeprom)
 	write_8 (addr, dir_pin, eeprom);
 	write_8 (addr, enable_pin, eeprom);
 	write_float (addr, steps_per_mm, eeprom);
-	write_float (addr, max_f, eeprom);
+	write_float (addr, max_f_neg, eeprom);
+	write_float (addr, max_f_pos, eeprom);
 }

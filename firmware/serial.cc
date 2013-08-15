@@ -232,6 +232,13 @@ void try_send_next ()
 		// Still busy sending other packet.
 		return;
 	}
+	if (have_msg)
+	{
+		prepare_packet (msg_buffer);
+		send_packet (msg_buffer);
+		have_msg = false;
+		return;
+	}
 	for (uint8_t w = 0; w < MAXAXES; ++w)
 	{
 		if (limits_pos[w] != MAXLONG)
