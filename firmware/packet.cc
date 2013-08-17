@@ -13,6 +13,14 @@ static float get_float (uint8_t offset)
 	return ret.f;
 }
 
+static int32_t get_int32 (uint8_t offset)
+{
+	ReadFloat ret;
+	for (uint8_t t = 0; t < sizeof (float); ++t)
+		ret.b[t] = command[offset + t];
+	return ret.l;
+}
+
 void packet ()
 {
 	// command[0] is the length not including checksum bytes.
@@ -134,8 +142,9 @@ void packet ()
 			return;
 		}
 		temps[which]->target = get_float (3) + 273.15;
+		debug ("Temp %d %f", which, &temps[which]->target);
 		if (isnan (temps[which]->target)) {
-			// loop () doesn't handle it now, so it isn't disabled there.
+			// loop () doesn't handle it anymore, so it isn't disabled there.
 			RESET (temps[which]->power_pin);
 		}
 		Serial.write (CMD_ACK);
@@ -178,6 +187,38 @@ void packet ()
 		reply[0] = 2 + sizeof (float);
 		reply[1] = CMD_TEMP;
 		for (uint8_t b = 0; b < sizeof (float); ++b)
+			reply[2 + b] = f.b[b];
+		reply_ready = true;
+		try_send_next ();
+		return;
+	}
+	case CMD_SETPOS:	// Set current position
+	{
+		//debug ("CMD_SETPOS");
+		which = get_which ();
+		if (which < 2 || which > 2 + MAXAXES)
+		{
+			Serial.write (CMD_STALL);
+			return;
+		}
+		Serial.write (CMD_ACK);
+		axis[which - 2].current_pos = get_int32 (3);
+		return;
+	}
+	case CMD_GETPOS:	// Get current position
+	{
+		//debug ("CMD_GETPOS");
+		which = get_which ();
+		if (which < 2 || which > 2 + MAXAXES)
+		{
+			Serial.write (CMD_STALL);
+			return;
+		}
+		ReadFloat f;
+		f.l = axis[which - 2].current_pos;
+		reply[0] = 2 + sizeof (int32_t);
+		reply[1] = CMD_POS;
+		for (uint8_t b = 0; b < sizeof (int32_t); ++b)
 			reply[2 + b] = f.b[b];
 		reply_ready = true;
 		try_send_next ();

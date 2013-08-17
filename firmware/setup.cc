@@ -48,6 +48,7 @@ void setup ()
 		temps[i] = NULL;
 		objects[i] = &axis[a];
 		limits_pos[a] = MAXLONG;
+		axis[a].current_pos = NAN;
 	}
 	for (uint8_t e = 0; e < MAXEXTRUDERS; ++e, ++i)
 	{
@@ -74,6 +75,7 @@ void setup ()
 			temps[o]->is_on = false;
 			temps[o]->min_alarm = NAN;
 			temps[o]->max_alarm = NAN;
+			temps[o]->target = NAN;
 		}
 	}
 	uint16_t address = 0;

@@ -11,18 +11,18 @@ static void handle_temps (unsigned long current_time) {
 	if (--temp_counter)
 		return;
 	temp_counter = 20;
-	temp_current = (temp_current + 1) % (EXTRUDER0 + num_extruders);
 	uint8_t i;
-	for (i = 0; i < TEMP0 + num_temps; ++i) {
-		uint8_t next = (temp_current + i) % (TEMP0 + num_temps);
-	       if (temps[next] && (!isnan (temps[next]->target) || !isnan (temps[next]->min_alarm) || !isnan (temps[next]->max_alarm)) && temps[next]->power_pin < 255 && (temps[next]->thermistor_pin < 255 || temps[next]->target > 0 && isinf (temps[next]->target))) {
-		       temp_current = next;
-		       break;
-	       }
+	for (i = 1; i <= 2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS; ++i) {
+		uint8_t next = (temp_current + i) % (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS);
+		if (temps[next] && (!isnan (temps[next]->target) || !isnan (temps[next]->min_alarm) || !isnan (temps[next]->max_alarm)) && temps[next]->power_pin < 255 && (temps[next]->thermistor_pin < 255 || temps[next]->target > 0 && isinf (temps[next]->target))) {
+			temp_current = next;
+			break;
+		}
 	}
 	// If there is no temperature handling to do; return.
-	if (i >= TEMP0 + num_temps)
+	if (i > 2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS) {
 		return;
+	}
 	float temp = temps[temp_current]->read ();
 	// First of all, if an alarm should be triggered, do so.
 	if (!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp || !isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp) {
@@ -30,6 +30,22 @@ static void handle_temps (unsigned long current_time) {
 		temps[temp_current]->max_alarm = NAN;
 		which_tempcbs |= (1 << temp_current);
 		try_send_next ();
+	}
+	if (isnan (temps[temp_current]->core_C) || isnan (temps[temp_current]->shell_C) || isnan (temps[temp_current]->transfer) || isnan (temps[temp_current]->radiation)) {
+		// No valid settings; use simple on/off-regime based on current temperature only.
+		if (temp < temps[temp_current]->target) {
+			if (!temps[temp_current]->is_on)
+				debug ("switching on %d", temp_current);
+			SET (temps[temp_current]->power_pin);
+			temps[temp_current]->is_on = true;
+		}
+		else {
+			if (temps[temp_current]->is_on)
+				debug ("switching off %d", temp_current);
+			RESET (temps[temp_current]->power_pin);
+			temps[temp_current]->is_on = false;
+		}
+		return;
 	}
 	unsigned long dt = current_time - temps[temp_current]->last_time;
 	if (dt == 0)
@@ -77,7 +93,7 @@ static void handle_motors (unsigned long current_time) {
 			if (int (current_time * f / 1e6) != int (last_time * f / 1e6)) {
 				SET (motors[m]->step_pin);
 				RESET (motors[m]->step_pin);
-				if (m >= 2 && m < num_axes)
+				if (m >= 2 && m < num_axes + 2)
 					axis[m - 2].current_pos += (motors[m]->positive ? 1 : -1);
 			}
 			continue;
@@ -90,7 +106,7 @@ static void handle_motors (unsigned long current_time) {
 			SET (motors[m]->step_pin);
 			++motors[m]->steps_done;
 			RESET (motors[m]->step_pin);
-			if (m >= 2 && m < num_axes) {
+			if (m >= 2 && m < num_axes + 2) {
 				axis[m - 2].current_pos += (motors[m]->positive ? 1 : -1);
 			}
 		}
@@ -112,7 +128,7 @@ static void handle_axis (unsigned long current_time) {
 		if (axis[axis_current].motor.steps_total <= axis[axis_current].motor.steps_done && !axis[axis_current].motor.continuous || (axis[axis_current].motor.positive ? !GET (axis[axis_current].limit_max_pin, false) : !GET (axis[axis_current].limit_min_pin, false)))
 			continue;
 		bool need_cb = axis[axis_current].motor.steps_total > axis[axis_current].motor.steps_done && queue[queue_start].cb;
-		debug ("hit %d", int (axis_current));
+		//debug ("hit %d", int (axis_current));
 		// Hit endstop; abort current move and notify host.
 		axis[axis_current].motor.continuous = false;	// Stop continuous move only for the motor that hits the switch.
 		for (uint8_t m = 0; m < EXTRUDER0 + num_extruders; ++m) {

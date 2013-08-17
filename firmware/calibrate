@@ -11,130 +11,124 @@ def test_one (axis, steps_per_s, use_min, slow, back): # {{{
 	# Move to the limit switch at slow speed.
 	s = -1 if use_min else 1
 	p.limits.clear ()
-	p.run (axis + 2, float ('inf') if back else s * slow)
+	# Go to the switch.  Use calibrated speed in second pass.
+	p.run_axis (axis, s * slow)
 	while len (p.limits) == 0:
 		p.recv_packet (want_any = True)
-	print 'start', p.limits.values ()
 	p.limits.clear ()
-	# We're at the switch now; move away a small distance.
-	distance = min (slow / p.axis[axis].motor.steps_per_mm, 100)	# Move one second or 100 mm, whichever is less.
 	p.axis[axis].set_current_pos (0)
-	epsilon = min (distance / 2, 20)
+	# We're at the switch now; move away a small distance.
+	distance = 3200. / p.axis[axis].motor.steps_per_mm	# Move one rotation of the motor.
+	epsilon = min (distance / 2, 5)
 	if back:
 		p.goto (axes = {axis: -s * distance}, f0 = steps_per_s / (distance * p.axis[axis].motor.steps_per_mm))
 		# Try moving to the switch again (actually epsilon mm before it).
-		p.goto (axes = {axis: -s * epsilon}, cb = True)
+		p.goto (axes = {axis: -s * epsilon}, f0 = slow / ((distance - epsilon) * p.axis[axis].motor.steps_per_mm), cb = True)
 	else:
 		p.goto (axes = {axis: -s * distance}, f0 = slow / (distance * p.axis[axis].motor.steps_per_mm))
 		# Try moving to the switch again (actually epsilon mm through it).
 		p.goto (axes = {axis: epsilon * s}, f0 = steps_per_s / ((distance + epsilon) * p.axis[axis].motor.steps_per_mm), cb = True)
 	while p.movewait > 0:
 		p.recv_packet (want_any = True)
-	print p.limits.values ()
-	return len (p.limits) != 0
+	if back:
+		return axis not in p.limits
+	else:
+		return axis in p.limits
 # }}}
 
-def test (axis): # {{{
+def test_half (axis, back): # {{{
 	# Binary search for maximum steps per second.
 	assert p.axis[axis].limit_min_pin < 255 or p.axis[axis].limit_max_pin < 255
 	lower = 3200. # 1 revolution per second
-	upper = 10000.
-	# Find real upper bound.
-	while test_one (axis, upper, p.axis[axis].limit_min_pin < 255, lower * .2, False):
-		lower = upper
-		upper *= 2
-	slow = lower * .2
-	lower /= 1.5	# Just to be sure.
-	upper *= 1.5	# Just to be sure.
-	# Continue until we have a value within .1%.
-	while upper / lower - 1. > .001:
-		mid = (lower + upper) / 2
-		# Try this value.
-		if test_one (axis, mid, p.axis[axis].limit_min_pin < 255, slow, False):
-			lower = (mid + lower) / 2
-		else:
-			upper = (mid + upper) / 2
-	upper1 = upper
-	# Then find the value for other direction.
-	lower = slow / .2
 	upper = lower * 2
-	while test_one (axis, upper, p.axis[axis].limit_min_pin < 255, lower * .2, True):
+	use_min = p.axis[axis].limit_min_pin < 255
+	# Find real upper bound.
+	while test_one (axis, upper, use_min, lower * .2, back):
 		lower = upper
 		upper *= 2
+	slow = lower / 10
 	lower /= 1.5	# Just to be sure.
 	upper *= 1.5	# Just to be sure.
-	while upper / lower - 1. > .001:
+	# Continue until we have a value within 10%.
+	while upper / lower - 1. > .1:
 		mid = (lower + upper) / 2
 		# Try this value.
-		if test_one (axis, mid, p.axis[axis].limit_min_pin < 255, slow, True):
+		if test_one (axis, mid, use_min, slow, back):
 			lower = (mid + lower) / 2
 		else:
 			upper = (mid + upper) / 2
-	print ('result for axis %d: %f, %f mm/s' % (axis, upper1 / p.axis[axis].motor.steps_per_mm, upper / p.axis[axis].motor.steps_per_mm))
-	return upper1, upper
+	return upper / 4	# Be safe and set the limit well below the "missing steps"-limit.
 # }}}
 
-def calibrate_temps (temps, channels): # {{{
-	cold = []
-	# Set up temp to return raw adc counts.
-	for temp, channel in zip (temps, channels):
-		temp.alpha = 0
-		p.write (channel)
-		# Save cold count; set cold temperature later.
-		coldadc = sum ([p.readtemp (channel) for x in range (50)]) / 50
-	# Heat it for 10 seconds, then let it cool for 30 seconds
-	for temp, channel in zip (temps, channels):
-		p.settemp (channel, float ('inf'))
-	start = time.time ()
-	measure = [[] for c in channels]
-	while time.time () < start + 30:
-		print time.time () - start
-		for c, channel in enumerate (channels):
-			measure[c].append ((time.time () - start, p.readtemp (channel)))
-	for channel in channels:
-		p.settemp (channel, float ('nan'))
-	split = time.time () - start
-	while time.time () < start + 330:
-		for c, channel in enumerate (channels):
-			measure[c].append ((time.time () - start, p.readtemp (channel)))
-	# determine alpha, beta, R0, radiation and convection from last 30 seconds. (Is that possible?  Don't auto-calibrate alpha, beta and R0 for now.)
-	# determine buffer_delay and power from first 10 seconds.
-	# Step 1: dump all data to a file for manual inspection.
-	with open ('/tmp/dump', 'w') as f:
-		f.write ('# split: %f; channels: ' % split + ' '.join (['%d' % x for x in channels]) + '\n')
-		f.write ('\n'.join ([' '.join (['%f %f' % measure[channel][row] for channel in range (len (channels))]) for row in range (len (measure[0]))]) + '\n')
+def test (axis): # {{{
+	p.axis[axis].motor.max_f_neg = float ('inf')	# Discard old max speed.
+	p.axis[axis].motor.max_f_pos = float ('inf')	# Discard old max speed.
+	p.write_axis (axis)
+	p.axis[axis].motor.max_f_neg = test_half (axis, False)
+	p.write_axis (axis)
+	p.axis[axis].motor.max_f_pos = test_half (axis, True)
+	p.write_axis (axis)
+	print ('result for axis %d: %f, %f mm/s' % (axis, p.axis[axis].motor.max_f_neg / p.axis[axis].motor.steps_per_mm, p.axis[axis].motor.max_f_pos / p.axis[axis].motor.steps_per_mm))
 # }}}
 
-# Start easy: motors with endstops. {{{
-if True:
+def move_z_away (): # {{{
 	# Move z out of the way.
-	p.run (4, -p.axis[2].motor.steps_per_mm)
+	p.run_axis (2, -p.axis[2].motor.steps_per_mm)
 	while len (p.limits) == 0:
 		p.recv_packet (want_any = True)
 	p.axis[2].set_current_pos (0)
 	p.goto (axes = {2: 4}, f0 = 1. / 4, cb = True)
 	while p.movewait != 0:
 		p.recv_packet (want_any = True)
-	p.sleep (2 + 2)
+	p.sleep_axis (2)
+# }}}
+
+def calibrate_axes (): # Start easy: motors with endstops. {{{
+	move_z_away ()
 	for a in range (p.num_axes):
-		p.axis[a].motor.max_f_neg = float ('inf')	# Discard old max speed.
-		p.axis[a].motor.max_f_pos = float ('inf')	# Discard old max speed.
-		p.write_axis (a)
-		p.axis[a].motor.max_f_neg, p.axis[a].motor.max_f_pos = test (a) * .8	# Set it slightly lower, to be safe.
-		p.sleep (a + 2)
-		p.write_axis (a)
+		test (a)
+		p.sleep_axis (a)
 		p.save_axis (a)
 # }}}
 
-# Then temperature sensors. {{{
-if False:
+def do_calibrate_temps (temps, channels): # {{{
+	cold = [p.readtemp (channel) for channel in channels]
+	# In steps of 10 degrees, measure how much power is required to keep the temperature there.
+	temp = (int (max (cold) / 10) + 1) * 10
+	while temp <= 250:
+		current_channels = [x for x in channels if temp < 130 or x < 2 + p.maxaxes + p.maxextruders]
+		for c in current_channels:
+			p.settemp (c, temp)
+		# Wait for it to stabelize
+		t = time.time ()
+		while time.time () < t + 10:
+			p.recv_packet (want_any = True, end_time = t + 10)
+		# Measure the power
+		result = []
+		for c in current_channels:
+			p.power_start (c)
+		t = time.time ()
+		while time.time () < t + 10:
+			p.recv_packet (want_any = True)
+		for c in current_channels:
+			result.append ((c, p.power_end (c)))
+		print ('%d: %s' % (temp, ' '.join (['%d:%f' % x for x in result])))
+		temp += 10
+# }}}
+
+def calibrate_temps (): # Then temperature sensors. {{{
 	temps = []
 	channels = []
-	if p.bed.thermistor_pin and p.bed.power_pin:
-		temps.append (p.bed)
-		channels.append (5)
-	for e in range (p.num_extruders):
-		temps.append (p.extruder[e].temp)
-		channels.append (6 + e)
-	calibrate_temps (temps, channels)
+	for e in range (p.maxextruders):
+		if p.extruder[e].temp.thermistor_pin < 255 and p.extruder[e].temp.power_pin < 255:
+			temps.append (p.extruder[e].temp)
+			channels.append (2 + p.maxaxes + e)
+	for t in range (p.maxtemps):
+		if p.temp[t].thermistor_pin < 255 and p.temp[t].power_pin < 255:
+			temps.append (p.temp[t])
+			channels.append (2 + p.maxaxes + p.maxextruders + t)
+	do_calibrate_temps (temps, channels)
 # }}}
+
+#calibrate_axes ()
+calibrate_temps ()

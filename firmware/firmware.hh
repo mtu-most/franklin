@@ -50,7 +50,6 @@ enum SingleByteCommands {	// See serial.cc for computation of command values.
 	CMD_RESET = 0xf4,	// Emergency reset: clear queue, stop and sleep motors, temperatures off.  (Never sent to host.)  Typically sent 3 times with 5 ms pauses in between.
 	CMD_INIT = 0x95,	// Printer started and is ready for commands.
 	CMD_ACKRESET = 0xa6,	// Reset received.
-	// The following code has proper checksum correction, but isn't used.  If a new commands is added, it should use this code.
 	CMD_DEBUG = 0xc7	// Debug message; a nul-terminated message follows (no checksum; no resend).
 };
 
@@ -64,6 +63,8 @@ enum Command {
 	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [degrees C].
 	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [degrees C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
 	CMD_READTEMP,	// 1 byte: which channel.  Reply: TEMP. [degrees C]
+	CMD_SETPOS,	// 1 byte: which channel; 4 bytes: pos.
+	CMD_GETPOS,	// 1 byte: which channel.  Reply: POS. [steps]
 	CMD_LOAD,	// 1 byte: which channel.
 	CMD_SAVE,	// 1 byte: which channel.
 	CMD_READ,	// 1 byte: which channel.  Reply: DATA.
@@ -74,6 +75,7 @@ enum Command {
 		// responses to host requests; only one active at a time.
 	CMD_START,	// 4 byte: 0 (protocol version).
 	CMD_TEMP,	// 1 byte: requested channel; 4 byte: requested channel's temperature. [degrees C]
+	CMD_POS,	// 4 byte: pos. [steps]
 	CMD_DATA,	// n byte: requested data.
 	CMD_PONG,	// 1 byte: PING argument.
 		// asynchronous events.

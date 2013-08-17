@@ -4,6 +4,9 @@ void Temp::load (uint16_t &addr, bool eeprom)
 {
 	alpha = read_float (addr, eeprom);
 	beta = read_float (addr, eeprom);
+	core_C = read_float (addr, eeprom);
+	shell_C = read_float (addr, eeprom);
+	transfer = read_float (addr, eeprom);
 	radiation = read_float (addr, eeprom);
 	power = read_float (addr, eeprom);
 	power_pin = read_8 (addr, eeprom);
@@ -16,6 +19,9 @@ void Temp::save (uint16_t &addr, bool eeprom)
 {
 	write_float (addr, alpha, eeprom);
 	write_float (addr, beta, eeprom);
+	write_float (addr, core_C, eeprom);
+	write_float (addr, shell_C, eeprom);
+	write_float (addr, transfer, eeprom);
 	write_float (addr, radiation, eeprom);
 	write_float (addr, power, eeprom);
 	write_8 (addr, power_pin, eeprom);

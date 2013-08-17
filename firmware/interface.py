@@ -33,25 +33,33 @@ class Printer: # {{{
 			'SETTEMP': 0x05,
 			'WAITTEMP': 0x06,
 			'READTEMP': 0x07,
-			'LOAD': 0x08,
-			'SAVE': 0x09,
-			'READ': 0x0a,
-			'WRITE': 0x0b,
-			'PAUSE': 0x0c,
-			'PING': 0x0d}
+			'SETPOS': 0x08,
+			'GETPOS': 0x09,
+			'LOAD': 0x0a,
+			'SAVE': 0x0b,
+			'READ': 0x0c,
+			'WRITE': 0x0d,
+			'PAUSE': 0x0e,
+			'PING': 0x0f}
 	rcommand = {
-			'START': '\x0e',
-			'TEMP': '\x0f',
-			'DATA': '\x10',
-			'PONG': '\x11',
-			'MOVECB': '\x12',
-			'TEMPCB': '\x13',
-			'CONTINUE': '\x14',
-			'LIMIT': '\x15',
-			'MESSAGE': '\x16'}
+			'START': '\x10',
+			'TEMP': '\x11',
+			'POS': '\x12',
+			'DATA': '\x13',
+			'PONG': '\x14',
+			'MOVECB': '\x15',
+			'TEMPCB': '\x16',
+			'CONTINUE': '\x17',
+			'LIMIT': '\x18',
+			'MESSAGE': '\x19'}
 	# }}}
 	def __init__ (self, port = '/dev/ttyACM0'): # {{{
 		self.printer = serial.Serial (port, baudrate = 115200, timeout = .01)
+		# Reset firmware.
+		self.printer.setDTR (False)
+		time.sleep (.1)
+		self.printer.setDTR (True)
+		time.sleep (.1)
 		self.printer.readall ()	# flush buffer.
 		# Wait for firmware to boot.
 		self.printer.setTimeout (2)
@@ -165,13 +173,18 @@ class Printer: # {{{
 				#print repr (reply)
 				assert reply == ''
 	# }}}
-	def recv_packet (self, buffer = '', want_any = False): # {{{
+	def recv_packet (self, buffer = '', want_any = False, end_time = None): # {{{
+		if end_time:
+			self.printer.setTimeout (end_time - time.time ())
 		while True:
 			while len (buffer) < 1:
 				r = self.printer.read (1)
 				if r != self.single['DEBUG']:
 					dprint ('(3) read', r)
 				if r == '':
+					if end_time and time.time () >= end_time:
+						self.printer.setTimeout (Printer.default_timeout)
+						return ''
 					dprint ('writing (2)', self.single['NACK']);
 					self.printer.write (self.single['NACK'])
 					continue
@@ -218,6 +231,8 @@ class Printer: # {{{
 						assert self.movewait > 0
 						self.movewait -= 1
 					if want_any:
+						if end_time:
+							self.printer.setTimeout (Printer.default_timeout)
 						return ''
 					buffer = ''
 					continue	# Start over.
@@ -225,18 +240,24 @@ class Printer: # {{{
 					assert ord (data[0]) in self.tempwait
 					self.tempwait.remove (ord (data[0]))
 					if want_any:
+						if end_time:
+							self.printer.setTimeout (Printer.default_timeout)
 						return ''
 					buffer = ''
 					continue	# Start over.
 				if data[0] == self.rcommand['CONTINUE']:
 					self.wait = False
 					if want_any:
+						if end_time:
+							self.printer.setTimeout (Printer.default_timeout)
 						return ''
 					buffer = ''
 					continue	# Start over.
 				if data[0] == self.rcommand['LIMIT']:
 					self.limits[ord (data[1])] = struct.unpack ('<l', data[2:])[0]
 					if want_any:
+						if end_time:
+							self.printer.setTimeout (Printer.default_timeout)
 						return ''
 					buffer = ''
 					continue	# Start over.
@@ -244,13 +265,15 @@ class Printer: # {{{
 					self.messages.append ((struct.unpack ('<l', data[1:5])[0], data[5:]))
 					print ('Message: %d %s' % self.messages[-1])
 					continue	# Start over.
+				if end_time:
+					self.printer.setTimeout (Printer.default_timeout)
 				return data
 	# }}}
-	def block (self, timout = 30): # {{{
+	def block (self, timeout = 30, probe = True): # {{{
 		self.printer.setTimeout (timeout)
 		r = self.printer.read ()
 		dprint ('(2) read', r)
-		assert r != ''
+		assert probe or r != ''
 		self.printer.setTimeout (Printer.default_timeout)
 		assert self.recv_packet (r, True) == ''
 	# }}}
@@ -266,15 +289,15 @@ class Printer: # {{{
 	# Config stuff.  {{{
 	class Temp: # {{{
 		def read (self, data):
-			self.alpha, self.beta, self.radiation, self.power, self.power_pin, self.thermistor_pin = struct.unpack ('<ffffBB', data[:18])
-			return data[18:]
+			self.alpha, self.beta, self.core_C, self.shell_C, self.transfer, self.radiation, self.power, self.power_pin, self.thermistor_pin = struct.unpack ('<fffffffBB', data[:30])
+			return data[30:]
 		def write (self):
-			return struct.pack ('<ffffBB', self.alpha, self.beta, self.radiation, self.power, self.power_pin, self.thermistor_pin)
+			return struct.pack ('<fffffffBB', self.alpha, self.beta, self.core_C, self.shell_C, self.transfer, self.radiation, self.power, self.power_pin, self.thermistor_pin)
 	# }}}
 	class Motor: # {{{
 		def read (self, data):
-			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f_neg, self.max_f_pos = struct.unpack ('<BBBfff', data[:11])
-			return data[11:]
+			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f_neg, self.max_f_pos = struct.unpack ('<BBBfff', data[:15])
+			return data[15:]
 		def write (self):
 			return struct.pack ('<BBBfff', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f_neg, self.max_f_pos)
 	# }}}
@@ -285,15 +308,16 @@ class Printer: # {{{
 			self.motor = Printer.Motor ()
 		def read (self, data):
 			data = self.motor.read (data)
-			self.limit_min_pin, self.limit_max_pin, self.current_pos = struct.unpack ('<BBl', data)
+			self.limit_min_pin, self.limit_max_pin = struct.unpack ('<BB', data)
 		def write (self):
-			return self.motor.write () + struct.pack ('<BBl', self.limit_min_pin, self.limit_max_pin, self.current_pos)
+			return self.motor.write () + struct.pack ('<BB', self.limit_min_pin, self.limit_max_pin)
 		def set_current_pos (self, pos):
-			self.current_pos = pos
-			self.printer.write_axis (self.id)
+			self.printer.send_packet (struct.pack ('<BBl', self.printer.command['SETPOS'], 2 + self.id, pos))
 		def get_current_pos (self):
-			# Don't update the stored value; it may be in the middle of a move.
-			return struct.unpack ('<BBl', self.printer.read (2 + self.id)[-6:])[2]
+			self.printer.send_packet (struct.pack ('<BB', self.printer.command['GETPOS'], 2 + self.id))
+			ret = self.recv_packet ()
+			assert ret[0] == self.rcommand['POS']
+			return struct.unpack ('<l', ret[1:])[0]
 	# }}}
 	class Extruder: # {{{
 		def __init__ (self):
@@ -350,14 +374,25 @@ class Printer: # {{{
 			assert axis < self.num_axes
 			targets[(axis + 2) >> 3] |= 1 << ((axis + 2) & 0x7)
 			args += struct.pack ('<f', axes[axis])
-			self.axis[axis].current_pos = axes[axis]	# Assume move has completed.
 		if e is not None:
 			targets[(2 + self.num_axes + which) >> 3] |= 1 << ((2 + self.num_axes + which) & 0x7)
 			args += struct.pack ('<f', e)
 		self.send_packet (p + ''.join ([chr (t) for t in targets]) + args)
 	# }}}
+	def run_axis (self, which, speed): # {{{
+		self.run (2 + which, speed)
+	# }}}
+	def run_extruder (self, which, speed): # {{{
+		self.run (2 + self.maxaxes + which, speed)
+	# }}}
 	def run (self, channel, speed):	# speed: float; 0 means off. # {{{
 		self.send_packet (struct.pack ('<BBf', self.command['RUN'], channel, speed))
+	# }}}
+	def sleep_axis (self, which, sleeping = True): # {{{
+		self.sleep (2 + which, sleeping)
+	# }}}
+	def sleep_extruder (self, which, sleeping = True): # {{{
+		self.sleep (2 + self.maxaxes + which, sleeping)
 	# }}}
 	def sleep (self, channel, sleeping = True): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['SLEEP'], (channel & 0x7f) | (0x80 if sleeping else 0)))
@@ -600,6 +635,9 @@ if __name__ == '__main__': # {{{
 		for e in range (p.maxextruders):
 			p.extruder[e].temp.beta = 3885.0342279785623
 			p.extruder[e].temp.alpha = 10.056909432214743
+			p.extruder[e].temp.core_C = float ('nan')
+			p.extruder[e].temp.shell_C = float ('nan')
+			p.extruder[e].temp.transfer = float ('nan')
 			p.extruder[e].temp.radiation = float ('nan')
 			p.extruder[e].temp.power = 12. ** 2 / 5.4
 			# Different per hobbed bolt and possibly per filament; must be measured.
@@ -611,6 +649,9 @@ if __name__ == '__main__': # {{{
 		for t in range (p.maxtemps):
 			p.temp[t].beta = float ('nan')
 			p.temp[t].alpha = float ('nan')
+			p.temp[t].core_C = float ('nan')
+			p.temp[t].shell_C = float ('nan')
+			p.temp[t].transfer = float ('nan')
 			p.temp[t].radiation = float ('nan')
 			p.temp[t].power = float ('nan')
 		p.temp[0].beta = 3700.
@@ -630,31 +671,18 @@ if __name__ == '__main__': # {{{
 			print ('\tlimit pins: %d %d' % (p.axis[a].limit_min_pin, p.axis[a].limit_max_pin))
 			print ('\tmotor pins: %d %d %d' % (p.axis[a].motor.step_pin, p.axis[a].motor.dir_pin, p.axis[a].motor.enable_pin))
 			print ('\tmotor steps per mm: %f' % p.axis[a].motor.steps_per_mm)
-			print ('\tmotor max steps per ms: %f, %f' % p.axis[a].motor.max_f_neg, p.axis[a].motor.max_f_pos)
+			print ('\tmotor max steps per ms: %f, %f' % (p.axis[a].motor.max_f_neg, p.axis[a].motor.max_f_pos))
 		for e in range (p.maxextruders):
 			print ('extruder %d' % e)
 			print ('\ttemp pins: %d %d' % (p.extruder[e].temp.power_pin, p.extruder[e].temp.thermistor_pin))
-			print ('\ttemp settings: %f %f %f %f' % (p.extruder[e].temp.alpha, p.extruder[e].temp.beta, p.extruder[e].temp.radiation, p.extruder[e].temp.power))
+			print ('\ttemp settings: %f %f %f %f %f %f %f' % (p.extruder[e].temp.alpha, p.extruder[e].temp.beta, p.extruder[e].temp.core_C, p.extruder[e].temp.shell_C, p.extruder[e].temp.transfer, p.extruder[e].temp.radiation, p.extruder[e].temp.power))
 			print ('\tmotor pins: %d %d %d' % (p.extruder[e].motor.step_pin, p.extruder[e].motor.dir_pin, p.extruder[e].motor.enable_pin))
 			print ('\tmotor steps per mm: %f' % p.extruder[e].motor.steps_per_mm)
-			print ('\tmotor max steps per ms: %f, %f' % p.extruder[e].motor.max_f_neg, p.extruder[e].motor.max_f_pos)
-			#p.extruder[e].temp.alpha = float ('nan')
+			print ('\tmotor max steps per ms: %f, %f' % (p.extruder[e].motor.max_f_neg, p.extruder[e].motor.max_f_pos))
 		for t in range (p.maxtemps):
 			print ('temp %d' % t)
 			print ('\tpins: %d %d' % (p.temp[t].power_pin, p.temp[t].thermistor_pin))
-			print ('\tsettings: %f %f %f %f' % (p.temp[t].alpha, p.temp[t].beta, p.temp[t].radiation, p.temp[t].power))
-			#p.temp[t].alpha = float ('nan')
+			print ('\tsettings: %f %f %f %f %f %f %f' % (p.temp[t].alpha, p.temp[t].beta, p.temp[t].core_C, p.temp[t].shell_C, p.temp[t].transfer, p.temp[t].radiation, p.temp[t].power))
 		for i in range (2 + p.maxaxes, 2 + p.maxaxes + p.maxextruders + p.maxtemps):
-			p.write (i)
 			print ('temp %d: %f' % (i, p.readtemp (i)))
-		p.goto (f0 = 3.5, axes = [-100], cb = True)
-		while p.movewait > 0:
-		#p.run (2, -100)
-		#while len (p.limits) == 0:
-			p.recv_packet (want_any = True)
-		#for i in range (20):
-		#	p.sleep (2, True)
-		#	time.sleep (1)
-		#	p.sleep (2, False)
-		#	time.sleep (1)
 # }}}
