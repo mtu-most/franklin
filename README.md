@@ -1,3 +1,27 @@
+# MOST RepRap host software
+This is software for controlling a RepRap 3-D printer.  Use it if you don't
+like the other options.
+
+## Installation
+Install the following Debian packages (or their versions for your OS):
+ * python 2.7
+ * python-gtk2
+ * python-avahi
+ * apache2
+
+Set up the apache userdir module: run "a2enmod userdir" and add in /etc/apache2/mods-available/userdir.conf:
+        AllowOverride All
+        Options MultiViews Indexes SymLinksIfOwnerMatch IncludesNoExec ExecCGI
+        <Files *.cgi>
+            sethandler cgi-script
+        </Files>
+Then restart apache.
+
+Put this directory in `~/public_html`.  Then run `reprap-server`.  It should connect to the printer and home it.  If it doesn't, you may need to pass an arguments for which serial port to use: `reprap-server --serial /dev/ttySomething`.
+
+When the server is running, you should be able to contact it at
+http://localhost/most-reprap
+
 # The problem that this code tries to solve
 Controlling a 3D printer should be easy.  The firmware handles the hardware,
 and the slicer handles the conversion from STL to GCODE.  The interface only
