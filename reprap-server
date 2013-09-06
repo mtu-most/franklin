@@ -9,13 +9,14 @@ import glib
 
 a = argparse.ArgumentParser ()
 a.add_argument ('--serial', default = '/dev/ttyACM0', help = 'serial port')
+a.add_argument ('--baud', default = 115200, help = 'baud rate', type = int)
 a.add_argument ('--network', default = 'reprap|RepRap 3D printer', help = 'network port')
 args = a.parse_args ()
 
 
 class Server:
 	# Boring stuff {{{
-	def __init__ (self, port):	# {{{
+	def __init__ (self, port, baud):	# {{{
 		self.lineno = 0
 		self.f_factor = 1.
 		self.f_min = 0.
@@ -30,7 +31,7 @@ class Server:
 			self.port = None
 			self.extruders = 4
 		else:
-			self.port = serial.Serial (port, baudrate = 115200, timeout = .01)
+			self.port = serial.Serial (port, baudrate = baud, timeout = .01)
 			self.port.readall ()
 			self.port.setTimeout (2)
 			for i in range (2):
@@ -369,15 +370,15 @@ class Server:
 				else:
 					raise AssertionError ('No usable reply to request for machine temperature')
 			temps = {}
-			for x in re.findall ('[BT](?:\d*)?:(?:\d|\.)+', state):
+			for x in re.findall ('[BT]\d*:-?[0-9.]+', state):
 				k, v = x.split (':')
 				temps[k] = float (v)
 		etemps = [None] * self.extruders
-		if self.extruders > 0:
+		if self.extruders != 1:
 			for e in range (self.extruders):
 				etemps[e] = temps['T%d' % e]
 		else:
-			etemps[0] = temps['T0']
+			etemps[0] = temps['T']
 		return {'bed_target': self.bed, 'temperature_target': self.temp, 'bed_current': temps['B'], 'temperature_current': etemps, 'position': (self.x, self.y, self.z)}
 	# }}}
 	# }}}
@@ -403,7 +404,7 @@ class Server:
 	# }}}
 	# }}}
 
-serverobj = Server (args.serial)
+serverobj = Server (args.serial, args.baud)
 server = network.RPCServer (args.network, lambda socket: serverobj)
 #network.bgloop ()
 glib.MainLoop ().run ()
