@@ -7,11 +7,11 @@ import time
 
 p = interface.Printer ()
 
-def test_one (axis, steps_per_s, use_min, slow, back): # {{{
+def axis_test_single (axis, steps_per_s, use_min, slow, back): # {{{
 	# Move to the limit switch at slow speed.
 	s = -1 if use_min else 1
 	p.limits.clear ()
-	# Go to the switch.  Use calibrated speed in second pass.
+	# Go to the switch.
 	p.run_axis (axis, s * slow)
 	while len (p.limits) == 0:
 		p.recv_packet (want_any = True)
@@ -19,15 +19,19 @@ def test_one (axis, steps_per_s, use_min, slow, back): # {{{
 	p.axis[axis].set_current_pos (0)
 	# We're at the switch now; move away a small distance.
 	distance = 3200. / p.axis[axis].motor.steps_per_mm	# Move one rotation of the motor.
-	epsilon = min (distance / 2, 5)
+	epsilon = min (distance / 4, 5)
 	if back:
+		# Move away at high speed, then almost to it at low speed; if moving away failed, we'll hit the switch.
 		p.goto (axes = {axis: -s * distance}, f0 = steps_per_s / (distance * p.axis[axis].motor.steps_per_mm))
 		# Try moving to the switch again (actually epsilon mm before it).
 		p.goto (axes = {axis: -s * epsilon}, f0 = slow / ((distance - epsilon) * p.axis[axis].motor.steps_per_mm), cb = True)
 	else:
+		# Move away slowly, then fast almost to it, then slowly slightly through it; if the fast move failed, we won't hit the switch.
 		p.goto (axes = {axis: -s * distance}, f0 = slow / (distance * p.axis[axis].motor.steps_per_mm))
-		# Try moving to the switch again (actually epsilon mm through it).
-		p.goto (axes = {axis: epsilon * s}, f0 = steps_per_s / ((distance + epsilon) * p.axis[axis].motor.steps_per_mm), cb = True)
+		# Try moving to the switch again (actually epsilon mm before it).
+		p.goto (axes = {axis: -s * epsilon}, f0 = steps_per_s / ((distance - epsilon) * p.axis[axis].motor.steps_per_mm))
+		# And slowly through it.
+		p.goto (axes = {axis: s * epsilon}, f0 = slow / (2 * epsilon * p.axis[axis].motor.steps_per_mm), cb = True)
 	while p.movewait > 0:
 		p.recv_packet (want_any = True)
 	if back:
@@ -36,14 +40,14 @@ def test_one (axis, steps_per_s, use_min, slow, back): # {{{
 		return axis in p.limits
 # }}}
 
-def test_half (axis, back): # {{{
+def axis_test_half (axis, back): # {{{
 	# Binary search for maximum steps per second.
 	assert p.axis[axis].limit_min_pin < 255 or p.axis[axis].limit_max_pin < 255
 	lower = 3200. # 1 revolution per second
 	upper = lower * 2
 	use_min = p.axis[axis].limit_min_pin < 255
 	# Find real upper bound.
-	while test_one (axis, upper, use_min, lower * .2, back):
+	while axis_test_single (axis, upper, use_min, 3200., back):
 		lower = upper
 		upper *= 2
 	slow = lower / 10
@@ -53,7 +57,7 @@ def test_half (axis, back): # {{{
 	while upper / lower - 1. > .1:
 		mid = (lower + upper) / 2
 		# Try this value.
-		if test_one (axis, mid, use_min, slow, back):
+		if axis_test_single (axis, mid, use_min, 3200., back):
 			lower = (mid + lower) / 2
 		else:
 			upper = (mid + upper) / 2
@@ -64,9 +68,9 @@ def test (axis): # {{{
 	p.axis[axis].motor.max_f_neg = float ('inf')	# Discard old max speed.
 	p.axis[axis].motor.max_f_pos = float ('inf')	# Discard old max speed.
 	p.write_axis (axis)
-	p.axis[axis].motor.max_f_neg = test_half (axis, False)
+	p.axis[axis].motor.max_f_neg = axis_test_half (axis, False)
 	p.write_axis (axis)
-	p.axis[axis].motor.max_f_pos = test_half (axis, True)
+	p.axis[axis].motor.max_f_pos = axis_test_half (axis, True)
 	p.write_axis (axis)
 	print ('result for axis %d: %f, %f mm/s' % (axis, p.axis[axis].motor.max_f_neg / p.axis[axis].motor.steps_per_mm, p.axis[axis].motor.max_f_pos / p.axis[axis].motor.steps_per_mm))
 # }}}
@@ -130,5 +134,5 @@ def calibrate_temps (): # Then temperature sensors. {{{
 	do_calibrate_temps (temps, channels)
 # }}}
 
-#calibrate_axes ()
-calibrate_temps ()
+calibrate_axes ()
+#calibrate_temps ()
