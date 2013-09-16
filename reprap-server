@@ -33,7 +33,7 @@ class Server:
 		else:
 			self.port = serial.Serial (port, baudrate = baud, timeout = .01)
 			self.port.readall ()
-			self.port.setTimeout (2)
+			self.port.setTimeout (20)
 			for i in range (2):
 				if self.port.readline ().strip () == 'start':
 					break
