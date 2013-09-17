@@ -1,4 +1,4 @@
-#include "firmware.hh"
+#include "firmware.h"
 
 void setup ()
 {
@@ -48,7 +48,7 @@ void setup ()
 		temps[i] = NULL;
 		objects[i] = &axis[a];
 		limits_pos[a] = MAXLONG;
-		axis[a].current_pos = NAN;
+		axis[a].current_pos = 0;
 	}
 	for (uint8_t e = 0; e < MAXEXTRUDERS; ++e, ++i)
 	{

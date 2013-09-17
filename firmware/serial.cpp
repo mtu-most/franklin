@@ -1,4 +1,4 @@
-#include "firmware.hh"
+#include "firmware.h"
 
 // Commands which can be sent:
 // Packet: n*4 bytes, of which n*3 bytes are data.
@@ -9,7 +9,7 @@
 // The second byte of a packet is the flipflop and the command (fccccccc)
 // All other commands have bit 7 set, so they cannot be mistaken for a packet.
 // They have 4 bit data and 3 bit parity: 1pppdddd
-// Codes (defined in firmware.hh):
+// Codes (defined in firmware.h):
 // 	0000	-> 0x80	1000
 // 	0001	-> 0xe1	1110
 // 	0010	-> 0xd2	1101

@@ -1,4 +1,4 @@
-#include "firmware.hh"
+#include "firmware.h"
 
 void Temp::load (uint16_t &addr, bool eeprom)
 {
@@ -12,7 +12,6 @@ void Temp::load (uint16_t &addr, bool eeprom)
 	power_pin = read_8 (addr, eeprom);
 	thermistor_pin = read_8 (addr, eeprom);
 	SET_OUTPUT (power_pin);
-	SET_INPUT_NOPULLUP (thermistor_pin);
 }
 
 void Temp::save (uint16_t &addr, bool eeprom)

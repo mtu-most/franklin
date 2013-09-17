@@ -1,6 +1,8 @@
+#include <EEPROM.h>
+
 // vim: set filetype=cpp foldmethod=marker foldmarker={,} :
 #define EXTERN	// This must be done in exactly one cc-file.
-#include "firmware.hh"
+#include "firmware.h"
 
 // Loop function handles all regular updates.
 // I'd have liked to have a timer interrupt for these actions, but arduino doesn't allow it.
@@ -14,7 +16,7 @@ static void handle_temps (unsigned long current_time) {
 	uint8_t i;
 	for (i = 1; i <= 2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS; ++i) {
 		uint8_t next = (temp_current + i) % (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS);
-		if (temps[next] && (!isnan (temps[next]->target) || !isnan (temps[next]->min_alarm) || !isnan (temps[next]->max_alarm)) && temps[next]->power_pin < 255 && (temps[next]->thermistor_pin < 255 || temps[next]->target > 0 && isinf (temps[next]->target))) {
+		if (temps[next] && (!isnan (temps[next]->target) || !isnan (temps[next]->min_alarm) || !isnan (temps[next]->max_alarm)) && temps[next]->power_pin < 255 && (temps[next]->thermistor_pin < 255 || (temps[next]->target > 0 && isinf (temps[next]->target)))) {
 			temp_current = next;
 			break;
 		}
@@ -25,7 +27,7 @@ static void handle_temps (unsigned long current_time) {
 	}
 	float temp = temps[temp_current]->read ();
 	// First of all, if an alarm should be triggered, do so.
-	if (!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp || !isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp) {
+	if ((!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp) || (!isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp)) {
 		temps[temp_current]->min_alarm = NAN;
 		temps[temp_current]->max_alarm = NAN;
 		which_tempcbs |= (1 << temp_current);
@@ -125,7 +127,7 @@ static void handle_motors (unsigned long current_time) {
 
 static void handle_axis (unsigned long current_time) {
 	for (uint8_t axis_current = 0; axis_current < num_axes; ++axis_current) {
-		if (axis[axis_current].motor.steps_total <= axis[axis_current].motor.steps_done && !axis[axis_current].motor.continuous || (axis[axis_current].motor.positive ? !GET (axis[axis_current].limit_max_pin, false) : !GET (axis[axis_current].limit_min_pin, false)))
+		if ((axis[axis_current].motor.steps_total <= axis[axis_current].motor.steps_done && !axis[axis_current].motor.continuous) || (axis[axis_current].motor.positive ? !GET (axis[axis_current].limit_max_pin, false) : !GET (axis[axis_current].limit_min_pin, false)))
 			continue;
 		bool need_cb = axis[axis_current].motor.steps_total > axis[axis_current].motor.steps_done && queue[queue_start].cb;
 		//debug ("hit %d", int (axis_current));

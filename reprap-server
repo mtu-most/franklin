@@ -33,7 +33,7 @@ class Server:
 		else:
 			self.port = serial.Serial (port, baudrate = baud, timeout = .01)
 			self.port.readall ()
-			self.port.setTimeout (20)
+			self.port.setTimeout (10)
 			for i in range (2):
 				if self.port.readline ().strip () == 'start':
 					break
@@ -57,7 +57,6 @@ class Server:
 		self.send ('M82')
 		self.send ('M21')
 		self.currentextruder = 0
-		self.send ('G28', retries = 30)
 		if self.extruders > 1:
 			for e in range (self.extruders):
 				self.send ('T%d' % e)
@@ -69,6 +68,7 @@ class Server:
 			self.send ('G92 X0 Y0 Z0 E0')
 			self.send ('M104 S0')
 		self.send ('M140 S0')
+		print ("Setup done")
 	# }}}
 	def serial_data (self):	# {{{
 		line = self.port.readline ().strip ()

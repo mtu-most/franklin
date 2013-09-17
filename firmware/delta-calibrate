@@ -1,25 +1,23 @@
 #!/usr/bin/python
 
 import gtk
-import serial
+import interface
 
 class App (gtk.EventBox):
 	def __init__ (self):
 		super (App, self).__init__ ()
-		self.printer = serial.Serial ('/dev/ttyACM0', 115200, timeout = .1)
-		self.printer.readall ()
-		self.printer.setTimeout (2)
-		print 1
-		print self.printer.readline ()
-		print self.printer.readline ()
-		self.printer.setTimeout (.1)
-		self.printer.write ('G91\n')
-		self.printer.readline ()
-		self.printer.write ('G28\n')
-		self.printer.readline ()
+		self.printer = interface.Printer ('/dev/ttyUSB0')
+		self.printer.run_axis (0, 100)
+		self.printer.run_axis (1, 100)
+		self.printer.run_axis (2, 100)
+		while len (self.printer.limits) < 3:
+			self.printer.recv_packet (want_any = True)
+		self.printer.limits.clear ()
+		for i in range (3):
+			self.printer.axis[i].set_current_pos (0)
 		self.control = False
 		self.shift = False
-		self.axis = 'E'
+		self.axis = -1
 		self.step = 0
 		self.x = 0.
 		self.z = 0.
@@ -36,33 +34,24 @@ class App (gtk.EventBox):
 		if self.shift:
 			return 10
 		return 1
-	def send (self, data):
-		self.printer.write ('%s\n' % data)
-		while True:
-			l = self.printer.readline ()
-			if l.startswith ('wait'):
-				continue
-			assert l.startswith ('ok')
-			return
+	def move (self, dx, dz):
+		if self.x + dx < 0:
+			dx = -self.x
+		self.x += dx
+		self.z += dz
+		axes = {0: self.z, 1: self.z, 2: self.z}
+		if self.axis >= 0:
+			axes[self.axis] += self.x
+		self.printer.goto (axes = axes)
 	def press (self, widget, event):
 		if event.keyval == gtk.keysyms.Up:
-			x = self.get_amount ()
-			self.send ('G1 X%f Y%f Z%f' % (x, x, x))
-			self.z += x
+			self.move (0, self.get_amount ())
 		elif event.keyval == gtk.keysyms.Down:
-			x = -self.get_amount ()
-			self.send ('G1 X%f Y%f Z%f' % (x, x, x))
-			self.z += x
+			self.move (0, -self.get_amount ())
 		elif event.keyval == gtk.keysyms.Left:
-			x = -self.get_amount ()
-			if self.x + x < 0:
-				x = -self.x
-			self.send ('G1 %s%f' % (self.axis, x))
-			self.x += x
+			self.move (-self.get_amount (), 0)
 		elif event.keyval == gtk.keysyms.Right:
-			x = self.get_amount ()
-			self.send ('G1 %s%f' % (self.axis, x))
-			self.x += x
+			self.move (self.get_amount (), 0)
 		elif event.keyval == gtk.keysyms.Shift_L:
 			self.shift = True
 		elif event.keyval == gtk.keysyms.Control_L:
@@ -73,20 +62,19 @@ class App (gtk.EventBox):
 				print 'Printer height: %f' % self.zero
 				self.x = 0
 				self.z = 0
-				self.axis = 'X'
+				for i in range (3):
+					self.printer.axis[i].set_current_pos (0)
+				self.axis = 0
 			else:
 				print 'Distance %d %s: %f Z: %f' % (self.step, self.axis, self.x, self.z)
 				if self.step == 7:
 					self.step = 1
-					self.send ('G1 X%f Y%f Z%f' % (-self.z, -self.z, -self.z))
-					self.send ('G1 %s%f' % (self.axis, -self.x))
+					self.move (0, -self.z)
+					self.move (-self.x, 0)
 					self.x = 0
 					self.z = 0
-					if self.axis == 'X':
-						self.axis = 'Y'
-					elif self.axis == 'Y':
-						self.axis = 'Z'
-					elif self.axis == 'Z':
+					self.axis += 1
+					if self.axis >= 3:
 						gtk.main_quit ()
 					return
 			self.step += 1

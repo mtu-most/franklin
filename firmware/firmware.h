@@ -28,9 +28,9 @@
 #define EXTERN extern
 #endif
 
-#define SET_OUTPUT(pin) do { if ((pin) < 255) { pinMode (pin, OUTPUT); }} while (0)
-#define SET_INPUT(pin) do { if ((pin) < 255) { pinMode (pin, INPUT_PULLUP); }} while (0)
-#define SET_INPUT_NOPULLUP(pin) do { if ((pin) < 255) { pinMode (pin, INPUT); }} while (0)
+#define SET_OUTPUT(pin) do { if ((pin) < 255) { pinMode ((pin), OUTPUT); }} while (0)
+#define SET_INPUT(pin) do { if ((pin) < 255) { pinMode ((pin), INPUT); }} while (0)
+#define SET_INPUT_NOPULLUP(pin) do { if ((pin) < 255) { pinMode ((pin), INPUT); }} while (0)
 #define SET(pin) do { if ((pin) < 255) { digitalWrite ((pin), HIGH); } } while (0)
 #define RESET(pin) do { if ((pin) < 255) { digitalWrite ((pin), LOW); } } while (0)
 #define GET(pin, _default) ((pin) < 255 ? digitalRead (pin) : _default)
@@ -195,6 +195,7 @@ struct MoveCommand
 EXTERN uint8_t num_extruders;
 EXTERN uint8_t num_axes;
 EXTERN uint8_t num_temps;
+EXTERN uint8_t led_pin;
 EXTERN float room_T;	//[degrees C]
 // Other variables.
 EXTERN unsigned char command[COMMAND_SIZE];

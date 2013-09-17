@@ -1,4 +1,4 @@
-#include "firmware.hh"
+#include "firmware.h"
 
 void debug (char const *fmt, ...) {
 	va_list ap;
@@ -56,7 +56,7 @@ void debug (char const *fmt, ...) {
 					break;
 				}
 				case 'c': {
-					char arg = va_arg (ap, char);
+					char arg = va_arg (ap, int);
 					Serial.write (arg);
 					break;
 				}
@@ -74,6 +74,6 @@ void debug (char const *fmt, ...) {
 		}
 	}
 	va_end (ap);
-	Serial.write (0);
+	Serial.write ((uint8_t)0);
 	Serial.flush ();
 }

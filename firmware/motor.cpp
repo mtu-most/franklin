@@ -1,4 +1,4 @@
-#include "firmware.hh"
+#include "firmware.h"
 
 void Motor::load (uint16_t &addr, bool eeprom)
 {

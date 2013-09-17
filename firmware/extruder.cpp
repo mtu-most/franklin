@@ -1,4 +1,4 @@
-#include "firmware.hh"
+#include "firmware.h"
 
 void Extruder::load (uint16_t &addr, bool eeprom)
 {

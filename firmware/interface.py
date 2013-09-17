@@ -1,15 +1,20 @@
 # vim: set foldmethod=marker :
 
+show_own_debug = False
+show_firmware_debug = True
+
 # Imports.  {{{
 import serial
 import time
 import math
 import struct
+import os
 # }}}
 
-def dprint (x, data):
-	#print ('%s: %s' % (x, ' '.join (['%02x' % ord (c) for c in data])))
-	pass
+def dprint (x, data): # {{{
+	if show_own_debug:
+		print ('%s: %s' % (x, ' '.join (['%02x' % ord (c) for c in data])))
+# }}}
 
 class Printer: # {{{
 	# Internal stuff.  {{{
@@ -53,8 +58,14 @@ class Printer: # {{{
 			'LIMIT': '\x18',
 			'MESSAGE': '\x19'}
 	# }}}
-	def __init__ (self, port = '/dev/ttyACM0'): # {{{
-		self.printer = serial.Serial (port, baudrate = 115200, timeout = .01)
+	def __init__ (self, port = ('/dev/ttyUSB0', '/dev/ttyACM0')): # {{{
+		if not isinstance (port, (list, tuple)):
+			port = (port,)
+		for p in port:
+			if not os.path.exists (p):
+				continue
+			self.printer = serial.Serial (p, baudrate = 115200, timeout = .01)
+			break
 		# Reset firmware.
 		self.printer.setDTR (False)
 		time.sleep (.1)
@@ -62,7 +73,7 @@ class Printer: # {{{
 		time.sleep (.1)
 		self.printer.readall ()	# flush buffer.
 		# Wait for firmware to boot.
-		self.printer.setTimeout (2)
+		self.printer.setTimeout (15)
 		r = self.printer.read ()
 		dprint ('read (0)', r)
 		self.printer.setTimeout (Printer.default_timeout)
@@ -72,8 +83,11 @@ class Printer: # {{{
 				r = self.printer.read ()
 				dprint ('read (0)', r)
 				continue
-			assert r == self.single['INIT']
-			break
+			if r == self.single['INIT']:
+				break
+			dprint ('unexpected data', r)
+			r = self.printer.read ()
+			dprint ('read (0)', r)
 		self.printer.setTimeout (Printer.default_timeout)
 		# Set up state.
 		self.ff_in = False
@@ -84,7 +98,7 @@ class Printer: # {{{
 		self.tempwait = set ()
 		self.begin ()
 		self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBB', self.read (0))
-		self.num_axes, self.num_extruders, self.num_temps, self.room_T = struct.unpack ('<BBBf', self.read (1))
+		self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T = struct.unpack ('<BBBBf', self.read (1))
 		self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
 		for a in range (self.maxaxes):
 			self.axis[a].read (self.read (2 + a))
@@ -94,6 +108,9 @@ class Printer: # {{{
 		self.temp = [Printer.Temp () for t in range (self.maxtemps)]
 		for t in range (self.maxtemps):
 			self.temp[t].read (self.read (2 + self.maxaxes + self.maxextruders + t))
+		global show_own_debug
+		if show_own_debug is None:
+			show_own_debug = True
 	# }}}
 	def make_packet (self, data): # {{{
 		data = chr (len (data) + 1) + data
@@ -284,7 +301,8 @@ class Printer: # {{{
 			if r in ('', '\0'):
 				break
 			s += r
-		print ('Debug: %s' % s)
+		if show_firmware_debug:
+			print ('Debug: %s' % s)
 	# }}}
 	# Config stuff.  {{{
 	class Temp: # {{{
@@ -436,7 +454,7 @@ class Printer: # {{{
 	def load (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['LOAD'], channel))
 		if channel == 1:
-			self.num_axes, self.num_extruders, self.num_temps, self.room_T = struct.unpack ('<BBBf', self.read (1))
+			self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T = struct.unpack ('<BBBBf', self.read (1))
 		elif 2 <= channel < 2 + self.maxaxes:
 			self.axis[channel - 2].read (self.read (channel))
 		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
@@ -471,7 +489,7 @@ class Printer: # {{{
 			self.save (i)
 	# }}}
 	def write_variables (self): # {{{
-		data = struct.pack ('<BBBf', self.num_axes, self.num_extruders, self.num_temps, self.room_T)
+		data = struct.pack ('<BBBBf', self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T)
 		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 1) + data)
 	# }}}
 	def write_axis (self, which): # {{{
@@ -518,6 +536,7 @@ class Printer: # {{{
 			min_limits = not max_limits
 		elif max_limits is None:
 			max_limits = not min_limits
+		self.led_pin = 13
 		self.num_axes = 3
 		p.num_extruders = 1	# Default to 1 extruder, heated bed and fan.
 		p.num_temps = 2
@@ -574,6 +593,7 @@ class Printer: # {{{
 		elif max_limits is None:
 			max_limits = not min_limits
 		assert not (max_limits and min_limits)
+		self.led_pin = 28	# 27 according to Repetier?
 		self.axis[0].limit_min_pin = 18 if min_limits else 255
 		self.axis[0].limit_max_pin = 18 if max_limits else 255
 		self.axis[0].motor.step_pin = 15
@@ -588,7 +608,7 @@ class Printer: # {{{
 		self.axis[2].limit_max_pin = 20 if max_limits else 255
 		self.axis[2].motor.step_pin = 3
 		self.axis[2].motor.dir_pin = 2
-		self.axis[2].motor.enable_pin = 26
+		self.axis[2].motor.enable_pin = 29	#26 according to Repetier?
 		for a in range (3, self.maxaxes):
 			self.axis[a].limit_min_pin = 255
 			self.axis[a].limit_max_pin = 255
@@ -606,9 +626,11 @@ class Printer: # {{{
 			self.extruder[e].motor.step_pin = 255
 			self.extruder[e].motor.dir_pin = 255
 			self.extruder[e].motor.enable_pin = 255
-		self.temp[0].power_pin = 10
+		self.temp[0].power_pin = 12
 		self.temp[0].thermistor_pin = 6
-		for t in range (1, self.maxtemps):
+		self.temp[1].power_pin = 4
+		self.temp[1].thermistor_pin = 255
+		for t in range (2, self.maxtemps):
 			self.temp[t].power_pin = 255
 			self.temp[t].thermistor_pin = 255
 	# }}}
@@ -617,21 +639,19 @@ class Printer: # {{{
 
 if __name__ == '__main__': # {{{
 	p = Printer ()
-	if False:
+	if True:
 		# Set everything up for calibration.
-		p.set_ramps_pins ()
-		p.num_extruders = 2	# Override default.
-		p.num_temps = 1
+		p.set_melzi_pins (max_limits = True)
+		p.num_temps = 0
 		p.room_T = 25.
 		for a in range (p.maxaxes):
 			p.axis[a].motor.max_f_neg = float ('inf')
 			p.axis[a].motor.max_f_pos = float ('inf')
 			p.axis[a].motor.steps_per_mm = float ('nan')
-		# X and Y: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
+		# all axis: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
 		p.axis[0].motor.steps_per_mm = (200 * 16.) / (5 * 12)	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
 		p.axis[1].motor.steps_per_mm = (200 * 16.) / (5 * 12)
-		# Z: 1.25 mm per revolution; 200 steps per revolution; 16 microsteps per step.
-		p.axis[2].motor.steps_per_mm = (200 * 16.) / 1.25
+		p.axis[2].motor.steps_per_mm = (200 * 16.) / (5 * 12)
 		for e in range (p.maxextruders):
 			p.extruder[e].temp.beta = 3885.0342279785623
 			p.extruder[e].temp.alpha = 10.056909432214743

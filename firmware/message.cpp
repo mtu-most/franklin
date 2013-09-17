@@ -1,4 +1,4 @@
-#include "firmware.hh"
+#include "firmware.h"
 
 void message (uint32_t code, char *msg, uint8_t len)
 {

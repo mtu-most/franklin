@@ -1,5 +1,5 @@
 #include <EEPROM.h>
-#include "firmware.hh"
+#include "firmware.h"
 
 uint8_t read_8 (uint16_t &address, bool eeprom)
 {

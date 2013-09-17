@@ -1,5 +1,5 @@
 // vim: set foldmethod=marker foldmarker={,} :
-#include "firmware.hh"
+#include "firmware.h"
 
 void next_move () {
 	if (queue_start == queue_end)

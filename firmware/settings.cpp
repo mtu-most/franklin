@@ -1,4 +1,4 @@
-#include "firmware.hh"
+#include "firmware.h"
 
 void Constants::load (uint16_t &addr, bool eeprom)
 {
@@ -18,6 +18,7 @@ void Variables::load (uint16_t &addr, bool eeprom)
 	num_axes = read_8 (addr, eeprom);
 	num_extruders = read_8 (addr, eeprom);
 	num_temps = read_8 (addr, eeprom);
+	led_pin = read_8 (addr, eeprom);
 	room_T = read_float (addr, eeprom) + 273.15;
 	// If settings are invalid values, the eeprom is probably not initialized; use defaults.
 	if (num_axes > MAXAXES)
@@ -26,6 +27,7 @@ void Variables::load (uint16_t &addr, bool eeprom)
 		num_extruders = 1;
 	if (num_temps > MAXTEMPS)
 		num_temps = 1;
+	SET_OUTPUT (led_pin);
 }
 
 void Variables::save (uint16_t &addr, bool eeprom)
@@ -33,5 +35,6 @@ void Variables::save (uint16_t &addr, bool eeprom)
 	write_8 (addr, num_axes, eeprom);
 	write_8 (addr, num_extruders, eeprom);
 	write_8 (addr, num_temps, eeprom);
+	write_8 (addr, led_pin, eeprom);
 	write_float (addr, room_T - 273.15, eeprom);
 }

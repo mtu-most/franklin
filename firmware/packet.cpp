@@ -1,4 +1,4 @@
-#include "firmware.hh"
+#include "firmware.h"
 
 static uint8_t get_which ()
 {
@@ -71,7 +71,7 @@ void packet ()
 		// f0 and f1 must be present and valid.
 		float f0 = queue[queue_end].data[F0];
 		float f1 = queue[queue_end].data[F1];
-		if (isnan (f0) || isnan (f1) || f0 < 0 || f1 < 0 || f0 == 0 && f1 == 0)
+		if (isnan (f0) || isnan (f1) || f0 < 0 || f1 < 0 || (f0 == 0 && f1 == 0))
 		{
 			Serial.write (CMD_STALL);
 			return;
