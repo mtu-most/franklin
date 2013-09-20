@@ -88,6 +88,11 @@ void serial ()
 			}
 			Serial.write (CMD_ACKRESET);
 			continue;
+		case 0:
+		case 1:
+			// These lengths are not allowed; this cannot be a good packet.
+			Serial.write (CMD_NACK);
+			continue;
 		default:
 			break;
 		}
@@ -269,7 +274,7 @@ void try_send_next ()
 	if (which_tempcbs != 0)
 	{
 		//debug ("tempcb %d", which_tempcbs);
-		for (uint8_t w = 0; w < EXTRUDER0 + num_extruders; ++w)
+		for (uint8_t w = 0; w < MAXOBJECT; ++w)
 		{
 			if (which_tempcbs & (1 << w))
 			{

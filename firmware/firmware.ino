@@ -77,22 +77,22 @@ static void handle_temps (unsigned long current_time) {
 	}
 }
 
-static void handle_motors (unsigned long current_time) {
-	for (uint8_t m = 0; m < TEMP0; ++m) {
+static void handle_motors (unsigned long current_time, unsigned long longtime) {
+	for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 		if (!motors[m])
 		       continue;
 		if (motors[m]->steps_done >= motors[m]->steps_total) {
 			if (!motors[m]->continuous)
 				continue;
-			if (current_time == last_time)
-				continue;
+			last_active = longtime;
 			float f = motors[m]->f;
 			float max_f = (motors[m]->positive ? motors[m]->max_f_pos : motors[m]->max_f_neg);
 			if (f > max_f) {
 				f = max_f;
 				motors[m]->f = f;
 			}
-			if (int (current_time * f / 1e6) != int (last_time * f / 1e6)) {
+			unsigned steps = int (current_time * f / 1e6) - int (last_time * f / 1e6);
+			for (unsigned s = 0; s < steps; ++s) {
 				SET (motors[m]->step_pin);
 				RESET (motors[m]->step_pin);
 				if (m >= 2 && m < num_axes + 2)
@@ -100,6 +100,7 @@ static void handle_motors (unsigned long current_time) {
 			}
 			continue;
 		}
+		last_active = longtime;
 		float t = (current_time - start_time) / 1e6;
 		motors[m]->f = 2 * motors[m]->a * t + f0;
 		float now = motors[m]->a * t * t + f0 * t;
@@ -127,13 +128,17 @@ static void handle_motors (unsigned long current_time) {
 
 static void handle_axis (unsigned long current_time) {
 	for (uint8_t axis_current = 0; axis_current < num_axes; ++axis_current) {
-		if ((axis[axis_current].motor.steps_total <= axis[axis_current].motor.steps_done && !axis[axis_current].motor.continuous) || (axis[axis_current].motor.positive ? !GET (axis[axis_current].limit_max_pin, false) : !GET (axis[axis_current].limit_min_pin, false)))
+		// No check if motors are not moving.
+		if (axis[axis_current].motor.steps_total <= axis[axis_current].motor.steps_done && !axis[axis_current].motor.continuous)
+			continue;
+		// No problem if limit switch is not hit.
+		if (axis[axis_current].motor.positive ? !GET (axis[axis_current].limit_max_pin, false) : !GET (axis[axis_current].limit_min_pin, false))
 			continue;
 		bool need_cb = axis[axis_current].motor.steps_total > axis[axis_current].motor.steps_done && queue[queue_start].cb;
-		//debug ("hit %d", int (axis_current));
+		debug ("hit %d %d %d", int (axis_current), axis[axis_current].motor.positive, axis[axis_current].limit_min_pin);
 		// Hit endstop; abort current move and notify host.
 		axis[axis_current].motor.continuous = false;	// Stop continuous move only for the motor that hits the switch.
-		for (uint8_t m = 0; m < EXTRUDER0 + num_extruders; ++m) {
+		for (uint8_t m = 2 + MAXAXES; m < MAXOBJECT; ++m) {
 			if (!motors[m])
 				continue;
 			if (motors[m]->steps_total > motors[m]->steps_done)
@@ -151,7 +156,24 @@ static void handle_axis (unsigned long current_time) {
 void loop () {
 	serial ();
 	unsigned long current_time = micros ();
+	unsigned long longtime = millis ();
 	handle_temps (current_time);	// Periodic temps stuff: temperature regulation.
-	handle_motors (current_time);	// Movement.
+	handle_motors (current_time, longtime);	// Movement.
 	handle_axis (current_time);	// limit switches.
+	if (longtime - last_active > motor_limit) {
+		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
+			if (!motors[m])
+				continue;
+			SET (motors[m]->enable_pin);
+		}
+	}
+	if (longtime - last_active > temp_limit) {
+		for (uint8_t t = 0; t < MAXOBJECT; ++t)
+		{
+			if (!temps[t])
+				continue;
+			RESET (temps[t]->power_pin);
+			temps[t]->target = NAN;
+		}
+	}
 }

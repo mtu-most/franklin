@@ -20,6 +20,8 @@ void Variables::load (uint16_t &addr, bool eeprom)
 	num_temps = read_8 (addr, eeprom);
 	led_pin = read_8 (addr, eeprom);
 	room_T = read_float (addr, eeprom) + 273.15;
+	motor_limit = read_32 (addr, eeprom);
+	temp_limit = read_32 (addr, eeprom);
 	// If settings are invalid values, the eeprom is probably not initialized; use defaults.
 	if (num_axes > MAXAXES)
 		num_axes = 3;
@@ -37,4 +39,6 @@ void Variables::save (uint16_t &addr, bool eeprom)
 	write_8 (addr, num_temps, eeprom);
 	write_8 (addr, led_pin, eeprom);
 	write_float (addr, room_T - 273.15, eeprom);
+	write_32 (addr, motor_limit, eeprom);
+	write_32 (addr, temp_limit, eeprom);
 }

@@ -4,9 +4,7 @@ import gtk
 import interface
 
 class App (gtk.EventBox):
-	def __init__ (self):
-		super (App, self).__init__ ()
-		self.printer = interface.Printer ('/dev/ttyUSB0')
+	def home (self):
 		self.printer.run_axis (0, 100)
 		self.printer.run_axis (1, 100)
 		self.printer.run_axis (2, 100)
@@ -15,12 +13,27 @@ class App (gtk.EventBox):
 		self.printer.limits.clear ()
 		for i in range (3):
 			self.printer.axis[i].set_current_pos (0)
+		self.printer.goto (axes = {0:-10,1:-10,2:-10}, cb = True)
+		while self.printer.movewait > 0:
+			self.printer.recv_packet (want_any = True)
+		self.printer.run_axis (0, 10)
+		self.printer.run_axis (1, 10)
+		self.printer.run_axis (2, 10)
+		while len (self.printer.limits) < 3:
+			self.printer.recv_packet (want_any = True)
+		self.printer.limits.clear ()
+		for i in range (3):
+			self.printer.axis[i].set_current_pos (0)
+	def __init__ (self):
+		super (App, self).__init__ ()
+		self.printer = interface.Printer ('/dev/ttyUSB0')
+		self.home ()
 		self.control = False
 		self.shift = False
 		self.axis = -1
-		self.step = 0
-		self.x = 0.
+		self.step = None
 		self.z = 0.
+		self.other = 0.
 		self.add_events (gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
 		self.connect ('key_press_event', self.press)
 		self.connect ('key_release_event', self.release)
@@ -34,14 +47,12 @@ class App (gtk.EventBox):
 		if self.shift:
 			return 10
 		return 1
-	def move (self, dx, dz):
-		if self.x + dx < 0:
-			dx = -self.x
-		self.x += dx
+	def move (self, dz, dother):
 		self.z += dz
-		axes = {0: self.z, 1: self.z, 2: self.z}
+		self.other += dother
+		axes = {0: self.other, 1: self.other, 2: self.other}
 		if self.axis >= 0:
-			axes[self.axis] += self.x
+			axes[self.axis] += self.z
 		self.printer.goto (axes = axes)
 	def press (self, widget, event):
 		if event.keyval == gtk.keysyms.Up:
@@ -57,22 +68,31 @@ class App (gtk.EventBox):
 		elif event.keyval == gtk.keysyms.Control_L:
 			self.control = True
 		elif event.keyval == gtk.keysyms.Return:
-			if self.step == 0:
-				self.zero = -self.z
+			if self.step is None:
+				self.zero = -self.other
 				print 'Printer height: %f' % self.zero
-				self.x = 0
 				self.z = 0
+				self.other = 0
 				for i in range (3):
 					self.printer.axis[i].set_current_pos (0)
 				self.axis = 0
+				self.step = -8
+				return
+			elif self.step == -8:
+				self.z0 = self.z - self.other
+				print 'Z0 difference: %f' % self.z0
 			else:
-				print 'Distance %d %s: %f Z: %f' % (self.step, self.axis, self.x, self.z)
+				print '%d %d %f' % (self.axis, self.step * 10, self.z - self.z0)
 				if self.step == 7:
-					self.step = 1
-					self.move (0, -self.z)
-					self.move (-self.x, 0)
-					self.x = 0
-					self.z = 0
+					self.step = -7
+					if self.z > self.other:
+						self.move (0, -self.other)
+						self.move (-self.z, 0)
+					else:
+						self.move (-self.z, 0)
+						self.move (0, -self.other)
+					self.z = 0.
+					self.other = 0.
 					self.axis += 1
 					if self.axis >= 3:
 						gtk.main_quit ()
@@ -91,3 +111,5 @@ w.connect ('destroy', lambda x:gtk.main_quit ())
 a.show ()
 w.show ()
 gtk.main ()
+for i in range (3):
+	a.printer.sleep_axis (i)

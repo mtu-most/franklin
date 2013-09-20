@@ -229,6 +229,7 @@ EXTERN bool pause_all;
 EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
+EXTERN unsigned long last_active, motor_limit, temp_limit;
 
 // debug.cc
 void debug (char const *fmt, ...);

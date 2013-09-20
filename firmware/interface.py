@@ -98,7 +98,7 @@ class Printer: # {{{
 		self.tempwait = set ()
 		self.begin ()
 		self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBB', self.read (0))
-		self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T = struct.unpack ('<BBBBf', self.read (1))
+		self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T, self.motor_limit, self.temp_limit = struct.unpack ('<BBBBfLL', self.read (1))
 		self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
 		for a in range (self.maxaxes):
 			self.axis[a].read (self.read (2 + a))
@@ -454,7 +454,7 @@ class Printer: # {{{
 	def load (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['LOAD'], channel))
 		if channel == 1:
-			self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T = struct.unpack ('<BBBBf', self.read (1))
+			self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T, self.motor_limit, self.temp_limit = struct.unpack ('<BBBBfLL', self.read (1))
 		elif 2 <= channel < 2 + self.maxaxes:
 			self.axis[channel - 2].read (self.read (channel))
 		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
@@ -489,7 +489,7 @@ class Printer: # {{{
 			self.save (i)
 	# }}}
 	def write_variables (self): # {{{
-		data = struct.pack ('<BBBBf', self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T)
+		data = struct.pack ('<BBBBfLL', self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T, self.motor_limit, self.temp_limit)
 		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 1) + data)
 	# }}}
 	def write_axis (self, which): # {{{
@@ -644,6 +644,8 @@ if __name__ == '__main__': # {{{
 		p.set_melzi_pins (max_limits = True)
 		p.num_temps = 0
 		p.room_T = 25.
+		p.temp_limit = 60000
+		p.motor_limit = 10000
 		for a in range (p.maxaxes):
 			p.axis[a].motor.max_f_neg = float ('inf')
 			p.axis[a].motor.max_f_pos = float ('inf')
@@ -686,6 +688,8 @@ if __name__ == '__main__': # {{{
 		print ('num extruders: %d' % p.num_extruders)
 		print ('num temps: %d' % p.num_temps)
 		print ('room temperature: %f' % p.room_T)
+		print ('motor limit: %d ms' % p.motor_limit)
+		print ('temp limit: %d ms' % p.temp_limit)
 		for a in range (p.maxaxes):
 			print ('Axis %d:' % a)
 			print ('\tlimit pins: %d %d' % (p.axis[a].limit_min_pin, p.axis[a].limit_max_pin))

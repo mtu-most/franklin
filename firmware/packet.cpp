@@ -96,6 +96,7 @@ void packet ()
 			Serial.write (CMD_STALL);
 			return;
 		}
+		Serial.write (CMD_ACK);
 		ReadFloat f;
 		for (uint8_t i = 0; i < sizeof (float); ++i) {
 			f.b[i] = command[3 + i];
@@ -103,6 +104,13 @@ void packet ()
 		if (f.f != 0)
 		{
 			motors[which]->positive = f.f > 0;
+			if (which >= 2 && which < 2 + MAXAXES && (motors[which]->positive ? GET (axis[which - 2].limit_max_pin, false) : GET (axis[which - 2].limit_min_pin, false))) {
+				// Refuse to move if limit switch is already hit.
+				motors[which]->continuous = false;
+				limits_pos[which - 2] = axis[which - 2].current_pos;
+				try_send_next ();
+				return;
+			}
 			if (motors[which]->positive)
 				SET (motors[which]->dir_pin);
 			else
@@ -113,7 +121,6 @@ void packet ()
 		}
 		else
 			motors[which]->continuous = false;
-		Serial.write (CMD_ACK);
 		return;
 	}
 	case CMD_SLEEP:	// disable motor current
@@ -153,9 +160,8 @@ void packet ()
 	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
 	{
 		//debug ("CMD_WAITTEMP");
-		uint8_t const num = EXTRUDER0 + num_extruders;
-		uint8_t ch = command[2];
-		if (ch >= num || !temps[ch])
+		which = get_which ();
+		if (!temps[which])
 		{
 			Serial.write (CMD_STALL);
 			return;
@@ -166,8 +172,8 @@ void packet ()
 			min.b[i] = command[3 + i];
 			max.b[i] = command[3 + i + sizeof (float)];
 		}
-		temps[ch]->min_alarm = min.f + 273.15;
-		temps[ch]->max_alarm = max.f + 273.15;
+		temps[which]->min_alarm = min.f + 273.15;
+		temps[which]->max_alarm = max.f + 273.15;
 		Serial.write (CMD_ACK);
 		return;
 	}
