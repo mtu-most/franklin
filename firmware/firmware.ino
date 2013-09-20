@@ -160,16 +160,15 @@ void loop () {
 	handle_temps (current_time);	// Periodic temps stuff: temperature regulation.
 	handle_motors (current_time, longtime);	// Movement.
 	handle_axis (current_time);	// limit switches.
-	if (longtime - last_active > motor_limit) {
+	if (motor_limit > 0 && longtime - last_active > motor_limit) {
 		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 			if (!motors[m])
 				continue;
 			SET (motors[m]->enable_pin);
 		}
 	}
-	if (longtime - last_active > temp_limit) {
-		for (uint8_t t = 0; t < MAXOBJECT; ++t)
-		{
+	if (temp_limit > 0 && longtime - last_active > temp_limit) {
+		for (uint8_t t = 0; t < MAXOBJECT; ++t) {
 			if (!temps[t])
 				continue;
 			RESET (temps[t]->power_pin);
