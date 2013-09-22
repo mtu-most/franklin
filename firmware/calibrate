@@ -35,6 +35,7 @@ def axis_test_single (axis, steps_per_s, use_min, slow, neg): # {{{
 		p.goto (axes = {axis: s * epsilon}, f0 = slow / (2 * epsilon * p.axis[axis].motor.steps_per_mm), cb = True)
 	while p.movewait > 0:
 		p.recv_packet (want_any = True)
+	print p.limits
 	if back:
 		return axis not in p.limits
 	else:

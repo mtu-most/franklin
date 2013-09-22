@@ -27,6 +27,7 @@ class App (gtk.EventBox):
 	def __init__ (self):
 		super (App, self).__init__ ()
 		self.printer = interface.Printer ('/dev/ttyUSB0')
+		print 'have printer'
 		self.home ()
 		self.control = False
 		self.shift = False

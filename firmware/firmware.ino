@@ -135,10 +135,10 @@ static void handle_axis (unsigned long current_time) {
 		if (axis[axis_current].motor.positive ? !GET (axis[axis_current].limit_max_pin, false) : !GET (axis[axis_current].limit_min_pin, false))
 			continue;
 		bool need_cb = axis[axis_current].motor.steps_total > axis[axis_current].motor.steps_done && queue[queue_start].cb;
-		debug ("hit %d %d %d", int (axis_current), axis[axis_current].motor.positive, axis[axis_current].limit_min_pin);
+		debug ("hit %d %d %d", int (axis_current), axis[axis_current].motor.steps_total, axis[axis_current].motor.continuous);
 		// Hit endstop; abort current move and notify host.
 		axis[axis_current].motor.continuous = false;	// Stop continuous move only for the motor that hits the switch.
-		for (uint8_t m = 2 + MAXAXES; m < MAXOBJECT; ++m) {
+		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 			if (!motors[m])
 				continue;
 			if (motors[m]->steps_total > motors[m]->steps_done)

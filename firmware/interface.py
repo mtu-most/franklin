@@ -1,6 +1,6 @@
 # vim: set foldmethod=marker :
 
-show_own_debug = False
+show_own_debug = None
 show_firmware_debug = True
 
 # Imports.  {{{
