@@ -1,0 +1,17 @@
+#!/usr/bin/python
+
+import interface
+import math
+import wave
+
+wavefile = wave.open ('exterminate.wav')
+data = [ord (x) for x in wavefile.readframes (wavefile.getnframes ())]
+minimum = min (data)
+maximum = max (data)
+data = [int ((x - (minimum + maximum) / 2.) / (maximum - minimum) * 7.99 + 4) for x in data]
+data = [(x[0] + 16 * x[1]) for x in zip (data[::2], data[1::2])]
+
+p = interface.Printer ()
+p.play (data)
+while True:
+	p.recv_packet (want_any = True)
