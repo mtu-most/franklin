@@ -37,11 +37,12 @@
 
 union ReadFloat {
 	float f;
-	uint32_t l;
+	int32_t i;
+	uint32_t u;
 	uint8_t b[sizeof (float)];
 };
 
-enum SingleByteCommands {	// See serial.cc for computation of command values.
+enum SingleByteCommands {	// See serial.cpp for computation of command values.
 // These bytes (except RESET) are sent in reply to a received packet only.
 	CMD_ACK = 0x80,		// Packet properly received and accepted; ready for next command.  Reply follows if it should.
 	CMD_NACK = 0xe1,	// Incorrect checksum.
@@ -71,6 +72,7 @@ enum Command {
 	CMD_WRITE,	// 1 byte: which channel; n bytes: data.
 	CMD_PAUSE,	// 1 byte: 0: not pause; 1: pause.
 	CMD_PING,	// 1 byte: code.  Reply: PONG.
+	CMD_PLAY,	// 1 byte: motor 1, 1 byte: motor 2, 4 bytes: #samples. 
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_START,	// 4 byte: 0 (protocol version).
@@ -163,7 +165,7 @@ struct Axis : public Object
 	Motor motor;
 	uint8_t limit_min_pin;
 	uint8_t limit_max_pin;
-	uint32_t current_pos;
+	int32_t current_pos;
 	virtual void load (uint16_t &addr, bool eeprom);
 	virtual void save (uint16_t &addr, bool eeprom);
 	virtual ~Axis () {}
@@ -222,7 +224,7 @@ EXTERN uint8_t queue_start, queue_end;
 EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent out.
 EXTERN bool continue_cb;		// is a continue event waiting to be sent out?
 EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
-EXTERN uint32_t limits_pos[MAXAXES];	// position when limit switch was hit or MAXLONG;
+EXTERN int32_t limits_pos[MAXAXES];	// position when limit switch was hit or MAXLONG;
 EXTERN bool have_msg;
 EXTERN char msg_buffer[MSGBUFSIZE];
 EXTERN bool pause_all;
@@ -231,27 +233,27 @@ EXTERN bool reply_ready;
 EXTERN char *last_packet;
 EXTERN unsigned long last_active, motor_limit, temp_limit;
 
-// debug.cc
+// debug.cpp
 void debug (char const *fmt, ...);
 
-// packet.cc
+// packet.cpp
 void packet ();	// A command packet has arrived; handle it.
 
-// serial.cc
+// serial.cpp
 void serial ();	// Handle commands from serial.
 void send_packet (char *the_packet);
 void try_send_next ();
 
-// move.cc
+// move.cpp
 void next_move ();
 
-// setup.cc
+// setup.cpp
 void setup ();
 
 // firmware.ino
 void loop ();	// Do stuff which needs doing: moving motors and adjusting heaters.
 
-// storage.cc
+// storage.cpp
 uint8_t read_8 (uint16_t &address, bool eeprom);
 void write_8 (uint16_t &address, uint8_t data, bool eeprom);
 uint16_t read_16 (uint16_t &address, bool eeprom);
@@ -260,5 +262,8 @@ uint32_t read_32 (uint16_t &address, bool eeprom);
 void write_32 (uint16_t &address, uint32_t data, bool eeprom);
 float read_float (uint16_t &address, bool eeprom);
 void write_float (uint16_t &address, float data, bool eeprom);
+
+// play.cpp
+void play (uint8_t which, uint32_t num_samples);
 
 #endif

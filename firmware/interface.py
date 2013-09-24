@@ -45,18 +45,19 @@ class Printer: # {{{
 			'READ': 0x0c,
 			'WRITE': 0x0d,
 			'PAUSE': 0x0e,
-			'PING': 0x0f}
+			'PING': 0x0f,
+			'PLAY': 0x10}
 	rcommand = {
-			'START': '\x10',
-			'TEMP': '\x11',
-			'POS': '\x12',
-			'DATA': '\x13',
-			'PONG': '\x14',
-			'MOVECB': '\x15',
-			'TEMPCB': '\x16',
-			'CONTINUE': '\x17',
-			'LIMIT': '\x18',
-			'MESSAGE': '\x19'}
+			'START': '\x11',
+			'TEMP': '\x12',
+			'POS': '\x13',
+			'DATA': '\x14',
+			'PONG': '\x15',
+			'MOVECB': '\x16',
+			'TEMPCB': '\x17',
+			'CONTINUE': '\x18',
+			'LIMIT': '\x19',
+			'MESSAGE': '\x1a'}
 	# }}}
 	def __init__ (self, port = ('/dev/ttyUSB0', '/dev/ttyACM0')): # {{{
 		if not isinstance (port, (list, tuple)):
@@ -525,6 +526,25 @@ class Printer: # {{{
 	def ping (self, arg = 0): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['PING'], arg))
 		assert struct.unpack ('<BB', self.recv_packet ()) == (ord (self.rcommand['PONG']), arg)
+	# }}}
+	def play (self, data): # {{{
+		self.send_packet (struct.pack ('<BBQ', self.command['PLAY'], 2, len (data) - len (data) % 32))
+		self.printer.write (''.join ([chr (x) for x in data[:64]]))
+		p = 64
+		r = self.printer.read (1)
+		if r != Printer.single['INIT']:
+			dprint ('huh?', r)
+			return
+		while p + 32 <= len (data):
+			# Send fragment
+			d = ''.join ([chr (x) for x in data[p:p + 32]])
+			self.printer.write (d)
+			p += 32
+			# Wait for ack
+			r = self.printer.read (1)
+			if r != Printer.single['INIT']:
+				dprint ('huh?', r)
+				break
 	# }}}
 	# }}}
 	# Presets.  {{{

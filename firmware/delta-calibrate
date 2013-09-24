@@ -4,6 +4,23 @@ import gtk
 import interface
 
 class App (gtk.EventBox):
+	def __init__ (self):
+		super (App, self).__init__ ()
+		self.printer = interface.Printer ('/dev/ttyUSB0')
+		self.home ()
+		self.control = False
+		self.shift = False
+		self.axis = -1
+		self.step = None
+		self.z = 0.
+		self.other = 0.
+		self.add_events (gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
+		self.connect ('key_press_event', self.press)
+		self.connect ('key_release_event', self.release)
+		self.set_can_focus (True)
+		self.label = gtk.Label ('Make the bed horizontal with a spirit level.  All the guide rods should be vertical then.  Move the extruder so the independent arm is vertical')
+		self.add (self.label)
+		self.label.show ()
 	def home (self):
 		self.printer.run_axis (0, 100)
 		self.printer.run_axis (1, 100)
@@ -24,24 +41,6 @@ class App (gtk.EventBox):
 		self.printer.limits.clear ()
 		for i in range (3):
 			self.printer.axis[i].set_current_pos (0)
-	def __init__ (self):
-		super (App, self).__init__ ()
-		self.printer = interface.Printer ('/dev/ttyUSB0')
-		print 'have printer'
-		self.home ()
-		self.control = False
-		self.shift = False
-		self.axis = -1
-		self.step = None
-		self.z = 0.
-		self.other = 0.
-		self.add_events (gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
-		self.connect ('key_press_event', self.press)
-		self.connect ('key_release_event', self.release)
-		self.set_can_focus (True)
-		self.label = gtk.Label ('start')
-		self.add (self.label)
-		self.label.show ()
 	def get_amount (self):
 		if self.control:
 			return .1

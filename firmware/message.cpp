@@ -9,7 +9,7 @@ void message (uint32_t code, char *msg, uint8_t len)
 	msg_buffer[0] = 2 + 4 + len;
 	msg_buffer[1] = CMD_MESSAGE;
 	ReadFloat f;
-	f.l = code;
+	f.u = code;
 	for (uint8_t i = 0; i < 4; ++i)
 		msg_buffer[2 + i] = f.b[i];
 	for (uint8_t i = 0; i < len; ++i)

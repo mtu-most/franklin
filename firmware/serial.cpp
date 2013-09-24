@@ -251,7 +251,7 @@ void try_send_next ()
 			//debug ("limit %d", w);
 			limitcb_buffer[2] = w;
 			ReadFloat f;
-			f.l = limits_pos[w];
+			f.i = limits_pos[w];
 			limitcb_buffer[3] = f.b[0];
 			limitcb_buffer[4] = f.b[1];
 			limitcb_buffer[5] = f.b[2];

@@ -18,7 +18,15 @@ static int32_t get_int32 (uint8_t offset)
 	ReadFloat ret;
 	for (uint8_t t = 0; t < sizeof (float); ++t)
 		ret.b[t] = command[offset + t];
-	return ret.l;
+	return ret.i;
+}
+
+static uint32_t get_uint32 (uint8_t offset)
+{
+	ReadFloat ret;
+	for (uint8_t t = 0; t < sizeof (float); ++t)
+		ret.b[t] = command[offset + t];
+	return ret.u;
 }
 
 void packet ()
@@ -221,7 +229,7 @@ void packet ()
 			return;
 		}
 		ReadFloat f;
-		f.l = axis[which - 2].current_pos;
+		f.i = axis[which - 2].current_pos;
 		reply[0] = 2 + sizeof (int32_t);
 		reply[1] = CMD_POS;
 		for (uint8_t b = 0; b < sizeof (int32_t); ++b)
@@ -306,6 +314,13 @@ void packet ()
 		reply[2] = command[2];
 		reply_ready = true;
 		try_send_next ();
+	}
+	case CMD_PLAY:
+	{
+		//debug ("CMD_PLAY");
+		Serial.write (CMD_ACK);
+		uint32_t num_samples = get_uint32 (3);
+		play (command[2], num_samples);
 	}
 	default:
 	{
