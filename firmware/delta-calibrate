@@ -6,7 +6,7 @@ import interface
 class App (gtk.EventBox):
 	def __init__ (self):
 		super (App, self).__init__ ()
-		self.printer = interface.Printer ('/dev/ttyUSB0')
+		self.printer = interface.Printer ()
 		self.home ()
 		self.control = False
 		self.shift = False
