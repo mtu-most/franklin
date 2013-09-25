@@ -14,28 +14,37 @@ static unsigned long wait (unsigned long last)
 	}
 }
 
-static uint8_t play_sample (Motor *m, uint8_t sample, uint8_t mpos)
+static uint8_t play_sample (uint8_t sample, uint8_t mpos)
 {
 	// Play the sample.
 	if (mpos == sample)
 		return mpos;
-	if (mpos < sample)
+	int8_t step;
+	for (uint8_t m = 0; m < MAXOBJECT; ++m)
 	{
-		SET (m->dir_pin);
-		while (mpos < sample)
+		if (!motors[m])
+			continue;
+		if (mpos < sample)
 		{
-			SET (m->step_pin);
-			RESET (m->step_pin);
-			mpos += 1;
+			SET (motors[m]->dir_pin);
+			step = 1;
 		}
-		return mpos;
+		else
+		{
+			RESET (motors[m]->dir_pin);
+			step = -1;
+		}
 	}
-	RESET (m->dir_pin);
-	while (mpos > sample)
+	while (mpos != sample)
 	{
-		SET (m->step_pin);
-		RESET (m->step_pin);
-		mpos -= 1;
+		for (uint8_t m = 0; m < MAXOBJECT; ++m)
+		{
+			if (!motors[m])
+				continue;
+			SET (motors[m]->step_pin);
+			RESET (motors[m]->step_pin);
+		}
+		mpos += step;
 	}
 	return mpos;
 }
@@ -52,16 +61,20 @@ static void parse_data (uint8_t *src, uint8_t *dst)
 	dst[7] = (src[2] >> 5) & 0x7;
 }
 
-void play (uint8_t which, uint32_t num_samples)
+void play (uint32_t num_samples)
 {
-	Motor *m = motors[which];
 	uint8_t fragment[FSIZE];
 	uint8_t fpos = 0;
 	while (Serial.available () < FSIZE) {}
 	for (uint8_t t = 0; t < FSIZE; ++t)
 		fragment[t] = Serial.read ();
 	uint8_t mpos = 0;
-	RESET (m->enable_pin);
+	for (uint8_t m = 0; m < MAXOBJECT; ++m)
+	{
+		if (!motors[m])
+			continue;
+		RESET (motors[m]->enable_pin);
+	}
 	unsigned long last_sample = micros ();
 	while (num_samples-- > 0)
 	{
@@ -73,7 +86,7 @@ void play (uint8_t which, uint32_t num_samples)
 		for (uint8_t t = 0; t < 8; ++t)
 		{
 			last_sample = wait (last_sample);
-			mpos = play_sample (m, target[t], mpos);
+			mpos = play_sample (target[t], mpos);
 		}
 		// Increment the counter, and start next fragment if at end.
 		if (fpos >= FSIZE)
@@ -93,6 +106,6 @@ void play (uint8_t which, uint32_t num_samples)
 		}
 	}
 	// Reset motor to its original position.
-	mpos = play_sample (m, 0, mpos);
+	mpos = play_sample (0, mpos);
 	last_active = millis ();
 }

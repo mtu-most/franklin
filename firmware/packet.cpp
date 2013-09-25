@@ -319,8 +319,8 @@ void packet ()
 	{
 		//debug ("CMD_PLAY");
 		Serial.write (CMD_ACK);
-		uint32_t num_samples = get_uint32 (3);
-		play (command[2], num_samples);
+		uint32_t num_samples = get_uint32 (2);
+		play (num_samples);
 	}
 	default:
 	{

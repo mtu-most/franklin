@@ -264,6 +264,6 @@ float read_float (uint16_t &address, bool eeprom);
 void write_float (uint16_t &address, float data, bool eeprom);
 
 // play.cpp
-void play (uint8_t which, uint32_t num_samples);
+void play (uint32_t num_samples);
 
 #endif

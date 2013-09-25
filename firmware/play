@@ -3,8 +3,9 @@
 import interface
 import math
 import wave
+import sys
 
-wavefile = wave.open ('ij.wav')
+wavefile = wave.open (sys.argv[1])
 data = [ord (x) for x in wavefile.readframes (wavefile.getnframes ())]
 minimum = min (data)
 maximum = max (data)

@@ -1,6 +1,6 @@
 # vim: set foldmethod=marker :
 
-show_own_debug = None
+show_own_debug = False
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -528,7 +528,7 @@ class Printer: # {{{
 		assert struct.unpack ('<BB', self.recv_packet ()) == (ord (self.rcommand['PONG']), arg)
 	# }}}
 	def play (self, data): # {{{
-		self.send_packet (struct.pack ('<BBQ', self.command['PLAY'], 4, len (data) - len (data) % 32))
+		self.send_packet (struct.pack ('<BQ', self.command['PLAY'], len (data) - len (data) % 32))
 		self.printer.write (data[:60])
 		p = 60
 		r = self.printer.read (1)
@@ -660,7 +660,7 @@ if __name__ == '__main__': # {{{
 	p = Printer ()
 	if True:
 		# Set everything up for calibration.
-		p.set_ramps_pins (max_limits = True)
+		p.set_melzi_pins (max_limits = True)
 		p.num_temps = 0
 		p.room_T = 25.
 		p.temp_limit = 60000
@@ -672,7 +672,8 @@ if __name__ == '__main__': # {{{
 		# all axis: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
 		p.axis[0].motor.steps_per_mm = (200 * 16.) / (5 * 12)	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
 		p.axis[1].motor.steps_per_mm = (200 * 16.) / (5 * 12)
-		p.axis[2].motor.steps_per_mm = 200 * 16 / 1.25
+		p.axis[2].motor.steps_per_mm = (200 * 16.) / (5 * 12)
+		#p.axis[2].motor.steps_per_mm = 200 * 16 / 1.25
 		for e in range (p.maxextruders):
 			p.extruder[e].temp.beta = 3885.0342279785623
 			p.extruder[e].temp.alpha = 10.056909432214743
