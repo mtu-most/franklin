@@ -8,17 +8,20 @@ class App (gtk.EventBox):
 		super (App, self).__init__ ()
 		self.printer = interface.Printer ()
 		self.home ()
+		self.printer.motor_limit = 0
+		self.printer.write_variables ()
 		self.control = False
 		self.shift = False
-		self.axis = -1
-		self.step = None
+		self.axis = 0
+		self.phase = 0
 		self.z = 0.
 		self.other = 0.
 		self.add_events (gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
 		self.connect ('key_press_event', self.press)
 		self.connect ('key_release_event', self.release)
 		self.set_can_focus (True)
-		self.label = gtk.Label ('Make the bed horizontal with a spirit level.  All the guide rods should be vertical then.  Move the extruder so the independent arm is vertical')
+		self.label = gtk.Label ('You know what to do...')
+		self.set_size_request (600, 400)
 		self.add (self.label)
 		self.label.show ()
 	def home (self):
@@ -48,6 +51,8 @@ class App (gtk.EventBox):
 			return 10
 		return 1
 	def move (self, dz, dother):
+		if self.phase >= 8:
+			dz = 0
 		self.z += dz
 		self.other += dother
 		axes = {0: self.other, 1: self.other, 2: self.other}
@@ -68,46 +73,50 @@ class App (gtk.EventBox):
 		elif event.keyval == gtk.keysyms.Control_L:
 			self.control = True
 		elif event.keyval == gtk.keysyms.Return:
-			if self.step is None:
-				self.zero = -self.other
-				print 'Printer height: %f' % self.zero
-				self.z = 0
-				self.other = 0
-				for i in range (3):
-					self.printer.axis[i].set_current_pos (0)
-				self.axis = 0
-				self.step = -8
+			if self.phase == 0:
+				self.z0 = self.z
+				self.zs = []
+			print '%d %d %f %f' % (self.axis, (self.phase % 8) * 10, self.z, self.other)
+			if self.phase <= 7:
+				self.zs.append ((self.z, self.other))
+			self.phase += 1
+			if self.phase == 16:
+				self.phase = 0
+				if self.z > self.other:
+					self.move (0, -self.other / 2)
+					self.move (-self.z, 0)
+				else:
+					self.move (-self.z, 0)
+					self.move (0, -self.other / 2)
+				self.axis += 1
+				if self.axis >= 3:
+					gtk.main_quit ()
 				return
-			elif self.step == -8:
-				self.z0 = self.z - self.other
-				print 'Z0 difference: %f' % self.z0
-			else:
-				print '%d %d %f' % (self.axis, self.step * 10, self.z - self.z0)
-				if self.step == 7:
-					self.step = -7
-					if self.z > self.other:
-						self.move (0, -self.other)
-						self.move (-self.z, 0)
-					else:
-						self.move (-self.z, 0)
-						self.move (0, -self.other)
-					self.z = 0.
-					self.other = 0.
-					self.axis += 1
-					if self.axis >= 3:
-						gtk.main_quit ()
-					return
-			self.step += 1
+			if self.phase >= 8:
+				c = self.zs[self.phase - 8]
+				self.phase -= 8
+				if c[1] > self.other:
+					self.move (0, c[1] - self.other)
+					self.move (c[0] - self.z, 0)
+				else:
+					self.move (c[0] - self.z, 0)
+					print c[1], self.other
+					self.move (0, c[1] - self.other)
+				self.phase += 8
 	def release (self, widget, event):
 		if event.keyval == gtk.keysyms.ISO_Prev_Group:
 			self.shift = False
 		elif event.keyval == gtk.keysyms.Control_L:
 			self.control = False
+	def quit (self, x):
+		self.printer.motor_limit = 10000
+		self.printer.write_variables ()
+		gtk.main_quit ()
 
 w = gtk.Window ()
 a = App ()
 w.add (a)
-w.connect ('destroy', lambda x:gtk.main_quit ())
+w.connect ('destroy', a.quit)
 a.show ()
 w.show ()
 gtk.main ()

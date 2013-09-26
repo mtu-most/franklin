@@ -19,7 +19,7 @@ static uint8_t play_sample (uint8_t sample, uint8_t mpos)
 	// Play the sample.
 	if (mpos == sample)
 		return mpos;
-	int8_t step;
+	int8_t step = 0;
 	for (uint8_t m = 0; m < MAXOBJECT; ++m)
 	{
 		if (!motors[m])

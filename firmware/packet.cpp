@@ -151,16 +151,17 @@ void packet ()
 	{
 		//debug ("CMD_SETTEMP");
 		which = get_which ();
-		if (!temps[which])
+		float target = get_float (3);
+		if (!temps[which] || (temps[which]->thermistor_pin >= 255 && (target < 0 || !isinf (target)) && !isnan (target)))
 		{
 			Serial.write (CMD_STALL);
 			return;
 		}
-		temps[which]->target = get_float (3) + 273.15;
-		debug ("Temp %d %f", which, &temps[which]->target);
+		temps[which]->target = target + 273.15;
 		if (isnan (temps[which]->target)) {
 			// loop () doesn't handle it anymore, so it isn't disabled there.
 			RESET (temps[which]->power_pin);
+			temps[which]->is_on = false;
 		}
 		Serial.write (CMD_ACK);
 		return;

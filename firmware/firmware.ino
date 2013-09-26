@@ -25,27 +25,41 @@ static void handle_temps (unsigned long current_time) {
 	if (i > 2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS) {
 		return;
 	}
-	float temp = temps[temp_current]->read ();
-	// First of all, if an alarm should be triggered, do so.
-	if ((!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp) || (!isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp)) {
-		temps[temp_current]->min_alarm = NAN;
-		temps[temp_current]->max_alarm = NAN;
-		which_tempcbs |= (1 << temp_current);
-		try_send_next ();
+	float temp = NAN;
+	if (temps[temp_current]->thermistor_pin < 255) {
+		temp = temps[temp_current]->read ();
+		// First of all, if an alarm should be triggered, do so.
+		if ((!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp) || (!isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp)) {
+			temps[temp_current]->min_alarm = NAN;
+			temps[temp_current]->max_alarm = NAN;
+			which_tempcbs |= (1 << temp_current);
+			try_send_next ();
+		}
 	}
-	if (isnan (temps[temp_current]->core_C) || isnan (temps[temp_current]->shell_C) || isnan (temps[temp_current]->transfer) || isnan (temps[temp_current]->radiation)) {
-		// No valid settings; use simple on/off-regime based on current temperature only.
-		if (temp < temps[temp_current]->target) {
-			if (!temps[temp_current]->is_on)
-				debug ("switching on %d", temp_current);
+	if (isinf (temps[temp_current]->target) && temps[temp_current]->target > 0) {
+		if (!temps[temp_current]->is_on) {
+			debug ("switching on %d", temp_current);
 			SET (temps[temp_current]->power_pin);
 			temps[temp_current]->is_on = true;
 		}
+	}
+	if (temps[temp_current]->thermistor_pin < 255)
+		return;
+	if (isnan (temps[temp_current]->core_C) || isnan (temps[temp_current]->shell_C) || isnan (temps[temp_current]->transfer) || isnan (temps[temp_current]->radiation)) {
+		// No valid settings; use simple on/off-regime based on current temperature only.
+		if (temp < temps[temp_current]->target) {
+			if (!temps[temp_current]->is_on) {
+				debug ("switching on %d", temp_current);
+				SET (temps[temp_current]->power_pin);
+				temps[temp_current]->is_on = true;
+			}
+		}
 		else {
-			if (temps[temp_current]->is_on)
+			if (temps[temp_current]->is_on) {
 				debug ("switching off %d", temp_current);
-			RESET (temps[temp_current]->power_pin);
-			temps[temp_current]->is_on = false;
+				RESET (temps[temp_current]->power_pin);
+				temps[temp_current]->is_on = false;
+			}
 		}
 		return;
 	}
