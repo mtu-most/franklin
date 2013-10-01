@@ -5,6 +5,7 @@ like the other options.
 ## Installation
 Install the following Debian packages (or their versions for your OS):
  * python 2.7
+ * python-serial
  * python-gtk2
  * python-avahi
  * apache2
