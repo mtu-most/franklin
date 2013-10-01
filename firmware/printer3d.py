@@ -59,8 +59,10 @@ class Printer: # {{{
 			'LIMIT': '\x19',
 			'MESSAGE': '\x1a'}
 	# }}}
-	def __init__ (self, port = ('/dev/ttyUSB0', '/dev/ttyACM0')): # {{{
-		if not isinstance (port, (list, tuple)):
+	def __init__ (self, port = None): # {{{
+		if not port:
+			port = ('/dev/ttyUSB0', '/dev/ttyACM0')
+		elif not isinstance (port, (list, tuple)):
 			port = (port,)
 		for p in port:
 			if not os.path.exists (p):
@@ -416,8 +418,20 @@ class Printer: # {{{
 	def sleep (self, channel, sleeping = True): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['SLEEP'], (channel & 0x7f) | (0x80 if sleeping else 0)))
 	# }}}
+	def settemp_extruder (self, which, temp):	# {{{
+		self.settemp (2 + self.maxaxes + which, temp)
+	# }}}
+	def settemp_temp (self, which, temp):	# {{{
+		self.settemp (2 + self.maxaxes + self.maxextruders + which, temp)
+	# }}}
 	def settemp (self, channel, temp): # {{{
 		self.send_packet (struct.pack ('<BBf', self.command['SETTEMP'], channel, temp))
+	# }}}
+	def waittemp_extruder (self, which, min, max):	# {{{
+		self.waittemp (2 + self.maxaxes + which, min, max)
+	# }}}
+	def waittemp_temp (self, which, min, max):	# {{{
+		self.waittemp (2 + self.maxaxes + self.maxextruders + which, min, max)
 	# }}}
 	def waittemp (self, channel, min, max): # {{{
 		if min is None:

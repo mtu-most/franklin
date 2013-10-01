@@ -1,11 +1,11 @@
 #!/usr/bin/python
 # vim: set foldmethod=marker :
 
-import interface
+import printer3d
 import sys
 import time
 
-p = interface.Printer ()
+p = printer3d.Printer ()
 
 def axis_test_single (axis, steps_per_s, use_min, slow, neg): # {{{
 	# Move to the limit switch at slow speed.

@@ -94,10 +94,17 @@ void play (uint32_t num_samples)
 			// If a new fragment is available, load it.
 			if (Serial.available () < FSIZE)
 			{
-				// If at end and no next fragment present, signal buffer underflow and exit.
-				Serial.write (CMD_NACK);
-				debug ("available: %d", Serial.available ());
-				break;
+				unsigned long long waitstart = millis ();
+				while (Serial.available () < FSIZE && millis () - waitstart < 100) {}
+				if (Serial.available () < FSIZE)
+				{
+					// If at end and no next fragment present, signal buffer underflow and exit.
+					debug ("available: %d", Serial.available ());
+					while (Serial.available () > 0)
+						Serial.read ();
+					Serial.write (CMD_NACK);
+					break;
+				}
 			}
 			for (uint8_t t = 0; t < FSIZE; ++t)
 				fragment[t] = Serial.read ();

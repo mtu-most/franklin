@@ -1,12 +1,12 @@
 #!/usr/bin/python
 
 import gtk
-import interface
+import printer3d
 
 class App (gtk.EventBox):
 	def __init__ (self):
 		super (App, self).__init__ ()
-		self.printer = interface.Printer ()
+		self.printer = printer3d.Printer ()
 		self.home ()
 		self.printer.motor_limit = 0
 		self.printer.write_variables ()

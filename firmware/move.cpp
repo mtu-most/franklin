@@ -73,10 +73,11 @@ void next_move () {
 				continue;
 			motors[m]->steps_total = 0;
 		}
+	}
+	if (motors_busy == 0) {
 		if (queue[queue_start].cb)
 			++num_movecbs;
 		try_send_next ();
-	}
-	if (motors_busy == 0)
 		next_move ();
+	}
 }
