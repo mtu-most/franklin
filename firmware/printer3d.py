@@ -9,6 +9,8 @@ import time
 import math
 import struct
 import os
+import re
+import sys
 # }}}
 
 def dprint (x, data): # {{{
@@ -21,6 +23,7 @@ class Printer: # {{{
 	# Constants.  {{{
 	# Serial timeout for normal communication in seconds.
 	default_timeout = 5	# TODO: this is for debugging; really should be .005
+	long_timeout = 3	# Timeout when waiting for the printer to boot.  May need 15 for non-optiboot.
 	# Masks for computing checksums.
 	mask = [	[0xc0, 0xc3, 0xff, 0x09],
 			[0x38, 0x3a, 0x7e, 0x13],
@@ -59,61 +62,69 @@ class Printer: # {{{
 			'LIMIT': '\x19',
 			'MESSAGE': '\x1a'}
 	# }}}
-	def __init__ (self, port = None): # {{{
-		if not port:
-			port = ('/dev/ttyUSB0', '/dev/ttyACM0')
-		elif not isinstance (port, (list, tuple)):
-			port = (port,)
-		for p in port:
-			if not os.path.exists (p):
-				continue
-			self.printer = serial.Serial (p, baudrate = 115200, timeout = .01)
-			break
-		# Reset firmware.
-		self.printer.setDTR (False)
-		time.sleep (.1)
-		self.printer.setDTR (True)
-		time.sleep (.1)
-		self.printer.readall ()	# flush buffer.
-		# Wait for firmware to boot.
-		self.printer.setTimeout (15)
-		r = self.printer.read ()
-		dprint ('read (0)', r)
-		self.printer.setTimeout (Printer.default_timeout)
-		while True:
-			if r == self.single['DEBUG']:
-				self.handle_debug ()
-				r = self.printer.read ()
-				dprint ('read (0)', r)
-				continue
-			if r == self.single['INIT']:
-				break
-			dprint ('unexpected data', r)
-			r = self.printer.read ()
-			dprint ('read (0)', r)
-		self.printer.setTimeout (Printer.default_timeout)
-		# Set up state.
-		self.ff_in = False
-		self.ff_out = False
-		self.limits = {}
-		self.wait = False
-		self.movewait = 0
-		self.tempwait = set ()
-		self.begin ()
-		self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBB', self.read (0))
-		self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T, self.motor_limit, self.temp_limit = struct.unpack ('<BBBBfLL', self.read (1))
-		self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
-		for a in range (self.maxaxes):
-			self.axis[a].read (self.read (2 + a))
-		self.extruder = [Printer.Extruder () for t in range (self.maxextruders)]
-		for e in range (self.maxextruders):
-			self.extruder[e].read (self.read (2 + self.maxaxes + e))
-		self.temp = [Printer.Temp () for t in range (self.maxtemps)]
-		for t in range (self.maxtemps):
-			self.temp[t].read (self.read (2 + self.maxaxes + self.maxextruders + t))
-		global show_own_debug
-		if show_own_debug is None:
-			show_own_debug = True
+	def __init__ (self, name = None): # {{{
+		# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
+		blacklist = ('console$', 'tty$', 'ttyS?\d+$')
+		for p in os.listdir ('/sys/class/tty'):
+			for b in blacklist:
+				if re.match (b, p):
+					break
+			else:
+				try:
+					self.printer = serial.Serial ('/dev/' + p, baudrate = 115200, timeout = .01)
+					# Reset firmware.
+					self.printer.setDTR (False)
+					time.sleep (.1)
+					self.printer.setDTR (True)
+					time.sleep (.1)
+					self.printer.readall ()	# flush buffer.
+					# Wait for firmware to boot.
+					self.printer.setTimeout (Printer.long_timeout)
+					r = self.printer.read ()
+					dprint ('read (0)', r)
+					if len (r) == 0:
+						continue
+					self.printer.setTimeout (Printer.default_timeout)
+					while True:
+						if r == self.single['DEBUG']:
+							self.handle_debug ()
+							r = self.printer.read ()
+							dprint ('read (0)', r)
+							continue
+						if r == self.single['INIT']:
+							break
+						dprint ('unexpected data', r)
+						r = self.printer.read ()
+						dprint ('read (0)', r)
+					self.printer.setTimeout (Printer.default_timeout)
+					# Set up state.
+					self.ff_in = False
+					self.ff_out = False
+					self.limits = {}
+					self.wait = False
+					self.movewait = 0
+					self.tempwait = set ()
+					self.begin ()
+					self.namelen, self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBBB', self.read (0))
+					self.load (1)
+					if name is None or not re.match (name, self.name):
+						self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
+						for a in range (self.maxaxes):
+							self.axis[a].read (self.read (2 + a))
+						self.extruder = [Printer.Extruder () for t in range (self.maxextruders)]
+						for e in range (self.maxextruders):
+							self.extruder[e].read (self.read (2 + self.maxaxes + e))
+						self.temp = [Printer.Temp () for t in range (self.maxtemps)]
+						for t in range (self.maxtemps):
+							self.temp[t].read (self.read (2 + self.maxaxes + self.maxextruders + t))
+						global show_own_debug
+						if show_own_debug is None:
+							show_own_debug = True
+						return
+				except:
+					pass
+		sys.stderr.write ('Printer not found')
+		sys.exit (0)
 	# }}}
 	def make_packet (self, data): # {{{
 		data = chr (len (data) + 1) + data
@@ -469,7 +480,9 @@ class Printer: # {{{
 	def load (self, channel): # {{{
 		self.send_packet (struct.pack ('<BB', self.command['LOAD'], channel))
 		if channel == 1:
-			self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T, self.motor_limit, self.temp_limit = struct.unpack ('<BBBBfLL', self.read (1))
+			data = self.read (1)
+			self.name = data[:self.namelen]
+			self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit = struct.unpack ('<BBBBBfLL', data[self.namelen:])
 		elif 2 <= channel < 2 + self.maxaxes:
 			self.axis[channel - 2].read (self.read (channel))
 		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
@@ -504,7 +517,7 @@ class Printer: # {{{
 			self.save (i)
 	# }}}
 	def write_variables (self): # {{{
-		data = struct.pack ('<BBBBfLL', self.num_axes, self.num_extruders, self.num_temps, self.led_pin, self.room_T, self.motor_limit, self.temp_limit)
+		data = (self.name + chr (0) * self.namelen)[:self.namelen] + struct.pack ('<BBBBBfLL', self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit)
 		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 1) + data)
 	# }}}
 	def write_axis (self, which): # {{{
@@ -674,7 +687,8 @@ if __name__ == '__main__': # {{{
 	p = Printer ()
 	if True:
 		# Set everything up for calibration.
-		p.set_melzi_pins (max_limits = True)
+		#p.set_melzi_pins (max_limits = True)
+		p.set_ramps_pins ()
 		p.num_temps = 0
 		p.room_T = 25.
 		p.temp_limit = 60000
@@ -686,8 +700,8 @@ if __name__ == '__main__': # {{{
 		# all axis: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
 		p.axis[0].motor.steps_per_mm = (200 * 16.) / (5 * 12)	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
 		p.axis[1].motor.steps_per_mm = (200 * 16.) / (5 * 12)
-		p.axis[2].motor.steps_per_mm = (200 * 16.) / (5 * 12)
-		#p.axis[2].motor.steps_per_mm = 200 * 16 / 1.25
+		#p.axis[2].motor.steps_per_mm = (200 * 16.) / (5 * 12)
+		p.axis[2].motor.steps_per_mm = 200 * 16 / 1.25
 		for e in range (p.maxextruders):
 			p.extruder[e].temp.beta = 3885.0342279785623
 			p.extruder[e].temp.alpha = 10.056909432214743

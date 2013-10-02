@@ -13,7 +13,7 @@ class App (gtk.EventBox):
 		self.control = False
 		self.shift = False
 		self.axis = 0
-		self.phase = 0
+		self.phase = 1
 		self.z = 0.
 		self.other = 0.
 		self.add_events (gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
@@ -51,7 +51,7 @@ class App (gtk.EventBox):
 			return 10
 		return 1
 	def move (self, dz, dother):
-		if self.phase >= 8:
+		if self.phase > 1:
 			dz = 0
 		self.z += dz
 		self.other += dother
@@ -59,6 +59,13 @@ class App (gtk.EventBox):
 		if self.axis >= 0:
 			axes[self.axis] += self.z
 		self.printer.goto (axes = axes)
+	def topoint (self);
+		if c[1] > self.other:
+			self.move (0, c[1] - self.other)
+			self.move (c[0] - self.z, 0)
+		else:
+			self.move (c[0] - self.z, 0)
+			self.move (0, c[1] - self.other)
 	def press (self, widget, event):
 		if event.keyval == gtk.keysyms.Up:
 			self.move (0, self.get_amount ())
@@ -72,37 +79,34 @@ class App (gtk.EventBox):
 			self.shift = True
 		elif event.keyval == gtk.keysyms.Control_L:
 			self.control = True
-		elif event.keyval == gtk.keysyms.Return:
-			if self.phase == 0:
-				self.z0 = self.z
-				self.zs = []
-			print '%d %d %f %f' % (self.axis, (self.phase % 8) * 10, self.z, self.other)
-			if self.phase <= 7:
-				self.zs.append ((self.z, self.other))
-			self.phase += 1
-			if self.phase == 16:
-				self.phase = 0
-				if self.z > self.other:
-					self.move (0, -self.other / 2)
-					self.move (-self.z, 0)
-				else:
-					self.move (-self.z, 0)
-					self.move (0, -self.other / 2)
-				self.axis += 1
-				if self.axis >= 3:
-					gtk.main_quit ()
+		elif event.keyval == gtk.keysyms.Escape:
+			self.zs = []
+			if self.phase != 1:
 				return
-			if self.phase >= 8:
-				c = self.zs[self.phase - 8]
-				self.phase -= 8
-				if c[1] > self.other:
-					self.move (0, c[1] - self.other)
-					self.move (c[0] - self.z, 0)
-				else:
-					self.move (c[0] - self.z, 0)
-					print c[1], self.other
-					self.move (0, c[1] - self.other)
-				self.phase += 8
+			self.point = 0
+			self.phase = 2
+			self.topoint ()
+		elif event.keyval == gtk.keysyms.Return:
+			print ('%d %f %f' % (self.axis, self.z, self.other))
+			if self.phase == 1:
+				self.zs.append ((self.z, self.other))
+				return
+			c = self.zs[self.point]
+			self.topoint ()
+			self.point += 1
+			if self.point < len (self.zs):
+				return
+			self.point = 0
+			self.phase = 1
+			if self.z > self.other:
+				self.move (0, -self.other / 2)
+				self.move (-self.z, 0)
+			else:
+				self.move (-self.z, 0)
+				self.move (0, -self.other / 2)
+			self.axis += 1
+			if self.axis >= 3:
+				gtk.main_quit ()
 	def release (self, widget, event):
 		if event.keyval == gtk.keysyms.ISO_Prev_Group:
 			self.shift = False

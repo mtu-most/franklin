@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <math.h>
 
+#define NAMELEN 16		// Length of the printer name.
 #define QUEUE_LENGTH_LOG2 4
 #define QUEUE_LENGTH (1 << QUEUE_LENGTH_LOG2)	// Number of items which can be in the queue.
 #define QUEUE_LENGTH_MASK ((1 << QUEUE_LENGTH_LOG2) - 1)	// Mask to use for circular queue.
@@ -163,9 +164,12 @@ struct Variables : public Object
 struct Axis : public Object
 {
 	Motor motor;
+	int32_t limit_min_pos;	// Position of motor (in steps) when the min limit switch is triggered.
+	int32_t limit_max_pos;	// Position of motor (in steps) when the max limit switch is triggered.
+	float length, radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
 	uint8_t limit_min_pin;
 	uint8_t limit_max_pin;
-	int32_t current_pos;
+	int32_t current_pos;	// Current position (in steps).
 	virtual void load (uint16_t &addr, bool eeprom);
 	virtual void save (uint16_t &addr, bool eeprom);
 	virtual ~Axis () {}
@@ -194,9 +198,11 @@ struct MoveCommand
 #define COMMAND_SIZE (1 << COMMAND_SIZE_LOG2)
 #define COMMAND_LEN_MASK (COMMAND_SIZE - 1)
 // Code 1 variables
+EXTERN uint8_t name[NAMELEN];
 EXTERN uint8_t num_extruders;
 EXTERN uint8_t num_axes;
 EXTERN uint8_t num_temps;
+EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN uint8_t led_pin;
 EXTERN float room_T;	//[degrees C]
 // Other variables.

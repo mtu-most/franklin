@@ -7,6 +7,7 @@ import sys
 
 wavefile = wave.open (sys.argv[1])
 data = [ord (x) for x in wavefile.readframes (wavefile.getnframes ())]
+data = [(h << 8) + l if h < 128 else (h << 8) + l - (1 << 16) for l, h in zip (data[::2], data[1::2])]
 minimum = min (data)
 maximum = max (data)
 data = [int ((x - (minimum + maximum) / 2.) / (maximum - minimum) * 7.99 + 4) for x in data]
