@@ -64,66 +64,64 @@ class Printer: # {{{
 	# }}}
 	def __init__ (self, name = None): # {{{
 		# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
-		blacklist = ('console$', 'tty$', 'ttyS?\d+$')
+		blacklist = 'console$|ttyS?\d*$'
 		for p in os.listdir ('/sys/class/tty'):
-			for b in blacklist:
-				if re.match (b, p):
-					break
-			else:
-				try:
-					self.printer = serial.Serial ('/dev/' + p, baudrate = 115200, timeout = .01)
-					# Reset firmware.
-					self.printer.setDTR (False)
-					time.sleep (.1)
-					self.printer.setDTR (True)
-					time.sleep (.1)
-					self.printer.readall ()	# flush buffer.
-					# Wait for firmware to boot.
-					self.printer.setTimeout (Printer.long_timeout)
-					r = self.printer.read ()
-					dprint ('read (0)', r)
-					if len (r) == 0:
-						continue
-					self.printer.setTimeout (Printer.default_timeout)
-					while True:
-						if r == self.single['DEBUG']:
-							self.handle_debug ()
-							r = self.printer.read ()
-							dprint ('read (0)', r)
-							continue
-						if r == self.single['INIT']:
-							break
-						dprint ('unexpected data', r)
+			if re.match (blacklist, p):
+				continue
+			try:
+				self.printer = serial.Serial ('/dev/' + p, baudrate = 115200, timeout = .01)
+				# Reset firmware.
+				self.printer.setDTR (False)
+				time.sleep (.1)
+				self.printer.setDTR (True)
+				time.sleep (.1)
+				self.printer.readall ()	# flush buffer.
+				# Wait for firmware to boot.
+				self.printer.setTimeout (Printer.long_timeout)
+				r = self.printer.read ()
+				dprint ('read (0)', r)
+				if len (r) == 0:
+					continue
+				self.printer.setTimeout (Printer.default_timeout)
+				while True:
+					if r == self.single['DEBUG']:
+						self.handle_debug ()
 						r = self.printer.read ()
 						dprint ('read (0)', r)
-					self.printer.setTimeout (Printer.default_timeout)
-					# Set up state.
-					self.ff_in = False
-					self.ff_out = False
-					self.limits = {}
-					self.wait = False
-					self.movewait = 0
-					self.tempwait = set ()
-					self.begin ()
-					self.namelen, self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBBB', self.read (0))
-					self.load (1)
-					if name is None or not re.match (name, self.name):
-						self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
-						for a in range (self.maxaxes):
-							self.axis[a].read (self.read (2 + a))
-						self.extruder = [Printer.Extruder () for t in range (self.maxextruders)]
-						for e in range (self.maxextruders):
-							self.extruder[e].read (self.read (2 + self.maxaxes + e))
-						self.temp = [Printer.Temp () for t in range (self.maxtemps)]
-						for t in range (self.maxtemps):
-							self.temp[t].read (self.read (2 + self.maxaxes + self.maxextruders + t))
-						global show_own_debug
-						if show_own_debug is None:
-							show_own_debug = True
-						return
-				except:
-					pass
-		sys.stderr.write ('Printer not found')
+						continue
+					if r == self.single['INIT']:
+						break
+					dprint ('unexpected data', r)
+					r = self.printer.read ()
+					dprint ('read (0)', r)
+				self.printer.setTimeout (Printer.default_timeout)
+				# Set up state.
+				self.ff_in = False
+				self.ff_out = False
+				self.limits = {}
+				self.wait = False
+				self.movewait = 0
+				self.tempwait = set ()
+				self.begin ()
+				self.namelen, self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBBB', self.read (0))
+				self.load (1)
+				if name is None or not re.match (name, self.name):
+					self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
+					for a in range (self.maxaxes):
+						self.axis[a].read (self.read (2 + a))
+					self.extruder = [Printer.Extruder () for t in range (self.maxextruders)]
+					for e in range (self.maxextruders):
+						self.extruder[e].read (self.read (2 + self.maxaxes + e))
+					self.temp = [Printer.Temp () for t in range (self.maxtemps)]
+					for t in range (self.maxtemps):
+						self.temp[t].read (self.read (2 + self.maxaxes + self.maxextruders + t))
+					global show_own_debug
+					if show_own_debug is None:
+						show_own_debug = True
+					return
+			except:
+				pass
+		sys.stderr.write ('Printer not found\n')
 		sys.exit (0)
 	# }}}
 	def make_packet (self, data): # {{{
@@ -573,188 +571,4 @@ class Printer: # {{{
 				break
 	# }}}
 	# }}}
-	# Presets.  {{{
-	def set_ramps_pins (self, min_limits = None, max_limits = None): # {{{
-		if min_limits is None and max_limits is None:
-			min_limits = True
-			max_limits = False
-		elif min_limits is None:
-			min_limits = not max_limits
-		elif max_limits is None:
-			max_limits = not min_limits
-		self.led_pin = 13
-		self.num_axes = 3
-		p.num_extruders = 1	# Default to 1 extruder, heated bed and fan.
-		p.num_temps = 2
-		self.axis[0].limit_min_pin = 3 if min_limits else 255
-		self.axis[0].limit_max_pin = 2 if max_limits else 255
-		self.axis[0].motor.step_pin = 54
-		self.axis[0].motor.dir_pin = 55
-		self.axis[0].motor.enable_pin = 38
-		self.axis[1].limit_min_pin = 14 if min_limits else 255
-		self.axis[1].limit_max_pin = 15 if max_limits else 255
-		self.axis[1].motor.step_pin = 60
-		self.axis[1].motor.dir_pin = 61
-		self.axis[1].motor.enable_pin = 56
-		self.axis[2].limit_min_pin = 18 if min_limits else 255
-		self.axis[2].limit_max_pin = 19 if max_limits else 255
-		self.axis[2].motor.step_pin = 46
-		self.axis[2].motor.dir_pin = 48
-		self.axis[2].motor.enable_pin = 62
-		for a in range (3, self.maxaxes):
-			self.axis[a].limit_min_pin = 255
-			self.axis[a].limit_max_pin = 255
-			self.axis[a].motor.step_pin = 255
-			self.axis[a].motor.dir_pin = 255
-			self.axis[a].motor.enable_pin = 255
-		self.extruder[0].temp.power_pin = 10
-		self.extruder[0].temp.thermistor_pin = 13
-		self.extruder[0].motor.step_pin = 26
-		self.extruder[0].motor.dir_pin = 28
-		self.extruder[0].motor.enable_pin = 24
-		self.extruder[1].temp.power_pin = 9
-		self.extruder[1].temp.thermistor_pin = 15
-		self.extruder[1].motor.step_pin = 36
-		self.extruder[1].motor.dir_pin = 34
-		self.extruder[1].motor.enable_pin = 30
-		for e in range (2, self.maxextruders):
-			self.extruder[e].temp.power_pin = 255
-			self.extruder[e].temp.thermistor_pin = 255
-			self.extruder[e].R0 = float ('nan')
-			self.extruder[e].motor.step_pin = 255
-			self.extruder[e].motor.dir_pin = 255
-			self.extruder[e].motor.enable_pin = 255
-		self.temp[0].power_pin = 8
-		self.temp[0].thermistor_pin = 14
-		for t in range (1, self.maxtemps):
-			self.temp[t].power_pin = 255
-			self.temp[t].thermistor_pin = 255
-	# }}}
-	def set_melzi_pins (self, min_limits = None, max_limits = None): # {{{
-		if min_limits is None and max_limits is None:
-			min_limits = True
-			max_limits = False
-		elif min_limits is None:
-			min_limits = not max_limits
-		elif max_limits is None:
-			max_limits = not min_limits
-		assert not (max_limits and min_limits)
-		self.led_pin = 28	# 27 according to Repetier?
-		self.axis[0].limit_min_pin = 18 if min_limits else 255
-		self.axis[0].limit_max_pin = 18 if max_limits else 255
-		self.axis[0].motor.step_pin = 15
-		self.axis[0].motor.dir_pin = 21
-		self.axis[0].motor.enable_pin = 14
-		self.axis[1].limit_min_pin = 19 if min_limits else 255
-		self.axis[1].limit_max_pin = 19 if max_limits else 255
-		self.axis[1].motor.step_pin = 22
-		self.axis[1].motor.dir_pin = 23
-		self.axis[1].motor.enable_pin = 14
-		self.axis[2].limit_min_pin = 20 if min_limits else 255
-		self.axis[2].limit_max_pin = 20 if max_limits else 255
-		self.axis[2].motor.step_pin = 3
-		self.axis[2].motor.dir_pin = 2
-		self.axis[2].motor.enable_pin = 29	#26 according to Repetier?
-		for a in range (3, self.maxaxes):
-			self.axis[a].limit_min_pin = 255
-			self.axis[a].limit_max_pin = 255
-			self.axis[a].motor.step_pin = 255
-			self.axis[a].motor.dir_pin = 255
-			self.axis[a].motor.enable_pin = 255
-		self.extruder[0].temp.power_pin = 13
-		self.extruder[0].temp.thermistor_pin = 7
-		self.extruder[0].motor.step_pin = 1
-		self.extruder[0].motor.dir_pin = 0
-		self.extruder[0].motor.enable_pin = 14
-		for e in range (1, self.maxextruders):
-			self.extruder[e].temp.power_pin = 255
-			self.extruder[e].temp.thermistor_pin = 255
-			self.extruder[e].motor.step_pin = 255
-			self.extruder[e].motor.dir_pin = 255
-			self.extruder[e].motor.enable_pin = 255
-		self.temp[0].power_pin = 12
-		self.temp[0].thermistor_pin = 6
-		self.temp[1].power_pin = 4
-		self.temp[1].thermistor_pin = 255
-		for t in range (2, self.maxtemps):
-			self.temp[t].power_pin = 255
-			self.temp[t].thermistor_pin = 255
-	# }}}
-	# }}}
-# }}}
-
-if __name__ == '__main__': # {{{
-	p = Printer ()
-	if True:
-		# Set everything up for calibration.
-		#p.set_melzi_pins (max_limits = True)
-		p.set_ramps_pins ()
-		p.num_temps = 0
-		p.room_T = 25.
-		p.temp_limit = 60000
-		p.motor_limit = 10000
-		for a in range (p.maxaxes):
-			p.axis[a].motor.max_f_neg = float ('inf')
-			p.axis[a].motor.max_f_pos = float ('inf')
-			p.axis[a].motor.steps_per_mm = float ('nan')
-		# all axis: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
-		p.axis[0].motor.steps_per_mm = (200 * 16.) / (5 * 12)	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
-		p.axis[1].motor.steps_per_mm = (200 * 16.) / (5 * 12)
-		#p.axis[2].motor.steps_per_mm = (200 * 16.) / (5 * 12)
-		p.axis[2].motor.steps_per_mm = 200 * 16 / 1.25
-		for e in range (p.maxextruders):
-			p.extruder[e].temp.beta = 3885.0342279785623
-			p.extruder[e].temp.alpha = 10.056909432214743
-			p.extruder[e].temp.core_C = float ('nan')
-			p.extruder[e].temp.shell_C = float ('nan')
-			p.extruder[e].temp.transfer = float ('nan')
-			p.extruder[e].temp.radiation = float ('nan')
-			p.extruder[e].temp.power = 12. ** 2 / 5.4
-			# Different per hobbed bolt and possibly per filament; must be measured.
-			# However, as an estimate:
-			# Small gear has 9 teeth; large gear 47.  Radius of hobbing is approximately 3.2 mm (20/2pi).
-			p.extruder[e].motor.steps_per_mm = 835 #(200 * 16.) / ((9. / 47) * 20)
-			p.extruder[e].motor.max_f_neg = float ('inf')
-			p.extruder[e].motor.max_f_pos = float ('inf')
-		for t in range (p.maxtemps):
-			p.temp[t].beta = float ('nan')
-			p.temp[t].alpha = float ('nan')
-			p.temp[t].core_C = float ('nan')
-			p.temp[t].shell_C = float ('nan')
-			p.temp[t].transfer = float ('nan')
-			p.temp[t].radiation = float ('nan')
-			p.temp[t].power = float ('nan')
-		p.temp[0].beta = 3700.
-		p.temp[0].alpha = 11.7
-		p.temp[0].radiation = float ('nan')
-		p.temp[0].power = 12. ** 2 / 1.6
-		p.write_all ()
-		p.save_all ()
-	else:
-		# Display current settings.
-		print ('num axes: %d' % p.num_axes)
-		print ('num extruders: %d' % p.num_extruders)
-		print ('num temps: %d' % p.num_temps)
-		print ('room temperature: %f' % p.room_T)
-		print ('motor limit: %d ms' % p.motor_limit)
-		print ('temp limit: %d ms' % p.temp_limit)
-		for a in range (p.maxaxes):
-			print ('Axis %d:' % a)
-			print ('\tlimit pins: %d %d' % (p.axis[a].limit_min_pin, p.axis[a].limit_max_pin))
-			print ('\tmotor pins: %d %d %d' % (p.axis[a].motor.step_pin, p.axis[a].motor.dir_pin, p.axis[a].motor.enable_pin))
-			print ('\tmotor steps per mm: %f' % p.axis[a].motor.steps_per_mm)
-			print ('\tmotor max steps per ms: %f, %f' % (p.axis[a].motor.max_f_neg, p.axis[a].motor.max_f_pos))
-		for e in range (p.maxextruders):
-			print ('extruder %d' % e)
-			print ('\ttemp pins: %d %d' % (p.extruder[e].temp.power_pin, p.extruder[e].temp.thermistor_pin))
-			print ('\ttemp settings: %f %f %f %f %f %f %f' % (p.extruder[e].temp.alpha, p.extruder[e].temp.beta, p.extruder[e].temp.core_C, p.extruder[e].temp.shell_C, p.extruder[e].temp.transfer, p.extruder[e].temp.radiation, p.extruder[e].temp.power))
-			print ('\tmotor pins: %d %d %d' % (p.extruder[e].motor.step_pin, p.extruder[e].motor.dir_pin, p.extruder[e].motor.enable_pin))
-			print ('\tmotor steps per mm: %f' % p.extruder[e].motor.steps_per_mm)
-			print ('\tmotor max steps per ms: %f, %f' % (p.extruder[e].motor.max_f_neg, p.extruder[e].motor.max_f_pos))
-		for t in range (p.maxtemps):
-			print ('temp %d' % t)
-			print ('\tpins: %d %d' % (p.temp[t].power_pin, p.temp[t].thermistor_pin))
-			print ('\tsettings: %f %f %f %f %f %f %f' % (p.temp[t].alpha, p.temp[t].beta, p.temp[t].core_C, p.temp[t].shell_C, p.temp[t].transfer, p.temp[t].radiation, p.temp[t].power))
-		for i in range (2 + p.maxaxes, 2 + p.maxaxes + p.maxextruders + p.maxtemps):
-			print ('temp %d: %f' % (i, p.readtemp (i)))
 # }}}

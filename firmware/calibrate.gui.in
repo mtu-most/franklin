@@ -1,0 +1,33 @@
+gtk
+	Window title=':Printer calibration'
+		VBox
+			HBox
+				VBox
+					RadioButton group=:board value=melzi
+						'Melzi
+					CheckButton value=melzi_min_limits:True
+						'Have limit switches at minimum travel
+				VBox
+					RadioButton group=:board
+						'Ramps
+					CheckButton value=ramps_min_limits:True
+						'Have limit switches at minimum travel
+					CheckButton value=ramps_max_limits:False
+						'Have limit switches at maximum travel
+			HBox
+				'Seconds inactivity before motors go idle
+				Entry value=motor_limit:10
+			HBox
+				'Seconds inactivity before heaters go idle
+				Entry value=temp_limit:600
+			HBox
+				Button clicked=set_prusa
+					'Initialize Prusa
+				Button clicked=set_delta
+					'Initialize Delta
+			Button clicked=calibrate_axis_speeds
+				'Calibrate axis motor speeds
+			Button clicked=calibrate_temps
+				'Calibrate temp sensors
+			Button clicked=save
+				'Save all settings
