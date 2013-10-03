@@ -13,7 +13,7 @@ def axis_test_single (axis, steps_per_s, use_min, slow, neg): # {{{
 	s = -1 if use_min else 1
 	p.limits.clear ()
 	# Go to the switch.
-	p.run_axis (axis, s * slow / p.axis[axis].motor.steps_per_mm)
+	p.run_axis (axis, s * slow)
 	while len (p.limits) == 0:
 		p.recv_packet (want_any = True)
 	p.limits.clear ()
@@ -80,7 +80,7 @@ def move_z_away (): # {{{
 		return
 	print p.axis[2].limit_max_pin
 	# Move z out of the way.
-	p.run_axis (2, -p.axis[2].motor.steps_per_mm)
+	p.run_axis (2, -1)
 	while len (p.limits) == 0:
 		p.recv_packet (want_any = True)
 	p.axis[2].set_current_pos (0)
@@ -244,15 +244,15 @@ def set_melzi_pins (min_limits = None, max_limits = None): # {{{
 		p.temp[t].thermistor_pin = 255
 # }}}
 
-# Set everything up for calibration.
+# Set everything up for calibration. {{{
 def setup ():
 	if g.melzi:
 		set_melzi_pins (g.melzi_min_limits)
 	else:
 		set_ramps_pins (g.ramps_min_limits, g.ramps_max_limits)
 	p.room_T = 25.
-	p.temp_limit = int (g.temp_limit * 1000)
-	p.motor_limit = int (g.motor_limit * 1000)
+	p.temp_limit = int (float (g.temp_limit) * 1000)
+	p.motor_limit = int (float (g.motor_limit) * 1000)
 	for a in range (p.maxaxes):
 		p.axis[a].motor.max_f_neg = float ('inf')
 		p.axis[a].motor.max_f_pos = float ('inf')
@@ -300,6 +300,7 @@ def setup_delta ():
 	p.axis[1].motor.steps_per_mm = (200 * 16.) / (5 * 12)
 	p.axis[2].motor.steps_per_mm = (200 * 16.) / (5 * 12)
 	p.write_all ()
+# }}}
 
 g = gui.Gui (events = {
 		'set_prusa': setup_prusa,
