@@ -9,20 +9,20 @@
 
 static uint8_t temp_counter = 1;
 static uint8_t temp_current = 0;
-static void handle_temps (unsigned long current_time) {
+static void handle_temps (unsigned long current_time, unsigned long longtime) {
 	if (--temp_counter)
 		return;
 	temp_counter = 20;
 	uint8_t i;
-	for (i = 1; i <= 2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS; ++i) {
-		uint8_t next = (temp_current + i) % (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS);
+	for (i = 1; i <= MAXOBJECT; ++i) {
+		uint8_t next = (temp_current + i) % MAXOBJECT;
 		if (temps[next] && (!isnan (temps[next]->target) || !isnan (temps[next]->min_alarm) || !isnan (temps[next]->max_alarm)) && temps[next]->power_pin < 255 && (temps[next]->thermistor_pin < 255 || (temps[next]->target > 0 && isinf (temps[next]->target)))) {
 			temp_current = next;
 			break;
 		}
 	}
 	// If there is no temperature handling to do; return.
-	if (i > 2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS) {
+	if (i > MAXOBJECT) {
 		return;
 	}
 	float temp = NAN;
@@ -41,9 +41,11 @@ static void handle_temps (unsigned long current_time) {
 			debug ("switching on %d", temp_current);
 			SET (temps[temp_current]->power_pin);
 			temps[temp_current]->is_on = true;
+			++temps_busy;
+			last_active = longtime;
 		}
 	}
-	if (temps[temp_current]->thermistor_pin < 255)
+	if (temps[temp_current]->thermistor_pin >= 255)
 		return;
 	if (isnan (temps[temp_current]->core_C) || isnan (temps[temp_current]->shell_C) || isnan (temps[temp_current]->transfer) || isnan (temps[temp_current]->radiation)) {
 		// No valid settings; use simple on/off-regime based on current temperature only.
@@ -52,6 +54,8 @@ static void handle_temps (unsigned long current_time) {
 				debug ("switching on %d", temp_current);
 				SET (temps[temp_current]->power_pin);
 				temps[temp_current]->is_on = true;
+				++temps_busy;
+				last_active = longtime;
 			}
 		}
 		else {
@@ -59,6 +63,8 @@ static void handle_temps (unsigned long current_time) {
 				debug ("switching off %d", temp_current);
 				RESET (temps[temp_current]->power_pin);
 				temps[temp_current]->is_on = false;
+				--temps_busy;
+				last_active = longtime;
 			}
 		}
 		return;
@@ -84,10 +90,14 @@ static void handle_temps (unsigned long current_time) {
 	if (T < temps[temp_current]->target) {
 		SET (temps[temp_current]->power_pin);
 		temps[temp_current]->is_on = true;
+		++temps_busy;
+		last_active = longtime;
 	}
 	else {
 		RESET (temps[temp_current]->power_pin);
 		temps[temp_current]->is_on = false;
+		--temps_busy;
+		last_active = longtime;
 	}
 }
 
@@ -167,26 +177,46 @@ static void handle_axis (unsigned long current_time) {
 	}
 }
 
+static void handle_led (unsigned long current_time) {
+	if (current_time - led_last < 1000 / 50)
+		return;
+	led_last += 1000 / 50;
+	led_phase += 1;
+	led_phase %= 50;
+	// Timings read from https://en.wikipedia.org/wiki/File:Wiggers_Diagram.png (phonocardiogram).
+	bool state = (led_phase <= 4 || (led_phase >= 14 && led_phase <= 17));
+	if (temps_busy > 0)
+		state = !state;
+	if (state)
+		SET (led_pin);
+	else
+		RESET (led_pin);
+}
+
 void loop () {
 	serial ();
 	unsigned long current_time = micros ();
 	unsigned long longtime = millis ();
-	handle_temps (current_time);	// Periodic temps stuff: temperature regulation.
+	handle_temps (current_time, longtime);	// Periodic temps stuff: temperature regulation.
 	handle_motors (current_time, longtime);	// Movement.
 	handle_axis (current_time);	// limit switches.
-	if (motor_limit > 0 && longtime - last_active > motor_limit) {
+	handle_led (longtime);	// heart beat.
+	if (motors_busy > 0 && motor_limit > 0 && longtime - last_active > motor_limit) {
 		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 			if (!motors[m])
 				continue;
 			SET (motors[m]->enable_pin);
 		}
 	}
-	if (temp_limit > 0 && longtime - last_active > temp_limit) {
+	if (temps_busy > 0 && temp_limit > 0 && longtime - last_active > temp_limit) {
 		for (uint8_t t = 0; t < MAXOBJECT; ++t) {
 			if (!temps[t])
 				continue;
 			RESET (temps[t]->power_pin);
 			temps[t]->target = NAN;
+			temps[t]->is_on = false;
+			--temps_busy;
+			last_active = longtime;
 		}
 	}
 }

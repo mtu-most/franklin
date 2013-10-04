@@ -79,7 +79,10 @@ def parse_gcode (gcode):
 def parse_gcode_chunk (cmd, args):
 	global etemp, btemp, rel, erel
 	print ('%s %s' % (cmd, args))
-	if cmd in ('G0', 'G1'):
+	if cmd[0] == 'T':
+		# Tool selection is not currently supported.
+		pass
+	elif cmd in ('G0', 'G1'):
 		components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None}
 		for c in args:
 			assert c in components and components[c] is None
@@ -151,6 +154,10 @@ def parse_gcode_chunk (cmd, args):
 	elif cmd == 'M104':
 		etemp = args['S']
 		printer.settemp_extruder (0, etemp)
+	elif cmd == 'M106':	# Fan on
+		printer.settemp_temp (1, float ('inf'))
+	elif cmd == 'M107':
+		printer.settemp_temp (1, float ('nan'))
 	elif cmd == 'M109':
 		etemp = args['S']
 		printer.settemp_extruder (0, etemp)
@@ -178,7 +185,7 @@ def parse_gcode_chunk (cmd, args):
 class Connection (wshttpd.Wshttpd):
 	def recv (self, frame):
 		try:
-			cmd, data = json.loads (frame)
+			(cmd, data), index = json.JSONDecoder ().raw_decode (frame)
 		except:
 			self.send (json.dumps (['error', 'invalid json content']))
 			return
@@ -194,7 +201,11 @@ class Connection (wshttpd.Wshttpd):
 		if self.address.path == '/':
 			self.reply (200, open ('html/page.html').read ())
 		elif self.address.path == '/page.js':
-			self.reply (200, open ('html/page.js').read ().replace ('HOSTNAME', self.headers['Host']), {'Content-Type': 'application/javascript;charset=utf-8'})
+			if config['tls']:
+				prefix = 'wss://'
+			else:
+				prefix = 'ws://'
+			self.reply (200, open ('html/page.js').read ().replace ('HOSTNAME', prefix + self.headers['Host']), {'Content-Type': 'application/javascript;charset=utf-8'})
 		elif self.address.path == '/page.css':
 			self.reply (200, open ('html/page.css').read (), {'Content-Type': 'text/css;charset=utf-8'})
 		elif self.address.path == '/audio.ogg':

@@ -83,6 +83,7 @@ void serial ()
 					{
 						RESET (temps[o]->power_pin);
 						temps[o]->is_on = false;
+						last_active = millis ();
 					}
 				}
 			}

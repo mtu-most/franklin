@@ -16,6 +16,11 @@ void setup ()
 	last_packet = NULL;
 	out_busy = false;
 	reply_ready = false;
+	led_phase = 0;
+	led_counter = 0;
+	temps_busy = 0;
+	led_last = millis ();
+	last_active = millis ();
 	f0 = 0;
 	f1 = 0;
 	start_time = micros ();

@@ -162,6 +162,8 @@ void packet ()
 			// loop () doesn't handle it anymore, so it isn't disabled there.
 			RESET (temps[which]->power_pin);
 			temps[which]->is_on = false;
+			--temps_busy;
+			last_active = millis ();
 		}
 		Serial.write (CMD_ACK);
 		return;

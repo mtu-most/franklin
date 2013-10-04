@@ -26,14 +26,14 @@ def axis_test_single (axis, steps_per_s, use_min, slow, neg): # {{{
 		# Move away at high speed, then almost to it at low speed; if moving away failed, we'll hit the switch.
 		p.goto (axes = {axis: -s * distance}, f0 = steps_per_s / (distance * p.axis[axis].motor.steps_per_mm))
 		# Try moving to the switch again (actually epsilon mm before it).
-		p.goto (axes = {axis: -s * epsilon}, f0 = slow / ((distance - epsilon) * p.axis[axis].motor.steps_per_mm), cb = True)
+		p.goto (axes = {axis: -s * epsilon}, f0 = slow / (distance - epsilon), cb = True)
 	else:
 		# Move away slowly, then fast almost to it, then slowly slightly through it; if the fast move failed, we won't hit the switch.
-		p.goto (axes = {axis: -s * distance}, f0 = slow / (distance * p.axis[axis].motor.steps_per_mm))
+		p.goto (axes = {axis: -s * distance}, f0 = slow / distance)
 		# Try moving to the switch again (actually epsilon mm before it).
 		p.goto (axes = {axis: -s * epsilon}, f0 = steps_per_s / ((distance - epsilon) * p.axis[axis].motor.steps_per_mm))
 		# And slowly through it.
-		p.goto (axes = {axis: s * epsilon}, f0 = slow / (2 * epsilon * p.axis[axis].motor.steps_per_mm), cb = True)
+		p.goto (axes = {axis: s * epsilon}, f0 = slow / (2 * epsilon), cb = True)
 	while p.movewait > 0:
 		p.recv_packet (want_any = True)
 	print p.limits
@@ -49,7 +49,7 @@ def axis_test_half (axis, neg): # {{{
 	upper = lower * 2
 	use_min = p.axis[axis].limit_min_pin < 255
 	# Find real upper bound.
-	while axis_test_single (axis, upper, use_min, 3200., neg):
+	while axis_test_single (axis, upper, use_min, .5 * 3200. / p.axis[axis].motor.steps_per_mm, neg):
 		lower = upper
 		upper *= 2
 	slow = lower / 10
@@ -59,11 +59,11 @@ def axis_test_half (axis, neg): # {{{
 	while upper / lower - 1. > .1:
 		mid = (lower + upper) / 2
 		# Try this value.
-		if axis_test_single (axis, mid, use_min, 3200., neg):
+		if axis_test_single (axis, mid, use_min, .5 * 3200. / p.axis[axis].motor.steps_per_mm, neg):
 			lower = (mid + lower) / 2
 		else:
 			upper = (mid + upper) / 2
-	return upper / 4	# Be safe and set the limit well below the "missing steps"-limit.
+	return upper * .8	# Be safe and set the limit well below the "missing steps"-limit.
 # }}}
 def axis_test (axis): # {{{
 	p.axis[axis].motor.max_f_neg = float ('inf')	# Discard old max speed.

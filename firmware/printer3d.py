@@ -1,6 +1,6 @@
 # vim: set foldmethod=marker :
 
-show_own_debug = None
+show_own_debug = False
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -65,11 +65,14 @@ class Printer: # {{{
 	def __init__ (self, name = None): # {{{
 		# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
 		blacklist = 'console$|ttyS?\d*$'
+		found_ports = []
+		found_printers = []
 		for p in os.listdir ('/sys/class/tty'):
 			if re.match (blacklist, p):
 				continue
 			try:
 				self.printer = serial.Serial ('/dev/' + p, baudrate = 115200, timeout = .01)
+				found_ports.append (p)
 				# Reset firmware.
 				self.printer.setDTR (False)
 				time.sleep (.1)
@@ -105,7 +108,7 @@ class Printer: # {{{
 				self.begin ()
 				self.namelen, self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBBB', self.read (0))
 				self.load (1)
-				if name is None or not re.match (name, self.name):
+				if not name or re.match (name, self.name):
 					self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
 					for a in range (self.maxaxes):
 						self.axis[a].read (self.read (2 + a))
@@ -119,9 +122,11 @@ class Printer: # {{{
 					if show_own_debug is None:
 						show_own_debug = True
 					return
+				else:
+					found_printers.append ((p, self.name))
 			except:
 				pass
-		sys.stderr.write ('Printer not found\n')
+		sys.stderr.write ('Printer not found.  Usable ports: %s, Printers: %s\n' % (', '.join (found_ports), ', '.join (['%s (%s)' % (x[1], x[0]) for x in found_printers])))
 		sys.exit (0)
 	# }}}
 	def make_packet (self, data): # {{{

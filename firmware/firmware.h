@@ -30,7 +30,7 @@
 #endif
 
 #define SET_OUTPUT(pin) do { if ((pin) < 255) { pinMode ((pin), OUTPUT); }} while (0)
-#define SET_INPUT(pin) do { if ((pin) < 255) { pinMode ((pin), INPUT); }} while (0)
+#define SET_INPUT(pin) do { if ((pin) < 255) { pinMode ((pin), INPUT_PULLUP); }} while (0)
 #define SET_INPUT_NOPULLUP(pin) do { if ((pin) < 255) { pinMode ((pin), INPUT); }} while (0)
 #define SET(pin) do { if ((pin) < 255) { digitalWrite ((pin), HIGH); } } while (0)
 #define RESET(pin) do { if ((pin) < 255) { digitalWrite ((pin), LOW); } } while (0)
@@ -218,7 +218,7 @@ EXTERN Variables variables;
 EXTERN Axis axis[MAXAXES];
 EXTERN Temp temp[MAXTEMPS];
 EXTERN Extruder extruder[MAXEXTRUDERS];
-EXTERN uint8_t motors_busy;
+EXTERN uint8_t motors_busy, temps_busy;
 EXTERN unsigned long start_time;	// start time of current move [us]
 EXTERN unsigned long last_time;		// last time continuous move was handled [us]
 EXTERN float f0, f1;			// start and end f for current move [s**-1]
@@ -237,7 +237,9 @@ EXTERN bool pause_all;
 EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
-EXTERN unsigned long last_active, motor_limit, temp_limit;
+EXTERN unsigned long last_active, led_last, motor_limit, temp_limit;
+EXTERN uint8_t led_phase, led_counter;
+EXTERN float mean_temp;
 
 // debug.cpp
 void debug (char const *fmt, ...);

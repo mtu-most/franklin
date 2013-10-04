@@ -11,11 +11,11 @@ function open_websocket ()
 	if (window.hasOwnProperty ('MozWebSocket'))
 	{
 		// Old firefox.
-		websocket = new MozWebSocket ('wss://HOSTNAME');
+		websocket = new MozWebSocket ('HOSTNAME');
 	}
 	else
 	{
-		websocket = new WebSocket ('wss://HOSTNAME');
+		websocket = new WebSocket ('HOSTNAME');
 	}
 	websocket.onmessage = function (frame) { message (JSON.parse (frame.data)); }
 	websocket.onopen = setup;
