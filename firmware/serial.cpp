@@ -68,12 +68,15 @@ void serial ()
 			// Emergency reset.
 			queue_start = 0;
 			queue_end = 0;
+			delta_source[0] = NAN;
+			phase = 3;
 			for (uint8_t o = 0; o < MAXOBJECT; ++o)
 			{
 				if (motors[o])
 				{
 					motors[o]->steps_total = 0;
-					motors[o]->continuous = false;
+					motors[o]->continuous_steps_per_s = 0;
+					motors[o]->f = 0;
 					SET (motors[o]->enable_pin);
 				}
 				if (temps[o])
@@ -201,7 +204,7 @@ static void prepare_packet (char *the_packet)
 	for (uint8_t t = 0; t < (cmd_len + 2) / 3; ++t)
 	{
 		uint8_t sum = t & 7;
-		for (unsigned bit = 0; bit < 5; ++bit)
+		for (uint8_t bit = 0; bit < 5; ++bit)
 		{
 			uint8_t check = 0;
 			for (uint8_t p = 0; p < 3; ++p)

@@ -5,7 +5,7 @@ void setup ()
 	// Initialize volatile variables.
 	Serial.begin (115200);
 	command_end = 0;
-	motors_busy = 0;
+	motors_busy = false;
 	queue_start = 0;
 	queue_end = 0;
 	num_movecbs = 0;
@@ -17,13 +17,11 @@ void setup ()
 	out_busy = false;
 	reply_ready = false;
 	led_phase = 0;
-	led_counter = 0;
 	temps_busy = 0;
+	delta_source[0] = NAN;
 	led_last = millis ();
 	last_active = millis ();
-	f0 = 0;
-	f1 = 0;
-	start_time = micros ();
+	phase = 3;
 	// Prepare asynchronous command buffers.
 	limitcb_buffer[0] = 7;
 	limitcb_buffer[1] = CMD_LIMIT;
@@ -71,9 +69,10 @@ void setup ()
 	for (uint8_t o = 0; o < MAXOBJECT; ++o)
 	{
 		if (motors[o]) {
-			motors[o]->steps_total = 0;
 			motors[o]->steps_done = 0;
-			motors[o]->continuous = false;
+			motors[o]->steps_total = 0;
+			motors[o]->f = 0;
+			motors[o]->continuous_steps_per_s = 0;
 		}
 		if (temps[o]) {
 			temps[o]->last_time = time;
@@ -83,7 +82,7 @@ void setup ()
 			temps[o]->target = NAN;
 		}
 	}
-	uint16_t address = 0;
+	int16_t address = 0;
 	objects[F0]->address = address;	// Not used, but initialized anyway.
 	for (uint8_t o = 1; o < MAXOBJECT; ++o)
 	{
@@ -93,4 +92,5 @@ void setup ()
 	if (address - 1 > E2END)
 		debug ("Warning: data doesn't fit in EEPROM; decrease MAXAXES, MAXEXTRUDERS, or MAXTEMPS and reflash the firmware!");
 	Serial.write (CMD_INIT);
+	debug ("Eeprom used: %d, available: %d", address, E2END);
 }

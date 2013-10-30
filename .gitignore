@@ -1,4 +1,7 @@
 network.py
 gui.py
 *.pyc
-firmware/build-mega2560
+*.gui
+firmware/build-*
+firmware/wshttpd.py
+firmware/xdgbasedir.py

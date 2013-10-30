@@ -1,6 +1,6 @@
 #include "firmware.h"
 
-void Temp::load (uint16_t &addr, bool eeprom)
+void Temp::load (int16_t &addr, bool eeprom)
 {
 	alpha = read_float (addr, eeprom);
 	beta = read_float (addr, eeprom);
@@ -14,7 +14,7 @@ void Temp::load (uint16_t &addr, bool eeprom)
 	SET_OUTPUT (power_pin);
 }
 
-void Temp::save (uint16_t &addr, bool eeprom)
+void Temp::save (int16_t &addr, bool eeprom)
 {
 	write_float (addr, alpha, eeprom);
 	write_float (addr, beta, eeprom);
@@ -30,7 +30,7 @@ void Temp::save (uint16_t &addr, bool eeprom)
 float Temp::read () {
 	if (thermistor_pin >= 255)
 		return NAN;
-	uint16_t adc = analogRead (thermistor_pin);
+	int16_t adc = analogRead (thermistor_pin);
 	// Compute R from adc.
 	// adc = maxadc * R / (R + Rs)
 	// adc/maxadc = 1 - Rs / (R + Rs)

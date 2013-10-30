@@ -1,6 +1,6 @@
 #include "firmware.h"
 
-void Extruder::load (uint16_t &addr, bool eeprom)
+void Extruder::load (int16_t &addr, bool eeprom)
 {
 	motor.load (addr, eeprom);
 	temp.load (addr, eeprom);
@@ -9,7 +9,7 @@ void Extruder::load (uint16_t &addr, bool eeprom)
 	filament_size = read_float (addr, eeprom);
 }
 
-void Extruder::save (uint16_t &addr, bool eeprom)
+void Extruder::save (int16_t &addr, bool eeprom)
 {
 	motor.save (addr, eeprom);
 	temp.save (addr, eeprom);

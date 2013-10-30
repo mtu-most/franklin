@@ -91,9 +91,9 @@ enum Command {
 
 struct Object
 {
-	uint16_t address;
-	virtual void load (uint16_t &address, bool eeprom) = 0;
-	virtual void save (uint16_t &address, bool eeprom) = 0;
+	int16_t address;
+	virtual void load (int16_t &address, bool eeprom) = 0;
+	virtual void save (int16_t &address, bool eeprom) = 0;
 	virtual ~Object () {}
 };
 
@@ -124,8 +124,8 @@ struct Temp : public Object
 	bool is_on;				// If the heater is currently on.
 	// Functions.
 	float read ();				// Read current temperature.
-	virtual void load (uint16_t &addr, bool eeprom);
-	virtual void save (uint16_t &addr, bool eeprom);
+	virtual void load (int16_t &addr, bool eeprom);
+	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Temp () {}
 };
 
@@ -135,29 +135,29 @@ struct Motor : public Object
 	uint8_t dir_pin;
 	uint8_t enable_pin;
 	float steps_per_mm;			// hardware calibration [steps/mm].
-	float max_f_neg, max_f_pos;		// maximum value for f in positive and negative direction [steps/s].
-	float a;				// acceleration of current move [s**-2]
-	uint16_t steps_total;			// total number of steps for current move [steps].
-	uint16_t steps_done;			// finished number of steps for current move [steps].
+	float max_v_neg, max_v_pos, max_a;	// maximum value for f in positive and negative direction [steps/s], [steps/s^2].
+	int32_t steps_total, steps_done;	// finished number of steps for current move [steps].
+	float continuous_steps_per_s;		// steps per second for continuous run.
+	float continuous_steps;			// fractional continuous steps that have been done.
+	unsigned long continuous_last_time;	// micros value when last continuous iteration was run.
 	bool positive;				// direction of current movement.
-	bool continuous;			// whether the motor should move without scheduled end point.
 	float f;				// current flowrate [steps/s]; used to communicate from extruder motor to extruder temp.
-	virtual void load (uint16_t &addr, bool eeprom);
-	virtual void save (uint16_t &addr, bool eeprom);
+	virtual void load (int16_t &addr, bool eeprom);
+	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Motor () {}
 };
 
 struct Constants : public Object
 {
-	virtual void load (uint16_t &addr, bool eeprom);	// NI
-	virtual void save (uint16_t &addr, bool eeprom);
+	virtual void load (int16_t &addr, bool eeprom);	// NI
+	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Constants () {}
 };
 
 struct Variables : public Object
 {
-	virtual void load (uint16_t &addr, bool eeprom);
-	virtual void save (uint16_t &addr, bool eeprom);
+	virtual void load (int16_t &addr, bool eeprom);
+	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Variables () {}
 };
 
@@ -166,12 +166,13 @@ struct Axis : public Object
 	Motor motor;
 	int32_t limit_min_pos;	// Position of motor (in steps) when the min limit switch is triggered.
 	int32_t limit_max_pos;	// Position of motor (in steps) when the max limit switch is triggered.
-	float length, radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
+	float delta_length, delta_radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
 	uint8_t limit_min_pin;
 	uint8_t limit_max_pin;
 	int32_t current_pos;	// Current position (in steps).
-	virtual void load (uint16_t &addr, bool eeprom);
-	virtual void save (uint16_t &addr, bool eeprom);
+	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
+	virtual void load (int16_t &addr, bool eeprom);
+	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Axis () {}
 };
 
@@ -183,8 +184,8 @@ struct Extruder : public Object
 	float nozzle_size;
 	float filament_size;
 	float capacity;		// heat capacity of filament in [energy]/mm/K
-	virtual void load (uint16_t &addr, bool eeprom);
-	virtual void save (uint16_t &addr, bool eeprom);
+	virtual void load (int16_t &addr, bool eeprom);
+	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Extruder () {}
 };
 
@@ -205,6 +206,7 @@ EXTERN uint8_t num_temps;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN uint8_t led_pin;
 EXTERN float room_T;	//[degrees C]
+EXTERN float feedrate;	// Multiplication factor for f values, used at start of move.
 // Other variables.
 EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
@@ -218,10 +220,8 @@ EXTERN Variables variables;
 EXTERN Axis axis[MAXAXES];
 EXTERN Temp temp[MAXTEMPS];
 EXTERN Extruder extruder[MAXEXTRUDERS];
-EXTERN uint8_t motors_busy, temps_busy;
-EXTERN unsigned long start_time;	// start time of current move [us]
-EXTERN unsigned long last_time;		// last time continuous move was handled [us]
-EXTERN float f0, f1;			// start and end f for current move [s**-1]
+EXTERN bool motors_busy;
+EXTERN uint8_t temps_busy;
 EXTERN Motor *motors[MAXOBJECT];
 EXTERN Temp *temps[MAXOBJECT];
 EXTERN Object *objects[MAXOBJECT];
@@ -238,8 +238,14 @@ EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
 EXTERN unsigned long last_active, led_last, motor_limit, temp_limit;
-EXTERN uint8_t led_phase, led_counter;
+EXTERN uint8_t phase;
+EXTERN uint16_t led_phase;
 EXTERN float mean_temp;
+EXTERN unsigned long t[4];
+EXTERN float f[4];
+EXTERN float v[4];
+EXTERN float a[4];
+EXTERN float delta_target[3], delta_source[3];
 
 // debug.cpp
 void debug (char const *fmt, ...);
@@ -262,16 +268,26 @@ void setup ();
 void loop ();	// Do stuff which needs doing: moving motors and adjusting heaters.
 
 // storage.cpp
-uint8_t read_8 (uint16_t &address, bool eeprom);
-void write_8 (uint16_t &address, uint8_t data, bool eeprom);
-uint16_t read_16 (uint16_t &address, bool eeprom);
-void write_16 (uint16_t &address, uint16_t data, bool eeprom);
-uint32_t read_32 (uint16_t &address, bool eeprom);
-void write_32 (uint16_t &address, uint32_t data, bool eeprom);
-float read_float (uint16_t &address, bool eeprom);
-void write_float (uint16_t &address, float data, bool eeprom);
+uint8_t read_8 (int16_t &address, bool eeprom);
+void write_8 (int16_t &address, uint8_t data, bool eeprom);
+int16_t read_16 (int16_t &address, bool eeprom);
+void write_16 (int16_t &address, int16_t data, bool eeprom);
+int32_t read_32 (int16_t &address, bool eeprom);
+void write_32 (int16_t &address, int32_t data, bool eeprom);
+float read_float (int16_t &address, bool eeprom);
+void write_float (int16_t &address, float data, bool eeprom);
 
 // play.cpp
-void play (uint32_t num_samples);
+void play (int32_t num_samples, uint32_t axes, uint32_t extruders);
+
+static inline int32_t delta_to_axis (uint8_t a, float *target) {
+	float dx = target[0] - axis[a].x;
+	float dy = target[1] - axis[a].y;
+	float dz = target[2] - axis[a].z;
+	float r = sqrt (dx * dx + dy * dy);
+	float dest = sqrt (axis[a].delta_length * axis[a].delta_length - r * r) + dz;
+	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", &dx, &dy, &dz, &axis[a].z, &r, &target);
+	return int32_t (dest * axis[a].motor.steps_per_mm) - axis[a].current_pos;
+}
 
 #endif

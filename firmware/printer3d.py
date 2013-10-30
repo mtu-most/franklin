@@ -11,6 +11,8 @@ import struct
 import os
 import re
 import sys
+import wave
+import sys
 # }}}
 
 def dprint (x, data): # {{{
@@ -71,14 +73,21 @@ class Printer: # {{{
 			if re.match (blacklist, p):
 				continue
 			try:
+				# Set up state.
+				self.ff_in = False
+				self.ff_out = False
+				self.limits = {}
+				self.wait = False
+				self.movewait = 0
+				self.tempwait = set ()
 				self.printer = serial.Serial ('/dev/' + p, baudrate = 115200, timeout = .01)
 				found_ports.append (p)
-				# Reset firmware.
+				self.printer.readall ()	# flush buffer.
+				# Reset printer.
 				self.printer.setDTR (False)
 				time.sleep (.1)
 				self.printer.setDTR (True)
 				time.sleep (.1)
-				self.printer.readall ()	# flush buffer.
 				# Wait for firmware to boot.
 				self.printer.setTimeout (Printer.long_timeout)
 				r = self.printer.read ()
@@ -88,7 +97,7 @@ class Printer: # {{{
 				self.printer.setTimeout (Printer.default_timeout)
 				while True:
 					if r == self.single['DEBUG']:
-						self.handle_debug ()
+						self._handle_debug ()
 						r = self.printer.read ()
 						dprint ('read (0)', r)
 						continue
@@ -98,26 +107,19 @@ class Printer: # {{{
 					r = self.printer.read ()
 					dprint ('read (0)', r)
 				self.printer.setTimeout (Printer.default_timeout)
-				# Set up state.
-				self.ff_in = False
-				self.ff_out = False
-				self.limits = {}
-				self.wait = False
-				self.movewait = 0
-				self.tempwait = set ()
-				self.begin ()
-				self.namelen, self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBBB', self.read (0))
+				self._begin ()
+				self.namelen, self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBBB', self._read (0))
 				self.load (1)
 				if not name or re.match (name, self.name):
 					self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
 					for a in range (self.maxaxes):
-						self.axis[a].read (self.read (2 + a))
+						self.axis[a].read (self._read (2 + a))
 					self.extruder = [Printer.Extruder () for t in range (self.maxextruders)]
 					for e in range (self.maxextruders):
-						self.extruder[e].read (self.read (2 + self.maxaxes + e))
+						self.extruder[e].read (self._read (2 + self.maxaxes + e))
 					self.temp = [Printer.Temp () for t in range (self.maxtemps)]
 					for t in range (self.maxtemps):
-						self.temp[t].read (self.read (2 + self.maxaxes + self.maxextruders + t))
+						self.temp[t].read (self._read (2 + self.maxaxes + self.maxextruders + t))
 					global show_own_debug
 					if show_own_debug is None:
 						show_own_debug = True
@@ -125,11 +127,12 @@ class Printer: # {{{
 				else:
 					found_printers.append ((p, self.name))
 			except:
+				#print sys.exc_value
 				pass
 		sys.stderr.write ('Printer not found.  Usable ports: %s, Printers: %s\n' % (', '.join (found_ports), ', '.join (['%s (%s)' % (x[1], x[0]) for x in found_printers])))
-		sys.exit (0)
+		raise ValueError ('printer not found')
 	# }}}
-	def make_packet (self, data): # {{{
+	def _make_packet (self, data): # {{{
 		data = chr (len (data) + 1) + data
 		for t in range ((len (data) + 2) / 3):
 			check = t & 0x7
@@ -146,7 +149,7 @@ class Printer: # {{{
 		#print ' '.join (['%02x' % ord (x) for x in data])
 		return data
 	# }}}
-	def parse_packet (self, data): # {{{
+	def _parse_packet (self, data): # {{{
 		#print ' '.join (['%02x' % ord (x) for x in data])
 		if ord (data[0]) + (ord (data[0]) + 2) / 3 != len (data):
 			return None
@@ -167,11 +170,11 @@ class Printer: # {{{
 					return None
 		return data[1:length]
 	# }}}
-	def send_packet (self, data): # {{{
+	def _send_packet (self, data): # {{{
 		if self.ff_out:
 			data = chr (ord (data[0]) | 0x80) + data[1:]
 		self.ff_out = not self.ff_out
-		data = self.make_packet (data)
+		data = self._make_packet (data)
 		events = 0
 		ready = 0
 		while True:
@@ -184,7 +187,7 @@ class Printer: # {{{
 				if r == '':
 					break	# Packet was not received.  Break from this loop to resend it.
 				if r == self.single['DEBUG']:
-					self.handle_debug ()
+					self._handle_debug ()
 					continue
 				if r == self.single['ACK']:
 					return	# Done.
@@ -203,11 +206,11 @@ class Printer: # {{{
 					continue
 				# Regular packet received.  Must be asynchronous; handle it.
 				#print repr (r)
-				reply = self.recv_packet (r, True)
+				reply = self._recv_packet (r, True)
 				#print repr (reply)
 				assert reply == ''
 	# }}}
-	def recv_packet (self, buffer = '', want_any = False, end_time = None): # {{{
+	def _recv_packet (self, buffer = '', want_any = False, end_time = None): # {{{
 		if end_time:
 			self.printer.setTimeout (end_time - time.time ())
 		while True:
@@ -219,11 +222,12 @@ class Printer: # {{{
 					if end_time and time.time () >= end_time:
 						self.printer.setTimeout (Printer.default_timeout)
 						return ''
-					dprint ('writing (2)', self.single['NACK']);
-					self.printer.write (self.single['NACK'])
+					if want_any == False:
+						dprint ('writing (2)', self.single['NACK']);
+						self.printer.write (self.single['NACK'])
 					continue
 				if r == self.single['DEBUG']:
-					self.handle_debug ()
+					self._handle_debug ()
 					continue
 				assert r != self.single['INIT']	# This should be handled more gracefully.  TODO.
 				assert (ord (r) & 0x80) == 0	# This must not happen.
@@ -240,7 +244,7 @@ class Printer: # {{{
 				buffer += r
 			else:
 				# Entire buffer has been received.
-				data = self.parse_packet (buffer)
+				data = self._parse_packet (buffer)
 				if data is None:
 					dprint ('writing (4)', self.single['NACK']);
 					self.printer.write (self.single['NACK'])
@@ -261,9 +265,9 @@ class Printer: # {{{
 				self.ff_in = not self.ff_in
 				# Handle the asynchronous events here; don't bother the caller with them.
 				if data[0] == self.rcommand['MOVECB']:
-					for i in range (ord (data[1])):
-						assert self.movewait > 0
-						self.movewait -= 1
+					num = ord (data[1])
+					assert self.movewait >= num
+					self.movewait -= num
 					if want_any:
 						if end_time:
 							self.printer.setTimeout (Printer.default_timeout)
@@ -271,8 +275,8 @@ class Printer: # {{{
 					buffer = ''
 					continue	# Start over.
 				if data[0] == self.rcommand['TEMPCB']:
-					assert ord (data[0]) in self.tempwait
-					self.tempwait.remove (ord (data[0]))
+					assert ord (data[1]) in self.tempwait
+					self.tempwait.remove (ord (data[1]))
 					if want_any:
 						if end_time:
 							self.printer.setTimeout (Printer.default_timeout)
@@ -309,9 +313,9 @@ class Printer: # {{{
 		dprint ('(2) read', r)
 		assert probe or r != ''
 		self.printer.setTimeout (Printer.default_timeout)
-		assert self.recv_packet (r, True) == ''
+		assert self._recv_packet (r, True) == ''
 	# }}}
-	def handle_debug (self): # {{{
+	def _handle_debug (self): # {{{
 		s = ''
 		while True:
 			r = self.printer.read (1)
@@ -331,10 +335,10 @@ class Printer: # {{{
 	# }}}
 	class Motor: # {{{
 		def read (self, data):
-			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f_neg, self.max_f_pos = struct.unpack ('<BBBfff', data[:15])
-			return data[15:]
+			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_v_neg, self.max_v_pos, self.max_a = struct.unpack ('<BBBffff', data[:19])
+			return data[19:]
 		def write (self):
-			return struct.pack ('<BBBfff', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_f_neg, self.max_f_pos)
+			return struct.pack ('<BBBffff', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.max_v_neg, self.max_v_pos, self.max_a)
 	# }}}
 	class Axis: # {{{
 		def __init__ (self, printer, id):
@@ -343,15 +347,15 @@ class Printer: # {{{
 			self.motor = Printer.Motor ()
 		def read (self, data):
 			data = self.motor.read (data)
-			self.limit_min_pin, self.limit_max_pin = struct.unpack ('<BB', data)
+			self.limit_min_pin, self.limit_max_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius = struct.unpack ('<BBllff', data)
 		def write (self):
-			return self.motor.write () + struct.pack ('<BB', self.limit_min_pin, self.limit_max_pin)
+			return self.motor.write () + struct.pack ('<BBllff', self.limit_min_pin, self.limit_max_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius)
 		def set_current_pos (self, pos):
-			self.printer.send_packet (struct.pack ('<BBl', self.printer.command['SETPOS'], 2 + self.id, pos))
+			self.printer._send_packet (struct.pack ('<BBl', self.printer.command['SETPOS'], 2 + self.id, pos))
 		def get_current_pos (self):
-			self.printer.send_packet (struct.pack ('<BB', self.printer.command['GETPOS'], 2 + self.id))
-			ret = self.recv_packet ()
-			assert ret[0] == self.rcommand['POS']
+			self.printer._send_packet (struct.pack ('<BB', self.printer.command['GETPOS'], 2 + self.id))
+			ret = self.printer._recv_packet ()
+			assert ret[0] == self.printer.rcommand['POS']
 			return struct.unpack ('<l', ret[1:])[0]
 	# }}}
 	class Extruder: # {{{
@@ -367,13 +371,13 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	# Internal commands.  {{{
-	def begin (self): # {{{
-		self.send_packet (struct.pack ('<Bf', self.command['BEGIN'], 0))
-		assert struct.unpack ('<Bf', self.recv_packet ()) == (ord (self.rcommand['START']), 0.0)
+	def _begin (self): # {{{
+		self._send_packet (struct.pack ('<Bf', self.command['BEGIN'], 0))
+		assert struct.unpack ('<Bf', self._recv_packet ()) == (ord (self.rcommand['START']), 0.0)
 	# }}}
-	def read (self, channel): # {{{
-		self.send_packet (struct.pack ('<BB', self.command['READ'], channel))
-		p = self.recv_packet ()
+	def _read (self, channel): # {{{
+		self._send_packet (struct.pack ('<BB', self.command['READ'], channel))
+		p = self._recv_packet ()
 		assert p[0] == self.rcommand['DATA']
 		return p[1:]
 	# }}}
@@ -412,7 +416,7 @@ class Printer: # {{{
 		if e is not None:
 			targets[(2 + self.num_axes + which) >> 3] |= 1 << ((2 + self.num_axes + which) & 0x7)
 			args += struct.pack ('<f', e)
-		self.send_packet (p + ''.join ([chr (t) for t in targets]) + args)
+		self._send_packet (p + ''.join ([chr (t) for t in targets]) + args)
 	# }}}
 	def run_axis (self, which, speed): # {{{
 		self.run (2 + which, speed)
@@ -421,7 +425,7 @@ class Printer: # {{{
 		self.run (2 + self.maxaxes + which, speed)
 	# }}}
 	def run (self, channel, speed):	# speed: float; 0 means off. # {{{
-		self.send_packet (struct.pack ('<BBf', self.command['RUN'], channel, speed))
+		self._send_packet (struct.pack ('<BBf', self.command['RUN'], channel, speed))
 	# }}}
 	def sleep_axis (self, which, sleeping = True): # {{{
 		self.sleep (2 + which, sleeping)
@@ -430,7 +434,7 @@ class Printer: # {{{
 		self.sleep (2 + self.maxaxes + which, sleeping)
 	# }}}
 	def sleep (self, channel, sleeping = True): # {{{
-		self.send_packet (struct.pack ('<BB', self.command['SLEEP'], (channel & 0x7f) | (0x80 if sleeping else 0)))
+		self._send_packet (struct.pack ('<BB', self.command['SLEEP'], (channel & 0x7f) | (0x80 if sleeping else 0)))
 	# }}}
 	def settemp_extruder (self, which, temp):	# {{{
 		self.settemp (2 + self.maxaxes + which, temp)
@@ -439,7 +443,7 @@ class Printer: # {{{
 		self.settemp (2 + self.maxaxes + self.maxextruders + which, temp)
 	# }}}
 	def settemp (self, channel, temp): # {{{
-		self.send_packet (struct.pack ('<BBf', self.command['SETTEMP'], channel, temp))
+		self._send_packet (struct.pack ('<BBf', self.command['SETTEMP'], channel, temp))
 	# }}}
 	def waittemp_extruder (self, which, min, max):	# {{{
 		self.waittemp (2 + self.maxaxes + which, min, max)
@@ -452,7 +456,7 @@ class Printer: # {{{
 			min = float ('nan')
 		if max is None:
 			max = float ('nan')
-		self.send_packet (struct.pack ('<BBff', self.command['WAITTEMP'], channel, min, max))
+		self._send_packet (struct.pack ('<BBff', self.command['WAITTEMP'], channel, min, max))
 		if math.isnan (min) and math.isnan (max):
 			self.tempwait.discard (channel)
 		else:
@@ -463,8 +467,8 @@ class Printer: # {{{
 			self.block ()
 	# }}}
 	def readtemp (self, channel): # {{{
-		self.send_packet (struct.pack ('<BB', self.command['READTEMP'], channel))
-		ret = self.recv_packet ()
+		self._send_packet (struct.pack ('<BB', self.command['READTEMP'], channel))
+		ret = self._recv_packet ()
 		assert ret[0] == self.rcommand['TEMP']
 		return struct.unpack ('<f', ret[1:])[0]
 	# }}}
@@ -481,18 +485,18 @@ class Printer: # {{{
 		self.load (2 + self.maxaxes + self.maxextruders + which)
 	# }}}
 	def load (self, channel): # {{{
-		self.send_packet (struct.pack ('<BB', self.command['LOAD'], channel))
+		self._send_packet (struct.pack ('<BB', self.command['LOAD'], channel))
 		if channel == 1:
-			data = self.read (1)
+			data = self._read (1)
 			self.name = data[:self.namelen]
-			self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit = struct.unpack ('<BBBBBfLL', data[self.namelen:])
+			self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate = struct.unpack ('<BBBBBfLLf', data[self.namelen:])
 		elif 2 <= channel < 2 + self.maxaxes:
-			self.axis[channel - 2].read (self.read (channel))
+			self.axis[channel - 2].read (self._read (channel))
 		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
-			self.extruder[channel - 2 - self.maxaxes].read (self.read (channel))
+			self.extruder[channel - 2 - self.maxaxes].read (self._read (channel))
 		else:
 			assert channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps
-			self.temp[channel - 2 - self.maxaxes - self.maxextruders].read (self.read (channel))
+			self.temp[channel - 2 - self.maxaxes - self.maxextruders].read (self._read (channel))
 	# }}}
 	def load_all (self): # {{{
 		for i in range (1, 2 + self.maxaxes + self.maxextruders + self.maxtemps):
@@ -512,7 +516,7 @@ class Printer: # {{{
 		self.save (2 + self.maxaxes + self.maxextruders + which)
 	# }}}
 	def save (self, channel): # {{{
-		self.send_packet (struct.pack ('<BB', self.command['SAVE'], channel))
+		self._send_packet (struct.pack ('<BB', self.command['SAVE'], channel))
 	# }}}
 	def save_all (self): # {{{
 		for i in range (1, 2 + self.maxaxes + self.maxextruders + self.maxtemps):
@@ -520,20 +524,20 @@ class Printer: # {{{
 			self.save (i)
 	# }}}
 	def write_variables (self): # {{{
-		data = (self.name + chr (0) * self.namelen)[:self.namelen] + struct.pack ('<BBBBBfLL', self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit)
-		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 1) + data)
+		data = (self.name + chr (0) * self.namelen)[:self.namelen] + struct.pack ('<BBBBBfLLf', self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate)
+		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 1) + data)
 	# }}}
 	def write_axis (self, which): # {{{
 		data = self.axis[which].write ()
-		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + which) + data)
+		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + which) + data)
 	# }}}
 	def write_extruder (self, which): # {{{
 		data = self.extruder[which].write ()
-		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + which) + data)
+		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + which) + data)
 	# }}}
 	def write_temp (self, which): # {{{
 		data = self.temp[which].write ()
-		self.send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + self.maxextruders + which) + data)
+		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + self.maxextruders + which) + data)
 	# }}}
 	def write (self, channel): # {{{
 		if channel == 1:
@@ -551,29 +555,119 @@ class Printer: # {{{
 			self.write (i)
 	# }}}
 	def pause (self, pausing = True): # {{{
-		self.send_packet (struct.pack ('<BB', self.command['PAUSE'], pausing))
+		self._send_packet (struct.pack ('<BB', self.command['PAUSE'], pausing))
 	# }}}
 	def ping (self, arg = 0): # {{{
-		self.send_packet (struct.pack ('<BB', self.command['PING'], arg))
-		assert struct.unpack ('<BB', self.recv_packet ()) == (ord (self.rcommand['PONG']), arg)
+		self._send_packet (struct.pack ('<BB', self.command['PING'], arg))
+		assert struct.unpack ('<BB', self._recv_packet ()) == (ord (self.rcommand['PONG']), arg)
 	# }}}
-	def play (self, data): # {{{
-		self.send_packet (struct.pack ('<BQ', self.command['PLAY'], len (data) - len (data) % 32))
-		self.printer.write (data[:60])
-		p = 60
-		r = self.printer.read (1)
-		if r != Printer.single['INIT']:
-			dprint ('huh?', r)
-			return
-		while p + 30 <= len (data):
-			# Send fragment
-			self.printer.write (data[p:p+30])
-			p += 30
-			# Wait for ack
+	def home (self, axes = (0, 1, 2)): # {{{
+		if self.printer_type != 1:
+			# Find the switches.
+			self.limits.clear ()
+			for axis in axes:
+				s = 3200. / self.axis[axis].motor.steps_per_mm
+				self.run_axis (axis, -s if self.axis[axis].limit_min_pin < 255 else s)
+			self.wait_for_limits (len (axes))
+			# Back off a bit.
+			axesmove = {}
+			for axis in axes:
+				self.axis[axis].set_current_pos (0)
+				axesmove[axis] = 3 if self.axis[axis].limit_min_pin < 255 else -3
+			self.goto (axes = axesmove, cb = True)
+			self.wait_for_cb ()
+			# Move there again, but slowly.
+			self.limits.clear ()
+			for axis in axes:
+				self.run_axis (axis, -1 if self.axis[axis].limit_min_pin < 255 else 1)
+			self.wait_for_limits (len (axes))
+			# Current position is 0.
+			ret = [self.axis[axis].limit_min_pos if self.axis[axis].limit_min_pin < 255 else self.axis[axis].limit_max_pos for axis in axes]
+			for i, axis in enumerate (axes):
+				self.axis[axis].set_current_pos (ret[i])
+			return [p / axis[i].motor.steps_per_mm for i, p in enumerate (axes)]
+		else:
+			# Compute home position close to limit switches.
+			if self.axis[0].limit_max_pin < 255:
+				pos = (0, 0, min ([self.axis[i].limit_max_pos / self.axis[i].motor.steps_per_mm for i in range (3)]) - 10)
+			else:
+				pos = [0, 0, max ([self.axis[i].limit_min_pos / self.axis[i].motor.steps_per_mm for i in range (3)]) + 10]
+			# Go to limit switches.
+			self.limits.clear ()
+			s = 1 if self.axis[0].limit_max_pin < 255 else -1
+			for i in range (3):
+				self.run_axis (i, s * 50)
+			self.wait_for_limits (3)
+			# Set positions to limit switch positions.
+			for i in range (3):
+				self.axis[i].set_current_pos (self.axis[i].limit_max_pos if self.axis[0].limit_max_pin < 255 else self.axis[i].limit_min_pos)
+			# Go to home position.
+			self.goto (pos, cb = True)
+			self.wait_for_cb ()
+			# Slowly go to limit switches.
+			self.limits.clear ()
+			for i in range (3):
+				self.run_axis (i, s * 10)
+			self.wait_for_limits (3)
+			self.limits.clear ()
+			# Set positions to improved values.
+			for i in range (3):
+				self.axis[i].set_current_pos (self.axis[i].limit_max_pos if self.axis[0].limit_max_pin < 255 else self.axis[i].limit_min_pos)
+			# Go to home position.
+			self.goto (pos, cb = True)
+			# Return current nozzle position.
+			return [pos[a] for a in axes]
+	# }}}
+	def play (self, file, axes = (), extruders = (0,)): # {{{
+		wavefile = wave.open (file)
+		data = [ord (x) for x in wavefile.readframes (wavefile.getnframes ())]
+		data = [(h << 8) + l if h < 128 else (h << 8) + l - (1 << 16) for l, h in zip (data[::2], data[1::2])]
+		minimum = min (data)
+		maximum = max (data)
+		data = [int ((x - (minimum + maximum) / 2.) / (maximum - minimum) * 7.99 + 4) for x in data]
+		d = ''
+		for pos in range (0, len (data) - 7, 8):
+			d += chr ((data[pos + 0] | data[pos + 1] << 3 | data[pos + 2] << 6) & 0xff)
+			d += chr ((data[pos + 2] >> 2 | data[pos + 3] << 1 | data[pos + 4] << 4 | data[pos + 5] << 7) & 0xff)
+			d += chr ((data[pos + 5] >> 1 | data[pos + 6] << 2 | data[pos + 7] << 5) & 0xff)
+
+		fragments = len (d) / 30
+		arg = 0
+		for a in axes:
+			arg |= 1 << (a + 2)
+		for e in extruders:
+			arg |= 1 << (e + 2 + self.num_axes)
+		self._send_packet (struct.pack ('<BlL', self.command['PLAY'], fragments * 30, arg).rstrip ('\0'))
+		fragment = 0
+		while True:
 			r = self.printer.read (1)
-			if r != Printer.single['INIT']:
-				dprint ('huh?', r)
+			while r == Printer.single['DEBUG']:
+				self._handle_debug ()
+				r = self.printer.read (1)
+			if r == Printer.single['ACK']:
 				break
+			if r == Printer.single['ACKWAIT']:
+				#dprint ('sending %d/%d' % (fragment, fragments), d[fragment * 30:(fragment + 1) * 30])
+				while fragment >= fragments:
+					fragment -= fragments
+				self.printer.write (d[fragment * 30:(fragment + 1) * 30])
+				fragment += 1
+				continue
+			dprint ('problem', r)
+			self.printer.read ()
+			break
+	# }}}
+	def wait_for_cb (self): # {{{
+		while self.movewait:
+			self._recv_packet (want_any = True)
+	# }}}
+	def wait_for_limits (self, num = 1): # {{{
+		while len (self.limits) < num:
+			self._recv_packet (want_any = True)
+	# }}}
+	def wait_for_temp (self): # {{{
+		while len (self.tempwait) > 0:
+			self._recv_packet (want_any = True)
 	# }}}
 	# }}}
 # }}}
