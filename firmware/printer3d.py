@@ -585,7 +585,7 @@ class Printer: # {{{
 			ret = [self.axis[axis].limit_min_pos if self.axis[axis].limit_min_pin < 255 else self.axis[axis].limit_max_pos for axis in axes]
 			for i, axis in enumerate (axes):
 				self.axis[axis].set_current_pos (ret[i])
-			return [p / axis[i].motor.steps_per_mm for i, p in enumerate (axes)]
+			return [p / self.axis[i].motor.steps_per_mm for i, p in enumerate (axes)]
 		else:
 			# Compute home position close to limit switches.
 			if self.axis[0].limit_max_pin < 255:

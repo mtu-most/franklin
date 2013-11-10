@@ -39,6 +39,9 @@ elif request == 'extrude':
 	reprap.extrude (float (query.getfirst ('dir')), int (query.getfirst ('extruder', 0)))
 	reprap.wait ()
 	print ('ok')
+elif request == 'add_z_offset':
+	reprap.add_z_offset (float (query.getfirst ('offset')))
+	print ('ok')
 elif request == 'feedfactor':
 	reprap.feedfactor (float (query.getfirst ('factor')))
 	print ('ok')

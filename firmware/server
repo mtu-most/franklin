@@ -89,10 +89,10 @@ def parse_gcode_chunk (cmd, args):
 			dist = abs (estep)
 		#if f0 is None:
 		f0 = pos[4]
-		print ('going to %s estep %s f0 %s dist %s' % (pos, estep, f0, dist))
+		#print ('going to %s estep %s f0 %s dist %s' % (pos, estep, f0, dist))
 		if dist > 0:
-			printer.goto (axes = {0: pos[0], 1: pos[1], 2: pos[2]}, e = estep, f0 = f0 / dist / 60, f1 = pos[4] / dist / 60, cb = True)
-			printer.wait_for_cb ()
+			printer.goto (axes = {0: pos[0], 1: pos[1], 2: pos[2]}, e = estep, f0 = f0 / dist / 60, f1 = pos[4] / dist / 60, cb = False)
+			#printer.wait_for_cb ()
 	elif cmd == 'G28':
 		flush ()
 		which = ''

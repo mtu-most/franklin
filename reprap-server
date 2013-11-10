@@ -6,6 +6,7 @@ import serial
 import argparse
 import re
 import glib
+import sys
 
 a = argparse.ArgumentParser ()
 a.add_argument ('--serial', default = '/dev/ttyACM0', help = 'serial port')
@@ -27,6 +28,7 @@ class Server:
 		self.sdstarted = False
 		self.relpos = False
 		self.erelpos = False
+		self.z_offset = 0.
 		if port == '':
 			self.port = None
 			self.extruders = 4
@@ -34,15 +36,19 @@ class Server:
 			self.port = serial.Serial (port, baudrate = baud, timeout = .01)
 			self.port.readall ()
 			self.port.setTimeout (10)
-			for i in range (2):
-				if self.port.readline ().strip () == 'start':
+			for i in range (5):
+				l = self.port.readline ().strip ().strip ('\0')
+				sys.stderr.write (l + '\n')
+				if l == 'start':
 					break
 			else:
 				raise AssertionError ("printer doesn't start")
+			self.port.setTimeout (.1)
 			glib.io_add_watch (self.port.fileno (), glib.IO_IN | glib.IO_PRI, lambda fd, cond: self.serial_data ())
 			info = self.send ('M115')
 			assert info is not None
-			e = re.findall ('EXTRUDER_COUNT:(\d*)', info)
+			sys.stderr.write ('%s %s' % (info, self.port.readall ()))
+			e = [2] # re.findall ('EXTRUDER_COUNT:(\d*)', info)
 			if len (e) == 0:
 				l = self.port.readline ()
 				e = re.findall ('EXTRUDER_COUNT:(\d*)', l)
@@ -98,6 +104,8 @@ class Server:
 				del codes['F']
 				line = words[0] + ' '.join (['%s%f' % (x, float (codes[x])) for x in codes]) + ' F%f' % f
 				codes['F'] = True	# The only important thing is that it is defined.
+			if 'Z' in codes:
+				codes['Z'] = float (codes['Z']) + self.z_offset
 			if 'E' in codes:
 				codes['E'] = float (codes['E']) * self.flow[self.currentextruder]
 		ret = self._send_impl (line, retries)
@@ -334,6 +342,9 @@ class Server:
 	# }}}
 	# }}}
 	# Tweaking {{{
+	def add_z_offset (self, offset): # {{{
+		self.z_offset += offset
+	# }}}
 	def feedfactor (self, factor): # {{{
 		self.f_factor = factor
 	# }}}

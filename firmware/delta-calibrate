@@ -1,5 +1,22 @@
 #!/usr/bin/python
 
+'''
+Delta calibration.  The user must move the extruder to specific positions and
+the printer will be calibrated by this program.
+
+For each axis, the user must:
+	First move the other two (together/delta) to make the axis vertical.
+	Then move it straight down to position the calibration sheet under the nozzle.
+	Then for each circle, move it above the circle.
+	The calibration sheet is removed, and for each position the bed must be touched.
+	At this point, the rod length for the axis is computed.
+With the rod lengths known, a carriage position can be converted to a distance from the tower.
+This is used to compute the distances between the towers from the vertical position measurements.
+With these numbers, the real center point is computed, and the radii for all axes.
+The user is requested to move the nozzle to the bed at the center point.
+This is used to recompute (and check) the computed radii.  The new values are used.
+'''
+
 import sys
 import gtk
 import printer3d
@@ -8,7 +25,7 @@ import scipy.optimize
 class App (gtk.EventBox):
 	xs = [99.5, 199.0]	# Distances from center of calibration circles.
 	txt_make_vertical = 'Make the axis vertical'
-	txt_set_reference = 'position the center marker under the reference point'
+	txt_set_reference = 'Position the center marker under the reference point'
 	txt_move_to_next_point = 'Move the reference point above the next position'
 	txt_move_to_bed = 'Move the reference point to the reference plane'
 	def __init__ (self):
@@ -27,16 +44,24 @@ class App (gtk.EventBox):
 		self.connect ('key_press_event', self.press)
 		self.connect ('key_release_event', self.release)
 		self.set_can_focus (True)
-		self.label = gtk.Label (self.txt_make_vertical)
+		self.label = gtk.Label ()
+		self.set_text (self.txt_make_vertical)
+		self.amountlabel = gtk.Label ()
+		self.set_amountlabel ()
 		self.set_size_request (600, 400)
-		self.add (self.label)
+		box = gtk.VBox ()
+		box.add (self.label)
+		box.add (self.amountlabel)
+		self.add (box)
 		self.label.show ()
+		self.amountlabel.show ()
+		box.show ()
 	def start (self):
 		self.printer = printer3d.Printer ()
-		self.home ()
 		self.printer.motor_limit = 0
 		self.printer.printer_type = 0
 		self.printer.write_variables ()
+		self.home ()
 		for i in range (3):
 			self.printer.axis[i].motor.max_v_neg /= 2
 			self.printer.axis[i].motor.max_v_pos /= 2
@@ -77,8 +102,9 @@ class App (gtk.EventBox):
 			axes[self.axis] += self.z
 			axes[(self.axis + 1) % 3] += self.skew
 			axes[(self.axis + 2) % 3] -= self.skew
-		if started:
-			self.printer.goto (axes = axes)
+		if startphase > 0:
+			self.printer.goto (axes = axes, cb = True)
+			self.printer.wait_for_cb ()
 	def topoint (self):
 		c = self.zs[self.point]
 		phase = self.phase
@@ -115,22 +141,31 @@ class App (gtk.EventBox):
 				self.move (-self.get_amount (), 0, 0)
 			else:
 				self.move (0, 0, -self.get_amount ())
-		elif event.keyval == gtk.keysyms.Shift_L:
-			self.shift = True
-		elif event.keyval == gtk.keysyms.Control_L:
-			self.control = True
+		elif event.keyval in (gtk.keysyms.Shift_L, gtk.keysyms.Shift_R):
+			self.shift = not self.shift
+			self.set_amountlabel ()
+		elif event.keyval in (gtk.keysyms.Control_L, gtk.keysyms.Control_R):
+			self.control = not self.control
+			self.set_amountlabel ()
 		elif event.keyval == gtk.keysyms.Return:
 			print ('%d %5.1f %5.1f %3.1f' % (self.axis, self.z, self.other, self.skew))
 			self.handle_data ()
 	def release (self, widget, event):
+		return
 		if event.keyval == gtk.keysyms.ISO_Prev_Group:
 			self.shift = False
+			self.set_amountlabel ()
 		elif event.keyval == gtk.keysyms.Control_L:
 			self.control = False
+			self.set_amountlabel ()
 	def quit (self, x):
 		self.printer.motor_limit = 10000
 		self.printer.write_variables ()
 		gtk.main_quit ()
+	def set_text (self, text):
+		self.label.set_text (text)
+	def set_amountlabel (self):
+		self.amountlabel.set_text ('Steps of %f mm' % self.get_amount ())
 	def handle_data (self):
 		self.point += 1
 		if self.phase == 1:
@@ -139,11 +174,11 @@ class App (gtk.EventBox):
 				self.point = 1
 				self.phase = 2
 				self.topoint ()
-				self.label.set_text (self.txt_move_to_bed)
+				self.set_text (self.txt_move_to_bed)
 			elif self.point == 1:
-				self.label.set_text (self.txt_set_reference)
+				self.set_text (self.txt_set_reference)
 			else:
-				self.label.set_text (self.txt_move_to_next_point)
+				self.set_text (self.txt_move_to_next_point)
 			return
 		if self.point < len (self.zs):
 			self.topoint ()
@@ -155,7 +190,8 @@ class App (gtk.EventBox):
 			l = -z / 2 - x ** 2 / 2 / z
 			print ('l = %f' % l)
 			avg_l += l
-		print ('average l = %f' % (avg_l / len (self.xs)))
+		avg_l /= len (self.xs)
+		print ('average l = %f' % avg_l)
 		self.axisinfo.append ((z0, avg_l, self.zs[1][1] + self.skew, self.zs[1][1] - self.skew))
 		self.zs = []
 		self.point = 0
@@ -168,41 +204,47 @@ class App (gtk.EventBox):
 			self.move (-self.z, 0, 0)
 			self.move (0, -self.other / 2, -self.skew)
 		self.axis += 1
-		self.label.set_text (self.txt_make_vertical)
+		self.set_text (self.txt_make_vertical)
 		if self.axis >= 3:
 			def axislen (a, t):
 				# Compute length from axis a to axis (a + t + 1) % 3
 				b = (a + t + 1) % 3
 				z = self.axisinfo[b][2 + t] - self.axisinfo[a][0]
 				l = self.axisinfo[a][1]
-				return (-z ** 2 - 2 * l * z) ** .5
+				ret = (-z ** 2 - 2 * l * z) ** .5
+				print ('distance from axis %d to axis %d is %f' % (a, b, ret))
+				return ret
 			d = [[axislen (a, t) for t in range (2)] for a in range (3)]
 			ad = [(d[t][0] + d[(t + 1) % 3][1]) / 2 for t in range (3)]
-			print ('d = %s' % d)
+			print ('ad = %s' % ad)
 			def cosrule (a, b, c):
-				return b ** 2 + c ** 2 + b * c - a ** 2 # cos(120) == .5
+				return b ** 2 + c ** 2 + b * c - a ** 2 # cos(120) == -.5
 			def errfunc (p):
 				return [cosrule (ad[0], p[0], p[1]), cosrule (ad[1], p[1], p[2]), cosrule (ad[2], p[2], p[0])]
 			# These values are correct for an equidistant triangle (and ad[*] are all equal there), which should be pretty close.
-			p0 = [ad[0] * .5 * 3 ** .5, ad[1] * .5 * 3 ** .5, ad[2] *.5 * 3 ** .5]
+			p0 = [ad[0] * .5 * 3 ** .5, ad[1] * .5 * 3 ** .5, ad[2] * .5 * 3 ** .5]
 			p1, success = scipy.optimize.leastsq (errfunc, p0[:])
 			print ('Radii: %5.1f %5.1f %5.1f' % tuple (p1))
 			zeropos = [self.axisinfo[a][0] + (self.axisinfo[a][1] ** 2 - p1[a] ** 2) ** .5 - self.axisinfo[a][1] for a in range (3)]
 			print ('Zero positions: %s' % ', '.join (['%5.1f' % x for x in zeropos]))
-			global started
-			if not started:
-				started = None
-			else:
+			global startphase
+			if startphase > 0:
 				for i in range (3):
 					self.printer.axis[i].limit_max_pos = -zeropos[i]
 					self.printer.axis[i].delta_length = self.axisinfo[i][1]
 					self.printer.axis[i].delta_radius = p1[i]
+					self.printer.axis[i].motor.max_v_neg *= 2
+					self.printer.axis[i].motor.max_v_pos *= 2
 					self.printer.write_axis (i)
 					self.printer.save_axis (i)
 				self.printer.printer_type = 1
 				self.printer.write_variables ()
 				self.printer.save_variables ()
-				gtk.main_quit ()
+				if startphase == 2:
+					gtk.main_quit ()
+				startphase = 3
+			else:
+				startphase = 4
 
 w = gtk.Window ()
 a = App ()
@@ -210,15 +252,28 @@ w.add (a)
 w.connect ('destroy', a.quit)
 a.show ()
 w.show ()
+# 0: gtk not initialized
+# 1: window shown from input; connected to printer; loop not running
+# 2: loop running
+# 3: loop done
+# 4: loop not running; analysis done
+startphase = 0
 started = False
 if len (sys.argv) > 1:
 	with open (sys.argv[1]) as f:
 		for ln in f.readlines ():
+			if ln.strip () == '':
+				if startphase == 0:
+					startphase = 1
+					a.start ()
+				continue
 			axis, a.z, a.other, a.skew = [float (x) for x in ln.split ()]
 			a.handle_data ()
-if started is not None:
-	started = True
-	a.start ()
-	gtk.main ()
+if startphase != 4:
+	if startphase == 0:
+		a.start ()
+	if startphase < 3:
+		startphase = 2
+		gtk.main ()
 	for i in range (3):
 		a.printer.sleep_axis (i)

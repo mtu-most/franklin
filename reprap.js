@@ -304,3 +304,8 @@ function change_refresh ()
 	else
 		do_refresh = false;
 }
+
+function add_z_offset ()
+{
+	send ('add_z_offset&offset=' + document.getElementById ('offset').value)
+}
