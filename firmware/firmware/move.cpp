@@ -19,6 +19,10 @@ void next_move () {
 			diff = int32_t (target * motors[m]->steps_per_mm + .5) - axis[m - 2].current_pos;
 		else
 			diff = int32_t (target * motors[m]->steps_per_mm + .5);
+		if (diff != 0 && (motors[m]->audio_flags & (Motor::PLAYING | Motor::STATE)) == (Motor::PLAYING | Motor::STATE)) {
+			diff -= 1;
+			motors[m]->audio_flags &= ~Motor::STATE;
+		}
 		motors[m]->positive = diff > 0;
 		motors[m]->steps_total = abs (diff);
 		motors[m]->steps_done = 0;
@@ -44,11 +48,20 @@ void next_move () {
 			else
 				delta_target[c] = delta_source[c];
 		}
+		// Limit delta_target to reachable coordinates.
+		int32_t diff[3];
+		bool ok = true;
+		for (uint8_t ta = 0; ta < 3; ++ta)
+			diff[ta] = delta_to_axis (ta, delta_target, &ok);
+		if (!ok) {
+			debug ("Warning: limiting delta target");
+			for (uint8_t ta = 0; ta < 3; ++ta)
+				diff[ta] = delta_to_axis (ta, delta_target, &ok);
+		}
 		// Find target motor positions.
 		for (uint8_t ta = 0; ta < 3; ++ta) {
-			int32_t diff = delta_to_axis (ta, delta_target);
-			axis[ta].motor.steps_total = abs (diff);
-			axis[ta].motor.positive = diff > 0;
+			axis[ta].motor.steps_total = abs (diff[ta]);
+			axis[ta].motor.positive = diff[ta] > 0;
 			axis[ta].motor.steps_done = 0;
 			//debug ("delta %d steps %x %x", ta, int (axis[ta].motor.steps_total >> 16), int (axis[ta].motor.steps_total));
 		}
@@ -168,5 +181,5 @@ void next_move () {
 	t[1] = t[0] + (unsigned long)(t1f * 1e6);
 	t[2] = t[0] + (unsigned long)(t2f * 1e6);
 	t[3] = t[0] + (unsigned long)(t3f * 1e6);
-	//debug ("steps %d %d %d t %d %d %d %d v %f %f %f %f a %f %f %f %f f %f %f %f %f", int (axis[0].motor.steps_total), int (axis[1].motor.steps_total), int (axis[2].motor.steps_total), int (t[0]), int (t[1]), int (t[2]), int (t[3]), &v[0], &v[1], &v[2], &v[3], &a[0], &a[1], &a[2], &a[3], &f[0], &f[1], &f[2], &f[3]);
+	//debug ("xsteps %x %x t %d %d %d %d v %f %f %f %f a %f %f %f %f f %f %f %f %f", int (axis[0].motor.steps_total >> 16), int (axis[1].motor.steps_total), int (t[0]), int (t[1]), int (t[2]), int (t[3]), &v[0], &v[1], &v[2], &v[3], &a[0], &a[1], &a[2], &a[3], &f[0], &f[1], &f[2], &f[3]);
 }

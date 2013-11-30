@@ -160,6 +160,23 @@ static void reverse (uint8_t m) {
 }
 
 static void handle_motors (unsigned long current_time, unsigned long longtime) {
+	if (pause_all)
+		return;
+	int8_t audio_state = -1;
+	uint8_t bit = (current_time - audio_start) / audio_us_per_bit;
+	uint8_t byte = bit >> 3;
+	if (audio_head != audio_tail) {
+		while (byte >= AUDIO_FRAGMENT_SIZE) {
+			audio_head = (audio_head + 1) % AUDIO_FRAGMENTS;
+			if (audio_tail == audio_head)
+				break;
+			byte -= AUDIO_FRAGMENT_SIZE;
+			// us per fragment = us/bit*bit/fragment
+			audio_start += audio_us_per_bit * 8 * AUDIO_FRAGMENT_SIZE;
+		}
+		if (audio_head != audio_tail)
+			audio_state = (audio_buffer[audio_head][byte] >> (bit & 7)) & 1;
+	}
 	while (phase < 3 && current_time - t[phase] >= t[phase + 1] - t[phase]) {
 		//debug ("step %d %d %d %d %d %d", int (t[0]), int (current_time - t[0]), int (t[1] - t[0]), int (t[2] - t[0]), int (t[3] - t[0]), int (phase));
 		if (++phase >= 3) {
@@ -182,8 +199,19 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 	}
 	// Check for continuous moves.
 	for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-		if (!motors[m] || motors[m]->steps_total != 0 || (motors[m]->continuous_steps_per_s == 0 && motors[m]->f == 0)) {
-			// Doing a regular move, or not moving at all.
+		if (!motors[m] || motors[m]->steps_total != 0)
+			continue;
+		if (motors[m]->continuous_steps_per_s == 0 && motors[m]->f == 0) {
+			// Non-moving motor: play audio, if we should.
+			if (motors[m]->audio_flags & Motor::PLAYING && audio_state >= 0 && !!audio_state != !!(motors[m]->audio_flags & Motor::STATE)) {
+				if (motors[m]->audio_flags & Motor::STATE)
+					RESET (motors[m]->dir_pin);
+				else
+					SET (motors[m]->dir_pin);
+				SET (motors[m]->step_pin);
+				RESET (motors[m]->step_pin);
+				motors[m]->audio_flags ^= Motor::STATE;
+			}
 			continue;
 		}
 		last_active = longtime;
@@ -240,7 +268,8 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 				pos[c] = delta_source[c] + (delta_target[c] - delta_source[c]) * fraction;
 			// Delta movements are hardcoded to 3 axes.
 			for (uint8_t a = 0; a < 3; ++a) {
-				int32_t diff = delta_to_axis (a, pos);
+				bool ok = true;
+				int32_t diff = delta_to_axis (a, pos, &ok);
 				bool positive = diff > 0;
 				if (positive != axis[a].motor.positive)
 					reverse (a + 2);

@@ -1,0 +1,156 @@
+gtk
+	def name=Axis min=min setmin=setmin minlabel=minlabel max=max setmax=setmax maxlabel=maxlabel accel=accel setaccel=setaccel accellabel=accellabel mincalibrate=mincalibrate maxcalibrate=maxcalibrate deltalen=deltalen setdeltalen=setdeltalen deltalenlabel=deltalenlabel deltaradius=deltaradius setdeltaradius=setdeltaradius deltaradiuslabel=deltaradiuslabel minlimit=minlimit minlimitlabel=minlimitlabel setminlimit=setminlimit maxlimit=maxlimit maxlimitlabel=maxlimitlabel setmaxlimit=setmaxlimit move=move movepos=movepos moveneg=moveneg position=position label=label
+		Table columns=5 label=label
+			'Negative max speed (mm/s)
+			Entry value=min
+			Button clicked=setmin
+				'Set
+			Label value=minlabel
+			Button clicked=mincalibrate
+				'Auto-calibrate
+
+			'Positive max speed (mm/s)
+			Entry value=max
+			Button clicked=setmax
+				'Set
+			Label value=maxlabel
+			Button clicked=maxcalibrate
+				'Auto-calibrate
+
+			'Max acceleration (mm/s^2)
+			Entry value=accel
+			Button clicked=setaccel
+				'Set
+			Label value=accellabel
+			Button sensitive=:False
+				'Auto-calibrate (N/A)
+
+			'Delta rod length
+			Entry value=deltalen
+			Button clicked=setdeltalen
+				'Set
+			Label value=deltalenlabel
+			Button sensitive=:False
+				'Auto-calibrate (N/A)
+
+			'Delta radius
+			Entry value=deltaradius
+			Button clicked=setdeltaradius
+				'Set
+			Label value=deltaradiuslabel
+			Button sensitive=:False
+				'Auto-calibrate (N/A)
+
+			'Minimum limit switch position
+			Entry value=minlimit
+			Button clicked=setminlimit
+				'Set
+			Label value=minlimitlabel
+			Button sensitive=:False
+				'Auto-calibrate (N/A)
+
+			'Maximum limit switch position
+			Entry value=maxlimit
+			Button clicked=setmaxlimit
+				'Set
+			Label value=maxlimitlabel
+			Button sensitive=:False
+				'Auto-calibrate (N/A)
+
+			'Move
+			Entry value=move
+			Button clicked=movepos
+				'Positive
+			Button clicked=moveneg
+				'Negative
+			Label value=position
+			Label value=:
+
+	def name=Extruder min=min setmin=setmin minlabel=minlabel max=max setmax=setmax maxlabel=maxlabel accel=accel setaccel=setaccel accellabel=accellabel move=move movepos=movepos moveneg=moveneg label=label
+		Table columns=5 label=label
+			'Negative max speed (mm/s)
+			Entry value=min
+			Button clicked=setmin
+				'Set
+			Label value=minlabel
+			Button sensitive=:False
+				'Auto-calibrate (N/A)
+			'Positive max speed (mm/s)
+			Entry value=max
+			Button clicked=setmax
+				'Set
+			Label value=maxlabel
+			Button sensitive=:False
+				'Auto-calibrate (N/A)
+			'Max acceleration (mm/s^2)
+			Entry value=accel
+			Button clicked=setaccel
+				'Set
+			Label value=accellabel
+			Button sensitive=:False
+				'Auto-calibrate (N/A)
+			'Steps per mm
+			Entry value=steps
+			Button clicked=setsteps
+				'Set
+			Label value=stepslabel
+			Button sensitive=:False
+				'Auto-calibrate (N/A)
+			'Move
+			Entry value=move
+			Button clicked=movepos
+				'Positive
+			Button clicked=moveneg
+				'Negative
+			Label value=:
+			Label value=:
+
+	Window title=':Printer calibration'
+		VBox
+			HBox
+				'Name
+				Entry value=name_entry
+				Button clicked=set_name
+					'Set
+				Label value=name
+			Frame label=':Printer type'
+				VBox
+					HBox
+						VBox
+							RadioButton group=:board value=melzi
+								'Melzi
+							CheckButton value=melzi_min_limits:True
+								'Have limit switches at minimum travel
+						VBox
+							RadioButton group=:board
+								'Ramps
+							CheckButton value=ramps_min_limits:True
+								'Have limit switches at minimum travel
+							CheckButton value=ramps_max_limits:False
+								'Have limit switches at maximum travel
+					HBox
+						Button clicked=set_prusa
+							'Initialize Prusa
+						Button clicked=set_delta
+							'Initialize Delta
+			HBox
+				'Seconds inactivity before motors go idle
+				Entry value=motor_limit:10
+			HBox
+				'Seconds inactivity before heaters go idle
+				Entry value=temp_limit:600
+			HBox
+				Button clicked=home
+					'Home all
+				Button clicked=homez
+					'Home Z
+			Frame label=':Motor speeds'
+				HBox
+					Notebook
+						Axis label=":All axes" min=aspeedn_entry setmin=set_aspeedn minlabel=aspeedn_label max=aspeedp_entry setmax=set_aspeedp maxlabel=aspeedp_label accel=aaccel_entry setaccel=set_aaccel accellabel=aaccel_label deltalen=adeltalen_entry deltalenlabel=adeltalen_label setdeltalen=set_adeltalen deltaradius=adeltaradius_entry deltaradiuslabel=adeltaradius_label setdeltaradius=set_adeltaradius minlimit=aminlimit_entry setminlimit=set_aminlimit minlimitlabel=aminlimit_label maxlimit=amaxlimit_entry setmaxlimit=set_amaxlimit maxlimitlabel=amaxlimit_label move=amove movepos=amovepos moveneg=amoveneg position=aposition maxcalibrate= mincalibrate=
+						Axis label=":X axis" min=xspeedn_entry setmin=set_xspeedn minlabel=xspeedn_label max=xspeedp_entry setmax=set_xspeedp maxlabel=xspeedp_label accel=xaccel_entry setaccel=set_xaccel accellabel=xaccel_label mincalibrate=calibrate_xspeedn maxcalibrate=calibrate_xspeedp deltalen=xdeltalen_entry deltalenlabel=xdeltalen_label setdeltalen=set_xdeltalen deltaradius=xdeltaradius_entry deltaradiuslabel=xdeltaradius_label setdeltaradius=set_xdeltaradius minlimit=xminlimit_entry setminlimit=set_xminlimit minlimitlabel=xminlimit_label maxlimit=xmaxlimit_entry setmaxlimit=set_xmaxlimit maxlimitlabel=xmaxlimit_label move=xmove movepos=xmovepos moveneg=xmoveneg position=xposition
+						Axis label=":Y axis" min=yspeedn_entry setmin=set_yspeedn minlabel=yspeedn_label max=yspeedp_entry setmax=set_yspeedp maxlabel=yspeedp_label accel=yaccel_entry setaccel=set_yaccel accellabel=yaccel_label mincalibrate=calibrate_yspeedn maxcalibrate=calibrate_yspeedp deltalen=ydeltalen_entry deltalenlabel=ydeltalen_label setdeltalen=set_ydeltalen deltaradius=ydeltaradius_entry deltaradiuslabel=ydeltaradius_label setdeltaradius=set_ydeltaradius minlimit=yminlimit_entry setminlimit=set_yminlimit minlimitlabel=yminlimit_label maxlimit=ymaxlimit_entry setmaxlimit=set_ymaxlimit maxlimitlabel=ymaxlimit_label move=ymove movepos=ymovepos moveneg=ymoveneg position=yposition
+						Axis label=":Z axis" min=zspeedn_entry setmin=set_zspeedn minlabel=zspeedn_label max=zspeedp_entry setmax=set_zspeedp maxlabel=zspeedp_label accel=zaccel_entry setaccel=set_zaccel accellabel=zaccel_label mincalibrate=calibrate_zspeedn maxcalibrate=calibrate_zspeedp deltalen=zdeltalen_entry deltalenlabel=zdeltalen_label setdeltalen=set_zdeltalen deltaradius=zdeltaradius_entry deltaradiuslabel=zdeltaradius_label setdeltaradius=set_zdeltaradius minlimit=zminlimit_entry setminlimit=set_zminlimit minlimitlabel=zminlimit_label maxlimit=zmaxlimit_entry setmaxlimit=set_zmaxlimit maxlimitlabel=zmaxlimit_label move=zmove movepos=zmovepos moveneg=zmoveneg position=zposition
+						Extruder label=":Extruder" min=espeedn_entry setmin=set_espeedn minlabel=espeedn_label max=espeedp_entry setmax=set_espeedp maxlabel=espeedp_label accel=eaccel_entry setaccel=set_eaccel accellabel=eaccel_label steps=esteps_entry setsteps=set_esteps stepslabel=esteps_label move=emove movepos=emovepos moveneg=emoveneg
+			Button clicked=save
+				'Save all settings

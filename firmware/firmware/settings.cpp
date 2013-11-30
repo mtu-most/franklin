@@ -13,6 +13,8 @@ void Constants::save (int16_t &addr, bool eeprom)
 	write_8 (addr, MAXAXES, false);
 	write_8 (addr, MAXEXTRUDERS, false);
 	write_8 (addr, MAXTEMPS, false);
+	write_8 (addr, AUDIO_FRAGMENTS, false);
+	write_8 (addr, AUDIO_FRAGMENT_SIZE, false);
 }
 
 void Variables::load (int16_t &addr, bool eeprom)

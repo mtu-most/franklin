@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# Detect port and hardware type.
+shopt -s nullglob
+PORT=`echo /dev/ttyACM* /dev/ttyUSB*`
+if [ -z "$PORT" ]; then
+	echo >&2 'Error: no 3-D printer port found (looking for /dev/ttyACM* and /dev/ttyUSB*).'
+	exit 1
+fi
+
+if [ `echo "$PORT" | wc -w` -gt 1 ]; then
+	echo >&2 "Error: multiple 3-D printer ports found ($PORT)."
+	echo >&2 'Error: please connect only one when running this program.'
+	exit 1
+fi
+
+if [ "${PORT#/dev/ttyACM}" != "$PORT" ]; then
+	# This is a Ramps board.
+	export BOARD=mega2560
+	export BOARDS=/usr/share/arduino/hardware/arduino/boards.txt
+else
+	# This is a Melzi board.
+	export BOARD=mighty_opt
+	export BOARDS=/usr/share/arduino/hardware/mighty-1284p/boards.txt
+fi
+make -C /usr/share/printer3d/firmware

@@ -19,7 +19,7 @@ This is used to recompute (and check) the computed radii.  The new values are us
 
 import sys
 import gtk
-import printer3d
+import network
 import scipy.optimize
 
 class App (gtk.EventBox):
@@ -57,32 +57,30 @@ class App (gtk.EventBox):
 		self.amountlabel.show ()
 		box.show ()
 	def start (self):
-		self.printer = printer3d.Printer ()
-		self.printer.motor_limit = 0
-		self.printer.printer_type = 0
-		self.printer.write_variables ()
+		self.printer = network.RPCSocket ('reprap|')
+		self.printer.set_motor_limit (0)
+		self.printer.set_printer_type (0)
 		self.home ()
 		for i in range (3):
-			self.printer.axis[i].motor.max_v_neg /= 2
-			self.printer.axis[i].motor.max_v_pos /= 2
-			self.printer.write_axis (i)
+			self.printer.axis_motor_set_max_v_neg (i, self.printer.axis_motor_get_max_v_neg (i) / 2)
+			self.printer.axis_motor_set_max_v_pos (i, self.printer.axis_motor_get_max_v_pos (i) / 2)
 	def home (self):
-		self.printer.limits.clear ()
-		s = 1 if self.printer.axis[0].limit_max_pin < 255 else -1
+		self.printer.clear_limits ()
+		s = 1 if self.printer.axis_get_limit_max_pin (0) < 255 else -1
 		for i in range (3):
 			self.printer.run_axis (i, s * 50)
 		self.printer.wait_for_limits (3)
-		self.printer.limits.clear ()
+		self.printer.clear_limits ()
 		for i in range (3):
-			self.printer.axis[i].set_current_pos (0)
+			self.printer.axis_set_current_pos (i, 0)
 		self.printer.goto (axes = {0: s * -10, 1: s * -10, 2: s * -10}, cb = True)
 		self.printer.wait_for_cb ()
 		for i in range (3):
 			self.printer.run_axis (i, s * 10)
 		self.printer.wait_for_limits (3)
-		self.printer.limits.clear ()
+		self.printer.clear_limits ()
 		for i in range (3):
-			self.printer.axis[i].set_current_pos (0)
+			self.printer.axis_set_current_pos (i, 0)
 	def get_amount (self):
 		if self.control:
 			return .1
@@ -159,8 +157,7 @@ class App (gtk.EventBox):
 			self.control = False
 			self.set_amountlabel ()
 	def quit (self, x):
-		self.printer.motor_limit = 10000
-		self.printer.write_variables ()
+		self.printer.set_motor_limit (10000)
 		gtk.main_quit ()
 	def set_text (self, text):
 		self.label.set_text (text)
@@ -230,15 +227,13 @@ class App (gtk.EventBox):
 			global startphase
 			if startphase > 0:
 				for i in range (3):
-					self.printer.axis[i].limit_max_pos = -zeropos[i]
-					self.printer.axis[i].delta_length = self.axisinfo[i][1]
-					self.printer.axis[i].delta_radius = p1[i]
-					self.printer.axis[i].motor.max_v_neg *= 2
-					self.printer.axis[i].motor.max_v_pos *= 2
-					self.printer.write_axis (i)
+					self.printer.axis_set_limit_max_pos (i, -zeropos[i])
+					self.printer.axis_set_delta_length (i, self.axisinfo[i][1])
+					self.printer.axis_set_delta_radius (i, p1[i])
+					self.printer.axis_motor_set_max_v_neg (i, self.printer.axis_motor_get_max_v_neg (i) * 2)
+					self.printer.axis_motor_set_max_v_pos (i, self.printer.axis_motor_get_max_v_pos (i) * 2)
 					self.printer.save_axis (i)
-				self.printer.printer_type = 1
-				self.printer.write_variables ()
+				self.printer.set_printer_type (1)
 				self.printer.save_variables ()
 				if startphase == 2:
 					gtk.main_quit ()

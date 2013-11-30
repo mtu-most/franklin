@@ -89,6 +89,13 @@ void packet ()
 				return;
 			}
 		}
+		// If a new goto is sent while paused; we discard the current buffer.
+		if (pause_all) {
+			queue_start = 0;
+			queue_end = 0;
+			pause_all = false;
+			audio_start += micros () - pause_time;
+		}
 		// Set cb in next record, because it will be read when queue_start has already been incremented.
 		queue_end = (queue_end + 1) & QUEUE_LENGTH_MASK;
 		queue[queue_end].cb = command[1] == CMD_GOTOCB;
@@ -116,8 +123,13 @@ void packet ()
 			return;
 		}
 		Serial.write (CMD_ACK);
-		if (which < 2 + MAXAXES)
+		if (which < 2 + MAXAXES) {
 			delta_source[0] = NAN;
+			if ((motors[which]->audio_flags & (Motor::PLAYING | Motor::STATE)) == (Motor::PLAYING | Motor::STATE)) {
+				motors[which]->audio_flags &= ~Motor::STATE;
+				axis[which - 2].current_pos += 1;
+			}
+		}
 		if (f.f > 0) {
 			if (f.f > motors[which]->max_v_pos / motors[which]->steps_per_mm)
 				f.f = motors[which]->max_v_pos / motors[which]->steps_per_mm;
@@ -340,6 +352,18 @@ void packet ()
 	case CMD_PAUSE:
 	{
 		//debug ("CMD_PAUSE");
+		if (command[2]) {
+			if (!pause_all)
+				pause_time = micros ();
+		}
+		else {
+			if (pause_all) {
+				unsigned long diff = micros () - pause_time;
+				for (uint8_t i = 0; i < 4; ++i)
+					t[i] += diff;
+				audio_start += diff;
+			}
+		}
 		pause_all = command[2] != 0;
 		Serial.write (CMD_ACK);
 		return;

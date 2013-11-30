@@ -22,6 +22,9 @@ void setup ()
 	led_last = millis ();
 	last_active = millis ();
 	phase = 3;
+	audio_head = 0;
+	audio_tail = 0;
+	audio_us_per_bit = 125; // 1000000 / 8000;
 	// Prepare asynchronous command buffers.
 	limitcb_buffer[0] = 7;
 	limitcb_buffer[1] = CMD_LIMIT;
@@ -73,6 +76,7 @@ void setup ()
 			motors[o]->steps_total = 0;
 			motors[o]->f = 0;
 			motors[o]->continuous_steps_per_s = 0;
+			motors[o]->audio_flags = 0;
 		}
 		if (temps[o]) {
 			temps[o]->last_time = time;

@@ -1,6 +1,6 @@
 # vim: set foldmethod=marker :
 
-show_own_debug = False
+show_own_debug = None
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -66,6 +66,8 @@ class Printer: # {{{
 	# }}}
 	def __init__ (self, name = None): # {{{
 		# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
+		self.continue_cb = None
+		self.pos = []
 		blacklist = 'console$|ttyS?\d*$'
 		found_ports = []
 		found_printers = []
@@ -108,7 +110,7 @@ class Printer: # {{{
 					dprint ('read (0)', r)
 				self.printer.setTimeout (Printer.default_timeout)
 				self._begin ()
-				self.namelen, self.maxaxes, self.maxextruders, self.maxtemps = struct.unpack ('<BBBB', self._read (0))
+				self.namelen, self.maxaxes, self.maxextruders, self.maxtemps, self.audio_fragments, self.audio_fragment_size = struct.unpack ('<BBBBBB', self._read (0))
 				self.load (1)
 				if not name or re.match (name, self.name):
 					self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
@@ -285,6 +287,8 @@ class Printer: # {{{
 					continue	# Start over.
 				if data[0] == self.rcommand['CONTINUE']:
 					self.wait = False
+					if self.continue_cb:
+						self.continue_cb ()
 					if want_any:
 						if end_time:
 							self.printer.setTimeout (Printer.default_timeout)
@@ -307,14 +311,6 @@ class Printer: # {{{
 					self.printer.setTimeout (Printer.default_timeout)
 				return data
 	# }}}
-	def block (self, timeout = 30, probe = True): # {{{
-		self.printer.setTimeout (timeout)
-		r = self.printer.read ()
-		dprint ('(2) read', r)
-		assert probe or r != ''
-		self.printer.setTimeout (Printer.default_timeout)
-		assert self._recv_packet (r, True) == ''
-	# }}}
 	def _handle_debug (self): # {{{
 		s = ''
 		while True:
@@ -324,8 +320,34 @@ class Printer: # {{{
 			s += r
 		if show_firmware_debug:
 			print ('Debug: %s' % s)
+	def _begin (self): # {{{
+		self._send_packet (struct.pack ('<Bf', self.command['BEGIN'], 0))
+		assert struct.unpack ('<Bf', self._recv_packet ()) == (ord (self.rcommand['START']), 0.0)
 	# }}}
-	# Config stuff.  {{{
+	def _read (self, channel): # {{{
+		self._send_packet (struct.pack ('<BB', self.command['READ'], channel))
+		p = self._recv_packet ()
+		assert p[0] == self.rcommand['DATA']
+		return p[1:]
+	# }}}
+	# }}}
+	def _write_variables (self): # {{{
+		data = (self.name + chr (0) * self.namelen)[:self.namelen] + struct.pack ('<BBBBBfLLfH', self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate)
+		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 1) + data)
+	# }}}
+	def _write_axis (self, which): # {{{
+		data = self.axis[which].write ()
+		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + which) + data)
+	# }}}
+	def _write_extruder (self, which): # {{{
+		data = self.extruder[which].write ()
+		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + which) + data)
+	# }}}
+	def _write_temp (self, which): # {{{
+		data = self.temp[which].write ()
+		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + self.maxextruders + which) + data)
+	# }}}
+	# Subclasses.  {{{
 	class Temp: # {{{
 		def read (self, data):
 			self.alpha, self.beta, self.core_C, self.shell_C, self.transfer, self.radiation, self.power, self.power_pin, self.thermistor_pin = struct.unpack ('<fffffffBB', data[:30])
@@ -370,18 +392,6 @@ class Printer: # {{{
 			return self.motor.write () + self.temp.write () + struct.pack ('<fff', self.filament_heat, self.nozzle_size, self.filament_size)
 	# }}}
 	# }}}
-	# Internal commands.  {{{
-	def _begin (self): # {{{
-		self._send_packet (struct.pack ('<Bf', self.command['BEGIN'], 0))
-		assert struct.unpack ('<Bf', self._recv_packet ()) == (ord (self.rcommand['START']), 0.0)
-	# }}}
-	def _read (self, channel): # {{{
-		self._send_packet (struct.pack ('<BB', self.command['READ'], channel))
-		p = self._recv_packet ()
-		assert p[0] == self.rcommand['DATA']
-		return p[1:]
-	# }}}
-	# }}}
 	# }}}
 	# Useful commands.  {{{
 	def goto (self, axes = {}, e = None, f0 = None, f1 = None, which = 0, cb = False): # {{{
@@ -411,6 +421,9 @@ class Printer: # {{{
 		a.sort ()
 		for axis in a:
 			assert axis < self.num_axes
+			if math.isnan (axes[axis]):
+				continue
+			self.pos[axis] = axes[axis]
 			targets[(axis + 2) >> 3] |= 1 << ((axis + 2) & 0x7)
 			args += struct.pack ('<f', axes[axis])
 		if e is not None:
@@ -425,6 +438,8 @@ class Printer: # {{{
 		self.run (2 + self.maxaxes + which, speed)
 	# }}}
 	def run (self, channel, speed):	# speed: float; 0 means off. # {{{
+		if channel >= 2 and channel < 2 + self.num_axes and not math.isnan (speed):
+			self.pos[channel - 2] = float ('nan')
 		self._send_packet (struct.pack ('<BBf', self.command['RUN'], channel, speed))
 	# }}}
 	def sleep_axis (self, which, sleeping = True): # {{{
@@ -466,6 +481,12 @@ class Printer: # {{{
 		while len (self.tempwait) > 0:
 			self.block ()
 	# }}}
+	def readtemp_extruder (self, which):	# {{{
+		return self.readtemp (2 + self.maxaxes + which)
+	# }}}
+	def readtemp_temp (self, which):	# {{{
+		return self.readtemp (2 + self.maxaxes + self.maxextruders + which)
+	# }}}
 	def readtemp (self, channel): # {{{
 		self._send_packet (struct.pack ('<BB', self.command['READTEMP'], channel))
 		ret = self._recv_packet ()
@@ -489,7 +510,8 @@ class Printer: # {{{
 		if channel == 1:
 			data = self._read (1)
 			self.name = data[:self.namelen]
-			self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate = struct.unpack ('<BBBBBfLLf', data[self.namelen:])
+			self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate = struct.unpack ('<BBBBBfLLfH', data[self.namelen:])
+			self.pos = (self.pos + [float ('nan')] * self.num_axes)[:self.num_axes]
 		elif 2 <= channel < 2 + self.maxaxes:
 			self.axis[channel - 2].read (self._read (channel))
 		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
@@ -522,37 +544,6 @@ class Printer: # {{{
 		for i in range (1, 2 + self.maxaxes + self.maxextruders + self.maxtemps):
 			print ('saving %d' % i)
 			self.save (i)
-	# }}}
-	def write_variables (self): # {{{
-		data = (self.name + chr (0) * self.namelen)[:self.namelen] + struct.pack ('<BBBBBfLLf', self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate)
-		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 1) + data)
-	# }}}
-	def write_axis (self, which): # {{{
-		data = self.axis[which].write ()
-		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + which) + data)
-	# }}}
-	def write_extruder (self, which): # {{{
-		data = self.extruder[which].write ()
-		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + which) + data)
-	# }}}
-	def write_temp (self, which): # {{{
-		data = self.temp[which].write ()
-		self._send_packet (struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + self.maxextruders + which) + data)
-	# }}}
-	def write (self, channel): # {{{
-		if channel == 1:
-			self.write_variables ()
-		elif 2 <= channel < 2 + self.maxaxes:
-			self.write_axis (channel - 2)
-		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
-			self.write_extruder (channel - 2 - self.maxaxes)
-		else:
-			self.write_temp (channel - 2 - self.maxaxes - self.maxextruders)
-	# }}}
-	def write_all (self): # {{{
-		for i in range (1, 2 + self.maxaxes + self.maxextruders + self.maxtemps):
-			print ('(4) writing %d' % i)
-			self.write (i)
 	# }}}
 	def pause (self, pausing = True): # {{{
 		self._send_packet (struct.pack ('<BB', self.command['PAUSE'], pausing))
@@ -668,6 +659,368 @@ class Printer: # {{{
 	def wait_for_temp (self): # {{{
 		while len (self.tempwait) > 0:
 			self._recv_packet (want_any = True)
+	# }}}
+	def block (self, timeout = 30, probe = True): # {{{
+		self.printer.setTimeout (timeout)
+		r = self.printer.read ()
+		dprint ('(2) read', r)
+		assert probe or r != ''
+		self.printer.setTimeout (Printer.default_timeout)
+		assert self._recv_packet (r, True) == ''
+	# }}}
+	def is_waiting (self):	# {{{
+		return self.wait or len (self.tempwait) > 0
+	# }}}
+	def get_limits (self):	# {{{
+		return self.limits
+	# }}}
+	def clear_limits (self):	# {{{
+		self.limits.clear ()
+	# }}}
+	def get_position (self):	# {{{
+		return self.pos
+	# }}}
+	# }}}
+	# Accessor functions. {{{
+	# Constants. {{{
+	def get_namelen (self):	# {{{
+		return self.namelen
+	# }}}
+	def get_maxaxes (self):	# {{{
+		return self.maxaxes
+	# }}}
+	def get_audio_fragments (self):	# {{{
+		return self.audio_fragments
+	# }}}
+	def get_audio_fragment_size (self):	# {{{
+		return self.audio_fragment_size
+	# }}}
+	def get_maxextruders (self):	# {{{
+		return self.maxextruders
+	# }}}
+	def get_maxtemps (self):	# {{{
+		return self.maxtemps
+	# }}}
+	# }}}
+	# Variables. {{{
+	def set_name (self, value):	# {{{
+		self.name = value
+		self._write_variables ()
+	def get_name (self):
+		return self.name
+	# }}}
+	def set_num_axes (self, value):	# {{{
+		self.num_axes = value
+		self.pos = (self.pos + [float ('nan')] * value)[:value]
+		self._write_variables ()
+	def get_num_axes (self):
+		return self.num_axes
+	# }}}
+	def set_num_extruders (self, value):	# {{{
+		self.num_extruders = value
+		self._write_variables ()
+	def get_num_extruders (self):
+		return self.num_extruders
+	# }}}
+	def set_num_temps (self, value):	# {{{
+		self.num_temps = value
+		self._write_variables ()
+	def get_num_temps (self):
+		return self.num_temps
+	# }}}
+	def set_printer_type (self, value):	# {{{
+		self.printer_type = value
+		self._write_variables ()
+	def get_printer_type (self):
+		return self.printer_type
+	# }}}
+	def set_led_pin (self, value):	# {{{
+		self.led_pin = value
+		self._write_variables ()
+	def get_led_pin (self):
+		return self.led_pin
+	# }}}
+	def set_room_T (self, value):	# {{{
+		self.room_T = value
+		self._write_variables ()
+	def get_room_T (self):
+		return self.room_T
+	# }}}
+	def set_motor_limit (self, value):	# {{{
+		self.motor_limit = value
+		self._write_variables ()
+	def get_motor_limit (self):
+		return self.motor_limit
+	# }}}
+	def set_temp_limit (self, value):	# {{{
+		self.temp_limit = value
+		self._write_variables ()
+	def get_temp_limit (self):
+		return self.temp_limit
+	# }}}
+	def set_feedrate (self, value):	# {{{
+		self.feedrate = value
+		self._write_variables ()
+	def get_feedrate (self):
+		return self.feedrate
+	# }}}
+	# }}}
+	# Temp {{{
+	def temp_set_alpha (self, which, value):	# {{{
+		self.temp[which].alpha = value
+		self._write_temp (which)
+	def temp_get_alpha (self, which):
+		return self.temp[which].alpha
+	# }}}
+	def temp_set_beta (self, which, value):	# {{{
+		self.temp[which].beta = value
+		self._write_temp (which)
+	def temp_get_beta (self, which):
+		return self.temp[which].beta
+	# }}}
+	def temp_set_core_C (self, which, value):	# {{{
+		self.temp[which].core_C = value
+		self._write_temp (which)
+	def temp_get_core_C (self, which):
+		return self.temp[which].core_C
+	# }}}
+	def temp_set_shell_C (self, which, value):	# {{{
+		self.temp[which].shell_C = value
+		self._write_temp (which)
+	def temp_get_shell_C (self, which):
+		return self.temp[which].shell_C
+	# }}}
+	def temp_set_transfer (self, which, value):	# {{{
+		self.temp[which].transfer = value
+		self._write_temp (which)
+	def temp_get_transfer (self, which):
+		return self.temp[which].transfer
+	# }}}
+	def temp_set_radiation (self, which, value):	# {{{
+		self.temp[which].radiation = value
+		self._write_temp (which)
+	def temp_get_radiation (self, which):
+		return self.temp[which].radiation
+	# }}}
+	def temp_set_power (self, which, value):	# {{{
+		self.temp[which].power = value
+		self._write_temp (which)
+	def temp_get_power (self, which):
+		return self.temp[which].power
+	# }}}
+	def temp_set_power_pin (self, which, value):	# {{{
+		self.temp[which].power_pin = value
+		self._write_temp (which)
+	def temp_get_power_pin (self, which):
+		return self.temp[which].power_pin
+	# }}}
+	def temp_set_thermistor_pin (self, which, value):	# {{{
+		self.temp[which].thermistor_pin = value
+		self._write_temp (which)
+	def temp_get_thermistor_pin (self, which):
+		return self.temp[which].thermistor_pin
+	# }}}
+	# }}}
+	# Axis {{{
+	def axis_motor_set_step_pin (self, which, value):	# {{{
+		self.axis[which].motor.step_pin = value
+		self._write_axis (which)
+	def axis_motor_get_step_pin (self, which):
+		return self.axis[which].motor.step_pin
+	# }}}
+	def axis_motor_set_dir_pin (self, which, value):	# {{{
+		self.axis[which].motor.dir_pin = value
+		self._write_axis (which)
+	def axis_motor_get_dir_pin (self, which):
+		return self.axis[which].motor.dir_pin
+	# }}}
+	def axis_motor_set_enable_pin (self, which, value):	# {{{
+		self.axis[which].motor.enable_pin = value
+		self._write_axis (which)
+	def axis_motor_get_enable_pin (self, which):
+		return self.axis[which].motor.enable_pin
+	# }}}
+	def axis_motor_set_steps_per_mm (self, which, value):	# {{{
+		self.axis[which].motor.steps_per_mm = value
+		self._write_axis (which)
+	def axis_motor_get_steps_per_mm (self, which):
+		return self.axis[which].motor.steps_per_mm
+	# }}}
+	def axis_motor_set_max_v_neg (self, which, value):	# {{{
+		self.axis[which].motor.max_v_neg = value
+		self._write_axis (which)
+	def axis_motor_get_max_v_neg (self, which):
+		return self.axis[which].motor.max_v_neg
+	# }}}
+	def axis_motor_set_max_v_pos (self, which, value):	# {{{
+		self.axis[which].motor.max_v_pos = value
+		self._write_axis (which)
+	def axis_motor_get_max_v_pos (self, which):
+		return self.axis[which].motor.max_v_pos
+	# }}}
+	def axis_motor_set_max_a (self, which, value):	# {{{
+		self.axis[which].motor.max_a = value
+		self._write_axis (which)
+	def axis_motor_get_max_a (self, which):
+		return self.axis[which].motor.max_a
+	# }}}
+	def axis_set_limit_min_pin (self, which, value):	# {{{
+		self.axis[which].limit_min_pin = value
+		self._write_axis (which)
+	def axis_get_limit_min_pin (self, which):
+		return self.axis[which].limit_min_pin
+	# }}}
+	def axis_set_limit_max_pin (self, which, value):	# {{{
+		self.axis[which].limit_max_pin = value
+		self._write_axis (which)
+	def axis_get_limit_max_pin (self, which):
+		return self.axis[which].limit_max_pin
+	# }}}
+	def axis_set_limit_min_pos (self, which, value):	# {{{
+		self.axis[which].limit_min_pos = value
+		self._write_axis (which)
+	def axis_get_limit_min_pos (self, which):
+		return self.axis[which].limit_min_pos
+	# }}}
+	def axis_set_limit_max_pos (self, which, value):	# {{{
+		self.axis[which].limit_max_pos = value
+		self._write_axis (which)
+	def axis_get_limit_max_pos (self, which):
+		return self.axis[which].limit_max_pos
+	# }}}
+	def axis_set_delta_length (self, which, value):	# {{{
+		self.axis[which].delta_length = value
+		self._write_axis (which)
+	def axis_get_delta_length (self, which):
+		return self.axis[which].delta_length
+	# }}}
+	def axis_set_delta_radius (self, which, value):	# {{{
+		self.axis[which].delta_radius = value
+		self._write_axis (which)
+	def axis_get_delta_radius (self, which):
+		return self.axis[which].delta_radius
+	# }}}
+	def axis_set_current_pos (self, which, pos):	# {{{
+		self.axis[which].set_current_pos (pos)
+	def axis_get_current_pos (self, which):
+		return self.axis[which].get_current_pos ()
+	# }}}
+	# }}}
+	# Extruder {{{
+	def extruder_temp_set_alpha (self, which, value):	# {{{
+		self.extruder[which].temp.alpha = value
+		self._write_temp (which)
+	def extruder_temp_get_alpha (self, which):
+		return self.extruder[which].temp.alpha
+	# }}}
+	def extruder_temp_set_beta (self, which, value):	# {{{
+		self.extruder[which].temp.beta = value
+		self._write_temp (which)
+	def extruder_temp_get_beta (self, which):
+		return self.extruder[which].temp.beta
+	# }}}
+	def extruder_temp_set_core_C (self, which, value):	# {{{
+		self.extruder[which].temp.core_C = value
+		self._write_temp (which)
+	def extruder_temp_get_core_C (self, which):
+		return self.extruder[which].temp.core_C
+	# }}}
+	def extruder_temp_set_shell_C (self, which, value):	# {{{
+		self.extruder[which].temp.shell_C = value
+		self._write_temp (which)
+	def extruder_temp_get_shell_C (self, which):
+		return self.extruder[which].temp.shell_C
+	# }}}
+	def extruder_temp_set_transfer (self, which, value):	# {{{
+		self.extruder[which].temp.transfer = value
+		self._write_temp (which)
+	def extruder_temp_get_transfer (self, which):
+		return self.extruder[which].temp.transfer
+	# }}}
+	def extruder_temp_set_radiation (self, which, value):	# {{{
+		self.extruder[which].temp.radiation = value
+		self._write_temp (which)
+	def extruder_temp_get_radiation (self, which):
+		return self.extruder[which].temp.radiation
+	# }}}
+	def extruder_temp_set_power (self, which, value):	# {{{
+		self.extruder[which].temp.power = value
+		self._write_temp (which)
+	def extruder_temp_get_power (self, which):
+		return self.extruder[which].temp.power
+	# }}}
+	def extruder_temp_set_power_pin (self, which, value):	# {{{
+		self.extruder[which].temp.power_pin = value
+		self._write_temp (which)
+	def extruder_temp_get_power_pin (self, which):
+		return self.extruder[which].temp.power_pin
+	# }}}
+	def extruder_temp_set_thermistor_pin (self, which, value):	# {{{
+		self.extruder[which].temp.thermistor_pin = value
+		self._write_temp (which)
+	def extruder_temp_get_thermistor_pin (self, which):
+		return self.extruder[which].temp.thermistor_pin
+	# }}}
+	def extruder_motor_set_step_pin (self, which, value):	# {{{
+		self.extruder[which].motor.step_pin = value
+		self._write_extruder (which)
+	def extruder_motor_get_step_pin (self, which):
+		return self.extruder[which].motor.step_pin
+	# }}}
+	def extruder_motor_set_dir_pin (self, which, value):	# {{{
+		self.extruder[which].motor.dir_pin = value
+		self._write_extruder (which)
+	def extruder_motor_get_dir_pin (self, which):
+		return self.extruder[which].motor.dir_pin
+	# }}}
+	def extruder_motor_set_enable_pin (self, which, value):	# {{{
+		self.extruder[which].motor.enable_pin = value
+		self._write_extruder (which)
+	def extruder_motor_get_enable_pin (self, which):
+		return self.extruder[which].motor.enable_pin
+	# }}}
+	def extruder_motor_set_steps_per_mm (self, which, value):	# {{{
+		self.extruder[which].motor.steps_per_mm = value
+		self._write_extruder (which)
+	def extruder_motor_get_steps_per_mm (self, which):
+		return self.extruder[which].motor.steps_per_mm
+	# }}}
+	def extruder_motor_set_max_v_neg (self, which, value):	# {{{
+		self.extruder[which].motor.max_v_neg = value
+		self._write_extruder (which)
+	def extruder_motor_get_max_v_neg (self, which):
+		return self.extruder[which].motor.max_v_neg
+	# }}}
+	def extruder_motor_set_max_v_pos (self, which, value):	# {{{
+		self.extruder[which].motor.max_v_pos = value
+		self._write_extruder (which)
+	def extruder_motor_get_max_v_pos (self, which):
+		return self.extruder[which].motor.max_v_pos
+	# }}}
+	def extruder_motor_set_max_a (self, which, value):	# {{{
+		self.extruder[which].motor.max_a = value
+		self._write_extruder (which)
+	def extruder_motor_get_max_a (self, which):
+		return self.extruder[which].motor.max_a
+	# }}}
+	def extruder_set_filament_heat (self, which, value):	# {{{
+		self.extruder[which].filament_heat = value
+		self._write_extruder (which)
+	def extruder_get_filament_heat (self, which):
+		return self.extruder[which].filament_heat
+	# }}}
+	def extruder_set_nozzle_size (self, which, value):	# {{{
+		self.extruder[which].nozzle_size = value
+		self._write_extruder (which)
+	def extruder_get_nozzle_size (self, which):
+		return self.extruder[which].nozzle_size
+	# }}}
+	def extruder_set_filament_size (self, which, value):	# {{{
+		self.extruder[which].filament_size = value
+		self._write_extruder (which)
+	def extruder_get_filament_size (self, which):
+		return self.extruder[which].filament_size
+	# }}}
 	# }}}
 	# }}}
 # }}}

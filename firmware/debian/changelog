@@ -1,0 +1,5 @@
+printer3d (0.1-1) UNRELEASED; urgency=low
+
+  * Initial release. (Closes: #XXXXXX)
+
+ -- Bas Wijnen <wijnen@debian.org>  Fri, 31 Aug 2012 11:36:22 +0200

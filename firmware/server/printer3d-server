@@ -1,19 +1,22 @@
 #!/usr/bin/python
 
+import os
 import sys
 import json
 import printer3d
 import network
 import wshttpd
 import xdgbasedir
+import glib
 
-config = xdgbasedir.load_config (defaults = {'httpport': 8080, 'pythonport': 'reprap|RepRap printer control', 'tls': None, 'printer': '', 'wav_pre': 'wav/command.wav', 'wav_post': 'wav/rr.wav'})
+config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'httpport': 8080, 'pythonport': 'reprap|RepRap printer control', 'tls': None, 'printer': '', 'wav_pre': '', 'wav_post': ''})
 printer = printer3d.Printer (config['printer'])
 pos = [0., 0., 0., None, 1.]	# 3 axes, 1 extruder, 1 feedrate; it would be nicer to make this flexible; the firmware can handle it...
 rel = False
 erel = False
 etemp = float ('nan')
 btemp = float ('nan')
+gcode = []
 
 def home (axes):
 	ret = printer.home (axes)
@@ -24,8 +27,9 @@ def flush ():
 	printer.goto (cb = True)
 	printer.wait_for_cb ()
 
-def parse_gcode (gcode):
-	for lineno, line in enumerate (gcode.split ('\n')):
+def parse_gcode (code):
+	gcode[:] = []
+	for lineno, line in enumerate (code.split ('\n')):
 		line = line.strip ()
 		if line.startswith ('N'):
 			r = re.match ('N\d+\s*(.*?)\*\d+$')
@@ -47,12 +51,22 @@ def parse_gcode (gcode):
 				print ('%d:ignoring invalid gcode: %s' % (lineno, line))
 				break
 		else:
-			#try:
-			parse_gcode_chunk (line[0], args)
-			#except:
-			#print ('%d:ignoring gcode because of error: %s (%s)' % (lineno, sys.exc_value, line))
-	flush ()
+			gcode.append ((line[0], args))
+	send_gcode ()
 
+def send_gcode ():
+	if len (gcode) == 0:
+		return False
+	while len (gcode) > 0 and not printer.is_waiting ():
+		parse_gcode_chunk (*gcode.pop (0))
+	if len (gcode) == 0 and config['wav_post']:
+		printer.play (config['wav_post'])
+	return False
+
+def printer_input (source, condition):
+	printer.block ()
+	send_gcode ()
+	return True
 
 def parse_gcode_chunk (cmd, args):
 	global etemp, btemp, rel, erel
@@ -124,7 +138,7 @@ def parse_gcode_chunk (cmd, args):
 		if len (which) > 0:
 			flush ()
 			for w in which:
-				printer.axis[w].set_current_pos (which[w])
+				printer.axis_set_current_pos (w, which[w])
 	elif cmd == 'M82':
 		erel = False
 	elif cmd == 'M83':
@@ -148,24 +162,25 @@ def parse_gcode_chunk (cmd, args):
 		flush ()
 		etemp = args['S']
 		printer.settemp_extruder (0, etemp)
-		printer.waittemp_extruder (0, etemp, float ('nan'))
-		printer.wait_for_temp ()
+		if printer.extruder_temp_get_thermistor_pin (0) < 255:
+			printer.waittemp_extruder (0, etemp, float ('nan'))
 	elif cmd == 'M116':
 		flush ()
-		printer.waittemp_extruder (0, etemp, float ('nan'))
-		printer.waittemp_temp (0, btemp, float ('nan'))
-		printer.wait_for_temp ()
+		if printer.extruder_temp_get_thermistor_pin (0) < 255:
+			printer.waittemp_extruder (0, etemp, float ('nan'))
+		if printer.temp_get_thermistor_pin (0) < 255:
+			printer.waittemp_temp (0, btemp, float ('nan'))
 	elif cmd == 'M140':
 		flush ()
 		btemp = args['S']
-		printer.settemp_temp (0, etemp)
+		printer.settemp_temp (0, btemp)
 	elif cmd == 'M190':
 		flush ()
 		if 'S' in args:
 			btemp = args['S']
 			printer.settemp_temp (0, btemp)
-		printer.waittemp_temp (0, btemp, float ('nan'))
-		printer.wait_for_temp ()
+		if printer.temp_get_thermistor_pin (0) < 255:
+			printer.waittemp_temp (0, btemp, float ('nan'))
 	else:
 		raise SyntaxError ('invalid gcode command %s' % cmd)
 
@@ -176,32 +191,58 @@ class Connection (wshttpd.Wshttpd):
 		except:
 			self.send (json.dumps (['error', 'invalid json content']))
 			return
+		#print ('cmd %s data %s' % (cmd, repr (data)))
 		if cmd == 'gcode' and isinstance (data, (str, unicode)):
 			if (config['wav_pre']):
 				printer.play (config['wav_pre'])
 			parse_gcode (data)
-			if (config['wav_post']):
-				printer.play (config['wav_post'])
+		elif cmd == 'stop':
+			printer.pause (True)
+		elif cmd == 'resume':
+			printer.pause (False)
 		elif cmd == 'ping':
 			self.send (json.dumps (['pong', '']))
+		elif cmd == 'etemp':
+			printer.settemp_extruder (0, float (data))
+		elif cmd == 'btemp':
+			printer.settemp_temp (0, float (data))
+		elif cmd == 'home':
+			printer.home ()
+		elif cmd == 'homez':
+			printer.home ([2])
+		elif cmd == 'sleep':
+			for a in range (printer.get_num_axes ()):
+				printer.sleep_axis (a)
+			for e in range (printer.get_num_extruders ()):
+				printer.sleep_extruder (e)
+		elif cmd == 'feed':
+			printer.set_feedrate (float (data))
+		elif cmd == 'status':
+			self.send (json.dumps (['status', [printer.readtemp_temp (0), printer.readtemp_extruder (0)]]))
 		else:
 			self.send (json.dumps (['error', 'invalid command']))
 			return
 		self.send (json.dumps (['ok', None]))
 	def page (self):
 		if self.address.path == '/':
-			self.reply_html (open ('html/page.html').read ())
+			self.reply_html (self.gethtml ('page.html'))
 		elif self.address.path == '/page.js':
-			self.reply_js (open ('html/page.js').read ())
+			self.reply_js (self.gethtml ('page.js'))
 		elif self.address.path == '/page.css':
-			self.reply_css (open ('html/page.css').read ())
+			self.reply_css (self.gethtml ('page.css'))
 		elif self.address.path == '/audio.ogg':
-			self.reply (200, open ('html/audio.ogg').read (), {'Content-Type': 'audio/ogg'})
+			self.reply (200, self.gethtml ('audio.ogg'), {'Content-Type': 'audio/ogg'})
 		else:
 			self.reply (404)
+	def gethtml (self, page):
+		files = xdgbasedir.data_files_read (os.path.join ('html', page), packagename = 'printer3d')
+		assert len (files) > 0
+		return open (files[0]).read ()
 
 httpd = network.Server (config['httpport'], Connection, tls = config['tls'])
 direct = network.RPCServer (config['pythonport'], lambda socket: printer, tls = config['tls'])
+glib.io_add_watch (printer.printer.fd, glib.IO_IN, printer_input)
+printer.continue_cb = lambda: glib.idle_add (send_gcode)
 
 print ('running')
 network.fgloop ()

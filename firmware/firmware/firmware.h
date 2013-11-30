@@ -12,6 +12,8 @@
 #define MAXEXTRUDERS 8		// Total number of supported extruders.
 #define MAXTEMPS 8		// Total number of supported standalone temps (normally 1 is in use: bed).
 #define MAXOBJECT (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS)		// Total number of supported objects.
+#define AUDIO_FRAGMENTS 8
+#define AUDIO_FRAGMENT_SIZE 32
 
 #define MSGBUFSIZE 127	// Buffer size for messages; cannot be larger than 127.
 #define MAXMSGLEN ((MSGBUFSIZE / 4 * 3) + ((MSGBUFSIZE % 4 == 0) ? 0 : (MSGBUFSIZE % 4) - 1))
@@ -97,8 +99,7 @@ struct Object
 	virtual ~Object () {}
 };
 
-// All temperatures are in Kelvin.  Negative temperature target means heater is off.
-// Energy unit is chosen such that the heat capacity of the extruder is 1, so the energy is equal to the temperature.
+// All temperatures are stored in Kelvin, but communicated in degrees C.
 struct Temp : public Object
 {
 	// See temp.c from definition of calibration constants.
@@ -141,6 +142,11 @@ struct Motor : public Object
 	float continuous_steps;			// fractional continuous steps that have been done.
 	unsigned long continuous_last_time;	// micros value when last continuous iteration was run.
 	bool positive;				// direction of current movement.
+	uint8_t audio_flags;
+	enum Flags {
+		PLAYING = 1,
+		STATE = 2
+	};
 	float f;				// current flowrate [steps/s]; used to communicate from extruder motor to extruder temp.
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
@@ -207,6 +213,7 @@ EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN uint8_t led_pin;
 EXTERN float room_T;	//[degrees C]
 EXTERN float feedrate;	// Multiplication factor for f values, used at start of move.
+EXTERN uint16_t audio_us_per_bit;
 // Other variables.
 EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
@@ -234,6 +241,7 @@ EXTERN int32_t limits_pos[MAXAXES];	// position when limit switch was hit or MAX
 EXTERN bool have_msg;
 EXTERN char msg_buffer[MSGBUFSIZE];
 EXTERN bool pause_all;
+EXTERN unsigned long pause_time;
 EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
@@ -246,6 +254,9 @@ EXTERN float f[4];
 EXTERN float v[4];
 EXTERN float a[4];
 EXTERN float delta_target[3], delta_source[3];
+EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
+EXTERN uint8_t audio_head, audio_tail;
+EXTERN unsigned long audio_start;
 
 // debug.cpp
 void debug (char const *fmt, ...);
@@ -280,12 +291,32 @@ void write_float (int16_t &address, float data, bool eeprom);
 // play.cpp
 void play (int32_t num_samples, uint32_t axes, uint32_t extruders);
 
-static inline int32_t delta_to_axis (uint8_t a, float *target) {
+static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float dx = target[0] - axis[a].x;
 	float dy = target[1] - axis[a].y;
 	float dz = target[2] - axis[a].z;
-	float r = sqrt (dx * dx + dy * dy);
-	float dest = sqrt (axis[a].delta_length * axis[a].delta_length - r * r) + dz;
+	float r2 = dx * dx + dy * dy;
+	float l2 = axis[a].delta_length * axis[a].delta_length;
+	if (r2 > l2 + 100 - 20 * axis[a].delta_length) {
+		*ok = false;
+		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
+		// target = axis + (target - axis) * (l - epsilon) / r.
+		float factor = (axis[a].delta_length - 10.) / sqrt (r2);
+		target[0] = axis[a].x + (target[0] - axis[a].x) * factor;
+		target[1] = axis[a].y + (target[1] - axis[a].y) * factor;
+		return 0;
+	}
+	float inner = dx * axis[a].x + dy * axis[a].y;
+	if (inner > 0) {
+		*ok = false;
+		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
+		// target = axis + (target - (target.axis-epsilon)/|axis|2*axis)
+		float factor = .99 - (target[0] * axis[a].x + target[1] * axis[a].y) / (axis[a].x * axis[a].x + axis[a].y * axis[a].y);
+		target[0] += factor * axis[a].x;
+		target[1] += factor * axis[a].y;
+		return 0;
+	}
+	float dest = sqrt (l2 - r2) + dz;
 	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", &dx, &dy, &dz, &axis[a].z, &r, &target);
 	return int32_t (dest * axis[a].motor.steps_per_mm) - axis[a].current_pos;
 }

@@ -1,0 +1,642 @@
+#! /usr/bin/python
+# vim: set foldmethod=marker :
+
+import network
+import sys
+import time
+import gui
+import xdgbasedir
+
+config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'port': 'reprap|', 'tls': ''})
+p = network.RPCSocket (config['port'], tls = config['tls'])
+
+def axis_test_single (axis, steps_per_s, use_min, slow, positive): # {{{
+	# Move to the limit switch at slow speed.
+	s = -1 if use_min else 1
+	p.clear_limits ()
+	# Go to the switch.
+	p.run_axis (axis, s * slow)
+	p.wait_for_limits (1)
+	p.clear_limits ()
+	p.axis_set_current_pos (axis, 0)
+	# We're at the switch now; move away a small distance.
+	distance = 3 * 3200. / p.axis_motor_get_steps_per_mm (axis)	# Move one rotation of the motor.
+	epsilon = min (distance / 4, 5)
+	back = positive if use_min else not positive
+	if back:
+		# Move away at high speed, then almost to it at low speed; if moving away failed, we'll hit the switch.
+		p.goto (axes = {axis: -s * distance}, f0 = steps_per_s / (distance * p.axis_motor_get_steps_per_mm (axis)))
+		# Try moving to the switch again (actually epsilon mm before it).
+		p.goto (axes = {axis: -s * epsilon}, f0 = slow / (distance - epsilon), cb = True)
+	else:
+		# Move away slowly, then fast almost to it, then slowly slightly through it; if the fast move failed, we won't hit the switch.
+		p.goto (axes = {axis: -s * distance}, f0 = slow / distance)
+		# Try moving to the switch again (actually epsilon mm before it).
+		p.goto (axes = {axis: -s * epsilon}, f0 = steps_per_s / ((distance - epsilon) * p.axis_motor_get_steps_per_mm (axis)))
+		# And slowly through it.
+		p.goto (axes = {axis: s * epsilon}, f0 = slow / (2 * epsilon), cb = True)
+	p.wait_for_cb ()
+	limits = p.get_limits ()
+	print limits
+	if back:
+		return axis not in limits
+	else:
+		return axis in limits
+# }}}
+def axis_test_half (axis, positive): # {{{
+	# Discard old max speed.
+	if positive:
+		p.axis_motor_set_max_v_pos (axis, float ('inf'))
+	else:
+		p.axis_motor_set_max_v_neg (axis, float ('inf'))
+	# Binary search for maximum steps per second.
+	assert p.axis_get_limit_min_pin (axis) < 255 or p.axis_get_limit_max_pin (axis) < 255
+	lower = 3200. # 1 revolution per second
+	upper = lower * 2
+	use_min = p.axis_get_limit_min_pin (axis) < 255
+	# Find real upper bound.
+	while axis_test_single (axis, upper, use_min, 2 * 3200. / p.axis_motor_get_steps_per_mm (axis), positive):
+		lower = upper
+		upper *= 2
+	slow = lower / 10
+	lower /= 1.5	# Just to be sure.
+	upper *= 1.5	# Just to be sure.
+	# Continue until we have a value within 10%.
+	while upper / lower - 1. > .1:
+		mid = (lower + upper) / 2
+		# Try this value.
+		if axis_test_single (axis, mid, use_min, 2 * 3200. / p.axis_motor_get_steps_per_mm (axis), positive):
+			print 'faster'
+			lower = (mid + lower) / 2
+		else:
+			print 'slower'
+			upper = (mid + upper) / 2
+	return upper * .8	# Be safe and set the limit well below the "missing steps"-limit.
+# }}}
+def axis_test (axis): # {{{
+	p.axis_motor_set_max_a (axis, float (100000))	# Discard old max acceleration.
+	p.axis_motor_set_max_v_neg (axis, axis_test_half (axis, False))
+	p.axis_motor_set_max_v_pos (axis, axis_test_half (axis, True))
+# }}}
+def move_z_away (): # {{{
+	if p.axis_get_limit_min_pin (2) >= 255:
+		return
+	# Move z out of the way.
+	p.run_axis (2, -1)
+	p.wait_for_limits (1)
+	p.axis_set_current_pos (2, 0)
+	p.goto (axes = {2: 4}, f0 = 1. / 4, cb = True)
+	p.wait_for_cb ()
+	p.sleep_axis (2)
+# }}}
+def calibrate_axis_speeds (): # Start easy: motors with endstops. {{{
+	move_z_away ()
+	for a in range (p.get_num_axes ()):
+		axis_test (a)
+		p.sleep_axis (a)
+		p.save_axis (a)
+# }}}
+
+def do_calibrate_temps (temps, channels): # {{{
+	cold = [p.readtemp (channel) for channel in channels]
+	# In steps of 10 degrees, measure how much power is required to keep the temperature there.
+	temp = (int (max (cold) / 10) + 1) * 10
+	while temp <= 250:
+		current_channels = [x for x in channels if temp < 130 or x < 2 + p.get_maxaxes () + p.get_maxextruders ()]
+		for c in current_channels:
+			p.settemp (c, temp)
+		# Wait for it to stabelize
+		t = time.time ()
+		while True:
+			now = time.time ()
+			if now >= t + 10:
+				break
+			p.block (timeout = t + 10 - now)
+		# Measure the power
+		result = []
+		for c in current_channels:
+			p.power_start (c)
+		t = time.time ()
+		while True:
+			now = time.time ()
+			if now >= t + 10:
+				break
+			p.block (timeout = t + 10 - now)
+		for c in current_channels:
+			result.append ((c, p.power_end (c)))
+		print ('%d: %s' % (temp, ' '.join (['%d:%f' % x for x in result])))
+		temp += 10
+# }}}
+def calibrate_temps (): # Then temperature sensors. {{{
+	temps = []
+	channels = []
+	for e in range (p.get_maxextruders ()):
+		if p.extruder_temp_get_thermistor_pin (e) < 255 and p.extruder_temp_get_power_pin (e) < 255:
+			temps.append (p.extruder[e].temp) # FIXME
+			channels.append (2 + p.get_maxaxes () + e)
+	for t in range (p.get_maxtemps ()):
+		if p.temp_get_thermistor_pin (t) < 255 and p.temp_get_power_pin (t) < 255:
+			temps.append (p.temp[t]) # FIXME
+			channels.append (2 + p.get_maxaxes () + p.get_maxextruders () + t)
+	do_calibrate_temps (temps, channels)
+# }}}
+
+def set_ramps_pins (min_limits = None, max_limits = None): # {{{
+	if min_limits is None and max_limits is None:
+		min_limits = True
+		max_limits = False
+	elif min_limits is None:
+		min_limits = not max_limits
+	elif max_limits is None:
+		max_limits = not min_limits
+	p.set_led_pin (13)
+	p.set_num_axes (3)
+	p.axis_set_limit_min_pin (0, 3 if min_limits else 255)
+	p.axis_set_limit_max_pin (0, 2 if max_limits else 255)
+	p.axis_motor_set_step_pin (0, 54)
+	p.axis_motor_set_dir_pin (0, 55)
+	p.axis_motor_set_enable_pin (0, 38)
+	p.axis_set_limit_min_pin (1, 14 if min_limits else 255)
+	p.axis_set_limit_max_pin (1, 15 if max_limits else 255)
+	p.axis_motor_set_step_pin (1, 60)
+	p.axis_motor_set_dir_pin (1, 61)
+	p.axis_motor_set_enable_pin (1, 56)
+	p.axis_set_limit_min_pin (2, 18 if min_limits else 255)
+	p.axis_set_limit_max_pin (2, 19 if max_limits else 255)
+	p.axis_motor_set_step_pin (2, 46)
+	p.axis_motor_set_dir_pin (2, 48)
+	p.axis_motor_set_enable_pin (2, 62)
+	for a in range (3, p.maxaxes):
+		p.axis_set_limit_min_pin (a, 255)
+		p.axis_set_limit_max_pin (a, 255)
+		p.axis_motor_set_step_pin (a, 255)
+		p.axis_motor_set_dir_pin (a, 255)
+		p.axis_motor_set_enable_pin (a, 255)
+	# Reset all extruder values, then set up only the real ones.
+	for e in range (p.maxextruders):
+		p.extruder_temp_set_beta (e, 3885.0342279785623)
+		p.extruder_temp_set_alpha (e, 10.056909432214743)
+		p.extruder_temp_set_power_pin (e, 255)
+		p.extruder_temp_set_thermistor_pin (e, 255)
+		p.extruder_motor_set_step_pin (e, 255)
+		p.extruder_motor_set_dir_pin (e, 255)
+		p.extruder_motor_set_enable_pin (e, 255)
+	p.extruder_temp_set_power_pin (0, 10)
+	p.extruder_temp_set_thermistor_pin (0, 13)
+	p.extruder_motor_set_step_pin (0, 26)
+	p.extruder_motor_set_dir_pin (0, 28)
+	p.extruder_motor_set_enable_pin (0, 24)
+	# Set up second extruder pins no matter if it is used.
+	p.extruder_temp_set_power_pin (1, 9)
+	p.extruder_temp_set_thermistor_pin (1, 15)
+	p.extruder_motor_set_step_pin (1, 36)
+	p.extruder_motor_set_dir_pin (1, 34)
+	p.extruder_motor_set_enable_pin (1, 30)
+	for t in range (p.get_maxtemps ()):
+		p.temp_set_beta (0, float ('nan'))
+		p.temp_set_alpha (0, float ('nan'))
+		p.temp_set_power_pin (t, 255)
+		p.temp_set_thermistor_pin (t, 255)
+	p.temp_set_beta (0, 3700.)
+	p.temp_set_alpha (0, 11.7)
+	p.temp_set_power_pin (0, 8)
+	p.temp_set_thermistor_pin (0, 14)
+	# Set up fan pin no matter if it is used.
+	p.temp_set_power_pin (1, 9)
+# }}}
+def set_melzi_pins (min_limits = None, max_limits = None): # {{{
+	if min_limits is None and max_limits is None:
+		min_limits = True
+		max_limits = False
+	elif min_limits is None:
+		min_limits = not max_limits
+	elif max_limits is None:
+		max_limits = not min_limits
+	assert not (max_limits and min_limits)
+	p.set_led_pin (28)	# 27 according to Repetier?
+	p.axis_set_limit_min_pin (0, 18 if min_limits else 255)
+	p.axis_set_limit_max_pin (0, 18 if max_limits else 255)
+	p.axis_motor_set_step_pin (0, 15)
+	p.axis_motor_set_dir_pin (0, 21)
+	p.axis_motor_set_enable_pin (0, 14)
+	p.axis_set_limit_min_pin (1, 19 if min_limits else 255)
+	p.axis_set_limit_max_pin (1, 19 if max_limits else 255)
+	p.axis_motor_set_step_pin (1, 22)
+	p.axis_motor_set_dir_pin (1, 23)
+	p.axis_motor_set_enable_pin (1, 14)
+	p.axis_set_limit_min_pin (2, 20 if min_limits else 255)
+	p.axis_set_limit_max_pin (2, 20 if max_limits else 255)
+	p.axis_motor_set_step_pin (2, 3)
+	p.axis_motor_set_dir_pin (2, 2)
+	p.axis_motor_set_enable_pin (2, 29)	#26 according to Repetier?
+	for a in range (3, p.get_maxaxes ()):
+		p.axis_set_limit_min_pin (a, 255)
+		p.axis_set_limit_max_pin (a, 255)
+		p.axis_motor_set_step_pin (a, 255)
+		p.axis_motor_set_dir_pin (a, 255)
+		p.axis_motor_set_enable_pin (a, 255)
+	for e in range (p.get_maxextruders ()):
+		p.extruder_temp_set_beta (e, 3885.0342279785623)
+		p.extruder_temp_set_alpha (e, 10.811932016492776)
+		p.extruder_temp_set_power_pin (e, 255)
+		p.extruder_temp_set_thermistor_pin (e, 255)
+		p.extruder_motor_set_step_pin (e, 255)
+		p.extruder_motor_set_dir_pin (e, 255)
+		p.extruder_motor_set_enable_pin (e, 255)
+	p.extruder_temp_set_power_pin (0, 13)
+	p.extruder_temp_set_thermistor_pin (0, 7)
+	p.extruder_motor_set_step_pin (0, 1)
+	p.extruder_motor_set_dir_pin (0, 0)
+	p.extruder_motor_set_enable_pin (0, 14)
+	for t in range (2, p.get_maxtemps ()):
+		p.temp_set_power_pin (t, 255)
+		p.temp_set_thermistor_pin (t, 255)
+		p.temp_set_beta (0, float ('nan'))
+		p.temp_set_alpha (0, float ('nan'))
+	p.temp_set_power_pin (0, 12)	# Heated bed.
+	p.temp_set_thermistor_pin (0, 6)
+	p.temp_set_beta (0, 3700.)
+	p.temp_set_alpha (0, 10.811932016492776)
+	p.temp_set_power_pin (1, 4)		# Fan.
+	p.temp_set_thermistor_pin (1, 255)
+# }}}
+
+# Set everything up for calibration. {{{
+def setup ():
+	if g.melzi:
+		set_melzi_pins (g.melzi_min_limits)
+	else:
+		set_ramps_pins (g.ramps_min_limits, g.ramps_max_limits)
+	p.set_name ('')
+	p.set_room_T (25.)
+	p.set_temp_limit (int (float (g.temp_limit) * 1000))
+	p.set_motor_limit (int (float (g.motor_limit) * 1000))
+	p.set_feedrate (1.)
+	for a in range (p.get_maxaxes ()):
+		p.axis_motor_set_max_v_neg (a, float ('inf'))
+		p.axis_motor_set_max_v_pos (a, float ('inf'))
+		p.axis_set_limit_min_pos (a, 0.)
+		p.axis_set_limit_max_pos (a, 200.)
+		p.axis_motor_set_max_a (a, float ('inf'))
+		p.axis_motor_set_steps_per_mm (a, float ('nan'))
+	for e in range (p.get_maxextruders ()):
+		p.extruder_temp_set_core_C (e, float ('nan'))
+		p.extruder_temp_set_shell_C (e, float ('nan'))
+		p.extruder_temp_set_transfer (e, float ('nan'))
+		p.extruder_temp_set_radiation (e, float ('nan'))
+		p.extruder_temp_set_power (e, 12. ** 2 / 5.4)
+		# Different per hobbed bolt and possibly per filament; must be measured.
+		# However, as an estimate:
+		# Small gear has 9 teeth; large gear 47.  Radius of hobbing is approximately 3.2 mm (20/2pi).
+		p.extruder_motor_set_steps_per_mm (e, 835) #(200 * 16.) / ((9. / 47) * 20)
+		p.extruder_motor_set_max_v_neg (e, float ('inf'))
+		p.extruder_motor_set_max_v_pos (e, float ('inf'))
+		p.extruder_motor_set_max_a (e, float ('inf'))
+	for t in range (p.get_maxtemps ()):
+		p.temp_set_core_C (t, float ('nan'))
+		p.temp_set_shell_C (t, float ('nan'))
+		p.temp_set_transfer (t, float ('nan'))
+		p.temp_set_radiation (t, float ('nan'))
+		p.temp_set_power (t, float ('nan'))
+	p.temp_set_radiation (0, float ('nan'))
+	p.temp_set_power (0, 12. ** 2 / 1.6)
+
+def setup_prusa ():
+	setup ()
+	# x and y axis: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
+	p.axis_motor_set_steps_per_mm (0, (200 * 16.) / (5 * 12))	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
+	p.axis_motor_set_steps_per_mm (1, (200 * 16.) / (5 * 12))
+	# z axis: 1.25 mm per revolution, 200 steps per revolution; 16 microsteps per step.
+	p.axis_motor_set_steps_per_mm (2, 200 * 16 / 1.25)
+	p.set_printer_type (0)
+
+def setup_delta ():
+	setup ()
+	# all axis: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
+	p.axis_motor_set_steps_per_mm (0, (200 * 16.) / (5 * 12))	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
+	p.axis_motor_set_steps_per_mm (1, (200 * 16.) / (5 * 12))
+	p.axis_motor_set_steps_per_mm (2, (200 * 16.) / (5 * 12))
+	p.set_printer_type (1)
+# }}}
+
+# Gui functions {{{
+def set_name ():
+	p.set_name (g.name_entry)
+	update ()
+
+def set_speed (axis, positive, value):
+	if axis < 0:
+		for a in range (p.get_num_axes ()):
+			set_speed (a, positive, value)
+		return
+	if positive:
+		p.axis_motor_set_max_v_pos (axis, float (value) * p.axis_motor_get_steps_per_mm (axis))
+	else:
+		p.axis_motor_set_max_v_neg (axis, float (value) * p.axis_motor_get_steps_per_mm (axis))
+	update ()
+
+def set_accel (axis, value):
+	if axis < 0:
+		for a in range (p.get_num_axes ()):
+			set_accel (a, value)
+		return
+	p.axis_motor_set_max_a (axis, float (value) * p.axis_motor_get_steps_per_mm (axis))
+	update ()
+
+def set_deltalen (axis, value):
+	if axis < 0:
+		for a in range (p.get_num_axes ()):
+			set_deltalen (a, value)
+		return
+	p.axis_set_delta_length (axis, float (value))
+	update ()
+
+def set_deltaradius (axis, value):
+	if axis < 0:
+		for a in range (p.get_num_axes ()):
+			set_deltaradius (a, value)
+		return
+	p.axis_set_delta_radius (axis, float (value))
+	update ()
+
+def set_minlimit (axis, value):
+	if axis < 0:
+		for a in range (p.get_num_axes ()):
+			set_minlimit (a, value)
+		return
+	p.axis_set_limit_min_pos (axis, float (value) * p.axis_motor_get_steps_per_mm (axis))
+	update ()
+
+def set_maxlimit (axis, value):
+	if axis < 0:
+		for a in range (p.get_num_axes ()):
+			set_maxlimit (a, value)
+		return
+	p.axis_set_limit_max_pos (axis, float (value) * p.axis_motor_get_steps_per_mm (axis))
+	update ()
+
+def set_espeed (positive, value):
+	if positive:
+		p.extruder_motor_set_max_v_pos (0, float (value) * p.extruder_motor_get_steps_per_mm (0))
+	else:
+		p.extruder_motor_set_max_v_neg (0, float (value) * p.extruder_motor_get_steps_per_mm (0))
+	update ()
+
+def set_eaccel (value):
+	p.extruder_motor_set_max_a (0, float (value) * p.extruder_motor_get_steps_per_mm (0))
+	update ()
+
+def set_esteps (value):
+	max_a = p.extruder_motor_get_max_a (0) / p.extruder_motor_get_steps_per_mm (0)
+	max_v_pos = p.extruder_motor_get_max_v_pos (0) / p.extruder_motor_get_steps_per_mm (0)
+	max_v_neg = p.extruder_motor_get_max_v_neg (0) / p.extruder_motor_get_steps_per_mm (0)
+	p.extruder_motor_set_steps_per_mm (0, float (value))
+	p.extruder_motor_set_max_a (0, max_a * float (value))
+	p.extruder_motor_set_max_v_pos (0, max_v_pos * float (value))
+	p.extruder_motor_set_max_v_neg (0, max_v_neg * float (value))
+	update ()
+
+def calibrate_single_axis (axis, positive):
+	t = p.get_printer_type ()
+	p.set_printer_type (0)
+	val = axis_test_half (axis, positive)
+	set_speed (axis, positive, val / p.axis_motor_get_steps_per_mm (axis))
+	p.set_printer_type (t)
+	update ()
+
+def calibrate_axes ():
+	t = p.get_printer_type ()
+	p.set_printer_type (0)
+	move_z_away ()
+	calibrate_single_axis (0, False, 'xspeedn_label')
+	calibrate_single_axis (0, True, 'xspeedp_label')
+	calibrate_single_axis (1, False, 'yspeedn_label')
+	calibrate_single_axis (1, True, 'yspeedp_label')
+	calibrate_single_axis (2, False, 'zspeedn_label')
+	calibrate_single_axis (2, True, 'zspeedp_label')
+	p.set_printer_type (t)
+	update ()
+
+def move (axis, direction, amount):
+	pos = p.get_position ()
+	if axis < 0:
+		for a in range (len (pos)):
+			pos[a] += direction * float (amount)
+	else:
+		pos[axis] += direction * float (amount)
+	p.goto (axes = pos, cb = True)
+	p.wait_for_cb ()
+	update ()
+
+def emove (which, direction, amount):
+	p.goto (e = direction * float (amount), which = which, cb = True)
+	p.wait_for_cb ()
+	update ()
+
+def home (*args):
+	p.home (*args)
+	update ()
+
+g = gui.Gui (packagename = 'printer3d', events = {	# {{{
+		'set_name': set_name,
+		'set_prusa': setup_prusa,
+		'set_delta': setup_delta,
+
+		'set_aspeedn': lambda: set_speed (-1, False, g.aspeedn_entry),
+		'set_aspeedp': lambda: set_speed (-1, True, g.aspeedp_entry),
+		'set_aaccel': lambda: set_accel (-1, g.aaccel_entry),
+		'set_adeltalen': lambda: set_deltalen (-1, g.adeltalen_entry),
+		'set_adeltaradius': lambda: set_deltaradius (-1, g.adeltaradius_entry),
+		'set_aminlimit': lambda: set_minlimit (-1, g.aminlimit_entry),
+		'set_amaxlimit': lambda: set_maxlimit (-1, g.amaxlimit_entry),
+		'amoveneg': lambda: move (-1, -1, g.amove),
+		'amovepos': lambda: move (-1, 1, g.amove),
+
+		'set_xspeedn': lambda: set_speed (0, False, g.xspeedn_entry),
+		'calibrate_xspeedn': lambda: calibrate_single_axis (0, False),
+		'set_xspeedp': lambda: set_speed (0, True, g.xspeedp_entry),
+		'calibrate_xspeedp': lambda: calibrate_single_axis (0, True),
+		'set_xaccel': lambda: set_accel (0, g.xaccel_entry),
+		'set_xdeltalen': lambda: set_deltalen (0, g.xdeltalen_entry),
+		'set_xdeltaradius': lambda: set_deltaradius (0, g.xdeltaradius_entry),
+		'set_xminlimit': lambda: set_minlimit (0, g.xminlimit_entry),
+		'set_xmaxlimit': lambda: set_maxlimit (0, g.xmaxlimit_entry),
+		'xmoveneg': lambda: move (0, -1, g.xmove),
+		'xmovepos': lambda: move (0, 1, g.xmove),
+
+		'set_yspeedn': lambda: set_speed (1, False, g.yspeedn_entry),
+		'calibrate_yspeedn': lambda: calibrate_single_axis (1, False),
+		'set_yspeedp': lambda: set_speed (1, True, g.yspeedp_entry),
+		'calibrate_yspeedp': lambda: calibrate_single_axis (1, True),
+		'set_yaccel': lambda: set_accel (1, g.yaccel_entry),
+		'set_ydeltalen': lambda: set_deltalen (1, g.ydeltalen_entry),
+		'set_ydeltaradius': lambda: set_deltaradius (1, g.ydeltaradius_entry),
+		'set_yminlimit': lambda: set_minlimit (1, g.yminlimit_entry),
+		'set_ymaxlimit': lambda: set_maxlimit (1, g.ymaxlimit_entry),
+		'ymoveneg': lambda: move (1, -1, g.ymove),
+		'ymovepos': lambda: move (1, 1, g.ymove),
+
+		'set_zspeedn': lambda: set_speed (2, False, g.zspeedn_entry),
+		'calibrate_zspeedn': lambda: calibrate_single_axis (2, False),
+		'set_zspeedp': lambda: set_speed (2, True, g.zspeedp_entry),
+		'calibrate_zspeedp': lambda: calibrate_single_axis (2, True),
+		'set_zaccel': lambda: set_accel (2, g.zaccel_entry),
+		'set_zdeltalen': lambda: set_deltalen (2, g.zdeltalen_entry),
+		'set_zdeltaradius': lambda: set_deltaradius (2, g.zdeltaradius_entry),
+		'set_zminlimit': lambda: set_minlimit (2, g.zminlimit_entry),
+		'set_zmaxlimit': lambda: set_maxlimit (2, g.zmaxlimit_entry),
+		'zmoveneg': lambda: move (2, -1, g.zmove),
+		'zmovepos': lambda: move (2, 1, g.zmove),
+
+		#'calibrate_axis_speeds': calibrate_axes,
+		'set_espeedn': lambda: set_espeed (False, g.espeedn_entry),
+		'set_espeedp': lambda: set_espeed (True, g.espeedp_entry),
+		'set_eaccel': lambda: set_eaccel (g.eaccel_entry),
+		'set_esteps': lambda: set_esteps (g.esteps_entry),
+		'emoveneg': lambda: emove (0, -1, g.emove),
+		'emovepos': lambda: emove (0, 1, g.emove),
+		'home': lambda: home (),
+		'homez': lambda: home ((2,)),
+		'save': p.save_all
+	}, inputs = (
+		'name_entry',
+		'melzi',
+		'melzi_min_limits',
+		'ramps_min_limits',
+		'ramps_max_limits',
+		'motor_limit',
+		'temp_limit',
+		'aspeedn_entry',
+		'aspeedp_entry',
+		'aaccel_entry',
+		'adeltalen_entry',
+		'adeltaradius_entry',
+		'aminlimit_entry',
+		'amaxlimit_entry',
+		'amove',
+		'xspeedn_entry',
+		'xspeedp_entry',
+		'xaccel_entry',
+		'xdeltalen_entry',
+		'xdeltaradius_entry',
+		'xminlimit_entry',
+		'xmaxlimit_entry',
+		'xmove',
+		'yspeedn_entry',
+		'yspeedp_entry',
+		'yaccel_entry',
+		'ydeltalen_entry',
+		'ydeltaradius_entry',
+		'yminlimit_entry',
+		'ymaxlimit_entry',
+		'ymove',
+		'zspeedn_entry',
+		'zspeedp_entry',
+		'zaccel_entry',
+		'zdeltalen_entry',
+		'zdeltaradius_entry',
+		'zminlimit_entry',
+		'zmaxlimit_entry',
+		'zmove',
+		'espeedn_entry',
+		'espeedp_entry',
+		'eaccel_entry',
+		'esteps_entry',
+		'emove',
+	), outputs = (
+		'name',
+		'aspeedn_label',
+		'aspeedp_label',
+		'aaccel_label',
+		'adeltalen_label',
+		'adeltaradius_label',
+		'aminlimit_label',
+		'amaxlimit_label',
+		'aposition',
+		'xspeedn_label',
+		'xspeedp_label',
+		'xaccel_label',
+		'xdeltalen_label',
+		'xdeltaradius_label',
+		'xminlimit_label',
+		'xmaxlimit_label',
+		'xposition',
+		'yspeedn_label',
+		'yspeedp_label',
+		'yaccel_label',
+		'ydeltalen_label',
+		'ydeltaradius_label',
+		'yminlimit_label',
+		'ymaxlimit_label',
+		'yposition',
+		'zspeedn_label',
+		'zspeedp_label',
+		'zaccel_label',
+		'zdeltalen_label',
+		'zdeltaradius_label',
+		'zminlimit_label',
+		'zmaxlimit_label',
+		'zposition',
+		'espeedn_label',
+		'espeedp_label',
+		'eaccel_label',
+		'esteps_label',
+	))
+
+def update ():
+	g.name = p.get_name ().rstrip ('\0')
+	pos = p.get_position ()
+	if len (pos) > 0:
+		aspeedn = '%.2f' % (p.axis_motor_get_max_v_neg (0) / p.axis_motor_get_steps_per_mm (0))
+		aspeedp = '%.2f' % (p.axis_motor_get_max_v_pos (0) / p.axis_motor_get_steps_per_mm (0))
+		aaccel = '%.2f' % (p.axis_motor_get_max_a (0) / p.axis_motor_get_steps_per_mm (0))
+		adeltalen = '%.2f' % p.axis_get_delta_length (0)
+		adeltaradius = '%.2f' % p.axis_get_delta_radius (0)
+		aminlimit = '%.2f' % (p.axis_get_limit_min_pos (0) / p.axis_motor_get_steps_per_mm (0))
+		amaxlimit = '%.2f' % (p.axis_get_limit_max_pos (0) / p.axis_motor_get_steps_per_mm (0))
+		for a in range (len (pos)):
+			speedn = '%.2f' % (p.axis_motor_get_max_v_neg (a) / p.axis_motor_get_steps_per_mm (a))
+			speedp = '%.2f' % (p.axis_motor_get_max_v_pos (a) / p.axis_motor_get_steps_per_mm (a))
+			accel = '%.2f' % (p.axis_motor_get_max_a (a) / p.axis_motor_get_steps_per_mm (a))
+			deltalen = '%.2f' % p.axis_get_delta_length (a)
+			deltaradius = '%.2f' % p.axis_get_delta_radius (a)
+			minlimit = '%.2f' % (p.axis_get_limit_min_pos (a) / p.axis_motor_get_steps_per_mm (a))
+			maxlimit = '%.2f' % (p.axis_get_limit_max_pos (a) / p.axis_motor_get_steps_per_mm (a))
+			if aspeedn != speedn:
+				aspeedn = '-'
+			if aspeedp != speedp:
+				aspeedp = '-'
+			if aaccel != accel:
+				aaccel = '-'
+			if adeltalen != deltalen:
+				adeltalen = '-'
+			if adeltaradius != deltaradius:
+				adeltaradius = '-'
+			if aminlimit != minlimit:
+				aminlimit = '-'
+			if amaxlimit != maxlimit:
+				amaxlimit = '-'
+			setattr (g, chr (ord ('x') + a) + 'speedn_label', speedn)
+			setattr (g, chr (ord ('x') + a) + 'speedp_label', speedp)
+			setattr (g, chr (ord ('x') + a) + 'accel_label', accel)
+			setattr (g, chr (ord ('x') + a) + 'deltalen_label', deltalen)
+			setattr (g, chr (ord ('x') + a) + 'deltaradius_label', deltaradius)
+			setattr (g, chr (ord ('x') + a) + 'minlimit_label', minlimit)
+			setattr (g, chr (ord ('x') + a) + 'maxlimit_label', maxlimit)
+			setattr (g, chr (ord ('x') + a) + 'position', '%.2f' % pos[a])
+		g.aspeedn_label = aspeedn
+		g.aspeedp_label = aspeedp
+		g.aaccel_label = aaccel
+		g.adeltalen_label = adeltalen
+		g.adeltaradius_label = adeltaradius
+		g.aminlimit_label = aminlimit
+		g.amaxlimit_label = amaxlimit
+		g.aposition = '%.2f,%.2f,%.2f' % tuple (pos)
+	g.espeedn_label = '%.2f' % (p.extruder_motor_get_max_v_neg (0) / p.extruder_motor_get_steps_per_mm (0))
+	g.espeedp_label = '%.2f' % (p.extruder_motor_get_max_v_pos (0) / p.extruder_motor_get_steps_per_mm (0))
+	g.eaccel_label = '%.2f' % (p.extruder_motor_get_max_a (0) / p.extruder_motor_get_steps_per_mm (0))
+	g.esteps_label = '%.2f' % p.extruder_motor_get_steps_per_mm (0)
+update ()
+g ()
+# }}}
+# }}}

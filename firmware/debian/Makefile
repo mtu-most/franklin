@@ -1,0 +1,13 @@
+BOARD ?= mighty_opt
+BOARDS ?= /usr/share/arduino/hardware/mighty-1284p/boards.txt
+PORT ?= $(firstword $(wildcard /dev/ttyACM* /dev/ttyUSB*))
+
+apb = ard-parse-boards --boards_txt=$(BOARDS)
+proto = $(shell $(apb) $(BOARD) upload.protocol)
+baud = $(shell $(apb) $(BOARD) upload.speed)
+part = $(shell $(apb) $(BOARD) build.mcu)
+hex = $(BOARD).hex
+
+all:
+	ard-reset-arduino $(PORT)
+	avrdude -c $(proto) -b $(baud) -p $(part) -P $(PORT) -U flash:w:$(hex)
