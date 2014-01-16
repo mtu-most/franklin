@@ -14,7 +14,7 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 	uint8_t i;
 	for (i = 1; i <= MAXOBJECT; ++i) {
 		uint8_t next = (temp_current + i) % MAXOBJECT;
-		if (temps[next] && (!isnan (temps[next]->target) || !isnan (temps[next]->min_alarm) || !isnan (temps[next]->max_alarm)) && temps[next]->power_pin < 255 && (temps[next]->thermistor_pin < 255 || (temps[next]->target > 0 && isinf (temps[next]->target)))) {
+		if (temps[next] && (!isnan (temps[next]->target) || !isnan (temps[next]->min_alarm) || !isnan (temps[next]->max_alarm)) && !temps[next]->power_pin.invalid () && (!temps[next]->thermistor_pin.invalid () || (temps[next]->target > 0 && isinf (temps[next]->target)))) {
 			temp_current = next;
 			break;
 		}
@@ -24,7 +24,7 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 		return;
 	}
 	float temp = NAN;
-	if (temps[temp_current]->thermistor_pin < 255) {
+	if (!temps[temp_current]->thermistor_pin.invalid ()) {
 		temp = temps[temp_current]->read ();
 		// First of all, if an alarm should be triggered, do so.
 		if ((!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp) || (!isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp)) {
@@ -43,7 +43,7 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 			last_active = longtime;
 		}
 	}
-	if (temps[temp_current]->thermistor_pin >= 255)
+	if (temps[temp_current]->thermistor_pin.invalid ())
 		return;
 	if (isnan (temps[temp_current]->core_C) || isnan (temps[temp_current]->shell_C) || isnan (temps[temp_current]->transfer) || isnan (temps[temp_current]->radiation)) {
 		// No valid settings; use simple on/off-regime based on current temperature only.
@@ -104,128 +104,96 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 static void done_motors () {
 	// Mark motors as not moving.
 	for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-		if (!motors[m] || motors[m]->steps_total == 0)
+		if (!motors[m] || isnan (motors[m]->dist))
 			continue;
-		motors[m]->steps_total = 0;
+		motors[m]->dist = NAN;
 	}
-	if (printer_type == 1) {
-		for (uint8_t a = 0; a < 3; ++a)
-			delta_source[a] = delta_target[a];
-	}
-	phase = 3;
+	moving = false;
 	next_move ();
 }
 
 static bool do_steps (uint8_t m, int16_t num_steps) {
-	if (num_steps > 30) {	// Testing shows that up to 33 steps at once works (with 16x microstepping).
+	if (num_steps == 0)
+		return true;
+	if (motors[m]->positive != (num_steps > 0)) {
+		if (num_steps > 0)
+			SET (motors[m]->dir_pin);
+		else
+			RESET (motors[m]->dir_pin);
+		motors[m]->positive = (num_steps > 0);
+		//debug ("reverse positive %d %d", motors[m]->positive, num_steps);
+	}
+	if (abs (num_steps) > 30) {	// Testing shows that up to 33 steps at once works (with 16x microstepping).
 		debug ("many steps %d: %d", m, num_steps);
 	}
 	if (m >= 2 && m < MAXAXES + 2) {
 		// No problem if limit switch is not hit.
 		if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) : GET (axis[m - 2].limit_min_pin, false)) {
 			// Hit endstop; abort current move and notify host.
-			debug ("hit %d %d", int (m - 2), int (axis[m - 2].current_pos));
+			debug ("hit %d %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (motors[m]->positive), int (axis[m - 2].limit_max_pin.write ()));
 			// Stop continuous move only for the motor that hits the switch.
 			motors[m]->f = 0;
 			motors[m]->continuous_steps_per_s = 0;
 			limits_pos[m - 2] = axis[m - 2].current_pos;
 			try_send_next ();
-			if (motors[m]->steps_total != 0) {
-				if (queue[queue_start].cb)
-					++num_movecbs;
+			if (!isnan (motors[m]->dist)) {
+				abort_move ();
 				done_motors ();
 			}
-			delta_source[0] = NAN;
 			return false;
 		}
-		axis[m - 2].current_pos += int32_t (num_steps) * (motors[m]->positive ? 1 : -1);
+		axis[m - 2].current_pos += num_steps;
 	}
-        for (int16_t s = 0; s < num_steps; ++s) {
+        for (int16_t s = 0; s < abs (num_steps); ++s) {
 		SET (motors[m]->step_pin);
 		RESET (motors[m]->step_pin);
 	}
-	motors[m]->steps_done += num_steps;
 	return true;
 }
 
-static void reverse (uint8_t m) {
-	bool positive = !motors[m]->positive;
-	if (positive)
-		SET (motors[m]->dir_pin);
-	else
-		RESET (motors[m]->dir_pin);
-	motors[m]->positive = positive;
-	motors[m]->steps_done = -motors[m]->steps_done;
-	motors[m]->steps_total = -motors[m]->steps_total;
+static void move_axes (float target[3]) {
+	switch (printer_type) {
+	case 0:
+		for (uint8_t a = 0; a < num_axes; ++a)
+			if (!isnan (target[a]))
+				do_steps (2 + a, target[a] * axis[a].motor.steps_per_mm - axis[a].current_pos);
+		break;
+	case 1:
+		// Delta movements are hardcoded to 3 axes.
+		for (uint8_t a = 0; a < 3; ++a) {
+			bool ok = true;
+			int32_t the_target = delta_to_axis (a, target, &ok);
+			do_steps (2 + a, the_target - axis[a].current_pos);
+			debug ("delta move %d %d", int (the_target), ok);
+		}
+		break;
+	default:
+		debug ("Bug: printer_type %d not handled by move in " __FILE__, printer_type);
+		break;
+	}
 }
 
 static void handle_motors (unsigned long current_time, unsigned long longtime) {
 	if (pause_all)
 		return;
-	int8_t audio_state = -1;
-	uint8_t bit = (current_time - audio_start) / audio_us_per_bit;
-	uint8_t byte = bit >> 3;
-	if (audio_head != audio_tail) {
-		while (byte >= AUDIO_FRAGMENT_SIZE) {
-			audio_head = (audio_head + 1) % AUDIO_FRAGMENTS;
-			if (audio_tail == audio_head)
-				break;
-			byte -= AUDIO_FRAGMENT_SIZE;
-			// us per fragment = us/bit*bit/fragment
-			audio_start += audio_us_per_bit * 8 * AUDIO_FRAGMENT_SIZE;
-		}
-		if (audio_head != audio_tail)
-			audio_state = (audio_buffer[audio_head][byte] >> (bit & 7)) & 1;
-	}
-	while (phase < 3 && current_time - t[phase] >= t[phase + 1] - t[phase]) {
-		//debug ("step %d %d %d %d %d %d", int (t[0]), int (current_time - t[0]), int (t[1] - t[0]), int (t[2] - t[0]), int (t[3] - t[0]), int (phase));
-		if (++phase >= 3) {
-			for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-				if (!motors[m] || !motors[m]->steps_total)
-				       continue;
-				// The move has ended; do any remaining steps.
-				if (motors[m]->steps_total < 0)
-					reverse (m);
-				if (!do_steps (m, motors[m]->steps_total - motors[m]->steps_done))
-					return;
-			}
-			if (queue[queue_start].cb) {
-				++num_movecbs;
-				try_send_next ();
-			}
-			done_motors ();
-			break;
-		}
-	}
 	// Check for continuous moves.
 	for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-		if (!motors[m] || motors[m]->steps_total != 0)
+		if (!motors[m] || !isnan (motors[m]->dist))
 			continue;
-		if (motors[m]->continuous_steps_per_s == 0 && motors[m]->f == 0) {
-			// Non-moving motor: play audio, if we should.
-			if (motors[m]->audio_flags & Motor::PLAYING && audio_state >= 0 && !!audio_state != !!(motors[m]->audio_flags & Motor::STATE)) {
-				if (motors[m]->audio_flags & Motor::STATE)
-					RESET (motors[m]->dir_pin);
-				else
-					SET (motors[m]->dir_pin);
-				SET (motors[m]->step_pin);
-				RESET (motors[m]->step_pin);
-				motors[m]->audio_flags ^= Motor::STATE;
-			}
+		if (motors[m]->continuous_steps_per_s == 0 && motors[m]->f == 0)
 			continue;
-		}
 		last_active = longtime;
 		float current_t = (current_time - motors[m]->continuous_last_time) / 1e6;
 		motors[m]->continuous_last_time = current_time;
 		if (motors[m]->continuous_steps_per_s != motors[m]->f) {
 			// Getting up to speed, or slowing down.
 			if (motors[m]->continuous_steps_per_s > motors[m]->f) {
-				motors[m]->f += current_t * motors[m]->max_a;
+				motors[m]->f += current_t * motors[m]->max_a * motors[m]->steps_per_mm;
 				if (motors[m]->continuous_steps_per_s < motors[m]->f)
 					motors[m]->f = motors[m]->continuous_steps_per_s;
 			}
 			else {
-				motors[m]->f -= current_t * motors[m]->max_a;
+				motors[m]->f -= current_t * motors[m]->max_a * motors[m]->steps_per_mm;
 				if (motors[m]->f < 0 || (motors[m]->f == 0 && motors[m]->continuous_steps_per_s < 0)) {
 					motors[m]->f = -motors[m]->f;
 					motors[m]->continuous_steps_per_s = -motors[m]->continuous_steps_per_s;
@@ -237,6 +205,7 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 						motors[m]->positive = true;
 						SET (motors[m]->dir_pin);
 					}
+					//debug ("new positive %d", motors[m]->positive);
 					if (motors[m]->continuous_steps_per_s < motors[m]->f)
 						motors[m]->f = motors[m]->continuous_steps_per_s;
 				}
@@ -247,35 +216,114 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 		motors[m]->continuous_steps += motors[m]->f * current_t;
 		int16_t steps (motors[m]->continuous_steps);
 		motors[m]->continuous_steps -= steps;
-		do_steps (m, steps);
+		do_steps (m, steps * (motors[m]->positive ? 1 : -1));
 		continue;
 	}
-	if (phase < 3) {
-		last_active = longtime;
-		float current_t = (current_time - t[phase]) / 1e6;
-		float fraction = f[phase] + v[phase] * current_t + .5 * a[phase] * current_t * current_t;
-		if (fraction > f[phase + 1])
-			fraction = f[phase + 1];
-		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-			// Handle all regularly moving motors here, except for axes on a delta printer which knows its location.
-			if (!motors[m] || motors[m]->steps_total == 0 || (printer_type == 1 && m < 2 + MAXAXES && !isnan (delta_source[0])))
+	// Check for regular move.
+	if (!moving)
+		return;
+	last_active = longtime;
+	long t = current_time - start_time;
+	float target[num_axes];
+	while (t >= t0 + tq) {	// Finish this move and prepare next.
+		for (uint8_t a = 0; a < num_axes; ++a) {
+			if (isnan (axis[a].motor.dist)) {
+				target[a] = NAN;
 				continue;
-			do_steps (m, motors[m]->steps_total * fraction - motors[m]->steps_done);
-		}
-		if (printer_type == 1 && !isnan (delta_source[0])) {
-			float pos[3];
-			for (uint8_t c = 0; c < 3; ++c)
-				pos[c] = delta_source[c] + (delta_target[c] - delta_source[c]) * fraction;
-			// Delta movements are hardcoded to 3 axes.
-			for (uint8_t a = 0; a < 3; ++a) {
-				bool ok = true;
-				int32_t diff = delta_to_axis (a, pos, &ok);
-				bool positive = diff > 0;
-				if (positive != axis[a].motor.positive)
-					reverse (a + 2);
-				do_steps (2 + a, abs (diff));
 			}
+			float dist = isnan (axis[a].motor.dist) ? 0 : axis[a].motor.dist;
+			float next_dist = isnan (axis[a].motor.next_dist) ? 0 : axis[a].motor.next_dist;
+			target[a] = axis[a].source + axis[a].motor.main_dist + (dist * vp + next_dist * vq) * tq / 2e6;
 		}
+		move_axes (target);
+		for (uint8_t e = 0; e < num_extruders; ++e) {
+			if (isnan (extruder[e].motor.dist))
+				continue;
+			float dist = isnan (extruder[e].motor.dist) ? 0 : extruder[e].motor.dist;
+			float next_dist = isnan (extruder[e].motor.next_dist) ? 0 : extruder[e].motor.next_dist;
+			float mm = extruder[e].motor.main_dist + (dist * vp + next_dist * vq) * tq / 2e6;
+			if (!do_steps (2 + MAXAXES + e, mm * extruder[e].motor.steps_per_mm - extruder[e].steps_done))
+				return;
+		}
+		if (current_move_has_cb) {
+			++num_movecbs;
+			try_send_next ();
+		}
+		for (uint8_t a = 0; a < num_axes; ++a)
+			if (!isnan (axis[a].motor.dist)) {
+				//debug ("before source %d %f %f", a, &axis[a].source, &axis[a].motor.dist);
+				axis[a].source += axis[a].motor.dist;
+				//debug ("after source %d %f %f %d", a, &axis[a].source, &axis[a].motor.dist, int (axis[a].current_pos));
+			}
+		done_motors ();
+		if (!moving)
+			return;
+		t = micros () - start_time;
+	}
+	if (t < t0) {	// Main part.
+		float dist_fraction = f0 + (v0 + (vp - v0) / 2 * (t * 1. / t0)) * t / 1e6;
+		for (uint8_t a = 0; a < num_axes; ++a) {
+			if (isnan (axis[a].motor.dist)) {
+				target[a] = NAN;
+				continue;
+			}
+			target[a] = axis[a].source + axis[a].motor.dist * dist_fraction;
+		}
+		for (uint8_t e = 0; e < num_extruders; ++e) {
+			if (isnan (extruder[e].motor.dist))
+				continue;
+			int32_t steps = extruder[e].motor.dist * dist_fraction * extruder[e].motor.steps_per_mm;
+			do_steps (2 + MAXAXES + e, steps - extruder[e].steps_done);
+			extruder[e].steps_done = steps;
+		}
+	}
+	else {	// Connector part.
+		t -= t0;
+		for (uint8_t a = 0; a < num_axes; ++a) {
+			if (isnan (axis[a].motor.dist) && isnan (axis[a].motor.next_dist)) {
+				target[a] = NAN;
+				continue;
+			}
+			float dist = isnan (axis[a].motor.dist) ? 0 : axis[a].motor.dist;
+			float next_dist = isnan (axis[a].motor.next_dist) ? 0 : axis[a].motor.next_dist;
+			target[a] = axis[a].source + axis[a].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (t * 1. / tq)) * t / 1e6;
+		}
+		for (uint8_t e = 0; e < num_extruders; ++e) {
+			if (isnan (extruder[e].motor.dist) && isnan (extruder[e].motor.next_dist))
+				continue;
+			float dist = isnan (extruder[e].motor.dist) ? 0 : extruder[e].motor.dist;
+			float next_dist = isnan (extruder[e].motor.next_dist) ? 0 : extruder[e].motor.next_dist;
+			int32_t steps = (extruder[e].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (t * 1. / tq)) * t / 1e6) * extruder[e].motor.steps_per_mm;
+			do_steps (2 + MAXAXES + e, steps - extruder[e].steps_done);
+			extruder[e].steps_done = steps;
+		}
+	}
+	move_axes (target);
+}
+
+static void handle_audio (unsigned long current_time, unsigned long longtime) {
+	if (audio_head != audio_tail) {
+		last_active = longtime;
+		int8_t audio_state = -1;
+		int16_t bit = (current_time - audio_start) / audio_us_per_bit;
+		int16_t byte = bit >> 3;
+		while (byte >= AUDIO_FRAGMENT_SIZE) {
+			if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
+			{
+				continue_cb |= 2;
+				try_send_next ();
+			}
+			audio_head = (audio_head + 1) % AUDIO_FRAGMENTS;
+			if (audio_tail == audio_head)
+				break;
+			byte -= AUDIO_FRAGMENT_SIZE;
+			// us per fragment = us/bit*bit/fragment
+			audio_start += audio_us_per_bit * 8 * AUDIO_FRAGMENT_SIZE;
+		}
+		if (audio_head != audio_tail)
+			audio_state = (audio_buffer[audio_head][byte] >> (bit & 7)) & 1;
+		(void)audio_state;
+		// TODO: move motors.
 	}
 }
 
@@ -301,6 +349,7 @@ void loop () {
 	handle_temps (current_time, longtime);	// Periodic temps stuff: temperature regulation.
 	handle_motors (current_time, longtime);	// Movement.
 	handle_led (longtime);	// heart beat.
+	handle_audio (current_time, longtime);
 	if (motors_busy && motor_limit > 0 && longtime - last_active > motor_limit) {
 		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 			if (!motors[m])

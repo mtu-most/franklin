@@ -1,5 +1,8 @@
 #!/usr/bin/make -f
 
+# gcc-avr does not support stack protection.
+export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector
+
 %:
 	dh $@ --with python2
 

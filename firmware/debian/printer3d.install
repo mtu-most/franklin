@@ -1,10 +1,10 @@
 firmware/Makefile /usr/share/printer3d/firmware
 firmware/build-mighty_opt/mighty_opt.hex /usr/share/printer3d/firmware
 firmware/build-mega2560/mega2560.hex /usr/share/printer3d/firmware
-debian/Makefile /usr/share/printer3d/firmware
-debian/printer3d-firmware-upload /usr/bin
+firmware/printer3d-firmware-upload /usr/bin
+firmware/Makefile.upload /usr/share/printer3d/firmware
 server/printer3d-server /usr/share/printer3d
 server/printer3d.py /usr/share/printer3d
+server/html /usr/share/printer3d
 calibrate/printer3d-calibrate /usr/bin
 calibrate/printer3d-calibrate.gui /usr/share/printer3d
-server/html /usr/share/printer3d

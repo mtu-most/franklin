@@ -135,10 +135,14 @@ gtk
 							'Initialize Delta
 			HBox
 				'Seconds inactivity before motors go idle
-				Entry value=motor_limit:10
+				Entry value=motor_limit
+				Button clicked=set_motor_limit
+					'Set
 			HBox
 				'Seconds inactivity before heaters go idle
-				Entry value=temp_limit:600
+				Entry value=temp_limit
+				Button clicked=set_temp_limit
+					'Set
 			HBox
 				Button clicked=home
 					'Home all

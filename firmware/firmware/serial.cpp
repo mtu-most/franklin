@@ -68,13 +68,20 @@ void serial ()
 			// Emergency reset.
 			queue_start = 0;
 			queue_end = 0;
-			delta_source[0] = NAN;
-			phase = 3;
+			for (uint8_t a = 0; a < 3; ++a)
+				axis[a].source = NAN;
+			moving = false;
+			t0 = 0;
+			tq = 0;
+			v0 = 0;
+			vp = 0;
+			vq = 0;
 			for (uint8_t o = 0; o < MAXOBJECT; ++o)
 			{
 				if (motors[o])
 				{
-					motors[o]->steps_total = 0;
+					motors[o]->dist = NAN;
+					motors[o]->next_dist = NAN;
 					motors[o]->continuous_steps_per_s = 0;
 					motors[o]->f = 0;
 					SET (motors[o]->enable_pin);
@@ -299,12 +306,22 @@ void try_send_next ()
 		reply_ready = false;
 		return;
 	}
-	if (continue_cb)
+	if (continue_cb & 1)
 	{
-		//debug ("continue");
+		//debug ("continue move");
+		continue_buffer[2] = 0;
 		prepare_packet (continue_buffer);
 		send_packet (continue_buffer);
-		continue_cb = false;
+		continue_cb &= ~1;
+		return;
+	}
+	if (continue_cb & 2)
+	{
+		//debug ("continue audio");
+		continue_buffer[2] = 1;
+		prepare_packet (continue_buffer);
+		send_packet (continue_buffer);
+		continue_cb &= ~2;
 		return;
 	}
 	//debug ("nothing to send?!");

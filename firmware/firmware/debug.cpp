@@ -47,7 +47,7 @@ void debug (char const *fmt, ...) {
 				}
 				case 'f': {
 					float *arg = va_arg (ap, float *);
-					Serial.print (*arg);
+					Serial.print (*arg, 5);
 					break;
 				}
 				case 's': {

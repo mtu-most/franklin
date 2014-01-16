@@ -4,245 +4,235 @@ import os
 import sys
 import json
 import printer3d
-import network
 import wshttpd
 import xdgbasedir
 import glib
+import time
+from wshttpd import log
 
-config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'httpport': 8080, 'pythonport': 'reprap|RepRap printer control', 'tls': None, 'printer': '', 'wav_pre': '', 'wav_post': ''})
-printer = printer3d.Printer (config['printer'])
-pos = [0., 0., 0., None, 1.]	# 3 axes, 1 extruder, 1 feedrate; it would be nicer to make this flexible; the firmware can handle it...
-rel = False
-erel = False
-etemp = float ('nan')
-btemp = float ('nan')
-gcode = []
+config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'port': 8080, 'printer': '', 'audiodir': xdgbasedir.cache_filename_write (packagename = 'printer3d', filename = 'audio', makedirs = False)})
 
-def home (axes):
-	ret = printer.home (axes)
-	for i, a in enumerate (axes):
-		pos[a] = ret[i]
-
-def flush ():
-	printer.goto (cb = True)
-	printer.wait_for_cb ()
-
-def parse_gcode (code):
-	gcode[:] = []
-	for lineno, line in enumerate (code.split ('\n')):
-		line = line.strip ()
-		if line.startswith ('N'):
-			r = re.match ('N\d+\s*(.*?)\*\d+$')
-			if not r:
-				# Invalid line; ignore it.
-				print ('%d:ignoring invalid gcode: %s' % (lineno, line))
+class Printer:
+	def __init__ (self, name):
+		self.printer = printer3d.Printer (name)
+		self.printer.continue_cb = lambda: glib.idle_add (self.send_gcode)
+		self.printer.audiodir = config['audiodir']
+		glib.io_add_watch (self.printer.printer.fd, glib.IO_IN, self.printer_input)
+		# [axes, extruders, feedrate]
+		self.pos = [[0.] * self.printer.get_num_axes (), [0.] * self.printer.get_num_extruders (), 1.]
+		self.current_extruder = 0
+		self.rel = False
+		self.erel = False
+		self.etemp = float ('nan')
+		self.btemp = float ('nan')
+		self.gcode = []
+	def home (self, axes = None):
+		if axes is None:
+			axes = range (self.printer.get_num_axes ())
+		ret = self.printer.home (axes)
+		for i, a in enumerate (axes):
+			self.pos[0][a] = ret[i]
+	def flush (self):
+		self.printer.goto (cb = True)
+		self.printer.wait_for_cb ()
+	def parse_gcode (self, code):
+		self.gcode = []
+		for lineno, line in enumerate (code.split ('\n')):
+			line = line.strip ()
+			if line.startswith ('N'):
+				r = re.match ('N\d+\s*(.*?)\*\d+$')
+				if not r:
+					# Invalid line; ignore it.
+					print ('%d:ignoring invalid gcode: %s' % (lineno, line))
+					continue
+				line = r.group (1)
+			if ';' in line:
+				line = line[:line.index (';')].strip ()
+			if line == '':
 				continue
-			line = r.group (1)
-		if ';' in line:
-			line = line[:line.index (';')].strip ()
-		if line == '':
-			continue
-		line = line.split ()
-		args = {}
-		for a in line[1:]:
-			try:
-				args[a[0]] = float (a[1:])
-			except:
-				print ('%d:ignoring invalid gcode: %s' % (lineno, line))
-				break
-		else:
-			gcode.append ((line[0], args))
-	send_gcode ()
-
-def send_gcode ():
-	if len (gcode) == 0:
-		return False
-	while len (gcode) > 0 and not printer.is_waiting ():
-		parse_gcode_chunk (*gcode.pop (0))
-	if len (gcode) == 0 and config['wav_post']:
-		printer.play (config['wav_post'])
-	return False
-
-def printer_input (source, condition):
-	printer.block ()
-	send_gcode ()
-	return True
-
-def parse_gcode_chunk (cmd, args):
-	global etemp, btemp, rel, erel
-	#print ('%s %s' % (cmd, args))
-	if cmd[0] == 'T':
-		# Tool selection is not currently supported.
-		pass
-	elif cmd in ('G0', 'G1'):
-		components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None}
-		for c in args:
-			assert c in components and components[c] is None
-			components[c] = args[c]
-		f0 = pos[4]
-		if components['F'] is not None:
-			pos[4] = components['F']
-		if components['E'] is not None:
-			if erel:
-				estep = components['E']
+			line = line.split ()
+			args = {}
+			for a in line[1:]:
+				try:
+					args[a[0]] = float (a[1:])
+				except:
+					print ('%d:ignoring invalid gcode: %s' % (lineno, line))
+					break
 			else:
-				estep = components['E'] - pos[3]
-			pos[3] += estep
-		else:
-			estep = 0
-		oldpos = pos[:3]
-		for axis in range (3):
-			value = components[chr (ord ('X') + axis)]
-			if value is not None:
-				if rel:
-					pos[axis] += value
+				self.gcode.append ((line[0], args))
+		self.send_gcode ()
+	def send_gcode (self):
+		if len (self.gcode) == 0:
+			return False
+		while len (self.gcode) > 0 and not self.printer.is_waiting ():
+			self.parse_gcode_chunk (*self.gcode.pop (0))
+		return False
+	def printer_input (self, source, condition):
+		self.printer.block ()
+		self.send_gcode ()
+		return True
+	def parse_gcode_chunk (self, cmd, args):
+		global etemp, btemp, rel, erel
+		#print ('%s %s' % (cmd, args))
+		if cmd[0] == 'T':
+			# Tool selection.
+			target = int (cmd[1:])
+			assert len (self.pos[1]) > target
+			self.current_extruder = target
+		elif cmd in ('G0', 'G1'):
+			components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None}
+			for c in args:
+				assert c in components and components[c] is None
+				components[c] = args[c]
+			f0 = self.pos[2]
+			if components['F'] is not None:
+				self.pos[2] = components['F']
+			if components['E'] is not None:
+				if self.erel:
+					estep = components['E']
 				else:
-					pos[axis] = value
-		dist = sum ([(pos[x] - oldpos[x]) ** 2 for x in range (3)]) ** .5
-		if dist == 0:
-			dist = abs (estep)
-		#if f0 is None:
-		f0 = pos[4]
-		#print ('going to %s estep %s f0 %s dist %s' % (pos, estep, f0, dist))
-		if dist > 0:
-			printer.goto (axes = {0: pos[0], 1: pos[1], 2: pos[2]}, e = estep, f0 = f0 / dist / 60, f1 = pos[4] / dist / 60, cb = False)
-			#printer.wait_for_cb ()
-	elif cmd == 'G28':
-		flush ()
-		which = ''
-		for w in args:
-			which += w
-		if which == '':
-			which = 'XYZ'
-		axes = [ord (w) - ord ('X') for w in which]
-		home (axes)
-	elif cmd == 'G4':
-		flush ()
-		if 'P' in args:
-			time.sleep (args[P] / 1000)
-	elif cmd == 'G21':
-		pass
-	elif cmd == 'G90':
-		rel = False
-	elif cmd == 'G91':
-		rel = True
-	elif cmd == 'G92':
-		which = {}
-		for w in args:
-			if w in 'XYZ':
-				wh = ord (w) - ord ('X')
-				pos[wh] = args[w]
-				which[wh] = args[w]
-			elif w == 'E':
-				pos[3] = args[w]
-		if len (which) > 0:
-			flush ()
-			for w in which:
-				printer.axis_set_current_pos (w, which[w])
-	elif cmd == 'M82':
-		erel = False
-	elif cmd == 'M83':
-		erel = True
-	elif cmd == 'M84':
-		flush ()
-		for axis in range (3):
-			printer.sleep_axis (axis)
-		printer.sleep_extruder (0)
-	elif cmd == 'M104':
-		flush ()
-		etemp = args['S']
-		printer.settemp_extruder (0, etemp)
-	elif cmd == 'M106':	# Fan on
-		flush ()
-		printer.settemp_temp (1, float ('inf'))
-	elif cmd == 'M107':
-		flush ()
-		printer.settemp_temp (1, float ('nan'))
-	elif cmd == 'M109':
-		flush ()
-		etemp = args['S']
-		printer.settemp_extruder (0, etemp)
-		if printer.extruder_temp_get_thermistor_pin (0) < 255:
-			printer.waittemp_extruder (0, etemp, float ('nan'))
-	elif cmd == 'M116':
-		flush ()
-		if printer.extruder_temp_get_thermistor_pin (0) < 255:
-			printer.waittemp_extruder (0, etemp, float ('nan'))
-		if printer.temp_get_thermistor_pin (0) < 255:
-			printer.waittemp_temp (0, btemp, float ('nan'))
-	elif cmd == 'M140':
-		flush ()
-		btemp = args['S']
-		printer.settemp_temp (0, btemp)
-	elif cmd == 'M190':
-		flush ()
-		if 'S' in args:
-			btemp = args['S']
-			printer.settemp_temp (0, btemp)
-		if printer.temp_get_thermistor_pin (0) < 255:
-			printer.waittemp_temp (0, btemp, float ('nan'))
-	else:
-		raise SyntaxError ('invalid gcode command %s' % cmd)
-
-class Connection (wshttpd.Wshttpd):
-	def recv (self, frame):
-		try:
-			(cmd, data), index = json.JSONDecoder ().raw_decode (frame)
-		except:
-			self.send (json.dumps (['error', 'invalid json content']))
-			return
-		#print ('cmd %s data %s' % (cmd, repr (data)))
-		if cmd == 'gcode' and isinstance (data, (str, unicode)):
-			if (config['wav_pre']):
-				printer.play (config['wav_pre'])
-			parse_gcode (data)
-		elif cmd == 'stop':
-			printer.pause (True)
-		elif cmd == 'resume':
-			printer.pause (False)
-		elif cmd == 'ping':
-			self.send (json.dumps (['pong', '']))
-		elif cmd == 'etemp':
-			printer.settemp_extruder (0, float (data))
-		elif cmd == 'btemp':
-			printer.settemp_temp (0, float (data))
-		elif cmd == 'home':
-			printer.home ()
-		elif cmd == 'homez':
-			printer.home ([2])
-		elif cmd == 'sleep':
-			for a in range (printer.get_num_axes ()):
-				printer.sleep_axis (a)
-			for e in range (printer.get_num_extruders ()):
-				printer.sleep_extruder (e)
-		elif cmd == 'feed':
-			printer.set_feedrate (float (data))
-		elif cmd == 'status':
-			self.send (json.dumps (['status', [printer.readtemp_temp (0), printer.readtemp_extruder (0)]]))
+					estep = components['E'] - self.pos[1][self.current_extruder]
+				self.pos[1][self.current_extruder] += estep
+			else:
+				estep = 0
+			oldpos = self.pos[0]
+			for axis in range (3):
+				value = components[chr (ord ('X') + axis)]
+				if value is not None:
+					if self.rel:
+						self.pos[0][axis] += value
+					else:
+						self.pos[0][axis] = value
+			dist = sum ([(self.pos[0][x] - oldpos[x]) ** 2 for x in range (3)]) ** .5
+			if dist == 0:
+				dist = abs (estep)
+			#print ('going to %s estep %s f0 %s dist %s' % (pos, estep, f0, dist))
+			if dist > 0:
+				#if f0 is None:
+				#f0 = self.pos[1][self.current_extruder]
+				f0 = self.pos[2]	# Use new value.
+				self.printer.goto (axes = {0: self.pos[0][0], 1: self.pos[0][1], 2: self.pos[0][2]}, e = estep, f0 = f0 / dist / 60, f1 = self.pos[2] / dist / 60, cb = False)
+				#self.printer.wait_for_cb ()
+		elif cmd == 'G28':
+			self.flush ()
+			which = ''
+			for w in args:
+				which += w
+			if which == '':
+				which = 'XYZ'
+			axes = [ord (w) - ord ('X') for w in which]
+			self.home (axes)
+		elif cmd == 'G4':
+			self.flush ()
+			if 'P' in args:
+				time.sleep (args['P'] / 1000)
+		elif cmd == 'G21':
+			pass
+		elif cmd == 'G90':
+			self.rel = False
+		elif cmd == 'G91':
+			self.rel = True
+		elif cmd == 'G92':
+			which = {}
+			for w in args:
+				if w in 'XYZ':
+					wh = ord (w) - ord ('X')
+					self.pos[0][wh] = args[w]
+					which[wh] = args[w]
+				elif w == 'E':
+					self.pos[1][self.current_extruder] = args[w]
+			if len (which) > 0:
+				self.flush ()
+				for w in which:
+					self.printer.axis_set_current_pos (w, which[w])
+		elif cmd == 'M82':
+			self.erel = False
+		elif cmd == 'M83':
+			self.erel = True
+		elif cmd == 'M84':
+			self.flush ()
+			for axis in range (3):
+				self.printer.sleep_axis (axis)
+			self.printer.sleep_extruder (0)
+		elif cmd == 'M104':
+			self.flush ()
+			self.etemp = args['S']
+			self.printer.settemp_extruder (0, self.etemp)
+		elif cmd == 'M106':	# Fan on
+			#self.flush ()
+			#self.printer.settemp_temp (1, float ('inf'))
+			pass
+		elif cmd == 'M107':
+			#self.flush ()
+			#self.printer.settemp_temp (1, float ('nan'))
+			pass
+		elif cmd == 'M109':
+			self.flush ()
+			self.etemp = args['S']
+			self.printer.settemp_extruder (0, self.etemp)
+			if self.printer.extruder_temp_get_thermistor_pin (0) < 255:
+				self.printer.waittemp_extruder (0, self.etemp, float ('nan'))
+		elif cmd == 'M116':
+			self.flush ()
+			if self.printer.extruder_temp_get_thermistor_pin (0) < 255:
+				self.printer.waittemp_extruder (0, self.etemp, float ('nan'))
+			if self.printer.temp_get_thermistor_pin (0) < 255:
+				self.printer.waittemp_temp (0, self.btemp, float ('nan'))
+		elif cmd == 'M140':
+			self.flush ()
+			self.btemp = args['S']
+			self.printer.settemp_temp (0, self.btemp)
+		elif cmd == 'M190':
+			self.flush ()
+			if 'S' in args:
+				self.btemp = args['S']
+				self.printer.settemp_temp (0, self.btemp)
+			if self.printer.temp_get_thermistor_pin (0) < 255:
+				self.printer.waittemp_temp (0, self.btemp, float ('nan'))
 		else:
-			self.send (json.dumps (['error', 'invalid command']))
-			return
-		self.send (json.dumps (['ok', None]))
-	def page (self):
-		if self.address.path == '/':
-			self.reply_html (self.gethtml ('page.html'))
-		elif self.address.path == '/page.js':
-			self.reply_js (self.gethtml ('page.js'))
-		elif self.address.path == '/page.css':
-			self.reply_css (self.gethtml ('page.css'))
-		elif self.address.path == '/audio.ogg':
-			self.reply (200, self.gethtml ('audio.ogg'), {'Content-Type': 'audio/ogg'})
-		else:
-			self.reply (404)
-	def gethtml (self, page):
-		files = xdgbasedir.data_files_read (os.path.join ('html', page), packagename = 'printer3d')
-		assert len (files) > 0
-		return open (files[0]).read ()
+			raise SyntaxError ('invalid gcode command %s' % cmd)
 
-httpd = network.Server (config['httpport'], Connection, tls = config['tls'])
-direct = network.RPCServer (config['pythonport'], lambda socket: printer, tls = config['tls'])
-glib.io_add_watch (printer.printer.fd, glib.IO_IN, printer_input)
-printer.continue_cb = lambda: glib.idle_add (send_gcode)
+class Connection (wshttpd.Httpd_connection):
+	def __init__ (self, socket):
+		self.socket = socket
+		self.printer = default_printer
+		log ('init')
+	def set_printer (self, printer):
+		assert printer in printers
+		self.printer = printers[printer]
+	def printerlist (self):
+		return printers.keys
+	def gcode (self, code):
+		assert self.printer is not None
+		log ('gcode')
+		self.printer.parse_gcode (code)
+	def home_all (self):
+		assert self.printer is not None
+		self.printer.gcode = []
+		self.printer.home ()
+	def home_z (self):
+		assert self.printer is not None
+		self.printer.gcode = []
+		self.printer.home ([2])
+	def sleep_all (self):
+		assert self.printer is not None
+		self.printer.gcode = []
+		for a in range (self.printer.printer.get_num_axes ()):
+			self.printer.printer.sleep_axis (a)
+		for e in range (self.printer.printer.get_num_extruders ()):
+			self.printer.printer.sleep_extruder (e)
+	def status (self):
+		assert self.printer is not None
+		return (self.printer.printer.readtemp_temp (0), self.printer.printer.readtemp_extruder (0))
+	def __getattr__ (self, attr):
+		#log ('other: %s' % attr)
+		assert self.printer is not None
+		return getattr (self.printer.printer, attr)
+
+default_printer = Printer (config['printer'])
+printers = {default_printer.printer.get_name (): default_printer}
+
+httpd = wshttpd.RPChttpd (config['port'], Connection, httpdirs = xdgbasedir.data_files_read ('html', packagename = 'printer3d') + ['html', '/home/shevek/src/python-wshttpd'])
 
 print ('running')
-network.fgloop ()
+wshttpd.fgloop ()

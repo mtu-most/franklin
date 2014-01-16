@@ -23,19 +23,15 @@ HTTP_PORT=8080
 PYTHON_PORT='reprap|RepRap printer interface'
 
 # Path to key and certificate to use for encryption.
-TLS=''
+# This can either be a single file containing the private key and certificate,
+# or one file for each of those, separated by a colon.
+TLS='/etc/ssl/private/ssl-cert-snakeoil.key:/etc/ssl/certs/ssl-cert-snakeoil.pem'
 
 # Regular expression of printer name to connect to.
 PRINTER=''
 
-# Sound to play before each print.
-WAV_PRE=''
-
-# Sound to play after each print.
-WAV_POST=''
-
 # Arguments to start-stop-daemon.
-ARGS="--make-pidfile --quiet --chuid nobody:nogroup"
+ARGS="--make-pidfile --quiet --chuid printer3d:printer3d"
 
 # File for storing the pid.  You probably don't need to change this.
 PIDFILE=/run/printer3d.pid
@@ -50,7 +46,7 @@ NAME=printer3d
 DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/printer3d-server
 ARGS="--pidfile $PIDFILE --exec $DAEMON $ARGS"
-START_ARGS="--background --oknodo --start $ARGS -- --httpport=$HTTP_PORT --pythonport=$PYTHON_PORT --tls=$TLS --printer=$PRINTER --wav_pre=$WAV_PRE --wav_post=$WAV_POST"
+START_ARGS="--background --oknodo --start $ARGS -- --httpport=$HTTP_PORT --pythonport='$PYTHON_PORT' --tls=$TLS --printer='$PRINTER'"
 STOP_ARGS="--oknodo --stop $ARGS"
 
 if test ! -x "$DAEMON"; then

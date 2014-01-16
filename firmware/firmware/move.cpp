@@ -1,185 +1,330 @@
-// vim: set foldmethod=marker foldmarker={,} :
+// vim: set foldmethod=marker :
 #include "firmware.h"
 
+//#define DEBUG_MOVE
+
+// Set up:
+// start_time		micros() at start of move.
+// t0			time to do main part.
+// tq			time to do connection.
+// m->dist		total distance of this segment (mm).
+// m->next_dist		total distance of next segment (mm).
+// m->main_dist		distance of main part (mm).
+// m->move_done	0
+// v0, vp		start and end velocity for main part. (fraction/s)
+// vq			end velocity of connector part. (fraction/s)
 void next_move () {
 	if (queue_start == queue_end)
 		return;
-	//debug ("next %d %d", queue_start, queue_end);
+#ifdef DEBUG_MOVE
+	debug ("next move qstart %d qend %d", queue_start, queue_end);
+#endif
 	// Set everything up for running queue[queue_start].
-	v[1] = queue[queue_start].data[F0] * feedrate;
-	v[2] = queue[queue_start].data[F1] * feedrate;
-	// For all motors except delta axes, set steps_total, steps_done.
-	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-		if (!motors[m] || isnan (queue[queue_start].data[mt + 2]) || (printer_type == 1 && m < 2 + MAXAXES))
-			continue;
-		float target = queue[queue_start].data[mt + 2];
-		int32_t diff;
-		if (m >= 2 && m < 2 + MAXAXES)
-			diff = int32_t (target * motors[m]->steps_per_mm + .5) - axis[m - 2].current_pos;
+
+	if (isnan (axis[0].source)) { // {{{
+		// Determine current location of extruder.
+		if (printer_type == 0) { // {{{
+			for (uint8_t a = 0; a < MAXAXES; ++a)
+				axis[a].source = axis[a].current_pos / axis[a].motor.steps_per_mm;
+		}
+		// }}}
+		else if (printer_type == 1) { // {{{
+			// This is very slow, but that's no problem, because it is only used after the position is lost
+			// (when a limit switch is hit, when a motor is run, and when reset is received.)
+			//
+			// (z_i-z_p)^2=l_i^2-(x_i-x_p)^2-(y_i-y_p)^2 === Z_i
+			// dZ_i/dx_p=2(x_i-x_p) and dZ_i/dy_p=2(y_i-y_p)
+			debug ("new delta position");
+			float xp = 0;
+			float yp = 0;
+			while (false && true) {
+				for (uint8_t c = 0; c < 2; ++c) {
+					for (uint8_t a = 0; a < 3; ++a) {
+						//float dx = axis[a].x - xp;
+						//float dy = axis[a].y - yp;
+						float Z[3];
+						for (uint8_t a2 = 0; a2 < 3; ++a2) {
+							float dx2 = axis[a2].x - xp;
+							float dy2 = axis[a2].y - yp;
+							Z[a2] = sqrt (axis[a2].delta_length * axis[a2].delta_length - dx2 * dx2 - dy2 * dy2);
+						}
+						//float dZdxp = -dx / Z[a];
+						//float dZdyp = -dy / Z[a];
+						uint8_t b = (a + 1) % 3;
+						uint8_t c = (a + 2) % 3;
+						float error = Z[b] * axis[b].motor.steps_per_mm - axis[b].current_pos;
+						error += Z[c] * axis[c].motor.steps_per_mm - axis[c].current_pos;
+						error /= 2;
+						error = Z[a] * axis[a].motor.steps_per_mm - axis[a].current_pos - error;
+						// Positive error means Z is too large.
+					}
+				}
+			}
+			// TODO
+			axis[0].source = 0;
+			axis[1].source = 0;
+			axis[2].source = axis[2].limit_max_pos / axis[2].motor.steps_per_mm;
+		}
+		// }}}
 		else
-			diff = int32_t (target * motors[m]->steps_per_mm + .5);
-		if (diff != 0 && (motors[m]->audio_flags & (Motor::PLAYING | Motor::STATE)) == (Motor::PLAYING | Motor::STATE)) {
-			diff -= 1;
-			motors[m]->audio_flags &= ~Motor::STATE;
-		}
-		motors[m]->positive = diff > 0;
-		motors[m]->steps_total = abs (diff);
-		motors[m]->steps_done = 0;
-		//debug ("motor %d steps %d", m, motors[m]->steps_total);
+			debug ("Error: invalid printer type %d", printer_type);
 	}
-	// For delta axes, set steps_total, steps_done.
-	if (printer_type == 1) {
-#define sin120 0.8660254037844386	// .5*sqrt(3)
-#define cos120 -.5
-		// Coordinates of axes (at angles 0, 120, 240; each with its own radius).
-		axis[0].x = axis[0].delta_radius;
-		axis[1].x = axis[1].delta_radius * cos120;
-		axis[2].x = axis[2].delta_radius * cos120;
-		axis[0].y = 0;
-		axis[1].y = axis[1].delta_radius * sin120;
-		axis[2].y = axis[2].delta_radius * -sin120;
-		for (uint8_t ta = 0; ta < 3; ++ta)
-			axis[ta].z = sqrt (axis[ta].delta_length * axis[ta].delta_length - axis[ta].delta_radius * axis[ta].delta_radius);
-		// Set target coordinates.
-		for (uint8_t c = 0; c < 3; ++c) {
-			if (!isnan (queue[queue_start].data[AXIS0 + c]))
-				delta_target[c] = queue[queue_start].data[AXIS0 + c];
-			else
-				delta_target[c] = delta_source[c];
-		}
-		// Limit delta_target to reachable coordinates.
-		int32_t diff[3];
-		bool ok = true;
-		for (uint8_t ta = 0; ta < 3; ++ta)
-			diff[ta] = delta_to_axis (ta, delta_target, &ok);
-		if (!ok) {
-			debug ("Warning: limiting delta target");
-			for (uint8_t ta = 0; ta < 3; ++ta)
-				diff[ta] = delta_to_axis (ta, delta_target, &ok);
-		}
-		// Find target motor positions.
-		for (uint8_t ta = 0; ta < 3; ++ta) {
-			axis[ta].motor.steps_total = abs (diff[ta]);
-			axis[ta].motor.positive = diff[ta] > 0;
-			axis[ta].motor.steps_done = 0;
-			//debug ("delta %d steps %x %x", ta, int (axis[ta].motor.steps_total >> 16), int (axis[ta].motor.steps_total));
-		}
-	}
-	// Set v[0], v[3], f[0], f[3].
-	v[0] = 0;
-	v[3] = 0;
-	f[0] = 0;
-	f[3] = 1;
-	// Limit v[1] and v[2] to max values.
-	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-		if (!motors[m] || isnan (queue[queue_start].data[mt + 2]) || motors[m]->steps_total == 0)
-			continue;
-		float max_v = motors[m]->positive ? motors[m]->max_v_pos : motors[m]->max_v_neg;
-		float v1 = motors[m]->steps_total * v[1];
-		float v2 = motors[m]->steps_total * v[2];
-		if (v1 > max_v) {
-			//float tmp = v[1];
-			//debug ("limit %d v1 %d to %f %f %f", m, int (motors[m]->steps_total), &max_v, &tmp, &v1);
-			v[1] = max_v / motors[m]->steps_total;
-		}
-		if (v2 > max_v) {
-			//float tmp = v[2];
-			//debug ("limit %d v2 %d to %f %f %f", m, int (motors[m]->steps_total), &max_v, &tmp, &v2);
-			v[2] = max_v / motors[m]->steps_total;
-		}
-	}
-	//debug ("v %f %f", &v[1], &v[2]);
-	// Find (shortest possible) start and end times (now delta, later absolute).
-	float t1f = 0, t2f = 0, t3f = 0;
-	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-		if (!motors[m] || isnan (queue[queue_start].data[mt + 2]) || motors[m]->steps_total == 0)
-			continue;
-		float limit = abs ((v[1] - v[0]) * motors[m]->steps_total) / motors[m]->max_a;
-		if (t1f < limit)
-			t1f = limit;
-		limit = abs ((v[3] - v[2]) * motors[m]->steps_total) / motors[m]->max_a;
-		if (t3f < limit)
-			t3f = limit;
-	}
-	//debug ("limits %f %f", &t1f, &t3f);
-	// Set t2f and update t1f and t3f to be absolute time.
-	// t2f - t1f is the time for the piece in the middle; it's the fraction to do divided by the average speed.
-	// The fraction is all (1) minus what is done during t1 and t3 (which have average speeds of v[x]/2).
-	// The average speed is halfway the start and end speed.
-	t2f = t1f + (1. - (v[1] * t1f / 2 + v[2] * t3f / 2)) / ((v[1] + v[2]) / 2);
-	t3f += t2f;
-	//debug ("times %f %f %f", &t1f, &t2f, &t3f);
-	if (t2f < t1f) {
-		// Speeding up and slowing down takes more steps than we need to do in total.
-		// Speed up as fast as we can, then slow down as fast as we can, doing the correct number of steps.
-		float t1 = -INFINITY;
-		float t2 = -INFINITY, t_error = 0;
+	// }}}
+	if (!move_prepared) { // {{{
+		// We have to speed up first; don't pop anything off the queue yet, just set values to handle segment 0.
+#ifdef DEBUG_MOVE
+		debug ("no move prepared");
+#endif
+		bool action = false;
 		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
 			uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-			if (!motors[m] || isnan (queue[queue_start].data[mt + 2]) || motors[m]->steps_total == 0)
+			if (!motors[m])
 				continue;
-			float new_a = motors[m]->max_a / motors[m]->steps_total;
-			float new_t1 = sqrt (f[3] / new_a + (v[0] * v[0] + v[3] * v[3]) / (2 * new_a * new_a)) - v[0] / new_a;
-			if (new_t1 > t1) {
-				t1 = new_t1;
-				t2 = t1 + (v[0] - v[3]) / new_a;
-				a[0] = new_a;
-				f[1] = v[0] * t1 + .5 * new_a * t1 * t1;
-				t_error = 2 * f[3] / (v[0] + v[3]);
+			if (isnan (queue[queue_start].data[mt + 2])) {
+				motors[m]->dist = NAN;
+				motors[m]->next_dist = NAN;
+				continue;
 			}
+			motors[m]->dist = 0;
+			if (mt < num_axes)
+				motors[m]->next_dist = queue[queue_start].data[mt + 2] - axis[mt].source;
+			else
+				motors[m]->next_dist = queue[queue_start].data[mt + 2];
+			if (motors[m]->next_dist != 0)
+				action = true;
+#ifdef DEBUG_MOVE
+			debug ("next dist motor %d %f", m, &motors[m]->next_dist);
+#endif
 		}
-		if (t1 <= 0) {
-			// This shouldn't happen: we entered the segment at high speed, and do not have enough steps to slow down within the restrictions.
-			// Slow down faster than max_a; let's hope we aren't skipping steps.
-			t1f = 0;
-			t2f = 0;
-			t3f = t_error;
-			f[1] = f[0];
-			v[1] = v[0];
-			f[2] = f[1];
-			v[2] = v[1];
-			debug ("Warning: exceeding max acceleration");
+		if (!action) {
+			// Nothing to do; discard this segment and try again.
+#ifdef DEBUG_MOVE
+			debug ("skipping zero move");
+#endif
+			if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
+				continue_cb |= 1;
+			if (queue[queue_start].cb)
+				++num_movecbs;
+			queue_start = (queue_start + 1) & QUEUE_LENGTH_MASK;
+			try_send_next ();
+			return next_move ();
 		}
+		tq = 0;	// Previous value; new value is computed below.
+		v0 = 0;
+		vp = 0;
+		vq = queue[queue_start].data[F0];
+		current_move_has_cb = false;
+		move_prepared = true;
+	}
+	// }}}
+	else { // We are prepared and can start at segment 1.  Set up everything. {{{
+		v0 = vq;
+#ifdef DEBUG_MOVE
+		debug ("move prepared, v0 = %f tq = %d", &v0, int (tq / 1000));
+#endif
+		uint8_t n = (queue_start + 1) & QUEUE_LENGTH_MASK;
+		if (n == queue_end) { // {{{
+#ifdef DEBUG_MOVE
+			debug ("last segment");
+#endif
+			// There is no next segment; we should stop at the end.
+			for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
+				uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+				if (!motors[m])
+					continue;
+				if (isnan (queue[queue_start].data[mt + 2])) {
+					motors[m]->dist = NAN;
+					motors[m]->next_dist = NAN;
+					continue;
+				}
+				motors[m]->dist = motors[m]->next_dist;
+				motors[m]->next_dist = 0;
+#ifdef DEBUG_MOVE
+				debug ("m %d dist %f nd %f", m, &motors[m]->dist, &motors[m]->next_dist);
+#endif
+			}
+			vp = queue[queue_start].data[F1];
+			vq = 0;
+			move_prepared = false;
+		}
+		// }}}
 		else {
-			t1f = t1;
-			t2f = t1f;
-			t3f = t2f + t2;
-			v[1] = v[0] + a[0] * t1;
-			f[2] = f[1];
-			v[2] = v[1];
+#ifdef DEBUG_MOVE
+			debug ("connection");
+#endif
+			// There is a next segment; we should connect to it.
+			for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
+				uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+				if (!motors[m])
+					continue;
+				if (isnan (queue[queue_start].data[mt + 2])) {
+					motors[m]->dist = NAN;
+					motors[m]->next_dist = NAN;
+					continue;
+				}
+				motors[m]->dist = motors[m]->next_dist;
+				motors[m]->next_dist = mt < num_axes ? queue[n].data[mt + 2] - (axis[mt].source + motors[m]->dist) : queue[n].data[mt + 2];
+#ifdef DEBUG_MOVE
+				debug ("m2 %d dist %f nd %f", m, &motors[m]->dist, &motors[m]->next_dist);
+#endif
+			}
+			vp = queue[queue_start].data[F1];
+			vq = queue[n].data[F0];
+			move_prepared = true;
 		}
-	}
-	// Set a[0], a[2], f[1], f[2]
-	a[0] = (v[1] - v[0]) / t1f;
-	a[2] = (v[3] - v[2]) / (t3f - t2f);
-	f[1] = f[0] + (v[1] + v[0]) / 2 * t1f;
-	f[2] = f[3] - (v[2] + v[3]) / 2 * (t3f - t2f);
-	// Set a[1]
-	a[1] = (v[2] - v[1]) / (t2f - t1f);
-	// Go to next queue position.
-	if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
-		continue_cb = true;
-	queue_start = (queue_start + 1) & QUEUE_LENGTH_MASK;
-	if (continue_cb)
-		try_send_next ();
-	// Set up motors.
-	for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-		if (!motors[m] || (motors[m]->steps_total == 0 && (printer_type == 0 || m >= 2 + 3)))
+		current_move_has_cb = queue[queue_start].cb;
+		if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start) {
+#ifdef DEBUG_MOVE
+			debug ("continue regular");
+#endif
+			continue_cb |= 1;
+			try_send_next ();
+		}
+		queue_start = n;
+	} // }}}
+	// Limit vp and vq. {{{
+#ifdef DEBUG_MOVE
+	debug ("before limit vp %f vq %f", &vp, &vq);
+#endif
+	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
+		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+		if (!motors[m] || (isnan (motors[m]->dist) && isnan (motors[m]->next_dist)))
 			continue;
-		if (motors[m]->positive)
-			SET (motors[m]->dir_pin);
-		else
-			RESET (motors[m]->dir_pin);
-		RESET (motors[m]->enable_pin);
+		// TODO: limit motors, not axes, for delta.
+		float max = motors[m]->dist > 0 ? motors[m]->max_v_pos : motors[m]->max_v_neg;
+		if (!isnan (motors[m]->dist) && vp * abs (motors[m]->dist) > max)
+			vp = max / abs (motors[m]->dist);
+		if (!isnan (motors[m]->next_dist) && vq * abs (motors[m]->next_dist) > max)
+			vq = max / abs (motors[m]->next_dist);
+#ifdef DEBUG_MOVE
+		debug ("%d vpq %f %f %f %f", m, &vp, &vq, &max, &motors[m]->next_dist);
+#endif
 	}
+#ifdef DEBUG_MOVE
+	debug ("after limit vp %f vq %f", &vp, &vq);
+#endif
+	// }}}
+	// Already set up: v0, vp, vq, m->dist, m->next_dist.
+	f0 = v0 * tq / 2e6;
+#ifdef DEBUG_MOVE
+	debug ("f0 %f tq %d v0 %f", &f0, int (tq / 1000), &v0);
+#endif
+	// Find shortest tq. {{{
+	tq = 0;
+	t0 = 0;
+	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
+		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+		if (!motors[m] || (isnan (motors[m]->dist) && isnan (motors[m]->next_dist)))
+			continue;
+		RESET (motors[m]->enable_pin);
+		// Find speeds in mm/s.
+		float v = isnan (motors[m]->dist) ? 0 : vp * motors[m]->dist;
+		float v0_mm = isnan (motors[m]->dist) ? 0 : v0 * motors[m]->dist;
+		float next_v = isnan (motors[m]->next_dist) ? 0 : vq * motors[m]->next_dist;
+		long min_t = long (abs (v - next_v) / motors[m]->max_a * 1e6);
+#ifdef DEBUG_MOVE
+		debug ("mint %d %f %f", int (min_t / 1000), &v, &next_v);
+#endif
+		if (tq < min_t)
+			tq = min_t;
+		min_t = long (abs (v - v0_mm) / motors[m]->max_a * 1e6);
+		if (t0 < min_t)
+			t0 = min_t;
+	}
+#ifdef DEBUG_MOVE
+	debug ("tq %d t0 %d", int (tq / 1000), int (t0 / 1000));
+#endif
+	// }}}
+	// Check if we're within the segment's limits. {{{
+	float ftq = tq / 1e6;
+	float fq = vq / 2 * ftq;
+	float fp = vp / 2 * ftq;
+	float fmain = (v0 + vp) * t0 / 2e6;
+#ifdef DEBUG_MOVE
+	debug ("ftq %f fp %f fq %f", &ftq, &fp, &fq);
+#endif
+	if (fq > .5 || fp > .5 || fmain + fp > 1 - f0) {
+		// Change vp and vq so it's ok. TODO: check this.
+		float factor = .5 / max (fq, fp);
+		float mf = (1 - f0) / (fmain + fp);
+		if (mf < factor)
+			factor = mf;
+		fp *= factor;
+		fq *= factor;
+		fmain *= factor;
+		factor = sqrt (factor);
+		vp *= factor;
+		vq *= factor;
+		tq *= factor;
+#ifdef DEBUG_MOVE
+		debug ("adjust %f f0 %f fp %f fq %f fmain %f v %f %f tq %d", &factor, &f0, &fp, &fq, &fmain, &vp, &vq, int (tq / 1000));
+#endif
+	}
+	// }}}
+	// Fill variables. {{{
+	if (abs (v0 + vp) > 1e-10) {
+		t0 = long ((1 - fp - f0) / (v0 + vp) * 2e6);
+#ifdef DEBUG_MOVE
+		debug ("t0 set %f fp %f f0 %f v0 %f vp %f", int (t0 / 1000), &fp, &f0, &v0, &vp);
+#endif
+	}
+	else
+		t0 = 0;
+	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
+		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+		if (!motors[m])
+			continue;
+		if (isnan (motors[m]->dist)) {
+			motors[m]->main_dist = 0;
+			continue;
+		}
+		motors[m]->main_dist = motors[m]->dist * (f0 + (v0 + vp) * t0 / 2e6);
+#ifdef DEBUG_MOVE
+		debug ("main dist %d %f %f %f %d", m, &motors[m]->main_dist, &v0, &vp, int (t0 / 1000));
+#endif
+		if (mt >= num_axes)
+			extruder[mt - num_axes].steps_done = f0 * motors[m]->dist * motors[m]->steps_per_mm;
+	}
+#ifdef DEBUG_MOVE
+	debug ("source 2 %f pos %d", &axis[0].source, int (axis[0].current_pos));
+	debug ("general f0=%f fp=%f fq=%f v0=%f vp=%f vq=%f t0=%d tq=%d", &f0, &fp, &fq, &v0, &vp, &vq, int (t0/1000), int (tq/1000));
+#endif
 	motors_busy = true;
-	phase = 0;
-	t[0] = micros ();
-	t[1] = t[0] + (unsigned long)(t1f * 1e6);
-	t[2] = t[0] + (unsigned long)(t2f * 1e6);
-	t[3] = t[0] + (unsigned long)(t3f * 1e6);
-	//debug ("xsteps %x %x t %d %d %d %d v %f %f %f %f a %f %f %f %f f %f %f %f %f", int (axis[0].motor.steps_total >> 16), int (axis[1].motor.steps_total), int (t[0]), int (t[1]), int (t[2]), int (t[3]), &v[0], &v[1], &v[2], &v[3], &a[0], &a[1], &a[2], &a[3], &f[0], &f[1], &f[2], &f[3]);
+	if (tq == 0) {
+		if (t0 == 0) {
+			// This is a no-move segment; pop it off the queue to prevent a deadlock.
+			if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start) {
+#ifdef DEBUG_MOVE
+				debug ("continue zero");
+#endif
+				continue_cb |= 1;
+				try_send_next ();
+			}
+			queue_start = (queue_start + 1) & QUEUE_LENGTH_MASK;
+		}
+		move_prepared = false;
+	}
+	moving = true;
+	start_time = micros ();
+	// }}}
+}
+
+void abort_move () {
+	if (!moving)
+		return;
+	if (current_move_has_cb)
+		++num_movecbs;
+	for (uint8_t m = 0; m < MAXOBJECT; ++m) {
+		if (!motors[m])
+			continue;
+	}
+	queue_start = 0;
+	queue_end = 0;
+	moving = false;
+	move_prepared = false;
+#ifdef DEBUG_MOVE
+	debug ("move no longer prepared");
+#endif
+	// Not always required, but this is a slow operation anyway and it doesn't harm if it's called needlessly.
+	try_send_next ();
 }

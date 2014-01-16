@@ -31,12 +31,21 @@
 #define EXTERN extern
 #endif
 
-#define SET_OUTPUT(pin) do { if ((pin) < 255) { pinMode ((pin), OUTPUT); }} while (0)
-#define SET_INPUT(pin) do { if ((pin) < 255) { pinMode ((pin), INPUT_PULLUP); }} while (0)
-#define SET_INPUT_NOPULLUP(pin) do { if ((pin) < 255) { pinMode ((pin), INPUT); }} while (0)
-#define SET(pin) do { if ((pin) < 255) { digitalWrite ((pin), HIGH); } } while (0)
-#define RESET(pin) do { if ((pin) < 255) { digitalWrite ((pin), LOW); } } while (0)
-#define GET(pin, _default) ((pin) < 255 ? digitalRead (pin) : _default)
+#define SET_OUTPUT(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, OUTPUT); }} while (0)
+#define SET_INPUT(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, INPUT_PULLUP); }} while (0)
+#define SET_INPUT_NOPULLUP(pin_no) do { if ((pin_no).invalid ()) { pinMode ((pin_no).pin, INPUT); }} while (0)
+#define SET(pin_no) do { if (!(pin_no).invalid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? LOW : HIGH); } } while (0)
+#define RESET(pin_no) do { if (!(pin_no).invalid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? HIGH : LOW); } } while (0)
+#define GET(pin_no, _default) (!(pin_no).invalid () ? digitalRead ((pin_no).pin) == HIGH ? !(pin_no).inverted () : (pin_no).inverted () : _default)
+
+struct Pin_t {
+	uint8_t flags;
+	uint8_t pin;
+	bool invalid () { return flags & 1; }
+	bool inverted () { return flags & 2; }
+	uint16_t write () { return flags << 8 | pin; }
+	void read (uint16_t data) { pin = data & 0xff; flags = data >> 8; }
+};
 
 union ReadFloat {
 	float f;
@@ -75,7 +84,8 @@ enum Command {
 	CMD_WRITE,	// 1 byte: which channel; n bytes: data.
 	CMD_PAUSE,	// 1 byte: 0: not pause; 1: pause.
 	CMD_PING,	// 1 byte: code.  Reply: PONG.
-	CMD_PLAY,	// 1 byte: motor 1, 1 byte: motor 2, 4 bytes: #samples. 
+	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: us_per_bit.
+	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_START,	// 4 byte: 0 (protocol version).
@@ -86,7 +96,7 @@ enum Command {
 		// asynchronous events.
 	CMD_MOVECB,	// 1 byte: number of movecb events.
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
-	CMD_CONTINUE,	// 1 byte: 0 (because commands must not have 0 or 2 byte arguments).  Bool flag if it needs to be sent.
+	CMD_CONTINUE,	// 1 byte: is_audio.  Bool flag if it needs to be sent.
 	CMD_LIMIT,	// 1 byte: which channel.
 	CMD_MESSAGE,	// 4 byte: code; n byte: string: message with no defined meaning; code may be used for a protocol.
 };
@@ -113,8 +123,8 @@ struct Temp : public Object
 	float radiation;			// radiated power = radiation * (shell_T ** 4 - room_T ** 4) [W/K**4]
 	float convection;			// convected power = convection * (shell_T - room_T) [W/K]
 	// Pins.
-	uint8_t power_pin;
-	uint8_t thermistor_pin;
+	Pin_t power_pin;
+	Pin_t thermistor_pin;
 	// Volatile variables.
 	float target;				// target temperature; NAN to disable. [degrees C]
 	float core_T, shell_T;			// current temperatures. [degrees C]
@@ -132,22 +142,22 @@ struct Temp : public Object
 
 struct Motor : public Object
 {
-	uint8_t step_pin;
-	uint8_t dir_pin;
-	uint8_t enable_pin;
+	Pin_t step_pin;
+	Pin_t dir_pin;
+	Pin_t enable_pin;
 	float steps_per_mm;			// hardware calibration [steps/mm].
-	float max_v_neg, max_v_pos, max_a;	// maximum value for f in positive and negative direction [steps/s], [steps/s^2].
-	int32_t steps_total, steps_done;	// finished number of steps for current move [steps].
+	float max_v_neg, max_v_pos, max_a;	// maximum value for f in positive and negative direction [mm/s], [mm/s^2].
 	float continuous_steps_per_s;		// steps per second for continuous run.
 	float continuous_steps;			// fractional continuous steps that have been done.
+	float f;
 	unsigned long continuous_last_time;	// micros value when last continuous iteration was run.
 	bool positive;				// direction of current movement.
+	float dist, next_dist, main_dist;
 	uint8_t audio_flags;
 	enum Flags {
 		PLAYING = 1,
 		STATE = 2
 	};
-	float f;				// current flowrate [steps/s]; used to communicate from extruder motor to extruder temp.
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Motor () {}
@@ -173,9 +183,10 @@ struct Axis : public Object
 	int32_t limit_min_pos;	// Position of motor (in steps) when the min limit switch is triggered.
 	int32_t limit_max_pos;	// Position of motor (in steps) when the max limit switch is triggered.
 	float delta_length, delta_radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
-	uint8_t limit_min_pin;
-	uint8_t limit_max_pin;
-	int32_t current_pos;	// Current position (in steps).
+	Pin_t limit_min_pin;
+	Pin_t limit_max_pin;
+	int32_t current_pos;	// Current position of motor (in steps).
+	float source;		// Source position of current movement of axis (in mm), or current position if there is no movement.
 	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
@@ -190,6 +201,7 @@ struct Extruder : public Object
 	float nozzle_size;
 	float filament_size;
 	float capacity;		// heat capacity of filament in [energy]/mm/K
+	int32_t steps_done;	// steps done during current move.
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Extruder () {}
@@ -210,10 +222,9 @@ EXTERN uint8_t num_extruders;
 EXTERN uint8_t num_axes;
 EXTERN uint8_t num_temps;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
-EXTERN uint8_t led_pin;
+EXTERN Pin_t led_pin;
 EXTERN float room_T;	//[degrees C]
 EXTERN float feedrate;	// Multiplication factor for f values, used at start of move.
-EXTERN uint16_t audio_us_per_bit;
 // Other variables.
 EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
@@ -235,7 +246,7 @@ EXTERN Object *objects[MAXOBJECT];
 EXTERN MoveCommand queue[QUEUE_LENGTH];
 EXTERN uint8_t queue_start, queue_end;
 EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent out.
-EXTERN bool continue_cb;		// is a continue event waiting to be sent out?
+EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
 EXTERN int32_t limits_pos[MAXAXES];	// position when limit switch was hit or MAXLONG;
 EXTERN bool have_msg;
@@ -246,17 +257,18 @@ EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
 EXTERN unsigned long last_active, led_last, motor_limit, temp_limit;
-EXTERN uint8_t phase;
 EXTERN uint16_t led_phase;
 EXTERN float mean_temp;
-EXTERN unsigned long t[4];
-EXTERN float f[4];
-EXTERN float v[4];
-EXTERN float a[4];
-EXTERN float delta_target[3], delta_source[3];
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
 EXTERN uint8_t audio_head, audio_tail;
 EXTERN unsigned long audio_start;
+EXTERN unsigned long start_time;
+EXTERN long t0, tq;
+EXTERN bool moving;
+EXTERN float v0, vp, vq, f0;
+EXTERN uint16_t audio_us_per_bit;
+EXTERN bool move_prepared;
+EXTERN bool current_move_has_cb;
 
 // debug.cpp
 void debug (char const *fmt, ...);
@@ -271,6 +283,7 @@ void try_send_next ();
 
 // move.cpp
 void next_move ();
+void abort_move ();
 
 // setup.cpp
 void setup ();
@@ -288,9 +301,6 @@ void write_32 (int16_t &address, int32_t data, bool eeprom);
 float read_float (int16_t &address, bool eeprom);
 void write_float (int16_t &address, float data, bool eeprom);
 
-// play.cpp
-void play (int32_t num_samples, uint32_t axes, uint32_t extruders);
-
 static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float dx = target[0] - axis[a].x;
 	float dy = target[1] - axis[a].y;
@@ -299,6 +309,7 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float l2 = axis[a].delta_length * axis[a].delta_length;
 	if (r2 > l2 + 100 - 20 * axis[a].delta_length) {
 		*ok = false;
+		debug ("not ok: %f %f %f %f %f %f %f", &target[0], &target[1], &dx, &dy, &r2, &l2, &axis[a].delta_length);
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
 		float factor = (axis[a].delta_length - 10.) / sqrt (r2);
@@ -309,6 +320,7 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float inner = dx * axis[a].x + dy * axis[a].y;
 	if (inner > 0) {
 		*ok = false;
+		debug ("not ok: %f %f %f %f %f", &inner, &dx, &dy, &axis[a].x, &axis[a].y);
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
 		// target = axis + (target - (target.axis-epsilon)/|axis|2*axis)
 		float factor = .99 - (target[0] * axis[a].x + target[1] * axis[a].y) / (axis[a].x * axis[a].x + axis[a].y * axis[a].y);
@@ -318,7 +330,7 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	}
 	float dest = sqrt (l2 - r2) + dz;
 	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", &dx, &dy, &dz, &axis[a].z, &r, &target);
-	return int32_t (dest * axis[a].motor.steps_per_mm) - axis[a].current_pos;
+	return dest * axis[a].motor.steps_per_mm;
 }
 
 #endif

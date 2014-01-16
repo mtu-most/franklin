@@ -7,7 +7,7 @@ Standards-Version: 3.9.4
 
 Package: printer3d
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python-wshttpd, python-network, python-serial, avrdude, arduino-mk, python-gui, python-xdgbasedir
+Depends: ${misc:Depends}, ${python:Depends}, python-wshttpd, python-network, python-serial, avrdude, arduino-mk, python-gui, python-xdgbasedir, adduser
 Description: server for controlling RepRap 3-D printers
  3-D printers need firmware and host software to work.  This package contains
  both.  The following hardware is currently supported:

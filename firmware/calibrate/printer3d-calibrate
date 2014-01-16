@@ -1,14 +1,14 @@
 #! /usr/bin/python
 # vim: set foldmethod=marker :
 
-import network
+import wshttpd
 import sys
 import time
 import gui
 import xdgbasedir
 
-config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'port': 'reprap|', 'tls': ''})
-p = network.RPCSocket (config['port'], tls = config['tls'])
+config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'port': '8080', 'tls': True})
+p = wshttpd.RPCWebsocket (config['port'], tls = config['tls'])
 
 def axis_test_single (axis, steps_per_s, use_min, slow, positive): # {{{
 	# Move to the limit switch at slow speed.
@@ -50,10 +50,10 @@ def axis_test_half (axis, positive): # {{{
 	else:
 		p.axis_motor_set_max_v_neg (axis, float ('inf'))
 	# Binary search for maximum steps per second.
-	assert p.axis_get_limit_min_pin (axis) < 255 or p.axis_get_limit_max_pin (axis) < 255
+	assert p.pin_valid (p.axis_get_limit_min_pin (axis)) or p.pin_valid (p.axis_get_limit_max_pin (axis))
 	lower = 3200. # 1 revolution per second
 	upper = lower * 2
-	use_min = p.axis_get_limit_min_pin (axis) < 255
+	use_min = p.pin_valid (p.axis_get_limit_min_pin (axis))
 	# Find real upper bound.
 	while axis_test_single (axis, upper, use_min, 2 * 3200. / p.axis_motor_get_steps_per_mm (axis), positive):
 		lower = upper
@@ -79,7 +79,7 @@ def axis_test (axis): # {{{
 	p.axis_motor_set_max_v_pos (axis, axis_test_half (axis, True))
 # }}}
 def move_z_away (): # {{{
-	if p.axis_get_limit_min_pin (2) >= 255:
+	if not p.pin_valid (p.axis_get_limit_min_pin (2)):
 		return
 	# Move z out of the way.
 	p.run_axis (2, -1)
@@ -131,11 +131,11 @@ def calibrate_temps (): # Then temperature sensors. {{{
 	temps = []
 	channels = []
 	for e in range (p.get_maxextruders ()):
-		if p.extruder_temp_get_thermistor_pin (e) < 255 and p.extruder_temp_get_power_pin (e) < 255:
+		if p.pin_valid (p.extruder_temp_get_thermistor_pin (e)) and p.pin_valid (p.extruder_temp_get_power_pin (e)):
 			temps.append (p.extruder[e].temp) # FIXME
 			channels.append (2 + p.get_maxaxes () + e)
 	for t in range (p.get_maxtemps ()):
-		if p.temp_get_thermistor_pin (t) < 255 and p.temp_get_power_pin (t) < 255:
+		if p.pin_valid (p.temp_get_thermistor_pin (t)) and p.pin_valid (p.temp_get_power_pin (t)):
 			temps.append (p.temp[t]) # FIXME
 			channels.append (2 + p.get_maxaxes () + p.get_maxextruders () + t)
 	do_calibrate_temps (temps, channels)
@@ -151,36 +151,36 @@ def set_ramps_pins (min_limits = None, max_limits = None): # {{{
 		max_limits = not min_limits
 	p.set_led_pin (13)
 	p.set_num_axes (3)
-	p.axis_set_limit_min_pin (0, 3 if min_limits else 255)
-	p.axis_set_limit_max_pin (0, 2 if max_limits else 255)
+	p.axis_set_limit_min_pin (0, 3 if min_limits else 0x100)
+	p.axis_set_limit_max_pin (0, 2 if max_limits else 0x100)
 	p.axis_motor_set_step_pin (0, 54)
 	p.axis_motor_set_dir_pin (0, 55)
 	p.axis_motor_set_enable_pin (0, 38)
-	p.axis_set_limit_min_pin (1, 14 if min_limits else 255)
-	p.axis_set_limit_max_pin (1, 15 if max_limits else 255)
+	p.axis_set_limit_min_pin (1, 14 if min_limits else 0x100)
+	p.axis_set_limit_max_pin (1, 15 if max_limits else 0x100)
 	p.axis_motor_set_step_pin (1, 60)
 	p.axis_motor_set_dir_pin (1, 61)
 	p.axis_motor_set_enable_pin (1, 56)
-	p.axis_set_limit_min_pin (2, 18 if min_limits else 255)
-	p.axis_set_limit_max_pin (2, 19 if max_limits else 255)
+	p.axis_set_limit_min_pin (2, 18 if min_limits else 0x100)
+	p.axis_set_limit_max_pin (2, 19 if max_limits else 0x100)
 	p.axis_motor_set_step_pin (2, 46)
 	p.axis_motor_set_dir_pin (2, 48)
 	p.axis_motor_set_enable_pin (2, 62)
-	for a in range (3, p.maxaxes):
-		p.axis_set_limit_min_pin (a, 255)
-		p.axis_set_limit_max_pin (a, 255)
-		p.axis_motor_set_step_pin (a, 255)
-		p.axis_motor_set_dir_pin (a, 255)
-		p.axis_motor_set_enable_pin (a, 255)
+	for a in range (3, p.get_maxaxes ()):
+		p.axis_set_limit_min_pin (a, 0x100)
+		p.axis_set_limit_max_pin (a, 0x100)
+		p.axis_motor_set_step_pin (a, 0x100)
+		p.axis_motor_set_dir_pin (a, 0x100)
+		p.axis_motor_set_enable_pin (a, 0x100)
 	# Reset all extruder values, then set up only the real ones.
-	for e in range (p.maxextruders):
+	for e in range (p.get_maxextruders ()):
 		p.extruder_temp_set_beta (e, 3885.0342279785623)
 		p.extruder_temp_set_alpha (e, 10.056909432214743)
-		p.extruder_temp_set_power_pin (e, 255)
-		p.extruder_temp_set_thermistor_pin (e, 255)
-		p.extruder_motor_set_step_pin (e, 255)
-		p.extruder_motor_set_dir_pin (e, 255)
-		p.extruder_motor_set_enable_pin (e, 255)
+		p.extruder_temp_set_power_pin (e, 0x100)
+		p.extruder_temp_set_thermistor_pin (e, 0x100)
+		p.extruder_motor_set_step_pin (e, 0x100)
+		p.extruder_motor_set_dir_pin (e, 0x100)
+		p.extruder_motor_set_enable_pin (e, 0x100)
 	p.extruder_temp_set_power_pin (0, 10)
 	p.extruder_temp_set_thermistor_pin (0, 13)
 	p.extruder_motor_set_step_pin (0, 26)
@@ -195,8 +195,8 @@ def set_ramps_pins (min_limits = None, max_limits = None): # {{{
 	for t in range (p.get_maxtemps ()):
 		p.temp_set_beta (0, float ('nan'))
 		p.temp_set_alpha (0, float ('nan'))
-		p.temp_set_power_pin (t, 255)
-		p.temp_set_thermistor_pin (t, 255)
+		p.temp_set_power_pin (t, 0x100)
+		p.temp_set_thermistor_pin (t, 0x100)
 	p.temp_set_beta (0, 3700.)
 	p.temp_set_alpha (0, 11.7)
 	p.temp_set_power_pin (0, 8)
@@ -214,43 +214,43 @@ def set_melzi_pins (min_limits = None, max_limits = None): # {{{
 		max_limits = not min_limits
 	assert not (max_limits and min_limits)
 	p.set_led_pin (28)	# 27 according to Repetier?
-	p.axis_set_limit_min_pin (0, 18 if min_limits else 255)
-	p.axis_set_limit_max_pin (0, 18 if max_limits else 255)
+	p.axis_set_limit_min_pin (0, 18 if min_limits else 0x100)
+	p.axis_set_limit_max_pin (0, 18 if max_limits else 0x100)
 	p.axis_motor_set_step_pin (0, 15)
 	p.axis_motor_set_dir_pin (0, 21)
 	p.axis_motor_set_enable_pin (0, 14)
-	p.axis_set_limit_min_pin (1, 19 if min_limits else 255)
-	p.axis_set_limit_max_pin (1, 19 if max_limits else 255)
+	p.axis_set_limit_min_pin (1, 19 if min_limits else 0x100)
+	p.axis_set_limit_max_pin (1, 19 if max_limits else 0x100)
 	p.axis_motor_set_step_pin (1, 22)
 	p.axis_motor_set_dir_pin (1, 23)
 	p.axis_motor_set_enable_pin (1, 14)
-	p.axis_set_limit_min_pin (2, 20 if min_limits else 255)
-	p.axis_set_limit_max_pin (2, 20 if max_limits else 255)
+	p.axis_set_limit_min_pin (2, 20 if min_limits else 0x100)
+	p.axis_set_limit_max_pin (2, 20 if max_limits else 0x100)
 	p.axis_motor_set_step_pin (2, 3)
 	p.axis_motor_set_dir_pin (2, 2)
 	p.axis_motor_set_enable_pin (2, 29)	#26 according to Repetier?
 	for a in range (3, p.get_maxaxes ()):
-		p.axis_set_limit_min_pin (a, 255)
-		p.axis_set_limit_max_pin (a, 255)
-		p.axis_motor_set_step_pin (a, 255)
-		p.axis_motor_set_dir_pin (a, 255)
-		p.axis_motor_set_enable_pin (a, 255)
+		p.axis_set_limit_min_pin (a, 0x100)
+		p.axis_set_limit_max_pin (a, 0x100)
+		p.axis_motor_set_step_pin (a, 0x100)
+		p.axis_motor_set_dir_pin (a, 0x100)
+		p.axis_motor_set_enable_pin (a, 0x100)
 	for e in range (p.get_maxextruders ()):
 		p.extruder_temp_set_beta (e, 3885.0342279785623)
 		p.extruder_temp_set_alpha (e, 10.811932016492776)
-		p.extruder_temp_set_power_pin (e, 255)
-		p.extruder_temp_set_thermistor_pin (e, 255)
-		p.extruder_motor_set_step_pin (e, 255)
-		p.extruder_motor_set_dir_pin (e, 255)
-		p.extruder_motor_set_enable_pin (e, 255)
+		p.extruder_temp_set_power_pin (e, 0x100)
+		p.extruder_temp_set_thermistor_pin (e, 0x100)
+		p.extruder_motor_set_step_pin (e, 0x100)
+		p.extruder_motor_set_dir_pin (e, 0x100)
+		p.extruder_motor_set_enable_pin (e, 0x100)
 	p.extruder_temp_set_power_pin (0, 13)
 	p.extruder_temp_set_thermistor_pin (0, 7)
 	p.extruder_motor_set_step_pin (0, 1)
 	p.extruder_motor_set_dir_pin (0, 0)
 	p.extruder_motor_set_enable_pin (0, 14)
 	for t in range (2, p.get_maxtemps ()):
-		p.temp_set_power_pin (t, 255)
-		p.temp_set_thermistor_pin (t, 255)
+		p.temp_set_power_pin (t, 0x100)
+		p.temp_set_thermistor_pin (t, 0x100)
 		p.temp_set_beta (0, float ('nan'))
 		p.temp_set_alpha (0, float ('nan'))
 	p.temp_set_power_pin (0, 12)	# Heated bed.
@@ -258,7 +258,7 @@ def set_melzi_pins (min_limits = None, max_limits = None): # {{{
 	p.temp_set_beta (0, 3700.)
 	p.temp_set_alpha (0, 10.811932016492776)
 	p.temp_set_power_pin (1, 4)		# Fan.
-	p.temp_set_thermistor_pin (1, 255)
+	p.temp_set_thermistor_pin (1, 0x100)
 # }}}
 
 # Set everything up for calibration. {{{
@@ -267,10 +267,7 @@ def setup ():
 		set_melzi_pins (g.melzi_min_limits)
 	else:
 		set_ramps_pins (g.ramps_min_limits, g.ramps_max_limits)
-	p.set_name ('')
 	p.set_room_T (25.)
-	p.set_temp_limit (int (float (g.temp_limit) * 1000))
-	p.set_motor_limit (int (float (g.motor_limit) * 1000))
 	p.set_feedrate (1.)
 	for a in range (p.get_maxaxes ()):
 		p.axis_motor_set_max_v_neg (a, float ('inf'))
@@ -330,9 +327,9 @@ def set_speed (axis, positive, value):
 			set_speed (a, positive, value)
 		return
 	if positive:
-		p.axis_motor_set_max_v_pos (axis, float (value) * p.axis_motor_get_steps_per_mm (axis))
+		p.axis_motor_set_max_v_pos (axis, float (value))
 	else:
-		p.axis_motor_set_max_v_neg (axis, float (value) * p.axis_motor_get_steps_per_mm (axis))
+		p.axis_motor_set_max_v_neg (axis, float (value))
 	update ()
 
 def set_accel (axis, value):
@@ -340,7 +337,7 @@ def set_accel (axis, value):
 		for a in range (p.get_num_axes ()):
 			set_accel (a, value)
 		return
-	p.axis_motor_set_max_a (axis, float (value) * p.axis_motor_get_steps_per_mm (axis))
+	p.axis_motor_set_max_a (axis, float (value))
 	update ()
 
 def set_deltalen (axis, value):
@@ -377,23 +374,17 @@ def set_maxlimit (axis, value):
 
 def set_espeed (positive, value):
 	if positive:
-		p.extruder_motor_set_max_v_pos (0, float (value) * p.extruder_motor_get_steps_per_mm (0))
+		p.extruder_motor_set_max_v_pos (0, float (value))
 	else:
-		p.extruder_motor_set_max_v_neg (0, float (value) * p.extruder_motor_get_steps_per_mm (0))
+		p.extruder_motor_set_max_v_neg (0, float (value))
 	update ()
 
 def set_eaccel (value):
-	p.extruder_motor_set_max_a (0, float (value) * p.extruder_motor_get_steps_per_mm (0))
+	p.extruder_motor_set_max_a (0, float (value))
 	update ()
 
 def set_esteps (value):
-	max_a = p.extruder_motor_get_max_a (0) / p.extruder_motor_get_steps_per_mm (0)
-	max_v_pos = p.extruder_motor_get_max_v_pos (0) / p.extruder_motor_get_steps_per_mm (0)
-	max_v_neg = p.extruder_motor_get_max_v_neg (0) / p.extruder_motor_get_steps_per_mm (0)
 	p.extruder_motor_set_steps_per_mm (0, float (value))
-	p.extruder_motor_set_max_a (0, max_a * float (value))
-	p.extruder_motor_set_max_v_pos (0, max_v_pos * float (value))
-	p.extruder_motor_set_max_v_neg (0, max_v_neg * float (value))
 	update ()
 
 def calibrate_single_axis (axis, positive):
@@ -435,6 +426,14 @@ def emove (which, direction, amount):
 
 def home (*args):
 	p.home (*args)
+	update ()
+
+def set_motor_limit ():
+	p.set_motor_limit (int (float (g.motor_limit) * 1000))
+	update ()
+
+def set_temp_limit ():
+	p.set_temp_limit (int (float (g.temp_limit) * 1000))
 	update ()
 
 g = gui.Gui (packagename = 'printer3d', events = {	# {{{
@@ -497,6 +496,8 @@ g = gui.Gui (packagename = 'printer3d', events = {	# {{{
 		'emovepos': lambda: emove (0, 1, g.emove),
 		'home': lambda: home (),
 		'homez': lambda: home ((2,)),
+		'set_motor_limit': set_motor_limit,
+		'set_temp_limit': set_temp_limit,
 		'save': p.save_all
 	}, inputs = (
 		'name_entry',
@@ -587,17 +588,17 @@ def update ():
 	g.name = p.get_name ().rstrip ('\0')
 	pos = p.get_position ()
 	if len (pos) > 0:
-		aspeedn = '%.2f' % (p.axis_motor_get_max_v_neg (0) / p.axis_motor_get_steps_per_mm (0))
-		aspeedp = '%.2f' % (p.axis_motor_get_max_v_pos (0) / p.axis_motor_get_steps_per_mm (0))
-		aaccel = '%.2f' % (p.axis_motor_get_max_a (0) / p.axis_motor_get_steps_per_mm (0))
+		aspeedn = '%.2f' % (p.axis_motor_get_max_v_neg (0))
+		aspeedp = '%.2f' % (p.axis_motor_get_max_v_pos (0))
+		aaccel = '%.2f' % (p.axis_motor_get_max_a (0))
 		adeltalen = '%.2f' % p.axis_get_delta_length (0)
 		adeltaradius = '%.2f' % p.axis_get_delta_radius (0)
 		aminlimit = '%.2f' % (p.axis_get_limit_min_pos (0) / p.axis_motor_get_steps_per_mm (0))
 		amaxlimit = '%.2f' % (p.axis_get_limit_max_pos (0) / p.axis_motor_get_steps_per_mm (0))
 		for a in range (len (pos)):
-			speedn = '%.2f' % (p.axis_motor_get_max_v_neg (a) / p.axis_motor_get_steps_per_mm (a))
-			speedp = '%.2f' % (p.axis_motor_get_max_v_pos (a) / p.axis_motor_get_steps_per_mm (a))
-			accel = '%.2f' % (p.axis_motor_get_max_a (a) / p.axis_motor_get_steps_per_mm (a))
+			speedn = '%.2f' % (p.axis_motor_get_max_v_neg (a))
+			speedp = '%.2f' % (p.axis_motor_get_max_v_pos (a))
+			accel = '%.2f' % (p.axis_motor_get_max_a (a))
 			deltalen = '%.2f' % p.axis_get_delta_length (a)
 			deltaradius = '%.2f' % p.axis_get_delta_radius (a)
 			minlimit = '%.2f' % (p.axis_get_limit_min_pos (a) / p.axis_motor_get_steps_per_mm (a))
@@ -632,11 +633,13 @@ def update ():
 		g.aminlimit_label = aminlimit
 		g.amaxlimit_label = amaxlimit
 		g.aposition = '%.2f,%.2f,%.2f' % tuple (pos)
-	g.espeedn_label = '%.2f' % (p.extruder_motor_get_max_v_neg (0) / p.extruder_motor_get_steps_per_mm (0))
-	g.espeedp_label = '%.2f' % (p.extruder_motor_get_max_v_pos (0) / p.extruder_motor_get_steps_per_mm (0))
-	g.eaccel_label = '%.2f' % (p.extruder_motor_get_max_a (0) / p.extruder_motor_get_steps_per_mm (0))
+	g.espeedn_label = '%.2f' % (p.extruder_motor_get_max_v_neg (0))
+	g.espeedp_label = '%.2f' % (p.extruder_motor_get_max_v_pos (0))
+	g.eaccel_label = '%.2f' % (p.extruder_motor_get_max_a (0))
 	g.esteps_label = '%.2f' % p.extruder_motor_get_steps_per_mm (0)
+	g.motor_limit = str (p.get_motor_limit () / 1000.)
+	g.temp_limit = str (p.get_temp_limit () / 1000.)
 update ()
 g ()
 # }}}
-# }}}
+# }}})

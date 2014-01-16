@@ -10,4 +10,4 @@ hex = $(BOARD).hex
 
 all:
 	ard-reset-arduino $(PORT)
-	avrdude -c $(proto) -b $(baud) -p $(part) -P $(PORT) -U flash:w:$(hex)
+	avrdude -V -c $(proto) -b $(baud) -p $(part) -P $(PORT) -U flash:w:$(hex)

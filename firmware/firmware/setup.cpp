@@ -9,7 +9,7 @@ void setup ()
 	queue_start = 0;
 	queue_end = 0;
 	num_movecbs = 0;
-	continue_cb = false;
+	continue_cb = 0;
 	which_tempcbs = 0;
 	have_msg = false;
 	pause_all = false;
@@ -18,10 +18,17 @@ void setup ()
 	reply_ready = false;
 	led_phase = 0;
 	temps_busy = 0;
-	delta_source[0] = NAN;
 	led_last = millis ();
 	last_active = millis ();
-	phase = 3;
+	v0 = 0;
+	vp = 0;
+	vq = 0;
+	t0 = 0;
+	tq = 0;
+	f0 = 0;
+	moving = false;
+	move_prepared = false;
+	current_move_has_cb = false;
 	audio_head = 0;
 	audio_tail = 0;
 	audio_us_per_bit = 125; // 1000000 / 8000;
@@ -55,6 +62,7 @@ void setup ()
 		objects[i] = &axis[a];
 		limits_pos[a] = MAXLONG;
 		axis[a].current_pos = 0;
+		axis[a].source = NAN;
 	}
 	for (uint8_t e = 0; e < MAXEXTRUDERS; ++e, ++i)
 	{
@@ -72,8 +80,8 @@ void setup ()
 	for (uint8_t o = 0; o < MAXOBJECT; ++o)
 	{
 		if (motors[o]) {
-			motors[o]->steps_done = 0;
-			motors[o]->steps_total = 0;
+			motors[o]->dist = NAN;
+			motors[o]->next_dist = NAN;
 			motors[o]->f = 0;
 			motors[o]->continuous_steps_per_s = 0;
 			motors[o]->audio_flags = 0;

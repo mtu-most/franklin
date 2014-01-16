@@ -21,6 +21,11 @@ static int32_t get_int32 (uint8_t offset)
 	return ret.i;
 }
 
+static uint16_t get_uint16 (uint8_t offset)
+{
+	return ((uint16_t)command[offset] & 0xff) | (uint16_t)command[offset + 1] << 8;
+}
+
 void packet ()
 {
 	// command[0] is the length not including checksum bytes.
@@ -79,32 +84,22 @@ void packet ()
 			Serial.write (CMD_STALL);
 			return;
 		}
-		if (printer_type == 1 && isnan (delta_source[0])) {
-			bool n0 = isnan (queue[queue_end].data[AXIS0]);
-			bool n1 = isnan (queue[queue_end].data[AXIS0 + 1]);
-			bool n2 = isnan (queue[queue_end].data[AXIS0 + 2]);
-			if ((n0 || n1 || n2) && !(n0 && n1 && n2)) {
-				debug ("For initial delta move, all or none of the coordinates must be NaN");
-				Serial.write (CMD_STALL);
-				return;
-			}
-		}
 		// If a new goto is sent while paused; we discard the current buffer.
 		if (pause_all) {
-			queue_start = 0;
-			queue_end = 0;
 			pause_all = false;
+			abort_move ();
 			audio_start += micros () - pause_time;
 		}
-		// Set cb in next record, because it will be read when queue_start has already been incremented.
-		queue_end = (queue_end + 1) & QUEUE_LENGTH_MASK;
 		queue[queue_end].cb = command[1] == CMD_GOTOCB;
+		queue_end = (queue_end + 1) & QUEUE_LENGTH_MASK;
 		if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
 			Serial.write (CMD_ACKWAIT);
 		else
 			Serial.write (CMD_ACK);
-		if (phase == 3)
+		if (!moving)
 			next_move ();
+		//else
+			//debug ("waiting with move");
 		break;
 	}
 	case CMD_RUN:	// run motor
@@ -116,27 +111,36 @@ void packet ()
 			f.b[i] = command[3 + i];
 		}
 		// Motor must exist, must not be doing a move.
-		if (!motors[which] || motors[which]->steps_total > 0)
+		if (!motors[which])
 		{
-			debug ("Running invalid or moving motor %d", which);
+			debug ("Running invalid motor %d", which);
+			Serial.write (CMD_STALL);
+			return;
+		}
+		// If a run is sent while paused; we discard the current buffer.
+		if (pause_all) {
+			pause_all = false;
+			abort_move ();
+			audio_start += micros () - pause_time;
+		}
+		if (!isnan (motors[which]->dist))
+		{
+			debug ("Running moving motor %d", which);
 			Serial.write (CMD_STALL);
 			return;
 		}
 		Serial.write (CMD_ACK);
 		if (which < 2 + MAXAXES) {
-			delta_source[0] = NAN;
-			if ((motors[which]->audio_flags & (Motor::PLAYING | Motor::STATE)) == (Motor::PLAYING | Motor::STATE)) {
-				motors[which]->audio_flags &= ~Motor::STATE;
-				axis[which - 2].current_pos += 1;
-			}
+			for (uint8_t a = 0; a < 3; ++a)
+				axis[a].source = NAN;
 		}
 		if (f.f > 0) {
-			if (f.f > motors[which]->max_v_pos / motors[which]->steps_per_mm)
-				f.f = motors[which]->max_v_pos / motors[which]->steps_per_mm;
+			if (f.f > motors[which]->max_v_pos)
+				f.f = motors[which]->max_v_pos;
 		}
 		else if (f.f < 0) {
-			if (-f.f > motors[which]->max_v_neg / motors[which]->steps_per_mm)
-				f.f = -motors[which]->max_v_neg / motors[which]->steps_per_mm;
+			if (f.f < -motors[which]->max_v_neg)
+				f.f = -motors[which]->max_v_neg;
 		}
 		if (motors[which]->f != 0) {
 		       	if ((motors[which]->positive && f.f < 0) || (!motors[which]->positive && f.f > 0))
@@ -155,9 +159,9 @@ void packet ()
 				motors[which]->continuous_steps_per_s = -f.f * motors[which]->steps_per_mm;
 				motors[which]->positive = false;
 			}
+			//debug ("initial positive %d", motors[which]->positive);
 			motors[which]->continuous_last_time = micros ();
 			RESET (motors[which]->enable_pin);
-			motors[which]->steps_done = 0;
 			motors[which]->continuous_steps = 0;
 			motors_busy = true;
 		}
@@ -187,7 +191,7 @@ void packet ()
 		//debug ("CMD_SETTEMP");
 		which = get_which ();
 		float target = get_float (3);
-		if (!temps[which] || (temps[which]->thermistor_pin >= 255 && (target < 0 || !isinf (target)) && !isnan (target)))
+		if (!temps[which] || (temps[which]->thermistor_pin.invalid () && (target < 0 || !isinf (target)) && !isnan (target)))
 		{
 			debug ("Setting invalid temp %d", which);
 			Serial.write (CMD_STALL);
@@ -259,7 +263,8 @@ void packet ()
 			Serial.write (CMD_STALL);
 			return;
 		}
-		delta_source[0] = NAN;
+		for (uint8_t a = 0; a < 3; ++a)
+			axis[a].source = NAN;
 		Serial.write (CMD_ACK);
 		axis[which - 2].current_pos = get_int32 (3);
 		return;
@@ -359,8 +364,7 @@ void packet ()
 		else {
 			if (pause_all) {
 				unsigned long diff = micros () - pause_time;
-				for (uint8_t i = 0; i < 4; ++i)
-					t[i] += diff;
+				start_time += diff;
 				audio_start += diff;
 			}
 		}
@@ -379,23 +383,56 @@ void packet ()
 		try_send_next ();
 		return;
 	}
-	case CMD_PLAY:
+	case CMD_AUDIO_SETUP:
 	{
-		//debug ("CMD_PLAY");
-		Serial.write (CMD_ACK);
-		uint32_t axes = 0, extruders = 0;
+		//debug ("CMD_AUDIO_SETUP");
+		audio_us_per_bit = get_uint16 (2);
 		for (uint8_t a = 0; a < num_axes; ++a)
 		{
-			if (command[6 + ((a + 2) >> 3)] & (1 << ((a + 2) & 0x7)))
-				axes |= 1 << a;
+			if (command[4 + ((a + 2) >> 3)] & (1 << ((a + 2) & 0x7))) {
+				axis[a].motor.audio_flags |= Motor::PLAYING;
+				RESET (axis[a].motor.enable_pin);
+				motors_busy = true;
+			}
+			else
+				axis[a].motor.audio_flags &= ~Motor::PLAYING;
 		}
 		for (uint8_t e = 0; e < num_extruders; ++e)
 		{
-			if (command[6 + ((e + 2 + num_axes) >> 3)] & (1 << ((e + 2 + num_axes) & 0x7)))
-				extruders |= 1 << e;
+			if (command[4 + ((e + 2 + num_axes) >> 3)] & (1 << ((e + 2 + num_axes) & 0x7))) {
+				extruder[e].motor.audio_flags |= Motor::PLAYING;
+				RESET (extruder[e].motor.enable_pin);
+				motors_busy = true;
+			}
+			else
+				extruder[e].motor.audio_flags &= ~Motor::PLAYING;
 		}
-		int32_t num_samples = get_int32 (2);
-		play (num_samples, axes, extruders);
+		// Abort any currently playing sample.
+		audio_head = 0;
+		audio_tail = 0;
+		Serial.write (CMD_ACK);
+		last_active = millis ();
+		return;
+	}
+	case CMD_AUDIO_DATA:
+	{
+		//debug ("CMD_AUDIO_DATA");
+		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
+		{
+			debug ("Audio buffer is full");
+			Serial.write (CMD_STALL);
+			return;
+		}
+		for (uint8_t i = 0; i < AUDIO_FRAGMENT_SIZE; ++i)
+			audio_buffer[audio_tail][i] = command[2 + i];
+		if (audio_tail == audio_head)
+			audio_start = micros ();
+		audio_tail = (audio_tail + 1) % AUDIO_FRAGMENTS;
+		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
+			Serial.write (CMD_ACKWAIT);
+		else
+			Serial.write (CMD_ACK);
+		last_active = millis ();
 		return;
 	}
 	default:

@@ -2,6 +2,7 @@
 
 void Temp::load (int16_t &addr, bool eeprom)
 {
+	SET_INPUT_NOPULLUP (power_pin);
 	alpha = read_float (addr, eeprom);
 	beta = read_float (addr, eeprom);
 	core_C = read_float (addr, eeprom);
@@ -9,8 +10,8 @@ void Temp::load (int16_t &addr, bool eeprom)
 	transfer = read_float (addr, eeprom);
 	radiation = read_float (addr, eeprom);
 	power = read_float (addr, eeprom);
-	power_pin = read_8 (addr, eeprom);
-	thermistor_pin = read_8 (addr, eeprom);
+	power_pin.read (read_16 (addr, eeprom));
+	thermistor_pin.read (read_16 (addr, eeprom));
 	SET_OUTPUT (power_pin);
 }
 
@@ -23,14 +24,14 @@ void Temp::save (int16_t &addr, bool eeprom)
 	write_float (addr, transfer, eeprom);
 	write_float (addr, radiation, eeprom);
 	write_float (addr, power, eeprom);
-	write_8 (addr, power_pin, eeprom);
-	write_8 (addr, thermistor_pin, eeprom);
+	write_16 (addr, power_pin.write (), eeprom);
+	write_16 (addr, thermistor_pin.write (), eeprom);
 }
 
 float Temp::read () {
-	if (thermistor_pin >= 255)
+	if (thermistor_pin.invalid ())
 		return NAN;
-	int16_t adc = analogRead (thermistor_pin);
+	int16_t adc = analogRead (thermistor_pin.pin);
 	// Compute R from adc.
 	// adc = maxadc * R / (R + Rs)
 	// adc/maxadc = 1 - Rs / (R + Rs)

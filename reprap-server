@@ -45,10 +45,10 @@ class Server:
 				raise AssertionError ("printer doesn't start")
 			self.port.setTimeout (.1)
 			glib.io_add_watch (self.port.fileno (), glib.IO_IN | glib.IO_PRI, lambda fd, cond: self.serial_data ())
-			info = self.send ('M115')
-			assert info is not None
-			sys.stderr.write ('%s %s' % (info, self.port.readall ()))
-			e = [2] # re.findall ('EXTRUDER_COUNT:(\d*)', info)
+			#info = self.send ('M115')
+			#assert info is not None
+			#sys.stderr.write ('%s %s' % (info, self.port.readall ()))
+			e = [1] # re.findall ('EXTRUDER_COUNT:(\d*)', info)
 			if len (e) == 0:
 				l = self.port.readline ()
 				e = re.findall ('EXTRUDER_COUNT:(\d*)', l)

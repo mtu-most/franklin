@@ -25,7 +25,7 @@ void Variables::load (int16_t &addr, bool eeprom)
 	num_extruders = read_8 (addr, eeprom);
 	num_temps = read_8 (addr, eeprom);
 	printer_type = read_8 (addr, eeprom);
-	led_pin = read_8 (addr, eeprom);
+	led_pin.read (read_16 (addr, eeprom));
 	room_T = read_float (addr, eeprom) + 273.15;
 	motor_limit = read_32 (addr, eeprom);
 	temp_limit = read_32 (addr, eeprom);
@@ -36,7 +36,7 @@ void Variables::load (int16_t &addr, bool eeprom)
 		num_axes = 3;
 		num_extruders = 1;
 		num_temps = 1;
-		led_pin = 255;
+		led_pin.flags = 0;
 		room_T = 20 + 273.15;
 		motor_limit = 10 * 1000;
 		temp_limit = (unsigned long)5 * 60 * 1000;
@@ -53,7 +53,7 @@ void Variables::save (int16_t &addr, bool eeprom)
 	write_8 (addr, num_extruders, eeprom);
 	write_8 (addr, num_temps, eeprom);
 	write_8 (addr, printer_type, eeprom);
-	write_8 (addr, led_pin, eeprom);
+	write_16 (addr, led_pin.write (), eeprom);
 	write_float (addr, room_T - 273.15, eeprom);
 	write_32 (addr, motor_limit, eeprom);
 	write_32 (addr, temp_limit, eeprom);

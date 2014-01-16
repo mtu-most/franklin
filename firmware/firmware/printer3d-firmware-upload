@@ -23,4 +23,4 @@ else
 	export BOARD=mighty_opt
 	export BOARDS=/usr/share/arduino/hardware/mighty-1284p/boards.txt
 fi
-make -C /usr/share/printer3d/firmware
+make -C /usr/share/printer3d/firmware -f /usr/share/printer3d/firmware/Makefile.upload
