@@ -2,9 +2,6 @@
 
 void Motor::load (int16_t &addr, bool eeprom)
 {
-	SET_INPUT_NOPULLUP (step_pin);
-	SET_INPUT_NOPULLUP (dir_pin);
-	SET_INPUT_NOPULLUP (enable_pin);
 	step_pin.read (read_16 (addr, eeprom));
 	dir_pin.read (read_16 (addr, eeprom));
 	enable_pin.read (read_16 (addr, eeprom));
@@ -15,7 +12,7 @@ void Motor::load (int16_t &addr, bool eeprom)
 	SET_OUTPUT (step_pin);
 	SET_OUTPUT (dir_pin);
 	SET_OUTPUT (enable_pin);
-	SET (enable_pin);
+	//SET (enable_pin);
 }
 
 void Motor::save (int16_t &addr, bool eeprom)

@@ -1,0 +1,45 @@
+#!/usr/bin/python
+
+r = 20
+step = 1
+pin = 16 + 0x200
+safe = 10
+hit = 100
+
+import wshttpd
+
+p = wshttpd.RPCWebsocket (8080)
+
+scanrange = [step * t - r for t in range (int (2 * r / step))]
+
+def find ():
+	p.goto ([0, 0, base - hit], cb = True)
+	p.wait_for_cb ()
+	return p.axis_get_current_pos (2)[1]
+
+# Home
+p.home ()
+# Set new limit switch
+old_limit_pin = p.axis_get_limit_min_pin (0)
+try:
+	p.axis_set_limit_min_pin (0, pin)
+	# Find level
+	base = 0
+	base = find () + safe
+	# Loop
+	for y in scanrange:
+		for x in scanrange:
+	#	Go to position
+			p.goto ([x, y, base])
+	#	Go up
+	#	Report z
+			print ('%f %f %f' % (x, y, find ()))
+	#	Go down
+			p.goto ([x, y, base])
+		print
+
+finally:
+	p.axis_set_limit_min_pin (0, old_limit_pin)
+	p.goto (cb = True)
+	p.wait_for_cb ()
+	p.home ()

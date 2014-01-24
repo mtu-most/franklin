@@ -51,6 +51,7 @@ class Printer:
 			if line == '':
 				continue
 			line = line.split ()
+			cmd = line[0][0], int (line[0][1:])
 			args = {}
 			for a in line[1:]:
 				try:
@@ -59,7 +60,7 @@ class Printer:
 					print ('%d:ignoring invalid gcode: %s' % (lineno, line))
 					break
 			else:
-				self.gcode.append ((line[0], args))
+				self.gcode.append ((cmd, args))
 		self.send_gcode ()
 	def send_gcode (self):
 		if len (self.gcode) == 0:
@@ -79,7 +80,7 @@ class Printer:
 			target = int (cmd[1:])
 			assert len (self.pos[1]) > target
 			self.current_extruder = target
-		elif cmd in ('G0', 'G1'):
+		elif cmd[0] == 'G' and cmd[1] in (0, 1):
 			components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None}
 			for c in args:
 				assert c in components and components[c] is None
@@ -95,7 +96,7 @@ class Printer:
 				self.pos[1][self.current_extruder] += estep
 			else:
 				estep = 0
-			oldpos = self.pos[0]
+			oldpos = self.pos[0][:]
 			for axis in range (3):
 				value = components[chr (ord ('X') + axis)]
 				if value is not None:
@@ -113,7 +114,7 @@ class Printer:
 				f0 = self.pos[2]	# Use new value.
 				self.printer.goto (axes = {0: self.pos[0][0], 1: self.pos[0][1], 2: self.pos[0][2]}, e = estep, f0 = f0 / dist / 60, f1 = self.pos[2] / dist / 60, cb = False)
 				#self.printer.wait_for_cb ()
-		elif cmd == 'G28':
+		elif cmd == ('G', 28):
 			self.flush ()
 			which = ''
 			for w in args:
@@ -122,17 +123,17 @@ class Printer:
 				which = 'XYZ'
 			axes = [ord (w) - ord ('X') for w in which]
 			self.home (axes)
-		elif cmd == 'G4':
+		elif cmd == ('G', 4):
 			self.flush ()
 			if 'P' in args:
 				time.sleep (args['P'] / 1000)
-		elif cmd == 'G21':
+		elif cmd == ('G', 21):
 			pass
-		elif cmd == 'G90':
+		elif cmd == ('G', 90):
 			self.rel = False
-		elif cmd == 'G91':
+		elif cmd == ('G', 91):
 			self.rel = True
-		elif cmd == 'G92':
+		elif cmd == ('G', 92):
 			which = {}
 			for w in args:
 				if w in 'XYZ':
@@ -145,44 +146,48 @@ class Printer:
 				self.flush ()
 				for w in which:
 					self.printer.axis_set_current_pos (w, which[w])
-		elif cmd == 'M82':
+		elif cmd == ('M', 42):
+			pin = args['P']
+			value = args['S']
+			self.printer.settemp_temp (pin, value)
+		elif cmd == ('M', 82):
 			self.erel = False
-		elif cmd == 'M83':
+		elif cmd == ('M', 83):
 			self.erel = True
-		elif cmd == 'M84':
+		elif cmd == ('M', 84):
 			self.flush ()
 			for axis in range (3):
 				self.printer.sleep_axis (axis)
 			self.printer.sleep_extruder (0)
-		elif cmd == 'M104':
+		elif cmd == ('M', 104):
 			self.flush ()
 			self.etemp = args['S']
 			self.printer.settemp_extruder (0, self.etemp)
-		elif cmd == 'M106':	# Fan on
+		elif cmd == ('M', 106):	# Fan on
 			#self.flush ()
 			#self.printer.settemp_temp (1, float ('inf'))
 			pass
-		elif cmd == 'M107':
+		elif cmd == ('M', 107):
 			#self.flush ()
 			#self.printer.settemp_temp (1, float ('nan'))
 			pass
-		elif cmd == 'M109':
+		elif cmd == ('M', 109):
 			self.flush ()
 			self.etemp = args['S']
 			self.printer.settemp_extruder (0, self.etemp)
 			if self.printer.extruder_temp_get_thermistor_pin (0) < 255:
 				self.printer.waittemp_extruder (0, self.etemp, float ('nan'))
-		elif cmd == 'M116':
+		elif cmd == ('M', 116):
 			self.flush ()
 			if self.printer.extruder_temp_get_thermistor_pin (0) < 255:
 				self.printer.waittemp_extruder (0, self.etemp, float ('nan'))
 			if self.printer.temp_get_thermistor_pin (0) < 255:
 				self.printer.waittemp_temp (0, self.btemp, float ('nan'))
-		elif cmd == 'M140':
+		elif cmd == ('M', 140):
 			self.flush ()
 			self.btemp = args['S']
 			self.printer.settemp_temp (0, self.btemp)
-		elif cmd == 'M190':
+		elif cmd == ('M', 190):
 			self.flush ()
 			if 'S' in args:
 				self.btemp = args['S']

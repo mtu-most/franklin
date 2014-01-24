@@ -123,7 +123,7 @@ void packet ()
 			abort_move ();
 			audio_start += micros () - pause_time;
 		}
-		if (!isnan (motors[which]->dist))
+		if (moving && !isnan (motors[which]->dist))
 		{
 			debug ("Running moving motor %d", which);
 			Serial.write (CMD_STALL);
@@ -280,12 +280,15 @@ void packet ()
 			return;
 		}
 		Serial.write (CMD_ACK);
-		ReadFloat f;
-		f.i = axis[which - 2].current_pos;
-		reply[0] = 2 + sizeof (int32_t);
+		ReadFloat pos, current;
+		pos.i = axis[which - 2].current_pos;
+		current.f = axis[which - 2].current;
+		reply[0] = 2 + sizeof (int32_t) + sizeof (float);
 		reply[1] = CMD_POS;
 		for (uint8_t b = 0; b < sizeof (int32_t); ++b)
-			reply[2 + b] = f.b[b];
+			reply[2 + b] = pos.b[b];
+		for (uint8_t b = 0; b < sizeof (float); ++b)
+			reply[2 + sizeof (int32_t) + b] = current.b[b];
 		reply_ready = true;
 		try_send_next ();
 		return;

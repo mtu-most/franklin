@@ -33,7 +33,7 @@
 
 #define SET_OUTPUT(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, OUTPUT); }} while (0)
 #define SET_INPUT(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, INPUT_PULLUP); }} while (0)
-#define SET_INPUT_NOPULLUP(pin_no) do { if ((pin_no).invalid ()) { pinMode ((pin_no).pin, INPUT); }} while (0)
+#define SET_INPUT_NOPULLUP(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, INPUT); }} while (0)
 #define SET(pin_no) do { if (!(pin_no).invalid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? LOW : HIGH); } } while (0)
 #define RESET(pin_no) do { if (!(pin_no).invalid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? HIGH : LOW); } } while (0)
 #define GET(pin_no, _default) (!(pin_no).invalid () ? digitalRead ((pin_no).pin) == HIGH ? !(pin_no).inverted () : (pin_no).inverted () : _default)
@@ -44,7 +44,12 @@ struct Pin_t {
 	bool invalid () { return flags & 1; }
 	bool inverted () { return flags & 2; }
 	uint16_t write () { return flags << 8 | pin; }
-	void read (uint16_t data) { pin = data & 0xff; flags = data >> 8; }
+	void read (uint16_t data) {
+		if ((data & 0xff) != pin)
+			SET_INPUT_NOPULLUP (*this);
+		pin = data & 0xff;
+		flags = data >> 8;
+	}
 };
 
 union ReadFloat {
@@ -77,7 +82,7 @@ enum Command {
 	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [degrees C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
 	CMD_READTEMP,	// 1 byte: which channel.  Reply: TEMP. [degrees C]
 	CMD_SETPOS,	// 1 byte: which channel; 4 bytes: pos.
-	CMD_GETPOS,	// 1 byte: which channel.  Reply: POS. [steps]
+	CMD_GETPOS,	// 1 byte: which channel.  Reply: POS. [steps, mm]
 	CMD_LOAD,	// 1 byte: which channel.
 	CMD_SAVE,	// 1 byte: which channel.
 	CMD_READ,	// 1 byte: which channel.  Reply: DATA.
@@ -90,7 +95,7 @@ enum Command {
 		// responses to host requests; only one active at a time.
 	CMD_START,	// 4 byte: 0 (protocol version).
 	CMD_TEMP,	// 1 byte: requested channel; 4 byte: requested channel's temperature. [degrees C]
-	CMD_POS,	// 4 byte: pos. [steps]
+	CMD_POS,	// 4 byte: pos [steps]; 4 byte: current [mm].
 	CMD_DATA,	// n byte: requested data.
 	CMD_PONG,	// 1 byte: PING argument.
 		// asynchronous events.
@@ -183,10 +188,11 @@ struct Axis : public Object
 	int32_t limit_min_pos;	// Position of motor (in steps) when the min limit switch is triggered.
 	int32_t limit_max_pos;	// Position of motor (in steps) when the max limit switch is triggered.
 	float delta_length, delta_radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
+	float offset;		// Position where axis claims to be when it is at 0.
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;
 	int32_t current_pos;	// Current position of motor (in steps).
-	float source;		// Source position of current movement of axis (in mm), or current position if there is no movement.
+	float source, current;	// Source position of current movement of axis (in mm), or current position if there is no movement.
 	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);

@@ -1,0 +1,31 @@
+#!/bin/sh -e
+
+if [ "$1" != configure ] ; then
+	exit 0
+fi
+
+# Create server user.
+if ! getent passwd printer3d >/dev/null; then
+	adduser --disabled-password --quiet --system \
+		--home /var/cache/printer3d --no-create-home \
+		--gecos "3-D printer server" --group printer3d
+fi
+
+# Add user to the ssl-cert group to use the snakeoil SSL certificate.
+if getent group ssl-cert >/dev/null ; then
+	adduser --quiet printer3d ssl-cert
+fi
+
+# Add user to the dialout group to use the serial ports.
+if getent group dialout >/dev/null ; then
+	adduser --quiet printer3d dialout
+fi
+
+# Set permissions on directory for audio files
+for dir in `find /var/cache/printer3d` ; do
+	if ! dpkg-statoverride --list $dir >/dev/null; then
+		chown printer3d:printer3d $dir
+	fi
+done
+
+#DEBHELPER#

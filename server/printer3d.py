@@ -392,16 +392,16 @@ class Printer: # {{{
 			self.motor = Printer.Motor ()
 		def read (self, data):
 			data = self.motor.read (data)
-			self.limit_min_pin, self.limit_max_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius = struct.unpack ('<HHllff', data)
+			self.limit_min_pin, self.limit_max_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius, self.offset = struct.unpack ('<HHllfff', data)
 		def write (self):
-			return self.motor.write () + struct.pack ('<HHllff', self.limit_min_pin, self.limit_max_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius)
+			return self.motor.write () + struct.pack ('<HHllfff', self.limit_min_pin, self.limit_max_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius, self.offset)
 		def set_current_pos (self, pos):
 			self.printer._send_packet (struct.pack ('<BBl', self.printer.command['SETPOS'], 2 + self.id, pos))
 		def get_current_pos (self):
 			self.printer._send_packet (struct.pack ('<BB', self.printer.command['GETPOS'], 2 + self.id))
 			ret = self.printer._recv_packet ()
 			assert ret[0] == self.printer.rcommand['POS']
-			return struct.unpack ('<l', ret[1:])[0]
+			return struct.unpack ('<lf', ret[1:])
 	# }}}
 	class Extruder: # {{{
 		def __init__ (self):
@@ -971,6 +971,12 @@ class Printer: # {{{
 		self._write_axis (which)
 	def axis_get_delta_radius (self, which):
 		return self.axis[which].delta_radius
+	# }}}
+	def axis_set_offset (self, which, offset):	# {{{
+		self.axis[which].offset = offset
+		self._write_axis (which)
+	def axis_get_offset (self, which):
+		return self.axis[which].offset
 	# }}}
 	def axis_set_current_pos (self, which, pos):	# {{{
 		self.axis[which].set_current_pos (pos)

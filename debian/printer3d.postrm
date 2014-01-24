@@ -1,0 +1,10 @@
+#!/bin/sh -e
+
+#DEBHELPER#
+
+if [ "$1" != purge ] ; then
+	exit 0
+fi
+
+userdel printer3d > /dev/null || :
+groupdel printer3d > /dev/null || :

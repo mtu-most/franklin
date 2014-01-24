@@ -25,7 +25,7 @@ void next_move () {
 		// Determine current location of extruder.
 		if (printer_type == 0) { // {{{
 			for (uint8_t a = 0; a < MAXAXES; ++a)
-				axis[a].source = axis[a].current_pos / axis[a].motor.steps_per_mm;
+				axis[a].source = axis[a].current_pos / axis[a].motor.steps_per_mm + axis[a].offset;
 		}
 		// }}}
 		else if (printer_type == 1) { // {{{
@@ -61,9 +61,9 @@ void next_move () {
 				}
 			}
 			// TODO
-			axis[0].source = 0;
-			axis[1].source = 0;
-			axis[2].source = axis[2].limit_max_pos / axis[2].motor.steps_per_mm;
+			axis[0].source = axis[0].offset;
+			axis[1].source = axis[1].offset;
+			axis[2].source = axis[2].limit_max_pos / axis[2].motor.steps_per_mm + axis[2].offset;
 		}
 		// }}}
 		else
@@ -87,7 +87,7 @@ void next_move () {
 			}
 			motors[m]->dist = 0;
 			if (mt < num_axes)
-				motors[m]->next_dist = queue[queue_start].data[mt + 2] - axis[mt].source;
+				motors[m]->next_dist = queue[queue_start].data[mt + 2] - axis[mt].offset - axis[mt].source;
 			else
 				motors[m]->next_dist = queue[queue_start].data[mt + 2];
 			if (motors[m]->next_dist != 0)
@@ -112,7 +112,7 @@ void next_move () {
 		tq = 0;	// Previous value; new value is computed below.
 		v0 = 0;
 		vp = 0;
-		vq = queue[queue_start].data[F0];
+		vq = queue[queue_start].data[F0] * feedrate;
 		current_move_has_cb = false;
 		move_prepared = true;
 	}
@@ -143,7 +143,7 @@ void next_move () {
 				debug ("m %d dist %f nd %f", m, &motors[m]->dist, &motors[m]->next_dist);
 #endif
 			}
-			vp = queue[queue_start].data[F1];
+			vp = queue[queue_start].data[F1] * feedrate;
 			vq = 0;
 			move_prepared = false;
 		}
@@ -163,13 +163,13 @@ void next_move () {
 					continue;
 				}
 				motors[m]->dist = motors[m]->next_dist;
-				motors[m]->next_dist = mt < num_axes ? queue[n].data[mt + 2] - (axis[mt].source + motors[m]->dist) : queue[n].data[mt + 2];
+				motors[m]->next_dist = mt < num_axes ? queue[n].data[mt + 2] - axis[mt].offset - (axis[mt].source + motors[m]->dist) : queue[n].data[mt + 2];
 #ifdef DEBUG_MOVE
 				debug ("m2 %d dist %f nd %f", m, &motors[m]->dist, &motors[m]->next_dist);
 #endif
 			}
-			vp = queue[queue_start].data[F1];
-			vq = queue[n].data[F0];
+			vp = queue[queue_start].data[F1] * feedrate;
+			vq = queue[n].data[F0] * feedrate;
 			move_prepared = true;
 		}
 		current_move_has_cb = queue[queue_start].cb;
@@ -282,7 +282,9 @@ void next_move () {
 #ifdef DEBUG_MOVE
 		debug ("main dist %d %f %f %f %d", m, &motors[m]->main_dist, &v0, &vp, int (t0 / 1000));
 #endif
-		if (mt >= num_axes)
+		if (mt < num_axes)
+			axis[mt].current = axis[mt].source + axis[mt].motor.dist * f0;
+		else
 			extruder[mt - num_axes].steps_done = f0 * motors[m]->dist * motors[m]->steps_per_mm;
 	}
 #ifdef DEBUG_MOVE
@@ -314,9 +316,11 @@ void abort_move () {
 		return;
 	if (current_move_has_cb)
 		++num_movecbs;
-	for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-		if (!motors[m])
+	for (uint8_t a = 0; a < MAXAXES; ++a) {
+		if (isnan (axis[a].motor.dist))
 			continue;
+		axis[a].source = axis[a].current;
+		axis[a].motor.dist = NAN;
 	}
 	queue_start = 0;
 	queue_end = 0;

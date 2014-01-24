@@ -1,88 +1,60 @@
 # MOST RepRap host software
-This is software for controlling a RepRap 3-D printer.  Use it if you don't
-like the other options.
+This is software for controlling a RepRap 3-D printer.
+
+## Introduction
+It works slightly different from other solutions.  Others have firmware which
+receives G-Code over the serial connection.  Any host program can then be used
+to send that gcode.
+
+This firmware, on the other hand, uses a custom protocol for communicating.
+It should only be used with the host-side software from the same release.
+This host-side software is a server, which provides a scriptable interface to
+Python programs, and a web interface where some simple operations can be
+performed (move to a position, home, etc) and regular G-Code can be uploaded.
+
+Because it does accept G-Code, any slicer can be used to generate it.
+
+## What does it support?
+
+ * Near-infinite flexibility due to the scripting interface.
+ * Reliability due to the better communication protocol.
+ * Run the server on the computer connected to the printer (which can even be a headless raspberry pi) and print from anywhere on the network.
+ * Carthesian and delta printers.
+ * It's tested on Ramps and Melzi, but should work on any Arduino-based electronics.
+ * Limits on speed and acceleration which will not be violated.
+ * Near-infinite axes, extruders, and temperature controllers.
+
+## What doesn't it support?
+
+ * Printing from SD (planned).
+ * Other printer types (should be easy to implement).
+ * Multiple printers (see below).
+
+If there are other things you are missing, please send me a feature request.
+
+## Printer farms
+
+This code is specifically intended to support running several printers from
+one server.  This is possible by starting multiple server processes, but that
+is ugly.  The server is designed in a way that it allows multiple printers to
+be controlled at once.  The benefit of this would be that they can be
+controlled over on the same web site (no need to have one tab open per
+printer, although that is always possible anyway), or over the same scripting
+connection (this is less interesting; it's not hard for a script to open
+several connections).
+
+The plan is to have the server running as a system service, which will detect
+printers (with the firmware installed) that are connected to and disconnected
+from the system.  To use a new printer, it is then a simple matter of plugging
+it in and it's ready for use.  Or if it's a very new printer, the firmware
+first needs to be uploaded.
 
 ## Installation
-Install the following Debian packages (or their versions for your OS):
- * python 2.7
- * python-serial
- * python-gtk2
- * python-avahi
- * apache2
 
-Set up the apache userdir module: run "a2enmod userdir" and add in /etc/apache2/mods-available/userdir.conf:
-        AllowOverride All
-        Options MultiViews Indexes SymLinksIfOwnerMatch IncludesNoExec ExecCGI
-        <Files *.cgi>
-            sethandler cgi-script
-        </Files>
-Then restart apache.
+For installation requirements, please refer to debian/control (the line that
+starts with Build-Depends).
 
-Put this directory in `~/public_html`.  Then run `reprap-server`.  It should connect to the printer and home it.  If it doesn't, you may need to pass an arguments for which serial port to use: `reprap-server --serial /dev/ttySomething`.
+If you're running Debian, you should get or the Debian package and install it.
+It can be built by running ''debuild -uc -us'' in this directory.
 
-When the server is running, you should be able to contact it at
-http://localhost/most-reprap
-
-# The problem that this code tries to solve
-Controlling a 3D printer should be easy.  The firmware handles the hardware,
-and the slicer handles the conversion from STL to GCODE.  The interface only
-needs to pass the GCODE to the firmware, and allow some simple direct
-manipulations such as setting the temperature.
-
-But there are extra features which are useful.  Repetier Host allows on the fly
-changes to the print speed and the amount of filament that is used, for
-example.
-
-Repetier Server allows sending GCODE with a web browser for printing.
-
-But Repetier Host is written in .Net, and it regularly breaks my entire desktop
-(it somehow manages to turn "focus to pointer" off and there is no way I can
-switch it on again, other than rebooting the machine).  That is bad enough for
-me to want something else.  Repetier Server doesn't allow direct control over
-the printer.  So you either have a "normal" interface, or you can attach the
-printer to a network, but not both.  And Repetier makes a giant mess of your
-filesystem by installing itself in places where it shouldn't be going.  I think
-all other printer interfaces do that, too.
-
-# The solution has three parts
-So my solution consists of several parts: a server (reprap-server), a cgi
-script (index.cgi), and a web page (reprap.html, reprap.css and reprap.js).
-
-## The server
-This is the part that talks to the firmware.  It listens to the network, from
-which it accepts any GCODE which it will pass on.  It also has a few
-convenience methods for all the common operations.
-
-The server fills the hole that the firmware should really be filling: it
-remembers the state of the printer and allows clients to request it.  So for
-example, the server can be asked ''what is the current location of the
-extruder?'' and the answer will be in a standard and understandable format
-(x,y,z).  The GCODE definition on the RepRap wiki has some rules about what the
-firmware should do, but they are not strict enough to write an interface on,
-and in any case they are completely ignored by firmware writers.  So the
-interface must do this job.  The server does it, so clients don't have to worry
-about a thing.
-
-The server also has all the required workarounds for properly working with
-multiple extruders (for example, sleep() will disable not only the current
-extruder motor, but all of them).
-
-The network interface that the server exports is only usable from Python; it
-uses a protocol which is very convenient for the client: they simply have an
-object where they call member functions, which return a value.
-
-## The cgi script
-One such Python program is the CGI script that comes with the server.  It
-should be installed in a place where it can be reached by people who should
-have access to the printer.  Use http authentication if you need to restrict
-access.
-
-The script doesn't do much; it provides a web site, and passes requests on to
-the server.  It is set up such that the requests can be made using AJAX.
-
-## The website
-The website has a few buttons and a printer area where you can click to move
-the extruder.  For each extruder, it has a temperature setting and a flowrate
-setting.  It has a feedrate setting and bed temperature control.
-
-It regularly requests the current temperatures from the server.  This has an unfortunate side-effect: at least in firefox, during this request, keyboard events are ignored.  So typing a new temperature in a box is annoying, because the numbers often aren't coming through.
+If you're not running Debian, you should be.  It makes your life better.

@@ -136,7 +136,7 @@ static bool do_steps (uint8_t m, int16_t num_steps) {
 			motors[m]->continuous_steps_per_s = 0;
 			limits_pos[m - 2] = axis[m - 2].current_pos;
 			try_send_next ();
-			if (!isnan (motors[m]->dist)) {
+			if (moving && !isnan (motors[m]->dist)) {
 				abort_move ();
 				done_motors ();
 			}
@@ -152,20 +152,28 @@ static bool do_steps (uint8_t m, int16_t num_steps) {
 }
 
 static void move_axes (float target[3]) {
+	uint8_t a = 0;
 	switch (printer_type) {
-	case 0:
-		for (uint8_t a = 0; a < num_axes; ++a)
-			if (!isnan (target[a]))
-				do_steps (2 + a, target[a] * axis[a].motor.steps_per_mm - axis[a].current_pos);
-		break;
 	case 1:
 		// Delta movements are hardcoded to 3 axes.
-		for (uint8_t a = 0; a < 3; ++a) {
+		for (uint8_t a2 = 0; a2 < 3; ++a2) {
 			bool ok = true;
-			int32_t the_target = delta_to_axis (a, target, &ok);
-			do_steps (2 + a, the_target - axis[a].current_pos);
-			debug ("delta move %d %d", int (the_target), ok);
+			int32_t the_target = delta_to_axis (a2, target, &ok);
+			if (!do_steps (2 + a2, the_target - axis[a2].current_pos)) {
+				// The move has been aborted.
+				return;
+			}
+			axis[a2].current = target[a2];
 		}
+		a = 3;
+		// Fall through to handle the non-delta axes.
+	case 0:
+		for (; a < num_axes; ++a)
+			if (!isnan (target[a])) {
+				if (!do_steps (2 + a, target[a] * axis[a].motor.steps_per_mm - axis[a].current_pos))
+					return;
+				axis[a].current = target[a];
+			}
 		break;
 	default:
 		debug ("Bug: printer_type %d not handled by move in " __FILE__, printer_type);
@@ -245,7 +253,7 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 			if (!do_steps (2 + MAXAXES + e, mm * extruder[e].motor.steps_per_mm - extruder[e].steps_done))
 				return;
 		}
-		if (current_move_has_cb) {
+		if (moving && current_move_has_cb) {
 			++num_movecbs;
 			try_send_next ();
 		}

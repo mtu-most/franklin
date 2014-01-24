@@ -14,9 +14,9 @@ function setup ()
 	rpc.call ('status', [], {}, set_status);
 }
 
-function set_status (temps) {
-	settext (document.getElementById ('btemp_read'), temps[0]);
-	settext (document.getElementById ('etemp_read'), temps[1]);
+function set_status (data) {
+	settext (document.getElementById ('btemp_read'), data[0]);
+	settext (document.getElementById ('etemp_read'), data[1]);
 }
 
 function settext (element, text)
@@ -75,4 +75,16 @@ function sleep ()
 function feed ()
 {
 	rpc.event ('set_feedrate', [Number (document.getElementById ('feed').value)], {});
+}
+
+function setoffset ()
+{
+	rpc.event ('axis_set_offset', [0, Number (document.getElementById ('xoff').value)], {});
+	rpc.event ('axis_set_offset', [1, Number (document.getElementById ('yoff').value)], {});
+	rpc.event ('axis_set_offset', [2, Number (document.getElementById ('zoff').value)], {});
+}
+
+function gotopos ()
+{
+	rpc.event ('goto', [[Number (document.getElementById ('xpos').value), Number (document.getElementById ('ypos').value), Number (document.getElementById ('zpos').value)]], {});
 }

@@ -9,6 +9,7 @@ void Axis::load (int16_t &addr, bool eeprom)
 	limit_max_pos = read_32 (addr, eeprom);
 	delta_length = read_float (addr, eeprom);
 	delta_radius = read_float (addr, eeprom);
+	offset = read_float (addr, eeprom);
 	SET_INPUT (limit_min_pin);
 	SET_INPUT (limit_max_pin);
 #define sin120 0.8660254037844386	// .5*sqrt(3)
@@ -38,4 +39,5 @@ void Axis::save (int16_t &addr, bool eeprom)
 	write_32 (addr, limit_max_pos, eeprom);
 	write_float (addr, delta_length, eeprom);
 	write_float (addr, delta_radius, eeprom);
+	write_float (addr, offset, eeprom);
 }
