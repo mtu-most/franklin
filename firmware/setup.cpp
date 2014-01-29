@@ -31,6 +31,7 @@ void setup ()
 	current_move_has_cb = false;
 	audio_head = 0;
 	audio_tail = 0;
+	audio_state = 0;
 	audio_us_per_bit = 125; // 1000000 / 8000;
 	// Prepare asynchronous command buffers.
 	limitcb_buffer[0] = 7;

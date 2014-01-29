@@ -266,7 +266,7 @@ EXTERN unsigned long last_active, led_last, motor_limit, temp_limit;
 EXTERN uint16_t led_phase;
 EXTERN float mean_temp;
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
-EXTERN uint8_t audio_head, audio_tail;
+EXTERN uint8_t audio_head, audio_tail, audio_state;
 EXTERN unsigned long audio_start;
 EXTERN unsigned long start_time;
 EXTERN long t0, tq;

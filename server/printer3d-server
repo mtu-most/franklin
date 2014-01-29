@@ -27,6 +27,7 @@ class Printer:
 		self.btemp = float ('nan')
 		self.gcode = []
 	def home (self, axes = None):
+		self.gcode = []
 		if axes is None:
 			axes = range (self.printer.get_num_axes ())
 		ret = self.printer.home (axes)
@@ -74,10 +75,10 @@ class Printer:
 		return True
 	def parse_gcode_chunk (self, cmd, args):
 		global etemp, btemp, rel, erel
-		#print ('%s %s' % (cmd, args))
+		#print ('Parsing %s %s' % (cmd, args))
 		if cmd[0] == 'T':
 			# Tool selection.
-			target = int (cmd[1:])
+			target = cmd[1]
 			assert len (self.pos[1]) > target
 			self.current_extruder = target
 		elif cmd[0] == 'G' and cmd[1] in (0, 1):
@@ -112,6 +113,8 @@ class Printer:
 				#if f0 is None:
 				#f0 = self.pos[1][self.current_extruder]
 				f0 = self.pos[2]	# Use new value.
+				if f0 == 0:
+					f0 = float ('inf')
 				self.printer.goto (axes = {0: self.pos[0][0], 1: self.pos[0][1], 2: self.pos[0][2]}, e = estep, f0 = f0 / dist / 60, f1 = self.pos[2] / dist / 60, cb = False)
 				#self.printer.wait_for_cb ()
 		elif cmd == ('G', 28):
@@ -122,7 +125,9 @@ class Printer:
 			if which == '':
 				which = 'XYZ'
 			axes = [ord (w) - ord ('X') for w in which]
+			gcode = self.gcode
 			self.home (axes)
+			self.gcode = gcode
 		elif cmd == ('G', 4):
 			self.flush ()
 			if 'P' in args:

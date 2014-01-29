@@ -215,6 +215,11 @@
 #
 ########################################################################
 
+dir_if_exists = $(wildcard $(1))
+ARDUINO_DIR   = /usr/share/arduino
+ARDMK_DIR     = /usr
+AVR_TOOLS_DIR = /usr
+
 arduino_output =
 # When output is not suppressed and we're in the top-level makefile,
 # running for the first time (i.e., not after a restart after

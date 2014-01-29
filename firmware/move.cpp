@@ -107,6 +107,7 @@ void next_move () {
 				++num_movecbs;
 			queue_start = (queue_start + 1) & QUEUE_LENGTH_MASK;
 			try_send_next ();
+			moving = false;
 			return next_move ();
 		}
 		tq = 0;	// Previous value; new value is computed below.
@@ -118,6 +119,7 @@ void next_move () {
 	}
 	// }}}
 	else { // We are prepared and can start at segment 1.  Set up everything. {{{
+		bool action = false;
 		v0 = vq;
 #ifdef DEBUG_MOVE
 		debug ("move prepared, v0 = %f tq = %d", &v0, int (tq / 1000));
@@ -132,13 +134,13 @@ void next_move () {
 				uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
 				if (!motors[m])
 					continue;
-				if (isnan (queue[queue_start].data[mt + 2])) {
-					motors[m]->dist = NAN;
-					motors[m]->next_dist = NAN;
-					continue;
-				}
 				motors[m]->dist = motors[m]->next_dist;
-				motors[m]->next_dist = 0;
+				if (isnan (queue[queue_start].data[mt + 2]))
+					motors[m]->next_dist = NAN;
+				else
+					motors[m]->next_dist = 0;
+				if ((!isnan (motors[m]->next_dist) && motors[m]->next_dist != 0) || (!isnan (motors[m]->dist) && motors[m]->dist != 0))
+					action = true;
 #ifdef DEBUG_MOVE
 				debug ("m %d dist %f nd %f", m, &motors[m]->dist, &motors[m]->next_dist);
 #endif
@@ -157,13 +159,13 @@ void next_move () {
 				uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
 				if (!motors[m])
 					continue;
-				if (isnan (queue[queue_start].data[mt + 2])) {
-					motors[m]->dist = NAN;
-					motors[m]->next_dist = NAN;
-					continue;
-				}
 				motors[m]->dist = motors[m]->next_dist;
-				motors[m]->next_dist = mt < num_axes ? queue[n].data[mt + 2] - axis[mt].offset - (axis[mt].source + motors[m]->dist) : queue[n].data[mt + 2];
+				if (isnan (queue[queue_start].data[mt + 2]))
+					motors[m]->next_dist = NAN;
+				else
+					motors[m]->next_dist = mt < num_axes ? queue[n].data[mt + 2] - axis[mt].offset - (axis[mt].source + motors[m]->dist) : queue[n].data[mt + 2];
+				if ((!isnan (motors[m]->next_dist) && motors[m]->next_dist != 0) || (!isnan (motors[m]->dist) && motors[m]->dist != 0))
+					action = true;
 #ifdef DEBUG_MOVE
 				debug ("m2 %d dist %f nd %f", m, &motors[m]->dist, &motors[m]->next_dist);
 #endif
@@ -181,6 +183,17 @@ void next_move () {
 			try_send_next ();
 		}
 		queue_start = n;
+		if (!action) {
+#ifdef DEBUG_MOVE
+			debug ("skipping zero prepared move");
+#endif
+			if (current_move_has_cb) {
+				++num_movecbs;
+				try_send_next ();
+			}
+			moving = false;
+			return next_move ();
+		}
 	} // }}}
 	// Limit vp and vq. {{{
 #ifdef DEBUG_MOVE
@@ -200,6 +213,10 @@ void next_move () {
 		debug ("%d vpq %f %f %f %f", m, &vp, &vq, &max, &motors[m]->next_dist);
 #endif
 	}
+	if (isinf (vp))
+		vp = 0;
+	if (isinf (vq))
+		vq = 0;
 #ifdef DEBUG_MOVE
 	debug ("after limit vp %f vq %f", &vp, &vq);
 #endif
@@ -265,7 +282,7 @@ void next_move () {
 	if (abs (v0 + vp) > 1e-10) {
 		t0 = long ((1 - fp - f0) / (v0 + vp) * 2e6);
 #ifdef DEBUG_MOVE
-		debug ("t0 set %f fp %f f0 %f v0 %f vp %f", int (t0 / 1000), &fp, &f0, &v0, &vp);
+		debug ("t0 set %d fp %f f0 %f v0 %f vp %f", int (t0 / 1000), &fp, &f0, &v0, &vp);
 #endif
 	}
 	else
@@ -312,23 +329,28 @@ void next_move () {
 }
 
 void abort_move () {
-	if (!moving)
-		return;
-	if (current_move_has_cb)
-		++num_movecbs;
-	for (uint8_t a = 0; a < MAXAXES; ++a) {
-		if (isnan (axis[a].motor.dist))
-			continue;
-		axis[a].source = axis[a].current;
-		axis[a].motor.dist = NAN;
-	}
-	queue_start = 0;
-	queue_end = 0;
-	moving = false;
-	move_prepared = false;
+	if (moving) {
+		if (current_move_has_cb)
+			++num_movecbs;
+		for (uint8_t a = 0; a < MAXAXES; ++a) {
+			if (isnan (axis[a].motor.dist))
+				continue;
+			axis[a].source = axis[a].current;
+			axis[a].motor.dist = NAN;
+		}
+		moving = false;
+		move_prepared = false;
 #ifdef DEBUG_MOVE
-	debug ("move no longer prepared");
+		debug ("move no longer prepared");
 #endif
+	}
+	if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
+		continue_cb |= 1;
+	while (queue_start != queue_end) {
+		if (queue[queue_start].cb)
+			++num_movecbs;
+		queue_start = (queue_start + 1) & QUEUE_LENGTH_MASK;
+	}
 	// Not always required, but this is a slow operation anyway and it doesn't harm if it's called needlessly.
 	try_send_next ();
 }

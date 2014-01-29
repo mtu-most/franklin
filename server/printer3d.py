@@ -1,6 +1,6 @@
 # vim: set foldmethod=marker :
 
-show_own_debug = False
+show_own_debug = None
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -14,6 +14,7 @@ import sys
 import wave
 import sys
 import StringIO
+import base64
 # }}}
 
 def dprint (x, data): # {{{
@@ -73,7 +74,7 @@ class Printer: # {{{
 		self.continue_cb = None
 		self.continue_audio_cb = None
 		self.pos = []
-		blacklist = 'console$|ttyS?\d*$'
+		blacklist = 'ptmx$|console$|ttyS?\d*$'
 		found_ports = []
 		found_printers = []
 		for p in os.listdir ('/sys/class/tty'):
@@ -135,7 +136,7 @@ class Printer: # {{{
 				else:
 					found_printers.append ((p, self.name))
 			except:
-				print sys.exc_value
+				print ('Not using %s: %s' % (p, sys.exc_value))
 				pass
 		sys.stderr.write ('Printer not found.  Usable ports: %s, Printers: %s\n' % (', '.join (found_ports), ', '.join (['%s (%s)' % (x[1], x[0]) for x in found_printers])))
 		raise ValueError ('printer not found')
@@ -277,6 +278,7 @@ class Printer: # {{{
 				# Handle the asynchronous events here; don't bother the caller with them.
 				if data[0] == self.rcommand['MOVECB']:
 					num = ord (data[1])
+					#print ('movecb %d/%d' % (num, self.movewait))
 					assert self.movewait >= num
 					self.movewait -= num
 					if want_any:
@@ -422,6 +424,7 @@ class Printer: # {{{
 			self.block ()
 		if cb:
 			self.movewait += 1
+			#print ('movewait +1 -> %d' % self.movewait)
 			p = chr (self.command['GOTOCB'])
 		else:
 			p = chr (self.command['GOTO'])
@@ -631,6 +634,7 @@ class Printer: # {{{
 				self.axis[i].set_current_pos (self.axis[i].limit_max_pos if self.pin_valid (self.axis[0].limit_max_pin) else self.axis[i].limit_min_pos)
 			# Go to home position.
 			self.goto (pos, cb = True)
+			self.wait_for_cb ()
 			# Return current nozzle position.
 			return [pos[a] for a in axes]
 	# }}}
@@ -650,7 +654,7 @@ class Printer: # {{{
 	# }}}
 	def audio_load (self, name, data): # {{{
 		assert os.path.basename (name) == name
-		wav = wave.open (StringIO.StringIO (data))
+		wav = wave.open (StringIO.StringIO (base64.b64decode (data)))
 		assert wav.getnchannels () == 1
 		data = [ord (x) for x in wav.readframes (wav.getnframes ())]
 		data = [(h << 8) + l if h < 128 else (h << 8) + l - (1 << 16) for l, h in zip (data[::2], data[1::2])]
@@ -664,6 +668,8 @@ class Printer: # {{{
 				if data[t + b] > level:
 					c += 1 << b
 			s += chr (c)
+		if not os.path.exists (self.audiodir):
+			os.makedirs (self.audiodir)
 		with open (os.path.join (self.audiodir, name), 'wb') as f:
 			f.write (struct.pack ('<H', 1000000 / wav.getframerate ()) + s)
 
@@ -682,7 +688,7 @@ class Printer: # {{{
 		return ret
 	# }}}
 	def wait_for_cb (self): # {{{
-		while self.movewait:
+		while self.movewait > 0:
 			self._recv_packet (want_any = True)
 	# }}}
 	def wait_for_limits (self, num = 1): # {{{

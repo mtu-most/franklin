@@ -312,7 +312,6 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 static void handle_audio (unsigned long current_time, unsigned long longtime) {
 	if (audio_head != audio_tail) {
 		last_active = longtime;
-		int8_t audio_state = -1;
 		int16_t bit = (current_time - audio_start) / audio_us_per_bit;
 		int16_t byte = bit >> 3;
 		while (byte >= AUDIO_FRAGMENT_SIZE) {
@@ -322,16 +321,36 @@ static void handle_audio (unsigned long current_time, unsigned long longtime) {
 				try_send_next ();
 			}
 			audio_head = (audio_head + 1) % AUDIO_FRAGMENTS;
-			if (audio_tail == audio_head)
-				break;
+			if (audio_tail == audio_head) {
+				debug ("audio done");
+				return;
+			}
 			byte -= AUDIO_FRAGMENT_SIZE;
 			// us per fragment = us/bit*bit/fragment
 			audio_start += audio_us_per_bit * 8 * AUDIO_FRAGMENT_SIZE;
 		}
-		if (audio_head != audio_tail)
-			audio_state = (audio_buffer[audio_head][byte] >> (bit & 7)) & 1;
-		(void)audio_state;
-		// TODO: move motors.
+		uint8_t old_state = audio_state;
+		audio_state = (audio_buffer[audio_head][byte] >> (bit & 7)) & 1;
+		if (audio_state != old_state) {
+			for (uint8_t m = 0; m < MAXOBJECT; ++m) {
+				if (!motors[m] || !(motors[m]->audio_flags & Motor::PLAYING))
+					continue;
+				if (audio_state) {
+					if (!motors[m]->positive) {
+						SET (motors[m]->dir_pin);
+						motors[m]->positive = true;
+					}
+				}
+				else {
+					if (motors[m]->positive) {
+						RESET (motors[m]->dir_pin);
+						motors[m]->positive = false;
+					}
+				}
+				SET (motors[m]->step_pin);
+				RESET (motors[m]->step_pin);
+			}
+		}
 	}
 }
 

@@ -66,10 +66,8 @@ def axis_test_half (axis, positive): # {{{
 		mid = (lower + upper) / 2
 		# Try this value.
 		if axis_test_single (axis, mid, use_min, 2 * 3200. / p.axis_motor_get_steps_per_mm (axis), positive):
-			print 'faster'
 			lower = (mid + lower) / 2
 		else:
-			print 'slower'
 			upper = (mid + upper) / 2
 	return upper * .8	# Be safe and set the limit well below the "missing steps"-limit.
 # }}}
@@ -205,7 +203,6 @@ def set_ramps_pins (min_limits = None, max_limits = None): # {{{
 	p.temp_set_power_pin (1, 9)
 # }}}
 def set_melzi_pins (min_limits = None, max_limits = None): # {{{
-	print ('melzi')
 	if min_limits is None and max_limits is None:
 		min_limits = True
 		max_limits = False
@@ -214,29 +211,20 @@ def set_melzi_pins (min_limits = None, max_limits = None): # {{{
 	elif max_limits is None:
 		max_limits = not min_limits
 	assert not (max_limits and min_limits)
-	print ('melzi')
 	p.set_led_pin (28)	# 27 according to Repetier?
-	print ('melzi')
 	p.axis_set_limit_min_pin (0, 18 if min_limits else 0x100)
 	p.axis_set_limit_max_pin (0, 18 if max_limits else 0x100)
-	print ('melzi')
 	p.axis_motor_set_step_pin (0, 15)
 	p.axis_motor_set_dir_pin (0, 21)
 	p.axis_motor_set_enable_pin (0, 14)
-	print ('melzi')
 	p.axis_set_limit_min_pin (1, 19 if min_limits else 0x100)
 	p.axis_set_limit_max_pin (1, 19 if max_limits else 0x100)
 	p.axis_motor_set_step_pin (1, 22)
 	p.axis_motor_set_dir_pin (1, 23)
-	print ('melzi2')
 	p.axis_motor_set_enable_pin (1, 14)
-	print ('melzi2')
 	p.axis_set_limit_min_pin (2, 20 if min_limits else 0x100)
-	print ('melzi2')
 	p.axis_set_limit_max_pin (2, 20 if max_limits else 0x100)
-	print ('melzi2')
 	p.axis_motor_set_step_pin (2, 3)
-	print ('melzi')
 	p.axis_motor_set_dir_pin (2, 2)
 	p.axis_motor_set_enable_pin (2, 29)	#26 according to Repetier?
 	for a in range (3, p.get_maxaxes ()):
@@ -245,7 +233,6 @@ def set_melzi_pins (min_limits = None, max_limits = None): # {{{
 		p.axis_motor_set_step_pin (a, 0x100)
 		p.axis_motor_set_dir_pin (a, 0x100)
 		p.axis_motor_set_enable_pin (a, 0x100)
-	print ('melzi')
 	for e in range (p.get_maxextruders ()):
 		p.extruder_temp_set_beta (e, 3885.0342279785623)
 		p.extruder_temp_set_alpha (e, 10.811932016492776)
@@ -254,39 +241,32 @@ def set_melzi_pins (min_limits = None, max_limits = None): # {{{
 		p.extruder_motor_set_step_pin (e, 0x100)
 		p.extruder_motor_set_dir_pin (e, 0x100)
 		p.extruder_motor_set_enable_pin (e, 0x100)
-	print ('melzi')
 	p.extruder_temp_set_power_pin (0, 13)
 	p.extruder_temp_set_thermistor_pin (0, 7)
 	p.extruder_motor_set_step_pin (0, 1)
 	p.extruder_motor_set_dir_pin (0, 0)
 	p.extruder_motor_set_enable_pin (0, 14)
-	print ('melzi')
 	for t in range (2, p.get_maxtemps ()):
 		p.temp_set_power_pin (t, 0x100)
 		p.temp_set_thermistor_pin (t, 0x100)
 		p.temp_set_beta (0, float ('nan'))
 		p.temp_set_alpha (0, float ('nan'))
-	print ('melzi')
 	p.temp_set_power_pin (0, 12)	# Heated bed.
 	p.temp_set_thermistor_pin (0, 6)
 	p.temp_set_beta (0, 3700.)
 	p.temp_set_alpha (0, 10.811932016492776)
 	p.temp_set_power_pin (1, 4)		# Fan.
 	p.temp_set_thermistor_pin (1, 0x100)
-	print ('melzi')
 # }}}
 
 # Set everything up for calibration. {{{
 def setup ():
-	print ('setup')
 	if g.melzi:
 		set_melzi_pins (g.melzi_min_limits)
 	else:
 		set_ramps_pins (g.ramps_min_limits, g.ramps_max_limits)
-	print ('setup')
 	p.set_room_T (25.)
 	p.set_feedrate (1.)
-	print ('setup')
 	for a in range (p.get_maxaxes ()):
 		p.axis_motor_set_max_v_neg (a, float ('inf'))
 		p.axis_motor_set_max_v_pos (a, float ('inf'))
@@ -294,7 +274,6 @@ def setup ():
 		p.axis_set_limit_max_pos (a, 200.)
 		p.axis_motor_set_max_a (a, float ('inf'))
 		p.axis_motor_set_steps_per_mm (a, float ('nan'))
-	print ('setup')
 	for e in range (p.get_maxextruders ()):
 		p.extruder_temp_set_core_C (e, float ('nan'))
 		p.extruder_temp_set_shell_C (e, float ('nan'))
@@ -308,17 +287,14 @@ def setup ():
 		p.extruder_motor_set_max_v_neg (e, float ('inf'))
 		p.extruder_motor_set_max_v_pos (e, float ('inf'))
 		p.extruder_motor_set_max_a (e, float ('inf'))
-	print ('setup')
 	for t in range (p.get_maxtemps ()):
 		p.temp_set_core_C (t, float ('nan'))
 		p.temp_set_shell_C (t, float ('nan'))
 		p.temp_set_transfer (t, float ('nan'))
 		p.temp_set_radiation (t, float ('nan'))
 		p.temp_set_power (t, float ('nan'))
-	print ('setup')
 	p.temp_set_radiation (0, float ('nan'))
 	p.temp_set_power (0, 12. ** 2 / 1.6)
-	print ('setup')
 
 def setup_prusa ():
 	setup ()
@@ -330,9 +306,7 @@ def setup_prusa ():
 	p.set_printer_type (0)
 
 def setup_delta ():
-	print ('setup delta')
 	setup ()
-	print ('setup delta 2')
 	# all axis: 5 mm per tooth; 12 teeth per revolution; 200 steps per revolution; 16 microsteps per step.
 	p.axis_motor_set_steps_per_mm (0, (200 * 16.) / (5 * 12))	# [steps/rev] / ([mm/t] * [t/rev]) = [steps/rev] / [mm/rev] = [steps/mm]
 	p.axis_motor_set_steps_per_mm (1, (200 * 16.) / (5 * 12))
