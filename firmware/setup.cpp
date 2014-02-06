@@ -49,6 +49,13 @@ void setup ()
 	continue_buffer[0] = 3;
 	continue_buffer[1] = CMD_CONTINUE;
 	continue_buffer[2] = 0;
+	sense_buffer[0] = 7;
+	sense_buffer[1] = CMD_SENSE;
+	sense_buffer[2] = 0;
+	sense_buffer[3] = 0;
+	sense_buffer[4] = 0;
+	sense_buffer[5] = 0;
+	sense_buffer[6] = 0;
 	motors[F0] = NULL;
 	temps[F0] = NULL;
 	objects[F0] = &constants;
@@ -61,9 +68,14 @@ void setup ()
 		motors[i] = &axis[a].motor;
 		temps[i] = NULL;
 		objects[i] = &axis[a];
-		limits_pos[a] = MAXLONG;
+		limits_pos[a] = NAN;
 		axis[a].current_pos = 0;
 		axis[a].source = NAN;
+		axis[a].sense_state = 0;
+		axis[a].sense_pos = MAXLONG;
+		axis[a].limit_min_pin.read (0x100);
+		axis[a].limit_max_pin.read (0x100);
+		axis[a].sense_pin.read (0x100);
 	}
 	for (uint8_t e = 0; e < MAXEXTRUDERS; ++e, ++i)
 	{
@@ -86,6 +98,9 @@ void setup ()
 			motors[o]->f = 0;
 			motors[o]->continuous_steps_per_s = 0;
 			motors[o]->audio_flags = 0;
+			motors[o]->enable_pin.read (0x100);
+			motors[o]->step_pin.read (0x100);
+			motors[o]->dir_pin.read (0x100);
 		}
 		if (temps[o]) {
 			temps[o]->last_time = time;
@@ -93,6 +108,8 @@ void setup ()
 			temps[o]->min_alarm = NAN;
 			temps[o]->max_alarm = NAN;
 			temps[o]->target = NAN;
+			temps[o]->power_pin.read (0x100);
+			temps[o]->thermistor_pin.read (0x100);
 		}
 	}
 	int16_t address = 0;

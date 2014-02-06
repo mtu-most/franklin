@@ -1,4 +1,3 @@
-firmware/Makefile /usr/share/printer3d/firmware
 firmware/build-mighty_opt/mighty_opt.hex /usr/share/printer3d/firmware
 firmware/build-mega2560/mega2560.hex /usr/share/printer3d/firmware
 firmware/printer3d-firmware-upload /usr/bin

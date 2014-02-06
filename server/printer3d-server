@@ -1,28 +1,33 @@
 #!/usr/bin/python
+# vim: foldmethod=marker :
 
+# Imports. {{{
+import re
 import os
 import sys
 import json
 import printer3d
-import wshttpd
+import websockets
 import xdgbasedir
 import glib
 import time
-from wshttpd import log
+from websockets import log
+import traceback
+# }}}
 
-config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'port': 8080, 'printer': '', 'audiodir': xdgbasedir.cache_filename_write (packagename = 'printer3d', filename = 'audio', makedirs = False)})
+config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'port': 8080, 'printer': '', 'audiodir': xdgbasedir.cache_filename_write (packagename = 'printer3d', filename = 'audio', makedirs = False), 'blacklist': 'ptmx$|console$|ttyS?\d*$', 'autodetect': True})
 
-class Printer:
-	def __init__ (self, name):
-		self.printer = printer3d.Printer (name)
+class Printer:	# {{{
+	def __init__ (self, port):
+		self.printer = printer3d.Printer (port)
 		self.printer.continue_cb = lambda: glib.idle_add (self.send_gcode)
 		self.printer.audiodir = config['audiodir']
 		glib.io_add_watch (self.printer.printer.fd, glib.IO_IN, self.printer_input)
 		# [axes, extruders, feedrate]
-		self.pos = [[0.] * self.printer.get_num_axes (), [0.] * self.printer.get_num_extruders (), 1.]
+		self.pos = [[0.] * self.printer.get_num_axes (), [0.] * self.printer.get_num_extruders (), float ('inf')]
 		self.current_extruder = 0
 		self.rel = False
-		self.erel = False
+		self.erel = None
 		self.etemp = float ('nan')
 		self.btemp = float ('nan')
 		self.gcode = []
@@ -32,7 +37,7 @@ class Printer:
 			axes = range (self.printer.get_num_axes ())
 		ret = self.printer.home (axes)
 		for i, a in enumerate (axes):
-			self.pos[0][a] = ret[i]
+			self.pos[0][a] = self.printer.axis_get_current_pos (a)[1]
 	def flush (self):
 		self.printer.goto (cb = True)
 		self.printer.wait_for_cb ()
@@ -70,7 +75,7 @@ class Printer:
 			self.parse_gcode_chunk (*self.gcode.pop (0))
 		return False
 	def printer_input (self, source, condition):
-		self.printer.block ()
+		self.printer.block (.1)
 		self.send_gcode ()
 		return True
 	def parse_gcode_chunk (self, cmd, args):
@@ -90,7 +95,7 @@ class Printer:
 			if components['F'] is not None:
 				self.pos[2] = components['F']
 			if components['E'] is not None:
-				if self.erel:
+				if self.erel or (self.erel is None and self.rel):
 					estep = components['E']
 				else:
 					estep = components['E'] - self.pos[1][self.current_extruder]
@@ -108,10 +113,10 @@ class Printer:
 			dist = sum ([(self.pos[0][x] - oldpos[x]) ** 2 for x in range (3)]) ** .5
 			if dist == 0:
 				dist = abs (estep)
-			#print ('going to %s estep %s f0 %s dist %s' % (pos, estep, f0, dist))
+			#print ('going to %s estep %s f0 %s dist %s' % (self.pos, estep, f0, dist))
 			if dist > 0:
 				#if f0 is None:
-				#f0 = self.pos[1][self.current_extruder]
+				#	f0 = self.pos[1][self.current_extruder]
 				f0 = self.pos[2]	# Use new value.
 				if f0 == 0:
 					f0 = float ('inf')
@@ -201,17 +206,73 @@ class Printer:
 				self.printer.waittemp_temp (0, self.btemp, float ('nan'))
 		else:
 			raise SyntaxError ('invalid gcode command %s' % cmd)
+# }}}
 
-class Connection (wshttpd.Httpd_connection):
+class Connection: # {{{
 	def __init__ (self, socket):
 		self.socket = socket
-		self.printer = default_printer
+		self.printer = self.find_printer (*default_printer)
 		log ('init')
+	@classmethod
+	def find_printer (cls, name = None, port = None):
+		if port in ports:
+			return ports[port]
+		if name is not None:
+			for printer in printers:
+				if re.match (name, printers[printer].printer.name):
+					return printers[printer]
+		return None
+	@classmethod
+	def set_autodetect (cls, detect):
+		global autodetect
+		autodetect = detect
+	@classmethod
+	def detect (cls, port):
+		global default_printer
+		assert port in ports and ports[port] is None
+		try:
+			ports[port] = Printer (port)
+			print ('found printer "%s" on port %s' % (ports[port].printer.name, port))
+		except:
+			traceback.print_exc ()
+			print ('found no printer on port %s' % port)
+			return
+		if ports[port].printer.name not in printers:
+			printers[ports[port].printer.name] = ports[port]
+	@classmethod
+	def detect_all (cls):
+		for p in ports:
+			if ports[p] is not None:
+				continue
+			cls.detect (p)
+	@classmethod
+	def add_port (cls, port):
+		assert port not in ports
+		ports[port] = None
+		if autodetect:
+			cls.detect (port)
+	@classmethod
+	def remove_port (cls, port):
+		assert port in ports
+		#if ports[port] is not None:
+		#	orphans.append (ports[port])
+		del ports[port]
+	@classmethod
+	def get_ports (cls):
+		return [(p, ports[p].printer.name if ports[p] is not None else None) for p in ports]
+	@classmethod
+	def set_default_printer (cls, name = None, port = None):
+		global default_printer
+		default_printer = (name, port)
+	@classmethod
+	def get_default_printer (cls):
+		return default_printer
+	@classmethod
+	def printerlist (cls):
+		return printers.keys ()
 	def set_printer (self, printer):
 		assert printer in printers
 		self.printer = printers[printer]
-	def printerlist (self):
-		return printers.keys
 	def gcode (self, code):
 		assert self.printer is not None
 		log ('gcode')
@@ -238,11 +299,25 @@ class Connection (wshttpd.Httpd_connection):
 		#log ('other: %s' % attr)
 		assert self.printer is not None
 		return getattr (self.printer.printer, attr)
+# }}}
 
-default_printer = Printer (config['printer'])
-printers = {default_printer.printer.get_name (): default_printer}
+default_printer = (None, None)
+printers = {}
+ports = {}
+autodetect = config['autodetect']
+if autodetect:
+	# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
+	for tty in os.listdir ('/sys/class/tty'):
+		if re.match (config['blacklist'], tty):
+			continue
+		Connection.add_port ('/dev/' + tty)
 
-httpd = wshttpd.RPChttpd (config['port'], Connection, httpdirs = xdgbasedir.data_files_read ('html', packagename = 'printer3d') + ['html', '/home/shevek/src/python-wshttpd'])
+if config['printer'] in ports:
+	default_printer = (None, config['printer'])
+else:
+	default_printer = (config['printer'], None)
+
+httpd = websockets.RPChttpd (config['port'], Connection, httpdirs = xdgbasedir.data_files_read ('html', packagename = 'printer3d'))
 
 print ('running')
-wshttpd.fgloop ()
+websockets.fgloop ()

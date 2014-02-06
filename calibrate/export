@@ -1,0 +1,31 @@
+#!/usr/bin/python
+
+import sys
+import websockets
+
+p = websockets.RPC (8080)
+
+def parse (f):
+	section = None
+	for l in f.readlines ():
+		l = l.strip ()
+		if l == '' or l.startswith ('#'):
+			print (l)
+			continue
+		if l.startswith ('['):
+			assert l.endswith (']')
+			section, code = l[1:-1].strip ().split ()
+			code = int (code)
+			print ('[%s %d]' % (section, code))
+			continue
+		key, value = l.split ('=', 1)
+		key = key.strip ()
+		if section is None:
+			value = getattr (p, 'get_' + key) ()
+		else:
+			value = getattr (p, section + '_get_' + key) (code)
+		print ('%s = %s' % (key, value))
+
+for filename in sys.argv[1:]:
+	with open (filename) as f:
+		parse (f)

@@ -1,0 +1,45 @@
+#!/usr/bin/python
+
+import sys
+import websockets
+
+p = websockets.RPC (8080)
+
+def parse (f):
+	section = None
+	for l in f.readlines ():
+		l = l.strip ()
+		if l == '' or l.startswith ('#'):
+			continue
+		if l.startswith ('['):
+			assert l.endswith (']')
+			section, code = l[1:-1].strip ().split ()
+			code = int (code)
+			continue
+		key, value = l.split ('=', 1)
+		key = key.strip ()
+		if key == 'name':
+			value = value.strip ()
+		elif key.startswith ('num') or key.endswith ('type') or key.endswith ('pin') or key.endswith ('limit') or key == 'current_pos':
+			value = int (value)
+		else:
+			value = float (value)
+		print section, key, value
+		if section is None:
+			getattr (p, 'set_' + key) (value)
+		else:
+			getattr (p, section + '_set_' + key) (code, value)
+
+save = False
+for filename in sys.argv[1:]:
+	if filename == '-s':
+		save = True
+		continue
+	if filename == '-':
+		parse (sys.stdin)
+		continue
+	with open (filename) as f:
+		parse (f)
+
+if save:
+	p.save_all ()

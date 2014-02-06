@@ -17,18 +17,26 @@ CONFIG_FILE=/etc/default/printer3d
 RUN=1
 
 # Port to listen for browser requests.
-HTTP_PORT=8080
+PORT=8080
 
-# Port to listen for python clients.  The default is to take a random port and publish it using avahi.
-PYTHON_PORT='reprap|RepRap printer interface'
+# TLS key and certificate to use for encryption.  If not key is given,
+# encryption will be disabled (and there will be a warning about it).
+TLS_KEY='/etc/ssl/private/ssl-cert-snakeoil.key'
+TLS_CERT='/etc/ssl/certs/ssl-cert-snakeoil.pem'
 
-# Path to key and certificate to use for encryption.
-# This can either be a single file containing the private key and certificate,
-# or one file for each of those, separated by a colon.
-TLS='/etc/ssl/private/ssl-cert-snakeoil.key:/etc/ssl/certs/ssl-cert-snakeoil.pem'
+# Location where audio files are stored.
+AUDIODIR=/var/cache/printer3d/audio
 
-# Regular expression of printer name to connect to.
+# Regular expression of default printer; normally empty.
 PRINTER=''
+
+# The server keeps a list of serial ports on the system.  If this is set to
+# yes, it tries to connect to a printer on any new port (and at startup, on any
+# port).
+AUTODETECT=yes
+
+# Regular expression of serial ports to ignore.
+BLACKLIST='ptmx$|console$|ttyS?\d*$'
 
 # Arguments to start-stop-daemon.
 ARGS="--make-pidfile --quiet --chuid printer3d:printer3d"
@@ -42,11 +50,14 @@ if test -r $CONFIG_FILE; then
 	. $CONFIG_FILE
 fi
 
+export TLS_KEY
+export TLS_CERT
+
 NAME=printer3d
 DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/printer3d-server
 ARGS="--pidfile $PIDFILE --exec $DAEMON $ARGS"
-START_ARGS="--background --oknodo --start $ARGS -- --httpport=$HTTP_PORT --pythonport='$PYTHON_PORT' --tls=$TLS --printer='$PRINTER'"
+START_ARGS="--background --oknodo --start $ARGS -- --port=$PORT --printer='$PRINTER' --audiodir "$AUDIODIR""
 STOP_ARGS="--oknodo --stop $ARGS"
 
 if test ! -x "$DAEMON"; then

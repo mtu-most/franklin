@@ -1,6 +1,6 @@
 # vim: set foldmethod=marker :
 
-show_own_debug = None
+show_own_debug = False
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -35,7 +35,7 @@ class Printer: # {{{
 			[0x95, 0x6c, 0xd5, 0x43],
 			[0x4b, 0xdc, 0xe2, 0x83]]
 	# Single-byte commands.
-	single = { 'ACK': '\x80', 'NACK': '\xe1', 'ACKWAIT': '\xd2', 'STALL': '\xb3', 'RESET': '\xf4', 'INIT': '\x95', 'ACKRESET': '\xa6', 'DEBUG': '\xc7' }
+	single = { 'NACK': '\x80', 'ACK': '\xe1', 'ACKWAIT': '\xd2', 'STALL': '\xb3', 'RESET': '\xf4', 'INIT': '\x95', 'ACKRESET': '\xa6', 'DEBUG': '\xc7' }
 	command = {
 			'BEGIN': 0x00,
 			'GOTO': 0x01,
@@ -53,93 +53,78 @@ class Printer: # {{{
 			'WRITE': 0x0d,
 			'PAUSE': 0x0e,
 			'PING': 0x0f,
-			'AUDIO_SETUP': 0x10,
-			'AUDIO_DATA': 0x11}
+			'READPIN': 0x10,
+			'AUDIO_SETUP': 0x11,
+			'AUDIO_DATA': 0x12}
 	rcommand = {
-			'START': '\x12',
-			'TEMP': '\x13',
-			'POS': '\x14',
-			'DATA': '\x15',
-			'PONG': '\x16',
-			'MOVECB': '\x17',
-			'TEMPCB': '\x18',
-			'CONTINUE': '\x19',
-			'LIMIT': '\x1a',
-			'MESSAGE': '\x1b'}
+			'START': '\x13',
+			'TEMP': '\x14',
+			'POS': '\x15',
+			'DATA': '\x16',
+			'PONG': '\x17',
+			'MOVECB': '\x18',
+			'TEMPCB': '\x19',
+			'CONTINUE': '\x1a',
+			'LIMIT': '\x1b',
+			'SENSE': '\x1c',
+			'MESSAGE': '\x1d'}
 	# }}}
-	def __init__ (self, name = None): # {{{
-		# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
+	def __init__ (self, port): # {{{
+		self.port = port
 		self.audiodir = '.'
 		self.audiofile = None
 		self.continue_cb = None
 		self.continue_audio_cb = None
 		self.pos = []
-		blacklist = 'ptmx$|console$|ttyS?\d*$'
-		found_ports = []
-		found_printers = []
-		for p in os.listdir ('/sys/class/tty'):
-			if re.match (blacklist, p):
-				continue
-			try:
-				# Set up state.
-				self.ff_in = False
-				self.ff_out = False
-				self.limits = {}
-				self.wait = False
-				self.waitaudio = False
-				self.movewait = 0
-				self.tempwait = set ()
-				self.printer = serial.Serial ('/dev/' + p, baudrate = 115200, timeout = .01)
-				found_ports.append (p)
-				self.printer.readall ()	# flush buffer.
-				# Reset printer.
-				self.printer.setDTR (False)
-				time.sleep (.1)
-				self.printer.setDTR (True)
-				time.sleep (.1)
-				# Wait for firmware to boot.
-				self.printer.setTimeout (Printer.long_timeout)
+		# Set up state.
+		self.ff_in = False
+		self.ff_out = False
+		self.limits = {}
+		self.sense = {}
+		self.wait = False
+		self.waitaudio = False
+		self.movewait = 0
+		self.tempwait = set ()
+		self.printer = serial.Serial (port, baudrate = 115200, timeout = .01)
+		self.printer.readall ()	# flush buffer.
+		# Reset printer.
+		self.printer.setDTR (False)
+		time.sleep (.1)
+		self.printer.setDTR (True)
+		time.sleep (.1)
+		# Wait for firmware to boot.
+		self.printer.setTimeout (Printer.long_timeout)
+		r = self.printer.read ()
+		dprint ('read (0)', r)
+		assert len (r) != 0
+		self.printer.setTimeout (Printer.default_timeout)
+		while True:
+			if r == self.single['DEBUG']:
+				self._handle_debug ()
 				r = self.printer.read ()
 				dprint ('read (0)', r)
-				if len (r) == 0:
-					continue
-				self.printer.setTimeout (Printer.default_timeout)
-				while True:
-					if r == self.single['DEBUG']:
-						self._handle_debug ()
-						r = self.printer.read ()
-						dprint ('read (0)', r)
-						continue
-					if r == self.single['INIT']:
-						break
-					dprint ('unexpected data', r)
-					r = self.printer.read ()
-					dprint ('read (0)', r)
-				self.printer.setTimeout (Printer.default_timeout)
-				self._begin ()
-				self.namelen, self.maxaxes, self.maxextruders, self.maxtemps, self.audio_fragments, self.audio_fragment_size = struct.unpack ('<BBBBBB', self._read (0))
-				self.load (1)
-				if not name or re.match (name, self.name):
-					self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
-					for a in range (self.maxaxes):
-						self.axis[a].read (self._read (2 + a))
-					self.extruder = [Printer.Extruder () for t in range (self.maxextruders)]
-					for e in range (self.maxextruders):
-						self.extruder[e].read (self._read (2 + self.maxaxes + e))
-					self.temp = [Printer.Temp () for t in range (self.maxtemps)]
-					for t in range (self.maxtemps):
-						self.temp[t].read (self._read (2 + self.maxaxes + self.maxextruders + t))
-					global show_own_debug
-					if show_own_debug is None:
-						show_own_debug = True
-					return
-				else:
-					found_printers.append ((p, self.name))
-			except:
-				print ('Not using %s: %s' % (p, sys.exc_value))
-				pass
-		sys.stderr.write ('Printer not found.  Usable ports: %s, Printers: %s\n' % (', '.join (found_ports), ', '.join (['%s (%s)' % (x[1], x[0]) for x in found_printers])))
-		raise ValueError ('printer not found')
+				continue
+			if r == self.single['INIT']:
+				break
+			dprint ('unexpected data', r)
+			r = self.printer.read ()
+			dprint ('read (0)', r)
+		self.printer.setTimeout (Printer.default_timeout)
+		self._begin ()
+		self.namelen, self.maxaxes, self.maxextruders, self.maxtemps, self.audio_fragments, self.audio_fragment_size = struct.unpack ('<BBBBBB', self._read (0))
+		self.load (1)
+		self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
+		for a in range (self.maxaxes):
+			self.axis[a].read (self._read (2 + a))
+		self.extruder = [Printer.Extruder () for t in range (self.maxextruders)]
+		for e in range (self.maxextruders):
+			self.extruder[e].read (self._read (2 + self.maxaxes + e))
+		self.temp = [Printer.Temp () for t in range (self.maxtemps)]
+		for t in range (self.maxtemps):
+			self.temp[t].read (self._read (2 + self.maxaxes + self.maxextruders + t))
+		global show_own_debug
+		if show_own_debug is None:
+			show_own_debug = True
 	# }}}
 	def _make_packet (self, data): # {{{
 		data = chr (len (data) + 1) + data
@@ -313,7 +298,23 @@ class Printer: # {{{
 					buffer = ''
 					continue	# Start over.
 				if data[0] == self.rcommand['LIMIT']:
-					self.limits[ord (data[1])] = struct.unpack ('<l', data[2:])[0]
+					self.limits[ord (data[1])] = struct.unpack ('<f', data[2:])[0]
+					if want_any:
+						if end_time:
+							self.printer.setTimeout (Printer.default_timeout)
+						return ''
+					buffer = ''
+					continue	# Start over.
+				if data[0] == self.rcommand['SENSE']:
+					w = ord (data[1])
+					which = w & 0x7f
+					if which == 0x7f:
+						return data
+					state = bool (w & 0x80)
+					pos = struct.unpack ('<f', data[2:])[0]
+					if which not in self.sense:
+						self.sense[which] = []
+					self.sense[which].append ((state, pos))
 					if want_any:
 						if end_time:
 							self.printer.setTimeout (Printer.default_timeout)
@@ -323,6 +324,11 @@ class Printer: # {{{
 				if data[0] == self.rcommand['MESSAGE']:
 					self.messages.append ((struct.unpack ('<l', data[1:5])[0], data[5:]))
 					print ('Message: %d %s' % self.messages[-1])
+					if want_any:
+						if end_time:
+							self.printer.setTimeout (Printer.default_timeout)
+						return ''
+					buffer = ''
 					continue	# Start over.
 				if end_time:
 					self.printer.setTimeout (Printer.default_timeout)
@@ -346,6 +352,12 @@ class Printer: # {{{
 		p = self._recv_packet ()
 		assert p[0] == self.rcommand['DATA']
 		return p[1:]
+	# }}}
+	def _read_variables (self): # {{{
+		data = self._read (1)
+		self.name = data[:self.namelen].rstrip ('\0')
+		self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate = struct.unpack ('<BBBBHfLLf', data[self.namelen:])
+		self.pos = (self.pos + [float ('nan')] * self.num_axes)[:self.num_axes]
 	# }}}
 	# }}}
 	def _write_variables (self): # {{{
@@ -394,16 +406,16 @@ class Printer: # {{{
 			self.motor = Printer.Motor ()
 		def read (self, data):
 			data = self.motor.read (data)
-			self.limit_min_pin, self.limit_max_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius, self.offset = struct.unpack ('<HHllfff', data)
+			self.limit_min_pin, self.limit_max_pin, self.sense_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius, self.offset = struct.unpack ('<HHHfffff', data)
 		def write (self):
-			return self.motor.write () + struct.pack ('<HHllfff', self.limit_min_pin, self.limit_max_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius, self.offset)
+			return self.motor.write () + struct.pack ('<HHHfffff', self.limit_min_pin, self.limit_max_pin, self.sense_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius, self.offset)
 		def set_current_pos (self, pos):
-			self.printer._send_packet (struct.pack ('<BBl', self.printer.command['SETPOS'], 2 + self.id, pos))
+			self.printer._send_packet (struct.pack ('<BBf', self.printer.command['SETPOS'], 2 + self.id, pos))
 		def get_current_pos (self):
 			self.printer._send_packet (struct.pack ('<BB', self.printer.command['GETPOS'], 2 + self.id))
 			ret = self.printer._recv_packet ()
 			assert ret[0] == self.printer.rcommand['POS']
-			return struct.unpack ('<lf', ret[1:])
+			return struct.unpack ('<ff', ret[1:])
 	# }}}
 	class Extruder: # {{{
 		def __init__ (self):
@@ -432,6 +444,11 @@ class Printer: # {{{
 			a = {}
 			for i, axis in enumerate (axes):
 				a[i] = axis
+			axes = a
+		else:
+			a = {}
+			for i, axis in axes.items ():
+				a[int (i)] = axis
 			axes = a
 		targets = [0] * (((2 + self.num_axes + self.num_extruders - 1) >> 3) + 1)
 		args = ''
@@ -519,6 +536,12 @@ class Printer: # {{{
 		assert ret[0] == self.rcommand['TEMP']
 		return struct.unpack ('<f', ret[1:])[0]
 	# }}}
+	def readpin (self, pin): # {{{
+		self._send_packet (struct.pack ('<BB', self.command['READPIN'], pin))
+		ret = self._recv_packet ()
+		assert ret[0] == self.rcommand['SENSE']
+		return (ord (ret[1]) & 0x80) != 0
+	# }}}
 	def load_variables (self): # {{{
 		self.load (1)
 	# }}}
@@ -534,10 +557,7 @@ class Printer: # {{{
 	def load (self, channel): # {{{
 		self._send_packet (struct.pack ('<BB', self.command['LOAD'], channel))
 		if channel == 1:
-			data = self._read (1)
-			self.name = data[:self.namelen]
-			self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate = struct.unpack ('<BBBBHfLLf', data[self.namelen:])
-			self.pos = (self.pos + [float ('nan')] * self.num_axes)[:self.num_axes]
+			self._read_variables ()
 		elif 2 <= channel < 2 + self.maxaxes:
 			self.axis[channel - 2].read (self._read (channel))
 		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
@@ -578,7 +598,7 @@ class Printer: # {{{
 		self._send_packet (struct.pack ('<BB', self.command['PING'], arg))
 		assert struct.unpack ('<BB', self._recv_packet ()) == (ord (self.rcommand['PONG']), arg)
 	# }}}
-	def home (self, axes = (0, 1, 2)): # {{{
+	def home (self, axes = (0, 1, 2), speed = 5): # {{{
 		if self.printer_type != 1:
 			# Find the switches.
 			self.limits.clear ()
@@ -604,13 +624,65 @@ class Printer: # {{{
 				self.axis[axis].set_current_pos (ret[i])
 			for i, a in enumerate (axes):
 				self.pos[a] = ret[i] / self.axis[a].motor.steps_per_mm
-			return [self.pos[p] for p in axes]
+			return
 		else:
 			# Compute home position close to limit switches.
 			if self.pin_valid (self.axis[0].limit_max_pin):
-				pos = (0, 0, min ([self.axis[i].limit_max_pos / self.axis[i].motor.steps_per_mm for i in range (3)]) - 10)
+				pos = (0, 0, min ([self.axis[i].limit_max_pos for i in range (3)]) + self.axis[i].offset - 10)
+			elif self.pin_valid (self.axis[0].limit_min_pin):
+				pos = [0, 0, max ([self.axis[i].limit_min_pos for i in range (3)]) + self.axis[i].offset + 10]
 			else:
-				pos = [0, 0, max ([self.axis[i].limit_min_pos / self.axis[i].motor.steps_per_mm for i in range (3)]) + 10]
+				try:
+					self.set_printer_type (0)
+					for a in range (3):
+						self.axis[a].set_current_pos (0)
+					self.clear_sense ()
+					dist = 50
+					sense = {}
+					while len (sense) < 3:
+						self.goto ([dist if a not in sense else sense[a] for a in range (3)], cb = True)
+						if not self.wait_for_cb (True):
+							self.pause (True)
+							for a in self.sense:
+								if a not in sense:
+									sense[a] = self.sense[a][0][1]
+							self.clear_sense ()
+							continue
+						if len (sense) == 3:
+							break
+						while True:
+							self.goto ([-dist if a not in sense else sense[a] for a in range (3)], cb = True)
+							if not self.wait_for_cb (True):
+								self.pause (True)
+								for a in self.sense:
+									if a not in sense:
+										sense[a] = self.sense[a][0][1]
+								self.clear_sense ()
+								continue
+							break
+						assert dist < 300
+						dist += 30
+					self.goto ([sense[a] - 10 for a in range (3)], cb = True)
+					self.wait_for_cb ()
+					for a in range (3):
+						self.axis[a].set_current_pos (0)
+						self.clear_sense ()
+						self.goto ({a: 20}, f0 = speed / 20., cb = True)
+						self.wait_for_cb (True)
+						assert a in self.sense
+						self.pause (True)
+						sense[a] = self.sense[a][0][1]
+						self.goto ({a: 0}, cb = True)
+						self.wait_for_cb ()
+					self.goto ([sense[a] for a in range (3)], cb = True)
+					self.wait_for_cb ()
+					for a in range (3):
+						self.axis[a].set_current_pos (-self.axis[a].limit_min_pos)
+					self.goto ([min ([-self.axis[i].limit_min_pos for i in range (3)]) for a in range (3)], cb = True)
+					self.wait_for_cb ()
+				finally:
+					self.set_printer_type (1)
+				return
 			# Go to limit switches.
 			self.limits.clear ()
 			s = 1 if self.pin_valid (self.axis[0].limit_max_pin) else -1
@@ -635,8 +707,6 @@ class Printer: # {{{
 			# Go to home position.
 			self.goto (pos, cb = True)
 			self.wait_for_cb ()
-			# Return current nozzle position.
-			return [pos[a] for a in axes]
 	# }}}
 	def audio_play (self, name, axes = None, extruders = None): # {{{
 		assert os.path.basename (name) == name
@@ -679,7 +749,7 @@ class Printer: # {{{
 		for x in os.listdir (self.audiodir):
 			try:
 				with open (os.path.join (self.audiodir, x), 'rb') as f:
-					us_per_bit = struct.unpack ('<H', f.read (2))
+					us_per_bit = struct.unpack ('<H', f.read (2))[0]
 					bits = (os.fstat (f.fileno ()).st_size - 2) * 8
 					t = bits * us_per_bit * 1e-6
 					ret.append ((x, t))
@@ -687,9 +757,10 @@ class Printer: # {{{
 				pass
 		return ret
 	# }}}
-	def wait_for_cb (self): # {{{
-		while self.movewait > 0:
+	def wait_for_cb (self, sense = False): # {{{
+		while self.movewait > 0 and (not sense or len (self.sense) == 0):
 			self._recv_packet (want_any = True)
+		return self.movewait == 0
 	# }}}
 	def wait_for_limits (self, num = 1): # {{{
 		while len (self.limits) < num:
@@ -746,11 +817,25 @@ class Printer: # {{{
 	def is_waiting (self):	# {{{
 		return self.wait or len (self.tempwait) > 0
 	# }}}
-	def get_limits (self):	# {{{
-		return self.limits
+	def get_limits (self, axis = None):	# {{{
+		if axis is None:
+			return self.limits
+		if axis in self.limits:
+			return self.limits[axis]
+		return None
 	# }}}
 	def clear_limits (self):	# {{{
 		self.limits.clear ()
+	# }}}
+	def get_sense (self, axis = None):	# {{{
+		if axis is None:
+			return self.sense
+		if axis in self.sense:
+			return self.sense[axis]
+		return []
+	# }}}
+	def clear_sense (self):	# {{{
+		self.sense.clear ()
 	# }}}
 	def get_position (self):	# {{{
 		return self.pos
@@ -953,6 +1038,12 @@ class Printer: # {{{
 		self._write_axis (which)
 	def axis_get_limit_max_pin (self, which):
 		return self.axis[which].limit_max_pin
+	# }}}
+	def axis_set_sense_pin (self, which, value):	# {{{
+		self.axis[which].sense_pin = value
+		self._write_axis (which)
+	def axis_get_sense_pin (self, which):
+		return self.axis[which].sense_pin
 	# }}}
 	def axis_set_limit_min_pos (self, which, value):	# {{{
 		self.axis[which].limit_min_pos = value

@@ -19,6 +19,7 @@ void Constants::save (int16_t &addr, bool eeprom)
 
 void Variables::load (int16_t &addr, bool eeprom)
 {
+	uint8_t type = printer_type;
 	for (uint8_t i = 0; i < NAMELEN; ++i)
 		name[i] = read_8 (addr, eeprom);
 	num_axes = read_8 (addr, eeprom);
@@ -43,6 +44,8 @@ void Variables::load (int16_t &addr, bool eeprom)
 		feedrate = 1;
 	}
 	SET_OUTPUT (led_pin);
+	if (type != printer_type)
+		axis[0].source = NAN;
 }
 
 void Variables::save (int16_t &addr, bool eeprom)

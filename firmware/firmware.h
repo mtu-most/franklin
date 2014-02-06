@@ -1,5 +1,5 @@
-#ifndef _DATA_H
-#define _DATA_H
+#ifndef _FIRMWARE_H
+#define _FIRMWARE_H
 
 #include <Arduino.h>
 #include <math.h>
@@ -49,6 +49,8 @@ struct Pin_t {
 			SET_INPUT_NOPULLUP (*this);
 		pin = data & 0xff;
 		flags = data >> 8;
+		if (pin >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS)
+			flags |= 1;
 	}
 };
 
@@ -61,8 +63,8 @@ union ReadFloat {
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
 // These bytes (except RESET) are sent in reply to a received packet only.
-	CMD_ACK = 0x80,		// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_NACK = 0xe1,	// Incorrect checksum.
+	CMD_NACK = 0x80,	// Incorrect checksum.
+	CMD_ACK = 0xe1,		// Packet properly received and accepted; ready for next command.  Reply follows if it should.
 	CMD_ACKWAIT = 0xd2,	// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
 	CMD_STALL = 0xb3,	// Packet properly received, but not accepted; don't resend packet unmodified.
 	CMD_RESET = 0xf4,	// Emergency reset: clear queue, stop and sleep motors, temperatures off.  (Never sent to host.)  Typically sent 3 times with 5 ms pauses in between.
@@ -89,6 +91,7 @@ enum Command {
 	CMD_WRITE,	// 1 byte: which channel; n bytes: data.
 	CMD_PAUSE,	// 1 byte: 0: not pause; 1: pause.
 	CMD_PING,	// 1 byte: code.  Reply: PONG.
+	CMD_READPIN,	// 1 byte: pin. Reply: SENSE with channel 0, position pin.
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: us_per_bit.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	// to host
@@ -103,6 +106,7 @@ enum Command {
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
 	CMD_CONTINUE,	// 1 byte: is_audio.  Bool flag if it needs to be sent.
 	CMD_LIMIT,	// 1 byte: which channel.
+	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
 	CMD_MESSAGE,	// 4 byte: code; n byte: string: message with no defined meaning; code may be used for a protocol.
 };
 
@@ -185,12 +189,15 @@ struct Variables : public Object
 struct Axis : public Object
 {
 	Motor motor;
-	int32_t limit_min_pos;	// Position of motor (in steps) when the min limit switch is triggered.
-	int32_t limit_max_pos;	// Position of motor (in steps) when the max limit switch is triggered.
+	float limit_min_pos;	// Position of motor (in mm) when the min limit switch is triggered.
+	float limit_max_pos;	// Position of motor (in mm) when the max limit switch is triggered.
 	float delta_length, delta_radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
 	float offset;		// Position where axis claims to be when it is at 0.
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;
+	Pin_t sense_pin;
+	uint8_t sense_state;
+	float sense_pos;
 	int32_t current_pos;	// Current position of motor (in steps).
 	float source, current;	// Source position of current movement of axis (in mm), or current position if there is no movement.
 	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
@@ -239,6 +246,7 @@ EXTERN char limitcb_buffer[10];
 EXTERN char movecb_buffer[4];
 EXTERN char tempcb_buffer[4];
 EXTERN char continue_buffer[4];
+EXTERN char sense_buffer[10];
 EXTERN Constants constants;
 EXTERN Variables variables;
 EXTERN Axis axis[MAXAXES];
@@ -254,7 +262,7 @@ EXTERN uint8_t queue_start, queue_end;
 EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent out.
 EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
-EXTERN int32_t limits_pos[MAXAXES];	// position when limit switch was hit or MAXLONG;
+EXTERN float limits_pos[MAXAXES];	// position when limit switch was hit or nan
 EXTERN bool have_msg;
 EXTERN char msg_buffer[MSGBUFSIZE];
 EXTERN bool pause_all;
@@ -290,6 +298,7 @@ void try_send_next ();
 // move.cpp
 void next_move ();
 void abort_move ();
+void reset_pos ();
 
 // setup.cpp
 void setup ();

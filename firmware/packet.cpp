@@ -13,14 +13,6 @@ static float get_float (uint8_t offset)
 	return ret.f;
 }
 
-static int32_t get_int32 (uint8_t offset)
-{
-	ReadFloat ret;
-	for (uint8_t t = 0; t < sizeof (float); ++t)
-		ret.b[t] = command[offset + t];
-	return ret.i;
-}
-
 static uint16_t get_uint16 (uint8_t offset)
 {
 	return ((uint16_t)command[offset] & 0xff) | (uint16_t)command[offset + 1] << 8;
@@ -266,7 +258,7 @@ void packet ()
 		for (uint8_t a = 0; a < 3; ++a)
 			axis[a].source = NAN;
 		Serial.write (CMD_ACK);
-		axis[which - 2].current_pos = get_int32 (3);
+		axis[which - 2].current_pos = int32_t (get_float (3) * axis[which - 2].motor.steps_per_mm);
 		return;
 	}
 	case CMD_GETPOS:	// Get current position
@@ -280,8 +272,10 @@ void packet ()
 			return;
 		}
 		Serial.write (CMD_ACK);
+		if (isnan (axis[0].source))
+			reset_pos ();
 		ReadFloat pos, current;
-		pos.i = axis[which - 2].current_pos;
+		pos.f = axis[which - 2].current_pos / axis[which - 2].motor.steps_per_mm;
 		current.f = axis[which - 2].current;
 		reply[0] = 2 + sizeof (int32_t) + sizeof (float);
 		reply[1] = CMD_POS;
@@ -382,6 +376,29 @@ void packet ()
 		reply[0] = 3;
 		reply[1] = CMD_PONG;
 		reply[2] = command[2];
+		reply_ready = true;
+		try_send_next ();
+		return;
+	}
+	case CMD_READPIN:
+	{
+		//debug ("CMD_READPIN");
+		if (command[2] >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS)
+		{
+			debug ("Readpin can only handle %d pins; not %d", NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS, command[2]);
+			Serial.write (CMD_STALL);
+			return;
+		}
+		Serial.write (CMD_ACK);
+		reply[0] = 7;
+		reply[1] = CMD_SENSE;
+		reply[2] = digitalRead (command[2]) ? 0xff : 0x7f;
+		ReadFloat f;
+		f.i = command[2];
+		reply[3] = f.b[0];
+		reply[4] = f.b[1];
+		reply[5] = f.b[2];
+		reply[6] = f.b[3];
 		reply_ready = true;
 		try_send_next ();
 		return;

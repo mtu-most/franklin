@@ -134,12 +134,15 @@ static bool do_steps (uint8_t m, int16_t num_steps) {
 			// Stop continuous move only for the motor that hits the switch.
 			motors[m]->f = 0;
 			motors[m]->continuous_steps_per_s = 0;
-			limits_pos[m - 2] = axis[m - 2].current_pos;
+			limits_pos[m - 2] = axis[m - 2].current_pos / axis[m - 2].motor.steps_per_mm;
 			try_send_next ();
-			if (moving && !isnan (motors[m]->dist)) {
+			if (moving) {
+				debug ("stop %d", current_move_has_cb);
 				abort_move ();
 				done_motors ();
 			}
+			else
+				debug ("stop no move");
 			return false;
 		}
 		axis[m - 2].current_pos += num_steps;
@@ -182,6 +185,14 @@ static void move_axes (float target[3]) {
 }
 
 static void handle_motors (unsigned long current_time, unsigned long longtime) {
+	for (uint8_t a = 0; a < MAXAXES; ++a) {
+		if (GET (axis[a].sense_pin, false) ^ bool (axis[a].sense_state & 0x80)) {
+			axis[a].sense_state ^= 0x80;
+			axis[a].sense_state |= 1;
+			axis[a].sense_pos = axis[a].current_pos / axis[a].motor.steps_per_mm;
+			try_send_next ();
+		}
+	}
 	if (pause_all)
 		return;
 	// Check for continuous moves.

@@ -3,6 +3,29 @@
 
 //#define DEBUG_MOVE
 
+void reset_pos ()	// {{{
+{
+	// Determine current location of extruder.
+	if (printer_type == 0) { // {{{
+		for (uint8_t a = 0; a < MAXAXES; ++a)
+			axis[a].source = axis[a].current_pos / axis[a].motor.steps_per_mm;
+	}
+	// }}}
+	else if (printer_type == 1) { // {{{
+		debug ("new delta position");
+		// Assume that all axes' current_pos are equal, in other words, that x=y=0.  (Don't check; we can't handle it anyway).
+		axis[0].source = 0;
+		axis[1].source = 0;
+		axis[2].source = axis[0].current_pos / axis[0].motor.steps_per_mm;
+	}
+	// }}}
+	else
+		debug ("Error: invalid printer type %d", printer_type);
+	for (uint8_t a = 0; a < MAXAXES; ++a)
+		axis[a].current = axis[a].source;
+}
+// }}}
+
 // Set up:
 // start_time		micros() at start of move.
 // t0			time to do main part.
@@ -21,55 +44,8 @@ void next_move () {
 #endif
 	// Set everything up for running queue[queue_start].
 
-	if (isnan (axis[0].source)) { // {{{
-		// Determine current location of extruder.
-		if (printer_type == 0) { // {{{
-			for (uint8_t a = 0; a < MAXAXES; ++a)
-				axis[a].source = axis[a].current_pos / axis[a].motor.steps_per_mm + axis[a].offset;
-		}
-		// }}}
-		else if (printer_type == 1) { // {{{
-			// This is very slow, but that's no problem, because it is only used after the position is lost
-			// (when a limit switch is hit, when a motor is run, and when reset is received.)
-			//
-			// (z_i-z_p)^2=l_i^2-(x_i-x_p)^2-(y_i-y_p)^2 === Z_i
-			// dZ_i/dx_p=2(x_i-x_p) and dZ_i/dy_p=2(y_i-y_p)
-			debug ("new delta position");
-			float xp = 0;
-			float yp = 0;
-			while (false && true) {
-				for (uint8_t c = 0; c < 2; ++c) {
-					for (uint8_t a = 0; a < 3; ++a) {
-						//float dx = axis[a].x - xp;
-						//float dy = axis[a].y - yp;
-						float Z[3];
-						for (uint8_t a2 = 0; a2 < 3; ++a2) {
-							float dx2 = axis[a2].x - xp;
-							float dy2 = axis[a2].y - yp;
-							Z[a2] = sqrt (axis[a2].delta_length * axis[a2].delta_length - dx2 * dx2 - dy2 * dy2);
-						}
-						//float dZdxp = -dx / Z[a];
-						//float dZdyp = -dy / Z[a];
-						uint8_t b = (a + 1) % 3;
-						uint8_t c = (a + 2) % 3;
-						float error = Z[b] * axis[b].motor.steps_per_mm - axis[b].current_pos;
-						error += Z[c] * axis[c].motor.steps_per_mm - axis[c].current_pos;
-						error /= 2;
-						error = Z[a] * axis[a].motor.steps_per_mm - axis[a].current_pos - error;
-						// Positive error means Z is too large.
-					}
-				}
-			}
-			// TODO
-			axis[0].source = axis[0].offset;
-			axis[1].source = axis[1].offset;
-			axis[2].source = axis[2].limit_max_pos / axis[2].motor.steps_per_mm + axis[2].offset;
-		}
-		// }}}
-		else
-			debug ("Error: invalid printer type %d", printer_type);
-	}
-	// }}}
+	if (isnan (axis[0].source))
+		reset_pos ();
 	if (!move_prepared) { // {{{
 		// We have to speed up first; don't pop anything off the queue yet, just set values to handle segment 0.
 #ifdef DEBUG_MOVE
@@ -90,7 +66,8 @@ void next_move () {
 				motors[m]->next_dist = queue[queue_start].data[mt + 2] - axis[mt].offset - axis[mt].source;
 			else
 				motors[m]->next_dist = queue[queue_start].data[mt + 2];
-			if (motors[m]->next_dist != 0)
+			// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
+			if (abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .1)
 				action = true;
 #ifdef DEBUG_MOVE
 			debug ("next dist motor %d %f", m, &motors[m]->next_dist);
@@ -139,7 +116,8 @@ void next_move () {
 					motors[m]->next_dist = NAN;
 				else
 					motors[m]->next_dist = 0;
-				if ((!isnan (motors[m]->next_dist) && motors[m]->next_dist != 0) || (!isnan (motors[m]->dist) && motors[m]->dist != 0))
+				// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
+				if ((!isnan (motors[m]->next_dist) && abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .1) || (!isnan (motors[m]->dist) && abs (motors[m]->dist) * motors[m]->steps_per_mm > .1))
 					action = true;
 #ifdef DEBUG_MOVE
 				debug ("m %d dist %f nd %f", m, &motors[m]->dist, &motors[m]->next_dist);
@@ -164,7 +142,8 @@ void next_move () {
 					motors[m]->next_dist = NAN;
 				else
 					motors[m]->next_dist = mt < num_axes ? queue[n].data[mt + 2] - axis[mt].offset - (axis[mt].source + motors[m]->dist) : queue[n].data[mt + 2];
-				if ((!isnan (motors[m]->next_dist) && motors[m]->next_dist != 0) || (!isnan (motors[m]->dist) && motors[m]->dist != 0))
+				// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
+				if ((!isnan (motors[m]->next_dist) && abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .1) || (!isnan (motors[m]->dist) && abs (motors[m]->dist) * motors[m]->steps_per_mm > .1))
 					action = true;
 #ifdef DEBUG_MOVE
 				debug ("m2 %d dist %f nd %f", m, &motors[m]->dist, &motors[m]->next_dist);
