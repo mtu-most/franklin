@@ -122,5 +122,5 @@ void setup ()
 	if (address - 1 > E2END)
 		debug ("Warning: data doesn't fit in EEPROM; decrease MAXAXES, MAXEXTRUDERS, or MAXTEMPS and reflash the firmware!");
 	Serial.write (CMD_INIT);
-	debug ("Eeprom used: %d, available: %d", address, E2END);
+	//debug ("Eeprom used: %d, available: %d", address, E2END);
 }

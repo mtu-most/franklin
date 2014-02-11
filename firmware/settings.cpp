@@ -15,6 +15,8 @@ void Constants::save (int16_t &addr, bool eeprom)
 	write_8 (addr, MAXTEMPS, false);
 	write_8 (addr, AUDIO_FRAGMENTS, false);
 	write_8 (addr, AUDIO_FRAGMENT_SIZE, false);
+	write_8 (addr, NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS, false);
+	write_8 (addr, NUM_DIGITAL_PINS, false);
 }
 
 void Variables::load (int16_t &addr, bool eeprom)

@@ -2,7 +2,6 @@
 
 void Temp::load (int16_t &addr, bool eeprom)
 {
-	SET_INPUT_NOPULLUP (power_pin);
 	alpha = read_float (addr, eeprom);
 	beta = read_float (addr, eeprom);
 	core_C = read_float (addr, eeprom);

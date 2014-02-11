@@ -21,8 +21,7 @@ PORT=8080
 
 # TLS key and certificate to use for encryption.  If not key is given,
 # encryption will be disabled (and there will be a warning about it).
-TLS_KEY='/etc/ssl/private/ssl-cert-snakeoil.key'
-TLS_CERT='/etc/ssl/certs/ssl-cert-snakeoil.pem'
+TLS='/etc/ssl/certs/ssl-cert-snakeoil.pem:/etc/ssl/private/ssl-cert-snakeoil.key'
 
 # Location where audio files are stored.
 AUDIODIR=/var/cache/printer3d/audio
@@ -33,13 +32,13 @@ PRINTER=''
 # The server keeps a list of serial ports on the system.  If this is set to
 # yes, it tries to connect to a printer on any new port (and at startup, on any
 # port).
-AUTODETECT=yes
+AUTODETECT=True
 
 # Regular expression of serial ports to ignore.
-BLACKLIST='ptmx$|console$|ttyS?\d*$'
+BLACKLIST='/dev/(ptmx$|console$|ttyS?\d*)$'
 
 # Arguments to start-stop-daemon.
-ARGS="--make-pidfile --quiet --chuid printer3d:printer3d"
+ARGS="--quiet"
 
 # File for storing the pid.  You probably don't need to change this.
 PIDFILE=/run/printer3d.pid
@@ -56,8 +55,8 @@ export TLS_CERT
 NAME=printer3d
 DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/printer3d-server
-ARGS="--pidfile $PIDFILE --exec $DAEMON $ARGS"
-START_ARGS="--background --oknodo --start $ARGS -- --port=$PORT --printer='$PRINTER' --audiodir "$AUDIODIR""
+ARGS="--make-pidfile --pidfile $PIDFILE --chuid printer3d:printer3d $ARGS"
+START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --autodetect=$AUTODETECT --port=$PORT --printer=$PRINTER --audiodir=$AUDIODIR --tls=$TLS --blacklist=$BLACKLIST"
 STOP_ARGS="--oknodo --stop $ARGS"
 
 if test ! -x "$DAEMON"; then

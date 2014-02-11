@@ -12,7 +12,7 @@ void reset_pos ()	// {{{
 	}
 	// }}}
 	else if (printer_type == 1) { // {{{
-		debug ("new delta position");
+		//debug ("new delta position");
 		// Assume that all axes' current_pos are equal, in other words, that x=y=0.  (Don't check; we can't handle it anyway).
 		axis[0].source = 0;
 		axis[1].source = 0;

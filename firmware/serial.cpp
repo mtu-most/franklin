@@ -59,53 +59,18 @@ void serial ()
 			try_send_next ();
 			continue;
 		case CMD_NACK:
-			// Nack: the host didn't properly receive the notification: resend.
+			// Nack: the host didn't properly receive the packet: resend.
 			// Unless the last packet was already received; in that case ignore the NACK.
 			if (out_busy)
 				send_packet (last_packet);
 			continue;
-		case CMD_RESET:
-			// Emergency reset.
-			queue_start = 0;
-			queue_end = 0;
-			for (uint8_t a = 0; a < 3; ++a)
-				axis[a].source = NAN;
-			moving = false;
-			t0 = 0;
-			tq = 0;
-			v0 = 0;
-			vp = 0;
-			vq = 0;
-			for (uint8_t o = 0; o < MAXOBJECT; ++o)
-			{
-				if (motors[o])
-				{
-					motors[o]->dist = NAN;
-					motors[o]->next_dist = NAN;
-					motors[o]->continuous_steps_per_s = 0;
-					motors[o]->f = 0;
-					SET (motors[o]->enable_pin);
-				}
-				if (temps[o])
-				{
-					temps[o]->target = NAN;
-					if (temps[o]->is_on)
-					{
-						RESET (temps[o]->power_pin);
-						temps[o]->is_on = false;
-						last_active = millis ();
-					}
-				}
-			}
-			Serial.write (CMD_ACKRESET);
-			continue;
-		case 0:
-		case 1:
+		default:
+			break;
+		}
+		if (command[0] < 3 || command[0] == 4 || command[0] >= 0x80) {
 			// These lengths are not allowed; this cannot be a good packet.
 			Serial.write (CMD_NACK);
 			continue;
-		default:
-			break;
 		}
 		command_end = 1;
 		last_micros = micros ();
@@ -135,7 +100,7 @@ void serial ()
 	command_end = 0;
 	// Check packet integrity.
 	// Size must be good.
-	if (command[0] < 2 || command[0] == 4)
+	if (command[0] <= 2 || command[0] == 4)
 	{
 		Serial.write (CMD_NACK);
 		return;

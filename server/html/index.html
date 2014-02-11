@@ -8,18 +8,6 @@
 		<style type="text/css"></style>
 		<link rel="stylesheet" href="index.css"/>
 	</head>
-	<body onload="init ()">
-		<label for="printfile">Print file</label>
-		<input type="file" id="printfile" onchange="print ()"/>
-		<p>Extruder temperature<input type="text" id="etemp"/><button type="button" onclick="etemp ()">Set</button><span id="etemp_read"></span></p>
-		<p>Bed temperature<input type="text" id="btemp"/><button type="button" onclick="btemp ()">Set</button><span id="btemp_read"></span></p>
-		<p>Position<input type="text" id="xpos"/><input type="text" id="ypos"/><input type="text" id="zpos"/><button type="button" onclick="gotopos ()">Move</button></p>
-		<p>Offset<input type="text" id="xoff"/><input type="text" id="yoff"/><input type="text" id="zoff"/><button type="button" onclick="setoffset ()">Set</button></p>
-		<p><button type="button" onclick="stop ()">Pause</button>
-		<button type="button" onclick="resume ()">Resume</button>
-		<button type="button" onclick="home ()">Home</button>
-		<button type="button" onclick="homez ()">Home Z</button>
-		<button type="button" onclick="sleep ()">Sleep</button></p>
-		<p>Feedrate<input type="text" id="feed"/><button type="button" onclick="feed ()">Set</button></p>
+	<body onload="init ()" id="container">
 	</body>
 </html>

@@ -1,1 +1,2 @@
 /usr/share/printer3d/printer3d-server /usr/bin/printer3d-server
+/usr/share/python-websockets/rpc.js /usr/share/printer3d/html/rpc.js

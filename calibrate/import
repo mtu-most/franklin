@@ -3,7 +3,7 @@
 import sys
 import websockets
 
-p = websockets.RPC (8080)
+p = websockets.RPC (8080, tls=None)
 
 def parse (f):
 	section = None

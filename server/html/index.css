@@ -1,0 +1,30 @@
+.hidden {
+	display: none;
+}
+.nosetting .setting,.nofuture .future,.noconstants .constants,.nopin .pin,.nouseful .useful,.noaction .action,.noportaction .portaction,.noinactive .inactive,.noview .view,.noaudio audio {
+	display: none;
+}
+
+.box {
+	margin: 1ex 1ex;
+	padding: .5ex .5ex;
+	background: #ee9;
+}
+
+.box2 {
+	margin: 1ex 1ex;
+	padding: .5ex .5ex;
+	background: #8c8;
+}
+
+input {
+	width: 8ex;
+}
+
+.views {
+	float: right;
+}
+
+table {
+	clear: both;
+}

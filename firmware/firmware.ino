@@ -40,7 +40,6 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 			SET (temps[temp_current]->power_pin);
 			temps[temp_current]->is_on = true;
 			++temps_busy;
-			last_active = longtime;
 		}
 	}
 	if (temps[temp_current]->thermistor_pin.invalid ())
@@ -53,7 +52,6 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 				SET (temps[temp_current]->power_pin);
 				temps[temp_current]->is_on = true;
 				++temps_busy;
-				last_active = longtime;
 			}
 		}
 		else {
@@ -62,7 +60,6 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 				RESET (temps[temp_current]->power_pin);
 				temps[temp_current]->is_on = false;
 				--temps_busy;
-				last_active = longtime;
 			}
 		}
 		return;
@@ -130,19 +127,16 @@ static bool do_steps (uint8_t m, int16_t num_steps) {
 		// No problem if limit switch is not hit.
 		if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) : GET (axis[m - 2].limit_min_pin, false)) {
 			// Hit endstop; abort current move and notify host.
-			debug ("hit %d %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (motors[m]->positive), int (axis[m - 2].limit_max_pin.write ()));
+			//debug ("hit %d %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (motors[m]->positive), int (axis[m - 2].limit_max_pin.write ()));
 			// Stop continuous move only for the motor that hits the switch.
 			motors[m]->f = 0;
 			motors[m]->continuous_steps_per_s = 0;
 			limits_pos[m - 2] = axis[m - 2].current_pos / axis[m - 2].motor.steps_per_mm;
 			try_send_next ();
 			if (moving) {
-				debug ("stop %d", current_move_has_cb);
 				abort_move ();
 				done_motors ();
 			}
-			else
-				debug ("stop no move");
 			return false;
 		}
 		axis[m - 2].current_pos += num_steps;
@@ -185,7 +179,7 @@ static void move_axes (float target[3]) {
 }
 
 static void handle_motors (unsigned long current_time, unsigned long longtime) {
-	for (uint8_t a = 0; a < MAXAXES; ++a) {
+	for (uint8_t a = 0; a < MAXAXES; ++a) {	// Check sense pins.
 		if (GET (axis[a].sense_pin, false) ^ bool (axis[a].sense_state & 0x80)) {
 			axis[a].sense_state ^= 0x80;
 			axis[a].sense_state |= 1;
@@ -333,7 +327,7 @@ static void handle_audio (unsigned long current_time, unsigned long longtime) {
 			}
 			audio_head = (audio_head + 1) % AUDIO_FRAGMENTS;
 			if (audio_tail == audio_head) {
-				debug ("audio done");
+				//debug ("audio done");
 				return;
 			}
 			byte -= AUDIO_FRAGMENT_SIZE;

@@ -4,6 +4,7 @@ firmware/printer3d-firmware-upload /usr/bin
 firmware/Makefile.upload /usr/share/printer3d/firmware
 server/printer3d-server /usr/share/printer3d
 server/printer3d.py /usr/share/printer3d
+server/control /usr/share/printer3d
 server/html /usr/share/printer3d
 calibrate/printer3d-calibrate /usr/bin
 calibrate/printer3d-calibrate.gui /usr/share/printer3d

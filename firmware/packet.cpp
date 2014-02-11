@@ -115,40 +115,44 @@ void packet ()
 			abort_move ();
 			audio_start += micros () - pause_time;
 		}
-		if (moving && !isnan (motors[which]->dist))
+		if (moving)
 		{
-			debug ("Running moving motor %d", which);
-			Serial.write (CMD_STALL);
-			return;
+			if (((printer_type != 1 || which > 2 + 3) && !isnan (motors[which]->dist)) || (printer_type == 1 && which <= 2 + 3 && (!isnan (motors[2]->dist) || !isnan (motors[3]->dist) || !isnan (motors[4]->dist))))
+			{
+				debug ("Running moving motor %d", which);
+				Serial.write (CMD_STALL);
+				return;
+			}
 		}
 		Serial.write (CMD_ACK);
 		if (which < 2 + MAXAXES) {
 			for (uint8_t a = 0; a < 3; ++a)
 				axis[a].source = NAN;
 		}
-		if (f.f > 0) {
-			if (f.f > motors[which]->max_v_pos)
-				f.f = motors[which]->max_v_pos;
+		float speed = isnan (f.f) ? 0 : f.f;
+		if (speed > 0) {
+			if (speed > motors[which]->max_v_pos)
+				speed = motors[which]->max_v_pos;
 		}
-		else if (f.f < 0) {
-			if (f.f < -motors[which]->max_v_neg)
-				f.f = -motors[which]->max_v_neg;
+		else if (speed < 0) {
+			if (speed < -motors[which]->max_v_neg)
+				speed = -motors[which]->max_v_neg;
 		}
 		if (motors[which]->f != 0) {
-		       	if ((motors[which]->positive && f.f < 0) || (!motors[which]->positive && f.f > 0))
-				motors[which]->continuous_steps_per_s = -abs (f.f) * motors[which]->steps_per_mm;
+		       	if ((motors[which]->positive && speed < 0) || (!motors[which]->positive && speed > 0))
+				motors[which]->continuous_steps_per_s = -abs (speed) * motors[which]->steps_per_mm;
 			else
-				motors[which]->continuous_steps_per_s = abs (f.f) * motors[which]->steps_per_mm;
+				motors[which]->continuous_steps_per_s = abs (speed) * motors[which]->steps_per_mm;
 		}
 		else {
-			if (f.f > 0) {
+			if (speed > 0) {
 				SET (motors[which]->dir_pin);
-				motors[which]->continuous_steps_per_s = f.f * motors[which]->steps_per_mm;
+				motors[which]->continuous_steps_per_s = speed * motors[which]->steps_per_mm;
 				motors[which]->positive = true;
 			}
 			else {
 				RESET (motors[which]->dir_pin);
-				motors[which]->continuous_steps_per_s = -f.f * motors[which]->steps_per_mm;
+				motors[which]->continuous_steps_per_s = -speed * motors[which]->steps_per_mm;
 				motors[which]->positive = false;
 			}
 			//debug ("initial positive %d", motors[which]->positive);
@@ -363,6 +367,11 @@ void packet ()
 				unsigned long diff = micros () - pause_time;
 				start_time += diff;
 				audio_start += diff;
+				for (uint8_t m = 0; m < MAXOBJECT; ++m) {
+					if (!motors[m])
+						continue;
+					motors[m]->continuous_last_time += diff;
+				}
 			}
 		}
 		pause_all = command[2] != 0;
@@ -390,15 +399,9 @@ void packet ()
 			return;
 		}
 		Serial.write (CMD_ACK);
-		reply[0] = 7;
-		reply[1] = CMD_SENSE;
-		reply[2] = digitalRead (command[2]) ? 0xff : 0x7f;
-		ReadFloat f;
-		f.i = command[2];
-		reply[3] = f.b[0];
-		reply[4] = f.b[1];
-		reply[5] = f.b[2];
-		reply[6] = f.b[3];
+		reply[0] = 3;
+		reply[1] = CMD_PIN;
+		reply[2] = digitalRead (command[2]) ? 1 : 0;
 		reply_ready = true;
 		try_send_next ();
 		return;

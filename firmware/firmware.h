@@ -63,13 +63,13 @@ union ReadFloat {
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
 // These bytes (except RESET) are sent in reply to a received packet only.
-	CMD_NACK = 0x80,	// Incorrect checksum.
+	CMD_NACK = 0x80,	// Incorrect packet; please resend.
 	CMD_ACK = 0xe1,		// Packet properly received and accepted; ready for next command.  Reply follows if it should.
 	CMD_ACKWAIT = 0xd2,	// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
 	CMD_STALL = 0xb3,	// Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_RESET = 0xf4,	// Emergency reset: clear queue, stop and sleep motors, temperatures off.  (Never sent to host.)  Typically sent 3 times with 5 ms pauses in between.
+	CMD_UNUSED1 = 0xf4,
 	CMD_INIT = 0x95,	// Printer started and is ready for commands.
-	CMD_ACKRESET = 0xa6,	// Reset received.
+	CMD_UNUSED2 = 0xa6,
 	CMD_DEBUG = 0xc7	// Debug message; a nul-terminated message follows (no checksum; no resend).
 };
 
@@ -91,7 +91,7 @@ enum Command {
 	CMD_WRITE,	// 1 byte: which channel; n bytes: data.
 	CMD_PAUSE,	// 1 byte: 0: not pause; 1: pause.
 	CMD_PING,	// 1 byte: code.  Reply: PONG.
-	CMD_READPIN,	// 1 byte: pin. Reply: SENSE with channel 0, position pin.
+	CMD_READPIN,	// 1 byte: pin. Reply: PIN.
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: us_per_bit.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	// to host
@@ -101,13 +101,13 @@ enum Command {
 	CMD_POS,	// 4 byte: pos [steps]; 4 byte: current [mm].
 	CMD_DATA,	// n byte: requested data.
 	CMD_PONG,	// 1 byte: PING argument.
+	CMD_PIN,	// 1 byte: 0 or 1: pin state.
 		// asynchronous events.
 	CMD_MOVECB,	// 1 byte: number of movecb events.
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
 	CMD_CONTINUE,	// 1 byte: is_audio.  Bool flag if it needs to be sent.
 	CMD_LIMIT,	// 1 byte: which channel.
 	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
-	CMD_MESSAGE,	// 4 byte: code; n byte: string: message with no defined meaning; code may be used for a protocol.
 };
 
 struct Object
@@ -324,7 +324,7 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float l2 = axis[a].delta_length * axis[a].delta_length;
 	if (r2 > l2 + 100 - 20 * axis[a].delta_length) {
 		*ok = false;
-		debug ("not ok: %f %f %f %f %f %f %f", &target[0], &target[1], &dx, &dy, &r2, &l2, &axis[a].delta_length);
+		//debug ("not ok: %f %f %f %f %f %f %f", &target[0], &target[1], &dx, &dy, &r2, &l2, &axis[a].delta_length);
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
 		float factor = (axis[a].delta_length - 10.) / sqrt (r2);
@@ -335,7 +335,7 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float inner = dx * axis[a].x + dy * axis[a].y;
 	if (inner > 0) {
 		*ok = false;
-		debug ("not ok: %f %f %f %f %f", &inner, &dx, &dy, &axis[a].x, &axis[a].y);
+		//debug ("not ok: %f %f %f %f %f", &inner, &dx, &dy, &axis[a].x, &axis[a].y);
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
 		// target = axis + (target - (target.axis-epsilon)/|axis|2*axis)
 		float factor = .99 - (target[0] * axis[a].x + target[1] * axis[a].y) / (axis[a].x * axis[a].x + axis[a].y * axis[a].y);

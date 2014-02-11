@@ -1,0 +1,12 @@
+#!/usr/bin/python
+
+import websockets
+import os
+
+p = websockets.RPC (8080)
+action = os.getenv ('ACTION')
+dev = os.getenv ('DEVNAME')
+if action == 'add':
+	p.add_port (dev)
+elif action == 'remove':
+	p.remove_port (dev)
