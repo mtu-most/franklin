@@ -252,6 +252,8 @@ class Connection: # {{{
 	@classmethod
 	def find_printer (cls, name = None, port = None):
 		for p in ports:
+			if not ports[p]:
+				continue
 			if (name is None or re.match (name, ports[p].printer.name)) and (port is None or re.match (port, p)):
 				return ports[p]
 		return None

@@ -150,7 +150,7 @@ function Text (printer, name, object, part, index) { // {{{
 			text.entry.value = String (value);
 		}));
 	};
-	var button = td.AddElement ('button');
+	var button = text.AddElement ('button');
 	button.type = 'button';
 	button.AddText ('Set');
 	button.onclick = function () {
@@ -256,7 +256,7 @@ function Pin (printer, name, object, part, index, analog) { // {{{
 			var is_inverted = Boolean (Number (value) & 0x200);
 			pin.invalid.checked = is_invalid ? 'checked' : null;
 			if (!analog)
-				pin.inverted.checked = pin.is_inverted ? 'checked' : null;
+				pin.inverted.checked = is_inverted ? 'checked' : null;
 			pin.select.clearAll ();
 			var found = false;
 			for (var o = 0; o < (analog ? printer.constants.num_pins - printer.constants.num_digital_pins : printer.constants.num_pins); ++o) {

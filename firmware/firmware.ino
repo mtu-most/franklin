@@ -127,7 +127,7 @@ static bool do_steps (uint8_t m, int16_t num_steps) {
 		// No problem if limit switch is not hit.
 		if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) : GET (axis[m - 2].limit_min_pin, false)) {
 			// Hit endstop; abort current move and notify host.
-			//debug ("hit %d %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (motors[m]->positive), int (axis[m - 2].limit_max_pin.write ()));
+			debug ("hit %d %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (motors[m]->positive), int (axis[m - 2].limit_max_pin.write ()));
 			// Stop continuous move only for the motor that hits the switch.
 			motors[m]->f = 0;
 			motors[m]->continuous_steps_per_s = 0;

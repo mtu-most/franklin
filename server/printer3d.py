@@ -598,8 +598,8 @@ class Printer: # {{{
 		while c (): c.args = (yield websockets.WAIT)
 		self._set_waiter ('reply', resumeinfo)
 		ret = yield websockets.WAIT
-		assert ret[0] == self.rcommand['SENSE']
-		yield (ord (ret[1]) & 0x80) != 0
+		assert ret[0] == self.rcommand['PIN']
+		yield bool (ord (ret[1]))
 	# }}}
 	def load_variables (self): # {{{
 		resumeinfo = [(yield), None]
