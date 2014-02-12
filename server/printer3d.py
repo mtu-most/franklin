@@ -73,11 +73,13 @@ class Printer: # {{{
 			'SENSE': '\x1d'}
 	# }}}
 	def _set_waiter (self, type, resumeinfo, condition = True): # {{{
+		#log ('adding waiter for ' + type)
 		item = (resumeinfo[0], condition)
 		self.waiters[type].append (item)
 		return lambda: self.waiters.remove (item) if item in self.waiters else None
 	# }}}
 	def _trigger (self, type, arg = None, all = True): # {{{
+		#log ('triggering ' + type)
 		if all:
 			waiters = self.waiters[type]
 			self.waiters[type] = []
@@ -155,6 +157,7 @@ class Printer: # {{{
 		if time.time () - self.last_time > .1:
 			dprint ('writing (5)', self.single['NACK']);
 			self.printer.write (self.single['NACK'])
+			self.last_time = float ('nan')
 			self.buffer = ''
 			if self.debug_buffer is not None:
 				if show_firmware_debug:
@@ -207,6 +210,7 @@ class Printer: # {{{
 				self.buffer = r
 			packet_len = ord (self.buffer[0]) + (ord (self.buffer[0]) + 2) / 3
 			r = self.printer.read (packet_len - len (self.buffer))
+			dprint ('rest of packet read', r)
 			self.buffer += r
 			if len (self.buffer) < packet_len:
 				if len (r) == 0:
@@ -255,8 +259,7 @@ class Printer: # {{{
 				else:
 					# Audio continue.
 					self.waitaudio = False
-					if self.waiters['audio']:
-						self._trigger ('audio', None, False)
+					self._trigger ('audio', None, False)
 			elif packet[0] == self.rcommand['LIMIT']:
 				which = ord (packet[1])
 				self.limits[which] = struct.unpack ('<f', packet[2:])[0]

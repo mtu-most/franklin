@@ -3,7 +3,22 @@
 import websockets
 import os
 
-p = websockets.RPC (8080)
+tls = True
+port = 8080
+
+with open ('/etc/default/printer3d') as f:
+	for l in f.readlines ():
+		l = l.strip ()
+		if l == '' or l.startswith ('#') or not '=' in l:
+			continue
+		key, value = l.split ('=', 1)
+		if key == 'PORT':
+			# Leave it as a string because it need not be numerical.
+			port = value.strip ()
+		if key == 'TLS' and value.strip () == '':
+			tls = False
+
+p = websockets.RPC (port, tls = tls)
 action = os.getenv ('ACTION')
 dev = os.getenv ('DEVNAME')
 if action == 'add':

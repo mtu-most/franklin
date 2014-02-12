@@ -59,7 +59,7 @@ class Printer:	# {{{
 				r = re.match ('N\d+\s*(.*?)\*\d+$')
 				if not r:
 					# Invalid line; ignore it.
-					print ('%d:ignoring invalid gcode: %s' % (lineno, line))
+					log ('%d:ignoring invalid gcode: %s' % (lineno, line))
 					continue
 				line = r.group (1)
 			if ';' in line:
@@ -73,7 +73,7 @@ class Printer:	# {{{
 				try:
 					args[a[0]] = float (a[1:])
 				except:
-					print ('%d:ignoring invalid gcode: %s' % (lineno, line))
+					log ('%d:ignoring invalid gcode: %s' % (lineno, line))
 					break
 			else:
 				self.gcode.append ((cmd, args))
@@ -83,14 +83,14 @@ class Printer:	# {{{
 		resumeinfo = [(yield), None]
 		if len (self.gcode) == 0:
 			yield False
-		while len (self.gcode) > 0 and not self.printer.is_waiting ():
+		while len (self.gcode) > 0:
 			c = websockets.call (resumeinfo, self.parse_gcode_chunk, *self.gcode.pop (0))
 			while c (): c.args = (yield websockets.WAIT)
 		yield False
 	def parse_gcode_chunk (self, cmd, args):
 		resumeinfo = [(yield), None]
 		global etemp, btemp, rel, erel
-		#print ('Parsing %s %s' % (cmd, args))
+		#log ('Parsing %s %s' % (cmd, args))
 		if cmd[0] == 'T':
 			# Tool selection.
 			target = cmd[1]
@@ -123,7 +123,7 @@ class Printer:	# {{{
 			dist = sum ([(self.pos[0][x] - oldpos[x]) ** 2 for x in range (3)]) ** .5
 			if dist == 0:
 				dist = abs (estep)
-			#print ('going to %s estep %s f0 %s dist %s' % (self.pos, estep, f0, dist))
+			#log ('going to %s estep %s f0 %s dist %s' % (self.pos, estep, f0, dist))
 			if dist > 0:
 				#if f0 is None:
 				#	f0 = self.pos[1][self.current_extruder]
@@ -317,7 +317,7 @@ class Connection: # {{{
 		del ports[port]
 	@classmethod
 	def get_ports (cls):
-		return [(p, ports[p].printer.name if ports[p] is not None else None) for p in ports]
+		return [(p, ports[p].printer.name if ports[p] else None) for p in ports]
 	@classmethod
 	def set_default_printer (cls, name = None, port = None):
 		global default_printer
