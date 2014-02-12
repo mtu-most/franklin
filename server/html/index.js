@@ -14,7 +14,7 @@ function init ()
 	proto.Add = function (object, className) { this.appendChild (object); if (className) object.className = className; return object; }
 	proto.AddElement = function (name, className) { var element = document.createElement (name); return this.Add (element, className); }
 	proto.AddText = function (text) { var t = document.createTextNode (text); return this.Add (t); }
-	proto.clearAll = function () { while (this.firstChild) this.removeChild (this.firstChild); }
+	proto.ClearAll = function () { while (this.firstChild) this.removeChild (this.firstChild); }
 	proto.AddClass = function (className) {
 		var classes = this.className.split (' ');
 		if (classes.indexOf (className) >= 0)
@@ -168,7 +168,7 @@ function Range (printer, name, object, part, index, max) { // {{{
 			range.value = Number (value);
 			if (range.value >= max || range.value < 0)
 				range.value = 0;
-			range.select.clearAll ();
+			range.select.ClearAll ();
 			for (var o = 0; o < max; ++o) {
 				var option = range.select.AddElement ('option');
 				option.value = o;
@@ -196,7 +196,7 @@ function Choice (printer, name, object, part, index, list) { // {{{
 			choice.value = Number (value);
 			if (choice.value >= list.length || choice.value < 0)
 				choice.value = 0;
-			choice.select.clearAll ();
+			choice.select.ClearAll ();
 			for (var o = 0; o < list.length; ++o) {
 				var option = choice.select.AddElement ('option');
 				option.value = o;
@@ -210,7 +210,7 @@ function Choice (printer, name, object, part, index, list) { // {{{
 	button.type = 'button';
 	button.AddText ('Set');
 	button.onclick = function () {
-		printer.set (object, part, index, this.value);
+		printer.set (object, part, index, choice.select.selectedIndex);
 	};
 	return choice;
 } // }}}
@@ -224,7 +224,7 @@ function Float (printer, name, object, part, index, factor) { // {{{
 	the_float.refresh = function (cmd) {
 		cmd.push (printer.get (object, part, index, function (value) {
 			the_float.value = Number (value);
-			the_float.entry.value = String (Number (value) / the_float.factor);
+			the_float.entry.value = (Number (value) / the_float.factor).toFixed (3);
 		}));
 	};
 	var button = td.AddElement ('button');
@@ -257,7 +257,7 @@ function Pin (printer, name, object, part, index, analog) { // {{{
 			pin.invalid.checked = is_invalid ? 'checked' : null;
 			if (!analog)
 				pin.inverted.checked = is_inverted ? 'checked' : null;
-			pin.select.clearAll ();
+			pin.select.ClearAll ();
 			var found = false;
 			for (var o = 0; o < (analog ? printer.constants.num_pins - printer.constants.num_digital_pins : printer.constants.num_pins); ++o) {
 				var option = pin.select.AddElement ('option');
@@ -400,7 +400,15 @@ function Temp (printer, name, object, index) { // {{{
 		this.power.set ();
 	};
 	table.Add (NumFunction (printer, 'Enable', settempname, 'settemp', index), 'action');
-	// TODO: Read
+	var tr = table.AddElement ('tr');
+	tr.AddElement ('td').AddText ('Temperature');
+	td = tr.AddElement ('td');
+	temp.current = td.AddElement ('span');
+	td.AddText ('°C');
+	printer.monitor_queue.push (['readtemp_' + settempname, [index], {}, function (t) {
+		temp.current.ClearAll ();
+		temp.current.AddText (t.toFixed (3));
+	}]);
 	return temp;
 } // }}}
 function Axis (printer, name, index) { // {{{
@@ -434,9 +442,57 @@ function Axis (printer, name, index) { // {{{
 		this.delta_radius.refresh (cmd);
 		this.offset.refresh (cmd);
 	};
-	var td = table.AddElement ('tr', 'setting').AddElement ('td');
-	td.colSpan = 2;
+	// Goto.
+	var tr = table.AddElement ('tr', 'action')
+	tr.AddElement ('td').AddText ('Move');
+	var td = tr.AddElement ('td');
 	var button = td.AddElement ('button');
+	button.type = 'button';
+	button.AddText ('-');
+	button.onclick = function () {
+		printer.call ('axis_get_current_pos', [name], {}, function (pos) {
+			var arg = Object ()
+			arg[name] = pos[1] - Number (axis.dist.value);
+			printer.call ('goto', [arg], {}, null);
+		});
+	};
+	button = td.AddElement ('button');
+	button.type = 'button';
+	button.AddText ('+');
+	button.onclick = function () {
+		printer.call ('axis_get_current_pos', [name], {}, function (pos) {
+			var arg = Object ()
+			arg[name] = pos[1] + Number (axis.dist.value);
+			printer.call ('goto', [arg], {}, null);
+		});
+	};
+	axis.dist = td.AddElement ('input');
+	axis.dist.type = 'text';
+	axis.dist.value = '10';
+	// Current pos.
+	tr = table.AddElement ('tr', 'action')
+	tr.AddElement ('td').AddText ('Position');
+	td = tr.AddElement ('td');
+	axis.pos = td.AddElement ('input');
+	axis.pos.type = 'text';
+	axis.pos.value = '';
+	button = td.AddElement ('button');
+	button.type = 'button';
+	button.AddText ('Get');
+	button.onclick = function () {
+		printer.call ('axis_get_current_pos', [name], {}, function (pos) {
+			axis.pos.value = pos[1].toFixed (3);
+		});
+	};
+	button = td.AddElement ('button');
+	button.type = 'button';
+	button.AddText ('Set');
+	button.onclick = function () {
+		printer.call ('axis_set_current_pos', [name, Number (axis.pos.value)], {}, null);
+	};
+	td = table.AddElement ('tr', 'setting').AddElement ('td');
+	td.colSpan = 2;
+	button = td.AddElement ('button');
 	button.type = 'button';
 	button.AddText ('Setup Axis');
 	button.onclick = function () {
@@ -492,6 +548,7 @@ function Extruder (printer, name, index) { // {{{
 } // }}}
 function Printer (port) { // {{{
 	var printer = document.createElement ('table');
+	printer.monitor_queue = [];
 	printer.className = 'printer hidden';
 	printer.call = function (name, a, ka, cb) {
 		if (active_printer != printer)
@@ -560,7 +617,6 @@ function Printer (port) { // {{{
 		printer.temp_limit = printer.Add (Float (printer, 'Maximum idle time for temps [s]', null, 'temp_limit', null, 1000), 'setting');
 		printer.feedrate = printer.Add (Float (printer, 'Command feed factor', null, 'feedrate', null), 'useful');
 
-		// TODO: goto		special
 		printer.Add (Button (printer, 'Load all', null, 'load_all', null), 'action');
 		printer.Add (Button (printer, 'Save all', null, 'save_all', null), 'action');
 		printer.Add (Checkbox (printer, 'Pause', null, 'pause', null), 'action');
@@ -569,7 +625,6 @@ function Printer (port) { // {{{
 		printer.Add (Button (printer, 'Home all', null, 'home_all', null), 'action');
 		printer.Add (Button (printer, 'Sleep all', null, 'sleep_all', null), 'action');
 		// TODO: readpin	pin+go to function
-		// TODO: get position	button to display
 
 		var td = printer.AddElement ('tr').AddElement ('td');
 		td.colSpan = 2;
@@ -599,6 +654,17 @@ function Global () { // {{{
 	global.call = rpc.call;
 	global.get = Printer.get;
 	global.set = Printer.set;
+	global.ports_list = {}
+	global.selected = null;
+	setInterval (function () {
+		var p = global.ports_list[global.selected];
+		if (!p || !p[1])
+			return;
+		if (active_printer != p[1])
+			rpc.call ('set_printer', [null, global.selected], {}, function () { active_printer = p[1]; rpc.multicall (p[1].monitor_queue); });
+		else
+			rpc.multicall (p[1].monitor_queue);
+	}, 500);
 	var table = global.AddElement ('div', 'views');
 	var views = [['view', 'Show visibility', null], ['action', 'Actions', true], ['useful', 'Useful settings', true], ['setting', 'Other settings', false], ['pin', 'Pins', false], ['inactive', 'Disabled elements', false], ['future', 'Unused features', false], ['constants', 'Constants', false], ['portaction', 'Port administration', false], ['audio', 'Audio', false]];
 	for (var which = 0; which < views.length; ++which) {
@@ -636,9 +702,9 @@ function Global () { // {{{
 	global.printers = global.AddElement ('div');
 	global.selected = null;
 	global.rescan = function () {
-		global.ports.clearAll ();
+		global.ports.ClearAll ();
 		global.ports.AddText ('Port:');
-		global.printers.clearAll ();
+		global.printers.ClearAll ();
 		rpc.call ('get_ports', [], {}, function (ports) {
 			global.ports_list = {}
 			var first = null;
@@ -659,13 +725,14 @@ function Global () { // {{{
 					else {
 						global.disablebutton.className = '';
 						global.detectbutton.className = 'hidden';
-						global.ports_list[this.value][1].className = 'printer';
+						var p = global.ports_list[this.value][1];
+						p.className = 'printer';
 					}
 				};
 				span.AddText (ports[p][1] + '(' + ports[p][0] + ')');
 				if (global.selected == ports[p]) {
 					inp.selected = 'selected';
-					inp.onchange ();
+					inp.onclick ();
 				}
 				if (ports[p][1] != null) {
 					global.ports_list[ports[p][0]] = [inp, global.printers.Add (Printer (ports[p][0]))];

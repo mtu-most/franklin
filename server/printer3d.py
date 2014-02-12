@@ -460,16 +460,14 @@ class Printer: # {{{
 	# Useful commands.  {{{
 	def goto (self, axes = {}, e = None, f0 = None, f1 = None, which = 0, cb = False): # {{{
 		resumeinfo = [(yield), None]
+		a = {}
 		if isinstance (axes, (list, tuple)):
-			a = {}
 			for i, axis in enumerate (axes):
 				a[i] = axis
-			axes = a
 		else:
-			a = {}
 			for i, axis in axes.items ():
 				a[int (i)] = axis
-			axes = a
+		axes = a
 		targets = [0] * (((2 + self.num_axes + self.num_extruders - 1) >> 3) + 1)
 		args = ''
 		if f0 is None:
