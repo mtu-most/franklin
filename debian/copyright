@@ -1,7 +1,7 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: python-network
+Upstream-Name: most-reprap
 Upstream-Contact: Bas Wijnen <wijnen@debian.org>
-Source: https://github.com/wijnen/python-network
+Source: https://github.com/mtu-most/most-reprap
 
 Files: *
 Copyright: Copyright 2012 Bas Wijnen <wijnen@debian.org>

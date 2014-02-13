@@ -7,11 +7,11 @@ Standards-Version: 3.9.5
 
 Package: printer3d
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python-websockets, python-network, python-serial, avrdude, arduino-mk, python-gui, python-xdgbasedir, adduser
+Depends: ${misc:Depends}, ${python:Depends}, python-websockets, python-network, python-serial, avrdude, arduino-mk, python-xdgbasedir, adduser
 Description: server for controlling RepRap 3-D printers
  3-D printers need firmware and host software to work.  This package contains
  both.  The following hardware is currently supported:
-  * Controller board: Melzi and Ramps
+  * Controller board: all Arduino-based.  Melzi and Ramps have been tested.
   * Printer type: Carthesian and Delta
  If you need support for other controllers or printer types, let me know.
  .

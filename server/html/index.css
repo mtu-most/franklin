@@ -1,7 +1,7 @@
 .hidden {
 	display: none;
 }
-.nosetting .setting,.nofuture .future,.noconstants .constants,.nopin .pin,.nouseful .useful,.noaction .action,.noportaction .portaction,.noinactive .inactive,.noview .view,.noaudio audio {
+.nosetting .setting,.nofuture .future,.noconstants .constants,.nopin .pin,.nouseful .useful,.noaction .action,.noportaction .portaction,.noinactive .inactive,.noview .view,.noaudio .audio {
 	display: none;
 }
 
@@ -27,4 +27,12 @@ input {
 
 table {
 	clear: both;
+}
+
+.global {
+	background: #f00;
+}
+
+.connected {
+	background: #6d6;
 }

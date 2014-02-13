@@ -14,11 +14,9 @@ override_dh_auto_build:
 	sed -i -e 's/^.*MELZI=.*$$/#MELZI=true/' firmware/Makefile
 	${MAKE} -C firmware
 	mv firmware/build-mega2560/firmware.hex firmware/build-mega2560/mega2560.hex
-	xmlgen < calibrate/printer3d-calibrate.gui.in > calibrate/printer3d-calibrate.gui
 
 override_dh_auto_clean:
 	dh_auto_clean
 	rm -f *.pyc *.pyo
 	rm -rf firmware/build-*
-	rm -f calibrate/printer3d-calibrate.gui
 	sed -i -e 's/^.*MELZI=.*$$/MELZI=true/' firmware/Makefile

@@ -46,6 +46,13 @@ void next_move () {
 
 	if (isnan (axis[0].source))
 		reset_pos ();
+	if (printer_type == 1 && (!isnan (queue[queue_start].data[AXIS0]) || !isnan (queue[queue_start].data[AXIS0 + 1]) || !isnan (queue[queue_start].data[AXIS0 + 2]))) {
+		// For a delta, if any axis moves, all motors move; avoid trouble by setting none of them to nan.
+		for (uint8_t a = 0; a < 3; ++a) {
+			if (isnan (queue[queue_start].data[AXIS0 + a]))
+				queue[queue_start].data[AXIS0 + a] = axis[a].current;
+		}
+	}
 	if (!move_prepared) { // {{{
 		// We have to speed up first; don't pop anything off the queue yet, just set values to handle segment 0.
 #ifdef DEBUG_MOVE

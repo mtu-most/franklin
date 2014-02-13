@@ -10,18 +10,19 @@ import printer3d
 import websockets
 import xdgbasedir
 import glib
+import subprocess
 import time
 from websockets import log
 import traceback
 # }}}
 
-config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'port': 8080, 'printer': '', 'audiodir': xdgbasedir.cache_filename_write (packagename = 'printer3d', filename = 'audio', makedirs = False), 'blacklist': r'/dev/(ptmx$|console$|ttyS?\d*)$', 'autodetect': True, 'tls': None})
+config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'port': 8080, 'printer': '', 'audiodir': xdgbasedir.cache_filename_write (packagename = 'printer3d', filename = 'audio', makedirs = False), 'blacklist': r'/dev/(ptmx$|console$|ttyS?\d*)$', 'autodetect': True, 'tls': None, 'avrdude': '/usr/bin/avrdude'})
 
 class Printer:	# {{{
-	def _init (self, port):
+	def _init (self, port, broadcast, death):
 		resumeinfo = [(yield), None]
 		self.printer = printer3d.Printer ()
-		c = websockets.call (resumeinfo, self.printer._init, port)
+		c = websockets.call (resumeinfo, self.printer._init, port, broadcast, death)
 		while c (): c.args = (yield websockets.WAIT)
 		self.printer.audiodir = config['audiodir']
 		# [axes, extruders, feedrate]
@@ -247,8 +248,48 @@ class Printer:	# {{{
 
 class Connection: # {{{
 	def __init__ (self, socket):
+		socket.monitor = False
 		self.socket = socket
 		self.printer = self.find_printer (*default_printer)
+	@classmethod
+	def _broadcast (cls, target, name, *args):
+		if target:
+			if target.monitor:
+				getattr (target, name).event (*args)
+		elif httpd:
+			for c in httpd.websockets:
+				if c.monitor:
+					getattr (c, name).event (*args)
+	@classmethod
+	def upload (cls, port, board):
+		resumeinfo = [(yield), None]
+		cls.disable (port)
+		if board == 'melzi':
+			protocol = 'arduino'
+			baudrate = '115200'
+			mcu = 'atmega1284p'
+			filename = xdgbasedir.data_files_read (os.path.join ('firmware', 'mighty_opt.hex'), packagename = 'printer3d')[0]
+		elif board == 'ramps':
+			protocol = 'wiring'
+			baudrate = '115200'
+			mcu = 'atmega2560'
+			filename = xdgbasedir.data_files_read (os.path.join ('firmware', 'mega2560.hex'), packagename = 'printer3d')[0]
+		else:
+			raise ValueError ('board type not supported')
+		process = subprocess.Popen ([config['avrdude'], '-V', '-c', protocol, '-b', baudrate, '-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+		glib.io_add_watch (process.stdout, glib.IO_IN | glib.IO_PRI | glib.IO_HUP, lambda fd, cond: cls._upload_output (process.stdout, resumeinfo))
+		yield websockets.WAIT
+		if autodetect:
+			c = websockets.call (resumeinfo, cls.detect, None, port)
+			while c (): c.args = (yield websockets.WAIT)
+		yield process.wait ()
+	@classmethod
+	def _upload_output (cls, pipe, resumeinfo):
+		data = pipe.read ()
+		if data != '':
+			return True
+		resumeinfo[0] ()
+		return False
 	@classmethod
 	def find_printer (cls, name = None, port = None):
 		for p in ports:
@@ -261,39 +302,55 @@ class Connection: # {{{
 	def set_autodetect (cls, detect):
 		global autodetect
 		autodetect = detect
+		cls._broadcast (None, 'autodetect', autodetect)
+	@classmethod
+	def get_autodetect (cls):
+		return autodetect
 	@classmethod
 	def disable (cls, port):
 		assert port in ports
-		if ports[port]:
+		if not ports[port]:
 			return
 		# Close the serial connection.
-		ports[port].printer.printer.close ()
+		ports[port].printer._close ()
 		# Forget the printer.
 		ports[port] = None
+		cls._broadcast (None, 'del_printer', port)
 	@classmethod
-	def detect (cls, port):
+	def detect (cls, source, port):
 		resumeinfo = [(yield), None]
 		assert port in ports and ports[port] is None
 		log ('detecting printer on %s' % port)
 		try:
 			ports[port] = False
 			p = Printer ()
-			c = websockets.call (resumeinfo, p._init, port)
+			c = websockets.call (resumeinfo, p._init, port, cls._broadcast, cls.remove_port)
 			while c (): c.args = (yield websockets.WAIT)
 			ports[port] = p
 			log ('detected printer %s on %s' % (p.printer.name, port))
+			cls._send_printer (source, p.printer)
 		except:
 			log ('no printer found on port %s' % port)
 			ports[port] = None
 			traceback.print_exc ()
 			return
 	@classmethod
+	def _send_printer (cls, target, printer):
+		cls._broadcast (target, 'new_printer', printer.port, [printer.namelen, printer.maxaxes, printer.maxextruders, printer.maxtemps, printer.audio_fragments, printer.audio_fragment_size, printer.num_digital_pins, printer.num_pins])
+		printer._variables_update (target)
+		for a in range (printer.maxaxes):
+			printer._axis_update (a, target)
+		for e in range (printer.maxextruders):
+			printer._extruder_update (e, target)
+		for t in range (printer.maxtemps):
+			printer._temp_update (t, target)
+	@classmethod
 	def detect_all (cls):
 		resumeinfo = [(yield), None]
 		for p in ports:
 			if ports[p] is not None:
 				continue
-			c = websockets.call (resumeinfo, cls.detect, p)
+			c = websockets.call (resumeinfo, cls.detect, None, p)
 			while c (): c.args = (yield websockets.WAIT)
 	@classmethod
 	def add_port (cls, port):
@@ -303,18 +360,21 @@ class Connection: # {{{
 			#log ('skipping blacklisted port %s' % port)
 			return
 		ports[port] = None
+		cls._broadcast (None, 'new_port', port);
 		if autodetect:
-			c = websockets.call (resumeinfo, cls.detect, port)
+			c = websockets.call (resumeinfo, cls.detect, None, port)
 			while c (): c.args = (yield websockets.WAIT)
 	@classmethod
 	def remove_port (cls, port):
+		print ('removing port %s' % port)
 		if port not in ports:
 			return
 		if ports[port]:
 			# Close serial port, in case it still exists.
-			ports[port].printer.printer.close ()
+			cls.disable (port)
 			#orphans.append (ports[port])
 		del ports[port]
+		cls._broadcast (None, 'del_port', port)
 	@classmethod
 	def get_ports (cls):
 		return [(p, ports[p].printer.name if ports[p] else None) for p in ports]
@@ -329,6 +389,7 @@ class Connection: # {{{
 	def set_blacklist (cls, newlist):
 		global blacklist
 		blacklist = newlist
+		cls._broadcast (None, 'blacklist', blacklist)
 	@classmethod
 	def get_blacklist (cls):
 		return blacklist
@@ -373,12 +434,24 @@ class Connection: # {{{
 		c = websockets.call (resumeinfo, self.printer.printer.readtemp_extruder, 0)
 		while c (): c.args = (yield websockets.WAIT)
 		yield (t, c.ret ())
+	def set_monitor (self, value):
+		self.socket.monitor = value
+		if self.socket.monitor:
+			self.socket.autodetect.event (autodetect)
+			self.socket.blacklist.event (blacklist)
+			for p in ports:
+				self.socket.new_port.event (p)
+				if ports[p]:
+					Connection._send_printer (self.socket, ports[p].printer)
+	def get_monitor (self):
+		return self.socket.monitor
 	def __getattr__ (self, attr):
 		#log ('other: %s' % attr)
 		assert self.printer is not None
 		return getattr (self.printer.printer, attr)
 # }}}
 
+httpd = None
 default_printer = (None, None)
 ports = {}
 autodetect = config['autodetect']
