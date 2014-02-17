@@ -28,17 +28,14 @@ def dprint (x, data): # {{{
 class Printer: # {{{
 	# Internal stuff.  {{{
 	# Constants.  {{{
-	# Serial timeout for normal communication in seconds.
-	default_timeout = 5	# TODO: this is for debugging; really should be .005
-	long_timeout = 3	# Timeout when waiting for the printer to boot.  May need 15 for non-optiboot.
 	# Masks for computing checksums.
 	mask = [	[0xc0, 0xc3, 0xff, 0x09],
 			[0x38, 0x3a, 0x7e, 0x13],
 			[0x26, 0xb5, 0xb9, 0x23],
 			[0x95, 0x6c, 0xd5, 0x43],
 			[0x4b, 0xdc, 0xe2, 0x83]]
-	# Single-byte commands.
-	single = { 'NACK': '\x80', 'ACK': '\xe1', 'ACKWAIT': '\xd2', 'STALL': '\xb3', 'UNUSED1': '\xf4', 'INIT': '\x95', 'UNUSED2': '\xa6', 'DEBUG': '\xc7' }
+	# Single-byte commands.  See firmware/serial.cpp for an explanation of the codes.
+	single = { 'NACK': '\x80', 'ACK': '\xb3', 'ACKWAIT': '\xb4', 'STALL': '\x87', 'INIT': '\x99', 'GETID': '\xaa', 'SENDID': '\xad', 'DEBUG': '\x9e' }
 	command = {
 			'BEGIN': 0x00,
 			'GOTO': 0x01,
@@ -48,57 +45,65 @@ class Printer: # {{{
 			'SETTEMP': 0x05,
 			'WAITTEMP': 0x06,
 			'READTEMP': 0x07,
-			'SETPOS': 0x08,
-			'GETPOS': 0x09,
-			'LOAD': 0x0a,
-			'SAVE': 0x0b,
-			'READ': 0x0c,
-			'WRITE': 0x0d,
-			'PAUSE': 0x0e,
-			'PING': 0x0f,
-			'READPIN': 0x10,
-			'AUDIO_SETUP': 0x11,
-			'AUDIO_DATA': 0x12}
+			'READPOWER': 0x08,
+			'SETPOS': 0x09,
+			'GETPOS': 0x0a,
+			'LOAD': 0x0b,
+			'SAVE': 0x0c,
+			'READ': 0x0d,
+			'WRITE': 0x0e,
+			'PAUSE': 0x0f,
+			'PING': 0x10,
+			'READPIN': 0x11,
+			'AUDIO_SETUP': 0x12,
+			'AUDIO_DATA': 0x13}
 	rcommand = {
-			'START': '\x13',
-			'TEMP': '\x14',
-			'POS': '\x15',
-			'DATA': '\x16',
-			'PONG': '\x17',
-			'PIN': '\x18',
-			'MOVECB': '\x19',
-			'TEMPCB': '\x1a',
-			'CONTINUE': '\x1b',
-			'LIMIT': '\x1c',
-			'SENSE': '\x1d'}
+			'START': '\x14',
+			'TEMP': '\x15',
+			'POWER': '\x16',
+			'POS': '\x17',
+			'DATA': '\x18',
+			'PONG': '\x19',
+			'PIN': '\x1a',
+			'MOVECB': '\x1b',
+			'TEMPCB': '\x1c',
+			'CONTINUE': '\x1d',
+			'LIMIT': '\x1e',
+			'AUTOSLEEP': '\x1f',
+			'SENSE': '\x20'}
 	# }}}
 	def _set_waiter (self, type, resumeinfo, condition = True): # {{{
 		#log ('adding waiter for ' + type)
+		assert self.waiters[type][0] >= 2 or len (self.waiters[type][1]) == 0
 		item = (resumeinfo[0], condition)
-		self.waiters[type].append (item)
-		return lambda: self.waiters.remove (item) if item in self.waiters else None
+		self.waiters[type][1].append (item)
+		return lambda: self.waiters[type][1].remove (item) if item in self.waiters[type][1] else None
 	# }}}
-	def _trigger (self, type, arg = None, all = True): # {{{
+	def _trigger (self, type, arg = None): # {{{
 		#log ('triggering ' + type)
-		if all:
-			waiters = self.waiters[type]
-			self.waiters[type] = []
+		waiters = self.waiters[type][1][:]
+		self.waiters[type][1][:] = []
+		if self.waiters[type][0] < 2:
+			if len (waiters) != 1:
+				if self.waiters[type][0] != 0:
+					log ('no waiters for %s' % type)
+			else:
+				waiters[0][0] (arg)
+		elif self.waiters[type][0] == 2:
+			if len (self.waiters[type][1]) > 0:
+				self.waiters[type][1].pop (0)[0] (arg)
+		else:
 			for w in waiters:
 				if w[1] is True or w[1] (arg):
 					w[0] (arg)
 				else:
-					self.waiters[type].append (w)
-		else:
-			for i, w in enumerate (self.waiters[type]):
-				if w[1] is True or w[1] (arg):
-					break
-			else:
-				#log ('no triggers for %s' % type)
-				return
-			self.waiters[type].pop (i)[0] (arg)
+					self.waiters[type][1].append (w)
+		return len (waiters) > len (self.waiters[type][1])
 	# }}}
-	def _init (self, port, broadcast, death): # {{{
+	def _init (self, port, broadcast, death, orphans, newid): # {{{
 		resumeinfo = [(yield), None]
+		self.pong = 0
+		self.id_buffer = None
 		self.debug_buffer = None
 		self.buffer = ''
 		self.port = port
@@ -108,6 +113,7 @@ class Printer: # {{{
 		self.audiofile = None
 		self.pos = []
 		# Set up state.
+		self.sending = False
 		self.paused = False
 		self.ff_in = False
 		self.ff_out = False
@@ -117,21 +123,62 @@ class Printer: # {{{
 		self.waitaudio = False
 		self.movewait = 0
 		self.tempwait = set ()
-		self.waiters = {'connect': [], 'send': [], 'ack': [], 'queue': [], 'move': [], 'audio': [], 'limit': [], 'temp': [], 'reply': [], 'init': [], 'sense': []}
+		# Type: 0 = only one waiter allowed; 1: like 0, and must have a waiter when triggered; 2: queue; 3: broadcast.
+		self.waiters = {'id': (0, []), 'connect': (3, []), 'send': (2, []), 'ack': (0, []), 'queue': (2, []), 'move': (3, []), 'audio': (0, []), 'limit': (3, []), 'temp': (3, []), 'reply': (1, []), 'init': (1, []), 'sense': (3, []), 'pong': (3, [])}
 		self.printer = serial.Serial (port, baudrate = 115200, timeout = 0)
 		self.disconnected = False
-		self.printer.readall ()	# flush buffer.
 		self.last_time = float ('nan')
-		glib.io_add_watch (self.printer.fd, glib.IO_IN, self._printer_input)
-		# Reset printer.
-		self.printer.setDTR (False)
-		glib.timeout_add (100, lambda: resumeinfo[0] () is None and False)	# Make sure the lambda function returns False.
+		self.printer.readall ()	# flush buffer.
+		killer = self._set_waiter ('init', resumeinfo)
+		self.watcher = glib.io_add_watch (self.printer.fd, glib.IO_IN, self._printer_input)
+		# We need to get the printer id first.  If the printer is booting, this can take a while.
+		id = None
+		# Wait to make sure the command is interpreted as a new packet.
+		glib.timeout_add (150, lambda: resumeinfo[0] () is None and False)	# Make sure the lambda function returns False.
 		yield websockets.WAIT
-		self.printer.setDTR (True)
-		# Wait for firmware to boot.
-		self._set_waiter ('init', resumeinfo)
-		yield websockets.WAIT
-		c = websockets.call (resumeinfo, self._begin)
+		# How many times to try before accepting an invalid id.
+		self.id_tries = 10
+		handle = glib.timeout_add_seconds (10, lambda: resumeinfo[0] (False) is None and False)	# Make sure the lambda function returns False.
+		while id is None:
+			self.printer.write (self.single['GETID'])
+			getid_waiter = self._set_waiter ('id', resumeinfo)
+			id = (yield websockets.WAIT)
+			getid_waiter ()
+			if id is not False:
+				# This printer was running and tried to send an id.  Remove the timeout and check the id.
+				glib.source_remove (handle)
+				if id in orphans:
+					log ('accepting orphan')
+					killer ()
+					glib.source_remove (self.watcher)
+					yield orphans[id]
+				if id is None:
+					# An invalid id was received, or an init notification.
+					continue
+				# A valid id was received, but we don't know it.  This will be treated as no id.
+				log ("Printer has valid, but unknown id")
+		log ('accepting printer')
+		killer ()
+		# Send several ping commands, to get the flip flops synchronized.
+		# If the output flipflop is out of sync, the first ping will not generate a reply.
+		# If the input flipflop is out of sync, the first reply will not generate a trigger.
+		# Whatever happens, the third ping must be recognized by both sides.
+		# But first send an ack, so any transmission in progress is considered finished.
+		# This does no harm, because spurious acks are ignored.
+		self.printer.write (self.single['ACK'])
+		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BB', self.command['PING'], 0))
+		while c (): c.args = (yield websockets.WAIT)
+		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BB', self.command['PING'], 1))
+		while c (): c.args = (yield websockets.WAIT)
+		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BB', self.command['PING'], 2))
+		while c (): c.args = (yield websockets.WAIT)
+		while self.pong != 2:
+			self._set_waiter ('pong', resumeinfo)
+			yield websockets.WAIT
+		# Now we're in sync.
+		# Get the printer state.
+		self.printerid = newid
+		c = websockets.call (resumeinfo, self._begin, newid)
 		while c (): c.args = (yield websockets.WAIT)
 		c = websockets.call (resumeinfo, self._read, 0)
 		while c (): c.args = (yield websockets.WAIT)
@@ -143,25 +190,64 @@ class Printer: # {{{
 			c = websockets.call (resumeinfo, self._read, 2 + a)
 			while c (): c.args = (yield websockets.WAIT)
 			self.axis[a].read (c.ret ())
+			# Sleep motor.
+			c = websockets.call (resumeinfo, self.sleep_axis, a)
+			while c (): c.args = (yield websockets.WAIT)
 		self.extruder = [Printer.Extruder () for t in range (self.maxextruders)]
 		for e in range (self.maxextruders):
 			c = websockets.call (resumeinfo, self._read, 2 + self.maxaxes + e)
 			while c (): c.args = (yield websockets.WAIT)
 			self.extruder[e].read (c.ret ())
+			# Disable heater.
+			c = websockets.call (resumeinfo, self.settemp_extruder, e, float ('nan'))
+			while c (): c.args = (yield websockets.WAIT)
+			# Disable heater alarm.
+			c = websockets.call (resumeinfo, self.waittemp_extruder, e, float ('nan'), float ('nan'))
+			while c (): c.args = (yield websockets.WAIT)
+			# Sleep motor.
+			c = websockets.call (resumeinfo, self.sleep_extruder, e)
+			while c (): c.args = (yield websockets.WAIT)
 		self.temp = [Printer.Temp () for t in range (self.maxtemps)]
 		for t in range (self.maxtemps):
 			c = websockets.call (resumeinfo, self._read, 2 + self.maxaxes + self.maxextruders + t)
 			while c (): c.args = (yield websockets.WAIT)
 			self.temp[t].read (c.ret ())
+			# Disable heater.
+			c = websockets.call (resumeinfo, self.settemp_temp, t, float ('nan'))
+			while c (): c.args = (yield websockets.WAIT)
+			# Disable heater alarm.
+			c = websockets.call (resumeinfo, self.waittemp_temp, t, float ('nan'), float ('nan'))
+			while c (): c.args = (yield websockets.WAIT)
+		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
+		c = websockets.call (resumeinfo, self.pause, True)
+		while c (): c.args = (yield websockets.WAIT)
+		c = websockets.call (resumeinfo, self.goto)	# This flushes the buffer, possibly causing movecbs to be sent.
+		while c (): c.args = (yield websockets.WAIT)
+		c = websockets.call (resumeinfo, self.goto, cb = True)	# This sends one new movecb, to be sure the rest is received if it was sent.
+		while c (): c.args = (yield websockets.WAIT)
+		self._set_waiter ('move', resumeinfo)
+		yield websockets.WAIT
+		self.pong = 3	# Signal to allow all commands and send updates.
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
 	# }}}
+	def _reconnect (self, port, printer): # {{{
+		self.port = port
+		self.printer = printer
+		self.disconnected = False
+		self.watcher = glib.io_add_watch (self.printer.fd, glib.IO_IN, self._printer_input)
+		self._trigger ('connect')
+	# }}}
 	def _close (self): # {{{
+		glib.source_remove (self.watcher)
 		self.printer.close ()
+		log ('disconnecting')
 		self.disconnected = True
 	# }}}
 	def _printer_input (self, who, what): # {{{	
+		if self.disconnected:
+			return False
 		if time.time () - self.last_time > .1:
 			dprint ('writing (5)', self.single['NACK']);
 			self.printer.write (self.single['NACK'])
@@ -171,26 +257,43 @@ class Printer: # {{{
 				if show_firmware_debug:
 					log ('Debug (partial): %s' % self.debug_buffer)
 				self.debug_buffer = None
+			if self.id_buffer is not None:
+				log ('Partial id: %s' % ' '.join (['%02x' % ord (x) for x in self.id_buffer]))
+				self._trigger ('id', None)
+				self.id_buffer = None
 		while True:
-			while self.debug_buffer is not None:
+			while self.id_buffer is not None or self.debug_buffer is not None:
 				try:
 					r = self.printer.read (1)
-				except serial.SerialException:
+				except:
 					# Ignore the exception now; it will be triggered again below.
-					r = '\x00'
+					r = None
 				if r == '':
 					self.last_time = time.time ()
 					return True
-				if r == '\x00':
-					if show_firmware_debug:
-						log ('Debug: %s' % self.debug_buffer)
-					self.debug_buffer = None
+				if r is not None and self.id_buffer is not None:
+					self.id_buffer += r
+					if len (self.id_buffer) >= 8:
+						if not all ([x in self.id_map for x in self.id_buffer]) and not all ([ord (x) == 0 for x in self.id_buffer]):
+							log ('received invalid id: %s' % ' '.join (['%02x' % ord (x) for x in self.id_buffer]))
+							if self.id_tries > 0:
+								self.id_tries -= 1
+								self.id_buffer = None
+							else:
+								log ('accepting it anyway')
+						self._trigger ('id', self.id_buffer)
+						self.id_buffer = None
 				else:
-					self.debug_buffer += r
+					if r is None or r == '\x00':
+						if show_firmware_debug:
+							log ('Debug: %s' % self.debug_buffer)
+						self.debug_buffer = None
+					else:
+						self.debug_buffer += r
 			if len (self.buffer) == 0:
 				try:
 					r = self.printer.read (1)
-				except serial.SerialException:
+				except:
 					self._close ()
 					self._death (self.port)
 					return False
@@ -202,23 +305,34 @@ class Printer: # {{{
 				if r == self.single['DEBUG']:
 					self.debug_buffer = ''
 					continue
+				if r == self.single['SENDID']:
+					self.id_buffer = ''
+					continue
 				if r == self.single['ACK']:
 					# Ack is special in that if it isn't expected, it is not an error.
-					self._trigger ('ack', 'ack', False)
+					self._trigger ('ack', 'ack')
 					continue
 				if r == self.single['NACK']:
 					# Nack is special in that it should only be handled if an ack is expected.
-					self._trigger ('ack', 'nack', False)
+					self._trigger ('ack', 'nack')
 					continue
 				if r == self.single['ACKWAIT']:
-					self._trigger ('ack', 'wait', False)
+					self._trigger ('ack', 'wait')
 					continue
 				if r == self.single['INIT']:
-					self._trigger ('init')
+					if not self._trigger ('init'):
+						self._close ()
+						self._broadcast (None, 'reset', self.port)
+						self._death (self.port)
+						return False
 					continue
 				if r == self.single['STALL']:
 					# There is a problem we can't solve; kill the generator that registered to see the ack.
-					self._trigger ('ack', 'stall', False)
+					if not self._trigger ('ack', 'stall'):
+						self._close ()
+						self._broadcast (None, 'stall', self.port)
+						self._death (self.port)
+						return False
 				if (ord (r) & 0x80) != 0 or ord (r) in (0, 1, 2, 4):
 					dprint ('writing (1)', self.single['NACK']);
 					self.printer.write (self.single['NACK'])
@@ -261,47 +375,93 @@ class Printer: # {{{
 			# Flip it.
 			self.ff_in = not self.ff_in
 			# Handle the asynchronous events here; don't bother the caller with them.
+			if packet[0] == self.rcommand['PONG']:
+				# Strictly speaking a reply, but it's much easier to handle it as an asynchronous command.
+				self.pong = ord (packet[1])
+				self._trigger ('pong')
+				continue
 			if packet[0] == self.rcommand['MOVECB']:
 				num = ord (packet[1])
 				#log ('movecb %d/%d' % (num, self.movewait))
-				assert self.movewait >= num
-				self.movewait -= num
+				if self.pong == 3:
+					assert self.movewait >= num
+					self.movewait -= num
+				else:
+					self.movewait = 0
 				if self.movewait == 0:
 					self._trigger ('move')
 				continue
-			elif packet[0] == self.rcommand['TEMPCB']:
-				t = ord (packet[1])
-				assert ord (t) in self.tempwait
-				self.tempwait.remove (t)
-				self._trigger ('temp', t)
-			elif packet[0] == self.rcommand['CONTINUE']:
-				if packet[1] == '\x00':
-					# Move continue.
-					self.wait = False
-					self._trigger ('queue', None, False)
-				else:
-					# Audio continue.
-					self.waitaudio = False
-					self._trigger ('audio', None, False)
-			elif packet[0] == self.rcommand['LIMIT']:
-				which = ord (packet[1])
-				if not math.isnan (self.axis[which].motor.runspeed):
-					self.axis[which].motor.runspeed = float ('nan')
-					self._axis_update (which)
-				self.limits[which] = struct.unpack ('<f', packet[2:])[0]
-				if self.waiters['limit'] is not None:
+			# Don't handle these commands while connecting.
+			if self.pong == 3:
+				if packet[0] == self.rcommand['TEMPCB']:
+					t = ord (packet[1])
+					assert ord (t) in self.tempwait
+					self.tempwait.remove (t)
+					self._trigger ('temp', t)
+					continue
+				elif packet[0] == self.rcommand['CONTINUE']:
+					if packet[1] == '\x00':
+						# Move continue.
+						self.wait = False
+						self._trigger ('queue', None)
+					else:
+						# Audio continue.
+						self.waitaudio = False
+						self._trigger ('audio', None)
+					continue
+				elif packet[0] == self.rcommand['LIMIT']:
+					which = ord (packet[1])
+					if not math.isnan (self.axis[which].motor.runspeed):
+						self.axis[which].motor.runspeed = float ('nan')
+						self._axis_update (which)
+					self.limits[which] = struct.unpack ('<f', packet[2:])[0]
 					self._trigger ('limit', which)
-			elif packet[0] == self.rcommand['SENSE']:
-				w = ord (packet[1])
-				which = w & 0x7f
-				state = bool (w & 0x80)
-				pos = struct.unpack ('<f', packet[2:])[0]
-				if which not in self.sense:
-					self.sense[which] = []
-				self.sense[which].append ((state, pos))
-				self._trigger ('sense', which)
-			else:
-				self._trigger ('reply', packet)
+					continue
+				elif packet[0] == self.rcommand['AUTOSLEEP']:
+					what = ord (packet[1])
+					changed = [set (), set (), set ()]
+					if what & 1:
+						for a in range (self.maxaxes):
+							if not math.isnan (self.axis[a].motor.runspeed):
+								self.axis[a].motor.runspeed = float ('nan')
+								changed[0].add (a)
+							if not self.axis[a].motor.sleeping:
+								self.axis[a].motor.sleeping = True
+								changed[0].add (a)
+						for e in range (self.maxextruders):
+							if not math.isnan (self.extruder[e].motor.runspeed):
+								self.extruder[e].motor.runspeed = float ('nan')
+								changed[1].add (e)
+							if not self.extruder[e].motor.sleeping:
+								self.extruder[e].motor.sleeping = True
+								changed[1].add (e)
+					if what & 2:
+						for e in range (self.maxextruders):
+							if not math.isnan (self.extruder[e].temp.target):
+								self.extruder[e].temp.target = float ('nan')
+								changed[1].add (e)
+						for t in range (self.maxtemps):
+							if not math.isnan (self.temp[t].target):
+								self.temp[t].target = float ('nan')
+								changed[2].add (t)
+					for a in changed[0]:
+						self._axis_update (a)
+					for e in changed[1]:
+						self._extruder_update (e)
+					for t in changed[2]:
+						self._temp_update (t)
+					continue
+				elif packet[0] == self.rcommand['SENSE']:
+					w = ord (packet[1])
+					which = w & 0x7f
+					state = bool (w & 0x80)
+					pos = struct.unpack ('<f', packet[2:])[0]
+					if which not in self.sense:
+						self.sense[which] = []
+					self.sense[which].append ((state, pos))
+					self._trigger ('sense', which)
+					continue
+			self._trigger ('reply', packet)
 	# }}}
 	def _make_packet (self, data): # {{{
 		data = chr (len (data) + 1) + data
@@ -343,20 +503,26 @@ class Printer: # {{{
 	# }}}
 	def _send_packet (self, data, audio = False): # {{{
 		resumeinfo = [(yield), None]
-		if self.disconnected:
-			self._set_waiter ('connect', resumeinfo)
+		if self.sending:
+			self._set_waiter ('send', resumeinfo)
 			yield websockets.WAIT
-		if len (self.waiters['send']) > 0:
-			self.waiters.send.append (resumeinfo[0])
-			yield websockets.WAIT
+		self.sending = True
 		if self.ff_out:
 			data = chr (ord (data[0]) | 0x80) + data[1:]
 		self.ff_out = not self.ff_out
 		data = self._make_packet (data)
-		try:
+		while True:
+			if self.disconnected:
+				self._set_waiter ('connect', resumeinfo)
+				yield websockets.WAIT
 			while True:
 				dprint ('(1) writing', data);
-				self.printer.write (data)
+				try:
+					self.printer.write (data)
+				except:
+					self._close ()
+					self._death (self.port)
+					continue	# wait for reconnect.
 				self._set_waiter ('ack', resumeinfo)
 				ack = yield websockets.WAIT
 				if ack == 'nack':
@@ -372,12 +538,13 @@ class Printer: # {{{
 				else:
 					# ack == 'stall'
 					raise ValueError ('Printer sent stall')
-		finally:
-			self._trigger ('send', None, False)
+			break
+		self.sending = False
+		self._trigger ('send', None)
 	# }}}
-	def _begin (self): # {{{
+	def _begin (self, newid): # {{{
 		resumeinfo = [(yield), None]
-		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BL', self.command['BEGIN'], 0))
+		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BL', self.command['BEGIN'], 0) + newid)
 		while c (): c.args = (yield websockets.WAIT)
 		self._set_waiter ('reply', resumeinfo)
 		reply = yield websockets.WAIT
@@ -409,6 +576,8 @@ class Printer: # {{{
 		self._variables_update ()
 	# }}}
 	def _variables_update (self, target = None): # {{{
+		if self.pong != 3:
+			return
 		self._broadcast (target, 'variables_update', self.port, [self.name, self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, self.paused])
 	# }}}
 	def _write_axis (self, which): # {{{
@@ -419,6 +588,8 @@ class Printer: # {{{
 		self._axis_update (which)
 	# }}}
 	def _axis_update (self, which, target = None): # {{{
+		if self.pong != 3:
+			return
 		self._broadcast (target, 'axis_update', self.port, which, [
 			[self.axis[which].motor.step_pin, self.axis[which].motor.dir_pin, self.axis[which].motor.enable_pin, self.axis[which].motor.steps_per_mm, self.axis[which].motor.max_v_pos, self.axis[which].motor.max_v_neg, self.axis[which].motor.max_a, self.axis[which].motor.runspeed, self.axis[which].motor.sleeping],
 			self.axis[which].limit_min_pin, self.axis[which].limit_max_pin, self.axis[which].sense_pin, self.axis[which].limit_min_pos, self.axis[which].limit_max_pos, self.axis[which].delta_length, self.axis[which].delta_radius, self.axis[which].offset])
@@ -431,9 +602,11 @@ class Printer: # {{{
 		self._extruder_update (which)
 	# }}}
 	def _extruder_update (self, which, target = None): # {{{
+		if self.pong != 3:
+			return
 		self._broadcast (target, 'extruder_update', self.port, which, [
 			[self.extruder[which].motor.step_pin, self.extruder[which].motor.dir_pin, self.extruder[which].motor.enable_pin, self.extruder[which].motor.steps_per_mm, self.extruder[which].motor.max_v_pos, self.extruder[which].motor.max_v_neg, self.extruder[which].motor.max_a, self.extruder[which].motor.runspeed, self.extruder[which].motor.sleeping],
-			[self.extruder[which].temp.power_pin, self.extruder[which].temp.thermistor_pin, self.extruder[which].temp.alpha, self.extruder[which].temp.beta, self.extruder[which].temp.core_C, self.extruder[which].temp.shell_C, self.extruder[which].temp.transfer, self.extruder[which].temp.radiation, self.extruder[which].temp.power, self.extruder[which].temp.value],
+			[self.extruder[which].temp.power_pin, self.extruder[which].temp.thermistor_pin, self.extruder[which].temp.R0, self.extruder[which].temp.R1, self.extruder[which].temp.Rc, self.extruder[which].temp.Tc, self.extruder[which].temp.beta, self.extruder[which].temp.core_C, self.extruder[which].temp.shell_C, self.extruder[which].temp.transfer, self.extruder[which].temp.radiation, self.extruder[which].temp.power, self.extruder[which].temp.value],
 			self.extruder[which].filament_heat, self.extruder[which].nozzle_size, self.extruder[which].filament_size])
 	# }}}
 	def _write_temp (self, which): # {{{
@@ -444,7 +617,9 @@ class Printer: # {{{
 		self._temp_update (which)
 	# }}}
 	def _temp_update (self, which, target = None): # {{{
-		self._broadcast (target, 'temp_update', self.port, which, [self.temp[which].power_pin, self.temp[which].thermistor_pin, self.temp[which].alpha, self.temp[which].beta, self.temp[which].core_C, self.temp[which].shell_C, self.temp[which].transfer, self.temp[which].radiation, self.temp[which].power, self.temp[which].value])
+		if self.pong != 3:
+			return
+		self._broadcast (target, 'temp_update', self.port, which, [self.temp[which].power_pin, self.temp[which].thermistor_pin, self.temp[which].R0, self.temp[which].R1, self.temp[which].Rc, self.temp[which].Tc, self.temp[which].beta, self.temp[which].core_C, self.temp[which].shell_C, self.temp[which].transfer, self.temp[which].radiation, self.temp[which].power, self.temp[which].value])
 	# }}}
 	def _send_audio (self): # {{{
 		resumeinfo = [(yield), None]
@@ -461,10 +636,10 @@ class Printer: # {{{
 		def __init__ (self):
 			self.value = float ('nan')
 		def read (self, data):
-			self.alpha, self.beta, self.core_C, self.shell_C, self.transfer, self.radiation, self.power, self.power_pin, self.thermistor_pin = struct.unpack ('<fffffffHH', data[:32])
-			return data[32:]
+			self.R0, self.R1, self.Rc, self.Tc, self.beta, self.core_C, self.shell_C, self.transfer, self.radiation, self.power, self.power_pin, self.thermistor_pin = struct.unpack ('<ffffffffffHH', data[:44])
+			return data[44:]
 		def write (self):
-			return struct.pack ('<fffffffHH', self.alpha, self.beta, self.core_C, self.shell_C, self.transfer, self.radiation, self.power, self.power_pin, self.thermistor_pin)
+			return struct.pack ('<ffffffffffHH', self.R0, self.R1, self.Rc, self.Tc, self.beta, self.core_C, self.shell_C, self.transfer, self.radiation, self.power, self.power_pin, self.thermistor_pin)
 	# }}}
 	class Motor: # {{{
 		def __init__ (self):
@@ -548,10 +723,10 @@ class Printer: # {{{
 		if e is not None:
 			targets[(2 + self.num_axes + which) >> 3] |= 1 << ((2 + self.num_axes + which) & 0x7)
 			args += struct.pack ('<f', e)
-			if self.extruders[which].sleeping:
-				self.extruders[which].sleeping = False
+			if self.extruder[which].motor.sleeping:
+				self.extruder[which].motor.sleeping = False
 				self._extruder_update (which)
-		while self.wait:
+		while self.wait and not self.paused:
 			self._set_waiter ('queue', resumeinfo)
 			yield websockets.WAIT
 		if cb:
@@ -679,6 +854,27 @@ class Printer: # {{{
 		ret = yield websockets.WAIT
 		assert ret[0] == self.rcommand['TEMP']
 		yield struct.unpack ('<f', ret[1:])[0]
+	# }}}
+	def readpower_extruder (self, which):	# {{{
+		resumeinfo = [(yield), None]
+		c = websockets.call (resumeinfo, self.readpower, 2 + self.maxaxes + which)
+		while c (): c.args = (yield websockets.WAIT)
+		yield c.ret ()
+	# }}}
+	def readpower_temp (self, which):	# {{{
+		resumeinfo = [(yield), None]
+		c = websockets.call (resumeinfo, self.readpower, 2 + self.maxaxes + self.maxextruders + which)
+		while c (): c.args = (yield websockets.WAIT)
+		yield c.ret ()
+	# }}}
+	def readpower (self, channel): # {{{
+		resumeinfo = [(yield), None]
+		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BB', self.command['READPOWER'], channel))
+		while c (): c.args = (yield websockets.WAIT)
+		self._set_waiter ('reply', resumeinfo)
+		ret = yield websockets.WAIT
+		assert ret[0] == self.rcommand['POWER']
+		yield struct.unpack ('<LL', ret[1:])
 	# }}}
 	def readpin (self, pin): # {{{
 		resumeinfo = [(yield), None]
@@ -1152,13 +1348,37 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	# Temp {{{
-	def temp_set_alpha (self, which, value):	# {{{
+	def temp_set_R0 (self, which, value):	# {{{
 		resumeinfo = [(yield), None]
-		self.temp[which].alpha = value
+		self.temp[which].R0 = value
 		c = websockets.call (resumeinfo, self._write_temp, which)
 		while c (): c.args = (yield websockets.WAIT)
-	def temp_get_alpha (self, which):
-		return self.temp[which].alpha
+	def temp_get_R0 (self, which):
+		return self.temp[which].R0
+	# }}}
+	def temp_set_R1 (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.temp[which].R1 = value
+		c = websockets.call (resumeinfo, self._write_temp, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def temp_get_R1 (self, which):
+		return self.temp[which].R1
+	# }}}
+	def temp_set_Rc (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.temp[which].Rc = value
+		c = websockets.call (resumeinfo, self._write_temp, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def temp_get_Rc (self, which):
+		return self.temp[which].Rc
+	# }}}
+	def temp_set_Tc (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.temp[which].Tc = value
+		c = websockets.call (resumeinfo, self._write_temp, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def temp_get_Tc (self, which):
+		return self.temp[which].Tc
 	# }}}
 	def temp_set_beta (self, which, value):	# {{{
 		resumeinfo = [(yield), None]
@@ -1355,13 +1575,37 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	# Extruder {{{
-	def extruder_temp_set_alpha (self, which, value):	# {{{
+	def extruder_temp_set_R0 (self, which, value):	# {{{
 		resumeinfo = [(yield), None]
-		self.extruder[which].temp.alpha = value
+		self.extruder[which].temp.R0 = value
 		c = websockets.call (resumeinfo, self._write_extruder, which)
 		while c (): c.args = (yield websockets.WAIT)
-	def extruder_temp_get_alpha (self, which):
-		return self.extruder[which].temp.alpha
+	def extruder_temp_get_R0 (self, which):
+		return self.extruder[which].temp.R0
+	# }}}
+	def extruder_temp_set_R1 (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.extruder[which].temp.R1 = value
+		c = websockets.call (resumeinfo, self._write_extruder, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def extruder_temp_get_R1 (self, which):
+		return self.extruder[which].temp.R1
+	# }}}
+	def extruder_temp_set_Rc (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.extruder[which].temp.Rc = value
+		c = websockets.call (resumeinfo, self._write_extruder, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def extruder_temp_get_Rc (self, which):
+		return self.extruder[which].temp.Rc
+	# }}}
+	def extruder_temp_set_Tc (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.extruder[which].temp.Tc = value
+		c = websockets.call (resumeinfo, self._write_extruder, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def extruder_temp_get_Tc (self, which):
+		return self.extruder[which].temp.Tc
 	# }}}
 	def extruder_temp_set_beta (self, which, value):	# {{{
 		resumeinfo = [(yield), None]

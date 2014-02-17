@@ -9,16 +9,10 @@
 // The second byte of a packet is the flipflop and the command (fccccccc)
 // All other commands have bit 7 set, so they cannot be mistaken for a packet.
 // They have 4 bit data and 3 bit parity: 1pppdddd
-// Codes (defined in firmware.h):
-// 	0000	-> 0x80	1000
-// 	0001	-> 0xe1	1110
-// 	0010	-> 0xd2	1101
-// 	0011	-> 0xb3	1011
-// 	0100	-> 0xf4	1111
-// 	0101	-> 0x95	1001
-// 	0110	-> 0xa6	1010
-// 	0111	-> 0xc7	1100
-// static const uint8_t MASK1[3] = {0x4f, 0x2d, 0x1e}
+// static const uint8_t MASK1[3] = {0x4b, 0x2d, 0x1e}
+// Codes (low nybble is data): 80 (e1 d2) b3 b4 (d5 e6) 87 (f8) 99 aa (cb cc) ad 9e (ff)
+// Codes which have duplicates in printer id codes are not used.
+// These are defined in firmware.h.
 
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
@@ -39,13 +33,16 @@ void serial ()
 	if (!had_data && command_end > 0 && micros () >= last_micros + 100000)
 	{
 		// Command not finished; ignore it and wait for next.
+		wdt_reset ();
 		command_end = 0;
 	}
 	had_data = false;
 	while (command_end == 0)
 	{
-		if (!Serial.available ())
+		if (!Serial.available ()) {
+			wdt_reset ();
 			return;
+		}
 		had_data = true;
 		command[0] = Serial.read ();
 		//debug ("received: %x", command[0]);
@@ -64,6 +61,15 @@ void serial ()
 			if (out_busy)
 				send_packet (last_packet);
 			continue;
+		case CMD_GETID:
+			// Request printer id.  This is called when the host
+			// connects to the printer.  This may be a reconnect,
+			// and can happen at any time.
+			// Response is to send the printer id.
+			Serial.write (CMD_SENDID);
+			for (uint8_t i = 0; i < ID_SIZE; ++i)
+				Serial.write (printerid[i]);
+			continue;
 		default:
 			break;
 		}
@@ -79,6 +85,7 @@ void serial ()
 	if (len == 0)
 	{
 		//debug ("no more data available now");
+		wdt_reset ();
 		return;
 	}
 	had_data = true;
@@ -95,8 +102,10 @@ void serial ()
 	if (command_end < cmd_len)
 	{
 		//debug ("not done yet; %d of %d received.", command_end, cmd_len);
+		wdt_reset ();
 		return;
 	}
+	wdt_reset ();
 	command_end = 0;
 	// Check packet integrity.
 	// Size must be good.
@@ -164,6 +173,11 @@ void serial ()
 static void prepare_packet (char *the_packet)
 {
 	//debug ("prepare");
+	if (the_packet[0] >= MAXMSGLEN)
+	{
+		debug ("packet is too large: %d > %d", the_packet[0], MAXMSGLEN);
+		return;
+	}
 	// Set flipflop bit.
 	the_packet[1] &= ~0x80;
 	the_packet[1] ^= ff_out;
@@ -304,5 +318,26 @@ void try_send_next ()
 		continue_cb &= ~2;
 		return;
 	}
-	//debug ("nothing to send?!");
+	if (which_autosleep != 0)
+	{
+		autosleep_buffer[2] = which_autosleep;
+		prepare_packet (autosleep_buffer);
+		send_packet (autosleep_buffer);
+		which_autosleep = 0;
+		return;
+	}
+	if (ping != 0)
+	{
+		for (uint8_t b = 0; b < 8; ++b)
+		{
+			if (ping & 1 << b)
+			{
+				ping_buffer[2] = b;
+				prepare_packet (ping_buffer);
+				send_packet (ping_buffer);
+				ping &= ~(1 << b);
+				return;
+			}
+		}
+	}
 }

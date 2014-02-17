@@ -1,1 +1,2 @@
-SUBSYSTEMS=="tty", ENV{ID_BUS}=="usb", GROUP="dialout", MODE="0660", RUN="/usr/share/printer3d/control"
+SUBSYSTEMS=="tty", ACTION=="add", ENV{ID_BUS}=="usb", GROUP="dialout", MODE="0660", RUN+="/usr/share/printer3d/control"
+SUBSYSTEMS=="tty", ACTION=="remove", RUN+="/usr/share/printer3d/control"

@@ -85,11 +85,11 @@ void next_move () {
 #ifdef DEBUG_MOVE
 			debug ("skipping zero move");
 #endif
-			if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
+			if (((queue_end + 1) % QUEUE_LENGTH) == queue_start)
 				continue_cb |= 1;
 			if (queue[queue_start].cb)
 				++num_movecbs;
-			queue_start = (queue_start + 1) & QUEUE_LENGTH_MASK;
+			queue_start = (queue_start + 1) % QUEUE_LENGTH;
 			try_send_next ();
 			moving = false;
 			return next_move ();
@@ -108,7 +108,7 @@ void next_move () {
 #ifdef DEBUG_MOVE
 		debug ("move prepared, v0 = %f tq = %d", &v0, int (tq / 1000));
 #endif
-		uint8_t n = (queue_start + 1) & QUEUE_LENGTH_MASK;
+		uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
 		if (n == queue_end) { // {{{
 #ifdef DEBUG_MOVE
 			debug ("last segment");
@@ -161,7 +161,7 @@ void next_move () {
 			move_prepared = true;
 		}
 		current_move_has_cb = queue[queue_start].cb;
-		if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start) {
+		if (((queue_end + 1) % QUEUE_LENGTH) == queue_start) {
 #ifdef DEBUG_MOVE
 			debug ("continue regular");
 #endif
@@ -219,7 +219,7 @@ void next_move () {
 		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
 		if (!motors[m] || (isnan (motors[m]->dist) && isnan (motors[m]->next_dist)))
 			continue;
-		RESET (motors[m]->enable_pin);
+		SET (motors[m]->enable_pin);
 		// Find speeds in mm/s.
 		float v = isnan (motors[m]->dist) ? 0 : vp * motors[m]->dist;
 		float v0_mm = isnan (motors[m]->dist) ? 0 : v0 * motors[m]->dist;
@@ -298,14 +298,14 @@ void next_move () {
 	if (tq == 0) {
 		if (t0 == 0) {
 			// This is a no-move segment; pop it off the queue to prevent a deadlock.
-			if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start) {
+			if (((queue_end + 1) % QUEUE_LENGTH) == queue_start) {
 #ifdef DEBUG_MOVE
 				debug ("continue zero");
 #endif
 				continue_cb |= 1;
 				try_send_next ();
 			}
-			queue_start = (queue_start + 1) & QUEUE_LENGTH_MASK;
+			queue_start = (queue_start + 1) % QUEUE_LENGTH;
 		}
 		move_prepared = false;
 	}
@@ -330,12 +330,12 @@ void abort_move () {
 		debug ("move no longer prepared");
 #endif
 	}
-	if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
+	if (((queue_end + 1) % QUEUE_LENGTH) == queue_start)
 		continue_cb |= 1;
 	while (queue_start != queue_end) {
 		if (queue[queue_start].cb)
 			++num_movecbs;
-		queue_start = (queue_start + 1) & QUEUE_LENGTH_MASK;
+		queue_start = (queue_start + 1) % QUEUE_LENGTH;
 	}
 	// Not always required, but this is a slow operation anyway and it doesn't harm if it's called needlessly.
 	try_send_next ();

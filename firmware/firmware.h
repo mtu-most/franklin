@@ -1,23 +1,14 @@
 #ifndef _FIRMWARE_H
 #define _FIRMWARE_H
-
 #include <Arduino.h>
 #include <math.h>
+#include <avr/wdt.h>
+#include "configuration.h"
 
-#define NAMELEN 16		// Length of the printer name.
-#define QUEUE_LENGTH_LOG2 4
-#define QUEUE_LENGTH (1 << QUEUE_LENGTH_LOG2)	// Number of items which can be in the queue.
-#define QUEUE_LENGTH_MASK ((1 << QUEUE_LENGTH_LOG2) - 1)	// Mask to use for circular queue.
-#define MAXAXES 8		// Total number of supported axes (normally 3 are in use: x, y, z).
-#define MAXEXTRUDERS 8		// Total number of supported extruders.
-#define MAXTEMPS 8		// Total number of supported standalone temps (normally 1 is in use: bed).
+#define ID_SIZE 8	// Number of bytes in printerid.
 #define MAXOBJECT (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS)		// Total number of supported objects.
-#define AUDIO_FRAGMENTS 8
-#define AUDIO_FRAGMENT_SIZE 32
-
-#define MSGBUFSIZE 127	// Buffer size for messages; cannot be larger than 127.
-#define MAXMSGLEN ((MSGBUFSIZE / 4 * 3) + ((MSGBUFSIZE % 4 == 0) ? 0 : (MSGBUFSIZE % 4) - 1))
-
+#define MAXMSGLEN 127	// Maximum message length; cannot be larger than 127.
+#define MSGBUFSIZE (MAXMSGLEN + (MAXMSGLEN + 2) / 3 * 4)
 #define F0 0
 #define F1 1
 #define AXIS0 2
@@ -64,13 +55,13 @@ union ReadFloat {
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
 // These bytes (except RESET) are sent in reply to a received packet only.
 	CMD_NACK = 0x80,	// Incorrect packet; please resend.
-	CMD_ACK = 0xe1,		// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_ACKWAIT = 0xd2,	// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
-	CMD_STALL = 0xb3,	// Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_UNUSED1 = 0xf4,
-	CMD_INIT = 0x95,	// Printer started and is ready for commands.
-	CMD_UNUSED2 = 0xa6,
-	CMD_DEBUG = 0xc7	// Debug message; a nul-terminated message follows (no checksum; no resend).
+	CMD_ACK = 0xb3,		// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACKWAIT = 0xb4,	// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
+	CMD_STALL = 0x87,	// Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_INIT = 0x99,	// Printer started and is ready for commands.
+	CMD_GETID = 0xaa,	// Request printer ID code.
+	CMD_SENDID = 0xad,	// Response to GETID; ID follows.
+	CMD_DEBUG = 0x9e	// Debug message; a nul-terminated message follows (no checksum; no resend).
 };
 
 enum Command {
@@ -80,9 +71,10 @@ enum Command {
 	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
 	CMD_RUN,	// 1 byte: which channel (b0-6).  4 byte: speed [mm/s] (0 means off).
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
-	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [degrees C].
-	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [degrees C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
-	CMD_READTEMP,	// 1 byte: which channel.  Reply: TEMP. [degrees C]
+	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [°C].
+	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [°C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
+	CMD_READTEMP,	// 1 byte: which channel.  Reply: TEMP. [°C]
+	CMD_READPOWER,	// 1 byte: which channel.  Reply: POWER. [μs, μs]
 	CMD_SETPOS,	// 1 byte: which channel; 4 bytes: pos.
 	CMD_GETPOS,	// 1 byte: which channel.  Reply: POS. [steps, mm]
 	CMD_LOAD,	// 1 byte: which channel.
@@ -92,12 +84,13 @@ enum Command {
 	CMD_PAUSE,	// 1 byte: 0: not pause; 1: pause.
 	CMD_PING,	// 1 byte: code.  Reply: PONG.
 	CMD_READPIN,	// 1 byte: pin. Reply: PIN.
-	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: us_per_bit.
+	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_bit.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_START,	// 4 byte: 0 (protocol version).
-	CMD_TEMP,	// 1 byte: requested channel; 4 byte: requested channel's temperature. [degrees C]
+	CMD_TEMP,	// 4 byte: requested channel's temperature. [°C]
+	CMD_POWER,	// 4 byte: requested channel's power time; 4 bytes: current time. [μs, μs]
 	CMD_POS,	// 4 byte: pos [steps]; 4 byte: current [mm].
 	CMD_DATA,	// n byte: requested data.
 	CMD_PONG,	// 1 byte: PING argument.
@@ -107,6 +100,7 @@ enum Command {
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
 	CMD_CONTINUE,	// 1 byte: is_audio.  Bool flag if it needs to be sent.
 	CMD_LIMIT,	// 1 byte: which channel.
+	CMD_AUTOSLEEP,	// 1 byte: what: 1: motor; 2: temp; 3: both.
 	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
 };
 
@@ -118,12 +112,11 @@ struct Object
 	virtual ~Object () {}
 };
 
-// All temperatures are stored in Kelvin, but communicated in degrees C.
+// All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp : public Object
 {
 	// See temp.c from definition of calibration constants.
-	float alpha;				// alpha value of thermistor.  [1]
-	float beta;				// beta value of thermistor.  [degrees C]
+	float R0, R1, Rc, Tc, minus_beta;		// calibration values of thermistor.  [Ω, Ω, Ω, K, K]
 	// Temperature balance calibration.
 	float power;				// added power while heater is on.  [W]
 	float core_C;				// heat capacity of the core.  [J/K]
@@ -135,13 +128,15 @@ struct Temp : public Object
 	Pin_t power_pin;
 	Pin_t thermistor_pin;
 	// Volatile variables.
-	float target;				// target temperature; NAN to disable. [degrees C]
-	float core_T, shell_T;			// current temperatures. [degrees C]
-	float min_alarm;			// NAN, or the temperature at which to trigger the callback.  [degrees C]
-	float max_alarm;			// NAN, or the temperature at which to trigger the callback.  [degrees C]
+	float target;				// target temperature; NAN to disable. [K]
+	float core_T, shell_T;			// current temperatures. [K]
+	float min_alarm;			// NAN, or the temperature at which to trigger the callback.  [K]
+	float max_alarm;			// NAN, or the temperature at which to trigger the callback.  [K]
 	// Internal variables.
 	unsigned long last_time;		// last value of micros when this heater was handled.
+	unsigned long time_on;			// Time that the heater has been on since last reading.  [μs]
 	bool is_on;				// If the heater is currently on.
+	float C0, C1;				// Constants for faster temperature readings.  [1, counts]
 	// Functions.
 	float read ();				// Read current temperature.
 	virtual void load (int16_t &addr, bool eeprom);
@@ -236,17 +231,20 @@ EXTERN uint8_t num_axes;
 EXTERN uint8_t num_temps;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin;
-EXTERN float room_T;	//[degrees C]
+EXTERN float room_T;	//[°C]
 EXTERN float feedrate;	// Multiplication factor for f values, used at start of move.
 // Other variables.
+EXTERN char printerid[ID_SIZE];
 EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
 EXTERN char reply[COMMAND_SIZE];
 EXTERN char limitcb_buffer[10];
+EXTERN char autosleep_buffer[4];
 EXTERN char movecb_buffer[4];
 EXTERN char tempcb_buffer[4];
 EXTERN char continue_buffer[4];
 EXTERN char sense_buffer[10];
+EXTERN char ping_buffer[4];
 EXTERN Constants constants;
 EXTERN Variables variables;
 EXTERN Axis axis[MAXAXES];
@@ -263,6 +261,8 @@ EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent
 EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
 EXTERN float limits_pos[MAXAXES];	// position when limit switch was hit or nan
+EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
+EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool have_msg;
 EXTERN char msg_buffer[MSGBUFSIZE];
 EXTERN bool pause_all;

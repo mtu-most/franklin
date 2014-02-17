@@ -8,6 +8,7 @@
 static uint8_t temp_counter = 1;
 static uint8_t temp_current = 0;
 static void handle_temps (unsigned long current_time, unsigned long longtime) {
+	// Reading temps all the time makes it too slow; do it only every so often.  Their feedback is slow anyway.
 	if (--temp_counter)
 		return;
 	temp_counter = 20;
@@ -24,6 +25,7 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 		return;
 	}
 	float temp = NAN;
+	// Read the temperature and trigger any alarms.
 	if (!temps[temp_current]->thermistor_pin.invalid ()) {
 		temp = temps[temp_current]->read ();
 		// First of all, if an alarm should be triggered, do so.
@@ -34,16 +36,20 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 			try_send_next ();
 		}
 	}
+	// Temps without a thermistor can only be switched on by setting them to inf.
 	if (isinf (temps[temp_current]->target) && temps[temp_current]->target > 0) {
 		if (!temps[temp_current]->is_on) {
 			//debug ("switching on %d", temp_current);
 			SET (temps[temp_current]->power_pin);
 			temps[temp_current]->is_on = true;
+			temps[temp_current]->last_time = current_time;
 			++temps_busy;
 		}
 	}
 	if (temps[temp_current]->thermistor_pin.invalid ())
 		return;
+	// At this point, we have an actual temperature reading.
+	// If we don't have model settings, simply use the target as a switch between on and off.
 	if (isnan (temps[temp_current]->core_C) || isnan (temps[temp_current]->shell_C) || isnan (temps[temp_current]->transfer) || isnan (temps[temp_current]->radiation)) {
 		// No valid settings; use simple on/off-regime based on current temperature only.
 		if (temp < temps[temp_current]->target) {
@@ -51,19 +57,24 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 				//debug ("switching on %d", temp_current);
 				SET (temps[temp_current]->power_pin);
 				temps[temp_current]->is_on = true;
+				temps[temp_current]->last_time = current_time;
 				++temps_busy;
 			}
+			else
+				temps[temp_current]->time_on += current_time - temps[temp_current]->last_time;
 		}
 		else {
 			if (temps[temp_current]->is_on) {
 				//debug ("switching off %d", temp_current);
 				RESET (temps[temp_current]->power_pin);
 				temps[temp_current]->is_on = false;
+				temps[temp_current]->time_on += current_time - temps[temp_current]->last_time;
 				--temps_busy;
 			}
 		}
 		return;
 	}
+	// We have model settings.
 	unsigned long dt = current_time - temps[temp_current]->last_time;
 	if (dt == 0)
 		return;
@@ -82,17 +93,21 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 	// Add energy if required.
 	float E = temps[temp_current]->core_T * temps[temp_current]->core_C + temps[temp_current]->shell_T * temps[temp_current]->shell_C;
 	float T = E / (temps[temp_current]->core_C + temps[temp_current]->shell_C);
+	// Set the pin to correct value.
 	if (T < temps[temp_current]->target) {
 		if (!temps[temp_current]->is_on) {
 			SET (temps[temp_current]->power_pin);
 			temps[temp_current]->is_on = true;
 			++temps_busy;
 		}
+		else
+			temps[temp_current]->time_on += current_time - temps[temp_current]->last_time;
 	}
 	else {
 		if (temps[temp_current]->is_on) {
 			RESET (temps[temp_current]->power_pin);
 			temps[temp_current]->is_on = false;
+			temps[temp_current]->time_on += current_time - temps[temp_current]->last_time;
 			--temps_busy;
 		}
 	}
@@ -386,9 +401,10 @@ void loop () {
 		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 			if (!motors[m])
 				continue;
-			SET (motors[m]->enable_pin);
+			RESET (motors[m]->enable_pin);
 		}
 		motors_busy = false;
+		which_autosleep |= 1;
 	}
 	if (temps_busy > 0 && temp_limit > 0 && longtime - last_active > temp_limit) {
 		for (uint8_t current_t = 0; current_t < MAXOBJECT; ++current_t) {
@@ -400,5 +416,8 @@ void loop () {
 			last_active = longtime;
 		}
 		temps_busy = 0;
+		which_autosleep |= 2;
 	}
+	if (which_autosleep != 0)
+		try_send_next ();
 }

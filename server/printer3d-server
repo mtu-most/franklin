@@ -5,26 +5,39 @@
 import re
 import os
 import sys
+import random
 import json
 import printer3d
 import websockets
 import xdgbasedir
 import glib
 import subprocess
+import crypt
 import time
 from websockets import log
 import traceback
 # }}}
 
-config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'port': 8080, 'printer': '', 'audiodir': xdgbasedir.cache_filename_write (packagename = 'printer3d', filename = 'audio', makedirs = False), 'blacklist': r'/dev/(ptmx$|console$|ttyS?\d*)$', 'autodetect': True, 'tls': None, 'avrdude': '/usr/bin/avrdude'})
+config = xdgbasedir.config_load (packagename = 'printer3d', defaults = {'port': 8080, 'printer': '', 'audiodir': xdgbasedir.cache_filename_write (packagename = 'printer3d', filename = 'audio', makedirs = False), 'blacklist': r'/dev/(ptmx$|console$|ttyS?\d*)$', 'autodetect': True, 'tls': None, 'avrdude': '/usr/bin/avrdude', 'login': '', 'passwordfile': '', 'done': ''})
 
 class Printer:	# {{{
 	def _init (self, port, broadcast, death):
 		resumeinfo = [(yield), None]
 		self.printer = printer3d.Printer ()
-		c = websockets.call (resumeinfo, self.printer._init, port, broadcast, death)
-		while c (): c.args = (yield websockets.WAIT)
+		# Provide easy access to some useful data.
+		self.printer.id_map = ''.join ([chr (x) for x in id_map])
 		self.printer.audiodir = config['audiodir']
+		# Initialize the printer.
+		c = websockets.call (resumeinfo, self.printer._init, port, broadcast, death, orphans, nextid ())
+		while c (): c.args = (yield websockets.WAIT)
+		printer = c.ret ()
+		if printer is not None:
+			# An orphan has reconnected.
+			ports[port] = printer
+			orphans.pop (printer.printer.printerid)
+			c = websockets.call (resumeinfo, printer.printer._reconnect, port, self.printer.printer)
+			while c (): c.args = (yield websockets.WAIT)
+			yield True
 		# [axes, extruders, feedrate]
 		self.pos = [[0.] * self.printer.get_num_axes (), [0.] * self.printer.get_num_extruders (), float ('inf')]
 		self.current_extruder = 0
@@ -33,9 +46,12 @@ class Printer:	# {{{
 		self.etemp = float ('nan')
 		self.btemp = float ('nan')
 		self.gcode = []
-	def home (self, axes = None):
+	def home (self, axes = None, keep_gcode = False):
 		resumeinfo = [(yield), None]
-		self.gcode = []
+		if not keep_gcode:
+			if len (self.gcode) > 0:
+				print_done (self.printer.port, False, 'aborted by home command')
+			self.gcode = []
 		if axes is None:
 			axes = range (self.printer.get_num_axes ())
 		c = websockets.call (resumeinfo, self.printer.home, axes)
@@ -53,6 +69,8 @@ class Printer:	# {{{
 		while c (): c.args = (yield websockets.WAIT)
 	def parse_gcode (self, code):
 		resumeinfo = [(yield), None]
+		if len (self.gcode) > 0:
+			print_done (self.printer.port, False, 'aborted by starting new print')
 		self.gcode = []
 		for lineno, line in enumerate (code.split ('\n')):
 			line = line.strip ()
@@ -78,6 +96,8 @@ class Printer:	# {{{
 					break
 			else:
 				self.gcode.append ((cmd, args))
+		if len (self.gcode) > 0:
+			Connection._broadcast (None, 'printing', self.printer.port, True)
 		c = websockets.call (resumeinfo, self.send_gcode)
 		while c (): c.args = (yield websockets.WAIT)
 	def send_gcode (self):
@@ -87,6 +107,7 @@ class Printer:	# {{{
 		while len (self.gcode) > 0:
 			c = websockets.call (resumeinfo, self.parse_gcode_chunk, *self.gcode.pop (0))
 			while c (): c.args = (yield websockets.WAIT)
+		print_done (self.printer.port, True, 'completed')
 		yield False
 	def parse_gcode_chunk (self, cmd, args):
 		resumeinfo = [(yield), None]
@@ -143,10 +164,8 @@ class Printer:	# {{{
 			if which == '':
 				which = 'XYZ'
 			axes = [ord (w) - ord ('X') for w in which]
-			gcode = self.gcode
-			c = websockets.call (resumeinfo, self.home, axes)
+			c = websockets.call (resumeinfo, self.home, axes, True)
 			while c (): c.args = (yield websockets.WAIT)
-			self.gcode = gcode
 		elif cmd == ('G', 4):
 			c = websockets.call (resumeinfo, self.flush)
 			while c (): c.args = (yield websockets.WAIT)
@@ -280,7 +299,7 @@ class Connection: # {{{
 		glib.io_add_watch (process.stdout, glib.IO_IN | glib.IO_PRI | glib.IO_HUP, lambda fd, cond: cls._upload_output (process.stdout, resumeinfo))
 		yield websockets.WAIT
 		if autodetect:
-			c = websockets.call (resumeinfo, cls.detect, None, port)
+			c = websockets.call (resumeinfo, cls.detect, port)
 			while c (): c.args = (yield websockets.WAIT)
 		yield process.wait ()
 	@classmethod
@@ -308,8 +327,8 @@ class Connection: # {{{
 		return autodetect
 	@classmethod
 	def disable (cls, port):
-		assert port in ports
-		if not ports[port]:
+		if port not in ports or not ports[port]:
+			log ('port is not enabled')
 			return
 		# Close the serial connection.
 		ports[port].printer._close ()
@@ -317,18 +336,32 @@ class Connection: # {{{
 		ports[port] = None
 		cls._broadcast (None, 'del_printer', port)
 	@classmethod
-	def detect (cls, source, port):
+	def detect (cls, port):
 		resumeinfo = [(yield), None]
-		assert port in ports and ports[port] is None
 		log ('detecting printer on %s' % port)
+		if port not in ports or ports[port] != None:
+			log ('port is not in detectable state')
+			return
 		try:
 			ports[port] = False
 			p = Printer ()
-			c = websockets.call (resumeinfo, p._init, port, cls._broadcast, cls.remove_port)
+			def death (port):
+				if ports[port] is False:
+					# Printer was still being set up; just ignore it.
+					ports[port] = None
+				else:
+					orphans[ports[port].printer.printerid] = ports[port]
+					cls.disable (port)
+				if autodetect:
+					websockets.call (None, cls.detect, port) ()
+			c = websockets.call (resumeinfo, p._init, port, cls._broadcast, death)
 			while c (): c.args = (yield websockets.WAIT)
+			if c.ret ():
+				# This was a orphan, which has now been adopted.
+				return
 			ports[port] = p
 			log ('detected printer %s on %s' % (p.printer.name, port))
-			cls._send_printer (source, p.printer)
+			cls._send_printer (None, p.printer)
 		except:
 			log ('no printer found on port %s' % port)
 			ports[port] = None
@@ -344,25 +377,29 @@ class Connection: # {{{
 			printer._extruder_update (e, target)
 		for t in range (printer.maxtemps):
 			printer._temp_update (t, target)
+		if len (ports[printer.port].gcode) > 0:
+			cls._broadcast (target, 'printing', printer.port, True)
 	@classmethod
 	def detect_all (cls):
 		resumeinfo = [(yield), None]
 		for p in ports:
 			if ports[p] is not None:
 				continue
-			c = websockets.call (resumeinfo, cls.detect, None, p)
+			c = websockets.call (resumeinfo, cls.detect, p)
 			while c (): c.args = (yield websockets.WAIT)
 	@classmethod
 	def add_port (cls, port):
 		resumeinfo = [(yield), None]
-		assert port not in ports
+		if port in ports:
+			log ('already existing port %s cannot be added' % port)
+			return
 		if re.match (blacklist, port):
 			#log ('skipping blacklisted port %s' % port)
 			return
 		ports[port] = None
 		cls._broadcast (None, 'new_port', port);
 		if autodetect:
-			c = websockets.call (resumeinfo, cls.detect, None, port)
+			c = websockets.call (resumeinfo, cls.detect, port)
 			while c (): c.args = (yield websockets.WAIT)
 	@classmethod
 	def remove_port (cls, port):
@@ -400,24 +437,23 @@ class Connection: # {{{
 	def gcode (self, code):
 		resumeinfo = [(yield), None]
 		assert self.printer is not None
-		log ('gcode')
 		c = websockets.call (resumeinfo, self.printer.parse_gcode, code)
 		while c (): c.args = (yield websockets.WAIT)
 	def home_all (self):
 		resumeinfo = [(yield), None]
 		assert self.printer is not None
-		self.printer.gcode = []
-		c = websockets.call (resumeinfo, self.printer.home, )
+		c = websockets.call (resumeinfo, self.printer.home)
 		while c (): c.args = (yield websockets.WAIT)
 	def home_z (self):
 		resumeinfo = [(yield), None]
 		assert self.printer is not None
-		self.printer.gcode = []
 		c = websockets.call (resumeinfo, self.printer.home, [2])
 		while c (): c.args = (yield websockets.WAIT)
 	def sleep_all (self):
 		resumeinfo = [(yield), None]
 		assert self.printer is not None
+		if len (self.printer.gcode) > 0:
+			print_done (self.printer.printer.port, False, 'aborted by sleep command')
 		self.printer.gcode = []
 		for a in range (self.printer.printer.get_num_axes ()):
 			c = websockets.call (resumeinfo, self.printer.printer.sleep_axis, a)
@@ -451,11 +487,41 @@ class Connection: # {{{
 		return getattr (self.printer.printer, attr)
 # }}}
 
+def print_done (port, completed, reason):
+	Connection._broadcast (None, 'printing', self.printer.port, False)
+	if config['done']:
+		cmd = config['done']
+		if '[[STATE]]' in cmd:
+			cmd = cmd.replace ('[[STATE]]', 'completed' if completed else 'aborted')
+		if '[[REASON]]' in cmd:
+			cmd = cmd.replace ('[[REASON]]', reason)
+		p = subprocess.Popen (cmd, stdout = subprocess.PIPE, shell = True)
+		def process_done (fd, cond):
+			data = p.stdout.read ()
+			if data:
+				return True
+			p.wait ()
+			return False
+		glib.io_add_watch (p.stdout.fileno (), glib.IO_IN, process_done)
+
 httpd = None
 default_printer = (None, None)
 ports = {}
 autodetect = config['autodetect']
 blacklist = config['blacklist']
+orphans = {}
+
+last_id = random.randrange (1 << 32)
+# Parity table is [0x8b, 0x2d, 0x1e]; half of these codes overlap with codes from the single command map; those single commands are not used.
+id_map = [0x40, 0xe1, 0xd2, 0x73, 0x74, 0xd5, 0xe6, 0x47, 0xf8, 0x59, 0x6a, 0xcb, 0xcc, 0x6d, 0x5e, 0xff]
+def nextid ():
+	global last_id
+	# 0x23456789 is an arbitrary number with bits set in every nybble, that
+	# is odd (so it doesn't visit the same number twice until it did all of
+	# them, because it loops at 2**32, which is not divisible by anything
+	# except 2).
+	last_id = (last_id + 0x23456789) & 0xffffffff
+	return ''.join ([chr (id_map[(last_id >> (4 * c)) & 0xf]) for c in range (8)])
 if autodetect:
 	# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
 	if os.path.exists ('/sys/class/tty'):
@@ -467,7 +533,58 @@ if ' ' in config['printer']:
 else:
 	default_printer = (config['printer'], None)
 
-httpd = websockets.RPChttpd (config['port'], Connection, httpdirs = xdgbasedir.data_files_read ('html', packagename = 'printer3d'), tls = config['tls'])
+class Server (websockets.RPChttpd):
+	def auth_message (self, connection, is_websocket):
+		return 'Please identify yourself' if config['passwordfile'] or config['login'] else None
+	def authenticate (self, connection):
+		if config['login']:
+			if ':' in config['login']:
+				user, password = config['login'].split (':', 1)
+				if user == connection.data['user'] and password == connection.data['password']:
+					return True
+			else:
+				if user == config['login']:
+					return True
+		if config['passwordfile']:
+			with open (config['passwordfile']) as f:
+				for l in f.xreadlines ():
+					if ':' not in l:
+						continue
+					user, password = l.split (':', 1)
+					if user == connection.data['user'] and (password[1:] == connection.data['password'] if password.startswith (':') else password == crypt.crypt (connection.data['password'], password)):
+						return True
+		return False
+	def _motor (self, name, obj, index):
+		return '[%s %d]\n' % (name, index) + ''.join (['%s = %d\n' % (x, getattr (obj, x)) for x in ('step_pin', 'dir_pin', 'enable_pin')]) + ''.join (['%s = %f\n' % (x, getattr (obj, x)) for x in ('steps_per_mm', 'max_v_neg', 'max_v_pos', 'max_a')])
+	def _temp (self, name, obj, index):
+		return '[%s %d]\n' % (name, index) + ''.join (['%s = %d\n' % (x, getattr (obj, x)) for x in ('power_pin', 'thermistor_pin')]) + ''.join (['%s = %f\n' % (x, getattr (obj, x)) for x in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'core_C', 'shell_C', 'transfer', 'radiation', 'power')])
+	def page (self, connection):
+		if 'port' in connection.query:
+			port = connection.query['port'][0]
+			if port not in ports or not ports[port]:
+				self.reply (connection, 404)
+			else:
+				p = ports[port].printer
+				message = '[general]\n'
+				message += 'name=' + p.name.replace ('\\', '\\\\').replace ('\n', '\\n') + '\n'
+				message += ''.join (['%s = %d\n' % (x, getattr (p, x)) for x in ('num_axes', 'num_extruders', 'num_temps', 'printer_type', 'led_pin', 'motor_limit', 'temp_limit')])
+				message += ''.join (['%s = %d\n' % (x, getattr (p, x)) for x in ('room_T', 'feedrate')])
+				for a in range (p.maxaxes):
+					message += '[axis %d]\n' % a
+					message += ''.join (['%s = %d\n' % (x, getattr (p.axis[a], x)) for x in ('limit_min_pin', 'limit_max_pin', 'sense_pin')]) + ''.join (['%s = %f\n' % (x, getattr (p.axis[a], x)) for x in ('limit_min_pos', 'limit_max_pos', 'delta_length', 'delta_radius', 'offset')])
+					message += self._motor ('axis_motor', p.axis[a].motor, a)
+				for e in range (p.maxextruders):
+					message += '[extruder %d]\n' % e
+					message += ''.join (['%s = %f\n' % (x, getattr (p.extruder[e], x)) for x in ('filament_heat', 'nozzle_size', 'filament_size')])
+					message += self._motor ('extruder_motor', p.extruder[e].motor, e)
+					message += self._temp ('extruder_temp', p.extruder[e].temp, e)
+				for t in range (p.maxtemps):
+					message += self._temp ('temp', p.temp[t], t)
+				self.reply (connection, 200, message, 'text/plain;charset=utf8')
+		else:
+			websockets.RPChttpd.page (self, connection)
+
+httpd = Server (config['port'], Connection, httpdirs = xdgbasedir.data_files_read ('html', packagename = 'printer3d'), tls = config['tls'])
 
 log ('running')
 websockets.fgloop ()

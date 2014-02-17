@@ -1,5 +1,7 @@
 #include "firmware.h"
 
+//#define DEBUG_CMD
+
 static uint8_t get_which ()
 {
 	return command[2] & 0x3f;
@@ -28,7 +30,14 @@ void packet ()
 	{
 	case CMD_BEGIN:	// begin: request response
 	{
-		//debug ("CMD_BEGIN");
+#ifdef DEBUG_CMD
+		debug ("CMD_BEGIN");
+#endif
+		// A server is running; start the watchdog.
+		wdt_reset ();
+		wdt_enable (WDTO_120MS);
+		for (uint8_t i = 0; i < ID_SIZE; ++i)
+			printerid[i] = command[6 + i];
 		Serial.write (CMD_ACK);
 		reply[0] = 6;
 		reply[1] = CMD_START;
@@ -43,8 +52,10 @@ void packet ()
 	case CMD_GOTO:	// goto
 	case CMD_GOTOCB:	// goto with callback
 	{
-		//debug ("CMD_GOTO(CB)");
-		if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
+#ifdef DEBUG_CMD
+		debug ("CMD_GOTO(CB)");
+#endif
+		if (!pause_all && ((queue_end + 1) % QUEUE_LENGTH) == queue_start)
 		{
 			debug ("Host ignores wait request");
 			Serial.write (CMD_STALL);
@@ -83,8 +94,8 @@ void packet ()
 			audio_start += micros () - pause_time;
 		}
 		queue[queue_end].cb = command[1] == CMD_GOTOCB;
-		queue_end = (queue_end + 1) & QUEUE_LENGTH_MASK;
-		if (((queue_end + 1) & QUEUE_LENGTH_MASK) == queue_start)
+		queue_end = (queue_end + 1) % QUEUE_LENGTH;
+		if (((queue_end + 1) % QUEUE_LENGTH) == queue_start)
 			Serial.write (CMD_ACKWAIT);
 		else
 			Serial.write (CMD_ACK);
@@ -96,7 +107,9 @@ void packet ()
 	}
 	case CMD_RUN:	// run motor
 	{
-		//debug ("CMD_RUN");
+#ifdef DEBUG_CMD
+		debug ("CMD_RUN");
+#endif
 		which = get_which ();
 		ReadFloat f;
 		for (uint8_t i = 0; i < sizeof (float); ++i) {
@@ -157,7 +170,7 @@ void packet ()
 			}
 			//debug ("initial positive %d", motors[which]->positive);
 			motors[which]->continuous_last_time = micros ();
-			RESET (motors[which]->enable_pin);
+			SET (motors[which]->enable_pin);
 			motors[which]->continuous_steps = 0;
 			motors_busy = true;
 		}
@@ -165,7 +178,9 @@ void packet ()
 	}
 	case CMD_SLEEP:	// disable motor current
 	{
-		//debug ("CMD_SLEEP");
+#ifdef DEBUG_CMD
+		debug ("CMD_SLEEP");
+#endif
 		which = get_which ();
 		if (!motors[which])
 		{
@@ -174,9 +189,9 @@ void packet ()
 			return;
 		}
 		if (command[2] & 0x80)
-			SET (motors[which]->enable_pin);
-		else {
 			RESET (motors[which]->enable_pin);
+		else {
+			SET (motors[which]->enable_pin);
 			motors_busy = true;
 		}
 		Serial.write (CMD_ACK);
@@ -184,7 +199,9 @@ void packet ()
 	}
 	case CMD_SETTEMP:	// set target temperature and enable control
 	{
-		//debug ("CMD_SETTEMP");
+#ifdef DEBUG_CMD
+		debug ("CMD_SETTEMP");
+#endif
 		which = get_which ();
 		float target = get_float (3);
 		if (!temps[which] || (temps[which]->thermistor_pin.invalid () && (target < 0 || !isinf (target)) && !isnan (target)))
@@ -208,7 +225,9 @@ void packet ()
 	}
 	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
 	{
-		//debug ("CMD_WAITTEMP");
+#ifdef DEBUG_CMD
+		debug ("CMD_WAITTEMP");
+#endif
 		which = get_which ();
 		if (!temps[which])
 		{
@@ -229,7 +248,9 @@ void packet ()
 	}
 	case CMD_READTEMP:	// read temperature
 	{
-		//debug ("CMD_READTEMP");
+#ifdef DEBUG_CMD
+		debug ("CMD_READTEMP");
+#endif
 		which = get_which ();
 		if (!temps[which])
 		{
@@ -249,9 +270,41 @@ void packet ()
 		try_send_next ();
 		return;
 	}
+	case CMD_READPOWER:	// read used power
+	{
+#ifdef DEBUG_CMD
+		debug ("CMD_READPOWER");
+#endif
+		which = get_which ();
+		if (!temps[which])
+		{
+			debug ("Reading power of invalid temp %d", which);
+			Serial.write (CMD_STALL);
+			return;
+		}
+		Serial.write (CMD_ACK);
+		reply[0] = 10;
+		reply[1] = CMD_POWER;
+		ReadFloat on, current;
+		unsigned long t = micros ();
+		if (temps[which]->is_on) {
+			// This causes an insignificant error in the model, but when using this you probably aren't using the model anyway, and besides you won't notice the error even if you do.
+			temps[which]->time_on += t - temps[which]->last_time;
+			temps[which]->last_time = t;
+		}
+		on.u = temps[which]->time_on;
+		current.u = t;
+		for (uint8_t b = 0; b < sizeof (unsigned long); ++b)
+		{
+			reply[2 + b] = on.b[b];
+			reply[6 + b] = current.b[b];
+		}
+	}
 	case CMD_SETPOS:	// Set current position
 	{
-		//debug ("CMD_SETPOS");
+#ifdef DEBUG_CMD
+		debug ("CMD_SETPOS");
+#endif
 		which = get_which ();
 		if (which < 2 || which > 2 + MAXAXES)
 		{
@@ -267,7 +320,9 @@ void packet ()
 	}
 	case CMD_GETPOS:	// Get current position
 	{
-		//debug ("CMD_GETPOS");
+#ifdef DEBUG_CMD
+		debug ("CMD_GETPOS");
+#endif
 		which = get_which ();
 		if (which < 2 || which > 2 + MAXAXES)
 		{
@@ -293,7 +348,9 @@ void packet ()
 	}
 	case CMD_LOAD:	// reload settings from eeprom
 	{
-		//debug ("CMD_LOAD");
+#ifdef DEBUG_CMD
+		debug ("CMD_LOAD");
+#endif
 		which = get_which ();
 		if (which < 1 || which >= MAXOBJECT)
 		{
@@ -308,11 +365,19 @@ void packet ()
 	}
 	case CMD_SAVE:	// save settings to eeprom
 	{
-		//debug ("CMD_SAVE");
+#ifdef DEBUG_CMD
+		debug ("CMD_SAVE");
+#endif
 		which = get_which ();
 		if (which < 1 || which >= MAXOBJECT)
 		{
 			debug ("Saving invalid object %d", which);
+			Serial.write (CMD_STALL);
+			return;
+		}
+		if (moving)
+		{
+			debug ("Saving %d while moving would disrupt move", which);
 			Serial.write (CMD_STALL);
 			return;
 		}
@@ -323,7 +388,9 @@ void packet ()
 	}
 	case CMD_READ:	// reply settings to host
 	{
-		//debug ("CMD_READ");
+#ifdef DEBUG_CMD
+		debug ("CMD_READ");
+#endif
 		which = get_which ();
 		if (which < 0 || which >= MAXOBJECT)
 		{
@@ -343,7 +410,9 @@ void packet ()
 	case CMD_WRITE:	// change settings from host
 	{
 		which = get_which ();
-		//debug ("CMD_WRITE %d", which);
+#ifdef DEBUG_CMD
+		debug ("CMD_WRITE %d", which);
+#endif
 		if (which < 1 || which >= MAXOBJECT)
 		{
 			debug ("Writing invalid object %d", which);
@@ -357,7 +426,9 @@ void packet ()
 	}
 	case CMD_PAUSE:
 	{
-		//debug ("CMD_PAUSE");
+#ifdef DEBUG_CMD
+		debug ("CMD_PAUSE");
+#endif
 		if (command[2]) {
 			if (!pause_all)
 				pause_time = micros ();
@@ -380,18 +451,19 @@ void packet ()
 	}
 	case CMD_PING:
 	{
-		//debug ("CMD_PING");
+#ifdef DEBUG_CMD
+		debug ("CMD_PING");
+#endif
 		Serial.write (CMD_ACK);
-		reply[0] = 3;
-		reply[1] = CMD_PONG;
-		reply[2] = command[2];
-		reply_ready = true;
+		ping |= 1 << command[2];
 		try_send_next ();
 		return;
 	}
 	case CMD_READPIN:
 	{
-		//debug ("CMD_READPIN");
+#ifdef DEBUG_CMD
+		debug ("CMD_READPIN");
+#endif
 		if (command[2] >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS)
 		{
 			debug ("Readpin can only handle %d pins; not %d", NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS, command[2]);
@@ -408,13 +480,15 @@ void packet ()
 	}
 	case CMD_AUDIO_SETUP:
 	{
-		//debug ("CMD_AUDIO_SETUP");
+#ifdef DEBUG_CMD
+		debug ("CMD_AUDIO_SETUP");
+#endif
 		audio_us_per_bit = get_uint16 (2);
 		for (uint8_t a = 0; a < num_axes; ++a)
 		{
 			if (command[4 + ((a + 2) >> 3)] & (1 << ((a + 2) & 0x7))) {
 				axis[a].motor.audio_flags |= Motor::PLAYING;
-				RESET (axis[a].motor.enable_pin);
+				SET (axis[a].motor.enable_pin);
 				motors_busy = true;
 			}
 			else
@@ -424,7 +498,7 @@ void packet ()
 		{
 			if (command[4 + ((e + 2 + num_axes) >> 3)] & (1 << ((e + 2 + num_axes) & 0x7))) {
 				extruder[e].motor.audio_flags |= Motor::PLAYING;
-				RESET (extruder[e].motor.enable_pin);
+				SET (extruder[e].motor.enable_pin);
 				motors_busy = true;
 			}
 			else
@@ -439,7 +513,9 @@ void packet ()
 	}
 	case CMD_AUDIO_DATA:
 	{
-		//debug ("CMD_AUDIO_DATA");
+#ifdef DEBUG_CMD
+		debug ("CMD_AUDIO_DATA");
+#endif
 		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
 		{
 			debug ("Audio buffer is full");

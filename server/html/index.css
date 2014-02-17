@@ -36,3 +36,7 @@ table {
 .connected {
 	background: #6d6;
 }
+
+.printing {
+	background: #ff0;
+}

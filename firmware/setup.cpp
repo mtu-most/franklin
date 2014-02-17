@@ -2,6 +2,9 @@
 
 void setup ()
 {
+	uint8_t mcusr = MCUSR;
+	MCUSR = 0;
+	wdt_disable ();
 	// Initialize volatile variables.
 	Serial.begin (115200);
 	command_end = 0;
@@ -29,10 +32,13 @@ void setup ()
 	moving = false;
 	move_prepared = false;
 	current_move_has_cb = false;
+	which_autosleep = 0;
 	audio_head = 0;
 	audio_tail = 0;
 	audio_state = 0;
 	audio_us_per_bit = 125; // 1000000 / 8000;
+	for (uint8_t i = 0; i < ID_SIZE; ++i)
+		printerid[i] = 0;
 	// Prepare asynchronous command buffers.
 	limitcb_buffer[0] = 7;
 	limitcb_buffer[1] = CMD_LIMIT;
@@ -41,6 +47,9 @@ void setup ()
 	limitcb_buffer[4] = 0;
 	limitcb_buffer[5] = 0;
 	limitcb_buffer[6] = 0;
+	autosleep_buffer[0] = 3;
+	autosleep_buffer[1] = CMD_AUTOSLEEP;
+	autosleep_buffer[2] = 0;
 	movecb_buffer[0] = 3;
 	movecb_buffer[1] = CMD_MOVECB;
 	movecb_buffer[2] = 0;
@@ -56,6 +65,9 @@ void setup ()
 	sense_buffer[4] = 0;
 	sense_buffer[5] = 0;
 	sense_buffer[6] = 0;
+	ping_buffer[0] = 3;
+	ping_buffer[1] = CMD_PONG;
+	ping_buffer[2] = 0;
 	motors[F0] = NULL;
 	temps[F0] = NULL;
 	objects[F0] = &constants;
@@ -122,5 +134,5 @@ void setup ()
 	if (address - 1 > E2END)
 		debug ("Warning: data doesn't fit in EEPROM; decrease MAXAXES, MAXEXTRUDERS, or MAXTEMPS and reflash the firmware!");
 	Serial.write (CMD_INIT);
-	//debug ("Eeprom used: %d, available: %d", address, E2END);
+	debug ("Startup.  MCUSR: %x, Eeprom used: %d, available: %d", mcusr, address, E2END);
 }

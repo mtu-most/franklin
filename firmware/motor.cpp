@@ -17,10 +17,16 @@ void Motor::load (int16_t &addr, bool eeprom)
 	SET_OUTPUT (enable_pin);
 	if (e)
 		SET (enable_pin);
+	else
+		RESET (enable_pin);
 	if (d)
 		SET (dir_pin);
+	else
+		RESET (dir_pin);
 	if (s)
 		SET (step_pin);
+	else
+		RESET (step_pin);
 }
 
 void Motor::save (int16_t &addr, bool eeprom)

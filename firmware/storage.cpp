@@ -14,6 +14,7 @@ void write_8 (int16_t &address, uint8_t data, bool eeprom)
 	{
 		//debug ("EEPROM[%x] = %x", address, data);
 		EEPROM.write (address++, data);
+		wdt_reset ();
 		return;
 	}
 	reply[address++] = data;
