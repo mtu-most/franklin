@@ -26,6 +26,53 @@ void reset_pos ()	// {{{
 }
 // }}}
 
+static int16_t step_size[MAXAXES];
+static float fraction[MAXAXES];
+
+static float interpolate (uint8_t a, int16_t pos) { // {{{
+	if (a < num_axes)
+		return interpolate (a + 1, pos) * (1 - fraction[a]) + interpolate (a + 1, pos + step_size[a]) * fraction[a];
+	return displacement[pos];
+} // }}}
+
+static void apply_displacement () { // {{{
+	int16_t offset = 0;
+	for (uint8_t a = 0; a < num_axes; ++a) {
+		float data = queue[queue_start].data[AXIS0 + a];
+		int16_t pos = 0;
+		for (uint8_t a2 = 0; a2 < num_axes; ++a2) {
+			int16_t idx;
+			if (axis[a2].num_displacements[a] == 0)
+			{
+				step_size[num_axes - 1] = 0;
+				pos = -1;
+				break;
+			}
+			if (data < axis[a2].first_displacement) {
+				idx = 0;
+				fraction[a2] = 0;
+			}
+			else {
+				float f = (data - axis[a2].first_displacement) / axis[a2].displacement_step;
+				idx = int16_t (f);
+				if (idx >= axis[a2].num_displacements[a]) {
+					idx = axis[a2].num_displacements[a] - 1;
+					fraction[a2] = 1;
+				}
+				else
+					fraction[a2] = f - idx;
+			}
+			float size = a == 0 ? 1 : step_size[a - 1];
+			pos += size * idx;
+			step_size[a2] = size * axis[a2].num_displacements[a];
+		}
+		if (pos >= 0) {
+			queue[queue_start].data[AXIS0 + a] += interpolate (0, pos);
+		}
+		offset += step_size[num_axes - 1];
+	}
+} // }}}
+
 // Set up:
 // start_time		micros() at start of move.
 // t0			time to do main part.
@@ -46,6 +93,9 @@ void next_move () {
 
 	if (isnan (axis[0].source))
 		reset_pos ();
+	for (uint8_t a = 0; a < num_axes; ++a)
+		queue[queue_start].data[AXIS0 + a] += axis[a].offset;
+	apply_displacement ();
 	if (printer_type == 1 && (!isnan (queue[queue_start].data[AXIS0]) || !isnan (queue[queue_start].data[AXIS0 + 1]) || !isnan (queue[queue_start].data[AXIS0 + 2]))) {
 		// For a delta, if any axis moves, all motors move; avoid trouble by setting none of them to nan.
 		for (uint8_t a = 0; a < 3; ++a) {
@@ -70,7 +120,7 @@ void next_move () {
 			}
 			motors[m]->dist = 0;
 			if (mt < num_axes)
-				motors[m]->next_dist = queue[queue_start].data[mt + 2] - axis[mt].offset - axis[mt].source;
+				motors[m]->next_dist = queue[queue_start].data[mt + 2] - axis[mt].source;
 			else
 				motors[m]->next_dist = queue[queue_start].data[mt + 2];
 			// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
@@ -119,10 +169,7 @@ void next_move () {
 				if (!motors[m])
 					continue;
 				motors[m]->dist = motors[m]->next_dist;
-				if (isnan (queue[queue_start].data[mt + 2]))
-					motors[m]->next_dist = NAN;
-				else
-					motors[m]->next_dist = 0;
+				motors[m]->next_dist = NAN;
 				// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
 				if ((!isnan (motors[m]->next_dist) && abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .1) || (!isnan (motors[m]->dist) && abs (motors[m]->dist) * motors[m]->steps_per_mm > .1))
 					action = true;
@@ -145,10 +192,10 @@ void next_move () {
 				if (!motors[m])
 					continue;
 				motors[m]->dist = motors[m]->next_dist;
-				if (isnan (queue[queue_start].data[mt + 2]))
+				if (isnan (queue[n].data[mt + 2]))
 					motors[m]->next_dist = NAN;
 				else
-					motors[m]->next_dist = mt < num_axes ? queue[n].data[mt + 2] - axis[mt].offset - (axis[mt].source + motors[m]->dist) : queue[n].data[mt + 2];
+					motors[m]->next_dist = mt < num_axes ? queue[n].data[mt + 2] - (axis[mt].source + (isnan (motors[m]->dist) ? 0 : motors[m]->dist)) : queue[n].data[mt + 2];
 				// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
 				if ((!isnan (motors[m]->next_dist) && abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .1) || (!isnan (motors[m]->dist) && abs (motors[m]->dist) * motors[m]->steps_per_mm > .1))
 					action = true;

@@ -2,12 +2,12 @@ Source: printer3d
 Section: electronics
 Priority: optional
 Maintainer: Bas Wijnen <wijnen@debian.org>
-Build-Depends: debhelper (>= 9), python, python-support, gcc-avr, arduino-mighty-1284p, arduino-mk, xmlgen
+Build-Depends: debhelper (>= 9), python, python-support, gcc-avr, arduino-mighty-1284p, arduino-mk, xmlgen, ruby-ronn
 Standards-Version: 3.9.5
 
 Package: printer3d
 Architecture: all
-Depends: ${misc:Depends}, ${python:Depends}, python-websockets, python-network, python-serial, avrdude, arduino-mk, python-xdgbasedir, adduser
+Depends: ${misc:Depends}, ${python:Depends}, python-websockets, python-network, python-serial, avrdude, python-xdgbasedir, adduser
 Description: server for controlling RepRap 3-D printers
  3-D printers need firmware and host software to work.  This package contains
  both.  The following hardware is currently supported:

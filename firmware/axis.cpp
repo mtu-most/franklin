@@ -11,6 +11,17 @@ void Axis::load (int16_t &addr, bool eeprom)
 	delta_length = read_float (addr, eeprom);
 	delta_radius = read_float (addr, eeprom);
 	offset = read_float (addr, eeprom);
+#ifndef LOWMEM
+	for (uint8_t a = 0; a < MAXAXES; ++a)
+		num_displacements[a] = read_8 (addr, eeprom);
+	first_displacement = read_float (addr, eeprom);
+	displacement_step = read_float (addr, eeprom);
+#else
+	for (uint8_t a = 0; a < MAXAXES; ++a)
+		read_8 (addr, eeprom);
+	read_float (addr, eeprom);
+	read_float (addr, eeprom);
+#endif
 	SET_INPUT (limit_min_pin);
 	SET_INPUT (limit_max_pin);
 	SET_INPUT (sense_pin);
@@ -43,4 +54,15 @@ void Axis::save (int16_t &addr, bool eeprom)
 	write_float (addr, delta_length, eeprom);
 	write_float (addr, delta_radius, eeprom);
 	write_float (addr, offset, eeprom);
+#ifndef LOWMEM
+	for (uint8_t a = 0; a < MAXAXES; ++a)
+		write_8 (addr, num_displacements[a], eeprom);
+	write_float (addr, first_displacement, eeprom);
+	write_float (addr, displacement_step, eeprom);
+#else
+	for (uint8_t a = 0; a < MAXAXES; ++a)
+		write_8 (addr, 0, eeprom);
+	write_float (addr, 0, eeprom);
+	write_float (addr, 0, eeprom);
+#endif
 }

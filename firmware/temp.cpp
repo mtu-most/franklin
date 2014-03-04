@@ -7,17 +7,22 @@ void Temp::load (int16_t &addr, bool eeprom)
 	Rc = read_float (addr, eeprom);
 	Tc = read_float (addr, eeprom) + 273.15;
 	minus_beta = -read_float (addr, eeprom);
+#ifndef LOWMEM
 	core_C = read_float (addr, eeprom);
 	shell_C = read_float (addr, eeprom);
 	transfer = read_float (addr, eeprom);
 	radiation = read_float (addr, eeprom);
 	power = read_float (addr, eeprom);
+#else
+	read_float (addr, eeprom);
+	read_float (addr, eeprom);
+	read_float (addr, eeprom);
+	read_float (addr, eeprom);
+	read_float (addr, eeprom);
+#endif
 	power_pin.read (read_16 (addr, eeprom));
 	thermistor_pin.read (read_16 (addr, eeprom));
 	SET_OUTPUT (power_pin);
-	float k = Rc * exp (minus_beta / Tc);
-	C0 = k * 1024 / R0;
-	C1 = k / R0 + k / R1;
 }
 
 void Temp::save (int16_t &addr, bool eeprom)
@@ -27,11 +32,19 @@ void Temp::save (int16_t &addr, bool eeprom)
 	write_float (addr, Rc, eeprom);
 	write_float (addr, Tc - 273.15, eeprom);
 	write_float (addr, -minus_beta, eeprom);
+#ifndef LOWMEM
 	write_float (addr, core_C, eeprom);
 	write_float (addr, shell_C, eeprom);
 	write_float (addr, transfer, eeprom);
 	write_float (addr, radiation, eeprom);
 	write_float (addr, power, eeprom);
+#else
+	write_float (addr, NAN, eeprom);
+	write_float (addr, NAN, eeprom);
+	write_float (addr, NAN, eeprom);
+	write_float (addr, NAN, eeprom);
+	write_float (addr, NAN, eeprom);
+#endif
 	write_16 (addr, power_pin.write (), eeprom);
 	write_16 (addr, thermistor_pin.write (), eeprom);
 }
@@ -49,8 +62,10 @@ float Temp::read () {
 	// Compute T from R (:= Rs).
 	// R = k * exp (beta / T)
 	// T = beta/log(R/k)=-beta/log(k*Am/R0/As-k/R0-k/R1)
-	if (!isnan (minus_beta))
-		return minus_beta / log (C0 / adc - C1);
+	if (!isnan (minus_beta)) {
+		float k = Rc * exp (minus_beta / Tc);
+		return minus_beta / log (k * (1024 / R0 / adc - 1 / R0 - 1 / R1));
+	}
 	// beta == NaN is used for calibration: return raw value.
 	// This is only used for reading, so correct for conversion.
 	return adc + 273.15;

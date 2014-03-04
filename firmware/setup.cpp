@@ -4,9 +4,12 @@ void setup ()
 {
 	uint8_t mcusr = MCUSR;
 	MCUSR = 0;
+#ifdef WATCHDOG
 	wdt_disable ();
+#endif
 	// Initialize volatile variables.
 	Serial.begin (115200);
+	initialized = false;
 	command_end = 0;
 	motors_busy = false;
 	queue_start = 0;
@@ -14,7 +17,7 @@ void setup ()
 	num_movecbs = 0;
 	continue_cb = 0;
 	which_tempcbs = 0;
-	have_msg = false;
+	ping = 0;
 	pause_all = false;
 	last_packet = NULL;
 	out_busy = false;
@@ -33,41 +36,14 @@ void setup ()
 	move_prepared = false;
 	current_move_has_cb = false;
 	which_autosleep = 0;
+#ifdef AUDIO
 	audio_head = 0;
 	audio_tail = 0;
 	audio_state = 0;
 	audio_us_per_bit = 125; // 1000000 / 8000;
+#endif
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
 		printerid[i] = 0;
-	// Prepare asynchronous command buffers.
-	limitcb_buffer[0] = 7;
-	limitcb_buffer[1] = CMD_LIMIT;
-	limitcb_buffer[2] = 0;
-	limitcb_buffer[3] = 0;
-	limitcb_buffer[4] = 0;
-	limitcb_buffer[5] = 0;
-	limitcb_buffer[6] = 0;
-	autosleep_buffer[0] = 3;
-	autosleep_buffer[1] = CMD_AUTOSLEEP;
-	autosleep_buffer[2] = 0;
-	movecb_buffer[0] = 3;
-	movecb_buffer[1] = CMD_MOVECB;
-	movecb_buffer[2] = 0;
-	tempcb_buffer[0] = 3;
-	tempcb_buffer[1] = CMD_TEMPCB;
-	continue_buffer[0] = 3;
-	continue_buffer[1] = CMD_CONTINUE;
-	continue_buffer[2] = 0;
-	sense_buffer[0] = 7;
-	sense_buffer[1] = CMD_SENSE;
-	sense_buffer[2] = 0;
-	sense_buffer[3] = 0;
-	sense_buffer[4] = 0;
-	sense_buffer[5] = 0;
-	sense_buffer[6] = 0;
-	ping_buffer[0] = 3;
-	ping_buffer[1] = CMD_PONG;
-	ping_buffer[2] = 0;
 	motors[F0] = NULL;
 	temps[F0] = NULL;
 	objects[F0] = &constants;
@@ -101,6 +77,19 @@ void setup ()
 		temps[i] = &temp[t];
 		objects[i] = &temp[t];
 	}
+	for (uint8_t g = 0; g < MAXGPIOS; ++g, ++i)
+	{
+		motors[i] = NULL;
+		temps[i] = NULL;
+		objects[i] = &gpio[g];
+		gpio[g].pin.read (0x100);
+		gpio[g].state = 0;
+#ifndef LOWMEM
+		gpio[g].prev = NULL;
+		gpio[g].next = NULL;
+		gpio[g].master = 0;
+#endif
+	}
 	unsigned long time = micros ();
 	for (uint8_t o = 0; o < MAXOBJECT; ++o)
 	{
@@ -109,7 +98,9 @@ void setup ()
 			motors[o]->next_dist = NAN;
 			motors[o]->f = 0;
 			motors[o]->continuous_steps_per_s = 0;
+#ifdef AUDIO
 			motors[o]->audio_flags = 0;
+#endif
 			motors[o]->enable_pin.read (0x100);
 			motors[o]->step_pin.read (0x100);
 			motors[o]->dir_pin.read (0x100);
@@ -122,6 +113,7 @@ void setup ()
 			temps[o]->target = NAN;
 			temps[o]->power_pin.read (0x100);
 			temps[o]->thermistor_pin.read (0x100);
+			temps[o]->gpios = 0;
 		}
 	}
 	int16_t address = 0;

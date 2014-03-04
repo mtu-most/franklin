@@ -38,61 +38,66 @@ class Printer: # {{{
 	single = { 'NACK': '\x80', 'ACK': '\xb3', 'ACKWAIT': '\xb4', 'STALL': '\x87', 'INIT': '\x99', 'GETID': '\xaa', 'SENDID': '\xad', 'DEBUG': '\x9e' }
 	command = {
 			'BEGIN': 0x00,
-			'GOTO': 0x01,
-			'GOTOCB': 0x02,
-			'RUN': 0x03,
-			'SLEEP': 0x04,
-			'SETTEMP': 0x05,
-			'WAITTEMP': 0x06,
-			'READTEMP': 0x07,
-			'READPOWER': 0x08,
-			'SETPOS': 0x09,
-			'GETPOS': 0x0a,
-			'LOAD': 0x0b,
-			'SAVE': 0x0c,
-			'READ': 0x0d,
-			'WRITE': 0x0e,
-			'PAUSE': 0x0f,
-			'PING': 0x10,
-			'READPIN': 0x11,
-			'AUDIO_SETUP': 0x12,
-			'AUDIO_DATA': 0x13}
+			'PING': 0x01,
+			'GOTO': 0x02,
+			'GOTOCB': 0x03,
+			'RUN': 0x04,
+			'SLEEP': 0x05,
+			'SETTEMP': 0x06,
+			'WAITTEMP': 0x07,
+			'READTEMP': 0x08,
+			'READPOWER': 0x09,
+			'SETPOS': 0x0a,
+			'GETPOS': 0x0b,
+			'SETDISPLACE': 0x0c,
+			'GETDISPLACE': 0x0d,
+			'LOAD': 0x0e,
+			'SAVE': 0x0f,
+			'READ': 0x10,
+			'WRITE': 0x11,
+			'PAUSE': 0x12,
+			'READGPIO': 0x13,
+			'AUDIO_SETUP': 0x14,
+			'AUDIO_DATA': 0x15}
 	rcommand = {
-			'START': '\x14',
-			'TEMP': '\x15',
-			'POWER': '\x16',
-			'POS': '\x17',
-			'DATA': '\x18',
-			'PONG': '\x19',
-			'PIN': '\x1a',
-			'MOVECB': '\x1b',
-			'TEMPCB': '\x1c',
-			'CONTINUE': '\x1d',
-			'LIMIT': '\x1e',
-			'AUTOSLEEP': '\x1f',
-			'SENSE': '\x20'}
+			'START': '\x16',
+			'TEMP': '\x17',
+			'POWER': '\x18',
+			'POS': '\x19',
+			'DISPLACE': '\x1a',
+			'DATA': '\x1b',
+			'PONG': '\x1c',
+			'PIN': '\x1d',
+			'MOVECB': '\x1e',
+			'TEMPCB': '\x1f',
+			'CONTINUE': '\x20',
+			'LIMIT': '\x21',
+			'AUTOSLEEP': '\x22',
+			'SENSE': '\x23'}
 	# }}}
 	def _set_waiter (self, type, resumeinfo, condition = True): # {{{
-		#log ('adding waiter for ' + type)
+		if show_own_debug:
+			log ('adding waiter for %s: %s' % (type, repr (resumeinfo)))
 		assert self.waiters[type][0] >= 2 or len (self.waiters[type][1]) == 0
 		item = (resumeinfo[0], condition)
 		self.waiters[type][1].append (item)
 		return lambda: self.waiters[type][1].remove (item) if item in self.waiters[type][1] else None
 	# }}}
 	def _trigger (self, type, arg = None): # {{{
-		#log ('triggering ' + type)
+		if show_own_debug:
+			log ('triggering %s: %s (%s)' % (type, repr (self.waiters[type][1]), arg))
 		waiters = self.waiters[type][1][:]
-		self.waiters[type][1][:] = []
 		if self.waiters[type][0] < 2:
-			if len (waiters) != 1:
+			if len (self.waiters[type][1]) != 1:
 				if self.waiters[type][0] != 0:
 					log ('no waiters for %s' % type)
 			else:
-				waiters[0][0] (arg)
+				self.waiters[type][1].pop (0)[0] (arg)
 		elif self.waiters[type][0] == 2:
 			if len (self.waiters[type][1]) > 0:
 				self.waiters[type][1].pop (0)[0] (arg)
 		else:
+			self.waiters[type][1][:] = []
 			for w in waiters:
 				if w[1] is True or w[1] (arg):
 					w[0] (arg)
@@ -126,6 +131,9 @@ class Printer: # {{{
 		# Type: 0 = only one waiter allowed; 1: like 0, and must have a waiter when triggered; 2: queue; 3: broadcast.
 		self.waiters = {'id': (0, []), 'connect': (3, []), 'send': (2, []), 'ack': (0, []), 'queue': (2, []), 'move': (3, []), 'audio': (0, []), 'limit': (3, []), 'temp': (3, []), 'reply': (1, []), 'init': (1, []), 'sense': (3, []), 'pong': (3, [])}
 		self.printer = serial.Serial (port, baudrate = 115200, timeout = 0)
+		#self.printer.setDTR (False)
+		#time.sleep (.1)
+		#self.printer.setDTR (True)
 		self.disconnected = False
 		self.last_time = float ('nan')
 		self.printer.readall ()	# flush buffer.
@@ -144,19 +152,24 @@ class Printer: # {{{
 			getid_waiter = self._set_waiter ('id', resumeinfo)
 			id = (yield websockets.WAIT)
 			getid_waiter ()
-			if id is not False:
-				# This printer was running and tried to send an id.  Remove the timeout and check the id.
-				glib.source_remove (handle)
-				if id in orphans:
-					log ('accepting orphan')
-					killer ()
-					glib.source_remove (self.watcher)
-					yield orphans[id]
-				if id is None:
-					# An invalid id was received, or an init notification.
-					continue
-				# A valid id was received, but we don't know it.  This will be treated as no id.
-				log ("Printer has valid, but unknown id")
+			if id is False:
+				# Timeout.  Give up.
+				getid_waiter ()
+				glib.source_remove (self.watcher)
+				yield False
+			# This printer was running and tried to send an id.  Remove the timeout and check the id.
+			glib.source_remove (handle)
+			if id in orphans:
+				log ('accepting orphan')
+				killer ()
+				self.disconnected = True
+				glib.source_remove (self.watcher)
+				yield orphans[id]
+			if id is None:
+				# An invalid id was received, or an init notification.
+				continue
+			# A valid id was received, but we don't know it.  This will be treated as no id.
+			log ("Printer has valid, but unknown id")
 		log ('accepting printer')
 		killer ()
 		# Send several ping commands, to get the flip flops synchronized.
@@ -182,7 +195,7 @@ class Printer: # {{{
 		while c (): c.args = (yield websockets.WAIT)
 		c = websockets.call (resumeinfo, self._read, 0)
 		while c (): c.args = (yield websockets.WAIT)
-		self.namelen, self.maxaxes, self.maxextruders, self.maxtemps, self.audio_fragments, self.audio_fragment_size, self.num_pins, self.num_digital_pins = struct.unpack ('<BBBBBBBB', c.ret ())
+		self.namelen, self.maxaxes, self.maxextruders, self.maxtemps, self.maxgpios, self.maxdisplacements, self.audio_fragments, self.audio_fragment_size, self.num_pins, self.num_digital_pins = struct.unpack ('<BBBBBHBBBB', c.ret ())
 		c = websockets.call (resumeinfo, self._read_variables)
 		while c (): c.args = (yield websockets.WAIT)
 		self.axis = [Printer.Axis (self, t) for t in range (self.maxaxes)]
@@ -218,12 +231,24 @@ class Printer: # {{{
 			# Disable heater alarm.
 			c = websockets.call (resumeinfo, self.waittemp_temp, t, float ('nan'), float ('nan'))
 			while c (): c.args = (yield websockets.WAIT)
+		self.gpio = [Printer.Gpio () for g in range (self.maxgpios)]
+		for g in range (self.maxgpios):
+			c = websockets.call (resumeinfo, self._read, 2 + self.maxaxes + self.maxextruders + self.maxtemps + g)
+			while c (): c.args = (yield websockets.WAIT)
+			self.gpio[g].read (c.ret ())
+		self.displacement = [None] * self.maxdisplacements
+		for d in range (self.maxdisplacements):
+			c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BHB', self.command['GETDISPLACE'], d, 0))
+			while c (): c.args = (yield websockets.WAIT)
+			self._set_waiter ('reply', resumeinfo)
+			reply = yield websockets.WAIT
+			self.displacement[d] = struct.unpack ('<Bf', reply)[1]
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		c = websockets.call (resumeinfo, self.pause, True)
 		while c (): c.args = (yield websockets.WAIT)
 		c = websockets.call (resumeinfo, self.goto)	# This flushes the buffer, possibly causing movecbs to be sent.
 		while c (): c.args = (yield websockets.WAIT)
-		c = websockets.call (resumeinfo, self.goto, cb = True)	# This sends one new movecb, to be sure the rest is received if it was sent.
+		c = websockets.call (resumeinfo, self.goto, cb = True)	# This sends one new movecb, to be sure the rest is received if they were sent.
 		while c (): c.args = (yield websockets.WAIT)
 		self._set_waiter ('move', resumeinfo)
 		yield websockets.WAIT
@@ -231,12 +256,17 @@ class Printer: # {{{
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
+		yield True
 	# }}}
 	def _reconnect (self, port, printer): # {{{
 		self.port = port
 		self.printer = printer
 		self.disconnected = False
 		self.watcher = glib.io_add_watch (self.printer.fd, glib.IO_IN, self._printer_input)
+		# expect a missed packet.
+		self.printer.write (self.single['NACK'])
+		# both ways.
+		self._trigger ('ack', 'nack')
 		self._trigger ('connect')
 	# }}}
 	def _close (self): # {{{
@@ -262,11 +292,16 @@ class Printer: # {{{
 				self._trigger ('id', None)
 				self.id_buffer = None
 		while True:
+			if self.disconnected:
+				return False
 			while self.id_buffer is not None or self.debug_buffer is not None:
+				if self.disconnected:
+					return False
 				try:
 					r = self.printer.read (1)
 				except:
 					# Ignore the exception now; it will be triggered again below.
+					log ('exception during id or debug read')
 					r = None
 				if r == '':
 					self.last_time = time.time ()
@@ -283,6 +318,7 @@ class Printer: # {{{
 								log ('accepting it anyway')
 						self._trigger ('id', self.id_buffer)
 						self.id_buffer = None
+					continue
 				else:
 					if r is None or r == '\x00':
 						if show_firmware_debug:
@@ -290,6 +326,9 @@ class Printer: # {{{
 						self.debug_buffer = None
 					else:
 						self.debug_buffer += r
+					continue
+			if self.disconnected:
+				return False
 			if len (self.buffer) == 0:
 				try:
 					r = self.printer.read (1)
@@ -391,76 +430,89 @@ class Printer: # {{{
 				if self.movewait == 0:
 					self._trigger ('move')
 				continue
-			# Don't handle these commands while connecting.
-			if self.pong == 3:
-				if packet[0] == self.rcommand['TEMPCB']:
-					t = ord (packet[1])
-					assert ord (t) in self.tempwait
-					self.tempwait.remove (t)
-					self._trigger ('temp', t)
+			if packet[0] == self.rcommand['TEMPCB']:
+				if self.pong != 3:
+					# Ignore this while connecting.
 					continue
-				elif packet[0] == self.rcommand['CONTINUE']:
-					if packet[1] == '\x00':
-						# Move continue.
-						self.wait = False
-						self._trigger ('queue', None)
-					else:
-						# Audio continue.
-						self.waitaudio = False
-						self._trigger ('audio', None)
+				t = ord (packet[1])
+				assert ord (t) in self.tempwait
+				self.tempwait.remove (t)
+				self._trigger ('temp', t)
+				continue
+			elif packet[0] == self.rcommand['CONTINUE']:
+				if self.pong != 3:
+					# Ignore this while connecting.
 					continue
-				elif packet[0] == self.rcommand['LIMIT']:
-					which = ord (packet[1])
-					if not math.isnan (self.axis[which].motor.runspeed):
-						self.axis[which].motor.runspeed = float ('nan')
-						self._axis_update (which)
-					self.limits[which] = struct.unpack ('<f', packet[2:])[0]
-					self._trigger ('limit', which)
+				if packet[1] == '\x00':
+					# Move continue.
+					self.wait = False
+					self._trigger ('queue', True)
+				else:
+					# Audio continue.
+					self.waitaudio = False
+					self._trigger ('audio', None)
+				continue
+			elif packet[0] == self.rcommand['LIMIT']:
+				if self.pong != 3:
+					# Ignore this while connecting.
 					continue
-				elif packet[0] == self.rcommand['AUTOSLEEP']:
-					what = ord (packet[1])
-					changed = [set (), set (), set ()]
-					if what & 1:
-						for a in range (self.maxaxes):
-							if not math.isnan (self.axis[a].motor.runspeed):
-								self.axis[a].motor.runspeed = float ('nan')
-								changed[0].add (a)
-							if not self.axis[a].motor.sleeping:
-								self.axis[a].motor.sleeping = True
-								changed[0].add (a)
-						for e in range (self.maxextruders):
-							if not math.isnan (self.extruder[e].motor.runspeed):
-								self.extruder[e].motor.runspeed = float ('nan')
-								changed[1].add (e)
-							if not self.extruder[e].motor.sleeping:
-								self.extruder[e].motor.sleeping = True
-								changed[1].add (e)
-					if what & 2:
-						for e in range (self.maxextruders):
-							if not math.isnan (self.extruder[e].temp.target):
-								self.extruder[e].temp.target = float ('nan')
-								changed[1].add (e)
-						for t in range (self.maxtemps):
-							if not math.isnan (self.temp[t].target):
-								self.temp[t].target = float ('nan')
-								changed[2].add (t)
-					for a in changed[0]:
-						self._axis_update (a)
-					for e in changed[1]:
-						self._extruder_update (e)
-					for t in changed[2]:
-						self._temp_update (t)
+				which = ord (packet[1])
+				if not math.isnan (self.axis[which].motor.runspeed):
+					self.axis[which].motor.runspeed = float ('nan')
+					self._axis_update (which)
+				self.limits[which] = struct.unpack ('<f', packet[2:])[0]
+				self._trigger ('limit', which)
+				continue
+			elif packet[0] == self.rcommand['AUTOSLEEP']:
+				if self.pong != 3:
+					# Ignore this while connecting.
 					continue
-				elif packet[0] == self.rcommand['SENSE']:
-					w = ord (packet[1])
-					which = w & 0x7f
-					state = bool (w & 0x80)
-					pos = struct.unpack ('<f', packet[2:])[0]
-					if which not in self.sense:
-						self.sense[which] = []
-					self.sense[which].append ((state, pos))
-					self._trigger ('sense', which)
+				what = ord (packet[1])
+				changed = [set (), set (), set ()]
+				if what & 1:
+					for a in range (self.maxaxes):
+						if not math.isnan (self.axis[a].motor.runspeed):
+							self.axis[a].motor.runspeed = float ('nan')
+							changed[0].add (a)
+						if not self.axis[a].motor.sleeping:
+							self.axis[a].motor.sleeping = True
+							changed[0].add (a)
+					for e in range (self.maxextruders):
+						if not math.isnan (self.extruder[e].motor.runspeed):
+							self.extruder[e].motor.runspeed = float ('nan')
+							changed[1].add (e)
+						if not self.extruder[e].motor.sleeping:
+							self.extruder[e].motor.sleeping = True
+							changed[1].add (e)
+				if what & 2:
+					for e in range (self.maxextruders):
+						if not math.isnan (self.extruder[e].temp.value):
+							self.extruder[e].temp.value = float ('nan')
+							changed[1].add (e)
+					for t in range (self.maxtemps):
+						if not math.isnan (self.temp[t].value):
+							self.temp[t].value = float ('nan')
+							changed[2].add (t)
+				for a in changed[0]:
+					self._axis_update (a)
+				for e in changed[1]:
+					self._extruder_update (e)
+				for t in changed[2]:
+					self._temp_update (t)
+				continue
+			elif packet[0] == self.rcommand['SENSE']:
+				if self.pong != 3:
+					# Ignore this while connecting.
 					continue
+				w = ord (packet[1])
+				which = w & 0x7f
+				state = bool (w & 0x80)
+				pos = struct.unpack ('<f', packet[2:])[0]
+				if which not in self.sense:
+					self.sense[which] = []
+				self.sense[which].append ((state, pos))
+				self._trigger ('sense', which)
+				continue
 			self._trigger ('reply', packet)
 	# }}}
 	def _make_packet (self, data): # {{{
@@ -512,33 +564,28 @@ class Printer: # {{{
 		self.ff_out = not self.ff_out
 		data = self._make_packet (data)
 		while True:
-			if self.disconnected:
-				self._set_waiter ('connect', resumeinfo)
-				yield websockets.WAIT
-			while True:
-				dprint ('(1) writing', data);
-				try:
-					self.printer.write (data)
-				except:
-					self._close ()
-					self._death (self.port)
-					continue	# wait for reconnect.
-				self._set_waiter ('ack', resumeinfo)
-				ack = yield websockets.WAIT
-				if ack == 'nack':
-					continue
-				elif ack == 'ack':
-					break
-				elif ack == 'wait':
-					if audio:
-						self.waitaudio = True
-					else:
-						self.wait = True
-					break
+			dprint ('(1) writing', data);
+			try:
+				self.printer.write (data)
+			except:
+				self._close ()
+				self._death (self.port)
+				# Fall through to waiting for ack; at reconnect, a nack event will be generated.
+			self._set_waiter ('ack', resumeinfo)
+			ack = yield websockets.WAIT
+			if ack == 'nack':
+				continue
+			elif ack == 'ack':
+				break
+			elif ack == 'wait':
+				if audio:
+					self.waitaudio = True
 				else:
-					# ack == 'stall'
-					raise ValueError ('Printer sent stall')
-			break
+					self.wait = True
+				break
+			else:
+				# ack == 'stall'
+				raise ValueError ('Printer sent stall')
 		self.sending = False
 		self._trigger ('send', None)
 	# }}}
@@ -565,12 +612,12 @@ class Printer: # {{{
 		while c (): c.args = (yield websockets.WAIT)
 		data = c.ret ()
 		self.name = unicode (data[:self.namelen].rstrip ('\0'), 'utf-8', 'replace')
-		self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate = struct.unpack ('<BBBBHfLLf', data[self.namelen:])
+		self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate = struct.unpack ('<BBBBBHfLLf', data[self.namelen:])
 		self.pos = (self.pos + [float ('nan')] * self.num_axes)[:self.num_axes]
 	# }}}
 	def _write_variables (self): # {{{
 		resumeinfo = [(yield), None]
-		data = (self.name.encode ('utf-8') + chr (0) * self.namelen)[:self.namelen] + struct.pack ('<BBBBHfLLf', self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate)
+		data = (self.name.encode ('utf-8') + chr (0) * self.namelen)[:self.namelen] + struct.pack ('<BBBBBHfLLf', self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate)
 		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BB', self.command['WRITE'], 1) + data)
 		while c (): c.args = (yield websockets.WAIT)
 		self._variables_update ()
@@ -578,7 +625,7 @@ class Printer: # {{{
 	def _variables_update (self, target = None): # {{{
 		if self.pong != 3:
 			return
-		self._broadcast (target, 'variables_update', self.port, [self.name, self.num_axes, self.num_extruders, self.num_temps, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, self.paused])
+		self._broadcast (target, 'variables_update', self.port, [self.name, self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.led_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, self.paused])
 	# }}}
 	def _write_axis (self, which): # {{{
 		resumeinfo = [(yield), None]
@@ -592,7 +639,7 @@ class Printer: # {{{
 			return
 		self._broadcast (target, 'axis_update', self.port, which, [
 			[self.axis[which].motor.step_pin, self.axis[which].motor.dir_pin, self.axis[which].motor.enable_pin, self.axis[which].motor.steps_per_mm, self.axis[which].motor.max_v_pos, self.axis[which].motor.max_v_neg, self.axis[which].motor.max_a, self.axis[which].motor.runspeed, self.axis[which].motor.sleeping],
-			self.axis[which].limit_min_pin, self.axis[which].limit_max_pin, self.axis[which].sense_pin, self.axis[which].limit_min_pos, self.axis[which].limit_max_pos, self.axis[which].delta_length, self.axis[which].delta_radius, self.axis[which].offset])
+			self.axis[which].limit_min_pin, self.axis[which].limit_max_pin, self.axis[which].sense_pin, self.axis[which].limit_min_pos, self.axis[which].limit_max_pos, self.axis[which].delta_length, self.axis[which].delta_radius, self.axis[which].offset, self.axis[which].num_displacements, self.axis[which].first_displacement, self.axis[which].displacement_step])
 	# }}}
 	def _write_extruder (self, which): # {{{
 		resumeinfo = [(yield), None]
@@ -620,6 +667,29 @@ class Printer: # {{{
 		if self.pong != 3:
 			return
 		self._broadcast (target, 'temp_update', self.port, which, [self.temp[which].power_pin, self.temp[which].thermistor_pin, self.temp[which].R0, self.temp[which].R1, self.temp[which].Rc, self.temp[which].Tc, self.temp[which].beta, self.temp[which].core_C, self.temp[which].shell_C, self.temp[which].transfer, self.temp[which].radiation, self.temp[which].power, self.temp[which].value])
+	# }}}
+	def _write_gpio (self, which): # {{{
+		resumeinfo = [(yield), None]
+		data = self.gpio[which].write ()
+		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BB', self.command['WRITE'], 2 + self.maxaxes + self.maxextruders + self.maxtemps + which) + data)
+		while c (): c.args = (yield websockets.WAIT)
+		self._gpio_update (which)
+	# }}}
+	def _gpio_update (self, which, target = None): # {{{
+		if self.pong != 3:
+			return
+		self._broadcast (target, 'gpio_update', self.port, which, [self.gpio[which].pin, self.gpio[which].state, self.gpio[which].master, self.gpio[which].value])
+	# }}}
+	def _write_displacement (self, which): # {{{
+		resumeinfo = [(yield), None]
+		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BHf', self.command['SETDISPLACE'], which, self.displacement[which]))
+		while c (): c.args = (yield websockets.WAIT)
+		self._displacement_update ()
+	# }}}
+	def _displacement_update (self, target = None): # {{{
+		if self.pong != 3:
+			return
+		self._broadcast (target, 'displacement_update', self.displacement)
 	# }}}
 	def _send_audio (self): # {{{
 		resumeinfo = [(yield), None]
@@ -658,9 +728,11 @@ class Printer: # {{{
 			self.motor = Printer.Motor ()
 		def read (self, data):
 			data = self.motor.read (data)
-			self.limit_min_pin, self.limit_max_pin, self.sense_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius, self.offset = struct.unpack ('<HHHfffff', data)
+			self.limit_min_pin, self.limit_max_pin, self.sense_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius, self.offset = struct.unpack ('<HHHfffff', data[:26])
+			self.num_displacements = list (struct.unpack ('<' + 'B' * self.printer.maxaxes, data[26:26 + self.printer.maxaxes]))
+			self.first_displacement, self.displacement_step = struct.unpack ('<ff', data[26 + self.printer.maxaxes:])
 		def write (self):
-			return self.motor.write () + struct.pack ('<HHHfffff', self.limit_min_pin, self.limit_max_pin, self.sense_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius, self.offset)
+			return self.motor.write () + struct.pack ('<HHHfffff', self.limit_min_pin, self.limit_max_pin, self.sense_pin, self.limit_min_pos, self.limit_max_pos, self.delta_length, self.delta_radius, self.offset) + struct.pack ('<' + 'B' * self.printer.maxaxes, *self.num_displacements) + struct.pack ('<ff', self.first_displacement, self.displacement_step)
 		def set_current_pos (self, pos):
 			resumeinfo = [(yield), None]
 			c = websockets.call (resumeinfo, self.printer._send_packet, struct.pack ('<BBf', self.printer.command['SETPOS'], 2 + self.id, pos))
@@ -684,6 +756,12 @@ class Printer: # {{{
 			self.filament_heat, self.nozzle_size, self.filament_size = struct.unpack ('<fff', data)
 		def write (self):
 			return self.motor.write () + self.temp.write () + struct.pack ('<fff', self.filament_heat, self.nozzle_size, self.filament_size)
+	# }}}
+	class Gpio: # {{{
+		def read (self, data):
+			self.pin, self.state, self.master, self.value = struct.unpack ('<HBBf', data)
+		def write (self):
+			return struct.pack ('<HBBf', self.pin, self.state, self.master, self.value)
 	# }}}
 	# }}}
 	# }}}
@@ -728,7 +806,8 @@ class Printer: # {{{
 				self._extruder_update (which)
 		while self.wait and not self.paused:
 			self._set_waiter ('queue', resumeinfo)
-			yield websockets.WAIT
+			if not (yield websockets.WAIT):
+				return
 		if cb:
 			self.movewait += 1
 			#log ('movewait +1 -> %d' % self.movewait)
@@ -736,6 +815,7 @@ class Printer: # {{{
 		else:
 			p = chr (self.command['GOTO'])
 		if self.paused:
+			self._trigger ('queue', False)
 			self.paused = False
 			self._variables_update ()
 		c = websockets.call (resumeinfo, self._send_packet, p + ''.join ([chr (t) for t in targets]) + args)
@@ -753,6 +833,7 @@ class Printer: # {{{
 	# }}}
 	def run (self, channel, speed):	# speed: float; 0 means off. # {{{
 		resumeinfo = [(yield), None]
+		channel = int (channel)
 		if self.paused:
 			self.paused = False
 			self._variables_update ()
@@ -781,6 +862,7 @@ class Printer: # {{{
 	# }}}
 	def sleep (self, channel, sleeping = True): # {{{
 		resumeinfo = [(yield), None]
+		channel = int (channel)
 		if channel >= 2 and channel < 2 + self.maxaxes:
 			self.axis[channel - 2].motor.sleeping = sleeping
 			self._axis_update (channel - 2)
@@ -802,6 +884,7 @@ class Printer: # {{{
 	# }}}
 	def settemp (self, channel, temp): # {{{
 		resumeinfo = [(yield), None]
+		channel = int (channel)
 		if channel < 2 + self.maxaxes + self.maxextruders:
 			self.extruder[channel - 2 - self.maxaxes].temp.value = temp
 			self._extruder_update (channel - 2 - self.maxaxes)
@@ -823,6 +906,7 @@ class Printer: # {{{
 	# }}}
 	def waittemp (self, channel, min, max): # {{{
 		resumeinfo = [(yield), None]
+		channel = int (channel)
 		if min is None:
 			min = float ('nan')
 		if max is None:
@@ -848,6 +932,7 @@ class Printer: # {{{
 	# }}}
 	def readtemp (self, channel): # {{{
 		resumeinfo = [(yield), None]
+		channel = int (channel)
 		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BB', self.command['READTEMP'], channel))
 		while c (): c.args = (yield websockets.WAIT)
 		self._set_waiter ('reply', resumeinfo)
@@ -869,6 +954,7 @@ class Printer: # {{{
 	# }}}
 	def readpower (self, channel): # {{{
 		resumeinfo = [(yield), None]
+		channel = int (channel)
 		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BB', self.command['READPOWER'], channel))
 		while c (): c.args = (yield websockets.WAIT)
 		self._set_waiter ('reply', resumeinfo)
@@ -907,6 +993,7 @@ class Printer: # {{{
 	# }}}
 	def load (self, channel): # {{{
 		resumeinfo = [(yield), None]
+		channel = int (channel)
 		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BB', self.command['LOAD'], channel))
 		while c (): c.args = (yield websockets.WAIT)
 		if channel == 1:
@@ -918,14 +1005,17 @@ class Printer: # {{{
 		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
 			c = websockets.call (resumeinfo, self.extruder[channel - 2 - self.maxaxes].read, self._read (channel))
 			while c (): c.args = (yield websockets.WAIT)
+		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps:
+			c = websockets.call (resumeinfo, self.extruder[channel - 2 - self.maxaxes].read, self._read (channel))
+			while c (): c.args = (yield websockets.WAIT)
 		else:
-			assert channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps
-			c = websockets.call (resumeinfo, self.temp[channel - 2 - self.maxaxes - self.maxextruders].read, self._read (channel))
+			assert channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps + self.maxgpios
+			c = websockets.call (resumeinfo, self.gpio[channel - 2 - self.maxaxes - self.maxextruders - self.maxtemps].read, self._read (channel))
 			while c (): c.args = (yield websockets.WAIT)
 	# }}}
 	def load_all (self): # {{{
 		resumeinfo = [(yield), None]
-		for i in range (1, 2 + self.maxaxes + self.maxextruders + self.maxtemps):
+		for i in range (1, 2 + self.maxaxes + self.maxextruders + self.maxtemps + self.maxgpios):
 			log ('loading %d' % i)
 			c = websockets.call (resumeinfo, self.load, i)
 			while c (): c.args = (yield websockets.WAIT)
@@ -952,12 +1042,13 @@ class Printer: # {{{
 	# }}}
 	def save (self, channel): # {{{
 		resumeinfo = [(yield), None]
+		channel = int (channel)
 		c = websockets.call (resumeinfo, self._send_packet, struct.pack ('<BB', self.command['SAVE'], channel))
 		while c (): c.args = (yield websockets.WAIT)
 	# }}}
 	def save_all (self): # {{{
 		resumeinfo = [(yield), None]
-		for i in range (1, 2 + self.maxaxes + self.maxextruders + self.maxtemps):
+		for i in range (1, 2 + self.maxaxes + self.maxextruders + self.maxtemps + self.maxgpios):
 			log ('saving %d' % i)
 			c = websockets.call (resumeinfo, self.save, i)
 			while c (): c.args = (yield websockets.WAIT)
@@ -979,6 +1070,7 @@ class Printer: # {{{
 	# }}}
 	def home (self, axes = (0, 1, 2), speed = 5): # {{{
 		resumeinfo = [(yield), None]
+		self._trigger ('queue', False)
 		if self.printer_type != 1:
 			# Find the switches.
 			self.limits.clear ()
@@ -993,7 +1085,7 @@ class Printer: # {{{
 			for axis in axes:
 				c = websockets.call (resumeinfo, self.axis[axis].set_current_pos, 0)
 				while c (): c.args = (yield websockets.WAIT)
-				axesmove[axis] = 3 if self.pin_valid (self.axis[axis].limit_min_pin) else -3
+				axesmove[axis] = -self.axis[axis].offset + 3 if self.pin_valid (self.axis[axis].limit_min_pin) else -self.axis[axis].offset - 3
 			c = websockets.call (resumeinfo, self.goto, axes = axesmove, cb = True)
 			while c (): c.args = (yield websockets.WAIT)
 			c = websockets.call (resumeinfo, self.wait_for_cb, )
@@ -1005,20 +1097,19 @@ class Printer: # {{{
 				while c (): c.args = (yield websockets.WAIT)
 			c = websockets.call (resumeinfo, self.wait_for_limits, len (axes))
 			while c (): c.args = (yield websockets.WAIT)
-			# Current position is 0.
-			ret = [self.axis[axis].limit_min_pos if self.pin_valid (self.axis[axis].limit_min_pin) else self.axis[axis].limit_max_pos for axis in axes]
-			for i, axis in enumerate (axes):
-				c = websockets.call (resumeinfo, self.axis[axis].set_current_pos, ret[i])
+			# Current position is limit_pos.
+			for axis in axes:
+				p = self.axis[axis].limit_min_pos if self.pin_valid (self.axis[axis].limit_min_pin) else self.axis[axis].limit_max_pos
+				c = websockets.call (resumeinfo, self.axis[axis].set_current_pos, p)
 				while c (): c.args = (yield websockets.WAIT)
-			for i, a in enumerate (axes):
-				self.pos[a] = ret[i] / self.axis[a].motor.steps_per_mm
+				self.pos[axis] = p / self.axis[axis].motor.steps_per_mm + self.axis[axis].offset
 			return
 		else:
 			# Compute home position close to limit switches.
 			if self.pin_valid (self.axis[0].limit_max_pin):
-				pos = (0, 0, min ([self.axis[i].limit_max_pos for i in range (3)]) + self.axis[i].offset - 10)
+				pos = (-self.axis[0].offset, -self.axis[1].offset, min ([self.axis[i].limit_max_pos for i in range (3)]) - self.axis[2].offset - 10)
 			elif self.pin_valid (self.axis[0].limit_min_pin):
-				pos = [0, 0, max ([self.axis[i].limit_min_pos for i in range (3)]) + self.axis[i].offset + 10]
+				pos = [-self.axis[0].offset, -self.axis[1].offset, max ([self.axis[i].limit_min_pos for i in range (3)]) - self.axis[2].offset + 10]
 			else:
 				try:
 					c = websockets.call (resumeinfo, self.set_printer_type, 0)
@@ -1070,7 +1161,7 @@ class Printer: # {{{
 						self.clear_sense ()
 						c = websockets.call (resumeinfo, self.goto, {a: 20}, f0 = speed / 20., cb = True)
 						while c (): c.args = (yield websockets.WAIT)
-						c = websockets.call (resumeinfo, self.wait_for_cb, True)
+						c = websockets.call (resumeinfo, self.wait_for_cb, (a,))
 						while c (): c.args = (yield websockets.WAIT)
 						assert a in self.sense
 						c = websockets.call (resumeinfo, self.pause, True)
@@ -1078,18 +1169,18 @@ class Printer: # {{{
 						sense[a] = self.sense[a][0][1]
 						c = websockets.call (resumeinfo, self.goto, {a: 0}, cb = True)
 						while c (): c.args = (yield websockets.WAIT)
-						c = websockets.call (resumeinfo, self.wait_for_cb, )
+						c = websockets.call (resumeinfo, self.wait_for_cb)
 						while c (): c.args = (yield websockets.WAIT)
 					c = websockets.call (resumeinfo, self.goto, [sense[a] for a in range (3)], cb = True)
 					while c (): c.args = (yield websockets.WAIT)
-					c = websockets.call (resumeinfo, self.wait_for_cb, )
+					c = websockets.call (resumeinfo, self.wait_for_cb)
 					while c (): c.args = (yield websockets.WAIT)
 					for a in range (3):
 						c = websockets.call (resumeinfo, self.axis[a].set_current_pos, -self.axis[a].limit_min_pos)
 						while c (): c.args = (yield websockets.WAIT)
 					c = websockets.call (resumeinfo, self.goto, [min ([-self.axis[i].limit_min_pos for i in range (3)]) for a in range (3)], cb = True)
 					while c (): c.args = (yield websockets.WAIT)
-					c = websockets.call (resumeinfo, self.wait_for_cb, )
+					c = websockets.call (resumeinfo, self.wait_for_cb)
 					while c (): c.args = (yield websockets.WAIT)
 				finally:
 					c = websockets.call (resumeinfo, self.set_printer_type, 1)
@@ -1183,9 +1274,9 @@ class Printer: # {{{
 	# }}}
 	def wait_for_cb (self, sense = False): # {{{
 		resumeinfo = [(yield), None]
-		if sense in self.sense:
-			yield self.movewait == 0
 		if sense is not False:
+			if sense in self.sense:
+				yield self.movewait == 0
 			rm1 = self._set_waiter ('sense', resumeinfo, lambda s: sense is True or s in sense)
 		else:
 			rm1 = lambda: None
@@ -1257,6 +1348,12 @@ class Printer: # {{{
 	def get_maxtemps (self):	# {{{
 		return self.maxtemps
 	# }}}
+	def get_maxgpios (self):	# {{{
+		return self.maxgpios
+	# }}}
+	def get_maxdisplacements (self):	# {{{
+		return self.maxdisplacements
+	# }}}
 	def get_num_pins (self):	# {{{
 		return self.num_pins
 	# }}}
@@ -1267,7 +1364,9 @@ class Printer: # {{{
 	# Variables. {{{
 	def set_name (self, value):	# {{{
 		resumeinfo = [(yield), None]
-		self.name = unicode (value, 'utf-8', 'replace') if not isinstance (value, unicode) else value
+		if not isinstance (value, unicode):
+			value = unicode (value, 'utf-8', 'replace')
+		self.name = unicode (value.encode ('utf-8')[:self.namelen], 'utf-8', 'replace')
 		c = websockets.call (resumeinfo, self._write_variables)
 		while c (): c.args = (yield websockets.WAIT)
 	def get_name (self):
@@ -1297,6 +1396,14 @@ class Printer: # {{{
 		while c (): c.args = (yield websockets.WAIT)
 	def get_num_temps (self):
 		return self.num_temps
+	# }}}
+	def set_num_gpios (self, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.num_gpios = value
+		c = websockets.call (resumeinfo, self._write_variables, )
+		while c (): c.args = (yield websockets.WAIT)
+	def get_num_gpios (self):
+		return self.num_gpios
 	# }}}
 	def set_printer_type (self, value):	# {{{
 		resumeinfo = [(yield), None]
@@ -1573,6 +1680,30 @@ class Printer: # {{{
 	def axis_get_current_pos (self, which):
 		return self.axis[which].get_current_pos ()
 	# }}}
+	def axis_set_num_displacements (self, which, axis, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.axis[which].num_displacements[axis] = value
+		c = websockets.call (resumeinfo, self._write_axis, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def axis_get_num_displacements (self, which, axis):
+		return self.axis[which].num_displacements[axis]
+	# }}}
+	def axis_set_first_displacement (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.axis[which].first_displacement = value
+		c = websockets.call (resumeinfo, self._write_axis, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def axis_get_first_displacement (self, which):
+		return self.axis[which].first_displacement
+	# }}}
+	def axis_set_displacement_step (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.axis[which].displacement_step = value
+		c = websockets.call (resumeinfo, self._write_axis, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def axis_get_displacement_step (self, which):
+		return self.axis[which].displacement_step
+	# }}}
 	# }}}
 	# Extruder {{{
 	def extruder_temp_set_R0 (self, which, value):	# {{{
@@ -1751,6 +1882,64 @@ class Printer: # {{{
 	def extruder_get_filament_size (self, which):
 		return self.extruder[which].filament_size
 	# }}}
+	# }}}
+	# Gpio {{{
+	def gpio_set_pin (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.gpio[which].pin = value
+		c = websockets.call (resumeinfo, self._write_gpio, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def gpio_get_pin (self, which):
+		return self.gpio[which].pin
+	# }}}
+	def gpio_set_state (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.gpio[which].state = int (value)
+		c = websockets.call (resumeinfo, self._write_gpio, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def gpio_get_state (self, which):
+		return self.gpio[which].state
+	# }}}
+	def gpio_set_master (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.gpio[which].master = int (value)
+		c = websockets.call (resumeinfo, self._write_gpio, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def gpio_get_master (self, which):
+		return self.gpio[which].master
+	# }}}
+	def gpio_set_value (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		self.gpio[which].value = value
+		c = websockets.call (resumeinfo, self._write_gpio, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def gpio_get_value (self, which):
+		return self.gpio[which].value
+	# }}}
+	# }}}
+	def set_displacement (self, which, value):	# {{{
+		resumeinfo = [(yield), None]
+		if isinstance (which, int):
+			self.displacement[which] = value
+		else:
+			pos = 0
+			size = 1
+			for a in range (self.num_axes):
+				pos += which[a] * size
+				size *= self.axis[a].num_displacements[which[-1]]
+			self.displacement[pos] = value
+		c = websockets.call (resumeinfo, self._write_displacement, which)
+		while c (): c.args = (yield websockets.WAIT)
+	def get_displacement (self, which):
+		if isinstance (which, int):
+			return self.displacement[which]
+		else:
+			pos = 0
+			size = 1
+			for a in range (self.num_axes):
+				pos += which[a] * size
+				size *= self.axis[a].num_displacements[which[-1]]
+			return self.displacement[pos]
 	# }}}
 	# }}}
 # }}}

@@ -13,8 +13,19 @@ void Constants::save (int16_t &addr, bool eeprom)
 	write_8 (addr, MAXAXES, false);
 	write_8 (addr, MAXEXTRUDERS, false);
 	write_8 (addr, MAXTEMPS, false);
+	write_8 (addr, MAXGPIOS, false);
+#ifndef LOWMEM
+	write_16 (addr, MAXDISPLACEMENTS, false);
+#else
+	write_16 (addr, 0, false);
+#endif
+#ifdef AUDIO
 	write_8 (addr, AUDIO_FRAGMENTS, false);
 	write_8 (addr, AUDIO_FRAGMENT_SIZE, false);
+#else
+	write_8 (addr, 0, false);
+	write_8 (addr, 0, false);
+#endif
 	write_8 (addr, NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS, false);
 	write_8 (addr, NUM_DIGITAL_PINS, false);
 }
@@ -25,26 +36,24 @@ void Variables::load (int16_t &addr, bool eeprom)
 	for (uint8_t i = 0; i < NAMELEN; ++i)
 		name[i] = read_8 (addr, eeprom);
 	num_axes = read_8 (addr, eeprom);
+	num_axes = min (num_axes, MAXAXES);
 	num_extruders = read_8 (addr, eeprom);
+	num_extruders = min (num_extruders, MAXEXTRUDERS);
 	num_temps = read_8 (addr, eeprom);
+	num_temps = min (num_temps, MAXTEMPS);
+	num_gpios = read_8 (addr, eeprom);
+	num_gpios = min (num_gpios, MAXGPIOS);
 	printer_type = read_8 (addr, eeprom);
+	printer_type = min (printer_type, 1);
 	led_pin.read (read_16 (addr, eeprom));
+#ifndef LOWMEM
 	room_T = read_float (addr, eeprom) + 273.15;
+#else
+	read_float (addr, eeprom);	// Discard value.
+#endif
 	motor_limit = read_32 (addr, eeprom);
 	temp_limit = read_32 (addr, eeprom);
 	feedrate = read_float (addr, eeprom);
-	// If settings are invalid values, the eeprom is probably not initialized; use defaults.
-	if (num_axes > MAXAXES || num_extruders > MAXEXTRUDERS || num_temps > MAXTEMPS) {
-		memset (name, 0, NAMELEN);
-		num_axes = 3;
-		num_extruders = 1;
-		num_temps = 1;
-		led_pin.flags = 0;
-		room_T = 20 + 273.15;
-		motor_limit = 10 * 1000;
-		temp_limit = (unsigned long)5 * 60 * 1000;
-		feedrate = 1;
-	}
 	SET_OUTPUT (led_pin);
 	if (type != printer_type)
 		axis[0].source = NAN;
@@ -57,9 +66,14 @@ void Variables::save (int16_t &addr, bool eeprom)
 	write_8 (addr, num_axes, eeprom);
 	write_8 (addr, num_extruders, eeprom);
 	write_8 (addr, num_temps, eeprom);
+	write_8 (addr, num_gpios, eeprom);
 	write_8 (addr, printer_type, eeprom);
 	write_16 (addr, led_pin.write (), eeprom);
+#ifndef LOWMEM
 	write_float (addr, room_T - 273.15, eeprom);
+#else
+	write_float (addr, NAN, eeprom);
+#endif
 	write_32 (addr, motor_limit, eeprom);
 	write_32 (addr, temp_limit, eeprom);
 	write_float (addr, feedrate, eeprom);

@@ -2,13 +2,13 @@
 #define _FIRMWARE_H
 #include <Arduino.h>
 #include <math.h>
-#include <avr/wdt.h>
 #include "configuration.h"
+#ifdef WATCHDOG
+#include <avr/wdt.h>
+#endif
 
 #define ID_SIZE 8	// Number of bytes in printerid.
-#define MAXOBJECT (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS)		// Total number of supported objects.
-#define MAXMSGLEN 127	// Maximum message length; cannot be larger than 127.
-#define MSGBUFSIZE (MAXMSGLEN + (MAXMSGLEN + 2) / 3 * 4)
+#define MAXOBJECT (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS + MAXGPIOS)		// Total number of supported objects.
 #define F0 0
 #define F1 1
 #define AXIS0 2
@@ -67,6 +67,7 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values.
 enum Command {
 	// from host
 	CMD_BEGIN,	// 4 byte: 0 (preferred protocol version). Reply: START.
+	CMD_PING,	// 1 byte: code.  Reply: PONG.
 	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].
 	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
 	CMD_RUN,	// 1 byte: which channel (b0-6).  4 byte: speed [mm/s] (0 means off).
@@ -77,13 +78,14 @@ enum Command {
 	CMD_READPOWER,	// 1 byte: which channel.  Reply: POWER. [μs, μs]
 	CMD_SETPOS,	// 1 byte: which channel; 4 bytes: pos.
 	CMD_GETPOS,	// 1 byte: which channel.  Reply: POS. [steps, mm]
+	CMD_SETDISPLACE,// 2 byte: which; 4 byte: value. [mm]
+	CMD_GETDISPLACE,// 2 byte: which.  1 byte: 0 (to not make the packet size 4).  Reply: DISPLACE.
 	CMD_LOAD,	// 1 byte: which channel.
 	CMD_SAVE,	// 1 byte: which channel.
 	CMD_READ,	// 1 byte: which channel.  Reply: DATA.
 	CMD_WRITE,	// 1 byte: which channel; n bytes: data.
 	CMD_PAUSE,	// 1 byte: 0: not pause; 1: pause.
-	CMD_PING,	// 1 byte: code.  Reply: PONG.
-	CMD_READPIN,	// 1 byte: pin. Reply: PIN.
+	CMD_READGPIO,	// 1 byte: which channel. Reply: GPIO.
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_bit.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	// to host
@@ -92,6 +94,7 @@ enum Command {
 	CMD_TEMP,	// 4 byte: requested channel's temperature. [°C]
 	CMD_POWER,	// 4 byte: requested channel's power time; 4 bytes: current time. [μs, μs]
 	CMD_POS,	// 4 byte: pos [steps]; 4 byte: current [mm].
+	CMD_DISPLACE,	// 4 byte: value [mm].
 	CMD_DATA,	// n byte: requested data.
 	CMD_PONG,	// 1 byte: PING argument.
 	CMD_PIN,	// 1 byte: 0 or 1: pin state.
@@ -112,11 +115,15 @@ struct Object
 	virtual ~Object () {}
 };
 
+// Need this declaration to have the pointer in Temp.
+struct Gpio;
+
 // All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp : public Object
 {
 	// See temp.c from definition of calibration constants.
 	float R0, R1, Rc, Tc, minus_beta;		// calibration values of thermistor.  [Ω, Ω, Ω, K, K]
+#ifndef LOWMEM
 	// Temperature balance calibration.
 	float power;				// added power while heater is on.  [W]
 	float core_C;				// heat capacity of the core.  [J/K]
@@ -124,19 +131,22 @@ struct Temp : public Object
 	float transfer;				// heat transfer between core and shell.  [W/K]
 	float radiation;			// radiated power = radiation * (shell_T ** 4 - room_T ** 4) [W/K**4]
 	float convection;			// convected power = convection * (shell_T - room_T) [W/K]
+#endif
 	// Pins.
 	Pin_t power_pin;
 	Pin_t thermistor_pin;
 	// Volatile variables.
 	float target;				// target temperature; NAN to disable. [K]
+#ifndef LOWMEM
 	float core_T, shell_T;			// current temperatures. [K]
+	Gpio *gpios;				// linked list of gpios monitoring this temp.
+#endif
 	float min_alarm;			// NAN, or the temperature at which to trigger the callback.  [K]
 	float max_alarm;			// NAN, or the temperature at which to trigger the callback.  [K]
 	// Internal variables.
 	unsigned long last_time;		// last value of micros when this heater was handled.
 	unsigned long time_on;			// Time that the heater has been on since last reading.  [μs]
 	bool is_on;				// If the heater is currently on.
-	float C0, C1;				// Constants for faster temperature readings.  [1, counts]
 	// Functions.
 	float read ();				// Read current temperature.
 	virtual void load (int16_t &addr, bool eeprom);
@@ -157,11 +167,13 @@ struct Motor : public Object
 	unsigned long continuous_last_time;	// micros value when last continuous iteration was run.
 	bool positive;				// direction of current movement.
 	float dist, next_dist, main_dist;
+#ifdef AUDIO
 	uint8_t audio_flags;
 	enum Flags {
 		PLAYING = 1,
 		STATE = 2
 	};
+#endif
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Motor () {}
@@ -196,6 +208,11 @@ struct Axis : public Object
 	int32_t current_pos;	// Current position of motor (in steps).
 	float source, current;	// Source position of current movement of axis (in mm), or current position if there is no movement.
 	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
+#ifndef LOWMEM
+	uint8_t num_displacements[MAXAXES];
+	float first_displacement;
+	float displacement_step;
+#endif
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Axis () {}
@@ -205,52 +222,69 @@ struct Extruder : public Object
 {
 	Motor motor;
 	Temp temp;		// temperature regulation.
+#ifndef LOWMEM
 	float filament_heat;	// constant for how much heat is extracted per mm filament.
 	float nozzle_size;
 	float filament_size;
 	float capacity;		// heat capacity of filament in [energy]/mm/K
+#endif
 	int32_t steps_done;	// steps done during current move.
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Extruder () {}
 };
 
+struct Gpio : public Object
+{
+	Pin_t pin;
+	// bit 0: low/high; bit 1: in/out; bit 2: pullup enabled/disabled; bit 3: last read value (for change notification).
+	uint8_t state;
+#ifndef LOWMEM
+	uint8_t master;
+	float value;
+	Gpio *prev, *next;
+#endif
+	void setup (uint8_t new_state);
+	virtual void load (int16_t &addr, bool eeprom);
+	virtual void save (int16_t &addr, bool eeprom);
+	virtual ~Gpio () {}
+};
+
 struct MoveCommand
 {
 	bool cb;
-	float data[MAXOBJECT];	// Value if given, NaN otherwise.
+	float data[2 + MAXAXES + MAXEXTRUDERS];	// Value if given, NaN otherwise.
 };
 
-#define COMMAND_SIZE_LOG2 7
-#define COMMAND_SIZE (1 << COMMAND_SIZE_LOG2)
-#define COMMAND_LEN_MASK (COMMAND_SIZE - 1)
+#define COMMAND_SIZE 127
+#define COMMAND_LEN_MASK 0x7f
 // Code 1 variables
 EXTERN uint8_t name[NAMELEN];
 EXTERN uint8_t num_extruders;
 EXTERN uint8_t num_axes;
 EXTERN uint8_t num_temps;
+EXTERN uint8_t num_gpios;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin;
+#ifndef LOWMEM
 EXTERN float room_T;	//[°C]
+#endif
 EXTERN float feedrate;	// Multiplication factor for f values, used at start of move.
 // Other variables.
 EXTERN char printerid[ID_SIZE];
 EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
 EXTERN char reply[COMMAND_SIZE];
-EXTERN char limitcb_buffer[10];
-EXTERN char autosleep_buffer[4];
-EXTERN char movecb_buffer[4];
-EXTERN char tempcb_buffer[4];
-EXTERN char continue_buffer[4];
-EXTERN char sense_buffer[10];
-EXTERN char ping_buffer[4];
+EXTERN char out_buffer[10];
 EXTERN Constants constants;
 EXTERN Variables variables;
 EXTERN Axis axis[MAXAXES];
 EXTERN Temp temp[MAXTEMPS];
 EXTERN Extruder extruder[MAXEXTRUDERS];
-EXTERN bool motors_busy;
+EXTERN Gpio gpio[MAXGPIOS];
+#ifndef LOWMEM
+EXTERN float displacement[MAXDISPLACEMENTS];
+#endif
 EXTERN uint8_t temps_busy;
 EXTERN Motor *motors[MAXOBJECT];
 EXTERN Temp *temps[MAXOBJECT];
@@ -263,24 +297,25 @@ EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
 EXTERN float limits_pos[MAXAXES];	// position when limit switch was hit or nan
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
-EXTERN bool have_msg;
-EXTERN char msg_buffer[MSGBUFSIZE];
-EXTERN bool pause_all;
 EXTERN unsigned long pause_time;
+EXTERN bool initialized;
+EXTERN bool pause_all;
+EXTERN bool motors_busy;
 EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
 EXTERN unsigned long last_active, led_last, motor_limit, temp_limit;
 EXTERN uint16_t led_phase;
-EXTERN float mean_temp;
+#ifdef AUDIO
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
 EXTERN uint8_t audio_head, audio_tail, audio_state;
 EXTERN unsigned long audio_start;
+EXTERN uint16_t audio_us_per_bit;
+#endif
 EXTERN unsigned long start_time;
 EXTERN long t0, tq;
 EXTERN bool moving;
 EXTERN float v0, vp, vq, f0;
-EXTERN uint16_t audio_us_per_bit;
 EXTERN bool move_prepared;
 EXTERN bool current_move_has_cb;
 

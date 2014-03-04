@@ -1,0 +1,59 @@
+printer3d-server(8) -- host software for RepRap style 3-D printers
+==================================================================
+<!--
+printer3d.8.ronn - manual page for printer3d-server
+Copyright 2014 Michigan Technological University
+Author: Bas Wijnen <wijnen@debian.org>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+-->
+
+## SYNOPSIS
+`printer3d-server` --tls=[cert:key] [--options]
+
+## DESCRIPTION
+This program connects to 3-D printers that are attached to serial ports
+(usually over USB) and provides a web interface and a python interface to
+control those printers.
+
+## OPTIONS
+ * `-h`, `--help`:
+	Show usage summary, including all options and their defaults.
+ * `--tls`=[cert:key]:
+ 	Specify certificate and key to use for the website.  It is recommended to use encryption, especially when restricting access.  This option is required.  To use unencrypted communication, set it to the empty string.
+ * `--printer=<default>:
+ 	Specify the default printer.  If not specified, an arbitrary connected will be used.  When only one printer is connected, there is no reason to specify this option.
+ * `--done=command`:
+	Shell command to execute whenever a print it done.  In this command, the special codes `[[STATE]]` and `[[REASON]]` are replaced with the state (completed or aborted) and reason for ending the print.
+ * --autodetect=False:
+	By default, the server will try to detect a printer on any newly connected device which provides a serial port.  Setting this option to False will prevent this.
+ * `--login`=[name:password]
+	Set the credentials for accessing the website.  These are sent in plain text, so if you use this, you really should use the tls option to set up an encrypted link as well.
+ * `--passwordfile`=[file]
+	Read names and encrypted passwords from a file.  The file format is the same as for /etc/shadow, so it is possible to use that file directly.  There is no permission system; every logged in user is allowed to do everything the server supports.  Like with login, you should use --tls when using this option.
+ * `--port`=<port>:
+	Network port to listen on for browser requests.  The default is 8080.
+ * `--blacklist`=<regular expression>:
+	Any serial port device that matches this expression is ignored.
+ * `--avrdude`=<path>:
+	Location of the avrdude executable for flashing firmware.
+ * `--audiodir`=<path>:
+ 	Location to store processed audio files.
+ * `--saveconfig`[=<path>]:
+ 	Save the provided commandline arguments and (if no path is given) use them as defaults in the future.
+ * `--configfile`=<path>:
+	Use a previously saved file of commandline arguments.
+
+## AUTHOR
+Printer3d is written by `Bas Wijnen <wijnen@debian.org>`

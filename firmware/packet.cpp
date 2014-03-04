@@ -15,10 +15,12 @@ static float get_float (uint8_t offset)
 	return ret.f;
 }
 
+#if defined(AUDIO) || !defined(LOWMEM)
 static uint16_t get_uint16 (uint8_t offset)
 {
 	return ((uint16_t)command[offset] & 0xff) | (uint16_t)command[offset + 1] << 8;
 }
+#endif
 
 void packet ()
 {
@@ -34,8 +36,10 @@ void packet ()
 		debug ("CMD_BEGIN");
 #endif
 		// A server is running; start the watchdog.
+#ifdef WATCHDOG
 		wdt_reset ();
 		wdt_enable (WDTO_120MS);
+#endif
 		for (uint8_t i = 0; i < ID_SIZE; ++i)
 			printerid[i] = command[6 + i];
 		Serial.write (CMD_ACK);
@@ -71,6 +75,8 @@ void packet ()
 				ReadFloat f;
 				for (uint8_t i = 0; i < sizeof (float); ++i)
 					f.b[i] = command[offset + i + t * sizeof (float)];
+				if (ch >= 2 && !isnan (f.f))
+					initialized = true;
 				queue[queue_end].data[ch] = f.f;
 				//debug ("goto %d %f", ch, &f.f);
 				++t;
@@ -91,7 +97,9 @@ void packet ()
 		if (pause_all) {
 			pause_all = false;
 			abort_move ();
+#ifdef AUDIO
 			audio_start += micros () - pause_time;
+#endif
 		}
 		queue[queue_end].cb = command[1] == CMD_GOTOCB;
 		queue_end = (queue_end + 1) % QUEUE_LENGTH;
@@ -115,6 +123,8 @@ void packet ()
 		for (uint8_t i = 0; i < sizeof (float); ++i) {
 			f.b[i] = command[3 + i];
 		}
+		if (!isnan (f.f))
+			initialized = true;
 		// Motor must exist, must not be doing a move.
 		if (!motors[which])
 		{
@@ -126,7 +136,9 @@ void packet ()
 		if (pause_all) {
 			pause_all = false;
 			abort_move ();
+#ifdef AUDIO
 			audio_start += micros () - pause_time;
+#endif
 		}
 		if (moving)
 		{
@@ -220,12 +232,15 @@ void packet ()
 			}
 			last_active = millis ();
 		}
+		else
+			initialized = true;
 		Serial.write (CMD_ACK);
 		return;
 	}
 	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
 	{
 #ifdef DEBUG_CMD
+		initialize = true;
 		debug ("CMD_WAITTEMP");
 #endif
 		which = get_which ();
@@ -335,10 +350,10 @@ void packet ()
 			reset_pos ();
 		ReadFloat pos, current;
 		pos.f = axis[which - 2].current_pos / axis[which - 2].motor.steps_per_mm;
-		current.f = axis[which - 2].current;
-		reply[0] = 2 + sizeof (int32_t) + sizeof (float);
+		current.f = axis[which - 2].current - axis[which - 2].offset;
+		reply[0] = 2 + 2 * sizeof (float);
 		reply[1] = CMD_POS;
-		for (uint8_t b = 0; b < sizeof (int32_t); ++b)
+		for (uint8_t b = 0; b < sizeof (float); ++b)
 			reply[2 + b] = pos.b[b];
 		for (uint8_t b = 0; b < sizeof (float); ++b)
 			reply[2 + sizeof (int32_t) + b] = current.b[b];
@@ -346,6 +361,47 @@ void packet ()
 		try_send_next ();
 		return;
 	}
+#ifndef LOWMEM
+	case CMD_SETDISPLACE:	// Set a displacement value
+	{
+#ifdef DEBUG_CMD
+		debug ("CMD_SETDISPLACE");
+#endif
+		which = get_uint16 (2);
+		if (which > MAXDISPLACEMENTS)
+		{
+			debug ("Setting invalid displacement value %d", which);
+			Serial.write (CMD_STALL);
+			return;
+		}
+		Serial.write (CMD_ACK);
+		displacement[which] = get_float (4);
+		return;
+	}
+	case CMD_GETDISPLACE:	// Get a displacement value
+	{
+#ifdef DEBUG_CMD
+		debug ("CMD_GETDISPLACE");
+#endif
+		which = get_uint16 (2);
+		if (which > MAXDISPLACEMENTS)
+		{
+			debug ("Getting invalid displacement value %d", which);
+			Serial.write (CMD_STALL);
+			return;
+		}
+		Serial.write (CMD_ACK);
+		ReadFloat value;
+		value.f = displacement[which];
+		reply[0] = 2 + sizeof (float);
+		reply[1] = CMD_DISPLACE;
+		for (uint8_t b = 0; b < sizeof (float); ++b)
+			reply[2 + b] = value.b[b];
+		reply_ready = true;
+		try_send_next ();
+		return;
+	}
+#endif
 	case CMD_LOAD:	// reload settings from eeprom
 	{
 #ifdef DEBUG_CMD
@@ -437,7 +493,9 @@ void packet ()
 			if (pause_all) {
 				unsigned long diff = micros () - pause_time;
 				start_time += diff;
+#ifdef AUDIO
 				audio_start += diff;
+#endif
 				for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 					if (!motors[m])
 						continue;
@@ -459,25 +517,26 @@ void packet ()
 		try_send_next ();
 		return;
 	}
-	case CMD_READPIN:
+	case CMD_READGPIO:
 	{
 #ifdef DEBUG_CMD
-		debug ("CMD_READPIN");
+		debug ("CMD_READGPIO");
 #endif
-		if (command[2] >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS)
+		if (command[2] < 2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS || command[2] >= 2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS + MAXGPIOS)
 		{
-			debug ("Readpin can only handle %d pins; not %d", NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS, command[2]);
+			debug ("GETGPIO called for non-gpio channel %d", command[2]);
 			Serial.write (CMD_STALL);
 			return;
 		}
 		Serial.write (CMD_ACK);
 		reply[0] = 3;
 		reply[1] = CMD_PIN;
-		reply[2] = digitalRead (command[2]) ? 1 : 0;
+		reply[2] = GET (gpio[command[2] - (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS)].pin, false) ? 1 : 0;
 		reply_ready = true;
 		try_send_next ();
 		return;
 	}
+#ifdef AUDIO
 	case CMD_AUDIO_SETUP:
 	{
 #ifdef DEBUG_CMD
@@ -534,6 +593,7 @@ void packet ()
 		last_active = millis ();
 		return;
 	}
+#endif
 	default:
 	{
 		debug ("Invalid command %x %x %x %x", command[0], command[1], command[2], command[3]);

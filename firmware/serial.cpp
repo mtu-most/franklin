@@ -1,5 +1,7 @@
 #include "firmware.h"
 
+//#define DEBUG_FF
+
 // Commands which can be sent:
 // Packet: n*4 bytes, of which n*3 bytes are data.
 // Ack: 1 byte.
@@ -33,14 +35,18 @@ void serial ()
 	if (!had_data && command_end > 0 && micros () >= last_micros + 100000)
 	{
 		// Command not finished; ignore it and wait for next.
+#ifdef WATCHDOG
 		wdt_reset ();
+#endif
 		command_end = 0;
 	}
 	had_data = false;
 	while (command_end == 0)
 	{
 		if (!Serial.available ()) {
+#ifdef WATCHDOG
 			wdt_reset ();
+#endif
 			return;
 		}
 		had_data = true;
@@ -51,9 +57,14 @@ void serial ()
 		{
 		case CMD_ACK:
 			// Ack: everything was ok; flip the flipflop.
-			ff_out ^= 0x80;
-			out_busy = false;
-			try_send_next ();
+			if (out_busy) {	// Only if we expected it.
+				ff_out ^= 0x80;
+#ifdef DEBUG_FF
+				debug ("new ff_out: %d", ff_out);
+#endif
+				out_busy = false;
+				try_send_next ();
+			}
 			continue;
 		case CMD_NACK:
 			// Nack: the host didn't properly receive the packet: resend.
@@ -85,7 +96,9 @@ void serial ()
 	if (len == 0)
 	{
 		//debug ("no more data available now");
+#ifdef WATCHDOG
 		wdt_reset ();
+#endif
 		return;
 	}
 	had_data = true;
@@ -102,10 +115,14 @@ void serial ()
 	if (command_end < cmd_len)
 	{
 		//debug ("not done yet; %d of %d received.", command_end, cmd_len);
+#ifdef WATCHDOG
 		wdt_reset ();
+#endif
 		return;
 	}
+#ifdef WATCHDOG
 	wdt_reset ();
+#endif
 	command_end = 0;
 	// Check packet integrity.
 	// Size must be good.
@@ -147,11 +164,17 @@ void serial ()
 		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
 		// Resend the ack, but don't do anything (the action has already been taken).
 		//debug ("duplicate");
+#ifdef DEBUG_FF
+		debug ("old ff_in: %d", ff_in);
+#endif
 		Serial.write (CMD_ACK);
 		return;
 	}
 	// Right: update flip-flop and send ack.
 	ff_in ^= 0x80;
+#ifdef DEBUG_FF
+	debug ("new ff_in: %d", ff_in);
+#endif
 	// Clear flag for easier parsing.
 	command[1] &= ~0x80;
 	packet ();
@@ -173,14 +196,17 @@ void serial ()
 static void prepare_packet (char *the_packet)
 {
 	//debug ("prepare");
-	if (the_packet[0] >= MAXMSGLEN)
+	if (the_packet[0] >= COMMAND_SIZE)
 	{
-		debug ("packet is too large: %d > %d", the_packet[0], MAXMSGLEN);
+		debug ("packet is too large: %d > %d", the_packet[0], COMMAND_SIZE);
 		return;
 	}
 	// Set flipflop bit.
 	the_packet[1] &= ~0x80;
 	the_packet[1] ^= ff_out;
+#ifdef DEBUG_FF
+	debug ("use ff_out: %d", ff_out);
+#endif
 	// Compute the checksums.  This doesn't work for size in (1, 2, 4), so
 	// the protocol doesn't allow those.
 	// For size % 3 != 0, the first checksums are part of the data for the
@@ -227,53 +253,62 @@ void try_send_next ()
 		// Still busy sending other packet.
 		return;
 	}
-	if (have_msg)
-	{
-		prepare_packet (msg_buffer);
-		send_packet (msg_buffer);
-		have_msg = false;
-		return;
-	}
 	for (uint8_t w = 0; w < MAXAXES; ++w)
 	{
 		if (!isnan (limits_pos[w]))
 		{
-			//debug ("limit %d", w);
-			limitcb_buffer[2] = w;
+			debug ("limit %d", w);
+			out_buffer[0] = 7;
+			out_buffer[1] = CMD_LIMIT;
+			out_buffer[2] = w;
 			ReadFloat f;
 			f.f = limits_pos[w];
-			limitcb_buffer[3] = f.b[0];
-			limitcb_buffer[4] = f.b[1];
-			limitcb_buffer[5] = f.b[2];
-			limitcb_buffer[6] = f.b[3];
+			out_buffer[3] = f.b[0];
+			out_buffer[4] = f.b[1];
+			out_buffer[5] = f.b[2];
+			out_buffer[6] = f.b[3];
 			limits_pos[w] = NAN;
-			prepare_packet (limitcb_buffer);
-			send_packet (limitcb_buffer);
+			if (initialized)
+			{
+				prepare_packet (out_buffer);
+				send_packet (out_buffer);
+			}
+			else
+				try_send_next ();
 			return;
 		}
 		if (axis[w].sense_state & 1)
 		{
 			//debug ("sense %d %d %d", w, axis[w].sense_state, axis[w].sense_pos);
-			sense_buffer[2] = w | (axis[w].sense_state & 0x80);
+			out_buffer[0] = 7;
+			out_buffer[1] = CMD_SENSE;
+			out_buffer[2] = w | (axis[w].sense_state & 0x80);
 			ReadFloat f;
 			f.f = axis[w].sense_pos;
-			sense_buffer[3] = f.b[0];
-			sense_buffer[4] = f.b[1];
-			sense_buffer[5] = f.b[2];
-			sense_buffer[6] = f.b[3];
+			out_buffer[3] = f.b[0];
+			out_buffer[4] = f.b[1];
+			out_buffer[5] = f.b[2];
+			out_buffer[6] = f.b[3];
 			axis[w].sense_state &= ~1;
-			prepare_packet (sense_buffer);
-			send_packet (sense_buffer);
+			if (initialized)
+			{
+				prepare_packet (out_buffer);
+				send_packet (out_buffer);
+			}
+			else
+				try_send_next ();
 			return;
 		}
 	}
 	if (num_movecbs > 0)
 	{
 		//debug ("movecb %d", num_movecbs);
-		movecb_buffer[2] = num_movecbs;
-		prepare_packet (movecb_buffer);
-		send_packet (movecb_buffer);
+		out_buffer[0] = 3;
+		out_buffer[1] = CMD_MOVECB;
+		out_buffer[2] = num_movecbs;
 		num_movecbs = 0;
+		prepare_packet (out_buffer);
+		send_packet (out_buffer);
 		return;
 	}
 	if (which_tempcbs != 0)
@@ -283,13 +318,20 @@ void try_send_next ()
 		{
 			if (which_tempcbs & (1 << w))
 			{
-				tempcb_buffer[2] = w;
+				out_buffer[0] = 3;
+				out_buffer[1] = CMD_TEMPCB;
+				out_buffer[2] = w;
 				which_tempcbs &= ~(1 << w);
 				break;
 			}
 		}
-		prepare_packet (tempcb_buffer);
-		send_packet (tempcb_buffer);
+		if (initialized)
+		{
+			prepare_packet (out_buffer);
+			send_packet (out_buffer);
+		}
+		else
+			try_send_next ();
 		return;
 	}
 	if (reply_ready)
@@ -303,27 +345,48 @@ void try_send_next ()
 	if (continue_cb & 1)
 	{
 		//debug ("continue move");
-		continue_buffer[2] = 0;
-		prepare_packet (continue_buffer);
-		send_packet (continue_buffer);
+		out_buffer[0] = 3;
+		out_buffer[1] = CMD_CONTINUE;
+		out_buffer[2] = 0;
 		continue_cb &= ~1;
+		if (initialized)
+		{
+			prepare_packet (out_buffer);
+			send_packet (out_buffer);
+		}
+		else
+			try_send_next ();
 		return;
 	}
 	if (continue_cb & 2)
 	{
 		//debug ("continue audio");
-		continue_buffer[2] = 1;
-		prepare_packet (continue_buffer);
-		send_packet (continue_buffer);
+		out_buffer[0] = 3;
+		out_buffer[1] = CMD_CONTINUE;
+		out_buffer[2] = 1;
 		continue_cb &= ~2;
+		if (initialized)
+		{
+			prepare_packet (out_buffer);
+			send_packet (out_buffer);
+		}
+		else
+			try_send_next ();
 		return;
 	}
 	if (which_autosleep != 0)
 	{
-		autosleep_buffer[2] = which_autosleep;
-		prepare_packet (autosleep_buffer);
-		send_packet (autosleep_buffer);
+		out_buffer[0] = 3;
+		out_buffer[1] = CMD_AUTOSLEEP;
+		out_buffer[2] = which_autosleep;
 		which_autosleep = 0;
+		if (initialized)
+		{
+			prepare_packet (out_buffer);
+			send_packet (out_buffer);
+		}
+		else
+			try_send_next ();
 		return;
 	}
 	if (ping != 0)
@@ -332,9 +395,11 @@ void try_send_next ()
 		{
 			if (ping & 1 << b)
 			{
-				ping_buffer[2] = b;
-				prepare_packet (ping_buffer);
-				send_packet (ping_buffer);
+				reply[0] = 3;
+				reply[1] = CMD_PONG;
+				reply[2] = b;
+				prepare_packet (reply);
+				send_packet (reply);
 				ping &= ~(1 << b);
 				return;
 			}

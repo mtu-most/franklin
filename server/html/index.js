@@ -6,6 +6,7 @@ var active_printer;
 var rpc;
 var update_handle;
 var updater;
+var printer;
 // }}}
 
 // {{{ Events from server.
@@ -64,6 +65,7 @@ function setup_updater () {
 				global.detectbutton.RemoveClass ('hidden');
 			}
 			else {
+				printer = global.ports_list[port][1];
 				global.noprinter.AddClass ('hidden');
 				global.disablebutton.RemoveClass ('hidden');
 				global.detectbutton.AddClass ('hidden');
@@ -79,6 +81,7 @@ function setup_updater () {
 		if (port == global.selected) {
 			global.noprinter.RemoveClass ('hidden');
 			global.selected = null;
+			printer = null;
 		}
 		global.ports.removeChild (global.ports_list[port][0]);
 		delete global.ports_list[port];
@@ -96,6 +99,7 @@ function setup_updater () {
 		if (port == global.selected) {
 			global.noprinter.RemoveClass ('hidden');
 			global.selected = null;
+			printer = null;
 		}
 	};
 	updater.variables_update = function (port, values) {
@@ -111,12 +115,48 @@ function setup_updater () {
 	updater.temp_update = function (port, index, values) {
 		global.ports_list[port][1].temps[index].update (values);
 	};
+	updater.gpio_update = function (port, index, values) {
+		global.ports_list[port][1].gpios[index].update (values);
+	};
 	updater.printing = function (port, state) {
 		var printer = global.ports_list[port][1];
 		if (state)
 			printer.AddClass ('printing');
 		else
 			printer.RemoveClass ('printing');
+	};
+	updater.scripts = new Object;
+	updater.new_script = function (name, code, data) {
+		updater.scripts[name] = global.custom.AddElement ('div');
+		function update_data (new_data) {
+			rpc.call ('set_data', [name, _rpc_tojson (new_data)], {}, null);
+		}
+		var this_script = updater.scripts[name];
+		try {
+			eval ('(' + code + ')') (name, updater.scripts[name], eval ('(' + data + ')'));
+			var button = updater.scripts[name].AddElement ('button', 'portaction');
+			button.type = 'button';
+			button.AddText ('Remove');
+			button.onclick = function () {
+				rpc.call ('del_script', [name], {}, null);
+			};
+		}
+		catch (e) {
+			updater.del_script (name);
+		}
+	};
+	updater.del_script = function (name) {
+		global.custom.removeChild (updater.scripts[name]);
+		delete updater.scripts[name];
+	};
+	updater.new_data = function (name, data) {
+		updater.scripts[name].new_data (eval ('(' + data + ')'));
+	};
+	updater['confirm'] = function (message) {
+		if (!confirm (message ? message : "Please confirm to continue."))
+			rpc.multicall ([['pause', [true], {}], ['confirm', [], {}]], null);
+		else
+			rpc.call ('confirm', [], {}, null);
 	};
 }
 // }}}
@@ -125,12 +165,17 @@ function setup_updater () {
 function reconnect () {
 	global.RemoveClass ('connected');
 	rpc = null;
-	for (var p in global.ports_list)
+	for (var p in global.ports_list) {
 		if (typeof global.ports_list[p] == 'object') {
 			if (global.ports_list[p][1] != null)
 				updater.del_printer (p);
 			updater.del_port (p);
 		}
+	}
+	for (var s in updater.scripts) {
+		if (typeof updater.scripts[s] == 'object')
+			updater.del_script (s);
+	}
 	rpc = Rpc (updater, setup, reconnect);
 }
 
@@ -162,7 +207,6 @@ function init () {
 }
 
 function setup () {
-	global.call = rpc.call;
 	global.AddClass ('connected');
 	rpc.call ('set_monitor', [true], {}, null);
 }
@@ -241,12 +285,12 @@ function NumFunction (printer, name, object, part, index, negative) { // {{{
 			checkbox.checked = value < 0;
 			checkbox2.checked = value > 0;
 			if (!isNaN (value) && value != 0)
-				func.entry.value = Math.abs (value).toFixed (3);
+				func.entry.value = Math.abs (value).toFixed (1);
 		}
 		else {
 			checkbox.checked = !isNaN (value);
 			if (!isNaN (value))
-				func.entry.value = value.toFixed (3);
+				func.entry.value = value.toFixed (1);
 		}
 	};
 	return func;
@@ -275,11 +319,16 @@ function FileFunction (printer, name, object, part, index, send_name) { // {{{
 		}
 		var reader = new FileReader ();
 		reader.onload = function (e) {
+			function errors (err) {
+				if (err.length == 0)
+					return;
+				alert ('Errors in lines: ' + err.join (', '));
+			}
 			if (e.target.readyState == FileReader.DONE) {
 				if (send_name)
-					printer.call (object ? part + '_' + object : part, object ? [index, func.entry.value, e.target.result] : [func.entry.value, e.target.result], {}, null);
+					printer.call (object ? part + '_' + object : part, object ? [index, func.entry.value, e.target.result] : [func.entry.value, e.target.result], {}, errors);
 				else
-					printer.call (object ? part + '_' + object : part, object ? [index, e.target.result] : [e.target.result], {}, null);
+					printer.call (object ? part + '_' + object : part, object ? [index, e.target.result] : [e.target.result], {}, errors);
 			}
 		}
 		reader.readAsBinaryString (func.fileselect.files[0]);
@@ -325,7 +374,7 @@ function Text (printer, name, object, part, index) { // {{{
 	};
 	return text;
 } // }}}
-function Range (printer, name, object, part, index, max) { // {{{
+function Range (printer, name, object, part, index, max, gpio) { // {{{
 	var range = document.createElement ('tr');
 	range.AddElement ('td').AddText (name);
 	var td = range.AddElement ('td');
@@ -334,35 +383,78 @@ function Range (printer, name, object, part, index, max) { // {{{
 	button.type = 'button';
 	button.AddText ('Set');
 	button.onclick = function () {
-		printer.set (object, part, index, range.select.selectedIndex);
+		printer.set (object, part, index, Number (range.select.options[range.select.selectedIndex].value));
 	};
 	range.update = function (value) {
 		range.select.ClearAll ();
-		for (var o = 0; o < max; ++o) {
+		if (gpio) {
 			var option = range.select.AddElement ('option');
-			option.value = o;
-			option.AddText (String (o));
-			if (value == o)
+			option.value = 0;
+			option.AddText ('None');
+			if (value == null)
 				option.selected = true;
+			for (var o = 0; o <= printer.constants.maxextruders + printer.constants.maxtemps; ++o) {
+				var option = range.select.AddElement ('option');
+				option.value = 2 + printer.constants.maxaxes + o;
+				if (o < printer.constants.maxextruders)
+					option.AddText ('Extruder ' + String (o));
+				else
+					option.AddText ('Temp ' + String (o - printer.constants.maxextruders));
+				if (value == option.value)
+					option.selected = true;
+			}
+		}
+		else {
+			for (var o = 0; o <= max; ++o) {
+				var option = range.select.AddElement ('option');
+				option.value = o;
+				option.AddText (String (o));
+				if (value == o)
+					option.selected = true;
+			}
 		}
 	};
 	return range;
 } // }}}
-function Choice (printer, name, object, part, index, list) { // {{{
+function Choice (printer, name, object, part, index, list, radio) { // {{{
 	var choice = document.createElement ('tr');
 	choice.AddElement ('td').AddText (name);
-	var td = choice.AddElement ('td');
-	choice.select = td.AddElement ('select');
-	for (var o = 0; o < list.length; ++o) {
-		var option = choice.select.AddElement ('option');
-		option.value = o;
-		option.AddText (list[o]);
+	choice.radios = [];
+	if (radio) {
+		var table = choice.AddElement ('table');
+		for (var o = 0; o < list.length; ++o) {
+			var td = table.AddElement ('tr').AddElement ('td');
+			choice.radios[o] = td.AddElement ('input');
+			choice.radios[o].type = 'radio';
+			choice.radios[o].name = 'choice' + part + String (name);
+			choice.radios[o].value = String (o);
+			choice.radios[o].onclick = function () {
+				printer.set (object, part, index, Number (this.value));
+			};
+			td.AddText (list[o]);
+		}
 	}
-	var button = td.AddElement ('button');
-	button.type = 'button';
-	button.AddText ('Set');
-	button.onclick = function () { printer.set (object, part, index, choice.select.selectedIndex); };
-	choice.update = function (value) { choice.select.selectedIndex = value; };
+	else {
+		var td = choice.AddElement ('td');
+		choice.select = td.AddElement ('select');
+		for (var o = 0; o < list.length; ++o) {
+			var option = choice.select.AddElement ('option');
+			option.value = o;
+			option.AddText (list[o]);
+		}
+		var button = td.AddElement ('button');
+		button.type = 'button';
+		button.AddText ('Set');
+		button.onclick = function () { printer.set (object, part, index, choice.select.selectedIndex); };
+	}
+	choice.update = function (value) {
+		if (radio) {
+			if (value in choice.radios)
+				choice.radios[value].selected = true;
+		}
+		else
+			choice.select.selectedIndex = value;
+	};
 	return choice;
 } // }}}
 function Float (printer, name, object, part, index, factor) { // {{{
@@ -376,7 +468,7 @@ function Float (printer, name, object, part, index, factor) { // {{{
 	button.type = 'button';
 	button.AddText ('Set');
 	button.onclick = function () { printer.set (object, part, index, Number (the_float.entry.value) * the_float.factor); };
-	the_float.update = function (value) { the_float.entry.value = (Number (value) / the_float.factor).toFixed (3); };
+	the_float.update = function (value) { the_float.entry.value = (Number (value) / the_float.factor).toFixed (1); };
 	return the_float;
 } // }}}
 function Pin (printer, name, object, part, index, analog) { // {{{
@@ -410,7 +502,7 @@ function Pin (printer, name, object, part, index, analog) { // {{{
 	button.type = 'button';
 	button.AddText ('Set');
 	button.onclick = function () {
-		printer.set (object, part, index, Number (pin.select.value) + (pin.invalid.checked ? 0x100 : 0) + (pin.inverted.checked ? 0x200 : 0));
+		printer.set (object, part, index, Number (pin.select.value) + (pin.invalid.checked ? 0x100 : 0) + (!analog && pin.inverted.checked ? 0x200 : 0));
 	};
 	pin.update = function (value) {
 		pin.select.selectedIndex = Number (value) & 0xff;
@@ -491,9 +583,9 @@ function Temp (printer, name, object, index) { // {{{
 	}
 	temp.power_pin = table.Add (Pin (printer, 'Power pin', object, 'power_pin', index), 'pin');
 	temp.thermistor_pin = table.Add (Pin (printer, 'Thermistor pin', object, 'thermistor_pin', index, true), 'pin');
-	temp.R0 = table.Add (Float (printer, 'R0 [Ω]', object, 'R0', index), 'setting');
-	temp.R1 = table.Add (Float (printer, 'R1 [Ω]', object, 'R1', index), 'setting');
-	temp.Rc = table.Add (Float (printer, 'Rc [Ω]', object, 'Rc', index), 'setting');
+	temp.R0 = table.Add (Float (printer, 'R0 [kΩ]', object, 'R0', index, 1000), 'setting');
+	temp.R1 = table.Add (Float (printer, 'R1 [kΩ]', object, 'R1', index, 1000), 'setting');
+	temp.Rc = table.Add (Float (printer, 'Rc [kΩ]', object, 'Rc', index, 1000), 'setting');
 	temp.Tc = table.Add (Float (printer, 'Tc [°C]', object, 'Tc', index), 'setting');
 	temp.beta = table.Add (Float (printer, 'β [K]', object, 'beta', index), 'setting');
 	temp.core_C = table.Add (Float (printer, 'Core C [J/K]', object, 'core_C', index), 'future');
@@ -507,18 +599,18 @@ function Temp (printer, name, object, index) { // {{{
 	button.type = 'button';
 	button.AddText ('Setup temp');
 	button.onclick = function () {
-		this.power_pin.set ();
-		this.thermistor_pin.set ();
-		this.R0.set ();
-		this.R1.set ();
-		this.Rc.set ();
-		this.Tc.set ();
-		this.beta.set ();
-		this.core_C.set ();
-		this.shell_C.set ();
-		this.transfer.set ();
-		this.radiation.set ();
-		this.power.set ();
+		temp.power_pin.set ();
+		temp.thermistor_pin.set ();
+		temp.R0.set ();
+		temp.R1.set ();
+		temp.Rc.set ();
+		temp.Tc.set ();
+		temp.beta.set ();
+		temp.core_C.set ();
+		temp.shell_C.set ();
+		temp.transfer.set ();
+		temp.radiation.set ();
+		temp.power.set ();
 	};
 	var value = table.Add (NumFunction (printer, 'Enable', settempname, 'settemp', index), 'action');
 	value.entry.AddClass ('hidden');
@@ -527,7 +619,7 @@ function Temp (printer, name, object, index) { // {{{
 	td = tr.AddElement ('td');
 	temp.current = td.AddElement ('span');
 	td.AddText ('°C');
-	printer.monitor_queue.push ([function () { return !temp.thermistor_pin.invalid.checked; }, 'readtemp_' + settempname, [index], {}, function (t) { temp.current.ClearAll ().AddText (t.toFixed (3)); }]);
+	printer.monitor_queue.push ([function () { return !temp.thermistor_pin.invalid.checked; }, 'readtemp_' + settempname, [index], {}, function (t) { temp.current.ClearAll ().AddText (t.toFixed (1)); }]);
 	temp.update = function (values) {
 		this.power_pin.update (values[0]);
 		this.thermistor_pin.update (values[1]);
@@ -554,6 +646,25 @@ function Temp (printer, name, object, index) { // {{{
 	};
 	return temp;
 } // }}}
+function Gpio (printer, name, index) { // {{{
+	var gpio, table;
+	gpio = document.createElement ('td', 'gpio box inactive');
+	table = gpio.AddElement ('table');
+	var th = table.AddElement ('tr').AddElement ('th');
+	th.colSpan = 2;
+	th.AddText ('GPIO ' + String (name));
+	gpio.pin = table.Add (Pin (printer, 'Pin', 'gpio', 'pin', index), 'pin');
+	gpio.state = table.Add (Choice (printer, 'State', 'gpio', 'state', index, ['Disconnected', 'Input', 'Low', 'High'], true), 'useful');
+	gpio.master = table.Add (Range (printer, 'Master temp', 'gpio', 'master', index, null, true), 'setting');
+	gpio.value = table.Add (Float (printer, 'Trigger', 'gpio', 'value', index, 1), 'setting');
+	gpio.update = function (values) {
+		this.pin.update (values[0]);
+		this.state.update (values[1]);
+		this.master.update (values[2]);
+		this.value.update (values[3]);
+	};
+	return gpio;
+} // }}}
 function Axis (printer, name, index) { // {{{
 	var axis = document.createElement ('td');
 	axis.className = 'axis box inactive';
@@ -572,31 +683,19 @@ function Axis (printer, name, index) { // {{{
 	axis.offset = table.Add (Float (printer, 'Offset', 'axis', 'offset', index), 'useful');
 	// Goto.
 	var tr = table.AddElement ('tr', 'action')
-	tr.AddElement ('td').AddText ('Move');
+	tr.AddElement ('td').AddText ('Goto');
+	axis.dist = tr.AddElement ('td').AddElement ('input');
+	axis.dist.type = 'text';
+	axis.dist.value = '0';
 	var td = tr.AddElement ('td');
 	var button = td.AddElement ('button');
 	button.type = 'button';
-	button.AddText ('-');
+	button.AddText ('Go');
 	button.onclick = function () {
-		printer.call ('axis_get_current_pos', [name], {}, function (pos) {
-			var arg = new Object ()
-			arg[name] = pos[1] - Number (axis.dist.value);
-			printer.call ('goto', [arg], {}, null);
-		});
+		var arg = new Object ()
+		arg[name] = Number (axis.dist.value);
+		printer.call ('goto', [arg], {}, null);
 	};
-	button = td.AddElement ('button');
-	button.type = 'button';
-	button.AddText ('+');
-	button.onclick = function () {
-		printer.call ('axis_get_current_pos', [name], {}, function (pos) {
-			var arg = new Object ()
-			arg[name] = pos[1] + Number (axis.dist.value);
-			printer.call ('goto', [arg], {}, null);
-		});
-	};
-	axis.dist = td.AddElement ('input');
-	axis.dist.type = 'text';
-	axis.dist.value = '10';
 	// Current pos.
 	tr = table.AddElement ('tr', 'action')
 	tr.AddElement ('td').AddText ('Position');
@@ -609,14 +708,8 @@ function Axis (printer, name, index) { // {{{
 	button.AddText ('Get');
 	button.onclick = function () {
 		printer.call ('axis_get_current_pos', [name], {}, function (pos) {
-			axis.pos.value = pos[1].toFixed (3);
+			axis.pos.value = pos[1].toFixed (1);
 		});
-	};
-	button = td.AddElement ('button');
-	button.type = 'button';
-	button.AddText ('Set');
-	button.onclick = function () {
-		printer.call ('axis_set_current_pos', [name, Number (axis.pos.value)], {}, null);
 	};
 	td = table.AddElement ('tr', 'setting').AddElement ('td');
 	td.colSpan = 2;
@@ -671,6 +764,25 @@ function Extruder (printer, name, index) { // {{{
 		this.nozzle_size.set ();
 		this.filament_size.set ();
 	};
+	// Move.
+	var tr = table.AddElement ('tr', 'action')
+	tr.AddElement ('td').AddText ('Move');
+	var td = tr.AddElement ('td');
+	var button = td.AddElement ('button');
+	button.type = 'button';
+	button.AddText ('-');
+	button.onclick = function () {
+		printer.call ('goto', [], {'e': Number (-extruder.dist.value)}, null);
+	};
+	button = td.AddElement ('button');
+	button.type = 'button';
+	button.AddText ('+');
+	button.onclick = function () {
+		printer.call ('goto', [], {'e': Number (extruder.dist.value)}, null);
+	};
+	extruder.dist = td.AddElement ('input');
+	extruder.dist.type = 'text';
+	extruder.dist.value = '10';
 	extruder.update = function (values) {
 		this.motor.update (values[0]);
 		this.temp.update (values[1]);
@@ -697,17 +809,20 @@ function Printer (port, constants) { // {{{
 	printer.maxaxes = printer.Add (Constant (printer, 'maxaxes', 'Maximum number of axes', constants[1]), 'constants');
 	printer.maxextruders = printer.Add (Constant (printer, 'maxextruders', 'Maximum number of extruders', constants[2]), 'constants');
 	printer.maxtemps = printer.Add (Constant (printer, 'maxtemps', 'Maximum number of temps', constants[3]), 'constants');
-	printer.audio_fragments = printer.Add (Constant (printer, 'audio_fragments', 'Number of audio fragments', constants[4]), 'constants audio');
-	printer.audio_fragment_size = printer.Add (Constant (printer, 'audio_fragment_size', 'Audio fragment size [B]', constants[5]), 'constants audio');
-	printer.num_digital_pins = printer.Add (Constant (printer, 'num_digital_pins', 'Number of digital pins', constants[6]), 'constants');
-	printer.num_pins = printer.Add (Constant (printer, 'num_pins', 'Total number of pins', constants[7]), 'constants');
+	printer.maxgpios = printer.Add (Constant (printer, 'maxgpios', 'Maximum number of gpios', constants[4]), 'constants');
+	printer.audio_fragments = printer.Add (Constant (printer, 'audio_fragments', 'Number of audio fragments', constants[5]), 'constants audio');
+	printer.audio_fragment_size = printer.Add (Constant (printer, 'audio_fragment_size', 'Audio fragment size [B]', constants[6]), 'constants audio');
+	printer.num_digital_pins = printer.Add (Constant (printer, 'num_digital_pins', 'Number of digital pins', constants[7]), 'constants');
+	printer.num_pins = printer.Add (Constant (printer, 'num_pins', 'Total number of pins', constants[8]), 'constants');
 	printer.axes = [];
 	printer.extruders = [];
 	printer.temps = [];
+	printer.gpios = [];
 	printer.name = printer.Add (Text (printer, 'Name', null, 'name', null), 'setting');
 	printer.num_axes = printer.Add (Range (printer, 'Number of axes', null, 'num_axes', null, printer.constants.maxaxes), 'setting');
 	printer.num_extruders = printer.Add (Range (printer, 'Number of extruders', null, 'num_extruders', null, printer.constants.maxextruders), 'setting');
 	printer.num_temps = printer.Add (Range (printer, 'Number of temps', null, 'num_temps', null, printer.constants.maxtemps), 'setting');
+	printer.num_gpios = printer.Add (Range (printer, 'Number of gpios', null, 'num_gpios', null, printer.constants.maxgpios), 'setting');
 	printer.type = printer.Add (Choice (printer, 'Printer type', null, 'printer_type', null, ['Cartesian', 'Delta']), 'setting');
 	printer.led_pin = printer.Add (Pin (printer, 'Led pin', null, 'led_pin', null), 'pin');
 	printer.room_T = printer.Add (Float (printer, 'Room temperature [°C]', null, 'room_T', null), 'future');
@@ -717,8 +832,9 @@ function Printer (port, constants) { // {{{
 
 	printer.Add (Button (printer, 'Load all', null, 'load_all', null), 'setting');
 	printer.Add (Button (printer, 'Save all', null, 'save_all', null), 'setting');
-	printer.link = printer.AddElement ('tr', 'setting').AddElement ('td').AddElement ('A');
+	printer.link = printer.AddElement ('tr', 'setting').AddElement ('td').AddElement ('a');
 	printer.link.AddText ('Export settings');
+	printer.Add (FileFunction (printer, 'Import settings', null, 'import_settings', null, false), 'setting');
 	printer.pause = printer.Add (Checkbox (printer, 'Pause', null, 'pause', null, true), 'action');
 	// TODO: audio play	choice and go
 	printer.Add (FileFunction (printer, 'Print G-Code', null, 'gcode', null, false), 'action');
@@ -728,7 +844,50 @@ function Printer (port, constants) { // {{{
 	var td = printer.AddElement ('tr').AddElement ('td');
 	td.colSpan = 2;
 	var table = td.AddElement ('table');
-	var tr = table.AddElement ('tr');
+	var tr = table.AddElement ('tr', 'action');
+	tr.AddElement ('th').AddText ('Move');
+	for (var m = 0; m < 3; ++m) {
+		var input = tr.AddElement ('td').AddElement ('input');
+		input.type = 'text';
+		input.value = ['1', '10', '100'][m];
+		input.onkeydown = function (e) {
+			var me = this;
+			var code = e.which || e.keyCode;
+			switch (code) {
+				case 33: // Page up
+					printer.call ('axis_get_current_pos', [2], {}, function (pos) {
+						printer.call ('goto', [{2: pos[1] + Number (me.value)}], {}, null);
+					});
+					break;
+				case 34: // Page down
+					printer.call ('axis_get_current_pos', [2], {}, function (pos) {
+						printer.call ('goto', [{2: pos[1] - Number (me.value)}], {}, null);
+					});
+					break;
+				case 37: // Left
+					printer.call ('axis_get_current_pos', [0], {}, function (pos) {
+						printer.call ('goto', [{0: pos[1] - Number (me.value)}], {}, null);
+					});
+					break;
+				case 38: // Up
+					printer.call ('axis_get_current_pos', [1], {}, function (pos) {
+						printer.call ('goto', [{1: pos[1] + Number (me.value)}], {}, null);
+					});
+					break;
+				case 39: // Right
+					printer.call ('axis_get_current_pos', [0], {}, function (pos) {
+						printer.call ('goto', [{0: pos[1] + Number (me.value)}], {}, null);
+					});
+					break;
+				case 40: // Down
+					printer.call ('axis_get_current_pos', [1], {}, function (pos) {
+						printer.call ('goto', [{1: pos[1] - Number (me.value)}], {}, null);
+					});
+					break;
+			}
+		};
+	}
+	tr = table.AddElement ('tr');
 	for (var a = 0; a < printer.constants.maxaxes; ++a)
 		printer.axes[a] = tr.Add (Axis (printer, a, a), 'inactive');
 	tr = table.AddElement ('tr');
@@ -737,18 +896,22 @@ function Printer (port, constants) { // {{{
 	tr = table.AddElement ('tr');
 	for (var t = 0; t < printer.constants.maxtemps; ++t)
 		printer.temps[t] = tr.Add (Temp (printer, t, null, t), 'inactive');
+	tr = table.AddElement ('tr');
+	for (var g = 0; g < printer.constants.maxgpios; ++g)
+		printer.gpios[g] = tr.Add (Gpio (printer, g, g), 'inactive');
 	printer.update = function (values) {
 		this.name.update (values[0]);
 		this.num_axes.update (values[1]);
 		this.num_extruders.update (values[2]);
 		this.num_temps.update (values[3]);
-		this.type.update (values[4]);
-		this.led_pin.update (values[5]);
-		this.room_T.update (values[6]);
-		this.motor_limit.update (values[7]);
-		this.temp_limit.update (values[8]);
-		this.feedrate.update (values[9]);
-		this.pause.update (values[10]);
+		this.num_gpios.update (values[4]);
+		this.type.update (values[5]);
+		this.led_pin.update (values[6]);
+		this.room_T.update (values[7]);
+		this.motor_limit.update (values[8]);
+		this.temp_limit.update (values[9]);
+		this.feedrate.update (values[10]);
+		this.pause.update (values[11]);
 		for (var a = 0; a < printer.constants.maxaxes; ++a) {
 			if (a < printer.num_axes.select.selectedIndex)
 				printer.axes[a].RemoveClass ('inactive');
@@ -767,13 +930,22 @@ function Printer (port, constants) { // {{{
 			else
 				printer.temps[t].AddClass ('inactive');
 		}
-		this.link.href = encodeURIComponent (this.name.entry.value) + '?port=' + encodeURIComponent (port);
+		for (var g = 0; g < printer.constants.maxgpios; ++g) {
+			if (g < printer.num_gpios.select.selectedIndex)
+				printer.gpios[g].RemoveClass ('inactive');
+			else
+				printer.gpios[g].AddClass ('inactive');
+		}
+		this.link.href = encodeURIComponent (this.name.entry.value) + '.ini?port=' + encodeURIComponent (port);
 	};
 	return printer;
 } // }}}
 function Global () { // {{{
 	global = document.createElement ('div');
 	global.className = 'connected global';
+	global.call = function (name, a, ka, reply) {
+		rpc.call (name, a, ka, reply);
+	};
 	global.get = function (object, part, index, cb) {
 		if (object)
 			return [object + '_get_' + part, [index], {}, cb];
@@ -782,12 +954,13 @@ function Global () { // {{{
 	};
 	global.set = function (object, part, index, value) {
 		if (object)
-			this.call (object + '_set_' + part, [index, value], {}, null);
+			rpc.call (object + '_set_' + part, [index, value], {}, null);
 		else
-			this.call ('set_' + part, [value], {}, null);
+			rpc.call ('set_' + part, [value], {}, null);
 	};
 	global.ports_list = {}
 	global.selected = null;
+	printer = null;
 	update_temps ();
 	var table = global.AddElement ('div', 'views');
 	var views = [['view', 'Show visibility', null], ['action', 'Actions', true], ['useful', 'Useful settings', true], ['setting', 'Other settings', false], ['pin', 'Pins', false], ['inactive', 'Disabled elements', false], ['future', 'Unused features', false], ['constants', 'Constants', false], ['portaction', 'Port administration', false], ['audio', 'Audio', false]];
@@ -830,12 +1003,11 @@ function Global () { // {{{
 	span.AddText ('Printer:');
 	global.ports = span.AddElement ('span');
 	global.printers = global.AddElement ('div');
-	global.selected = null;
 	var buttons = span.AddElement ('span', 'portaction');
 	global.disablebutton = buttons.AddElement ('button');
 	global.disablebutton.type = 'button';
 	global.disablebutton.AddText ('Disable');
-	global.disablebutton.onClick = function () {
+	global.disablebutton.onclick = function () {
 		if (!global.ports_list[global.selected][1])
 			return;
 		rpc.call ('disable', [global.selected], {}, null);
@@ -843,12 +1015,14 @@ function Global () { // {{{
 	global.detectbutton = buttons.AddElement ('button');
 	global.detectbutton.type = 'button';
 	global.detectbutton.AddText ('Detect');
-	global.detectbutton.onClick = function () {
+	global.detectbutton.onclick = function () {
 		if (global.ports_list[global.selected][1])
 			return;
 		rpc.call ('detect', [global.selected], {}, null);
 	};
 	global.noprinter = global.printers.AddElement ('div', 'hidden');
 	global.noprinter.AddText ('No printer is selected');
+	global.custom = global.AddElement ('div');
+	global.custom.AddElement ('table', 'portaction').Add (FileFunction (global, 'Upload script', null, 'new_script', null));
 } // }}}
 // }}}

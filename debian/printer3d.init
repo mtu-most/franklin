@@ -10,8 +10,6 @@
 # Description:		Allow browser and python clients to control a 3-D printer
 ### END INIT INFO
 
-exit 0
-
 # The defaults below can be overridden in this file.
 CONFIG_FILE=/etc/default/printer3d
 

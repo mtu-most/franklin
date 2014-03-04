@@ -14,7 +14,9 @@ void write_8 (int16_t &address, uint8_t data, bool eeprom)
 	{
 		//debug ("EEPROM[%x] = %x", address, data);
 		EEPROM.write (address++, data);
+#ifdef WATCHDOG
 		wdt_reset ();
+#endif
 		return;
 	}
 	reply[address++] = data;

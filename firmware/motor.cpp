@@ -2,7 +2,7 @@
 
 void Motor::load (int16_t &addr, bool eeprom)
 {
-	bool e = GET (enable_pin, true);
+	bool e = GET (enable_pin, false);
 	bool d = GET (dir_pin, false);
 	bool s = GET (step_pin, false);
 	step_pin.read (read_16 (addr, eeprom));

@@ -15,7 +15,7 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 	uint8_t i;
 	for (i = 1; i <= MAXOBJECT; ++i) {
 		uint8_t next = (temp_current + i) % MAXOBJECT;
-		if (temps[next] && (!isnan (temps[next]->target) || !isnan (temps[next]->min_alarm) || !isnan (temps[next]->max_alarm)) && !temps[next]->power_pin.invalid () && (!temps[next]->thermistor_pin.invalid () || (temps[next]->target > 0 && isinf (temps[next]->target)))) {
+		if (temps[next] && (!isnan (temps[next]->target) || !isnan (temps[next]->min_alarm) || !isnan (temps[next]->max_alarm) || temps[next]->gpios) && !temps[next]->thermistor_pin.invalid ()) {
 			temp_current = next;
 			break;
 		}
@@ -24,33 +24,31 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 	if (i > MAXOBJECT) {
 		return;
 	}
-	float temp = NAN;
-	// Read the temperature and trigger any alarms.
-	if (!temps[temp_current]->thermistor_pin.invalid ()) {
-		temp = temps[temp_current]->read ();
-		// First of all, if an alarm should be triggered, do so.
-		if ((!isnan (temps[temp_current]->min_alarm) && temps[temp_current]->min_alarm < temp) || (!isnan (temps[temp_current]->max_alarm) && temps[temp_current]->max_alarm > temp)) {
-			temps[temp_current]->min_alarm = NAN;
-			temps[temp_current]->max_alarm = NAN;
-			which_tempcbs |= (1 << temp_current);
-			try_send_next ();
-		}
+	float temp = temps[temp_current]->read ();
+	// First of all, if an alarm should be triggered, do so.
+	if (temps[temp_current]->min_alarm < temp || temps[temp_current]->max_alarm > temp) {
+		temps[temp_current]->min_alarm = NAN;
+		temps[temp_current]->max_alarm = NAN;
+		which_tempcbs |= (1 << temp_current);
+		try_send_next ();
 	}
-	// Temps without a thermistor can only be switched on by setting them to inf.
-	if (isinf (temps[temp_current]->target) && temps[temp_current]->target > 0) {
-		if (!temps[temp_current]->is_on) {
-			//debug ("switching on %d", temp_current);
-			SET (temps[temp_current]->power_pin);
-			temps[temp_current]->is_on = true;
-			temps[temp_current]->last_time = current_time;
-			++temps_busy;
-		}
+#ifndef LOWMEM
+	// And handle any linked gpios.
+	for (Gpio *g = temps[temp_current]->gpios; g; g = g->next) {
+		SET_OUTPUT (g->pin);
+		if (temp >= g->value)
+			SET (g->pin);
+		else
+			RESET (g->pin);
 	}
-	if (temps[temp_current]->thermistor_pin.invalid ())
-		return;
-	// At this point, we have an actual temperature reading.
+#endif
 	// If we don't have model settings, simply use the target as a switch between on and off.
-	if (isnan (temps[temp_current]->core_C) || isnan (temps[temp_current]->shell_C) || isnan (temps[temp_current]->transfer) || isnan (temps[temp_current]->radiation)) {
+#ifndef LOWMEM
+	if (isnan (temps[temp_current]->core_C) || isnan (temps[temp_current]->shell_C) || isnan (temps[temp_current]->transfer) || isnan (temps[temp_current]->radiation))
+#else
+	if (true)
+#endif
+	{
 		// No valid settings; use simple on/off-regime based on current temperature only.
 		if (temp < temps[temp_current]->target) {
 			if (!temps[temp_current]->is_on) {
@@ -74,6 +72,7 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 		}
 		return;
 	}
+#ifndef LOWMEM
 	// We have model settings.
 	unsigned long dt = current_time - temps[temp_current]->last_time;
 	if (dt == 0)
@@ -111,6 +110,7 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 			--temps_busy;
 		}
 	}
+#endif
 }
 
 static void done_motors () {
@@ -142,7 +142,7 @@ static bool do_steps (uint8_t m, int16_t num_steps) {
 		// No problem if limit switch is not hit.
 		if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) : GET (axis[m - 2].limit_min_pin, false)) {
 			// Hit endstop; abort current move and notify host.
-			debug ("hit %d %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (motors[m]->positive), int (axis[m - 2].limit_max_pin.write ()));
+			debug ("hit %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (motors[m]->positive));
 			// Stop continuous move only for the motor that hits the switch.
 			motors[m]->f = 0;
 			motors[m]->continuous_steps_per_s = 0;
@@ -329,6 +329,7 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 	move_axes (target);
 }
 
+#ifdef AUDIO
 static void handle_audio (unsigned long current_time, unsigned long longtime) {
 	if (audio_head != audio_tail) {
 		last_active = longtime;
@@ -373,9 +374,10 @@ static void handle_audio (unsigned long current_time, unsigned long longtime) {
 		}
 	}
 }
+#endif
 
 static void handle_led (unsigned long current_time) {
-	unsigned timing = temps_busy > 0 ? 1000 / 80 : 1000 / 50;
+	unsigned timing = temps_busy > 0 ? 1000 / 100 : 1000 / 50;
 	if (current_time - led_last < timing)
 		return;
 	led_last += timing;
@@ -396,7 +398,9 @@ void loop () {
 	handle_temps (current_time, longtime);	// Periodic temps stuff: temperature regulation.
 	handle_motors (current_time, longtime);	// Movement.
 	handle_led (longtime);	// heart beat.
+#ifdef AUDIO
 	handle_audio (current_time, longtime);
+#endif
 	if (motors_busy && motor_limit > 0 && longtime - last_active > motor_limit) {
 		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 			if (!motors[m])
