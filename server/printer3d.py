@@ -1,6 +1,6 @@
 # vim: set foldmethod=marker :
 
-show_own_debug = False
+show_own_debug = True
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -999,19 +999,28 @@ class Printer: # {{{
 		if channel == 1:
 			c = websockets.call (resumeinfo, self._read_variables, )
 			while c (): c.args = (yield websockets.WAIT)
-		elif 2 <= channel < 2 + self.maxaxes:
-			c = websockets.call (resumeinfo, self.axis[channel - 2].read, self._read (channel))
-			while c (): c.args = (yield websockets.WAIT)
-		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
-			c = websockets.call (resumeinfo, self.extruder[channel - 2 - self.maxaxes].read, self._read (channel))
-			while c (): c.args = (yield websockets.WAIT)
-		elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps:
-			c = websockets.call (resumeinfo, self.extruder[channel - 2 - self.maxaxes].read, self._read (channel))
-			while c (): c.args = (yield websockets.WAIT)
+			self._variables_update ()
 		else:
-			assert channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps + self.maxgpios
-			c = websockets.call (resumeinfo, self.gpio[channel - 2 - self.maxaxes - self.maxextruders - self.maxtemps].read, self._read (channel))
+			c = websockets.call (resumeinfo, self._read, channel)
 			while c (): c.args = (yield websockets.WAIT)
+			data = c.ret ()
+			if 2 <= channel < 2 + self.maxaxes:
+				c = websockets.call (resumeinfo, self.axis[channel - 2].read, data)
+				while c (): c.args = (yield websockets.WAIT)
+				self._axis_update (channel - 2)
+			elif 2 + self.maxaxes <= channel < 2 + self.maxaxes + self.maxextruders:
+				c = websockets.call (resumeinfo, self.extruder[channel - 2 - self.maxaxes].read, data)
+				while c (): c.args = (yield websockets.WAIT)
+				self._extruder_update (channel - 2 - self.maxaxes)
+			elif 2 + self.maxaxes + self.maxextruders <= channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps:
+				c = websockets.call (resumeinfo, self.temp[channel - 2 - self.maxaxes - self.maxextruders].read, data)
+				while c (): c.args = (yield websockets.WAIT)
+				self._temp_update (channel - 2 - self.maxaxes - self.maxextruders)
+			else:
+				assert 2 + self.maxaxes + self.maxextruders + self.maxtemps <= channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps + self.maxgpios
+				c = websockets.call (resumeinfo, self.gpio[channel - 2 - self.maxaxes - self.maxextruders - self.maxtemps].read, data)
+				while c (): c.args = (yield websockets.WAIT)
+				self._gpio_update (channel - 2 - self.maxaxes - self.maxextruders - self.maxtemps)
 	# }}}
 	def load_all (self): # {{{
 		resumeinfo = [(yield), None]

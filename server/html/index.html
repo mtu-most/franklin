@@ -1,13 +1,275 @@
 <!DOCTYPE html>
+<!-- vim: set foldmethod=marker : -->
 <html>
-	<head>
-		<meta http-equiv="Content-type: text/html;charset=utf-8"/>
+	<head> <!-- {{{ -->
+		<meta http-equiv='Content-type: text/html;charset=utf-8'/>
 		<title>MOST RepRap printer interface</title>
-		<script type="application/javascript" src="rpc.js"></script>
-		<script type="application/javascript" src="index.js"></script>
-		<style type="text/css"></style>
-		<link rel="stylesheet" href="index.css"/>
-	</head>
-	<body onload="init ()" id="container">
+		<script type='application/javascript' src='rpc.js'></script>
+		<script type='application/javascript' src='server.js'></script>
+		<script type='application/javascript' src='index.js'></script>
+		<style type='text/css'></style>
+		<link rel='stylesheet' href='index.css'/>
+	</head> <!-- }}} -->
+	<body onload='init ()' id='container'>
+		<div id='templates'> <!-- {{{ -->
+			<div id='Label'> <!-- {{{ -->
+				<div class='tab'>
+					<input type='radio'/>
+					[!(
+					elements[1].port = args[0],
+					[printer ? printer.name : elements[1], elements[0]]
+					<span class='port'>[!('@' + args[0])!]</span>
+					<button type='button' onclick='rpc.call ("detect", [this.port], {});'>Detect</button>
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<!-- Primitives {{{ -->
+			<div id='Button'> <!-- {{{ -->
+				<div class='button'>
+					[!(
+					// args = title, action
+					elements[0].id = make_id (printer, [null, args[1]]),
+					elements[0].action = args[1],
+					elements[0].printer = printer,
+					elements[0].AddText (args[0]),
+					stack
+					<button type='button' onclick='this.printer.call (action, [], {})'></button>
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Text'> <!-- {{{ -->
+				<div class='text'>
+					[!(
+					// args = title, obj
+					elements[0].id = make_id (printer, args[1]),
+					elements[1].source = elements[0].id,
+					elements[1].obj = args[1],
+					elements[1].printer = printer,
+					[args[0]].concat (stack)
+					<input type='text'/>
+					<button type='button' onclick='set_value (this.printer, this.obj, document.getElementById (this.source).value)'>Set</button>
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Range'> <!-- {{{ -->
+				<div class='range'>
+					[!(
+					// args = title, max, obj
+					elements[0].id = make_id (printer, args[2]),
+					elements[1].source = elements[0].id,
+					elements[1].obj = args[2],
+					elements[1].printer = printer,
+					[args[0]].concat (stack)
+					<select>[!(range (args[1], elements[0], 'value')<option></option>)!]</select>
+					<button type='button' onclick='set_value (this.printer, this.obj, document.getElementById (this.source).selectedIndex)'>Set</button>
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Choice'> <!-- {{{ -->
+				<div class='choice'>
+					[!(
+					// args = title, obj, options
+					[args[0]].concat (choice (args[1], args[2], elements[0]))
+					<input type='radio'/>
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Pin'> <!-- {{{ -->
+				<div class='pin'>
+					[!(
+					// args = title, obj, only_analog
+					elements[0].id = make_id (printer, args[1]),
+					elements[0].obj = args[1],
+					elements[0].printer = printer,
+					elements[3].printer = printer,
+					elements[1].id = make_id (printer, args[1], 'invalid'),
+					elements[2].id = make_id (printer, args[1], 'inverted'),
+					elements[3].addEventListener ('click', function () { set_pin (self.printer, [args[1], args[2]]); }, false),
+					[args[0]].concat (stack)
+					<select>[!(pinrange (args[3] !== undefined, elements[0], 'value')<option></option>)!]</select>
+					<input type='checkbox'/>Invalid<input type='checkbox'/>Inverted
+					<button type='button'>Set</button>
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Float'> <!-- {{{ -->
+				<div class='float'>
+					[!(
+					// args = title, obj, factor
+					elements[0].id = make_id (printer, args[1]),
+					elements[0].factor = args[2] ? args[2] : 1,
+					elements[1].factor = elements[0].factor,
+					elements[1].source = elements[0].id,
+					elements[1].obj = args[1],
+					elements[1].printer = printer,
+					[args[0], elements[0], elements[1]]
+					<input type='text'/>
+					<button type='button' onclick='set_value (this.printer, this.obj, this.factor * Number (document.getElementById (this.source).value))'>Set</button>
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Floats'> <!-- {{{ -->
+				<div class='floats'>
+					[!(
+					// args = num, title, obj
+					floats (args[0], args[1], args[2])
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Checkbox'> <!-- {{{ -->
+				<div class='checkbox'>
+					[!(
+					// args = title, obj
+					elements[0].id = make_id (printer, args[1]),
+					elements[0].source = elements[0].id,
+					elements[0].obj = args[1],
+					elements[0].printer = printer,
+					elements[0].addEventListener ('click', function () { set_value (this.printer, this.obj, this.checked); }, false),
+					[args[0], elements[0]]
+					<input type='checkbox'/>
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='File'> <!-- {{{ -->
+				<div class='file'>
+					[!(
+					// args = title, obj
+					elements[0].id = make_id (printer, args[1]),
+					elements[1].source = args[1],
+					elements[1].printer = printer,
+					[args[0]].concat (stack)
+					<input type='file'/>
+					<button type='button' onclick='set_file (this.printer, this.source)'>Upload</button>
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<!-- }}} -->
+			<div id='Motor'> <!-- {{{ -->
+				<div class='motor'>
+					[!(
+					// args = parent, index
+					elements
+					[$(Pin ['Step pin', [[[args[0], 'motor'], args[1]], 'step_pin']])$]
+					[$(Pin ['Direction pin', [[[args[0], 'motor'], args[1]], 'dir_pin']])$]
+					[$(Pin ['Enable pin', [[[args[0], 'motor'], args[1]], 'enable_pin']])$]
+					[$(Float ['Steps per mm', [[[args[0], 'motor'], args[1]], 'steps_per_mm']])$]
+					[$(Float ['Maximum speed (positive)', [[[args[0], 'motor'], args[1]], 'max_v_pos']])$]
+					[$(Float ['Maximum speed (negative)', [[[args[0], 'motor'], args[1]], 'max_v_neg']])$]
+					[$(Float ['Maximum acceleration', [[[args[0], 'motor'], args[1]], 'max_a']])$]
+					// runspeed; sleeping.
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Temp_content'> <!-- {{{ -->
+				<div class='tempcontent'>
+					[!(
+					// args = parent, index
+					elements
+					[$(Pin ['Power pin', [[args[0], args[1]], 'power_pin']])$]
+					[$(Pin ['Thermistor pin', [[args[0], args[1]], 'thermistor_pin'], true])$]
+					[$(Float ['R0 (kΩ)', [[args[0], args[1]], 'R0'], 1000])$]
+					[$(Float ['R1 (kΩ)', [[args[0], args[1]], 'R1'], 1000])$]
+					[$(Float ['Rc (kΩ)', [[args[0], args[1]], 'Rc'], 1000])$]
+					[$(Float ['Tc (°C)', [[args[0], args[1]], 'Tc']])$]
+					[$(Float ['β (1)', [[args[0], args[1]], 'beta']])$]
+					[$(Float ['Core heat capacity (J/K)', [[args[0], args[1]], 'core_C']])$]
+					[$(Float ['Shell heat capacity (J/K)', [[args[0], args[1]], 'shell_C']])$]
+					[$(Float ['Heat conductivity (W/K)', [[args[0], args[1]], 'transfer']])$]
+					[$(Float ['Radiation (W/K⁴)', [[args[0], args[1]], 'radiation']])$]
+					[$(Float ['Power (W)', [[args[0], args[1]], 'power']])$]
+					[$(Float ['Target (°C)', [[args[0], args[1]], 'value', 'settemp']])$]
+					// current
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Axis'> <!-- {{{ -->
+				<div class='axis'>
+					[!(
+					// args = index, visible
+					(args[1] ? node.AddClass ('visible') : 0),
+					[axis_name (args[0])].concat (elements)
+					[$(Motor ['axis', args[0]])$]
+					[$(Pin ['Minimum limit pin', [['axis', args[0]], 'limit_min_pin']])$]
+					[$(Pin ['Maximum limit pin', [['axis', args[0]], 'limit_max_pin']])$]
+					[$(Pin ['Sense pin', [['axis', args[0]], 'sense_pin']])$]
+					[$(Float ['Minimum limit position', [['axis', args[0]], 'limit_min_pos']])$]
+					[$(Float ['Maximum limit position', [['axis', args[0]], 'limit_max_pos']])$]
+					[$(Float ['Delta rod length', [['axis', args[0]], 'delta_length']])$]
+					[$(Float ['Delta radius', [['axis', args[0]], 'delta_radius']])$]
+					[$(Float ['Offset', [['axis', args[0]], 'offset']])$]
+					[$(Floats [printer.maxaxes, 'Number of displacements', [['axis', args[0]], 'num_displacements']])$]
+					[$(Float ['First displacement', [['axis', args[0]], 'first_displacement']])$]
+					[$(Float ['Displacement step', [['axis', args[0]], 'displacement_step']])$]
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Extruder'> <!-- {{{ -->
+				<div class='extruder'>
+					[!(
+					// args = index, visible
+					(args[1] ? node.AddClass ('visible') : 0),
+					['Extruder ' + String (args[0])].concat (elements)
+					[$(Motor ['extruder', args[0]])$]
+					[$(Temp_content [['extruder', 'temp'], args[0]])$]
+					[$(Float ['Filament heat (J/mmK)', [['extruder', args[0]], 'filament_heat']])$]
+					[$(Float ['Nozzle diameter (mm)', [['extruder', args[0]], 'nozzle_size']])$]
+					[$(Float ['Filament diameter (mm)', [['extruder', args[0]], 'filament_size']])$]
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Temp'> <!-- {{{ -->
+				<div class='temp'>
+					[!(
+					// args = index, visible
+					(args[1] ? node.AddClass ('visible') : 0),
+					['Temp ' + String (args[0])].concat (elements)
+					[$(Temp_content ['temp', args[0]])$]
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Gpio'> <!-- {{{ -->
+				<div class='gpio'>
+					[!(
+					// args = index, visible
+					(args[1] ? node.AddClass ('visible') : 0),
+					['Gpio ' + String (args[0])].concat (stack)
+					[$(Pin ['Pin', [['gpio', args[0]], 'pin']])$]
+					[$(Choice ['State', [['gpio', args[0]], 'state'], ['Disabled (High Z)', 'Input (pulled up)', 'Off', 'On']])$]
+					Master temp<select>[!(temprange (elements[0], 'value')<option></option>)!]</select>
+					[$(Float ['Trigger value (°C)', [['gpio', args[0]], 'value']])$]
+					)!]
+				</div>
+			</div> <!-- }}} -->
+			<div id='Printer'> <!-- {{{ -->
+				<div class='printer'>
+					// TODO: upload audio, upload script, play audio, displacements, visibility.
+					[$(Text ['Name', [null, 'name']])$]
+					<a id='export'>Export configuration to file</a>
+					[$(Button ['Home', 'home'])$]
+					[$(Button ['Save to EEPROM', 'save_all'])$]
+					[$(Button ['Restore from EEPROM', 'load_all'])$]
+					[$(File ['Import configuration', [null, 'import', 'import_settings']])$]
+					[$(File ['Print', [null, 'gcode', 'gcode']])$]
+					[$(Range ['Number of axes', printer.maxaxes, [null, 'num_axes']])$]
+					[$(Range ['Number of extruders', printer.maxextruders, [null, 'num_extruders']])$]
+					[$(Range ['Number of temps', printer.maxtemps, [null, 'num_temps']])$]
+					[$(Range ['Number of gpios', printer.maxgpios, [null, 'num_gpios']])$]
+					[$(Choice ['Printer type', [null, 'printer_type'], ['Cartesian', 'Delta']])$]
+					[$(Pin ['LED pin', [null, 'led_pin']])$]
+					[$(Float ['Room temperature (°C)', [null, 'room_T']])$]
+					[$(Float ['Motor timeout (s)', [null, 'motor_limit'], 1000])$]
+					[$(Float ['Temp timeout (s)', [null, 'temp_limit'], 1000])$]
+					[$(Float ['Feedrate', [null, 'feedrate']])$]
+					[$(Checkbox ['Pause', [null, 'paused', 'pause']])$]
+					[!(multiple ('Axis', printer.maxaxes, 'num_axes'))!]
+					[!(multiple ('Extruder', printer.maxextruders, 'num_extruders'))!]
+					[!(multiple ('Temp', printer.maxtemps, 'num_temps'))!]
+					[!(multiple ('Gpio', printer.maxgpios, 'num_gpios'))!]
+				</div>
+			</div> <!-- }}} -->
+		</div> <!-- }}} -->
+		<div id='labels'></div>
+		<div id='printers'></div>
+		<div id='debug'></div>
 	</body>
 </html>

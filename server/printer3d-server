@@ -571,7 +571,7 @@ class Connection: # {{{
 		self.printer = self.find_printer (printer, port)
 	def get_printer (self):
 		return self.printer.printer.name if self.printer is not None else None
-	def import_settings (self, settings):
+	def import_settings (self, settings, filename = None):
 		resumeinfo = [(yield), None]
 		assert self.printer is not None
 		section = 'general'
@@ -612,7 +612,7 @@ class Connection: # {{{
 			except:
 				errors.append ((l, str (sys.exc_value)))
 		yield errors
-	def gcode (self, code):
+	def gcode (self, code, filename = None):
 		resumeinfo = [(yield), None]
 		assert self.printer is not None
 		c = websockets.call (resumeinfo, self.printer.parse_gcode, code)
