@@ -11,7 +11,7 @@ var _updater;
 var _templates;
 var _updates;
 var rpc;
-var _printers;
+var printers;
 var _ports;
 var autodetect;
 var blacklist;
@@ -37,8 +37,8 @@ function trigger_update (called_port, name) {
 	var old_port = port;
 	port = called_port;
 	var old_printer = printer;
-	if (port in _printers)
-		printer = _printers[port];
+	if (port in printers)
+		printer = printers[port];
 	else
 		printer = null;
 	for (var i = 0; i < _updates[name].length; ++i) {
@@ -83,7 +83,7 @@ function _setup_updater () {
 			trigger_update ('', 'blacklist');
 		},
 		'new_printer': function (port, constants) {
-			_printers[port] = {
+			printers[port] = {
 				'port': port,
 				'namelen': constants[0],
 			       	'maxaxes': constants[1],
@@ -111,8 +111,8 @@ function _setup_updater () {
 				'temp': [],
 				'gpio': []
 			};
-			for (var i = 0; i < _printers[port].maxaxes; ++i) {
-				_printers[port].axis.push ({
+			for (var i = 0; i < printers[port].maxaxes; ++i) {
+				printers[port].axis.push ({
 					'motor': {
 						'step_pin': 0,
 						'dir_pin': 0,
@@ -136,11 +136,11 @@ function _setup_updater () {
 				       	'first_displacement': 0,
 				       	'displacement_step': 0
 				});
-				for (var a = 0; a < _printers[port].maxaxes; ++a)
-					_printers[port].axis[i].num_displacements.push (0);
+				for (var a = 0; a < printers[port].maxaxes; ++a)
+					printers[port].axis[i].num_displacements.push (0);
 			}
-			for (var i = 0; i < _printers[port].maxextruders; ++i) {
-				_printers[port].extruder.push ({
+			for (var i = 0; i < printers[port].maxextruders; ++i) {
+				printers[port].extruder.push ({
 					'motor': {
 						'step_pin': 0,
 						'dir_pin': 0,
@@ -172,8 +172,8 @@ function _setup_updater () {
 				       	'filament_size': 0
 				});
 			}
-			for (var i = 0; i < _printers[port].maxtemps; ++i) {
-				_printers[port].temp.push ({
+			for (var i = 0; i < printers[port].maxtemps; ++i) {
+				printers[port].temp.push ({
 					'power_pin': 0,
 					'thermistor_pin': 0,
 					'R0': 0,
@@ -189,15 +189,15 @@ function _setup_updater () {
 					'value': 0
 				});
 			}
-			for (var i = 0; i < _printers[port].maxgpios; ++i) {
-				_printers[port].gpio.push ({
+			for (var i = 0; i < printers[port].maxgpios; ++i) {
+				printers[port].gpio.push ({
 					'pin': 0,
 				       	'state': 0,
 				       	'master': 0,
 				       	'value': 0
 				});
 			}
-			_printers[port].call = function (name, a, ka, reply) {
+			printers[port].call = function (name, a, ka, reply) {
 				var p = this.port;
 				if (_active_printer != p) {
 					rpc.call ('set_printer', [null, p], {}, function () { _active_printer = p; rpc.call (name, a, ka, reply); });
@@ -205,7 +205,7 @@ function _setup_updater () {
 				else
 					rpc.call (name, a, ka, reply);
 			};
-			_printers[port].set = function (obj, attr, value) {
+			printers[port].set = function (obj, attr, value) {
 				if (obj !== null && obj[0] !== undefined) {
 					this.call (obj[0] + '_set_' + attr, [obj[1], value], {});
 				}
@@ -214,7 +214,7 @@ function _setup_updater () {
 					this.call ('set_' + attr, [value], {});
 				}
 			};
-			trigger_update (port, 'new_printer', _printers[port]);
+			trigger_update (port, 'new_printer', printers[port]);
 		},
 		'del_printer': function (port) {
 			trigger_update (port, 'del_printer');
@@ -222,7 +222,7 @@ function _setup_updater () {
 				if (cb.substring (0, port.length + 1) == port + ' ')
 					delete _updates[cb];
 			}
-			delete _printers[port];
+			delete printers[port];
 		},
 		'new_audio': function (list) {
 			audio_list = list;
@@ -241,92 +241,92 @@ function _setup_updater () {
 			trigger_update ('', 'new_data', name);
 		},
 		'variables_update': function (port, values) {
-			_printers[port].name = values[0];
-			_printers[port].num_axes = values[1];
-			_printers[port].num_extruders = values[2];
-			_printers[port].num_temps = values[3];
-			_printers[port].num_gpios = values[4];
-			_printers[port].printer_type = values[5];
-			_printers[port].led_pin = values[6];
-			_printers[port].room_T = values[7];
-			_printers[port].motor_limit = values[8];
-			_printers[port].temp_limit = values[9];
-			_printers[port].feedrate = values[10];
-			_printers[port].paused = values[11];
+			printers[port].name = values[0];
+			printers[port].num_axes = values[1];
+			printers[port].num_extruders = values[2];
+			printers[port].num_temps = values[3];
+			printers[port].num_gpios = values[4];
+			printers[port].printer_type = values[5];
+			printers[port].led_pin = values[6];
+			printers[port].room_T = values[7];
+			printers[port].motor_limit = values[8];
+			printers[port].temp_limit = values[9];
+			printers[port].feedrate = values[10];
+			printers[port].paused = values[11];
 			trigger_update (port, 'variables_update');
 		},
 		'axis_update': function (port, index, values) {
-			_printers[port].axis[index].motor.step_pin = values[0][0];
-			_printers[port].axis[index].motor.dir_pin = values[0][1];
-			_printers[port].axis[index].motor.enable_pin = values[0][2];
-			_printers[port].axis[index].motor.steps_per_mm = values[0][3];
-			_printers[port].axis[index].motor.max_v_pos = values[0][4];
-			_printers[port].axis[index].motor.max_v_neg = values[0][5];
-			_printers[port].axis[index].motor.max_a = values[0][6];
-			_printers[port].axis[index].motor.runspeed = values[0][7];
-			_printers[port].axis[index].motor.sleeping = values[0][8];
-			_printers[port].axis[index].limit_min_pin = values[1];
-			_printers[port].axis[index].limit_max_pin = values[2];
-			_printers[port].axis[index].sense_pin = values[3];
-			_printers[port].axis[index].limit_min_pos = values[4];
-			_printers[port].axis[index].limit_max_pos = values[5];
-			_printers[port].axis[index].delta_length = values[6];
-			_printers[port].axis[index].delta_radius = values[7];
-			_printers[port].axis[index].offset = values[8];
-			_printers[port].axis[index].num_displacements = values[9];
-			_printers[port].axis[index].first_displacement = values[10];
-			_printers[port].axis[index].displacement_step = values[11];
+			printers[port].axis[index].motor.step_pin = values[0][0];
+			printers[port].axis[index].motor.dir_pin = values[0][1];
+			printers[port].axis[index].motor.enable_pin = values[0][2];
+			printers[port].axis[index].motor.steps_per_mm = values[0][3];
+			printers[port].axis[index].motor.max_v_pos = values[0][4];
+			printers[port].axis[index].motor.max_v_neg = values[0][5];
+			printers[port].axis[index].motor.max_a = values[0][6];
+			printers[port].axis[index].motor.runspeed = values[0][7];
+			printers[port].axis[index].motor.sleeping = values[0][8];
+			printers[port].axis[index].limit_min_pin = values[1];
+			printers[port].axis[index].limit_max_pin = values[2];
+			printers[port].axis[index].sense_pin = values[3];
+			printers[port].axis[index].limit_min_pos = values[4];
+			printers[port].axis[index].limit_max_pos = values[5];
+			printers[port].axis[index].delta_length = values[6];
+			printers[port].axis[index].delta_radius = values[7];
+			printers[port].axis[index].offset = values[8];
+			printers[port].axis[index].num_displacements = values[9];
+			printers[port].axis[index].first_displacement = values[10];
+			printers[port].axis[index].displacement_step = values[11];
 			trigger_update (port, 'axis_update', index);
 		},
 		'extruder_update': function (port, index, values) {
-			_printers[port].extruder[index].motor.step_pin = values[0][0];
-			_printers[port].extruder[index].motor.dir_pin = values[0][1];
-			_printers[port].extruder[index].motor.enable_pin = values[0][2];
-			_printers[port].extruder[index].motor.steps_per_mm = values[0][3];
-			_printers[port].extruder[index].motor.max_v_pos = values[0][4];
-			_printers[port].extruder[index].motor.max_v_neg = values[0][5];
-			_printers[port].extruder[index].motor.max_a = values[0][6];
-			_printers[port].extruder[index].motor.runspeed = values[0][7];
-			_printers[port].extruder[index].motor.sleeping = values[0][8];
-			_printers[port].extruder[index].temp.power_pin = values[1][0];
-			_printers[port].extruder[index].temp.thermistor_pin = values[1][1];
-			_printers[port].extruder[index].temp.R0 = values[1][2];
-			_printers[port].extruder[index].temp.R1 = values[1][3];
-			_printers[port].extruder[index].temp.Rc = values[1][4];
-			_printers[port].extruder[index].temp.Tc = values[1][5];
-			_printers[port].extruder[index].temp.beta = values[1][6];
-			_printers[port].extruder[index].temp.core_C = values[1][7];
-			_printers[port].extruder[index].temp.shell_C = values[1][8];
-			_printers[port].extruder[index].temp.transfer = values[1][9];
-			_printers[port].extruder[index].temp.radiation = values[1][10];
-			_printers[port].extruder[index].temp.power = values[1][11];
-			_printers[port].extruder[index].temp.value = values[1][12];
-			_printers[port].extruder[index].filament_heat = values[2];
-			_printers[port].extruder[index].nozzle_size = values[3];
-			_printers[port].extruder[index].filament_size = values[4];
+			printers[port].extruder[index].motor.step_pin = values[0][0];
+			printers[port].extruder[index].motor.dir_pin = values[0][1];
+			printers[port].extruder[index].motor.enable_pin = values[0][2];
+			printers[port].extruder[index].motor.steps_per_mm = values[0][3];
+			printers[port].extruder[index].motor.max_v_pos = values[0][4];
+			printers[port].extruder[index].motor.max_v_neg = values[0][5];
+			printers[port].extruder[index].motor.max_a = values[0][6];
+			printers[port].extruder[index].motor.runspeed = values[0][7];
+			printers[port].extruder[index].motor.sleeping = values[0][8];
+			printers[port].extruder[index].temp.power_pin = values[1][0];
+			printers[port].extruder[index].temp.thermistor_pin = values[1][1];
+			printers[port].extruder[index].temp.R0 = values[1][2];
+			printers[port].extruder[index].temp.R1 = values[1][3];
+			printers[port].extruder[index].temp.Rc = values[1][4];
+			printers[port].extruder[index].temp.Tc = values[1][5];
+			printers[port].extruder[index].temp.beta = values[1][6];
+			printers[port].extruder[index].temp.core_C = values[1][7];
+			printers[port].extruder[index].temp.shell_C = values[1][8];
+			printers[port].extruder[index].temp.transfer = values[1][9];
+			printers[port].extruder[index].temp.radiation = values[1][10];
+			printers[port].extruder[index].temp.power = values[1][11];
+			printers[port].extruder[index].temp.value = values[1][12];
+			printers[port].extruder[index].filament_heat = values[2];
+			printers[port].extruder[index].nozzle_size = values[3];
+			printers[port].extruder[index].filament_size = values[4];
 			trigger_update (port, 'extruder_update', index);
 		},
 		'temp_update': function (port, index, values) {
-			_printers[port].temp[index].power_pin = values[0];
-			_printers[port].temp[index].thermistor_pin = values[1];
-			_printers[port].temp[index].R0 = values[2];
-			_printers[port].temp[index].R1 = values[3];
-			_printers[port].temp[index].Rc = values[4];
-			_printers[port].temp[index].Tc = values[5];
-			_printers[port].temp[index].beta = values[6];
-			_printers[port].temp[index].core_C = values[7];
-			_printers[port].temp[index].shell_C = values[8];
-			_printers[port].temp[index].transfer = values[9];
-			_printers[port].temp[index].radiation = values[10];
-			_printers[port].temp[index].power = values[11];
-			_printers[port].temp[index].value = values[12];
+			printers[port].temp[index].power_pin = values[0];
+			printers[port].temp[index].thermistor_pin = values[1];
+			printers[port].temp[index].R0 = values[2];
+			printers[port].temp[index].R1 = values[3];
+			printers[port].temp[index].Rc = values[4];
+			printers[port].temp[index].Tc = values[5];
+			printers[port].temp[index].beta = values[6];
+			printers[port].temp[index].core_C = values[7];
+			printers[port].temp[index].shell_C = values[8];
+			printers[port].temp[index].transfer = values[9];
+			printers[port].temp[index].radiation = values[10];
+			printers[port].temp[index].power = values[11];
+			printers[port].temp[index].value = values[12];
 			trigger_update (port, 'temp_update', index);
 		},
 		'gpio_update': function (port, index, values) {
-			_printers[port].gpio[index].pin = values[0];
-			_printers[port].gpio[index].state = values[1];
-			_printers[port].gpio[index].master = values[2];
-			_printers[port].gpio[index].value = values[3];
+			printers[port].gpio[index].pin = values[0];
+			printers[port].gpio[index].state = values[1];
+			printers[port].gpio[index].master = values[2];
+			printers[port].gpio[index].value = values[3];
 			trigger_update (port, 'gpio_update', index);
 		}
 	};
@@ -351,8 +351,8 @@ function _reconnect () {
 		if (typeof scripts[s] == 'object')
 			_updater.del_script (s);
 	}
-	for (var p in _printers) {
-		if (typeof _printers[p] == 'object') {
+	for (var p in printers) {
+		if (typeof printers[p] == 'object') {
 			_updater.del_printer (p);
 		}
 	}
@@ -363,7 +363,7 @@ function _reconnect () {
 
 function setup () {
 	// Make sure the globals have a value of the correct type.
-	_printers = new Object;
+	printers = new Object;
 	_ports = [];
 	scripts = new Object;
 	autodetect = true;

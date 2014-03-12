@@ -1,7 +1,9 @@
 // vim: set foldmethod=marker :
 var ports;
-var labels, printers;
-// General supporting functions.
+var labels_element, printers_element;
+var selected_port, selected_printer;
+var script_cbs;
+// General supporting functions. {{{
 function get_elements (list) { // {{{
 	var ret = [];
 	for (var i = 0; i < list.length; ++i) {
@@ -13,12 +15,18 @@ function get_elements (list) { // {{{
 } // }}}
 
 function init () { // {{{
+	script_cbs = new Object;
 	ports = new Object;
-	labels = document.getElementById ('labels');
-	printers = document.getElementById ('printers');
+	labels_element = document.getElementById ('labels');
+	printers_element = document.getElementById ('printers');
+	selected_port = null;
+	selected_printer = null;
 	setup ();
 	register_update ('new_port', new_port);
 	register_update ('new_printer', new_printer);
+	register_update ('new_script', new_script);
+	register_update ('new_data', new_script_data);
+	register_update ('del_script', del_script);
 	register_update ('del_printer', del_printer);
 	register_update ('del_port', del_port);
 	register_update ('variables_update', update_variables);
@@ -69,7 +77,7 @@ function set_value (printer, id, value, reply) { // {{{
 			if (id[0] === null)
 				printer.call (id[2], [value], {}, reply);
 			else
-				printer.call (id[2] + '_' + id[1], [id[0][1], value], {}, reply);
+				printer.call (id[2] + '_' + (typeof id[0][0] == 'string' ? id[0][0] : id[0][0][0]), [id[0][1], value], {}, reply);
 		}
 	}
 } // }}}
@@ -89,39 +97,98 @@ function get_element (printer, id, extra) { // {{{
 	return document.getElementById (make_id (printer, id, extra));
 } // }}}
 
-// Non-update events.
+function switch_expert (state) { // {{{
+	var e = document.getElementById ('container');
+	if (state)
+		e.RemoveClass ('noexpert');
+	else
+		e.AddClass ('noexpert');
+} // }}}
+
+function select_printer (port) { // {{{
+	if (port === undefined)
+		port = selected_port;
+	else
+		selected_port = port;
+	selected_printer = printers[port];
+	for (var p in ports) {
+		if (typeof ports[p] != 'object')
+			continue;
+		if (p == port) {
+			ports[p][0].AddClass ('active');
+			ports[p][1].RemoveClass ('hidden');
+		}
+		else {
+			ports[p][0].RemoveClass ('active');
+			ports[p][1].AddClass ('hidden');
+		}
+	}
+} // }}}
+// }}}
+
+// Non-update events. {{{
 function new_port (port) { // {{{
 	ports[port] = [get_elements (build ('Label', [port]))[0], null, ''];
-	labels.Add (ports[port][0]);
+	labels_element.Add (ports[port][0]);
 } // }}}
 
 function new_printer () { // {{{
 	ports[port][1] = get_elements (build ('Printer', [port]))[0];
-	printers.Add (ports[port][1]);
+	printers_element.Add (ports[port][1]);
+	select_printer (port);
+} // }}}
+
+function new_script (name) { // {{{
+	var data = scripts[name][1];
+	var div = document.getElementById ('scripts');
+	var button;	// Normally used by scripts.
+	var new_data = function () {};
+	var remove = function () { if (button) div.removeChild (button); };
+	eval (scripts[name][0]);
+	var option = document.getElementById ('scriptlist').AddElement ('option');
+	option.value = name;
+	option.AddText (name);
+	script_cbs[name] = [remove, new_data, option];
+} // }}}
+
+function new_script_data (name) { // {{{
+	script_cbs[name][1] ();
+} // }}}
+
+function del_script (name) { // {{{
+	script_cbs[name][0] ();
+	document.getElementById ('scriptlist').removeChild (scripts_cbs[2]);
+	delete script_cbs[name];
 } // }}}
 
 function del_printer () { // {{{
-	printers.removeChild (ports[port][1]);
+	printers_element.removeChild (ports[port][1]);
 	ports[port][1] = null;
 	ports[port][2] = '';
+	if (selected_port == port)
+		selected_printer = null;
 } // }}}
 
 function del_port () { // {{{
-	labels.removeChild (ports[port][0]);
+	labels_element.removeChild (ports[port][0]);
+	if (selected_port == port)
+		selected_port = null;
 } // }}}
+// }}}
 
-// Update events (from server).
+// Update events (from server). {{{
 function update_variables () { // {{{
 	if (!get_element (printer, [null, 'name']))
 		return;
 	if (ports[port][2] != printer.name) {
-		labels.removeChild (ports[port][0]);
+		labels_element.removeChild (ports[port][0]);
 		ports[port][0] = get_elements (build ('Label', [port]))[0];
-		labels.Add (ports[port][0]);
+		labels_element.Add (ports[port][0]);
 		ports[port][2] = printer.name;
+		select_printer ();
 	}
 	update_text ([null, 'name']);
-	document.getElementById ('export').href = printer.name + '.ini?port=' + encodeURIComponent (port);
+	get_element (printer, [null, 'export']).href = printer.name + '.ini?port=' + encodeURIComponent (port);
 	update_range ([null, 'num_axes']);
 	update_range ([null, 'num_extruders']);
 	update_range ([null, 'num_temps']);
@@ -133,6 +200,39 @@ function update_variables () { // {{{
 	update_float ([null, 'temp_limit']);
 	update_float ([null, 'feedrate']);
 	update_checkbox ([null, 'paused', 'pause']);
+	// Update visibility.
+	for (var i = 0; i < printer.num_axes; ++i) {
+		get_element (printer, [['axis', i], 'container']).RemoveClass ('hidden');
+		get_element (printer, [['axispins', i], 'container']).RemoveClass ('hidden');
+	}
+	for (var i = printer.num_axes; i < printer.maxaxes; ++i) {
+		get_element (printer, [['axis', i], 'container']).AddClass ('hidden');
+		get_element (printer, [['axispins', i], 'container']).AddClass ('hidden');
+	}
+	for (var i = 0; i < printer.num_extruders; ++i) {
+		get_element (printer, [['extruder', i], 'container']).RemoveClass ('hidden');
+		get_element (printer, [['extruderpins', i], 'container']).RemoveClass ('hidden');
+	}
+	for (var i = printer.num_extruders; i < printer.maxextruders; ++i) {
+		get_element (printer, [['extruder', i], 'container']).AddClass ('hidden');
+		get_element (printer, [['extruderpins', i], 'container']).AddClass ('hidden');
+	}
+	for (var i = 0; i < printer.num_temps; ++i) {
+		get_element (printer, [['temp', i], 'container']).RemoveClass ('hidden');
+		get_element (printer, [['temppins', i], 'container']).RemoveClass ('hidden');
+	}
+	for (var i = printer.num_temps; i < printer.maxtemps; ++i) {
+		get_element (printer, [['temp', i], 'container']).AddClass ('hidden');
+		get_element (printer, [['temppins', i], 'container']).AddClass ('hidden');
+	}
+	for (var i = 0; i < printer.num_gpios; ++i) {
+		get_element (printer, [['gpio', i], 'container']).RemoveClass ('hidden');
+		get_element (printer, [['gpiopins', i], 'container']).RemoveClass ('hidden');
+	}
+	for (var i = printer.num_gpios; i < printer.maxgpios; ++i) {
+		get_element (printer, [['gpio', i], 'container']).AddClass ('hidden');
+		get_element (printer, [['gpiopins', i], 'container']).AddClass ('hidden');
+	}
 } // }}}
 
 function update_axis (index) { // {{{
@@ -173,11 +273,12 @@ function update_gpio (index) { // {{{
 		return;
 	update_pin ([['gpio', index], 'pin']);
 	update_choice ([['gpio', index], 'state']);
-	// TODO: master
+	update_temprange ([['gpio', index], 'master']);
 	update_float ([['gpio', index], 'value']);
 } // }}}
+// }}}
 
-// Update helpers.
+// Update helpers. {{{
 function update_motor (id) { // {{{
 	update_pin ([id, 'step_pin']);
 	update_pin ([id, 'dir_pin']);
@@ -248,7 +349,13 @@ function update_floats (id) { // {{{
 	}
 } // }}}
 
-// Builders.
+function update_temprange (id) { // {{{
+	var value = get_value (printer, id);
+	get_element (printer, id).selectedIndex = value > 0 ? 1 + value - 2 - printer.maxaxes : 0;
+} // }}}
+// }}}
+
+// Builders. {{{
 function range (num, element, attr) { // {{{
 	var ret = [];
 	for (var i = 0; i < num + 1; ++i) {
@@ -282,16 +389,19 @@ function pinrange (only_analog, element, attr) { // {{{
 	return ret;
 } // }}}
 
-function temprange (element, obj, attr) { // {{{
-	var ret = [];
+function temprange (element, attr) { // {{{
+	var node = element.cloneNode (true);
+	node.AddText ('None');
+	node[attr] = '0';
+	var ret = [node];
 	for (var i = 0; i < printer.maxextruders; ++i) {
-		var node = element.cloneNode (true);
+		node = element.cloneNode (true);
 		node.AddText ('Extruder ' + String (i));
 		node[attr] = String (2 + printer.maxaxes + i);
 		ret.push (node);
 	}
 	for (var i = 0; i < printer.maxtemps; ++i) {
-		var node = element.cloneNode (true);
+		node = element.cloneNode (true);
 		node.AddText ('Temp ' + String (i));
 		node[attr] = String (2 + printer.maxaxes + printer.maxextruders + i);
 		ret.push (node);
@@ -334,12 +444,13 @@ function floats (num, title, obj) { // {{{
 function axis_name (index) { // {{{
 	return 'Axis ' + String (index) + (index < 3 ? ': ' + String.fromCharCode ('X'.charCodeAt (0) + index) : '');
 } // }}}
+// }}}
 
-// Set helpers (to server).
+// Set helpers (to server). {{{
 function set_pin (printer, id) { // {{{
 	var value = get_element (printer, id).selectedIndex;
 	var invalid = get_element (printer, id, 'invalid').checked;
-	var invalid = get_element (printer, id, 'inverted').checked;
+	var inverted = get_element (printer, id, 'inverted').checked;
 	set_value (printer, id, value + 0x100 * invalid + 0x200 * inverted);
 } // }}}
 
@@ -365,3 +476,16 @@ function set_file (printer, id) { // {{{
 	}
 	reader.readAsBinaryString (element.files[0]);
 } // }}}
+
+function set_gpio_master (printer, index) { // {{{
+	var id = [['gpio', index], 'master'];
+	var e = get_element (printer, id);
+	set_value (printer, id, Number (e.childNodes[e.selectedIndex].value));
+} // }}}
+
+function remove_script () { // {{{
+	var e = document.getElementById ('scriptlist');
+	var name = e.childNodes[e.selectedIndex].value;
+	rpc.call ('del_script', [name], {});
+} // }}}
+// }}}

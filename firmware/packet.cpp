@@ -84,6 +84,10 @@ void packet ()
 			else
 				queue[queue_end].data[ch] = NAN;
 		}
+		if (!(command[2] & 0x1))
+			queue[queue_end].data[F0] = INFINITY;
+		if (!(command[2] & 0x2))
+			queue[queue_end].data[F1] = queue[queue_end].data[F0];
 		// f0 and f1 must be present and valid.
 		float f0 = queue[queue_end].data[F0];
 		float f1 = queue[queue_end].data[F1];

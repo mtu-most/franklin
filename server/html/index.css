@@ -1,42 +1,51 @@
-.hidden {
-	display: none;
-}
-.nosetting .setting,.nofuture .future,.noconstants .constants,.nopin .pin,.nouseful .useful,.noaction .action,.noportaction .portaction,.noinactive .inactive,.noview .view,.noaudio .audio {
+.hidden,.noexpert .expert {
 	display: none;
 }
 
-.box {
-	margin: 1ex 1ex;
-	padding: .5ex .5ex;
-	background: #ee9;
-}
-
-.box2 {
-	margin: 1ex 1ex;
-	padding: .5ex .5ex;
-	background: #8c8;
-}
-
-input {
-	width: 8ex;
-}
-
-.views {
+#expertswitch {
 	float: right;
+	background: #ff8;
 }
 
-table {
+.tab {
+	display: inline;
+	margin: 2ex;
+	padding: .5ex 2ex;
+	background: #ccc;
+}
+
+.tab.active {
+	background: #4f4;
+}
+
+.axis,.extruder,.temp,.gpio {
+	margin: 1ex 0em;
+	background: #cc8;
+}
+
+.printerpins,.axispins,.extruderpins,.temppins,.gpiopins {
+	margin: 1ex 0em;
 	clear: both;
 }
 
-.global {
-	background: #f00;
+.pintitle {
+	width: 12em;
+	float: left;
+	clear: both;
+	background: #ffc;
 }
 
-.connected {
-	background: #6d6;
+.pinvalue {
+	float: left;
+	background: #ffc;
 }
 
-.printing {
-	background: #ff0;
+.title {
+	float: left;
+	font-weight: bold;
+	width: 14em;
+}
+
+input[type=text] {
+	width: 4em;
 }

@@ -138,7 +138,7 @@ class Printer:	# {{{
 		z = None
 		while len (self.gcode) > 0:
 			cmd, args, message = self.gcode.pop (0)
-			#log ('Parsing %s %s' % (cmd, args))
+			log ('Parsing %s %s' % (cmd, args))
 			if cmd[0] == 'T':
 				# Tool selection.
 				target = cmd[1]

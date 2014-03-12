@@ -1,6 +1,6 @@
 # vim: set foldmethod=marker :
 
-show_own_debug = True
+show_own_debug = False
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -435,8 +435,8 @@ class Printer: # {{{
 					# Ignore this while connecting.
 					continue
 				t = ord (packet[1])
-				assert ord (t) in self.tempwait
-				self.tempwait.remove (t)
+				#assert ord (t) in self.tempwait
+				#self.tempwait.remove (t)
 				self._trigger ('temp', t)
 				continue
 			elif packet[0] == self.rcommand['CONTINUE']:
@@ -1120,12 +1120,16 @@ class Printer: # {{{
 			elif self.pin_valid (self.axis[0].limit_min_pin):
 				pos = [-self.axis[0].offset, -self.axis[1].offset, max ([self.axis[i].limit_min_pos for i in range (3)]) - self.axis[2].offset + 10]
 			else:
+				# Only sense pins are available; search for them.
 				try:
+					# Use carthesian commands while searching.
 					c = websockets.call (resumeinfo, self.set_printer_type, 0)
 					while c (): c.args = (yield websockets.WAIT)
+					# Set starting position as original 0.
 					for a in range (3):
 						c = websockets.call (resumeinfo, self.axis[a].set_current_pos, 0)
 						while c (): c.args = (yield websockets.WAIT)
+					# Go back and forth until the sensor is seen.
 					self.clear_sense ()
 					dist = 50
 					sense = {}
@@ -1160,6 +1164,8 @@ class Printer: # {{{
 							break
 						assert dist < 300
 						dist += 30
+					# All sensors are found.
+					# Move away, then one by one slowly back.
 					c = websockets.call (resumeinfo, self.goto, [sense[a] - 10 for a in range (3)], cb = True)
 					while c (): c.args = (yield websockets.WAIT)
 					c = websockets.call (resumeinfo, self.wait_for_cb, )
@@ -1180,19 +1186,28 @@ class Printer: # {{{
 						while c (): c.args = (yield websockets.WAIT)
 						c = websockets.call (resumeinfo, self.wait_for_cb)
 						while c (): c.args = (yield websockets.WAIT)
+					# All sensors are found with better precision.  Go to the sensor position.
 					c = websockets.call (resumeinfo, self.goto, [sense[a] for a in range (3)], cb = True)
 					while c (): c.args = (yield websockets.WAIT)
 					c = websockets.call (resumeinfo, self.wait_for_cb)
 					while c (): c.args = (yield websockets.WAIT)
+					# Set current position to be -limit_min_pos.
 					for a in range (3):
 						c = websockets.call (resumeinfo, self.axis[a].set_current_pos, -self.axis[a].limit_min_pos)
 						while c (): c.args = (yield websockets.WAIT)
-					c = websockets.call (resumeinfo, self.goto, [min ([-self.axis[i].limit_min_pos for i in range (3)]) for a in range (3)], cb = True)
+					# Move the extruder to the center: all axes must have the same coordinate.
+					# This is required to allow the printer to determine the position of the extruder.
+					pos = min ([-self.axis[i].limit_min_pos for i in range (3)])
+					c = websockets.call (resumeinfo, self.goto, [pos for a in range (3)], cb = True)
 					while c (): c.args = (yield websockets.WAIT)
 					c = websockets.call (resumeinfo, self.wait_for_cb)
 					while c (): c.args = (yield websockets.WAIT)
 				finally:
 					c = websockets.call (resumeinfo, self.set_printer_type, 1)
+					while c (): c.args = (yield websockets.WAIT)
+				# Force position recalculation.
+				for a in range (3):
+					c = websockets.call (resumeinfo, self.axis_get_current_pos, a)
 					while c (): c.args = (yield websockets.WAIT)
 				return
 			# Go to limit switches.
@@ -1283,6 +1298,8 @@ class Printer: # {{{
 	# }}}
 	def wait_for_cb (self, sense = False): # {{{
 		resumeinfo = [(yield), None]
+		if self.movewait == 0:
+			yield True
 		if sense is not False:
 			if sense in self.sense:
 				yield self.movewait == 0
