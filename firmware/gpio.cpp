@@ -12,18 +12,23 @@ void Gpio::load (int16_t &addr, bool eeprom)
 	read_8 (addr, eeprom);
 	read_float (addr, eeprom);
 #endif
-	// State:  0: disabled, 1: pullup input, 2: low, 3: high
-	if (state & 2) {
+	// State:  0: on, 1: off, 2: pullup input, 3: disabled
+	switch (state) {
+	case 0:
 		SET_OUTPUT (pin);
-		if (state & 1)
-			SET (pin);
-		else
-			RESET (pin);
-	}
-	else if (state & 1)
+		SET (pin);
+		break;
+	case 1:
+		SET_OUTPUT (pin);
+		RESET (pin);
+		break;
+	case 2:
 		SET_INPUT (pin);
-	else
+		break;
+	case 3:
 		SET_INPUT_NOPULLUP (pin);
+		break;
+	}
 #ifndef LOWMEM
 	if (master >= MAXOBJECT || !temps[master])
 		master = 0;

@@ -21,10 +21,6 @@
 #define MAXTEMPS 8
 #define MAXGPIOS 8
 
-// Maximum number of displacement elements.  The product of the actual numbers
-// of displacement elements for each axis cannot be larger than this number.
-#define MAXDISPLACEMENTS 64
-
 // If AUDIO is not defined, nothing related to audio will be included.
 #define AUDIO
 // Audio settings.  The audio buffer is split in fragments.  New data is sent

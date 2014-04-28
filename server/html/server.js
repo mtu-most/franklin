@@ -18,6 +18,7 @@ var blacklist;
 var audio_list;
 var scripts;
 var data;
+var queue;
 // }}}
 
 function dbg (msg) {
@@ -54,6 +55,9 @@ function trigger_update (called_port, name) {
 function _setup_updater () {
 	_updates = new Object;
 	_updater = {
+		'signal': function (port, name, arg) {
+			trigger_update (port, 'signal', name, arg);
+		},
 		'new_port': function (port) {
 			_ports.push (port);
 			trigger_update ('', 'new_port', port);
@@ -71,8 +75,8 @@ function _setup_updater () {
 		'printing': function (port, state) {
 			trigger_update (port, 'printing', state);
 		},
-		'confirm': function (message) {
-			trigger_update (port, 'confirm');
+		'confirm': function (port, message) {
+			trigger_update (port, 'confirm', message);
 		},
 		'autodetect': function (state) {
 			autodetect = state;
@@ -81,6 +85,10 @@ function _setup_updater () {
 		'blacklist': function (value) {
 			blacklist = value;
 			trigger_update ('', 'blacklist');
+		},
+		'queue': function (q) {
+			queue = q;
+			trigger_update ('', 'queue');
 		},
 		'new_printer': function (port, constants) {
 			printers[port] = {
@@ -101,6 +109,7 @@ function _setup_updater () {
 				'num_gpios': 0,
 				'printer_type': 0,
 				'led_pin': 0,
+				'probe_pin': 0,
 				'room_T': 0,
 				'motor_limit': 0,
 				'temp_limit': 0,
@@ -127,17 +136,16 @@ function _setup_updater () {
 					'limit_min_pin': 0,
 				       	'limit_max_pin': 0,
 				       	'sense_pin': 0,
-				       	'limit_min_pos': 0,
-				       	'limit_max_pos': 0,
+				       	'limit_pos': 0,
+				       	'axis_min': 0,
+				       	'axis_max': 0,
+				       	'motor_min': 0,
+				       	'motor_max': 0,
+				       	'park': 0,
 				       	'delta_length': 0,
 				       	'delta_radius': 0,
 				       	'offset': 0,
-				       	'num_displacements': [],
-				       	'first_displacement': 0,
-				       	'displacement_step': 0
 				});
-				for (var a = 0; a < printers[port].maxaxes; ++a)
-					printers[port].axis[i].num_displacements.push (0);
 			}
 			for (var i = 0; i < printers[port].maxextruders; ++i) {
 				printers[port].extruder.push ({
@@ -205,18 +213,11 @@ function _setup_updater () {
 				else
 					rpc.call (name, a, ka, reply);
 			};
-			printers[port].set = function (obj, attr, value) {
-				if (obj !== null && obj[0] !== undefined) {
-					this.call (obj[0] + '_set_' + attr, [obj[1], value], {});
-				}
-				else {
-					//dbg ('set ' + attr + ' ' + value);
-					this.call ('set_' + attr, [value], {});
-				}
-			};
 			trigger_update (port, 'new_printer', printers[port]);
 		},
 		'del_printer': function (port) {
+			if (_active_printer == port)
+				_active_printer = null;
 			trigger_update (port, 'del_printer');
 			for (var cb in _updates) {
 				if (cb.substring (0, port.length + 1) == port + ' ')
@@ -248,11 +249,12 @@ function _setup_updater () {
 			printers[port].num_gpios = values[4];
 			printers[port].printer_type = values[5];
 			printers[port].led_pin = values[6];
-			printers[port].room_T = values[7];
-			printers[port].motor_limit = values[8];
-			printers[port].temp_limit = values[9];
-			printers[port].feedrate = values[10];
-			printers[port].paused = values[11];
+			printers[port].probe_pin = values[7];
+			printers[port].room_T = values[8];
+			printers[port].motor_limit = values[9];
+			printers[port].temp_limit = values[10];
+			printers[port].feedrate = values[11];
+			printers[port].paused = values[12];
 			trigger_update (port, 'variables_update');
 		},
 		'axis_update': function (port, index, values) {
@@ -268,14 +270,15 @@ function _setup_updater () {
 			printers[port].axis[index].limit_min_pin = values[1];
 			printers[port].axis[index].limit_max_pin = values[2];
 			printers[port].axis[index].sense_pin = values[3];
-			printers[port].axis[index].limit_min_pos = values[4];
-			printers[port].axis[index].limit_max_pos = values[5];
-			printers[port].axis[index].delta_length = values[6];
-			printers[port].axis[index].delta_radius = values[7];
-			printers[port].axis[index].offset = values[8];
-			printers[port].axis[index].num_displacements = values[9];
-			printers[port].axis[index].first_displacement = values[10];
-			printers[port].axis[index].displacement_step = values[11];
+			printers[port].axis[index].limit_pos = values[4];
+			printers[port].axis[index].axis_min = values[5];
+			printers[port].axis[index].axis_max = values[6];
+			printers[port].axis[index].motor_min = values[7];
+			printers[port].axis[index].motor_max = values[8];
+			printers[port].axis[index].park = values[9];
+			printers[port].axis[index].delta_length = values[10];
+			printers[port].axis[index].delta_radius = values[11];
+			printers[port].axis[index].offset = values[12];
 			trigger_update (port, 'axis_update', index);
 		},
 		'extruder_update': function (port, index, values) {
@@ -358,7 +361,12 @@ function _reconnect () {
 	}
 	while (_ports.length > 0)
 		_updater.del_port (_ports.pop ());
-	rpc = Rpc (_updater, _setup_connection, _reconnect);
+	if (!confirm ('The connection to the server was lost.  Reconnect?'))
+		return;
+	// Try again in 5 seconds.
+	setTimeout (function () {
+		rpc = Rpc (_updater, _setup_connection, _reconnect);
+	}, 5000);
 }
 
 function setup () {
@@ -366,6 +374,7 @@ function setup () {
 	printers = new Object;
 	_ports = [];
 	scripts = new Object;
+	queue = [];
 	autodetect = true;
 	blacklist = '';
 	var proto = Object.prototype;
@@ -374,19 +383,25 @@ function setup () {
 	proto.AddText = function (text) { var t = document.createTextNode (text); return this.Add (t); }
 	proto.ClearAll = function () { while (this.firstChild) this.removeChild (this.firstChild); return this; }
 	proto.AddClass = function (className) {
+		if (!className)
+			return this;
 		var classes = this.className.split (' ');
 		if (classes.indexOf (className) >= 0)
-			return;
+			return this;
 		classes.push (className);
 		this.className = classes.join (' ');
+		return this;
 	}
 	proto.RemoveClass = function (className) {
+		if (!className)
+			return this;
 		var classes = this.className.split (' ');
 		var pos = classes.indexOf (className);
 		if (pos < 0)
-			return;
+			return this;
 		classes.splice (pos, 1);
 		this.className = classes.join (' ');
+		return this;
 	}
 	_init_templates ();
 	_setup_updater ();
@@ -442,7 +457,7 @@ function _init_templates () {
 			continue;
 		_templates[current.id] = current;
 	}
-	//_parse_node (document.getElementById ('container'));
+	_parse_node (document.getElementById ('container'));
 }
 
 function build (template, args) {
@@ -516,6 +531,7 @@ function _parse_node (node, args) {
 							if (pos + eval_code[1].length < current.data.length) {
 								next = node.insertBefore (document.createTextNode (current.data.substring (pos + eval_code[1].length)), next);
 							}
+							//dbg (expr);
 							result = eval ('(' + expr + ')');
 							if (typeof result == 'string')
 								result = [document.createTextNode (String (result))];

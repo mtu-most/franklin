@@ -11,7 +11,7 @@ void setup ()
 	Serial.begin (115200);
 	initialized = false;
 	command_end = 0;
-	motors_busy = false;
+	motors_busy = 0;
 	queue_start = 0;
 	queue_end = 0;
 	num_movecbs = 0;
@@ -22,6 +22,7 @@ void setup ()
 	last_packet = NULL;
 	out_busy = false;
 	reply_ready = false;
+	led_pin.read (0x100);
 	led_phase = 0;
 	temps_busy = 0;
 	led_last = millis ();
@@ -57,8 +58,9 @@ void setup ()
 		temps[i] = NULL;
 		objects[i] = &axis[a];
 		limits_pos[a] = NAN;
-		axis[a].current_pos = 0;
+		axis[a].current_pos = MAXLONG;
 		axis[a].source = NAN;
+		axis[a].current = NAN;
 		axis[a].sense_state = 0;
 		axis[a].sense_pos = MAXLONG;
 		axis[a].limit_min_pin.read (0x100);

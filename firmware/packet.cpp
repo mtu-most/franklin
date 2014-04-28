@@ -59,6 +59,7 @@ void packet ()
 #ifdef DEBUG_CMD
 		debug ("CMD_GOTO(CB)");
 #endif
+		last_active = millis ();
 		if (!pause_all && ((queue_end + 1) % QUEUE_LENGTH) == queue_start)
 		{
 			debug ("Host ignores wait request");
@@ -75,6 +76,11 @@ void packet ()
 				ReadFloat f;
 				for (uint8_t i = 0; i < sizeof (float); ++i)
 					f.b[i] = command[offset + i + t * sizeof (float)];
+				if (ch >= 2 && ch < 2 + num_axes && axis[ch - 2].current_pos == MAXLONG) {
+					debug ("Moving uninitialized axis %d", ch - 2);
+					Serial.write (CMD_STALL);
+					return;
+				}
 				if (ch >= 2 && !isnan (f.f))
 					initialized = true;
 				queue[queue_end].data[ch] = f.f;
@@ -99,8 +105,8 @@ void packet ()
 		}
 		// If a new goto is sent while paused; we discard the current buffer.
 		if (pause_all) {
-			pause_all = false;
 			abort_move ();
+			flush_queue ();
 #ifdef AUDIO
 			audio_start += micros () - pause_time;
 #endif
@@ -122,6 +128,7 @@ void packet ()
 #ifdef DEBUG_CMD
 		debug ("CMD_RUN");
 #endif
+		last_active = millis ();
 		which = get_which ();
 		ReadFloat f;
 		for (uint8_t i = 0; i < sizeof (float); ++i) {
@@ -138,26 +145,25 @@ void packet ()
 		}
 		// If a run is sent while paused; we discard the current buffer.
 		if (pause_all) {
-			pause_all = false;
 			abort_move ();
+			flush_queue ();
 #ifdef AUDIO
 			audio_start += micros () - pause_time;
 #endif
 		}
-		if (moving)
+		if (moving_motor (which))
 		{
-			if (((printer_type != 1 || which > 2 + 3) && !isnan (motors[which]->dist)) || (printer_type == 1 && which <= 2 + 3 && (!isnan (motors[2]->dist) || !isnan (motors[3]->dist) || !isnan (motors[4]->dist))))
-			{
-				debug ("Running moving motor %d", which);
-				Serial.write (CMD_STALL);
-				return;
-			}
+			debug ("Running moving motor %d", which);
+			Serial.write (CMD_STALL);
+			return;
 		}
 		Serial.write (CMD_ACK);
-		if (which < 2 + MAXAXES) {
+		if (printer_type == 1 && which < 2 + 3) {
 			for (uint8_t a = 0; a < 3; ++a)
 				axis[a].source = NAN;
 		}
+		else if (which < 2 + MAXAXES)
+			axis[which - 2].source = NAN;
 		float speed = isnan (f.f) ? 0 : f.f;
 		if (speed > 0) {
 			if (speed > motors[which]->max_v_pos)
@@ -168,12 +174,14 @@ void packet ()
 				speed = -motors[which]->max_v_neg;
 		}
 		if (motors[which]->f != 0) {
+			//debug ("running changes speed from %f to %f", &motors[which]->f, &speed);
 		       	if ((motors[which]->positive && speed < 0) || (!motors[which]->positive && speed > 0))
 				motors[which]->continuous_steps_per_s = -abs (speed) * motors[which]->steps_per_mm;
 			else
 				motors[which]->continuous_steps_per_s = abs (speed) * motors[which]->steps_per_mm;
 		}
 		else {
+			//debug ("new running speed %f", &speed);
 			if (speed > 0) {
 				SET (motors[which]->dir_pin);
 				motors[which]->continuous_steps_per_s = speed * motors[which]->steps_per_mm;
@@ -188,7 +196,7 @@ void packet ()
 			motors[which]->continuous_last_time = micros ();
 			SET (motors[which]->enable_pin);
 			motors[which]->continuous_steps = 0;
-			motors_busy = true;
+			motors_busy |= 1 << which;
 		}
 		return;
 	}
@@ -197,6 +205,7 @@ void packet ()
 #ifdef DEBUG_CMD
 		debug ("CMD_SLEEP");
 #endif
+		last_active = millis ();
 		which = get_which ();
 		if (!motors[which])
 		{
@@ -204,11 +213,39 @@ void packet ()
 			Serial.write (CMD_STALL);
 			return;
 		}
-		if (command[2] & 0x80)
+		if (moving_motor (which))
+		{
+			if (pause_all)
+			{
+				abort_move ();
+				flush_queue ();
+			}
+			else
+			{
+				debug ("Sleeping moving axis %d", which - 2);
+				Serial.write (CMD_STALL);
+				return;
+			}
+		}
+		if (command[2] & 0x80) {
 			RESET (motors[which]->enable_pin);
+			motors_busy &= ~(1 << which);
+			if (printer_type == 1 && which < 2 + 3) {
+				for (uint8_t a = 2; a < 2 + 3; ++a) {
+					axis[a].current_pos = MAXLONG;
+					axis[a].source = NAN;
+					axis[a].current = NAN;
+				}
+			}
+			else if (which < 2 + MAXAXES) {
+				axis[which - 2].current_pos = MAXLONG;
+				axis[which - 2].source = NAN;
+				axis[which - 2].current = NAN;
+			}
+		}
 		else {
 			SET (motors[which]->enable_pin);
-			motors_busy = true;
+			motors_busy |= 1 << which;
 		}
 		Serial.write (CMD_ACK);
 		return;
@@ -218,6 +255,7 @@ void packet ()
 #ifdef DEBUG_CMD
 		debug ("CMD_SETTEMP");
 #endif
+		last_active = millis ();
 		which = get_which ();
 		float target = get_float (3);
 		if (!temps[which] || (temps[which]->thermistor_pin.invalid () && (target < 0 || !isinf (target)) && !isnan (target)))
@@ -234,7 +272,6 @@ void packet ()
 				temps[which]->is_on = false;
 				--temps_busy;
 			}
-			last_active = millis ();
 		}
 		else
 			initialized = true;
@@ -324,15 +361,36 @@ void packet ()
 #ifdef DEBUG_CMD
 		debug ("CMD_SETPOS");
 #endif
+		last_active = millis ();
 		which = get_which ();
 		if (which < 2 || which > 2 + MAXAXES)
 		{
-			debug ("Setting position of invalid axis %d", which);
+			debug ("Setting position of non-axis component %d", which);
 			Serial.write (CMD_STALL);
 			return;
 		}
-		for (uint8_t a = 0; a < 3; ++a)
-			axis[a].source = NAN;
+		if (!(motors_busy & 1 << which))
+		{
+			debug ("Setting position of sleeping axis %d (busy %x)", which - 2, motors_busy);
+			Serial.write (CMD_STALL);
+			return;
+		}
+		if (moving_motor (which))
+		{
+			debug ("Setting position of moving axis %d", which - 2);
+			Serial.write (CMD_STALL);
+			return;
+		}
+		if (printer_type == 1 && which <= 2 + 3) {
+			for (uint8_t a = 0; a < 3; ++a) {
+				axis[a].source = NAN;
+				axis[a].current = NAN;
+			}
+		}
+		else {
+			axis[which - 2].source = NAN;
+			axis[which - 2].current = NAN;
+		}
 		Serial.write (CMD_ACK);
 		axis[which - 2].current_pos = int32_t (get_float (3) * axis[which - 2].motor.steps_per_mm);
 		return;
@@ -365,47 +423,6 @@ void packet ()
 		try_send_next ();
 		return;
 	}
-#ifndef LOWMEM
-	case CMD_SETDISPLACE:	// Set a displacement value
-	{
-#ifdef DEBUG_CMD
-		debug ("CMD_SETDISPLACE");
-#endif
-		which = get_uint16 (2);
-		if (which > MAXDISPLACEMENTS)
-		{
-			debug ("Setting invalid displacement value %d", which);
-			Serial.write (CMD_STALL);
-			return;
-		}
-		Serial.write (CMD_ACK);
-		displacement[which] = get_float (4);
-		return;
-	}
-	case CMD_GETDISPLACE:	// Get a displacement value
-	{
-#ifdef DEBUG_CMD
-		debug ("CMD_GETDISPLACE");
-#endif
-		which = get_uint16 (2);
-		if (which > MAXDISPLACEMENTS)
-		{
-			debug ("Getting invalid displacement value %d", which);
-			Serial.write (CMD_STALL);
-			return;
-		}
-		Serial.write (CMD_ACK);
-		ReadFloat value;
-		value.f = displacement[which];
-		reply[0] = 2 + sizeof (float);
-		reply[1] = CMD_DISPLACE;
-		for (uint8_t b = 0; b < sizeof (float); ++b)
-			reply[2 + b] = value.b[b];
-		reply_ready = true;
-		try_send_next ();
-		return;
-	}
-#endif
 	case CMD_LOAD:	// reload settings from eeprom
 	{
 #ifdef DEBUG_CMD
@@ -489,6 +506,7 @@ void packet ()
 #ifdef DEBUG_CMD
 		debug ("CMD_PAUSE");
 #endif
+		last_active = millis ();
 		if (command[2]) {
 			if (!pause_all)
 				pause_time = micros ();
@@ -546,13 +564,14 @@ void packet ()
 #ifdef DEBUG_CMD
 		debug ("CMD_AUDIO_SETUP");
 #endif
+		last_active = millis ();
 		audio_us_per_bit = get_uint16 (2);
 		for (uint8_t a = 0; a < num_axes; ++a)
 		{
 			if (command[4 + ((a + 2) >> 3)] & (1 << ((a + 2) & 0x7))) {
 				axis[a].motor.audio_flags |= Motor::PLAYING;
 				SET (axis[a].motor.enable_pin);
-				motors_busy = true;
+				motors_busy |= 1 << (a + 2);
 			}
 			else
 				axis[a].motor.audio_flags &= ~Motor::PLAYING;
@@ -562,7 +581,7 @@ void packet ()
 			if (command[4 + ((e + 2 + num_axes) >> 3)] & (1 << ((e + 2 + num_axes) & 0x7))) {
 				extruder[e].motor.audio_flags |= Motor::PLAYING;
 				SET (extruder[e].motor.enable_pin);
-				motors_busy = true;
+				motors_busy |= 1 << (2 + MAXAXES + e);
 			}
 			else
 				extruder[e].motor.audio_flags &= ~Motor::PLAYING;
@@ -571,7 +590,6 @@ void packet ()
 		audio_head = 0;
 		audio_tail = 0;
 		Serial.write (CMD_ACK);
-		last_active = millis ();
 		return;
 	}
 	case CMD_AUDIO_DATA:
@@ -579,6 +597,8 @@ void packet ()
 #ifdef DEBUG_CMD
 		debug ("CMD_AUDIO_DATA");
 #endif
+		initialized = true;
+		last_active = millis ();
 		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
 		{
 			debug ("Audio buffer is full");
@@ -594,7 +614,6 @@ void packet ()
 			Serial.write (CMD_ACKWAIT);
 		else
 			Serial.write (CMD_ACK);
-		last_active = millis ();
 		return;
 	}
 #endif

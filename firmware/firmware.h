@@ -78,8 +78,6 @@ enum Command {
 	CMD_READPOWER,	// 1 byte: which channel.  Reply: POWER. [μs, μs]
 	CMD_SETPOS,	// 1 byte: which channel; 4 bytes: pos.
 	CMD_GETPOS,	// 1 byte: which channel.  Reply: POS. [steps, mm]
-	CMD_SETDISPLACE,// 2 byte: which; 4 byte: value. [mm]
-	CMD_GETDISPLACE,// 2 byte: which.  1 byte: 0 (to not make the packet size 4).  Reply: DISPLACE.
 	CMD_LOAD,	// 1 byte: which channel.
 	CMD_SAVE,	// 1 byte: which channel.
 	CMD_READ,	// 1 byte: which channel.  Reply: DATA.
@@ -94,7 +92,6 @@ enum Command {
 	CMD_TEMP,	// 4 byte: requested channel's temperature. [°C]
 	CMD_POWER,	// 4 byte: requested channel's power time; 4 bytes: current time. [μs, μs]
 	CMD_POS,	// 4 byte: pos [steps]; 4 byte: current [mm].
-	CMD_DISPLACE,	// 4 byte: value [mm].
 	CMD_DATA,	// n byte: requested data.
 	CMD_PONG,	// 1 byte: PING argument.
 	CMD_PIN,	// 1 byte: 0 or 1: pin state.
@@ -196,10 +193,12 @@ struct Variables : public Object
 struct Axis : public Object
 {
 	Motor motor;
-	float limit_min_pos;	// Position of motor (in mm) when the min limit switch is triggered.
-	float limit_max_pos;	// Position of motor (in mm) when the max limit switch is triggered.
+	float limit_pos;	// Position of motor (in mm) when the limit switch is triggered.
 	float delta_length, delta_radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
 	float offset;		// Position where axis claims to be when it is at 0.
+	float park;		// Park position; not used by the firmware, but stored for use by the host.
+	float axis_min, axis_max;	// Limits for the movement of this axis.
+	int32_t motor_min, motor_max;	// Limits for the movement of this motor.
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;
 	Pin_t sense_pin;
@@ -208,11 +207,6 @@ struct Axis : public Object
 	int32_t current_pos;	// Current position of motor (in steps).
 	float source, current;	// Source position of current movement of axis (in mm), or current position if there is no movement.
 	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
-#ifndef LOWMEM
-	uint8_t num_displacements[MAXAXES];
-	float first_displacement;
-	float displacement_step;
-#endif
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Axis () {}
@@ -265,7 +259,7 @@ EXTERN uint8_t num_axes;
 EXTERN uint8_t num_temps;
 EXTERN uint8_t num_gpios;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
-EXTERN Pin_t led_pin;
+EXTERN Pin_t led_pin, probe_pin;
 #ifndef LOWMEM
 EXTERN float room_T;	//[°C]
 #endif
@@ -282,9 +276,6 @@ EXTERN Axis axis[MAXAXES];
 EXTERN Temp temp[MAXTEMPS];
 EXTERN Extruder extruder[MAXEXTRUDERS];
 EXTERN Gpio gpio[MAXGPIOS];
-#ifndef LOWMEM
-EXTERN float displacement[MAXDISPLACEMENTS];
-#endif
 EXTERN uint8_t temps_busy;
 EXTERN Motor *motors[MAXOBJECT];
 EXTERN Temp *temps[MAXOBJECT];
@@ -300,7 +291,7 @@ EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN unsigned long pause_time;
 EXTERN bool initialized;
 EXTERN bool pause_all;
-EXTERN bool motors_busy;
+EXTERN uint32_t motors_busy;		// bitmask of motors which are enabled.
 EXTERN bool out_busy;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
@@ -313,7 +304,7 @@ EXTERN unsigned long audio_start;
 EXTERN uint16_t audio_us_per_bit;
 #endif
 EXTERN unsigned long start_time;
-EXTERN long t0, tq;
+EXTERN long t0, tp, tq;
 EXTERN bool moving;
 EXTERN float v0, vp, vq, f0;
 EXTERN bool move_prepared;
@@ -333,6 +324,7 @@ void try_send_next ();
 // move.cpp
 void next_move ();
 void abort_move ();
+void flush_queue ();
 void reset_pos ();
 
 // setup.cpp
@@ -357,16 +349,17 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float dz = target[2] - axis[a].z;
 	float r2 = dx * dx + dy * dy;
 	float l2 = axis[a].delta_length * axis[a].delta_length;
-	if (r2 > l2 + 100 - 20 * axis[a].delta_length) {
+	if (r2 > l2 - 2500) {
 		*ok = false;
 		//debug ("not ok: %f %f %f %f %f %f %f", &target[0], &target[1], &dx, &dy, &r2, &l2, &axis[a].delta_length);
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
-		float factor = (axis[a].delta_length - 10.) / sqrt (r2);
+		float factor = (axis[a].delta_length - 50.) / sqrt (r2);
 		target[0] = axis[a].x + (target[0] - axis[a].x) * factor;
 		target[1] = axis[a].y + (target[1] - axis[a].y) * factor;
 		return 0;
 	}
+	// Inner project shows if projection is inside or outside the printable region.
 	float inner = dx * axis[a].x + dy * axis[a].y;
 	if (inner > 0) {
 		*ok = false;
@@ -381,6 +374,18 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float dest = sqrt (l2 - r2) + dz;
 	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", &dx, &dy, &dz, &axis[a].z, &r, &target);
 	return dest * axis[a].motor.steps_per_mm;
+}
+
+static inline bool moving_motor (uint8_t which) {
+	if (!moving)
+		return false;
+	if (printer_type == 1 && which < 2 + 3) {
+		for (uint8_t a = 2; a < 2 + 3; ++a)
+			if (!isnan (motors[a]->dist))
+				return true;
+		return false;
+	}
+	return !isnan (motors[which]->dist);
 }
 
 #endif

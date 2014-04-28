@@ -116,7 +116,7 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 static void done_motors () {
 	// Mark motors as not moving.
 	for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-		if (!motors[m] || isnan (motors[m]->dist))
+		if (!motors[m])
 			continue;
 		motors[m]->dist = NAN;
 	}
@@ -127,6 +127,7 @@ static void done_motors () {
 static bool do_steps (uint8_t m, int16_t num_steps) {
 	if (num_steps == 0)
 		return true;
+	//debug ("do steps %d %d", m, num_steps);
 	if (motors[m]->positive != (num_steps > 0)) {
 		if (num_steps > 0)
 			SET (motors[m]->dir_pin);
@@ -140,21 +141,21 @@ static bool do_steps (uint8_t m, int16_t num_steps) {
 	}
 	if (m >= 2 && m < MAXAXES + 2) {
 		// No problem if limit switch is not hit.
-		if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) : GET (axis[m - 2].limit_min_pin, false)) {
+		if ((motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) : GET (axis[m - 2].limit_min_pin, false)) || (axis[m - 2].motor_max != MAXLONG && axis[m - 2].current_pos != MAXLONG && axis[m - 2].current_pos + num_steps > axis[m - 2].motor_max) || (axis[m - 2].motor_min != MAXLONG && axis[m - 2].current_pos != MAXLONG && axis[m - 2].current_pos + num_steps < axis[m - 2].motor_min)) {
 			// Hit endstop; abort current move and notify host.
-			debug ("hit %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (motors[m]->positive));
+			//debug ("hit %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (motors[m]->positive));
 			// Stop continuous move only for the motor that hits the switch.
 			motors[m]->f = 0;
 			motors[m]->continuous_steps_per_s = 0;
 			limits_pos[m - 2] = axis[m - 2].current_pos / axis[m - 2].motor.steps_per_mm;
 			try_send_next ();
-			if (moving) {
-				abort_move ();
-				done_motors ();
-			}
+			abort_move ();
+			next_move ();
 			return false;
 		}
-		axis[m - 2].current_pos += num_steps;
+		// Update current position only if it is valid.
+		if (axis[m - 2].current_pos != MAXLONG)
+			axis[m - 2].current_pos += num_steps;
 	}
         for (int16_t s = 0; s < abs (num_steps); ++s) {
 		SET (motors[m]->step_pin);
@@ -168,16 +169,17 @@ static void move_axes (float target[3]) {
 	switch (printer_type) {
 	case 1:
 		// Delta movements are hardcoded to 3 axes.
-		for (uint8_t a2 = 0; a2 < 3; ++a2) {
-			bool ok = true;
-			int32_t the_target = delta_to_axis (a2, target, &ok);
-			if (!do_steps (2 + a2, the_target - axis[a2].current_pos)) {
-				// The move has been aborted.
-				return;
+		if (!isnan (target[0]) && !isnan (target[1]) && !isnan (target[2])) {
+			for (; a < 3; ++a) {
+				bool ok = true;
+				int32_t the_target = delta_to_axis (a, target, &ok);
+				if (!do_steps (2 + a, the_target - axis[a].current_pos)) {
+					// The move has been aborted.
+					return;
+				}
+				axis[a].current = target[a];
 			}
-			axis[a2].current = target[a2];
 		}
-		a = 3;
 		// Fall through to handle the non-delta axes.
 	case 0:
 		for (; a < num_axes; ++a)
@@ -195,7 +197,7 @@ static void move_axes (float target[3]) {
 
 static void handle_motors (unsigned long current_time, unsigned long longtime) {
 	for (uint8_t a = 0; a < MAXAXES; ++a) {	// Check sense pins.
-		if (GET (axis[a].sense_pin, false) ^ bool (axis[a].sense_state & 0x80)) {
+		if (axis[a].current_pos != MAXLONG && GET (axis[a].sense_pin, false) ^ bool (axis[a].sense_state & 0x80)) {
 			axis[a].sense_state ^= 0x80;
 			axis[a].sense_state |= 1;
 			axis[a].sense_pos = axis[a].current_pos / axis[a].motor.steps_per_mm;
@@ -253,15 +255,11 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 	last_active = longtime;
 	long t = current_time - start_time;
 	float target[num_axes];
-	while (t >= t0 + tq) {	// Finish this move and prepare next.
+	while (t >= t0 + tp) {	// Finish this move and prepare next.
 		for (uint8_t a = 0; a < num_axes; ++a) {
-			if (isnan (axis[a].motor.dist)) {
-				target[a] = NAN;
-				continue;
-			}
 			float dist = isnan (axis[a].motor.dist) ? 0 : axis[a].motor.dist;
 			float next_dist = isnan (axis[a].motor.next_dist) ? 0 : axis[a].motor.next_dist;
-			target[a] = axis[a].source + axis[a].motor.main_dist + (dist * vp + next_dist * vq) * tq / 2e6;
+			target[a] = axis[a].source + axis[a].motor.main_dist + (dist * vp + next_dist * vq) * tp / 2e6;
 		}
 		move_axes (target);
 		for (uint8_t e = 0; e < num_extruders; ++e) {
@@ -269,11 +267,12 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 				continue;
 			float dist = isnan (extruder[e].motor.dist) ? 0 : extruder[e].motor.dist;
 			float next_dist = isnan (extruder[e].motor.next_dist) ? 0 : extruder[e].motor.next_dist;
-			float mm = extruder[e].motor.main_dist + (dist * vp + next_dist * vq) * tq / 2e6;
+			float mm = extruder[e].motor.main_dist + (dist * vp + next_dist * vq) * tp / 2e6;
 			if (!do_steps (2 + MAXAXES + e, mm * extruder[e].motor.steps_per_mm - extruder[e].steps_done))
 				return;
 		}
 		if (moving && current_move_has_cb) {
+			debug ("movecb 1");
 			++num_movecbs;
 			try_send_next ();
 		}
@@ -314,14 +313,14 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 			}
 			float dist = isnan (axis[a].motor.dist) ? 0 : axis[a].motor.dist;
 			float next_dist = isnan (axis[a].motor.next_dist) ? 0 : axis[a].motor.next_dist;
-			target[a] = axis[a].source + axis[a].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (t * 1. / tq)) * t / 1e6;
+			target[a] = axis[a].source + axis[a].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (t * 1. / tp)) * t / 1e6;
 		}
 		for (uint8_t e = 0; e < num_extruders; ++e) {
 			if (isnan (extruder[e].motor.dist) && isnan (extruder[e].motor.next_dist))
 				continue;
 			float dist = isnan (extruder[e].motor.dist) ? 0 : extruder[e].motor.dist;
 			float next_dist = isnan (extruder[e].motor.next_dist) ? 0 : extruder[e].motor.next_dist;
-			int32_t steps = (extruder[e].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (t * 1. / tq)) * t / 1e6) * extruder[e].motor.steps_per_mm;
+			int32_t steps = (extruder[e].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (t * 1. / tp)) * t / 1e6) * extruder[e].motor.steps_per_mm;
 			do_steps (2 + MAXAXES + e, steps - extruder[e].steps_done);
 			extruder[e].steps_done = steps;
 		}
@@ -331,13 +330,17 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 
 #ifdef AUDIO
 static void handle_audio (unsigned long current_time, unsigned long longtime) {
+	if (pause_all)
+		return;
 	if (audio_head != audio_tail) {
 		last_active = longtime;
 		int16_t bit = (current_time - audio_start) / audio_us_per_bit;
 		int16_t byte = bit >> 3;
 		while (byte >= AUDIO_FRAGMENT_SIZE) {
+			//debug ("next audio fragment");
 			if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
 			{
+				//debug ("continue audio");
 				continue_cb |= 2;
 				try_send_next ();
 			}
@@ -401,13 +404,18 @@ void loop () {
 #ifdef AUDIO
 	handle_audio (current_time, longtime);
 #endif
-	if (motors_busy && motor_limit > 0 && longtime - last_active > motor_limit) {
+	if (motors_busy != 0 && !pause_all && motor_limit > 0 && longtime - last_active > motor_limit) {
 		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 			if (!motors[m])
 				continue;
 			RESET (motors[m]->enable_pin);
 		}
-		motors_busy = false;
+		for (uint8_t a = 0; a < MAXAXES; ++a) {
+			axis[a].current_pos = MAXLONG;
+			axis[a].current = NAN;
+			axis[a].source = NAN;
+		}
+		motors_busy = 0;
 		which_autosleep |= 1;
 	}
 	if (temps_busy > 0 && temp_limit > 0 && longtime - last_active > temp_limit) {

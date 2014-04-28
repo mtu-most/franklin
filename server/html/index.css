@@ -1,10 +1,35 @@
-.hidden,.noexpert .expert {
+.hidden,
+.empty *,
+
+.notweak .tweak,
+.noexpert .expert,
+.notweak .expert,
+.nosetup .setup,
+.notweak .setup,
+.noexpert .setup,
+
+.notweak .basichidden,
+.noexpert .tweakhidden,
+.notweak .tweakhidden,
+.nosetup .experthidden,
+.noexpert .experthidden,
+.notweak .experthidden,
+
+.nomover #movediv
+{
 	display: none;
 }
 
-#expertswitch {
-	float: right;
+#showswitches {
+	position: fixed;
+	right: 10px;
+	top: 10px;
 	background: #ff8;
+}
+
+#showswitches > * {
+	clear: both;
+	float: right;
 }
 
 .tab {
@@ -23,29 +48,69 @@
 	background: #cc8;
 }
 
-.printerpins,.axispins,.extruderpins,.temppins,.gpiopins {
+.pins_printer,.pins_axis,.pins_extruder,.pins_temp,.pins_gpio {
 	margin: 1ex 0em;
-	clear: both;
 }
 
 .pintitle {
-	width: 12em;
-	float: left;
-	clear: both;
 	background: #ffc;
 }
 
 .pinvalue {
-	float: left;
 	background: #ffc;
 }
 
 .title {
+	margin: 10px 0px 0px 0px;
+}
+.floattitle {
+	background: #cfc;
+	margin: 10px 0px 0px 0px;
+}
+.choicetitle {
+	background: #cfc;
+	margin: 10px 0px 0px 0px;
+}
+.inputtitle {
+	background: #cfc;
+	margin: 10px 0px 0px 0px;
+}
+.blocktitle {
+	background: #afa;
+	margin: 10px 0px 0px 0px;
+}
+.rowtitle {
+	background: #cfc;
+}
+input[type="text"] {
+	width: 5em;
+}
+select[multiple] {
+	width: 50%;
 	float: left;
-	font-weight: bold;
-	width: 14em;
+}
+#labels,#scripts {
+	clear: both;
+}
+.checked {
+	background: #0f0;
 }
 
-input[type=text] {
-	width: 4em;
+#movediv {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	background: #666;
+}
+
+#movebox {
+	background: #ee6;
+	width: 80%;
+	margin: auto auto;
+}
+#move_viewbox {
+	margin: auto auto;
+	text-align: center;
 }

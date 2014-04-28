@@ -14,11 +14,6 @@ void Constants::save (int16_t &addr, bool eeprom)
 	write_8 (addr, MAXEXTRUDERS, false);
 	write_8 (addr, MAXTEMPS, false);
 	write_8 (addr, MAXGPIOS, false);
-#ifndef LOWMEM
-	write_16 (addr, MAXDISPLACEMENTS, false);
-#else
-	write_16 (addr, 0, false);
-#endif
 #ifdef AUDIO
 	write_8 (addr, AUDIO_FRAGMENTS, false);
 	write_8 (addr, AUDIO_FRAGMENT_SIZE, false);
@@ -26,8 +21,9 @@ void Constants::save (int16_t &addr, bool eeprom)
 	write_8 (addr, 0, false);
 	write_8 (addr, 0, false);
 #endif
-	write_8 (addr, NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS, false);
-	write_8 (addr, NUM_DIGITAL_PINS, false);
+	// NUM_DIGITAL_PINS is incorrect; avoid using it.
+	write_8 (addr, A0 + NUM_ANALOG_INPUTS, false);
+	write_8 (addr, A0, false);
 }
 
 void Variables::load (int16_t &addr, bool eeprom)
@@ -46,6 +42,7 @@ void Variables::load (int16_t &addr, bool eeprom)
 	printer_type = read_8 (addr, eeprom);
 	printer_type = min (printer_type, 1);
 	led_pin.read (read_16 (addr, eeprom));
+	probe_pin.read (read_16 (addr, eeprom));
 #ifndef LOWMEM
 	room_T = read_float (addr, eeprom) + 273.15;
 #else
@@ -56,7 +53,14 @@ void Variables::load (int16_t &addr, bool eeprom)
 	feedrate = read_float (addr, eeprom);
 	SET_OUTPUT (led_pin);
 	if (type != printer_type)
-		axis[0].source = NAN;
+	{
+		for (uint8_t a = 0; a < MAXAXES; ++a)
+		{
+			axis[a].source = NAN;
+			axis[a].current = NAN;
+			axis[a].current_pos = MAXLONG;
+		}
+	}
 }
 
 void Variables::save (int16_t &addr, bool eeprom)
@@ -69,6 +73,7 @@ void Variables::save (int16_t &addr, bool eeprom)
 	write_8 (addr, num_gpios, eeprom);
 	write_8 (addr, printer_type, eeprom);
 	write_16 (addr, led_pin.write (), eeprom);
+	write_16 (addr, probe_pin.write (), eeprom);
 #ifndef LOWMEM
 	write_float (addr, room_T - 273.15, eeprom);
 #else

@@ -10,11 +10,17 @@ override_dh_auto_build:
 	dh_auto_build
 	ronn -r server/printer3d-server.8.ronn
 	sed -i -e 's/^.*MELZI=.*$$/MELZI=true/' firmware/Makefile
+	sed -i -e 's/^.*MEGA=.*$$/#MEGA=true/' firmware/Makefile
 	${MAKE} -C firmware
 	mv firmware/build-mighty_opt/firmware.hex firmware/build-mighty_opt/mighty_opt.hex
 	sed -i -e 's/^.*MELZI=.*$$/#MELZI=true/' firmware/Makefile
+	sed -i -e 's/^.*MEGA=.*$$/#MEGA=true/' firmware/Makefile
 	${MAKE} -C firmware
 	mv firmware/build-mega2560/firmware.hex firmware/build-mega2560/mega2560.hex
+	sed -i -e 's/^.*MELZI=.*$$/#MELZI=true/' firmware/Makefile
+	sed -i -e 's/^.*MEGA=.*$$/MEGA=true/' firmware/Makefile
+	${MAKE} -C firmware
+	mv firmware/build-mega/firmware.hex firmware/build-mega/mega.hex
 
 override_dh_auto_clean:
 	dh_auto_clean

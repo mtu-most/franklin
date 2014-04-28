@@ -19,10 +19,6 @@ RUN=1
 # Port to listen for browser requests.
 PORT=8080
 
-# TLS key and certificate to use for encryption.  If not key is given,
-# encryption will be disabled (and there will be a warning about it).
-TLS='/etc/ssl/certs/ssl-cert-snakeoil.pem:/etc/ssl/private/ssl-cert-snakeoil.key'
-
 # Location where audio files are stored.
 AUDIODIR=/var/cache/printer3d/audio
 
@@ -35,7 +31,7 @@ PRINTER=''
 AUTODETECT=True
 
 # Regular expression of serial ports to ignore.
-BLACKLIST='/dev/(ptmx$|console$|ttyS?\d*)$'
+BLACKLIST='/dev/(ptmx$|console$|ttyS?\d*|ttyprintk)$'
 
 # Arguments to start-stop-daemon.
 ARGS="--quiet"
@@ -56,7 +52,7 @@ NAME=printer3d
 DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/printer3d-server
 ARGS="--make-pidfile --pidfile $PIDFILE --chuid printer3d:printer3d $ARGS"
-START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --autodetect=$AUTODETECT --port=$PORT --printer=$PRINTER --audiodir=$AUDIODIR --tls=$TLS --blacklist=$BLACKLIST"
+START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --autodetect=$AUTODETECT --port=$PORT --printer=$PRINTER --audiodir=$AUDIODIR --blacklist=$BLACKLIST"
 STOP_ARGS="--oknodo --stop $ARGS"
 
 if test ! -x "$DAEMON"; then

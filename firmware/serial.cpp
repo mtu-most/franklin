@@ -257,7 +257,7 @@ void try_send_next ()
 	{
 		if (!isnan (limits_pos[w]))
 		{
-			debug ("limit %d", w);
+			//debug ("limit %d", w);
 			out_buffer[0] = 7;
 			out_buffer[1] = CMD_LIMIT;
 			out_buffer[2] = w;
