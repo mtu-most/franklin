@@ -1,5 +1,6 @@
 #include "firmware.h"
 
+//#define DEBUG_SERIAL
 //#define DEBUG_FF
 
 // Commands which can be sent:
@@ -32,7 +33,7 @@ static const uint8_t MASK[5][4] = {
 // There may be serial data available.
 void serial ()
 {
-	if (!had_data && command_end > 0 && micros () >= last_micros + 100000)
+	if (!had_data && command_end > 0 && micros () - last_micros >= 100000)
 	{
 		// Command not finished; ignore it and wait for next.
 #ifdef WATCHDOG
@@ -51,13 +52,16 @@ void serial ()
 		}
 		had_data = true;
 		command[0] = Serial.read ();
-		//debug ("received: %x", command[0]);
+#ifdef DEBUG_SERIAL
+		debug ("received: %x", command[0]);
+#endif
 		// If this is a 1-byte command, handle it.
 		switch (command[0])
 		{
-		case CMD_ACK:
+		case CMD_ACK0:
+		case CMD_ACK1:
 			// Ack: everything was ok; flip the flipflop.
-			if (out_busy) {	// Only if we expected it.
+			if (out_busy && (!ff_out ^ (command[0] == CMD_ACK1))) {	// Only if we expected it and it is the right type.
 				ff_out ^= 0x80;
 #ifdef DEBUG_FF
 				debug ("new ff_out: %d", ff_out);
@@ -72,12 +76,12 @@ void serial ()
 			if (out_busy)
 				send_packet (last_packet);
 			continue;
-		case CMD_GETID:
+		case CMD_ID:
 			// Request printer id.  This is called when the host
 			// connects to the printer.  This may be a reconnect,
 			// and can happen at any time.
 			// Response is to send the printer id.
-			Serial.write (CMD_SENDID);
+			Serial.write (CMD_ID);
 			for (uint8_t i = 0; i < ID_SIZE; ++i)
 				Serial.write (printerid[i]);
 			continue;
@@ -95,10 +99,19 @@ void serial ()
 	int len = Serial.available ();
 	if (len == 0)
 	{
-		//debug ("no more data available now");
+#ifdef DEBUG_SERIAL
+		debug ("no more data available now");
+#endif
 #ifdef WATCHDOG
 		wdt_reset ();
 #endif
+		// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
+		if (out_busy && micros () - out_time >= 200000) {
+#ifdef DEBUG_SERIAL
+			debug ("resending packet");
+#endif
+			send_packet (last_packet);
+		}
 		return;
 	}
 	had_data = true;
@@ -109,12 +122,16 @@ void serial ()
 	if (command_end + len > cmd_len)
 		len = cmd_len - command_end;
 	Serial.readBytes (reinterpret_cast <char *> (&command[command_end]), len);
-	//debug ("read %d bytes", len);
+#ifdef DEBUG_SERIAL
+	debug ("read %d bytes", len);
+#endif
 	last_micros = micros ();
 	command_end += len;
 	if (command_end < cmd_len)
 	{
-		//debug ("not done yet; %d of %d received.", command_end, cmd_len);
+#ifdef DEBUG_SERIAL
+		debug ("not done yet; %d of %d received.", command_end, cmd_len);
+#endif
 #ifdef WATCHDOG
 		wdt_reset ();
 #endif
@@ -157,17 +174,21 @@ void serial ()
 		}
 	}
 	// Packet is good.
-	//debug ("good");
+#ifdef DEBUG_SERIAL
+	debug ("good");
+#endif
 	// Flip-flop must have good state.
 	if ((command[1] & 0x80) != ff_in)
 	{
 		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
 		// Resend the ack, but don't do anything (the action has already been taken).
-		//debug ("duplicate");
+#ifdef DEBUG_SERIAL
+		debug ("duplicate");
+#endif
 #ifdef DEBUG_FF
 		debug ("old ff_in: %d", ff_in);
 #endif
-		Serial.write (CMD_ACK);
+		Serial.write (ff_in ? CMD_ACK0 : CMD_ACK1);
 		return;
 	}
 	// Right: update flip-flop and send ack.
@@ -195,7 +216,9 @@ void serial ()
 // Set checksum bytes.
 static void prepare_packet (char *the_packet)
 {
-	//debug ("prepare");
+#ifdef DEBUG_SERIAL
+	debug ("prepare");
+#endif
 	if (the_packet[0] >= COMMAND_SIZE)
 	{
 		debug ("packet is too large: %d > %d", the_packet[0], COMMAND_SIZE);
@@ -235,29 +258,39 @@ static void prepare_packet (char *the_packet)
 // Send packet to host.
 void send_packet (char *the_packet)
 {
-	//debug ("send");
+#ifdef DEBUG_SERIAL
+	debug ("send");
+#endif
 	last_packet = the_packet;
 	uint8_t cmd_len = the_packet[0] & COMMAND_LEN_MASK;
 	for (uint8_t t = 0; t < cmd_len + (cmd_len + 2) / 3; ++t)
 		Serial.write (the_packet[t]);
 	out_busy = true;
+	out_time = micros ();
 }
 
 // Call send_packet if we can.
 void try_send_next ()
 {
-	//debug ("try send");
+#ifdef DEBUG_SERIAL
+	debug ("try send");
+#endif
 	if (out_busy)
 	{
-		//debug ("still busy");
+#ifdef DEBUG_SERIAL
+		debug ("still busy");
+#endif
 		// Still busy sending other packet.
 		return;
 	}
+#if MAXAXES > 0
 	for (uint8_t w = 0; w < MAXAXES; ++w)
 	{
 		if (!isnan (limits_pos[w]))
 		{
-			//debug ("limit %d", w);
+#ifdef DEBUG_SERIAL
+			debug ("limit %d", w);
+#endif
 			out_buffer[0] = 7;
 			out_buffer[1] = CMD_LIMIT;
 			out_buffer[2] = w;
@@ -279,7 +312,9 @@ void try_send_next ()
 		}
 		if (axis[w].sense_state & 1)
 		{
-			//debug ("sense %d %d %d", w, axis[w].sense_state, axis[w].sense_pos);
+#ifdef DEBUG_SERIAL
+			debug ("sense %d %d %d", w, axis[w].sense_state, axis[w].sense_pos);
+#endif
 			out_buffer[0] = 7;
 			out_buffer[1] = CMD_SENSE;
 			out_buffer[2] = w | (axis[w].sense_state & 0x80);
@@ -300,9 +335,12 @@ void try_send_next ()
 			return;
 		}
 	}
+#endif
 	if (num_movecbs > 0)
 	{
-		//debug ("movecb %d", num_movecbs);
+#ifdef DEBUG_SERIAL
+		debug ("sending %d movecbs", num_movecbs);
+#endif
 		out_buffer[0] = 3;
 		out_buffer[1] = CMD_MOVECB;
 		out_buffer[2] = num_movecbs;
@@ -311,9 +349,12 @@ void try_send_next ()
 		send_packet (out_buffer);
 		return;
 	}
+#if MAXTEMPS > 0 || MAXEXTRUDERS > 0
 	if (which_tempcbs != 0)
 	{
-		//debug ("tempcb %d", which_tempcbs);
+#ifdef DEBUG_SERIAL
+		debug ("tempcb %d", which_tempcbs);
+#endif
 		for (uint8_t w = 0; w < MAXOBJECT; ++w)
 		{
 			if (which_tempcbs & (1 << w))
@@ -334,9 +375,12 @@ void try_send_next ()
 			try_send_next ();
 		return;
 	}
+#endif
 	if (reply_ready)
 	{
-		//debug ("reply %x %d", reply[1], reply[0]);
+#ifdef DEBUG_SERIAL
+		debug ("reply %x %d", reply[1], reply[0]);
+#endif
 		prepare_packet (reply);
 		send_packet (reply);
 		reply_ready = false;
@@ -344,7 +388,9 @@ void try_send_next ()
 	}
 	if (continue_cb & 1)
 	{
-		//debug ("continue move");
+#ifdef DEBUG_SERIAL
+		debug ("continue move");
+#endif
 		out_buffer[0] = 3;
 		out_buffer[1] = CMD_CONTINUE;
 		out_buffer[2] = 0;
@@ -360,7 +406,9 @@ void try_send_next ()
 	}
 	if (continue_cb & 2)
 	{
-		//debug ("continue audio");
+#ifdef DEBUG_SERIAL
+		debug ("continue audio");
+#endif
 		out_buffer[0] = 3;
 		out_buffer[1] = CMD_CONTINUE;
 		out_buffer[2] = 1;
@@ -405,4 +453,14 @@ void try_send_next ()
 			}
 		}
 	}
+}
+
+void write_ack ()
+{
+	Serial.write (ff_in ? CMD_ACK0 : CMD_ACK1);
+}
+
+void write_ackwait ()
+{
+	Serial.write (ff_in ? CMD_ACKWAIT0 : CMD_ACKWAIT1);
 }

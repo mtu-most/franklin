@@ -1,26 +1,27 @@
 #include "firmware.h"
 
+#if MAXGPIOS > 0
 void Gpio::load (int16_t &addr, bool eeprom)
 {
-	uint8_t oldmaster = master;
 	pin.read (read_16 (addr, eeprom));
 	state = read_8 (addr, eeprom);
 #ifndef LOWMEM
+	uint8_t oldmaster = master;
 	master = read_8 (addr, eeprom);
 	value = read_float (addr, eeprom) + 273.15;
 #else
 	read_8 (addr, eeprom);
 	read_float (addr, eeprom);
 #endif
-	// State:  0: on, 1: off, 2: pullup input, 3: disabled
+	// State:  0: off, 1: on, 2: pullup input, 3: disabled
 	switch (state) {
 	case 0:
 		SET_OUTPUT (pin);
-		SET (pin);
+		RESET (pin);
 		break;
 	case 1:
 		SET_OUTPUT (pin);
-		RESET (pin);
+		SET (pin);
 		break;
 	case 2:
 		SET_INPUT (pin);
@@ -76,3 +77,4 @@ void Gpio::save (int16_t &addr, bool eeprom)
 	write_float (addr, NAN, eeprom);
 #endif
 }
+#endif

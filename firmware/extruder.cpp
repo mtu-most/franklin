@@ -1,5 +1,6 @@
 #include "firmware.h"
 
+#if MAXEXTRUDERS > 0
 void Extruder::load (int16_t &addr, bool eeprom)
 {
 	motor.load (addr, eeprom);
@@ -29,3 +30,4 @@ void Extruder::save (int16_t &addr, bool eeprom)
 	write_float (addr, 0, eeprom);
 #endif
 }
+#endif

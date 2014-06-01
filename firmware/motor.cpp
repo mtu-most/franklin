@@ -1,5 +1,6 @@
 #include "firmware.h"
 
+#if MAXAXES > 0 || MAXEXTRUDER > 0
 void Motor::load (int16_t &addr, bool eeprom)
 {
 	bool e = GET (enable_pin, false);
@@ -9,9 +10,12 @@ void Motor::load (int16_t &addr, bool eeprom)
 	dir_pin.read (read_16 (addr, eeprom));
 	enable_pin.read (read_16 (addr, eeprom));
 	steps_per_mm = read_float (addr, eeprom);
-	max_v_neg = read_float (addr, eeprom);
-	max_v_pos = read_float (addr, eeprom);
+	limit_v = read_float (addr, eeprom);
+	max_v = read_float (addr, eeprom);
 	max_a = read_float (addr, eeprom);
+	max_steps = read_8 (addr, eeprom);
+	if (max_steps <= 0)
+		max_steps = 1;
 	SET_OUTPUT (step_pin);
 	SET_OUTPUT (dir_pin);
 	SET_OUTPUT (enable_pin);
@@ -35,7 +39,9 @@ void Motor::save (int16_t &addr, bool eeprom)
 	write_16 (addr, dir_pin.write (), eeprom);
 	write_16 (addr, enable_pin.write (), eeprom);
 	write_float (addr, steps_per_mm, eeprom);
-	write_float (addr, max_v_neg, eeprom);
-	write_float (addr, max_v_pos, eeprom);
+	write_float (addr, limit_v, eeprom);
+	write_float (addr, max_v, eeprom);
 	write_float (addr, max_a, eeprom);
+	write_8 (addr, max_steps, eeprom);
 }
+#endif

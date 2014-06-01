@@ -25,6 +25,7 @@
 	right: 10px;
 	top: 10px;
 	background: #ff8;
+	z-index: 2;
 }
 
 #showswitches > * {
@@ -103,6 +104,7 @@ select[multiple] {
 	top: 0;
 	bottom: 0;
 	background: #666;
+	z-index: 1;
 }
 
 #movebox {

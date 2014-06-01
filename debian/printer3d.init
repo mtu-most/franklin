@@ -19,6 +19,9 @@ RUN=1
 # Port to listen for browser requests.
 PORT=8080
 
+# Program to manage the printer.
+PRINTERCMD=/usr/share/printer3d/printer3d
+
 # Location where audio files are stored.
 AUDIODIR=/var/cache/printer3d/audio
 
@@ -32,6 +35,24 @@ AUTODETECT=True
 
 # Regular expression of serial ports to ignore.
 BLACKLIST='/dev/(ptmx$|console$|ttyS?\d*|ttyprintk)$'
+
+# Required credentials as user:password or just a user (password is ignored).
+LOGIN=''
+
+# Shadow-like passwordfile with acceptable credentials.
+PASSWORDFILE=''
+
+# Command to run in a shell when a print is done (finished or aborted).
+# May contain the following (including the square brackets), which will be
+# replaced:
+# [[STATE]]	replaced with 'completed' or 'aborted' (without quotes)
+# [[REASON]]	replaced with the reason that printing stopped
+# This could be set to something like
+# 'echo "your print was [[STATE]]: [[REASON]]" | mail -s "print [[STATE]] - [[REASON]]" your@mail.address.example.com'
+DONE=''
+
+# Location of avrdude on the system.
+AVRDUDE=''
 
 # Arguments to start-stop-daemon.
 ARGS="--quiet"
@@ -52,7 +73,7 @@ NAME=printer3d
 DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/printer3d-server
 ARGS="--make-pidfile --pidfile $PIDFILE --chuid printer3d:printer3d $ARGS"
-START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --autodetect=$AUTODETECT --port=$PORT --printer=$PRINTER --audiodir=$AUDIODIR --blacklist=$BLACKLIST"
+START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --autodetect=$AUTODETECT --port=$PORT --printer=$PRINTER --audiodir=$AUDIODIR --blacklist=$BLACKLIST --printercmd=$PRINTERCMD --login=$LOGIN --passwordfile=$PASSWORDFILE --done=$DONE --avrdude=$AVRDUDE"
 STOP_ARGS="--oknodo --stop $ARGS"
 
 if test ! -x "$DAEMON"; then

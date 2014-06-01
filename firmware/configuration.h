@@ -5,13 +5,15 @@
 
 // When setting this, Things are stripped down so much that they fit into an
 // Arduino Uno.  This severely limits the functionality.
+// All other settings from this file are redefined in firmware.h if this is
+// defined.
 //#define LOWMEM
 
 // Maximum length of the printer name in bytes.
-#define NAMELEN 64
+#define NAMELEN 32
 
 // Maximum number of move commands in the queue.
-#define QUEUE_LENGTH 6
+#define QUEUE_LENGTH 64
 
 // Maximum number of axes, extruders, temps and gpios.  You can use less than
 // what you define here, not more.  It is a good idea to have a setting here
@@ -34,7 +36,7 @@
 #endif
 
 // Watchdog.  If enabled, the device will automatically reset when it doesn't
-// work properly.  This should only be switched on if you have a jumper to
-// prevent resetting the device at connect.
+// work properly.  However, it may also trigger when too much time is spent
+// outputting debugging info.
 // To enable, uncomment; to disable, comment it out.
-#define WATCHDOG
+//#define WATCHDOG

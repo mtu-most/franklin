@@ -2,7 +2,30 @@
 #define _FIRMWARE_H
 #include <Arduino.h>
 #include <math.h>
+
 #include "configuration.h"
+#ifdef LOWMEM
+// Adjust all settings to low memory limits.
+#undef NAMELEN
+#define NAMELEN 8
+#undef QUEUE_LENGTH
+#define QUEUE_LENGTH 1
+#undef MAXAXES
+#define MAXAXES 2
+#undef MAXEXTRUDERS
+#define MAXEXTRUDERS 0
+#undef MAXTEMPS
+#define MAXTEMPS 0
+#undef MAXGPIOS
+#define MAXGPIOS 0
+#ifdef AUDIO
+#undef AUDIO
+#endif
+#ifdef WATCHDOG
+#undef WATCHDOG
+#endif
+#endif // LOWMEM
+
 #ifdef WATCHDOG
 #include <avr/wdt.h>
 #endif
@@ -15,7 +38,7 @@
 #define EXTRUDER0 (AXIS0 + num_axes)
 #define TEMP0 (EXTRUDER0 + num_extruders)
 
-#define MAXLONG (int32_t ((~uint32_t (0)) >> 1))
+#define MAXLONG (int32_t ((uint32_t (1) << 31) - 1))
 
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
@@ -55,12 +78,12 @@ union ReadFloat {
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
 // These bytes (except RESET) are sent in reply to a received packet only.
 	CMD_NACK = 0x80,	// Incorrect packet; please resend.
-	CMD_ACK = 0xb3,		// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_ACKWAIT = 0xb4,	// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
+	CMD_ACK0 = 0xb3,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACKWAIT0 = 0xb4,	// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
 	CMD_STALL = 0x87,	// Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_INIT = 0x99,	// Printer started and is ready for commands.
-	CMD_GETID = 0xaa,	// Request printer ID code.
-	CMD_SENDID = 0xad,	// Response to GETID; ID follows.
+	CMD_ACKWAIT1 = 0x99,	// Printer started and is ready for commands.
+	CMD_ID = 0xaa,		// Request/reply printer ID code.
+	CMD_ACK1 = 0xad,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
 	CMD_DEBUG = 0x9e	// Debug message; a nul-terminated message follows (no checksum; no resend).
 };
 
@@ -112,9 +135,12 @@ struct Object
 	virtual ~Object () {}
 };
 
+#if MAXGPIOS > 0
 // Need this declaration to have the pointer in Temp.
 struct Gpio;
+#endif
 
+#if MAXTEMPS > 0 || MAXEXTRUDERS > 0
 // All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp : public Object
 {
@@ -134,9 +160,12 @@ struct Temp : public Object
 	Pin_t thermistor_pin;
 	// Volatile variables.
 	float target;				// target temperature; NAN to disable. [K]
+	float last;				// last measured temperature.
 #ifndef LOWMEM
 	float core_T, shell_T;			// current temperatures. [K]
+#if MAXGPIOS > 0
 	Gpio *gpios;				// linked list of gpios monitoring this temp.
+#endif
 #endif
 	float min_alarm;			// NAN, or the temperature at which to trigger the callback.  [K]
 	float max_alarm;			// NAN, or the temperature at which to trigger the callback.  [K]
@@ -145,23 +174,27 @@ struct Temp : public Object
 	unsigned long time_on;			// Time that the heater has been on since last reading.  [μs]
 	bool is_on;				// If the heater is currently on.
 	// Functions.
-	float read ();				// Read current temperature.
+	void setup_read ();			// Initialize ADC for reading the thermistor.
+	float get_value ();			// Get thermistor reading, or NAN if it isn't available yet.
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Temp () {}
 };
+#endif
 
+#if MAXEXTRUDERS > 0 || MAXAXES > 0
 struct Motor : public Object
 {
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	Pin_t enable_pin;
 	float steps_per_mm;			// hardware calibration [steps/mm].
-	float max_v_neg, max_v_pos, max_a;	// maximum value for f in positive and negative direction [mm/s], [mm/s^2].
+	float max_v, limit_v, max_a;			// maximum value for f [mm/s], [mm/s^2].
+	uint8_t max_steps;			// maximum number of steps in one iteration.
 	float continuous_steps_per_s;		// steps per second for continuous run.
 	float continuous_steps;			// fractional continuous steps that have been done.
 	float f;
-	unsigned long continuous_last_time;	// micros value when last continuous iteration was run.
+	unsigned long last_time;		// micros value when last iteration was run.
 	bool positive;				// direction of current movement.
 	float dist, next_dist, main_dist;
 #ifdef AUDIO
@@ -175,6 +208,7 @@ struct Motor : public Object
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Motor () {}
 };
+#endif
 
 struct Constants : public Object
 {
@@ -190,6 +224,7 @@ struct Variables : public Object
 	virtual ~Variables () {}
 };
 
+#if MAXAXES > 0
 struct Axis : public Object
 {
 	Motor motor;
@@ -211,7 +246,9 @@ struct Axis : public Object
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Axis () {}
 };
+#endif
 
+#if MAXEXTRUDERS > 0
 struct Extruder : public Object
 {
 	Motor motor;
@@ -227,7 +264,9 @@ struct Extruder : public Object
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Extruder () {}
 };
+#endif
 
+#if MAXGPIOS > 0
 struct Gpio : public Object
 {
 	Pin_t pin;
@@ -243,6 +282,7 @@ struct Gpio : public Object
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Gpio () {}
 };
+#endif
 
 struct MoveCommand
 {
@@ -264,6 +304,7 @@ EXTERN Pin_t led_pin, probe_pin;
 EXTERN float room_T;	//[°C]
 #endif
 EXTERN float feedrate;	// Multiplication factor for f values, used at start of move.
+EXTERN float angle;
 // Other variables.
 EXTERN char printerid[ID_SIZE];
 EXTERN unsigned char command[COMMAND_SIZE];
@@ -272,20 +313,35 @@ EXTERN char reply[COMMAND_SIZE];
 EXTERN char out_buffer[10];
 EXTERN Constants constants;
 EXTERN Variables variables;
+#if MAXAXES > 0
 EXTERN Axis axis[MAXAXES];
+#endif
+#if MAXTEMPS > 0
 EXTERN Temp temp[MAXTEMPS];
+#endif
+#if MAXEXTRUDERS > 0
 EXTERN Extruder extruder[MAXEXTRUDERS];
+#endif
+#if MAXGPIOS > 0
 EXTERN Gpio gpio[MAXGPIOS];
+#endif
 EXTERN uint8_t temps_busy;
+#if MAXAXES > 0 || MAXEXTRUDERS > 0
 EXTERN Motor *motors[MAXOBJECT];
+#endif
+#if MAXTEMPS > 0 || MAXEXTRUDERS > 0
 EXTERN Temp *temps[MAXOBJECT];
+#endif
 EXTERN Object *objects[MAXOBJECT];
 EXTERN MoveCommand queue[QUEUE_LENGTH];
 EXTERN uint8_t queue_start, queue_end;
+EXTERN bool queue_full;
 EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent out.
 EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
+#if MAXAXES > 0
 EXTERN float limits_pos[MAXAXES];	// position when limit switch was hit or nan
+#endif
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN unsigned long pause_time;
@@ -293,10 +349,15 @@ EXTERN bool initialized;
 EXTERN bool pause_all;
 EXTERN uint32_t motors_busy;		// bitmask of motors which are enabled.
 EXTERN bool out_busy;
+EXTERN unsigned long out_time;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
 EXTERN unsigned long last_active, led_last, motor_limit, temp_limit;
 EXTERN uint16_t led_phase;
+EXTERN uint8_t adc_phase;
+#if MAXTEMPS > 0 || MAXEXTRUDERS > 0
+EXTERN uint8_t temp_current;
+#endif
 #ifdef AUDIO
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
 EXTERN uint8_t audio_head, audio_tail, audio_state;
@@ -320,6 +381,8 @@ void packet ();	// A command packet has arrived; handle it.
 void serial ();	// Handle commands from serial.
 void send_packet (char *the_packet);
 void try_send_next ();
+void write_ack ();
+void write_ackwait ();
 
 // move.cpp
 void next_move ();
@@ -343,49 +406,61 @@ void write_32 (int16_t &address, int32_t data, bool eeprom);
 float read_float (int16_t &address, bool eeprom);
 void write_float (int16_t &address, float data, bool eeprom);
 
+// axis.cpp
+#ifndef LOWMEM
+void compute_axes ();
+#endif
+
+#if MAXAXES >= 3
 static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float dx = target[0] - axis[a].x;
 	float dy = target[1] - axis[a].y;
 	float dz = target[2] - axis[a].z;
 	float r2 = dx * dx + dy * dy;
 	float l2 = axis[a].delta_length * axis[a].delta_length;
-	if (r2 > l2 - 2500) {
+	if (r2 > axis[a].axis_max * axis[a].axis_max) {
 		*ok = false;
 		//debug ("not ok: %f %f %f %f %f %f %f", &target[0], &target[1], &dx, &dy, &r2, &l2, &axis[a].delta_length);
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
-		float factor = (axis[a].delta_length - 50.) / sqrt (r2);
+		float factor = axis[a].axis_max / sqrt (r2);
 		target[0] = axis[a].x + (target[0] - axis[a].x) * factor;
 		target[1] = axis[a].y + (target[1] - axis[a].y) * factor;
 		return 0;
 	}
-	// Inner project shows if projection is inside or outside the printable region.
-	float inner = dx * axis[a].x + dy * axis[a].y;
-	if (inner > 0) {
+	// Inner product shows if projection is inside or outside the printable region.
+	float projection = -(dx * axis[a].x + dy * axis[a].y) / axis[a].delta_radius;
+	if (projection < axis[a].axis_min) {
 		*ok = false;
 		//debug ("not ok: %f %f %f %f %f", &inner, &dx, &dy, &axis[a].x, &axis[a].y);
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
-		// target = axis + (target - (target.axis-epsilon)/|axis|2*axis)
-		float factor = .99 - (target[0] * axis[a].x + target[1] * axis[a].y) / (axis[a].x * axis[a].x + axis[a].y * axis[a].y);
-		target[0] += factor * axis[a].x;
-		target[1] += factor * axis[a].y;
-		return 0;
+		target[0] -= (axis[a].axis_min - projection - .001) / axis[a].delta_radius * axis[a].x;
+		target[1] -= (axis[a].axis_min - projection - .001) / axis[a].delta_radius * axis[a].y;
+		// Assume this was a small correction; that way, things will work even if numerical errors cause this to be called for the real move.
+		dx = target[0] - axis[a].x;
+		dy = target[1] - axis[a].y;
+		r2 = dx * dx + dy * dy;
 	}
 	float dest = sqrt (l2 - r2) + dz;
 	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", &dx, &dy, &dz, &axis[a].z, &r, &target);
 	return dest * axis[a].motor.steps_per_mm;
 }
+#endif
 
+#if MAXAXES > 0 || MAXEXTRUDERS > 0
 static inline bool moving_motor (uint8_t which) {
-	if (!moving)
+	if (pause_all || !moving)
 		return false;
+#if MAXAXES >= 3
 	if (printer_type == 1 && which < 2 + 3) {
 		for (uint8_t a = 2; a < 2 + 3; ++a)
-			if (!isnan (motors[a]->dist))
+			if (motors[a]->dist != 0 && !isnan (motors[a]->dist))
 				return true;
 		return false;
 	}
+#endif
 	return !isnan (motors[which]->dist);
 }
+#endif
 
 #endif

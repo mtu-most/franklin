@@ -28,7 +28,9 @@ void Constants::save (int16_t &addr, bool eeprom)
 
 void Variables::load (int16_t &addr, bool eeprom)
 {
+#if MAXAXES > 0
 	uint8_t type = printer_type;
+#endif
 	for (uint8_t i = 0; i < NAMELEN; ++i)
 		name[i] = read_8 (addr, eeprom);
 	num_axes = read_8 (addr, eeprom);
@@ -40,7 +42,11 @@ void Variables::load (int16_t &addr, bool eeprom)
 	num_gpios = read_8 (addr, eeprom);
 	num_gpios = min (num_gpios, MAXGPIOS);
 	printer_type = read_8 (addr, eeprom);
+#if MAXAXES >= 3
 	printer_type = min (printer_type, 1);
+#else
+	printer_type = 0;
+#endif
 	led_pin.read (read_16 (addr, eeprom));
 	probe_pin.read (read_16 (addr, eeprom));
 #ifndef LOWMEM
@@ -51,7 +57,15 @@ void Variables::load (int16_t &addr, bool eeprom)
 	motor_limit = read_32 (addr, eeprom);
 	temp_limit = read_32 (addr, eeprom);
 	feedrate = read_float (addr, eeprom);
+	angle = read_float (addr, eeprom);
+	angle = angle - int (angle / 360) * 360;
+	if (isinf(angle) || isnan(angle))
+		angle = 0;
+#ifndef LOWMEM
+	compute_axes ();
+#endif
 	SET_OUTPUT (led_pin);
+#if MAXAXES > 0
 	if (type != printer_type)
 	{
 		for (uint8_t a = 0; a < MAXAXES; ++a)
@@ -61,6 +75,7 @@ void Variables::load (int16_t &addr, bool eeprom)
 			axis[a].current_pos = MAXLONG;
 		}
 	}
+#endif
 }
 
 void Variables::save (int16_t &addr, bool eeprom)
@@ -82,4 +97,5 @@ void Variables::save (int16_t &addr, bool eeprom)
 	write_32 (addr, motor_limit, eeprom);
 	write_32 (addr, temp_limit, eeprom);
 	write_float (addr, feedrate, eeprom);
+	write_float (addr, angle, eeprom);
 }

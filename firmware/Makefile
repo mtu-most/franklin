@@ -1,6 +1,6 @@
-#MELZI=true
+MELZI=true
+#MEGA=true
 #MINI=true
-MEGA=true
 
 MONITOR_PORT = /dev/ttyACM* /dev/ttyUSB*
 

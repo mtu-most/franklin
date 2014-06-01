@@ -1,5 +1,6 @@
 #include "firmware.h"
 
+#if MAXAXES > 0
 void Axis::load (int16_t &addr, bool eeprom)
 {
 	motor.load (addr, eeprom);
@@ -20,23 +21,34 @@ void Axis::load (int16_t &addr, bool eeprom)
 	SET_INPUT (limit_min_pin);
 	SET_INPUT (limit_max_pin);
 	SET_INPUT (sense_pin);
+	z = sqrt (delta_length * delta_length - delta_radius * delta_radius);
+#ifndef LOWMEM
+	compute_axes ();
+#endif
+}
+
+#ifndef LOWMEM
 #define sin120 0.8660254037844386	// .5*sqrt(3)
 #define cos120 -.5
+void compute_axes ()
+{
+#if MAXAXES >= 3
 	// Coordinates of axes (at angles 0, 120, 240; each with its own radius).
-	if (this == &axis[0]) {
-		x = delta_radius;
-		y = 0;
-		z = sqrt (delta_length * delta_length - delta_radius * delta_radius);
-	} else if (this == &axis[1]) {
-		x = delta_radius * cos120;
-		y = delta_radius * sin120;
-		z = sqrt (delta_length * delta_length - delta_radius * delta_radius);
-	} else if (this == &axis[2]) {
-		x = delta_radius * cos120;
-		y = delta_radius * -sin120;
-		z = sqrt (delta_length * delta_length - delta_radius * delta_radius);
+	axis[0].x = axis[0].delta_radius;
+	axis[0].y = 0;
+	axis[1].x = axis[1].delta_radius * cos120;
+	axis[1].y = axis[1].delta_radius * sin120;
+	axis[2].x = axis[2].delta_radius * cos120;
+	axis[2].y = axis[2].delta_radius * -sin120;
+	for (uint8_t a = 0; a < 3; ++a) {
+		float x = axis[a].x * cos (angle) - axis[a].y * sin (angle);
+		float y = axis[a].y * cos (angle) + axis[a].x * sin (angle);
+		axis[a].x = x;
+		axis[a].y = y;
 	}
+#endif
 }
+#endif
 
 void Axis::save (int16_t &addr, bool eeprom)
 {
@@ -54,3 +66,4 @@ void Axis::save (int16_t &addr, bool eeprom)
 	write_float (addr, delta_radius, eeprom);
 	write_float (addr, offset, eeprom);
 }
+#endif
