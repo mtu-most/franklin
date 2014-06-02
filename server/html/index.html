@@ -17,16 +17,8 @@
 					[!(
 						node.id = make_id (null, [null, 'label']),
 						node.port = args[0],
-						elements[0].port = args[0],
-						elements[2].port = args[0],
-						elements[3].port = args[0],
-						elements[4].port = args[0],
 						printer ? [printer.name].concat (elements.slice (1)) : elements
-						<button type='button' onclick='rpc.call ("detect", [this.port], {});'>Detect</button>
 						<span class='port setup'>[!('@' + args[0])!]</span>
-						<button class='setup' type='button' onclick='rpc.call ("upload", [this.port, "melzi"], {});'>Upload Melzi firmware</button>
-						<button class='setup' type='button' onclick='rpc.call ("upload", [this.port, "ramps"], {});'>Upload Ramps firmware</button>
-						<button class='setup' type='button' onclick='rpc.call ("upload", [this.port, "mega"], {});'>Upload Mega firmware</button>
 					)!]
 				</div>
 			</div> <!-- }}} -->
@@ -124,20 +116,29 @@
 				<span></span>
 				)!]
 			</div> <!-- }}} -->
-			<div id='Checkbox'> <!-- {{{ -->
+			<div id='Toggle'> <!-- {{{ -->
 				[!(
-				// args = title, obj, class
-				elements[0].id = make_id (printer, args[1], 'title'),
-				elements[1].id = make_id (printer, args[1]),
+				// args = title, obj, oncommand, offcommand, ontext, offtext, class
+				elements[1].AddText (args[2]),
+				elements[2].AddText (args[3]),
+				elements[3].value = [args[5], args[4]],
+				elements[3].id = make_id (printer, args[1]),
 				elements[1].obj = args[1],
+				elements[2].obj = args[1],
 				elements[1].printer = printer,
-				elements[1].addEventListener ('click', function () { set_value (this.printer, this.obj, this.checked); }, false),
+				elements[2].printer = printer,
+				elements[1].addEventListener ('click', function () { set_value (this.printer, this.obj, true); }, false),
+				elements[2].addEventListener ('click', function () { set_value (this.printer, this.obj, false); }, false),
 				elements[0].AddText (args[0]),
-				args[2] ? elements[0].AddClass (args[2]) : 0,
-				args[2] ? elements[1].AddClass (args[2]) : 0,
+				args[6] ? elements[0].AddClass (args[6]) : 0,
+				args[6] ? elements[1].AddClass (args[6]) : 0,
+				args[6] ? elements[2].AddClass (args[6]) : 0,
+				args[6] ? elements[3].AddClass (args[6]) : 0,
 				stack
 				<span class='blocktitle'></span>
-				<input type='checkbox' class='title'/>
+				<button type='button' class='title'></button>
+				<button type='button' class='title'></button>
+				<span class='title'></span>
 				)!]
 			</div> <!-- }}} -->
 			<div id='File'> <!-- {{{ -->
@@ -250,8 +251,6 @@
 				<div>[$(Float [[['axis', args[0]], 'limit_pos'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'axis_min'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'axis_max'], 1, 'setup'])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'motor_min'], 1, 'setup'])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'motor_max'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'park'], 1, 'setup'])$]</div>
 				)!]
 			</div> <!-- }}} -->
@@ -261,6 +260,8 @@
 				[make_tablerow (axis_name (args[0]), elements, ['rowtitle expert', 'expert'], 'expert')]
 				<div>[$(Float [[['axis', args[0]], 'delta_length'], 1, 'expert'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'delta_radius'], 1, 'expert'])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'motor_min'], 1, 'setup'])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'motor_max'], 1, 'setup'])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Move_axis'> <!-- {{{ -->
@@ -409,12 +410,13 @@
 			</div> <!-- }}} -->
 
 			<div id='Printer'> <!-- {{{ -->
-				<div class='printer hidden'>
-					// TODO: upload script, see printing state, command feedback.
+				// TODO: upload script, see printing state, command feedback.
+				<div class='printer notconnected'> <!-- {{{ -->
 					[!(node.id = make_id (printer, [null, 'container']),'')!]
 					<div class='setup'>[$(Text ['Name', [null, 'name'], 'setup'])$]</div>
 					<div class='tweak'>[$(Button ['Sleep', 'sleep_all'])$]</div>
-					<div>[$(Checkbox ['Pause', [null, 'paused', 'pause']])$]</div>
+					<div class='tweak'><button type='button' onclick="selected_printer.call ('home', [], {}, update_canvas_and_spans)">Home</button></div>
+					<div>[$(Toggle ['Pause', [null, 'paused', 'pause'], 'Pause', 'Resume', 'Paused', ''])$]</div>
 
 					<table class='tweak'>
 						<tr>
@@ -558,13 +560,9 @@
 							'Switch pos (mm)',
 							'Axis min (mm)',
 							'Axis max (mm)',
-							'Motor min (mm)',
-							'Motor max (mm)',
 							'Park pos (mm)'
 						], [
 							'blocktitle',
-							'floattitle setup',
-							'floattitle setup',
 							'floattitle setup',
 							'floattitle setup',
 							'floattitle setup',
@@ -574,8 +572,6 @@
 							'Position of the limit switch.',
 							'Minimum value that the axis may move to.',
 							'Maximum value that the axis may move to.',
-							'Minimum value that the motor may move to.',
-							'Maximum value that the motor may move to.',
 							'Park position of the axis.'
 						]),
 						multiple ('Limits_axis')
@@ -586,14 +582,20 @@
 							'Axis delta',
 							'Rod length (mm)',
 							'Radius (mm)'
+							'Motor min (mm)',
+							'Motor max (mm)',
 						], [
 							'blocktitle',
 							'floattitle setup delta',
 							'floattitle setup delta'
+							'floattitle setup',
+							'floattitle setup',
 						], [
 							null,
 							'Length of the tie rods, measured between the pivot points.',
 							'Horizontal distance between the pivot points of the tie rods.  Note that this value does not include the effector or carriage offsets.'
+							'Minimum value that the motor may move to. (Normally 0.)',
+							'Maximum value that the motor may move to. (Normally equal to rod length.)',
 						]),
 						multiple ('Delta_axis')
 					).AddClass ('setup')])!]
@@ -669,13 +671,31 @@
 						stack
 						<a class='title' title='Save settings to disk.'>Export settings to file</a>
 					)!]</div>
+				</div> <!-- }}} -->
+			</div> <!-- }}} -->
+			<div id='NoPrinter'> <!-- {{{ -->
+				<div class='noprinter notconnected'>
+					[!(node.id = make_id (printer, [null, 'nocontainer']),'')!]
+					<h2>No printer is found on this port.</h2>
+					<p>
+						If autodetect does not work, you can request to detect a printer:
+						[!(
+							elements[0].port = args[0],
+							elements
+							<button type='button' onclick='rpc.call ("detect", [this.port], {});'>Detect</button>
+						)!]
+					</p>
+					<p>
+						Or you can upload the firmware that fits your hardware.
+						[!(upload_buttons (args[0], [['melzi', '1284p (Melzi, Sanguinololu)'], ['ramps', 'mega2560 (Ramps)'], ['mega', 'mega']]))!]
+					</p>
 				</div>
 			</div> <!-- }}} -->
 		</div> <!-- }}} -->
 		<div id='showswitches'> <!-- {{{ -->
 			<div>
 				<label for='tweakbox'>Show tweak settings</label>
-				<input type='checkbox' id='tweakbox' onclick='switch_show (this.checked, "tweak")'/>
+				<input type='checkbox' id='tweakbox' selected='selected' onclick='switch_show (this.checked, "tweak")'/>
 			</div>
 			<div class='tweak'>
 				<label for='expertbox'>Show expert settings</label>

@@ -62,7 +62,9 @@ class Printer: # {{{
 		global printer
 		printer = self
 		self.printer = serial.Serial(port, baudrate = 115200, timeout = 0)
-		self.printer.readall()	# Discard pending data.
+		# Discard pending data.
+		while self.printer.read() != '':
+			pass
 		self.home_phase = None
 		self.home_protect = False
 		self.home_cb = [False, self._do_home]
@@ -107,7 +109,9 @@ class Printer: # {{{
 			self._close()
 			sys.exit(0)
 		time.sleep(.150)	# Make sure data is received.
-		self.printer.readall()	# Discard pending data.
+		# Discard pending data.
+		while self.printer.read() != '':
+			pass
 		# Send several ping commands, to get the flip flops synchronized.
 		# If the output flipflop is out of sync, the first ping will not generate a reply.
 		# If the input flipflop is out of sync, the first reply will be ignored.

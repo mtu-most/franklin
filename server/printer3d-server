@@ -29,7 +29,7 @@ config = xdgbasedir.config_load(packagename = 'printer3d', defaults = {
 		'login': '',
 		'passwordfile': '',
 		'done': '',
-		'printercmd': xdgbasedir.data_files_read(packagename = 'printer3d', filename = 'printer')
+		'printercmd': (tuple(xdgbasedir.data_files_read(packagename = 'printer3d', filename = 'printer')) + ('',))[0]
 	})
 # }}}
 
@@ -666,8 +666,13 @@ def detect(port): # {{{
 		log("not detecting on %s, because file doesn't exist." % port)
 		return False
 	log('detecting on %s' % port)
-	printer = serial.Serial(port, baudrate = 115200, timeout = 0)
-	printer.readall()	# flush buffer.
+	try:
+		printer = serial.Serial(port, baudrate = 115200, timeout = 0)
+	except serial.SerialException:
+		return False
+	# flush buffer.
+	while printer.read() != '':
+		pass
 	# We need to get the printer id first.  If the printer is booting, this can take a while.
 	id = [None, None]
 	# Wait to make sure the command is interpreted as a new packet.

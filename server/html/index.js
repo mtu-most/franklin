@@ -46,15 +46,21 @@ function init() { // {{{
 		var things = document.location.search.split('&');
 		for (var t = 0; t < things.length; ++t) {
 			var items = things[t].substring(1).split('=');
-			if (items[1] != '1')
-				continue;
-			var e = document.getElementById(items[0] + 'box');
-			if (e) {
-				e.checked = true;
-				switch_show(true, items[0]);
+			if (items[1] == '0') {
+				var e = document.getElementById(items[0] + 'box');
+				if (e)
+					e.checked = false;
+			}
+			else if (items[1] == '1') {
+				var e = document.getElementById(items[0] + 'box');
+				if (e)
+					e.checked = true;
 			}
 		}
 	}
+	var items = ['tweak', 'expert', 'setup'];
+	for (var i = 0; i < items.length; ++i)
+		switch_show (document.getElementById (items[i] + 'box').checked, items[i]);
 } // }}}
 
 function make_id(printer, id, extra) { // {{{
@@ -165,6 +171,19 @@ function make_visibles(num) { // {{{
 	return ret;
 }
 // }}}
+
+function upload_buttons(port, buttons) { // {{{
+	var ret = document.createElement('ul');
+	for (var b = 0; b < buttons.length; ++b) {
+		var button = ret.AddElement('li').AddElement('button');
+		button.type = 'button';
+		button.onclick = function() {
+			rpc.call ("upload", [port, buttons[b][0]], {});
+		};
+		button.AddText(buttons[b][1]);
+	}
+	return [ret];
+}
 // }}}
 // }}}
 
@@ -263,16 +282,18 @@ function quick_print() { // {{{
 
 // Non-update events. {{{
 function new_port(port) { // {{{
-	ports[port] = [get_elements(build('Label', [port]))[0], null, ''];
+	ports[port] = [get_elements(build('Label', [port]))[0], get_elements(build('NoPrinter', [port]))[0], null, ''];
 	labels_element.Add(ports[port][0]);
+	printers_element.Add(ports[port][1]);
 } // }}}
 
 function new_printer() { // {{{
 	printer.reference = [0, 0];
 	printer.local_angle = 0;
 	visibles[port] = {titles: [], axis: make_visibles(printer.maxaxes), extruder: make_visibles(printer.maxextruders), temp: make_visibles(printer.maxtemps), gpio: make_visibles(printer.maxgpios)};
-	ports[port][1] = get_elements(build('Printer', [port]))[0];
-	printers_element.Add(ports[port][1]);
+	ports[port][2] = get_elements(build('Printer', [port]))[0];
+	ports[port][1].RemoveClass('notconnected');
+	ports[port][1].AddClass('connected');
 	select_printer(port);
 } // }}}
 
@@ -299,18 +320,19 @@ function del_script(name) { // {{{
 } // }}}
 
 function del_printer() { // {{{
-	if (ports[port][1] === null)
-		return;
-	printers_element.removeChild(ports[port][1]);
+	ports[port][1].RemoveClass('connected');
+	ports[port][1].AddClass('notconnected');
+	printers_element.removeChild(ports[port][2]);
+	ports[port][2] = null;
 	delete visibles[port];
-	ports[port][1] = null;
-	ports[port][2] = '';
+	ports[port][3] = '';
 	if (selected_port == port)
 		selected_printer = null;
 } // }}}
 
 function del_port() { // {{{
 	labels_element.removeChild(ports[port][0]);
+	printers_element.removeChild(ports[port][1]);
 	if (selected_port == port)
 		selected_port = null;
 } // }}}
@@ -323,6 +345,7 @@ function do_confirm(message) { // {{{
 function do_queue() { // {{{
 	var e = document.getElementById('queue');
 	var q = [];
+	var must_deselect = queue.length > e.options.length;
 	for (var i = 0; i < queue.length; ++i)
 		q.push(queue[i][0]);
 	var rm = [];
@@ -330,6 +353,8 @@ function do_queue() { // {{{
 		var i;
 		for (i = 0; i < q.length; ++i) {
 			if (q[i] == e.options[item].value) {
+				if (must_deselect)
+					e.options[item].selected = false;
 				q.splice(i, 1);
 				i = -1;
 				break;
@@ -355,11 +380,11 @@ function do_queue() { // {{{
 function update_variables() { // {{{
 	if (!get_element(printer, [null, 'name']))
 		return;
-	if (ports[port][2] != printer.name) {
+	if (ports[port][3] != printer.name) {
 		labels_element.removeChild(ports[port][0]);
 		ports[port][0] = get_elements(build('Label', [port]))[0];
 		labels_element.Add(ports[port][0]);
-		ports[port][2] = printer.name;
+		ports[port][3] = printer.name;
 		select_printer();
 	}
 	update_text([null, 'name']);
@@ -375,7 +400,7 @@ function update_variables() { // {{{
 	update_float([null, 'temp_limit']);
 	update_float([null, 'feedrate']);
 	update_float([null, 'angle']);
-	update_checkbox([null, 'paused', 'pause']);
+	update_toggle([null, 'paused', 'pause']);
 	// Update visibility.
 	for (var i = 0; i < printer.num_axes; ++i) {
 		for (var j = 0; j < visibles[port].axis[i].length; ++j)
@@ -560,11 +585,11 @@ function update_choice(id) { // {{{
 	}
 } // }}}
 
-function update_checkbox(id) { // {{{
-	if (get_value(printer, id))
-		get_element(printer, id, 'title').AddClass('checked');
-	else
-		get_element(printer, id, 'title').RemoveClass('checked');
+function update_toggle(id) { // {{{
+	var v = get_value(printer, id);
+	var e = get_element(printer, id);
+	e.ClearAll ();
+	e.AddText (e.value[v]);
 } // }}}
 
 function update_pin(id) { // {{{

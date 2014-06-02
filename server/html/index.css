@@ -15,6 +15,9 @@
 .noexpert .experthidden,
 .notweak .experthidden,
 
+.connected .noprinter,
+.notconnected .printer,
+
 .nomover #movediv
 {
 	display: none;
