@@ -18,18 +18,18 @@ import serial
 import json
 import traceback
 
-config = xdgbasedir.config_load(packagename = 'printer3d', defaults = {
+config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'port': 8080,
 		'address': '',
 		'printer': '',
-		'audiodir': xdgbasedir.cache_filename_write(packagename = 'printer3d', filename = 'audio', makedirs = False),
+		'audiodir': xdgbasedir.cache_filename_write(packagename = 'franklin', filename = 'audio', makedirs = False),
 		'blacklist': r'/dev/(ptmx|console|tty(printk|S?\d*))$',
 		'autodetect': 'True',
 		'avrdude': '/usr/bin/avrdude',
 		'login': '',
 		'passwordfile': '',
 		'done': '',
-		'printercmd': (tuple(xdgbasedir.data_files_read(packagename = 'printer3d', filename = 'printer')) + ('',))[0]
+		'printercmd': (tuple(xdgbasedir.data_files_read(packagename = 'franklin', filename = 'printer.py')) + ('',))[0]
 	})
 # }}}
 
@@ -42,12 +42,12 @@ blacklist = config['blacklist']
 orphans = {}
 scripts = {}
 queue = {}
-# These are defined in printer3d, but ID is required here.
+# These are defined in printer, but ID is required here.
 single = { 'NACK': '\x80', 'ACK0': '\xb3', 'ACKWAIT0': '\xb4', 'STALL': '\x87', 'ACKWAIT1': '\x99', 'ID': '\xaa', 'ACK1': '\xad', 'DEBUG': '\x9e' }
 # }}}
 
 # Load scripts. {{{
-for d in xdgbasedir.data_files_read('scripts', packagename = 'printer3d'):
+for d in xdgbasedir.data_files_read('scripts', packagename = 'franklin'):
 	for s in os.listdir(d):
 		name, ext = os.path.splitext(s)
 		if ext != os.extsep + 'js' or name in scripts:
@@ -138,32 +138,33 @@ class Connection: # {{{
 			protocol = 'arduino'
 			baudrate = '115200'
 			mcu = 'atmega1284p'
-			filename = xdgbasedir.data_files_read(os.path.join('firmware', 'mighty_opt.hex'), packagename = 'printer3d')[0]
+			filename = xdgbasedir.data_files_read(os.path.join('firmware', 'mighty_opt.hex'), packagename = 'franklin')[0]
 		elif board == 'ramps':
 			protocol = 'wiring'
 			baudrate = '115200'
 			mcu = 'atmega2560'
-			filename = xdgbasedir.data_files_read(os.path.join('firmware', 'mega2560.hex'), packagename = 'printer3d')[0]
+			filename = xdgbasedir.data_files_read(os.path.join('firmware', 'mega2560.hex'), packagename = 'franklin')[0]
 		elif board == 'mega':
 			protocol = 'arduino'
 			baudrate = '57600'
 			mcu = 'atmega1280'
-			filename = xdgbasedir.data_files_read(os.path.join('firmware', 'mega.hex'), packagename = 'printer3d')[0]
+			filename = xdgbasedir.data_files_read(os.path.join('firmware', 'mega.hex'), packagename = 'franklin')[0]
 		else:
 			raise ValueError('board type not supported')
-		process = subprocess.Popen([config['avrdude'], '-V', '-c', protocol, '-b', baudrate, '-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+		data = ['']
+		process = subprocess.Popen([config['avrdude'], '-q', '-q', '-V', '-c', protocol, '-b', baudrate, '-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
 		def output(fd, cond):
-			data = process.stdout.read()
-			if data != '':
+			data[0] += process.stdout.read()
+			if data[0] != '':
 				return True
 			resumeinfo[0]()
 			return False
 		glib.io_add_watch(process.stdout, glib.IO_IN | glib.IO_PRI | glib.IO_HUP, output)
 		yield websockets.WAIT
+		process.communicate()[0]
 		if autodetect:
-			c = websockets.call(resumeinfo, cls.detect, port)
-			while c(): c.args = (yield websockets.WAIT)
-		yield process.communicate()
+			c = websockets.call(None, cls.detect, port)()
+		yield data[0] or 'firmware successfully uploaded'
 	# }}}
 	@classmethod
 	def find_printer(cls, name = None, port = None): # {{{
@@ -193,7 +194,8 @@ class Connection: # {{{
 		# Forget the printer.  First tell the printer to die
 		p = ports[port]
 		ports[port] = None
-		p.call('die', (), {}, lambda success, ret: cls._broadcast(None, 'del_printer', port))
+		p.call('die', (), {}, lambda success, ret: None)
+		cls._broadcast(None, 'del_printer', port)
 	# }}}
 	@classmethod
 	def detect(cls, port): # {{{
@@ -270,7 +272,7 @@ class Connection: # {{{
 		scripts[name] = [code, None]
 		while '%04d' % nextscriptname in scripts:
 			nextscriptname += 1
-		with open(xdgbasedir.data_filename_write(os.path.join('scripts', name + os.extsep + 'js'), packagename = 'printer3d'), 'wb') as f:
+		with open(xdgbasedir.data_filename_write(os.path.join('scripts', name + os.extsep + 'js'), packagename = 'franklin'), 'wb') as f:
 			f.write(code)
 		cls._broadcast(None, 'new_script', name, code, None)
 		return []
@@ -279,7 +281,7 @@ class Connection: # {{{
 	def del_script(cls, name): # {{{
 		del scripts[name]
 		for e in('js', 'dat'):
-			filename = xdgbasedir.data_filename_write(os.path.join('scripts', name + os.extsep + e), packagename = 'printer3d')
+			filename = xdgbasedir.data_filename_write(os.path.join('scripts', name + os.extsep + e), packagename = 'franklin')
 			if os.path.exists(filename):
 				os.unlink(filename)
 		cls._broadcast(None, 'del_script', name)
@@ -287,7 +289,7 @@ class Connection: # {{{
 	@classmethod
 	def set_data(cls, name, data): # {{{
 		scripts[name][1] = data
-		filename = xdgbasedir.data_filename_write(os.path.join('scripts', name + os.extsep + 'dat'), packagename = 'printer3d')
+		filename = xdgbasedir.data_filename_write(os.path.join('scripts', name + os.extsep + 'dat'), packagename = 'franklin')
 		if data is None:
 			if os.path.exists(filename):
 				os.unlink(filename)
@@ -531,11 +533,13 @@ class Connection: # {{{
 	def queue_print(self, names, ref = (0, 0), angle = 0, probemap = None): # {{{
 		resumeinfo = [(yield), None]
 		assert self.printer is not None
+		Connection._broadcast(None, 'printing', self.printer, True)
 		for n in names:
 			c = websockets.call(resumeinfo, self.gcode_run, queue[n][0], ref, angle, probemap)
 			while c(): c.args = (yield websockets.WAIT)
-			if c.ret():
-				yield c.ret()
+		print_done(ports[self.printer], *c.ret())
+		if c.ret():
+			yield c.ret()
 	# }}}
 	def queue_probe(self, names, ref = (0, 0), angle = 0, density = (4, 4)): # {{{
 		resumeinfo = [(yield), None]
@@ -696,8 +700,10 @@ def detect(port): # {{{
 					log('skip non-id: %s %s' % (' '.join(['%02x' % ord(x) for x in id[0]]), id[0]))
 					if single['ID'] in id[0]:
 						id[0] = id[0][id[0].index(single['ID']):]
+						log('keeping some: %s %s' % (' '.join(['%02x' % ord(x) for x in id[0]]), id[0]))
 					else:
 						id[0] = ''
+						log('discarding all')
 			if not all([x in str_id_map for x in id[0][1:]]) and not all([ord(x) == 0 for x in id[0][1:]]):
 				log('received invalid id: %s' % id[0]) #' '.join(['%02x' % ord(x) for x in id[0][1:]]))
 				if id[1] > 0:
@@ -745,8 +751,7 @@ str_id_map = ''.join([chr(x) for x in id_map])
 # }}}
 
 def print_done(port, completed, reason): # {{{
-	ports[port]._gcode = []
-	Connection._broadcast(None, 'printing', port, False)
+	Connection._broadcast(None, 'printing', port.port, False)
 	if config['done']:
 		cmd = config['done']
 		cmd = cmd.replace('[[STATE]]', 'completed' if completed else 'aborted').replace('[[REASON]]', reason)
@@ -756,7 +761,7 @@ def print_done(port, completed, reason): # {{{
 			data = p.stdout.read()
 			if data:
 				return True
-			p.wait()
+			log('Flashing done; return: %s' % repr(p.wait()))
 			return False
 		glib.io_add_watch(p.stdout.fileno(), glib.IO_IN, process_done)
 # }}}
@@ -775,7 +780,7 @@ else:
 	default_printer = (config['printer'], None)
 # }}}
 
-httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = xdgbasedir.data_files_read('html', packagename = 'printer3d'), address = config['address'])
+httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = xdgbasedir.data_files_read('html', packagename = 'franklin'), address = config['address'])
 
 log('running')
 websockets.fgloop()

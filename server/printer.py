@@ -889,6 +889,7 @@ class Printer: # {{{
 			self.home_protect = False
 			return
 		if self.gcode_id is not None:
+			log('done %d %s' % (complete, reason))
 			self._send(self.gcode_id, 'return', (complete, reason))
 		self.gcode_id = None
 		self.gcode = []
@@ -1619,7 +1620,7 @@ class Printer: # {{{
 		message = '[general]\r\n'
 		# Don't export the name.
 		#message += 'name=' + self.name.replace('\\', '\\\\').replace('\n', '\\n') + '\r\n'
-		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('num_axes', 'num_extruders', 'num_temps', 'printer_type', 'led_pin', 'motor_limit', 'temp_limit')])
+		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('num_axes', 'num_extruders', 'num_temps', 'printer_type', 'led_pin', 'probe_pin', 'motor_limit', 'temp_limit')])
 		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('room_T', 'feedrate', 'angle')])
 		for a in range(self.maxaxes):
 			message += '[axis %d]\r\n' % a

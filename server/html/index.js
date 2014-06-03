@@ -153,11 +153,13 @@ function select_printer(port) { // {{{
 			continue;
 		if (p == port) {
 			ports[p][0].AddClass('active');
+			ports[p][2].RemoveClass('hidden');
 			if (ports[p][1])
 				ports[p][1].RemoveClass('hidden');
 		}
 		else {
 			ports[p][0].RemoveClass('active');
+			ports[p][2].AddClass('hidden');
 			if (ports[p][1])
 				ports[p][1].AddClass('hidden');
 		}
@@ -177,8 +179,9 @@ function upload_buttons(port, buttons) { // {{{
 	for (var b = 0; b < buttons.length; ++b) {
 		var button = ret.AddElement('li').AddElement('button');
 		button.type = 'button';
+		button.target = buttons[b][0]
 		button.onclick = function() {
-			rpc.call ("upload", [port, buttons[b][0]], {});
+			rpc.call ('upload', [port, this.target], {}, function(ret) { alert('upload done: ' + ret);});
 		};
 		button.AddText(buttons[b][1]);
 	}
@@ -283,6 +286,7 @@ function quick_print() { // {{{
 // Non-update events. {{{
 function new_port(port) { // {{{
 	ports[port] = [get_elements(build('Label', [port]))[0], get_elements(build('NoPrinter', [port]))[0], null, ''];
+	ports[port][0].AddClass('setup');
 	labels_element.Add(ports[port][0]);
 	printers_element.Add(ports[port][1]);
 } // }}}
@@ -292,6 +296,8 @@ function new_printer() { // {{{
 	printer.local_angle = 0;
 	visibles[port] = {titles: [], axis: make_visibles(printer.maxaxes), extruder: make_visibles(printer.maxextruders), temp: make_visibles(printer.maxtemps), gpio: make_visibles(printer.maxgpios)};
 	ports[port][2] = get_elements(build('Printer', [port]))[0];
+	printers_element.Add(ports[port][2]);
+	ports[port][0].RemoveClass('setup');
 	ports[port][1].RemoveClass('notconnected');
 	ports[port][1].AddClass('connected');
 	select_printer(port);
@@ -322,6 +328,7 @@ function del_script(name) { // {{{
 function del_printer() { // {{{
 	ports[port][1].RemoveClass('connected');
 	ports[port][1].AddClass('notconnected');
+	ports[port][0].AddClass('setup');
 	printers_element.removeChild(ports[port][2]);
 	ports[port][2] = null;
 	delete visibles[port];
@@ -378,7 +385,7 @@ function do_queue() { // {{{
 
 // Update events(from server). {{{
 function update_variables() { // {{{
-	if (!get_element(printer, [null, 'name']))
+	if (!get_element(printer, [null, 'container']))
 		return;
 	if (ports[port][3] != printer.name) {
 		labels_element.removeChild(ports[port][0]);
@@ -387,7 +394,6 @@ function update_variables() { // {{{
 		ports[port][3] = printer.name;
 		select_printer();
 	}
-	update_text([null, 'name']);
 	get_element(printer, [null, 'export']).href = printer.name + '.ini?port=' + encodeURIComponent(port);
 	update_range([null, 'num_axes']);
 	update_range([null, 'num_extruders']);
@@ -395,6 +401,7 @@ function update_variables() { // {{{
 	update_range([null, 'num_gpios']);
 	update_choice([null, 'printer_type']);
 	update_pin([null, 'led_pin']);
+	update_pin([null, 'probe_pin']);
 	update_float([null, 'room_T']);
 	update_float([null, 'motor_limit']);
 	update_float([null, 'temp_limit']);
@@ -465,7 +472,7 @@ function update_variables() { // {{{
 } // }}}
 
 function update_axis(index) { // {{{
-	if (!get_element(printer, [null, 'name']))
+	if (!get_element(printer, [null, 'container']))
 		return;
 	update_motor([['axis', 'motor'], index]);
 	update_pin([['axis', index], 'limit_min_pin']);
@@ -483,7 +490,7 @@ function update_axis(index) { // {{{
 } // }}}
 
 function update_extruder(index) { // {{{
-	if (!get_element(printer, [null, 'name']))
+	if (!get_element(printer, [null, 'container']))
 		return;
 	update_motor([['extruder', 'motor'], index]);
 	update_tempcontent([['extruder', 'temp'], index]);
@@ -493,13 +500,13 @@ function update_extruder(index) { // {{{
 } // }}}
 
 function update_temp(index) { // {{{
-	if (!get_element(printer, [null, 'name']))
+	if (!get_element(printer, [null, 'container']))
 		return;
 	update_tempcontent(['temp', index]);
 } // }}}
 
 function update_gpio(index) { // {{{
-	if (!get_element(printer, [null, 'name']))
+	if (!get_element(printer, [null, 'container']))
 		return;
 	update_pin([['gpio', index], 'pin']);
 	update_choice([['gpio', index], 'state']);
@@ -564,12 +571,6 @@ function update_tempcontent(id) { // {{{
 	update_float([id, 'value', 'settemp']);
 } // }}}
 
-function update_text(id) { // {{{
-	var e = get_element(printer, id);
-	e.ClearAll();
-	e.AddText(get_value(printer, id));
-} // }}}
-
 function update_range(id) { // {{{
 	get_element(printer, id).selectedIndex = get_value(printer, id);
 } // }}}
@@ -577,8 +578,16 @@ function update_range(id) { // {{{
 function update_choice(id) { // {{{
 	var value = get_value(printer, id);
 	var list = choices[make_id(printer, id)][1];
-	if (value < list.length)
+	var container = get_element(printer, [null, 'container']);
+	for (var i = 0; i < list.length; ++i) {
+		if (list[i].containerclass && i != value)
+			container.RemoveClass(list[i].containerclass);
+	}
+	if (value < list.length) {
 		list[value].checked = true;
+		if (list[value].containerclass)
+			container.AddClass(list[value].containerclass);
+	}
 	else {
 		for (var i = 0; i < list.length; ++i)
 			list[i].checked = false;
@@ -589,7 +598,7 @@ function update_toggle(id) { // {{{
 	var v = get_value(printer, id);
 	var e = get_element(printer, id);
 	e.ClearAll ();
-	e.AddText (e.value[v]);
+	e.AddText (e.value[Number(v)]);
 } // }}}
 
 function update_pin(id) { // {{{
@@ -675,7 +684,7 @@ function temprange(element, attr) { // {{{
 
 var choices = new Object;
 
-function choice(obj, options, element, label, classes) { // {{{
+function choice(obj, options, element, label, classes, containerclasses) { // {{{
 	var ret = [];
 	var id = make_id(printer, obj);
 	choices[id] = [obj, []];
@@ -690,9 +699,13 @@ function choice(obj, options, element, label, classes) { // {{{
 		choices[id][1].push(e);
 		e.name = id;
 		e.id = make_id(printer, obj, String(i));
+		if (containerclasses)
+			e.containerclass = containerclasses[i];
 		e.value = String(i);
 		e.printer = printer;
-		e.addEventListener('click', function() { set_value(this.printer, choices[this.name][0], Number(this.value)); }, false);
+		e.addEventListener('click', function() {
+		       	set_value(this.printer, choices[this.name][0], Number(this.value));
+		}, false);
 		var l = label.cloneNode(true);
 		if (classes) {
 			if (typeof classes == 'string')
@@ -747,8 +760,8 @@ function floats(num, title, obj) { // {{{
 	return ret;
 } // }}}
 
-function axis_name(index) { // {{{
-	return index < 3 ? String.fromCharCode('X'.charCodeAt(0) + index) : 'Axis ' + String(index);
+function axis_name(index, as_axis) { // {{{
+	return index < 3 ? String.fromCharCode((as_axis ? 'X' : 'U').charCodeAt(0) + index) : 'Axis ' + String(index);
 } // }}}
 
 function extruder_name(index) { // {{{
@@ -942,7 +955,7 @@ function redraw_canvas(x, y) { // {{{
 		};
 		break;
 	case 1:
-		var names = ['X', 'Y', 'Z'];
+		var names = ['U', 'V', 'W'];
 		var radius = [];
 		var length = [];
 		for (var a = 0; a < 3; ++a) {

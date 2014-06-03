@@ -1,8 +1,0 @@
-# This file contains the settings for printer3d-server.
-# It is used by /etc/init.d/printer3d, for starting and stopping
-#  the server.
-# See /etc/init.d/printer3d for possible variables to assign.
-# If no value is given here, the default from that file is used.
-#
-# This file is sourced as a shell script, so no spaces are allowed
-# around the = sign.

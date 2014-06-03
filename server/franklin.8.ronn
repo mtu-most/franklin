@@ -1,7 +1,7 @@
-printer3d-server(8) -- host software for RepRap style 3-D printers
-==================================================================
+franklin(8) -- host software for RepRap style 3-D printers
+==========================================================
 <!--
-printer3d.8.ronn - manual page for printer3d-server
+franklin.8.ronn - manual page for franklin
 Copyright 2014 Michigan Technological University
 Author: Bas Wijnen <wijnen@debian.org>
 
@@ -20,7 +20,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -->
 
 ## SYNOPSIS
-`printer3d-server` --tls=[cert:key] [--options]
+`franklin` [--options]
 
 ## DESCRIPTION
 This program connects to 3-D printers that are attached to serial ports

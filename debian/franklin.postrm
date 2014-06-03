@@ -1,0 +1,10 @@
+#!/bin/sh -e
+
+#DEBHELPER#
+
+if [ "$1" != purge ] ; then
+	exit 0
+fi
+
+userdel franklin3d > /dev/null 2> /dev/null || :
+groupdel franklin3d > /dev/null 2> /dev/null || :

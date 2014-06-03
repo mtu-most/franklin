@@ -8,7 +8,7 @@ export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector
 
 override_dh_auto_build:
 	dh_auto_build
-	ronn -r server/printer3d-server.8.ronn
+	ronn -r server/franklin.8.ronn
 	sed -i -e 's/^.*MELZI=.*$$/MELZI=true/' firmware/Makefile
 	sed -i -e 's/^.*MEGA=.*$$/#MEGA=true/' firmware/Makefile
 	${MAKE} -C firmware
@@ -24,6 +24,6 @@ override_dh_auto_build:
 
 override_dh_auto_clean:
 	dh_auto_clean
-	rm -f *.pyc *.pyo server/printer3d-server.8
+	rm -f *.pyc *.pyo server/franklin.8
 	rm -rf firmware/build-*
 	sed -i -e 's/^.*MELZI=.*$$/MELZI=true/' firmware/Makefile

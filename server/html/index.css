@@ -15,8 +15,8 @@
 .noexpert .experthidden,
 .notweak .experthidden,
 
-.connected .noprinter,
-.notconnected .printer,
+.connected.noprinter,
+.nodelta .delta,
 
 .nomover #movediv
 {

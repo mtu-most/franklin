@@ -6,7 +6,7 @@ import os
 tls = True
 port = 8080
 
-with open ('/etc/default/printer3d') as f:
+with open ('/etc/default/franklin') as f:
 	for l in f.readlines ():
 		l = l.strip ()
 		if l == '' or l.startswith ('#') or not '=' in l:

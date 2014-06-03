@@ -15,7 +15,6 @@
 			<div id='Label'> <!-- {{{ -->
 				<div class='tab' onclick='select_printer (this.port)'>
 					[!(
-						node.id = make_id (null, [null, 'label']),
 						node.port = args[0],
 						printer ? [printer.name].concat (elements.slice (1)) : elements
 						<span class='port setup'>[!('@' + args[0])!]</span>
@@ -38,19 +37,16 @@
 			<div id='Text'> <!-- {{{ -->
 				[!(
 				// args = title, obj, class
-				elements[1].id = make_id (printer, args[1]),
-				elements[2].id = make_id (printer, args[1], 'source'),
-				elements[3].source = elements[2].id,
-				elements[3].obj = args[1],
+				elements[1].id = make_id (printer, args[1], 'source'),
+				elements[2].source = elements[2].id,
+				elements[2].obj = args[1],
 				args[2] ? elements[0].AddClass (args[2]) : 0,
 				args[2] ? elements[1].AddClass (args[2]) : 0,
 				args[2] ? elements[2].AddClass (args[2]) : 0,
-				args[2] ? elements[3].AddClass (args[2]) : 0,
-				elements[3].printer = printer,
+				elements[2].printer = printer,
 				elements[0].AddText (args[0]),
 				elements
 				<span class='blocktitle'></span>
-				<span></span>
 				<input type='text' class='title'/>
 				<button class='button title' type='button' onclick='set_value (this.printer, this.obj, document.getElementById (this.source).value)'>Set</button>
 				)!]
@@ -69,8 +65,8 @@
 			</div> <!-- }}} -->
 			<div id='Choice'> <!-- {{{ -->
 				[!(
-				// args = obj, options, class[es]
-				choice (args[0], args[1], elements[0], elements[1], args[2])
+				// args = obj, options, class[es], containerclasses
+				choice (args[0], args[1], elements[0], elements[1], args[2], args[3])
 				<input type='radio'/>
 				<label></label>
 				)!]
@@ -194,8 +190,6 @@
 				<!-- args = parent, index, basic_steps -->
 				<div>[$(Run [[[args[0], 'motor'], args[1]], args[2] ? '' : 'expert'])$]</div>
 				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'steps_per_mm'], 1, args[2] ? '' : 'expert'])$]</div>
-				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'max_v'], 1, 'expert'])$]</div>
-				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'max_a'], 1, 'expert'])$]</div>
 				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'limit_v'], 1, 'setup'])$]</div>
 				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'max_steps'], 1, 'setup'])$]</div>
 				<!--sleeping.-->
@@ -239,15 +233,15 @@
 
 			<div id='Motor_axis'> <!-- {{{ -->
 				[!(
-				// args = index, className
-				[make_tablerow (axis_name (args[0]), elements, ['rowtitle', args[1]], 'expert')]
+				// args = index, class
+				[make_tablerow (axis_name (args[0], false), elements, ['rowtitle', args[1]], 'expert')]
 				[$(Motor ['axis', args[0]])$]
 				)!]
 			</div> <!-- }}} -->
 			<div id='Limits_axis'> <!-- {{{ -->
 				[!(
 				// args = index
-				[make_tablerow (axis_name (args[0]), elements, ['rowtitle setup', 'setup'], 'setup')]
+				[make_tablerow (axis_name (args[0], true), elements, ['rowtitle setup', ['setup', 'setup delta', 'setup delta', 'setup']], 'setup')]
 				<div>[$(Float [[['axis', args[0]], 'limit_pos'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'axis_min'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'axis_max'], 1, 'setup'])$]</div>
@@ -257,9 +251,9 @@
 			<div id='Delta_axis'> <!-- {{{ -->
 				[!(
 				// args = index
-				[make_tablerow (axis_name (args[0]), elements, ['rowtitle expert', 'expert'], 'expert')]
-				<div>[$(Float [[['axis', args[0]], 'delta_length'], 1, 'expert'])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'delta_radius'], 1, 'expert'])$]</div>
+				[make_tablerow (axis_name (args[0], false), elements, ['rowtitle expert', ['expert delta', 'expert delta', 'setup', 'setup']], 'expert')]
+				<div>[$(Float [[['axis', args[0]], 'delta_length'], 1, 'expert delta'])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'delta_radius'], 1, 'expert delta'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_min'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_max'], 1, 'setup'])$]</div>
 				)!]
@@ -275,15 +269,17 @@
 					target[String (args[0])] = Number (get_element (this.printer, [['axis', this.index], 'goto']).value);
 					this.printer.call ('goto', [target], {});
 				}, false),
-				[make_tablerow (axis_name (args[0]), [[elements[1], elements[2]], elements[0]], ['rowtitle', ''])]
+				[make_tablerow (axis_name (args[0], true), [[elements[1], elements[2]], elements[0], elements[3], elements[4]], ['rowtitle', ''])]
 				<div>[$(Float [[['axis', args[0]], 'offset'], 1, (args[0] != 2 ? 'expert' : 'tweak')])$]</div>
 				<input type='text'/>
 				<button class='button' type='button'>Go</button>
+				<div>[$(Float [[[['axis', 'motor'], args[0]], 'max_v'], 1, 'expert'])$]</div>
+				<div>[$(Float [[[['axis', 'motor'], args[0]], 'max_a'], 1, 'expert'])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Pins_axis'> <!-- {{{ -->
 				[!(
-				make_pin_title (axis_name (args[0]), stack)
+				make_pin_title (axis_name (args[0], false), stack)
 				[$(Pin ['Step pin', [[['axis', 'motor'], args[0]], 'step_pin']])$]
 				[$(Pin ['Dir pin', [[['axis', 'motor'], args[0]], 'dir_pin']])$]
 				[$(Pin ['Enable pin', [[['axis', 'motor'], args[0]], 'enable_pin']])$]
@@ -336,10 +332,12 @@
 					var value = Number (get_element (this.printer, [['extruder', this.index], 'move']).value);
 					this.printer.call ('goto', [], {e: -value, which: this.index});
 				}, false),
-				[make_tablerow (extruder_name (args[0]), [[elements[0], elements[1], elements[2]], elements[3], elements[4], elements[5]], ['rowtitle', args[1]])]
+				[make_tablerow (extruder_name (args[0]), [[elements[0], elements[1], elements[2]], elements[3], elements[4], elements[5], elements[6], elements[7]], ['rowtitle', args[1]])]
 				<input type='text'/>
 				<button class='button' type='button'>Extrude</button>
 				<button class='button' type='button'>Retract</button>
+				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'max_v'], 1, 'expert'])$]</div>
+				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'max_a'], 1, 'expert'])$]</div>
 				<div>[$(Float [[['extruder', args[0]], 'filament_heat'], 1, 'expert'])$]</div>
 				<div>[$(Float [[['extruder', args[0]], 'nozzle_size'], 1, 'expert'])$]</div>
 				<div>[$(Float [[['extruder', args[0]], 'filament_size'], 1, 'expert'])$]</div>
@@ -411,8 +409,9 @@
 
 			<div id='Printer'> <!-- {{{ -->
 				// TODO: upload script, see printing state, command feedback.
-				<div class='printer notconnected'> <!-- {{{ -->
+				<div class='printer'>
 					[!(node.id = make_id (printer, [null, 'container']),'')!]
+					<div class='setup'>[!(elements[0].port = port, elements<button type='button' onclick="rpc.call ('disable', [this.port], {})">Disable printer</button>)!]</div>
 					<div class='setup'>[$(Text ['Name', [null, 'name'], 'setup'])$]</div>
 					<div class='tweak'>[$(Button ['Sleep', 'sleep_all'])$]</div>
 					<div class='tweak'><button type='button' onclick="selected_printer.call ('home', [], {}, update_canvas_and_spans)">Home</button></div>
@@ -432,7 +431,7 @@
 							<th class='rowtitle'>&nbsp;</th>
 							<td class='tweak'>[$(Float [[null, 'feedrate'], .01])$]</td>
 							<td class='setup'>[$(Float [[null, 'angle'], 1])$]</td>
-							<td class='setup'>[$(Choice [[null, 'printer_type'], ['Cartesian', 'Delta']])$]</td>
+							<td class='setup'>[$(Choice [[null, 'printer_type'], ['Cartesian', 'Delta'], undefined, ['nodelta', null]])$]</td>
 							<td class='setup'>[$(Float [[null, 'room_T'], 1])$]</td>
 							<td class='expert'>[$(Float [[null, 'motor_limit'], 1000])$]</td>
 							<td class='expert'>[$(Float [[null, 'temp_limit'], 1000])$]</td>
@@ -451,26 +450,20 @@
 							'Motors',
 							'Run',
 							'Steps per mm',
-							'Max v (mm/s)',
-							'Max a (mm/s²)',
 							'v limit (mm/s)',
-							'Max steps',
+							'Max steps'
 						], [
 							'blocktitle',
 							'floattitle',
 							'floattitle',
-							'floattitle expert',
-							'floattitle expert',
 							'floattitle setup',
 							'floattitle setup'
 						], [
 							null,
 							'Unlimited move.',
 							'Set the (micro)steps that the motor needs to do to move the hardware by one mm.',
-							'Maximum speed that the axis will try to move.',
-							'Maximum acceleration that the axis is trying to use while speeding up or slowing down.',
 							'Maximum speed that the motor is allowed to move.',
-							'Maximum number of steps to do in one iteration; set to number of microsteps.',
+							'Maximum number of steps to do in one iteration; set to number of microsteps.'
 						]),
 					multiple ('Motor_axis', 'expert'),
 					multiple ('Motor_extruder')
@@ -480,15 +473,21 @@
 						multiple_titles ([[], ['axis'], [], []], [
 							'Axis move',
 							'Go (mm)',
-							'Offset (mm)'
+							'Offset (mm)',
+							'Max v (mm/s)',
+							'Max a (mm/s²)'
 						], [
 							'blocktitle',
 							'inputtitle tweak',
-							'floattitle tweak'
+							'floattitle tweak',
+							'floattitle expert',
+							'floattitle expert'
 						], [
 							null,
 							'Physically move the extruder to this position.  For Z, more positive numbers move the extruder away from the bed.',
-							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.'
+							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.',
+							'Maximum speed that the axis will try to move.',
+							'Maximum acceleration that the axis is trying to use while speeding up or slowing down.'
 						]),
 						multiple ('Move_axis')
 					).AddClass ('tweak')])!]
@@ -497,23 +496,29 @@
 						multiple_titles ([[], ['extruder'], [], []], [
 							'Extruder setup',
 							'Extrude (mm)',
+							'Max v (mm/s)',
+							'Max a (mm/s²)',
 							'Filament heat (J/mmK)',
 							'Nozzle diameter (mm)',
 							'Filament diameter (mm)'
 						], [
 							'blocktitle',
 							'inputtitle tweak',
+							'floattitle expert',
+							'floattitle expert',
 							'floattitle setup',
 							'floattitle setup',
 							'floattitle setup'
 						], [
 							null,
 							'Extrude or retract a length of filament.',
+							'Maximum speed that the extruder will try to move.',
+							'Maximum acceleration that the extruder is trying to use while speeding up or slowing down.',
 							'Amount of heat that increases the temperature of 1 mm of filament by 1 K.',
 							'Diameter of the nozzle.',
 							'Diameter of the filament.'
 						]),
-						multiple ('Setup_extruder', ['tweak', 'setup', 'setup', 'setup'])
+						multiple ('Setup_extruder', ['tweak', 'expert', 'expert', 'setup', 'setup', 'setup'])
 					).AddClass ('tweak')])!]
 
 					[!([make_table (
@@ -552,7 +557,7 @@
 							'If a master temp is set, the pin will be on if that temp is above this value, otherwise it will be off.'
 						]),
 						multiple ('Gpio_gpio')
-					)])!]
+					).AddClass('tweak')])!]
 
 					[!([make_table (
 						multiple_titles ([[], [], [], ['axis']], [
@@ -564,8 +569,8 @@
 						], [
 							'blocktitle',
 							'floattitle setup',
-							'floattitle setup',
-							'floattitle setup',
+							'floattitle setup delta',
+							'floattitle setup delta',
 							'floattitle setup'
 						], [
 							null,
@@ -579,23 +584,23 @@
 
 					[!([make_table (
 						multiple_titles ([[], [], [], ['axis']], [
-							'Axis delta',
+							'Motor settings',
 							'Rod length (mm)',
-							'Radius (mm)'
+							'Radius (mm)',
 							'Motor min (mm)',
-							'Motor max (mm)',
+							'Motor max (mm)'
 						], [
 							'blocktitle',
 							'floattitle setup delta',
-							'floattitle setup delta'
+							'floattitle setup delta',
 							'floattitle setup',
-							'floattitle setup',
+							'floattitle setup'
 						], [
 							null,
 							'Length of the tie rods, measured between the pivot points.',
-							'Horizontal distance between the pivot points of the tie rods.  Note that this value does not include the effector or carriage offsets.'
+							'Horizontal distance between the pivot points of the tie rods.  Note that this value does not include the effector or carriage offsets.',
 							'Minimum value that the motor may move to. (Normally 0.)',
-							'Maximum value that the motor may move to. (Normally equal to rod length.)',
+							'Maximum value that the motor may move to. (Normally equal to rod length.)'
 						]),
 						multiple ('Delta_axis')
 					).AddClass ('setup')])!]
@@ -671,10 +676,10 @@
 						stack
 						<a class='title' title='Save settings to disk.'>Export settings to file</a>
 					)!]</div>
-				</div> <!-- }}} -->
+				</div>
 			</div> <!-- }}} -->
 			<div id='NoPrinter'> <!-- {{{ -->
-				<div class='noprinter notconnected'>
+				<div class='noprinter notconnected setup'>
 					[!(node.id = make_id (printer, [null, 'nocontainer']),'')!]
 					<h2>No printer is found on this port.</h2>
 					<p>

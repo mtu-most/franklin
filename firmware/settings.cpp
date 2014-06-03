@@ -55,8 +55,14 @@ void Variables::load (int16_t &addr, bool eeprom)
 	read_float (addr, eeprom);	// Discard value.
 #endif
 	motor_limit = read_32 (addr, eeprom);
+	if (motor_limit < 0)
+		motor_limit = 0;
 	temp_limit = read_32 (addr, eeprom);
+	if (temp_limit < 0)
+		temp_limit = 0;
 	feedrate = read_float (addr, eeprom);
+	if (isnan (feedrate) || feedrate <= 0)
+		feedrate = 1;
 	angle = read_float (addr, eeprom);
 	angle = angle - int (angle / 360) * 360;
 	if (isinf(angle) || isnan(angle))
