@@ -166,7 +166,7 @@ class Printer: # {{{
 		for g in range(self.maxgpios):
 			self.gpio[g].read(self._read(2 + self.maxaxes + self.maxextruders + self.maxtemps + g))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
-		self.pause(True)
+		self.pause(True, False)
 		self.goto()[1](None)	# This flushes the buffer, possibly causing movecbs to be sent.
 		self.goto(cb = True)[1](None)	# This sends one new movecb, to be sure the rest is received if they were sent.
 		self._get_reply(cb = True)
@@ -201,7 +201,7 @@ class Printer: # {{{
 			'SAVE': 0x0d,
 			'READ': 0x0e,
 			'WRITE': 0x0f,
-			'PAUSE': 0x10,
+			'QUEUED': 0x10,
 			'READGPIO': 0x11,
 			'AUDIO_SETUP': 0x12,
 			'AUDIO_DATA': 0x13}
@@ -454,13 +454,8 @@ class Printer: # {{{
 				if packet[1] == '\x00':
 					# Move continue.
 					self.wait = False
-					# Only do queue if not paused;
-					# otherwise it my cause a cb to be
-					# triggered, which in turn may flush
-					# the queue by doing a goto.
-					if not self.paused:
-						#log('resuming queue %d' % len(self.queue))
-						call_queue.append((self._do_queue, []))
+					#log('resuming queue %d' % len(self.queue))
+					call_queue.append((self._do_queue, []))
 				else:
 					# Audio continue.
 					self.waitaudio = False
@@ -914,7 +909,7 @@ class Printer: # {{{
 	# }}}
 	def _do_queue(self): # {{{
 		log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
-		while not self.wait and (self.queue_pos < len(self.queue) or (self.resuming and self.queue_info[0] < len(self.queue_info[2]))):
+		while not self.wait and (self.queue_pos < len(self.queue) or self.resuming):
 			if self.queue_pos >= len(self.queue):
 				log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
 				self.queue = self.queue_info[2]
@@ -924,6 +919,8 @@ class Printer: # {{{
 				self.gcode_wait = self.queue_info[5]
 				self.resuming = False
 				self.queue_info = None
+				if self.queue_pos >= len(self.queue):
+					break
 			id, axes, e, f0, f1, which, cb = self.queue[self.queue_pos]
 			self.queue_pos += 1
 			a = {}
@@ -974,9 +971,6 @@ class Printer: # {{{
 				p = chr(self.command['GOTOCB'])
 			else:
 				p = chr(self.command['GOTO'])
-			if self.paused:
-				self.paused = False
-				self._variables_update()
 			self._send_packet(p + ''.join([chr(t) for t in targets]) + args)
 			if id is not None:
 				self._send(id, 'return', None)
@@ -994,7 +988,7 @@ class Printer: # {{{
 			self.orig_printer_type = self.printer_type
 			self.set_variables(printer_type = 0)
 			# If it is currently moving, doing the things below without pausing causes stall responses.
-			self.pause(True)
+			self.pause(True, False)
 			for a in range(self.num_axes):
 				self.sleep_axis(a, False)
 				self.axis[a].set_current_pos(self.axis[a].motor_min)
@@ -1011,7 +1005,7 @@ class Printer: # {{{
 				return
 			# Fall through.
 		if self.home_phase == 0:
-			self.pause(True)	# Needed if we hit a sense switch.
+			self.pause(True, False)	# Needed if we hit a sense switch.
 			found_limits = False
 			for a in self.limits.keys() + self.sense.keys():
 				if a in self.home_target:
@@ -1035,7 +1029,7 @@ class Printer: # {{{
 				return
 			# Fall through.
 		if self.home_phase == 1:
-			self.pause(True)	# Needed if we hit a sense switch.
+			self.pause(True, False)	# Needed if we hit a sense switch.
 			found_limits = False
 			for a in self.limits.keys() + self.sense.keys():
 				if a in self.home_target:
@@ -1082,7 +1076,7 @@ class Printer: # {{{
 				return
 			# Fall through
 		if self.home_phase == 3:
-			self.pause(True)	# Needed if we hit a sense switch.
+			self.pause(True, False)	# Needed if we hit a sense switch.
 			found_limits = False
 			for a in self.limits.keys() + self.sense.keys():
 				if a in self.home_target:
@@ -1177,11 +1171,6 @@ class Printer: # {{{
 			self.movecb.append(self.probe_cb)
 			self.goto({2: 3}, cb = True)[1](None)
 	# }}}
-	def _queue_flushed(self): # {{{
-		self.movewait = 0
-		self.paused = False
-		self._variables_update()
-	# }}}
 	# Subclasses.  {{{
 	class Temp: # {{{
 		def __init__(self):
@@ -1266,18 +1255,13 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, axes = {}, e = None, f0 = None, f1 = None, which = 0, cb = False): # {{{
-		log('goto %s' % repr(axes))
-		if self.paused:
-			self._queue_flushed()
+		#log('goto %s' % repr(axes))
 		self.queue.append((id, axes, e, f0, f1, which, cb))
 		if not self.wait:
 			self._do_queue()
 	# }}}
 	def run(self, channel, speed):	# speed: float; 0 means off. # {{{
 		channel = int(channel)
-		if self.paused:
-			self.paused = False
-			self._variables_update()
 		if channel >= 2 and channel < 2 + self.num_axes:
 			if speed != 0 and not math.isnan(speed):
 				#log(repr(self.pos))
@@ -1299,8 +1283,6 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	def sleep(self, channel, sleeping = True): # {{{
-		if self.paused:
-			self._queue_flushed()
 		channel = int(channel)
 		if channel >= 2 and channel < 2 + self.maxaxes:
 			self.axis[channel - 2].motor.sleeping = sleeping
@@ -1414,7 +1396,7 @@ class Printer: # {{{
 				assert 2 + self.maxaxes + self.maxextruders + self.maxtemps <= channel < 2 + self.maxaxes + self.maxextruders + self.maxtemps + self.maxgpios
 				self.gpio[channel - 2 - self.maxaxes - self.maxextruders - self.maxtemps].read(data)
 				self._gpio_update(channel - 2 - self.maxaxes - self.maxextruders - self.maxtemps)
-			return True
+		return True
 	def load_variables(self): # {{{
 		return self.load(1)
 	# }}}
@@ -1455,18 +1437,18 @@ class Printer: # {{{
 			self.save(i)
 	# }}}
 	# }}}
-	def pause(self, pausing = True): # {{{
+	def pause(self, pausing = True, store = True): # {{{
 		was_paused = self.paused
-		if not self._send_packet(struct.pack('<BB', self.command['PAUSE'], pausing)):
-			return False
-		reply = struct.unpack('<BB', self._get_reply())
-		if reply[0] != ord(self.rcommand['QUEUE']):
-			log('invalid reply to pause command')
-			return False
+		if pausing:
+			if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], True)):
+				return False
+			reply = struct.unpack('<BB', self._get_reply())
+			if reply[0] != ord(self.rcommand['QUEUE']):
+				log('invalid reply to queued command')
+				return False
+			self.wait = False
 		self.paused = pausing
-		self.wait = False
 		self._variables_update()
-		log('pause %d %d %d' % (pausing, was_paused, reply[1]))
 		if not self.paused:
 			if was_paused:
 				# Go back to pausing position.
@@ -1476,20 +1458,29 @@ class Printer: # {{{
 				self.resuming = True
 			self._do_queue()
 		else:
-			if not was_paused and self.queue_info is None and len(self.queue) > 0:
-				self.queue_info = [self.queue_pos - reply[1], [a.get_current_pos() for a in self.axis], self.queue, self.movecb, self.flushing, self.gcode_wait]
+			if not was_paused:
+				log('pausing %d %d %d %d' % (self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
+				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - reply[1] >= 0:
+					log('pausing gcode %d/%d/%d' % (self.queue_pos, reply[1], len(self.queue)))
+					self.queue_info = [self.queue_pos - reply[1], [a.get_current_pos() for a in self.axis], self.queue, self.movecb, self.flushing, self.gcode_wait]
+				else:
+					log('stopping')
+					while len(self.movecb) > 0:
+						call_queue.extend([(x[1], [True]) for x in self.movecb])
 				self.queue = []
 				self.movecb = []
 				self.flushing = False
 				self.gcode_wait = None
 				self.queue_pos = 0
-		return reply[1]
 	# }}}
 	def queued(self): # {{{
-		# From the caller, doing this would be a race condition.  Here
-		# it isn't, because this is the single-threaded manager of the
-		# printer.
-		return self.pause(self.paused)
+		if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], False)):
+			return None
+		reply = struct.unpack('<BB', self._get_reply())
+		if reply[0] != ord(self.rcommand['QUEUE']):
+			log('invalid reply to queued command')
+			return None
+		return reply[1]
 	# }}}
 	def ping(self, arg = 0): # {{{
 		if not self._send_packet(struct.pack('<BB', self.command['PING'], arg)):

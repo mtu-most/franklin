@@ -105,7 +105,7 @@ enum Command {
 	CMD_SAVE,	// 1 byte: which channel.
 	CMD_READ,	// 1 byte: which channel.  Reply: DATA.
 	CMD_WRITE,	// 1 byte: which channel; n bytes: data.
-	CMD_PAUSE,	// 1 byte: 0: not pause; 1: pause.  Reply: QUEUE.
+	CMD_QUEUED,	// 1 byte: 0: query queue length; 1: stop and query queue length.  Reply: QUEUE.
 	CMD_READGPIO,	// 1 byte: which channel. Reply: GPIO.
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_bit.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
@@ -345,9 +345,7 @@ EXTERN float limits_pos[MAXAXES];	// position when limit switch was hit or nan
 #endif
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
-EXTERN unsigned long pause_time;
 EXTERN bool initialized;
-EXTERN bool pause_all;
 EXTERN uint32_t motors_busy;		// bitmask of motors which are enabled.
 EXTERN bool out_busy;
 EXTERN unsigned long out_time;
@@ -427,7 +425,7 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 
 #if MAXAXES > 0 || MAXEXTRUDERS > 0
 static inline bool moving_motor (uint8_t which) {
-	if (pause_all || !moving)
+	if (!moving)
 		return false;
 #if MAXAXES >= 3
 	if (printer_type == 1 && which < 2 + 3) {

@@ -23,7 +23,6 @@ void setup ()
 	continue_cb = 0;
 	which_tempcbs = 0;
 	ping = 0;
-	pause_all = false;
 	last_packet = NULL;
 	out_busy = false;
 	reply_ready = false;

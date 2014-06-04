@@ -278,8 +278,6 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 		}
 	}
 #endif
-	if (pause_all)
-		return;
 	// Check for continuous moves.
 	for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 		if (!motors[m] || !isnan (motors[m]->dist))
@@ -288,7 +286,6 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 			continue;
 		last_active = longtime;
 		float current_t = (current_time - motors[m]->last_time) / 1e6;
-		motors[m]->last_time = current_time;
 		if (motors[m]->continuous_steps_per_s != motors[m]->f) {
 			// Getting up to speed, or slowing down.
 			if (motors[m]->continuous_steps_per_s > motors[m]->f) {
@@ -320,7 +317,10 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 		motors[m]->continuous_steps += motors[m]->f * current_t;
 		int16_t steps (motors[m]->continuous_steps);
 		motors[m]->continuous_steps -= steps;
+		delayed = false;
 		do_steps (m, steps * (motors[m]->positive ? 1 : -1), current_time);
+		if (delayed || steps)
+			motors[m]->last_time = current_time;
 		continue;
 	}
 	// Check for regular move.
@@ -450,8 +450,6 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 
 #ifdef AUDIO
 static void handle_audio (unsigned long current_time, unsigned long longtime) {
-	if (pause_all)
-		return;
 	if (audio_head != audio_tail) {
 		last_active = longtime;
 		int16_t bit = (current_time - audio_start) / audio_us_per_bit;
@@ -531,7 +529,7 @@ void loop () {
 	handle_audio (current_time, longtime);
 #endif
 #if MAXAXES > 0 || MAXEXTRUDERS > 0
-	if (motors_busy != 0 && !pause_all && motor_limit > 0 && longtime - last_active > motor_limit) {
+	if (motors_busy != 0 && motor_limit > 0 && longtime - last_active > motor_limit) {
 		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 			if (!motors[m])
 				continue;

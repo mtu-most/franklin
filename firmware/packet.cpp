@@ -63,17 +63,11 @@ void packet ()
 		debug ("CMD_GOTO(CB)");
 #endif
 		last_active = millis ();
-		if (!pause_all && queue_full)
+		if (queue_full)
 		{
 			debug ("Host ignores wait request");
 			Serial.write (CMD_STALL);
 			return;
-		}
-		// If a new goto is sent while paused; we discard the current buffer.
-		if (pause_all) {
-#ifdef AUDIO
-			audio_start += micros () - pause_time;
-#endif
 		}
 		uint8_t const num = TEMP0;
 		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
@@ -154,13 +148,8 @@ void packet ()
 			Serial.write (CMD_STALL);
 			return;
 		}
-		// If a run is sent while paused; we discard the current buffer.
-		if (pause_all) {
-#ifdef AUDIO
-			audio_start += micros () - pause_time;
-#endif
-		}
 		write_ack ();
+		//debug("running %d", which);
 #if MAXAXES >= 3
 		if (printer_type == 1 && which < 2 + 3) {
 			for (uint8_t a = 0; a < 3; ++a) {
@@ -177,6 +166,7 @@ void packet ()
 		}
 #endif
 		float speed = isnan (f.f) ? 0 : f.f;
+		//debug("at speed %f", &speed);
 		if (speed > 0) {
 			if (speed > motors[which]->limit_v)
 				speed = motors[which]->limit_v;
@@ -185,6 +175,7 @@ void packet ()
 			if (speed < -motors[which]->limit_v)
 				speed = -motors[which]->limit_v;
 		}
+		//debug("I mean at speed %f", &speed);
 		if (motors[which]->f != 0) {
 			//debug ("running changes speed from %f to %f", &motors[which]->f, &speed);
 		       	if ((motors[which]->positive && speed < 0) || (!motors[which]->positive && speed > 0))
@@ -528,43 +519,23 @@ void packet ()
 		write_ack ();
 		return;
 	}
-	case CMD_PAUSE:
+	case CMD_QUEUED:
 	{
 #ifdef DEBUG_CMD
-		debug ("CMD_PAUSE");
+		debug ("CMD_QUEUED");
 #endif
 		last_active = millis ();
 		reply[0] = 3;
 		reply[1] = CMD_QUEUE;
 		reply[2] = queue_full ? QUEUE_LENGTH : (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH;
 		if (command[2]) {
-			if (!pause_all)
-				pause_time = micros ();
+			queue_start = 0;
+			queue_end = 0;
+			queue_full = false;
+			//debug ("aborting at request");
+			abort_move ();
 		}
-		else {
-			if (pause_all) {
-				unsigned long diff = micros () - pause_time;
-				start_time += diff;
-#ifdef AUDIO
-				audio_start += diff;
-#endif
-#if MAXAXES > 0 || MAXEXTRUDERS > 0
-				for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-					if (!motors[m])
-						continue;
-					motors[m]->last_time += diff;
-				}
-#endif
-			}
-		}
-		pause_all = bool (command[2]);
 		write_ack ();
-		pause_all = false;
-		queue_start = 0;
-		queue_end = 0;
-		queue_full = false;
-		//debug ("aborting while flushing");
-		abort_move ();
 		reply_ready = true;
 		try_send_next ();
 		return;
