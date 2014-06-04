@@ -50,11 +50,54 @@ void reset_pos ()	// {{{
 #endif
 
 #if MAXAXES > 0
+
+#if MAXAXES >= 3
+static bool check_delta (uint8_t a, float *target) {
+	float dx = target[0] - axis[a].x;
+	float dy = target[1] - axis[a].y;
+	float r2 = dx * dx + dy * dy;
+	if (r2 > axis[a].axis_max * axis[a].axis_max) {
+		//debug ("not ok: %f %f %f %f %f %f %f", &target[0], &target[1], &dx, &dy, &r2, &l2, &axis[a].delta_length);
+		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
+		// target = axis + (target - axis) * (l - epsilon) / r.
+		float factor = axis[a].axis_max / sqrt (r2);
+		target[0] = axis[a].x + (target[0] - axis[a].x) * factor;
+		target[1] = axis[a].y + (target[1] - axis[a].y) * factor;
+		return false;
+	}
+	// Inner product shows if projection is inside or outside the printable region.
+	float projection = -(dx * axis[a].x + dy * axis[a].y) / axis[a].delta_radius;
+	if (projection < axis[a].axis_min) {
+		//debug ("not ok: %f %f %f %f %f", &inner, &dx, &dy, &axis[a].x, &axis[a].y);
+		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
+		target[0] -= (axis[a].axis_min - projection - .001) / axis[a].delta_radius * axis[a].x;
+		target[1] -= (axis[a].axis_min - projection - .001) / axis[a].delta_radius * axis[a].y;
+		// Assume this was a small correction; that way, things will work even if numerical errors cause this to be called for the real move.
+		dx = target[0] - axis[a].x;
+		dy = target[1] - axis[a].y;
+		r2 = dx * dx + dy * dy;
+		return false;
+	}
+	return true;
+}
+#endif
+
 static void apply_offsets (float *data) {
 	// Apply offsets.
 	for (uint8_t a = 0; a < num_axes; ++a) {
 		data[AXIS0 + a] += axis[a].offset;
 	}
+#if MAXAXES >= 3
+	if (printer_type == 1) {
+		while (true) {
+			bool ok = true;
+			for (uint8_t a = 0; a < num_axes; ++a)
+				ok &= check_delta (a, &data[AXIS0]);
+			if (ok)
+				break;
+		}
+	}
+#endif
 }
 #endif
 
@@ -79,6 +122,7 @@ void next_move () {
 	debug ("Next move; queue start = %d, end = %d", queue_start, queue_end);
 #endif
 	// Set everything up for running queue[queue_start].
+	freeze_time = -1;
 
 #if MAXAXES > 0
 	// Make sure printer state is good. {{{
@@ -108,8 +152,19 @@ void next_move () {
 #if MAXAXES > 0
 	for (uint8_t a = 0; a < num_axes; ++a) {
 		if (!isnan (queue[queue_start].data[AXIS0 + a]) && isnan (axis[a].source)) {
-			debug ("Motor positions are not known, so move cannot take place; aborting move and flushing the queue.");
-			flush_queue ();
+			debug ("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue.");
+			// This possible removes one move too many, but it shouldn't happen anyway.
+			if (queue[queue_start].cb) {
+				++num_movecbs;
+				try_send_next ();
+			}
+			if (queue_end == queue_start) {
+				continue_cb |= 1;
+				try_send_next ();
+			}
+			queue_start = (queue_start + 1) % QUEUE_LENGTH;
+			queue_full = false;
+			abort_move ();
 			return;
 		}
 	}
@@ -477,10 +532,6 @@ void abort_move () { // {{{
 	//debug ("try aborting move");
 	if (moving) {
 		//debug ("aborting move");
-		if (current_move_has_cb) {
-			//debug ("movecb 3");
-			++num_movecbs;
-		}
 #if MAXAXES > 0
 		for (uint8_t a = 0; a < MAXAXES; ++a) {
 			//debug ("setting axis %d source to %f", a, &axis[a].current);
@@ -518,23 +569,4 @@ void abort_move () { // {{{
 		}
 	}
 #endif
-} // }}}
-
-void flush_queue () { // {{{
-	pause_all = false;
-	if (queue_end == queue_start) {
-		continue_cb |= 1;
-		try_send_next ();
-	}
-	while (queue_start != queue_end) {
-		if (queue[queue_start].cb) {
-			//debug ("movecb 2");
-			++num_movecbs;
-			try_send_next ();
-		}
-		queue_start = (queue_start + 1) % QUEUE_LENGTH;
-	}
-	queue_full = false;
-	//debug ("aborting while flushing");
-	abort_move ();
 } // }}}

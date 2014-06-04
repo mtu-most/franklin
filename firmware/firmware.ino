@@ -1,5 +1,5 @@
 // vim: set filetype=cpp foldmethod=marker foldmarker={,} :
-#define EXTERN	// This must be done in exactly one cc-file.
+#define EXTERN	// This must be done in exactly one source file.
 #include "firmware.h"
 
 // Loop function handles all regular updates.
@@ -172,7 +172,7 @@ static bool do_steps (uint8_t m, int16_t num_steps, unsigned long current_time) 
 #if MAXAXES > 0
 	if (m >= 2 && m < MAXAXES + 2) {
 		// No problem if limit switch is not hit.
-		//if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) || (axis[m - 2].motor_max != MAXLONG && axis[m - 2].current_pos != MAXLONG && axis[m - 2].current_pos + int32_t (num_steps) > axis[m - 2].motor_max) : GET (axis[m - 2].limit_min_pin, false) || (axis[m - 2].motor_min != MAXLONG && axis[m - 2].current_pos != MAXLONG && axis[m - 2].current_pos + int32_t (num_steps) < axis[m - 2].motor_min)) {
+		//if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) || (axis[m - 2].motor_max != MAXLONG && axis[m - 2].current_pos != MAXLONG && axis[m - 2].current_pos + int32_t (num_steps) > axis[m - 2].motor_max) : GET (axis[m - 2].limit_min_pin, false) || (axis[m - 2].motor_min != MAXLONG && axis[m - 2].current_pos != MAXLONG && axis[m - 2].current_pos + int32_t (num_steps) < axis[m - 2].motor_min))
 		if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) : GET (axis[m - 2].limit_min_pin, false)) {
 			// Hit endstop; abort current move and notify host.
 			debug ("hit %d %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (axis[m - 2].motor_min), int (axis[m - 2].motor_max));
@@ -180,6 +180,10 @@ static bool do_steps (uint8_t m, int16_t num_steps, unsigned long current_time) 
 			motors[m]->f = 0;
 			motors[m]->continuous_steps_per_s = 0;
 			limits_pos[m - 2] = axis[m - 2].current_pos / axis[m - 2].motor.steps_per_mm;
+			if (current_move_has_cb) {
+				//debug ("movecb 3");
+				++num_movecbs;
+			}
 			try_send_next ();
 			//debug ("aborting for limit");
 			abort_move ();
@@ -191,6 +195,7 @@ static bool do_steps (uint8_t m, int16_t num_steps, unsigned long current_time) 
 			axis[m - 2].current_pos += num_steps;
 	}
 #else
+	// Dummy clause to make the else below work in case there are no axes.
 	if (false) {
 	}
 #endif
@@ -219,10 +224,17 @@ static bool move_axes (float target[3], unsigned long current_time) {
 				if (isnan (target[aa]))
 					target[aa] = axis[aa].current;
 			}
-			for (; a < 3; ++a) {
-				bool ok = true;
-				int32_t the_target = delta_to_axis (a, target, &ok);
-				if (!do_steps (2 + a, the_target - axis[a].current_pos, current_time)) {
+			int32_t the_target[3];
+			bool ok = true;
+			for (a = 0; a < 3; ++a) {
+				the_target[a] = delta_to_axis (a, target, &ok);
+			}
+			if (!ok) {
+				for (a = 0; a < 3; ++a)
+					the_target[a] = delta_to_axis (a, target, &ok);
+			}
+			for (a = 0; a < 3; ++a) {
+				if (!do_steps (2 + a, the_target[a] - axis[a].current_pos, current_time)) {
 					// The move has been aborted.
 					return false;
 				}
@@ -317,7 +329,10 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 	last_active = longtime;
 	long t;
 	delayed = false;
-	t = current_time - start_time;
+	if (freeze_time >= 0)
+		t = freeze_time;
+	else
+		t = current_time - start_time;
 #if MAXAXES > 0
 	float target[num_axes];
 #endif
@@ -348,6 +363,8 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 		}
 #endif
 		if (delayed) {	// Not really done yet.
+			if (freeze_time < 0)
+				freeze_time = t;
 			return;
 		}
 		if (moving && current_move_has_cb) {
@@ -387,7 +404,7 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 #endif
 	}
 	else {	// Connector part.
-		t -= t0;
+		long tc = t - t0;
 #if MAXAXES > 0
 		for (uint8_t a = 0; a < num_axes; ++a) {
 			if ((isnan (axis[a].motor.dist) || axis[a].motor.dist == 0) && (isnan (axis[a].motor.next_dist) || axis[a].motor.next_dist == 0)) {
@@ -396,7 +413,7 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 			}
 			float dist = isnan (axis[a].motor.dist) ? 0 : axis[a].motor.dist;
 			float next_dist = isnan (axis[a].motor.next_dist) ? 0 : axis[a].motor.next_dist;
-			target[a] = axis[a].source + axis[a].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (t * 1. / tp)) * t / 1e6;
+			target[a] = axis[a].source + axis[a].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (tc * 1. / tp)) * tc / 1e6;
 		}
 #endif
 #if MAXEXTRUDERS > 0
@@ -405,7 +422,7 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 				continue;
 			float dist = isnan (extruder[e].motor.dist) ? 0 : extruder[e].motor.dist;
 			float next_dist = isnan (extruder[e].motor.next_dist) ? 0 : extruder[e].motor.next_dist;
-			int32_t steps = (extruder[e].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (t * 1. / tp)) * t / 1e6) * extruder[e].motor.steps_per_mm;
+			int32_t steps = (extruder[e].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (tc * 1. / tp)) * tc / 1e6) * extruder[e].motor.steps_per_mm;
 			do_steps (2 + MAXAXES + e, steps - extruder[e].steps_done, current_time);
 		}
 #endif
@@ -413,6 +430,21 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 #if MAXAXES > 0
 	move_axes (target, current_time);
 #endif
+	if (delayed) {
+		if (freeze_time < 0) {
+			//debug("freeze normal");
+			freeze_time = t;
+		}
+	}
+	else if (freeze_time >= 0) {
+		// freeze_time = current_time_0 - start_time_0
+		// start_time_1 = current_time_1 - freeze_time
+		// = current_time_1 - current_time_0 + start_time_0
+		// => start_time += current_time_1 - current_time_0
+		start_time = current_time - freeze_time;
+		freeze_time = -1;
+		//debug("unfreeze");
+	}
 }
 #endif
 

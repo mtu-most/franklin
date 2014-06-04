@@ -83,8 +83,9 @@
 				elements[4].htmlFor = elements[3].id,
 				elements[5].printer = printer,
 				elements[5].addEventListener ('click', function () { set_pin (this.printer, args[1]); }, false),
+				args[2] ? (elements[3].AddClass ('hidden'), elements[4].AddClass ('hidden')) : 0,
 				[make_tablerow (args[0], [[elements[0]], [elements[1], elements[2]], [elements[3], elements[4]], [elements[5]]], ['pintitle', 'pinvalue'])]
-				<select class='pinselect'>[!(pinrange (args[2] !== undefined, elements[0], 'value')<option></option>)!]</select>
+				<select class='pinselect'>[!(pinrange (args[2], elements[0], 'value')<option></option>)!]</select>
 				<input type='checkbox'/>
 				<label>Invalid</label>
 				<input type='checkbox'/>
@@ -242,7 +243,6 @@
 				[!(
 				// args = index
 				[make_tablerow (axis_name (args[0], true), elements, ['rowtitle setup', ['setup', 'setup delta', 'setup delta', 'setup']], 'setup')]
-				<div>[$(Float [[['axis', args[0]], 'limit_pos'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'axis_min'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'axis_max'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'park'], 1, 'setup'])$]</div>
@@ -252,10 +252,11 @@
 				[!(
 				// args = index
 				[make_tablerow (axis_name (args[0], false), elements, ['rowtitle expert', ['expert delta', 'expert delta', 'setup', 'setup']], 'expert')]
-				<div>[$(Float [[['axis', args[0]], 'delta_length'], 1, 'expert delta'])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'delta_radius'], 1, 'expert delta'])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'limit_pos'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_min'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_max'], 1, 'setup'])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'delta_length'], 1, 'expert delta'])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'delta_radius'], 1, 'expert delta'])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Move_axis'> <!-- {{{ -->
@@ -280,12 +281,12 @@
 			<div id='Pins_axis'> <!-- {{{ -->
 				[!(
 				make_pin_title (axis_name (args[0], false), stack)
-				[$(Pin ['Step pin', [[['axis', 'motor'], args[0]], 'step_pin']])$]
-				[$(Pin ['Dir pin', [[['axis', 'motor'], args[0]], 'dir_pin']])$]
-				[$(Pin ['Enable pin', [[['axis', 'motor'], args[0]], 'enable_pin']])$]
-				[$(Pin ['Min limit pin', [['axis', args[0]], 'limit_min_pin']])$]
-				[$(Pin ['Max limit pin', [['axis', args[0]], 'limit_max_pin']])$]
-				[$(Pin ['Sense pin', [['axis', args[0]], 'sense_pin']])$]
+				[$(Pin ['Step', [[['axis', 'motor'], args[0]], 'step_pin']])$]
+				[$(Pin ['Dir', [[['axis', 'motor'], args[0]], 'dir_pin']])$]
+				[$(Pin ['Enable', [[['axis', 'motor'], args[0]], 'enable_pin']])$]
+				[$(Pin ['Min limit', [['axis', args[0]], 'limit_min_pin']])$]
+				[$(Pin ['Max limit', [['axis', args[0]], 'limit_max_pin']])$]
+				[$(Pin ['Sense', [['axis', args[0]], 'sense_pin']])$]
 				)!]
 			</div> <!-- }}} -->
 			<div id='Motor_extruder'> <!-- {{{ -->
@@ -348,11 +349,11 @@
 				// args = index, visible
 				node.id = make_id (printer, [['extruderpins', args[0]], 'container']),
 				make_pin_title (extruder_name (args[0]), stack)
-				[$(Pin ['Step pin', [[['extruder', 'motor'], args[0]], 'step_pin']])$]
-				[$(Pin ['Direction pin', [[['extruder', 'motor'], args[0]], 'dir_pin']])$]
-				[$(Pin ['Enable pin', [[['extruder', 'motor'], args[0]], 'enable_pin']])$]
-				[$(Pin ['Power pin', [[['extruder', 'temp'], args[0]], 'power_pin']])$]
-				[$(Pin ['Thermistor pin', [[['extruder', 'temp'], args[0]], 'thermistor_pin'], true])$]
+				[$(Pin ['Step', [[['extruder', 'motor'], args[0]], 'step_pin']])$]
+				[$(Pin ['Direction', [[['extruder', 'motor'], args[0]], 'dir_pin']])$]
+				[$(Pin ['Enable', [[['extruder', 'motor'], args[0]], 'enable_pin']])$]
+				[$(Pin ['Power', [[['extruder', 'temp'], args[0]], 'power_pin']])$]
+				[$(Pin ['Thermistor', [[['extruder', 'temp'], args[0]], 'thermistor_pin'], true])$]
 				)!]
 			</div> <!-- }}} -->
 			<div id='Temp_components_temp'> <!-- {{{ -->
@@ -381,8 +382,8 @@
 				// args = index, visible
 				node.id = make_id (printer, [['temppins', args[0]], 'container']),
 				make_pin_title (temp_name (args[0]), stack)
-				[$(Pin ['Power pin', [['temp', args[0]], 'power_pin']])$]
-				[$(Pin ['Thermistor pin', [['temp', args[0]], 'thermistor_pin'], true])$]
+				[$(Pin ['Power', [['temp', args[0]], 'power_pin']])$]
+				[$(Pin ['Thermistor', [['temp', args[0]], 'thermistor_pin'], true])$]
 				)!]
 			</div> <!-- }}} -->
 			<div id='Gpio_gpio'> <!-- {{{ -->
@@ -562,22 +563,19 @@
 					[!([make_table (
 						multiple_titles ([[], [], [], ['axis']], [
 							'Axis limits',
-							'Switch pos (mm)',
+							'Park pos (mm)',
 							'Axis min (mm)',
-							'Axis max (mm)',
-							'Park pos (mm)'
+							'Axis max (mm)'
 						], [
 							'blocktitle',
 							'floattitle setup',
 							'floattitle setup delta',
-							'floattitle setup delta',
-							'floattitle setup'
+							'floattitle setup delta'
 						], [
 							null,
-							'Position of the limit switch.',
+							'Park position of the axis.',
 							'Minimum value that the axis may move to.',
-							'Maximum value that the axis may move to.',
-							'Park position of the axis.'
+							'Maximum value that the axis may move to.'
 						]),
 						multiple ('Limits_axis')
 					).AddClass ('setup')])!]
@@ -585,22 +583,25 @@
 					[!([make_table (
 						multiple_titles ([[], [], [], ['axis']], [
 							'Motor settings',
-							'Rod length (mm)',
-							'Radius (mm)',
+							'Switch pos (mm)',
 							'Motor min (mm)',
-							'Motor max (mm)'
+							'Motor max (mm)',
+							'Rod length (mm)',
+							'Radius (mm)'
 						], [
 							'blocktitle',
-							'floattitle setup delta',
-							'floattitle setup delta',
 							'floattitle setup',
-							'floattitle setup'
+							'floattitle setup',
+							'floattitle setup',
+							'floattitle setup delta',
+							'floattitle setup delta'
 						], [
 							null,
-							'Length of the tie rods, measured between the pivot points.',
-							'Horizontal distance between the pivot points of the tie rods.  Note that this value does not include the effector or carriage offsets.',
+							'Position of the limit switch.',
 							'Minimum value that the motor may move to. (Normally 0.)',
-							'Maximum value that the motor may move to. (Normally equal to rod length.)'
+							'Maximum value that the motor may move to. (Normally equal to rod length.)',
+							'Length of the tie rods, measured between the pivot points.',
+							'Horizontal distance between the pivot points of the tie rods.  Note that this value does not include the effector or carriage offsets.'
 						]),
 						multiple ('Delta_axis')
 					).AddClass ('setup')])!]
@@ -665,8 +666,8 @@
 						multiple ('Pins_extruder'),
 						multiple ('Pins_temp'),
 						multiple ('Pins_gpio')).AddClass ('setup')]
-						[$(Pin ['LED pin', [null, 'led_pin']])$]
-						[$(Pin ['Probe pin', [null, 'probe_pin']])$]
+						[$(Pin ['LED', [null, 'led_pin']])$]
+						[$(Pin ['Probe', [null, 'probe_pin']])$]
 					)!]
 					[$(Button ['Save settings to EEPROM', 'save_all', 'expert'])$]
 					[$(Button ['Restore settings from EEPROM', 'load_all', 'expert'])$]

@@ -60,7 +60,7 @@ function init() { // {{{
 	}
 	var items = ['tweak', 'expert', 'setup'];
 	for (var i = 0; i < items.length; ++i)
-		switch_show (document.getElementById (items[i] + 'box').checked, items[i]);
+		switch_show(document.getElementById(items[i] + 'box').checked, items[i]);
 } // }}}
 
 function make_id(printer, id, extra) { // {{{
@@ -179,9 +179,9 @@ function upload_buttons(port, buttons) { // {{{
 	for (var b = 0; b < buttons.length; ++b) {
 		var button = ret.AddElement('li').AddElement('button');
 		button.type = 'button';
-		button.target = buttons[b][0]
+		button.target = buttons[b][0];
 		button.onclick = function() {
-			rpc.call ('upload', [port, this.target], {}, function(ret) { alert('upload done: ' + ret);});
+			rpc.call('upload', [port, this.target], {}, function(ret) { alert('upload done: ' + ret);});
 		};
 		button.AddText(buttons[b][1]);
 	}
@@ -258,7 +258,7 @@ function queue_print() { // {{{
 }
 // }}}
 
-function queue_mill () { // {{{
+function queue_mill() { // {{{
 	var q = get_queue();
 	selected_printer.call('get_axis_pos', [0], {}, function(x) {
 		selected_printer.call('get_axis_pos', [1], {}, function(y) {
@@ -597,8 +597,8 @@ function update_choice(id) { // {{{
 function update_toggle(id) { // {{{
 	var v = get_value(printer, id);
 	var e = get_element(printer, id);
-	e.ClearAll ();
-	e.AddText (e.value[Number(v)]);
+	e.ClearAll();
+	e.AddText(e.value[Number(v)]);
 } // }}}
 
 function update_pin(id) { // {{{
@@ -973,7 +973,7 @@ function redraw_canvas(x, y) { // {{{
 			var k = (dx1 * (x1 - x0) + dy1 * (y1 - y0)) / (dx1 * dx1 + dy1 * dy1);
 			var t = s * Math.sqrt(r * r - (x1 - x0) * (x1 - x0) - (y1 - y0) * (y1 - y0) + k * k) - k;
 			return [x1 + t * dx1, y1 + t * dy1];
-		}
+		};
 		var angles = [[null, null], [null, null], [null, null]];
 		var maxx = 0, maxy = 0;
 		for (var a = 0; a < 3; ++a) {

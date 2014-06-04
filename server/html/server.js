@@ -94,14 +94,15 @@ function _setup_updater() {
 			printers[port] = {
 				'port': port,
 				'namelen': constants[0],
-			       	'maxaxes': constants[1],
-			       	'maxextruders': constants[2],
-			       	'maxtemps': constants[3],
-			       	'maxgpios': constants[4],
-			       	'audio_fragments': constants[5],
-			       	'audio_fragment_size': constants[6],
-			       	'num_digital_pins': constants[7],
-			       	'num_pins': constants[8],
+				'queue_length': constants[1],
+				'maxaxes': constants[2],
+				'maxextruders': constants[3],
+				'maxtemps': constants[4],
+				'maxgpios': constants[5],
+				'audio_fragments': constants[6],
+				'audio_fragment_size': constants[7],
+				'num_digital_pins': constants[8],
+				'num_pins': constants[9],
 				'name': '',
 				'num_axes': 0,
 				'num_extruders': 0,
@@ -136,17 +137,17 @@ function _setup_updater() {
 						'sleeping': true
 					},
 					'limit_min_pin': 0,
-				       	'limit_max_pin': 0,
-				       	'sense_pin': 0,
-				       	'limit_pos': 0,
-				       	'axis_min': 0,
-				       	'axis_max': 0,
-				       	'motor_min': 0,
-				       	'motor_max': 0,
-				       	'park': 0,
-				       	'delta_length': 0,
-				       	'delta_radius': 0,
-				       	'offset': 0
+					'limit_max_pin': 0,
+					'sense_pin': 0,
+					'limit_pos': 0,
+					'axis_min': 0,
+					'axis_max': 0,
+					'motor_min': 0,
+					'motor_max': 0,
+					'park': 0,
+					'delta_length': 0,
+					'delta_radius': 0,
+					'offset': 0
 				});
 			}
 			for (var i = 0; i < printers[port].maxextruders; ++i) {
@@ -179,8 +180,8 @@ function _setup_updater() {
 						'value': 0
 					},
 					'filament_heat': 0,
-				       	'nozzle_size': 0,
-				       	'filament_size': 0
+					'nozzle_size': 0,
+					'filament_size': 0
 				});
 			}
 			for (var i = 0; i < printers[port].maxtemps; ++i) {
@@ -203,9 +204,9 @@ function _setup_updater() {
 			for (var i = 0; i < printers[port].maxgpios; ++i) {
 				printers[port].gpio.push({
 					'pin': 0,
-				       	'state': 0,
-				       	'master': 0,
-				       	'value': 0
+					'state': 0,
+					'master': 0,
+					'value': 0
 				});
 			}
 			printers[port].call = function(name, a, ka, reply) {
@@ -346,8 +347,8 @@ function register_update(name, cb) {
 		_updates[name] = [];
 	_updates[name].push(cb);
 	return function() {
-	       var pos = _updates[name].indexOf(cb);
-	       _updates[name].splice(pos, 1);
+		var pos = _updates[name].indexOf(cb);
+		_updates[name].splice(pos, 1);
 	};
 }
 // }}}

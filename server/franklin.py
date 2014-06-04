@@ -152,7 +152,7 @@ class Connection: # {{{
 		else:
 			raise ValueError('board type not supported')
 		data = ['']
-		process = subprocess.Popen([config['avrdude'], '-q', '-q', '-V', '-c', protocol, '-b', baudrate, '-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+		process = subprocess.Popen([config['avrdude'], '-q', '-q', '-V', '-c', protocol, '-b', baudrate, '-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
 		def output(fd, cond):
 			data[0] += process.stdout.read()
 			if data[0] != '':
@@ -593,9 +593,7 @@ class Port: # {{{
 			old[:] = [x for x in orphans if orphans[x].name == self.name]
 			if len(old) > 0:
 				orphans[old[0]].call('export_settings', (), {}, get_settings)
-		def get_constants(success, constants):
-			self.call('send_printer', [None], {}, lambda success, data: self.call('get_variables', (), {}, get_vars))
-		self.call('get_constants', (), {}, get_constants)
+		self.call('send_printer', [None], {}, lambda success, data: self.call('get_variables', (), {}, get_vars))
 	# }}}
 	def call(self, name, args, kargs, cb): # {{{
 		data = json.dumps([self.next_mid, name, args, kargs]) + '\n'
@@ -726,7 +724,7 @@ def detect(port): # {{{
 			log('accepting unknown printer on port %s (id was %s)' % (port, repr(id[0])))
 			id[0] = nextid()
 			log('new id %s' % repr(id[0]))
-			process = subprocess.Popen((config['printercmd'], port, config['audiodir'], id[0]), stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+			process = subprocess.Popen((config['printercmd'], port, config['audiodir'], id[0]), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, id[0])
 			# TODO: restore settings of orphan with the same name.
 			return False
@@ -756,7 +754,7 @@ def print_done(port, completed, reason): # {{{
 		cmd = config['done']
 		cmd = cmd.replace('[[STATE]]', 'completed' if completed else 'aborted').replace('[[REASON]]', reason)
 		log('running %s' % cmd)
-		p = subprocess.Popen(cmd, stdout = subprocess.PIPE, shell = True)
+		p = subprocess.Popen(cmd, stdout = subprocess.PIPE, shell = True, close_fds = True)
 		def process_done(fd, cond):
 			data = p.stdout.read()
 			if data:

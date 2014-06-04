@@ -71,8 +71,6 @@ void packet ()
 		}
 		// If a new goto is sent while paused; we discard the current buffer.
 		if (pause_all) {
-			//debug ("flushing for move while pausing");
-			flush_queue ();
 #ifdef AUDIO
 			audio_start += micros () - pause_time;
 #endif
@@ -158,8 +156,6 @@ void packet ()
 		}
 		// If a run is sent while paused; we discard the current buffer.
 		if (pause_all) {
-			//debug ("flushing for run while pausing");
-			flush_queue ();
 #ifdef AUDIO
 			audio_start += micros () - pause_time;
 #endif
@@ -231,17 +227,9 @@ void packet ()
 		}
 		if (moving_motor (which))
 		{
-			if (pause_all)
-			{
-				//debug ("flushing for sleep while pausing");
-				flush_queue ();
-			}
-			else
-			{
-				debug ("Sleeping moving axis %d", which - 2);
-				Serial.write (CMD_STALL);
-				return;
-			}
+			debug ("Sleeping moving axis %d", which - 2);
+			Serial.write (CMD_STALL);
+			return;
 		}
 		if (command[2] & 0x80) {
 			RESET (motors[which]->enable_pin);
@@ -546,6 +534,9 @@ void packet ()
 		debug ("CMD_PAUSE");
 #endif
 		last_active = millis ();
+		reply[0] = 3;
+		reply[1] = CMD_QUEUE;
+		reply[2] = queue_full ? QUEUE_LENGTH : (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH;
 		if (command[2]) {
 			if (!pause_all)
 				pause_time = micros ();
@@ -566,8 +557,16 @@ void packet ()
 #endif
 			}
 		}
-		pause_all = command[2] != 0;
+		pause_all = bool (command[2]);
 		write_ack ();
+		pause_all = false;
+		queue_start = 0;
+		queue_end = 0;
+		queue_full = false;
+		//debug ("aborting while flushing");
+		abort_move ();
+		reply_ready = true;
+		try_send_next ();
 		return;
 	}
 	case CMD_PING:

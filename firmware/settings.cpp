@@ -10,6 +10,7 @@ void Constants::save (int16_t &addr, bool eeprom)
 {
 	// This should never be called with eeprom true, but if it is, don't write to eeprom anyway.
 	write_8 (addr, NAMELEN, false);
+	write_8 (addr, QUEUE_LENGTH, false);
 	write_8 (addr, MAXAXES, false);
 	write_8 (addr, MAXEXTRUDERS, false);
 	write_8 (addr, MAXTEMPS, false);

@@ -105,7 +105,7 @@ enum Command {
 	CMD_SAVE,	// 1 byte: which channel.
 	CMD_READ,	// 1 byte: which channel.  Reply: DATA.
 	CMD_WRITE,	// 1 byte: which channel; n bytes: data.
-	CMD_PAUSE,	// 1 byte: 0: not pause; 1: pause.
+	CMD_PAUSE,	// 1 byte: 0: not pause; 1: pause.  Reply: QUEUE.
 	CMD_READGPIO,	// 1 byte: which channel. Reply: GPIO.
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_bit.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
@@ -118,6 +118,7 @@ enum Command {
 	CMD_DATA,	// n byte: requested data.
 	CMD_PONG,	// 1 byte: PING argument.
 	CMD_PIN,	// 1 byte: 0 or 1: pin state.
+	CMD_QUEUE,	// 1 byte: current number of records in queue.
 		// asynchronous events.
 	CMD_MOVECB,	// 1 byte: number of movecb events.
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
@@ -365,6 +366,7 @@ EXTERN unsigned long audio_start;
 EXTERN uint16_t audio_us_per_bit;
 #endif
 EXTERN unsigned long start_time;
+EXTERN long freeze_time;
 EXTERN long t0, tp, tq;
 EXTERN bool moving;
 EXTERN float v0, vp, vq, f0;
@@ -387,7 +389,6 @@ void write_ackwait ();
 // move.cpp
 void next_move ();
 void abort_move ();
-void flush_queue ();
 void reset_pos ();
 
 // setup.cpp
@@ -418,29 +419,6 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float dz = target[2] - axis[a].z;
 	float r2 = dx * dx + dy * dy;
 	float l2 = axis[a].delta_length * axis[a].delta_length;
-	if (r2 > axis[a].axis_max * axis[a].axis_max) {
-		*ok = false;
-		//debug ("not ok: %f %f %f %f %f %f %f", &target[0], &target[1], &dx, &dy, &r2, &l2, &axis[a].delta_length);
-		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
-		// target = axis + (target - axis) * (l - epsilon) / r.
-		float factor = axis[a].axis_max / sqrt (r2);
-		target[0] = axis[a].x + (target[0] - axis[a].x) * factor;
-		target[1] = axis[a].y + (target[1] - axis[a].y) * factor;
-		return 0;
-	}
-	// Inner product shows if projection is inside or outside the printable region.
-	float projection = -(dx * axis[a].x + dy * axis[a].y) / axis[a].delta_radius;
-	if (projection < axis[a].axis_min) {
-		*ok = false;
-		//debug ("not ok: %f %f %f %f %f", &inner, &dx, &dy, &axis[a].x, &axis[a].y);
-		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
-		target[0] -= (axis[a].axis_min - projection - .001) / axis[a].delta_radius * axis[a].x;
-		target[1] -= (axis[a].axis_min - projection - .001) / axis[a].delta_radius * axis[a].y;
-		// Assume this was a small correction; that way, things will work even if numerical errors cause this to be called for the real move.
-		dx = target[0] - axis[a].x;
-		dy = target[1] - axis[a].y;
-		r2 = dx * dx + dy * dy;
-	}
 	float dest = sqrt (l2 - r2) + dz;
 	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", &dx, &dy, &dz, &axis[a].z, &r, &target);
 	return dest * axis[a].motor.steps_per_mm;

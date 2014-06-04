@@ -8,6 +8,7 @@ export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector
 
 override_dh_auto_build:
 	dh_auto_build
+	${MAKE} -C server/html
 	ronn -r server/franklin.8.ronn
 	sed -i -e 's/^.*MELZI=.*$$/MELZI=true/' firmware/Makefile
 	sed -i -e 's/^.*MEGA=.*$$/#MEGA=true/' firmware/Makefile

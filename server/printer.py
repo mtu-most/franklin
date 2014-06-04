@@ -34,8 +34,6 @@ def dprint(x, data): # {{{
 
 # Sentinel for blocking functions.
 WAIT = object()
-# Message for aborting a move; used in goto, checked in _print_done
-ABORT_REASON = 'Aborted by other command.'
 
 # Decorator for functions which block.
 class delayed: # {{{
@@ -66,13 +64,15 @@ class Printer: # {{{
 		while self.printer.read() != '':
 			pass
 		self.home_phase = None
-		self.home_protect = False
 		self.home_cb = [False, self._do_home]
 		self.probe_cb = [False, None]
 		self.gcode = None
 		self.gcode_id = None
 		self.gcode_wait = None
 		self.queue = []
+		self.queue_pos = 0
+		self.queue_info = None
+		self.resuming = False
 		self.flushing = False
 		self.initialized = False
 		self.debug_buffer = None
@@ -140,7 +140,7 @@ class Printer: # {{{
 		# Get the printer state.
 		self.printerid = newid
 		self._begin(newid)
-		self.namelen, self.maxaxes, self.maxextruders, self.maxtemps, self.maxgpios, self.audio_fragments, self.audio_fragment_size, self.num_pins, self.num_digital_pins = struct.unpack('<BBBBBBBBB', self._read(0))
+		self.namelen, self.queue_length, self.maxaxes, self.maxextruders, self.maxtemps, self.maxgpios, self.audio_fragments, self.audio_fragment_size, self.num_pins, self.num_digital_pins = struct.unpack('<BBBBBBBBBB', self._read(0))
 		self._read_variables()
 		self.axis = [Printer.Axis(self, t) for t in range(self.maxaxes)]
 		for a in range(self.maxaxes):
@@ -213,12 +213,13 @@ class Printer: # {{{
 			'DATA': '\x18',
 			'PONG': '\x19',
 			'PIN': '\x1a',
-			'MOVECB': '\x1b',
-			'TEMPCB': '\x1c',
-			'CONTINUE': '\x1d',
-			'LIMIT': '\x1e',
-			'AUTOSLEEP': '\x1f',
-			'SENSE': '\x20'}
+			'QUEUE': '\x1b',
+			'MOVECB': '\x1c',
+			'TEMPCB': '\x1d',
+			'CONTINUE': '\x1e',
+			'LIMIT': '\x1f',
+			'AUTOSLEEP': '\x20',
+			'SENSE': '\x21'}
 	# }}}
 	def _broadcast(self, *a): # {{{
 		self._send(None, 'broadcast', *a)
@@ -459,7 +460,7 @@ class Printer: # {{{
 					# the queue by doing a goto.
 					if not self.paused:
 						#log('resuming queue %d' % len(self.queue))
-						self._do_queue()
+						call_queue.append((self._do_queue, []))
 				else:
 					# Audio continue.
 					self.waitaudio = False
@@ -612,6 +613,7 @@ class Printer: # {{{
 					continue
 				elif (not self.ff_out and ack[1] in ('ack0', 'wait0')) or (self.ff_out and ack[1] in ('ack1', 'wait1')):
 					log('wrong ack response waiting for ack')
+					traceback.print_stack()
 					maxtries -= 1
 					continue
 				elif ack[1] in ('ack0', 'ack1'):
@@ -884,21 +886,20 @@ class Printer: # {{{
 		self._print_done(True, 'completed')
 	# }}}
 	def _print_done(self, complete, reason): # {{{
-		if self.home_phase is not None and self.home_protect and not complete and reason == ABORT_REASON:
-			# Protection only works once.
-			self.home_protect = False
-			return
-		if self.gcode_id is not None:
+		if self.queue_info is None and self.gcode_id is not None:
 			log('done %d %s' % (complete, reason))
 			self._send(self.gcode_id, 'return', (complete, reason))
-		self.gcode_id = None
-		self.gcode = []
-		self.flushing = False
-		self.gcode_wait = None
-		while len(self.queue) > 0:
-			id, axes, e, f0, f1, which, cb = self.queue.pop(0)
+			self.gcode_id = None
+			self.gcode = []
+			self.flushing = False
+			self.gcode_wait = None
+		while self.queue_pos < len(self.queue):
+			id, axes, e, f0, f1, which, cb = self.queue[self.queue_pos]
+			self.queue_pos += 1
 			if id is not None:
 				self._send(id, 'error', 'aborted')
+			self.queue = []
+			self.queue_pos = 0
 		if self.home_phase is not None:
 			#log('killing homer')
 			self.home_phase = None
@@ -907,12 +908,24 @@ class Printer: # {{{
 				self.movecb.remove(self.home_cb)
 				self._send(self.home_id, 'return', None)
 		if self.probe_cb in self.movecb:
+			#log('killing prober')
 			self.movecb.remove(self.probe_cb)
 			self.probe_cb(False)
 	# }}}
 	def _do_queue(self): # {{{
-		while (not self.wait or self.paused) and len(self.queue) > 0:
-			id, axes, e, f0, f1, which, cb = self.queue.pop(0)
+		log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
+		while not self.wait and (self.queue_pos < len(self.queue) or (self.resuming and self.queue_info[0] < len(self.queue_info[2]))):
+			if self.queue_pos >= len(self.queue):
+				log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
+				self.queue = self.queue_info[2]
+				self.queue_pos = self.queue_info[0]
+				self.movecb = self.queue_info[3]
+				self.flushing = self.queue_info[4]
+				self.gcode_wait = self.queue_info[5]
+				self.resuming = False
+				self.queue_info = None
+			id, axes, e, f0, f1, which, cb = self.queue[self.queue_pos]
+			self.queue_pos += 1
 			a = {}
 			if isinstance(axes,(list, tuple)):
 				for i, axis in enumerate(axes):
@@ -969,7 +982,7 @@ class Printer: # {{{
 				self._send(id, 'return', None)
 	# }}}
 	def _do_home(self, done = None): # {{{
-		#log('do_home: %s %s' % (self.home_phase, done))
+		log('do_home: %s %s' % (self.home_phase, done))
 		# 0: move to max limit switch or find sense switch.
 		# 1: move to min limit switch or find sense switch.
 		# 2: back off.
@@ -1008,7 +1021,6 @@ class Printer: # {{{
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				self.home_protect = True
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			self.home_phase = 1
@@ -1019,7 +1031,6 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				self.home_protect = True
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			# Fall through.
@@ -1034,7 +1045,6 @@ class Printer: # {{{
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				self.home_protect = True
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
@@ -1051,7 +1061,6 @@ class Printer: # {{{
 			if len(target) > 0:
 				self.home_cb[0] = False
 				self.movecb.append(self.home_cb)
-				self.home_protect = True
 				self.goto(target, cb = True)[1](None)
 				return
 			# Fall through
@@ -1069,7 +1078,6 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				self.home_protect = True
 				self.goto(self.home_target, f0 = self.home_speed, cb = True)[1](None)
 				return
 			# Fall through
@@ -1084,7 +1092,6 @@ class Printer: # {{{
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				self.home_protect = True
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
@@ -1107,7 +1114,6 @@ class Printer: # {{{
 				if not math.isnan(target):
 					self.home_cb[0] = False
 					self.movecb.append(self.home_cb)
-					self.home_protect = True
 					self.goto([target - self.axis[a].offset for a in range(self.num_axes)], cb = True)[1](None)
 					return
 			# Fall through.
@@ -1170,6 +1176,11 @@ class Printer: # {{{
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, angle, speed, 0, good)
 			self.movecb.append(self.probe_cb)
 			self.goto({2: 3}, cb = True)[1](None)
+	# }}}
+	def _queue_flushed(self): # {{{
+		self.movewait = 0
+		self.paused = False
+		self._variables_update()
 	# }}}
 	# Subclasses.  {{{
 	class Temp: # {{{
@@ -1255,10 +1266,9 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, axes = {}, e = None, f0 = None, f1 = None, which = 0, cb = False): # {{{
-		#log('goto %s' % repr(axes))
+		log('goto %s' % repr(axes))
 		if self.paused:
-			# Flush queue.
-			self._print_done(False, ABORT_REASON)
+			self._queue_flushed()
 		self.queue.append((id, axes, e, f0, f1, which, cb))
 		if not self.wait:
 			self._do_queue()
@@ -1289,12 +1299,9 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	def sleep(self, channel, sleeping = True): # {{{
-		if sleeping:
-			self._print_done(False, 'aborted by putting a motor to sleep')
-		channel = int(channel)
 		if self.paused:
-			self.paused = False
-			self._variables_update()
+			self._queue_flushed()
+		channel = int(channel)
 		if channel >= 2 and channel < 2 + self.maxaxes:
 			self.axis[channel - 2].motor.sleeping = sleeping
 			if sleeping:
@@ -1449,13 +1456,40 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	def pause(self, pausing = True): # {{{
+		was_paused = self.paused
 		if not self._send_packet(struct.pack('<BB', self.command['PAUSE'], pausing)):
 			return False
+		reply = struct.unpack('<BB', self._get_reply())
+		if reply[0] != ord(self.rcommand['QUEUE']):
+			log('invalid reply to pause command')
+			return False
 		self.paused = pausing
+		self.wait = False
 		self._variables_update()
+		log('pause %d %d %d' % (pausing, was_paused, reply[1]))
 		if not self.paused:
+			if was_paused:
+				# Go back to pausing position.
+				self.goto(self.queue_info[1])
+				# TODO: adjust extrusion of current segment to shorter path length.
+				log('resuming')
+				self.resuming = True
 			self._do_queue()
-		return True
+		else:
+			if not was_paused and self.queue_info is None and len(self.queue) > 0:
+				self.queue_info = [self.queue_pos - reply[1], [a.get_current_pos() for a in self.axis], self.queue, self.movecb, self.flushing, self.gcode_wait]
+				self.queue = []
+				self.movecb = []
+				self.flushing = False
+				self.gcode_wait = None
+				self.queue_pos = 0
+		return reply[1]
+	# }}}
+	def queued(self): # {{{
+		# From the caller, doing this would be a race condition.  Here
+		# it isn't, because this is the single-threaded manager of the
+		# printer.
+		return self.pause(self.paused)
 	# }}}
 	def ping(self, arg = 0): # {{{
 		if not self._send_packet(struct.pack('<BB', self.command['PING'], arg)):
@@ -1466,9 +1500,6 @@ class Printer: # {{{
 	@delayed
 	def home(self, id, speed = 5, cb = None): # {{{
 		#log('homing')
-		# id None means it is initiated by gcode.
-		if id is not None:
-			self._print_done(False, 'Aborted by homing')
 		self.home_id = id
 		self.home_speed = speed
 		self.home_done_cb = cb
@@ -1708,6 +1739,7 @@ class Printer: # {{{
 		else:
 			self.btemp = float('nan')
 		self._print_done(False, 'aborted by starting new print')
+		self.queue_info = None
 		self.gcode = code
 		self.gcode_id = id
 		if len(self.gcode) <= 0:
@@ -1767,7 +1799,7 @@ class Printer: # {{{
 	# Constants and variables. {{{
 	def get_constants(self):
 		ret = {}
-		for key in ('namelen', 'audio_fragments', 'audio_fragment_size', 'maxaxes', 'maxextruders', 'maxtemps', 'maxgpios', 'num_pins', 'num_digital_pins'):
+		for key in ('namelen', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'maxaxes', 'maxextruders', 'maxtemps', 'maxgpios', 'num_pins', 'num_digital_pins'):
 			ret[key] = getattr(self, key)
 		return ret
 	def get_variables(self):
@@ -1843,7 +1875,7 @@ class Printer: # {{{
 		assert len(ka) == 0
 	# }}}
 	def send_printer(self, target): # {{{
-		self._broadcast(target, 'new_printer', [self.namelen, self.maxaxes, self.maxextruders, self.maxtemps, self.maxgpios, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_pins])
+		self._broadcast(target, 'new_printer', [self.namelen, self.queue_length, self.maxaxes, self.maxextruders, self.maxtemps, self.maxgpios, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_pins])
 		self._variables_update(target)
 		for a in range(self.maxaxes):
 			self._axis_update(a, target)
