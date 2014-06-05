@@ -294,6 +294,7 @@ function new_port(port) { // {{{
 function new_printer() { // {{{
 	printer.reference = [0, 0];
 	printer.local_angle = 0;
+	printer.lock = null;
 	visibles[port] = {titles: [], axis: make_visibles(printer.maxaxes), extruder: make_visibles(printer.maxextruders), temp: make_visibles(printer.maxtemps), gpio: make_visibles(printer.maxgpios)};
 	ports[port][2] = get_elements(build('Printer', [port]))[0];
 	printers_element.Add(ports[port][2]);

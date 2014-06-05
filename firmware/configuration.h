@@ -13,7 +13,7 @@
 #define NAMELEN 32
 
 // Maximum number of move commands in the queue.
-#define QUEUE_LENGTH 64
+#define QUEUE_LENGTH 20
 
 // Maximum number of axes, extruders, temps and gpios.  You can use less than
 // what you define here, not more.  It is a good idea to have a setting here
