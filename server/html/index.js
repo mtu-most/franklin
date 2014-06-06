@@ -403,7 +403,7 @@ function update_variables() { // {{{
 	update_choice([null, 'printer_type']);
 	update_pin([null, 'led_pin']);
 	update_pin([null, 'probe_pin']);
-	update_float([null, 'room_T']);
+	//update_float([null, 'room_T']);
 	update_float([null, 'motor_limit']);
 	update_float([null, 'temp_limit']);
 	update_float([null, 'feedrate']);
@@ -495,9 +495,9 @@ function update_extruder(index) { // {{{
 		return;
 	update_motor([['extruder', 'motor'], index]);
 	update_tempcontent([['extruder', 'temp'], index]);
-	update_float([['extruder', index], 'filament_heat']);
-	update_float([['extruder', index], 'nozzle_size']);
-	update_float([['extruder', index], 'filament_size']);
+	//update_float([['extruder', index], 'filament_heat']);
+	//update_float([['extruder', index], 'nozzle_size']);
+	//update_float([['extruder', index], 'filament_size']);
 } // }}}
 
 function update_temp(index) { // {{{
@@ -564,11 +564,11 @@ function update_tempcontent(id) { // {{{
 	update_float([id, 'Rc']);
 	update_float([id, 'Tc']);
 	update_float([id, 'beta']);
-	update_float([id, 'core_C']);
-	update_float([id, 'shell_C']);
-	update_float([id, 'transfer']);
-	update_float([id, 'radiation']);
-	update_float([id, 'power']);
+	//update_float([id, 'core_C']);
+	//update_float([id, 'shell_C']);
+	//update_float([id, 'transfer']);
+	//update_float([id, 'radiation']);
+	//update_float([id, 'power']);
 	update_float([id, 'value', 'settemp']);
 } // }}}
 

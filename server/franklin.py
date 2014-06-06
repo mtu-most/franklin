@@ -729,7 +729,7 @@ def detect(port): # {{{
 			# TODO: restore settings of orphan with the same name.
 			return False
 		printer.write(single['ID'])
-		timeout_handle = glib.timeout_add(10000, timeout)
+		timeout_handle = glib.timeout_add(15000, timeout)
 		watcher = glib.io_add_watch(printer.fileno(), glib.IO_IN, boot_printer_input)
 	glib.timeout_add(150, part2)
 # }}}

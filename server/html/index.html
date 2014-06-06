@@ -242,21 +242,21 @@
 			<div id='Limits_axis'> <!-- {{{ -->
 				[!(
 				// args = index
-				[make_tablerow (axis_name (args[0], true), elements, ['rowtitle setup', ['setup delta', 'setup delta', 'setup']], 'setup')]
+				[make_tablerow (axis_name (args[0], true), elements, ['rowtitle setup', ['setup', 'setup delta', 'setup delta']], 'setup')]
+				<div>[$(Float [[['axis', args[0]], 'park'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'axis_min'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'axis_max'], 1, 'setup'])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'park'], 1, 'setup'])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Delta_axis'> <!-- {{{ -->
 				[!(
 				// args = index
-				[make_tablerow (axis_name (args[0], false), elements, ['rowtitle expert', ['setup', 'expert delta', 'expert delta', 'setup', 'setup']], 'expert')]
+				[make_tablerow (axis_name (args[0], false), elements, ['rowtitle expert', ['setup', 'setup', 'setup', 'setup delta', 'setup delta']], 'expert')]
 				<div>[$(Float [[['axis', args[0]], 'limit_pos'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_min'], 1, 'setup'])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_max'], 1, 'setup'])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'delta_length'], 1, 'expert delta'])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'delta_radius'], 1, 'expert delta'])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'delta_length'], 1, 'setup delta'])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'delta_radius'], 1, 'setup delta'])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Move_axis'> <!-- {{{ -->
@@ -333,15 +333,12 @@
 					var value = Number (get_element (this.printer, [['extruder', this.index], 'move']).value);
 					this.printer.call ('goto', [], {e: -value, which: this.index});
 				}, false),
-				[make_tablerow (extruder_name (args[0]), [[elements[0], elements[1], elements[2]], elements[3], elements[4], elements[5], elements[6], elements[7]], ['rowtitle', args[1]])]
+				[make_tablerow (extruder_name (args[0]), [[elements[0], elements[1], elements[2]], elements[3], elements[4]], ['rowtitle', args[1]])]
 				<input type='text'/>
 				<button class='button' type='button'>Extrude</button>
 				<button class='button' type='button'>Retract</button>
 				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'max_v'], 1, 'expert'])$]</div>
 				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'max_a'], 1, 'expert'])$]</div>
-				<div>[$(Float [[['extruder', args[0]], 'filament_heat'], 1, 'expert'])$]</div>
-				<div>[$(Float [[['extruder', args[0]], 'nozzle_size'], 1, 'expert'])$]</div>
-				<div>[$(Float [[['extruder', args[0]], 'filament_size'], 1, 'expert'])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Pins_extruder'> <!-- {{{ -->
@@ -424,7 +421,6 @@
 							<th class='floattitle tweak'>Feedrate (%)</th>
 							<th class='floattitle setup'>Angle</th>
 							<th class='choicetitle setup'>Printer type</th>
-							<th class='floattitle setup'>Room T (°C)</th>
 							<th class='floattitle expert'>Motor timeout (s)</th>
 							<th class='floattitle expert'>Temp timeout (s)</th>
 						</tr>
@@ -433,7 +429,6 @@
 							<td class='tweak'>[$(Float [[null, 'feedrate'], .01])$]</td>
 							<td class='setup'>[$(Float [[null, 'angle'], 1])$]</td>
 							<td class='setup'>[$(Choice [[null, 'printer_type'], ['Cartesian', 'Delta'], undefined, ['nodelta', null]])$]</td>
-							<td class='setup'>[$(Float [[null, 'room_T'], 1])$]</td>
 							<td class='expert'>[$(Float [[null, 'motor_limit'], 1000])$]</td>
 							<td class='expert'>[$(Float [[null, 'temp_limit'], 1000])$]</td>
 						</tr>
@@ -498,28 +493,19 @@
 							'Extruder setup',
 							'Extrude (mm)',
 							'Max v (mm/s)',
-							'Max a (mm/s²)',
-							'Filament heat (J/mmK)',
-							'Nozzle diameter (mm)',
-							'Filament diameter (mm)'
+							'Max a (mm/s²)'
 						], [
 							'blocktitle',
 							'inputtitle tweak',
 							'floattitle expert',
-							'floattitle expert',
-							'floattitle setup',
-							'floattitle setup',
-							'floattitle setup'
+							'floattitle expert'
 						], [
 							null,
 							'Extrude or retract a length of filament.',
 							'Maximum speed that the extruder will try to move.',
-							'Maximum acceleration that the extruder is trying to use while speeding up or slowing down.',
-							'Amount of heat that increases the temperature of 1 mm of filament by 1 K.',
-							'Diameter of the nozzle.',
-							'Diameter of the filament.'
+							'Maximum acceleration that the extruder is trying to use while speeding up or slowing down.'
 						]),
-						multiple ('Setup_extruder', ['tweak', 'expert', 'expert', 'setup', 'setup', 'setup'])
+						multiple ('Setup_extruder', ['tweak', 'expert', 'expert'])
 					).AddClass ('tweak')])!]
 
 					[!([make_table (
@@ -631,34 +617,6 @@
 						]),
 						multiple ('Temp_components_extruder', 'setup'),
 						multiple ('Temp_components_temp', 'setup')
-					).AddClass ('setup')])!]
-
-					[!([make_table (
-						multiple_titles ([[], [], [], ['extruder', 'temp']], [
-							'Temp calibration',
-							'Core C (J/K)',
-							'Shell C (J/K)',
-							'Transfer (W/K)',
-							'Radiation (W/K⁴)',
-							'Power (W)'
-						], [
-							'blocktitle',
-							'floattitle',
-							'floattitle',
-							'floattitle',
-							'floattitle',
-							'floattitle',
-							'floattitle'
-						], [
-							null,
-							'Heat capacity of the core.',
-							'Heat capacity of the shell.',
-							'Thermal conductivity between the core and the shell.',
-							'Radiation of the shell.',
-							'Maximum power of the heater.'
-						]),
-						multiple ('Temp_calibration_extruder', 'setup'),
-						multiple ('Temp_calibration_temp', 'setup')
 					).AddClass ('setup')])!]
 
 					[!([make_table (elements[0], elements[1],

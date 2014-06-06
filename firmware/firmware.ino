@@ -57,7 +57,8 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 #endif
 	// If we don't have model settings, simply use the target as a switch between on and off.
 #ifndef LOWMEM
-	if (isnan (temps[temp_current]->core_C) || isnan (temps[temp_current]->shell_C) || isnan (temps[temp_current]->transfer) || isnan (temps[temp_current]->radiation))
+	// Don't use those values yet.
+	if (true || isnan (temps[temp_current]->core_C) || isnan (temps[temp_current]->shell_C) || isnan (temps[temp_current]->transfer) || isnan (temps[temp_current]->radiation))
 #else
 	if (true)
 #endif

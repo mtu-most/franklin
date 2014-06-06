@@ -1774,9 +1774,12 @@ class Printer: # {{{
 			ret[key] = getattr(obj, key)
 		return ret
 	def _set_motor(self, obj, ka):
-		for key in ('step_pin', 'dir_pin', 'enable_pin', 'steps_per_mm', 'limit_v', 'max_v', 'max_a', 'max_steps'):
+		for key in ('step_pin', 'dir_pin', 'enable_pin', 'max_steps'):
 			if key in ka:
-				setattr(obj, key, ka.pop(key))
+				setattr(obj, key, int(ka.pop(key)))
+		for key in ('steps_per_mm', 'limit_v', 'max_v', 'max_a'):
+			if key in ka:
+				setattr(obj, key, float(ka.pop(key)))
 		assert len(ka) == 0
 	# }}}
 	# Temp subtype {{{
@@ -1786,9 +1789,12 @@ class Printer: # {{{
 			ret[key] = getattr(obj, key)
 		return ret
 	def _set_temp(self, obj, ka):
-		for key in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'core_C', 'shell_C', 'transfer', 'radiation', 'power', 'power_pin', 'thermistor_pin'):
+		for key in ('power_pin', 'thermistor_pin'):
 			if key in ka:
-				setattr(obj, key, ka.pop(key))
+				setattr(obj, key, int(ka.pop(key)))
+		for key in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'core_C', 'shell_C', 'transfer', 'radiation', 'power'):
+			if key in ka:
+				setattr(obj, key, float(ka.pop(key)))
 		assert len(ka) == 0
 	# }}}
 	# Constants and variables. {{{
@@ -1804,9 +1810,14 @@ class Printer: # {{{
 		return ret
 	def set_variables(self, **ka):
 		#log('setting variables with %s' % repr(ka))
-		for key in ('name', 'num_axes', 'num_extruders', 'num_temps', 'num_gpios', 'printer_type', 'led_pin', 'probe_pin', 'room_T', 'motor_limit', 'temp_limit', 'feedrate', 'angle'):
+		if 'name' in ka:
+			self.name = str(ka.pop('name'))
+		for key in ('num_axes', 'num_extruders', 'num_temps', 'num_gpios', 'printer_type', 'led_pin', 'probe_pin'):
 			if key in ka:
-				setattr(self, key, ka.pop(key))
+				setattr(self, key, int(ka.pop(key)))
+		for key in ('room_T', 'motor_limit', 'temp_limit', 'feedrate', 'angle'):
+			if key in ka:
+				setattr(self, key, float(ka.pop(key)))
 		self._write_variables()
 		self.pos = (self.pos + [float('nan')] * self.num_axes)[:self.num_axes]
 		assert len(ka) == 0
@@ -1833,9 +1844,12 @@ class Printer: # {{{
 	def set_axis(self, index, **ka):
 		if 'motor' in ka:
 			self._set_motor(self.axis[index].motor, ka.pop('motor'))
-		for key in ('limit_min_pin', 'limit_max_pin', 'sense_pin', 'limit_pos', 'axis_min', 'axis_max', 'motor_min', 'motor_max', 'park', 'delta_length', 'delta_radius', 'offset'):
+		for key in ('limit_min_pin', 'limit_max_pin', 'sense_pin'):
 			if key in ka:
-				setattr(self.axis[index], key, ka.pop(key))
+				setattr(self.axis[index], key, int(ka.pop(key)))
+		for key in ('limit_pos', 'axis_min', 'axis_max', 'motor_min', 'motor_max', 'park', 'delta_length', 'delta_radius', 'offset'):
+			if key in ka:
+				setattr(self.axis[index], key, float(ka.pop(key)))
 		self._write_axis(index)
 		assert len(ka) == 0
 	# }}}
@@ -1852,7 +1866,7 @@ class Printer: # {{{
 			self._set_temp(self.extruder[index].temp, ka.pop('temp'))
 		for key in ('filament_heat', 'nozzle_size', 'filament_size'):
 			if key in ka:
-				setattr(self.extruder[index], key, ka.pop(key))
+				setattr(self.extruder[index], key, float(ka.pop(key)))
 		self._write_extruder(index)
 		assert len(ka) == 0
 	# }}}
@@ -1863,9 +1877,11 @@ class Printer: # {{{
 			ret[key] = getattr(self.gpio[index], key)
 		return ret
 	def set_gpio(self, index, **ka):
-		for key in ('pin', 'state', 'master', 'value'):
+		for key in ('pin', 'state', 'master'):
 			if key in ka:
-				setattr(self.gpio[index], key, ka.pop(key))
+				setattr(self.gpio[index], key, int(ka.pop(key)))
+		if 'value' in ka:
+			self.gpio[index].value = float(ka.pop(key))
 		self._write_gpio(index)
 		assert len(ka) == 0
 	# }}}
