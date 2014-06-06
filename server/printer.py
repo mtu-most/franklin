@@ -424,7 +424,7 @@ class Printer: # {{{
 			# Handle the asynchronous events.
 			if packet[0] == self.rcommand['MOVECB']:
 				num = ord(packet[1])
-				#log('movecb %d/%d (%d in queue)' % (num, self.movewait, len(self.movecb)))
+				log('movecb %d/%d (%d in queue)' % (num, self.movewait, len(self.movecb)))
 				if self.initialized:
 					assert self.movewait >= num
 					self.movewait -= num
@@ -974,9 +974,12 @@ class Printer: # {{{
 			self._send_packet(p + ''.join([chr(t) for t in targets]) + args)
 			if id is not None:
 				self._send(id, 'return', None)
+		if not self.wait:
+			self.queue = []
+			self.queue_pos = 0
 	# }}}
 	def _do_home(self, done = None): # {{{
-		log('do_home: %s %s' % (self.home_phase, done))
+		#log('do_home: %s %s' % (self.home_phase, done))
 		# 0: move to max limit switch or find sense switch.
 		# 1: move to min limit switch or find sense switch.
 		# 2: back off.
@@ -1045,17 +1048,17 @@ class Printer: # {{{
 				log('Warning: not all limits were found during homing')
 			self.home_phase = 2
 			# Back off.
-			target = {}
+			self.home_target = {}
 			for a in range(self.num_axes):
 				self.axis[a].set_current_pos(self.axis[a].limit_pos)
 				if self.pin_valid(self.axis[a].limit_max_pin) or (not self.pin_valid(self.axis[a].limit_min_pin) and self.pin_valid(self.axis[a].sense_pin)):
-					target[a] = self.axis[a].limit_pos - 10 - self.axis[a].offset
+					self.home_target[a] = self.axis[a].limit_pos - 10 - self.axis[a].offset
 				elif self.pin_valid(self.axis[a].limit_min_pin):
-					target[a] = self.axis[a].limit_pos + 10 - self.axis[a].offset
-			if len(target) > 0:
+					self.home_target[a] = self.axis[a].limit_pos + 10 - self.axis[a].offset
+			if len(self.home_target) > 0:
 				self.home_cb[0] = False
 				self.movecb.append(self.home_cb)
-				self.goto(target, cb = True)[1](None)
+				self.goto(self.home_target, cb = True)[1](None)
 				return
 			# Fall through
 		if self.home_phase == 2:
@@ -1442,6 +1445,7 @@ class Printer: # {{{
 		if pausing:
 			if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], True)):
 				return False
+			self.movewait = 0
 			reply = struct.unpack('<BB', self._get_reply())
 			if reply[0] != ord(self.rcommand['QUEUE']):
 				log('invalid reply to queued command')
