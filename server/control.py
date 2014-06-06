@@ -3,7 +3,6 @@
 import websockets
 import os
 
-tls = True
 port = 8080
 
 with open ('/etc/default/franklin') as f:
@@ -15,10 +14,8 @@ with open ('/etc/default/franklin') as f:
 		if key == 'PORT':
 			# Leave it as a string because it need not be numerical.
 			port = value.strip ()
-		if key == 'TLS' and value.strip () == '':
-			tls = False
 
-p = websockets.RPC (port, tls = tls)
+p = websockets.RPC (port)
 action = os.getenv ('ACTION')
 dev = os.getenv ('DEVNAME')
 if action == 'add':
