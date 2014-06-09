@@ -630,6 +630,52 @@ void packet ()
 		return;
 	}
 #endif
+#if SERIAL_BUFFER_SIZE > 0
+	case CMD_SETSERIAL:
+	{
+#ifdef DEBUG_CMD
+		debug ("CMD_SETSERIAL");
+#endif
+		uint8_t port = command[2];
+		if (port <= 0 || port >= NUMSERIALS)
+		{
+			debug ("invalid serial port");
+			Serial.write (CMD_STALL);
+			return;
+		}
+		ReadFloat baud;
+		for (uint8_t t = 0; t < sizeof (uint32_t); ++t)
+			baud.b[t] = command[3 + t];
+		if (baud.i <= 0) {
+			serialactive[port] = false;
+			serialport[port]->end ();
+		}
+		else {
+			serialactive[port] = true;
+			serialport[port]->begin (baud.i);
+		}
+		write_ack ();
+		return;
+	}
+	case CMD_SERIAL_TX:
+	{
+#ifdef DEBUG_CMD
+		debug ("CMD_SERIAL_TX");
+#endif
+		uint8_t port = command[2];
+		if (port <= 0 || port >= NUMSERIALS)
+		{
+			debug ("invalid serial port");
+			Serial.write (CMD_STALL);
+			return;
+		}
+		for (uint8_t i = 3; i < command[0]; ++i) {
+			serialport[port]->write (command[i]);
+		}
+		write_ack ();
+		return;
+	}
+#endif
 	default:
 	{
 		debug ("Invalid command %x %x %x %x", command[0], command[1], command[2], command[3]);

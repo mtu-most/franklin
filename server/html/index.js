@@ -1082,27 +1082,29 @@ function redraw_canvas(x, y) { // {{{
 	c.translate(-r[0], -r[1]);
 
 	c.beginPath();
-	// Draw print bounding box.
-	c.rect(b[0][0], b[1][0], b[0][1] - b[0][0], b[1][1] - b[1][0]);
+	if (b !== undefined) {
+		// Draw print bounding box.
+		c.rect(b[0][0], b[1][0], b[0][1] - b[0][0], b[1][1] - b[1][0]);
 
-	// Draw tick marks.
-	c.moveTo((b[0][1] + b[0][0]) / 2, b[1][0]);
-	c.lineTo((b[0][1] + b[0][0]) / 2, b[1][0] + 5);
+		// Draw tick marks.
+		c.moveTo((b[0][1] + b[0][0]) / 2, b[1][0]);
+		c.lineTo((b[0][1] + b[0][0]) / 2, b[1][0] + 5);
 
-	c.moveTo((b[0][1] + b[0][0]) / 2, b[1][1]);
-	c.lineTo((b[0][1] + b[0][0]) / 2, b[1][1] - 5);
+		c.moveTo((b[0][1] + b[0][0]) / 2, b[1][1]);
+		c.lineTo((b[0][1] + b[0][0]) / 2, b[1][1] - 5);
 
-	c.moveTo(b[0][0], (b[1][1] + b[1][0]) / 2);
-	c.lineTo(b[0][0] + 5, (b[1][1] + b[1][0]) / 2);
+		c.moveTo(b[0][0], (b[1][1] + b[1][0]) / 2);
+		c.lineTo(b[0][0] + 5, (b[1][1] + b[1][0]) / 2);
 
-	c.moveTo(b[0][1], (b[1][1] + b[1][0]) / 2);
-	c.lineTo(b[0][1] - 5, (b[1][1] + b[1][0]) / 2);
+		c.moveTo(b[0][1], (b[1][1] + b[1][0]) / 2);
+		c.lineTo(b[0][1] - 5, (b[1][1] + b[1][0]) / 2);
 
-	// Draw central cross.
-	c.moveTo((b[0][1] + b[0][0]) / 2 - 5, (b[1][1] + b[1][0]) / 2);
-	c.lineTo((b[0][1] + b[0][0]) / 2 + 5, (b[1][1] + b[1][0]) / 2);
-	c.moveTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 + 5);
-	c.lineTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 - 5);
+		// Draw central cross.
+		c.moveTo((b[0][1] + b[0][0]) / 2 - 5, (b[1][1] + b[1][0]) / 2);
+		c.lineTo((b[0][1] + b[0][0]) / 2 + 5, (b[1][1] + b[1][0]) / 2);
+		c.moveTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 + 5);
+		c.lineTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 - 5);
+	}
 
 	// Draw zero.
 	c.moveTo(3, 0);

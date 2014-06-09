@@ -18,6 +18,8 @@
 #define MAXTEMPS 0
 #undef MAXGPIOS
 #define MAXGPIOS 0
+#undef SERIAL_BUFFER_SIZE
+#define SERIAL_BUFFER_SIZE 0
 #ifdef AUDIO
 #undef AUDIO
 #endif
@@ -51,6 +53,23 @@
 #define SET(pin_no) do { if (!(pin_no).invalid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? LOW : HIGH); } } while (0)
 #define RESET(pin_no) do { if (!(pin_no).invalid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? HIGH : LOW); } } while (0)
 #define GET(pin_no, _default) (!(pin_no).invalid () ? digitalRead ((pin_no).pin) == HIGH ? !(pin_no).inverted () : (pin_no).inverted () : _default)
+
+#if SERIAL_BUFFER_SIZE > 0
+// This is really ugly, but it's how it's done in the arduino sources, and no other variables are defined.
+#if defined(UBRR3H)
+#define NUMSERIALS 4
+#define SETUP_SERIALS do { serialport[0] = &Serial; serialport[1] = &Serial1; serialport[2] = &Serial2; serialport[3] = &Serial3; } while (0)
+#elif defined(UBRR2H)
+#define NUMSERIALS 3
+#define SETUP_SERIALS do { serialport[0] = &Serial; serialport[1] = &Serial1; serialport[2] = &Serial2; } while (0)
+#elif defined(UBRR1H)
+#define NUMSERIALS 2
+#define SETUP_SERIALS do { serialport[0] = &Serial; serialport[1] = &Serial1; } while (0)
+#else
+#define NUMSERIALS 1
+#define SETUP_SERIALS do { serialport[0] = &Serial; } while (0)
+#endif
+#endif
 
 struct Pin_t {
 	uint8_t flags;
@@ -109,6 +128,8 @@ enum Command {
 	CMD_READGPIO,	// 1 byte: which channel. Reply: GPIO.
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_bit.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
+	CMD_SETSERIAL,	// 1 byte: which port, 4 byte (int): baudrate
+	CMD_SERIAL_TX,	// 1 byte: which port, 1 byte: data length, n bytes: data
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_START,	// 4 byte: 0 (protocol version).
@@ -126,6 +147,7 @@ enum Command {
 	CMD_LIMIT,	// 1 byte: which channel.
 	CMD_AUTOSLEEP,	// 1 byte: what: 1: motor; 2: temp; 3: both.
 	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
+	CMD_SERIAL_RX,	// 1 byte: which port, 1 byte: data length, n bytes: data
 };
 
 struct Object
@@ -370,6 +392,12 @@ EXTERN bool moving;
 EXTERN float v0, vp, vq, f0;
 EXTERN bool move_prepared;
 EXTERN bool current_move_has_cb;
+#if SERIAL_BUFFER_SIZE > 0
+EXTERN HardwareSerial *serialport[NUMSERIALS];
+EXTERN bool serialactive[NUMSERIALS];
+EXTERN char serialbuffer[3 + SERIAL_BUFFER_SIZE + (3 + SERIAL_BUFFER_SIZE + 2) / 3];
+EXTERN bool serial_out_busy;
+#endif
 
 // debug.cpp
 void debug (char const *fmt, ...);

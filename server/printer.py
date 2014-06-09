@@ -204,22 +204,25 @@ class Printer: # {{{
 			'QUEUED': 0x10,
 			'READGPIO': 0x11,
 			'AUDIO_SETUP': 0x12,
-			'AUDIO_DATA': 0x13}
+			'AUDIO_DATA': 0x13,
+			'SETSERIAL': 0x14,
+			'SERIAL_TX': 0x15}
 	rcommand = {
-			'START': '\x14',
-			'TEMP': '\x15',
-			'POWER': '\x16',
-			'POS': '\x17',
-			'DATA': '\x18',
-			'PONG': '\x19',
-			'PIN': '\x1a',
-			'QUEUE': '\x1b',
-			'MOVECB': '\x1c',
-			'TEMPCB': '\x1d',
-			'CONTINUE': '\x1e',
-			'LIMIT': '\x1f',
-			'AUTOSLEEP': '\x20',
-			'SENSE': '\x21'}
+			'START': '\x16',
+			'TEMP': '\x17',
+			'POWER': '\x18',
+			'POS': '\x19',
+			'DATA': '\x1a',
+			'PONG': '\x1b',
+			'PIN': '\x1c',
+			'QUEUE': '\x1d',
+			'MOVECB': '\x1e',
+			'TEMPCB': '\x1f',
+			'CONTINUE': '\x20',
+			'LIMIT': '\x21',
+			'AUTOSLEEP': '\x22',
+			'SENSE': '\x23',
+			'SERIAL_RX': '\x24'}
 	# }}}
 	def _broadcast(self, *a): # {{{
 		self._send(None, 'broadcast', *a)
@@ -533,6 +536,11 @@ class Printer: # {{{
 					else:
 						s += 1
 				continue
+			elif packet[0] == self.rcommand['SERIAL_RX']:
+				port = ord(packet[1])
+				data = packet[2:]
+				log('Serial data received on port %d: %s' % (port, data))
+				continue
 			elif not self.initialized and packet[0] == self.rcommand['PONG'] and ord(packet[1]) < 2:
 				# PONGs during initialization are possible.
 				dprint('ignore pong', packet)
@@ -543,21 +551,22 @@ class Printer: # {{{
 			raise AssertionError('Received unexpected reply packet')
 	# }}}
 	def _make_packet(self, data): # {{{
-		data = chr(len(data) + 1) + data
-		for t in range((len(data) + 2) / 3):
+		checklen = len(data) / 3 + 1
+		fulldata = list(chr(len(data) + 1) + data + '\x00' * checklen)
+		for t in range(checklen):
 			check = t & 0x7
 			for bit in range(5):
 				sum = check & Printer.mask[bit][3]
 				for byte in range(3):
-					sum ^= ord(data[3 * t + byte]) & Printer.mask[bit][byte]
+					sum ^= ord(fulldata[3 * t + byte]) & Printer.mask[bit][byte]
 				sum ^= sum >> 4
 				sum ^= sum >> 2
 				sum ^= sum >> 1
 				if sum & 1:
 					check |= 1 <<(bit + 3)
-			data += chr(check)
-		#log(' '.join(['%02x' % ord(x) for x in data]))
-		return data
+			fulldata[len(data) + 1 + t] = chr(check)
+		#log(' '.join(['%02x' % ord(x) for x in fulldata]))
+		return ''.join(fulldata)
 	# }}}
 	def _parse_packet(self, data): # {{{
 		#log(' '.join(['%02x' % ord(x) for x in data]))
@@ -567,6 +576,8 @@ class Printer: # {{{
 		checksum = data[length:]
 		for t in range(len(checksum)):
 			r = data[3 * t:3 * t + 3] + checksum[t]
+			if length in (2, 4):
+				r[2] = '\x00'
 			if(ord(checksum[t]) & 0x7) != (t & 7):
 				return None
 			for bit in range(5):
@@ -1075,7 +1086,7 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				self.goto(self.home_target, f0 = self.home_speed, cb = True)[1](None)
+				self.goto(self.home_target, f0 = self.home_speed / 20., cb = True)[1](None)
 				return
 			# Fall through
 		if self.home_phase == 3:
@@ -1686,7 +1697,11 @@ class Printer: # {{{
 				if r.group(3):
 					section = r.group(2)
 					index = int(r.group(3))
-					changed[section.split('_')[0]][index] = True
+					type = section.split('_')[0]
+					if index >= len(changed[type]):
+						errors.append((l, 'index out of range'))
+						continue
+					changed[type][index] = True
 				else:
 					section = r.group(1)
 					index = None
@@ -1764,6 +1779,13 @@ class Printer: # {{{
 			else:
 				self._do_gcode()
 		return True
+	# }}}
+	def serial_enable(self, port, baud = 115200): # {{{
+		return self._send_packet(struct.pack('<BBl', self.command['SETSERIAL'], port, baud))
+	# }}}
+	def serial_send(self, port, data): # {{{
+		# data is unicode; that messes things up.
+		return self._send_packet(struct.pack('<BB', self.command['SERIAL_TX'], port) + data.encode('utf-8'))
 	# }}}
 	# }}}
 	# Accessor functions. {{{
@@ -1881,7 +1903,7 @@ class Printer: # {{{
 			if key in ka:
 				setattr(self.gpio[index], key, int(ka.pop(key)))
 		if 'value' in ka:
-			self.gpio[index].value = float(ka.pop(key))
+			self.gpio[index].value = float(ka.pop('value'))
 		self._write_gpio(index)
 		assert len(ka) == 0
 	# }}}

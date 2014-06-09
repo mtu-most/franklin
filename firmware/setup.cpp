@@ -153,6 +153,13 @@ void setup ()
 		}
 #endif
 	}
+#if SERIAL_BUFFER_SIZE > 0
+	SETUP_SERIALS;
+	for (uint8_t i = 0; i < NUMSERIALS; ++i)
+		serialactive[i] = false;
+	serial_out_busy = false;
+	serialbuffer[0] = 0;
+#endif
 	int16_t address = 0;
 	objects[F0]->address = address;	// Not used, but initialized anyway.
 	for (uint8_t o = 1; o < MAXOBJECT; ++o)

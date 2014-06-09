@@ -147,7 +147,7 @@
 				elements[1].id = make_id (printer, args[1]),
 				elements[2].source = args[1],
 				elements[2].printer = printer,
-				elements[2].extra = (args[3] ? args[3] : null),
+				elements[2].extra = (args[3] ? args[3] : function() {}),
 				elements[0].AddText (args[0]),
 				stack
 				<span class='blocktitle'></span>
