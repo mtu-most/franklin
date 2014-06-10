@@ -42,6 +42,7 @@ blacklist = config['blacklist']
 orphans = {}
 scripts = {}
 queue = {}
+laser = serial.Serial('/dev/ttyUSB0', 38400)
 # These are defined in printer, but ID is required here.
 single = { 'NACK': '\x80', 'ACK0': '\xb3', 'ACKWAIT0': '\xb4', 'STALL': '\x87', 'ACKWAIT1': '\x99', 'ID': '\xaa', 'ACK1': '\xad', 'DEBUG': '\x9e' }
 # }}}
@@ -112,6 +113,9 @@ class Connection: # {{{
 	# }}}
 	@classmethod
 	def _broadcast(cls, target, name, *args): # {{{
+		if name == 'spindle':
+			laser.write('laser:output %d\nbeep 2\n' % args[0])
+			return
 		if target is not None:
 			#log('broadcasting to target %d' % target)
 			if target not in Connection.connections:
@@ -350,7 +354,15 @@ class Connection: # {{{
 				continue
 			line = line.split()
 			if mode is None or line[0][0] in 'GMT':
-				cmd = line[0][0], int(line[0][1:])
+				if len(line[0]) < 2:
+					log('%d:ignoring unparsable line: %s' % (lineno, origline))
+					continue
+				try:
+					cmd = line[0][0], int(line[0][1:])
+				except:
+					log('%d:parse error in line: %s' % (lineno, origline))
+					traceback.print_exc()
+					continue
 				line = line[1:]
 			else:
 				cmd = mode

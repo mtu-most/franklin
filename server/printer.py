@@ -805,9 +805,13 @@ class Printer: # {{{
 				return self.request_confirmation(message)[1](None)
 			elif cmd[0] == 'M' and cmd[1] in (3, 4):
 				# Start spindle; we don't support speed or direction, so M3 and M4 are equal.
+				# Allow external actions.
+				self._broadcast(None, 'spindle', [True])
 				self.set_gpio(1, state = 1)
 			elif cmd == ('M', 5):
 				# Stop spindle.
+				# Allow external actions.
+				self._broadcast(None, 'spindle', [False])
 				self.set_gpio(1, state = 0)
 			elif cmd == ('M', 9):
 				# Coolant off.  We don't support coolant, but turning it off is not an error.
