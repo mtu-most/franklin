@@ -153,7 +153,7 @@ void setup ()
 		}
 #endif
 	}
-#if SERIAL_BUFFER_SIZE > 0
+#if SERIAL_BUFFERSIZE > 0
 	SETUP_SERIALS;
 	for (uint8_t i = 0; i < NUMSERIALS; ++i)
 		serialactive[i] = false;

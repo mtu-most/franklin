@@ -630,7 +630,7 @@ void packet ()
 		return;
 	}
 #endif
-#if SERIAL_BUFFER_SIZE > 0
+#if SERIAL_BUFFERSIZE > 0
 	case CMD_SETSERIAL:
 	{
 #ifdef DEBUG_CMD

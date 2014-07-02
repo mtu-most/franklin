@@ -33,7 +33,7 @@ static const uint8_t MASK[5][4] = {
 // There may be serial data available.
 void serial ()
 {
-#if SERIAL_BUFFER_SIZE > 0
+#if SERIAL_BUFFERSIZE > 0
 	if (serialbuffer[0] == 0) {
 		for (uint8_t p = 1; p < NUMSERIALS; ++p) {
 			if (!serialactive[p] || !serialport[p]->available ())
@@ -45,9 +45,9 @@ void serial ()
 		}
 	}
 	// Don't add bytes to a packet which is already being sent.
-	if (serialbuffer[0] != 0 && !serial_out_busy && serialbuffer[0] < SERIAL_BUFFER_SIZE + 3) {
+	if (serialbuffer[0] != 0 && !serial_out_busy && serialbuffer[0] < SERIAL_BUFFERSIZE + 3) {
 		uint8_t p = serialbuffer[2];
-		while (serialport[p]->available () && serialbuffer[0] < SERIAL_BUFFER_SIZE + 3) {
+		while (serialport[p]->available () && serialbuffer[0] < SERIAL_BUFFERSIZE + 3) {
 			serialbuffer[(uint8_t)serialbuffer[0]] = serialport[p]->read ();
 			serialbuffer[0] += 1;
 		}
@@ -87,7 +87,7 @@ void serial ()
 				debug ("new ff_out: %d", ff_out);
 #endif
 				out_busy = false;
-#if SERIAL_BUFFER_SIZE > 0
+#if SERIAL_BUFFERSIZE > 0
 				if (serial_out_busy) {
 					serial_out_busy = false;
 					serialbuffer[0] = 0;
@@ -490,7 +490,7 @@ void try_send_next ()
 			}
 		}
 	}
-#if SERIAL_BUFFER_SIZE > 0
+#if SERIAL_BUFFERSIZE > 0
 	if (serialbuffer[0] > 0) {
 		prepare_packet (serialbuffer);
 		serial_out_busy = true;

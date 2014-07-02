@@ -23,9 +23,10 @@ config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'address': '',
 		'printer': '',
 		'audiodir': xdgbasedir.cache_filename_write(packagename = 'franklin', filename = 'audio', makedirs = False),
-		'blacklist': r'/dev/(ptmx|console|tty(printk|S?\d*))$',
+		'blacklist': '/dev/(ptmx|console|tty(printk|S?\\d*))$',
 		'autodetect': 'True',
 		'avrdude': '/usr/bin/avrdude',
+		'allow-system': '^$',
 		'login': '',
 		'passwordfile': '',
 		'done': '',
@@ -350,6 +351,12 @@ class Connection: # {{{
 				line = line[:p].strip()
 			if comment.upper().startswith('MSG,'):
 				message = comment[4:].strip()
+			elif comment.startswith('SYSTEM:'):
+				if not re.match(config['allow-system'], comment[7:]):
+					log('refusing to run forbidden system command')
+				else:
+					ret.append((('SYSTEM', 0), {}, comment[7:]))
+				continue
 			if line == '':
 				continue
 			line = line.split()

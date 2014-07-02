@@ -1,8 +1,8 @@
-#!/usr/bin/python
+#! /usr/bin/python
 # vim: set foldmethod=marker :
 
 show_own_debug = False
-#show_own_debug = True
+show_own_debug = True
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -540,6 +540,7 @@ class Printer: # {{{
 				port = ord(packet[1])
 				data = packet[2:]
 				log('Serial data received on port %d: %s' % (port, data))
+				self._broadcast(None, 'serial', [port, data])
 				continue
 			elif not self.initialized and packet[0] == self.rcommand['PONG'] and ord(packet[1]) < 2:
 				# PONGs during initialization are possible.
@@ -887,6 +888,12 @@ class Printer: # {{{
 					self.gcode.pop(0)
 					self.waittemp_temp(0, self.btemp)
 					return self.wait_for_temp_temp(0)[1](None)
+			elif cmd == ('SYSTEM', 0):
+				if not self.flushing:
+					self.flushing = True
+					return self.flush()[1](None)
+				log('running system command: %s' % message)
+				os.system(message)
 			self.flushing = False
 			if len(self.gcode) > 0:
 				self.gcode.pop(0)
@@ -1459,6 +1466,7 @@ class Printer: # {{{
 		was_paused = self.paused
 		if pausing:
 			if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], True)):
+				log('failed to pause printer')
 				return False
 			self.movewait = 0
 			reply = struct.unpack('<BB', self._get_reply())
@@ -1477,6 +1485,7 @@ class Printer: # {{{
 				self.resuming = True
 			self._do_queue()
 		else:
+			log('pausing')
 			if not was_paused:
 				log('pausing %d %d %d %d' % (self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
 				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - reply[1] >= 0:
@@ -1486,6 +1495,7 @@ class Printer: # {{{
 					log('stopping')
 					while len(self.movecb) > 0:
 						call_queue.extend([(x[1], [True]) for x in self.movecb])
+					self.paused = False
 				self.queue = []
 				self.movecb = []
 				self.flushing = False

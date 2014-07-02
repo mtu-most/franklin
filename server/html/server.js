@@ -90,6 +90,9 @@ function _setup_updater() {
 			queue = q;
 			trigger_update('', 'queue');
 		},
+		'serial': function(port, serialport, data) {
+			trigger_update(port, 'serial', serialport, data);
+		},
 		'new_printer': function(port, constants) {
 			printers[port] = {
 				'port': port,

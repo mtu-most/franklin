@@ -52,39 +52,14 @@ void Temp::save (int16_t &addr, bool eeprom)
 
 void Temp::setup_read () {
 	//debug("alt adc: %d", analogRead(thermistor_pin.pin));
-	// Mostly copied from /usr/share/arduino/hardware/arduino/cores/arduino/wiring_analog.c.
-#if defined(__AVR_ATmega32U4__)
-	uint8_t pin = analogPinToChannel(thermistor_pin.pin);
-	ADCSRB = (ADCSRB & ~(1 << MUX5)) | (((pin >> 3) & 0x01) << MUX5);
-#elif defined(ADCSRB) && defined(MUX5)
-	// the MUX5 bit of ADCSRB selects whether we're reading from channels
-	// 0 to 7 (MUX5 low) or 8 to 15 (MUX5 high).
-	uint8_t pin = thermistor_pin.pin;
-	ADCSRB = (ADCSRB & ~(1 << MUX5)) | (((pin >> 3) & 0x01) << MUX5);
-#else
-	uint8_t pin = thermistor_pin.pin;
-#endif
-
-#if defined(ADMUX)
-	ADMUX = (DEFAULT << 6) | (pin & 0x7);
-#endif
-	// Start the conversion.
-	ADCSRA |= 1 << ADSC;
+	return adc_start(thermistor_pin.pin);
 	adc_phase = 2;
 }
 
 float Temp::get_value () {
-	if (bit_is_set(ADCSRA, ADSC))
+	if (!adc_ready(thermistor_pin.pin))
 		return NAN;
-	uint16_t low = ADCL;
-	uint16_t high = ADCH;
-	if (adc_phase < 3) {
-		adc_phase = 3;
-		// Start another conversion.
-		ADCSRA |= 1 << ADSC;
-		return NAN;
-	}
-	uint16_t adc = (high << 8) | low;
+	uint16_t adc = adc_get(thermistor_pin.pin);
 	//debug("adc: %d", adc);
 	// Symbols: A[ms]: adc value, R[01s]: resistor value, V[m01s]: voltage
 	// with m: maximum value, 0: series resistor, 1: parallel resistor, s: sensed value (thermistor)

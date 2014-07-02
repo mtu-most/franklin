@@ -1,9 +1,8 @@
 #ifndef _FIRMWARE_H
 #define _FIRMWARE_H
-#include <Arduino.h>
+#include <configuration.h>
 #include <math.h>
 
-#include "configuration.h"
 #ifdef LOWMEM
 // Adjust all settings to low memory limits.
 #undef NAMELEN
@@ -18,8 +17,8 @@
 #define MAXTEMPS 0
 #undef MAXGPIOS
 #define MAXGPIOS 0
-#undef SERIAL_BUFFER_SIZE
-#define SERIAL_BUFFER_SIZE 0
+#undef SERIAL_BUFFERSIZE
+#define SERIAL_BUFFERSIZE 0
 #ifdef AUDIO
 #undef AUDIO
 #endif
@@ -27,10 +26,6 @@
 #undef WATCHDOG
 #endif
 #endif // LOWMEM
-
-#ifdef WATCHDOG
-#include <avr/wdt.h>
-#endif
 
 #define ID_SIZE 8	// Number of bytes in printerid.
 #define MAXOBJECT (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS + MAXGPIOS)		// Total number of supported objects.
@@ -47,29 +42,7 @@
 #define EXTERN extern
 #endif
 
-#define SET_OUTPUT(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, OUTPUT); }} while (0)
-#define SET_INPUT(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, INPUT_PULLUP); }} while (0)
-#define SET_INPUT_NOPULLUP(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, INPUT); }} while (0)
-#define SET(pin_no) do { if (!(pin_no).invalid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? LOW : HIGH); } } while (0)
-#define RESET(pin_no) do { if (!(pin_no).invalid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? HIGH : LOW); } } while (0)
-#define GET(pin_no, _default) (!(pin_no).invalid () ? digitalRead ((pin_no).pin) == HIGH ? !(pin_no).inverted () : (pin_no).inverted () : _default)
-
-#if SERIAL_BUFFER_SIZE > 0
-// This is really ugly, but it's how it's done in the arduino sources, and no other variables are defined.
-#if defined(UBRR3H)
-#define NUMSERIALS 4
-#define SETUP_SERIALS do { serialport[0] = &Serial; serialport[1] = &Serial1; serialport[2] = &Serial2; serialport[3] = &Serial3; } while (0)
-#elif defined(UBRR2H)
-#define NUMSERIALS 3
-#define SETUP_SERIALS do { serialport[0] = &Serial; serialport[1] = &Serial1; serialport[2] = &Serial2; } while (0)
-#elif defined(UBRR1H)
-#define NUMSERIALS 2
-#define SETUP_SERIALS do { serialport[0] = &Serial; serialport[1] = &Serial1; } while (0)
-#else
-#define NUMSERIALS 1
-#define SETUP_SERIALS do { serialport[0] = &Serial; } while (0)
-#endif
-#endif
+#include ARCH_INCLUDE
 
 struct Pin_t {
 	uint8_t flags;
@@ -392,10 +365,10 @@ EXTERN bool moving;
 EXTERN float v0, vp, vq, f0;
 EXTERN bool move_prepared;
 EXTERN bool current_move_has_cb;
-#if SERIAL_BUFFER_SIZE > 0
+#if SERIAL_BUFFERSIZE > 0
 EXTERN HardwareSerial *serialport[NUMSERIALS];
 EXTERN bool serialactive[NUMSERIALS];
-EXTERN char serialbuffer[3 + SERIAL_BUFFER_SIZE + (3 + SERIAL_BUFFER_SIZE + 2) / 3];
+EXTERN char serialbuffer[3 + SERIAL_BUFFERSIZE + (3 + SERIAL_BUFFERSIZE + 2) / 3];
 EXTERN bool serial_out_busy;
 #endif
 

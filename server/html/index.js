@@ -930,6 +930,8 @@ function update_canvas_and_spans(update_lock) { // {{{
 // }}}
 
 function redraw_canvas(x, y) { // {{{
+	if (!selected_printer)
+		return;
 	var canvas = document.getElementById('move_view');
 	var c = canvas.getContext('2d');
 	var box = document.getElementById('movebox');
