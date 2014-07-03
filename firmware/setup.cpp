@@ -4,9 +4,7 @@ void setup ()
 {
 	uint8_t mcusr = MCUSR;
 	MCUSR = 0;
-#ifdef WATCHDOG
-	wdt_disable ();
-#endif
+	watchdog_disable ();
 	// Initialize volatile variables.
 	Serial.begin (115200);
 	initialized = false;

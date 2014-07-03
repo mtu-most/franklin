@@ -29,7 +29,7 @@
 
 // Defined by arduino: NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS
 
-static uint8_t adc_last_pin;
+EXTERN uint8_t adc_last_pin;
 
 static inline void adc_start(uint8_t adcpin) {
 	// Mostly copied from /usr/share/arduino/hardware/arduino/cores/arduino/wiring_analog.c.
@@ -69,5 +69,24 @@ static inline uint16_t adc_get(uint8_t pin) {
 	uint16_t low = ADCL;
 	uint16_t high = ADCH;
 	return (high << 8) | low;
+}
+
+static inline void watchdog_enable() {
+#ifdef WATCHDOG
+	wdt_reset();
+	wdt_enable(WDTO_120MS);
+#endif
+}
+
+static inline void watchdog_disable() {
+#ifdef WATCHDOG
+	wdt_disable();
+#endif
+}
+
+static inline void watchdog_reset() {
+#ifdef WATCHDOG
+	wdt_reset();
+#endif
 }
 #endif

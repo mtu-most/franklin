@@ -56,18 +56,14 @@ void serial ()
 	if (!had_data && command_end > 0 && micros () - last_micros >= 100000)
 	{
 		// Command not finished; ignore it and wait for next.
-#ifdef WATCHDOG
-		wdt_reset ();
-#endif
+		watchdog_reset ();
 		command_end = 0;
 	}
 	had_data = false;
 	while (command_end == 0)
 	{
 		if (!Serial.available ()) {
-#ifdef WATCHDOG
-			wdt_reset ();
-#endif
+			watchdog_reset ();
 			return;
 		}
 		had_data = true;
@@ -129,9 +125,7 @@ void serial ()
 #ifdef DEBUG_SERIAL
 		debug ("no more data available now");
 #endif
-#ifdef WATCHDOG
-		wdt_reset ();
-#endif
+		watchdog_reset ();
 		// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
 		if (out_busy && micros () - out_time >= 200000) {
 #ifdef DEBUG_SERIAL
@@ -159,14 +153,10 @@ void serial ()
 #ifdef DEBUG_SERIAL
 		debug ("not done yet; %d of %d received.", command_end, cmd_len);
 #endif
-#ifdef WATCHDOG
-		wdt_reset ();
-#endif
+		watchdog_reset ();
 		return;
 	}
-#ifdef WATCHDOG
-	wdt_reset ();
-#endif
+	watchdog_reset ();
 	command_end = 0;
 	// Check packet integrity.
 	// Size must be good.

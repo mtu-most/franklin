@@ -1,6 +1,6 @@
 #ifndef _FIRMWARE_H
 #define _FIRMWARE_H
-#include <configuration.h>
+#include "configuration.h"
 #include <math.h>
 
 #ifdef LOWMEM

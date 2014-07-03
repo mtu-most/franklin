@@ -1,3 +1,4 @@
+#include <stdint.h>
 #define SET_OUTPUT(pin_no) do { if (!(pin_no).invalid ()) {}} while (0)
 #define SET_INPUT(pin_no) do { if (!(pin_no).invalid ()) {}} while (0)
 #define SET_INPUT_NOPULLUP(pin_no) do { if (!(pin_no).invalid ()) {}} while (0)

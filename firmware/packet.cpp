@@ -38,10 +38,7 @@ void packet ()
 		debug ("CMD_BEGIN");
 #endif
 		// A server is running; start the watchdog.
-#ifdef WATCHDOG
-		wdt_reset ();
-		wdt_enable (WDTO_120MS);
-#endif
+		watchdog_enable ();
 		for (uint8_t i = 0; i < ID_SIZE; ++i)
 			printerid[i] = command[6 + i];
 		write_ack ();

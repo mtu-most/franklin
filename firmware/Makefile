@@ -12,10 +12,11 @@ HEADERS = configuration.h firmware.h
 ifdef PI
 HEADERS += arch-pi.h
 CPPFLAGS += -DARCH_INCLUDE=\"arch-pi.h\"
+OBJECTS = $(patsubst %.cpp,%.o,$(SOURCES))
 franklin: $(OBJECTS) Makefile
 	g++ $(LDFLAGS) $(OBJECTS) -o $@
 %.o: %.cpp $(HEADERS) Makefile
-	g++ $(CPPFLAGS) $(CXXFLAGS) $< -o $@
+	g++ $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 else
 
