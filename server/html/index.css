@@ -119,3 +119,24 @@ select[multiple] {
 	margin: auto auto;
 	text-align: center;
 }
+.blocker {
+	background: #f44;
+	padding: 1em 1em 1em 1em;
+	position: fixed;
+	top: 0px;
+	left: 0px;
+	width: 100%;
+}
+.status {
+	background: #ff8;
+	padding: 1em 1em 1em 1em;
+	white-space: pre-line;
+	position: fixed;
+	bottom: 0px;
+	left: 0px;
+	width: 100%;
+}
+body {
+	margin-top: 3em;
+	margin-bottom: 6em;
+}

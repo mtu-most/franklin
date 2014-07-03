@@ -2,7 +2,7 @@
 # vim: set foldmethod=marker :
 
 show_own_debug = False
-show_own_debug = True
+#show_own_debug = True
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -63,6 +63,8 @@ class Printer: # {{{
 		# Discard pending data.
 		while self.printer.read() != '':
 			pass
+		self.status = None
+		self.confirm_id = 0
 		self.home_phase = None
 		self.home_cb = [False, self._do_home]
 		self.probe_cb = [False, None]
@@ -106,7 +108,6 @@ class Printer: # {{{
 				break
 		else:
 			log("Printer doesn't respond: giving up.")
-			self._close()
 			sys.exit(0)
 		time.sleep(.150)	# Make sure data is received.
 		# Discard pending data.
@@ -128,14 +129,12 @@ class Printer: # {{{
 			reply = self._get_reply()
 			if reply is None:
 				log('No ping reply: giving up.')
-				self._close()
-				return
+				sys.exit(0)
 			if reply[0] == self.rcommand['PONG'] and ord(reply[1]) == 2:
 				break
 		else:
 			log('Timeout waiting for pongs: giving up.')
-			self._close()
-			return
+			sys.exit(0)
 		# Now we're in sync.
 		# Get the printer state.
 		self.printerid = newid
@@ -187,42 +186,43 @@ class Printer: # {{{
 	command = {
 			'BEGIN': 0x00,
 			'PING': 0x01,
-			'GOTO': 0x02,
-			'GOTOCB': 0x03,
-			'RUN': 0x04,
-			'SLEEP': 0x05,
-			'SETTEMP': 0x06,
-			'WAITTEMP': 0x07,
-			'READTEMP': 0x08,
-			'READPOWER': 0x09,
-			'SETPOS': 0x0a,
-			'GETPOS': 0x0b,
-			'LOAD': 0x0c,
-			'SAVE': 0x0d,
-			'READ': 0x0e,
-			'WRITE': 0x0f,
-			'QUEUED': 0x10,
-			'READGPIO': 0x11,
-			'AUDIO_SETUP': 0x12,
-			'AUDIO_DATA': 0x13,
-			'SETSERIAL': 0x14,
-			'SERIAL_TX': 0x15}
+			'RESET': 0x02,
+			'GOTO': 0x03,
+			'GOTOCB': 0x04,
+			'RUN': 0x05,
+			'SLEEP': 0x06,
+			'SETTEMP': 0x07,
+			'WAITTEMP': 0x08,
+			'READTEMP': 0x09,
+			'READPOWER': 0x0a,
+			'SETPOS': 0x0b,
+			'GETPOS': 0x0c,
+			'LOAD': 0x0d,
+			'SAVE': 0x0e,
+			'READ': 0x0f,
+			'WRITE': 0x10,
+			'QUEUED': 0x11,
+			'READGPIO': 0x12,
+			'AUDIO_SETUP': 0x13,
+			'AUDIO_DATA': 0x14,
+			'SETSERIAL': 0x15,
+			'SERIAL_TX': 0x16}
 	rcommand = {
-			'START': '\x16',
-			'TEMP': '\x17',
-			'POWER': '\x18',
-			'POS': '\x19',
-			'DATA': '\x1a',
-			'PONG': '\x1b',
-			'PIN': '\x1c',
-			'QUEUE': '\x1d',
-			'MOVECB': '\x1e',
-			'TEMPCB': '\x1f',
-			'CONTINUE': '\x20',
-			'LIMIT': '\x21',
-			'AUTOSLEEP': '\x22',
-			'SENSE': '\x23',
-			'SERIAL_RX': '\x24'}
+			'START': '\x17',
+			'TEMP': '\x18',
+			'POWER': '\x19',
+			'POS': '\x1a',
+			'DATA': '\x1b',
+			'PONG': '\x1c',
+			'PIN': '\x1d',
+			'QUEUE': '\x1e',
+			'MOVECB': '\x1f',
+			'TEMPCB': '\x20',
+			'CONTINUE': '\x21',
+			'LIMIT': '\x22',
+			'AUTOSLEEP': '\x23',
+			'SENSE': '\x24',
+			'SERIAL_RX': '\x25'}
 	# }}}
 	def _broadcast(self, *a): # {{{
 		self._send(None, 'broadcast', *a)
@@ -356,8 +356,7 @@ class Printer: # {{{
 						return ('ack', 'stall')
 					else:
 						log('printer sent unsolicited stall')
-						self._close()
-						return ('ack', 'stall')
+						sys.exit(0)
 				if r == self.single['ID']:
 					# The printer has reset, or some extra data was received after reconnect.
 					# Check which by reading the id.
@@ -377,8 +376,7 @@ class Printer: # {{{
 							# Printer has reset.
 							self._broadcast(None, 'reset')
 							log('printer reset')
-							self._close()
-							return ('reset', None)
+							sys.exit(0)
 						# Regular id has been sent; ignore.
 						continue
 				if(ord(r) & 0x80) != 0 or ord(r) in (0, 1, 2, 4):
@@ -427,7 +425,7 @@ class Printer: # {{{
 			# Handle the asynchronous events.
 			if packet[0] == self.rcommand['MOVECB']:
 				num = ord(packet[1])
-				log('movecb %d/%d (%d in queue)' % (num, self.movewait, len(self.movecb)))
+				#log('movecb %d/%d (%d in queue)' % (num, self.movewait, len(self.movecb)))
 				if self.initialized:
 					assert self.movewait >= num
 					self.movewait -= num
@@ -549,7 +547,8 @@ class Printer: # {{{
 			if reply:
 				return ('packet', packet)
 			dprint('unexpected packet', packet)
-			raise AssertionError('Received unexpected reply packet')
+			if self.initialized:
+				raise AssertionError('Received unexpected reply packet')
 	# }}}
 	def _make_packet(self, data): # {{{
 		checklen = len(data) / 3 + 1
@@ -781,7 +780,16 @@ class Printer: # {{{
 				#log(repr(args))
 				sina, cosa = self.gcode_angle
 				target = cosa * args['X'] - sina * args['Y'] + self.gcode_ref[0], cosa * args['Y'] + sina * args['X'] + self.gcode_ref[1]
-				self.goto([target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], e = args['E'], f0 = args['f'], f1 = args['F'])[1](None)
+				if self._use_probemap and self.gcode_probemap:
+					source = cosa * args['x'] - sina * args['y'] + self.gcode_ref[0], cosa * args['y'] + sina * args['x'] + self.gcode_ref[1]
+					if args[x] is not None:
+						num = max([abs(target[t] - source[t]) / (abs(self.gcode_probemap[0][t + 2] - self.gcode_probemap[0][t]) / self.gcode_probemap[1][t]) for t in range(2)])
+					else:
+						num = 1
+					for t in range(num):
+						target = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
+					self.goto([target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], e = args['E'], f0 = args['f'], f1 = args['F'])[1](None)
+				self.goto([target[0], target[1], args['Z']], e = args['E'], f0 = args['f'], f1 = args['F'])[1](None)
 			elif cmd in (('G', 28), ('M', 6)):
 				# Home or tool change; same response: park
 				if not self.flushing:
@@ -806,13 +814,9 @@ class Printer: # {{{
 				return self.request_confirmation(message)[1](None)
 			elif cmd[0] == 'M' and cmd[1] in (3, 4):
 				# Start spindle; we don't support speed or direction, so M3 and M4 are equal.
-				# Allow external actions.
-				self._broadcast(None, 'spindle', [True])
 				self.set_gpio(1, state = 1)
 			elif cmd == ('M', 5):
 				# Stop spindle.
-				# Allow external actions.
-				self._broadcast(None, 'spindle', [False])
 				self.set_gpio(1, state = 0)
 			elif cmd == ('M', 9):
 				# Coolant off.  We don't support coolant, but turning it off is not an error.
@@ -930,10 +934,10 @@ class Printer: # {{{
 			self.probe_cb(False)
 	# }}}
 	def _do_queue(self): # {{{
-		log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
+		#log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 		while not self.wait and (self.queue_pos < len(self.queue) or self.resuming):
 			if self.queue_pos >= len(self.queue):
-				log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
+				#log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
 				self.queue = self.queue_info[2]
 				self.queue_pos = self.queue_info[0]
 				self.movecb = self.queue_info[3]
@@ -1260,6 +1264,10 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	# Useful commands.  {{{
+	def reset(self): # {{{
+		log('%s resetting and dying.' % self.name)
+		return self._send_packet(struct.pack('<BB', self.command['RESET'], 0))
+	# }}}
 	def die(self): # {{{
 		log('%s dying as requested by host.' % self.name)
 		return (WAIT, WAIT)
@@ -1443,7 +1451,10 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	def save(self, channel): # {{{
-		return self._send_packet(struct.pack('<BB', self.command['SAVE'], int(channel)))
+		self._broadcast(None, 'blocked', 'saving')
+		ret = self._send_packet(struct.pack('<BB', self.command['SAVE'], int(channel)))
+		self._broadcast(None, 'blocked', None)
+		return ret
 	def save_variables(self): # {{{
 		return self.save(1)
 	# }}}
@@ -1481,18 +1492,18 @@ class Printer: # {{{
 				# Go back to pausing position.
 				self.goto(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
-				log('resuming')
+				#log('resuming')
 				self.resuming = True
 			self._do_queue()
 		else:
-			log('pausing')
+			#log('pausing')
 			if not was_paused:
-				log('pausing %d %d %d %d' % (self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
+				#log('pausing %d %d %d %d' % (self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
 				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - reply[1] >= 0:
-					log('pausing gcode %d/%d/%d' % (self.queue_pos, reply[1], len(self.queue)))
+					#log('pausing gcode %d/%d/%d' % (self.queue_pos, reply[1], len(self.queue)))
 					self.queue_info = [self.queue_pos - reply[1], [a.get_current_pos() for a in self.axis], self.queue, self.movecb, self.flushing, self.gcode_wait]
 				else:
-					log('stopping')
+					#log('stopping')
 					while len(self.movecb) > 0:
 						call_queue.extend([(x[1], [True]) for x in self.movecb])
 					self.paused = False

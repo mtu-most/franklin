@@ -408,7 +408,12 @@
 			<div id='Printer'> <!-- {{{ -->
 				// TODO: upload script, see printing state, command feedback.
 				<div class='printer'>
-					[!(node.id = make_id (printer, [null, 'container']),'')!]
+					[!(
+						node.id = make_id (printer, [null, 'container']),
+						elements[0].id = make_id(printer, [null, 'block1']),
+						elements
+						<div class='hidden blocker'></div>
+					)!]
 					<div class='setup'>[!(elements[0].port = port, elements<button type='button' onclick="rpc.call ('disable', [this.port], {})">Disable printer</button>)!]</div>
 					<div class='setup'>[$(Text ['Name', [null, 'name'], 'setup'])$]</div>
 					<div class='tweak'>[$(Button ['Sleep', 'sleep_all'])$]</div>
@@ -635,11 +640,21 @@
 						stack
 						<a class='title' title='Save settings to disk.'>Export settings to file</a>
 					)!]</div>
+					[!(
+						elements[0].id = make_id(printer, [null, 'status1']),
+						elements
+						<div class='status'></div>
+					)!]
 				</div>
 			</div> <!-- }}} -->
 			<div id='NoPrinter'> <!-- {{{ -->
 				<div class='noprinter notconnected setup'>
-					[!(node.id = make_id (printer, [null, 'nocontainer']),'')!]
+					[!(
+						node.id = make_id ({'port': port}, [null, 'nocontainer']),
+						elements[0].id = make_id({'port': args[0]}, [null, 'block2']),
+						elements
+						<div class='hidden blocker'></div>
+					)!]
 					<h2>No printer is found on this port.</h2>
 					<p>
 						If autodetect does not work, you can request to detect a printer:
@@ -653,6 +668,11 @@
 						Or you can upload the firmware that fits your hardware.
 						[!(upload_buttons (args[0], [['melzi', '1284p (Melzi, Sanguinololu)'], ['ramps', 'mega2560 (Ramps)'], ['mega', 'mega']]))!]
 					</p>
+					[!(
+						elements[0].id = make_id({'port': args[0]}, [null, 'status2']),
+						elements
+						<div class='status'></div>
+					)!]
 				</div>
 			</div> <!-- }}} -->
 		</div> <!-- }}} -->

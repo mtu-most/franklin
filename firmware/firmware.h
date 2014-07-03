@@ -83,6 +83,7 @@ enum Command {
 	// from host
 	CMD_BEGIN,	// 4 byte: 0 (preferred protocol version). Reply: START.
 	CMD_PING,	// 1 byte: code.  Reply: PONG.
+	CMD_RESET,	// 1 byte: 0.
 	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].
 	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
 	CMD_RUN,	// 1 byte: which channel (b0-6).  4 byte: speed [mm/s] (0 means off).

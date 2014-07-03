@@ -34,6 +34,8 @@ function init() { // {{{
 	register_update('new_printer', new_printer);
 	register_update('new_script', new_script);
 	register_update('new_data', new_script_data);
+	register_update('blocked', blocked);
+	register_update('status', new_status);
 	register_update('del_script', del_script);
 	register_update('del_printer', del_printer);
 	register_update('del_port', del_port);
@@ -321,6 +323,23 @@ function new_script_data(name) { // {{{
 	script_cbs[name][1] ();
 } // }}}
 
+function blocked(reason) { // {{{
+	var e = ports[port][2] !== null ? get_element(printer, [null, 'block1']) : get_element({'port': port}, [null, 'block2']);
+	if (reason) {
+		e.ClearAll();
+		e.AddText(reason);
+		e.RemoveClass('hidden');
+	}
+	else
+		e.AddClass('hidden');
+} // }}}
+
+function new_status(stat) { // {{{
+	var e = ports[port][2] !== null ? get_element(printer, [null, 'status1']) : get_element({'port': port}, [null, 'status2']);
+	e.ClearAll();
+	e.AddText(stat);
+} // }}}
+
 function del_script(name) { // {{{
 	document.getElementById('scripts').removeChild(script_cbs[name][0]);
 	delete script_cbs[name];
@@ -345,9 +364,9 @@ function del_port() { // {{{
 		selected_port = null;
 } // }}}
 
-function do_confirm(message) { // {{{
+function do_confirm(id, message) { // {{{
 	var the_printer = printer;
-	the_printer.call('confirm', [confirm(message)], {});
+	the_printer.call('confirm', [id, confirm(message)], {});
 } // }}}
 
 function do_queue() { // {{{
