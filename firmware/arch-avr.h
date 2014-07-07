@@ -1,7 +1,5 @@
 #include <Arduino.h>
-#ifdef WATCHDOG
 #include <avr/wdt.h>
-#endif
 
 #define SET_OUTPUT(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, OUTPUT); }} while (0)
 #define SET_INPUT(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, INPUT_PULLUP); }} while (0)
@@ -88,5 +86,10 @@ static inline void watchdog_reset() {
 #ifdef WATCHDOG
 	wdt_reset();
 #endif
+}
+
+static inline void reset() {
+	wdt_enable(WDTO_15MS);	// As short as possible.
+	while(1) {}
 }
 #endif

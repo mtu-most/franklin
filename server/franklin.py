@@ -17,6 +17,7 @@ import time
 import serial
 import json
 import traceback
+import fcntl
 
 config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'port': 8080,
@@ -43,7 +44,6 @@ blacklist = config['blacklist']
 orphans = {}
 scripts = {}
 queue = {}
-laser = serial.Serial('/dev/ttyUSB0', 38400)
 # These are defined in printer, but ID is required here.
 single = { 'NACK': '\x80', 'ACK0': '\xb3', 'ACKWAIT0': '\xb4', 'STALL': '\x87', 'ACKWAIT1': '\x99', 'ID': '\xaa', 'ACK1': '\xad', 'DEBUG': '\x9e' }
 # }}}
@@ -114,9 +114,6 @@ class Connection: # {{{
 	# }}}
 	@classmethod
 	def _broadcast(cls, target, name, *args): # {{{
-		if name == 'spindle':
-			laser.write('laser:output %d\nbeep 2\n' % args[0])
-			return
 		if target is not None:
 			#log('broadcasting to target %d' % target)
 			if target not in Connection.connections:
@@ -138,7 +135,6 @@ class Connection: # {{{
 	@classmethod
 	def upload(cls, port, board): # {{{
 		resumeinfo = [(yield), None]
-		cls.disable(port)
 		if board == 'melzi':
 			protocol = 'arduino'
 			baudrate = '115200'
@@ -156,20 +152,40 @@ class Connection: # {{{
 			filename = xdgbasedir.data_files_read(os.path.join('firmware', 'mega.hex'), packagename = 'franklin')[0]
 		else:
 			raise ValueError('board type not supported')
+		if ports[port] is not None:
+			c = websockets.call(resumeinfo, ports[port].printer.reset, [], {})
+			while c(): c.args = (yield websockets.WAIT)
+			cls.disable(port)
 		data = ['']
 		process = subprocess.Popen([config['avrdude'], '-q', '-q', '-V', '-c', protocol, '-b', baudrate, '-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
 		def output(fd, cond):
-			data[0] += process.stdout.read()
-			if data[0] != '':
+			d = ''
+			try:
+				d = process.stdout.read()
+			except:
+				data[0] += '\nError: ' + traceback.format_exc()
+				log(repr(data[0]))
+				resumeinfo[0](data[0])
+				return False
+			if d != '':
+				cls._broadcast(None, 'status', port, '\n'.join(data[0].split('\n')[-4:]))
+				data[0] += d
 				return True
-			resumeinfo[0]()
+			resumeinfo[0](data[0])
 			return False
+		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
+		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
 		glib.io_add_watch(process.stdout, glib.IO_IN | glib.IO_PRI | glib.IO_HUP, output)
-		yield websockets.WAIT
-		process.communicate()[0]
+		cls._broadcast(None, 'blocked', port, 'uploading')
+		cls._broadcast(None, 'status', port, '')
+		d = (yield websockets.WAIT)
+		process.kill()	# In case it wasn't dead yet.
+		process.communicate()	# Clean up.
+		cls._broadcast(None, 'blocked', port, None)
+		cls._broadcast(None, 'status', port, '')
 		if autodetect:
-			c = websockets.call(None, cls.detect, port)()
-		yield data[0] or 'firmware successfully uploaded'
+			websockets.call(None, cls.detect, port)()
+		yield (d or 'firmware successfully uploaded')
 	# }}}
 	@classmethod
 	def find_printer(cls, name = None, port = None): # {{{
@@ -210,7 +226,8 @@ class Connection: # {{{
 			#log('port is not in detectable state')
 			return
 		ports[port] = False
-		websockets.call(resumeinfo, detect, port)
+		c = websockets.call(resumeinfo, detect, port)
+		while c(): c.args = (yield websockets.WAIT)
 	# }}}
 	@classmethod
 	def detect_all(cls): # {{{
@@ -473,24 +490,24 @@ class Connection: # {{{
 								f0 = float('inf')
 						if math.isnan(dist):
 							dist = 0
-						args = {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': estep, 'f': f0 / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf')}
+						args = {'x': oldpos[0], 'y': oldpos[1], 'z': oldpos[2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': estep, 'f': f0 / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf')}
 						cmd = ('G', 1)
 						ret.append((cmd, args, message))
 					else:
 						# Drill cycle.
 						# Only support OLD_Z (G90) retract mode; don't support repeats(L).
 						# goto x,y
-						ret.append((('G', 1), {'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[2], 'E': 0, 'f': float('inf'), 'F': float('inf')}, message))
+						ret.append((('G', 1), {'x': oldpos[0], 'y': oldpos[1], 'z': oldpos[2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[2], 'E': 0, 'f': float('inf'), 'F': float('inf')}, message))
 						# goto r
-						ret.append((('G', 1), {'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
+						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
 						# goto z; this is always straight down, because the move before and after it are also vertical.
 						if z != r:
 							f0 = pos[2] / abs(z - r) / 60
-							ret.append((('G', 1), {'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'E': 0, 'f': f0, 'F': f0}, None))
+							ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'E': 0, 'f': f0, 'F': f0}, None))
 						# retract; this is always straight up, because the move before and after it are also non-horizontal.
-						ret.append((('G', 1), {'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[2], 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
+						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[2], 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
 						# empty move; this makes sure the previous move is entirely vertical.
-						ret.append((('G', 1), {'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[2], 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
+						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[2], 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
 						# Set up current z position so next G81 will work.
 						pos[0][2] = oldpos[2]
 				else:
@@ -511,6 +528,9 @@ class Connection: # {{{
 		for cmd, args, message in code:
 			if tuple(cmd) != ('G', 1):
 				continue
+			inspect(args['x'], ret[0])
+			inspect(args['y'], ret[1])
+			inspect(args['z'], ret[2])
 			inspect(args['X'], ret[0])
 			inspect(args['Y'], ret[1])
 			inspect(args['Z'], ret[2])
@@ -644,8 +664,6 @@ class Port: # {{{
 				for w in self.waiters[t]:
 					self.waiters[t][w](False, 'Printer died')
 			Connection.disable(self.port)
-			if autodetect:
-				websockets.call(None, Connection.detect, self.port)()
 			return False
 		data = json.loads(line)
 		#log('printer input:' + repr(data))

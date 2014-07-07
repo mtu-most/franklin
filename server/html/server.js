@@ -75,8 +75,8 @@ function _setup_updater() {
 		'printing': function(port, state) {
 			trigger_update(port, 'printing', state);
 		},
-		'confirm': function(port, message) {
-			trigger_update(port, 'confirm', message);
+		'confirm': function(port, id, message) {
+			trigger_update(port, 'confirm', id, message);
 		},
 		'autodetect': function(state) {
 			autodetect = state;
@@ -248,6 +248,12 @@ function _setup_updater() {
 			scripts[name][1] = data;
 			trigger_update('', 'new_data', name);
 		},
+		'blocked': function(port, reason) {
+			trigger_update(port, 'blocked', reason);
+		},
+		'status': function(port, stat) {
+			trigger_update(port, 'status', stat);
+		},
 		'variables_update': function(port, values) {
 			printers[port].name = values[0];
 			printers[port].num_axes = values[1];
@@ -263,6 +269,7 @@ function _setup_updater() {
 			printers[port].feedrate = values[11];
 			printers[port].angle = values[12];
 			printers[port].paused = values[13];
+			printers[port].status = values[14];
 			trigger_update(port, 'variables_update');
 		},
 		'axis_update': function(port, index, values) {

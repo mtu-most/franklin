@@ -1,4 +1,6 @@
 #include <stdint.h>
+#include <stdlib.h>
+
 #define SET_OUTPUT(pin_no) do { if (!(pin_no).invalid ()) {}} while (0)
 #define SET_INPUT(pin_no) do { if (!(pin_no).invalid ()) {}} while (0)
 #define SET_INPUT_NOPULLUP(pin_no) do { if (!(pin_no).invalid ()) {}} while (0)
@@ -24,4 +26,9 @@ static inline bool adc_ready(uint8_t pin) {
 
 static inline uint16_t adc_get(uint8_t pin) {
 	return 0;
+}
+
+static inline void reset() {
+	// This shouldn't happen.  But if it does, die.
+	exit(0);
 }

@@ -52,6 +52,15 @@ void packet ()
 		try_send_next ();
 		return;
 	}
+	case CMD_RESET: // reset controller; used before reprogramming flash.
+	{
+#ifdef DEBUG_CMD
+		debug ("CMD_RESET");
+#endif
+		write_ack ();
+		Serial.flush ();
+		reset ();
+	}
 #if MAXEXTRUDERS > 0 || MAXAXES > 0
 	case CMD_GOTO:	// goto
 	case CMD_GOTOCB:	// goto with callback
