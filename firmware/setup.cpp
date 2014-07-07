@@ -173,6 +173,6 @@ void setup ()
 		debug ("Warning: data doesn't fit in EEPROM; decrease MAXAXES, MAXEXTRUDERS, or MAXTEMPS and reflash the firmware!");
 	Serial.write (CMD_ID);
 	for (uint8_t i = 0; i < 8; ++i)
-		Serial.write ('\0');
+		Serial.write (uint8_t(0));
 	debug ("Startup.  MCUSR: %x, Eeprom used: %d, available: %d", mcusr, address, E2END);
 }
