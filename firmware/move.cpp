@@ -89,7 +89,7 @@ static void apply_offsets (float *data) {
 	}
 #if MAXAXES >= 3
 	if (printer_type == 1) {
-		while (true) {
+		for (uint8_t timeout = 0; timeout < 2; ++timeout) {
 			bool ok = true;
 			for (uint8_t a = 0; a < num_axes; ++a)
 				ok &= check_delta (a, &data[AXIS0]);

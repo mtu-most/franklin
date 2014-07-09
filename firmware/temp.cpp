@@ -52,7 +52,7 @@ void Temp::save (int16_t &addr, bool eeprom)
 
 void Temp::setup_read () {
 	//debug("alt adc: %d", analogRead(thermistor_pin.pin));
-	return adc_start(thermistor_pin.pin);
+	adc_start(thermistor_pin.pin);
 	adc_phase = 2;
 }
 
