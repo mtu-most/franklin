@@ -63,6 +63,14 @@ class Printer: # {{{
 		# Discard pending data.
 		while self.printer.read() != '':
 			pass
+		self.jobqueue = {}
+		self.job_output = ''
+		self.jobs_active = []
+		self.jobs_ref = None
+		self.jobs_angle = 0
+		self.jobs_probemap = None
+		self.job_current = 0
+		self.job_id = None
 		self.status = None
 		self.confirm_id = 0
 		self.home_phase = None
@@ -631,9 +639,9 @@ class Printer: # {{{
 					else:
 						self.wait = True
 					return True
-				else:
+				else: # ack[1] == 'stall'
 					log('stall response waiting for ack')
-					# ack[1] == 'stall'
+					self._print_done(False, 'printer sent stall')
 					return False
 		return False
 	# }}}
@@ -910,10 +918,24 @@ class Printer: # {{{
 		if self.queue_info is None and self.gcode_id is not None:
 			log('done %d %s' % (complete, reason))
 			self._send(self.gcode_id, 'return', (complete, reason))
-			self.gcode_id = None
-			self.gcode = []
-			self.flushing = False
-			self.gcode_wait = None
+		self.gcode_id = None
+		self.gcode = []
+		self.flushing = False
+		self.gcode_wait = None
+		if len(self.jobs_active) > 0:
+			if complete:
+				if self.job_current >= len(self.jobs_active):
+					log('queue done')
+					self._send(self.job_id, 'return', (True, reason))
+					self.job_id = None
+					self.jobs_active = []
+				else:
+					self._next_job()
+			else:
+				log('job part done; moving on')
+				self._send(self.job_id, 'return', (False, reason))
+				self.job_id = None
+				self.jobs_active = []
 		while self.queue_pos < len(self.queue):
 			id, axes, e, f0, f1, which, cb = self.queue[self.queue_pos]
 			self.queue_pos += 1
@@ -1005,7 +1027,7 @@ class Printer: # {{{
 			self.queue_pos = 0
 	# }}}
 	def _do_home(self, done = None): # {{{
-		#log('do_home: %s %s' % (self.home_phase, done))
+		log('do_home: %s %s' % (self.home_phase, done))
 		# 0: move to max limit switch or find sense switch.
 		# 1: move to min limit switch or find sense switch.
 		# 2: back off.
@@ -1115,7 +1137,9 @@ class Printer: # {{{
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				self.goto(self.home_target, cb = True)[1](None)
+				key = self.home_target.keys()[0]
+				dist = abs(self.home_target[key] - self.axis[key].get_current_pos()[1])
+				self.goto(self.home_target, f0 = self.home_speed / dist, cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
 				log('Warning: not all limits were hit during homing')
@@ -1199,6 +1223,13 @@ class Printer: # {{{
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, angle, speed, 0, good)
 			self.movecb.append(self.probe_cb)
 			self.goto({2: 3}, cb = True)[1](None)
+	# }}}
+	def _next_job(self): # {{{
+		self.job_current += 1
+		if self.job_current >= len(self.jobs_active):
+			self._print_done(True, 'Queue finished')
+			return
+		self.gcode_run(self.jobqueue[self.jobs_active[self.job_current]][0], self.jobs_ref, self.jobs_angle, self.jobs_probemap)[1](None)
 	# }}}
 	# Subclasses.  {{{
 	class Temp: # {{{
@@ -1504,7 +1535,7 @@ class Printer: # {{{
 					self.queue_info = [self.queue_pos - reply[1], [a.get_current_pos() for a in self.axis], self.queue, self.movecb, self.flushing, self.gcode_wait]
 				else:
 					#log('stopping')
-					while len(self.movecb) > 0:
+					if len(self.movecb) > 0:
 						call_queue.extend([(x[1], [True]) for x in self.movecb])
 					self.paused = False
 				self.queue = []
@@ -1531,6 +1562,7 @@ class Printer: # {{{
 	@delayed
 	def home(self, id, speed = 5, cb = None): # {{{
 		#log('homing')
+		self._print_done(False, 'aborted by homing')
 		self.home_id = id
 		self.home_speed = speed
 		self.home_done_cb = cb
@@ -1811,6 +1843,248 @@ class Printer: # {{{
 	def serial_send(self, port, data): # {{{
 		# data is unicode; that messes things up.
 		return self._send_packet(struct.pack('<BB', self.command['SERIAL_TX'], port) + data.encode('utf-8'))
+	# }}}
+	def queue_add(self, data, name): # {{{
+		assert name not in self.jobqueue
+		self._broadcast(None, 'blocked', 'parsing g-code')
+		parsed = self.gcode_parse(data)
+		self.jobqueue[name] = (parsed, self.gcode_bbox(parsed))
+		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
+		self._broadcast(None, 'blocked', None)
+		return ''
+	# }}}
+	def queue_remove(self, name): # {{{
+		assert name in self.jobqueue
+		del self.jobqueue[name]
+		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
+	# }}}
+	def gcode_parse(self, code): # {{{
+		mode = None
+		message = None
+		ret = []
+		unit = 1
+		rel = False
+		erel = None
+		pos = [[float('nan'), float('nan'), float('nan')], [0.], float('inf')]
+		current_extruder = 0
+		for lineno, origline in enumerate(code.split('\n')):
+			line = origline.strip()
+			if line.startswith('N'):
+				r = re.match('N\d+\s*(.*?)\*\d+$')
+				if not r:
+					# Invalid line; ignore it.
+					log('%d:ignoring invalid gcode: %s' % (lineno, origline))
+					continue
+				line = r.group(1)
+			comment = ''
+			while '(' in line:
+				b = line.index('(')
+				e = line.find(')', b)
+				if e < 0:
+					log('%d:ignoring unterminated comment: %s' % (lineno, origline))
+					continue
+				comment = line[b + 1:e].strip()
+				line = line[:b] + line[e + 1:].strip()
+			if ';' in line:
+				p = line.index(';')
+				comment = line[p + 1:].strip()
+				line = line[:p].strip()
+			if comment.upper().startswith('MSG,'):
+				message = comment[4:].strip()
+			elif comment.startswith('SYSTEM:'):
+				if not re.match(config['allow-system'], comment[7:]):
+					log('refusing to run forbidden system command')
+				else:
+					ret.append((('SYSTEM', 0), {}, comment[7:]))
+				continue
+			if line == '':
+				continue
+			line = line.split()
+			if mode is None or line[0][0] in 'GMT':
+				if len(line[0]) < 2:
+					log('%d:ignoring unparsable line: %s' % (lineno, origline))
+					continue
+				try:
+					cmd = line[0][0], int(line[0][1:])
+				except:
+					log('%d:parse error in line: %s' % (lineno, origline))
+					traceback.print_exc()
+					continue
+				line = line[1:]
+			else:
+				cmd = mode
+			args = {}
+			for a in line:
+				try:
+					args[a[0]] = float(a[1:])
+				except:
+					log('%d:ignoring invalid gcode: %s' % (lineno, origline))
+					break
+			else:
+				if cmd == ('M', 2):
+					# Program end.
+					break
+				elif cmd[0] == 'T':
+					target = cmd[1]
+					if target >= len(pos[1]):
+						pos[1].extend([0.] * (target - len(pos[1]) + 1))
+					current_extruder = target
+					continue
+				elif cmd == ('G', 20):
+					unit = 25.4
+					continue
+				elif cmd == ('G', 21):
+					unit = 1
+					continue
+				elif cmd == ('G', 90):
+					rel = False
+					continue
+				elif cmd == ('G', 91):
+					rel = True
+					continue
+				elif cmd == ('M', 82):
+					erel = False
+					continue
+				elif cmd == ('M', 83):
+					erel = True
+					continue
+				elif cmd == ('G', 92):
+					which = {}
+					for w in args:
+						if w in 'XYZ':
+							# Ignore; this is only abused.
+							pass
+						elif w == 'E':
+							pos[1][current_extruder] = args[w]
+					continue
+				elif cmd[0] == 'M' and cmd[1] in(104, 109, 116):
+					args['E'] = current_extruder
+				if not((cmd[0] == 'G' and cmd[1] in(0, 1, 4, 28, 81, 94)) or(cmd[0] == 'M' and cmd[1] in(0, 3, 4, 5, 6, 9, 42, 84, 104, 106, 107, 109, 116, 140, 190)) or(cmd[0] in('S', 'T'))):
+					log('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
+				elif cmd == ('G', 28):
+					ret.append((cmd, args, message))
+					for a in range(len(pos[0])):
+						pos[0][a] = float('nan')
+				elif cmd[0] == 'G' and cmd[1] in(0, 1, 81):
+					if cmd[1] != 0:
+						mode = cmd
+					components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None, 'R': None}
+					for c in args:
+						assert c in components and components[c] is None
+						components[c] = args[c]
+					f0 = pos[2]
+					if components['F'] is not None:
+						pos[2] = components['F'] * unit
+					if cmd[1] != 81:
+						if components['E'] is not None:
+							if erel or(erel is None and rel):
+								estep = components['E'] * unit
+							else:
+								estep = components['E'] * unit - pos[1][current_extruder]
+							pos[1][current_extruder] += estep
+						else:
+							estep = 0
+					else:
+						estep = 0
+						if components['R'] is not None:
+							if rel:
+								r = pos[0][2] + components['R'] * unit
+							else:
+								r = components['R'] * unit
+					oldpos = pos[0][:]
+					for axis in range(3):
+						value = components[chr(ord('X') + axis)]
+						if value is not None:
+							if rel:
+								pos[0][axis] += value * unit
+							else:
+								pos[0][axis] = value * unit
+							if axis == 2:
+								z = pos[0][2]
+					if cmd[1] != 81:
+						dist = sum([(pos[0][x] - oldpos[x]) ** 2 for x in range(3)]) ** .5
+						if dist == 0:
+							dist = abs(estep)
+						if dist > 0:
+							#if f0 is None:
+							#	f0 = pos[1][current_extruder]
+							f0 = pos[2]	# Always use new value.
+							if f0 == 0:
+								f0 = float('inf')
+						if math.isnan(dist):
+							dist = 0
+						args = {'x': oldpos[0], 'y': oldpos[1], 'z': oldpos[2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': estep, 'f': f0 / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf')}
+						cmd = ('G', 1)
+						ret.append((cmd, args, message))
+					else:
+						# Drill cycle.
+						# Only support OLD_Z (G90) retract mode; don't support repeats(L).
+						# goto x,y
+						ret.append((('G', 1), {'x': oldpos[0], 'y': oldpos[1], 'z': oldpos[2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[2], 'E': 0, 'f': float('inf'), 'F': float('inf')}, message))
+						# goto r
+						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
+						# goto z; this is always straight down, because the move before and after it are also vertical.
+						if z != r:
+							f0 = pos[2] / abs(z - r) / 60
+							ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'E': 0, 'f': f0, 'F': f0}, None))
+						# retract; this is always straight up, because the move before and after it are also non-horizontal.
+						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[2], 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
+						# empty move; this makes sure the previous move is entirely vertical.
+						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[2], 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
+						# Set up current z position so next G81 will work.
+						pos[0][2] = oldpos[2]
+				else:
+					ret.append((cmd, args, message))
+				message = None
+		return ret
+	# }}}
+	def gcode_bbox(self, code): # {{{
+		ret = [[None, None], [None, None], [None, None]]
+		def inspect(value, box):
+			if math.isnan(value):
+				return
+			if box[0] is None or value < box[0]:
+				box[0] = value
+			if box[1] is None or value > box[1]:
+				box[1] = value
+		for cmd, args, message in code:
+			if tuple(cmd) != ('G', 1):
+				continue
+			inspect(args['x'], ret[0])
+			inspect(args['y'], ret[1])
+			inspect(args['z'], ret[2])
+			inspect(args['X'], ret[0])
+			inspect(args['Y'], ret[1])
+			inspect(args['Z'], ret[2])
+		return ret
+	# }}}
+	@delayed
+	def queue_print(self, id, names, ref = (0, 0), angle = 0, probemap = None): # {{{
+		self._broadcast(None, 'printing', True)
+		self.job_output = ''
+		self.jobs_active = names
+		self.jobs_ref = ref
+		self.jobs_angle = angle
+		self.jobs_probemap = probemap
+		self.job_current = -1	# next_job will make it start at 0.
+		self.job_id = id
+		self._next_job()
+	# }}}
+	@delayed
+	def queue_probe(self, id, names, ref = (0, 0), angle = 0, density = (4, 4)): # {{{
+		bbox = [float('nan'), (float('nan')), float('nan'), float('nan')]
+		for n in names:
+			bb = queue[n][1]
+			if not bbox[0] < bb[0]:
+				bbox[0] = bb[0]
+			if not bbox[1] < bb[1]:
+				bbox[1] = bb[1]
+			if not bbox[2] > bb[2]:
+				bbox[2] = bb[2]
+			if not bbox[3] > bb[3]:
+				bbox[3] = bb[3]
+		# TODO: probing.
+		self.queue_print(names, ref, angle, probemap)(id)
 	# }}}
 	# }}}
 	# Accessor functions. {{{

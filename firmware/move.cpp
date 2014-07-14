@@ -42,7 +42,7 @@ void reset_pos ()	// {{{
 	for (uint8_t a = 0; a < MAXAXES; ++a) {
 		axis[a].current = axis[a].source;
 #ifdef DEBUG_MOVE
-		debug ("New position for axis %d = %f", a, &axis[a].source);
+		debug ("New position for axis %d = %f", a, F(axis[a].source));
 #endif
 	}
 }
@@ -57,7 +57,7 @@ static bool check_delta (uint8_t a, float *target) {
 	float dy = target[1] - axis[a].y;
 	float r2 = dx * dx + dy * dy;
 	if (r2 > axis[a].axis_max * axis[a].axis_max) {
-		//debug ("not ok: %f %f %f %f %f %f %f", &target[0], &target[1], &dx, &dy, &r2, &l2, &axis[a].delta_length);
+		//debug ("not ok: %f %f %f %f %f %f %f", F(target[0]), F(target[1]), F(dx), F(dy), F(r2), F(l2), F(axis[a].delta_length));
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
 		float factor = axis[a].axis_max / sqrt (r2);
@@ -68,7 +68,7 @@ static bool check_delta (uint8_t a, float *target) {
 	// Inner product shows if projection is inside or outside the printable region.
 	float projection = -(dx * axis[a].x + dy * axis[a].y) / axis[a].delta_radius;
 	if (projection < axis[a].axis_min) {
-		//debug ("not ok: %f %f %f %f %f", &inner, &dx, &dy, &axis[a].x, &axis[a].y);
+		//debug ("not ok: %f %f %f %f %f", F(inner), F(dx), F(dy), F(axis[a].x), F(axis[a].y));
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
 		target[0] -= (axis[a].axis_min - projection - .001) / axis[a].delta_radius * axis[a].x;
 		target[1] -= (axis[a].axis_min - projection - .001) / axis[a].delta_radius * axis[a].y;
@@ -194,7 +194,7 @@ void next_move () {
 		}
 		current_move_has_cb = false;
 #ifdef DEBUG_MOVE
-		debug ("Extra segment has been set up: f0=%f v0=%f /s vp=%f /s vq=%f /s t0=%d ms tp=%d ms tq=%d ms", &f0, &v0, &vp, &vq, int (t0/1000), int (tp/1000), int (tq/1000));
+		debug ("Extra segment has been set up: f0=%f v0=%f /s vp=%f /s vq=%f /s t0=%d ms tp=%d ms tq=%d ms", F(f0), F(v0), F(vp), F(vq), int (t0/1000), int (tp/1000), int (tq/1000));
 #endif
 		//debug("moving->true");
 		moving = true;
@@ -233,7 +233,7 @@ void next_move () {
 			if (abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .1)
 				action = true;
 #ifdef DEBUG_MOVE
-			debug ("Preparing motor %d for a dist of %f", m, &motors[m]->next_dist);
+			debug ("Preparing motor %d for a dist of %f", m, F(motors[m]->next_dist));
 #endif
 		}
 		// If no motors are moving for this segment, discard it and try the next.
@@ -266,7 +266,7 @@ void next_move () {
 		f0 = 0;
 		vq = queue[queue_start].data[F0] * feedrate;
 #ifdef DEBUG_MOVE
-		debug ("Using vq = %f from queue %f and feed %f", &vq, &queue[queue_start].data[F0], feedrate);
+		debug ("Using vq = %f from queue %f and feed %f", F(vq), F(queue[queue_start].data[F0]), feedrate);
 #endif
 		current_move_has_cb = false;
 		move_prepared = true;
@@ -277,7 +277,7 @@ void next_move () {
 		bool action = false;
 		v0 = vq;
 #ifdef DEBUG_MOVE
-		debug ("Move was prepared with v0 = %f and tq = %d", &v0, int (tq / 1000));
+		debug ("Move was prepared with v0 = %f and tq = %d", F(v0), int (tq / 1000));
 #endif
 		uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
 		if (n == queue_end) { // {{{
@@ -300,7 +300,7 @@ void next_move () {
 					motors[m]->dist = 0;
 				}
 #ifdef DEBUG_MOVE
-				debug ("Last segment distance for motor %d is %f", m, &motors[m]->dist);
+				debug ("Last segment distance for motor %d is %f", m, F(motors[m]->dist));
 #endif
 			}
 			vq = 0;
@@ -335,7 +335,7 @@ void next_move () {
 				if (abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .001 || abs (motors[m]->dist) * motors[m]->steps_per_mm > .001)
 					action = true;
 #ifdef DEBUG_MOVE
-				debug ("Connecting distance for motor %d is %f, to %f", m, &motors[m]->dist, &motors[m]->next_dist);
+				debug ("Connecting distance for motor %d is %f, to %f", m, F(motors[m]->dist), F(motors[m]->next_dist));
 #endif
 			}
 			vq = queue[n].data[F0] * feedrate;
@@ -377,7 +377,7 @@ void next_move () {
 	// current_move_has_cb: if a cb should be fired after this segment is complete.
 	// move_prepared: if this segment connects to a following segment.
 #ifdef DEBUG_MOVE
-	debug ("Set up: tq = %d ms, v0 = %f /s, vp = %f /s, vq = %f /s", int (tq / 1000), &v0, &vp, &vq);
+	debug ("Set up: tq = %d ms, v0 = %f /s, vp = %f /s, vq = %f /s", int (tq / 1000), F(v0), F(vp), F(vq));
 #endif
 
 	// Limit vp, vq, ap and aq. {{{
@@ -404,13 +404,13 @@ void next_move () {
 		}
 	}
 #ifdef DEBUG_MOVE
-	debug ("After limiting, vp = %f /s and vq = %f /s", &vp, &vq);
+	debug ("After limiting, vp = %f /s and vq = %f /s", F(vp), F(vq));
 #endif
 	// }}}
 	// Already set up: v0, vp, vq, max_ap, max_aq, m->dist, m->next_dist.
 	// To do: start_time, t0, tp, tq, m->main_dist, m->steps_done
 #ifdef DEBUG_MOVE
-	debug ("Preparation did f0 = %f", &f0);
+	debug ("Preparation did f0 = %f", F(f0));
 #endif
 	// Find shortest tp. {{{
 	if (isinf (vp)) {
@@ -451,7 +451,7 @@ void next_move () {
 		// The current value of t0 is the minimum value; set the actual value.
 		t0 = long ((1 - fp - f0) / (v0 + vp) * 2e6);
 #ifdef DEBUG_MOVE
-		debug ("This move had an initial v of %f, which is sustained %d ms.", &v0, int (t0 / 1000));
+		debug ("This move had an initial v of %f, which is sustained %d ms.", F(v0), int (t0 / 1000));
 #endif
 	}
 	else
@@ -504,14 +504,14 @@ void next_move () {
 			SET (motors[m]->enable_pin);
 			motors_busy |= 1 << m;
 			/*if (mt < num_axes)
-				debug ("Move motor %f from %f (really %f) over %f steps (f0=%f)", m, &axis[mt].source, &axis[mt].current, &motors[m]->dist, &f0);*/
+				debug ("Move motor %f from %f (really %f) over %f steps (f0=%f)", m, F(axis[mt].source), F(axis[mt].current), F(motors[m]->dist), F(f0));*/
 		}
 		if (isinf (vp) || isinf (v0))
 			motors[m]->main_dist = 0;
 		else
 			motors[m]->main_dist = motors[m]->dist * (f0 + (v0 + vp) * t0 / 2e6);
 #ifdef DEBUG_MOVE
-		debug ("Motor %d dist %f main dist = %f, next dist = %f", m, &motors[m]->dist, &motors[m]->main_dist, &motors[m]->next_dist);
+		debug ("Motor %d dist %f main dist = %f, next dist = %f", m, F(motors[m]->dist), F(motors[m]->main_dist), F(motors[m]->next_dist));
 #endif
 #if MAXEXTRUDERS > 0
 		if (mt >= num_axes)
@@ -519,7 +519,7 @@ void next_move () {
 #endif
 	}
 #ifdef DEBUG_MOVE
-	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%d ms tp=%d ms tq=%d ms max_aq=%f", &f0, &fp, &fq, &v0, &vp, &vq, int (t0/1000), int (tp/1000), int (tq/1000), &max_aq);
+	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%d ms tp=%d ms tq=%d ms max_aq=%f", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), int (t0/1000), int (tp/1000), int (tq/1000), F(max_aq));
 #endif
 	//debug("moving->true");
 	moving = true;
@@ -534,7 +534,7 @@ void abort_move () { // {{{
 		//debug ("aborting move");
 #if MAXAXES > 0
 		for (uint8_t a = 0; a < MAXAXES; ++a) {
-			//debug ("setting axis %d source to %f", a, &axis[a].current);
+			//debug ("setting axis %d source to %f", a, F(axis[a].current));
 			axis[a].source = axis[a].current;
 		}
 #endif

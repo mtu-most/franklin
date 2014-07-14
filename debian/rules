@@ -10,15 +10,11 @@ override_dh_auto_build:
 	dh_auto_build
 	${MAKE} -C server/html
 	ronn -r server/franklin.8.ronn
-	${MAKE} -C firmware TARGET=MELZI
-	mv firmware/build-mighty_opt/firmware.hex firmware/build-mighty_opt/mighty_opt.hex
-	${MAKE} -C firmware TARGET=MEGA2560
-	mv firmware/build-mega2560/firmware.hex firmware/build-mega2560/mega2560.hex
-	${MAKE} -C firmware TARGET=MEGA
-	mv firmware/build-mega/firmware.hex firmware/build-mega/mega.hex
+	${MAKE} -C firmware TARGET=melzi
+	${MAKE} -C firmware TARGET=ramps
+	${MAKE} -C firmware TARGET=mega
 
 override_dh_auto_clean:
 	dh_auto_clean
 	rm -f *.pyc *.pyo server/franklin.8
 	rm -rf firmware/build-*
-	sed -i -e 's/^.*MELZI=.*$$/MELZI=true/' firmware/Makefile

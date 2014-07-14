@@ -72,7 +72,7 @@ float Temp::get_value () {
 	// T = beta/log(R/k)=-beta/log(k*Am/R0/As-k/R0-k/R1)
 	if (!isnan (minus_beta)) {
 		float k = Rc * exp (minus_beta / Tc);
-		//debug("k: %f adc: %d beta: %f", &k, adc, &minus_beta);
+		//debug("k: %f adc: %d beta: %f", F(k), adc, F(minus_beta));
 		last = minus_beta / log (k * (1024 / R0 / adc - 1 / R0 - 1 / R1));
 	}
 	else {

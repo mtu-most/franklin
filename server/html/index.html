@@ -16,7 +16,7 @@
 				<div class='tab' onclick='select_printer (this.port)'>
 					[!(
 						node.port = args[0],
-						printer ? [printer.name].concat (elements.slice (1)) : elements
+						printer ? [printer.name].concat (elements) : elements
 						<span class='port setup'>[!('@' + args[0])!]</span>
 					)!]
 				</div>
@@ -415,6 +415,28 @@
 						<div class='hidden blocker'></div>
 					)!]
 					<div class='setup'>[!(elements[0].port = port, elements<button type='button' onclick="rpc.call ('disable', [this.port], {})">Disable printer</button>)!]</div>
+					<div> <!-- {{{ Queue. -->
+						<div>[$(File ['Add to queue', [null, 'queue_add', 'queue_add'], undefined, queue_deselect])$]</div>
+						<div>
+							[!(
+								elements[0].id = make_id (printer, [null, 'queue']),
+								elements
+								<select multiple='multiple'></select>
+								<div class='queuelist'>
+									<button type='button' onclick='queue_up ()'>&#x2b06;</button>
+									<button type='button' onclick='queue_del ()'>Remove selected</button><br/>
+									<button type='button' onclick='queue_down ()'>&#x2b07;</button>
+									<button type='button' onclick='quick_print ()'>Print selected at center</button><br/>
+									<button type='button' onclick='start_move ()'>Position selected and print</button>
+								</div>
+							)!]
+						</div>
+					</div> <!-- }}} -->
+					[!(
+						elements[0].id = make_id (printer, [null, 'scripts']),
+						elements
+						<div></div>
+					)!]
 					<div class='setup'>[$(Text ['Name', [null, 'name'], 'setup'])$]</div>
 					<div class='tweak'>[$(Button ['Sleep', 'sleep_all'])$]</div>
 					<div class='tweak'><button type='button' onclick="selected_printer.call ('home', [], {}, update_canvas_and_spans)">Home</button></div>
@@ -650,7 +672,7 @@
 			<div id='NoPrinter'> <!-- {{{ -->
 				<div class='noprinter notconnected setup'>
 					[!(
-						node.id = make_id ({'port': port}, [null, 'nocontainer']),
+						node.id = make_id ({'port': args[0]}, [null, 'nocontainer']),
 						elements[0].id = make_id({'port': args[0]}, [null, 'block2']),
 						elements
 						<div class='hidden blocker'></div>
@@ -690,23 +712,10 @@
 				<input type='checkbox' id='setupbox' onclick='switch_show (this.checked, "setup")'/>
 			</div>
 		</div> <!-- }}} -->
-		<div> <!-- {{{ Queue. -->
-			<div>[$(File ['Add to queue', [null, 'queue_add', 'queue_add'], undefined, queue_deselect])$]</div>
-			<div>
-				<select multiple='multiple' id='queue'></select>
-				<div id='queuelist'>
-					<button type='button' onclick='queue_up ()'>&#x2b06;</button>
-					<button type='button' onclick='queue_del ()'>Remove selected</button><br/>
-					<button type='button' onclick='queue_down ()'>&#x2b07;</button>
-					<button type='button' onclick='quick_print ()'>Print selected at center</button><br/>
-					<button type='button' onclick='start_move ()'>Position selected and print</button>
-				</div>
-			</div>
-		</div> <!-- }}} -->
-		<div id='scripts'></div>
 		<div id='labels'></div>
 		<div id='printers'></div>
 		<div id='debug'></div>
+		<div id='scripts'></div>
 		<div id='movediv' onkeydown='if (!key_move (event.keyCode, event.shiftKey, event.ctrlKey)) event.preventDefault ()'><!-- {{{ -->
 			<div id='movebox'>
 				<p>Amount per keypress: <input value='10' class='title' type='text' id='move_amount'/></p>

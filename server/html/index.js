@@ -155,15 +155,15 @@ function select_printer(port) { // {{{
 			continue;
 		if (p == port) {
 			ports[p][0].AddClass('active');
-			ports[p][2].RemoveClass('hidden');
-			if (ports[p][1])
-				ports[p][1].RemoveClass('hidden');
+			ports[p][1].RemoveClass('hidden');
+			if (ports[p][2])
+				ports[p][2].RemoveClass('hidden');
 		}
 		else {
 			ports[p][0].RemoveClass('active');
-			ports[p][2].AddClass('hidden');
-			if (ports[p][1])
-				ports[p][1].AddClass('hidden');
+			ports[p][1].AddClass('hidden');
+			if (ports[p][2])
+				ports[p][2].AddClass('hidden');
 		}
 	}
 } // }}}
@@ -194,7 +194,7 @@ function upload_buttons(port, buttons) { // {{{
 
 // Queue functions.  {{{
 function queue_deselect() { // {{{
-	var e = document.getElementById('queue');
+	var e = get_element(selected_printer, [null, 'queue']);
 	for (var i = 1; i < e.options.length; ++i) {
 		e.options[i].selected = false;
 	}
@@ -202,7 +202,7 @@ function queue_deselect() { // {{{
 // }}}
 
 function queue_up() { // {{{
-	var e = document.getElementById('queue');
+	var e = get_element(selected_printer, [null, 'queue']);
 	for (var i = 1; i < e.options.length; ++i) {
 		if (e.options[i].selected) {
 			var cur = e.options[i];
@@ -214,7 +214,7 @@ function queue_up() { // {{{
 // }}}
 
 function queue_down() { // {{{
-	var e = document.getElementById('queue');
+	var e = get_element(selected_printer, [null, 'queue']);
 	for (var i = e.options.length - 2; i >= 0; --i) {
 		if (e.options[i].selected) {
 			var cur = e.options[i];
@@ -226,8 +226,8 @@ function queue_down() { // {{{
 // }}}
 
 function queue_del() { // {{{
+	var e = get_element(selected_printer, [null, 'queue']);
 	var rm = [];
-	var e = document.getElementById('queue');
 	for (var i = 0; i < e.options.length; ++i) {
 		if (e.options[i].selected)
 			rm.push(e.options[i]);
@@ -237,9 +237,11 @@ function queue_del() { // {{{
 }
 // }}}
 
-function get_queue() { // {{{
+function get_queue(printer) { // {{{
+	if (printer === undefined)
+		printer = selected_printer;
 	var toprint = [];
-	var e = document.getElementById('queue');
+	var e = get_element(printer, [null, 'queue']);
 	for (var i = 0; i < e.options.length; ++i) {
 		if (e.options[i].selected)
 			toprint.push(e.options[i].value);
@@ -370,11 +372,11 @@ function do_confirm(id, message) { // {{{
 } // }}}
 
 function do_queue() { // {{{
-	var e = document.getElementById('queue');
+	var e = get_element(selected_printer, [null, 'queue']);
 	var q = [];
-	var must_deselect = queue.length > e.options.length;
-	for (var i = 0; i < queue.length; ++i)
-		q.push(queue[i][0]);
+	var must_deselect = selected_printer.queue.length > e.options.length;
+	for (var i = 0; i < selected_printer.queue.length; ++i)
+		q.push(selected_printer.queue[i][0]);
 	var rm = [];
 	for (var item = 0; item < e.options.length; ++item) {
 		var i;
@@ -1225,26 +1227,26 @@ function key_move(key, shift, ctrl) { // {{{
 
 function start_move() { // {{{
 	// Update bbox.
-	var q = document.getElementById('queue');
+	var q = get_element(selected_printer, [null, 'queue']);
 	selected_printer.bbox = [[0, 0], [0, 0]];
 	for (var e = 0; e < q.options.length; ++e) {
 		if (!q.options[e].selected)
 			continue;
 		var name = q.options[e].value;
 		var item;
-		for (item = 0; item < queue.length; ++item)
-			if (queue[item][0] == name)
+		for (item = 0; item < selected_printer.queue.length; ++item)
+			if (selected_printer.queue[item][0] == name)
 				break;
-		if (item >= queue.length)
+		if (item >= selected_printer.queue.length)
 			continue;
-		if (queue[item][1][0][0] < selected_printer.bbox[0][0])
-			selected_printer.bbox[0][0] = queue[item][1][0][0];
-		if (queue[item][1][0][1] > selected_printer.bbox[0][1])
-			selected_printer.bbox[0][1] = queue[item][1][0][1];
-		if (queue[item][1][1][0] < selected_printer.bbox[1][0])
-			selected_printer.bbox[1][0] = queue[item][1][1][0];
-		if (queue[item][1][1][1] > selected_printer.bbox[1][1])
-			selected_printer.bbox[1][1] = queue[item][1][1][1];
+		if (selected_printer.queue[item][1][0][0] < selected_printer.bbox[0][0])
+			selected_printer.bbox[0][0] = selected_printer.queue[item][1][0][0];
+		if (selected_printer.queue[item][1][0][1] > selected_printer.bbox[0][1])
+			selected_printer.bbox[0][1] = selected_printer.queue[item][1][0][1];
+		if (selected_printer.queue[item][1][1][0] < selected_printer.bbox[1][0])
+			selected_printer.bbox[1][0] = selected_printer.queue[item][1][1][0];
+		if (selected_printer.queue[item][1][1][1] > selected_printer.bbox[1][1])
+			selected_printer.bbox[1][1] = selected_printer.queue[item][1][1][1];
 	}
 	selected_printer.lock = null;
 	update_canvas_and_spans(false);

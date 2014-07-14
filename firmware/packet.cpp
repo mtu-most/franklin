@@ -95,7 +95,7 @@ void packet ()
 				if (ch >= 2 && !isnan (f.f))
 					initialized = true;
 				queue[queue_end].data[ch] = f.f;
-				//debug ("goto %d %f", ch, &f.f);
+				//debug ("goto %d %f", ch, F(f.f));
 				++t;
 			}
 			else
@@ -110,7 +110,7 @@ void packet ()
 		float f1 = queue[queue_end].data[F1];
 		if (isnan (f0) || isnan (f1) || f0 < 0 || f1 < 0 || (f0 == 0 && f1 == 0))
 		{
-			debug ("Invalid f0 or f1: %f %f", &f0, &f1);
+			debug ("Invalid f0 or f1: %f %f", F(f0), F(f1));
 			Serial.write (CMD_STALL);
 			return;
 		}
@@ -172,7 +172,7 @@ void packet ()
 		}
 #endif
 		float speed = isnan (f.f) ? 0 : f.f;
-		//debug("at speed %f", &speed);
+		//debug("at speed %f", F(speed));
 		if (speed > 0) {
 			if (speed > motors[which]->limit_v)
 				speed = motors[which]->limit_v;
@@ -181,16 +181,16 @@ void packet ()
 			if (speed < -motors[which]->limit_v)
 				speed = -motors[which]->limit_v;
 		}
-		//debug("I mean at speed %f", &speed);
+		//debug("I mean at speed %f", F(speed));
 		if (motors[which]->f != 0) {
-			//debug ("running changes speed from %f to %f", &motors[which]->f, &speed);
+			//debug ("running changes speed from %f to %f", F(motors[which]->f), F(speed));
 		       	if ((motors[which]->positive && speed < 0) || (!motors[which]->positive && speed > 0))
 				motors[which]->continuous_steps_per_s = -abs (speed) * motors[which]->steps_per_mm;
 			else
 				motors[which]->continuous_steps_per_s = abs (speed) * motors[which]->steps_per_mm;
 		}
 		else {
-			//debug ("new running speed %f", &speed);
+			//debug ("new running speed %f", F(speed));
 			if (speed > 0) {
 				SET (motors[which]->dir_pin);
 				motors[which]->continuous_steps_per_s = speed * motors[which]->steps_per_mm;

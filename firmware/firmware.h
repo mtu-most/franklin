@@ -1,7 +1,9 @@
 #ifndef _FIRMWARE_H
-#define _FIRMWARE_H
 #include "configuration.h"
+#include ARCH_INCLUDE
+#define _FIRMWARE_H
 #include <math.h>
+#include <stdarg.h>
 
 #ifdef LOWMEM
 // Adjust all settings to low memory limits.
@@ -41,8 +43,6 @@
 #ifndef EXTERN
 #define EXTERN extern
 #endif
-
-#include ARCH_INCLUDE
 
 struct Pin_t {
 	uint8_t flags;
@@ -373,9 +373,6 @@ EXTERN char serialbuffer[3 + SERIAL_BUFFERSIZE + (3 + SERIAL_BUFFERSIZE + 2) / 3
 EXTERN bool serial_out_busy;
 #endif
 
-// debug.cpp
-void debug (char const *fmt, ...);
-
 // packet.cpp
 void packet ();	// A command packet has arrived; handle it.
 
@@ -420,7 +417,7 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float r2 = dx * dx + dy * dy;
 	float l2 = axis[a].delta_length * axis[a].delta_length;
 	float dest = sqrt (l2 - r2) + dz;
-	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", &dx, &dy, &dz, &axis[a].z, &r, &target);
+	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", F(dx), F(dy), F(dz), F(axis[a].z), F(r), F(target));
 	return dest * axis[a].motor.steps_per_mm;
 }
 #endif
@@ -440,5 +437,7 @@ static inline bool moving_motor (uint8_t which) {
 	return !isnan (motors[which]->dist);
 }
 #endif
+
+#include ARCH_INCLUDE
 
 #endif

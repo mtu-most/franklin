@@ -2,8 +2,7 @@
 
 void setup ()
 {
-	uint8_t mcusr = MCUSR;
-	MCUSR = 0;
+	arch_setup_start();
 	watchdog_disable ();
 	// Initialize volatile variables.
 	Serial.begin (115200);
@@ -169,10 +168,8 @@ void setup ()
 		if (len + (len + 2) / 3 >= COMMAND_SIZE)
 			debug ("Warning: object %d is too large for the serial protocol!", o);
 	}
-	if (address - 1 > E2END)
-		debug ("Warning: data doesn't fit in EEPROM; decrease MAXAXES, MAXEXTRUDERS, or MAXTEMPS and reflash the firmware!");
 	Serial.write (CMD_ID);
 	for (uint8_t i = 0; i < 8; ++i)
 		Serial.write (uint8_t(0));
-	debug ("Startup.  MCUSR: %x, Eeprom used: %d, available: %d", mcusr, address, E2END);
+	arch_setup_end(address);
 }

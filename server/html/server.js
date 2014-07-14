@@ -18,7 +18,6 @@ var blacklist;
 var audio_list;
 var scripts;
 var data;
-var queue;
 // }}}
 
 function dbg(msg) {
@@ -86,9 +85,9 @@ function _setup_updater() {
 			blacklist = value;
 			trigger_update('', 'blacklist');
 		},
-		'queue': function(q) {
-			queue = q;
-			trigger_update('', 'queue');
+		'queue': function(port, q) {
+			printers[port].queue = q;
+			trigger_update(port, 'queue');
 		},
 		'serial': function(port, serialport, data) {
 			trigger_update(port, 'serial', serialport, data);
@@ -96,6 +95,7 @@ function _setup_updater() {
 		'new_printer': function(port, constants) {
 			printers[port] = {
 				'port': port,
+				'queue': [],
 				'namelen': constants[0],
 				'queue_length': constants[1],
 				'maxaxes': constants[2],
@@ -391,7 +391,6 @@ function setup() {
 	printers = new Object;
 	_ports = [];
 	scripts = new Object;
-	queue = [];
 	autodetect = true;
 	blacklist = '';
 	var proto = Object.prototype;
@@ -528,7 +527,11 @@ function _parse_node(node, args) {
 				var stack = [];
 				var elements = [];
 				current = next;
-				while (current) {
+				while (true) {
+					if (!current) {
+						alert('unterminated eval');
+						break;
+					}
 					next = current.nextSibling;
 					node.removeChild(current);
 					if (current instanceof Comment) {

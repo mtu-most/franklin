@@ -242,7 +242,7 @@ static bool move_axes (float target[3], unsigned long current_time) {
 			}
 			if (!delayed) {
 				for (a = 0; a < 3; ++a) {
-					//debug ("setting axis %d current to %f", a, &target[a]);
+					//debug ("setting axis %d current to %f", a, F(target[a]));
 					axis[a].current = target[a];
 				}
 			}
@@ -376,9 +376,9 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 #if MAXAXES > 0
 		for (uint8_t a = 0; a < num_axes; ++a)
 			if (!isnan (axis[a].motor.dist)) {
-				//debug ("before source %d %f %f", a, &axis[a].source, &axis[a].motor.dist);
+				//debug ("before source %d %f %f", a, F(axis[a].source), F(axis[a].motor.dist));
 				axis[a].source += axis[a].motor.dist;
-				//debug ("after source %d %f %f %d", a, &axis[a].source, &axis[a].motor.dist, int (axis[a].current_pos));
+				//debug ("after source %d %f %f %d", a, F(axis[a].source), F(axis[a].motor.dist), int (axis[a].current_pos));
 			}
 #endif
 		done_motors ();

@@ -1,3 +1,5 @@
+// This is not an include quard.  This file is included twice; once before this symbol is included and once after.
+#ifndef _FIRMWARE_H
 #include <Arduino.h>
 #include <avr/wdt.h>
 
@@ -24,6 +26,9 @@
 #define SETUP_SERIALS do { serialport[0] = &Serial; } while (0)
 #endif
 #endif
+
+// Everything before this line is used at the start of firmware.h; everything after it at the end.
+#else
 
 // Defined by arduino: NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS
 
@@ -92,4 +97,100 @@ static inline void reset() {
 	wdt_enable(WDTO_15MS);	// As short as possible.
 	while(1) {}
 }
+
+static inline void debug (char const *fmt, ...) {
+	va_list ap;
+	va_start (ap, fmt);
+	Serial.write (CMD_DEBUG);
+	for (char const *p = fmt; *p; ++p) {
+		if (*p == '%') {
+			bool longvalue = false;
+			while (true) {
+				++p;
+				switch (*p) {
+				case 0: {
+					Serial.write ('%');
+					--p;
+					break;
+				}
+				case 'l': {
+					longvalue = true;
+					continue;
+				}
+				case '%': {
+					Serial.write ('%');
+					break;
+				}
+				case 'd': {
+					if (longvalue) {
+						int32_t *arg = va_arg (ap, int32_t *);
+						Serial.print (*arg, DEC);
+					}
+					else {
+						int arg = va_arg (ap, int);
+						Serial.print (arg, DEC);
+					}
+					break;
+				}
+				case 'x': {
+					if (longvalue) {
+						int32_t *arg = va_arg (ap, int32_t *);
+						Serial.print (*arg, HEX);
+					}
+					else {
+						int arg = va_arg (ap, int);
+						Serial.print (arg, HEX);
+					}
+					break;
+				}
+				case 'f': {
+					float *arg = va_arg (ap, float *);
+					Serial.print (*arg, 5);
+					break;
+				}
+				case 's': {
+					char const *arg = va_arg (ap, char const *);
+					Serial.print (arg);
+					break;
+				}
+				case 'c': {
+					char arg = va_arg (ap, int);
+					Serial.write (arg);
+					break;
+				}
+				default: {
+					Serial.write ('%');
+					Serial.write (*p);
+					break;
+				}
+				}
+				break;
+			}
+		}
+		else {
+			Serial.write (*p);
+		}
+	}
+	va_end (ap);
+	Serial.write ((uint8_t)0);
+	Serial.flush ();
+}
+#ifdef F
+#undef F
+#endif
+#define F(x) &(x)
+
+static uint8_t mcusr;
+
+static inline void arch_setup_start() {
+	mcusr = MCUSR;
+	MCUSR = 0;
+}
+
+static inline void arch_setup_end(int address) {
+	debug ("Startup.  MCUSR: %x, Eeprom used: %d, available: %d", mcusr, address, E2END);
+	if (address - 1 > E2END)
+		debug ("Warning: data doesn't fit in EEPROM; decrease MAXAXES, MAXEXTRUDERS, or MAXTEMPS and reflash the firmware!");
+}
+#endif
 #endif
