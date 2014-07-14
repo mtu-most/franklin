@@ -18,7 +18,7 @@ static float get_float (uint8_t offset)
 #endif
 
 #if defined(AUDIO) || !defined(LOWMEM)
-static uint16_t get_uint16 (uint8_t offset)
+static int16_t get_int16 (uint8_t offset)
 {
 	return ((uint16_t)command[offset] & 0xff) | (uint16_t)command[offset + 1] << 8;
 }
@@ -273,7 +273,8 @@ void packet ()
 			return;
 		}
 		temps[which]->target = target + 273.15;
-		if (isnan (temps[which]->target)) {
+		temps[which]->adctarget = temps[which]->toadc (temps[which]->target);
+		if (temps[which]->adctarget < 0) {
 			// loop () doesn't handle it anymore, so it isn't disabled there.
 			if (temps[which]->is_on) {
 				RESET (temps[which]->power_pin);
@@ -281,7 +282,7 @@ void packet ()
 				--temps_busy;
 			}
 		}
-		else if (isinf (temps[which]->target)) {
+		else if (temps[which]->adctarget >= MAXINT) {
 			// loop () doesn't handle it anymore, so it isn't enabled there.
 			if (!temps[which]->is_on) {
 				SET (temps[which]->power_pin);
@@ -316,6 +317,8 @@ void packet ()
 		}
 		temps[which]->min_alarm = min.f + 273.15;
 		temps[which]->max_alarm = max.f + 273.15;
+		temps[which]->adcmin_alarm = temps[which]->toadc (temps[which]->min_alarm);
+		temps[which]->adcmax_alarm = temps[which]->toadc (temps[which]->max_alarm);
 		write_ack ();
 		adc_phase = 1;
 		return;
@@ -333,8 +336,8 @@ void packet ()
 			return;
 		}
 		write_ack ();
-		ReadFloat f;
-		f.f = temps[which]->last - 273.15;
+		ReadFloat f;	// TODO: start a measurement and report when it's ready.
+		f.f = temps[which]->fromadc (temps[which]->adclast) - 273.15;
 		//debug ("read temp %f", f.f);
 		reply[0] = 2 + sizeof (float);
 		reply[1] = CMD_TEMP;
@@ -584,7 +587,7 @@ void packet ()
 		debug ("CMD_AUDIO_SETUP");
 #endif
 		last_active = millis ();
-		audio_us_per_bit = get_uint16 (2);
+		audio_us_per_bit = get_int16 (2);
 		for (uint8_t a = 0; a < num_axes; ++a)
 		{
 			if (command[4 + ((a + 2) >> 3)] & (1 << ((a + 2) & 0x7))) {

@@ -38,6 +38,7 @@
 #define TEMP0 (EXTRUDER0 + num_extruders)
 
 #define MAXLONG (int32_t ((uint32_t (1) << 31) - 1))
+#define MAXINT (int16_t ((uint16_t (1) << 15) - 1))
 
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
@@ -157,7 +158,8 @@ struct Temp : public Object
 	Pin_t thermistor_pin;
 	// Volatile variables.
 	float target;				// target temperature; NAN to disable. [K]
-	float last;				// last measured temperature.
+	int16_t adctarget;			// target temperature in adc counts; -1 for disabled. [adccounts]
+	int16_t adclast;			// last measured temperature. [adccounts]
 #ifndef LOWMEM
 	float core_T, shell_T;			// current temperatures. [K]
 #if MAXGPIOS > 0
@@ -166,13 +168,17 @@ struct Temp : public Object
 #endif
 	float min_alarm;			// NAN, or the temperature at which to trigger the callback.  [K]
 	float max_alarm;			// NAN, or the temperature at which to trigger the callback.  [K]
+	int16_t adcmin_alarm;			// -1, or the temperature at which to trigger the callback.  [adccounts]
+	int16_t adcmax_alarm;			// -1, or the temperature at which to trigger the callback.  [adccounts]
 	// Internal variables.
 	unsigned long last_time;		// last value of micros when this heater was handled.
 	unsigned long time_on;			// Time that the heater has been on since last reading.  [μs]
 	bool is_on;				// If the heater is currently on.
 	// Functions.
 	void setup_read ();			// Initialize ADC for reading the thermistor.
-	float get_value ();			// Get thermistor reading, or NAN if it isn't available yet.
+	int16_t get_value ();			// Get thermistor reading, or -1 if it isn't available yet.
+	float fromadc (int16_t adc);		// convert ADC to K.
+	int16_t toadc (float T);		// convert K to ADC.
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Temp () {}
@@ -272,6 +278,7 @@ struct Gpio : public Object
 #ifndef LOWMEM
 	uint8_t master;
 	float value;
+	float adcvalue;
 	Gpio *prev, *next;
 #endif
 	void setup (uint8_t new_state);
@@ -348,7 +355,7 @@ EXTERN unsigned long out_time;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
 EXTERN unsigned long last_active, led_last, motor_limit, temp_limit;
-EXTERN uint16_t led_phase;
+EXTERN int16_t led_phase;
 EXTERN uint8_t adc_phase;
 #if MAXTEMPS > 0 || MAXEXTRUDERS > 0
 EXTERN uint8_t temp_current;
@@ -357,7 +364,7 @@ EXTERN uint8_t temp_current;
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
 EXTERN uint8_t audio_head, audio_tail, audio_state;
 EXTERN unsigned long audio_start;
-EXTERN uint16_t audio_us_per_bit;
+EXTERN int16_t audio_us_per_bit;
 #endif
 EXTERN unsigned long start_time;
 EXTERN long freeze_time;

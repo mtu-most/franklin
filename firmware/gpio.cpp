@@ -33,6 +33,8 @@ void Gpio::load (int16_t &addr, bool eeprom)
 #ifndef LOWMEM
 	if (master >= MAXOBJECT || !temps[master])
 		master = 0;
+	if (temps[master])
+		adcvalue = temps[master]->toadc (value);
 	if (oldmaster != master)
 	{
 		// Disable old links.

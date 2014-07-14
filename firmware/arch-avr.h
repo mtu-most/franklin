@@ -68,9 +68,9 @@ static inline bool adc_ready(uint8_t pin) {
 	return true;
 }
 
-static inline uint16_t adc_get(uint8_t pin) {
-	uint16_t low = ADCL;
-	uint16_t high = ADCH;
+static inline int16_t adc_get(uint8_t pin) {
+	int16_t low = uint8_t(ADCL);
+	int16_t high = uint8_t(ADCH);
 	return (high << 8) | low;
 }
 

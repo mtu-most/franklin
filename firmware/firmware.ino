@@ -14,9 +14,9 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 		for (i = 1; i <= MAXOBJECT; ++i) {
 			uint8_t next = (temp_current + i) % MAXOBJECT;
 			if (temps[next] &&
-					((!isnan (temps[next]->target) && !isinf (temps[next]->target))
-					 || !isnan (temps[next]->min_alarm)
-					 || !isnan (temps[next]->max_alarm)
+					((temps[next]->adctarget < 1 << 12 && temps[next]->adctarget >= 0)
+					 || temps[next]->adcmin_alarm < MAXINT
+					 || temps[next]->adcmax_alarm >= 0
 #ifndef LOWMEM
 					 || temps[next]->gpios
 #endif
@@ -33,15 +33,17 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 		}
 		temps[temp_current]->setup_read();
 	}
-	float temp = temps[temp_current]->get_value ();
-	if (isnan (temp))	// Not done yet.
+	int16_t temp = temps[temp_current]->get_value ();
+	if (temp < 0)	// Not done yet.
 		return;
 	// Set the phase so next time another temp is measured.
 	adc_phase = 1;
 	// First of all, if an alarm should be triggered, do so.
-	if (temps[temp_current]->min_alarm < temp || temps[temp_current]->max_alarm > temp) {
+	if (temps[temp_current]->adcmin_alarm < temp || temps[temp_current]->adcmax_alarm > temp) {
 		temps[temp_current]->min_alarm = NAN;
 		temps[temp_current]->max_alarm = NAN;
+		temps[temp_current]->adcmin_alarm = MAXINT;
+		temps[temp_current]->adcmax_alarm = -1;
 		which_tempcbs |= (1 << temp_current);
 		try_send_next ();
 	}
@@ -49,7 +51,7 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 	// And handle any linked gpios.
 	for (Gpio *g = temps[temp_current]->gpios; g; g = g->next) {
 		SET_OUTPUT (g->pin);
-		if (temp >= g->value)
+		if (temp >= g->adcvalue)
 			SET (g->pin);
 		else
 			RESET (g->pin);
@@ -64,7 +66,7 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 #endif
 	{
 		// No valid settings; use simple on/off-regime based on current temperature only.
-		if (temp < temps[temp_current]->target) {
+		if (temp < temps[temp_current]->adctarget) {
 			if (!temps[temp_current]->is_on) {
 				//debug ("switching on %d", temp_current);
 				SET (temps[temp_current]->power_pin);

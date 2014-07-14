@@ -26,7 +26,7 @@ static inline bool adc_ready(uint8_t pin) {
 	return false;
 }
 
-static inline uint16_t adc_get(uint8_t pin) {
+static inline int16_t adc_get(uint8_t pin) {
 	return 0;
 }
 

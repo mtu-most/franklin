@@ -141,11 +141,11 @@ void setup ()
 			temps[o]->min_alarm = NAN;
 			temps[o]->max_alarm = NAN;
 			temps[o]->target = NAN;
-			temps[o]->last = NAN;
+			temps[o]->adclast = -1;
 			temps[o]->power_pin.read (0x100);
 			temps[o]->thermistor_pin.read (0x100);
 #ifndef LOWMEM
-			temps[o]->gpios = 0;
+			temps[o]->gpios = NULL;
 #endif
 		}
 #endif
