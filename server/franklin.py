@@ -148,10 +148,10 @@ class Connection: # {{{
 			mcu = 'atmega1280'
 		else:
 			raise ValueError('board type not supported')
-		if ports[port] is not None:
+		if ports[port] not in (False, None):
 			c = websockets.call(resumeinfo, ports[port].printer.reset, [], {})
 			while c(): c.args = (yield websockets.WAIT)
-			cls.disable(port)
+		cls.disable(port)
 		data = ['']
 		filename = xdgbasedir.data_files_read(os.path.join('firmware', board + '.hex'), packagename = 'franklin')[0]
 		process = subprocess.Popen([config['avrdude'], '-q', '-q', '-V', '-c', protocol, '-b', baudrate, '-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
