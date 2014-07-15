@@ -780,7 +780,7 @@ class Printer: # {{{
 		while len(self.gcode) > 0:
 			cmd, args, message = self.gcode[0]
 			cmd = tuple(cmd)
-			#log('Running %s %s' % (cmd, args))
+			log('Running %s %s' % (cmd, args))
 			if cmd[0] == 'S':
 				# Spindle speed; not supported, but shouldn't error.
 				pass
@@ -797,7 +797,8 @@ class Printer: # {{{
 					for t in range(num):
 						target = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
 					self.goto([target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], e = args['E'], f0 = args['f'], f1 = args['F'])[1](None)
-				self.goto([target[0], target[1], args['Z']], e = args['E'], f0 = args['f'], f1 = args['F'])[1](None)
+				else:
+					self.goto([target[0], target[1], args['Z']], e = args['E'], f0 = args['f'], f1 = args['F'])[1](None)
 			elif cmd in (('G', 28), ('M', 6)):
 				# Home or tool change; same response: park
 				if not self.flushing:

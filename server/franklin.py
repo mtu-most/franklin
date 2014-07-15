@@ -362,7 +362,7 @@ class Connection: # {{{
 # }}}
 
 class Port: # {{{
-	def __init__(self, port, process, id): # {{{
+	def __init__(self, port, process, id, detectport): # {{{
 		self.name = None
 		self.port = port
 		self.process = process
@@ -377,6 +377,8 @@ class Port: # {{{
 			orphans[old[0]].call('die', (), {}, lambda success, ret: None)
 			del orphans[old[0]]
 		def get_vars(success, vars):
+			# The child has opened the port now; close our handle.
+			detectport.close()
 			self.name = vars['name']
 			# Copy settings from orphan with the same name, then kill the orphan.
 			old[:] = [x for x in orphans if orphans[x].name == self.name]
@@ -473,6 +475,7 @@ def detect(port): # {{{
 		def timeout():
 			# Timeout.  Give up.
 			glib.source_remove(watcher)
+			printer.close()
 			log('Timeout waiting for printer on port %s; giving up.' % port)
 			return False
 		def boot_printer_input(fd, cond):
@@ -498,27 +501,26 @@ def detect(port): # {{{
 					return True
 				else:
 					log('accepting it anyway')
-			# We have something to handle; cancel the timeout and close the serial port.
+			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset.
 			glib.source_remove(timeout_handle)
-			printer.close()
 			# This printer was running and tried to send an id.  Check the id.
 			id[0] = id[0][1:]
 			if id[0] in orphans:
 				log('accepting orphan %s on %s' % (repr(id[0]), port))
 				ports[port] = orphans[id[0]]
-				ports[port].call('reconnect', [port], {}, lambda success, ret: ports[port].call('send_printer', [None], {}, lambda success, data: None))
+				ports[port].call('reconnect', [port], {}, lambda success, ret: ports[port].call('send_printer', [None], {}, lambda success, data: printer.close()))
 				return False
 			log('accepting unknown printer on port %s (id was %s)' % (port, repr(id[0])))
 			id[0] = nextid()
 			log('new id %s' % repr(id[0]))
 			process = subprocess.Popen((config['printercmd'], port, config['audiodir'], id[0]), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-			ports[port] = Port(port, process, id[0])
-			# TODO: restore settings of orphan with the same name.
+			ports[port] = Port(port, process, id[0], printer)
 			return False
 		printer.write(single['ID'])
 		timeout_handle = glib.timeout_add(15000, timeout)
 		watcher = glib.io_add_watch(printer.fileno(), glib.IO_IN, boot_printer_input)
-	glib.timeout_add(150, part2)
+	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
+	glib.timeout_add(1000, part2)
 # }}}
 
 def nextid(): # {{{
