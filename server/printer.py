@@ -804,7 +804,7 @@ class Printer: # {{{
 					self.flushing = True
 					return self.flush()[1](None)
 				self.gcode.pop(0)
-				return self.park(True, self._do_gcode)[1](None)
+				return self.park(self._do_gcode, abort = False)[1](None)
 			elif cmd == ('G', 4):
 				if not self.flushing:
 					self.flushing = True
@@ -915,6 +915,8 @@ class Printer: # {{{
 		self._print_done(True, 'completed')
 	# }}}
 	def _print_done(self, complete, reason): # {{{
+		log('print done')
+		traceback.print_stack()
 		if self.queue_info is None and self.gcode_id is not None:
 			log('done %d %s' % (complete, reason))
 			self._send(self.gcode_id, 'return', (complete, reason))
@@ -925,14 +927,15 @@ class Printer: # {{{
 		if len(self.jobs_active) > 0:
 			if complete:
 				if self.job_current >= len(self.jobs_active):
-					log('queue done')
+					log('job queue done')
 					self._send(self.job_id, 'return', (True, reason))
 					self.job_id = None
 					self.jobs_active = []
 				else:
+					log('job part done; moving on')
 					self._next_job()
 			else:
-				log('job part done; moving on')
+				log('job aborted')
 				self._send(self.job_id, 'return', (False, reason))
 				self.job_id = None
 				self.jobs_active = []
@@ -941,8 +944,8 @@ class Printer: # {{{
 			self.queue_pos += 1
 			if id is not None:
 				self._send(id, 'error', 'aborted')
-			self.queue = []
-			self.queue_pos = 0
+		self.queue = []
+		self.queue_pos = 0
 		if self.home_phase is not None:
 			#log('killing homer')
 			self.home_phase = None
@@ -957,6 +960,8 @@ class Printer: # {{{
 	# }}}
 	def _do_queue(self): # {{{
 		#log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
+		if self.paused and not self.resuming:
+			return
 		while not self.wait and (self.queue_pos < len(self.queue) or self.resuming):
 			if self.queue_pos >= len(self.queue):
 				#log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
@@ -967,6 +972,9 @@ class Printer: # {{{
 				self.gcode_wait = self.queue_info[5]
 				self.resuming = False
 				self.queue_info = None
+				if self.paused:
+					self.paused = False
+					self._variables_update()
 				if self.queue_pos >= len(self.queue):
 					break
 			id, axes, e, f0, f1, which, cb = self.queue[self.queue_pos]
@@ -1229,7 +1237,7 @@ class Printer: # {{{
 		if self.job_current >= len(self.jobs_active):
 			self._print_done(True, 'Queue finished')
 			return
-		self.gcode_run(self.jobqueue[self.jobs_active[self.job_current]][0], self.jobs_ref, self.jobs_angle, self.jobs_probemap)[1](None)
+		self.gcode_run(self.jobqueue[self.jobs_active[self.job_current]][0], self.jobs_ref, self.jobs_angle, self.jobs_probemap, abort = False)[1](None)
 	# }}}
 	# Subclasses.  {{{
 	class Temp: # {{{
@@ -1517,7 +1525,6 @@ class Printer: # {{{
 				return False
 			self.wait = False
 		self.paused = pausing
-		self._variables_update()
 		if not self.paused:
 			if was_paused:
 				# Go back to pausing position.
@@ -1529,20 +1536,21 @@ class Printer: # {{{
 		else:
 			#log('pausing')
 			if not was_paused:
-				#log('pausing %d %d %d %d' % (self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
+				log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
 				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - reply[1] >= 0:
 					#log('pausing gcode %d/%d/%d' % (self.queue_pos, reply[1], len(self.queue)))
 					self.queue_info = [self.queue_pos - reply[1], [a.get_current_pos() for a in self.axis], self.queue, self.movecb, self.flushing, self.gcode_wait]
 				else:
 					#log('stopping')
+					self.paused = False
 					if len(self.movecb) > 0:
 						call_queue.extend([(x[1], [True]) for x in self.movecb])
-					self.paused = False
 				self.queue = []
 				self.movecb = []
 				self.flushing = False
 				self.gcode_wait = None
 				self.queue_pos = 0
+		self._variables_update()
 	# }}}
 	def queued(self): # {{{
 		if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], False)):
@@ -1560,23 +1568,23 @@ class Printer: # {{{
 		return struct.unpack('<BB', reply) == (ord(self.rcommand['PONG']), arg)
 	# }}}
 	@delayed
-	def home(self, id, speed = 5, cb = None): # {{{
+	def home(self, id, speed = 5, cb = None, abort = True): # {{{
 		#log('homing')
-		self._print_done(False, 'aborted by homing')
+		if abort:
+			self._print_done(False, 'aborted by homing')
 		self.home_id = id
 		self.home_speed = speed
 		self.home_done_cb = cb
 		self._do_home()
 	# }}}
 	@delayed
-	def park(self, id, keep_gcode = False, cb = None): # {{{
+	def park(self, id, cb = None, abort = True): # {{{
 		#log('parking')
-		if not keep_gcode:
-			#log('dumping gcode')
-			self.gcode = []
-		if any(self.axis[a].motor.sleeping for a in range(self.num_axes)):
+		if abort:
+			self._print_done(False, 'aborted by parking')
+		if not all(self.axis[a].valid for a in range(self.num_axes)):
 			#log('homing')
-			self.home(cb = lambda: self.park(keep_gcode, cb)[1](id))[1](None)
+			self.home(cb = lambda: self.park(cb, abort = False)[1](id), abort = False)[1](None)
 			return
 		def park_cb(w):
 			#log('park cb')
@@ -1795,7 +1803,7 @@ class Printer: # {{{
 		return errors
 	# }}}
 	@delayed
-	def gcode_run(self, id, code, ref = (0, 0), angle = 0, probemap = None): # {{{
+	def gcode_run(self, id, code, ref = (0, 0), angle = 0, probemap = None, abort = True): # {{{
 		self.gcode_ref = ref
 		angle = math.radians(angle)
 		self.gcode_angle = math.sin(angle), math.cos(angle)
@@ -1805,13 +1813,17 @@ class Printer: # {{{
 			self.btemp = self.temp[0].value
 		else:
 			self.btemp = float('nan')
-		self._print_done(False, 'aborted by starting new print')
+		if abort:
+			self._print_done(False, 'aborted by starting new print')
 		self.queue_info = None
 		self.gcode = code
 		self.gcode_id = id
+		if self.paused:
+			self.paused = False
+			self._variables_update()
 		if len(self.gcode) <= 0:
 			log('nothing to run')
-			ret(complete, 'nothing to run')
+			ret(False, 'nothing to run')
 			return
 		self._broadcast(None, 'printing', True)
 		self._do_gcode()

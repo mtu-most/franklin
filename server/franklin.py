@@ -416,7 +416,7 @@ class Port: # {{{
 			Connection.disable(self.port)
 			return False
 		data = json.loads(line)
-		log('printer input:' + repr(data))
+		#log('printer input:' + repr(data))
 		if data[1] == 'broadcast':
 			Connection._broadcast(data[2], data[3], self.port, *(data[4:]))
 		elif data[1] == 'disconnect':
