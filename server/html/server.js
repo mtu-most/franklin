@@ -112,6 +112,7 @@ function _setup_updater() {
 				'num_temps': 0,
 				'num_gpios': 0,
 				'printer_type': 0,
+				'max_deviation': 0,
 				'led_pin': 0,
 				'probe_pin': 0,
 				'room_T': 0,
@@ -261,15 +262,16 @@ function _setup_updater() {
 			printers[port].num_temps = values[3];
 			printers[port].num_gpios = values[4];
 			printers[port].printer_type = values[5];
-			printers[port].led_pin = values[6];
-			printers[port].probe_pin = values[7];
-			printers[port].room_T = values[8];
-			printers[port].motor_limit = values[9];
-			printers[port].temp_limit = values[10];
-			printers[port].feedrate = values[11];
-			printers[port].angle = values[12];
-			printers[port].paused = values[13];
-			printers[port].status = values[14];
+			printers[port].max_deviation = values[6];
+			printers[port].led_pin = values[7];
+			printers[port].probe_pin = values[8];
+			printers[port].room_T = values[9];
+			printers[port].motor_limit = values[10];
+			printers[port].temp_limit = values[11];
+			printers[port].feedrate = values[12];
+			printers[port].angle = values[13];
+			printers[port].paused = values[14];
+			printers[port].status = values[15];
 			trigger_update(port, 'variables_update');
 		},
 		'axis_update': function(port, index, values) {

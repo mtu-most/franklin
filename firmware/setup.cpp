@@ -32,7 +32,6 @@ void setup ()
 	vp = 0;
 	vq = 0;
 	t0 = 0;
-	tq = 0;
 	f0 = 0;
 	//debug("moving->false");
 	moving = false;

@@ -1,7 +1,7 @@
 // vim: set foldmethod=marker :
 #include "firmware.h"
 
-//#define DEBUG_MOVE
+#define DEBUG_MOVE
 
 #if MAXAXES > 0
 void reset_pos ()	// {{{
@@ -105,7 +105,6 @@ static void apply_offsets (float *data) {
 // start_time		micros() at start of move.
 // t0			time to do main part.
 // tp			time to do connection.
-// tq			time to do startup.  This cannot be smaller than tp.
 // m->dist		total distance of this segment (mm).
 // m->next_dist		total distance of next segment (mm).
 // m->main_dist		distance of main part (mm).
@@ -113,7 +112,7 @@ static void apply_offsets (float *data) {
 // v0, vp		start and end velocity for main part. (fraction/s)
 // vq			end velocity of connector part. (fraction/s)
 
-// Used from previous segment (if move_prepared == true): tp, tq, vq.
+// Used from previous segment (if move_prepared == true): tp, vq.
 void next_move () {
 #if MAXAXES > 0 || MAXEXTRUDERS > 0
 	if (queue_start == queue_end && !queue_full)
@@ -173,36 +172,6 @@ void next_move () {
 
 	v0 = vq;
 	f0 = v0 * tp / 2e6;
-	// If tp was too short, the motors aren't up to speed yet; insert a fake segment to get there.
-	if (move_prepared && tq > tp) { // {{{
-#ifdef DEBUG_MOVE
-		debug ("Last move wasn't good enough, building rest of preparation.");
-#endif
-		v0 = 0;
-		vp = 0;
-		t0 = 0;
-		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-			uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-			if (!motors[m])
-				continue;
-			motors[m]->dist = 0;
-			motors[m]->main_dist = 0;
-#if MAXEXTRUDERS > 0
-			if (mt >= num_axes)
-				extruder[mt - num_axes].steps_done = f0 * motors[m]->next_dist;
-#endif
-		}
-		current_move_has_cb = false;
-#ifdef DEBUG_MOVE
-		debug ("Extra segment has been set up: f0=%f v0=%f /s vp=%f /s vq=%f /s t0=%d ms tp=%d ms tq=%d ms", F(f0), F(v0), F(vp), F(vq), int (t0/1000), int (tp/1000), int (tq/1000));
-#endif
-		//debug("moving->true");
-		moving = true;
-		start_time = micros () - tp;
-		tp = tq;
-		return;
-	} // }}}
-	float max_ap = INFINITY, max_aq = INFINITY; // [fraction/s²]
 	// If no move is prepared, do a fake segment with only the speed change at the end; don't pop anything off the queue.
 	if (!move_prepared) { // {{{
 #ifdef DEBUG_MOVE
@@ -230,7 +199,7 @@ void next_move () {
 #endif
 				motors[m]->next_dist = queue[queue_start].data[mt + 2];
 			// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
-			if (abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .1)
+			if (abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .001)
 				action = true;
 #ifdef DEBUG_MOVE
 			debug ("Preparing motor %d for a dist of %f", m, F(motors[m]->next_dist));
@@ -275,9 +244,8 @@ void next_move () {
 	// Otherwise, we are prepared and can start the segment. {{{
 	else {
 		bool action = false;
-		v0 = vq;
 #ifdef DEBUG_MOVE
-		debug ("Move was prepared with v0 = %f and tq = %d", F(v0), int (tq / 1000));
+		debug ("Move was prepared with v0 = %f and tp = %d", F(v0), int (tp / 1000));
 #endif
 		uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
 		if (n == queue_end) { // {{{
@@ -292,13 +260,12 @@ void next_move () {
 				motors[m]->dist = motors[m]->next_dist;
 				// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
 				if (abs (motors[m]->dist) * motors[m]->steps_per_mm > .001) {
-					motors[m]->next_dist = 0;
 					action = true;
 				}
 				else {
-					motors[m]->next_dist = 0;
 					motors[m]->dist = 0;
 				}
+				motors[m]->next_dist = 0;
 #ifdef DEBUG_MOVE
 				debug ("Last segment distance for motor %d is %f", m, F(motors[m]->dist));
 #endif
@@ -376,11 +343,13 @@ void next_move () {
 	// vq: next move's requested starting speed.
 	// current_move_has_cb: if a cb should be fired after this segment is complete.
 	// move_prepared: if this segment connects to a following segment.
+	// m->dist: total distance of this segment (mm).
+	// m->next_dist: total distance of next segment (mm).
 #ifdef DEBUG_MOVE
-	debug ("Set up: tq = %d ms, v0 = %f /s, vp = %f /s, vq = %f /s", int (tq / 1000), F(v0), F(vp), F(vq));
+	debug ("Set up: tp = %d ms, v0 = %f /s, vp = %f /s, vq = %f /s", int (tp / 1000), F(v0), F(vp), F(vq));
 #endif
 
-	// Limit vp, vq, ap and aq. {{{
+	// Limit vp, vq. {{{
 	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
 		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
 		if (!motors[m])
@@ -390,109 +359,64 @@ void next_move () {
 			a = motors[m]->max_v / abs (motors[m]->dist);
 			if (!isnan (a) && !isinf (a) && vp > a)
 				vp = a;
-			a = motors[m]->max_a / abs (motors[m]->dist);
-			if (!isnan (a) && !isinf (a) && max_ap > a)
-				max_ap = a;
 		}
 		if (abs (motors[m]->next_dist) > .001) {
 			a = motors[m]->max_v / abs (motors[m]->next_dist);
 			if (!isnan (a) && !isinf (a) && vq > a)
 				vq = a;
-			a = motors[m]->max_a / abs (motors[m]->next_dist);
-			if (!isnan (a) && !isinf (a) && max_aq > a)
-				max_aq = a;
 		}
 	}
 #ifdef DEBUG_MOVE
 	debug ("After limiting, vp = %f /s and vq = %f /s", F(vp), F(vq));
 #endif
 	// }}}
-	// Already set up: v0, vp, vq, max_ap, max_aq, m->dist, m->next_dist.
-	// To do: start_time, t0, tp, tq, m->main_dist, m->steps_done
+	// Already set up: f0, v0, vp, vq, m->dist, m->next_dist.
+	// To do: start_time, t0, tp, m->main_dist, m->steps_done
 #ifdef DEBUG_MOVE
 	debug ("Preparation did f0 = %f", F(f0));
 #endif
-	// Find shortest tp. {{{
-	if (isinf (vp)) {
-		tp = 0;
-		t0 = 0;
+
+#if MAXAXES > 0
+	// Use maximum deviation to find fraction where to start rounded corner.
+	float mm_round;
+	float norma2 = 0, normb2 = 0, inner = 0, summed2 = 0;
+	for (uint8_t a = 0; a < num_axes; ++a) {
+		inner += axis[a].motor.dist * axis[a].motor.next_dist;
+		norma2 += axis[a].motor.dist * axis[a].motor.dist;
+		normb2 += axis[a].motor.next_dist * axis[a].motor.next_dist;
+		float s = axis[a].motor.dist + axis[a].motor.next_dist;
+		summed2 += s * s;
+	}
+	if (norma2 < .01 || normb2 < .01) {
+		// At least one of the segments is 0; no rounded corner.
+		mm_round = 0;
 	}
 	else {
-		t0 = long (abs (vp - v0) / max_ap * 1e6);
-		tp = long (vp / max_ap * 1e6);
+		float alpha = acos(inner / sqrt(norma2 * normb2));
+		float mm = max_deviation / sin(alpha);
+		float scale = sqrt(summed2) / 2;
+		mm_round = mm / scale;
 	}
-#ifdef DEBUG_MOVE
-	debug ("Required time for acceleration in main part: %d, in connector: %d.", int (t0 / 1000), int (tp / 1000));
-#endif
-	// }}}
-	// Check if we're within the segment's limits. {{{ XXX
-	float fp = vp / 2e6 * tp;
-	float fmain = (v0 + vp) * t0 / 2e6;	// This is the minimum fraction for the main part.
-	if (isinf (vp))
-	{
-		t0 = 0;
-		tp = 0;
-		fp = 1. - f0;
+	// Convert mm to fraction for both p and q.
+	float fp = mm_round / sqrt(norma2);
+	float fq = mm_round / sqrt(normb2);
+	if (fp > .5) {
+		fq *= .5 / fp;
+		fp = .5;
 	}
-	else if (fmain + fp > 1 - f0) {
-		// This move is too short for the requested vp.  Don't go too far.
-		if (!isinf (max_ap)) {
-			t0 = long ((sqrt ((1 - f0 + v0 * v0 / 2 / max_ap) / max_ap) - v0 / max_ap) * 1e6);
-			tp = t0 + long (v0 / max_ap * 1e6);
-			vp = v0 + max_ap * t0 / 1e6;
-		}
-		else {
-			tp = 0;
-			vp = v0;	// XXX is this correct?
-			t0 = long ((1 - f0) / v0 * 1e6);
-		}
-	}
-	else if (v0 > 1e-10 || vp > 1e-10) {
-		// The current value of t0 is the minimum value; set the actual value.
-		t0 = long ((1 - fp - f0) / (v0 + vp) * 2e6);
-#ifdef DEBUG_MOVE
-		debug ("This move had an initial v of %f, which is sustained %d ms.", F(v0), int (t0 / 1000));
-#endif
-	}
-	else
-		t0 = 0;
-	// }}}
-	// Set up q. {{{
-	tq = long (vq / max_aq * 1e6);
-	if (tq < tp)
-		tq = tp;
-	if (isinf (vq)) {
-		// Use all available time to go as fast as possible.
-		// v*t == 1
-		// v=at
-		// att == 1
-		// t = 1/sqrt a
-		// v = sqrt a
-		if (isinf (max_aq)) {
-			vq = 0;
-			tq = 0;
-		}
-		else {
-			vq = sqrt (max_aq);
-			tq = long (vq / max_aq * 1e6);
-		}
-	}
-	float fq = vq * tq / 2e6;
 	if (fq > .5) {
-		// This segment is too short for this speed; slow it down.
+		fp *= .5 / fq;
 		fq = .5;
-		tq = long (sqrt (fq / max_aq) * 1e6);
-		if (tq < tp) {
-			// Now it doesn't take long enough; slow it down.
-			tq = tp;
-			vq = 1e6 / tq;
-		}
-		else
-			vq = tq * max_aq / 1e6;
-	} // }}}
-	// If this is a preparation segment, give it time to actually do the preparation.
-	if (tp == 0 && t0 == 0)
-		tp = tq;
+	}
+#else
+	float fp = 0;
+	float fq = 0;
+#endif
+
+	// Compute t0 and tp.
+	tp = long (fp * 1e6 / vp);
+	t0 = long ((1. - f0 - fp) * 2e6 / (v0 + vp));
+
 	// Finish. {{{
 	start_time = micros ();
 	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
@@ -519,7 +443,7 @@ void next_move () {
 #endif
 	}
 #ifdef DEBUG_MOVE
-	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%d ms tp=%d ms tq=%d ms max_aq=%f", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), int (t0/1000), int (tp/1000), int (tq/1000), F(max_aq));
+	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%d ms tp=%d ms", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), int (t0/1000), int (tp/1000));
 #endif
 	//debug("moving->true");
 	moving = true;

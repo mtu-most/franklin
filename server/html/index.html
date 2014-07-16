@@ -448,6 +448,7 @@
 							<th class='floattitle tweak'>Feedrate (%)</th>
 							<th class='floattitle setup'>Angle</th>
 							<th class='choicetitle setup'>Printer type</th>
+							<th class='choicetitle expert'>Max deviation</th>
 							<th class='floattitle expert'>Motor timeout (s)</th>
 							<th class='floattitle expert'>Temp timeout (s)</th>
 						</tr>
@@ -456,6 +457,7 @@
 							<td class='tweak'>[$(Float [[null, 'feedrate'], .01])$]</td>
 							<td class='setup'>[$(Float [[null, 'angle'], 1])$]</td>
 							<td class='setup'>[$(Choice [[null, 'printer_type'], ['Cartesian', 'Delta'], undefined, ['nodelta', null]])$]</td>
+							<td class='setup'>[$(Float [[null, 'max_deviation'], 1])$]</td>
 							<td class='expert'>[$(Float [[null, 'motor_limit'], 1000])$]</td>
 							<td class='expert'>[$(Float [[null, 'temp_limit'], 1000])$]</td>
 						</tr>

@@ -192,7 +192,7 @@ struct Motor : public Object
 	Pin_t dir_pin;
 	Pin_t enable_pin;
 	float steps_per_mm;			// hardware calibration [steps/mm].
-	float max_v, limit_v, max_a;			// maximum value for f [mm/s], [mm/s^2].
+	float max_v, limit_v, max_a;		// maximum value for f [mm/s], [mm/s^2].
 	uint8_t max_steps;			// maximum number of steps in one iteration.
 	float continuous_steps_per_s;		// steps per second for continuous run.
 	float continuous_steps;			// fractional continuous steps that have been done.
@@ -304,6 +304,7 @@ EXTERN uint8_t num_temps;
 EXTERN uint8_t num_gpios;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
+EXTERN float max_deviation;
 #ifndef LOWMEM
 EXTERN float room_T;	//[°C]
 #endif
@@ -368,7 +369,7 @@ EXTERN int16_t audio_us_per_bit;
 #endif
 EXTERN unsigned long start_time;
 EXTERN long freeze_time;
-EXTERN long t0, tp, tq;
+EXTERN long t0, tp;
 EXTERN bool moving;
 EXTERN float v0, vp, vq, f0;
 EXTERN bool move_prepared;

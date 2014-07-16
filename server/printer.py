@@ -674,13 +674,13 @@ class Printer: # {{{
 			return False
 		#log('%d' % len(data[self.namelen:]))
 		self.name = unicode(data[:self.namelen].rstrip('\0'), 'utf-8', 'replace')
-		self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.led_pin, self.probe_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, angle = struct.unpack('<BBBBBHHfLLff', data[self.namelen:])
+		self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.max_deviation, self.led_pin, self.probe_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, angle = struct.unpack('<BBBBBfHHfLLff', data[self.namelen:])
 		self.pos = (self.pos + [float('nan')] * self.num_axes)[:self.num_axes]
 		self.angle = math.degrees(angle)
 		return True
 	# }}}
 	def _write_variables(self): # {{{
-		data = (self.name.encode('utf-8') + chr(0) * self.namelen)[:self.namelen] + struct.pack('<BBBBBHHfLLff', self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.led_pin, self.probe_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, math.radians(self.angle))
+		data = (self.name.encode('utf-8') + chr(0) * self.namelen)[:self.namelen] + struct.pack('<BBBBBfHHfLLff', self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.max_deviation, self.led_pin, self.probe_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, math.radians(self.angle))
 		if not self._send_packet(struct.pack('<BB', self.command['WRITE'], 1) + data):
 			return False
 		self._variables_update()
@@ -689,7 +689,7 @@ class Printer: # {{{
 	def _variables_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		self._broadcast(target, 'variables_update', [self.name, self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.led_pin, self.probe_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, self.angle, self.paused])
+		self._broadcast(target, 'variables_update', [self.name, self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.max_deviation, self.led_pin, self.probe_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, self.angle, self.paused])
 	# }}}
 	def _write_axis(self, which): # {{{
 		data = self.axis[which].write()
@@ -1722,7 +1722,7 @@ class Printer: # {{{
 		message = '[general]\r\n'
 		# Don't export the name.
 		#message += 'name=' + self.name.replace('\\', '\\\\').replace('\n', '\\n') + '\r\n'
-		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('num_axes', 'num_extruders', 'num_temps', 'printer_type', 'led_pin', 'probe_pin', 'motor_limit', 'temp_limit')])
+		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('num_axes', 'num_extruders', 'num_temps', 'printer_type', 'max_deviation', 'led_pin', 'probe_pin', 'motor_limit', 'temp_limit')])
 		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('room_T', 'feedrate', 'angle')])
 		for a in range(self.maxaxes):
 			message += '[axis %d]\r\n' % a
@@ -2138,7 +2138,7 @@ class Printer: # {{{
 		return ret
 	def get_variables(self):
 		ret = {}
-		for key in ('name', 'num_axes', 'num_extruders', 'num_temps', 'num_gpios', 'printer_type', 'led_pin', 'probe_pin', 'room_T', 'motor_limit', 'temp_limit', 'feedrate', 'angle'):
+		for key in ('name', 'num_axes', 'num_extruders', 'num_temps', 'num_gpios', 'printer_type', 'max_deviation', 'led_pin', 'probe_pin', 'room_T', 'motor_limit', 'temp_limit', 'feedrate', 'angle'):
 			ret[key] = getattr(self, key)
 		return ret
 	def set_variables(self, **ka):
@@ -2148,7 +2148,7 @@ class Printer: # {{{
 		for key in ('num_axes', 'num_extruders', 'num_temps', 'num_gpios', 'printer_type', 'led_pin', 'probe_pin'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
-		for key in ('room_T', 'motor_limit', 'temp_limit', 'feedrate', 'angle'):
+		for key in ('max_deviation', 'room_T', 'motor_limit', 'temp_limit', 'feedrate', 'angle'):
 			if key in ka:
 				setattr(self, key, float(ka.pop(key)))
 		self._write_variables()

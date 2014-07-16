@@ -422,6 +422,7 @@ function update_variables() { // {{{
 	update_range([null, 'num_temps']);
 	update_range([null, 'num_gpios']);
 	update_choice([null, 'printer_type']);
+	update_float([null, 'max_deviation']);
 	update_pin([null, 'led_pin']);
 	update_pin([null, 'probe_pin']);
 	//update_float([null, 'room_T']);
