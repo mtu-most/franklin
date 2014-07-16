@@ -780,7 +780,7 @@ class Printer: # {{{
 		while len(self.gcode) > 0:
 			cmd, args, message = self.gcode[0]
 			cmd = tuple(cmd)
-			log('Running %s %s' % (cmd, args))
+			#log('Running %s %s' % (cmd, args))
 			if cmd[0] == 'S':
 				# Spindle speed; not supported, but shouldn't error.
 				pass
@@ -1028,15 +1028,14 @@ class Printer: # {{{
 				p = chr(self.command['GOTOCB'])
 			else:
 				p = chr(self.command['GOTO'])
+			#log('queueing %s' % repr(axes))
 			self._send_packet(p + ''.join([chr(t) for t in targets]) + args)
 			if id is not None:
 				self._send(id, 'return', None)
-		if not self.wait:
-			self.queue = []
-			self.queue_pos = 0
+		# TODO: clear queue when...?
 	# }}}
 	def _do_home(self, done = None): # {{{
-		log('do_home: %s %s' % (self.home_phase, done))
+		#log('do_home: %s %s' % (self.home_phase, done))
 		# 0: move to max limit switch or find sense switch.
 		# 1: move to min limit switch or find sense switch.
 		# 2: back off.
@@ -1537,7 +1536,7 @@ class Printer: # {{{
 		else:
 			#log('pausing')
 			if not was_paused:
-				log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
+				#log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
 				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - reply[1] >= 0:
 					#log('pausing gcode %d/%d/%d' % (self.queue_pos, reply[1], len(self.queue)))
 					self.queue_info = [self.queue_pos - reply[1], [a.get_current_pos() for a in self.axis], self.queue, self.movecb, self.flushing, self.gcode_wait]
