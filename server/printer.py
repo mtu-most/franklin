@@ -961,7 +961,7 @@ class Printer: # {{{
 	# }}}
 	def _do_queue(self): # {{{
 		#log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
-		if self.paused and not self.resuming:
+		if self.paused and not self.resuming and len(self.queue) == 0:
 			return
 		while not self.wait and (self.queue_pos < len(self.queue) or self.resuming):
 			if self.queue_pos >= len(self.queue):

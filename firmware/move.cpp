@@ -1,7 +1,7 @@
 // vim: set foldmethod=marker :
 #include "firmware.h"
 
-#define DEBUG_MOVE
+//#define DEBUG_MOVE
 
 #if MAXAXES > 0
 void reset_pos ()	// {{{
@@ -170,14 +170,12 @@ void next_move () {
 #endif
 	// }}}
 
-	v0 = vq;
-	f0 = v0 * tp / 2e6;
+	f0 = vq * tp / 2e6;
 	// If no move is prepared, do a fake segment with only the speed change at the end; don't pop anything off the queue.
 	if (!move_prepared) { // {{{
 #ifdef DEBUG_MOVE
 		debug ("No move prepared.");
 #endif
-		v0 = 0;
 		f0 = 0;
 		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
 			uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
@@ -200,7 +198,7 @@ void next_move () {
 	// Otherwise, we are prepared and can start the segment. {{{
 	bool action = false;
 #ifdef DEBUG_MOVE
-	debug ("Move was prepared with v0 = %f and tp = %d", F(v0), int (tp / 1000));
+	debug ("Move was prepared with tp = %d", int (tp / 1000));
 #endif
 	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
 	if (n == queue_end) { // {{{
@@ -262,6 +260,7 @@ void next_move () {
 		move_prepared = true;
 	}
 	// }}}
+	v0 = queue[queue_start].data[F0] * feedrate;
 	vp = queue[queue_start].data[F1] * feedrate;
 	current_move_has_cb = queue[queue_start].cb;
 	if (queue_end == queue_start) {
@@ -302,7 +301,7 @@ void next_move () {
 	debug ("Set up: tp = %d ms, v0 = %f /s, vp = %f /s, vq = %f /s", int (tp / 1000), F(v0), F(vp), F(vq));
 #endif
 
-	// Limit vp, vq. {{{
+	// Limit v0, vp, vq. {{{
 	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
 		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
 		if (!motors[m])
@@ -310,8 +309,12 @@ void next_move () {
 		float a;
 		if (abs (motors[m]->dist) > .001) {
 			a = motors[m]->max_v / abs (motors[m]->dist);
-			if (!isnan (a) && !isinf (a) && vp > a)
-				vp = a;
+			if (!isnan (a) && !isinf (a)) {
+				if (v0 > a)
+					v0 = a;
+				if (vp > a)
+					vp = a;
+			}
 		}
 		if (abs (motors[m]->next_dist) > .001) {
 			a = motors[m]->max_v / abs (motors[m]->next_dist);
@@ -320,7 +323,7 @@ void next_move () {
 		}
 	}
 #ifdef DEBUG_MOVE
-	debug ("After limiting, vp = %f /s and vq = %f /s", F(vp), F(vq));
+	debug ("After limiting, v0 = %f /s, vp = %f /s and vq = %f /s", F(v0), F(vp), F(vq));
 #endif
 	// }}}
 	// Already set up: f0, v0, vp, vq, m->dist, m->next_dist.
