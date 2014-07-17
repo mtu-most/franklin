@@ -175,166 +175,119 @@ void next_move () {
 	// If no move is prepared, do a fake segment with only the speed change at the end; don't pop anything off the queue.
 	if (!move_prepared) { // {{{
 #ifdef DEBUG_MOVE
-		debug ("No move prepared, building preparation segment.");
+		debug ("No move prepared.");
 #endif
-#if MAXAXES > 0
-		apply_offsets (queue[queue_start].data);
-#endif
-
-		// For requested motors, set dist to 0 and next_dist to correct value.
-		bool action = false;
+		v0 = 0;
+		f0 = 0;
 		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
 			uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
 			if (!motors[m])
 				continue;
-			motors[m]->dist = 0;
-			if (isnan (queue[queue_start].data[mt + 2])) {
+			if (isnan (queue[queue_start].data[mt + 2]))
 				motors[m]->next_dist = 0;
-				continue;
-			}
+			else {
 #if MAXAXES > 0
-			if (mt < num_axes)
-				motors[m]->next_dist = queue[queue_start].data[mt + 2] - axis[mt].source;
-			else
+				if (mt < num_axes)
+					motors[m]->next_dist = queue[queue_start].data[mt + 2] - axis[mt].source;
+				else
 #endif
-				motors[m]->next_dist = queue[queue_start].data[mt + 2];
-			// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
-			if (abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .001)
-				action = true;
-#ifdef DEBUG_MOVE
-			debug ("Preparing motor %d for a dist of %f", m, F(motors[m]->next_dist));
-#endif
-		}
-		// If no motors are moving for this segment, discard it and try the next.
-		if (!action) {
-#ifdef DEBUG_MOVE
-			debug ("Skipping zero-distance move (from preparation)");
-#endif
-			if (queue_end == queue_start)
-				continue_cb |= 1;
-			if (queue[queue_start].cb) {
-#ifdef DEBUG_MOVE
-				debug ("Sending movecb for skipped move.");
-#endif
-				++num_movecbs;
+					motors[m]->next_dist = queue[queue_start].data[mt + 2];
+				debug("next dist of motor %d = %f", m, F(motors[m]->next_dist));
 			}
-			queue_start = (queue_start + 1) % QUEUE_LENGTH;
-			queue_full = false;
-			try_send_next ();
-			//debug("moving->false");
-			moving = false;
-			for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-				if (!motors[m])
-					continue;
-				motors[m]->dist = NAN;
-			}
-			return next_move ();
 		}
-		v0 = 0;
-		vp = 0;
-		f0 = 0;
-		vq = queue[queue_start].data[F0] * feedrate;
-#ifdef DEBUG_MOVE
-		debug ("Using vq = %f from queue %f and feed %f", F(vq), F(queue[queue_start].data[F0]), feedrate);
-#endif
-		current_move_has_cb = false;
-		move_prepared = true;
 	}
 	// }}}
 	// Otherwise, we are prepared and can start the segment. {{{
-	else {
-		bool action = false;
+	bool action = false;
 #ifdef DEBUG_MOVE
-		debug ("Move was prepared with v0 = %f and tp = %d", F(v0), int (tp / 1000));
+	debug ("Move was prepared with v0 = %f and tp = %d", F(v0), int (tp / 1000));
 #endif
-		uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
-		if (n == queue_end) { // {{{
-			// There is no next segment; we should stop at the end.
+	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
+	if (n == queue_end) { // {{{
+		// There is no next segment; we should stop at the end.
 #ifdef DEBUG_MOVE
-			debug ("Building final segment.");
+		debug ("Building final segment.");
 #endif
-			for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-				uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-				if (!motors[m])
-					continue;
-				motors[m]->dist = motors[m]->next_dist;
-				// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
-				if (abs (motors[m]->dist) * motors[m]->steps_per_mm > .001) {
-					action = true;
-				}
-				else {
-					motors[m]->dist = 0;
-				}
+		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
+			uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+			if (!motors[m])
+				continue;
+			motors[m]->dist = motors[m]->next_dist;
+			// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
+			if (abs (motors[m]->dist) * motors[m]->steps_per_mm > .001)
+				action = true;
+			else
+				motors[m]->dist = 0;
+			motors[m]->next_dist = 0;
+#ifdef DEBUG_MOVE
+			debug ("Last segment distance for motor %d is %f", m, F(motors[m]->dist));
+#endif
+		}
+		vq = 0;
+		move_prepared = false;
+	}
+	// }}}
+	else { // {{{
+		// There is a next segment; we should connect to it.
+#ifdef DEBUG_MOVE
+		debug ("Building a connecting segment.");
+#endif
+		// Apply offsets to next segment.
+#if MAXAXES > 0
+		apply_offsets (queue[n].data);
+#endif
+		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
+			uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+			if (!motors[m])
+				continue;
+			motors[m]->dist = motors[m]->next_dist;
+			if (isnan (queue[n].data[mt + 2]))
 				motors[m]->next_dist = 0;
-#ifdef DEBUG_MOVE
-				debug ("Last segment distance for motor %d is %f", m, F(motors[m]->dist));
-#endif
-			}
-			vq = 0;
-			move_prepared = false;
-		}
-		// }}}
-		else { // {{{
-			// There is a next segment; we should connect to it.
-#ifdef DEBUG_MOVE
-			debug ("Building a connecting segment.");
-#endif
-			// Apply offsets to next segment.
+			else {
 #if MAXAXES > 0
-			apply_offsets (queue[n].data);
+				if (mt < num_axes)
+					motors[m]->next_dist = queue[n].data[mt + 2] - (axis[mt].source + motors[m]->dist);
+				else
 #endif
-			for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-				uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-				if (!motors[m])
-					continue;
-				motors[m]->dist = motors[m]->next_dist;
-				if (isnan (queue[n].data[mt + 2]))
-					motors[m]->next_dist = 0;
-				else {
-#if MAXAXES > 0
-					if (mt < num_axes)
-						motors[m]->next_dist = queue[n].data[mt + 2] - (axis[mt].source + motors[m]->dist);
-					else
-#endif
-						motors[m]->next_dist = queue[n].data[mt + 2];
-				}
-				// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
-				if (abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .001 || abs (motors[m]->dist) * motors[m]->steps_per_mm > .001)
-					action = true;
-#ifdef DEBUG_MOVE
-				debug ("Connecting distance for motor %d is %f, to %f", m, F(motors[m]->dist), F(motors[m]->next_dist));
-#endif
+					motors[m]->next_dist = queue[n].data[mt + 2];
 			}
-			vq = queue[n].data[F0] * feedrate;
-			move_prepared = true;
+			// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
+			if (abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .001 || abs (motors[m]->dist) * motors[m]->steps_per_mm > .001)
+				action = true;
+#ifdef DEBUG_MOVE
+			debug ("Connecting distance for motor %d is %f, to %f", m, F(motors[m]->dist), F(motors[m]->next_dist));
+#endif
 		}
-		// }}}
-		vp = queue[queue_start].data[F1] * feedrate;
-		current_move_has_cb = queue[queue_start].cb;
-		if (queue_end == queue_start) {
-			continue_cb |= 1;
+		vq = queue[n].data[F0] * feedrate;
+		move_prepared = true;
+	}
+	// }}}
+	vp = queue[queue_start].data[F1] * feedrate;
+	current_move_has_cb = queue[queue_start].cb;
+	if (queue_end == queue_start) {
+		continue_cb |= 1;
+		try_send_next ();
+	}
+	queue_start = n;
+	queue_full = false;
+	if (!action) {
+#ifdef DEBUG_MOVE
+		debug ("Skipping zero-distance prepared move");
+#endif
+		if (current_move_has_cb) {
+			++num_movecbs;
 			try_send_next ();
 		}
-		queue_start = n;
-		queue_full = false;
-		if (!action) {
-#ifdef DEBUG_MOVE
-			debug ("Skipping zero-distance prepared move");
-#endif
-			if (current_move_has_cb) {
-				++num_movecbs;
-				try_send_next ();
-			}
-			//debug("moving->false");
-			moving = false;
-			for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-				if (!motors[m])
-					continue;
-				motors[m]->dist = NAN;
-			}
-			return next_move ();
+		//debug("moving->false");
+		moving = false;
+		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
+			if (!motors[m])
+				continue;
+			motors[m]->dist = NAN;
 		}
-	} // }}}
+		return next_move ();
+	}
+	// }}}
 
 	// Currently set up:
 	// f0: fraction of move already done by connection.
@@ -398,8 +351,8 @@ void next_move () {
 		mm_round = mm / scale;
 	}
 	// Convert mm to fraction for both p and q.
-	float fp = mm_round / sqrt(norma2);
-	float fq = mm_round / sqrt(normb2);
+	float fp = norma2 >= .01 ? mm_round / sqrt(norma2) : 0;
+	float fq = normb2 >= .01 ? mm_round / sqrt(normb2) : 0;
 	if (fp > .5) {
 		fq *= .5 / fp;
 		fp = .5;
