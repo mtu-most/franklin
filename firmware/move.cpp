@@ -52,7 +52,7 @@ void reset_pos ()	// {{{
 #if MAXAXES > 0
 
 #if MAXAXES >= 3
-static bool check_delta (uint8_t a, float *target) {
+static bool check_delta (uint8_t a, float *target) {	// {{{
 	float dx = target[0] - axis[a].x;
 	float dy = target[1] - axis[a].y;
 	float r2 = dx * dx + dy * dy;
@@ -79,10 +79,10 @@ static bool check_delta (uint8_t a, float *target) {
 		return false;
 	}
 	return true;
-}
+}	// }}}
 #endif
 
-static void apply_offsets (float *data) {
+static void apply_offsets (float *data) {	// {{{
 	// Apply offsets.
 	for (uint8_t a = 0; a < num_axes; ++a) {
 		data[AXIS0 + a] += axis[a].offset;
@@ -98,7 +98,7 @@ static void apply_offsets (float *data) {
 		}
 	}
 #endif
-}
+}	// }}}
 #endif
 
 // Set up:
@@ -171,10 +171,13 @@ void next_move () {
 	// }}}
 
 	f0 = vq * tp / 2e6;
-	// If no move is prepared, do a fake segment with only the speed change at the end; don't pop anything off the queue.
+	// If no move is prepared, set next_dist from the queue; it will be used as dist below.
 	if (!move_prepared) { // {{{
 #ifdef DEBUG_MOVE
 		debug ("No move prepared.");
+#endif
+#if MAXAXES > 0
+		apply_offsets (queue[queue_start].data);
 #endif
 		f0 = 0;
 		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
@@ -190,7 +193,9 @@ void next_move () {
 				else
 #endif
 					motors[m]->next_dist = queue[queue_start].data[mt + 2];
+#ifdef DEBUG_MOVE
 				debug("next dist of motor %d = %f", m, F(motors[m]->next_dist));
+#endif
 			}
 		}
 	}
@@ -335,27 +340,30 @@ void next_move () {
 #if MAXAXES > 0
 	// Use maximum deviation to find fraction where to start rounded corner.
 	float mm_round;
-	float norma2 = 0, normb2 = 0, inner = 0, summed2 = 0;
+	float norma2 = 0, normb2 = 0, inner = 0;
 	for (uint8_t a = 0; a < num_axes; ++a) {
 		inner += axis[a].motor.dist * axis[a].motor.next_dist;
 		norma2 += axis[a].motor.dist * axis[a].motor.dist;
 		normb2 += axis[a].motor.next_dist * axis[a].motor.next_dist;
-		float s = axis[a].motor.dist + axis[a].motor.next_dist;
-		summed2 += s * s;
 	}
-	if (norma2 < .01 || normb2 < .01) {
+	float norma = sqrt(norma2);
+	float normb = sqrt(normb2);
+	if (norma < .01 || normb < .01) {
 		// At least one of the segments is 0; no rounded corner.
 		mm_round = 0;
 	}
 	else {
-		float alpha = acos(inner / sqrt(norma2 * normb2));
-		float mm = max_deviation / sin(alpha);
+		float summed2 = 0;
+		for (uint8_t a = 0; a < num_axes; ++a) {
+			float s = axis[a].motor.dist / norma + axis[a].motor.next_dist / normb;
+			summed2 += s * s;
+		}
 		float scale = sqrt(summed2) / 2;
-		mm_round = mm / scale;
+		mm_round = max_deviation / scale;
 	}
 	// Convert mm to fraction for both p and q.
-	float fp = norma2 >= .01 ? mm_round / sqrt(norma2) : 0;
-	float fq = normb2 >= .01 ? mm_round / sqrt(normb2) : 0;
+	float fp = norma >= .01 ? mm_round / sqrt(norma) : 0;
+	float fq = normb >= .01 ? mm_round / sqrt(normb) : 0;
 	if (fp > .5) {
 		fq *= .5 / fp;
 		fp = .5;
@@ -370,7 +378,7 @@ void next_move () {
 #endif
 
 	// Compute t0 and tp.
-	tp = long (fp * 1e6 / vp);
+	tp = long (fp * 2e6 / vp);
 	t0 = long ((1. - f0 - fp) * 2e6 / (v0 + vp));
 
 	// Finish. {{{
@@ -389,7 +397,7 @@ void next_move () {
 		if (isinf (vp) || isinf (v0))
 			motors[m]->main_dist = 0;
 		else
-			motors[m]->main_dist = motors[m]->dist * (f0 + (v0 + vp) * t0 / 2e6);
+			motors[m]->main_dist = motors[m]->dist * (1 - fp);
 #ifdef DEBUG_MOVE
 		debug ("Motor %d dist %f main dist = %f, next dist = %f", m, F(motors[m]->dist), F(motors[m]->main_dist), F(motors[m]->next_dist));
 #endif

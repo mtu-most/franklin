@@ -14,9 +14,9 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 		for (i = 1; i <= MAXOBJECT; ++i) {
 			uint8_t next = (temp_current + i) % MAXOBJECT;
 			if (temps[next] &&
-					((temps[next]->adctarget < 1 << 12 && temps[next]->adctarget >= 0)
-					 || temps[next]->adcmin_alarm < MAXINT
-					 || temps[next]->adcmax_alarm >= 0
+					((temps[next]->adctarget < MAXINT && temps[next]->adctarget >= 0)
+					 || (temps[next]->adcmin_alarm >= 0 && temps[next]->adcmin_alarm < MAXINT)
+					 || temps[next]->adcmax_alarm < MAXINT
 #ifndef LOWMEM
 					 || temps[next]->gpios
 #endif
@@ -36,14 +36,15 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 	int16_t temp = temps[temp_current]->get_value ();
 	if (temp < 0)	// Not done yet.
 		return;
+	//debug("temp for %d: %d", temp_current, temp);
 	// Set the phase so next time another temp is measured.
 	adc_phase = 1;
-	// First of all, if an alarm should be triggered, do so.
-	if (temps[temp_current]->adcmin_alarm < temp || temps[temp_current]->adcmax_alarm > temp) {
+	// First of all, if an alarm should be triggered, do so.  Adc values are higher for lower temperatures.
+	if ((temps[temp_current]->adcmin_alarm < MAXINT && temps[temp_current]->adcmin_alarm > temp) || temps[temp_current]->adcmax_alarm < temp) {
 		temps[temp_current]->min_alarm = NAN;
 		temps[temp_current]->max_alarm = NAN;
 		temps[temp_current]->adcmin_alarm = MAXINT;
-		temps[temp_current]->adcmax_alarm = -1;
+		temps[temp_current]->adcmax_alarm = MAXINT;
 		which_tempcbs |= (1 << temp_current);
 		try_send_next ();
 	}
@@ -51,7 +52,8 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 	// And handle any linked gpios.
 	for (Gpio *g = temps[temp_current]->gpios; g; g = g->next) {
 		SET_OUTPUT (g->pin);
-		if (temp >= g->adcvalue)
+		// adc values are lower for higher temperatures.
+		if (temp < g->adcvalue)
 			SET (g->pin);
 		else
 			RESET (g->pin);
@@ -65,8 +67,8 @@ static void handle_temps (unsigned long current_time, unsigned long longtime) {
 	if (true)
 #endif
 	{
-		// No valid settings; use simple on/off-regime based on current temperature only.
-		if (temp < temps[temp_current]->adctarget) {
+		// No valid settings; use simple on/off-regime based on current temperature only.  Note that adc values are lower for higher temperatures.
+		if (temp > temps[temp_current]->adctarget) {
 			if (!temps[temp_current]->is_on) {
 				//debug ("switching on %d", temp_current);
 				SET (temps[temp_current]->power_pin);
@@ -556,6 +558,7 @@ void loop () {
 				continue;
 			RESET (temps[current_t]->power_pin);
 			temps[current_t]->target = NAN;
+			temps[current_t]->adctarget = MAXINT;
 			temps[current_t]->is_on = false;
 			last_active = longtime;
 		}

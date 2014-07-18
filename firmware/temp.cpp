@@ -69,9 +69,9 @@ int16_t Temp::get_value () {
 
 float Temp::fromadc (int16_t adc) {
 	if (adc < 0)
-		return NAN;
-	if (adc >= MAXINT)
 		return INFINITY;
+	if (adc >= MAXINT)
+		return NAN;
 	//debug("adc: %d", adc);
 	// Symbols: A[ms]: adc value, R[01s]: resistor value, V[m01s]: voltage
 	// with m: maximum value, 0: series resistor, 1: parallel resistor, s: sensed value (thermistor)
@@ -94,9 +94,9 @@ float Temp::fromadc (int16_t adc) {
 
 int16_t Temp::toadc (float T) {
 	if (isnan (T))
-		return -1;
-	if (isinf (T))
 		return MAXINT;
+	if (isinf (T))
+		return -1;
 	float k = Rc * exp (minus_beta / Tc);
 	float Rs = k * exp (-minus_beta / T);
 	return ((1 << 10) - 1) * Rs / (Rs + R0);

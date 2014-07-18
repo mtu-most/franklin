@@ -465,6 +465,9 @@ class Printer: # {{{
 					self.wait = False
 					#log('resuming queue %d' % len(self.queue))
 					call_queue.append((self._do_queue, []))
+					if self.flushing is None:
+						self.flushing = False
+						call_queue.append((self._do_gcode, []))
 				else:
 					# Audio continue.
 					self.waitaudio = False
@@ -641,6 +644,7 @@ class Printer: # {{{
 					return True
 				else: # ack[1] == 'stall'
 					log('stall response waiting for ack')
+					self._unpause()
 					self._print_done(False, 'printer sent stall')
 					return False
 		return False
@@ -778,6 +782,9 @@ class Printer: # {{{
 	# }}}
 	def _do_gcode(self): # {{{
 		while len(self.gcode) > 0:
+			if self.paused:
+				# Resume when no longer paused.
+				return
 			cmd, args, message = self.gcode[0]
 			cmd = tuple(cmd)
 			#log('Running %s %s' % (cmd, args))
@@ -785,6 +792,9 @@ class Printer: # {{{
 				# Spindle speed; not supported, but shouldn't error.
 				pass
 			elif cmd == ('G', 1):
+				if self.flushing is None:
+					log('not filling; waiting for queue space')
+					return
 				#log(repr(args))
 				sina, cosa = self.gcode_angle
 				target = cosa * args['X'] - sina * args['Y'] + self.gcode_ref[0], cosa * args['Y'] + sina * args['X'] + self.gcode_ref[1]
@@ -799,6 +809,11 @@ class Printer: # {{{
 					self.goto([target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], e = args['E'], f0 = args['f'], f1 = args['F'])[1](None)
 				else:
 					self.goto([target[0], target[1], args['Z']], e = args['E'], f0 = args['f'], f1 = args['F'])[1](None)
+				if (self.wait or len(self.queue) - self.queue_pos > self.queue_length) and self.flushing is False:
+					#log('stop filling; wait for queue space')
+					self.flushing = None
+					self.gcode.pop(0)
+					return
 			elif cmd in (('G', 28), ('M', 6)):
 				# Home or tool change; same response: park
 				if not self.flushing:
@@ -910,6 +925,9 @@ class Printer: # {{{
 			self.flushing = False
 			if len(self.gcode) > 0:
 				self.gcode.pop(0)
+			else:
+				# Printing was aborted; don't call print_done, or we'll abort whatever aborted us.
+				return
 		if self.gcode_id is not None and not self.flushing:
 			self.flushing = True
 			return self.flush()[1](None)
@@ -925,6 +943,7 @@ class Printer: # {{{
 		self.gcode = []
 		self.flushing = False
 		self.gcode_wait = None
+		log('job %s' % repr(self.jobs_active))
 		if len(self.jobs_active) > 0:
 			if complete:
 				if self.job_current >= len(self.jobs_active):
@@ -959,23 +978,27 @@ class Printer: # {{{
 			self.movecb.remove(self.probe_cb)
 			self.probe_cb(False)
 	# }}}
+	def _unpause(self): # {{{
+		if self.queue_info is None:
+			return
+		#log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
+		self.queue = self.queue_info[2]
+		self.queue_pos = self.queue_info[0]
+		self.movecb = self.queue_info[3]
+		self.flushing = self.queue_info[4]
+		self.gcode_wait = self.queue_info[5]
+		self.resuming = False
+		self.queue_info = None
+		self.paused = False
+		self._variables_update()
+	# }}}
 	def _do_queue(self): # {{{
 		#log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 		if self.paused and not self.resuming and len(self.queue) == 0:
 			return
 		while not self.wait and (self.queue_pos < len(self.queue) or self.resuming):
 			if self.queue_pos >= len(self.queue):
-				#log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
-				self.queue = self.queue_info[2]
-				self.queue_pos = self.queue_info[0]
-				self.movecb = self.queue_info[3]
-				self.flushing = self.queue_info[4]
-				self.gcode_wait = self.queue_info[5]
-				self.resuming = False
-				self.queue_info = None
-				if self.paused:
-					self.paused = False
-					self._variables_update()
+				self._unpause()
 				if self.queue_pos >= len(self.queue):
 					break
 			id, axes, e, f0, f1, which, cb = self.queue[self.queue_pos]
@@ -1032,7 +1055,9 @@ class Printer: # {{{
 			self._send_packet(p + ''.join([chr(t) for t in targets]) + args)
 			if id is not None:
 				self._send(id, 'return', None)
-		# TODO: clear queue when...?
+			if self.flushing is None:
+				self.flushing = False
+				self._do_gcode()
 	# }}}
 	def _do_home(self, done = None): # {{{
 		#log('do_home: %s %s' % (self.home_phase, done))
@@ -1237,7 +1262,7 @@ class Printer: # {{{
 		if self.job_current >= len(self.jobs_active):
 			self._print_done(True, 'Queue finished')
 			return
-		self.gcode_run(self.jobqueue[self.jobs_active[self.job_current]][0], self.jobs_ref, self.jobs_angle, self.jobs_probemap, abort = False)[1](None)
+		self.gcode_run(self.jobqueue[self.jobs_active[self.job_current]][0][:], self.jobs_ref, self.jobs_angle, self.jobs_probemap, abort = False)[1](None)
 	# }}}
 	# Subclasses.  {{{
 	class Temp: # {{{
@@ -1530,13 +1555,13 @@ class Printer: # {{{
 				# Go back to pausing position.
 				self.goto(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
-				#log('resuming')
+				log('resuming')
 				self.resuming = True
 			self._do_queue()
 		else:
-			#log('pausing')
+			log('pausing')
 			if not was_paused:
-				#log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
+				log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
 				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - reply[1] >= 0:
 					#log('pausing gcode %d/%d/%d' % (self.queue_pos, reply[1], len(self.queue)))
 					self.queue_info = [self.queue_pos - reply[1], [a.get_current_pos() for a in self.axis], self.queue, self.movecb, self.flushing, self.gcode_wait]
@@ -1814,6 +1839,7 @@ class Printer: # {{{
 		else:
 			self.btemp = float('nan')
 		if abort:
+			self._unpause()
 			self._print_done(False, 'aborted by starting new print')
 		self.queue_info = None
 		self.gcode = code
@@ -1844,6 +1870,7 @@ class Printer: # {{{
 			self._send(id, 'return', success)
 		else:
 			if not success:
+				self._unpause()
 				self._print_done(False, 'aborted by failed confirmation')
 			else:
 				self._do_gcode()
@@ -2229,6 +2256,7 @@ class Printer: # {{{
 			self._temp_update(t, target)
 		for g in range(self.maxgpios):
 			self._gpio_update(g, target)
+		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
 		if self.gcode is not None:
 			self._broadcast(target, 'printing', True)
 	# }}}

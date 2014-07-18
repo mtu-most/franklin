@@ -274,24 +274,29 @@ void packet ()
 		}
 		temps[which]->target = target + 273.15;
 		temps[which]->adctarget = temps[which]->toadc (temps[which]->target);
-		if (temps[which]->adctarget < 0) {
+		//debug("adc target %d", temps[which]->adctarget);
+		if (temps[which]->adctarget >= MAXINT) {
 			// loop () doesn't handle it anymore, so it isn't disabled there.
+			//debug ("Temp %d disabled", which);
 			if (temps[which]->is_on) {
 				RESET (temps[which]->power_pin);
 				temps[which]->is_on = false;
 				--temps_busy;
 			}
 		}
-		else if (temps[which]->adctarget >= MAXINT) {
+		else if (temps[which]->adctarget < 0) {
 			// loop () doesn't handle it anymore, so it isn't enabled there.
+			//debug ("Temp %d enabled", which);
 			if (!temps[which]->is_on) {
 				SET (temps[which]->power_pin);
 				temps[which]->is_on = true;
 				++temps_busy;
 			}
 		}
-		else
+		else {
+			//debug ("Temp %d set to %f", which, F(target));
 			initialized = true;
+		}
 		adc_phase = 1;
 		write_ack ();
 		return;
