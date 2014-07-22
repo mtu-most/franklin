@@ -554,7 +554,7 @@ function update_motor(id) { // {{{
 	update_float([id, 'steps_per_mm']);
 	update_float([id, 'limit_v']);
 	update_float([id, 'max_v']);
-	update_float([id, 'max_a']);
+	update_float([id, 'limit_a']);
 	update_float([id, 'max_steps']);
 	var speed = get_value(printer, [id, 'runspeed']);
 	var minus = get_element(printer, [id, 'minus']);

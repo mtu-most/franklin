@@ -125,6 +125,10 @@ void setup ()
 			motors[o]->next_dist = NAN;
 			motors[o]->f = 0;
 			motors[o]->continuous_steps_per_s = 0;
+			motors[o]->last_v = 0;
+			motors[o]->prelast_v = 0;
+			motors[o]->last_time = time;
+			motors[o]->prelast_time = 0;
 #ifdef AUDIO
 			motors[o]->audio_flags = 0;
 #endif

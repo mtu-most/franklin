@@ -12,7 +12,7 @@ void Motor::load (int16_t &addr, bool eeprom)
 	steps_per_mm = read_float (addr, eeprom);
 	limit_v = read_float (addr, eeprom);
 	max_v = read_float (addr, eeprom);
-	max_a = read_float (addr, eeprom);
+	limit_a = read_float (addr, eeprom);
 	max_steps = read_8 (addr, eeprom);
 	if (max_steps <= 0)
 		max_steps = 1;
@@ -41,7 +41,7 @@ void Motor::save (int16_t &addr, bool eeprom)
 	write_float (addr, steps_per_mm, eeprom);
 	write_float (addr, limit_v, eeprom);
 	write_float (addr, max_v, eeprom);
-	write_float (addr, max_a, eeprom);
+	write_float (addr, limit_a, eeprom);
 	write_8 (addr, max_steps, eeprom);
 }
 #endif

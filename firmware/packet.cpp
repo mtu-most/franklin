@@ -203,6 +203,7 @@ void packet ()
 			}
 			//debug ("initial positive %d", motors[which]->positive);
 			motors[which]->last_time = micros ();
+			motors[which]->prelast_time = 0;
 			SET (motors[which]->enable_pin);
 			motors[which]->continuous_steps = 0;
 			motors_busy |= 1 << which;

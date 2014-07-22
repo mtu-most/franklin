@@ -192,12 +192,14 @@ struct Motor : public Object
 	Pin_t dir_pin;
 	Pin_t enable_pin;
 	float steps_per_mm;			// hardware calibration [steps/mm].
-	float max_v, limit_v, max_a;		// maximum value for f [mm/s], [mm/s^2].
+	float max_v, limit_v, limit_a;		// maximum value for f [mm/s], [mm/s^2].
 	uint8_t max_steps;			// maximum number of steps in one iteration.
 	float continuous_steps_per_s;		// steps per second for continuous run.
 	float continuous_steps;			// fractional continuous steps that have been done.
 	float f;
 	unsigned long last_time;		// micros value when last iteration was run.
+	float prelast_time;			// time between last_v and prelast_v. [s]
+	float last_v, prelast_v;		// v at last and pre-last time, for using limit_a [mm/s].
 	bool positive;				// direction of current movement.
 	float dist, next_dist, main_dist;
 #ifdef AUDIO

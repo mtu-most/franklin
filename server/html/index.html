@@ -275,7 +275,7 @@
 				<input type='text'/>
 				<button class='button' type='button'>Go</button>
 				<div>[$(Float [[[['axis', 'motor'], args[0]], 'max_v'], 1, 'expert'])$]</div>
-				<div>[$(Float [[[['axis', 'motor'], args[0]], 'max_a'], 1, 'expert'])$]</div>
+				<div>[$(Float [[[['axis', 'motor'], args[0]], 'limit_a'], 1, 'expert'])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Pins_axis'> <!-- {{{ -->
@@ -338,7 +338,7 @@
 				<button class='button' type='button'>Extrude</button>
 				<button class='button' type='button'>Retract</button>
 				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'max_v'], 1, 'expert'])$]</div>
-				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'max_a'], 1, 'expert'])$]</div>
+				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'limit_a'], 1, 'expert'])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Pins_extruder'> <!-- {{{ -->
@@ -532,7 +532,7 @@
 							null,
 							'Extrude or retract a length of filament.',
 							'Maximum speed that the extruder will try to move.',
-							'Maximum acceleration that the extruder is trying to use while speeding up or slowing down.'
+							'Maximum acceleration that the extruder motor is using while speeding up or slowing down.'
 						]),
 						multiple ('Setup_extruder', ['tweak', 'expert', 'expert'])
 					).AddClass ('tweak')])!]

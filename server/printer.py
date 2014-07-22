@@ -706,7 +706,7 @@ class Printer: # {{{
 		if not self.initialized:
 			return
 		self._broadcast(target, 'axis_update', which, [
-			[self.axis[which].motor.step_pin, self.axis[which].motor.dir_pin, self.axis[which].motor.enable_pin, self.axis[which].motor.steps_per_mm, self.axis[which].motor.limit_v, self.axis[which].motor.max_v, self.axis[which].motor.max_a, self.axis[which].motor.max_steps, self.axis[which].motor.runspeed, self.axis[which].motor.sleeping],
+			[self.axis[which].motor.step_pin, self.axis[which].motor.dir_pin, self.axis[which].motor.enable_pin, self.axis[which].motor.steps_per_mm, self.axis[which].motor.limit_v, self.axis[which].motor.max_v, self.axis[which].motor.limit_a, self.axis[which].motor.max_steps, self.axis[which].motor.runspeed, self.axis[which].motor.sleeping],
 			self.axis[which].limit_min_pin, self.axis[which].limit_max_pin, self.axis[which].sense_pin, self.axis[which].limit_pos, self.axis[which].axis_min, self.axis[which].axis_max, self.axis[which].motor_min, self.axis[which].motor_max, self.axis[which].park, self.axis[which].delta_length, self.axis[which].delta_radius, self.axis[which].offset])
 	# }}}
 	def _write_extruder(self, which): # {{{
@@ -720,7 +720,7 @@ class Printer: # {{{
 		if not self.initialized:
 			return
 		self._broadcast(target, 'extruder_update', which, [
-			[self.extruder[which].motor.step_pin, self.extruder[which].motor.dir_pin, self.extruder[which].motor.enable_pin, self.extruder[which].motor.steps_per_mm, self.extruder[which].motor.limit_v, self.extruder[which].motor.max_v, self.extruder[which].motor.max_a, self.extruder[which].motor.max_steps, self.extruder[which].motor.runspeed, self.extruder[which].motor.sleeping],
+			[self.extruder[which].motor.step_pin, self.extruder[which].motor.dir_pin, self.extruder[which].motor.enable_pin, self.extruder[which].motor.steps_per_mm, self.extruder[which].motor.limit_v, self.extruder[which].motor.max_v, self.extruder[which].motor.limit_a, self.extruder[which].motor.max_steps, self.extruder[which].motor.runspeed, self.extruder[which].motor.sleeping],
 			[self.extruder[which].temp.power_pin, self.extruder[which].temp.thermistor_pin, self.extruder[which].temp.R0, self.extruder[which].temp.R1, self.extruder[which].temp.Rc, self.extruder[which].temp.Tc, self.extruder[which].temp.beta, self.extruder[which].temp.core_C, self.extruder[which].temp.shell_C, self.extruder[which].temp.transfer, self.extruder[which].temp.radiation, self.extruder[which].temp.power, self.extruder[which].temp.value],
 			self.extruder[which].filament_heat, self.extruder[which].nozzle_size, self.extruder[which].filament_size])
 	# }}}
@@ -749,7 +749,7 @@ class Printer: # {{{
 		self._broadcast(target, 'gpio_update', which, [self.gpio[which].pin, self.gpio[which].state, self.gpio[which].master, self.gpio[which].value])
 	# }}}
 	def _export_motor(self, name, obj, index): # {{{
-		return '[%s %d]\r\n' % (name, index) + ''.join(['%s = %d\r\n' % (x, getattr(obj, x)) for x in ('step_pin', 'dir_pin', 'enable_pin')]) + ''.join(['%s = %f\r\n' % (x, getattr(obj, x)) for x in ('steps_per_mm', 'limit_v', 'max_v', 'max_a', 'max_steps')])
+		return '[%s %d]\r\n' % (name, index) + ''.join(['%s = %d\r\n' % (x, getattr(obj, x)) for x in ('step_pin', 'dir_pin', 'enable_pin')]) + ''.join(['%s = %f\r\n' % (x, getattr(obj, x)) for x in ('steps_per_mm', 'limit_v', 'max_v', 'limit_a', 'max_steps')])
 	# }}}
 	def _export_temp(self, name, obj, index): # {{{
 		return '[%s %d]\r\n' % (name, index) + ''.join(['%s = %d\r\n' % (x, getattr(obj, x)) for x in ('power_pin', 'thermistor_pin')]) + ''.join(['%s = %f\r\n' % (x, getattr(obj, x)) for x in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'core_C', 'shell_C', 'transfer', 'radiation', 'power')])
@@ -1279,10 +1279,10 @@ class Printer: # {{{
 			self.runspeed = 0
 			self.sleeping = True
 		def read(self, data):
-			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.limit_v, self.max_v, self.max_a, self.max_steps = struct.unpack('<HHHffffB', data[:23])
+			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.limit_v, self.max_v, self.limit_a, self.max_steps = struct.unpack('<HHHffffB', data[:23])
 			return data[23:]
 		def write(self):
-			return struct.pack('<HHHffffB', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.limit_v, self.max_v, self.max_a, self.max_steps)
+			return struct.pack('<HHHffffB', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.limit_v, self.max_v, self.limit_a, self.max_steps)
 	# }}}
 	class Axis: # {{{
 		def __init__(self, printer, id):
@@ -2130,14 +2130,14 @@ class Printer: # {{{
 	# Motor subtype {{{
 	def _get_motor(self, obj):
 		ret = {}
-		for key in ('step_pin', 'dir_pin', 'enable_pin', 'steps_per_mm', 'limit_v', 'max_v', 'max_a', 'max_steps'):
+		for key in ('step_pin', 'dir_pin', 'enable_pin', 'steps_per_mm', 'limit_v', 'max_v', 'limit_a', 'max_steps'):
 			ret[key] = getattr(obj, key)
 		return ret
 	def _set_motor(self, obj, ka):
 		for key in ('step_pin', 'dir_pin', 'enable_pin', 'max_steps'):
 			if key in ka:
 				setattr(obj, key, int(ka.pop(key)))
-		for key in ('steps_per_mm', 'limit_v', 'max_v', 'max_a'):
+		for key in ('steps_per_mm', 'limit_v', 'max_v', 'limit_a'):
 			if key in ka:
 				setattr(obj, key, float(ka.pop(key)))
 		assert len(ka) == 0

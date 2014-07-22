@@ -152,6 +152,45 @@ static bool do_steps (uint8_t m, int16_t num_steps, unsigned long current_time) 
 	if (num_steps == 0)
 		return true;
 	//debug ("do steps %d %d", m, num_steps);
+	float dt = (current_time - motors[m]->last_time) / 1e6;
+	float stepsdt = motors[m]->steps_per_mm * dt;
+	float v = num_steps / stepsdt;
+	if (abs (v) > motors[m]->limit_v) {
+		delayed = true;
+		v = (num_steps < 0 ? -1 : 1) * motors[m]->limit_v;
+		num_steps = int16_t (v * stepsdt);
+		//debug ("delay steps %d %d", m, num_steps);
+		if (num_steps == 0)
+			return true;
+	}
+	float adt = dt + motors[m]->prelast_time;
+	float limit_dv = motors[m]->limit_a * adt;
+	if (abs (motors[m]->prelast_v - v) > limit_dv) {
+		delayed = true;
+		float old_v = v;
+		v = motors[m]->prelast_v + (v < motors[m]->prelast_v ? -1 : 1) * limit_dv;
+		if (old_v != 0 && motors[m]->prelast_v != 0 && (v < 0) ^ (old_v > 0)) {
+			// Set v to 0 and record this as an event, to prevent it from happening again next iteration.
+			motors[m]->prelast_v = motors[m]->last_v;
+			motors[m]->last_v = 0;
+			motors[m]->prelast_time = dt;
+			motors[m]->last_time = current_time;
+			return true;
+		}
+		num_steps = int16_t (v * motors[m]->steps_per_mm * adt);
+		if (num_steps == 0)
+			return true;
+	}
+	if (abs (num_steps) > motors[m]->max_steps) {
+		delayed = true;
+		num_steps = (num_steps < 0 ? -1 : 1) * motors[m]->max_steps;
+		v = num_steps / stepsdt;
+		//debug ("delay steps %d %d", m, num_steps);
+	}
+	motors[m]->prelast_v = motors[m]->last_v;
+	motors[m]->last_v = v;
+	motors[m]->prelast_time = dt;
+	motors[m]->last_time = current_time;
 	if (motors[m]->positive != (num_steps > 0)) {
 		if (num_steps > 0)
 			SET (motors[m]->dir_pin);
@@ -159,20 +198,6 @@ static bool do_steps (uint8_t m, int16_t num_steps, unsigned long current_time) 
 			RESET (motors[m]->dir_pin);
 		motors[m]->positive = (num_steps > 0);
 		//debug ("reverse positive %d %d", motors[m]->positive, num_steps);
-	}
-	float dt = (current_time - motors[m]->last_time) / 1e6;
-	if (abs (num_steps) / dt > motors[m]->limit_v * motors[m]->steps_per_mm) {
-		delayed = true;
-		num_steps = int16_t ((num_steps < 0 ? -1 : 1) * motors[m]->limit_v * motors[m]->steps_per_mm * dt);
-		//debug ("delay steps %d %d", m, num_steps);
-		if (num_steps == 0)
-			return true;
-	}
-	motors[m]->last_time = current_time;
-	if (abs (num_steps) > motors[m]->max_steps) {
-		delayed = true;
-		num_steps = (num_steps < 0 ? -1 : 1) * motors[m]->max_steps;
-		//debug ("delay steps %d %d", m, num_steps);
 	}
 #if MAXAXES > 0
 	if (m >= 2 && m < MAXAXES + 2) {
@@ -183,6 +208,8 @@ static bool do_steps (uint8_t m, int16_t num_steps, unsigned long current_time) 
 			debug ("hit %d %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (axis[m - 2].motor_min), int (axis[m - 2].motor_max));
 			// Stop continuous move only for the motor that hits the switch.
 			motors[m]->f = 0;
+			motors[m]->last_v = 0;
+			motors[m]->prelast_v = 0;
 			motors[m]->continuous_steps_per_s = 0;
 			limits_pos[m - 2] = axis[m - 2].current_pos / axis[m - 2].motor.steps_per_mm;
 			if (current_move_has_cb) {
@@ -294,12 +321,12 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 		if (motors[m]->continuous_steps_per_s != motors[m]->f) {
 			// Getting up to speed, or slowing down.
 			if (motors[m]->continuous_steps_per_s > motors[m]->f) {
-				motors[m]->f += current_t * motors[m]->max_a * motors[m]->steps_per_mm;
+				motors[m]->f += current_t * motors[m]->limit_a * motors[m]->steps_per_mm;
 				if (motors[m]->continuous_steps_per_s < motors[m]->f)
 					motors[m]->f = motors[m]->continuous_steps_per_s;
 			}
 			else {
-				motors[m]->f -= current_t * motors[m]->max_a * motors[m]->steps_per_mm;
+				motors[m]->f -= current_t * motors[m]->limit_a * motors[m]->steps_per_mm;
 				if (motors[m]->f < 0 || (motors[m]->f == 0 && motors[m]->continuous_steps_per_s < 0)) {
 					motors[m]->f = -motors[m]->f;
 					motors[m]->continuous_steps_per_s = -motors[m]->continuous_steps_per_s;
