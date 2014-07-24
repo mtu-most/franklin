@@ -99,6 +99,7 @@ class Printer: # {{{
 		self.sense = {}
 		self.wait = False
 		self.waitaudio = False
+		self.audioid = None
 		self.movewait = 0
 		self.movecb = []
 		self.limitcb = []
@@ -471,6 +472,7 @@ class Printer: # {{{
 				else:
 					# Audio continue.
 					self.waitaudio = False
+					self._audio_play()
 				continue
 			elif packet[0] == self.rcommand['LIMIT']:
 				if not self.initialized:
@@ -1264,6 +1266,24 @@ class Printer: # {{{
 			return
 		self.gcode_run(self.jobqueue[self.jobs_active[self.job_current]][0][:], self.jobs_ref, self.jobs_angle, self.jobs_probemap, abort = False)[1](None)
 	# }}}
+	def _audio_play(self): # {{{
+		if self.audiofile is None:
+			if self.audioid is not None:
+				self._send(id, 'return', True)
+			return
+		while not self.waitaudio:
+			data = self.audiofile.read(self.audio_fragment_size)
+			if len(data) < self.audio_fragment_size:
+				self.audiofile = None
+				if self.audioid is not None:
+					self._send(id, 'return', True)
+				return
+			if not self._send_packet(chr(self.command['AUDIO_DATA']) + data, audio = True):
+				self.audiofile = None
+				if self.audioid is not None:
+					self._send(id, 'return', False)
+				return
+	# }}}
 	# Subclasses.  {{{
 	class Temp: # {{{
 		def __init__(self):
@@ -1620,7 +1640,8 @@ class Printer: # {{{
 		self.movecb.append((False, park_cb))
 		self.goto([self.axis[a].park for a in range(self.num_axes)], cb = True)[1](None)
 	# }}}
-	def audio_play(self, name, axes = None, extruders = None): # {{{
+	@delayed
+	def audio_play(self, id, name, axes = None, extruders = None): # {{{
 		assert os.path.basename(name) == name
 		self.audiofile = open(os.path.join(self.audiodir, name), 'rb')
 		channels = [0] *(((2 + self.num_axes + self.num_extruders - 1) >> 3) + 1)
@@ -1633,20 +1654,12 @@ class Printer: # {{{
 		us_per_bit = self.audiofile.read(2)
 		if not self._send_packet(chr(self.command['AUDIO_SETUP']) + us_per_bit + ''.join([chr(x) for x in channels])):
 			return False
-		while self.audiofile is not None:
-			while self.waitaudio:
-				glib.Mainloop.iteration() #TODO
-			data = self.audiofile.read(self.audio_fragment_size)
-			if len(data) < self.audio_fragment_size:
-				self.audiofile = None
-				return True
-			if not self._send_packet(chr(self.command['AUDIO_DATA']) + data, audio = True):
-				return False
-		return True
+		self.audio_id = id
+		self._audio_play()
 	# }}}
 	def audio_load(self, name, data): # {{{
 		assert os.path.basename(name) == name
-		wav = wave.open(io.StringIO(base64.b64decode(data)))
+		wav = wave.open(io.BytesIO(base64.b64decode(data)))
 		assert wav.getnchannels() == 1
 		data = [ord(x) for x in wav.readframes(wav.getnframes())]
 		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2], data[1::2])]

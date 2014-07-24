@@ -305,9 +305,9 @@ void packet ()
 	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
 	{
 #ifdef DEBUG_CMD
-		initialize = true;
 		debug ("CMD_WAITTEMP");
 #endif
+		initialized = true;
 		which = get_which ();
 		if (!temps[which])
 		{
