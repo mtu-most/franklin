@@ -148,70 +148,59 @@ static void done_motors () {
 	next_move ();
 }
 
-static bool do_steps (uint8_t m, int16_t num_steps, unsigned long current_time) {
-	if (num_steps == 0)
-		return true;
-	//debug ("do steps %d %d", m, num_steps);
+static bool do_steps (uint8_t m, float distance, unsigned long current_time) {
 	float dt = (current_time - motors[m]->last_time) / 1e6;
-	float stepsdt = motors[m]->steps_per_mm * dt;
-	float v = num_steps / stepsdt;
+	float v = distance / dt;
+	// Limit v.
 	if (abs (v) > motors[m]->limit_v) {
 		delayed = true;
-		v = (num_steps < 0 ? -1 : 1) * motors[m]->limit_v;
-		num_steps = int16_t (v * stepsdt);
-		//debug ("delay steps %d %d", m, num_steps);
-		if (num_steps == 0)
-			return true;
+		v = (distance < 0 ? -1 : 1) * motors[m]->limit_v;
+		distance = v * dt;
 	}
-	float adt = dt + motors[m]->prelast_time;
-	float limit_dv = motors[m]->limit_a * adt;
-	if (abs (motors[m]->prelast_v - v) > limit_dv) {
+	// Limit a.
+	float limit_dv = motors[m]->limit_a * dt;
+	if (abs (motors[m]->last_v - v) > limit_dv) {
 		delayed = true;
 		float old_v = v;
-		v = motors[m]->prelast_v + (v < motors[m]->prelast_v ? -1 : 1) * limit_dv;
-		if (old_v != 0 && motors[m]->prelast_v != 0 && (v < 0) ^ (old_v > 0)) {
+		v = motors[m]->last_v + (v < motors[m]->last_v ? -1 : 1) * limit_dv;
+		if (old_v != 0 && motors[m]->last_v != 0 && (v < 0) ^ (old_v > 0)) {
 			// Set v to 0 and record this as an event, to prevent it from happening again next iteration.
-			motors[m]->prelast_v = motors[m]->last_v;
 			motors[m]->last_v = 0;
-			motors[m]->prelast_time = dt;
 			motors[m]->last_time = current_time;
 			return true;
 		}
-		num_steps = int16_t (v * motors[m]->steps_per_mm * adt);
-		if (num_steps == 0)
-			return true;
+		distance = v * dt;
 	}
-	if (abs (num_steps) > motors[m]->max_steps) {
+	// Limit steps per iteration.
+	int16_t steps = distance * motors[m]->steps_per_mm;
+	if (abs (steps) > motors[m]->max_steps) {
 		delayed = true;
-		num_steps = (num_steps < 0 ? -1 : 1) * motors[m]->max_steps;
-		v = num_steps / stepsdt;
-		//debug ("delay steps %d %d", m, num_steps);
+		steps = (steps < 0 ? -1 : 1) * motors[m]->max_steps;
+		distance = steps * motors[m]->steps_per_mm;
+		v = distance / dt;
 	}
-	motors[m]->prelast_v = motors[m]->last_v;
+	// Record this iteration.
 	motors[m]->last_v = v;
-	motors[m]->prelast_time = dt;
 	motors[m]->last_time = current_time;
-	if (motors[m]->positive != (num_steps > 0)) {
-		if (num_steps > 0)
+	// Set positive and direction pin.
+	if (motors[m]->positive != (steps > 0)) {
+		if (distance > 0)
 			SET (motors[m]->dir_pin);
 		else
 			RESET (motors[m]->dir_pin);
-		motors[m]->positive = (num_steps > 0);
-		//debug ("reverse positive %d %d", motors[m]->positive, num_steps);
+		motors[m]->positive = (steps > 0);
 	}
 #if MAXAXES > 0
 	if (m >= 2 && m < MAXAXES + 2) {
-		// No problem if limit switch is not hit.
-		//if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) || (axis[m - 2].motor_max != MAXLONG && axis[m - 2].current_pos != MAXLONG && axis[m - 2].current_pos + int32_t (num_steps) > axis[m - 2].motor_max) : GET (axis[m - 2].limit_min_pin, false) || (axis[m - 2].motor_min != MAXLONG && axis[m - 2].current_pos != MAXLONG && axis[m - 2].current_pos + int32_t (num_steps) < axis[m - 2].motor_min))
-		if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) : GET (axis[m - 2].limit_min_pin, false)) {
+		// Check limit switches.
+		if (motors[m]->positive ? GET (axis[m - 2].limit_max_pin, false) || axis[m - 2].current_pos + distance > axis[m - 2].motor_max : GET (axis[m - 2].limit_min_pin, false) || axis[m - 2].current_pos + distance < axis[m - 2].motor_min) {
 			// Hit endstop; abort current move and notify host.
-			debug ("hit %d %d %d %d", int (m - 2), int (axis[m - 2].current_pos), int (axis[m - 2].motor_min), int (axis[m - 2].motor_max));
+			debug ("hit %d %f %f %f", int (m - 2), F(axis[m - 2].current_pos), F(axis[m - 2].motor_min), F(axis[m - 2].motor_max));
 			// Stop continuous move only for the motor that hits the switch.
 			motors[m]->f = 0;
 			motors[m]->last_v = 0;
-			motors[m]->prelast_v = 0;
-			motors[m]->continuous_steps_per_s = 0;
-			limits_pos[m - 2] = axis[m - 2].current_pos / axis[m - 2].motor.steps_per_mm;
+			motors[m]->continuous_v = 0;
+			limits_pos[m - 2] = axis[m - 2].current_pos;
 			if (current_move_has_cb) {
 				//debug ("movecb 3");
 				++num_movecbs;
@@ -223,8 +212,7 @@ static bool do_steps (uint8_t m, int16_t num_steps, unsigned long current_time) 
 			return false;
 		}
 		// Update current position only if it is valid.
-		if (axis[m - 2].current_pos != MAXLONG)
-			axis[m - 2].current_pos += num_steps;
+		axis[m - 2].current_pos += distance;
 	}
 #else
 	// Dummy clause to make the else below work in case there are no axes.
@@ -233,10 +221,10 @@ static bool do_steps (uint8_t m, int16_t num_steps, unsigned long current_time) 
 #endif
 #if MAXEXTRUDERS > 0
 	else {
-		extruder[m - 2 - MAXAXES].steps_done += num_steps;
+		extruder[m - 2 - MAXAXES].distance_done += distance;
 	}
 #endif
-        for (int16_t s = 0; s < abs (num_steps); ++s) {
+        for (int16_t s = 0; s < abs (steps); ++s) {
 		SET (motors[m]->step_pin);
 		RESET (motors[m]->step_pin);
 	}
@@ -256,7 +244,7 @@ static bool move_axes (float target[3], unsigned long current_time) {
 				if (isnan (target[aa]))
 					target[aa] = axis[aa].current;
 			}
-			int32_t the_target[3];
+			float the_target[3];
 			bool ok = true;
 			for (a = 0; a < 3; ++a) {
 				the_target[a] = delta_to_axis (a, target, &ok);
@@ -285,7 +273,7 @@ static bool move_axes (float target[3], unsigned long current_time) {
 	case 0:
 		for (; a < num_axes; ++a)
 			if (!isnan (target[a])) {
-				if (!do_steps (2 + a, target[a] * axis[a].motor.steps_per_mm - axis[a].current_pos, current_time))
+				if (!do_steps (2 + a, target[a] - axis[a].current_pos, current_time))
 					return false;
 				if (!delayed)
 					axis[a].current = target[a];
@@ -302,10 +290,10 @@ static bool move_axes (float target[3], unsigned long current_time) {
 static void handle_motors (unsigned long current_time, unsigned long longtime) {
 #if MAXAXES > 0
 	for (uint8_t a = 0; a < MAXAXES; ++a) {	// Check sense pins.
-		if (axis[a].current_pos != MAXLONG && GET (axis[a].sense_pin, false) ^ bool (axis[a].sense_state & 0x80)) {
+		if (!isnan(axis[a].current_pos) && GET (axis[a].sense_pin, false) ^ bool (axis[a].sense_state & 0x80)) {
 			axis[a].sense_state ^= 0x80;
 			axis[a].sense_state |= 1;
-			axis[a].sense_pos = axis[a].current_pos / axis[a].motor.steps_per_mm;
+			axis[a].sense_pos = axis[a].current_pos;
 			try_send_next ();
 		}
 	}
@@ -314,22 +302,22 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 	for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 		if (!motors[m] || !isnan (motors[m]->dist))
 			continue;
-		if (motors[m]->continuous_steps_per_s == 0 && motors[m]->f == 0)
+		if (motors[m]->continuous_v == 0 && motors[m]->f == 0)
 			continue;
 		last_active = longtime;
 		float current_t = (current_time - motors[m]->last_time) / 1e6;
-		if (motors[m]->continuous_steps_per_s != motors[m]->f) {
+		if (motors[m]->continuous_v != motors[m]->f) {
 			// Getting up to speed, or slowing down.
-			if (motors[m]->continuous_steps_per_s > motors[m]->f) {
-				motors[m]->f += current_t * motors[m]->limit_a * motors[m]->steps_per_mm;
-				if (motors[m]->continuous_steps_per_s < motors[m]->f)
-					motors[m]->f = motors[m]->continuous_steps_per_s;
+			if (motors[m]->continuous_v > motors[m]->f) {
+				motors[m]->f += current_t * motors[m]->limit_a;
+				if (motors[m]->continuous_v < motors[m]->f)
+					motors[m]->f = motors[m]->continuous_v;
 			}
 			else {
-				motors[m]->f -= current_t * motors[m]->limit_a * motors[m]->steps_per_mm;
-				if (motors[m]->f < 0 || (motors[m]->f == 0 && motors[m]->continuous_steps_per_s < 0)) {
+				motors[m]->f -= current_t * motors[m]->limit_a;
+				if (motors[m]->f < 0 || (motors[m]->f == 0 && motors[m]->continuous_v < 0)) {
 					motors[m]->f = -motors[m]->f;
-					motors[m]->continuous_steps_per_s = -motors[m]->continuous_steps_per_s;
+					motors[m]->continuous_v = -motors[m]->continuous_v;
 					if (motors[m]->positive) {
 						motors[m]->positive = false;
 						RESET (motors[m]->dir_pin);
@@ -339,18 +327,18 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 						SET (motors[m]->dir_pin);
 					}
 					//debug ("new positive %d", motors[m]->positive);
-					if (motors[m]->continuous_steps_per_s < motors[m]->f)
-						motors[m]->f = motors[m]->continuous_steps_per_s;
+					if (motors[m]->continuous_v < motors[m]->f)
+						motors[m]->f = motors[m]->continuous_v;
 				}
-				else if (motors[m]->continuous_steps_per_s > motors[m]->f)
-					motors[m]->f = motors[m]->continuous_steps_per_s;
+				else if (motors[m]->continuous_v > motors[m]->f)
+					motors[m]->f = motors[m]->continuous_v;
 			}
 		}
-		motors[m]->continuous_steps += motors[m]->f * current_t;
-		int16_t steps (motors[m]->continuous_steps);
-		motors[m]->continuous_steps -= steps;
+		motors[m]->continuous_f += motors[m]->f * current_t;
+		int16_t steps (motors[m]->continuous_f * motors[m]->steps_per_mm);
+		motors[m]->continuous_f -= steps / motors[m]->steps_per_mm;
 		delayed = false;
-		do_steps (m, steps * (motors[m]->positive ? 1 : -1), current_time);
+		do_steps (m, steps * (motors[m]->positive ? 1 : -1) / motors[m]->steps_per_mm, current_time);
 		if (delayed || steps)
 			motors[m]->last_time = current_time;
 		continue;
@@ -390,7 +378,7 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 			float dist = isnan (extruder[e].motor.dist) ? 0 : extruder[e].motor.dist;
 			float next_dist = isnan (extruder[e].motor.next_dist) ? 0 : extruder[e].motor.next_dist;
 			float mm = dist + next_dist * fq;
-			if (!do_steps (2 + MAXAXES + e, mm * extruder[e].motor.steps_per_mm - extruder[e].steps_done, current_time))
+			if (!do_steps (2 + MAXAXES + e, mm - extruder[e].distance_done, current_time))
 				return;
 		}
 #endif
@@ -409,7 +397,7 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 			if (!isnan (axis[a].motor.dist)) {
 				//debug ("before source %d %f %f", a, F(axis[a].source), F(axis[a].motor.dist));
 				axis[a].source += axis[a].motor.dist;
-				//debug ("after source %d %f %f %d", a, F(axis[a].source), F(axis[a].motor.dist), int (axis[a].current_pos));
+				//debug ("after source %d %f %f %f", a, F(axis[a].source), F(axis[a].motor.dist), F(axis[a].current_pos));
 			}
 #endif
 		done_motors ();
@@ -430,8 +418,8 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 		for (uint8_t e = 0; e < num_extruders; ++e) {
 			if (isnan (extruder[e].motor.dist))
 				continue;
-			int32_t steps = extruder[e].motor.dist * dist_fraction * extruder[e].motor.steps_per_mm;
-			do_steps (2 + MAXAXES + e, steps - extruder[e].steps_done, current_time);
+			float dist = extruder[e].motor.dist * dist_fraction;
+			do_steps (2 + MAXAXES + e, dist - extruder[e].distance_done, current_time);
 		}
 #endif
 	}
@@ -454,8 +442,8 @@ static void handle_motors (unsigned long current_time, unsigned long longtime) {
 				continue;
 			float dist = isnan (extruder[e].motor.dist) ? 0 : extruder[e].motor.dist;
 			float next_dist = isnan (extruder[e].motor.next_dist) ? 0 : extruder[e].motor.next_dist;
-			int32_t steps = (extruder[e].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (tc * 1. / tp)) * tc / 1e6) * extruder[e].motor.steps_per_mm;
-			do_steps (2 + MAXAXES + e, steps - extruder[e].steps_done, current_time);
+			float distance = (extruder[e].motor.main_dist + (dist * vp + (next_dist * vq - dist * vp) / 2 * (tc * 1. / tp)) * tc / 1e6);
+			do_steps (2 + MAXAXES + e, distance - extruder[e].distance_done, current_time);
 		}
 #endif
 	}
@@ -569,7 +557,7 @@ void loop () {
 		}
 #if MAXAXES > 0
 		for (uint8_t a = 0; a < MAXAXES; ++a) {
-			axis[a].current_pos = MAXLONG;
+			axis[a].current_pos = NAN;
 			axis[a].current = NAN;
 			axis[a].source = NAN;
 		}

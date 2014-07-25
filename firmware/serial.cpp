@@ -340,7 +340,7 @@ void try_send_next ()
 		if (axis[w].sense_state & 1)
 		{
 #ifdef DEBUG_SERIAL
-			debug ("sense %d %d %d", w, axis[w].sense_state, axis[w].sense_pos);
+			debug ("sense %d %d %f", w, axis[w].sense_state, F(axis[w].sense_pos));
 #endif
 			out_buffer[0] = 7;
 			out_buffer[1] = CMD_SENSE;

@@ -86,7 +86,7 @@ void packet ()
 				for (uint8_t i = 0; i < sizeof (float); ++i)
 					f.b[i] = command[offset + i + t * sizeof (float)];
 #if MAXAXES > 0
-				if (ch >= 2 && ch < 2 + num_axes && axis[ch - 2].current_pos == MAXLONG) {
+				if (ch >= 2 && ch < 2 + num_axes && isnan(axis[ch - 2].current_pos)) {
 					debug ("Moving uninitialized axis %d", ch - 2);
 					Serial.write (CMD_STALL);
 					return;
@@ -185,27 +185,27 @@ void packet ()
 		if (motors[which]->f != 0) {
 			//debug ("running changes speed from %f to %f", F(motors[which]->f), F(speed));
 		       	if ((motors[which]->positive && speed < 0) || (!motors[which]->positive && speed > 0))
-				motors[which]->continuous_steps_per_s = -abs (speed) * motors[which]->steps_per_mm;
+				motors[which]->continuous_v = -abs (speed);
 			else
-				motors[which]->continuous_steps_per_s = abs (speed) * motors[which]->steps_per_mm;
+				motors[which]->continuous_v = abs (speed);
 		}
 		else {
 			//debug ("new running speed %f", F(speed));
 			if (speed > 0) {
 				SET (motors[which]->dir_pin);
-				motors[which]->continuous_steps_per_s = speed * motors[which]->steps_per_mm;
+				motors[which]->continuous_v = speed;
 				motors[which]->positive = true;
 			}
 			else {
 				RESET (motors[which]->dir_pin);
-				motors[which]->continuous_steps_per_s = -speed * motors[which]->steps_per_mm;
+				motors[which]->continuous_v = -speed;
 				motors[which]->positive = false;
 			}
 			//debug ("initial positive %d", motors[which]->positive);
 			motors[which]->last_time = micros ();
 			motors[which]->prelast_time = 0;
 			SET (motors[which]->enable_pin);
-			motors[which]->continuous_steps = 0;
+			motors[which]->continuous_f = 0;
 			motors_busy |= 1 << which;
 		}
 		return;
@@ -235,7 +235,7 @@ void packet ()
 #if MAXAXES >= 3
 			if (printer_type == 1 && which < 2 + 3) {
 				for (uint8_t a = 2; a < 2 + 3; ++a) {
-					axis[a - 2].current_pos = MAXLONG;
+					axis[a - 2].current_pos = NAN;
 					axis[a - 2].source = NAN;
 					axis[a - 2].current = NAN;
 				}
@@ -244,7 +244,7 @@ void packet ()
 #endif
 #if MAXAXES > 0
 			if (which < 2 + MAXAXES) {
-				axis[which - 2].current_pos = MAXLONG;
+				axis[which - 2].current_pos = NAN;
 				axis[which - 2].source = NAN;
 				axis[which - 2].current = NAN;
 			}
@@ -424,7 +424,7 @@ void packet ()
 			axis[which - 2].current = NAN;
 		}
 		write_ack ();
-		axis[which - 2].current_pos = int32_t (get_float (3) * axis[which - 2].motor.steps_per_mm);
+		axis[which - 2].current_pos = get_float (3);
 		return;
 	}
 	case CMD_GETPOS:	// Get current position
@@ -443,7 +443,7 @@ void packet ()
 		if (isnan (axis[0].source))
 			reset_pos ();
 		ReadFloat pos, current;
-		pos.f = axis[which - 2].current_pos / axis[which - 2].motor.steps_per_mm;
+		pos.f = axis[which - 2].current_pos;
 		current.f = axis[which - 2].current - axis[which - 2].offset;
 		reply[0] = 2 + 2 * sizeof (float);
 		reply[1] = CMD_POS;

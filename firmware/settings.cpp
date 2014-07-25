@@ -80,7 +80,7 @@ void Variables::load (int16_t &addr, bool eeprom)
 		{
 			axis[a].source = NAN;
 			axis[a].current = NAN;
-			axis[a].current_pos = MAXLONG;
+			axis[a].current_pos = NAN;
 		}
 	}
 #endif

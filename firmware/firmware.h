@@ -194,8 +194,8 @@ struct Motor : public Object
 	float steps_per_mm;			// hardware calibration [steps/mm].
 	float max_v, limit_v, limit_a;		// maximum value for f [mm/s], [mm/s^2].
 	uint8_t max_steps;			// maximum number of steps in one iteration.
-	float continuous_steps_per_s;		// steps per second for continuous run.
-	float continuous_steps;			// fractional continuous steps that have been done.
+	float continuous_v;			// speed for continuous run.
+	float continuous_f;			// fractional continuous distance that have been done.
 	float f;
 	unsigned long last_time;		// micros value when last iteration was run.
 	float prelast_time;			// time between last_v and prelast_v. [s]
@@ -238,13 +238,13 @@ struct Axis : public Object
 	float offset;		// Position where axis claims to be when it is at 0.
 	float park;		// Park position; not used by the firmware, but stored for use by the host.
 	float axis_min, axis_max;	// Limits for the movement of this axis.
-	int32_t motor_min, motor_max;	// Limits for the movement of this motor.
+	float motor_min, motor_max;	// Limits for the movement of this motor.
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;
 	Pin_t sense_pin;
 	uint8_t sense_state;
 	float sense_pos;
-	int32_t current_pos;	// Current position of motor (in steps).
+	float current_pos;	// Current position of motor (in mm).
 	float source, current;	// Source position of current movement of axis (in mm), or current position if there is no movement.
 	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
 	virtual void load (int16_t &addr, bool eeprom);
@@ -264,7 +264,7 @@ struct Extruder : public Object
 	float filament_size;
 	float capacity;		// heat capacity of filament in [energy]/mm/K
 #endif
-	int32_t steps_done;	// steps done during current move.
+	int32_t distance_done;	// steps done during current move.
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Extruder () {}
@@ -420,7 +420,7 @@ void compute_axes ();
 #endif
 
 #if MAXAXES >= 3
-static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
+static inline float delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float dx = target[0] - axis[a].x;
 	float dy = target[1] - axis[a].y;
 	float dz = target[2] - axis[a].z;
@@ -428,7 +428,7 @@ static inline int32_t delta_to_axis (uint8_t a, float *target, bool *ok) {
 	float l2 = axis[a].delta_length * axis[a].delta_length;
 	float dest = sqrt (l2 - r2) + dz;
 	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", F(dx), F(dy), F(dz), F(axis[a].z), F(r), F(target));
-	return dest * axis[a].motor.steps_per_mm;
+	return dest;
 }
 #endif
 

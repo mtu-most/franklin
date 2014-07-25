@@ -12,16 +12,17 @@ void reset_pos ()	// {{{
 	// Determine current location of extruder.
 	if (printer_type == 0) { // {{{
 		for (uint8_t a = 0; a < MAXAXES; ++a)
-			axis[a].source = axis[a].current_pos == MAXLONG ? NAN : axis[a].current_pos / axis[a].motor.steps_per_mm;
+			axis[a].source = axis[a].current_pos;
 	}
 	// }}}
 #if MAXAXES >= 3
 	else if (printer_type == 1) { // {{{
 		//debug ("new delta position");
-		// All axes' current_pos must be valid and equal, in other words, that x=y=0.
-		if (axis[0].current_pos == MAXLONG || axis[1].current_pos == MAXLONG || axis[2].current_pos == MAXLONG || axis[0].current_pos != axis[1].current_pos || axis[0].current_pos != axis[2].current_pos) {
+		// All axes' current_pos must be valid and equal, in other words, x=y=0.
+		// An invalid position is NAN, and conveniently NAN != NAN, so no check is required.
+		if (axis[0].current_pos != axis[1].current_pos || axis[0].current_pos != axis[2].current_pos) {
 #ifdef DEBUG_MOVE
-			debug ("Refusing to set new delta position from current_pos = (%d, %d, %d)", int (axis[0].current_pos), int (axis[1].current_pos), int (axis[2].current_pos));
+			debug ("Refusing to set new delta position from current_pos = (%f, %f, %f)", F(axis[0].current_pos), F(axis[1].current_pos), F(axis[2].current_pos));
 #endif
 			axis[0].source = NAN;
 			axis[1].source = NAN;
@@ -30,10 +31,10 @@ void reset_pos ()	// {{{
 		else {
 			axis[0].source = 0;
 			axis[1].source = 0;
-			axis[2].source = axis[0].current_pos / axis[0].motor.steps_per_mm;
+			axis[2].source = axis[0].current_pos;
 		}
 		for (uint8_t a = 3; a < MAXAXES; ++a)
-			axis[a].source = axis[a].current_pos == MAXLONG ? NAN : axis[a].current_pos / axis[a].motor.steps_per_mm;
+			axis[a].source = axis[a].current_pos;
 	}
 	// }}}
 #endif
@@ -108,7 +109,7 @@ static void apply_offsets (float *data) {	// {{{
 // m->dist		total distance of this segment (mm).
 // m->next_dist		total distance of next segment (mm).
 // m->main_dist		distance of main part (mm).
-// m->steps_done	(extruder only): steps of this segment that have been done in preparation.
+// m->distance_done	(extruder only): steps of this segment that have been done in preparation.
 // v0, vp		start and end velocity for main part. (fraction/s)
 // vq			end velocity of connector part. (fraction/s)
 
@@ -218,8 +219,7 @@ void next_move () {
 			if (!motors[m])
 				continue;
 			motors[m]->dist = motors[m]->next_dist;
-			// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
-			if (abs (motors[m]->dist) * motors[m]->steps_per_mm > .001)
+			if (abs (motors[m]->dist) > .00001)
 				action = true;
 			else
 				motors[m]->dist = 0;
@@ -256,8 +256,7 @@ void next_move () {
 #endif
 					motors[m]->next_dist = queue[n].data[mt + 2];
 			}
-			// For a delta, this multiplication isn't really allowed, but we're only looking at orders of magnitude, so it's ok.
-			if (abs (motors[m]->next_dist) * motors[m]->steps_per_mm > .001 || abs (motors[m]->dist) * motors[m]->steps_per_mm > .001)
+			if (abs (motors[m]->next_dist) > .00001 || abs (motors[m]->dist) > .00001)
 				action = true;
 #ifdef DEBUG_MOVE
 			debug ("Connecting distance for motor %d is %f, to %f", m, F(motors[m]->dist), F(motors[m]->next_dist));
@@ -334,7 +333,7 @@ void next_move () {
 #endif
 	// }}}
 	// Already set up: f0, v0, vp, vq, m->dist, m->next_dist.
-	// To do: start_time, t0, tp, m->main_dist, m->steps_done
+	// To do: start_time, t0, tp, m->main_dist, m->distance_done
 #ifdef DEBUG_MOVE
 	debug ("Preparation did f0 = %f", F(f0));
 #endif
@@ -406,7 +405,7 @@ void next_move () {
 #endif
 #if MAXEXTRUDERS > 0
 		if (mt >= num_axes)
-			extruder[mt - num_axes].steps_done = f0 * motors[m]->dist * motors[m]->steps_per_mm;
+			extruder[mt - num_axes].distance_done = f0 * motors[m]->dist;
 #endif
 	}
 #ifdef DEBUG_MOVE
@@ -432,7 +431,7 @@ void abort_move () { // {{{
 		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
 			if (!motors[m])
 				continue;
-			motors[m]->continuous_steps_per_s = 0;
+			motors[m]->continuous_v = 0;
 			motors[m]->f = 0;
 			motors[m]->dist = NAN;
 			motors[m]->next_dist = NAN;

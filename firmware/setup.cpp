@@ -67,11 +67,11 @@ void setup ()
 #endif
 		objects[i] = &axis[a];
 		limits_pos[a] = NAN;
-		axis[a].current_pos = MAXLONG;
+		axis[a].current_pos = NAN;
 		axis[a].source = NAN;
 		axis[a].current = NAN;
 		axis[a].sense_state = 0;
-		axis[a].sense_pos = MAXLONG;
+		axis[a].sense_pos = NAN;
 		axis[a].limit_min_pin.read (0x100);
 		axis[a].limit_max_pin.read (0x100);
 		axis[a].sense_pin.read (0x100);
@@ -124,7 +124,8 @@ void setup ()
 			motors[o]->dist = NAN;
 			motors[o]->next_dist = NAN;
 			motors[o]->f = 0;
-			motors[o]->continuous_steps_per_s = 0;
+			motors[o]->continuous_v = 0;
+			motors[o]->continuous_f = 0;
 			motors[o]->last_v = 0;
 			motors[o]->prelast_v = 0;
 			motors[o]->last_time = time;

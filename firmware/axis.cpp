@@ -10,10 +10,8 @@ void Axis::load (int16_t &addr, bool eeprom)
 	limit_pos = read_float (addr, eeprom);
 	axis_min = read_float (addr, eeprom);
 	axis_max = read_float (addr, eeprom);
-	float f = read_float (addr, eeprom);
-	motor_min = isnan (f) ? MAXLONG : f * motor.steps_per_mm;
-	f = read_float (addr, eeprom);
-	motor_max = isnan (f) ? MAXLONG : f * motor.steps_per_mm;
+	motor_min = read_float (addr, eeprom);
+	motor_max = read_float (addr, eeprom);
 	park = read_float (addr, eeprom);
 	delta_length = read_float (addr, eeprom);
 	delta_radius = read_float (addr, eeprom);
@@ -59,8 +57,8 @@ void Axis::save (int16_t &addr, bool eeprom)
 	write_float (addr, limit_pos, eeprom);
 	write_float (addr, axis_min, eeprom);
 	write_float (addr, axis_max, eeprom);
-	write_float (addr, motor_min == MAXLONG ? NAN : motor_min / motor.steps_per_mm, eeprom);
-	write_float (addr, motor_max == MAXLONG ? NAN : motor_max / motor.steps_per_mm, eeprom);
+	write_float (addr, motor_min, eeprom);
+	write_float (addr, motor_max, eeprom);
 	write_float (addr, park, eeprom);
 	write_float (addr, delta_length, eeprom);
 	write_float (addr, delta_radius, eeprom);
