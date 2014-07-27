@@ -171,12 +171,29 @@ static bool do_steps (uint8_t m, float distance, unsigned long current_time) {
 		}
 		distance = v * dt;
 	}
+#if MAXAXES > 0
+	float old_pos;
+	if (m >= 2 && m < MAXAXES + 2) {
+		old_pos = axis[m - 2].current_pos;
+	}
+#else
+	// Dummy clause to make the else below work in case there are no axes.
+	if (false) {
+	}
+#endif
+#if MAXEXTRUDERS > 0
+	else {
+		old_pos = extruder[m - 2 - MAXAXES].distance_done;
+	}
+#endif
+	float new_pos = old_pos + distance;
 	// Limit steps per iteration.
-	int16_t steps = distance * motors[m]->steps_per_mm;
+	int16_t steps = int32_t(new_pos * motors[m]->steps_per_mm) - int32_t(old_pos * motors[m]->steps_per_mm);
 	if (abs (steps) > motors[m]->max_steps) {
 		delayed = true;
 		steps = (steps < 0 ? -1 : 1) * motors[m]->max_steps;
 		distance = steps * motors[m]->steps_per_mm;
+		new_pos = old_pos + distance;
 		v = distance / dt;
 	}
 	// Record this iteration.
@@ -212,7 +229,7 @@ static bool do_steps (uint8_t m, float distance, unsigned long current_time) {
 			return false;
 		}
 		// Update current position only if it is valid.
-		axis[m - 2].current_pos += distance;
+		axis[m - 2].current_pos = new_pos;
 	}
 #else
 	// Dummy clause to make the else below work in case there are no axes.
@@ -221,7 +238,7 @@ static bool do_steps (uint8_t m, float distance, unsigned long current_time) {
 #endif
 #if MAXEXTRUDERS > 0
 	else {
-		extruder[m - 2 - MAXAXES].distance_done += distance;
+		extruder[m - 2 - MAXAXES].distance_done = new_pos;
 	}
 #endif
         for (int16_t s = 0; s < abs (steps); ++s) {

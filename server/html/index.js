@@ -6,6 +6,7 @@ var selected_port, selected_printer;
 var script_cbs;
 var visibles;
 var type2plural = {axis: 'axes', extruder: 'extruders', temp: 'temps', gpio: 'gpios'};
+var printer_types = ['Cartesian', 'Delta'];
 // }}}
 
 // General supporting functions. {{{
@@ -35,7 +36,7 @@ function init() { // {{{
 	register_update('new_script', new_script);
 	register_update('new_data', new_script_data);
 	register_update('blocked', blocked);
-	register_update('status', new_status);
+	register_update('message', new_message);
 	register_update('del_script', del_script);
 	register_update('del_printer', del_printer);
 	register_update('del_port', del_port);
@@ -60,9 +61,6 @@ function init() { // {{{
 			}
 		}
 	}
-	var items = ['tweak', 'expert', 'setup'];
-	for (var i = 0; i < items.length; ++i)
-		switch_show(document.getElementById(items[i] + 'box').checked, items[i]);
 } // }}}
 
 function make_id(printer, id, extra) { // {{{
@@ -336,10 +334,10 @@ function blocked(reason) { // {{{
 		e.AddClass('hidden');
 } // }}}
 
-function new_status(stat) { // {{{
-	var e = ports[port][2] !== null ? get_element(printer, [null, 'status1']) : get_element({'port': port}, [null, 'status2']);
+function new_message(msg) { // {{{
+	var e = ports[port][2] !== null ? get_element(printer, [null, 'message1']) : get_element({'port': port}, [null, 'message2']);
 	e.ClearAll();
-	e.AddText(stat);
+	e.AddText(msg);
 } // }}}
 
 function del_script(name) { // {{{
@@ -421,7 +419,9 @@ function update_variables() { // {{{
 	update_range([null, 'num_extruders']);
 	update_range([null, 'num_temps']);
 	update_range([null, 'num_gpios']);
-	update_choice([null, 'printer_type']);
+	var e = document.getElementById(make_id(printer, [null, 'printer_type']));
+	e.ClearAll();
+	e.AddText(printer_types[get_value(printer, [null, 'printer_type'])]);
 	update_float([null, 'max_deviation']);
 	update_pin([null, 'led_pin']);
 	update_pin([null, 'probe_pin']);
@@ -430,7 +430,10 @@ function update_variables() { // {{{
 	update_float([null, 'temp_limit']);
 	update_float([null, 'feedrate']);
 	update_float([null, 'angle']);
-	update_toggle([null, 'paused', 'pause']);
+	e = document.getElementById(make_id(printer, [null, 'status']));
+	e.ClearAll();
+	var stat = get_value(printer, [null, 'status']);
+	e.AddText(stat === null ? 'Idle' : stat ? 'Printing' : 'Paused');
 	// Update visibility.
 	for (var i = 0; i < printer.num_axes; ++i) {
 		for (var j = 0; j < visibles[port].axis[i].length; ++j)
@@ -465,32 +468,18 @@ function update_variables() { // {{{
 			visibles[port].gpio[i][j].AddClass('hidden');
 	}
 	for (var i = 0; i < visibles[port].titles.length; ++i) {
-		var check_titles = function(items, objs, add, remove) {
-			for (var j = 0; j < items.length; ++j) {
-				if (printer['num_' + type2plural[items[j]]] != 0)
-					break;
-			}
-			for (var k = 0; k < objs.length; ++k) {
-				if (j < items.length) {
-					for (var c = 0; c < remove.length; ++c)
-						objs[k].RemoveClass(remove[c]);
-				}
-				else {
-					for (var c = 0; c < add.length; ++c)
-						objs[k].AddClass(add[c]);
-				}
-			}
-			return j < items.length;
-		};
-		var classes = ['hidden', 'expert_hidden', 'tweak_hidden', 'basic_hidden'];
-		var next = [];
-		for (var v = 0; v < visibles[port].titles[i][0].length; ++v) {
-			if (check_titles(visibles[port].titles[i][0][v], visibles[port].titles[i][1], next, classes))
+		var items = visibles[port].titles[i][0];
+		var objs = visibles[port].titles[i][1];
+		for (var j = 0; j < items.length; ++j) {
+			if (printer['num_' + type2plural[items[j]]] != 0)
 				break;
-			next = [classes.pop()];
 		}
-		if (v >= visibles[port].titles[i][0].length)
-			check_titles([], visibles[port].titles[i][1], ['hidden'], []);
+		for (var k = 0; k < objs.length; ++k) {
+			if (j < items.length)
+				objs[k].RemoveClass('hidden');
+			else
+				objs[k].AddClass('hidden');
+		}
 	}
 } // }}}
 
@@ -702,6 +691,13 @@ function temprange(element, attr) { // {{{
 		node[attr] = String(2 + printer.maxaxes + printer.maxextruders + i);
 		ret.push(node);
 	}
+	return ret;
+} // }}}
+
+function create_printer_type_select() { // {{{
+	var ret = document.createElement('select');
+	for (var o = 0; o < printer_types.length; ++o)
+		ret.AddElement('option').AddText(printer_types[o]);
 	return ret;
 } // }}}
 

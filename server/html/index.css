@@ -1,39 +1,14 @@
 .hidden,
 .empty *,
 
-.notweak .tweak,
-.noexpert .expert,
-.notweak .expert,
-.nosetup .setup,
-.notweak .setup,
-.noexpert .setup,
-
-.notweak .basichidden,
-.noexpert .tweakhidden,
-.notweak .tweakhidden,
-.nosetup .experthidden,
-.noexpert .experthidden,
-.notweak .experthidden,
+/*.nosetup .setup,*/
 
 .connected.noprinter,
 .nodelta .delta,
 
-.nomover #movediv
+.nomover .movediv
 {
 	display: none;
-}
-
-#showswitches {
-	position: fixed;
-	right: 10px;
-	top: 10px;
-	background: #ff8;
-	z-index: 2;
-}
-
-#showswitches > * {
-	clear: both;
-	float: right;
 }
 
 .tab {
@@ -100,22 +75,19 @@ select[multiple] {
 	background: #0f0;
 }
 
-#movediv {
-	position: fixed;
-	left: 0;
-	right: 0;
-	top: 0;
-	bottom: 0;
+.movediv {
+	float: right;
 	background: #666;
 	z-index: 1;
+	width: 30%;
 }
 
-#movebox {
+.movebox {
 	background: #ee6;
 	width: 80%;
 	margin: auto auto;
 }
-#move_viewbox {
+.move_viewbox {
 	margin: auto auto;
 	text-align: center;
 }
@@ -139,4 +111,79 @@ select[multiple] {
 body {
 	margin-top: 3em;
 	margin-bottom: 6em;
+}
+
+.htitle1 {
+	width: 20%;
+	background: #66f;
+}
+.htitle2 {
+	width: 20%;
+	background: #66f;
+}
+.htitle3 {
+	width: 20%;
+	background: #66f;
+}
+.htitle4 {
+	width: 20%;
+	background: #66f;
+}
+.htitle5 {
+	width: 20%;
+	background: #66f;
+}
+
+.rowtitle1 {
+	width: 20%;
+	background: #ccf;
+}
+.rowtitle2 {
+	width: 20%;
+	background: #ccf;
+}
+.rowtitle3 {
+	width: 20%;
+	background: #ccf;
+}
+.rowtitle4 {
+	width: 20%;
+	background: #ccf;
+}
+.rowtitle5 {
+	width: 20%;
+	background: #ccf;
+}
+
+.title1 {
+	width: 60%;
+	background: #88f;
+}
+.title2 {
+	width: 30%;
+	background: #88f;
+}
+.title3 {
+	width: 20%;
+	background: #88f;
+}
+.title4 {
+	width: 15%;
+	background: #88f;
+}
+.title5 {
+	width: 12%;
+	background: #88f;
+}
+.title6 {
+	width: 10%;
+	background: #88f;
+}
+
+table {
+	width: 100%;
+}
+
+table.left {
+	width: 70%;
 }

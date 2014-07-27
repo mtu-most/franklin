@@ -120,7 +120,7 @@ function _setup_updater() {
 				'temp_limit': 0,
 				'feedrate': 1,
 				'angle': 0,
-				'paused': false,
+				'message': null,
 				'axis': [],
 				'extruder': [],
 				'temp': [],
@@ -252,8 +252,8 @@ function _setup_updater() {
 		'blocked': function(port, reason) {
 			trigger_update(port, 'blocked', reason);
 		},
-		'status': function(port, stat) {
-			trigger_update(port, 'status', stat);
+		'message': function(port, stat) {
+			trigger_update(port, 'message', stat);
 		},
 		'variables_update': function(port, values) {
 			printers[port].name = values[0];
@@ -270,8 +270,8 @@ function _setup_updater() {
 			printers[port].temp_limit = values[11];
 			printers[port].feedrate = values[12];
 			printers[port].angle = values[13];
-			printers[port].paused = values[14];
-			printers[port].status = values[15];
+			printers[port].status = values[14];
+			printers[port].message = values[15];
 			trigger_update(port, 'variables_update');
 		},
 		'axis_update': function(port, index, values) {
