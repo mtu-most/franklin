@@ -7,6 +7,7 @@ void setup()
 	// Initialize volatile variables.
 	Serial.begin(115200);
 	initialized = false;
+	debug_buffer_ptr = 0;
 	adc_phase = 0;
 #if MAXTEMPS > 0 || MAXEXTRUDERS > 0
 	temp_current = 0;

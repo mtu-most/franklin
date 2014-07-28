@@ -62,3 +62,25 @@ void write_float (int16_t &address, float data, bool eeprom)
 	for (uint8_t t = 0; t < sizeof (float); ++t)
 		write_8 (address, d.b[t], eeprom);
 }
+
+int32_t read_micro (int16_t &address, bool eeprom)
+{
+	float f = read_float(address, eeprom);
+	return int32_t(f * 1e6);
+}
+
+void write_micro (int16_t &address, int32_t data, bool eeprom)
+{
+	write_float(address, data / 1e6, eeprom);
+}
+
+int32_t read_milli (int16_t &address, bool eeprom)
+{
+	float f = read_float(address, eeprom);
+	return int32_t(f * 1e3);
+}
+
+void write_milli (int16_t &address, int32_t data, bool eeprom)
+{
+	write_float(address, data / 1e3, eeprom);
+}

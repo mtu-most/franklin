@@ -193,16 +193,16 @@ struct Motor : public Object
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	Pin_t enable_pin;
-	float steps_per_mm;			// hardware calibration [steps/mm].
-	float max_v, limit_v, limit_a;		// maximum value for f [mm/s], [mm/s^2].
+	int32_t steps_per_um;			// hardware calibration [steps/μm].
+	int32_t max_v, limit_v, limit_a;	// maximum value for f [μm/s], [mm/s^2]!.
 	uint8_t max_steps;			// maximum number of steps in one iteration.
-	float continuous_v;			// speed for continuous run.
-	float continuous_f;			// fractional continuous distance that have been done.
-	float f;
+	int32_t continuous_v;			// speed for continuous run.
+	int32_t continuous_f;			// fractional continuous distance that have been done.
+	int32_t f;
 	unsigned long last_time;		// micros value when last iteration was run.
-	float last_v;				// v at last time, for using limit_a [mm/s].
+	int32_t last_v;				// v at last time, for using limit_a [mm/s].
 	bool positive;				// direction of current movement.
-	float dist, next_dist, main_dist;
+	int32_t dist, next_dist, main_dist;
 #ifdef AUDIO
 	uint8_t audio_flags;
 	enum Flags {
@@ -234,20 +234,20 @@ struct Variables : public Object
 struct Axis : public Object
 {
 	Motor motor;
-	float limit_pos;	// Position of motor (in mm) when the limit switch is triggered.
-	float delta_length, delta_radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
-	float offset;		// Position where axis claims to be when it is at 0.
-	float park;		// Park position; not used by the firmware, but stored for use by the host.
-	float axis_min, axis_max;	// Limits for the movement of this axis.
-	float motor_min, motor_max;	// Limits for the movement of this motor.
+	int32_t limit_pos;	// Position of motor (in μm) when the limit switch is triggered.
+	int32_t delta_length, delta_radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
+	int32_t offset;		// Position where axis claims to be when it is at 0.
+	int32_t park;		// Park position; not used by the firmware, but stored for use by the host.
+	int32_t axis_min, axis_max;	// Limits for the movement of this axis.
+	int32_t motor_min, motor_max;	// Limits for the movement of this motor.
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;
 	Pin_t sense_pin;
 	uint8_t sense_state;
-	float sense_pos;
-	float current_pos;	// Current position of motor (in mm).
-	float source, current;	// Source position of current movement of axis (in mm), or current position if there is no movement.
-	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
+	int32_t sense_pos;
+	int32_t current_pos;	// Current position of motor (in μm).
+	int32_t source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
+	int32_t x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
 	virtual void load (int16_t &addr, bool eeprom);
 	virtual void save (int16_t &addr, bool eeprom);
 	virtual ~Axis () {}
@@ -307,11 +307,11 @@ EXTERN uint8_t num_temps;
 EXTERN uint8_t num_gpios;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
-EXTERN float max_deviation;
+EXTERN int32_t max_deviation;
 #ifndef LOWMEM
 EXTERN float room_T;	//[°C]
 #endif
-EXTERN float feedrate;	// Multiplication factor for f values, used at start of move.
+EXTERN int32_t feedrate;	// Multiplication factor for f values, used at start of move.
 EXTERN float angle;
 // Other variables.
 EXTERN char printerid[ID_SIZE];
@@ -348,7 +348,7 @@ EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent
 EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
 #if MAXAXES > 0
-EXTERN float limits_pos[MAXAXES];	// position when limit switch was hit or nan
+EXTERN int32_t limits_pos[MAXAXES];	// position when limit switch was hit or nan
 #endif
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
@@ -374,7 +374,7 @@ EXTERN unsigned long start_time;
 EXTERN long freeze_time;
 EXTERN long t0, tp;
 EXTERN bool moving;
-EXTERN float v0, vp, vq, f0;
+EXTERN int32_t v0, vp, vq, f0;
 EXTERN bool move_prepared;
 EXTERN bool current_move_has_cb;
 #if SERIAL_BUFFERSIZE > 0
@@ -383,6 +383,12 @@ EXTERN bool serialactive[NUMSERIALS];
 EXTERN char serialbuffer[3 + SERIAL_BUFFERSIZE + (3 + SERIAL_BUFFERSIZE + 2) / 3];
 EXTERN bool serial_out_busy;
 #endif
+EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
+EXTERN uint16_t debug_buffer_ptr;
+
+// debug.cpp
+void buffered_debug_flush();
+void buffered_debug(char const *fmt, ...);
 
 // packet.cpp
 void packet ();	// A command packet has arrived; handle it.
@@ -414,6 +420,10 @@ int32_t read_32 (int16_t &address, bool eeprom);
 void write_32 (int16_t &address, int32_t data, bool eeprom);
 float read_float (int16_t &address, bool eeprom);
 void write_float (int16_t &address, float data, bool eeprom);
+int32_t read_micro (int16_t &address, bool eeprom);
+void write_micro (int16_t &address, int32_t data, bool eeprom);
+int32_t read_milli (int16_t &address, bool eeprom);
+void write_milli (int16_t &address, int32_t data, bool eeprom);
 
 // axis.cpp
 #ifndef LOWMEM
@@ -421,13 +431,13 @@ void compute_axes ();
 #endif
 
 #if MAXAXES >= 3
-static inline float delta_to_axis (uint8_t a, float *target, bool *ok) {
-	float dx = target[0] - axis[a].x;
-	float dy = target[1] - axis[a].y;
-	float dz = target[2] - axis[a].z;
-	float r2 = dx * dx + dy * dy;
-	float l2 = axis[a].delta_length * axis[a].delta_length;
-	float dest = sqrt (l2 - r2) + dz;
+static inline int32_t delta_to_axis (uint8_t a, int32_t *target, bool *ok) {
+	int32_t dx = target[0] - axis[a].x;
+	int32_t dy = target[1] - axis[a].y;
+	int32_t dz = target[2] - axis[a].z;
+	int32_t r2 = dx / 1000 * dx + dy / 1000 * dy;
+	int32_t l2 = axis[a].delta_length / 1000 * axis[a].delta_length;
+	int32_t dest = int32_t(sqrt ((l2 - r2) * 1e3)) + dz;
 	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", F(dx), F(dy), F(dz), F(axis[a].z), F(r), F(target));
 	return dest;
 }

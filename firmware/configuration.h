@@ -44,3 +44,5 @@
 // outputting debugging info.
 // To enable, uncomment; to disable, comment it out.
 //#define WATCHDOG
+
+#define DEBUG_BUFFER_LENGTH 1000

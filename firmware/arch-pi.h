@@ -51,7 +51,7 @@ public:
 
 static FakeSerial Serial;
 
-#define debug(...) fprintf(stderr, __VA_ARGS__)
+#define debug(...) do { buffered_debug_flush(); fprintf(stderr, __VA_ARGS__); } while (0)
 #define F(x) (x)
 
 static inline long long micros() { return 0; }

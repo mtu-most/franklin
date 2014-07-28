@@ -99,6 +99,7 @@ static inline void reset() {
 }
 
 static inline void debug (char const *fmt, ...) {
+	buffered_debug_flush();
 	va_list ap;
 	va_start (ap, fmt);
 	Serial.write (CMD_DEBUG);
