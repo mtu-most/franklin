@@ -77,7 +77,7 @@
 				elements[0].id = make_id(printer, args[1]),
 				elements[0].obj = args[1],
 				elements[0].printer = printer,
-				elements[1].id = make_id(printer, args[1], 'invalid'),
+				elements[1].id = make_id(printer, args[1], 'valid'),
 				elements[2].htmlFor = elements[1].id,
 				elements[3].id = make_id(printer, args[1], 'inverted'),
 				elements[4].htmlFor = elements[3].id,
@@ -87,7 +87,7 @@
 				[make_tablerow(args[0], [[elements[0]], [elements[1], elements[2]], [elements[3], elements[4]], [elements[5]]], ['pintitle', 'pinvalue'])]
 				<select class='pinselect'>[!(pinrange(args[2], elements[0], 'value')<option></option>)!]</select>
 				<input type='checkbox'/>
-				<label>Invalid</label>
+				<label>Valid</label>
 				<input type='checkbox'/>
 				<label>Inverted</label>
 				<button class='button' type='button'>Set</button>
@@ -272,11 +272,10 @@
 					target[String(args[0])] = Number(get_element(this.printer, [['axis', this.index], 'goto']).value);
 					this.printer.call('goto', [target], {});
 				}, false),
-				[make_tablerow(axis_name(args[0], true), [[elements[1], elements[2]], elements[0], elements[3], elements[4]], ['rowtitle4', ''])]
+				[make_tablerow(axis_name(args[0], true), [[elements[1], elements[2]], elements[0], elements[3]], ['rowtitle4', ''])]
 				<div>[$(Float [[['axis', args[0]], 'offset'], 1])$]</div>
 				<input type='text'/>
 				<button class='button' type='button'>Go</button>
-				<div>[$(Float [[[['axis', 'motor'], args[0]], 'max_v'], 1])$]</div>
 				<div>[$(Run [[['axis', 'motor'], args[0]]])$]</div>
 				)!]
 			</div> <!-- }}} -->
@@ -446,7 +445,7 @@
 								elements[0].printer = printer,
 								elements[0].obj = create_printer_type_select(),
 								elements[0].onclick = function() {
-									set_value(this.printer, 'printer_type', this.obj.selectedIndex);
+									set_value(this.printer, [null, 'printer_type'], this.obj.selectedIndex);
 								},
 								elements[1].id = make_id(printer, [null, 'printer_type']),
 								[elements[0].obj, elements[0], elements[1]]
@@ -455,8 +454,8 @@
 							)!]
 						</div>
 						<div>[$(Text ['Name', [null, 'name']])$]</div>
-						<div>Motor Timeout: [$(Float [[null, 'motor_limit'], 1000])$] s</div>
-						<div>Temp Timeout: [$(Float [[null, 'temp_limit'], 1000])$] s</div>
+						<div>Motor Timeout: [$(Float [[null, 'motor_limit'], 60000])$] min</div>
+						<div>Temp Timeout: [$(Float [[null, 'temp_limit'], 60000])$] min</div>
 						<div>Angle: [$(Float [[null, 'angle'], 1])$]°</div>
 						<div>
 							[!(build('Range', ['Axes', printer.maxaxes, [null, 'num_axes']]))!]
@@ -647,19 +646,17 @@
 							'Axis',
 							'Go (mm)',
 							'Offset (mm)',
-							'Max v (mm/s)',
 							'Run'
 						], [
-							'htitle4',
-							'title4',
-							'title4',
-							'title4',
-							'title4'
+							'htitle3',
+							'title3',
+							'title3',
+							'title3',
+							'title3'
 						], [
 							null,
 							'Physically move the extruder to this position.  For Z, more positive numbers move the extruder away from the bed.',
 							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.',
-							'Maximum speed that the axis will try to move along this coordinate.',
 							'Move motor indefinitely.'
 						]),
 						multiple('Move_axis')
@@ -685,23 +682,33 @@
 						multiple('Move_extruder')
 					)])!] <!-- }}} -->
 					<div class='movediv' onkeydown='if (!key_move(event.keyCode, event.shiftKey, event.ctrlKey)) event.preventDefault()'><!-- {{{ -->
-						<div class='movebox'>
-							<p>Amount per keypress: <input value='10' class='title' type='text' id='move_amount'/></p>
-							<div class='move_viewbox'><canvas id='move_view'></canvas></div>
-							<p>[!(
-								elements[0].id = make_id(printer, [null, 'movespan0']),
-								elements[1].id = make_id(printer, [null, 'movespan1']),
-								elements[2].id = make_id(printer, [null, 'movespan2']),
-								['Current position: ', elements[0], ', ', elements[1], ', ', elements[2], ' mm']
-								<span></span>
-								<span></span>
-								<span></span>
-							)!]</p>
-							<p>
-								<!-- TODO: document position.  -->
-								<button type='button' onclick="reset_position()">Reset position</button>
-							</p>
-						</div>
+						[!(
+							elements[0].id = make_id(printer, [null, 'movebox']),
+							elements
+							<div class='movebox'>
+								<p>Amount per keypress: <input value='10' class='title' type='text' id='move_amount'/></p>
+								<div class='move_viewbox'>
+									[!(
+										elements[0].id = make_id(printer, [null, 'move_view']),
+										elements
+										<canvas id='move_view'></canvas>
+									)!]
+								</div>
+								<p>[!(
+									elements[0].id = make_id(printer, [null, 'movespan0']),
+									elements[1].id = make_id(printer, [null, 'movespan1']),
+									elements[2].id = make_id(printer, [null, 'movespan2']),
+									[elements[0], ', ', elements[1], ', ', elements[2], ' mm']
+									<span></span>
+									<span></span>
+									<span></span>
+								)!]</p>
+								<p>
+									<!-- TODO: document position.  -->
+									<button type='button' onclick="reset_position()">Reset position</button>
+								</p>
+							</div>
+						)!]
 					</div><!-- }}} -->
 
 					[!([make_table(	// Temp control {{{

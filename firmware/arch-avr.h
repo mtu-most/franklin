@@ -3,12 +3,12 @@
 #include <Arduino.h>
 #include <avr/wdt.h>
 
-#define SET_OUTPUT(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, OUTPUT); }} while (0)
-#define SET_INPUT(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, INPUT_PULLUP); }} while (0)
-#define SET_INPUT_NOPULLUP(pin_no) do { if (!(pin_no).invalid ()) { pinMode ((pin_no).pin, INPUT); }} while (0)
-#define SET(pin_no) do { if (!(pin_no).invalid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? LOW : HIGH); } } while (0)
-#define RESET(pin_no) do { if (!(pin_no).invalid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? HIGH : LOW); } } while (0)
-#define GET(pin_no, _default) (!(pin_no).invalid () ? digitalRead ((pin_no).pin) == HIGH ? !(pin_no).inverted () : (pin_no).inverted () : _default)
+#define SET_OUTPUT(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, OUTPUT); }} while (0)
+#define SET_INPUT(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, INPUT_PULLUP); }} while (0)
+#define SET_INPUT_NOPULLUP(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, INPUT); }} while (0)
+#define SET(pin_no) do { if ((pin_no).valid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? LOW : HIGH); } } while (0)
+#define RESET(pin_no) do { if ((pin_no).valid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? HIGH : LOW); } } while (0)
+#define GET(pin_no, _default) ((pin_no).valid () ? digitalRead ((pin_no).pin) == HIGH ? !(pin_no).inverted () : (pin_no).inverted () : _default)
 
 #if SERIAL_BUFFERSIZE > 0
 // This is really ugly, but it's how it's done in the arduino sources, and no other variables are defined.

@@ -95,9 +95,9 @@ void Variables::save (int16_t &addr, bool eeprom)
 	write_8 (addr, num_temps, eeprom);
 	write_8 (addr, num_gpios, eeprom);
 	write_8 (addr, printer_type, eeprom);
+	write_float (addr, max_deviation, eeprom);
 	write_16 (addr, led_pin.write (), eeprom);
 	write_16 (addr, probe_pin.write (), eeprom);
-	write_float (addr, max_deviation, eeprom);
 #ifndef LOWMEM
 	write_float (addr, room_T - 273.15, eeprom);
 #else

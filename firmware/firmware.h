@@ -48,7 +48,7 @@
 struct Pin_t {
 	uint8_t flags;
 	uint8_t pin;
-	bool invalid () { return flags & 1; }
+	bool valid () { return flags & 1; }
 	bool inverted () { return flags & 2; }
 	uint16_t write () { return flags << 8 | pin; }
 	void read (uint16_t data) {
@@ -56,8 +56,10 @@ struct Pin_t {
 			SET_INPUT_NOPULLUP (*this);
 		pin = data & 0xff;
 		flags = data >> 8;
-		if (pin >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS)
-			flags |= 1;
+		if ((flags & ~2) != 1 || pin >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS) {
+			pin = 0;
+			flags = 0;
+		}
 	}
 };
 
@@ -198,8 +200,7 @@ struct Motor : public Object
 	float continuous_f;			// fractional continuous distance that have been done.
 	float f;
 	unsigned long last_time;		// micros value when last iteration was run.
-	float prelast_time;			// time between last_v and prelast_v. [s]
-	float last_v, prelast_v;		// v at last and pre-last time, for using limit_a [mm/s].
+	float last_v;				// v at last time, for using limit_a [mm/s].
 	bool positive;				// direction of current movement.
 	float dist, next_dist, main_dist;
 #ifdef AUDIO

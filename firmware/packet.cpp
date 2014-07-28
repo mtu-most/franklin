@@ -92,10 +92,9 @@ void packet ()
 					return;
 				}
 #endif
-				if (ch >= 2 && !isnan (f.f))
-					initialized = true;
 				queue[queue_end].data[ch] = f.f;
 				//debug ("goto %d %f", ch, F(f.f));
+				initialized = true;
 				++t;
 			}
 			else
@@ -139,7 +138,7 @@ void packet ()
 		for (uint8_t i = 0; i < sizeof (float); ++i) {
 			f.b[i] = command[3 + i];
 		}
-		if (!isnan (f.f))
+		if (!isnan(f.f) && f.f != 0)
 			initialized = true;
 		// Motor must exist, must not be doing a move.
 		if (!motors[which])
@@ -203,7 +202,6 @@ void packet ()
 			}
 			//debug ("initial positive %d", motors[which]->positive);
 			motors[which]->last_time = micros ();
-			motors[which]->prelast_time = 0;
 			SET (motors[which]->enable_pin);
 			motors[which]->continuous_f = 0;
 			motors_busy |= 1 << which;
@@ -267,7 +265,7 @@ void packet ()
 		last_active = millis ();
 		which = get_which ();
 		float target = get_float (3);
-		if (!temps[which] || (temps[which]->thermistor_pin.invalid () && (target < 0 || !isinf (target)) && !isnan (target)))
+		if (!temps[which] || (!temps[which]->thermistor_pin.valid () && (target < 0 || !isinf (target)) && !isnan (target)))
 		{
 			debug ("Setting invalid temp %d", which);
 			Serial.write (CMD_STALL);

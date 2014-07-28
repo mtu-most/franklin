@@ -185,11 +185,10 @@ void next_move () {
 			uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
 			if (!motors[m])
 				continue;
+			motors[m]->last_v = 0;
 			if (isnan (queue[queue_start].data[mt + 2]))
 				motors[m]->next_dist = 0;
 			else {
-				motors[m]->last_v = 0;
-				motors[m]->prelast_v = 0;
 #if MAXAXES > 0
 				if (mt < num_axes)
 					motors[m]->next_dist = queue[queue_start].data[mt + 2] - axis[mt].source;
@@ -390,7 +389,6 @@ void next_move () {
 			continue;
 		if (motors[m]->dist != 0 || motors[m]->next_dist != 0) {
 			motors[m]->last_time = start_time;
-			motors[m]->prelast_time = 0;
 			SET (motors[m]->enable_pin);
 			motors_busy |= 1 << m;
 			/*if (mt < num_axes)
@@ -433,6 +431,7 @@ void abort_move () { // {{{
 				continue;
 			motors[m]->continuous_v = 0;
 			motors[m]->f = 0;
+			motors[m]->last_v = 0;
 			motors[m]->dist = NAN;
 			motors[m]->next_dist = NAN;
 		}

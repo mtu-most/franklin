@@ -2,7 +2,7 @@
 # vim: set foldmethod=marker :
 
 show_own_debug = False
-#show_own_debug = True
+show_own_debug = True
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -294,7 +294,7 @@ class Printer: # {{{
 		while '\n' in self.command_buffer:
 			pos = self.command_buffer.index('\n')
 			id, func, a, ka = json.loads(self.command_buffer[:pos])
-			#log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer)))
+			log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer[pos:])))
 			self.command_buffer = self.command_buffer[pos + 1:]
 			die = False
 			try:
@@ -948,7 +948,7 @@ class Printer: # {{{
 		log('job %s' % repr(self.jobs_active))
 		if len(self.jobs_active) > 0:
 			if complete:
-				if self.job_current >= len(self.jobs_active):
+				if self.job_current >= len(self.jobs_active) - 1:
 					log('job queue done')
 					self._send(self.job_id, 'return', (True, reason))
 					self.job_id = None
@@ -1751,7 +1751,7 @@ class Printer: # {{{
 		return self.pos
 	# }}}
 	def pin_valid(self, pin):	# {{{
-		return(pin & 0x100) == 0
+		return(pin & 0x100) != 0
 	# }}}
 	def axis_valid(self, axis):	# {{{
 		return self.axis[axis].valid

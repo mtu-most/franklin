@@ -3,12 +3,12 @@
 #include <iostream>
 #include <cstdio>
 
-#define SET_OUTPUT(pin_no) do { if (!(pin_no).invalid ()) {}} while (0)
-#define SET_INPUT(pin_no) do { if (!(pin_no).invalid ()) {}} while (0)
-#define SET_INPUT_NOPULLUP(pin_no) do { if (!(pin_no).invalid ()) {}} while (0)
-#define SET(pin_no) do { if (!(pin_no).invalid ()) {} } while (0)
-#define RESET(pin_no) do { if (!(pin_no).invalid ()) {} } while (0)
-#define GET(pin_no, _default) (!(pin_no).invalid () ? false ? !(pin_no).inverted () : (pin_no).inverted () : _default)
+#define SET_OUTPUT(pin_no) do { if ((pin_no).valid ()) {}} while (0)
+#define SET_INPUT(pin_no) do { if ((pin_no).valid ()) {}} while (0)
+#define SET_INPUT_NOPULLUP(pin_no) do { if ((pin_no).valid ()) {}} while (0)
+#define SET(pin_no) do { if ((pin_no).valid ()) {} } while (0)
+#define RESET(pin_no) do { if ((pin_no).valid ()) {} } while (0)
+#define GET(pin_no, _default) ((pin_no).valid () ? false ? !(pin_no).inverted () : (pin_no).inverted () : _default)
 
 #undef SERIAL_BUFFERSIZE
 #define SERIAL_BUFFERSIZE 0

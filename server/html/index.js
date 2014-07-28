@@ -434,6 +434,7 @@ function update_variables() { // {{{
 	e.ClearAll();
 	var stat = get_value(printer, [null, 'status']);
 	e.AddText(stat === null ? 'Idle' : stat ? 'Printing' : 'Paused');
+	update_canvas_and_spans();
 	// Update visibility.
 	for (var i = 0; i < printer.num_axes; ++i) {
 		for (var j = 0; j < visibles[port].axis[i].length; ++j)
@@ -499,6 +500,7 @@ function update_axis(index) { // {{{
 	update_float([['axis', index], 'delta_radius']);
 	update_float([['axis', index], 'offset']);
 	update_float([['axis', index], 'park']);
+	update_canvas_and_spans();
 } // }}}
 
 function update_extruder(index) { // {{{
@@ -615,7 +617,7 @@ function update_toggle(id) { // {{{
 
 function update_pin(id) { // {{{
 	get_element(printer, id).selectedIndex = get_value(printer, id) & 0xff;
-	get_element(printer, id, 'invalid').checked = Boolean(get_value(printer, id) & 0x100);
+	get_element(printer, id, 'valid').checked = Boolean(get_value(printer, id) & 0x100);
 	get_element(printer, id, 'inverted').checked = Boolean(get_value(printer, id) & 0x200);
 } // }}}
 
@@ -847,9 +849,9 @@ function make_tablerow(title, cells, classes, mainclass, id) { // {{{
 // Set helpers(to server). {{{
 function set_pin(printer, id) { // {{{
 	var value = get_element(printer, id).selectedIndex;
-	var invalid = get_element(printer, id, 'invalid').checked;
+	var valid = get_element(printer, id, 'valid').checked;
 	var inverted = get_element(printer, id, 'inverted').checked;
-	set_value(printer, id, value + 0x100 * invalid + 0x200 * inverted);
+	set_value(printer, id, value + 0x100 * valid + 0x200 * inverted);
 } // }}}
 
 function set_file(printer, id) { // {{{
@@ -931,13 +933,13 @@ function update_canvas_and_spans(update_lock) { // {{{
 			printer.call('get_axis_pos', [2], {}, function(z) {
 				if (update_lock)
 					printer.lock = [[x[1], y[1]], [selected_printer.reference[0], selected_printer.reference[1]]];
-				var e = document.getElementById('move_span_0');
+				var e = document.getElementById(make_id(selected_printer, [null, 'movespan0']));
 				e.ClearAll();
 				e.AddText(x[1].toFixed(1));
-				e = document.getElementById('move_span_1');
+				e = document.getElementById(make_id(selected_printer, [null, 'movespan1']));
 				e.ClearAll();
 				e.AddText(y[1].toFixed(1));
-				e = document.getElementById('move_span_2');
+				e = document.getElementById(make_id(selected_printer, [null, 'movespan2']));
 				e.ClearAll();
 				e.AddText(z[1].toFixed(1));
 				redraw_canvas(x[1], y[1]);
@@ -950,9 +952,9 @@ function update_canvas_and_spans(update_lock) { // {{{
 function redraw_canvas(x, y) { // {{{
 	if (!selected_printer)
 		return;
-	var canvas = document.getElementById('move_view');
+	var canvas = document.getElementById(make_id(selected_printer, [null, 'move_view']));
 	var c = canvas.getContext('2d');
-	var box = document.getElementById('movebox');
+	var box = document.getElementById(make_id(selected_printer, [null, 'movebox']));
 	var extra_height = box.clientHeight - canvas.clientHeight;
 	var printerwidth;
 	var printerheight;

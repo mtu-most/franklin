@@ -1,11 +1,11 @@
 #include "firmware.h"
 
-void setup ()
+void setup()
 {
 	arch_setup_start();
-	watchdog_disable ();
+	watchdog_disable();
 	// Initialize volatile variables.
-	Serial.begin (115200);
+	Serial.begin(115200);
 	initialized = false;
 	adc_phase = 0;
 #if MAXTEMPS > 0 || MAXEXTRUDERS > 0
@@ -23,11 +23,12 @@ void setup ()
 	last_packet = NULL;
 	out_busy = false;
 	reply_ready = false;
-	led_pin.read (0x100);
+	led_pin.read(0);
+	probe_pin.read(0);
 	led_phase = 0;
 	temps_busy = 0;
-	led_last = millis ();
-	last_active = millis ();
+	led_last = millis();
+	last_active = millis();
 	v0 = 0;
 	vp = 0;
 	vq = 0;
@@ -72,9 +73,9 @@ void setup ()
 		axis[a].current = NAN;
 		axis[a].sense_state = 0;
 		axis[a].sense_pos = NAN;
-		axis[a].limit_min_pin.read (0x100);
-		axis[a].limit_max_pin.read (0x100);
-		axis[a].sense_pin.read (0x100);
+		axis[a].limit_min_pin.read(0);
+		axis[a].limit_max_pin.read(0);
+		axis[a].sense_pin.read(0);
 	}
 #endif
 #if MAXEXTRUDERS > 0
@@ -105,7 +106,7 @@ void setup ()
 		temps[i] = NULL;
 #endif
 		objects[i] = &gpio[g];
-		gpio[g].pin.read (0x100);
+		gpio[g].pin.read(0);
 		gpio[g].state = 0;
 #ifndef LOWMEM
 		gpio[g].prev = NULL;
@@ -115,7 +116,7 @@ void setup ()
 	}
 #endif
 #if MAXTEMPS > 0 || MAXEXTRUDERS > 0
-	unsigned long time = micros ();
+	unsigned long time = micros();
 #endif
 	for (uint8_t o = 0; o < MAXOBJECT; ++o)
 	{
@@ -127,15 +128,13 @@ void setup ()
 			motors[o]->continuous_v = 0;
 			motors[o]->continuous_f = 0;
 			motors[o]->last_v = 0;
-			motors[o]->prelast_v = 0;
 			motors[o]->last_time = time;
-			motors[o]->prelast_time = 0;
 #ifdef AUDIO
 			motors[o]->audio_flags = 0;
 #endif
-			motors[o]->enable_pin.read (0x100);
-			motors[o]->step_pin.read (0x100);
-			motors[o]->dir_pin.read (0x100);
+			motors[o]->enable_pin.read(0);
+			motors[o]->step_pin.read(0);
+			motors[o]->dir_pin.read(0);
 		}
 #endif
 #if MAXTEMPS > 0 || MAXEXTRUDERS > 0
@@ -146,8 +145,8 @@ void setup ()
 			temps[o]->max_alarm = NAN;
 			temps[o]->target = NAN;
 			temps[o]->adclast = -1;
-			temps[o]->power_pin.read (0x100);
-			temps[o]->thermistor_pin.read (0x100);
+			temps[o]->power_pin.read(0);
+			temps[o]->thermistor_pin.read(0);
 #ifndef LOWMEM
 			temps[o]->gpios = NULL;
 #endif
@@ -166,14 +165,14 @@ void setup ()
 	for (uint8_t o = 1; o < MAXOBJECT; ++o)
 	{
 		objects[o]->address = address;
-		objects[o]->load (address, true);
+		objects[o]->load(address, true);
 		// A packet is length, command, channel, data.
 		int16_t len = 3 + address - objects[o]->address;
 		if (len + (len + 2) / 3 >= COMMAND_SIZE)
-			debug ("Warning: object %d is too large for the serial protocol!", o);
+			debug("Warning: object %d is too large for the serial protocol!", o);
 	}
-	Serial.write (CMD_ID);
+	Serial.write(CMD_ID);
 	for (uint8_t i = 0; i < 8; ++i)
-		Serial.write (uint8_t(0));
+		Serial.write(uint8_t(0));
 	arch_setup_end(address);
 }
