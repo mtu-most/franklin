@@ -2,7 +2,7 @@
 
 /*
 Units:
-x: μm		μ1
+x: μm		n1
 v: μm/s		1/s	-> float
 a: μm/s²		-> float
 t: μs	(but motor_limit, temp_limit: ms)
@@ -395,8 +395,8 @@ EXTERN unsigned long start_time;
 EXTERN long freeze_time;
 EXTERN long t0, tp;
 EXTERN bool moving;
+EXTERN int32_t f0, fp, fq, fmain;
 EXTERN float v0, vp, vq;
-EXTERN float f0;
 EXTERN bool move_prepared;
 EXTERN bool current_move_has_cb;
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];

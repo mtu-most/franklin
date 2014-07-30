@@ -157,7 +157,7 @@ void next_move () {
 		debug("checking %ld %ld", F(queue[queue_start].data[a]), F(axis[a].source));
 		if (queue[queue_start].data[a] != MAXLONG && axis[a].source == MAXLONG) {
 			debug ("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue.");
-			// This possible removes one move too many, but it shouldn't happen anyway.
+			// This possibly removes one move too many, but it shouldn't happen anyway.
 			if (queue[queue_start].cb) {
 				++num_movecbs;
 				try_send_next ();
@@ -175,7 +175,7 @@ void next_move () {
 #endif
 	// }}}
 
-	f0 = vq * tp / 2;
+	f0 = fq;
 	// If no move is prepared, set next_dist from the queue; it will be used as dist below.
 	if (!move_prepared) { // {{{
 #ifdef DEBUG_MOVE
@@ -213,7 +213,7 @@ void next_move () {
 	// Otherwise, we are prepared and can start the segment. {{{
 	bool action = false;
 #ifdef DEBUG_MOVE
-	debug ("Move was prepared with tp = %d", int (tp / 1000));
+	debug ("Move was prepared with tp = %ld", F(tp));
 #endif
 	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
 	if (n == queue_end) { // {{{
@@ -295,13 +295,14 @@ void next_move () {
 				continue;
 			motors[mtr]->dist = MAXLONG;
 		}
+		fq = 0;
 		return next_move ();
 	}
 	// }}}
 
 	// Currently set up:
 	// f0: fraction of move already done by connection.
-	// v0: previous move's final speed.
+	// v0: this move's requested starting speed.
 	// vp: this move's requested ending speed.
 	// vq: next move's requested starting speed.
 	// current_move_has_cb: if a cb should be fired after this segment is complete.
@@ -338,11 +339,13 @@ void next_move () {
 #endif
 	// }}}
 	// Already set up: f0, v0, vp, vq, mtr->dist, mtr->next_dist.
-	// To do: start_time, t0, tp, mtr->main_dist, mtr->distance_done
+	// To do: start_time, t0, tp, fmain, fp, fq, mtr->main_dist, mtr->distance_done
 #ifdef DEBUG_MOVE
-	debug ("Preparation did f0 = %f", F(f0));
+	debug ("Preparation did f0 = %ld", F(f0));
 #endif
 
+	int32_t fp;
+	int32_t fq;
 #if MAXAXES > 0
 	// Use maximum deviation to find fraction where to start rounded corner.
 	int32_t um_round;
@@ -367,29 +370,23 @@ void next_move () {
 		int32_t scale(sqrt(kf(summed2)) / 2);
 		um_round = k(max_deviation) / scale;
 	}
-	// Convert mm to fraction for both p and q.
-	float fp = norma > 0 ? um_round * 1.0 / norma : 0;
-	float fq = normb > 0 ? um_round * 1.0 / normb : 0;
-	if (fp > .5) {
-		fq *= .5 / fp;
-		fp = .5;
+	// Convert mm to fraction for both p and q.  Initially use μ1 instead of n1 to avoid overflows.
+	fp = norma >= k(1) ? k(um_round) / m(norma) : 0;
+	fq = normb >= k(1) ? k(um_round) / m(normb) : 0;
+	if (fp > M(1) / 2) {
+		fq = k(fq) / 2 / fp * k(1);
+		fp = M(1) / 2;
 	}
-	if (fq > .5) {
-		fp *= .5 / fq;
-		fq = .5;
+	if (fq > M(1) / 2) {
+		fp = k(fq) / 2 / fq * k(1);
+		fq = M(1) / 2;
 	}
+	fp = k(fp);
+	fq = k(fq);
 #else
-	float fp = 0;
-	float fq = 0;
+	fp = 0;
+	fq = 0;
 #endif
-
-	// Compute t0 and tp.
-	tp = M(fp / vp * 2);
-	t0 = M((1 - f0 - fp) / (v0 + vp) * 2);
-	if (tp < 0)
-		tp = MAXLONG;
-	if (t0 < 0)
-		t0 = MAXLONG;
 
 	// Finish. {{{
 	start_time = micros ();
