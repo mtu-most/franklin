@@ -5,25 +5,27 @@ void Temp::load (int16_t &addr, bool eeprom)
 {
 	R0 = read_float (addr, eeprom);
 	R1 = read_float (addr, eeprom);
-	Rc = read_float (addr, eeprom);
-	Tc = read_float (addr, eeprom) + 273.15;
-	minus_beta = -read_float (addr, eeprom);
+	logRc = read_float (addr, eeprom);
+	Tc = read_float (addr, eeprom);
+	beta = read_float (addr, eeprom);
+	K = exp (logRc - beta / Tc);
+	//debug("K %f R0 %f R1 %f logRc %f Tc %f beta %f", F(K), F(R0), F(R1), F(logRc), F(Tc), F(beta));
 #ifndef LOWMEM
 #if MAXGPIOS > 0
 	for (Gpio *gpio = gpios; gpio; gpio = gpio->next)
 		gpio->adcvalue = toadc (gpio->value);
 #endif
-	core_C = read_float (addr, eeprom);
-	shell_C = read_float (addr, eeprom);
-	transfer = read_float (addr, eeprom);
-	radiation = read_float (addr, eeprom);
-	power = read_float (addr, eeprom);
+	core_C = read_32 (addr, eeprom);
+	shell_C = read_32 (addr, eeprom);
+	transfer = read_32 (addr, eeprom);
+	radiation = read_32 (addr, eeprom);
+	power = read_32 (addr, eeprom);
 #else
-	read_float (addr, eeprom);
-	read_float (addr, eeprom);
-	read_float (addr, eeprom);
-	read_float (addr, eeprom);
-	read_float (addr, eeprom);
+	read_32 (addr, eeprom);
+	read_32 (addr, eeprom);
+	read_32 (addr, eeprom);
+	read_32 (addr, eeprom);
+	read_32 (addr, eeprom);
 #endif
 	power_pin.read (read_16 (addr, eeprom));
 	thermistor_pin.read (read_16 (addr, eeprom));
@@ -34,21 +36,21 @@ void Temp::save (int16_t &addr, bool eeprom)
 {
 	write_float (addr, R0, eeprom);
 	write_float (addr, R1, eeprom);
-	write_float (addr, Rc, eeprom);
-	write_float (addr, Tc - 273.15, eeprom);
-	write_float (addr, -minus_beta, eeprom);
+	write_float (addr, logRc, eeprom);
+	write_float (addr, Tc, eeprom);
+	write_float (addr, beta, eeprom);
 #ifndef LOWMEM
-	write_float (addr, core_C, eeprom);
-	write_float (addr, shell_C, eeprom);
-	write_float (addr, transfer, eeprom);
-	write_float (addr, radiation, eeprom);
-	write_float (addr, power, eeprom);
+	write_32 (addr, core_C, eeprom);
+	write_32 (addr, shell_C, eeprom);
+	write_32 (addr, transfer, eeprom);
+	write_32 (addr, radiation, eeprom);
+	write_32 (addr, power, eeprom);
 #else
-	write_float (addr, NAN, eeprom);
-	write_float (addr, NAN, eeprom);
-	write_float (addr, NAN, eeprom);
-	write_float (addr, NAN, eeprom);
-	write_float (addr, NAN, eeprom);
+	write_32 (addr, -1, eeprom);
+	write_32 (addr, -1, eeprom);
+	write_32 (addr, -1, eeprom);
+	write_32 (addr, -1, eeprom);
+	write_32 (addr, -1, eeprom);
 #endif
 	write_16 (addr, power_pin.write (), eeprom);
 	write_16 (addr, thermistor_pin.write (), eeprom);
@@ -64,14 +66,15 @@ int16_t Temp::get_value () {
 	if (!adc_ready(thermistor_pin.pin))
 		return -1;
 	adclast = adc_get(thermistor_pin.pin);
+	//debug("adc: %d", adclast);
 	return adclast;
 }
 
-float Temp::fromadc (int16_t adc) {
+int32_t Temp::fromadc (int16_t adc) {
 	if (adc < 0)
-		return INFINITY;
+		return MAXLONG;
 	if (adc >= MAXINT)
-		return NAN;
+		return -1;
 	//debug("adc: %d", adc);
 	// Symbols: A[ms]: adc value, R[01s]: resistor value, V[m01s]: voltage
 	// with m: maximum value, 0: series resistor, 1: parallel resistor, s: sensed value (thermistor)
@@ -80,25 +83,23 @@ float Temp::fromadc (int16_t adc) {
 	// Am/As = 1+R0/Rs+R0/R1
 	// => 1/Rs = R0*Am/As-1/R0-1/R1
 	// Compute T from R (:= Rs).
-	// R = k * exp (beta / T)
-	// T = beta/log(R/k)=-beta/log(k*Am/R0/As-k/R0-k/R1)
-	if (isnan (minus_beta)) {
-		// beta == NaN is used for calibration: return raw value.
-		// This is only used for reading, so correct for conversion.
-		return adc + 273.15;
+	// R = K * exp (beta / T)
+	// T = beta/log(R/K)=-beta/log(K*Am/R0/As-K/R0-K/R1)
+	if (isnan(beta)) {
+		// beta < 0 is used for calibration: return raw value as K.
+		return k(int32_t(adc));
 	}
-	float k = Rc * exp (minus_beta / Tc);
-	//debug("k: %f adc: %d beta: %f", F(k), adc, F(minus_beta));
-	return minus_beta / log (k * (1024 / R0 / adc - 1 / R0 - 1 / R1));
+	//debug("K: %f adc: %d beta: %f", F(K), adc, F(beta));
+	return k(-beta / log(K * (1024 / R0 / adc - 1 / R0 - 1 / R1)));
 }
 
-int16_t Temp::toadc (float T) {
-	if (isnan (T))
+int16_t Temp::toadc (int32_t T) {
+	if (T < 0)
 		return MAXINT;
-	if (isinf (T))
+	if (T == MAXLONG)
 		return -1;
-	float k = Rc * exp (minus_beta / Tc);
-	float Rs = k * exp (-minus_beta / T);
+	float Rs = K * exp (beta * 1. / mf(T));
+	//debug("K %f Rs %f R0 %f logRc %f Tc %f beta %f", F(K), F(Rs), F(R0), F(logRc), F(Tc), F(beta));
 	return ((1 << 10) - 1) * Rs / (Rs + R0);
 }
 #endif

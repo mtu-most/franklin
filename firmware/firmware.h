@@ -1,4 +1,32 @@
 #ifndef _FIRMWARE_H
+
+/*
+Units:
+x: μm		μ1
+v: μm/s		1/s	-> float
+a: μm/s²		-> float
+t: μs	(but motor_limit, temp_limit: ms)
+T: mK	(but β, Tc: K (float))
+feedrate: 1		-> float
+α: rad			-> float
+R: Ω			-> float
+
+# TODO: determine reasonable values.
+C: mJ/K
+J: mJ/Ks
+I: mJ/K⁴
+P: mW
+*/
+
+#define u(x) (int32_t(x) >> 20)
+#define m(x) (int32_t(x) >> 10)
+#define m2(x) (int32_t(x) >> 5)
+#define mf(x) (float(x) / (1 << 10))
+#define k(x) int32_t((x) * (1 << 10))
+#define kf(x) (float(x) * (1 << 10))
+#define kM(x) int32_t((x) * (1 << 15))
+#define M(x) int32_t((x) * ((int32_t)1 << 20))
+
 #include "configuration.h"
 #include ARCH_INCLUDE
 #define _FIRMWARE_H
@@ -19,8 +47,6 @@
 #define MAXTEMPS 0
 #undef MAXGPIOS
 #define MAXGPIOS 0
-#undef SERIAL_BUFFERSIZE
-#define SERIAL_BUFFERSIZE 0
 #ifdef AUDIO
 #undef AUDIO
 #endif
@@ -31,14 +57,9 @@
 
 #define ID_SIZE 8	// Number of bytes in printerid.
 #define MAXOBJECT (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS + MAXGPIOS)		// Total number of supported objects.
-#define F0 0
-#define F1 1
-#define AXIS0 2
-#define EXTRUDER0 (AXIS0 + num_axes)
-#define TEMP0 (EXTRUDER0 + num_extruders)
 
-#define MAXLONG (int32_t ((uint32_t (1) << 31) - 1))
-#define MAXINT (int16_t ((uint16_t (1) << 15) - 1))
+#define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
+#define MAXINT (int16_t((uint16_t(1) << 15) - 1))
 
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
@@ -48,12 +69,12 @@
 struct Pin_t {
 	uint8_t flags;
 	uint8_t pin;
-	bool valid () { return flags & 1; }
-	bool inverted () { return flags & 2; }
-	uint16_t write () { return flags << 8 | pin; }
-	void read (uint16_t data) {
+	bool valid() { return flags & 1; }
+	bool inverted() { return flags & 2; }
+	uint16_t write() { return flags << 8 | pin; }
+	void read(uint16_t data) {
 		if ((data & 0xff) != pin)
-			SET_INPUT_NOPULLUP (*this);
+			SET_INPUT_NOPULLUP(*this);
 		pin = data & 0xff;
 		flags = data >> 8;
 		if ((flags & ~2) != 1 || pin >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS) {
@@ -66,8 +87,8 @@ struct Pin_t {
 union ReadFloat {
 	float f;
 	int32_t i;
-	uint32_t u;
-	uint8_t b[sizeof (float)];
+	uint32_t ui;
+	uint8_t b[sizeof(float)];
 };
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
@@ -105,8 +126,6 @@ enum Command {
 	CMD_READGPIO,	// 1 byte: which channel. Reply: GPIO.
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_bit.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
-	CMD_SETSERIAL,	// 1 byte: which port, 4 byte (int): baudrate
-	CMD_SERIAL_TX,	// 1 byte: which port, 1 byte: data length, n bytes: data
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_START,	// 4 byte: 0 (protocol version).
@@ -124,15 +143,14 @@ enum Command {
 	CMD_LIMIT,	// 1 byte: which channel.
 	CMD_AUTOSLEEP,	// 1 byte: what: 1: motor; 2: temp; 3: both.
 	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
-	CMD_SERIAL_RX,	// 1 byte: which port, 1 byte: data length, n bytes: data
 };
 
 struct Object
 {
 	int16_t address;
-	virtual void load (int16_t &address, bool eeprom) = 0;
-	virtual void save (int16_t &address, bool eeprom) = 0;
-	virtual ~Object () {}
+	virtual void load(int16_t &address, bool eeprom) = 0;
+	virtual void save(int16_t &address, bool eeprom) = 0;
+	virtual ~Object() {}
 };
 
 #if MAXGPIOS > 0
@@ -145,45 +163,46 @@ struct Gpio;
 struct Temp : public Object
 {
 	// See temp.c from definition of calibration constants.
-	float R0, R1, Rc, Tc, minus_beta;		// calibration values of thermistor.  [Ω, Ω, Ω, K, K]
+	float R0, R1, logRc, beta, Tc;	// calibration values of thermistor.  [Ω, Ω, logΩ, K, K]
 #ifndef LOWMEM
 	// Temperature balance calibration.
-	float power;				// added power while heater is on.  [W]
-	float core_C;				// heat capacity of the core.  [J/K]
-	float shell_C;				// heat capacity of the shell.  [J/K]
-	float transfer;				// heat transfer between core and shell.  [W/K]
-	float radiation;			// radiated power = radiation * (shell_T ** 4 - room_T ** 4) [W/K**4]
-	float convection;			// convected power = convection * (shell_T - room_T) [W/K]
+	int32_t power;			// added power while heater is on.  [W]
+	int32_t core_C;			// heat capacity of the core.  [J/K]
+	int32_t shell_C;		// heat capacity of the shell.  [J/K]
+	int32_t transfer;		// heat transfer between core and shell.  [W/K]
+	int32_t radiation;		// radiated power = radiation * (shell_T ** 4 - room_T ** 4) [W/K**4]
+	int32_t convection;		// convected power = convection * (shell_T - room_T) [W/K]
 #endif
 	// Pins.
 	Pin_t power_pin;
 	Pin_t thermistor_pin;
 	// Volatile variables.
-	float target;				// target temperature; NAN to disable. [K]
-	int16_t adctarget;			// target temperature in adc counts; -1 for disabled. [adccounts]
-	int16_t adclast;			// last measured temperature. [adccounts]
+	int32_t target;			// target temperature; NAN to disable. [K]
+	int16_t adctarget;		// target temperature in adc counts; -1 for disabled. [adccounts]
+	int16_t adclast;		// last measured temperature. [adccounts]
 #ifndef LOWMEM
-	float core_T, shell_T;			// current temperatures. [K]
+	int32_t core_T, shell_T;	// current temperatures. [K]
 #if MAXGPIOS > 0
-	Gpio *gpios;				// linked list of gpios monitoring this temp.
+	Gpio *gpios;			// linked list of gpios monitoring this temp.
 #endif
 #endif
-	float min_alarm;			// NAN, or the temperature at which to trigger the callback.  [K]
-	float max_alarm;			// NAN, or the temperature at which to trigger the callback.  [K]
-	int16_t adcmin_alarm;			// -1, or the temperature at which to trigger the callback.  [adccounts]
-	int16_t adcmax_alarm;			// -1, or the temperature at which to trigger the callback.  [adccounts]
+	int32_t min_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
+	int32_t max_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
+	int16_t adcmin_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
+	int16_t adcmax_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
 	// Internal variables.
-	unsigned long last_time;		// last value of micros when this heater was handled.
-	unsigned long time_on;			// Time that the heater has been on since last reading.  [μs]
-	bool is_on;				// If the heater is currently on.
+	unsigned long last_time;	// last value of micros when this heater was handled.
+	unsigned long time_on;		// Time that the heater has been on since last reading.  [μs]
+	bool is_on;			// If the heater is currently on.
+	float K;			// Thermistor constant; kept in memory for performance.
 	// Functions.
-	void setup_read ();			// Initialize ADC for reading the thermistor.
-	int16_t get_value ();			// Get thermistor reading, or -1 if it isn't available yet.
-	float fromadc (int16_t adc);		// convert ADC to K.
-	int16_t toadc (float T);		// convert K to ADC.
-	virtual void load (int16_t &addr, bool eeprom);
-	virtual void save (int16_t &addr, bool eeprom);
-	virtual ~Temp () {}
+	void setup_read();		// Initialize ADC for reading the thermistor.
+	int16_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
+	int32_t fromadc(int16_t adc);	// convert ADC to K.
+	int16_t toadc(int32_t T);	// convert K to ADC.
+	virtual void load(int16_t &addr, bool eeprom);
+	virtual void save(int16_t &addr, bool eeprom);
+	virtual ~Temp() {}
 };
 #endif
 
@@ -193,14 +212,14 @@ struct Motor : public Object
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	Pin_t enable_pin;
-	int32_t steps_per_um;			// hardware calibration [steps/μm].
-	int32_t max_v, limit_v, limit_a;	// maximum value for f [μm/s], [mm/s^2]!.
+	int32_t steps_per_m;			// hardware calibration [steps/m].
+	float max_v, limit_v, limit_a;		// maximum value for f [μm/s], [mm/s^2]!.
 	uint8_t max_steps;			// maximum number of steps in one iteration.
-	int32_t continuous_v;			// speed for continuous run.
-	int32_t continuous_f;			// fractional continuous distance that have been done.
-	int32_t f;
+	float continuous_v;			// speed for continuous run.
+	int32_t continuous_f;			// fractional continuous distance that has been done.
+	float f;
 	unsigned long last_time;		// micros value when last iteration was run.
-	int32_t last_v;				// v at last time, for using limit_a [mm/s].
+	float last_v;				// v at last time, for using limit_a [mm/s].
 	bool positive;				// direction of current movement.
 	int32_t dist, next_dist, main_dist;
 #ifdef AUDIO
@@ -210,24 +229,24 @@ struct Motor : public Object
 		STATE = 2
 	};
 #endif
-	virtual void load (int16_t &addr, bool eeprom);
-	virtual void save (int16_t &addr, bool eeprom);
-	virtual ~Motor () {}
+	virtual void load(int16_t &addr, bool eeprom);
+	virtual void save(int16_t &addr, bool eeprom);
+	virtual ~Motor() {}
 };
 #endif
 
 struct Constants : public Object
 {
-	virtual void load (int16_t &addr, bool eeprom);	// NI
-	virtual void save (int16_t &addr, bool eeprom);
-	virtual ~Constants () {}
+	virtual void load(int16_t &addr, bool eeprom);	// NI
+	virtual void save(int16_t &addr, bool eeprom);
+	virtual ~Constants() {}
 };
 
 struct Variables : public Object
 {
-	virtual void load (int16_t &addr, bool eeprom);
-	virtual void save (int16_t &addr, bool eeprom);
-	virtual ~Variables () {}
+	virtual void load(int16_t &addr, bool eeprom);
+	virtual void save(int16_t &addr, bool eeprom);
+	virtual ~Variables() {}
 };
 
 #if MAXAXES > 0
@@ -248,9 +267,9 @@ struct Axis : public Object
 	int32_t current_pos;	// Current position of motor (in μm).
 	int32_t source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
 	int32_t x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
-	virtual void load (int16_t &addr, bool eeprom);
-	virtual void save (int16_t &addr, bool eeprom);
-	virtual ~Axis () {}
+	virtual void load(int16_t &addr, bool eeprom);
+	virtual void save(int16_t &addr, bool eeprom);
+	virtual ~Axis() {}
 };
 #endif
 
@@ -260,15 +279,16 @@ struct Extruder : public Object
 	Motor motor;
 	Temp temp;		// temperature regulation.
 #ifndef LOWMEM
-	float filament_heat;	// constant for how much heat is extracted per mm filament.
-	float nozzle_size;
-	float filament_size;
-	float capacity;		// heat capacity of filament in [energy]/mm/K
+	// TODO: Actually use this and decide on units.
+	int32_t filament_heat;	// constant for how much heat is extracted per mm filament.
+	int32_t nozzle_size;
+	int32_t filament_size;
+	int32_t capacity;	// heat capacity of filament in [energy]/mm/K
 #endif
 	int32_t distance_done;	// steps done during current move.
-	virtual void load (int16_t &addr, bool eeprom);
-	virtual void save (int16_t &addr, bool eeprom);
-	virtual ~Extruder () {}
+	virtual void load(int16_t &addr, bool eeprom);
+	virtual void save(int16_t &addr, bool eeprom);
+	virtual ~Extruder() {}
 };
 #endif
 
@@ -280,21 +300,22 @@ struct Gpio : public Object
 	uint8_t state;
 #ifndef LOWMEM
 	uint8_t master;
-	float value;
-	float adcvalue;
+	int32_t value;
+	int16_t adcvalue;
 	Gpio *prev, *next;
 #endif
-	void setup (uint8_t new_state);
-	virtual void load (int16_t &addr, bool eeprom);
-	virtual void save (int16_t &addr, bool eeprom);
-	virtual ~Gpio () {}
+	void setup(uint8_t new_state);
+	virtual void load(int16_t &addr, bool eeprom);
+	virtual void save(int16_t &addr, bool eeprom);
+	virtual ~Gpio() {}
 };
 #endif
 
 struct MoveCommand
 {
 	bool cb;
-	float data[2 + MAXAXES + MAXEXTRUDERS];	// Value if given, NaN otherwise.
+	float f[2];
+	int32_t data[MAXAXES + MAXEXTRUDERS];	// Value if given, MAXLONG otherwise.
 };
 
 #define COMMAND_SIZE 127
@@ -309,10 +330,10 @@ EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
 EXTERN int32_t max_deviation;
 #ifndef LOWMEM
-EXTERN float room_T;	//[°C]
+EXTERN int32_t room_T;	//[°C]
 #endif
-EXTERN int32_t feedrate;	// Multiplication factor for f values, used at start of move.
-EXTERN float angle;
+EXTERN float feedrate;		// Multiplication factor for f values, used at start of move.
+EXTERN int32_t angle;
 // Other variables.
 EXTERN char printerid[ID_SIZE];
 EXTERN unsigned char command[COMMAND_SIZE];
@@ -374,15 +395,10 @@ EXTERN unsigned long start_time;
 EXTERN long freeze_time;
 EXTERN long t0, tp;
 EXTERN bool moving;
-EXTERN int32_t v0, vp, vq, f0;
+EXTERN float v0, vp, vq;
+EXTERN float f0;
 EXTERN bool move_prepared;
 EXTERN bool current_move_has_cb;
-#if SERIAL_BUFFERSIZE > 0
-EXTERN HardwareSerial *serialport[NUMSERIALS];
-EXTERN bool serialactive[NUMSERIALS];
-EXTERN char serialbuffer[3 + SERIAL_BUFFERSIZE + (3 + SERIAL_BUFFERSIZE + 2) / 3];
-EXTERN bool serial_out_busy;
-#endif
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
 EXTERN uint16_t debug_buffer_ptr;
 
@@ -391,71 +407,67 @@ void buffered_debug_flush();
 void buffered_debug(char const *fmt, ...);
 
 // packet.cpp
-void packet ();	// A command packet has arrived; handle it.
+void packet();	// A command packet has arrived; handle it.
 
 // serial.cpp
-void serial ();	// Handle commands from serial.
-void send_packet (char *the_packet);
-void try_send_next ();
-void write_ack ();
-void write_ackwait ();
+void serial();	// Handle commands from serial.
+void send_packet(char *the_packet);
+void try_send_next();
+void write_ack();
+void write_ackwait();
 
 // move.cpp
-void next_move ();
-void abort_move ();
-void reset_pos ();
+void next_move();
+void abort_move();
+void reset_pos();
 
 // setup.cpp
-void setup ();
+void setup();
 
 // firmware.ino
-void loop ();	// Do stuff which needs doing: moving motors and adjusting heaters.
+void loop();	// Do stuff which needs doing: moving motors and adjusting heaters.
 
 // storage.cpp
-uint8_t read_8 (int16_t &address, bool eeprom);
-void write_8 (int16_t &address, uint8_t data, bool eeprom);
-int16_t read_16 (int16_t &address, bool eeprom);
-void write_16 (int16_t &address, int16_t data, bool eeprom);
-int32_t read_32 (int16_t &address, bool eeprom);
-void write_32 (int16_t &address, int32_t data, bool eeprom);
-float read_float (int16_t &address, bool eeprom);
-void write_float (int16_t &address, float data, bool eeprom);
-int32_t read_micro (int16_t &address, bool eeprom);
-void write_micro (int16_t &address, int32_t data, bool eeprom);
-int32_t read_milli (int16_t &address, bool eeprom);
-void write_milli (int16_t &address, int32_t data, bool eeprom);
+uint8_t read_8(int16_t &address, bool eeprom);
+void write_8(int16_t &address, uint8_t data, bool eeprom);
+int16_t read_16(int16_t &address, bool eeprom);
+void write_16(int16_t &address, int16_t data, bool eeprom);
+int32_t read_32(int16_t &address, bool eeprom);
+void write_32(int16_t &address, int32_t data, bool eeprom);
+float read_float(int16_t &address, bool eeprom);
+void write_float(int16_t &address, float data, bool eeprom);
 
 // axis.cpp
 #ifndef LOWMEM
-void compute_axes ();
+void compute_axes();
 #endif
 
 #if MAXAXES >= 3
-static inline int32_t delta_to_axis (uint8_t a, int32_t *target, bool *ok) {
+static inline int32_t delta_to_axis(uint8_t a, int32_t *target, bool *ok) {
 	int32_t dx = target[0] - axis[a].x;
 	int32_t dy = target[1] - axis[a].y;
 	int32_t dz = target[2] - axis[a].z;
-	int32_t r2 = dx / 1000 * dx + dy / 1000 * dy;
-	int32_t l2 = axis[a].delta_length / 1000 * axis[a].delta_length;
-	int32_t dest = int32_t(sqrt ((l2 - r2) * 1e3)) + dz;
-	//debug ("dta dx %f dy %f dz %f z %f, r %f target %f", F(dx), F(dy), F(dz), F(axis[a].z), F(r), F(target));
+	int32_t r2 = m(dx) * dx + m(dy) * dy;
+	int32_t l2 = m(axis[a].delta_length) * axis[a].delta_length;
+	int32_t dest = int32_t(sqrt(kf(l2 - r2))) + dz;
+	//debug("dta dx %f dy %f dz %f z %f, r %f target %f", F(dx), F(dy), F(dz), F(axis[a].z), F(r), F(target));
 	return dest;
 }
 #endif
 
 #if MAXAXES > 0 || MAXEXTRUDERS > 0
-static inline bool moving_motor (uint8_t which) {
+static inline bool moving_motor(uint8_t which) {
 	if (!moving)
 		return false;
 #if MAXAXES >= 3
 	if (printer_type == 1 && which < 2 + 3) {
 		for (uint8_t a = 2; a < 2 + 3; ++a)
-			if (motors[a]->dist != 0 && !isnan (motors[a]->dist))
+			if (motors[a]->dist != 0 && motors[a]->dist != MAXLONG)
 				return true;
 		return false;
 	}
 #endif
-	return !isnan (motors[which]->dist);
+	return motors[which]->dist != MAXLONG;
 }
 #endif
 

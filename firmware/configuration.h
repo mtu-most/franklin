@@ -23,10 +23,6 @@
 #define MAXTEMPS 4
 #define MAXGPIOS 8
 
-// Size of the buffer to use for data from extra serial ports to the host.
-// Set to 0 to disable serial data forwarding.
-#define SERIAL_BUFFERSIZE 20
-
 // If AUDIO is not defined, nothing related to audio will be included.
 #define AUDIO
 // Audio settings.  The audio buffer is split in fragments.  New data is sent

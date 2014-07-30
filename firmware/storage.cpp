@@ -1,10 +1,9 @@
-#include <EEPROM.h>
 #include "firmware.h"
 
 uint8_t read_8 (int16_t &address, bool eeprom)
 {
 	if (eeprom)
-		return EEPROM.read (address++);
+		return read_eeprom (address++);
 	return command[address++];
 }
 
@@ -13,7 +12,7 @@ void write_8 (int16_t &address, uint8_t data, bool eeprom)
 	if (eeprom)
 	{
 		//debug ("EEPROM[%x] = %x", address, data);
-		EEPROM.write (address++, data);
+		write_eeprom (address++, data);
 		watchdog_reset ();
 		return;
 	}
@@ -61,26 +60,4 @@ void write_float (int16_t &address, float data, bool eeprom)
 	d.f = data;
 	for (uint8_t t = 0; t < sizeof (float); ++t)
 		write_8 (address, d.b[t], eeprom);
-}
-
-int32_t read_micro (int16_t &address, bool eeprom)
-{
-	float f = read_float(address, eeprom);
-	return int32_t(f * 1e6);
-}
-
-void write_micro (int16_t &address, int32_t data, bool eeprom)
-{
-	write_float(address, data / 1e6, eeprom);
-}
-
-int32_t read_milli (int16_t &address, bool eeprom)
-{
-	float f = read_float(address, eeprom);
-	return int32_t(f * 1e3);
-}
-
-void write_milli (int16_t &address, int32_t data, bool eeprom)
-{
-	write_float(address, data / 1e3, eeprom);
 }

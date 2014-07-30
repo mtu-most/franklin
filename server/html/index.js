@@ -542,7 +542,7 @@ function update_motor(id) { // {{{
 	update_pin([id, 'step_pin']);
 	update_pin([id, 'dir_pin']);
 	update_pin([id, 'enable_pin']);
-	update_float([id, 'steps_per_mm']);
+	update_float([id, 'steps_per_m']);
 	update_float([id, 'limit_v']);
 	update_float([id, 'max_v']);
 	update_float([id, 'limit_a']);

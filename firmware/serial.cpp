@@ -31,45 +31,25 @@ static const uint8_t MASK[5][4] = {
 	{0x4b, 0xdc, 0xe2, 0x83}};
 
 // There may be serial data available.
-void serial ()
+void serial()
 {
-#if SERIAL_BUFFERSIZE > 0
-	if (serialbuffer[0] == 0) {
-		for (uint8_t p = 1; p < NUMSERIALS; ++p) {
-			if (!serialactive[p] || !serialport[p]->available ())
-				continue;
-			serialbuffer[0] = 3;
-			serialbuffer[1] = CMD_SERIAL_RX;
-			serialbuffer[2] = p;
-			break;
-		}
-	}
-	// Don't add bytes to a packet which is already being sent.
-	if (serialbuffer[0] != 0 && !serial_out_busy && serialbuffer[0] < SERIAL_BUFFERSIZE + 3) {
-		uint8_t p = serialbuffer[2];
-		while (serialport[p]->available () && serialbuffer[0] < SERIAL_BUFFERSIZE + 3) {
-			serialbuffer[(uint8_t)serialbuffer[0]] = serialport[p]->read ();
-			serialbuffer[0] += 1;
-		}
-	}
-#endif
-	if (!had_data && command_end > 0 && micros () - last_micros >= 100000)
+	if (!had_data && command_end > 0 && micros() - last_micros >= 100000)
 	{
 		// Command not finished; ignore it and wait for next.
-		watchdog_reset ();
+		watchdog_reset();
 		command_end = 0;
 	}
 	had_data = false;
 	while (command_end == 0)
 	{
-		if (!Serial.available ()) {
-			watchdog_reset ();
+		if (!Serial.available()) {
+			watchdog_reset();
 			return;
 		}
 		had_data = true;
-		command[0] = Serial.read ();
+		command[0] = Serial.read();
 #ifdef DEBUG_SERIAL
-		debug ("received: %x", command[0]);
+		debug("received: %x", command[0]);
 #endif
 		// If this is a 1-byte command, handle it.
 		switch (command[0])
@@ -80,32 +60,26 @@ void serial ()
 			if (out_busy && (!ff_out ^ (command[0] == CMD_ACK1))) {	// Only if we expected it and it is the right type.
 				ff_out ^= 0x80;
 #ifdef DEBUG_FF
-				debug ("new ff_out: %d", ff_out);
+				debug("new ff_out: %d", ff_out);
 #endif
 				out_busy = false;
-#if SERIAL_BUFFERSIZE > 0
-				if (serial_out_busy) {
-					serial_out_busy = false;
-					serialbuffer[0] = 0;
-				}
-#endif
-				try_send_next ();
+				try_send_next();
 			}
 			continue;
 		case CMD_NACK:
 			// Nack: the host didn't properly receive the packet: resend.
 			// Unless the last packet was already received; in that case ignore the NACK.
 			if (out_busy)
-				send_packet (last_packet);
+				send_packet(last_packet);
 			continue;
 		case CMD_ID:
 			// Request printer id.  This is called when the host
 			// connects to the printer.  This may be a reconnect,
 			// and can happen at any time.
 			// Response is to send the printer id.
-			Serial.write (CMD_ID);
+			Serial.write(CMD_ID);
 			for (uint8_t i = 0; i < ID_SIZE; ++i)
-				Serial.write (printerid[i]);
+				Serial.write(printerid[i]);
 			continue;
 		default:
 			break;
@@ -113,25 +87,25 @@ void serial ()
 		if (command[0] < 2 || command[0] >= 0x80) {
 			// These lengths are not allowed; this cannot be a good packet.
 			debug("invalid length %d", int(command[0]));
-			Serial.write (CMD_NACK);
+			Serial.write(CMD_NACK);
 			continue;
 		}
 		command_end = 1;
-		last_micros = micros ();
+		last_micros = micros();
 	}
-	int len = Serial.available ();
+	int len = Serial.available();
 	if (len == 0)
 	{
 #ifdef DEBUG_SERIAL
-		debug ("no more data available now");
+		debug("no more data available now");
 #endif
-		watchdog_reset ();
+		watchdog_reset();
 		// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
-		if (out_busy && micros () - out_time >= 200000) {
+		if (out_busy && micros() - out_time >= 200000) {
 #ifdef DEBUG_SERIAL
-			debug ("resending packet");
+			debug("resending packet");
 #endif
-			send_packet (last_packet);
+			send_packet(last_packet);
 		}
 		return;
 	}
@@ -142,28 +116,28 @@ void serial ()
 	cmd_len += (cmd_len + 2) / 3;
 	if (command_end + len > cmd_len)
 		len = cmd_len - command_end;
-	Serial.readBytes (reinterpret_cast <char *> (&command[command_end]), len);
+	Serial.readBytes(reinterpret_cast <char *> (&command[command_end]), len);
 #ifdef DEBUG_SERIAL
-	debug ("read %d bytes", len);
+	debug("read %d bytes", len);
 #endif
-	last_micros = micros ();
+	last_micros = micros();
 	command_end += len;
 	if (command_end < cmd_len)
 	{
 #ifdef DEBUG_SERIAL
-		debug ("not done yet; %d of %d received.", command_end, cmd_len);
+		debug("not done yet; %d of %d received.", command_end, cmd_len);
 #endif
-		watchdog_reset ();
+		watchdog_reset();
 		return;
 	}
-	watchdog_reset ();
+	watchdog_reset();
 	command_end = 0;
 	// Check packet integrity.
 	// Size must be good.
 	if (command[0] < 2)
 	{
 		debug("invalid size %d", int(command[0]));
-		Serial.write (CMD_NACK);
+		Serial.write(CMD_NACK);
 		return;
 	}
 	// Checksum must be good.
@@ -175,8 +149,8 @@ void serial ()
 			command[len + t] = 0;
 		if ((sum & 0x7) != (t & 0x7))
 		{
-			debug ("incorrect extra bit");
-			Serial.write (CMD_NACK);
+			debug("incorrect extra bit");
+			Serial.write(CMD_NACK);
 			return;
 		}
 		for (uint8_t bit = 0; bit < 5; ++bit)
@@ -189,15 +163,15 @@ void serial ()
 			check ^= check >> 1;
 			if (check & 1)
 			{
-				debug ("incorrect checksum");
-				Serial.write (CMD_NACK);
+				debug("incorrect checksum");
+				Serial.write(CMD_NACK);
 				return;
 			}
 		}
 	}
 	// Packet is good.
 #ifdef DEBUG_SERIAL
-	debug ("good");
+	debug("good");
 #endif
 	// Flip-flop must have good state.
 	if ((command[1] & 0x80) != ff_in)
@@ -205,22 +179,22 @@ void serial ()
 		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
 		// Resend the ack, but don't do anything (the action has already been taken).
 #ifdef DEBUG_SERIAL
-		debug ("duplicate");
+		debug("duplicate");
 #endif
 #ifdef DEBUG_FF
-		debug ("old ff_in: %d", ff_in);
+		debug("old ff_in: %d", ff_in);
 #endif
-		Serial.write (ff_in ? CMD_ACK0 : CMD_ACK1);
+		Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
 		return;
 	}
 	// Right: update flip-flop and send ack.
 	ff_in ^= 0x80;
 #ifdef DEBUG_FF
-	debug ("new ff_in: %d", ff_in);
+	debug("new ff_in: %d", ff_in);
 #endif
 	// Clear flag for easier parsing.
 	command[1] &= ~0x80;
-	packet ();
+	packet();
 }
 
 // Command sending method:
@@ -236,21 +210,21 @@ void serial ()
 // - call send_packet to resend the last packet
 
 // Set checksum bytes.
-static void prepare_packet (char *the_packet)
+static void prepare_packet(char *the_packet)
 {
 #ifdef DEBUG_SERIAL
-	debug ("prepare");
+	debug("prepare");
 #endif
 	if (the_packet[0] >= COMMAND_SIZE)
 	{
-		debug ("packet is too large: %d > %d", the_packet[0], COMMAND_SIZE);
+		debug("packet is too large: %d > %d", the_packet[0], COMMAND_SIZE);
 		return;
 	}
 	// Set flipflop bit.
 	the_packet[1] &= ~0x80;
 	the_packet[1] ^= ff_out;
 #ifdef DEBUG_FF
-	debug ("use ff_out: %d", ff_out);
+	debug("use ff_out: %d", ff_out);
 #endif
 	// Compute the checksums.  This doesn't work for size in (1, 2, 4), so
 	// the protocol doesn't allow 1, and requires an initial 0 at position
@@ -283,29 +257,29 @@ static void prepare_packet (char *the_packet)
 }
 
 // Send packet to host.
-void send_packet (char *the_packet)
+void send_packet(char *the_packet)
 {
 #ifdef DEBUG_SERIAL
-	debug ("send");
+	debug("send");
 #endif
 	last_packet = the_packet;
 	uint8_t cmd_len = the_packet[0] & COMMAND_LEN_MASK;
 	for (uint8_t t = 0; t < cmd_len + (cmd_len + 2) / 3; ++t)
-		Serial.write (the_packet[t]);
+		Serial.write(the_packet[t]);
 	out_busy = true;
-	out_time = micros ();
+	out_time = micros();
 }
 
 // Call send_packet if we can.
-void try_send_next ()
+void try_send_next()
 {
 #ifdef DEBUG_SERIAL
-	debug ("try send");
+	debug("try send");
 #endif
 	if (out_busy)
 	{
 #ifdef DEBUG_SERIAL
-		debug ("still busy");
+		debug("still busy");
 #endif
 		// Still busy sending other packet.
 		return;
@@ -313,40 +287,40 @@ void try_send_next ()
 #if MAXAXES > 0
 	for (uint8_t w = 0; w < MAXAXES; ++w)
 	{
-		if (!isnan (limits_pos[w]))
+		if (limits_pos[w] != MAXLONG)
 		{
 #ifdef DEBUG_SERIAL
-			debug ("limit %d", w);
+			debug("limit %d", w);
 #endif
 			out_buffer[0] = 7;
 			out_buffer[1] = CMD_LIMIT;
 			out_buffer[2] = w;
 			ReadFloat f;
-			f.f = limits_pos[w];
+			f.i = limits_pos[w];
 			out_buffer[3] = f.b[0];
 			out_buffer[4] = f.b[1];
 			out_buffer[5] = f.b[2];
 			out_buffer[6] = f.b[3];
-			limits_pos[w] = NAN;
+			limits_pos[w] = MAXLONG;
 			if (initialized)
 			{
-				prepare_packet (out_buffer);
-				send_packet (out_buffer);
+				prepare_packet(out_buffer);
+				send_packet(out_buffer);
 			}
 			else
-				try_send_next ();
+				try_send_next();
 			return;
 		}
 		if (axis[w].sense_state & 1)
 		{
 #ifdef DEBUG_SERIAL
-			debug ("sense %d %d %f", w, axis[w].sense_state, F(axis[w].sense_pos));
+			debug("sense %d %d %f", w, axis[w].sense_state, F(axis[w].sense_pos));
 #endif
 			out_buffer[0] = 7;
 			out_buffer[1] = CMD_SENSE;
 			out_buffer[2] = w | (axis[w].sense_state & 0x80);
 			ReadFloat f;
-			f.f = axis[w].sense_pos;
+			f.i = axis[w].sense_pos;
 			out_buffer[3] = f.b[0];
 			out_buffer[4] = f.b[1];
 			out_buffer[5] = f.b[2];
@@ -354,11 +328,11 @@ void try_send_next ()
 			axis[w].sense_state &= ~1;
 			if (initialized)
 			{
-				prepare_packet (out_buffer);
-				send_packet (out_buffer);
+				prepare_packet(out_buffer);
+				send_packet(out_buffer);
 			}
 			else
-				try_send_next ();
+				try_send_next();
 			return;
 		}
 	}
@@ -366,21 +340,21 @@ void try_send_next ()
 	if (num_movecbs > 0)
 	{
 #ifdef DEBUG_SERIAL
-		debug ("sending %d movecbs", num_movecbs);
+		debug("sending %d movecbs", num_movecbs);
 #endif
 		out_buffer[0] = 3;
 		out_buffer[1] = CMD_MOVECB;
 		out_buffer[2] = num_movecbs;
 		num_movecbs = 0;
-		prepare_packet (out_buffer);
-		send_packet (out_buffer);
+		prepare_packet(out_buffer);
+		send_packet(out_buffer);
 		return;
 	}
 #if MAXTEMPS > 0 || MAXEXTRUDERS > 0
 	if (which_tempcbs != 0)
 	{
 #ifdef DEBUG_SERIAL
-		debug ("tempcb %d", which_tempcbs);
+		debug("tempcb %d", which_tempcbs);
 #endif
 		for (uint8_t w = 0; w < MAXOBJECT; ++w)
 		{
@@ -395,28 +369,28 @@ void try_send_next ()
 		}
 		if (initialized)
 		{
-			prepare_packet (out_buffer);
-			send_packet (out_buffer);
+			prepare_packet(out_buffer);
+			send_packet(out_buffer);
 		}
 		else
-			try_send_next ();
+			try_send_next();
 		return;
 	}
 #endif
 	if (reply_ready)
 	{
 #ifdef DEBUG_SERIAL
-		debug ("reply %x %d", reply[1], reply[0]);
+		debug("reply %x %d", reply[1], reply[0]);
 #endif
-		prepare_packet (reply);
-		send_packet (reply);
+		prepare_packet(reply);
+		send_packet(reply);
 		reply_ready = false;
 		return;
 	}
 	if (continue_cb & 1)
 	{
 #ifdef DEBUG_SERIAL
-		debug ("continue move");
+		debug("continue move");
 #endif
 		out_buffer[0] = 3;
 		out_buffer[1] = CMD_CONTINUE;
@@ -424,17 +398,17 @@ void try_send_next ()
 		continue_cb &= ~1;
 		if (initialized)
 		{
-			prepare_packet (out_buffer);
-			send_packet (out_buffer);
+			prepare_packet(out_buffer);
+			send_packet(out_buffer);
 		}
 		else
-			try_send_next ();
+			try_send_next();
 		return;
 	}
 	if (continue_cb & 2)
 	{
 #ifdef DEBUG_SERIAL
-		debug ("continue audio");
+		debug("continue audio");
 #endif
 		out_buffer[0] = 3;
 		out_buffer[1] = CMD_CONTINUE;
@@ -442,11 +416,11 @@ void try_send_next ()
 		continue_cb &= ~2;
 		if (initialized)
 		{
-			prepare_packet (out_buffer);
-			send_packet (out_buffer);
+			prepare_packet(out_buffer);
+			send_packet(out_buffer);
 		}
 		else
-			try_send_next ();
+			try_send_next();
 		return;
 	}
 	if (which_autosleep != 0)
@@ -457,11 +431,11 @@ void try_send_next ()
 		which_autosleep = 0;
 		if (initialized)
 		{
-			prepare_packet (out_buffer);
-			send_packet (out_buffer);
+			prepare_packet(out_buffer);
+			send_packet(out_buffer);
 		}
 		else
-			try_send_next ();
+			try_send_next();
 		return;
 	}
 	if (ping != 0)
@@ -473,28 +447,21 @@ void try_send_next ()
 				reply[0] = 3;
 				reply[1] = CMD_PONG;
 				reply[2] = b;
-				prepare_packet (reply);
-				send_packet (reply);
+				prepare_packet(reply);
+				send_packet(reply);
 				ping &= ~(1 << b);
 				return;
 			}
 		}
 	}
-#if SERIAL_BUFFERSIZE > 0
-	if (serialbuffer[0] > 0) {
-		prepare_packet (serialbuffer);
-		serial_out_busy = true;
-		send_packet (serialbuffer);
-	}
-#endif
 }
 
-void write_ack ()
+void write_ack()
 {
-	Serial.write (ff_in ? CMD_ACK0 : CMD_ACK1);
+	Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
 }
 
-void write_ackwait ()
+void write_ackwait()
 {
-	Serial.write (ff_in ? CMD_ACKWAIT0 : CMD_ACKWAIT1);
+	Serial.write(ff_in ? CMD_ACKWAIT0 : CMD_ACKWAIT1);
 }

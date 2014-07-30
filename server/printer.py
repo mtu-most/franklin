@@ -2,7 +2,7 @@
 # vim: set foldmethod=marker :
 
 show_own_debug = False
-show_own_debug = True
+#show_own_debug = True
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -47,6 +47,37 @@ class delayed: # {{{
 			return self.f(printer, id, *a, **ka)
 		return (WAIT, wrap)
 # }}}
+
+def milli(x):
+	return float(x) / (1 << 10)
+def micro(x):
+	return float(x) / (1 << 20)
+def kilo(x):
+	return float(x) * (1 << 10)
+
+MAXLONG = int((1 << 31) - 1)
+MINLONG = int(-(1 << 31))
+def aslong(f, factor = 2, nan = -1):
+	if math.isnan(f):
+		return nan
+	f *= 1 << (factor * 10)
+	if f > MAXLONG:
+		return MAXLONG
+	if f < MINLONG:
+		return MINLONG
+	return int(f)
+
+def temp2dev(temp):
+	if math.isnan(temp):
+		return -1
+	return aslong((temp + 273.15) * 1024, 0)
+
+def dev2temp(dev):
+	if dev < 0:
+		return float('nan')
+	if dev == MAXLONG:
+		return float('inf')
+	return dev / 1024. - 273.15
 
 class Printer: # {{{
 	# Internal stuff.  {{{
@@ -213,25 +244,22 @@ class Printer: # {{{
 			'QUEUED': 0x11,
 			'READGPIO': 0x12,
 			'AUDIO_SETUP': 0x13,
-			'AUDIO_DATA': 0x14,
-			'SETSERIAL': 0x15,
-			'SERIAL_TX': 0x16}
+			'AUDIO_DATA': 0x14}
 	rcommand = {
-			'START': '\x17',
-			'TEMP': '\x18',
-			'POWER': '\x19',
-			'POS': '\x1a',
-			'DATA': '\x1b',
-			'PONG': '\x1c',
-			'PIN': '\x1d',
-			'QUEUE': '\x1e',
-			'MOVECB': '\x1f',
-			'TEMPCB': '\x20',
-			'CONTINUE': '\x21',
-			'LIMIT': '\x22',
-			'AUTOSLEEP': '\x23',
-			'SENSE': '\x24',
-			'SERIAL_RX': '\x25'}
+			'START': '\x15',
+			'TEMP': '\x16',
+			'POWER': '\x17',
+			'POS': '\x18',
+			'DATA': '\x19',
+			'PONG': '\x1a',
+			'PIN': '\x1b',
+			'QUEUE': '\x1c',
+			'MOVECB': '\x1d',
+			'TEMPCB': '\x1e',
+			'CONTINUE': '\x1f',
+			'LIMIT': '\x20',
+			'AUTOSLEEP': '\x21',
+			'SENSE': '\x22'}
 	# }}}
 	def _broadcast(self, *a): # {{{
 		self._send(None, 'broadcast', *a)
@@ -482,7 +510,7 @@ class Printer: # {{{
 				if not math.isnan(self.axis[which].motor.runspeed):
 					self.axis[which].motor.runspeed = float('nan')
 					self._axis_update(which)
-				self.limits[which] = struct.unpack('<f', packet[2:])[0]
+				self.limits[which] = micro(struct.unpack('<l', packet[2:])[0])
 				l = 0
 				while l < len(self.limitcb):
 					if self.limitcb[l][0] <= len(self.limits):
@@ -535,7 +563,7 @@ class Printer: # {{{
 				w = ord(packet[1])
 				which = w & 0x7f
 				state = bool(w & 0x80)
-				pos = struct.unpack('<f', packet[2:])[0]
+				pos = micro(struct.unpack('<l', packet[2:])[0])
 				if which not in self.sense:
 					self.sense[which] = []
 				self.sense[which].append((state, pos))
@@ -546,12 +574,6 @@ class Printer: # {{{
 						call_queue.append((self.movecb.pop(s)[1], [self.movewait == 0]))
 					else:
 						s += 1
-				continue
-			elif packet[0] == self.rcommand['SERIAL_RX']:
-				port = ord(packet[1])
-				data = packet[2:]
-				log('Serial data received on port %d: %s' % (port, data))
-				self._broadcast(None, 'serial', [port, data])
 				continue
 			elif not self.initialized and packet[0] == self.rcommand['PONG'] and ord(packet[1]) < 2:
 				# PONGs during initialization are possible.
@@ -680,13 +702,15 @@ class Printer: # {{{
 			return False
 		#log('%d' % len(data[self.namelen:]))
 		self.name = unicode(data[:self.namelen].rstrip('\0'), 'utf-8', 'replace')
-		self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.max_deviation, self.led_pin, self.probe_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, angle = struct.unpack('<BBBBBfHHfLLff', data[self.namelen:])
+		self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, max_deviation, self.led_pin, self.probe_pin, room_T, self.motor_limit, self.temp_limit, self.feedrate, angle = struct.unpack('<BBBBBlHHlLLff', data[self.namelen:])
 		self.pos = (self.pos + [float('nan')] * self.num_axes)[:self.num_axes]
+		self.max_deviation = micro(max_deviation)
+		self.room_T = dev2temp(room_T)
 		self.angle = math.degrees(angle)
 		return True
 	# }}}
 	def _write_variables(self): # {{{
-		data = (self.name.encode('utf-8') + chr(0) * self.namelen)[:self.namelen] + struct.pack('<BBBBBfHHfLLff', self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, self.max_deviation, self.led_pin, self.probe_pin, self.room_T, self.motor_limit, self.temp_limit, self.feedrate, math.radians(self.angle))
+		data = (self.name.encode('utf-8') + chr(0) * self.namelen)[:self.namelen] + struct.pack('<BBBBBlHHlLLff', self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, aslong(self.max_deviation), self.led_pin, self.probe_pin, temp2dev(self.room_T), self.motor_limit, self.temp_limit, self.feedrate, math.radians(self.angle))
 		if not self._send_packet(struct.pack('<BB', self.command['WRITE'], 1) + data):
 			return False
 		self._variables_update()
@@ -708,7 +732,7 @@ class Printer: # {{{
 		if not self.initialized:
 			return
 		self._broadcast(target, 'axis_update', which, [
-			[self.axis[which].motor.step_pin, self.axis[which].motor.dir_pin, self.axis[which].motor.enable_pin, self.axis[which].motor.steps_per_mm, self.axis[which].motor.limit_v, self.axis[which].motor.max_v, self.axis[which].motor.limit_a, self.axis[which].motor.max_steps, self.axis[which].motor.runspeed, self.axis[which].motor.sleeping],
+			[self.axis[which].motor.step_pin, self.axis[which].motor.dir_pin, self.axis[which].motor.enable_pin, self.axis[which].motor.steps_per_m, self.axis[which].motor.limit_v, self.axis[which].motor.max_v, self.axis[which].motor.limit_a, self.axis[which].motor.max_steps, self.axis[which].motor.runspeed, self.axis[which].motor.sleeping],
 			self.axis[which].limit_min_pin, self.axis[which].limit_max_pin, self.axis[which].sense_pin, self.axis[which].limit_pos, self.axis[which].axis_min, self.axis[which].axis_max, self.axis[which].motor_min, self.axis[which].motor_max, self.axis[which].park, self.axis[which].delta_length, self.axis[which].delta_radius, self.axis[which].offset])
 	# }}}
 	def _write_extruder(self, which): # {{{
@@ -722,7 +746,7 @@ class Printer: # {{{
 		if not self.initialized:
 			return
 		self._broadcast(target, 'extruder_update', which, [
-			[self.extruder[which].motor.step_pin, self.extruder[which].motor.dir_pin, self.extruder[which].motor.enable_pin, self.extruder[which].motor.steps_per_mm, self.extruder[which].motor.limit_v, self.extruder[which].motor.max_v, self.extruder[which].motor.limit_a, self.extruder[which].motor.max_steps, self.extruder[which].motor.runspeed, self.extruder[which].motor.sleeping],
+			[self.extruder[which].motor.step_pin, self.extruder[which].motor.dir_pin, self.extruder[which].motor.enable_pin, self.extruder[which].motor.steps_per_m, self.extruder[which].motor.limit_v, self.extruder[which].motor.max_v, self.extruder[which].motor.limit_a, self.extruder[which].motor.max_steps, self.extruder[which].motor.runspeed, self.extruder[which].motor.sleeping],
 			[self.extruder[which].temp.power_pin, self.extruder[which].temp.thermistor_pin, self.extruder[which].temp.R0, self.extruder[which].temp.R1, self.extruder[which].temp.Rc, self.extruder[which].temp.Tc, self.extruder[which].temp.beta, self.extruder[which].temp.core_C, self.extruder[which].temp.shell_C, self.extruder[which].temp.transfer, self.extruder[which].temp.radiation, self.extruder[which].temp.power, self.extruder[which].temp.value],
 			self.extruder[which].filament_heat, self.extruder[which].nozzle_size, self.extruder[which].filament_size])
 	# }}}
@@ -751,7 +775,7 @@ class Printer: # {{{
 		self._broadcast(target, 'gpio_update', which, [self.gpio[which].pin, self.gpio[which].state, self.gpio[which].master, self.gpio[which].value])
 	# }}}
 	def _export_motor(self, name, obj, index): # {{{
-		return '[%s %d]\r\n' % (name, index) + ''.join(['%s = %d\r\n' % (x, getattr(obj, x)) for x in ('step_pin', 'dir_pin', 'enable_pin')]) + ''.join(['%s = %f\r\n' % (x, getattr(obj, x)) for x in ('steps_per_mm', 'limit_v', 'max_v', 'limit_a', 'max_steps')])
+		return '[%s %d]\r\n' % (name, index) + ''.join(['%s = %d\r\n' % (x, getattr(obj, x)) for x in ('step_pin', 'dir_pin', 'enable_pin')]) + ''.join(['%s = %f\r\n' % (x, getattr(obj, x)) for x in ('steps_per_m', 'limit_v', 'max_v', 'limit_a', 'max_steps')])
 	# }}}
 	def _export_temp(self, name, obj, index): # {{{
 		return '[%s %d]\r\n' % (name, index) + ''.join(['%s = %d\r\n' % (x, getattr(obj, x)) for x in ('power_pin', 'thermistor_pin')]) + ''.join(['%s = %f\r\n' % (x, getattr(obj, x)) for x in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'core_C', 'shell_C', 'transfer', 'radiation', 'power')])
@@ -1039,11 +1063,11 @@ class Printer: # {{{
 					self._axis_update(axis)
 				self.pos[axis] = axes[axis]
 				targets[(axis + 2) >> 3] |= 1 <<((axis + 2) & 0x7)
-				args += struct.pack('<f', axes[axis])
+				args += struct.pack('<l', aslong(axes[axis], 1))
 				#log('axis %d: %f' %(axis, axes[axis]))
 			if e is not None:
 				targets[(2 + self.num_axes + which) >> 3] |= 1 <<((2 + self.num_axes + which) & 0x7)
-				args += struct.pack('<f', e)
+				args += struct.pack('<l', aslong(e, 1))
 				if self.extruder[which].motor.sleeping:
 					self.extruder[which].motor.sleeping = False
 					self._extruder_update(which)
@@ -1087,6 +1111,7 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
+				log("N t %s" % (self.home_target))
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			# Fall through.
@@ -1101,6 +1126,7 @@ class Printer: # {{{
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
+				log("0 t %s" % (self.home_target))
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			self.home_phase = 1
@@ -1111,6 +1137,7 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
+				log("1 t %s" % (self.home_target))
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			# Fall through.
@@ -1125,6 +1152,7 @@ class Printer: # {{{
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
+				log("2 t %s" % (self.home_target))
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
@@ -1141,6 +1169,7 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = False
 				self.movecb.append(self.home_cb)
+				log("back t %s" % (self.home_target))
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			# Fall through
@@ -1158,6 +1187,7 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
+				log("sp %s t %s" % (self.home_speed, self.home_target))
 				self.goto(self.home_target, f0 = self.home_speed / 20., cb = True)[1](None)
 				return
 			# Fall through
@@ -1174,6 +1204,7 @@ class Printer: # {{{
 				self.movecb.append(self.home_cb)
 				key = self.home_target.keys()[0]
 				dist = abs(self.home_target[key] - self.axis[key].get_current_pos()[1])
+				log("sp %s d %s t %s" % (self.home_speed, dist, self.home_target))
 				self.goto(self.home_target, f0 = self.home_speed / dist, cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
@@ -1289,20 +1320,34 @@ class Printer: # {{{
 		def __init__(self):
 			self.value = float('nan')
 		def read(self, data):
-			self.R0, self.R1, self.Rc, self.Tc, self.beta, self.core_C, self.shell_C, self.transfer, self.radiation, self.power, self.power_pin, self.thermistor_pin = struct.unpack('<ffffffffffHH', data[:44])
+			self.R0, self.R1, logRc, Tc, self.beta, core_C, shell_C, transfer, radiation, power, self.power_pin, self.thermistor_pin = struct.unpack('<ffffflllllHH', data[:44])
+			try:
+				self.Rc = math.exp(logRc)
+			except:
+				self.Rc = float('nan')
+			self.Tc = Tc - 273.15
+			self.core_C = milli(core_C)
+			self.shell_C = milli(shell_C)
+			self.transfer = milli(transfer)
+			self.radiation = milli(radiation)
+			self.power = milli(power)
 			return data[44:]
 		def write(self):
-			return struct.pack('<ffffffffffHH', self.R0, self.R1, self.Rc, self.Tc, self.beta, self.core_C, self.shell_C, self.transfer, self.radiation, self.power, self.power_pin, self.thermistor_pin)
+			try:
+				logRc = math.log(self.Rc)
+			except:
+				logRc = float('nan')
+			return struct.pack('<ffffflllllHH', self.R0, self.R1, logRc, self.Tc + 273.15, self.beta, aslong(self.core_C, 1), aslong(self.shell_C, 1), aslong(self.transfer, 1), aslong(self.radiation, 1), aslong(self.power, 1), self.power_pin, self.thermistor_pin)
 	# }}}
 	class Motor: # {{{
 		def __init__(self):
 			self.runspeed = 0
 			self.sleeping = True
 		def read(self, data):
-			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.limit_v, self.max_v, self.limit_a, self.max_steps = struct.unpack('<HHHffffB', data[:23])
+			self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_m, self.limit_v, self.max_v, self.limit_a, self.max_steps = struct.unpack('<HHHlfffB', data[:23])
 			return data[23:]
 		def write(self):
-			return struct.pack('<HHHffffB', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_mm, self.limit_v, self.max_v, self.limit_a, self.max_steps)
+			return struct.pack('<HHHlfffB', self.step_pin, self.dir_pin, self.enable_pin, self.steps_per_m, self.limit_v, self.max_v, self.limit_a, self.max_steps)
 	# }}}
 	class Axis: # {{{
 		def __init__(self, printer, id):
@@ -1312,12 +1357,21 @@ class Printer: # {{{
 			self.motor = Printer.Motor()
 		def read(self, data):
 			data = self.motor.read(data)
-			self.limit_min_pin, self.limit_max_pin, self.sense_pin, self.limit_pos, self.axis_min, self.axis_max, self.motor_min, self.motor_max, self.park, self.delta_length, self.delta_radius, self.offset = struct.unpack('<HHHfffffffff', data)
+			self.limit_min_pin, self.limit_max_pin, self.sense_pin, limit_pos, axis_min, axis_max, motor_min, motor_max, park, delta_length, delta_radius, offset = struct.unpack('<HHHlllllllll', data)
+			self.limit_pos = micro(limit_pos)
+			self.axis_min = micro(axis_min)
+			self.axis_max = micro(axis_max)
+			self.motor_min = micro(motor_min)
+			self.motor_max = micro(motor_max)
+			self.park = micro(park)
+			self.delta_length = micro(delta_length)
+			self.delta_radius = micro(delta_radius)
+			self.offset = micro(offset)
 		def write(self):
-			return self.motor.write() + struct.pack('<HHHfffffffff', self.limit_min_pin, self.limit_max_pin, self.sense_pin, self.limit_pos, self.axis_min, self.axis_max, self.motor_min, self.motor_max, self.park, self.delta_length, self.delta_radius, self.offset)
+			return self.motor.write() + struct.pack('<HHHlllllllll', self.limit_min_pin, self.limit_max_pin, self.sense_pin, aslong(self.limit_pos), aslong(self.axis_min), aslong(self.axis_max), aslong(self.motor_min), aslong(self.motor_max), aslong(self.park), aslong(self.delta_length), aslong(self.delta_radius), aslong(self.offset))
 		def set_current_pos(self, pos):
 			#log('setting pos of %d to %f' % (self.id, pos))
-			if not self.printer._send_packet(struct.pack('<BBf', self.printer.command['SETPOS'], 2 + self.id, pos)):
+			if not self.printer._send_packet(struct.pack('<BBl', self.printer.command['SETPOS'], 2 + self.id, aslong(pos, 1))):
 				return False
 			self.valid = True
 			return True
@@ -1326,7 +1380,8 @@ class Printer: # {{{
 				return None
 			ret = self.printer._get_reply()
 			assert ret[0] == self.printer.rcommand['POS']
-			return struct.unpack('<ff', ret[1:])
+			pos = struct.unpack('<ll', ret[1:])
+			return [float('nan') if p == MAXLONG else milli(p) for p in pos]
 	# }}}
 	class Extruder: # {{{
 		def __init__(self):
@@ -1335,15 +1390,19 @@ class Printer: # {{{
 		def read(self, data):
 			data = self.motor.read(data)
 			data = self.temp.read(data)
-			self.filament_heat, self.nozzle_size, self.filament_size = struct.unpack('<fff', data)
+			filament_heat, nozzle_size, filament_size = struct.unpack('<lll', data)
+			self.filament_heat = milli(filament_heat)
+			self.nozzle_size = micro(nozzle_size)
+			self.filament_size = micro(filament_size)
 		def write(self):
-			return self.motor.write() + self.temp.write() + struct.pack('<fff', self.filament_heat, self.nozzle_size, self.filament_size)
+			return self.motor.write() + self.temp.write() + struct.pack('<lll', aslong(self.filament_heat), aslong(self.nozzle_size), aslong(self.filament_size))
 	# }}}
 	class Gpio: # {{{
 		def read(self, data):
-			self.pin, self.state, self.master, self.value = struct.unpack('<HBBf', data)
+			self.pin, self.state, self.master, value = struct.unpack('<HBBl', data)
+			self.value = dev2temp(value)
 		def write(self):
-			return struct.pack('<HBBf', self.pin, self.state, self.master, self.value)
+			return struct.pack('<HBBl', self.pin, self.state, self.master, temp2dev(self.value))
 	# }}}
 	# }}}
 	# }}}
@@ -1372,7 +1431,9 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, axes = {}, e = None, f0 = None, f1 = None, which = 0, cb = False): # {{{
-		#log('goto %s' % repr(axes))
+		log('goto %s' % repr(axes))
+		log('speed %s' % f0)
+		traceback.print_stack()
 		self.queue.append((id, axes, e, f0, f1, which, cb))
 		if not self.wait:
 			self._do_queue()
@@ -1391,7 +1452,7 @@ class Printer: # {{{
 			self.extruder[channel - 2 - self.maxaxes].motor.runspeed = speed
 			self.extruder[channel - 2 - self.maxaxes].motor.sleeping = False
 			self._extruder_update(channel - 2 - self.maxaxes)
-		return self._send_packet(struct.pack('<BBf', self.command['RUN'], channel, speed))
+		return self._send_packet(struct.pack('<BBl', self.command['RUN'], channel, aslong(speed, nan = 0)))
 	def run_axis(self, which, speed): # {{{
 		return self.run(2 + which, speed)
 	# }}}
@@ -1431,7 +1492,7 @@ class Printer: # {{{
 		else:
 			self.temp[channel - 2 - self.maxaxes - self.maxextruders].value = temp
 			self._temp_update(channel - 2 - self.maxaxes - self.maxextruders)
-		return self._send_packet(struct.pack('<BBf', self.command['SETTEMP'], channel, temp))
+		return self._send_packet(struct.pack('<BBl', self.command['SETTEMP'], channel, temp2dev(temp)))
 	def settemp_extruder(self, which, temp):	# {{{
 		return self.settemp(2 + self.maxaxes + which, temp)
 	# }}}
@@ -1445,7 +1506,7 @@ class Printer: # {{{
 			min = float('nan')
 		if max is None:
 			max = float('nan')
-		return self._send_packet(struct.pack('<BBff', self.command['WAITTEMP'], channel, min, max))
+		return self._send_packet(struct.pack('<BBll', self.command['WAITTEMP'], channel, temp2dev(min), temp2dev(max)))
 	def waittemp_extruder(self, which, min, max = None):	# {{{
 		return self.waittemp(2 + self.maxaxes + which, min, max)
 	# }}}
@@ -1459,7 +1520,7 @@ class Printer: # {{{
 			return None
 		ret = self._get_reply()
 		assert ret[0] == self.rcommand['TEMP']
-		return struct.unpack('<f', ret[1:])[0]
+		return dev2temp(struct.unpack('<l', ret[1:])[0])
 	def readtemp_extruder(self, which):	# {{{
 		return self.readtemp(2 + self.maxaxes + which)
 	# }}}
@@ -1889,13 +1950,6 @@ class Printer: # {{{
 				self._do_gcode()
 		return True
 	# }}}
-	def serial_enable(self, port, baud = 115200): # {{{
-		return self._send_packet(struct.pack('<BBl', self.command['SETSERIAL'], port, baud))
-	# }}}
-	def serial_send(self, port, data): # {{{
-		# data is unicode; that messes things up.
-		return self._send_packet(struct.pack('<BB', self.command['SERIAL_TX'], port) + data.encode('utf-8'))
-	# }}}
 	def queue_add(self, data, name): # {{{
 		assert name not in self.jobqueue
 		self._broadcast(None, 'blocked', 'parsing g-code')
@@ -2143,14 +2197,14 @@ class Printer: # {{{
 	# Motor subtype {{{
 	def _get_motor(self, obj):
 		ret = {}
-		for key in ('step_pin', 'dir_pin', 'enable_pin', 'steps_per_mm', 'limit_v', 'max_v', 'limit_a', 'max_steps'):
+		for key in ('step_pin', 'dir_pin', 'enable_pin', 'steps_per_m', 'limit_v', 'max_v', 'limit_a', 'max_steps'):
 			ret[key] = getattr(obj, key)
 		return ret
 	def _set_motor(self, obj, ka):
 		for key in ('step_pin', 'dir_pin', 'enable_pin', 'max_steps'):
 			if key in ka:
 				setattr(obj, key, int(ka.pop(key)))
-		for key in ('steps_per_mm', 'limit_v', 'max_v', 'limit_a'):
+		for key in ('steps_per_m', 'limit_v', 'max_v', 'limit_a'):
 			if key in ka:
 				setattr(obj, key, float(ka.pop(key)))
 		assert len(ka) == 0

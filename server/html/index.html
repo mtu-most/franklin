@@ -238,7 +238,7 @@
 				[!(
 				// args = index; park should not be in this table.
 				[make_tablerow(axis_name(args[0], false), elements, ['rowtitle4'])]
-				<div>[$(Float [[[['axis', 'motor'], args[0]], 'steps_per_mm'], 1])$]</div>
+				<div>[$(Float [[[['axis', 'motor'], args[0]], 'steps_per_m'], 1000])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'limit_pos'], 1])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_min'], 1])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_max'], 1])$]</div>
@@ -352,7 +352,7 @@
 				<input type='text'/>
 				<button class='button' type='button'>Extrude</button>
 				<button class='button' type='button'>Retract</button>
-				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'steps_per_mm'], 1])$]</div>
+				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'steps_per_m'], 1000])$]</div>
 				<div>[$(Run [[['extruder', 'motor'], args[0]]])$]</div>
 				)!]
 			</div> <!-- }}} -->

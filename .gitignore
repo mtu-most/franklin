@@ -5,3 +5,5 @@ gui.py
 firmware/build-*
 firmware/wshttpd.py
 firmware/xdgbasedir.py
+firmware/*.o
+calibrate/*.ini

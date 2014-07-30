@@ -49,15 +49,15 @@ void setup()
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
 		printerid[i] = 0;
 #if MAXAXES > 0 || MAXEXTRUDERS > 0
-	motors[F0] = NULL;
-	motors[F1] = NULL;
+	motors[0] = NULL;
+	motors[1] = NULL;
 #endif
 #if MAXTEMPS > 0 || MAXEXTRUDERS > 0
-	temps[F0] = NULL;
-	temps[F1] = NULL;
+	temps[0] = NULL;
+	temps[1] = NULL;
 #endif
-	objects[F0] = &constants;
-	objects[F1] = &variables;
+	objects[0] = &constants;
+	objects[1] = &variables;
 	uint8_t i = 2;
 	(void)&i;	// If pretty much nothing is available, this variable is not used.
 #if MAXAXES > 0
@@ -68,12 +68,12 @@ void setup()
 		temps[i] = NULL;
 #endif
 		objects[i] = &axis[a];
-		limits_pos[a] = NAN;
-		axis[a].current_pos = NAN;
-		axis[a].source = NAN;
-		axis[a].current = NAN;
+		limits_pos[a] = MAXLONG;
+		axis[a].current_pos = MAXLONG;
+		axis[a].source = MAXLONG;
+		axis[a].current = MAXLONG;
 		axis[a].sense_state = 0;
-		axis[a].sense_pos = NAN;
+		axis[a].sense_pos = MAXLONG;
 		axis[a].limit_min_pin.read(0);
 		axis[a].limit_max_pin.read(0);
 		axis[a].sense_pin.read(0);
@@ -123,8 +123,8 @@ void setup()
 	{
 #if MAXAXES > 0 || MAXEXTRUDERS > 0
 		if (motors[o]) {
-			motors[o]->dist = NAN;
-			motors[o]->next_dist = NAN;
+			motors[o]->dist = MAXLONG;
+			motors[o]->next_dist = MAXLONG;
 			motors[o]->f = 0;
 			motors[o]->continuous_v = 0;
 			motors[o]->continuous_f = 0;
@@ -142,9 +142,9 @@ void setup()
 		if (temps[o]) {
 			temps[o]->last_time = time;
 			temps[o]->is_on = false;
-			temps[o]->min_alarm = NAN;
-			temps[o]->max_alarm = NAN;
-			temps[o]->target = NAN;
+			temps[o]->min_alarm = MAXLONG;
+			temps[o]->max_alarm = MAXLONG;
+			temps[o]->target = MAXLONG;
 			temps[o]->adclast = -1;
 			temps[o]->power_pin.read(0);
 			temps[o]->thermistor_pin.read(0);
@@ -162,7 +162,7 @@ void setup()
 	serialbuffer[0] = 0;
 #endif
 	int16_t address = 0;
-	objects[F0]->address = address;	// Not used, but initialized anyway.
+	objects[0]->address = address;	// Not used, but initialized anyway.
 	for (uint8_t o = 1; o < MAXOBJECT; ++o)
 	{
 		objects[o]->address = address;

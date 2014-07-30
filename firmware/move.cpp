@@ -1,7 +1,7 @@
 // vim: set foldmethod=marker :
 #include "firmware.h"
 
-//#define DEBUG_MOVE
+#define DEBUG_MOVE
 
 #if MAXAXES > 0
 void reset_pos ()	// {{{
@@ -55,23 +55,23 @@ void reset_pos ()	// {{{
 static bool check_delta (uint8_t a, int32_t *target) {	// {{{
 	int32_t dx = target[0] - axis[a].x;
 	int32_t dy = target[1] - axis[a].y;
-	int32_t r2 = dx / 1000 * dx + dy / 1000 * dy;
-	if (r2 > axis[a].axis_max / 1000 * axis[a].axis_max) {
+	int32_t r2 = m2(dx) * m2(dx) + m2(dy) * m2(dy);
+	if (r2 > m2(axis[a].axis_max) * m2(axis[a].axis_max)) {
 		//debug ("not ok: %ld %ld %ld %ld %ld %ld %ld", F(target[0]), F(target[1]), F(dx), F(dy), F(r2), F(l2), F(axis[a].delta_length));
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
-		int32_t factor(axis[a].axis_max * 1e3 / sqrt (r2 * 1e3));
-		target[0] = axis[a].x + (target[0] - axis[a].x) * factor / 1000;
-		target[1] = axis[a].y + (target[1] - axis[a].y) * factor / 1000;
+		int32_t factor(axis[a].axis_max / sqrt (mf(r2)));
+		target[0] = axis[a].x + m2((target[0] - axis[a].x) * m2(factor));
+		target[1] = axis[a].y + m2((target[1] - axis[a].y) * m2(factor));
 		return false;
 	}
 	// Inner product shows if projection is inside or outside the printable region.
-	int32_t projection = -(dx * 1000 / axis[a].delta_radius * axis[a].x + dy * 1000 / axis[a].delta_radius * axis[a].y) / 1000;
+	int32_t projection = -m(dx / k(axis[a].delta_radius) * axis[a].x + dy / k(axis[a].delta_radius) * axis[a].y);
 	if (projection < axis[a].axis_min) {
 		//debug ("not ok: %ld %ld %ld %ld %ld", F(inner), F(dx), F(dy), F(axis[a].x), F(axis[a].y));
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
-		target[0] -= (axis[a].axis_min - projection - 1) * 1000 / axis[a].delta_radius * axis[a].x / 1000;
-		target[1] -= (axis[a].axis_min - projection - 1) * 1000 / axis[a].delta_radius * axis[a].y / 1000;
+		target[0] -= k(axis[a].axis_min - projection - 1) / axis[a].delta_radius * m(axis[a].x);
+		target[1] -= k(axis[a].axis_min - projection - 1) / axis[a].delta_radius * m(axis[a].y);
 		// Assume this was a small correction; that way, things will work even if numerical errors cause this to be called for the real move.
 		return false;
 	}
@@ -82,16 +82,23 @@ static bool check_delta (uint8_t a, int32_t *target) {	// {{{
 static void apply_offsets (int32_t *data) {	// {{{
 	// Apply offsets.
 	for (uint8_t a = 0; a < num_axes; ++a) {
-		data[AXIS0 + a] += axis[a].offset;
+		data[a] = data[a] == MAXLONG ? MAXLONG : data[a] + axis[a].offset;
 	}
 #if MAXAXES >= 3
 	if (printer_type == 1) {
-		for (uint8_t timeout = 0; timeout < 2; ++timeout) {
-			bool ok = true;
-			for (uint8_t a = 0; a < num_axes; ++a)
-				ok &= check_delta (a, &data[AXIS0]);
-			if (ok)
-				break;
+		if (data[0] == MAXLONG || data[1] == MAXLONG || data[2] == MAXLONG) {
+			data[0] = MAXLONG;
+			data[1] = MAXLONG;
+			data[2] = MAXLONG;
+		}
+		else {
+			for (uint8_t timeout = 0; timeout < 2; ++timeout) {
+				bool ok = true;
+				for (uint8_t a = 0; a < num_axes; ++a)
+					ok &= check_delta (a, &data[0]);
+				if (ok)
+					break;
+			}
 		}
 	}
 #endif
@@ -102,10 +109,10 @@ static void apply_offsets (int32_t *data) {	// {{{
 // start_time		micros() at start of move.
 // t0			time to do main part.
 // tp			time to do connection.
-// m->dist		total distance of this segment (mm).
-// m->next_dist		total distance of next segment (mm).
-// m->main_dist		distance of main part (mm).
-// m->distance_done	(extruder only): steps of this segment that have been done in preparation.
+// mtr->dist		total distance of this segment (mm).
+// mtr->next_dist		total distance of next segment (mm).
+// mtr->main_dist		distance of main part (mm).
+// mtr->distance_done	(extruder only): steps of this segment that have been done in preparation.
 // v0, vp		start and end velocity for main part. (fraction/s)
 // vq			end velocity of connector part. (fraction/s)
 
@@ -133,21 +140,22 @@ void next_move () {
 
 #if MAXAXES >= 3
 	// For a delta, if any axis moves, all motors move; avoid trouble by setting none of them to nan.
-	if (printer_type == 1 && (queue[queue_start].data[AXIS0] != MAXLONG || queue[queue_start].data[AXIS0 + 1] != MAXLONG || queue[queue_start].data[AXIS0 + 2] != MAXLONG)) {
+	if (printer_type == 1 && (queue[queue_start].data[0] == MAXLONG || queue[queue_start].data[1] == MAXLONG || queue[queue_start].data[2] == MAXLONG)) {
 		for (uint8_t a = 0; a < 3; ++a) {
-			if (queue[queue_start].data[AXIS0 + a] == MAXLONG) {
+			if (queue[queue_start].data[a] == MAXLONG) {
 #ifdef DEBUG_MOVE
 				debug ("Filling delta axis %d", a);
 #endif
 				// Offset will be added later; compensate for it.
-				queue[queue_start].data[AXIS0 + a] = axis[a].source - axis[a].offset;
+				queue[queue_start].data[a] = axis[a].source == MAXLONG ? MAXLONG : axis[a].source - axis[a].offset;
 			}
 		}
 	}
 #endif
 #if MAXAXES > 0
 	for (uint8_t a = 0; a < num_axes; ++a) {
-		if (queue[queue_start].data[AXIS0 + a] != MAXLONG && axis[a].source == MAXLONG) {
+		debug("checking %ld %ld", F(queue[queue_start].data[a]), F(axis[a].source));
+		if (queue[queue_start].data[a] != MAXLONG && axis[a].source == MAXLONG) {
 			debug ("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue.");
 			// This possible removes one move too many, but it shouldn't happen anyway.
 			if (queue[queue_start].cb) {
@@ -167,7 +175,7 @@ void next_move () {
 #endif
 	// }}}
 
-	f0 = vq * tp / 2000;	// [μ1] = [m1/s] * [μs] / [m1]
+	f0 = vq * tp / 2;
 	// If no move is prepared, set next_dist from the queue; it will be used as dist below.
 	if (!move_prepared) { // {{{
 #ifdef DEBUG_MOVE
@@ -178,21 +186,25 @@ void next_move () {
 #endif
 		f0 = 0;
 		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-			uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-			if (!motors[m])
+			uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+			if (!motors[mtr])
 				continue;
-			motors[m]->last_v = 0;
-			if (queue[queue_start].data[mt + 2] == MAXLONG)
-				motors[m]->next_dist = 0;
+			motors[mtr]->last_v = 0;
+			if (queue[queue_start].data[mt] == MAXLONG)
+				motors[mtr]->next_dist = 0;
 			else {
 #if MAXAXES > 0
-				if (mt < num_axes)
-					motors[m]->next_dist = queue[queue_start].data[mt + 2] - axis[mt].source;
+				if (mt < num_axes) {
+					motors[mtr]->next_dist = queue[queue_start].data[mt] - axis[mt].source;
+#ifdef DEBUG_MOVE
+					debug("next dist of axis %d: %ld - %ld = %ld", mt, F(queue[queue_start].data[mt]), F(axis[mt].source), F(motors[mtr]->next_dist));
+#endif
+				}
 				else
 #endif
-					motors[m]->next_dist = queue[queue_start].data[mt + 2];
+					motors[mtr]->next_dist = queue[queue_start].data[mt];
 #ifdef DEBUG_MOVE
-				debug("next dist of motor %d = %ld", m, F(motors[m]->next_dist));
+				debug("next dist of motor %d = %ld", mtr, F(motors[mtr]->next_dist));
 #endif
 			}
 		}
@@ -210,17 +222,15 @@ void next_move () {
 		debug ("Building final segment.");
 #endif
 		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-			uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-			if (!motors[m])
+			uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+			if (!motors[mtr])
 				continue;
-			motors[m]->dist = motors[m]->next_dist;
-			if (motors[m]->dist != 0)
+			motors[mtr]->dist = motors[mtr]->next_dist;
+			if (motors[mtr]->dist != 0)
 				action = true;
-			else
-				motors[m]->dist = 0;
-			motors[m]->next_dist = 0;
+			motors[mtr]->next_dist = 0;
 #ifdef DEBUG_MOVE
-			debug ("Last segment distance for motor %d is %ld", m, F(motors[m]->dist));
+			debug ("Last segment distance for motor %d is %ld", mtr, F(motors[mtr]->dist));
 #endif
 		}
 		vq = 0;
@@ -237,32 +247,32 @@ void next_move () {
 		apply_offsets (queue[n].data);
 #endif
 		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-			uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-			if (!motors[m])
+			uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+			if (!motors[mtr])
 				continue;
-			motors[m]->dist = motors[m]->next_dist;
-			if (queue[n].data[mt + 2] == MAXLONG)
-				motors[m]->next_dist = 0;
+			motors[mtr]->dist = motors[mtr]->next_dist;
+			if (queue[n].data[mt] == MAXLONG)
+				motors[mtr]->next_dist = 0;
 			else {
 #if MAXAXES > 0
 				if (mt < num_axes)
-					motors[m]->next_dist = queue[n].data[mt + 2] - (axis[mt].source + motors[m]->dist);
+					motors[mtr]->next_dist = queue[n].data[mt] - (axis[mt].source + motors[mtr]->dist);
 				else
 #endif
-					motors[m]->next_dist = queue[n].data[mt + 2];
+					motors[mtr]->next_dist = queue[n].data[mt];
 			}
-			if (motors[m]->next_dist != 0 || motors[m]->dist != 0)
+			if (motors[mtr]->next_dist != 0 || motors[mtr]->dist != 0)
 				action = true;
 #ifdef DEBUG_MOVE
-			debug ("Connecting distance for motor %d is %ld, to %ld", m, F(motors[m]->dist), F(motors[m]->next_dist));
+			debug ("Connecting distance for motor %d is %ld, to %ld", mtr, F(motors[mtr]->dist), F(motors[mtr]->next_dist));
 #endif
 		}
-		vq = queue[n].data[F0] / 1000 * feedrate / 1000;
+		vq = queue[n].f[0] * feedrate;
 		move_prepared = true;
 	}
 	// }}}
-	v0 = queue[queue_start].data[F0] / 1000 * feedrate / 1000;
-	vp = queue[queue_start].data[F1] / 1000 * feedrate / 1000;
+	v0 = queue[queue_start].f[0] * feedrate;
+	vp = queue[queue_start].f[1] * feedrate;
 	current_move_has_cb = queue[queue_start].cb;
 	if (queue_end == queue_start) {
 		continue_cb |= 1;
@@ -280,10 +290,10 @@ void next_move () {
 		}
 		//debug("moving->false");
 		moving = false;
-		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-			if (!motors[m])
+		for (uint8_t mtr = 0; mtr < MAXOBJECT; ++mtr) {
+			if (!motors[mtr])
 				continue;
-			motors[m]->dist = MAXLONG;
+			motors[mtr]->dist = MAXLONG;
 		}
 		return next_move ();
 	}
@@ -296,39 +306,41 @@ void next_move () {
 	// vq: next move's requested starting speed.
 	// current_move_has_cb: if a cb should be fired after this segment is complete.
 	// move_prepared: if this segment connects to a following segment.
-	// m->dist: total distance of this segment (mm).
-	// m->next_dist: total distance of next segment (mm).
+	// mtr->dist: total distance of this segment (mm).
+	// mtr->next_dist: total distance of next segment (mm).
 #ifdef DEBUG_MOVE
-	debug ("Set up: tp = %d ms, v0 = %ld /s, vp = %ld /s, vq = %ld /s", int (tp / 1000), F(v0), F(vp), F(vq));
+	debug ("Set up: tp = %ld s, v0 = %f /s, vp = %f /s, vq = %f /s", F(tp), F(v0), F(vp), F(vq));
 #endif
 
 	// Limit v0, vp, vq. {{{
 	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-		if (!motors[m])
+		uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+		if (!motors[mtr])
 			continue;
-		int32_t a;
-		if (motors[m]->dist != 0) {
-			a = motors[m]->max_v * 1000 / abs (motors[m]->dist);
-			if (v0 > a)
-				v0 = a;
-			if (vp > a)
-				vp = a;
-		}
-		if (motors[m]->next_dist != 0) {
-			a = motors[m]->max_v * 1000 / abs (motors[m]->next_dist);
-			if (vq > a)
-				vq = a;
+		if (motors[mtr]->max_v != MAXLONG) {
+			float a;
+			if (motors[mtr]->dist != 0) {
+				a = motors[mtr]->max_v / motors[mtr]->dist;
+				if (v0 > a)
+					v0 = a;
+				if (vp > a)
+					vp = a;
+			}
+			if (motors[mtr]->next_dist != 0) {
+				a = motors[mtr]->max_v / motors[mtr]->next_dist;
+				if (vq > a)
+					vq = a;
+			}
 		}
 	}
 #ifdef DEBUG_MOVE
-	debug ("After limiting, v0 = %ld /s, vp = %ld /s and vq = %ld /s", F(v0), F(vp), F(vq));
+	debug ("After limiting, v0 = %f /s, vp = %f /s and vq = %f /s", F(v0), F(vp), F(vq));
 #endif
 	// }}}
-	// Already set up: f0, v0, vp, vq, m->dist, m->next_dist.
-	// To do: start_time, t0, tp, m->main_dist, m->distance_done
+	// Already set up: f0, v0, vp, vq, mtr->dist, mtr->next_dist.
+	// To do: start_time, t0, tp, mtr->main_dist, mtr->distance_done
 #ifdef DEBUG_MOVE
-	debug ("Preparation did f0 = %ld", F(f0));
+	debug ("Preparation did f0 = %f", F(f0));
 #endif
 
 #if MAXAXES > 0
@@ -336,12 +348,12 @@ void next_move () {
 	int32_t um_round;
 	int32_t norma2 = 0, normb2 = 0, inner = 0;
 	for (uint8_t a = 0; a < num_axes; ++a) {
-		inner += axis[a].motor.dist / 1000 * axis[a].motor.next_dist;
-		norma2 += axis[a].motor.dist / 1000 * axis[a].motor.dist;
-		normb2 += axis[a].motor.next_dist / 1000 * axis[a].motor.next_dist;
+		inner += m2(axis[a].motor.dist) * m2(axis[a].motor.next_dist);
+		norma2 += m2(axis[a].motor.dist) * m2(axis[a].motor.dist);
+		normb2 += m2(axis[a].motor.next_dist) * m2(axis[a].motor.next_dist);
 	}
-	int32_t norma(sqrt(norma2 * 1e3));
-	int32_t normb(sqrt(normb2 * 1e3));
+	int32_t norma(sqrt(kf(norma2)));
+	int32_t normb(sqrt(kf(normb2)));
 	if (norma <= 0 || normb <= 0) {
 		// At least one of the segments is 0; no rounded corner.
 		um_round = 0;
@@ -349,22 +361,22 @@ void next_move () {
 	else {
 		int32_t summed2 = 0;
 		for (uint8_t a = 0; a < num_axes; ++a) {
-			int32_t s = axis[a].motor.dist * 1000 / norma + axis[a].motor.next_dist * 1000 / normb;
-			summed2 += s / 1000 * s;
+			int32_t s = m2(k(axis[a].motor.dist) / norma + k(axis[a].motor.next_dist) / normb);
+			summed2 += s * s;
 		}
-		int32_t scale(sqrt(summed2 / 1e3) / 2e-3);
-		um_round = max_deviation * 1000 / scale;
+		int32_t scale(sqrt(kf(summed2)) / 2);
+		um_round = k(max_deviation) / scale;
 	}
 	// Convert mm to fraction for both p and q.
-	int32_t fp = norma > 0 ? um_round / norma : 0;
-	int32_t fq = normb > 0 ? um_round / normb : 0;
-	if (fp > 500000) {
-		fq = 500000000 / fp * fq / 1000;
-		fp = 500000;
+	float fp = norma > 0 ? um_round * 1.0 / norma : 0;
+	float fq = normb > 0 ? um_round * 1.0 / normb : 0;
+	if (fp > .5) {
+		fq *= .5 / fp;
+		fp = .5;
 	}
-	if (fq > 500000) {
-		fp = 500000000 / fq * fp / 1000;
-		fq = 500000;
+	if (fq > .5) {
+		fp *= .5 / fq;
+		fq = .5;
 	}
 #else
 	float fp = 0;
@@ -372,33 +384,37 @@ void next_move () {
 #endif
 
 	// Compute t0 and tp.
-	tp = fp * 2000 / vp;
-	t0 = (1000000 - f0 - fp) * 2000 / (v0 + vp);
+	tp = M(fp / vp * 2);
+	t0 = M((1 - f0 - fp) / (v0 + vp) * 2);
+	if (tp < 0)
+		tp = MAXLONG;
+	if (t0 < 0)
+		t0 = MAXLONG;
 
 	// Finish. {{{
 	start_time = micros ();
 	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-		uint8_t m = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-		if (!motors[m])
+		uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+		if (!motors[mtr])
 			continue;
-		if (motors[m]->dist != 0 || motors[m]->next_dist != 0) {
-			motors[m]->last_time = start_time;
-			SET (motors[m]->enable_pin);
-			motors_busy |= 1 << m;
+		if (motors[mtr]->dist != 0 || motors[mtr]->next_dist != 0) {
+			motors[mtr]->last_time = start_time;
+			SET (motors[mtr]->enable_pin);
+			motors_busy |= 1 << mtr;
 			/*if (mt < num_axes)
-				debug ("Move motor %ld from %ld (really %ld) over %ld steps (f0=%ld)", m, F(axis[mt].source), F(axis[mt].current), F(motors[m]->dist), F(f0));*/
+				debug ("Move motor %ld from %ld (really %ld) over %ld steps (f0=%f)", mtr, F(axis[mt].source), F(axis[mt].current), F(motors[mtr]->dist), F(f0));*/
 		}
-		motors[m]->main_dist = motors[m]->dist * (1000 - fp / 1000) / 1000;
+		motors[mtr]->main_dist = motors[mtr]->dist * (1 - fp);
 #ifdef DEBUG_MOVE
-		debug ("Motor %d dist %ld main dist = %ld, next dist = %ld", m, F(motors[m]->dist), F(motors[m]->main_dist), F(motors[m]->next_dist));
+		debug ("Motor %d dist %ld main dist = %ld, next dist = %ld", mtr, F(motors[mtr]->dist), F(motors[mtr]->main_dist), F(motors[mtr]->next_dist));
 #endif
 #if MAXEXTRUDERS > 0
 		if (mt >= num_axes)
-			extruder[mt - num_axes].distance_done = motors[m]->dist * (f0 / 1000) / 1000;
+			extruder[mt - num_axes].distance_done = motors[mtr]->dist * f0;
 #endif
 	}
 #ifdef DEBUG_MOVE
-	debug ("Segment has been set up: f0=%ld fp=%ld fq=%ld v0=%ld /s vp=%ld /s vq=%ld /s t0=%d ms tp=%d ms", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), int (t0/1000), int (tp/1000));
+	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%d ms tp=%d ms", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), int (t0/1000), int (tp/1000));
 #endif
 	//debug("moving->true");
 	moving = true;
@@ -417,14 +433,14 @@ void abort_move () { // {{{
 			axis[a].source = axis[a].current;
 		}
 #endif
-		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-			if (!motors[m])
+		for (uint8_t mtr = 0; mtr < MAXOBJECT; ++mtr) {
+			if (!motors[mtr])
 				continue;
-			motors[m]->continuous_v = 0;
-			motors[m]->f = 0;
-			motors[m]->last_v = 0;
-			motors[m]->dist = MAXLONG;
-			motors[m]->next_dist = MAXLONG;
+			motors[mtr]->continuous_v = 0;
+			motors[mtr]->f = 0;
+			motors[mtr]->last_v = 0;
+			motors[mtr]->dist = MAXLONG;
+			motors[mtr]->next_dist = MAXLONG;
 		}
 		//debug("moving->false");
 		moving = false;

@@ -69,3 +69,10 @@ static inline void arch_setup_start() {
 static inline void arch_setup_end(int address) {
 	(void)&address;
 }
+
+static inline uint8_t read_eeprom(uint16_t address) {
+	return 0;
+}
+
+static inline void write_eeprom(uint16_t address, uint8_t data) {
+}

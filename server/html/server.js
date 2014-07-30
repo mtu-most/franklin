@@ -132,7 +132,7 @@ function _setup_updater() {
 						'step_pin': 0,
 						'dir_pin': 0,
 						'enable_pin': 0,
-						'steps_per_mm': 0,
+						'steps_per_m': 0,
 						'limit_v': 0,
 						'max_v': 0,
 						'limit_a': 0,
@@ -160,7 +160,7 @@ function _setup_updater() {
 						'step_pin': 0,
 						'dir_pin': 0,
 						'enable_pin': 0,
-						'steps_per_mm': 0,
+						'steps_per_m': 0,
 						'limit_v': 0,
 						'max_v': 0,
 						'limit_a': 0,
@@ -278,7 +278,7 @@ function _setup_updater() {
 			printers[port].axis[index].motor.step_pin = values[0][0];
 			printers[port].axis[index].motor.dir_pin = values[0][1];
 			printers[port].axis[index].motor.enable_pin = values[0][2];
-			printers[port].axis[index].motor.steps_per_mm = values[0][3];
+			printers[port].axis[index].motor.steps_per_m = values[0][3];
 			printers[port].axis[index].motor.limit_v = values[0][4];
 			printers[port].axis[index].motor.max_v = values[0][5];
 			printers[port].axis[index].motor.limit_a = values[0][6];
@@ -303,7 +303,7 @@ function _setup_updater() {
 			printers[port].extruder[index].motor.step_pin = values[0][0];
 			printers[port].extruder[index].motor.dir_pin = values[0][1];
 			printers[port].extruder[index].motor.enable_pin = values[0][2];
-			printers[port].extruder[index].motor.steps_per_mm = values[0][3];
+			printers[port].extruder[index].motor.steps_per_m = values[0][3];
 			printers[port].extruder[index].motor.limit_v = values[0][4];
 			printers[port].extruder[index].motor.max_v = values[0][5];
 			printers[port].extruder[index].motor.limit_a = values[0][6];

@@ -2,6 +2,7 @@
 #ifndef _FIRMWARE_H
 #include <Arduino.h>
 #include <avr/wdt.h>
+#include <EEPROM.h>
 
 #define SET_OUTPUT(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, OUTPUT); }} while (0)
 #define SET_INPUT(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, INPUT_PULLUP); }} while (0)
@@ -193,5 +194,14 @@ static inline void arch_setup_end(int address) {
 	if (address - 1 > E2END)
 		debug ("Warning: data doesn't fit in EEPROM; decrease MAXAXES, MAXEXTRUDERS, or MAXTEMPS and reflash the firmware!");
 }
+
+static inline uint8_t read_eeprom(uint16_t address) {
+	return EEPROM.read(address);
+}
+
+static inline void write_eeprom(uint16_t address, uint8_t data) {
+	EEPROM.write(address, data);
+}
+
 #endif
 #endif
