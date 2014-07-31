@@ -510,7 +510,7 @@ class Printer: # {{{
 				if not math.isnan(self.axis[which].motor.runspeed):
 					self.axis[which].motor.runspeed = float('nan')
 					self._axis_update(which)
-				self.limits[which] = micro(struct.unpack('<l', packet[2:])[0])
+				self.limits[which] = milli(struct.unpack('<l', packet[2:])[0])
 				l = 0
 				while l < len(self.limitcb):
 					if self.limitcb[l][0] <= len(self.limits):
@@ -563,7 +563,7 @@ class Printer: # {{{
 				w = ord(packet[1])
 				which = w & 0x7f
 				state = bool(w & 0x80)
-				pos = micro(struct.unpack('<l', packet[2:])[0])
+				pos = milli(struct.unpack('<l', packet[2:])[0])
 				if which not in self.sense:
 					self.sense[which] = []
 				self.sense[which].append((state, pos))
@@ -704,13 +704,13 @@ class Printer: # {{{
 		self.name = unicode(data[:self.namelen].rstrip('\0'), 'utf-8', 'replace')
 		self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, max_deviation, self.led_pin, self.probe_pin, room_T, self.motor_limit, self.temp_limit, self.feedrate, angle = struct.unpack('<BBBBBlHHlLLff', data[self.namelen:])
 		self.pos = (self.pos + [float('nan')] * self.num_axes)[:self.num_axes]
-		self.max_deviation = micro(max_deviation)
+		self.max_deviation = milli(max_deviation)
 		self.room_T = dev2temp(room_T)
 		self.angle = math.degrees(angle)
 		return True
 	# }}}
 	def _write_variables(self): # {{{
-		data = (self.name.encode('utf-8') + chr(0) * self.namelen)[:self.namelen] + struct.pack('<BBBBBlHHlLLff', self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, aslong(self.max_deviation), self.led_pin, self.probe_pin, temp2dev(self.room_T), self.motor_limit, self.temp_limit, self.feedrate, math.radians(self.angle))
+		data = (self.name.encode('utf-8') + chr(0) * self.namelen)[:self.namelen] + struct.pack('<BBBBBlHHlLLff', self.num_axes, self.num_extruders, self.num_temps, self.num_gpios, self.printer_type, aslong(self.max_deviation, 1), self.led_pin, self.probe_pin, temp2dev(self.room_T), self.motor_limit, self.temp_limit, self.feedrate, math.radians(self.angle))
 		if not self._send_packet(struct.pack('<BB', self.command['WRITE'], 1) + data):
 			return False
 		self._variables_update()
@@ -1358,17 +1358,17 @@ class Printer: # {{{
 		def read(self, data):
 			data = self.motor.read(data)
 			self.limit_min_pin, self.limit_max_pin, self.sense_pin, limit_pos, axis_min, axis_max, motor_min, motor_max, park, delta_length, delta_radius, offset = struct.unpack('<HHHlllllllll', data)
-			self.limit_pos = micro(limit_pos)
-			self.axis_min = micro(axis_min)
-			self.axis_max = micro(axis_max)
-			self.motor_min = micro(motor_min)
-			self.motor_max = micro(motor_max)
-			self.park = micro(park)
-			self.delta_length = micro(delta_length)
-			self.delta_radius = micro(delta_radius)
-			self.offset = micro(offset)
+			self.limit_pos = milli(limit_pos)
+			self.axis_min = milli(axis_min)
+			self.axis_max = milli(axis_max)
+			self.motor_min = milli(motor_min)
+			self.motor_max = milli(motor_max)
+			self.park = milli(park)
+			self.delta_length = milli(delta_length)
+			self.delta_radius = milli(delta_radius)
+			self.offset = milli(offset)
 		def write(self):
-			return self.motor.write() + struct.pack('<HHHlllllllll', self.limit_min_pin, self.limit_max_pin, self.sense_pin, aslong(self.limit_pos), aslong(self.axis_min), aslong(self.axis_max), aslong(self.motor_min), aslong(self.motor_max), aslong(self.park), aslong(self.delta_length), aslong(self.delta_radius), aslong(self.offset))
+			return self.motor.write() + struct.pack('<HHHlllllllll', self.limit_min_pin, self.limit_max_pin, self.sense_pin, aslong(self.limit_pos, 1), aslong(self.axis_min, 1), aslong(self.axis_max, 1), aslong(self.motor_min, 1), aslong(self.motor_max, 1), aslong(self.park, 1), aslong(self.delta_length, 1), aslong(self.delta_radius, 1), aslong(self.offset, 1))
 		def set_current_pos(self, pos):
 			#log('setting pos of %d to %f' % (self.id, pos))
 			if not self.printer._send_packet(struct.pack('<BBl', self.printer.command['SETPOS'], 2 + self.id, aslong(pos, 1))):
@@ -1392,10 +1392,10 @@ class Printer: # {{{
 			data = self.temp.read(data)
 			filament_heat, nozzle_size, filament_size = struct.unpack('<lll', data)
 			self.filament_heat = milli(filament_heat)
-			self.nozzle_size = micro(nozzle_size)
-			self.filament_size = micro(filament_size)
+			self.nozzle_size = milli(nozzle_size)
+			self.filament_size = milli(filament_size)
 		def write(self):
-			return self.motor.write() + self.temp.write() + struct.pack('<lll', aslong(self.filament_heat), aslong(self.nozzle_size), aslong(self.filament_size))
+			return self.motor.write() + self.temp.write() + struct.pack('<lll', aslong(self.filament_heat, 1), aslong(self.nozzle_size, 1), aslong(self.filament_size, 1))
 	# }}}
 	class Gpio: # {{{
 		def read(self, data):
@@ -1452,7 +1452,7 @@ class Printer: # {{{
 			self.extruder[channel - 2 - self.maxaxes].motor.runspeed = speed
 			self.extruder[channel - 2 - self.maxaxes].motor.sleeping = False
 			self._extruder_update(channel - 2 - self.maxaxes)
-		return self._send_packet(struct.pack('<BBl', self.command['RUN'], channel, aslong(speed, nan = 0)))
+		return self._send_packet(struct.pack('<BBl', self.command['RUN'], channel, aslong(speed, 1, nan = 0)))
 	def run_axis(self, which, speed): # {{{
 		return self.run(2 + which, speed)
 	# }}}

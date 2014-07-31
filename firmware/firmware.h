@@ -18,14 +18,17 @@ I: mJ/K⁴
 P: mW
 */
 
-#define u(x) (int32_t(x) >> 20)
-#define m(x) (int32_t(x) >> 10)
-#define m2(x) (int32_t(x) >> 5)
+#define u(x) (int32_t((x) / (int32_t(1) << 20)))
+#define uf(x) (float(x) / (int32_t(1) << 20))
+#define m(x) (int32_t((x) / (1 << 10)))
+#define m2(x) (int32_t((x) / (1 << 5)))
 #define mf(x) (float(x) / (1 << 10))
+#define k2(x) int32_t((x) * (1 << 5))
 #define k(x) int32_t((x) * (1 << 10))
 #define kf(x) (float(x) * (1 << 10))
 #define kM(x) int32_t((x) * (1 << 15))
-#define M(x) int32_t((x) * ((int32_t)1 << 20))
+#define M(x) int32_t((x) * (int32_t(1) << 20))
+#define G(x) int32_t((x) * (int32_t(1) << 30))
 
 #include "configuration.h"
 #include ARCH_INCLUDE
@@ -395,8 +398,7 @@ EXTERN unsigned long start_time;
 EXTERN long freeze_time;
 EXTERN long t0, tp;
 EXTERN bool moving;
-EXTERN int32_t f0, fp, fq, fmain;
-EXTERN float v0, vp, vq;
+EXTERN int32_t f0, f1, f2, fp, fq, fmain;
 EXTERN bool move_prepared;
 EXTERN bool current_move_has_cb;
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];

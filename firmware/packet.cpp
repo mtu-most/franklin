@@ -108,6 +108,7 @@ void packet()
 					queue[queue_end].f[ch] = NAN;
 				else
 					queue[queue_end].data[ch - 2] = MAXLONG;
+				debug("goto %d -", ch);
 			}
 		}
 		if (!(command[2] & 0x1) || isnan(queue[queue_end].f[0]))
@@ -117,7 +118,7 @@ void packet()
 		// f0 and f1 must be valid.
 		float f0 = queue[queue_end].f[0];
 		float f1 = queue[queue_end].f[1];
-		if (f0 < 0 || f1 < 0 || (f0 == 0 && f1 == 0))
+		if (isnan(f0) || isnan(f1) || f0 < 0 || f1 < 0 || (f0 == 0 && f1 == 0))
 		{
 			debug("Invalid f0 or f1: %f %f", F(f0), F(f1));
 			Serial.write(CMD_STALL);

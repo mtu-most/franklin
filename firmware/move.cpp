@@ -55,26 +55,27 @@ void reset_pos ()	// {{{
 static bool check_delta (uint8_t a, int32_t *target) {	// {{{
 	int32_t dx = target[0] - axis[a].x;
 	int32_t dy = target[1] - axis[a].y;
-	int32_t r2 = m2(dx) * m2(dx) + m2(dy) * m2(dy);
-	if (r2 > m2(axis[a].axis_max) * m2(axis[a].axis_max)) {
-		//debug ("not ok: %ld %ld %ld %ld %ld %ld %ld", F(target[0]), F(target[1]), F(dx), F(dy), F(r2), F(l2), F(axis[a].delta_length));
+	int32_t r2 = m(dx) * m(dx) + m(dy) * m(dy);
+	if (r2 > m(axis[a].axis_max) * m(axis[a].axis_max)) {
+		debug ("not ok 1: %ld %ld %ld %ld %ld %ld %ld", F(target[0]), F(target[1]), F(dx), F(dy), F(r2), F(axis[a].delta_length), F(axis[a].axis_max));
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
-		int32_t factor(axis[a].axis_max / sqrt (mf(r2)));
-		target[0] = axis[a].x + m2((target[0] - axis[a].x) * m2(factor));
-		target[1] = axis[a].y + m2((target[1] - axis[a].y) * m2(factor));
+		int32_t factor(m2(axis[a].axis_max / sqrt(r2)));
+		target[0] = axis[a].x + m2((target[0] - axis[a].x) * factor);
+		target[1] = axis[a].y + m2((target[1] - axis[a].y) * factor);
 		return false;
 	}
 	// Inner product shows if projection is inside or outside the printable region.
 	int32_t projection = -m(dx / k(axis[a].delta_radius) * axis[a].x + dy / k(axis[a].delta_radius) * axis[a].y);
 	if (projection < axis[a].axis_min) {
-		//debug ("not ok: %ld %ld %ld %ld %ld", F(inner), F(dx), F(dy), F(axis[a].x), F(axis[a].y));
+		debug ("not ok 2: %ld %ld %ld %ld %ld", F(projection), F(dx), F(dy), F(axis[a].x), F(axis[a].y));
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
 		target[0] -= k(axis[a].axis_min - projection - 1) / axis[a].delta_radius * m(axis[a].x);
 		target[1] -= k(axis[a].axis_min - projection - 1) / axis[a].delta_radius * m(axis[a].y);
 		// Assume this was a small correction; that way, things will work even if numerical errors cause this to be called for the real move.
 		return false;
 	}
+	debug("ok");
 	return true;
 }	// }}}
 #endif
@@ -95,7 +96,7 @@ static void apply_offsets (int32_t *data) {	// {{{
 			for (uint8_t timeout = 0; timeout < 2; ++timeout) {
 				bool ok = true;
 				for (uint8_t a = 0; a < num_axes; ++a)
-					ok &= check_delta (a, &data[0]);
+					ok &= check_delta (a, data);
 				if (ok)
 					break;
 			}
@@ -200,12 +201,13 @@ void next_move () {
 					debug("next dist of axis %d: %ld - %ld = %ld", mt, F(queue[queue_start].data[mt]), F(axis[mt].source), F(motors[mtr]->next_dist));
 #endif
 				}
-				else
+				else {
 #endif
 					motors[mtr]->next_dist = queue[queue_start].data[mt];
 #ifdef DEBUG_MOVE
-				debug("next dist of motor %d = %ld", mtr, F(motors[mtr]->next_dist));
+					debug("next dist of extruder %d = %ld", mt - num_axes, F(motors[mtr]->next_dist));
 #endif
+				}
 			}
 		}
 	}
@@ -216,6 +218,7 @@ void next_move () {
 	debug ("Move was prepared with tp = %ld", F(tp));
 #endif
 	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
+	float vq;
 	if (n == queue_end) { // {{{
 		// There is no next segment; we should stop at the end.
 #ifdef DEBUG_MOVE
@@ -271,8 +274,8 @@ void next_move () {
 		move_prepared = true;
 	}
 	// }}}
-	v0 = queue[queue_start].f[0] * feedrate;
-	vp = queue[queue_start].f[1] * feedrate;
+	float v0 = queue[queue_start].f[0] * feedrate;
+	float vp = queue[queue_start].f[1] * feedrate;
 	current_move_has_cb = queue[queue_start].cb;
 	if (queue_end == queue_start) {
 		continue_cb |= 1;
@@ -387,6 +390,12 @@ void next_move () {
 	fp = 0;
 	fq = 0;
 #endif
+	// Set up t0, tp.
+	t0 = m((G(1) - fp) / (abs(v0 + vp) / 2));
+	tp = m(fp / (abs(vp) / 2));
+	// Set up f1, f2.
+	f1 = k(.5 * abs(v0) * t0);
+	f2 = G(1) - fp - f1;
 
 	// Finish. {{{
 	start_time = micros ();
@@ -401,7 +410,7 @@ void next_move () {
 			/*if (mt < num_axes)
 				debug ("Move motor %ld from %ld (really %ld) over %ld steps (f0=%f)", mtr, F(axis[mt].source), F(axis[mt].current), F(motors[mtr]->dist), F(f0));*/
 		}
-		motors[mtr]->main_dist = motors[mtr]->dist * (1 - fp);
+		motors[mtr]->main_dist = m(motors[mtr]->dist * u(G(1) - fp));
 #ifdef DEBUG_MOVE
 		debug ("Motor %d dist %ld main dist = %ld, next dist = %ld", mtr, F(motors[mtr]->dist), F(motors[mtr]->main_dist), F(motors[mtr]->next_dist));
 #endif
@@ -411,7 +420,7 @@ void next_move () {
 #endif
 	}
 #ifdef DEBUG_MOVE
-	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%d ms tp=%d ms", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), int (t0/1000), int (tp/1000));
+	debug ("Segment has been set up: f0=%ld fp=%ld fq=%ld v0=%f /s vp=%f /s vq=%f /s t0=%ld μs tp=%ld μs", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), F(t0), F(tp));
 #endif
 	//debug("moving->true");
 	moving = true;

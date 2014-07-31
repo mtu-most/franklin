@@ -30,9 +30,6 @@ void setup()
 	temps_busy = 0;
 	led_last = millis();
 	last_active = millis();
-	v0 = 0;
-	vp = 0;
-	vq = 0;
 	t0 = 0;
 	f0 = 0;
 	//debug("moving->false");

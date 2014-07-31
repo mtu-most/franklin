@@ -186,8 +186,8 @@
 			<div id='Motor'> <!-- {{{ -->
 				<!-- args = parent, index, basic_steps -->
 				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'max_steps'], 1])$]</div>
-				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'limit_v'], 1])$]</div>
-				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'limit_a'], 1000])$]</div>
+				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'limit_v'], 1000])$]</div>
+				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'limit_a'], 1000000])$]</div>
 				<!--sleeping.-->
 			</div> <!-- }}} -->
 			<div id='Temp_components'> <!-- {{{ -->
@@ -238,7 +238,7 @@
 				[!(
 				// args = index; park should not be in this table.
 				[make_tablerow(axis_name(args[0], false), elements, ['rowtitle4'])]
-				<div>[$(Float [[[['axis', 'motor'], args[0]], 'steps_per_m'], 1000])$]</div>
+				<div>[$(Float [[[['axis', 'motor'], args[0]], 'steps_per_m'], 1024 * 1024 / 1000.])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'limit_pos'], 1])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_min'], 1])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_max'], 1])$]</div>
@@ -322,14 +322,14 @@
 				[!(
 				// args = index, class
 				[make_tablerow(axis_name(args[0], true), elements, ['rowtitle1'])]
-				<div>[$(Float [[[['axis', 'motor'], args[0]], 'max_v'], 1])$]</div>
+				<div>[$(Float [[[['axis', 'motor'], args[0]], 'max_v'], 1000])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Maxv_extruder'> <!-- {{{ -->
 				[!(
 				// args = index, class
 				[make_tablerow(extruder_name(args[0]), elements, ['rowtitle1'])]
-				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'max_v'], 1])$]</div>
+				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'max_v'], 1000])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Move_extruder'> <!-- {{{ -->
@@ -457,6 +457,7 @@
 						<div>Motor Timeout: [$(Float [[null, 'motor_limit'], 60000])$] min</div>
 						<div>Temp Timeout: [$(Float [[null, 'temp_limit'], 60000])$] min</div>
 						<div>Angle: [$(Float [[null, 'angle'], 1])$]°</div>
+						<div>Max Deviation: [$(Float [[null, 'max_deviation'], .001])$] μm</div>
 						<div>
 							[!(build('Range', ['Axes', printer.maxaxes, [null, 'num_axes']]))!]
 							[!(build('Range', ['Extruders', printer.maxextruders, [null, 'num_extruders']]))!]
@@ -746,7 +747,6 @@
 					).AddClass('left')])!] <!-- }}} -->
 
 					<div>Feedrate: [$(Float [[null, 'feedrate'], .01])$] %</div>
-					<div>Max Deviation: [$(Float [[null, 'max_deviation'], .001])$] μm</div>
 
 					[!([make_table( // Max v {{{
 						multiple_titles(['axis', 'extruder'], [
