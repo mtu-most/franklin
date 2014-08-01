@@ -32,20 +32,6 @@ void write_16 (int16_t &address, int16_t data, bool eeprom)
 	write_8 (address, (data >> 8) & 0xff, eeprom);
 }
 
-int32_t read_32 (int16_t &address, bool eeprom)
-{
-	uint32_t ret = 0;
-	for (uint8_t t = 0; t < 4; ++t)
-		ret |= (uint32_t (read_8 (address, eeprom)) & 0xff) << (8 * t);
-	return ret;
-}
-
-void write_32 (int16_t &address, int32_t data, bool eeprom)
-{
-	for (uint8_t t = 0; t < 4; ++t)
-		write_8 (address, (data >> (8 * t)) & 0xff, eeprom);
-}
-
 float read_float (int16_t &address, bool eeprom)
 {
 	ReadFloat ret;

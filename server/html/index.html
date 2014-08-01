@@ -167,8 +167,8 @@
 				elements[2].factor = 1,
 				elements[0].other = elements[2],
 				elements[2].other = elements[0],
-				elements[0].addEventListener('click', function() { this.other.checked = false; this.printer.call('run_' + this.obj[0][0], [this.obj[1], this.checked ? this.factor * Number(get_element(this.printer, this.obj, 'value').value) : NaN], {}); }, false),
-				elements[2].addEventListener('click', function() { this.other.checked = false; this.printer.call('run_' + this.obj[0][0], [this.obj[1], this.checked ? this.factor * Number(get_element(this.printer, this.obj, 'value').value) : NaN], {}); }, false),
+				elements[0].addEventListener('click', function() { this.other.checked = false; this.printer.call('run_' + this.obj[0][0], [this.obj[1], this.checked ? this.factor * Number(get_element(this.printer, this.obj, 'value').value / 1000.) : NaN], {}); }, false),
+				elements[2].addEventListener('click', function() { this.other.checked = false; this.printer.call('run_' + this.obj[0][0], [this.obj[1], this.checked ? this.factor * Number(get_element(this.printer, this.obj, 'value').value / 1000.) : NaN], {}); }, false),
 				args[1] ? elements[0].AddClass(args[1]) : 0,
 				args[1] ? elements[1].AddClass(args[1]) : 0,
 				args[1] ? elements[2].AddClass(args[1]) : 0,
@@ -186,8 +186,8 @@
 			<div id='Motor'> <!-- {{{ -->
 				<!-- args = parent, index, basic_steps -->
 				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'max_steps'], 1])$]</div>
-				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'limit_v'], 1000])$]</div>
-				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'limit_a'], 1000000])$]</div>
+				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'limit_v'], .001])$]</div>
+				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'limit_a'], 1])$]</div>
 				<!--sleeping.-->
 			</div> <!-- }}} -->
 			<div id='Temp_components'> <!-- {{{ -->
@@ -238,27 +238,27 @@
 				[!(
 				// args = index; park should not be in this table.
 				[make_tablerow(axis_name(args[0], false), elements, ['rowtitle4'])]
-				<div>[$(Float [[[['axis', 'motor'], args[0]], 'steps_per_m'], 1024 * 1024 / 1000.])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'limit_pos'], 1])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'motor_min'], 1])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'motor_max'], 1])$]</div>
+				<div>[$(Float [[[['axis', 'motor'], args[0]], 'steps_per_m'], 1000])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'limit_pos'], .001])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'motor_min'], .001])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'motor_max'], .001])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Park_axis'> <!-- {{{ -->
 				[!(
 				// args = index; park should not be in this table.
 				[make_tablerow(axis_name(args[0], true), elements, ['rowtitle1'])]
-				<div>[$(Float [[['axis', args[0]], 'park'], 1])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'park'], .001])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Delta_axis'> <!-- {{{ -->
 				[!(
 				// args = index
 				[make_tablerow(axis_name(args[0], false), elements, ['rowtitle4'])]
-				<div>[$(Float [[['axis', args[0]], 'delta_length'], 1])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'delta_radius'], 1])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'axis_min'], 1])$]</div>
-				<div>[$(Float [[['axis', args[0]], 'axis_max'], 1])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'delta_length'], .001])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'delta_radius'], .001])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'axis_min'], .001])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'axis_max'], .001])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Move_axis'> <!-- {{{ -->
@@ -269,11 +269,11 @@
 				elements[2].index = args[0],
 				elements[2].addEventListener('click', function() {
 					var target = new Object;
-					target[String(args[0])] = Number(get_element(this.printer, [['axis', this.index], 'goto']).value);
+					target[String(args[0])] = Number(get_element(this.printer, [['axis', this.index], 'goto']).value) / 1000.;
 					this.printer.call('goto', [target], {});
 				}, false),
 				[make_tablerow(axis_name(args[0], true), [[elements[1], elements[2]], elements[0], elements[3]], ['rowtitle4', ''])]
-				<div>[$(Float [[['axis', args[0]], 'offset'], 1])$]</div>
+				<div>[$(Float [[['axis', args[0]], 'offset'], .001])$]</div>
 				<input type='text'/>
 				<button class='button' type='button'>Go</button>
 				<div>[$(Run [[['axis', 'motor'], args[0]]])$]</div>
@@ -322,14 +322,14 @@
 				[!(
 				// args = index, class
 				[make_tablerow(axis_name(args[0], true), elements, ['rowtitle1'])]
-				<div>[$(Float [[[['axis', 'motor'], args[0]], 'max_v'], 1000])$]</div>
+				<div>[$(Float [[[['axis', 'motor'], args[0]], 'max_v'], .001])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Maxv_extruder'> <!-- {{{ -->
 				[!(
 				// args = index, class
 				[make_tablerow(extruder_name(args[0]), elements, ['rowtitle1'])]
-				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'max_v'], 1000])$]</div>
+				<div>[$(Float [[[['extruder', 'motor'], args[0]], 'max_v'], .001])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Move_extruder'> <!-- {{{ -->
@@ -340,13 +340,13 @@
 				elements[1].index = args[0],
 				elements[1].addEventListener('click', function() {
 					var value = Number(get_element(this.printer, [['extruder', this.index], 'move']).value);
-					this.printer.call('goto', [], {e: value, which: this.index});
+					this.printer.call('goto', [], {e: value / 1000., which: this.index});
 				}, false),
 				elements[2].printer = printer,
 				elements[2].index = args[0],
 				elements[2].addEventListener('click', function() {
 					var value = Number(get_element(this.printer, [['extruder', this.index], 'move']).value);
-					this.printer.call('goto', [], {e: -value, which: this.index});
+					this.printer.call('goto', [], {e: -value / 1000., which: this.index});
 				}, false),
 				[make_tablerow(extruder_name(args[0]), [elements[3], [elements[0], elements[1], elements[2]], elements[4]], ['rowtitle3', args[1]])]
 				<input type='text'/>
@@ -454,8 +454,8 @@
 							)!]
 						</div>
 						<div>[$(Text ['Name', [null, 'name']])$]</div>
-						<div>Motor Timeout: [$(Float [[null, 'motor_limit'], 60000])$] min</div>
-						<div>Temp Timeout: [$(Float [[null, 'temp_limit'], 60000])$] min</div>
+						<div>Motor Timeout: [$(Float [[null, 'motor_limit'], 60])$] min</div>
+						<div>Temp Timeout: [$(Float [[null, 'temp_limit'], 60])$] min</div>
 						<div>Angle: [$(Float [[null, 'angle'], 1])$]°</div>
 						<div>Max Deviation: [$(Float [[null, 'max_deviation'], .001])$] μm</div>
 						<div>
@@ -682,7 +682,7 @@
 						]),
 						multiple('Move_extruder')
 					)])!] <!-- }}} -->
-					<div class='movediv' onkeydown='if (!key_move(event.keyCode, event.shiftKey, event.ctrlKey)) event.preventDefault()'><!-- {{{ -->
+					<div class='movediv' onclick='start_move()' onkeydown='if (!key_move(event.keyCode, event.shiftKey, event.ctrlKey)) event.preventDefault()'><!-- {{{ -->
 						[!(
 							elements[0].id = make_id(printer, [null, 'movebox']),
 							elements

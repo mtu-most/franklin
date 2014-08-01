@@ -8,10 +8,10 @@ void Gpio::load (int16_t &addr, bool eeprom)
 #ifndef LOWMEM
 	uint8_t oldmaster = master;
 	master = read_8 (addr, eeprom);
-	value = read_32 (addr, eeprom);
+	value = read_float (addr, eeprom);
 #else
 	read_8 (addr, eeprom);
-	read_32 (addr, eeprom);
+	read_float (addr, eeprom);
 #endif
 	// State:  0: off, 1: on, 2: pullup input, 3: disabled
 	switch (state) {
@@ -74,10 +74,10 @@ void Gpio::save (int16_t &addr, bool eeprom)
 	write_8 (addr, state, eeprom);
 #ifndef LOWMEM
 	write_8 (addr, master, eeprom);
-	write_32 (addr, value, eeprom);
+	write_float (addr, value, eeprom);
 #else
 	write_8 (addr, 0, eeprom);
-	write_32 (addr, -1, eeprom);
+	write_float (addr, NAN, eeprom);
 #endif
 }
 #endif

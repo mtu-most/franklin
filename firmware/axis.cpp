@@ -7,15 +7,15 @@ void Axis::load(int16_t &addr, bool eeprom)
 	limit_min_pin.read(read_16(addr, eeprom));
 	limit_max_pin.read(read_16(addr, eeprom));
 	sense_pin.read(read_16(addr, eeprom));
-	limit_pos = read_32(addr, eeprom);
-	axis_min = read_32(addr, eeprom);
-	axis_max = read_32(addr, eeprom);
-	motor_min = read_32(addr, eeprom);
-	motor_max = read_32(addr, eeprom);
-	park = read_32(addr, eeprom);
-	delta_length = read_32(addr, eeprom);
-	delta_radius = read_32(addr, eeprom);
-	offset = read_32(addr, eeprom);
+	limit_pos = read_float(addr, eeprom);
+	axis_min = read_float(addr, eeprom);
+	axis_max = read_float(addr, eeprom);
+	motor_min = read_float(addr, eeprom);
+	motor_max = read_float(addr, eeprom);
+	park = read_float(addr, eeprom);
+	delta_length = read_float(addr, eeprom);
+	delta_radius = read_float(addr, eeprom);
+	offset = read_float(addr, eeprom);
 	SET_INPUT(limit_min_pin);
 	SET_INPUT(limit_max_pin);
 	SET_INPUT(sense_pin);
@@ -67,14 +67,14 @@ void Axis::save(int16_t &addr, bool eeprom)
 	write_16(addr, limit_min_pin.write(), eeprom);
 	write_16(addr, limit_max_pin.write(), eeprom);
 	write_16(addr, sense_pin.write(), eeprom);
-	write_32(addr, limit_pos, eeprom);
-	write_32(addr, axis_min, eeprom);
-	write_32(addr, axis_max, eeprom);
-	write_32(addr, motor_min, eeprom);
-	write_32(addr, motor_max, eeprom);
-	write_32(addr, park, eeprom);
-	write_32(addr, delta_length, eeprom);
-	write_32(addr, delta_radius, eeprom);
-	write_32(addr, offset, eeprom);
+	write_float(addr, limit_pos, eeprom);
+	write_float(addr, axis_min, eeprom);
+	write_float(addr, axis_max, eeprom);
+	write_float(addr, motor_min, eeprom);
+	write_float(addr, motor_max, eeprom);
+	write_float(addr, park, eeprom);
+	write_float(addr, delta_length, eeprom);
+	write_float(addr, delta_radius, eeprom);
+	write_float(addr, offset, eeprom);
 }
 #endif

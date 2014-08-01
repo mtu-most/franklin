@@ -9,7 +9,7 @@ void Motor::load(int16_t &addr, bool eeprom)
 	step_pin.read(read_16(addr, eeprom));
 	dir_pin.read(read_16(addr, eeprom));
 	enable_pin.read(read_16(addr, eeprom));
-	steps_per_m = read_32(addr, eeprom);
+	steps_per_m = read_float(addr, eeprom);
 	limit_v = read_float(addr, eeprom);
 	max_v = read_float(addr, eeprom);
 	limit_a = read_float(addr, eeprom);
@@ -38,7 +38,7 @@ void Motor::save(int16_t &addr, bool eeprom)
 	write_16(addr, step_pin.write(), eeprom);
 	write_16(addr, dir_pin.write(), eeprom);
 	write_16(addr, enable_pin.write(), eeprom);
-	write_32(addr, steps_per_m, eeprom);
+	write_float(addr, steps_per_m, eeprom);
 	write_float(addr, limit_v, eeprom);
 	write_float(addr, max_v, eeprom);
 	write_float(addr, limit_a, eeprom);

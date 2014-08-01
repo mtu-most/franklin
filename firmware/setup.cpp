@@ -65,12 +65,12 @@ void setup()
 		temps[i] = NULL;
 #endif
 		objects[i] = &axis[a];
-		limits_pos[a] = MAXLONG;
-		axis[a].current_pos = MAXLONG;
-		axis[a].source = MAXLONG;
-		axis[a].current = MAXLONG;
+		limits_pos[a] = NAN;
+		axis[a].current_pos = NAN;
+		axis[a].source = NAN;
+		axis[a].current = NAN;
 		axis[a].sense_state = 0;
-		axis[a].sense_pos = MAXLONG;
+		axis[a].sense_pos = NAN;
 		axis[a].limit_min_pin.read(0);
 		axis[a].limit_max_pin.read(0);
 		axis[a].sense_pin.read(0);
@@ -120,9 +120,8 @@ void setup()
 	{
 #if MAXAXES > 0 || MAXEXTRUDERS > 0
 		if (motors[o]) {
-			motors[o]->dist = MAXLONG;
-			motors[o]->next_dist = MAXLONG;
-			motors[o]->f = 0;
+			motors[o]->dist = NAN;
+			motors[o]->next_dist = NAN;
 			motors[o]->continuous_v = 0;
 			motors[o]->continuous_f = 0;
 			motors[o]->last_v = 0;
@@ -139,9 +138,9 @@ void setup()
 		if (temps[o]) {
 			temps[o]->last_time = time;
 			temps[o]->is_on = false;
-			temps[o]->min_alarm = MAXLONG;
-			temps[o]->max_alarm = MAXLONG;
-			temps[o]->target = MAXLONG;
+			temps[o]->min_alarm = NAN;
+			temps[o]->max_alarm = NAN;
+			temps[o]->target = NAN;
 			temps[o]->adclast = -1;
 			temps[o]->power_pin.read(0);
 			temps[o]->thermistor_pin.read(0);

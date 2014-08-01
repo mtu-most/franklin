@@ -8,12 +8,12 @@ static uint8_t get_which()
 }
 
 #if MAXTEMPS > 0 || MAXEXTRUDERS > 0 || MAXAXES > 0
-static int32_t get_int32(uint8_t offset)
+static float get_float(uint8_t offset)
 {
-	int32_t ret = 0;
-	for (uint8_t t = 0; t < 4; ++t)
-		ret |= ((uint32_t)command[offset + t] & 0xff) << (8 * t);
-	return ret;
+	ReadFloat ret;
+	for (uint8_t t = 0; t < sizeof(float); ++t)
+		ret.b[t] = command[offset + t];
+	return ret.f;
 }
 #endif
 
@@ -83,10 +83,10 @@ void packet()
 			if (command[2 + (ch >> 3)] & (1 << (ch & 0x7)))
 			{
 				ReadFloat f;
-				for (uint8_t i = 0; i < sizeof(int32_t); ++i)
-					f.b[i] = command[offset + i + t * sizeof(int32_t)];
+				for (uint8_t i = 0; i < sizeof(float); ++i)
+					f.b[i] = command[offset + i + t * sizeof(float)];
 #if MAXAXES > 0
-				if (ch >= 2 && ch < 2 + num_axes && axis[ch - 2].current_pos == MAXLONG) {
+				if (ch >= 2 && ch < 2 + num_axes && isnan(axis[ch - 2].current_pos)) {
 					debug("Moving uninitialized axis %d", ch - 2);
 					Serial.write(CMD_STALL);
 					return;
@@ -97,8 +97,8 @@ void packet()
 					debug("goto %d %f", ch, F(f.f));
 				}
 				else {
-					queue[queue_end].data[ch - 2] = f.i;
-					debug("goto %d %ld", ch, F(f.i));
+					queue[queue_end].data[ch - 2] = f.f;
+					debug("goto %d %f", ch, F(f.f));
 				}
 				initialized = true;
 				++t;
@@ -107,7 +107,7 @@ void packet()
 				if (ch < 2)
 					queue[queue_end].f[ch] = NAN;
 				else
-					queue[queue_end].data[ch - 2] = MAXLONG;
+					queue[queue_end].data[ch - 2] = NAN;
 				debug("goto %d -", ch);
 			}
 		}
@@ -159,7 +159,7 @@ void packet()
 			return;
 		}
 		ReadFloat f;
-		for (uint8_t i = 0; i < sizeof(int32_t); ++i) {
+		for (uint8_t i = 0; i < sizeof(float); ++i) {
 			f.b[i] = command[3 + i];
 		}
 		if (!isnan(f.f) && f.f != 0)
@@ -169,55 +169,35 @@ void packet()
 #if MAXAXES >= 3
 		if (printer_type == 1 && which < 2 + 3) {
 			for (uint8_t a = 0; a < 3; ++a) {
-				axis[a].source = MAXLONG;
-				axis[a].current = MAXLONG;
+				axis[a].source = NAN;
+				axis[a].current = NAN;
 			}
 		}
 		else
 #endif
 #if MAXAXES > 0
 		if (which < 2 + MAXAXES) {
-			axis[which - 2].source = MAXLONG;
-			axis[which - 2].current = MAXLONG;
+			axis[which - 2].source = NAN;
+			axis[which - 2].current = NAN;
 		}
 #endif
 		if (isnan(f.f))
 			f.f = 0;
 		//debug("at speed %f", F(f.f));
-		if (f.f > 0) {
-			if (f.f > motors[which]->limit_v)
-				f.f = motors[which]->limit_v;
-		}
-		else if (f.f < 0) {
-			if (f.f < -motors[which]->limit_v)
-				f.f = -motors[which]->limit_v;
-		}
+		if (abs(f.f) > motors[which]->limit_v)
+			f.f = (f.f < 0 ? -1 : 1) * motors[which]->limit_v;
 		//debug("I mean at speed %f", F(f.f));
-		if (motors[which]->f != 0) {
-			//debug("running changes speed from %f to %f", F(motors[which]->f), F(f.f));
-		       	if ((motors[which]->positive && f.f < 0) || (!motors[which]->positive && f.f > 0))
-				motors[which]->continuous_v = -abs(f.f);
-			else
-				motors[which]->continuous_v = abs(f.f);
-		}
-		else {
-			//debug("new running speed %ld", F(f.i));
-			if (f.i > 0) {
-				SET(motors[which]->dir_pin);
-				motors[which]->continuous_v = f.f;
-				motors[which]->positive = true;
-			}
-			else {
-				RESET(motors[which]->dir_pin);
-				motors[which]->continuous_v = -f.f;
-				motors[which]->positive = false;
-			}
-			//debug("initial positive %d", motors[which]->positive);
-			motors[which]->last_time = micros();
-			SET(motors[which]->enable_pin);
-			motors[which]->continuous_f = 0;
-			motors_busy |= 1 << which;
-		}
+		if (f.f >= 0)
+			SET(motors[which]->dir_pin);
+		else
+			RESET(motors[which]->dir_pin);
+		motors[which]->positive = f.f >= 0;
+		motors[which]->continuous_v = abs(f.f);
+		//debug("initial positive %d", motors[which]->positive);
+		motors[which]->last_time = micros();
+		SET(motors[which]->enable_pin);
+		motors[which]->continuous_f = 0;
+		motors_busy |= 1 << which;
 		return;
 	}
 	case CMD_SLEEP:	// disable motor current
@@ -245,18 +225,18 @@ void packet()
 #if MAXAXES >= 3
 			if (printer_type == 1 && which < 2 + 3) {
 				for (uint8_t a = 2; a < 2 + 3; ++a) {
-					axis[a - 2].current_pos = MAXLONG;
-					axis[a - 2].source = MAXLONG;
-					axis[a - 2].current = MAXLONG;
+					axis[a - 2].current_pos = NAN;
+					axis[a - 2].source = NAN;
+					axis[a - 2].current = NAN;
 				}
 			}
 			else
 #endif
 #if MAXAXES > 0
 			if (which < 2 + MAXAXES) {
-				axis[which - 2].current_pos = MAXLONG;
-				axis[which - 2].source = MAXLONG;
-				axis[which - 2].current = MAXLONG;
+				axis[which - 2].current_pos = NAN;
+				axis[which - 2].source = NAN;
+				axis[which - 2].current = NAN;
 			}
 #endif
 		}
@@ -282,7 +262,7 @@ void packet()
 			Serial.write(CMD_STALL);
 			return;
 		}
-		temps[which]->target = get_int32(3);
+		temps[which]->target = get_float(3);
 		temps[which]->adctarget = temps[which]->toadc(temps[which]->target);
 		debug("adc target %d from %d", temps[which]->adctarget, int16_t(temps[which]->target / 1024));
 		if (temps[which]->adctarget >= MAXINT) {
@@ -304,7 +284,7 @@ void packet()
 			}
 		}
 		else {
-			//debug("Temp %d set to %ld", which, F(target));
+			//debug("Temp %d set to %f", which, F(target));
 			initialized = true;
 		}
 		adc_phase = 1;
@@ -325,13 +305,13 @@ void packet()
 			return;
 		}
 		ReadFloat min, max;
-		for (uint8_t i = 0; i < sizeof(int32_t); ++i)
+		for (uint8_t i = 0; i < sizeof(float); ++i)
 		{
 			min.b[i] = command[3 + i];
-			max.b[i] = command[3 + i + sizeof(int32_t)];
+			max.b[i] = command[3 + i + sizeof(float)];
 		}
-		temps[which]->min_alarm = min.i;
-		temps[which]->max_alarm = max.i;
+		temps[which]->min_alarm = min.f;
+		temps[which]->max_alarm = max.f;
 		temps[which]->adcmin_alarm = temps[which]->toadc(temps[which]->min_alarm);
 		temps[which]->adcmax_alarm = temps[which]->toadc(temps[which]->max_alarm);
 		write_ack();
@@ -352,11 +332,11 @@ void packet()
 		}
 		write_ack();
 		ReadFloat f;	// TODO: start a measurement and report when it's ready.
-		f.i = temps[which]->fromadc(temps[which]->adclast);
-		debug("read temp %ld", F(f.i));
-		reply[0] = 2 + sizeof(int32_t);
+		f.f = temps[which]->fromadc(temps[which]->adclast);
+		debug("read temp %f", F(f.f));
+		reply[0] = 2 + sizeof(float);
 		reply[1] = CMD_TEMP;
-		for (uint8_t b = 0; b < sizeof(int32_t); ++b)
+		for (uint8_t b = 0; b < sizeof(float); ++b)
 			reply[2 + b] = f.b[b];
 		reply_ready = true;
 		try_send_next();
@@ -422,18 +402,18 @@ void packet()
 #if MAXAXES >= 3
 		if (printer_type == 1 && which <= 2 + 3) {
 			for (uint8_t a = 0; a < 3; ++a) {
-				axis[a].source = MAXLONG;
-				axis[a].current = MAXLONG;
+				axis[a].source = NAN;
+				axis[a].current = NAN;
 			}
 		}
 		else
 #endif
 		{
-			axis[which - 2].source = MAXLONG;
-			axis[which - 2].current = MAXLONG;
+			axis[which - 2].source = NAN;
+			axis[which - 2].current = NAN;
 		}
 		write_ack();
-		axis[which - 2].current_pos = get_int32(3);
+		axis[which - 2].current_pos = get_float(3);
 		return;
 	}
 	case CMD_GETPOS:	// Get current position
@@ -449,17 +429,17 @@ void packet()
 			return;
 		}
 		write_ack();
-		if (axis[which - 2].source == MAXLONG)
+		if (isnan(axis[which - 2].source))
 			reset_pos();
 		ReadFloat pos, current;
-		pos.i = axis[which - 2].current_pos;
-		current.i = axis[which - 2].current - axis[which - 2].offset;
-		reply[0] = 2 + 2 * sizeof(int32_t);
+		pos.f = axis[which - 2].current_pos;
+		current.f = axis[which - 2].current - axis[which - 2].offset;
+		reply[0] = 2 + 2 * sizeof(float);
 		reply[1] = CMD_POS;
-		for (uint8_t b = 0; b < sizeof(int32_t); ++b)
+		for (uint8_t b = 0; b < sizeof(float); ++b)
 			reply[2 + b] = pos.b[b];
-		for (uint8_t b = 0; b < sizeof(int32_t); ++b)
-			reply[2 + sizeof(int32_t) + b] = current.b[b];
+		for (uint8_t b = 0; b < sizeof(float); ++b)
+			reply[2 + sizeof(float) + b] = current.b[b];
 		reply_ready = true;
 		try_send_next();
 		return;

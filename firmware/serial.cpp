@@ -287,7 +287,7 @@ void try_send_next()
 #if MAXAXES > 0
 	for (uint8_t w = 0; w < MAXAXES; ++w)
 	{
-		if (limits_pos[w] != MAXLONG)
+		if (!isnan(limits_pos[w]))
 		{
 #ifdef DEBUG_SERIAL
 			debug("limit %d", w);
@@ -296,12 +296,12 @@ void try_send_next()
 			out_buffer[1] = CMD_LIMIT;
 			out_buffer[2] = w;
 			ReadFloat f;
-			f.i = limits_pos[w];
+			f.f = limits_pos[w];
 			out_buffer[3] = f.b[0];
 			out_buffer[4] = f.b[1];
 			out_buffer[5] = f.b[2];
 			out_buffer[6] = f.b[3];
-			limits_pos[w] = MAXLONG;
+			limits_pos[w] = NAN;
 			if (initialized)
 			{
 				prepare_packet(out_buffer);
@@ -320,7 +320,7 @@ void try_send_next()
 			out_buffer[1] = CMD_SENSE;
 			out_buffer[2] = w | (axis[w].sense_state & 0x80);
 			ReadFloat f;
-			f.i = axis[w].sense_pos;
+			f.f = axis[w].sense_pos;
 			out_buffer[3] = f.b[0];
 			out_buffer[4] = f.b[1];
 			out_buffer[5] = f.b[2];

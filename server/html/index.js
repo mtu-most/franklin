@@ -49,16 +49,8 @@ function init() { // {{{
 		var things = document.location.search.split('&');
 		for (var t = 0; t < things.length; ++t) {
 			var items = things[t].substring(1).split('=');
-			if (items[1] == '0') {
-				var e = document.getElementById(items[0] + 'box');
-				if (e)
-					e.checked = false;
-			}
-			else if (items[1] == '1') {
-				var e = document.getElementById(items[0] + 'box');
-				if (e)
-					e.checked = true;
-			}
+			if (items[0] == 'setup')
+				document.getElementById('container').RemoveClass('nosetup');
 		}
 	}
 } // }}}
@@ -400,6 +392,7 @@ function do_queue() { // {{{
 		option.value = q[i];
 		option.selected = true;
 	}
+	start_move();
 } // }}}
 // }}}
 
@@ -564,7 +557,7 @@ function update_motor(id) { // {{{
 			minus.checked = false;
 			plus.checked = true;
 		}
-		value.value = String(Math.abs(speed));
+		value.value = String(Math.abs(speed) * 1000.);
 	}
 	//update_float([id, 'sleeping']);
 } // }}}
@@ -935,13 +928,13 @@ function update_canvas_and_spans(update_lock) { // {{{
 					printer.lock = [[x[1], y[1]], [selected_printer.reference[0], selected_printer.reference[1]]];
 				var e = document.getElementById(make_id(selected_printer, [null, 'movespan0']));
 				e.ClearAll();
-				e.AddText(x[1].toFixed(1));
+				e.AddText((x[1] * 1000).toFixed(1));
 				e = document.getElementById(make_id(selected_printer, [null, 'movespan1']));
 				e.ClearAll();
-				e.AddText(y[1].toFixed(1));
+				e.AddText((y[1] * 1000).toFixed(1));
 				e = document.getElementById(make_id(selected_printer, [null, 'movespan2']));
 				e.ClearAll();
-				e.AddText(z[1].toFixed(1));
+				e.AddText((z[1] * 1000).toFixed(1));
 				redraw_canvas(x[1], y[1]);
 			});
 		});
@@ -963,8 +956,8 @@ function redraw_canvas(x, y) { // {{{
 	case 0:
 		var xaxis = selected_printer.axis[0];
 		var yaxis = selected_printer.axis[1];
-		printerwidth = 2 * Math.max(xaxis.motor_max, -xaxis.motor_min) + 10;
-		printerheight = 2 * Math.max(yaxis.motor_max, -yaxis.motor_min) + 10;
+		printerwidth = 2 * Math.max(xaxis.motor_max, -xaxis.motor_min) + .010;
+		printerheight = 2 * Math.max(yaxis.motor_max, -yaxis.motor_min) + .010;
 		outline = function(c) {
 			c.beginPath();
 			// Why does this not work?
@@ -985,9 +978,12 @@ function redraw_canvas(x, y) { // {{{
 			radius.push(selected_printer.axis[a].delta_radius);
 			length.push(selected_printer.axis[a].delta_length);
 		}
-		var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
-		var dx = [0, -.8660254037844387, .8660254037844387];
-		var dy = [1, -.5, -.5];
+		//var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
+		//var dx = [0, -.8660254037844387, .8660254037844387];
+		//var dy = [1, -.5, -.5];
+		var origin = [[radius[0] * .8660254037844387, radius[0] * -.5], [0, radius[1]], [radius[2] * -.8660254037844387, radius[2] * -.5]];
+		var dx = [.5, -1, .5];
+		var dy = [.8660254037844387, 0, -.8660254037844387];
 		var intersects = [];
 		var intersect = function(x0, y0, r, x1, y1, dx1, dy1, positive) {
 			// Find intersection of circle(x-x0)^2+(y-y0)^2==r^2 and line l=(x1,y1)+t(dx1,dy1); use positive of negative solution for t.
@@ -1025,17 +1021,18 @@ function redraw_canvas(x, y) { // {{{
 			}
 			c.stroke();
 			for (var a = 0; a < 3; ++a) {
-				var w = c.measureText(names[a]).width;
+				var w = c.measureText(names[a]).width / 1000;
+				c.beginPath();
 				c.save();
-				c.translate(origin[a][0] + dy[a] * 15 - w / 2, origin[a][1] - dx[a] * 15);
+				c.translate(origin[a][0] + dy[a] * .015 - w / 2, origin[a][1] - dx[a] * .015);
 				c.rotate(selected_printer.angle * Math.PI / 180);
-				c.scale(1, -1);
-				c.strokeText(names[a], 0, 0);
+				c.scale(.001, -.001);
+				c.fillText(names[a], 0, 0);
 				c.restore();
 			}
 			c.restore();
 		};
-		var extra = c.measureText(names[0]).width + 20;
+		var extra = c.measureText(names[0]).width / 1000 + .02;
 		printerwidth = 2 * (maxx + extra);
 		printerheight = 2 * (maxy + extra);
 		break;
@@ -1043,7 +1040,7 @@ function redraw_canvas(x, y) { // {{{
 	var r = Math.sqrt(printerwidth * printerwidth + printerheight * printerheight);
 	var factor = Math.min(window.innerWidth, window.innerHeight) / r;
 	factor /= 2;
-	var size = r * factor + 5;
+	var size = r * factor + .005;
 	canvas.height = size;
 	canvas.width = size;
 	box.style.marginTop = String((window.innerHeight - canvas.height - extra_height) / 2) + 'px';
@@ -1065,6 +1062,7 @@ function redraw_canvas(x, y) { // {{{
 
 	c.translate(canvas.width / 2, canvas.height / 2);
 	c.scale(factor, -factor);
+	c.lineWidth = 1. / factor;
 
 	// Draw outline.
 	c.strokeStyle = '#888';
@@ -1072,8 +1070,8 @@ function redraw_canvas(x, y) { // {{{
 	outline(c);
 	// Draw center.
 	c.beginPath();
-	c.moveTo(1, 0);
-	c.arc(0, 0, 1, 0, 2 * Math.PI);
+	c.moveTo(.001, 0);
+	c.arc(0, 0, .001, 0, 2 * Math.PI);
 	c.fillStyle = '#888';
 	c.fill();
 
@@ -1081,18 +1079,18 @@ function redraw_canvas(x, y) { // {{{
 	c.beginPath();
 	c.fillStyle = '#44f';
 	if (l === null) {
-		c.moveTo(true_pos[0] + 3, true_pos[1]);
-		c.arc(true_pos[0], true_pos[1], 3, 0, 2 * Math.PI);
+		c.moveTo(true_pos[0] + .003, true_pos[1]);
+		c.arc(true_pos[0], true_pos[1], .003, 0, 2 * Math.PI);
 		c.fill();
 	}
 	else {
-		c.rect(true_pos[0] - 3, true_pos[1] - 3, 6, 6);
+		c.rect(true_pos[0] - .003, true_pos[1] - .003, .006, .006);
 		c.fill();
 		c.beginPath();
-		c.moveTo(l[0][0] - 5, l[0][1] - 5);
-		c.lineTo(l[0][0] + 5, l[0][1] + 5);
-		c.moveTo(l[0][0] - 5, l[0][1] + 5);
-		c.lineTo(l[0][0] + 5, l[0][1] - 5);
+		c.moveTo(l[0][0] - .005, l[0][1] - .005);
+		c.lineTo(l[0][0] + .005, l[0][1] + .005);
+		c.moveTo(l[0][0] - .005, l[0][1] + .005);
+		c.lineTo(l[0][0] + .005, l[0][1] - .005);
 		c.strokeStyle = '#44f';
 		c.stroke();
 	}
@@ -1110,32 +1108,32 @@ function redraw_canvas(x, y) { // {{{
 
 		// Draw tick marks.
 		c.moveTo((b[0][1] + b[0][0]) / 2, b[1][0]);
-		c.lineTo((b[0][1] + b[0][0]) / 2, b[1][0] + 5);
+		c.lineTo((b[0][1] + b[0][0]) / 2, b[1][0] + .005);
 
 		c.moveTo((b[0][1] + b[0][0]) / 2, b[1][1]);
-		c.lineTo((b[0][1] + b[0][0]) / 2, b[1][1] - 5);
+		c.lineTo((b[0][1] + b[0][0]) / 2, b[1][1] - .005);
 
 		c.moveTo(b[0][0], (b[1][1] + b[1][0]) / 2);
-		c.lineTo(b[0][0] + 5, (b[1][1] + b[1][0]) / 2);
+		c.lineTo(b[0][0] + .005, (b[1][1] + b[1][0]) / 2);
 
 		c.moveTo(b[0][1], (b[1][1] + b[1][0]) / 2);
-		c.lineTo(b[0][1] - 5, (b[1][1] + b[1][0]) / 2);
+		c.lineTo(b[0][1] - .005, (b[1][1] + b[1][0]) / 2);
 
 		// Draw central cross.
-		c.moveTo((b[0][1] + b[0][0]) / 2 - 5, (b[1][1] + b[1][0]) / 2);
-		c.lineTo((b[0][1] + b[0][0]) / 2 + 5, (b[1][1] + b[1][0]) / 2);
-		c.moveTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 + 5);
-		c.lineTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 - 5);
+		c.moveTo((b[0][1] + b[0][0]) / 2 - .005, (b[1][1] + b[1][0]) / 2);
+		c.lineTo((b[0][1] + b[0][0]) / 2 + .005, (b[1][1] + b[1][0]) / 2);
+		c.moveTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 + .005);
+		c.lineTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 - .005);
 	}
 
 	// Draw zero.
-	c.moveTo(3, 0);
-	c.arc(0, 0, 3, 0, 2 * Math.PI);
+	c.moveTo(.003, 0);
+	c.arc(0, 0, .003, 0, 2 * Math.PI);
 
 	// Draw lock.
 	if (l !== null) {
 		// Draw the reference point.
-		c.rect(l[1][0] - 5, l[1][1] - 5, 10, 10);
+		c.rect(l[1][0] - .005, l[1][1] - .005, .01, .01);
 	}
 
 	// Update it on screen.
@@ -1148,9 +1146,9 @@ function redraw_canvas(x, y) { // {{{
 // }}}
 
 function key_move(key, shift, ctrl) { // {{{
-	var value = Number(document.getElementById('move_amount').value);
+	var value = Number(document.getElementById('move_amount').value) / 1000;
 	if (shift)
-		value /= 10.;
+		value /= 10;
 	var spanx = document.getElementById('move_span_0');
 	var spany = document.getElementById('move_span_1');
 	var spanz = document.getElementById('move_span_2');
@@ -1249,8 +1247,6 @@ function start_move() { // {{{
 	}
 	selected_printer.lock = null;
 	update_canvas_and_spans(false);
-	switch_show(true, 'mover');
-	document.getElementById('move_amount').focus();
 } // }}}
 
 function reset_position() { // {{{

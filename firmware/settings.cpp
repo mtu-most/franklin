@@ -48,20 +48,16 @@ void Variables::load(int16_t &addr, bool eeprom)
 #else
 	printer_type = 0;
 #endif
-	max_deviation = read_32(addr, eeprom);
+	max_deviation = read_float(addr, eeprom);
 	led_pin.read(read_16(addr, eeprom));
 	probe_pin.read(read_16(addr, eeprom));
 #ifndef LOWMEM
-	room_T = read_32(addr, eeprom);
+	room_T = read_float(addr, eeprom);
 #else
-	read_32(addr, eeprom);	// Discard value.
+	read_float(addr, eeprom);	// Discard value.
 #endif
-	motor_limit = read_32(addr, eeprom);
-	if (motor_limit < 0)
-		motor_limit = 0;
-	temp_limit = read_32(addr, eeprom);
-	if (temp_limit < 0)
-		temp_limit = 0;
+	motor_limit = read_float(addr, eeprom);
+	temp_limit = read_float(addr, eeprom);
 	feedrate = read_float(addr, eeprom);
 	if (isnan(feedrate) || isinf(feedrate) || feedrate <= 0)
 		feedrate = 1;
@@ -75,9 +71,9 @@ void Variables::load(int16_t &addr, bool eeprom)
 	{
 		for (uint8_t a = 0; a < MAXAXES; ++a)
 		{
-			axis[a].source = MAXLONG;
-			axis[a].current = MAXLONG;
-			axis[a].current_pos = MAXLONG;
+			axis[a].source = NAN;
+			axis[a].current = NAN;
+			axis[a].current_pos = NAN;
 		}
 	}
 #endif
@@ -92,16 +88,16 @@ void Variables::save(int16_t &addr, bool eeprom)
 	write_8(addr, num_temps, eeprom);
 	write_8(addr, num_gpios, eeprom);
 	write_8(addr, printer_type, eeprom);
-	write_32(addr, max_deviation, eeprom);
+	write_float(addr, max_deviation, eeprom);
 	write_16(addr, led_pin.write(), eeprom);
 	write_16(addr, probe_pin.write(), eeprom);
 #ifndef LOWMEM
-	write_32(addr, room_T, eeprom);
+	write_float(addr, room_T, eeprom);
 #else
-	write_32(addr, MAXLONG, eeprom);
+	write_float(addr, NAN, eeprom);
 #endif
-	write_32(addr, motor_limit, eeprom);
-	write_32(addr, temp_limit, eeprom);
+	write_float(addr, motor_limit, eeprom);
+	write_float(addr, temp_limit, eeprom);
 	write_float(addr, feedrate, eeprom);
 	write_float(addr, angle, eeprom);
 }
