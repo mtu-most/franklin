@@ -4,105 +4,13 @@
 //#define DEBUG_MOVE
 
 #if MAXAXES > 0
-void reset_pos ()	// {{{
-{
-#ifdef DEBUG_MOVE
-	debug ("Recalculating current position");
-#endif
-	// Determine current location of extruder.
-	if (printer_type == 0) { // {{{
-		for (uint8_t a = 0; a < MAXAXES; ++a)
-			axis[a].source = axis[a].current_pos;
-	}
-	// }}}
-#if MAXAXES >= 3
-	else if (printer_type == 1) { // {{{
-		//debug ("new delta position");
-		// All axes' current_pos must be valid and equal, in other words, x=y=0.
-		if (axis[0].current_pos != axis[1].current_pos || axis[0].current_pos != axis[2].current_pos) {
-#ifdef DEBUG_MOVE
-			debug ("Refusing to set new delta position from current_pos = (%f, %f, %f)", F(axis[0].current_pos), F(axis[1].current_pos), F(axis[2].current_pos));
-#endif
-			axis[0].source = NAN;
-			axis[1].source = NAN;
-			axis[2].source = NAN;
-		}
-		else {
-			axis[0].source = 0;
-			axis[1].source = 0;
-			axis[2].source = axis[0].current_pos;
-		}
-		for (uint8_t a = 3; a < MAXAXES; ++a)
-			axis[a].source = axis[a].current_pos;
-	}
-	// }}}
-#endif
-	else
-		debug ("Error: invalid printer type %d", printer_type);
-	for (uint8_t a = 0; a < MAXAXES; ++a) {
-		axis[a].current = axis[a].source;
-#ifdef DEBUG_MOVE
-		debug ("New position for axis %d = %f", a, F(axis[a].source));
-#endif
-	}
-}
-// }}}
-#endif
-
-#if MAXAXES > 0
-
-#if MAXAXES >= 3
-static bool check_delta (uint8_t a, float *target) {	// {{{
-	float dx = target[0] - axis[a].x;
-	float dy = target[1] - axis[a].y;
-	float r2 = dx * dx + dy * dy;
-	if (r2 > axis[a].axis_max * axis[a].axis_max) {
-		debug ("not ok 1: %f %f %f %f %f %f %f", F(target[0]), F(target[1]), F(dx), F(dy), F(r2), F(axis[a].delta_length), F(axis[a].axis_max));
-		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
-		// target = axis + (target - axis) * (l - epsilon) / r.
-		float factor(axis[a].axis_max / sqrt(r2));
-		target[0] = axis[a].x + (target[0] - axis[a].x) * factor;
-		target[1] = axis[a].y + (target[1] - axis[a].y) * factor;
-		return false;
-	}
-	// Inner product shows if projection is inside or outside the printable region.
-	float projection = -(dx / axis[a].delta_radius * axis[a].x + dy / axis[a].delta_radius * axis[a].y);
-	if (projection < axis[a].axis_min) {
-		debug ("not ok 2: %f %f %f %f %f", F(projection), F(dx), F(dy), F(axis[a].x), F(axis[a].y));
-		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
-		target[0] -= (axis[a].axis_min - projection - 1) / axis[a].delta_radius * axis[a].x;
-		target[1] -= (axis[a].axis_min - projection - 1) / axis[a].delta_radius * axis[a].y;
-		// Assume this was a small correction; that way, things will work even if numerical errors cause this to be called for the real move.
-		return false;
-	}
-	debug("ok");
-	return true;
-}	// }}}
-#endif
 
 static void apply_offsets (float *data) {	// {{{
 	// Apply offsets.
 	for (uint8_t a = 0; a < num_axes; ++a) {
 		data[a] += axis[a].offset;
 	}
-#if MAXAXES >= 3
-	if (printer_type == 1) {
-		if (isnan(data[0]) || isnan(data[1]) || isnan(data[2])) {
-			data[0] = NAN;
-			data[1] = NAN;
-			data[2] = NAN;
-		}
-		else {
-			for (uint8_t timeout = 0; timeout < 2; ++timeout) {
-				bool ok = true;
-				for (uint8_t a = 0; a < num_axes; ++a)
-					ok &= check_delta (a, data);
-				if (ok)
-					break;
-			}
-		}
-	}
-#endif
+	printer_types[printer_type]->check_position(data);
 }	// }}}
 #endif
 
@@ -131,32 +39,33 @@ void next_move () {
 #if MAXAXES > 0
 	// Make sure printer state is good. {{{
 	// If the source is unknown, determine it from current_pos.
+	//for (uint8_t a = 0; a < num_axes; ++a)
+	//	debug("target %d %f", a, F(queue[queue_start].data[a]));
 	for (uint8_t a = 0; a < num_axes; ++a) {
 		if (isnan(axis[a].source)) {
-			reset_pos ();
+			printer_types[printer_type]->reset_pos ();
 			break;
 		}
 	}
 #endif
 
-#if MAXAXES >= 3
-	// For a delta, if any axis moves, all motors move; avoid trouble by setting none of them to nan.
-	if (printer_type == 1 && (isnan(queue[queue_start].data[0]) || isnan(queue[queue_start].data[1]) || isnan(queue[queue_start].data[2]))) {
-		for (uint8_t a = 0; a < 3; ++a) {
-			if (isnan(queue[queue_start].data[a])) {
-#ifdef DEBUG_MOVE
-				debug ("Filling delta axis %d", a);
-#endif
-				// Offset will be added later; compensate for it.
-				queue[queue_start].data[a] = axis[a].source - axis[a].offset;
-			}
-		}
-	}
-#endif
+	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
+
 #if MAXAXES > 0
 	for (uint8_t a = 0; a < num_axes; ++a) {
-		debug("checking %f %f", F(queue[queue_start].data[a]), F(axis[a].source));
-		if (!isnan(queue[queue_start].data[a]) && isnan(axis[a].source)) {
+		if (n != queue_end) {
+			// If only one of them is set, set the other one as well to make the rounded corner work.
+			if (!isnan(queue[queue_start].data[a]) && isnan(queue[n].data[a])) {
+				queue[n].data[a] = queue[queue_start].data[a];
+				debug("filling next %d with %f", a, F(queue[n].data[a]));
+			}
+			if (isnan(queue[queue_start].data[a]) && !isnan(queue[n].data[a])) {
+				// Compensate for offset which is added later.
+				queue[queue_start].data[a] = axis[a].source - axis[a].offset;
+				debug("filling %d with %f", a, F(queue[queue_start].data[a]));
+			}
+		}
+		if ((!isnan(queue[queue_start].data[a]) && isnan(axis[a].source)) || (n != queue_end && !isnan(queue[n].data[a]) && isnan(axis[a].source))) {
 			debug ("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue.");
 			// This possibly removes one move too many, but it shouldn't happen anyway.
 			if (queue[queue_start].cb) {
@@ -167,7 +76,7 @@ void next_move () {
 				continue_cb |= 1;
 				try_send_next ();
 			}
-			queue_start = (queue_start + 1) % QUEUE_LENGTH;
+			queue_start = n;
 			queue_full = false;
 			abort_move ();
 			return;
@@ -191,8 +100,11 @@ void next_move () {
 			if (!motors[mtr])
 				continue;
 			motors[mtr]->last_v = 0;
-			if (isnan(queue[queue_start].data[mt]))
+			motors[mtr]->last_distance = 0;
+			if (isnan(queue[queue_start].data[mt])) {
 				motors[mtr]->next_dist = 0;
+				//debug("not using object %d", mtr);
+			}
 			else {
 #if MAXAXES > 0
 				if (mt < num_axes) {
@@ -217,7 +129,6 @@ void next_move () {
 #ifdef DEBUG_MOVE
 	debug ("Move was prepared with tp = %f", F(tp));
 #endif
-	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
 	float vq;
 	if (n == queue_end) { // {{{
 		// There is no next segment; we should stop at the end.
@@ -403,13 +314,6 @@ void next_move () {
 		uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
 		if (!motors[mtr])
 			continue;
-		if (motors[mtr]->dist != 0 || motors[mtr]->next_dist != 0) {
-			motors[mtr]->last_time = start_time;
-			SET (motors[mtr]->enable_pin);
-			motors_busy |= 1 << mtr;
-			/*if (mt < num_axes)
-				debug ("Move motor %f from %f (really %f) over %f steps (f0=%f)", mtr, F(axis[mt].source), F(axis[mt].current), F(motors[mtr]->dist), F(f0));*/
-		}
 		motors[mtr]->main_dist = motors[mtr]->dist * (1 - fp);
 #ifdef DEBUG_MOVE
 		debug ("Motor %d dist %f main dist = %f, next dist = %f", mtr, F(motors[mtr]->dist), F(motors[mtr]->main_dist), F(motors[mtr]->next_dist));

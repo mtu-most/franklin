@@ -154,6 +154,7 @@
 			<div id='Run'> <!-- {{{ -->
 				[!(
 				// args = obj, class
+				args[0][1] === null ? '' : (
 				elements[0].id = make_id(printer, args[0], 'minus'),
 				elements[2].id = make_id(printer, args[0], 'plus'),
 				elements[4].id = make_id(printer, args[0], 'value'),
@@ -174,7 +175,8 @@
 				args[1] ? elements[2].AddClass(args[1]) : 0,
 				args[1] ? elements[3].AddClass(args[1]) : 0,
 				args[1] ? elements[4].AddClass(args[1]) : 0,
-				stack
+				elements)
+				<span></span>
 				<input type='checkbox' class='run1'/>
 				<label class='run2'>-</label>
 				<input type='checkbox' class='run1'/>
@@ -242,6 +244,7 @@
 				<div>[$(Float [[['axis', args[0]], 'limit_pos'], .001])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_min'], .001])$]</div>
 				<div>[$(Float [[['axis', args[0]], 'motor_max'], .001])$]</div>
+				<div>[$(Run [[['axis', 'motor'], args[0]]])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Park_axis'> <!-- {{{ -->
@@ -272,11 +275,10 @@
 					target[String(args[0])] = Number(get_element(this.printer, [['axis', this.index], 'goto']).value) / 1000.;
 					this.printer.call('goto', [target], {});
 				}, false),
-				[make_tablerow(axis_name(args[0], true), [[elements[1], elements[2]], elements[0], elements[3]], ['rowtitle4', ''])]
+				[make_tablerow(axis_name(args[0], true), [[elements[1], elements[2]], elements[0]], ['rowtitle3', ''])]
 				<div>[$(Float [[['axis', args[0]], 'offset'], .001])$]</div>
 				<input type='text'/>
 				<button class='button' type='button'>Go</button>
-				<div>[$(Run [[['axis', 'motor'], args[0]]])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Pins_axis'> <!-- {{{ -->
@@ -492,19 +494,22 @@
 								'Coupling (steps/mm)',
 								'Switch pos (mm)',
 								'Motor min (mm)',
-								'Motor max (mm)'
+								'Motor max (mm)',
+								'Run'
 							], [
-								'htitle4',
-								'title4',
-								'title4',
-								'title4',
-								'title4'
+								'htitle5',
+								'title5',
+								'title5',
+								'title5',
+								'title5',
+								'title5'
 							], [
 								null,
 								'Number of (micro)steps that the motor needs to do to move the hardware by one mm.',
 								'Position of the limit switch.',
 								'Minimum value that the motor may move to.',
-								'Maximum value that the motor may move to.'
+								'Maximum value that the motor may move to.',
+								'Move motor indefinitely.'
 							]),
 							multiple('Axis_axis')
 						)])!] <!-- }}} -->
@@ -591,10 +596,10 @@
 						)])!] <!-- }}} -->
 
 						[!([make_table(elements[0], elements[1], // Pins {{{
-							multiple('Pins_axis'),
-							multiple('Pins_extruder'),
-							multiple('Pins_temp'),
-							multiple('Pins_gpio'))]
+							multiple('Pins_axis', null, false),
+							multiple('Pins_extruder', null, false),
+							multiple('Pins_temp', null, false),
+							multiple('Pins_gpio', null, false))]
 							[$(Pin ['LED', [null, 'led_pin']])$]
 							[$(Pin ['Probe', [null, 'probe_pin']])$]
 							)!] <!-- }}} -->
@@ -646,19 +651,15 @@
 						multiple_titles(['axis'], [
 							'Axis',
 							'Go (mm)',
-							'Offset (mm)',
-							'Run'
+							'Offset (mm)'
 						], [
-							'htitle3',
-							'title3',
-							'title3',
-							'title3',
-							'title3'
+							'htitle2',
+							'title2',
+							'title2'
 						], [
 							null,
 							'Physically move the extruder to this position.  For Z, more positive numbers move the extruder away from the bed.',
-							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.',
-							'Move motor indefinitely.'
+							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.'
 						]),
 						multiple('Move_axis')
 					)])!] <!-- }}} -->

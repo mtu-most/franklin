@@ -4,6 +4,8 @@ void setup()
 {
 	arch_setup_start();
 	watchdog_disable();
+	printer_type = ~0;
+	setup_printertypes();
 	// Initialize volatile variables.
 	Serial.begin(115200);
 	initialized = false;
@@ -28,6 +30,7 @@ void setup()
 	probe_pin.read(0);
 	led_phase = 0;
 	temps_busy = 0;
+	requested_temp = 0;
 	led_last = millis();
 	last_active = millis();
 	t0 = 0;

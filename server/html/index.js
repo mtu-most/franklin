@@ -80,18 +80,27 @@ function set_value(printer, id, value, reply, arg) { // {{{
 		var obj = {};
 		obj[id[1]] = value;
 		if (id[0] === null) {
+			// Global setting.
 			printer.call('set_variables', [], obj, reply);
 		}
 		else if (typeof id[0][0] == 'string') {
+			// Action.
 			printer.call('set_' + id[0][0], [id[0][1]], obj, reply);
 		}
 		else {
+			// Component.
+			// Build target.
 			for (var i = 1; i < id[0][0].length; ++i) {
 				var newobj = {};
 				newobj[id[0][0][i]] = obj;
 				obj = newobj;
 			}
-			printer.call('set_' + id[0][0][0], [id[0][1]], obj, reply);
+			if (id[0][1] === null) {
+				for (var n = 0; n < printer['num_' + type2plural[id[0][0][0]]]; ++n)
+					printer.call('set_' + id[0][0][0], [n], obj, reply);
+			}
+			else
+				printer.call('set_' + id[0][0][0], [id[0][1]], obj, reply);
 		}
 	}
 	else {
@@ -160,6 +169,7 @@ function select_printer(port) { // {{{
 
 function make_visibles(num) { // {{{
 	var ret = [];
+	ret[''] = [];
 	for (var i = 0; i < num; ++i)
 		ret[i] = [];
 	return ret;
@@ -437,6 +447,14 @@ function update_variables() { // {{{
 		for (var j = 0; j < visibles[port].axis[i].length; ++j)
 			visibles[port].axis[i][j].AddClass('hidden');
 	}
+	if (printer.num_axes > 1) {
+		for (var j = 0; j < visibles[port].axis[''].length; ++j)
+			visibles[port].axis[''][j].RemoveClass('hidden');
+	}
+	else {
+		for (var j = 0; j < visibles[port].axis[''].length; ++j)
+			visibles[port].axis[''][j].AddClass('hidden');
+	}
 	for (var i = 0; i < printer.num_extruders; ++i) {
 		for (var j = 0; j < visibles[port].extruder[i].length; ++j)
 			visibles[port].extruder[i][j].RemoveClass('hidden');
@@ -444,6 +462,14 @@ function update_variables() { // {{{
 	for (var i = printer.num_extruders; i < printer.maxextruders; ++i) {
 		for (var j = 0; j < visibles[port].extruder[i].length; ++j)
 			visibles[port].extruder[i][j].AddClass('hidden');
+	}
+	if (printer.num_extruders > 1) {
+		for (var j = 0; j < visibles[port].extruder[''].length; ++j)
+			visibles[port].extruder[''][j].RemoveClass('hidden');
+	}
+	else {
+		for (var j = 0; j < visibles[port].extruder[''].length; ++j)
+			visibles[port].extruder[''][j].AddClass('hidden');
 	}
 	for (var i = 0; i < printer.num_temps; ++i) {
 		for (var j = 0; j < visibles[port].temp[i].length; ++j)
@@ -453,6 +479,14 @@ function update_variables() { // {{{
 		for (var j = 0; j < visibles[port].temp[i].length; ++j)
 			visibles[port].temp[i][j].AddClass('hidden');
 	}
+	if (printer.num_temps > 1) {
+		for (var j = 0; j < visibles[port].temp[''].length; ++j)
+			visibles[port].temp[''][j].RemoveClass('hidden');
+	}
+	else {
+		for (var j = 0; j < visibles[port].temp[''].length; ++j)
+			visibles[port].temp[''][j].AddClass('hidden');
+	}
 	for (var i = 0; i < printer.num_gpios; ++i) {
 		for (var j = 0; j < visibles[port].gpio[i].length; ++j)
 			visibles[port].gpio[i][j].RemoveClass('hidden');
@@ -460,6 +494,14 @@ function update_variables() { // {{{
 	for (var i = printer.num_gpios; i < printer.maxgpios; ++i) {
 		for (var j = 0; j < visibles[port].gpio[i].length; ++j)
 			visibles[port].gpio[i][j].AddClass('hidden');
+	}
+	if (printer.num_gpios > 1) {
+		for (var j = 0; j < visibles[port].gpio[''].length; ++j)
+			visibles[port].gpio[''][j].RemoveClass('hidden');
+	}
+	else {
+		for (var j = 0; j < visibles[port].gpio[''].length; ++j)
+			visibles[port].gpio[''][j].AddClass('hidden');
 	}
 	for (var i = 0; i < visibles[port].titles.length; ++i) {
 		var items = visibles[port].titles[i][0];
@@ -747,10 +789,11 @@ function multiple_titles(modes, titles, classes, mouseovers) { // {{{
 	return ret;
 } // }}}
 
-function multiple(template, arg) { // {{{
+function multiple(template, arg, all) { // {{{
 	var ret = [];
 	var type = template.replace(/^.*_(.*?)$/, '$1');
-	for (var i = 0; i < printer['max' + type2plural[type]]; ++i) {
+	var num = printer['max' + type2plural[type]];
+	var one = function(template, arg, i) {
 		var part = build(template, [i, arg]);
 		for (var p = 0; p < part.length; ++p) {
 			if (part[p] instanceof Comment)
@@ -760,10 +803,17 @@ function multiple(template, arg) { // {{{
 					alert('Non-empty text node in result of multiple: ' + part[p].data);
 				continue;
 			}
-			visibles[port][type][i].push(part[p]);
+			visibles[port][type][i === null ? '' : i].push(part[p]);
+			if (i === null)
+				part[p].AddClass('all');
 			ret.push(part[p]);
 		}
+		return ret;
 	}
+	for (var i = 0; i < num; ++i)
+		ret = ret.concat(one(template, arg, i));
+	if (all !== false && num > 1)
+		ret = ret.concat(one(template, arg, null));
 	return ret;
 } // }}}
 
@@ -775,18 +825,26 @@ function floats(num, title, obj) { // {{{
 } // }}}
 
 function axis_name(index, as_axis) { // {{{
+	if (index === null)
+		return 'All Axes';
 	return index < 3 ? String.fromCharCode((as_axis ? 'X' : 'U').charCodeAt(0) + index) : 'Axis ' + String(index);
 } // }}}
 
 function extruder_name(index) { // {{{
+	if (index === null)
+		return 'All Extruders';
 	return 'Extruder ' + String(index);
 } // }}}
 
 function temp_name(index) { // {{{
+	if (index === null)
+		return 'All Temps';
 	return index == 0 ? 'Bed' : 'Temp ' + String(index);
 } // }}}
 
 function gpio_name(index) { // {{{
+	if (index === null)
+		return 'All Gpios';
 	return index == 0 ? 'Fan' : 'Gpio ' + String(index);
 } // }}}
 

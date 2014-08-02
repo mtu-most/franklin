@@ -43,11 +43,8 @@ void Variables::load(int16_t &addr, bool eeprom)
 	num_gpios = read_8(addr, eeprom);
 	num_gpios = min(num_gpios, MAXGPIOS);
 	printer_type = read_8(addr, eeprom);
-#if MAXAXES >= 3
-	printer_type = min(printer_type, 1);
-#else
-	printer_type = 0;
-#endif
+	if (printer_type >= NUM_PRINTER_TYPES || !printer_types[printer_type])
+		printer_type = 0;
 	max_deviation = read_float(addr, eeprom);
 	led_pin.read(read_16(addr, eeprom));
 	probe_pin.read(read_16(addr, eeprom));
@@ -70,11 +67,7 @@ void Variables::load(int16_t &addr, bool eeprom)
 	if (type != printer_type)
 	{
 		for (uint8_t a = 0; a < MAXAXES; ++a)
-		{
-			axis[a].source = NAN;
-			axis[a].current = NAN;
-			axis[a].current_pos = NAN;
-		}
+			printer_types[printer_type]->invalidate_axis(a);
 	}
 #endif
 }

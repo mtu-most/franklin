@@ -186,7 +186,6 @@ struct Temp : public Object
 	bool is_on;			// If the heater is currently on.
 	float K;			// Thermistor constant; kept in memory for performance.
 	// Functions.
-	void setup_read();		// Initialize ADC for reading the thermistor.
 	int16_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
 	float fromadc(int16_t adc);	// convert ADC to K.
 	int16_t toadc(float T);	// convert K to ADC.
@@ -208,7 +207,7 @@ struct Motor : public Object
 	float continuous_v;			// speed for continuous run.
 	float continuous_f;			// fractional continuous distance that has been done.
 	unsigned long last_time;		// micros value when last iteration was run.
-	float last_v;				// v at last time, for using limit_a [mm/s].
+	float last_v, last_distance;		// v at and distance since last time, for using limit_a [mm/s], [mm].
 	bool positive;				// direction of current movement.
 	float dist, next_dist, main_dist;
 #ifdef AUDIO
@@ -309,6 +308,25 @@ struct MoveCommand
 
 #define COMMAND_SIZE 127
 #define COMMAND_LEN_MASK 0x7f
+
+struct PrinterType
+{
+	virtual void xyz2motors(float *xyz, float *motors, bool *ok) = 0;
+	virtual void reset_pos() = 0;
+	virtual void check_position(float *data) = 0;
+	virtual void enable_motors() = 0;
+	virtual void invalidate_axis(uint8_t a) = 0;
+};
+#define NUM_PRINTER_TYPES 2
+EXTERN PrinterType *printer_types[NUM_PRINTER_TYPES];
+extern PrinterType *Type_Cartesian;
+extern PrinterType *Type_Delta;
+#define setup_printertypes() do { \
+	uint8_t t = 0; \
+	printer_types[t++] = Type_Cartesian; \
+	printer_types[t++] = Type_Delta; \
+} while(0)
+
 // Code 1 variables
 EXTERN uint8_t name[NAMELEN];
 EXTERN uint8_t num_extruders;
@@ -390,6 +408,7 @@ EXTERN bool move_prepared;
 EXTERN bool current_move_has_cb;
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
 EXTERN uint16_t debug_buffer_ptr;
+EXTERN uint8_t requested_temp;
 
 // debug.cpp
 void buffered_debug_flush();
@@ -408,7 +427,6 @@ void write_ackwait();
 // move.cpp
 void next_move();
 void abort_move();
-void reset_pos();
 
 // setup.cpp
 void setup();
@@ -429,31 +447,10 @@ void write_float(int16_t &address, float data, bool eeprom);
 void compute_axes();
 #endif
 
-#if MAXAXES >= 3
-static inline float delta_to_axis(uint8_t a, float *target, bool *ok) {
-	float dx = target[0] - axis[a].x;
-	float dy = target[1] - axis[a].y;
-	float dz = target[2] - axis[a].z;
-	float r2 = dx * dx + dy * dy;
-	float l2 = axis[a].delta_length * axis[a].delta_length;
-	float dest = sqrt(l2 - r2) + dz;
-	//debug("dta dx %f dy %f dz %f z %f, r %f target %f", F(dx), F(dy), F(dz), F(axis[a].z), F(r), F(target));
-	return dest;
-}
-#endif
-
 #if MAXAXES > 0 || MAXEXTRUDERS > 0
 static inline bool moving_motor(uint8_t which) {
 	if (!moving)
 		return false;
-#if MAXAXES >= 3
-	if (printer_type == 1 && which < 2 + 3) {
-		for (uint8_t a = 2; a < 2 + 3; ++a)
-			if (motors[a]->dist != 0 && !isnan(motors[a]->dist))
-				return true;
-		return false;
-	}
-#endif
 	return !isnan(motors[which]->dist);
 }
 #endif

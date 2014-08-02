@@ -94,11 +94,11 @@ void packet()
 #endif
 				if (ch < 2) {
 					queue[queue_end].f[ch] = f.f;
-					debug("goto %d %f", ch, F(f.f));
+					//debug("goto %d %f", ch, F(f.f));
 				}
 				else {
 					queue[queue_end].data[ch - 2] = f.f;
-					debug("goto %d %f", ch, F(f.f));
+					//debug("goto %d %f", ch, F(f.f));
 				}
 				initialized = true;
 				++t;
@@ -108,7 +108,7 @@ void packet()
 					queue[queue_end].f[ch] = NAN;
 				else
 					queue[queue_end].data[ch - 2] = NAN;
-				debug("goto %d -", ch);
+				//debug("goto %d -", ch);
 			}
 		}
 		if (!(command[2] & 0x1) || isnan(queue[queue_end].f[0]))
@@ -166,20 +166,9 @@ void packet()
 			initialized = true;
 		write_ack();
 		//debug("running %d", which);
-#if MAXAXES >= 3
-		if (printer_type == 1 && which < 2 + 3) {
-			for (uint8_t a = 0; a < 3; ++a) {
-				axis[a].source = NAN;
-				axis[a].current = NAN;
-			}
-		}
-		else
-#endif
 #if MAXAXES > 0
-		if (which < 2 + MAXAXES) {
-			axis[which - 2].source = NAN;
-			axis[which - 2].current = NAN;
-		}
+		if (which < 2 + MAXAXES)
+			printer_types[printer_type]->invalidate_axis(which - 2);
 #endif
 		if (isnan(f.f))
 			f.f = 0;
@@ -222,21 +211,10 @@ void packet()
 		if (command[2] & 0x80) {
 			RESET(motors[which]->enable_pin);
 			motors_busy &= ~(1 << which);
-#if MAXAXES >= 3
-			if (printer_type == 1 && which < 2 + 3) {
-				for (uint8_t a = 2; a < 2 + 3; ++a) {
-					axis[a - 2].current_pos = NAN;
-					axis[a - 2].source = NAN;
-					axis[a - 2].current = NAN;
-				}
-			}
-			else
-#endif
 #if MAXAXES > 0
 			if (which < 2 + MAXAXES) {
+				printer_types[printer_type]->invalidate_axis(which - 2);
 				axis[which - 2].current_pos = NAN;
-				axis[which - 2].source = NAN;
-				axis[which - 2].current = NAN;
 			}
 #endif
 		}
@@ -264,7 +242,7 @@ void packet()
 		}
 		temps[which]->target = get_float(3);
 		temps[which]->adctarget = temps[which]->toadc(temps[which]->target);
-		debug("adc target %d from %d", temps[which]->adctarget, int16_t(temps[which]->target / 1024));
+		//debug("adc target %d from %d", temps[which]->adctarget, int16_t(temps[which]->target / 1024));
 		if (temps[which]->adctarget >= MAXINT) {
 			// loop() doesn't handle it anymore, so it isn't disabled there.
 			//debug("Temp %d disabled", which);
@@ -330,16 +308,8 @@ void packet()
 			Serial.write(CMD_STALL);
 			return;
 		}
+		requested_temp = which;
 		write_ack();
-		ReadFloat f;	// TODO: start a measurement and report when it's ready.
-		f.f = temps[which]->fromadc(temps[which]->adclast);
-		debug("read temp %f", F(f.f));
-		reply[0] = 2 + sizeof(float);
-		reply[1] = CMD_TEMP;
-		for (uint8_t b = 0; b < sizeof(float); ++b)
-			reply[2 + b] = f.b[b];
-		reply_ready = true;
-		try_send_next();
 		return;
 	}
 	case CMD_READPOWER:	// read used power
@@ -399,21 +369,13 @@ void packet()
 			Serial.write(CMD_STALL);
 			return;
 		}
-#if MAXAXES >= 3
-		if (printer_type == 1 && which <= 2 + 3) {
-			for (uint8_t a = 0; a < 3; ++a) {
-				axis[a].source = NAN;
-				axis[a].current = NAN;
-			}
-		}
-		else
+#if MAXAXES > 0
+		if (which < 2 + MAXAXES)
+			printer_types[printer_type]->invalidate_axis(which - 2);
 #endif
-		{
-			axis[which - 2].source = NAN;
-			axis[which - 2].current = NAN;
-		}
 		write_ack();
 		axis[which - 2].current_pos = get_float(3);
+		//debug("Set position of axis %d to %f", which - 2, F(axis[which - 2].current_pos));
 		return;
 	}
 	case CMD_GETPOS:	// Get current position
@@ -430,7 +392,7 @@ void packet()
 		}
 		write_ack();
 		if (isnan(axis[which - 2].source))
-			reset_pos();
+			printer_types[printer_type]->reset_pos();
 		ReadFloat pos, current;
 		pos.f = axis[which - 2].current_pos;
 		current.f = axis[which - 2].current - axis[which - 2].offset;

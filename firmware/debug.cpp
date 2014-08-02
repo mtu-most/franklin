@@ -22,19 +22,17 @@ static void add_num(int32_t num, int8_t base, int8_t decimal = 0) {
 	int16_t digits = 0;
 	int32_t n = num;
 	int32_t power = 1;
-	while (n > 0) {
+	while (n > 0 || digits < decimal + 1) {
 		n /= base;
 		power *= base;
 		digits += 1;
 	}
-	if (digits < decimal + 1)
-		digits = decimal + 1;
 	while (digits > 0) {
 		if (digits-- == decimal)
 			add_char('.');
 		power /= base;
 		uint8_t c = num / power;
-		num -= int32_t(c) * power;
+		num -= uint32_t(c) * power;
 		if (c < 10)
 			add_char('0' + c);
 		else
@@ -88,7 +86,7 @@ void buffered_debug(char const *fmt, ...) {
 				}
 				case 'f': {
 					float *arg = va_arg(ap, float *);
-					add_num(*arg * 1000, 10, 3);
+					add_num(*arg * (longvalue ? 1e6 : 1e3), 10, longvalue ? 6 : 3);
 					break;
 				}
 				case 's': {

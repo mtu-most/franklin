@@ -294,7 +294,7 @@ class Printer: # {{{
 		while '\n' in self.command_buffer:
 			pos = self.command_buffer.index('\n')
 			id, func, a, ka = json.loads(self.command_buffer[:pos])
-			log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer[pos:])))
+			#log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer[pos:])))
 			self.command_buffer = self.command_buffer[pos + 1:]
 			die = False
 			try:
@@ -323,7 +323,8 @@ class Printer: # {{{
 					return ('no data', None)
 				if r == '\x00':
 					if show_firmware_debug:
-						log('Debug: %s' % self.debug_buffer)
+						for ln in self.debug_buffer.split(';'):
+							log('Debug: %s' % ln)
 					self.debug_buffer = None
 				else:
 					self.debug_buffer += r
@@ -932,8 +933,8 @@ class Printer: # {{{
 		self._print_done(True, 'completed')
 	# }}}
 	def _print_done(self, complete, reason): # {{{
-		log('print done')
-		traceback.print_stack()
+		#log('print done')
+		#traceback.print_stack()
 		if self.queue_info is None and self.gcode_id is not None:
 			log('done %d %s' % (complete, reason))
 			self._send(self.gcode_id, 'return', (complete, reason))
@@ -941,19 +942,19 @@ class Printer: # {{{
 		self.gcode = []
 		self.flushing = False
 		self.gcode_wait = None
-		log('job %s' % repr(self.jobs_active))
+		#log('job %s' % repr(self.jobs_active))
 		if len(self.jobs_active) > 0:
 			if complete:
 				if self.job_current >= len(self.jobs_active) - 1:
-					log('job queue done')
+					#log('job queue done')
 					self._send(self.job_id, 'return', (True, reason))
 					self.job_id = None
 					self.jobs_active = []
 				else:
-					log('job part done; moving on')
+					#log('job part done; moving on')
 					self._next_job()
 			else:
-				log('job aborted')
+				#log('job aborted')
 				self._send(self.job_id, 'return', (False, reason))
 				self.job_id = None
 				self.jobs_active = []
@@ -1083,7 +1084,7 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				log("N t %s" % (self.home_target))
+				#log("N t %s" % (self.home_target))
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			# Fall through.
@@ -1098,7 +1099,7 @@ class Printer: # {{{
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				log("0 t %s" % (self.home_target))
+				#log("0 t %s" % (self.home_target))
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			self.home_phase = 1
@@ -1109,7 +1110,7 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				log("1 t %s" % (self.home_target))
+				#log("1 t %s" % (self.home_target))
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			# Fall through.
@@ -1124,7 +1125,7 @@ class Printer: # {{{
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				log("2 t %s" % (self.home_target))
+				#log("2 t %s" % (self.home_target))
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
@@ -1141,7 +1142,7 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = False
 				self.movecb.append(self.home_cb)
-				log("back t %s" % (self.home_target))
+				#log("back t %s" % (self.home_target))
 				self.goto(self.home_target, cb = True)[1](None)
 				return
 			# Fall through
@@ -1159,7 +1160,7 @@ class Printer: # {{{
 			if len(self.home_target) > 0:
 				self.home_cb[0] = self.home_target.keys()
 				self.movecb.append(self.home_cb)
-				log("sp %s t %s" % (self.home_speed, self.home_target))
+				#log("sp %s t %s" % (self.home_speed, self.home_target))
 				self.goto(self.home_target, f0 = self.home_speed / .020, cb = True)[1](None)
 				return
 			# Fall through
@@ -1176,7 +1177,7 @@ class Printer: # {{{
 				self.movecb.append(self.home_cb)
 				key = self.home_target.keys()[0]
 				dist = abs(self.home_target[key] - self.axis[key].get_current_pos()[1])
-				log("sp %s d %s t %s" % (self.home_speed, dist, self.home_target))
+				#log("sp %s d %s t %s" % (self.home_speed, dist, self.home_target))
 				self.goto(self.home_target, f0 = self.home_speed / dist, cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
@@ -1385,9 +1386,9 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, axes = {}, e = None, f0 = None, f1 = None, which = 0, cb = False): # {{{
-		log('goto %s' % repr(axes))
-		log('speed %s' % f0)
-		traceback.print_stack()
+		#log('goto %s' % repr(axes))
+		#log('speed %s' % f0)
+		#traceback.print_stack()
 		self.queue.append((id, axes, e, f0, f1, which, cb))
 		if not self.wait:
 			self._do_queue()
@@ -1590,13 +1591,13 @@ class Printer: # {{{
 				# Go back to pausing position.
 				self.goto(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
-				log('resuming')
+				#log('resuming')
 				self.resuming = True
 			self._do_queue()
 		else:
-			log('pausing')
+			#log('pausing')
 			if not was_paused:
-				log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
+				#log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
 				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - reply[1] >= 0:
 					#log('pausing gcode %d/%d/%d' % (self.queue_pos, reply[1], len(self.queue)))
 					self.queue_info = [self.queue_pos - reply[1], [a.get_current_pos() for a in self.axis], self.queue, self.movecb, self.flushing, self.gcode_wait]
@@ -1831,7 +1832,7 @@ class Printer: # {{{
 			key = r.group(4)
 			value = r.group(5)
 			if key != 'name':
-				if key.endswith('limit') or key.endswith('pin') or key.startswith('num'):
+				if key.endswith('pin') or key.startswith('num'):
 					value = int(value)
 				else:
 					value = float(value)

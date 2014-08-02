@@ -56,12 +56,6 @@ void Temp::save (int16_t &addr, bool eeprom)
 	write_16 (addr, thermistor_pin.write (), eeprom);
 }
 
-void Temp::setup_read () {
-	//debug("alt adc: %d", analogRead(thermistor_pin.pin));
-	adc_start(thermistor_pin.pin);
-	adc_phase = 2;
-}
-
 int16_t Temp::get_value () {
 	if (!adc_ready(thermistor_pin.pin))
 		return -1;
