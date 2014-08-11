@@ -284,8 +284,8 @@ void try_send_next()
 		// Still busy sending other packet.
 		return;
 	}
-#if MAXAXES > 0
-	for (uint8_t w = 0; w < MAXAXES; ++w)
+#ifdef HAVE_MOTORS
+	for (uint8_t w = 0; w < num_axes; ++w)
 	{
 		if (!isnan(limits_pos[w]))
 		{
@@ -350,7 +350,7 @@ void try_send_next()
 		send_packet(out_buffer);
 		return;
 	}
-#if MAXTEMPS > 0 || MAXEXTRUDERS > 0
+#ifdef HAVE_TEMPS
 	if (which_tempcbs != 0)
 	{
 #ifdef DEBUG_SERIAL

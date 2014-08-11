@@ -1,6 +1,6 @@
 #include "firmware.h"
 
-#if MAXTEMPS > 0 || MAXEXTRUDERS > 0
+#ifdef HAVE_TEMPS
 void Temp::load (int16_t &addr, bool eeprom)
 {
 	R0 = read_float (addr, eeprom);
@@ -11,7 +11,7 @@ void Temp::load (int16_t &addr, bool eeprom)
 	K = exp (logRc - beta / Tc);
 	//debug("K %f R0 %f R1 %f logRc %f Tc %f beta %f", F(K), F(R0), F(R1), F(logRc), F(Tc), F(beta));
 #ifndef LOWMEM
-#if MAXGPIOS > 0
+#ifdef HAVE_GPIOS
 	for (Gpio *gpio = gpios; gpio; gpio = gpio->next)
 		gpio->adcvalue = toadc (gpio->value);
 #endif

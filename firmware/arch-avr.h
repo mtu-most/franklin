@@ -1,5 +1,6 @@
-// This is not an include quard.  This file is included twice; once before this symbol is included and once after.
-#ifndef _FIRMWARE_H
+// This is not an include quard.  This file is included twice; the first time the first part of the file is used, the second time the second part.
+#ifndef _ARCH_AVR_H
+#define _ARCH_AVR_H
 #include <Arduino.h>
 #include <avr/wdt.h>
 #include <EEPROM.h>

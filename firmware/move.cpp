@@ -3,17 +3,6 @@
 
 //#define DEBUG_MOVE
 
-#if MAXAXES > 0
-
-static void apply_offsets (float *data) {	// {{{
-	// Apply offsets.
-	for (uint8_t a = 0; a < num_axes; ++a) {
-		data[a] += axis[a].offset;
-	}
-	printer_types[printer_type]->check_position(data);
-}	// }}}
-#endif
-
 // Set up:
 // start_time		micros() at start of move.
 // t0			time to do main part.
@@ -27,7 +16,7 @@ static void apply_offsets (float *data) {	// {{{
 
 // Used from previous segment (if move_prepared == true): tp, vq.
 void next_move () {
-#if MAXAXES > 0 || MAXEXTRUDERS > 0
+#ifdef HAVE_SPACES
 	if (queue_start == queue_end && !queue_full)
 		return;
 #ifdef DEBUG_MOVE
@@ -35,54 +24,52 @@ void next_move () {
 #endif
 	// Set everything up for running queue[queue_start].
 	freeze_time = NAN;
+	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
 
-#if MAXAXES > 0
 	// Make sure printer state is good. {{{
 	// If the source is unknown, determine it from current_pos.
 	//for (uint8_t a = 0; a < num_axes; ++a)
 	//	debug("target %d %f", a, F(queue[queue_start].data[a]));
-	for (uint8_t a = 0; a < num_axes; ++a) {
-		if (isnan(axis[a].source)) {
-			printer_types[printer_type]->reset_pos ();
-			break;
+	for (uint8_t s = 0; s < num_spaces; ++s) {
+		Space &sp = *spaces[s];
+		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			if (isnan(sp.axis[a].source)) {
+				space_types[sp.type]->reset_pos();
+				break;
+			}
+		}
+		uint8_t a0 = 0;
+		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			if (n != queue_end) {
+				// If only one of them is set, set the other one as well to make the rounded corner work.
+				if (!isnan(queue[queue_start].data[a0 + a]) && isnan(queue[n].data[a0 + a])) {
+					queue[n].data[a0 + a] = 0;
+					debug("filling next %d with %f", a0 + a, F(queue[n].data[a0 + a]));
+				}
+				if (isnan(queue[queue_start].data[a]) && !isnan(queue[n].data[a])) {
+					queue[queue_start].data[a0 + a] = 0;
+					debug("filling %d with %f", a0 + a, F(queue[queue_start].data[a0 + a]));
+				}
+			}
+			if ((!isnan(queue[queue_start].data[a0 + a]) && isnan(sp.axis[a].source)) || (n != queue_end && !isnan(queue[n].data[a0 + a]) && isnan(sp.axis[a].source))) {
+				debug ("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue.");
+				// This possibly removes one move too many, but it shouldn't happen anyway.
+				if (queue[queue_start].cb) {
+					++num_movecbs;
+					try_send_next ();
+				}
+				if (queue_end == queue_start) {
+					continue_cb |= 1;
+					try_send_next ();
+				}
+				queue_start = n;
+				queue_full = false;
+				abort_move ();
+				return;
+			}
+			a0 += sp.num_axes;
 		}
 	}
-#endif
-
-	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
-
-#if MAXAXES > 0
-	for (uint8_t a = 0; a < num_axes; ++a) {
-		if (n != queue_end) {
-			// If only one of them is set, set the other one as well to make the rounded corner work.
-			if (!isnan(queue[queue_start].data[a]) && isnan(queue[n].data[a])) {
-				queue[n].data[a] = queue[queue_start].data[a];
-				debug("filling next %d with %f", a, F(queue[n].data[a]));
-			}
-			if (isnan(queue[queue_start].data[a]) && !isnan(queue[n].data[a])) {
-				// Compensate for offset which is added later.
-				queue[queue_start].data[a] = axis[a].source - axis[a].offset;
-				debug("filling %d with %f", a, F(queue[queue_start].data[a]));
-			}
-		}
-		if ((!isnan(queue[queue_start].data[a]) && isnan(axis[a].source)) || (n != queue_end && !isnan(queue[n].data[a]) && isnan(axis[a].source))) {
-			debug ("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue.");
-			// This possibly removes one move too many, but it shouldn't happen anyway.
-			if (queue[queue_start].cb) {
-				++num_movecbs;
-				try_send_next ();
-			}
-			if (queue_end == queue_start) {
-				continue_cb |= 1;
-				try_send_next ();
-			}
-			queue_start = n;
-			queue_full = false;
-			abort_move ();
-			return;
-		}
-	}
-#endif
 	// }}}
 
 	f0 = fq;
@@ -91,40 +78,33 @@ void next_move () {
 #ifdef DEBUG_MOVE
 		debug ("No move prepared.");
 #endif
-#if MAXAXES > 0
-		apply_offsets (queue[queue_start].data);
-#endif
+		check_positions(queue[queue_start].data);
 		f0 = 0;
-		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-			uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-			if (!motors[mtr])
-				continue;
-			motors[mtr]->last_v = 0;
-			motors[mtr]->last_distance = 0;
-			if (isnan(queue[queue_start].data[mt])) {
-				motors[mtr]->next_dist = 0;
-				//debug("not using object %d", mtr);
+		uint8_t a0 = 0;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = *spaces[s];
+			space_types[sp.type]->check_position(&data[a0]);
+			for (uint8_t m = 0; m < sp.num_motors; ++m) {
+				sp.motor[m]->last_v = 0;
+				sp.motor[m]->last_distance = 0;
 			}
-			else {
-#if MAXAXES > 0
-				if (mt < num_axes) {
-					motors[mtr]->next_dist = queue[queue_start].data[mt] - axis[mt].source;
-#ifdef DEBUG_MOVE
-					debug("next dist of axis %d: %f - %f = %f", mt, F(queue[queue_start].data[mt]), F(axis[mt].source), F(motors[mtr]->next_dist));
-#endif
+			for (uint8_t a = 0; a < sp.num_axes; ++a) {
+				if (isnan(queue[queue_start].data[a0 + a])) {
+					sp.axis[a]->next_dist = 0;
+					//debug("not using object %d", mtr);
 				}
 				else {
-#endif
-					motors[mtr]->next_dist = queue[queue_start].data[mt];
+					sp.axis[a]->next_dist = queue[queue_start].data[a0 + a];
 #ifdef DEBUG_MOVE
-					debug("next dist of extruder %d = %f", mt - num_axes, F(motors[mtr]->next_dist));
+					debug("next dist of %d = %f", a0 + a, F(sp.axis[a]->next_dist));
 #endif
 				}
 			}
+			a0 += sp.num_axes;
 		}
 	}
 	// }}}
-	// Otherwise, we are prepared and can start the segment. {{{
+	// We are prepared and can start the segment. {{{
 	bool action = false;
 #ifdef DEBUG_MOVE
 	debug ("Move was prepared with tp = %f", F(tp));
@@ -135,17 +115,17 @@ void next_move () {
 #ifdef DEBUG_MOVE
 		debug ("Building final segment.");
 #endif
-		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-			uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-			if (!motors[mtr])
-				continue;
-			motors[mtr]->dist = motors[mtr]->next_dist;
-			if (motors[mtr]->dist != 0)
-				action = true;
-			motors[mtr]->next_dist = 0;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = *spaces[s];
+			for (uint8_t a = 0; a < sp.num_axes; ++a) {
+				sp.axis[m].dist = sp.axis[a].next_dist;
+				if (sp.axis[a].dist != 0)
+					action = true;
+				sp.axis[a].next_dist = 0;
 #ifdef DEBUG_MOVE
-			debug ("Last segment distance for motor %d is %f", mtr, F(motors[mtr]->dist));
+				debug ("Last segment distance for motor %d is %f", a, F(sp.axis[a].dist));
 #endif
+			}
 		}
 		vq = 0;
 		move_prepared = false;
@@ -156,30 +136,23 @@ void next_move () {
 #ifdef DEBUG_MOVE
 		debug ("Building a connecting segment.");
 #endif
-		// Apply offsets to next segment.
-#if MAXAXES > 0
-		apply_offsets (queue[n].data);
-#endif
-		for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-			uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-			if (!motors[mtr])
-				continue;
-			motors[mtr]->dist = motors[mtr]->next_dist;
-			if (isnan(queue[n].data[mt]))
-				motors[mtr]->next_dist = 0;
-			else {
-#if MAXAXES > 0
-				if (mt < num_axes)
-					motors[mtr]->next_dist = queue[n].data[mt] - (axis[mt].source + motors[mtr]->dist);
+		uint8_t a0 = 0;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = *spaces[s];
+			space_types[sp.type]->check_position(&data[a0]);
+			for (uint8_t a = 0; a < sp.num_axes; ++a) {
+				sp.axis[a].dist = sp.axis[a].next_dist;
+				if (isnan(queue[n].data[a0 + a]))
+					sp.axis[a].next_dist = 0;
 				else
-#endif
-					motors[mtr]->next_dist = queue[n].data[mt];
-			}
-			if (motors[mtr]->next_dist != 0 || motors[mtr]->dist != 0)
-				action = true;
+					sp.axis[a].next_dist = queue[n].data[a0 + a];
+				if (sp.axis[a].next_dist != 0 || sp.axis[a].dist != 0)
+					action = true;
 #ifdef DEBUG_MOVE
-			debug ("Connecting distance for motor %d is %f, to %f", mtr, F(motors[mtr]->dist), F(motors[mtr]->next_dist));
+				debug ("Connecting distance for motor %d is %f, to %f", a, F(sp.axis[a].dist), F(sp.axis[a].next_dist));
 #endif
+			}
+			a0 += sp.num_axes;
 		}
 		vq = queue[n].f[0] * feedrate;
 		move_prepared = true;
@@ -204,10 +177,10 @@ void next_move () {
 		}
 		//debug("moving->false");
 		moving = false;
-		for (uint8_t mtr = 0; mtr < MAXOBJECT; ++mtr) {
-			if (!motors[mtr])
-				continue;
-			motors[mtr]->dist = NAN;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = *spaces[s];
+			for (uint8_t a = 0; a < sp.num_axes; ++a)
+				sp.axis[a].dist = NAN;
 		}
 		fq = 0;
 		return next_move ();
@@ -228,25 +201,25 @@ void next_move () {
 #endif
 
 	// Limit v0, vp, vq. {{{
-	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-		uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-		if (!motors[mtr])
-			continue;
-		if (!isnan(motors[mtr]->max_v)) {
-			float a;
-			if (motors[mtr]->dist != 0) {
-				a = motors[mtr]->max_v / motors[mtr]->dist;
-				if (v0 > a) {
-					v0 = a;
-					//debug("limited v0 to %f for max v %f dist %f so %f", F(v0), F(motors[mtr]->max_v), F(motors[mtr]->dist), F(a));
+	for (uint8_t s = 0; s < num_spaces; ++s) {
+		Space &sp = *spaces[s];
+		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			if (!isnan(sp.axes[a].max_v)) {
+				float max;
+				if (sp.axis[a].dist != 0) {
+					max = sp.axis[a].max_v / sp.axis[a].dist;
+					if (v0 > max) {
+						v0 = max;
+						//debug("limited v0 to %f for max v %f dist %f so %f", F(v0), F(sp.axis[a].max_v), F(sp.axis[a].dist), F(max));
+					}
+					if (vp > max)
+						vp = max;
 				}
-				if (vp > a)
-					vp = a;
-			}
-			if (motors[mtr]->next_dist != 0) {
-				a = motors[mtr]->max_v / motors[mtr]->next_dist;
-				if (vq > a)
-					vq = a;
+				if (sp.axis[a].next_dist != 0) {
+					max = sp.axis[a].max_v / sp.axis[a].next_dist;
+					if (vq > max)
+						vq = max;
+				}
 			}
 		}
 	}
@@ -260,47 +233,48 @@ void next_move () {
 	debug ("Preparation did f0 = %f", F(f0));
 #endif
 
-	float fp;
-	float fq;
-#if MAXAXES > 0
+	float fp = 0;
 	// Use maximum deviation to find fraction where to start rounded corner.
 	float m_round;
 	float norma2 = 0, normb2 = 0, inner = 0;
-	for (uint8_t a = 0; a < num_axes; ++a) {
-		inner += axis[a].motor.dist * axis[a].motor.next_dist;
-		norma2 += axis[a].motor.dist * axis[a].motor.dist;
-		normb2 += axis[a].motor.next_dist * axis[a].motor.next_dist;
-	}
-	float norma(sqrt(norma2));
-	float normb(sqrt(normb2));
-	if (norma <= 0 || normb <= 0) {
-		// At least one of the segments is 0; no rounded corner.
-		m_round = 0;
-	}
-	else {
-		float summed2 = 0;
-		for (uint8_t a = 0; a < num_axes; ++a) {
-			float s = axis[a].motor.dist / norma + axis[a].motor.next_dist / normb;
-			summed2 += s * s;
+	for (uint8_t s = 0; s < num_spaces; ++s) {
+		Space &sp = *spaces[s];
+		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			inner += axis[a].motor.dist * axis[a].motor.next_dist;
+			norma2 += axis[a].motor.dist * axis[a].motor.dist;
+			normb2 += axis[a].motor.next_dist * axis[a].motor.next_dist;
 		}
-		float scale(sqrt(summed2) / 2);
-		m_round = max_deviation / scale;
+		float norma(sqrt(norma2));
+		float normb(sqrt(normb2));
+		if (norma <= 0 || normb <= 0) {
+			// At least one of the segments is 0; no rounded corner.
+			m_round = 0;
+		}
+		else {
+			float summed2 = 0;
+			for (uint8_t a = 0; a < num_axes; ++a) {
+				float s = axis[a].motor.dist / norma + axis[a].motor.next_dist / normb;
+				summed2 += s * s;
+			}
+			float scale(sqrt(summed2) / 2);
+			m_round = max_deviation / scale;
+		}
+		// Convert m to fraction for both p and q.
+		float new_fp = norma > 0 ? m_round / norma : 0;
+		float new_fq = normb > 0 ? m_round / normb : 0;
+		if (new_fp > .5) {
+			new_fq *= .5 / new_fp;
+			new_fp = .5;
+		}
+		if (new_fq > .5) {
+			new_fp *= .5 / new_fq;
+			new_fq = .5;
+		}
+		if (new_fp < fp)
+			fp = new_fp;
+		if (new_fq < fq)
+			fq = new_fq;
 	}
-	// Convert m to fraction for both p and q.
-	fp = norma > 0 ? m_round / norma : 0;
-	fq = normb > 0 ? m_round / normb : 0;
-	if (fp > .5) {
-		fq *= .5 / fp;
-		fp = .5;
-	}
-	if (fq > .5) {
-		fp *= .5 / fq;
-		fq = .5;
-	}
-#else
-	fp = 0;
-	fq = 0;
-#endif
 	// Set up t0, tp.
 	t0 = (1 - fp) / (abs(v0 + vp) / 2);
 	tp = fp / (abs(vp) / 2);
@@ -309,47 +283,40 @@ void next_move () {
 	f2 = 1 - fp - f1;
 
 	// Finish. {{{
-	start_time = micros ();
-	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-		uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
-		if (!motors[mtr])
-			continue;
-		motors[mtr]->main_dist = motors[mtr]->dist * (1 - fp);
+	for (uint8_t s = 0; s < num_spaces; ++s) {
+		Space &sp = *spaces[s];
+		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			sp.axis[a].main_dist = sp.axis[a].dist * (1 - fp);
 #ifdef DEBUG_MOVE
-		debug ("Motor %d dist %f main dist = %f, next dist = %f", mtr, F(motors[mtr]->dist), F(motors[mtr]->main_dist), F(motors[mtr]->next_dist));
+			debug ("Motor %d dist %f main dist = %f, next dist = %f", mtr, F(motors[mtr]->dist), F(motors[mtr]->main_dist), F(motors[mtr]->next_dist));
 #endif
-#if MAXEXTRUDERS > 0
-		if (mt >= num_axes)
-			extruder[mt - num_axes].distance_done = motors[mtr]->dist * f0;
-#endif
+		}
 	}
 #ifdef DEBUG_MOVE
 	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f μs tp=%f μs", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), F(t0), F(tp));
 #endif
 	//debug("moving->true");
 	moving = true;
+	start_time = micros ();
 	// }}}
 #endif
 }
 
 void abort_move () { // {{{
-#if MAXAXES > 0 || MAXEXTRUDERS > 0
+#ifdef HAVE_SPACES
 	//debug ("try aborting move");
 	if (moving) {
 		//debug ("aborting move");
-#if MAXAXES > 0
-		for (uint8_t a = 0; a < MAXAXES; ++a) {
-			//debug ("setting axis %d source to %f", a, F(axis[a].current));
-			axis[a].source = axis[a].current;
-		}
-#endif
-		for (uint8_t mtr = 0; mtr < MAXOBJECT; ++mtr) {
-			if (!motors[mtr])
-				continue;
-			motors[mtr]->continuous_v = 0;
-			motors[mtr]->last_v = 0;
-			motors[mtr]->dist = NAN;
-			motors[mtr]->next_dist = NAN;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = *spaces[s];
+			for (uint8_t a = 0; a < sp.num_axes; ++a) {
+				//debug ("setting axis %d source to %f", a, F(axis[a].current));
+				sp.axis[a].source = sp.axis[a].current;
+				sp.axis[a].dist = NAN;
+				sp.axis[a].next_dist = NAN;
+			}
+			for (uint8_t m = 0; m < sp.num_motors; ++m)
+				sp.motor[m]->last_v = 0;
 		}
 		//debug("moving->false");
 		moving = false;

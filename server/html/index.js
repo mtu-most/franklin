@@ -84,11 +84,16 @@ function set_value(printer, id, value, reply, arg) { // {{{
 			printer.call('set_variables', [], obj, reply);
 		}
 		else if (typeof id[0][0] == 'string') {
-			// Action.
-			printer.call('set_' + id[0][0], [id[0][1]], obj, reply);
+			// Action or top level component.
+			if (id[0][1] === null) {
+				for (var n = 0; n < printer['num_' + type2plural[id[0][0]]]; ++n)
+					printer.call('set_' + id[0][0], [n], obj, reply);
+			}
+			else
+				printer.call('set_' + id[0][0], [id[0][1]], obj, reply);
 		}
 		else {
-			// Component.
+			// Nested component.
 			// Build target.
 			for (var i = 1; i < id[0][0].length; ++i) {
 				var newobj = {};
@@ -809,7 +814,7 @@ function multiple(template, arg, all) { // {{{
 			ret.push(part[p]);
 		}
 		return ret;
-	}
+	};
 	for (var i = 0; i < num; ++i)
 		ret = ret.concat(one(template, arg, i));
 	if (all !== false && num > 1)

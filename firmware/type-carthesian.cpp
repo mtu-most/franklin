@@ -14,8 +14,8 @@ void Cartesian::xyz2motors(float *xyz, float *motors, bool *ok) {
 }
 
 void Cartesian::reset_pos () {
-#if MAXAXES > 0
-	for (uint8_t a = 0; a < MAXAXES; ++a) {
+#ifdef HAVE_MOTORS
+	for (uint8_t a = 0; a < num_axes; ++a) {
 		axis[a].source = axis[a].current_pos;
 		axis[a].current = axis[a].source;
 	}
@@ -26,9 +26,9 @@ void Cartesian::check_position(float *data) {
 }
 
 void Cartesian::enable_motors() {
-#if MAXAXES > 0
+#ifdef HAVE_MOTORS
 	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-		uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+		uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2;
 		if (!motors[mtr])
 			continue;
 		if (!isnan(motors[mtr]->dist) || !isnan(motors[mtr]->next_dist)) {
@@ -43,7 +43,7 @@ void Cartesian::enable_motors() {
 }
 
 void Cartesian::invalidate_axis(uint8_t a) {
-#if MAXAXES > 0
+#ifdef HAVE_MOTORS
 	axis[a].source = NAN;
 	axis[a].current = NAN;
 #endif

@@ -294,7 +294,7 @@ class Printer: # {{{
 		while '\n' in self.command_buffer:
 			pos = self.command_buffer.index('\n')
 			id, func, a, ka = json.loads(self.command_buffer[:pos])
-			#log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer[pos:])))
+			log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer[pos:])))
 			self.command_buffer = self.command_buffer[pos + 1:]
 			die = False
 			try:

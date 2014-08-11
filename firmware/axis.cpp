@@ -1,6 +1,6 @@
 #include "firmware.h"
 
-#if MAXAXES > 0
+#ifdef HAVE_SPACES
 void Axis::load(int16_t &addr, bool eeprom)
 {
 	motor.load(addr, eeprom);
@@ -30,7 +30,7 @@ void Axis::load(int16_t &addr, bool eeprom)
 #define cos120 -.5
 void compute_axes()
 {
-#if MAXAXES >= 3
+#ifdef HAVE_DELTA
 	// Coordinates of axes (at angles 0, 120, 240; each with its own radius).
 	/* Originally u was on the x axis, but v on the y axis is more natural,
 	   because the front should be as open as possible.

@@ -1,6 +1,6 @@
 #include "firmware.h"
 
-#if MAXAXES > 0 || MAXEXTRUDER > 0
+#ifdef HAVE_MOTORS
 void Motor::load(int16_t &addr, bool eeprom)
 {
 	bool e = GET(enable_pin, false);

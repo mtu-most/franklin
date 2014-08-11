@@ -1,6 +1,6 @@
 #include "firmware.h"
 
-#if MAXGPIOS > 0
+#ifdef HAVE_GPIOS
 void Gpio::load (int16_t &addr, bool eeprom)
 {
 	pin.read (read_16 (addr, eeprom));

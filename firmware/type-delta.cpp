@@ -1,6 +1,11 @@
 #include <firmware.h>
 
-#if MAXAXES >= 3
+// TODO
+	float axis_min, axis_max;	// Limits for the movement of this axis.
+	float delta_length, delta_radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
+	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
+
+#ifdef HAVE_DELTA
 struct Delta : public PrinterType {
 	virtual void xyz2motors(float *xyz, float *motors, bool *ok);
 	virtual void reset_pos();
@@ -77,9 +82,9 @@ void Delta::reset_pos () {
 		axis[1].source = 0;
 		axis[2].source = axis[0].current_pos;
 	}
-	for (uint8_t a = 3; a < MAXAXES; ++a)
+	for (uint8_t a = 3; a < num_axes; ++a)
 		axis[a].source = axis[a].current_pos;
-	for (uint8_t a = 0; a < MAXAXES; ++a)
+	for (uint8_t a = 0; a < num_axes; ++a)
 		axis[a].current = axis[a].source;
 }
 
@@ -114,7 +119,7 @@ void Delta::enable_motors() {
 		}
 	}
 	for (uint8_t mt = 3; mt < num_axes + num_extruders; ++mt) {
-		uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2 + MAXAXES - num_axes;
+		uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2;
 		if (!motors[mtr])
 			continue;
 		if (!isnan(motors[mtr]->dist) || !isnan(motors[mtr]->next_dist))

@@ -15,22 +15,14 @@
 // Maximum number of move commands in the queue.
 #define QUEUE_LENGTH 10
 
-// Maximum number of axes, extruders, temps and gpios.  You can use less than
-// what you define here, not more.  It is a good idea to have a setting here
-// that you will never reach.  The sum may not be higher than 125.
-#define MAXAXES 6
-#define MAXEXTRUDERS 4
-#define MAXTEMPS 4
-#define MAXGPIOS 8
-
-// If AUDIO is not defined, nothing related to audio will be included.
-#define AUDIO
+// If HAVE_AUDIO is not defined, nothing related to audio will be included.
+#define HAVE_AUDIO
 // Audio settings.  The audio buffer is split in fragments.  New data is sent
 // in complete fragment sizes.  Because handshaking may cost time, more  than 2
 // fragments is a good idea.
 // The data takes 1 bit per sample, and the fragment size is in bytes, so the
 // number of samples in a fragment is 8 times AUDIO_FRAGMENT_SIZE.
-#ifdef AUDIO
+#ifdef HAVE_AUDIO
 #define AUDIO_FRAGMENTS 8
 #define AUDIO_FRAGMENT_SIZE 32
 #endif

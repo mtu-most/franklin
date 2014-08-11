@@ -7,7 +7,7 @@ static uint8_t get_which()
 	return command[2] & 0x3f;
 }
 
-#if MAXTEMPS > 0 || MAXEXTRUDERS > 0 || MAXAXES > 0
+#if defined(HAVE_TEMPS) || defined(HAVE_MOTORS)
 static float get_float(uint8_t offset)
 {
 	ReadFloat ret;
@@ -17,7 +17,7 @@ static float get_float(uint8_t offset)
 }
 #endif
 
-#if defined(AUDIO) || !defined(LOWMEM)
+#if defined(HAVE_AUDIO) || !defined(LOWMEM)
 static int16_t get_int16(uint8_t offset)
 {
 	return ((uint16_t)command[offset] & 0xff) | (uint16_t)command[offset + 1] << 8;
@@ -61,7 +61,7 @@ void packet()
 		Serial.flush();
 		reset();
 	}
-#if MAXEXTRUDERS > 0 || MAXAXES > 0
+#ifdef HAVE_MOTORS
 	case CMD_GOTO:	// goto
 	case CMD_GOTOCB:	// goto with callback
 	{
@@ -85,13 +85,11 @@ void packet()
 				ReadFloat f;
 				for (uint8_t i = 0; i < sizeof(float); ++i)
 					f.b[i] = command[offset + i + t * sizeof(float)];
-#if MAXAXES > 0
 				if (ch >= 2 && ch < 2 + num_axes && isnan(axis[ch - 2].current_pos)) {
 					debug("Moving uninitialized axis %d", ch - 2);
 					Serial.write(CMD_STALL);
 					return;
 				}
-#endif
 				if (ch < 2) {
 					queue[queue_end].f[ch] = f.f;
 					//debug("goto %d %f", ch, F(f.f));
@@ -166,10 +164,8 @@ void packet()
 			initialized = true;
 		write_ack();
 		//debug("running %d", which);
-#if MAXAXES > 0
-		if (which < 2 + MAXAXES)
+		if (which < 2 + num_axes)
 			printer_types[printer_type]->invalidate_axis(which - 2);
-#endif
 		if (isnan(f.f))
 			f.f = 0;
 		//debug("at speed %f", F(f.f));
@@ -211,12 +207,10 @@ void packet()
 		if (command[2] & 0x80) {
 			RESET(motors[which]->enable_pin);
 			motors_busy &= ~(1 << which);
-#if MAXAXES > 0
-			if (which < 2 + MAXAXES) {
+			if (which < 2 + num_axes) {
 				printer_types[printer_type]->invalidate_axis(which - 2);
 				axis[which - 2].current_pos = NAN;
 			}
-#endif
 		}
 		else {
 			SET(motors[which]->enable_pin);
@@ -226,7 +220,7 @@ void packet()
 		return;
 	}
 #endif
-#if MAXTEMPS > 0 || MAXEXTRUDERS > 0
+#ifdef HAVE_TEMPS
 	case CMD_SETTEMP:	// set target temperature and enable control
 	{
 #ifdef DEBUG_CMD
@@ -343,7 +337,7 @@ void packet()
 		}
 	}
 #endif
-#if MAXAXES > 0
+#ifdef HAVE_MOTORS
 	case CMD_SETPOS:	// Set current position
 	{
 #ifdef DEBUG_CMD
@@ -351,7 +345,7 @@ void packet()
 #endif
 		last_active = millis();
 		which = get_which();
-		if (which < 2 || which > 2 + MAXAXES)
+		if (which < 2 || which > 2 + num_axes)
 		{
 			debug("Setting position of non-axis component %d", which);
 			Serial.write(CMD_STALL);
@@ -369,10 +363,8 @@ void packet()
 			Serial.write(CMD_STALL);
 			return;
 		}
-#if MAXAXES > 0
-		if (which < 2 + MAXAXES)
+		if (which < 2 + num_axes)
 			printer_types[printer_type]->invalidate_axis(which - 2);
-#endif
 		write_ack();
 		axis[which - 2].current_pos = get_float(3);
 		//debug("Set position of axis %d to %f", which - 2, F(axis[which - 2].current_pos));
@@ -384,7 +376,7 @@ void packet()
 		debug("CMD_GETPOS");
 #endif
 		which = get_which();
-		if (which < 2 || which > 2 + MAXAXES)
+		if (which < 2 || which > 2 + num_axes)
 		{
 			debug("Getting position of invalid axis %d", which);
 			Serial.write(CMD_STALL);
@@ -516,13 +508,13 @@ void packet()
 		try_send_next();
 		return;
 	}
-#if MAXGPIOS > 0
+#ifdef HAVE_GPIOS
 	case CMD_READGPIO:
 	{
 #ifdef DEBUG_CMD
 		debug("CMD_READGPIO");
 #endif
-		if (command[2] < 2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS || command[2] >= 2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS + MAXGPIOS)
+		if (command[2] < GPIO0 || command[2] >= GPIO0 + num_gpios)
 		{
 			debug("GETGPIO called for non-gpio channel %d", command[2]);
 			Serial.write(CMD_STALL);
@@ -531,13 +523,13 @@ void packet()
 		write_ack();
 		reply[0] = 3;
 		reply[1] = CMD_PIN;
-		reply[2] = GET(gpio[command[2] - (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS)].pin, false) ? 1 : 0;
+		reply[2] = GET(gpio[command[2] - GPIO0].pin, false) ? 1 : 0;
 		reply_ready = true;
 		try_send_next();
 		return;
 	}
 #endif
-#ifdef AUDIO
+#ifdef HAVE_AUDIO
 	case CMD_AUDIO_SETUP:
 	{
 #ifdef DEBUG_CMD
@@ -560,7 +552,7 @@ void packet()
 			if (command[4 + ((e + 2 + num_axes) >> 3)] & (1 << ((e + 2 + num_axes) & 0x7))) {
 				extruder[e].motor.audio_flags |= Motor::PLAYING;
 				SET(extruder[e].motor.enable_pin);
-				motors_busy |= 1 << (2 + MAXAXES + e);
+				motors_busy |= 1 << (2 + num_axes + e);
 			}
 			else
 				extruder[e].motor.audio_flags &= ~Motor::PLAYING;

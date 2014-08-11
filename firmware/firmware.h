@@ -1,53 +1,12 @@
 #ifndef _FIRMWARE_H
-
-/*
-Units:
-x: μm		n1
-v: μm/s		1/s	-> float
-a: μm/s²		-> float
-t: μs	(but motor_limit, temp_limit: ms)
-T: mK	(but β, Tc: K (float))
-feedrate: 1		-> float
-α: rad			-> float
-R: Ω			-> float
-
-# TODO: determine reasonable values.
-C: mJ/K
-J: mJ/Ks
-I: mJ/K⁴
-P: mW
-*/
+#define _FIRMWARE_H
 
 #include "configuration.h"
 #include ARCH_INCLUDE
-#define _FIRMWARE_H
 #include <math.h>
 #include <stdarg.h>
 
-#ifdef LOWMEM
-// Adjust all settings to low memory limits.
-#undef NAMELEN
-#define NAMELEN 8
-#undef QUEUE_LENGTH
-#define QUEUE_LENGTH 1
-#undef MAXAXES
-#define MAXAXES 2
-#undef MAXEXTRUDERS
-#define MAXEXTRUDERS 0
-#undef MAXTEMPS
-#define MAXTEMPS 0
-#undef MAXGPIOS
-#define MAXGPIOS 0
-#ifdef AUDIO
-#undef AUDIO
-#endif
-#ifdef WATCHDOG
-#undef WATCHDOG
-#endif
-#endif // LOWMEM
-
 #define ID_SIZE 8	// Number of bytes in printerid.
-#define MAXOBJECT (2 + MAXAXES + MAXEXTRUDERS + MAXTEMPS + MAXGPIOS)		// Total number of supported objects.
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
 #define MAXINT (int16_t((uint16_t(1) << 15) - 1))
@@ -110,10 +69,18 @@ enum Command {
 	CMD_GETPOS,	// 1 byte: which channel.  Reply: POS. [steps, mm]
 	CMD_LOAD,	// 1 byte: which channel.
 	CMD_SAVE,	// 1 byte: which channel.
-	CMD_READ,	// 1 byte: which channel.  Reply: DATA.
-	CMD_WRITE,	// 1 byte: which channel; n bytes: data.
+	CMD_READ_GLOBALS,
+	CMD_READ_MOTOR,	// 1 byte: which channel.  Reply: DATA.
+	CMD_READ_SPACE,	// 1 byte: which channel.  Reply: DATA.
+	CMD_READ_TEMP,	// 1 byte: which channel.  Reply: DATA.
+	CMD_READ_GPIO,	// 1 byte: which channel.  Reply: DATA.
+	CMD_WRITE_GLOBALS,
+	CMD_WRITE_MOTOR,	// 1 byte: which channel; n bytes: data.
+	CMD_WRITE_SPACE,	// 1 byte: which channel; n bytes: data.
+	CMD_WRITE_TEMP,	// 1 byte: which channel; n bytes: data.
+	CMD_WRITE_GPIO,	// 1 byte: which channel; n bytes: data.
 	CMD_QUEUED,	// 1 byte: 0: query queue length; 1: stop and query queue length.  Reply: QUEUE.
-	CMD_READGPIO,	// 1 byte: which channel. Reply: GPIO.
+	CMD_READPIN,	// 1 byte: which channel. Reply: GPIO.
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_bit.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	// to host
@@ -135,26 +102,19 @@ enum Command {
 	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
 };
 
-struct Object
-{
-	int16_t address;
-	virtual void load(int16_t &address, bool eeprom) = 0;
-	virtual void save(int16_t &address, bool eeprom) = 0;
-	virtual ~Object() {}
-};
-
-#if MAXGPIOS > 0
+#ifdef HAVE_GPIOS
 // Need this declaration to have the pointer in Temp.
 struct Gpio;
 #endif
 
-#if MAXTEMPS > 0 || MAXEXTRUDERS > 0
+#ifdef HAVE_TEMPS
 // All temperatures are stored in Kelvin, but communicated in °C.
-struct Temp : public Object
+struct Temp
 {
 	// See temp.c from definition of calibration constants.
 	float R0, R1, logRc, beta, Tc;	// calibration values of thermistor.  [Ω, Ω, logΩ, K, K]
 #ifndef LOWMEM
+	/*
 	// Temperature balance calibration.
 	float power;			// added power while heater is on.  [W]
 	float core_C;			// heat capacity of the core.  [J/K]
@@ -162,6 +122,7 @@ struct Temp : public Object
 	float transfer;		// heat transfer between core and shell.  [W/K]
 	float radiation;		// radiated power = radiation * (shell_T ** 4 - room_T ** 4) [W/K**4]
 	float convection;		// convected power = convection * (shell_T - room_T) [W/K]
+	*/
 #endif
 	// Pins.
 	Pin_t power_pin;
@@ -171,8 +132,10 @@ struct Temp : public Object
 	int16_t adctarget;		// target temperature in adc counts; -1 for disabled. [adccounts]
 	int16_t adclast;		// last measured temperature. [adccounts]
 #ifndef LOWMEM
+	/*
 	float core_T, shell_T;	// current temperatures. [K]
-#if MAXGPIOS > 0
+	*/
+#ifdef HAVE_GPIOS
 	Gpio *gpios;			// linked list of gpios monitoring this temp.
 #endif
 #endif
@@ -189,102 +152,108 @@ struct Temp : public Object
 	int16_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
 	float fromadc(int16_t adc);	// convert ADC to K.
 	int16_t toadc(float T);	// convert K to ADC.
-	virtual void load(int16_t &addr, bool eeprom);
-	virtual void save(int16_t &addr, bool eeprom);
-	virtual ~Temp() {}
+	static void load(uint8_t t, int16_t &addr, bool eeprom);
+	static void save(uint8_t t, int16_t &addr, bool eeprom);
+	static void init(uint8_t t);
+	static void free(uint8_t t);
 };
 #endif
 
-#if MAXEXTRUDERS > 0 || MAXAXES > 0
-struct Motor : public Object
+#ifdef HAVE_MOTORS
+struct MotorType {
+	void (*load)(uint8_t t, int16_t &addr, bool eeprom);
+	void (*save)(uint8_t t, int16_t &addr, bool eeprom);
+};
+
+struct Stepper : public MotorType
 {
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	Pin_t enable_pin;
 	float steps_per_m;			// hardware calibration [steps/m].
-	float max_v, limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t max_steps;			// maximum number of steps in one iteration.
-	float continuous_v;			// speed for continuous run.
-	float continuous_f;			// fractional continuous distance that has been done.
+};
+
+struct Motor
+{
+	MotorType *motor;
+	Pin_t limit_min_pin;
+	Pin_t limit_max_pin;
+	float home_pos;	// Position of motor (in μm) when the home switch is triggered.
+	Pin_t sense_pin;
+	uint8_t sense_state;
+	float sense_pos;
+	float motor_min, motor_max;	// Limits for the movement of this motor.
+	float limits_pos;	// position when limit switch was hit or nan
+	float limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	unsigned long last_time;		// micros value when last iteration was run.
 	float last_v, last_distance;		// v at and distance since last time, for using limit_a [mm/s], [mm].
 	bool positive;				// direction of current movement.
-	float dist, next_dist, main_dist;
-#ifdef AUDIO
+	float current_pos;	// Current position of motor (in μm).
+#ifdef HAVE_AUDIO
 	uint8_t audio_flags;
 	enum Flags {
 		PLAYING = 1,
 		STATE = 2
 	};
 #endif
-	virtual void load(int16_t &addr, bool eeprom);
-	virtual void save(int16_t &addr, bool eeprom);
-	virtual ~Motor() {}
+	static void load(uint8_t t, int16_t &addr, bool eeprom);
+	static void save(uint8_t t, int16_t &addr, bool eeprom);
 };
 #endif
 
-struct Constants : public Object
+#ifdef HAVE_SPACES
+struct Axis
 {
-	virtual void load(int16_t &addr, bool eeprom);	// NI
-	virtual void save(int16_t &addr, bool eeprom);
-	virtual ~Constants() {}
-};
-
-struct Variables : public Object
-{
-	virtual void load(int16_t &addr, bool eeprom);
-	virtual void save(int16_t &addr, bool eeprom);
-	virtual ~Variables() {}
-};
-
-#if MAXAXES > 0
-struct Axis : public Object
-{
-	Motor motor;
-	float limit_pos;	// Position of motor (in μm) when the limit switch is triggered.
-	float delta_length, delta_radius;	// Calibration values for delta: length of the tie rod and the horizontal distance between the vertical position and the zero position.
 	float offset;		// Position where axis claims to be when it is at 0.
 	float park;		// Park position; not used by the firmware, but stored for use by the host.
-	float axis_min, axis_max;	// Limits for the movement of this axis.
-	float motor_min, motor_max;	// Limits for the movement of this motor.
-	Pin_t limit_min_pin;
-	Pin_t limit_max_pin;
-	Pin_t sense_pin;
-	uint8_t sense_state;
-	float sense_pos;
-	float current_pos;	// Current position of motor (in μm).
 	float source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
-	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position; only used for delta printers.
-	virtual void load(int16_t &addr, bool eeprom);
-	virtual void save(int16_t &addr, bool eeprom);
-	virtual ~Axis() {}
+	float max_v;
+	float dist, next_dist, main_dist;
+	static void load(uint8_t t, int16_t &addr, bool eeprom);
+	static void save(uint8_t t, int16_t &addr, bool eeprom);
 };
-#endif
 
-#if MAXEXTRUDERS > 0
-struct Extruder : public Object
+struct SpaceType
 {
-	Motor motor;
-	Temp temp;		// temperature regulation.
-#ifndef LOWMEM
-	// TODO: Actually use this and decide on units.
-	float filament_heat;	// constant for how much heat is extracted per mm filament.
-	float nozzle_size;
-	float filament_size;
-	float capacity;	// heat capacity of filament in [energy]/mm/K
-#endif
-	float distance_done;	// steps done during current move.
-	virtual void load(int16_t &addr, bool eeprom);
-	virtual void save(int16_t &addr, bool eeprom);
-	virtual ~Extruder() {}
+	void (*xyz2motors)(float *xyz, float *motors, bool *ok);
+	void (*reset_pos)();
+	void (*check_position)(float *data);
+	void (*enable_motors)();
+	void (*invalidate_axis)(uint8_t a);
+	void (*load)(uint8_t t, int16_t &addr, bool eeprom);
+	void (*save)(uint8_t t, int16_t &addr, bool eeprom);
+	void (*init)(uint8_t t);
+	void (*free)(uint8_t t);
 };
+
+struct Space
+{
+	uint8_t type;
+	void *type_data;
+	uint8_t num_motors, num_axes;
+	Motor *motor;
+	Axis axis[1];
+	static void load(uint8_t t, int16_t &addr, bool eeprom);
+	static void save(uint8_t t, int16_t &addr, bool eeprom);
+	static void init(uint8_t t);
+	static void free(uint8_t t);
+};
+#define NUM_SPACE_TYPES 2
+EXTERN SpaceType *space_types[NUM_SPACE_TYPES];
+extern SpaceType *Type_Cartesian;
+extern SpaceType *Type_Delta;
+#define setup_spacetypes() do { \
+	uint8_t t = 0; \
+	space_types[t++] = Type_Cartesian; \
+	space_types[t++] = Type_Delta; \
+} while(0)
 #endif
 
-#if MAXGPIOS > 0
-struct Gpio : public Object
+#ifdef HAVE_GPIOS
+struct Gpio
 {
 	Pin_t pin;
-	// bit 0: low/high; bit 1: in/out; bit 2: pullup enabled/disabled; bit 3: last read value (for change notification).
 	uint8_t state;
 #ifndef LOWMEM
 	uint8_t master;
@@ -293,9 +262,10 @@ struct Gpio : public Object
 	Gpio *prev, *next;
 #endif
 	void setup(uint8_t new_state);
-	virtual void load(int16_t &addr, bool eeprom);
-	virtual void save(int16_t &addr, bool eeprom);
-	virtual ~Gpio() {}
+	static void load(uint8_t t, int16_t &addr, bool eeprom);
+	static void save(uint8_t t, int16_t &addr, bool eeprom);
+	static void init(uint8_t t);
+	static void free(uint8_t t);
 };
 #endif
 
@@ -303,36 +273,26 @@ struct MoveCommand
 {
 	bool cb;
 	float f[2];
-	float data[MAXAXES + MAXEXTRUDERS];	// Value if given, NAN otherwise.
+	float data[1];	// Value if given, NAN otherwise.  Variable size array.
 };
 
 #define COMMAND_SIZE 127
 #define COMMAND_LEN_MASK 0x7f
 
-struct PrinterType
-{
-	virtual void xyz2motors(float *xyz, float *motors, bool *ok) = 0;
-	virtual void reset_pos() = 0;
-	virtual void check_position(float *data) = 0;
-	virtual void enable_motors() = 0;
-	virtual void invalidate_axis(uint8_t a) = 0;
-};
-#define NUM_PRINTER_TYPES 2
-EXTERN PrinterType *printer_types[NUM_PRINTER_TYPES];
-extern PrinterType *Type_Cartesian;
-extern PrinterType *Type_Delta;
-#define setup_printertypes() do { \
-	uint8_t t = 0; \
-	printer_types[t++] = Type_Cartesian; \
-	printer_types[t++] = Type_Delta; \
-} while(0)
-
 // Code 1 variables
 EXTERN uint8_t name[NAMELEN];
+#ifdef HAVE_SPACES
+EXTERN uint8_t num_spaces;
+#endif
+#ifdef HAVE_EXTRUDERS
 EXTERN uint8_t num_extruders;
-EXTERN uint8_t num_axes;
+#endif
+#ifdef HAVE_TEMPS
 EXTERN uint8_t num_temps;
+#endif
+#ifdef HAVE_GPIOS
 EXTERN uint8_t num_gpios;
+#endif
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
 EXTERN float max_deviation;
@@ -349,35 +309,28 @@ EXTERN char reply[COMMAND_SIZE];
 EXTERN char out_buffer[10];
 EXTERN Constants constants;
 EXTERN Variables variables;
-#if MAXAXES > 0
-EXTERN Axis axis[MAXAXES];
+#ifdef HAVE_SPACES
+EXTERN Space **space;
 #endif
-#if MAXTEMPS > 0
-EXTERN Temp temp[MAXTEMPS];
+#ifdef HAVE_MOTORS
+EXTERN Motor *motor;
 #endif
-#if MAXEXTRUDERS > 0
-EXTERN Extruder extruder[MAXEXTRUDERS];
+#ifdef HAVE_TEMPS
+EXTERN Temp *temp;
 #endif
-#if MAXGPIOS > 0
-EXTERN Gpio gpio[MAXGPIOS];
+#ifdef HAVE_EXTRUDERS
+EXTERN Extruder *extruder;
+#endif
+#ifdef HAVE_GPIOS
+EXTERN Gpio *gpio;
 #endif
 EXTERN uint8_t temps_busy;
-#if MAXAXES > 0 || MAXEXTRUDERS > 0
-EXTERN Motor *motors[MAXOBJECT];
-#endif
-#if MAXTEMPS > 0 || MAXEXTRUDERS > 0
-EXTERN Temp *temps[MAXOBJECT];
-#endif
-EXTERN Object *objects[MAXOBJECT];
 EXTERN MoveCommand queue[QUEUE_LENGTH];
 EXTERN uint8_t queue_start, queue_end;
 EXTERN bool queue_full;
 EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent out.
 EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
-#if MAXAXES > 0
-EXTERN float limits_pos[MAXAXES];	// position when limit switch was hit or nan
-#endif
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
@@ -390,10 +343,10 @@ EXTERN unsigned long last_active, led_last;
 EXTERN float motor_limit, temp_limit;
 EXTERN int16_t led_phase;
 EXTERN uint8_t adc_phase;
-#if MAXTEMPS > 0 || MAXEXTRUDERS > 0
+#ifdef HAVE_TEMPS
 EXTERN uint8_t temp_current;
 #endif
-#ifdef AUDIO
+#ifdef HAVE_AUDIO
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
 EXTERN uint8_t audio_head, audio_tail, audio_state;
 EXTERN unsigned long audio_start;
@@ -447,7 +400,7 @@ void write_float(int16_t &address, float data, bool eeprom);
 void compute_axes();
 #endif
 
-#if MAXAXES > 0 || MAXEXTRUDERS > 0
+#ifdef HAVE_MOTORS
 static inline bool moving_motor(uint8_t which) {
 	if (!moving)
 		return false;

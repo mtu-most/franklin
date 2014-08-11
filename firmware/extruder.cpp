@@ -1,6 +1,6 @@
 #include "firmware.h"
 
-#if MAXEXTRUDERS > 0
+#ifdef HAVE_EXTRUDERS
 void Extruder::load(int16_t &addr, bool eeprom)
 {
 	motor.load(addr, eeprom);

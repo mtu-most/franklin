@@ -1,3 +1,6 @@
+// This is not an include quard.  This file is included twice; the first time the first part of the file is used, the second time the second part.
+#ifndef _ARCH_AVR_H
+#define _ARCH_AVR_H
 #include <stdint.h>
 #include <stdlib.h>
 #include <iostream>
@@ -10,8 +13,6 @@
 #define RESET(pin_no) do { if ((pin_no).valid ()) {} } while (0)
 #define GET(pin_no, _default) ((pin_no).valid () ? false ? !(pin_no).inverted () : (pin_no).inverted () : _default)
 
-#undef SERIAL_BUFFERSIZE
-#define SERIAL_BUFFERSIZE 0
 #define NUM_DIGITAL_PINS 10
 #define NUM_ANALOG_INPUTS 0
 
@@ -76,3 +77,5 @@ static inline uint8_t read_eeprom(uint16_t address) {
 
 static inline void write_eeprom(uint16_t address, uint8_t data) {
 }
+#else
+#endif
