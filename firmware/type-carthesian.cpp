@@ -1,53 +1,47 @@
 #include <firmware.h>
 
-struct Cartesian : public PrinterType {
-	virtual void xyz2motors(float *xyz, float *motors, bool *ok);
-	virtual void reset_pos();
-	virtual void check_position(float *data);
-	virtual void enable_motors();
-	virtual void invalidate_axis(uint8_t a);
-};
-
-void Cartesian::xyz2motors(float *xyz, float *motors, bool *ok) {
-	for (uint8_t a = 0; a < num_axes; ++a)
+#ifdef HAVE_SPACES
+static void xyz2motors(Space *s, float *xyz, float *motors, bool *ok) {
+	for (uint8_t a = 0; a < s->num_axes; ++a)
 		motors[a] = xyz[a];
 }
 
-void Cartesian::reset_pos () {
-#ifdef HAVE_MOTORS
-	for (uint8_t a = 0; a < num_axes; ++a) {
-		axis[a].source = axis[a].current_pos;
-		axis[a].current = axis[a].source;
-	}
+static void reset_pos (Space *s) {
+	for (uint8_t a = 0; a < s->num_axes; ++a)
+		s->axis[a]->source = s->motor[a]->current_pos;
+}
+
+static void check_position(Space *s, float *data) {
+}
+
+static void load(Space *s, int16_t &addr, bool eeprom) {
+	uint8_t num = read_8(addr, eeprom);
+	s->set_nums(num, num, addr, eeprom);
+}
+
+static void save(Space *s, int16_t &addr, bool eeprom) {
+	write_8(addr, s->num_axes, eeprom);
+	s->save_std(addr, eeprom);
+}
+
+static void init(Space *s) {
+}
+
+static void free(Space *s) {
+}
+
+static int16_t size(Space *s) {
+	return 1 * 1 + s->size_std();
+}
+
+void Cartesian_init(uint8_t num) {
+	space_types[num].xyz2motors = xyz2motors;
+	space_types[num].reset_pos = reset_pos;
+	space_types[num].check_position = check_position;
+	space_types[num].load = load;
+	space_types[num].save = save;
+	space_types[num].init = init;
+	space_types[num].free = free;
+	space_types[num].size = size;
+}
 #endif
-}
-
-void Cartesian::check_position(float *data) {
-}
-
-void Cartesian::enable_motors() {
-#ifdef HAVE_MOTORS
-	for (uint8_t mt = 0; mt < num_axes + num_extruders; ++mt) {
-		uint8_t mtr = mt < num_axes ? mt + 2 : mt + 2;
-		if (!motors[mtr])
-			continue;
-		if (!isnan(motors[mtr]->dist) || !isnan(motors[mtr]->next_dist)) {
-			motors[mtr]->last_time = start_time;
-			SET (motors[mtr]->enable_pin);
-			motors_busy |= 1 << mtr;
-			/*if (mt < num_axes)
-				debug ("Move motor %f from %f (really %f) over %f steps (f0=%f)", mtr, F(axis[mt].source), F(axis[mt].current), F(motors[mtr]->dist), F(f0));*/
-		}
-	}
-#endif
-}
-
-void Cartesian::invalidate_axis(uint8_t a) {
-#ifdef HAVE_MOTORS
-	axis[a].source = NAN;
-	axis[a].current = NAN;
-#endif
-}
-
-static Cartesian obj;
-PrinterType *Type_Cartesian = &obj;

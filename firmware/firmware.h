@@ -2,6 +2,9 @@
 #define _FIRMWARE_H
 
 #include "configuration.h"
+#if !defined(HAVE_SPACES) && defined(HAVE_AUDIO)
+#error Cannot have audio without spaces.
+#endif
 #include ARCH_INCLUDE
 #include <math.h>
 #include <stdarg.h>
@@ -28,8 +31,7 @@ struct Pin_t {
 		pin = data & 0xff;
 		flags = data >> 8;
 		if ((flags & ~2) != 1 || pin >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS) {
-			pin = 0;
-			flags = 0;
+			flags &= ~1;
 		}
 	}
 };
@@ -59,7 +61,6 @@ enum Command {
 	CMD_RESET,	// 1 byte: 0.
 	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].
 	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
-	CMD_RUN,	// 1 byte: which channel (b0-6).  4 byte: speed [mm/s] (0 means off).
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
 	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [°C].
 	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [°C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
@@ -70,14 +71,12 @@ enum Command {
 	CMD_LOAD,	// 1 byte: which channel.
 	CMD_SAVE,	// 1 byte: which channel.
 	CMD_READ_GLOBALS,
-	CMD_READ_MOTOR,	// 1 byte: which channel.  Reply: DATA.
-	CMD_READ_SPACE,	// 1 byte: which channel.  Reply: DATA.
-	CMD_READ_TEMP,	// 1 byte: which channel.  Reply: DATA.
-	CMD_READ_GPIO,	// 1 byte: which channel.  Reply: DATA.
 	CMD_WRITE_GLOBALS,
-	CMD_WRITE_MOTOR,	// 1 byte: which channel; n bytes: data.
+	CMD_READ_SPACE,	// 1 byte: which channel.  Reply: DATA.
 	CMD_WRITE_SPACE,	// 1 byte: which channel; n bytes: data.
+	CMD_READ_TEMP,	// 1 byte: which channel.  Reply: DATA.
 	CMD_WRITE_TEMP,	// 1 byte: which channel; n bytes: data.
+	CMD_READ_GPIO,	// 1 byte: which channel.  Reply: DATA.
 	CMD_WRITE_GPIO,	// 1 byte: which channel; n bytes: data.
 	CMD_QUEUED,	// 1 byte: 0: query queue length; 1: stop and query queue length.  Reply: QUEUE.
 	CMD_READPIN,	// 1 byte: which channel. Reply: GPIO.
@@ -113,7 +112,6 @@ struct Temp
 {
 	// See temp.c from definition of calibration constants.
 	float R0, R1, logRc, beta, Tc;	// calibration values of thermistor.  [Ω, Ω, logΩ, K, K]
-#ifndef LOWMEM
 	/*
 	// Temperature balance calibration.
 	float power;			// added power while heater is on.  [W]
@@ -123,7 +121,6 @@ struct Temp
 	float radiation;		// radiated power = radiation * (shell_T ** 4 - room_T ** 4) [W/K**4]
 	float convection;		// convected power = convection * (shell_T - room_T) [W/K]
 	*/
-#endif
 	// Pins.
 	Pin_t power_pin;
 	Pin_t thermistor_pin;
@@ -131,18 +128,17 @@ struct Temp
 	float target;			// target temperature; NAN to disable. [K]
 	int16_t adctarget;		// target temperature in adc counts; -1 for disabled. [adccounts]
 	int16_t adclast;		// last measured temperature. [adccounts]
-#ifndef LOWMEM
 	/*
 	float core_T, shell_T;	// current temperatures. [K]
 	*/
 #ifdef HAVE_GPIOS
 	Gpio *gpios;			// linked list of gpios monitoring this temp.
 #endif
-#endif
 	float min_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
 	float max_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
 	int16_t adcmin_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
 	int16_t adcmax_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
+	bool alarm;
 	// Internal variables.
 	unsigned long last_time;	// last value of micros when this heater was handled.
 	unsigned long time_on;		// Time that the heater has been on since last reading.  [μs]
@@ -152,31 +148,33 @@ struct Temp
 	int16_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
 	float fromadc(int16_t adc);	// convert ADC to K.
 	int16_t toadc(float T);	// convert K to ADC.
-	static void load(uint8_t t, int16_t &addr, bool eeprom);
-	static void save(uint8_t t, int16_t &addr, bool eeprom);
-	static void init(uint8_t t);
-	static void free(uint8_t t);
+	void load(int16_t &addr, bool eeprom);
+	void save(int16_t &addr, bool eeprom);
+	void init();
+	void free();
+	void copy(Temp &dst);
+	static int16_t size0();
+	int16_t size() { return size0(); }
 };
 #endif
 
-#ifdef HAVE_MOTORS
-struct MotorType {
-	void (*load)(uint8_t t, int16_t &addr, bool eeprom);
-	void (*save)(uint8_t t, int16_t &addr, bool eeprom);
+#ifdef HAVE_SPACES
+struct Axis
+{
+	float offset;		// Position where axis claims to be when it is at 0.
+	float park;		// Park position; not used by the firmware, but stored for use by the host.
+	float source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
+	float max_v;
+	float dist, next_dist, main_dist;
 };
 
-struct Stepper : public MotorType
+struct Motor
 {
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	Pin_t enable_pin;
 	float steps_per_m;			// hardware calibration [steps/m].
 	uint8_t max_steps;			// maximum number of steps in one iteration.
-};
-
-struct Motor
-{
-	MotorType *motor;
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;
 	float home_pos;	// Position of motor (in μm) when the home switch is triggered.
@@ -197,56 +195,60 @@ struct Motor
 		STATE = 2
 	};
 #endif
-	static void load(uint8_t t, int16_t &addr, bool eeprom);
-	static void save(uint8_t t, int16_t &addr, bool eeprom);
 };
-#endif
 
-#ifdef HAVE_SPACES
-struct Axis
-{
-	float offset;		// Position where axis claims to be when it is at 0.
-	float park;		// Park position; not used by the firmware, but stored for use by the host.
-	float source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
-	float max_v;
-	float dist, next_dist, main_dist;
-	static void load(uint8_t t, int16_t &addr, bool eeprom);
-	static void save(uint8_t t, int16_t &addr, bool eeprom);
-};
+struct Space;
 
 struct SpaceType
 {
-	void (*xyz2motors)(float *xyz, float *motors, bool *ok);
-	void (*reset_pos)();
-	void (*check_position)(float *data);
-	void (*enable_motors)();
-	void (*invalidate_axis)(uint8_t a);
-	void (*load)(uint8_t t, int16_t &addr, bool eeprom);
-	void (*save)(uint8_t t, int16_t &addr, bool eeprom);
-	void (*init)(uint8_t t);
-	void (*free)(uint8_t t);
+	void (*xyz2motors)(Space *s, float *xyz, float *motors, bool *ok);
+	void (*reset_pos)(Space *s);
+	void (*check_position)(Space *s, float *data);
+	void (*load)(Space *s, int16_t &addr, bool eeprom);
+	void (*save)(Space *s, int16_t &addr, bool eeprom);
+	void (*init)(Space *s);
+	void (*free)(Space *s);
+	void (*copy)(Space *s, Space *d);
+	int16_t (*size)(Space *s);
 };
 
 struct Space
 {
 	uint8_t type;
 	void *type_data;
-	uint8_t num_motors, num_axes;
-	Motor *motor;
-	Axis axis[1];
-	static void load(uint8_t t, int16_t &addr, bool eeprom);
-	static void save(uint8_t t, int16_t &addr, bool eeprom);
-	static void init(uint8_t t);
-	static void free(uint8_t t);
+	uint8_t num_axes, num_motors;
+	Motor **motor;
+	Axis **axis;
+	void load(int16_t &addr, bool eeprom);
+	void save(int16_t &addr, bool eeprom);
+	void init();
+	void free();
+	void copy(Space &dst);
+	static int16_t size0();
+	int16_t size();
+	void set_nums(uint8_t na, uint8_t nm, int16_t &addr, bool eeprom);
+	void save_std(int16_t &addr, bool eeprom);
+	int16_t size_std();
 };
-#define NUM_SPACE_TYPES 2
-EXTERN SpaceType *space_types[NUM_SPACE_TYPES];
-extern SpaceType *Type_Cartesian;
-extern SpaceType *Type_Delta;
+
+#define NUM_SPACE_TYPES 1
+void Cartesian_init(uint8_t num);
+#define CARTESIAN_INIT(num) Cartesian_init(num);
+
+#ifdef HAVE_DELTA
+#define _SPACE_TYPE_TMP NUM_SPACE_TYPES + 1
+#undef NUM_SPACE_TYPES
+#define NUM_SPACE_TYPES _SPACE_TYPE_TMP
+void Delta_init(uint8_t num);
+#define DELTA_INIT(num) Delta_init(num);
+#else
+#define DELTA_INIT(num)
+#endif
+
+EXTERN SpaceType space_types[NUM_SPACE_TYPES];
 #define setup_spacetypes() do { \
-	uint8_t t = 0; \
-	space_types[t++] = Type_Cartesian; \
-	space_types[t++] = Type_Delta; \
+	CARTESIAN_INIT(0) \
+	DELTA_INIT(1) \
 } while(0)
 #endif
 
@@ -255,17 +257,20 @@ struct Gpio
 {
 	Pin_t pin;
 	uint8_t state;
-#ifndef LOWMEM
+#ifdef HAVE_TEMPS
 	uint8_t master;
 	float value;
 	int16_t adcvalue;
 	Gpio *prev, *next;
 #endif
 	void setup(uint8_t new_state);
-	static void load(uint8_t t, int16_t &addr, bool eeprom);
-	static void save(uint8_t t, int16_t &addr, bool eeprom);
-	static void init(uint8_t t);
-	static void free(uint8_t t);
+	void load(int16_t &addr, bool eeprom);
+	void save(int16_t &addr, bool eeprom);
+	void init();
+	void free();
+	void copy(Gpio &dst);
+	static int16_t size0();
+	int16_t size() { return size0(); }
 };
 #endif
 
@@ -273,14 +278,15 @@ struct MoveCommand
 {
 	bool cb;
 	float f[2];
-	float data[1];	// Value if given, NAN otherwise.  Variable size array.
+	float data[10];	// Value if given, NAN otherwise.  Variable size array. TODO
 };
 
 #define COMMAND_SIZE 127
 #define COMMAND_LEN_MASK 0x7f
 
 // Code 1 variables
-EXTERN uint8_t name[NAMELEN];
+EXTERN char *name;
+EXTERN uint8_t namelen;
 #ifdef HAVE_SPACES
 EXTERN uint8_t num_spaces;
 #endif
@@ -296,33 +302,22 @@ EXTERN uint8_t num_gpios;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
 EXTERN float max_deviation;
-#ifndef LOWMEM
-EXTERN float room_T;	//[°C]
-#endif
+//EXTERN float room_T;	//[°C]
 EXTERN float feedrate;		// Multiplication factor for f values, used at start of move.
-EXTERN float angle;
 // Other variables.
 EXTERN char printerid[ID_SIZE];
 EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
 EXTERN char reply[COMMAND_SIZE];
-EXTERN char out_buffer[10];
-EXTERN Constants constants;
-EXTERN Variables variables;
+EXTERN char out_buffer[16];
 #ifdef HAVE_SPACES
-EXTERN Space **space;
-#endif
-#ifdef HAVE_MOTORS
-EXTERN Motor *motor;
+EXTERN Space *spaces;
 #endif
 #ifdef HAVE_TEMPS
-EXTERN Temp *temp;
-#endif
-#ifdef HAVE_EXTRUDERS
-EXTERN Extruder *extruder;
+EXTERN Temp *temps;
 #endif
 #ifdef HAVE_GPIOS
-EXTERN Gpio *gpio;
+EXTERN Gpio *gpios;
 #endif
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];
@@ -330,11 +325,10 @@ EXTERN uint8_t queue_start, queue_end;
 EXTERN bool queue_full;
 EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent out.
 EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
-EXTERN uint32_t which_tempcbs;		// bitmask of waiting temp cbs.
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
-EXTERN uint32_t motors_busy;		// bitmask of motors which are enabled.
+EXTERN bool motors_busy;
 EXTERN bool out_busy;
 EXTERN unsigned long out_time;
 EXTERN bool reply_ready;
@@ -360,7 +354,7 @@ EXTERN float f0, f1, f2, fp, fq, fmain;
 EXTERN bool move_prepared;
 EXTERN bool current_move_has_cb;
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
-EXTERN uint16_t debug_buffer_ptr;
+EXTERN int16_t debug_buffer_ptr;
 EXTERN uint8_t requested_temp;
 
 // debug.cpp
@@ -395,18 +389,9 @@ void write_16(int16_t &address, int16_t data, bool eeprom);
 float read_float(int16_t &address, bool eeprom);
 void write_float(int16_t &address, float data, bool eeprom);
 
-// axis.cpp
-#ifndef LOWMEM
-void compute_axes();
-#endif
-
-#ifdef HAVE_MOTORS
-static inline bool moving_motor(uint8_t which) {
-	if (!moving)
-		return false;
-	return !isnan(motors[which]->dist);
-}
-#endif
+bool globals_load(int16_t &address, bool eeprom);
+void globals_save(int16_t &address, bool eeprom);
+int16_t globals_size();
 
 #include ARCH_INCLUDE
 

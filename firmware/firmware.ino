@@ -15,7 +15,7 @@
 #ifdef HAVE_TEMPS
 static void handle_temps(unsigned long current_time, unsigned long longtime) {
 	static int sleeper = 0;
-	if (sleeper > 0 && requested_temp == 0) {
+	if (sleeper > 0 && requested_temp >= num_temps) {
 		sleeper -= 1;
 		return;
 	}
@@ -23,43 +23,42 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 	if (adc_phase == 0)
 		return;
 	if (adc_phase == 1) {
-		if (requested_temp != 0)
+		if (requested_temp < num_temps)
 			temp_current = requested_temp;
 		else {
 			// Find the temp to measure next time.
 			uint8_t i;
-			for (i = 1; i <= MAXOBJECT; ++i) {
-				uint8_t next = (temp_current + i) % MAXOBJECT;
-				if (temps[next] &&
-						((temps[next]->adctarget < MAXINT && temps[next]->adctarget >= 0)
-						 || (temps[next]->adcmin_alarm >= 0 && temps[next]->adcmin_alarm < MAXINT)
-						 || temps[next]->adcmax_alarm < MAXINT
-#ifndef LOWMEM
-						 || temps[next]->gpios
+			for (i = 1; i <= num_temps; ++i) {
+				uint8_t next = (temp_current + i) % num_temps;
+				if (((temps[next].adctarget < MAXINT && temps[next].adctarget >= 0)
+						 || (temps[next].adcmin_alarm >= 0 && temps[next].adcmin_alarm < MAXINT)
+						 || temps[next].adcmax_alarm < MAXINT
+#ifdef HAVE_GPIO
+						 || temps[next].gpios
 #endif
 						 )
-						&& temps[next]->thermistor_pin.valid()) {
+						&& temps[next].thermistor_pin.valid()) {
 					temp_current = next;
 					break;
 				}
 			}
 			// If there is no temperature handling to do; disable (and abort the current one as well; it is no longer needed).
-			if (i > MAXOBJECT) {
+			if (i > num_temps) {
 				adc_phase = 0;
 				return;
 			}
 		}
-		adc_start(temps[temp_current]->thermistor_pin.pin);
+		adc_start(temps[temp_current].thermistor_pin.pin);
 		adc_phase = 2;
 		return;
 	}
-	int16_t temp = temps[temp_current]->get_value();
+	int16_t temp = temps[temp_current].get_value();
 	if (temp < 0)	// Not done yet.
 		return;
 	if (requested_temp == temp_current) {
-		requested_temp = 0;
+		requested_temp = ~0;
 		ReadFloat f;
-		f.f = temps[temp_current]->fromadc(temp);
+		f.f = temps[temp_current].fromadc(temp);
 		//debug("read temp %f", F(f.f));
 		reply[0] = 2 + sizeof(float);
 		reply[1] = CMD_TEMP;
@@ -72,17 +71,17 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 	// Set the phase so next time another temp is measured.
 	adc_phase = 1;
 	// First of all, if an alarm should be triggered, do so.  Adc values are higher for lower temperatures.
-	if ((temps[temp_current]->adcmin_alarm < MAXINT && temps[temp_current]->adcmin_alarm > temp) || temps[temp_current]->adcmax_alarm < temp) {
-		temps[temp_current]->min_alarm = NAN;
-		temps[temp_current]->max_alarm = NAN;
-		temps[temp_current]->adcmin_alarm = MAXINT;
-		temps[temp_current]->adcmax_alarm = MAXINT;
-		which_tempcbs |= (1 << temp_current);
+	if ((temps[temp_current].adcmin_alarm < MAXINT && temps[temp_current].adcmin_alarm > temp) || temps[temp_current].adcmax_alarm < temp) {
+		temps[temp_current].min_alarm = NAN;
+		temps[temp_current].max_alarm = NAN;
+		temps[temp_current].adcmin_alarm = MAXINT;
+		temps[temp_current].adcmax_alarm = MAXINT;
+		temps[temp_current].alarm = true;
 		try_send_next();
 	}
-#ifndef LOWMEM
+#ifdef HAVE_GPIO
 	// And handle any linked gpios.
-	for (Gpio *g = temps[temp_current]->gpios; g; g = g->next) {
+	for (Gpio *g = temps[temp_current].gpios; g; g = g->next) {
 		// adc values are lower for higher temperatures.
 		if (temp < g->adcvalue)
 			SET(g->pin);
@@ -91,83 +90,80 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 	}
 #endif
 	// If we don't have model settings, simply use the target as a switch between on and off.
-#ifndef LOWMEM
-	// Don't use those values yet.
-	if (true || temps[temp_current]->core_C <= 0 || temps[temp_current]->shell_C <= 0 || temps[temp_current]->transfer <= 0 || temps[temp_current]->radiation <= 0)
-#else
-	if (true)
-#endif
+	/* Don't use those values yet.
+	if (true || temps[temp_current].core_C <= 0 || temps[temp_current].shell_C <= 0 || temps[temp_current].transfer <= 0 || temps[temp_current].radiation <= 0)
+	*/
 	{
 		// No valid settings; use simple on/off-regime based on current temperature only.  Note that adc values are lower for higher temperatures.
-		if (temp > temps[temp_current]->adctarget) {
-			if (!temps[temp_current]->is_on) {
+		if (temp > temps[temp_current].adctarget) {
+			if (!temps[temp_current].is_on) {
 				//debug("switching on %d", temp_current);
-				SET(temps[temp_current]->power_pin);
-				temps[temp_current]->is_on = true;
-				temps[temp_current]->last_time = current_time;
+				SET(temps[temp_current].power_pin);
+				temps[temp_current].is_on = true;
+				temps[temp_current].last_time = current_time;
 				++temps_busy;
 			}
 			else
-				temps[temp_current]->time_on += current_time - temps[temp_current]->last_time;
+				temps[temp_current].time_on += current_time - temps[temp_current].last_time;
 		}
 		else {
-			if (temps[temp_current]->is_on) {
+			if (temps[temp_current].is_on) {
 				//debug("switching off %d", temp_current);
-				RESET(temps[temp_current]->power_pin);
-				temps[temp_current]->is_on = false;
-				temps[temp_current]->time_on += current_time - temps[temp_current]->last_time;
+				RESET(temps[temp_current].power_pin);
+				temps[temp_current].is_on = false;
+				temps[temp_current].time_on += current_time - temps[temp_current].last_time;
 				--temps_busy;
 			}
 		}
 		return;
 	}
-#ifndef LOWMEM
+	/*
 	// TODO: Make this work and decide on units.
 	// We have model settings.
-	unsigned long dt = current_time - temps[temp_current]->last_time;
+	unsigned long dt = current_time - temps[temp_current].last_time;
 	if (dt == 0)
 		return;
-	temps[temp_current]->last_time = current_time;
+	temps[temp_current].last_time = current_time;
 	// Heater and core/shell transfer.
-	if (temps[temp_current]->is_on)
-		temps[temp_current]->core_T += temps[temp_current]->power / temps[temp_current]->core_C * dt;
-	float Q = temps[temp_current]->transfer * (temps[temp_current]->core_T - temps[temp_current]->shell_T) * dt;
-	temps[temp_current]->core_T -= Q / temps[temp_current]->core_C;
-	temps[temp_current]->shell_T += Q / temps[temp_current]->shell_C;
-	if (temps[temp_current]->is_on)
-		temps[temp_current]->core_T += temps[temp_current]->power / temps[temp_current]->core_C * dt / 2;
+	if (temps[temp_current].is_on)
+		temps[temp_current].core_T += temps[temp_current].power / temps[temp_current].core_C * dt;
+	float Q = temps[temp_current].transfer * (temps[temp_current].core_T - temps[temp_current].shell_T) * dt;
+	temps[temp_current].core_T -= Q / temps[temp_current].core_C;
+	temps[temp_current].shell_T += Q / temps[temp_current].shell_C;
+	if (temps[temp_current].is_on)
+		temps[temp_current].core_T += temps[temp_current].power / temps[temp_current].core_C * dt / 2;
 	// Set shell to measured value.
-	temps[temp_current]->shell_T = temp;
+	temps[temp_current].shell_T = temp;
 	// Add energy if required.
-	float E = temps[temp_current]->core_T * temps[temp_current]->core_C + temps[temp_current]->shell_T * temps[temp_current]->shell_C;
-	float T = E / (temps[temp_current]->core_C + temps[temp_current]->shell_C);
+	float E = temps[temp_current].core_T * temps[temp_current].core_C + temps[temp_current].shell_T * temps[temp_current].shell_C;
+	float T = E / (temps[temp_current].core_C + temps[temp_current].shell_C);
 	// Set the pin to correct value.
-	if (T < temps[temp_current]->target) {
-		if (!temps[temp_current]->is_on) {
-			SET(temps[temp_current]->power_pin);
-			temps[temp_current]->is_on = true;
+	if (T < temps[temp_current].target) {
+		if (!temps[temp_current].is_on) {
+			SET(temps[temp_current].power_pin);
+			temps[temp_current].is_on = true;
 			++temps_busy;
 		}
 		else
-			temps[temp_current]->time_on += current_time - temps[temp_current]->last_time;
+			temps[temp_current].time_on += current_time - temps[temp_current].last_time;
 	}
 	else {
-		if (temps[temp_current]->is_on) {
-			RESET(temps[temp_current]->power_pin);
-			temps[temp_current]->is_on = false;
-			temps[temp_current]->time_on += current_time - temps[temp_current]->last_time;
+		if (temps[temp_current].is_on) {
+			RESET(temps[temp_current].power_pin);
+			temps[temp_current].is_on = false;
+			temps[temp_current].time_on += current_time - temps[temp_current].last_time;
 			--temps_busy;
 		}
 	}
-#endif
+	*/
 }
 #endif
 
 #ifdef HAVE_SPACES
 static bool delayed;
 
-static bool do_steps(uint8_t s, uint8_t m, float distance, unsigned long current_time) {
-	Motor &mtr = *spaces[s]->motor[m];
+static bool do_steps(Space *s, uint8_t m, float distance, unsigned long current_time) {
+	Motor &mtr = *s->motor[m];
 	if (isnan(distance) || distance == 0)
 		return true;
 	float dt = (current_time - mtr.last_time) / 1e6;
@@ -235,7 +231,7 @@ static bool do_steps(uint8_t s, uint8_t m, float distance, unsigned long current
 		// Hit endstop; abort current move and notify host.
 		debug("hit axis %d positive %d dist %f current_pos %f min %f max %f oldpos %f newpos %f last_v %f v %f", int(m - 2), mtr.positive, F(distance), F(mtr.current_pos), F(mtr.motor_min), F(mtr.motor_max), F(old_pos), F(new_pos), F(mtr.last_v), F(v));
 		mtr.last_v = 0;
-		motros[m].limits_pos = isnan(mtr.positive ? 1 : -1) : mtr.current_pos;
+		mtr.limits_pos = isnan(mtr.current_pos) ? INFINITY * (mtr.positive ? 1 : -1) : mtr.current_pos;
 		if (moving && current_move_has_cb) {
 			//debug("movecb 3");
 			++num_movecbs;
@@ -256,27 +252,27 @@ static bool do_steps(uint8_t s, uint8_t m, float distance, unsigned long current
 	else
 		mtr.last_distance += distance;
 	// Move.
-        for (int16_t s = 0; s < abs(steps); ++s) {
+        for (int16_t st = 0; st < abs(steps); ++st) {
 		SET(mtr.step_pin);
 		RESET(mtr.step_pin);
 	}
 	return true;
 }
 
-static bool move_axes(uint8_t s, float *target, unsigned long current_time) {
-	float motors_target[spaces[s]->num_motors];
+static bool move_axes(Space *s, float *target, unsigned long current_time) {
+	float motors_target[s->num_motors];
 	bool ok = true;
-	space_types[spaces[s]->type]->xyz2motors(target, motors_target, &ok);
+	space_types[s->type].xyz2motors(s, target, motors_target, &ok);
 	// Try again if it didn't work; it should have moved target to a better location.
 	if (!ok)
-		space_types[spaces[s]->type]->xyz2motors(target, motors_target, &ok);
-	for (uint8_t m = 0; m < spaces[s]->num_motors; ++m) {
-		if (!do_steps(s, m, motors_target[m] - spaces[s]->motors[m]->current_pos, current_time))
+		space_types[s->type].xyz2motors(s, target, motors_target, &ok);
+	for (uint8_t m = 0; m < s->num_motors; ++m) {
+		if (!do_steps(s, m, motors_target[m] - s->motor[m]->current_pos, current_time))
 			return false;
 	}
 	if (!delayed) {
-		for (uint8_t a = 0; a < spaces[s]->num_axes; ++a)
-			spaces[s]->axis[a].current = target[a];
+		for (uint8_t a = 0; a < s->num_axes; ++a)
+			s->axis[a]->current = target[a];
 	}
 	return true;
 }
@@ -284,7 +280,7 @@ static bool move_axes(uint8_t s, float *target, unsigned long current_time) {
 static void handle_motors(unsigned long current_time, unsigned long longtime) {
 	// Check sense pins.
 	for (uint8_t s = 0; s < num_spaces; ++s) {
-		Space &sp = *spaces[s];
+		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			if (!sp.motor[m]->sense_pin.valid())
 				continue;
@@ -311,16 +307,16 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 	if (t >= t0 + tp) {	// Finish this move and prepare next.
 		movedebug("finishing %f", F(t));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = *spaces[s];
+			Space &sp = spaces[s];
 			float target[sp.num_motors];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if ((isnan(sp.axis[a].motor.dist) || sp.axis[a].motor.dist == 0) && (isnan(sp.axis[a].motor.next_dist) || sp.axis[a].motor.next_dist == 0)) {
+				if ((isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) && (isnan(sp.axis[a]->next_dist) || sp.axis[a]->next_dist == 0)) {
 					target[a] = NAN;
 					continue;
 				}
-				target[a] = sp.axis[a].source + sp.axis[a].dist + sp.axis[a].next_dist * fq;
+				target[a] = sp.axis[a]->source + sp.axis[a]->dist + sp.axis[a]->next_dist * fq;
 			}
-			if (!move_axes(s, target, current_time))
+			if (!move_axes(&sp, target, current_time))
 				return;
 		}
 		if (delayed) { // Not really done yet.
@@ -334,17 +330,17 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 			try_send_next();
 		}
 		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = *spaces[s];
+			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				//debug("before source %d %f %f", a, F(axis[a].source), F(axis[a].motor.dist));
-				sp.axis[a].source += sp.axis[a].dist;
+				sp.axis[a]->source += sp.axis[a]->dist;
 				//debug("after source %d %f %f %f", a, F(axis[a].source), F(axis[a].motor.dist), F(axis[a].current_pos));
 			}
+			// Mark motors as not moving.
+			for (uint8_t a = 0; a < sp.num_axes; ++a)
+				sp.axis[a]->dist = NAN;
 		}
 		//debug("motors done");
-		// Mark motors as not moving.
-		for (uint8_t a = 0; a < sp.num_axes; ++a)
-			sp.axis[a].dist = NAN;
 		//debug("moving->false");
 		moving = false;
 		next_move();
@@ -355,35 +351,35 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 		float current_f = (f1 * (2 - t_fraction) + f2 * t_fraction) * t_fraction;
 		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", F(t), F(t0), F(tp), F(t_fraction), F(f1), F(f2), F(current_f));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = *spaces[s];
+			Space &sp = spaces[s];
 			float target[sp.num_motors];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (isnan(sp.axis[a].dist) || sp.axis[a].dist == 0) {
+				if (isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) {
 					target[a] = NAN;
 					continue;
 				}
-				target[a] = sp.axis[a].source + sp.axis[a].dist * current_f;
+				target[a] = sp.axis[a]->source + sp.axis[a]->dist * current_f;
 			}
-			move_axes(s, target, current_time);
+			move_axes(&sp, target, current_time);
 		}
 	}
 	else {	// Connector part.
 		movedebug("connector %f %f %f", F(t), F(t0), F(tp));
 		float tc = t - t0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = *spaces[s];
+			Space &sp = spaces[s];
 			float target[sp.num_motors];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if ((isnan(sp.axis[a].dist) || sp.axis[a].dist == 0) && (isnan(sp.axis[a].next_dist) || sp.axis[a].next_dist == 0)) {
+				if ((isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) && (isnan(sp.axis[a]->next_dist) || sp.axis[a]->next_dist == 0)) {
 					target[a] = NAN;
 					continue;
 				}
 				float t_fraction = tc / tp;
 				float current_f2 = fp * (2 - t_fraction) * t_fraction;
 				float current_f3 = fq * t_fraction * t_fraction;
-				target[a] = sp.axis[a].source + sp.axis[a].main_dist + sp.axis[a].dist * current_f2 + sp.axis[a].next_dist * current_f3;
+				target[a] = sp.axis[a]->source + sp.axis[a]->main_dist + sp.axis[a]->dist * current_f2 + sp.axis[a]->next_dist * current_f3;
 			}
-			move_axes(s, target, current_time);
+			move_axes(&sp, target, current_time);
 		}
 	}
 	if (delayed) {
@@ -430,23 +426,26 @@ static void handle_audio(unsigned long current_time, unsigned long longtime) {
 		uint8_t old_state = audio_state;
 		audio_state = (audio_buffer[audio_head][byte] >> (bit & 7)) & 1;
 		if (audio_state != old_state) {
-			for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-				if (!motors[m] || !(motors[m]->audio_flags & Motor::PLAYING))
-					continue;
-				if (audio_state) {
-					if (!motors[m]->positive) {
-						SET(motors[m]->dir_pin);
-						motors[m]->positive = true;
+			for (uint8_t s = 0; s < num_spaces; ++s) {
+				Space &sp = spaces[s];
+				for (uint8_t m = 0; m < sp.num_motors; ++m) {
+					if (!(sp.motor[m]->audio_flags & Motor::PLAYING))
+						continue;
+					if (audio_state) {
+						if (!sp.motor[m]->positive) {
+							SET(sp.motor[m]->dir_pin);
+							sp.motor[m]->positive = true;
+						}
 					}
-				}
-				else {
-					if (motors[m]->positive) {
-						RESET(motors[m]->dir_pin);
-						motors[m]->positive = false;
+					else {
+						if (sp.motor[m]->positive) {
+							RESET(sp.motor[m]->dir_pin);
+							sp.motor[m]->positive = false;
+						}
 					}
+					SET(sp.motor[m]->step_pin);
+					RESET(sp.motor[m]->step_pin);
 				}
-				SET(motors[m]->step_pin);
-				RESET(motors[m]->step_pin);
 			}
 		}
 	}
@@ -503,28 +502,29 @@ void loop() {
 	unsigned long audio_t = micros() - current_time;
 #endif
 #ifdef HAVE_SPACES
-	if (motors_busy != 0 && (longtime - last_active) / 1e3 > motor_limit) {
-		for (uint8_t m = 0; m < MAXOBJECT; ++m) {
-			if (!motors[m])
-				continue;
-			RESET(motors[m]->enable_pin);
-			motors[m].current_pos = NAN;
-			motors[m].current = NAN;
-			motors[m].source = NAN;
+	if (motors_busy && (longtime - last_active) / 1e3 > motor_limit) {
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = spaces[s];
+			for (uint8_t m = 0; m < sp.num_motors; ++m) {
+				RESET(sp.motor[m]->enable_pin);
+				sp.motor[m]->current_pos = NAN;
+			}
+			for (uint8_t a = 0; a < sp.num_axes; ++a) {
+				sp.axis[a]->current = NAN;
+				sp.axis[a]->source = NAN;
+			}
 		}
-		motors_busy = 0;
+		motors_busy = false;
 		which_autosleep |= 1;
 	}
 #endif
 #ifdef HAVE_TEMPS
 	if (temps_busy > 0 && (longtime - last_active) / 1e3 > temp_limit) {
-		for (uint8_t current_t = 0; current_t < MAXOBJECT; ++current_t) {
-			if (!temps[current_t])
-				continue;
-			RESET(temps[current_t]->power_pin);
-			temps[current_t]->target = NAN;
-			temps[current_t]->adctarget = MAXINT;
-			temps[current_t]->is_on = false;
+		for (uint8_t current_t = 0; current_t < num_temps; ++current_t) {
+			RESET(temps[current_t].power_pin);
+			temps[current_t].target = NAN;
+			temps[current_t].adctarget = MAXINT;
+			temps[current_t].is_on = false;
 			last_active = longtime;
 		}
 		temps_busy = 0;

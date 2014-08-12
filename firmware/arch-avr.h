@@ -190,10 +190,8 @@ static inline void arch_setup_start() {
 	MCUSR = 0;
 }
 
-static inline void arch_setup_end(int address) {
-	debug ("Startup.  MCUSR: %x, Eeprom used: %d, available: %d", mcusr, address, E2END);
-	if (address - 1 > E2END)
-		debug ("Warning: data doesn't fit in EEPROM; decrease MAXAXES, MAXEXTRUDERS, or MAXTEMPS and reflash the firmware!");
+static inline void arch_setup_end() {
+	debug ("Startup.  MCUSR: %x", mcusr);
 }
 
 static inline uint8_t read_eeprom(uint16_t address) {

@@ -7,7 +7,7 @@ static uint8_t get_which()
 	return command[2] & 0x3f;
 }
 
-#if defined(HAVE_TEMPS) || defined(HAVE_MOTORS)
+#if defined(HAVE_TEMPS) || defined(HAVE_SPACES)
 static float get_float(uint8_t offset)
 {
 	ReadFloat ret;
@@ -17,7 +17,7 @@ static float get_float(uint8_t offset)
 }
 #endif
 
-#if defined(HAVE_AUDIO) || !defined(LOWMEM)
+#if defined(HAVE_AUDIO)
 static int16_t get_int16(uint8_t offset)
 {
 	return ((uint16_t)command[offset] & 0xff) | (uint16_t)command[offset + 1] << 8;
@@ -39,6 +39,13 @@ void packet()
 #endif
 		// A server is running; start the watchdog.
 		watchdog_enable();
+		for (uint8_t i = 0; i < 4; ++i) {
+			if (command[2 + i] != 0) {
+				debug("Server version is not supported");
+				Serial.write(CMD_STALL);
+				return;
+			}
+		}
 		for (uint8_t i = 0; i < ID_SIZE; ++i)
 			printerid[i] = command[6 + i];
 		write_ack();
@@ -61,7 +68,7 @@ void packet()
 		Serial.flush();
 		reset();
 	}
-#ifdef HAVE_MOTORS
+#ifdef HAVE_SPACES
 	case CMD_GOTO:	// goto
 	case CMD_GOTOCB:	// goto with callback
 	{
@@ -75,7 +82,9 @@ void packet()
 			Serial.write(CMD_STALL);
 			return;
 		}
-		uint8_t const num = 2 + num_axes + num_extruders;
+		uint8_t num = 2;
+		for (uint8_t t = 0; t < num_spaces; ++t)
+			num += spaces[t].num_axes;
 		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
 		uint8_t t = 0;
 		for (uint8_t ch = 0; ch < num; ++ch)
@@ -85,11 +94,6 @@ void packet()
 				ReadFloat f;
 				for (uint8_t i = 0; i < sizeof(float); ++i)
 					f.b[i] = command[offset + i + t * sizeof(float)];
-				if (ch >= 2 && ch < 2 + num_axes && isnan(axis[ch - 2].current_pos)) {
-					debug("Moving uninitialized axis %d", ch - 2);
-					Serial.write(CMD_STALL);
-					return;
-				}
 				if (ch < 2) {
 					queue[queue_end].f[ch] = f.f;
 					//debug("goto %d %f", ch, F(f.f));
@@ -136,85 +140,37 @@ void packet()
 			//debug("waiting with move");
 		break;
 	}
-	case CMD_RUN:	// run motor
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_RUN");
-#endif
-		last_active = millis();
-		which = get_which();
-		// Motor must exist, must not be doing a move.
-		if (!motors[which])
-		{
-			debug("Running invalid motor %d", which);
-			Serial.write(CMD_STALL);
-			return;
-		}
-		if (moving_motor(which))
-		{
-			debug("Running moving motor %d", which);
-			Serial.write(CMD_STALL);
-			return;
-		}
-		ReadFloat f;
-		for (uint8_t i = 0; i < sizeof(float); ++i) {
-			f.b[i] = command[3 + i];
-		}
-		if (!isnan(f.f) && f.f != 0)
-			initialized = true;
-		write_ack();
-		//debug("running %d", which);
-		if (which < 2 + num_axes)
-			printer_types[printer_type]->invalidate_axis(which - 2);
-		if (isnan(f.f))
-			f.f = 0;
-		//debug("at speed %f", F(f.f));
-		if (abs(f.f) > motors[which]->limit_v)
-			f.f = (f.f < 0 ? -1 : 1) * motors[which]->limit_v;
-		//debug("I mean at speed %f", F(f.f));
-		if (f.f >= 0)
-			SET(motors[which]->dir_pin);
-		else
-			RESET(motors[which]->dir_pin);
-		motors[which]->positive = f.f >= 0;
-		motors[which]->continuous_v = abs(f.f);
-		//debug("initial positive %d", motors[which]->positive);
-		motors[which]->last_time = micros();
-		SET(motors[which]->enable_pin);
-		motors[which]->continuous_f = 0;
-		motors_busy |= 1 << which;
-		return;
-	}
 	case CMD_SLEEP:	// disable motor current
 	{
 #ifdef DEBUG_CMD
 		debug("CMD_SLEEP");
 #endif
 		last_active = millis();
-		which = get_which();
-		if (!motors[which])
+		if (moving)
 		{
-			debug("Sleeping invalid motor %d", which);
-			Serial.write(CMD_STALL);
-			return;
-		}
-		if (moving_motor(which))
-		{
-			debug("Sleeping moving axis %d", which - 2);
+			debug("Sleeping while moving");
 			Serial.write(CMD_STALL);
 			return;
 		}
 		if (command[2] & 0x80) {
-			RESET(motors[which]->enable_pin);
-			motors_busy &= ~(1 << which);
-			if (which < 2 + num_axes) {
-				printer_types[printer_type]->invalidate_axis(which - 2);
-				axis[which - 2].current_pos = NAN;
+			for (uint8_t t = 0; t < num_spaces; ++t) {
+				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
+					RESET(spaces[t].motor[m]->enable_pin);
+					spaces[t].motor[m]->current_pos = NAN;
+				}
+				for (uint8_t a = 0; a < spaces[t].num_axes; ++a) {
+					spaces[t].axis[a]->source = NAN;
+					spaces[t].axis[a]->current = NAN;
+				}
 			}
+			motors_busy = true;
 		}
 		else {
-			SET(motors[which]->enable_pin);
-			motors_busy |= 1 << which;
+			for (uint8_t t = 0; t < num_spaces; ++t) {
+				for (uint8_t m = 0; m < spaces[t].num_motors; ++m)
+					SET(spaces[t].motor[m]->enable_pin);
+			}
+			motors_busy = false;
 		}
 		write_ack();
 		return;
@@ -228,30 +184,30 @@ void packet()
 #endif
 		last_active = millis();
 		which = get_which();
-		if (!temps[which])
+		if (which >= num_temps)
 		{
 			debug("Setting invalid temp %d", which);
 			Serial.write(CMD_STALL);
 			return;
 		}
-		temps[which]->target = get_float(3);
-		temps[which]->adctarget = temps[which]->toadc(temps[which]->target);
+		temps[which].target = get_float(3);
+		temps[which].adctarget = temps[which].toadc(temps[which].target);
 		//debug("adc target %d from %d", temps[which]->adctarget, int16_t(temps[which]->target / 1024));
-		if (temps[which]->adctarget >= MAXINT) {
+		if (temps[which].adctarget >= MAXINT) {
 			// loop() doesn't handle it anymore, so it isn't disabled there.
 			//debug("Temp %d disabled", which);
-			if (temps[which]->is_on) {
-				RESET(temps[which]->power_pin);
-				temps[which]->is_on = false;
+			if (temps[which].is_on) {
+				RESET(temps[which].power_pin);
+				temps[which].is_on = false;
 				--temps_busy;
 			}
 		}
-		else if (temps[which]->adctarget < 0) {
+		else if (temps[which].adctarget < 0) {
 			// loop() doesn't handle it anymore, so it isn't enabled there.
 			//debug("Temp %d enabled", which);
-			if (!temps[which]->is_on) {
-				SET(temps[which]->power_pin);
-				temps[which]->is_on = true;
+			if (!temps[which].is_on) {
+				SET(temps[which].power_pin);
+				temps[which].is_on = true;
 				++temps_busy;
 			}
 		}
@@ -270,7 +226,7 @@ void packet()
 #endif
 		initialized = true;
 		which = get_which();
-		if (!temps[which])
+		if (which >= num_temps)
 		{
 			debug("Waiting for invalid temp %d", which);
 			Serial.write(CMD_STALL);
@@ -282,10 +238,10 @@ void packet()
 			min.b[i] = command[3 + i];
 			max.b[i] = command[3 + i + sizeof(float)];
 		}
-		temps[which]->min_alarm = min.f;
-		temps[which]->max_alarm = max.f;
-		temps[which]->adcmin_alarm = temps[which]->toadc(temps[which]->min_alarm);
-		temps[which]->adcmax_alarm = temps[which]->toadc(temps[which]->max_alarm);
+		temps[which].min_alarm = min.f;
+		temps[which].max_alarm = max.f;
+		temps[which].adcmin_alarm = temps[which].toadc(temps[which].min_alarm);
+		temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm);
 		write_ack();
 		adc_phase = 1;
 		return;
@@ -296,7 +252,7 @@ void packet()
 		debug("CMD_READTEMP");
 #endif
 		which = get_which();
-		if (!temps[which])
+		if (which >= num_temps)
 		{
 			debug("Reading invalid temp %d", which);
 			Serial.write(CMD_STALL);
@@ -312,7 +268,7 @@ void packet()
 		debug("CMD_READPOWER");
 #endif
 		which = get_which();
-		if (!temps[which])
+		if (which >= num_temps)
 		{
 			debug("Reading power of invalid temp %d", which);
 			Serial.write(CMD_STALL);
@@ -323,12 +279,12 @@ void packet()
 		reply[1] = CMD_POWER;
 		ReadFloat on, current;
 		unsigned long t = micros();
-		if (temps[which]->is_on) {
+		if (temps[which].is_on) {
 			// This causes an insignificant error in the model, but when using this you probably aren't using the model anyway, and besides you won't notice the error even if you do.
-			temps[which]->time_on += t - temps[which]->last_time;
-			temps[which]->last_time = t;
+			temps[which].time_on += t - temps[which].last_time;
+			temps[which].last_time = t;
 		}
-		on.ui = temps[which]->time_on;
+		on.ui = temps[which].time_on;
 		current.ui = t;
 		for (uint8_t b = 0; b < sizeof(unsigned long); ++b)
 		{
@@ -337,7 +293,7 @@ void packet()
 		}
 	}
 #endif
-#ifdef HAVE_MOTORS
+#ifdef HAVE_SPACES
 	case CMD_SETPOS:	// Set current position
 	{
 #ifdef DEBUG_CMD
@@ -345,29 +301,31 @@ void packet()
 #endif
 		last_active = millis();
 		which = get_which();
-		if (which < 2 || which > 2 + num_axes)
+		uint8_t t = command[3];
+		if (t >= num_spaces || which >= spaces[t].num_axes)
 		{
-			debug("Setting position of non-axis component %d", which);
+			debug("Invalid axis for setting position: %d %d", t, which);
 			Serial.write(CMD_STALL);
 			return;
 		}
-		if (!(motors_busy & 1 << which))
+		if (!motors_busy)
 		{
-			debug("Setting position of sleeping axis %d (busy %x)", which - 2, motors_busy);
+			debug("Setting position while motors are sleeping");
 			Serial.write(CMD_STALL);
 			return;
 		}
-		if (moving_motor(which))
+		if (moving)
 		{
-			debug("Setting position of moving axis %d", which - 2);
+			debug("Setting position while moving");
 			Serial.write(CMD_STALL);
 			return;
 		}
-		if (which < 2 + num_axes)
-			printer_types[printer_type]->invalidate_axis(which - 2);
+		for (uint8_t a = 0; a < spaces[t].num_axes; ++a) {
+			spaces[t].axis[a]->source = NAN;
+			spaces[t].axis[a]->current = NAN;
+		}
 		write_ack();
-		axis[which - 2].current_pos = get_float(3);
-		//debug("Set position of axis %d to %f", which - 2, F(axis[which - 2].current_pos));
+		spaces[t].motor[which]->current_pos = get_float(4);
 		return;
 	}
 	case CMD_GETPOS:	// Get current position
@@ -376,24 +334,24 @@ void packet()
 		debug("CMD_GETPOS");
 #endif
 		which = get_which();
-		if (which < 2 || which > 2 + num_axes)
+		uint8_t t = command[3];
+		if (t >= num_spaces || which >= spaces[t].num_axes)
 		{
-			debug("Getting position of invalid axis %d", which);
+			debug("Getting position of invalid axis %d %d", t, which);
 			Serial.write(CMD_STALL);
 			return;
 		}
 		write_ack();
-		if (isnan(axis[which - 2].source))
-			printer_types[printer_type]->reset_pos();
-		ReadFloat pos, current;
-		pos.f = axis[which - 2].current_pos;
-		current.f = axis[which - 2].current - axis[which - 2].offset;
-		reply[0] = 2 + 2 * sizeof(float);
+		if (isnan(spaces[t].axis[which]->source))
+			space_types[spaces[t].type].reset_pos(&spaces[t]);
+			for (uint8_t a = 0; a < spaces[t].num_axes; ++a)
+				spaces[t].axis[a]->current = spaces[t].axis[a]->source;
+		ReadFloat pos;
+		pos.f = spaces[t].axis[which]->current - spaces[t].axis[which]->offset;
+		reply[0] = 2 + sizeof(float);
 		reply[1] = CMD_POS;
 		for (uint8_t b = 0; b < sizeof(float); ++b)
 			reply[2 + b] = pos.b[b];
-		for (uint8_t b = 0; b < sizeof(float); ++b)
-			reply[2 + sizeof(float) + b] = current.b[b];
 		reply_ready = true;
 		try_send_next();
 		return;
@@ -404,15 +362,20 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_LOAD");
 #endif
-		which = get_which();
-		if (which < 1 || which >= MAXOBJECT)
-		{
-			debug("Loading invalid object %d", which);
-			Serial.write(CMD_STALL);
-			return;
-		}
-		addr = objects[which]->address;
-		objects[which]->load(addr, true);
+		addr = 0;
+		globals_load(addr, true);
+#ifdef HAVE_SPACES
+		for (uint8_t t = 0; t < num_spaces; ++t)
+			spaces[t].load(addr, true);
+#endif
+#ifdef HAVE_TEMPS
+		for (uint8_t t = 0; t < num_temps; ++t)
+			temps[t].load(addr, true);
+#endif
+#ifdef HAVE_GPIOS
+		for (uint8_t t = 0; t < num_gpios; ++t)
+			gpios[t].load(addr, true);
+#endif
 		write_ack();
 		return;
 	}
@@ -421,38 +384,36 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_SAVE");
 #endif
-		which = get_which();
-		if (which < 1 || which >= MAXOBJECT)
-		{
-			debug("Saving invalid object %d", which);
-			Serial.write(CMD_STALL);
-			return;
-		}
 		if (moving)
 		{
-			debug("Saving %d while moving would disrupt move", which);
+			debug("Saving while moving would disrupt move");
 			Serial.write(CMD_STALL);
 			return;
 		}
-		addr = objects[which]->address;
-		objects[which]->save(addr, true);
+		addr = 0;
+		globals_save(addr, true);
+#ifdef HAVE_SPACES
+		for (uint8_t t = 0; t < num_spaces; ++t)
+			spaces[t].save(addr, true);
+#endif
+#ifdef HAVE_TEMPS
+		for (uint8_t t = 0; t < num_temps; ++t)
+			temps[t].save(addr, true);
+#endif
+#ifdef HAVE_GPIOS
+		for (uint8_t t = 0; t < num_gpios; ++t)
+			gpios[t].save(addr, true);
+#endif
 		write_ack();
 		return;
 	}
-	case CMD_READ:	// reply settings to host
+	case CMD_READ_GLOBALS:
 	{
 #ifdef DEBUG_CMD
-		debug("CMD_READ");
+		debug("CMD_READ_GLOBALS");
 #endif
-		which = get_which();
-		if (which < 0 || which >= MAXOBJECT)
-		{
-			debug("Reading invalid object %d", which);
-			Serial.write(CMD_STALL);
-			return;
-		}
 		addr = 2;
-		objects[which]->save(addr, false);
+		globals_save(addr, false);
 		reply[0] = addr;
 		reply[1] = CMD_DATA;
 		write_ack();
@@ -460,23 +421,130 @@ void packet()
 		try_send_next();
 		return;
 	}
-	case CMD_WRITE:	// change settings from host
+	case CMD_WRITE_GLOBALS:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_WRITE_GLOBALS");
+#endif
+		addr = 3;
+		globals_load(addr, false);
+		write_ack();
+		return;
+	}
+#ifdef HAVE_SPACES
+	case CMD_READ_SPACE:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_READ_SPACE");
+#endif
+		addr = 2;
+		which = get_which();
+		if (which >= num_spaces) {
+			debug("Reading invalid space %d", which);
+			Serial.write(CMD_STALL);
+			return;
+		}
+		spaces[which].save(addr, false);
+		reply[0] = addr;
+		reply[1] = CMD_DATA;
+		write_ack();
+		reply_ready = true;
+		try_send_next();
+		return;
+	}
+	case CMD_WRITE_SPACE:
 	{
 		which = get_which();
 #ifdef DEBUG_CMD
-		debug("CMD_WRITE %d", which);
+		debug("CMD_WRITE_SPACE");
 #endif
-		if (which < 1 || which >= MAXOBJECT)
-		{
-			debug("Writing invalid object %d", which);
+		if (which >= num_spaces) {
+			debug("Writing invalid space %d", which);
 			Serial.write(CMD_STALL);
 			return;
 		}
 		addr = 3;
-		objects[which]->load(addr, false);
+		spaces[which].load(addr, false);
 		write_ack();
 		return;
 	}
+#endif
+#ifdef HAVE_TEMPS
+	case CMD_READ_TEMP:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_READ_TEMP");
+#endif
+		addr = 2;
+		which = get_which();
+		if (which >= num_temps) {
+			debug("Reading invalid temp %d", which);
+			Serial.write(CMD_STALL);
+			return;
+		}
+		temps[which].save(addr, false);
+		reply[0] = addr;
+		reply[1] = CMD_DATA;
+		write_ack();
+		reply_ready = true;
+		try_send_next();
+		return;
+	}
+	case CMD_WRITE_TEMP:
+	{
+		which = get_which();
+#ifdef DEBUG_CMD
+		debug("CMD_WRITE_TEMP");
+#endif
+		if (which >= num_temps) {
+			debug("Writing invalid temp %d", which);
+			Serial.write(CMD_STALL);
+			return;
+		}
+		addr = 3;
+		temps[which].load(addr, false);
+		write_ack();
+		return;
+	}
+#endif
+#ifdef HAVE_GPIOS
+	case CMD_READ_GPIO:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_READ_GPIO");
+#endif
+		addr = 2;
+		which = get_which();
+		if (which >= num_gpios) {
+			debug("Reading invalid gpio %d", which);
+			Serial.write(CMD_STALL);
+			return;
+		}
+		gpios[which].save(addr, false);
+		reply[0] = addr;
+		reply[1] = CMD_DATA;
+		write_ack();
+		reply_ready = true;
+		try_send_next();
+		return;
+	}
+	case CMD_WRITE_GPIO:
+	{
+		which = get_which();
+#ifdef DEBUG_CMD
+		debug("CMD_WRITE_GPIO");
+#endif
+		if (which >= num_gpios) {
+			debug("Writing invalid gpio %d", which);
+			Serial.write(CMD_STALL);
+			return;
+		}
+		addr = 3;
+		gpios[which].load(addr, false);
+		write_ack();
+		return;
+	}
+#endif
 	case CMD_QUEUED:
 	{
 #ifdef DEBUG_CMD
@@ -509,21 +577,22 @@ void packet()
 		return;
 	}
 #ifdef HAVE_GPIOS
-	case CMD_READGPIO:
+	case CMD_READPIN:
 	{
 #ifdef DEBUG_CMD
 		debug("CMD_READGPIO");
 #endif
-		if (command[2] < GPIO0 || command[2] >= GPIO0 + num_gpios)
+		which = get_which();
+		if (which >= num_gpios)
 		{
-			debug("GETGPIO called for non-gpio channel %d", command[2]);
+			debug("Reading invalid gpio %d", which);
 			Serial.write(CMD_STALL);
 			return;
 		}
 		write_ack();
 		reply[0] = 3;
 		reply[1] = CMD_PIN;
-		reply[2] = GET(gpio[command[2] - GPIO0].pin, false) ? 1 : 0;
+		reply[2] = GET(gpios[which].pin, false) ? 1 : 0;
 		reply_ready = true;
 		try_send_next();
 		return;
@@ -537,25 +606,18 @@ void packet()
 #endif
 		last_active = millis();
 		audio_us_per_bit = get_int16(2);
-		for (uint8_t a = 0; a < num_axes; ++a)
-		{
-			if (command[4 + ((a + 2) >> 3)] & (1 << ((a + 2) & 0x7))) {
-				axis[a].motor.audio_flags |= Motor::PLAYING;
-				SET(axis[a].motor.enable_pin);
-				motors_busy |= 1 << (a + 2);
+		uint8_t m0 = 0;
+		for (uint8_t t = 0; t < num_spaces; ++t) {
+			for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
+				if (command[4 + ((m0 + m) >> 3)] & (1 << ((m0 + m) & 0x7))) {
+					spaces[t].motor[m]->audio_flags |= Motor::PLAYING;
+					SET(spaces[t].motor[m]->enable_pin);
+					motors_busy = true;
+				}
+				else
+					spaces[t].motor[m]->audio_flags &= ~Motor::PLAYING;
 			}
-			else
-				axis[a].motor.audio_flags &= ~Motor::PLAYING;
-		}
-		for (uint8_t e = 0; e < num_extruders; ++e)
-		{
-			if (command[4 + ((e + 2 + num_axes) >> 3)] & (1 << ((e + 2 + num_axes) & 0x7))) {
-				extruder[e].motor.audio_flags |= Motor::PLAYING;
-				SET(extruder[e].motor.enable_pin);
-				motors_busy |= 1 << (2 + num_axes + e);
-			}
-			else
-				extruder[e].motor.audio_flags &= ~Motor::PLAYING;
+			m0 += spaces[t].num_motors;
 		}
 		// Abort any currently playing sample.
 		audio_head = 0;

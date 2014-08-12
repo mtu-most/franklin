@@ -3,17 +3,12 @@
 // EEPROM, so all your old settings are lost when you upload firmware with
 // different settings for these values.
 
-// When setting this, Things are stripped down so much that they fit into an
-// Arduino Uno.  This severely limits the functionality.
-// All other settings from this file are redefined in firmware.h if this is
-// defined.
-//#define LOWMEM
-
-// Maximum length of the printer name in bytes.
-#define NAMELEN 32
-
 // Maximum number of move commands in the queue.
 #define QUEUE_LENGTH 10
+
+#define HAVE_SPACES
+#define HAVE_TEMPS
+#define HAVE_GPIOS
 
 // If HAVE_AUDIO is not defined, nothing related to audio will be included.
 #define HAVE_AUDIO

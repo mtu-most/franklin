@@ -31,10 +31,12 @@ void next_move () {
 	//for (uint8_t a = 0; a < num_axes; ++a)
 	//	debug("target %d %f", a, F(queue[queue_start].data[a]));
 	for (uint8_t s = 0; s < num_spaces; ++s) {
-		Space &sp = *spaces[s];
+		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			if (isnan(sp.axis[a].source)) {
-				space_types[sp.type]->reset_pos();
+			if (isnan(sp.axis[a]->source)) {
+				space_types[sp.type].reset_pos(&sp);
+				for (uint8_t a = 0; a < sp.num_axes; ++a)
+					sp.axis[a]->current = sp.axis[a]->source;
 				break;
 			}
 		}
@@ -51,7 +53,7 @@ void next_move () {
 					debug("filling %d with %f", a0 + a, F(queue[queue_start].data[a0 + a]));
 				}
 			}
-			if ((!isnan(queue[queue_start].data[a0 + a]) && isnan(sp.axis[a].source)) || (n != queue_end && !isnan(queue[n].data[a0 + a]) && isnan(sp.axis[a].source))) {
+			if ((!isnan(queue[queue_start].data[a0 + a]) && isnan(sp.axis[a]->source)) || (n != queue_end && !isnan(queue[n].data[a0 + a]) && isnan(sp.axis[a]->source))) {
 				debug ("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue.");
 				// This possibly removes one move too many, but it shouldn't happen anyway.
 				if (queue[queue_start].cb) {
@@ -78,12 +80,11 @@ void next_move () {
 #ifdef DEBUG_MOVE
 		debug ("No move prepared.");
 #endif
-		check_positions(queue[queue_start].data);
 		f0 = 0;
 		uint8_t a0 = 0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = *spaces[s];
-			space_types[sp.type]->check_position(&data[a0]);
+			Space &sp = spaces[s];
+			space_types[sp.type].check_position(&sp, &queue[queue_start].data[a0]);
 			for (uint8_t m = 0; m < sp.num_motors; ++m) {
 				sp.motor[m]->last_v = 0;
 				sp.motor[m]->last_distance = 0;
@@ -116,12 +117,12 @@ void next_move () {
 		debug ("Building final segment.");
 #endif
 		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = *spaces[s];
+			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				sp.axis[m].dist = sp.axis[a].next_dist;
-				if (sp.axis[a].dist != 0)
+				sp.axis[a]->dist = sp.axis[a]->next_dist;
+				if (sp.axis[a]->dist != 0)
 					action = true;
-				sp.axis[a].next_dist = 0;
+				sp.axis[a]->next_dist = 0;
 #ifdef DEBUG_MOVE
 				debug ("Last segment distance for motor %d is %f", a, F(sp.axis[a].dist));
 #endif
@@ -138,15 +139,15 @@ void next_move () {
 #endif
 		uint8_t a0 = 0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = *spaces[s];
-			space_types[sp.type]->check_position(&data[a0]);
+			Space &sp = spaces[s];
+			space_types[sp.type].check_position(&sp, &queue[n].data[a0]);
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				sp.axis[a].dist = sp.axis[a].next_dist;
+				sp.axis[a]->dist = sp.axis[a]->next_dist;
 				if (isnan(queue[n].data[a0 + a]))
-					sp.axis[a].next_dist = 0;
+					sp.axis[a]->next_dist = 0;
 				else
-					sp.axis[a].next_dist = queue[n].data[a0 + a];
-				if (sp.axis[a].next_dist != 0 || sp.axis[a].dist != 0)
+					sp.axis[a]->next_dist = queue[n].data[a0 + a];
+				if (sp.axis[a]->next_dist != 0 || sp.axis[a]->dist != 0)
 					action = true;
 #ifdef DEBUG_MOVE
 				debug ("Connecting distance for motor %d is %f, to %f", a, F(sp.axis[a].dist), F(sp.axis[a].next_dist));
@@ -178,9 +179,9 @@ void next_move () {
 		//debug("moving->false");
 		moving = false;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = *spaces[s];
+			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a)
-				sp.axis[a].dist = NAN;
+				sp.axis[a]->dist = NAN;
 		}
 		fq = 0;
 		return next_move ();
@@ -202,12 +203,12 @@ void next_move () {
 
 	// Limit v0, vp, vq. {{{
 	for (uint8_t s = 0; s < num_spaces; ++s) {
-		Space &sp = *spaces[s];
+		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			if (!isnan(sp.axes[a].max_v)) {
+			if (!isnan(sp.axis[a]->max_v)) {
 				float max;
-				if (sp.axis[a].dist != 0) {
-					max = sp.axis[a].max_v / sp.axis[a].dist;
+				if (sp.axis[a]->dist != 0) {
+					max = sp.axis[a]->max_v / sp.axis[a]->dist;
 					if (v0 > max) {
 						v0 = max;
 						//debug("limited v0 to %f for max v %f dist %f so %f", F(v0), F(sp.axis[a].max_v), F(sp.axis[a].dist), F(max));
@@ -215,8 +216,8 @@ void next_move () {
 					if (vp > max)
 						vp = max;
 				}
-				if (sp.axis[a].next_dist != 0) {
-					max = sp.axis[a].max_v / sp.axis[a].next_dist;
+				if (sp.axis[a]->next_dist != 0) {
+					max = sp.axis[a]->max_v / sp.axis[a]->next_dist;
 					if (vq > max)
 						vq = max;
 				}
@@ -238,11 +239,11 @@ void next_move () {
 	float m_round;
 	float norma2 = 0, normb2 = 0, inner = 0;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
-		Space &sp = *spaces[s];
+		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			inner += axis[a].motor.dist * axis[a].motor.next_dist;
-			norma2 += axis[a].motor.dist * axis[a].motor.dist;
-			normb2 += axis[a].motor.next_dist * axis[a].motor.next_dist;
+			inner += sp.axis[a]->dist * sp.axis[a]->next_dist;
+			norma2 += sp.axis[a]->dist * sp.axis[a]->dist;
+			normb2 += sp.axis[a]->next_dist * sp.axis[a]->next_dist;
 		}
 		float norma(sqrt(norma2));
 		float normb(sqrt(normb2));
@@ -252,8 +253,8 @@ void next_move () {
 		}
 		else {
 			float summed2 = 0;
-			for (uint8_t a = 0; a < num_axes; ++a) {
-				float s = axis[a].motor.dist / norma + axis[a].motor.next_dist / normb;
+			for (uint8_t a = 0; a < sp.num_axes; ++a) {
+				float s = sp.axis[a]->dist / norma + sp.axis[a]->next_dist / normb;
 				summed2 += s * s;
 			}
 			float scale(sqrt(summed2) / 2);
@@ -284,9 +285,9 @@ void next_move () {
 
 	// Finish. {{{
 	for (uint8_t s = 0; s < num_spaces; ++s) {
-		Space &sp = *spaces[s];
+		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			sp.axis[a].main_dist = sp.axis[a].dist * (1 - fp);
+			sp.axis[a]->main_dist = sp.axis[a]->dist * (1 - fp);
 #ifdef DEBUG_MOVE
 			debug ("Motor %d dist %f main dist = %f, next dist = %f", mtr, F(motors[mtr]->dist), F(motors[mtr]->main_dist), F(motors[mtr]->next_dist));
 #endif
@@ -308,12 +309,12 @@ void abort_move () { // {{{
 	if (moving) {
 		//debug ("aborting move");
 		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = *spaces[s];
+			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				//debug ("setting axis %d source to %f", a, F(axis[a].current));
-				sp.axis[a].source = sp.axis[a].current;
-				sp.axis[a].dist = NAN;
-				sp.axis[a].next_dist = NAN;
+				sp.axis[a]->source = sp.axis[a]->current;
+				sp.axis[a]->dist = NAN;
+				sp.axis[a]->next_dist = NAN;
 			}
 			for (uint8_t m = 0; m < sp.num_motors; ++m)
 				sp.motor[m]->last_v = 0;

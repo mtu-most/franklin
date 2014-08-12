@@ -10,23 +10,17 @@ void Temp::load (int16_t &addr, bool eeprom)
 	beta = read_float (addr, eeprom);
 	K = exp (logRc - beta / Tc);
 	//debug("K %f R0 %f R1 %f logRc %f Tc %f beta %f", F(K), F(R0), F(R1), F(logRc), F(Tc), F(beta));
-#ifndef LOWMEM
 #ifdef HAVE_GPIOS
 	for (Gpio *gpio = gpios; gpio; gpio = gpio->next)
 		gpio->adcvalue = toadc (gpio->value);
 #endif
+	/*
 	core_C = read_float (addr, eeprom);
 	shell_C = read_float (addr, eeprom);
 	transfer = read_float (addr, eeprom);
 	radiation = read_float (addr, eeprom);
 	power = read_float (addr, eeprom);
-#else
-	read_float (addr, eeprom);
-	read_float (addr, eeprom);
-	read_float (addr, eeprom);
-	read_float (addr, eeprom);
-	read_float (addr, eeprom);
-#endif
+	*/
 	power_pin.read (read_16 (addr, eeprom));
 	thermistor_pin.read (read_16 (addr, eeprom));
 	SET_OUTPUT (power_pin);
@@ -39,21 +33,19 @@ void Temp::save (int16_t &addr, bool eeprom)
 	write_float (addr, logRc, eeprom);
 	write_float (addr, Tc, eeprom);
 	write_float (addr, beta, eeprom);
-#ifndef LOWMEM
+	/*
 	write_float (addr, core_C, eeprom);
 	write_float (addr, shell_C, eeprom);
 	write_float (addr, transfer, eeprom);
 	write_float (addr, radiation, eeprom);
 	write_float (addr, power, eeprom);
-#else
-	write_float (addr, NAN, eeprom);
-	write_float (addr, NAN, eeprom);
-	write_float (addr, NAN, eeprom);
-	write_float (addr, NAN, eeprom);
-	write_float (addr, NAN, eeprom);
-#endif
+	*/
 	write_16 (addr, power_pin.write (), eeprom);
 	write_16 (addr, thermistor_pin.write (), eeprom);
+}
+
+int16_t Temp::size0() {
+	return 2 * 2 + sizeof(float) * 10;
 }
 
 int16_t Temp::get_value () {
@@ -95,5 +87,74 @@ int16_t Temp::toadc (float T) {
 	float Rs = K * exp (beta * 1. / T);
 	//debug("K %f Rs %f R0 %f logRc %f Tc %f beta %f", F(K), F(Rs), F(R0), F(logRc), F(Tc), F(beta));
 	return ((1 << 10) - 1) * Rs / (Rs + R0);
+}
+
+void Temp::init() {
+	R0 = NAN;
+	R1 = INFINITY;
+	logRc = NAN;
+	Tc = 20;
+	beta = NAN;
+	/*
+	core_C = NAN;
+	shell_C = NAN;
+	transfer = NAN;
+	radiation = NAN;
+	power = NAN;
+	*/
+	power_pin.flags = 0;
+	power_pin.read(0);
+	thermistor_pin.flags = 0;
+	thermistor_pin.read(0);
+	min_alarm = NAN;
+	max_alarm = NAN;
+	adcmin_alarm = -1;
+	adcmax_alarm = -1;
+	alarm = false;
+	target = NAN;
+	adctarget = -1;
+#ifdef HAVE_GPIOS
+	gpios = NULL;
+#endif
+	last_time = millis();
+	time_on = 0;
+	is_on = false;
+	K = NAN;
+}
+
+void Temp::free() {
+}
+
+void Temp::copy(Temp &dst) {
+	dst.R0 = R0;
+	dst.R1 = R1;
+	dst.logRc = logRc;
+	dst.Tc = Tc;
+	dst.beta = beta;
+	/*
+	dst.core_C = core_C;
+	dst.shell_C = shell_C;
+	dst.transfer = transfer;
+	dst.radiation = radiation;
+	dst.power = power;
+	*/
+	dst.power_pin.flags = 0;
+	dst.power_pin.read(power_pin.write());
+	dst.thermistor_pin.flags = 0;
+	dst.thermistor_pin.read(thermistor_pin.write());
+	dst.min_alarm = min_alarm;
+	dst.max_alarm = max_alarm;
+	dst.adcmin_alarm = adcmin_alarm;
+	dst.adcmax_alarm = adcmax_alarm;
+	dst.alarm = alarm;
+	dst.target = target;
+	dst.adctarget = adctarget;
+#ifdef HAVE_GPIOS
+	dst.gpios = gpios;
+#endif
+	dst.last_time = last_time;
+	dst.time_on = time_on;
+	dst.is_on = is_on;
+	dst.K = K;
 }
 #endif

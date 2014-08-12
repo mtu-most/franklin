@@ -284,56 +284,58 @@ void try_send_next()
 		// Still busy sending other packet.
 		return;
 	}
-#ifdef HAVE_MOTORS
-	for (uint8_t w = 0; w < num_axes; ++w)
-	{
-		if (!isnan(limits_pos[w]))
-		{
+#ifdef HAVE_SPACES
+	for (uint8_t w = 0; w < num_spaces; ++w) {
+		for (uint8_t m = 0; m < spaces[w].num_motors; ++m) {
+			if (!isnan(spaces[w].motor[m]->limits_pos)) {
 #ifdef DEBUG_SERIAL
-			debug("limit %d", w);
+				debug("limit %d", w);
 #endif
-			out_buffer[0] = 7;
-			out_buffer[1] = CMD_LIMIT;
-			out_buffer[2] = w;
-			ReadFloat f;
-			f.f = limits_pos[w];
-			out_buffer[3] = f.b[0];
-			out_buffer[4] = f.b[1];
-			out_buffer[5] = f.b[2];
-			out_buffer[6] = f.b[3];
-			limits_pos[w] = NAN;
-			if (initialized)
-			{
-				prepare_packet(out_buffer);
-				send_packet(out_buffer);
+				out_buffer[0] = 8;
+				out_buffer[1] = CMD_LIMIT;
+				out_buffer[2] = w;
+				out_buffer[3] = m;
+				ReadFloat f;
+				f.f = spaces[w].motor[m]->limits_pos;
+				out_buffer[4] = f.b[0];
+				out_buffer[5] = f.b[1];
+				out_buffer[6] = f.b[2];
+				out_buffer[7] = f.b[3];
+				spaces[w].motor[m]->limits_pos = NAN;
+				if (initialized)
+				{
+					prepare_packet(out_buffer);
+					send_packet(out_buffer);
+				}
+				else
+					try_send_next();
+				return;
 			}
-			else
-				try_send_next();
-			return;
-		}
-		if (axis[w].sense_state & 1)
-		{
+			if (spaces[w].motor[m]->sense_state & 1)
+			{
 #ifdef DEBUG_SERIAL
-			debug("sense %d %d %f", w, axis[w].sense_state, F(axis[w].sense_pos));
+				debug("sense %d %d %f", w, spaces[w].motor[m]->sense_state, F(spaces[w].motor[m]->sense_pos));
 #endif
-			out_buffer[0] = 7;
-			out_buffer[1] = CMD_SENSE;
-			out_buffer[2] = w | (axis[w].sense_state & 0x80);
-			ReadFloat f;
-			f.f = axis[w].sense_pos;
-			out_buffer[3] = f.b[0];
-			out_buffer[4] = f.b[1];
-			out_buffer[5] = f.b[2];
-			out_buffer[6] = f.b[3];
-			axis[w].sense_state &= ~1;
-			if (initialized)
-			{
-				prepare_packet(out_buffer);
-				send_packet(out_buffer);
+				out_buffer[0] = 8;
+				out_buffer[1] = CMD_SENSE;
+				out_buffer[2] = w | (spaces[w].motor[m]->sense_state & 0x80);
+				out_buffer[3] = m;
+				ReadFloat f;
+				f.f = spaces[w].motor[m]->sense_pos;
+				out_buffer[4] = f.b[0];
+				out_buffer[5] = f.b[1];
+				out_buffer[6] = f.b[2];
+				out_buffer[7] = f.b[3];
+				spaces[w].motor[m]->sense_state &= ~1;
+				if (initialized)
+				{
+					prepare_packet(out_buffer);
+					send_packet(out_buffer);
+				}
+				else
+					try_send_next();
+				return;
 			}
-			else
-				try_send_next();
-			return;
 		}
 	}
 #endif
@@ -351,30 +353,24 @@ void try_send_next()
 		return;
 	}
 #ifdef HAVE_TEMPS
-	if (which_tempcbs != 0)
-	{
+	for (uint8_t t = 0; t < num_temps; ++t) {
+		if (temps[t].alarm) {
 #ifdef DEBUG_SERIAL
-		debug("tempcb %d", which_tempcbs);
+			debug("tempcb %d", t);
 #endif
-		for (uint8_t w = 0; w < MAXOBJECT; ++w)
-		{
-			if (which_tempcbs & (1 << w))
+			out_buffer[0] = 3;
+			out_buffer[1] = CMD_TEMPCB;
+			out_buffer[2] = t;
+			temps[t].alarm = false;
+			if (initialized)
 			{
-				out_buffer[0] = 3;
-				out_buffer[1] = CMD_TEMPCB;
-				out_buffer[2] = w;
-				which_tempcbs &= ~(1 << w);
-				break;
+				prepare_packet(out_buffer);
+				send_packet(out_buffer);
 			}
+			else
+				try_send_next();
+			return;
 		}
-		if (initialized)
-		{
-			prepare_packet(out_buffer);
-			send_packet(out_buffer);
-		}
-		else
-			try_send_next();
-		return;
 	}
 #endif
 	if (reply_ready)
