@@ -30,8 +30,9 @@ struct Pin_t {
 			SET_INPUT_NOPULLUP(*this);
 		pin = data & 0xff;
 		flags = data >> 8;
-		if ((flags & ~2) != 1 || pin >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS) {
-			flags &= ~1;
+		if (flags & ~3 || pin >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS) {
+			flags = 0;
+			pin = 0;
 		}
 	}
 };
@@ -72,8 +73,12 @@ enum Command {
 	CMD_SAVE,	// 1 byte: which channel.
 	CMD_READ_GLOBALS,
 	CMD_WRITE_GLOBALS,
-	CMD_READ_SPACE,	// 1 byte: which channel.  Reply: DATA.
-	CMD_WRITE_SPACE,	// 1 byte: which channel; n bytes: data.
+	CMD_READ_SPACE_INFO,	// 1 byte: which channel.  Reply: DATA.
+	CMD_READ_SPACE_AXIS,	// 1 byte: which channel.  Reply: DATA.
+	CMD_WRITE_SPACE_MOTOR,	// 1 byte: which channel; n bytes: data.
+	CMD_READ_SPACE_INFO,	// 1 byte: which channel.  Reply: DATA.
+	CMD_WRITE_SPACE_AXIS,	// 1 byte: which channel; n bytes: data.
+	CMD_WRITE_SPACE_MOTOR,	// 1 byte: which channel; n bytes: data.
 	CMD_READ_TEMP,	// 1 byte: which channel.  Reply: DATA.
 	CMD_WRITE_TEMP,	// 1 byte: which channel; n bytes: data.
 	CMD_READ_GPIO,	// 1 byte: which channel.  Reply: DATA.

@@ -63,6 +63,11 @@ void Space::set_nums(uint8_t na, uint8_t nm, int16_t &addr, bool eeprom) {
 		motor[m]->home_pos = read_float(addr, eeprom);
 		motor[m]->motor_min = read_float(addr, eeprom);
 		motor[m]->motor_max = read_float(addr, eeprom);
+		motor[m]->limit_v = read_float(addr, eeprom);
+		motor[m]->limit_a = read_float(addr, eeprom);
+		SET_OUTPUT(motor[m]->step_pin);
+		SET_OUTPUT(motor[m]->dir_pin);
+		SET_OUTPUT(motor[m]->enable_pin);
 		SET_INPUT(motor[m]->limit_min_pin);
 		SET_INPUT(motor[m]->limit_max_pin);
 		SET_INPUT(motor[m]->sense_pin);
@@ -77,12 +82,19 @@ void Space::save_std(int16_t &addr, bool eeprom) {
 		write_float(addr, axis[a]->max_v, eeprom);
 	}
 	for (uint8_t m = 0; m < num_motors; ++m) {
+		write_16(addr, motor[m]->step_pin.write(), eeprom);
+		write_16(addr, motor[m]->dir_pin.write(), eeprom);
+		write_16(addr, motor[m]->enable_pin.write(), eeprom);
 		write_16(addr, motor[m]->limit_min_pin.write(), eeprom);
 		write_16(addr, motor[m]->limit_max_pin.write(), eeprom);
 		write_16(addr, motor[m]->sense_pin.write(), eeprom);
+		write_float(addr, motor[m]->steps_per_m, eeprom);
+		write_float(addr, motor[m]->max_steps, eeprom);
 		write_float(addr, motor[m]->home_pos, eeprom);
 		write_float(addr, motor[m]->motor_min, eeprom);
 		write_float(addr, motor[m]->motor_max, eeprom);
+		write_float(addr, motor[m]->limit_v, eeprom);
+		write_float(addr, motor[m]->limit_a, eeprom);
 	}
 }
 
