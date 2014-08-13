@@ -365,8 +365,13 @@ void packet()
 		addr = 0;
 		globals_load(addr, true);
 #ifdef HAVE_SPACES
-		for (uint8_t t = 0; t < num_spaces; ++t)
-			spaces[t].load(addr, true);
+		for (uint8_t t = 0; t < num_spaces; ++t) {
+			spaces[t].load_info(addr, true);
+			for (uint8_t a = 0; a < spaces[t].num_axes; ++a)
+				spaces[t].load_axis(a, addr, true);
+			for (uint8_t m = 0; m < spaces[t].num_motors; ++m)
+				spaces[t].load_motor(m, addr, true);
+		}
 #endif
 #ifdef HAVE_TEMPS
 		for (uint8_t t = 0; t < num_temps; ++t)
@@ -393,8 +398,13 @@ void packet()
 		addr = 0;
 		globals_save(addr, true);
 #ifdef HAVE_SPACES
-		for (uint8_t t = 0; t < num_spaces; ++t)
-			spaces[t].save(addr, true);
+		for (uint8_t t = 0; t < num_spaces; ++t) {
+			spaces[t].save_info(addr, true);
+			for (uint8_t a = 0; a < spaces[t].num_axes; ++a)
+				spaces[t].save_axis(a, addr, true);
+			for (uint8_t m = 0; m < spaces[t].num_motors; ++m)
+				spaces[t].save_motor(m, addr, true);
+		}
 #endif
 #ifdef HAVE_TEMPS
 		for (uint8_t t = 0; t < num_temps; ++t)
@@ -426,16 +436,16 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_WRITE_GLOBALS");
 #endif
-		addr = 3;
+		addr = 2;
 		globals_load(addr, false);
 		write_ack();
 		return;
 	}
 #ifdef HAVE_SPACES
-	case CMD_READ_SPACE:
+	case CMD_READ_SPACE_INFO:
 	{
 #ifdef DEBUG_CMD
-		debug("CMD_READ_SPACE");
+		debug("CMD_READ_SPACE_INFO");
 #endif
 		addr = 2;
 		which = get_which();
@@ -444,7 +454,7 @@ void packet()
 			Serial.write(CMD_STALL);
 			return;
 		}
-		spaces[which].save(addr, false);
+		spaces[which].save_info(addr, false);
 		reply[0] = addr;
 		reply[1] = CMD_DATA;
 		write_ack();
@@ -452,11 +462,53 @@ void packet()
 		try_send_next();
 		return;
 	}
-	case CMD_WRITE_SPACE:
+	case CMD_READ_SPACE_AXIS:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_READ_SPACE_AXIS");
+#endif
+		addr = 2;
+		which = get_which();
+		uint8_t axis = command[3];
+		if (which >= num_spaces || axis >= spaces[which].num_axes) {
+			debug("Reading invalid axis %d %d", which, axis);
+			Serial.write(CMD_STALL);
+			return;
+		}
+		spaces[which].save_axis(axis, addr, false);
+		reply[0] = addr;
+		reply[1] = CMD_DATA;
+		write_ack();
+		reply_ready = true;
+		try_send_next();
+		return;
+	}
+	case CMD_READ_SPACE_MOTOR:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_READ_SPACE_MOTOR");
+#endif
+		addr = 2;
+		which = get_which();
+		uint8_t motor = command[3];
+		if (which >= num_spaces || motor >= spaces[which].num_motors) {
+			debug("Reading invalid motor %d %d", which, motor);
+			Serial.write(CMD_STALL);
+			return;
+		}
+		spaces[which].save_motor(motor, addr, false);
+		reply[0] = addr;
+		reply[1] = CMD_DATA;
+		write_ack();
+		reply_ready = true;
+		try_send_next();
+		return;
+	}
+	case CMD_WRITE_SPACE_INFO:
 	{
 		which = get_which();
 #ifdef DEBUG_CMD
-		debug("CMD_WRITE_SPACE");
+		debug("CMD_WRITE_SPACE_INFO");
 #endif
 		if (which >= num_spaces) {
 			debug("Writing invalid space %d", which);
@@ -464,7 +516,41 @@ void packet()
 			return;
 		}
 		addr = 3;
-		spaces[which].load(addr, false);
+		spaces[which].load_info(addr, false);
+		write_ack();
+		return;
+	}
+	case CMD_WRITE_SPACE_AXIS:
+	{
+		which = get_which();
+		uint8_t axis = command[3];
+#ifdef DEBUG_CMD
+		debug("CMD_WRITE_SPACE_MOTOR");
+#endif
+		if (which >= num_spaces || axis >= spaces[which].num_axes) {
+			debug("Writing invalid axis %d %d", which, axis);
+			Serial.write(CMD_STALL);
+			return;
+		}
+		addr = 4;
+		spaces[which].load_axis(axis, addr, false);
+		write_ack();
+		return;
+	}
+	case CMD_WRITE_SPACE_MOTOR:
+	{
+		which = get_which();
+		uint8_t motor = command[3];
+#ifdef DEBUG_CMD
+		debug("CMD_WRITE_SPACE_MOTOR");
+#endif
+		if (which >= num_spaces || motor >= spaces[which].num_motors) {
+			debug("Writing invalid motor %d %d", which, motor);
+			Serial.write(CMD_STALL);
+			return;
+		}
+		addr = 4;
+		spaces[which].load_motor(motor, addr, false);
 		write_ack();
 		return;
 	}

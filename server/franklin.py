@@ -384,7 +384,7 @@ class Port: # {{{
 			old[:] = [x for x in orphans if orphans[x].name == self.name]
 			if len(old) > 0:
 				orphans[old[0]].call('export_settings', (), {}, get_settings)
-		self.call('send_printer', [None], {}, lambda success, data: self.call('get_variables', (), {}, get_vars))
+		self.call('send_printer', [None], {}, lambda success, data: self.call('get_globals', (), {}, get_vars))
 	# }}}
 	def call(self, name, args, kargs, cb): # {{{
 		data = json.dumps([self.next_mid, name, args, kargs]) + '\n'

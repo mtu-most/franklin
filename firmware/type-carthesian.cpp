@@ -15,13 +15,13 @@ static void check_position(Space *s, float *data) {
 }
 
 static void load(Space *s, int16_t &addr, bool eeprom) {
+	debug("loading cartesian from %d", addr);
 	uint8_t num = read_8(addr, eeprom);
-	s->set_nums(num, num, addr, eeprom);
+	s->setup_nums(num, num);
 }
 
 static void save(Space *s, int16_t &addr, bool eeprom) {
 	write_8(addr, s->num_axes, eeprom);
-	s->save_std(addr, eeprom);
 }
 
 static void init(Space *s) {

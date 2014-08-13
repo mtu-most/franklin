@@ -105,7 +105,7 @@ static void load(Space *s, int16_t &addr, bool eeprom) {
 		if (APEX(s, a).axis_min > APEX(s, a).APEX(s, a).axis_max)
 			APEX(s, a).axis_min = 0;
 	}
-	s->set_nums(3, 3, addr, eeprom);
+	s->setup_nums(3, 3);
 }
 
 static void save(Space *s, int16_t &addr, bool eeprom) {
@@ -115,7 +115,6 @@ static void save(Space *s, int16_t &addr, bool eeprom) {
 		write_float(addr, APEX(s, a).length, eeprom);
 		write_float(addr, APEX(s, a).radius, eeprom);
 	}
-	s->save_std(addr, eeprom);
 }
 
 static void init(Space *s) {

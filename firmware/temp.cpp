@@ -93,7 +93,7 @@ void Temp::init() {
 	R0 = NAN;
 	R1 = INFINITY;
 	logRc = NAN;
-	Tc = 20;
+	Tc = 20 + 273.15;
 	beta = NAN;
 	/*
 	core_C = NAN;

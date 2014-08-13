@@ -50,6 +50,7 @@ bool globals_load(int16_t &addr, bool eeprom)
 		}
 		if (nl != namelen) {
 			delete[] name;
+			namelen = nl;
 			name = new char[nl];
 		}
 		// Free the old memory and initialize the new memory.
@@ -63,6 +64,7 @@ bool globals_load(int16_t &addr, bool eeprom)
 			for (uint8_t s = num_spaces; s < ns; ++s)
 				new_spaces[s].init();
 			delete[] spaces;
+			num_spaces = ns;
 			spaces = new_spaces;
 		}
 #endif
@@ -76,6 +78,7 @@ bool globals_load(int16_t &addr, bool eeprom)
 			for (uint8_t t = num_temps; t < nt; ++t)
 				new_temps[t].init();
 			delete[] temps;
+			num_temps = nt;
 			temps = new_temps;
 		}
 #endif
@@ -89,11 +92,11 @@ bool globals_load(int16_t &addr, bool eeprom)
 			for (uint8_t g = num_gpios; g < ns; ++g)
 				new_gpios[g].init();
 			delete[] gpios;
+			num_gpios = ng;
 			gpios = new_gpios;
 		}
 #endif
 	}
-	namelen = nl;
 	for (uint8_t n = 0; n < namelen; ++n)
 		name[n] = read_8(addr, eeprom);
 	max_deviation = read_float(addr, eeprom);

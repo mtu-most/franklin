@@ -75,8 +75,8 @@ enum Command {
 	CMD_WRITE_GLOBALS,
 	CMD_READ_SPACE_INFO,	// 1 byte: which channel.  Reply: DATA.
 	CMD_READ_SPACE_AXIS,	// 1 byte: which channel.  Reply: DATA.
-	CMD_WRITE_SPACE_MOTOR,	// 1 byte: which channel; n bytes: data.
-	CMD_READ_SPACE_INFO,	// 1 byte: which channel.  Reply: DATA.
+	CMD_READ_SPACE_MOTOR,	// 1 byte: which channel; n bytes: data.
+	CMD_WRITE_SPACE_INFO,	// 1 byte: which channel.  Reply: DATA.
 	CMD_WRITE_SPACE_AXIS,	// 1 byte: which channel; n bytes: data.
 	CMD_WRITE_SPACE_MOTOR,	// 1 byte: which channel; n bytes: data.
 	CMD_READ_TEMP,	// 1 byte: which channel.  Reply: DATA.
@@ -224,15 +224,18 @@ struct Space
 	uint8_t num_axes, num_motors;
 	Motor **motor;
 	Axis **axis;
-	void load(int16_t &addr, bool eeprom);
-	void save(int16_t &addr, bool eeprom);
+	void load_info(int16_t &addr, bool eeprom);
+	void load_axis(uint8_t a, int16_t &addr, bool eeprom);
+	void load_motor(uint8_t m, int16_t &addr, bool eeprom);
+	void save_info(int16_t &addr, bool eeprom);
+	void save_axis(uint8_t a, int16_t &addr, bool eeprom);
+	void save_motor(uint8_t m, int16_t &addr, bool eeprom);
 	void init();
 	void free();
 	void copy(Space &dst);
 	static int16_t size0();
 	int16_t size();
-	void set_nums(uint8_t na, uint8_t nm, int16_t &addr, bool eeprom);
-	void save_std(int16_t &addr, bool eeprom);
+	void setup_nums(uint8_t na, uint8_t nm);
 	int16_t size_std();
 };
 
