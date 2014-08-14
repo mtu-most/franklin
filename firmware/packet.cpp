@@ -362,25 +362,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_LOAD");
 #endif
-		addr = 0;
-		globals_load(addr, true);
-#ifdef HAVE_SPACES
-		for (uint8_t t = 0; t < num_spaces; ++t) {
-			spaces[t].load_info(addr, true);
-			for (uint8_t a = 0; a < spaces[t].num_axes; ++a)
-				spaces[t].load_axis(a, addr, true);
-			for (uint8_t m = 0; m < spaces[t].num_motors; ++m)
-				spaces[t].load_motor(m, addr, true);
-		}
-#endif
-#ifdef HAVE_TEMPS
-		for (uint8_t t = 0; t < num_temps; ++t)
-			temps[t].load(addr, true);
-#endif
-#ifdef HAVE_GPIOS
-		for (uint8_t t = 0; t < num_gpios; ++t)
-			gpios[t].load(addr, true);
-#endif
+		load_all();
 		write_ack();
 		return;
 	}

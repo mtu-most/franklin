@@ -652,7 +652,7 @@ class Printer: # {{{
 				self.spaces[channel].delta = []
 				for a in range(3):
 					self.spaces[channel].delta.append({})
-					self.spaces[channel].delta[-1]['axis_min'], self.spaces[channel].delta[-1]['axis_max'], self.spaces[channel].delta[-1]['length'], self.spaces[channel].delta[-1]['radius'] = struct.unpack('<ffff', info[1 + 16 * a:1 + 16 * (a + 1)])
+					self.spaces[channel].delta[-1]['axis_min'], self.spaces[channel].delta[-1]['axis_max'], self.spaces[channel].delta[-1]['rodlength'], self.spaces[channel].delta[-1]['radius'] = struct.unpack('<ffff', info[1 + 16 * a:1 + 16 * (a + 1)])
 				num_axes = 3
 				num_motors = 3
 			else:
@@ -1284,7 +1284,7 @@ class Printer: # {{{
 				data += struct.pack('<B', num_axes if num_axes is not None else len(self.axis))
 			else:
 				for a in range(3):
-					data += struct.pack('<ffff', self.delta[a]['axis_min'], self.delta[a]['axis_max'], self.delta[a]['length'], self.delta[a]['radius'])
+					data += struct.pack('<ffff', self.delta[a]['axis_min'], self.delta[a]['axis_max'], self.delta[a]['rodlength'], self.delta[a]['radius'])
 			return data
 		def write_axis(self, axis):
 			return struct.pack('<fff', self.axis[axis]['park'], self.axis[axis]['offset'], self.axis[axis]['max_v'])
@@ -1307,7 +1307,7 @@ class Printer: # {{{
 			if self.type == 0:
 				return std
 			elif self.type == 1:
-				return std + [[[a.axis_min, a.axis_max, a.length, a.radius] for a in self.delta]]
+				return std + [[[a.axis_min, a.axis_max, a.rodlength, a.radius] for a in self.delta]]
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -2036,7 +2036,7 @@ class Printer: # {{{
 			delta = []
 			for i in range(3):
 				d = {}
-				for key in ('axis_min', 'axis_max', 'length', 'radius'):
+				for key in ('axis_min', 'axis_max', 'rodlength', 'radius'):
 					d[key] = self.spaces[space].delta[key]
 				delta.append(d)
 			ret['delta'] = delta
@@ -2063,7 +2063,7 @@ class Printer: # {{{
 		elif self.spaces[space].type == 1:
 			num_axes = 3;
 			num_motors = 3;
-			for key in ('axis_min', 'axis_max', 'length', 'radius'):
+			for key in ('axis_min', 'axis_max', 'rodlength', 'radius'):
 				if key in ka:
 					self.spaces[space].delta[key] = ka[key]
 		self._send_packet(struct.pack('<BB', self.command['WRITE_SPACE_INFO'], space) + self.spaces[space].write_info(num_axes))

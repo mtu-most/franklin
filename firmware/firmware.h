@@ -385,6 +385,7 @@ void abort_move();
 
 // setup.cpp
 void setup();
+void load_all();
 
 // firmware.ino
 void loop();	// Do stuff which needs doing: moving motors and adjusting heaters.

@@ -98,121 +98,25 @@ function _setup_updater() {
 				'queue': [],
 				'namelen': constants[0],
 				'queue_length': constants[1],
-				'maxaxes': constants[2],
-				'maxextruders': constants[3],
-				'maxtemps': constants[4],
-				'maxgpios': constants[5],
 				'audio_fragments': constants[6],
 				'audio_fragment_size': constants[7],
 				'num_digital_pins': constants[8],
 				'num_pins': constants[9],
 				'name': '',
-				'num_axes': 0,
-				'num_extruders': 0,
+				'num_spaces': 0,
 				'num_temps': 0,
 				'num_gpios': 0,
-				'printer_type': 0,
 				'max_deviation': 0,
 				'led_pin': 0,
 				'probe_pin': 0,
-				'room_T': 0,
 				'motor_limit': 0,
 				'temp_limit': 0,
 				'feedrate': 1,
-				'angle': 0,
 				'message': null,
-				'axis': [],
-				'extruder': [],
-				'temp': [],
-				'gpio': []
+				'spaces': [],
+				'temps': [],
+				'gpios': []
 			};
-			for (var i = 0; i < printers[port].maxaxes; ++i) {
-				printers[port].axis.push({
-					'motor': {
-						'step_pin': 0,
-						'dir_pin': 0,
-						'enable_pin': 0,
-						'steps_per_m': 0,
-						'limit_v': 0,
-						'max_v': 0,
-						'limit_a': 0,
-						'max_steps': 1,
-						'runspeed': 0,
-						'sleeping': true
-					},
-					'limit_min_pin': 0,
-					'limit_max_pin': 0,
-					'sense_pin': 0,
-					'limit_pos': 0,
-					'axis_min': 0,
-					'axis_max': 0,
-					'motor_min': 0,
-					'motor_max': 0,
-					'park': 0,
-					'delta_length': 0,
-					'delta_radius': 0,
-					'offset': 0
-				});
-			}
-			for (var i = 0; i < printers[port].maxextruders; ++i) {
-				printers[port].extruder.push({
-					'motor': {
-						'step_pin': 0,
-						'dir_pin': 0,
-						'enable_pin': 0,
-						'steps_per_m': 0,
-						'limit_v': 0,
-						'max_v': 0,
-						'limit_a': 0,
-						'max_steps': 1,
-						'runspeed': 0,
-						'sleeping': true
-					},
-					'temp': {
-						'power_pin': 0,
-						'thermistor_pin': 0,
-						'R0': 0,
-						'R1': 0,
-						'Rc': 0,
-						'Tc': 0,
-						'beta': 0,
-						'core_C': 0,
-						'shell_C': 0,
-						'transfer': 0,
-						'radiation': 0,
-						'power': 0,
-						'value': 0
-					},
-					'filament_heat': 0,
-					'nozzle_size': 0,
-					'filament_size': 0
-				});
-			}
-			for (var i = 0; i < printers[port].maxtemps; ++i) {
-				printers[port].temp.push({
-					'power_pin': 0,
-					'thermistor_pin': 0,
-					'R0': 0,
-					'R1': 0,
-					'Rc': 0,
-					'Tc': 0,
-					'beta': 0,
-					'core_C': 0,
-					'shell_C': 0,
-					'transfer': 0,
-					'radiation': 0,
-					'power': 0,
-					'value': 0
-				});
-			}
-			for (var i = 0; i < printers[port].maxgpios; ++i) {
-				printers[port].gpio.push({
-					'pin': 0,
-					'state': 0,
-					'master': 0,
-					'value': 0
-				});
-			}
 			printers[port].call = function(name, a, ka, reply) {
 				var p = this.port;
 				if (_active_printer != p) {
@@ -255,100 +159,114 @@ function _setup_updater() {
 		'message': function(port, stat) {
 			trigger_update(port, 'message', stat);
 		},
-		'variables_update': function(port, values) {
-			printers[port].name = values[0];
-			printers[port].num_axes = values[1];
-			printers[port].num_extruders = values[2];
-			printers[port].num_temps = values[3];
-			printers[port].num_gpios = values[4];
-			printers[port].printer_type = values[5];
-			printers[port].max_deviation = values[6];
-			printers[port].led_pin = values[7];
-			printers[port].probe_pin = values[8];
-			printers[port].room_T = values[9];
-			printers[port].motor_limit = values[10];
-			printers[port].temp_limit = values[11];
-			printers[port].feedrate = values[12];
-			printers[port].angle = values[13];
-			printers[port].status = values[14];
-			printers[port].message = values[15];
+		'globals_update': function(port, values) {
+			new_num_spaces = values[0];
+			new_num_temps = values[1];
+			new_num_gpios = values[2];
+			printers[port].name = values[3];
+			printers[port].max_deviation = values[4];
+			printers[port].led_pin = values[5];
+			printers[port].probe_pin = values[6];
+			printers[port].motor_limit = values[7];
+			printers[port].temp_limit = values[8];
+			printers[port].feedrate = values[9];
+			printers[port].status = values[10];
 			trigger_update(port, 'variables_update');
+			for (var i = printer[port].num_spaces; i < new_num_spaces; ++i) {
+				printers[port].spaces.push({
+					'type': 0,
+					'num_axes': 0,
+					'num_motors': 0,
+					'delta': null,
+					'axis': [],
+					'motor': [],
+				});
+			}
+			printers[port].spaces.length = new_num_spaces;
+			printers[port].num_spaces = new_num_spaces;
+			for (var i = printer[port].num_temps; i < new_num_temps; ++i) {
+				printers[port].temps.push({
+					'power_pin': 0,
+					'thermistor_pin': 0,
+					'R0': 0,
+					'R1': 0,
+					'Rc': 0,
+					'Tc': 0,
+					'beta': 0,
+					'value': 0
+				});
+			}
+			printers[port].temps.length = new_num_temps;
+			printers[port].num_temps = new_num_temps;
+			for (var i = printers[port].num_gpios; i < new_num_gpios; ++i) {
+				printers[port].gpio.push({
+					'pin': 0,
+					'state': 0,
+					'master': 0xff,
+					'value': NaN
+				});
+			}
+			printers[port].gpios.length = new_num_gpios;
+			printers[port].num_gpios = new_num_gpios;
 		},
-		'axis_update': function(port, index, values) {
-			printers[port].axis[index].motor.step_pin = values[0][0];
-			printers[port].axis[index].motor.dir_pin = values[0][1];
-			printers[port].axis[index].motor.enable_pin = values[0][2];
-			printers[port].axis[index].motor.steps_per_m = values[0][3];
-			printers[port].axis[index].motor.limit_v = values[0][4];
-			printers[port].axis[index].motor.max_v = values[0][5];
-			printers[port].axis[index].motor.limit_a = values[0][6];
-			printers[port].axis[index].motor.max_steps = values[0][7];
-			printers[port].axis[index].motor.runspeed = values[0][8];
-			printers[port].axis[index].motor.sleeping = values[0][9];
-			printers[port].axis[index].limit_min_pin = values[1];
-			printers[port].axis[index].limit_max_pin = values[2];
-			printers[port].axis[index].sense_pin = values[3];
-			printers[port].axis[index].limit_pos = values[4];
-			printers[port].axis[index].axis_min = values[5];
-			printers[port].axis[index].axis_max = values[6];
-			printers[port].axis[index].motor_min = values[7];
-			printers[port].axis[index].motor_max = values[8];
-			printers[port].axis[index].park = values[9];
-			printers[port].axis[index].delta_length = values[10];
-			printers[port].axis[index].delta_radius = values[11];
-			printers[port].axis[index].offset = values[12];
-			trigger_update(port, 'axis_update', index);
-		},
-		'extruder_update': function(port, index, values) {
-			printers[port].extruder[index].motor.step_pin = values[0][0];
-			printers[port].extruder[index].motor.dir_pin = values[0][1];
-			printers[port].extruder[index].motor.enable_pin = values[0][2];
-			printers[port].extruder[index].motor.steps_per_m = values[0][3];
-			printers[port].extruder[index].motor.limit_v = values[0][4];
-			printers[port].extruder[index].motor.max_v = values[0][5];
-			printers[port].extruder[index].motor.limit_a = values[0][6];
-			printers[port].extruder[index].motor.max_steps = values[0][7];
-			printers[port].extruder[index].motor.runspeed = values[0][8];
-			printers[port].extruder[index].motor.sleeping = values[0][9];
-			printers[port].extruder[index].temp.power_pin = values[1][0];
-			printers[port].extruder[index].temp.thermistor_pin = values[1][1];
-			printers[port].extruder[index].temp.R0 = values[1][2];
-			printers[port].extruder[index].temp.R1 = values[1][3];
-			printers[port].extruder[index].temp.Rc = values[1][4];
-			printers[port].extruder[index].temp.Tc = values[1][5];
-			printers[port].extruder[index].temp.beta = values[1][6];
-			printers[port].extruder[index].temp.core_C = values[1][7];
-			printers[port].extruder[index].temp.shell_C = values[1][8];
-			printers[port].extruder[index].temp.transfer = values[1][9];
-			printers[port].extruder[index].temp.radiation = values[1][10];
-			printers[port].extruder[index].temp.power = values[1][11];
-			printers[port].extruder[index].temp.value = values[1][12];
-			printers[port].extruder[index].filament_heat = values[2];
-			printers[port].extruder[index].nozzle_size = values[3];
-			printers[port].extruder[index].filament_size = values[4];
-			trigger_update(port, 'extruder_update', index);
+		'space_update': function(port, index, values) {
+			printers[port].spaces[index].type = values[0];
+			printers[port].spaces[index].axis = [];
+			printers[port].spaces[index].motor = [];
+			for (var a = 0; a < values[1].length; ++a) {
+				printers[port].spaces[index].axis.push({
+					'park': values[1][a][0],
+					'offset': values[1][a][1],
+					'max_v': values[1][a][2]
+				});
+			}
+			for (var m = 0; m < values[2].length; ++m) {
+				printers[port].spaces[index].motor.push({
+					'step_pin': values[2][m][0],
+					'dir_pin': values[2][m][1],
+					'enable_pin': values[2][m][2],
+					'limit_min_pin': values[2][m][3],
+					'limit_max_pin': values[2][m][4],
+					'sense_pin': values[2][m][5],
+					'steps_per_m': values[2][m][6],
+					'max_steps': values[2][m][7],
+					'home_pos': values[2][m][8],
+					'motor_min': values[2][m][9],
+					'motor_max': values[2][m][10],
+					'limit_v': values[2][m][11],
+					'limit_a': values[2][m][12]
+				});
+			}
+			if (printers[port].spaces[index].type == 1) {
+				printers[port].spaces[index].delta = [];
+				for (var i = 0; i < 3; ++i) {
+					printers[port].spaces[index].delta.push({
+						'axis_min': values[3][i][0],
+						'axis_max': values[3][i][1],
+						'delta_length': values[3][i][2],
+						'delta_radius': values[3][i][3]
+					});
+				}
+			}
+			else
+				printers[port].spaces[index].delta = null;
+			trigger_update(port, 'space_update', index);
 		},
 		'temp_update': function(port, index, values) {
-			printers[port].temp[index].power_pin = values[0];
-			printers[port].temp[index].thermistor_pin = values[1];
-			printers[port].temp[index].R0 = values[2];
-			printers[port].temp[index].R1 = values[3];
-			printers[port].temp[index].Rc = values[4];
-			printers[port].temp[index].Tc = values[5];
-			printers[port].temp[index].beta = values[6];
-			printers[port].temp[index].core_C = values[7];
-			printers[port].temp[index].shell_C = values[8];
-			printers[port].temp[index].transfer = values[9];
-			printers[port].temp[index].radiation = values[10];
-			printers[port].temp[index].power = values[11];
-			printers[port].temp[index].value = values[12];
+			printers[port].temps[index].R0 = values[0];
+			printers[port].temps[index].R1 = values[1];
+			printers[port].temps[index].Rc = values[2];
+			printers[port].temps[index].Tc = values[3];
+			printers[port].temps[index].beta = values[4];
+			printers[port].temps[index].power_pin = values[5];
+			printers[port].temps[index].thermistor_pin = values[6];
 			trigger_update(port, 'temp_update', index);
 		},
 		'gpio_update': function(port, index, values) {
-			printers[port].gpio[index].pin = values[0];
-			printers[port].gpio[index].state = values[1];
-			printers[port].gpio[index].master = values[2];
-			printers[port].gpio[index].value = values[3];
+			printers[port].gpios[index].pin = values[0];
+			printers[port].gpios[index].state = values[1];
+			printers[port].gpios[index].master = values[2];
+			printers[port].gpios[index].value = values[3];
 			trigger_update(port, 'gpio_update', index);
 		}
 	};
@@ -382,10 +300,10 @@ function _reconnect() {
 		_updater.del_port(_ports.pop());
 	if (!confirm('The connection to the server was lost.  Reconnect?'))
 		return;
-	// Try again in 5 seconds.
+	// Wait a moment before retrying.
 	setTimeout(function() {
 		rpc = Rpc(_updater, _setup_connection, _reconnect);
-	}, 5000);
+	}, 500);
 }
 
 function setup() {

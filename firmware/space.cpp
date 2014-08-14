@@ -2,12 +2,9 @@
 
 #ifdef HAVE_SPACES
 void Space::setup_nums(uint8_t na, uint8_t nm) {
-	debug("setup nums %d %d", na, nm);
 	Axis **new_axes = new Axis *[na];
-	debug("setup nums %d", __LINE__);
 	for (uint8_t a = 0; a < min(num_axes, na); ++a)
 		new_axes[a] = axis[a];
-	debug("setup nums %d", __LINE__);
 	for (uint8_t a = num_axes; a < na; ++a) {
 		new_axes[a] = new Axis();
 		new_axes[a]->source = NAN;
@@ -16,17 +13,12 @@ void Space::setup_nums(uint8_t na, uint8_t nm) {
 		new_axes[a]->next_dist = NAN;
 		new_axes[a]->main_dist = NAN;
 	}
-	debug("setup nums %d", __LINE__);
 	delete[] axis;
-	debug("setup nums %d", __LINE__);
 	axis = new_axes;
 	num_axes = na;
-	debug("setup nums %d", __LINE__);
 	Motor **new_motors = new Motor *[nm];
-	debug("setup nums %d", __LINE__);
 	for (uint8_t m = 0; m < min(num_motors, nm); ++m)
 		new_motors[m] = motor[m];
-	debug("setup nums %d", __LINE__);
 	for (uint8_t m = num_motors; m < nm; ++m) {
 		new_motors[m] = new Motor();
 		new_motors[m]->sense_state = 0;
@@ -45,13 +37,9 @@ void Space::setup_nums(uint8_t na, uint8_t nm) {
 		new_motors[m]->audio_flags = 0;
 #endif
 	}
-	debug("setup nums %d", __LINE__);
 	delete[] motor;
-	debug("setup nums %d", __LINE__);
 	motor = new_motors;
-	debug("setup nums %d", __LINE__);
 	num_motors = nm;
-	debug("setup nums %d", __LINE__);
 }
 
 int16_t Space::size_std() {
@@ -61,6 +49,8 @@ int16_t Space::size_std() {
 void Space::load_info(int16_t &addr, bool eeprom)
 {
 	uint8_t t = type;
+	if (t >= NUM_SPACE_TYPES)
+		t = 0;
 	type = read_8(addr, eeprom);
 	if (type >= NUM_SPACE_TYPES) {
 		debug("request for type %d ignored", type);

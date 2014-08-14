@@ -4,7 +4,7 @@ var ports;
 var labels_element, printers_element;
 var selected_port, selected_printer;
 var script_cbs;
-var visibles;
+var multiples;
 var type2plural = {axis: 'axes', extruder: 'extruders', temp: 'temps', gpio: 'gpios'};
 var printer_types = ['Cartesian', 'Delta'];
 // }}}
@@ -23,7 +23,7 @@ function get_elements(list) { // {{{
 function init() { // {{{
 	script_cbs = new Object;
 	ports = new Object;
-	visibles = new Object;
+	multiples = new Object;
 	labels_element = document.getElementById('labels');
 	printers_element = document.getElementById('printers');
 	selected_port = null;
@@ -40,11 +40,10 @@ function init() { // {{{
 	register_update('del_script', del_script);
 	register_update('del_printer', del_printer);
 	register_update('del_port', del_port);
-	register_update('variables_update', update_variables);
-	register_update('axis_update', update_axis);
-	register_update('extruder_update', update_extruder);
-	register_update('temp_update', update_temp);
-	register_update('gpio_update', update_gpio);
+	register_update('globals_update', update_globals);
+	register_update('space_update', update_space);
+	register_update('temps_update', update_temps);
+	register_update('gpios_update', update_gpios);
 	if (document.location.search.length > 0 && document.location.search[0] == '?') {
 		var things = document.location.search.split('&');
 		for (var t = 0; t < things.length; ++t) {
@@ -304,7 +303,7 @@ function new_printer() { // {{{
 	printer.reference = [0, 0];
 	printer.local_angle = 0;
 	printer.lock = null;
-	visibles[port] = {titles: [], axis: make_visibles(printer.maxaxes), extruder: make_visibles(printer.maxextruders), temp: make_visibles(printer.maxtemps), gpio: make_visibles(printer.maxgpios)};
+	multiples[port] = {space: [], axis: [], motor: [], temp: [], gpio: []};
 	ports[port][2] = get_elements(build('Printer', [port]))[0];
 	printers_element.Add(ports[port][2]);
 	ports[port][0].RemoveClass('setup');
@@ -358,7 +357,7 @@ function del_printer() { // {{{
 	ports[port][0].AddClass('setup');
 	printers_element.removeChild(ports[port][2]);
 	ports[port][2] = null;
-	delete visibles[port];
+	delete multiples[port];
 	ports[port][3] = '';
 	if (selected_port == port)
 		selected_printer = null;
@@ -412,7 +411,7 @@ function do_queue() { // {{{
 // }}}
 
 // Update events(from server). {{{
-function update_variables() { // {{{
+function update_globals() { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
 	if (ports[port][3] != printer.name) {
@@ -423,104 +422,57 @@ function update_variables() { // {{{
 		select_printer();
 	}
 	get_element(printer, [null, 'export']).href = printer.name + '.ini?port=' + encodeURIComponent(port);
-	update_range([null, 'num_axes']);
-	update_range([null, 'num_extruders']);
-	update_range([null, 'num_temps']);
-	update_range([null, 'num_gpios']);
-	var e = document.getElementById(make_id(printer, [null, 'printer_type']));
-	e.ClearAll();
-	e.AddText(printer_types[get_value(printer, [null, 'printer_type'])]);
+	update_float([null, 'num_spaces']);
+	update_float([null, 'num_temps']);
+	update_float([null, 'num_gpios']);
 	update_float([null, 'max_deviation']);
 	update_pin([null, 'led_pin']);
 	update_pin([null, 'probe_pin']);
-	//update_float([null, 'room_T']);
 	update_float([null, 'motor_limit']);
 	update_float([null, 'temp_limit']);
 	update_float([null, 'feedrate']);
-	update_float([null, 'angle']);
 	e = document.getElementById(make_id(printer, [null, 'status']));
 	e.ClearAll();
 	var stat = get_value(printer, [null, 'status']);
 	e.AddText(stat === null ? 'Idle' : stat ? 'Printing' : 'Paused');
 	update_canvas_and_spans();
-	// Update visibility.
-	for (var i = 0; i < printer.num_axes; ++i) {
-		for (var j = 0; j < visibles[port].axis[i].length; ++j)
-			visibles[port].axis[i][j].RemoveClass('hidden');
-	}
-	for (var i = printer.num_axes; i < printer.maxaxes; ++i) {
-		for (var j = 0; j < visibles[port].axis[i].length; ++j)
-			visibles[port].axis[i][j].AddClass('hidden');
-	}
-	if (printer.num_axes > 1) {
-		for (var j = 0; j < visibles[port].axis[''].length; ++j)
-			visibles[port].axis[''][j].RemoveClass('hidden');
-	}
-	else {
-		for (var j = 0; j < visibles[port].axis[''].length; ++j)
-			visibles[port].axis[''][j].AddClass('hidden');
-	}
-	for (var i = 0; i < printer.num_extruders; ++i) {
-		for (var j = 0; j < visibles[port].extruder[i].length; ++j)
-			visibles[port].extruder[i][j].RemoveClass('hidden');
-	}
-	for (var i = printer.num_extruders; i < printer.maxextruders; ++i) {
-		for (var j = 0; j < visibles[port].extruder[i].length; ++j)
-			visibles[port].extruder[i][j].AddClass('hidden');
-	}
-	if (printer.num_extruders > 1) {
-		for (var j = 0; j < visibles[port].extruder[''].length; ++j)
-			visibles[port].extruder[''][j].RemoveClass('hidden');
-	}
-	else {
-		for (var j = 0; j < visibles[port].extruder[''].length; ++j)
-			visibles[port].extruder[''][j].AddClass('hidden');
-	}
-	for (var i = 0; i < printer.num_temps; ++i) {
-		for (var j = 0; j < visibles[port].temp[i].length; ++j)
-			visibles[port].temp[i][j].RemoveClass('hidden');
-	}
-	for (var i = printer.num_temps; i < printer.maxtemps; ++i) {
-		for (var j = 0; j < visibles[port].temp[i].length; ++j)
-			visibles[port].temp[i][j].AddClass('hidden');
-	}
-	if (printer.num_temps > 1) {
-		for (var j = 0; j < visibles[port].temp[''].length; ++j)
-			visibles[port].temp[''][j].RemoveClass('hidden');
-	}
-	else {
-		for (var j = 0; j < visibles[port].temp[''].length; ++j)
-			visibles[port].temp[''][j].AddClass('hidden');
-	}
-	for (var i = 0; i < printer.num_gpios; ++i) {
-		for (var j = 0; j < visibles[port].gpio[i].length; ++j)
-			visibles[port].gpio[i][j].RemoveClass('hidden');
-	}
-	for (var i = printer.num_gpios; i < printer.maxgpios; ++i) {
-		for (var j = 0; j < visibles[port].gpio[i].length; ++j)
-			visibles[port].gpio[i][j].AddClass('hidden');
-	}
-	if (printer.num_gpios > 1) {
-		for (var j = 0; j < visibles[port].gpio[''].length; ++j)
-			visibles[port].gpio[''][j].RemoveClass('hidden');
-	}
-	else {
-		for (var j = 0; j < visibles[port].gpio[''].length; ++j)
-			visibles[port].gpio[''][j].AddClass('hidden');
-	}
-	for (var i = 0; i < visibles[port].titles.length; ++i) {
-		var items = visibles[port].titles[i][0];
-		var objs = visibles[port].titles[i][1];
-		for (var j = 0; j < items.length; ++j) {
-			if (printer['num_' + type2plural[items[j]]] != 0)
-				break;
+	// TODO: titles.
+	var t = multiples[port]['space'];
+	for (var s = 0; s < t.length; ++s) {
+		while (t[s][1].length >= printer.num_spaces)
+			t[s][0].removeChild(t[s][1].pop());
+		while (t[s][1].length < printer.num_spaces - 1) {
+			var n = t[s][3](t[s][1].length);
+			t[s][1].push(n);
+			t[s][0].insertBefore(n, t[s][2]);
 		}
-		for (var k = 0; k < objs.length; ++k) {
-			if (j < items.length)
-				objs[k].RemoveClass('hidden');
-			else
-				objs[k].AddClass('hidden');
+		if (printer.num_spaces >= 2)
+			t[s][2].removeClass('hidden');
+	}
+	// TODO: axes and motors.
+	t = multiples[port]['temp'];
+	for (var s = 0; s < t.length; ++s) {
+		while (t[s][1].length >= printer.num_temps)
+			t[s][0].removeChild(t[s][1].pop());
+		while (t[s][1].length < printer.num_temps - 1) {
+			var n = t[s][3](t[s][1].length);
+			t[s][1].push(n);
+			t[s][0].insertBefore(n, t[s][2]);
 		}
+		if (printer.num_temps >= 2) {
+			t[s][2].removeClass('hidden');
+	}
+	t = multiples[port]['gpio'];
+	for (var s = 0; s < t.length; ++s) {
+		while (t[s][1].length >= printer.num_gpios)
+			t[s][0].removeChild(t[s][1].pop());
+		while (t[s][1].length < printer.num_gpios - 1) {
+			var n = t[s][3](t[s][1].length);
+			t[s][1].push(n);
+			t[s][0].insertBefore(n, t[s][2]);
+		}
+		if (printer.num_gpios >= 2)
+			t[s][2].removeClass('hidden');
 	}
 } // }}}
 
@@ -789,16 +741,14 @@ function multiple_titles(modes, titles, classes, mouseovers) { // {{{
 		if (mouseovers && mouseovers[cell])
 			th.title = mouseovers[cell];
 	}
-	visibles[port].titles.push([modes, [ret]]);
 	ret.AddClass('hidden');
 	return ret;
 } // }}}
 
 function multiple(template, arg, all) { // {{{
-	var ret = [];
 	var type = template.replace(/^.*_(.*?)$/, '$1');
-	var num = printer['max' + type2plural[type]];
 	var one = function(template, arg, i) {
+		var ret = [];
 		var part = build(template, [i, arg]);
 		for (var p = 0; p < part.length; ++p) {
 			if (part[p] instanceof Comment)
@@ -808,18 +758,22 @@ function multiple(template, arg, all) { // {{{
 					alert('Non-empty text node in result of multiple: ' + part[p].data);
 				continue;
 			}
-			visibles[port][type][i === null ? '' : i].push(part[p]);
 			if (i === null)
 				part[p].AddClass('all');
 			ret.push(part[p]);
 		}
-		return ret;
+		return ret[0];
 	};
-	for (var i = 0; i < num; ++i)
-		ret = ret.concat(one(template, arg, i));
-	if (all !== false && num > 1)
-		ret = ret.concat(one(template, arg, null));
-	return ret;
+	var r;
+	if (all !== false) {
+		var builder = function(i) { one(template, arg, i); }
+		r = [type, builder, builder(null)];
+		for (var i = 0; i < r[2].length; ++i)
+			r[2][i].AddClass('hidden');
+	}
+	else
+		r = [type, one, document.createComment('')];
+	return r;
 } // }}}
 
 function floats(num, title, obj) { // {{{
@@ -862,11 +816,12 @@ function make_pin_title(title, stack) { // {{{
 function make_table() { // {{{
 	var t = document.createElement('table');
 	for (var r = 0; r < arguments.length; ++r) {
-		if (arguments[r] instanceof Element)
+		if (arguments[r] instanceof Element) {
+			dbg("element added: " + String(arguments[r]));
 			t.Add(arguments[r]);
+		}
 		else {
-			for (var i = 0; i < arguments[r].length; ++i)
-				t.Add(arguments[r][i]);
+			multiples[port][arguments[r][0]].push([t, [], t.Add(arguments[r][2]), arguments[r][1]]);
 		}
 	}
 	return t;

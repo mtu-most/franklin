@@ -457,14 +457,11 @@
 						<div>[$(Text ['Name', [null, 'name']])$]</div>
 						<div>Motor Timeout: [$(Float [[null, 'motor_limit'], 60])$] min</div>
 						<div>Temp Timeout: [$(Float [[null, 'temp_limit'], 60])$] min</div>
-						<div>Angle: [$(Float [[null, 'angle'], 1])$]°</div>
 						<div>Max Deviation: [$(Float [[null, 'max_deviation'], .001])$] μm</div>
-						<div>
-							[!(build('Range', ['Axes', printer.maxaxes, [null, 'num_axes']]))!]
-							[!(build('Range', ['Extruders', printer.maxextruders, [null, 'num_extruders']]))!]
-							[!(build('Range', ['Temps', printer.maxtemps, [null, 'num_temps']]))!]
-							[!(build('Range', ['Gpios', printer.maxgpios, [null, 'num_gpios']]))!]
-						</div><!-- }}} -->
+						<div>Spaces: [$(Float [[null, 'num_spaces'], 1])$]</div>
+						<div>Temps: [$(Float [[null, 'num_temps'], 1])$]</div>
+						<div>Gpios: [$(Float [[null, 'num_gpios'], 1])$]</div>
+						<!-- }}} -->
 
 						[!([make_table( // Motor {{{
 							multiple_titles(['extruder', 'axis'], [
