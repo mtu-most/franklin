@@ -243,8 +243,8 @@ function _setup_updater() {
 					printers[port].spaces[index].delta.push({
 						'axis_min': values[3][i][0],
 						'axis_max': values[3][i][1],
-						'delta_length': values[3][i][2],
-						'delta_radius': values[3][i][3]
+						'rodlength': values[3][i][2],
+						'radius': values[3][i][3]
 					});
 				}
 			}

@@ -5,8 +5,8 @@ var labels_element, printers_element;
 var selected_port, selected_printer;
 var script_cbs;
 var multiples;
-var type2plural = {axis: 'axes', extruder: 'extruders', temp: 'temps', gpio: 'gpios'};
-var printer_types = ['Cartesian', 'Delta'];
+var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios'};
+var space_types = ['Cartesian', 'Delta'];
 // }}}
 
 // General supporting functions. {{{
@@ -255,8 +255,8 @@ function get_queue(printer) { // {{{
 // }}}
 
 function queue_print() { // {{{
-	selected_printer.call('get_axis_pos', [0], {}, function(x) {
-		selected_printer.call('get_axis_pos', [1], {}, function(y) {
+	selected_printer.call('get_axis_pos', [0, 0], {}, function(x) {
+		selected_printer.call('get_axis_pos', [0, 1], {}, function(y) {
 			var r = selected_printer.reference;
 			var sina = Math.sin(selected_printer.local_angle);
 			var cosa = Math.cos(selected_printer.local_angle);
@@ -268,8 +268,8 @@ function queue_print() { // {{{
 
 function queue_mill() { // {{{
 	var q = get_queue();
-	selected_printer.call('get_axis_pos', [0], {}, function(x) {
-		selected_printer.call('get_axis_pos', [1], {}, function(y) {
+	selected_printer.call('get_axis_pos', [0, 0], {}, function(x) {
+		selected_printer.call('get_axis_pos', [0, 1], {}, function(y) {
 			var r = selected_printer.reference;
 			var sina = Math.sin(selected_printer.local_angle);
 			var cosa = Math.cos(selected_printer.local_angle);
@@ -476,33 +476,42 @@ function update_globals() { // {{{
 	}
 } // }}}
 
-function update_axis(index) { // {{{
+function update_space(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
-	update_motor([['axis', 'motor'], index]);
-	update_pin([['axis', index], 'limit_min_pin']);
-	update_pin([['axis', index], 'limit_max_pin']);
-	update_pin([['axis', index], 'sense_pin']);
-	update_float([['axis', index], 'limit_pos']);
-	update_float([['axis', index], 'axis_min']);
-	update_float([['axis', index], 'axis_max']);
-	update_float([['axis', index], 'motor_min']);
-	update_float([['axis', index], 'motor_max']);
-	update_float([['axis', index], 'delta_length']);
-	update_float([['axis', index], 'delta_radius']);
-	update_float([['axis', index], 'offset']);
-	update_float([['axis', index], 'park']);
-	update_canvas_and_spans();
-} // }}}
-
-function update_extruder(index) { // {{{
-	if (!get_element(printer, [null, 'container']))
-		return;
-	update_motor([['extruder', 'motor'], index]);
-	update_tempcontent([['extruder', 'temp'], index]);
-	//update_float([['extruder', index], 'filament_heat']);
-	//update_float([['extruder', index], 'nozzle_size']);
-	//update_float([['extruder', index], 'filament_size']);
+	for (var a = 0; a < printer.spaces[index].num_axes; ++a) {
+		update_float([['axis', [index, a]], 'offset']);
+		update_float([['axis', [index, a]], 'park']);
+		update_float([['axis', [index, a]], 'max_v']);
+	}
+	for (var m = 0; m < printer.spaces[index].num_motors; ++m) {
+		update_pin([['motor', [index, m]], 'step_pin']);
+		update_pin([['motor', [index, m]], 'dir_pin']);
+		update_pin([['motor', [index, m]], 'enable_pin']);
+		update_pin([['motor', [index, m]], 'limit_min_pin']);
+		update_pin([['motor', [index, m]], 'limit_max_pin']);
+		update_pin([['motor', [index, m]], 'sense_pin']);
+		update_float([['motor', [index, m]], 'steps_per_m']);
+		update_float([['motor', [index, m]], 'max_steps']);
+		update_float([['motor', [index, m]], 'home_pos']);
+		update_float([['motor', [index, m]], 'motor_min']);
+		update_float([['motor', [index, m]], 'motor_max']);
+		update_float([['motor', [index, m]], 'limit_v']);
+		update_float([['motor', [index, m]], 'limit_a']);
+		update_canvas_and_spans();
+	}
+	if (printer.delta === null) {
+		get_element(printer, [['space', index], 'delta']).AddClass('hidden');
+	}
+	else {
+		get_element(printer, [['space', index], 'delta']).RemoveClass('hidden');
+		for (var d = 0; d < 3; ++d) {
+			update_float([['delta', [index, d]], 'axis_min']);
+			update_float([['delta', [index, d]], 'axis_max']);
+			update_float([['delta', [index, d]], 'rodlength']);
+			update_float([['delta', [index, d]], 'radius']);
+		}
+	}
 } // }}}
 
 function update_temp(index) { // {{{
@@ -629,7 +638,7 @@ function update_floats(id) { // {{{
 
 function update_temprange(id) { // {{{
 	var value = get_value(printer, id);
-	get_element(printer, id).selectedIndex = value > 0 ? 1 + value - 2 - printer.maxaxes : 0;
+	get_element(printer, id).selectedIndex = value != 255 ? 1 + value : 0;
 	return value;
 } // }}}
 // }}}
@@ -671,18 +680,12 @@ function pinrange(only_analog, element, attr) { // {{{
 function temprange(element, attr) { // {{{
 	var node = element.cloneNode(true);
 	node.AddText('None');
-	node[attr] = '0';
+	node[attr] = String(0xff);
 	var ret = [node];
-	for (var i = 0; i < printer.maxextruders; ++i) {
+	for (var i = 0; i < printer.num_temps; ++i) {
 		node = element.cloneNode(true);
-		node.AddText('Extruder ' + String(i));
-		node[attr] = String(2 + printer.maxaxes + i);
-		ret.push(node);
-	}
-	for (var i = 0; i < printer.maxtemps; ++i) {
-		node = element.cloneNode(true);
-		node.AddText('Temp ' + String(i));
-		node[attr] = String(2 + printer.maxaxes + printer.maxextruders + i);
+		node.AddText(temp_name(i));
+		node[attr] = String(i);
 		ret.push(node);
 	}
 	return ret;
@@ -690,8 +693,8 @@ function temprange(element, attr) { // {{{
 
 function create_printer_type_select() { // {{{
 	var ret = document.createElement('select');
-	for (var o = 0; o < printer_types.length; ++o)
-		ret.AddElement('option').AddText(printer_types[o]);
+	for (var o = 0; o < space_types.length; ++o)
+		ret.AddElement('option').AddText(space_types[o]);
 	return ret;
 } // }}}
 
@@ -783,16 +786,10 @@ function floats(num, title, obj) { // {{{
 	return ret;
 } // }}}
 
-function axis_name(index, as_axis) { // {{{
+function space_name(index) { // {{{
 	if (index === null)
-		return 'All Axes';
-	return index < 3 ? String.fromCharCode((as_axis ? 'X' : 'U').charCodeAt(0) + index) : 'Axis ' + String(index);
-} // }}}
-
-function extruder_name(index) { // {{{
-	if (index === null)
-		return 'All Extruders';
-	return 'Extruder ' + String(index);
+		return 'All Spaces';
+	return 'Space ' + String(index);
 } // }}}
 
 function temp_name(index) { // {{{
@@ -898,7 +895,7 @@ function move_axis(axes, amounts, update_lock, pos) { // {{{
 	if (pos === undefined)
 		pos = [];
 	if (pos.length < axes.length) {
-		selected_printer.call('get_axis_pos', [axes[pos.length]], {}, function(result) {
+		selected_printer.call('get_axis_pos', [0, axes[pos.length]], {}, function(result) {
 			pos.push(result[1] + amounts[pos.length]);
 			move_axis(axes, amounts, update_lock, pos);
 		});
@@ -907,7 +904,7 @@ function move_axis(axes, amounts, update_lock, pos) { // {{{
 	var target = new Object;
 	for (var a = 0; a < axes.length; ++a)
 		target[axes[a]] = pos[a];
-	selected_printer.call('goto', [target], {'cb': true}, function() {
+	selected_printer.call('goto', [[0, target]], {'cb': true}, function() {
 		selected_printer.call('wait_for_cb', [], {}, function() {
 			update_canvas_and_spans(update_lock);
 		});
@@ -916,8 +913,8 @@ function move_axis(axes, amounts, update_lock, pos) { // {{{
 // }}}
 
 function set_reference(x, y, ctrl) { // {{{
-	selected_printer.call('get_axis_pos', [0], {}, function(current_x) {
-		selected_printer.call('get_axis_pos', [1], {}, function(current_y) {
+	selected_printer.call('get_axis_pos', [0, 0], {}, function(current_x) {
+		selected_printer.call('get_axis_pos', [0, 1], {}, function(current_y) {
 			if (ctrl) {
 				selected_printer.reference = [x, y];
 				update_canvas_and_spans(false);
@@ -939,9 +936,9 @@ function set_reference(x, y, ctrl) { // {{{
 
 function update_canvas_and_spans(update_lock) { // {{{
 	var printer = selected_printer;
-	printer.call('get_axis_pos', [0], {}, function(x) {
-		printer.call('get_axis_pos', [1], {}, function(y) {
-			printer.call('get_axis_pos', [2], {}, function(z) {
+	printer.call('get_axis_pos', [0, 0], {}, function(x) {
+		printer.call('get_axis_pos', [0, 1], {}, function(y) {
+			printer.call('get_axis_pos', [0, 2], {}, function(z) {
 				if (update_lock)
 					printer.lock = [[x[1], y[1]], [selected_printer.reference[0], selected_printer.reference[1]]];
 				var e = document.getElementById(make_id(selected_printer, [null, 'movespan0']));
@@ -972,8 +969,8 @@ function redraw_canvas(x, y) { // {{{
 	var outline;
 	switch (selected_printer.printer_type) {
 	case 0:
-		var xaxis = selected_printer.axis[0];
-		var yaxis = selected_printer.axis[1];
+		var xaxis = selected_printer.spaces[0].axis[0];
+		var yaxis = selected_printer.spaces[0].axis[1];
 		printerwidth = 2 * Math.max(xaxis.motor_max, -xaxis.motor_min) + .010;
 		printerheight = 2 * Math.max(yaxis.motor_max, -yaxis.motor_min) + .010;
 		outline = function(c) {
@@ -993,8 +990,8 @@ function redraw_canvas(x, y) { // {{{
 		var radius = [];
 		var length = [];
 		for (var a = 0; a < 3; ++a) {
-			radius.push(selected_printer.axis[a].delta_radius);
-			length.push(selected_printer.axis[a].delta_length);
+			radius.push(selected_printer.spaces[0].delta[a].radius);
+			length.push(selected_printer.spaces[0].delta[a].rodlength);
 		}
 		//var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
 		//var dx = [0, -.8660254037844387, .8660254037844387];

@@ -184,6 +184,20 @@
 				)!]
 			</div> <!-- }}} -->
 			<!-- }}} -->
+
+
+
+			<div id='Spacetype_space'> <!-- {{{ -->
+				[!(
+					elements[0].printer = printer,
+					elements[0].index = args[0],
+					elements[0].obj = create_space_type_select(),
+					elements[1].id = make_id(printer, [['space', args[0]], 'type']),
+					[elements[0].obj, elements[0], elements[1]]
+					<button type='button' onclick="set_value(this.printer, this.target, this.obj.selected.value)">Set</button>
+					<span></span>
+				)!]
+			</div> <!-- }}} -->
 			<div id='Motor'> <!-- {{{ -->
 				<!-- args = parent, index, basic_steps -->
 				<div>[$(Float [[[[args[0], 'motor'], args[1]], 'max_steps'], 1])$]</div>
@@ -357,18 +371,6 @@
 				<div>[$(Run [[['extruder', 'motor'], args[0]]])$]</div>
 				)!]
 			</div> <!-- }}} -->
-			<div id='Pins_extruder'> <!-- {{{ -->
-				[!(
-				// args = index, visible
-				node.id = make_id(printer, [['extruderpins', args[0]], 'container']),
-				make_pin_title(extruder_name(args[0]), stack)
-				[$(Pin ['Step', [[['extruder', 'motor'], args[0]], 'step_pin']])$]
-				[$(Pin ['Direction', [[['extruder', 'motor'], args[0]], 'dir_pin']])$]
-				[$(Pin ['Enable', [[['extruder', 'motor'], args[0]], 'enable_pin']])$]
-				[$(Pin ['Power', [[['extruder', 'temp'], args[0]], 'power_pin']])$]
-				[$(Pin ['Thermistor', [[['extruder', 'temp'], args[0]], 'thermistor_pin'], true])$]
-				)!]
-			</div> <!-- }}} -->
 			<div id='Temp_components_temp'> <!-- {{{ -->
 				[!(
 				// args = index, class
@@ -440,20 +442,6 @@
 					)!]
 					<div class='setup'> <!-- {{{ -->
 						<!-- Global settings {{{ -->
-						<div>
-							Printer type:
-							[!(
-								elements[0].printer = printer,
-								elements[0].obj = create_printer_type_select(),
-								elements[0].onclick = function() {
-									set_value(this.printer, [null, 'printer_type'], this.obj.selectedIndex);
-								},
-								elements[1].id = make_id(printer, [null, 'printer_type']),
-								[elements[0].obj, elements[0], elements[1]]
-								<button type='button'>Set</button>
-								<span></span>
-							)!]
-						</div>
 						<div>[$(Text ['Name', [null, 'name']])$]</div>
 						<div>Motor Timeout: [$(Float [[null, 'motor_limit'], 60])$] min</div>
 						<div>Temp Timeout: [$(Float [[null, 'temp_limit'], 60])$] min</div>
@@ -463,74 +451,40 @@
 						<div>Gpios: [$(Float [[null, 'num_gpios'], 1])$]</div>
 						<!-- }}} -->
 
-						[!([make_table( // Motor {{{
-							multiple_titles(['extruder', 'axis'], [
-								'Motors',
-								'Microsteps',
-								'Max v (mm/s)',
-								'Max a (m/s²)'
-							], [
-								'htitle3',
-								'title3',
-								'title3',
-								'title3'
-							], [
-								null,
-								'Maximum number of steps to do in one iteration; set to number of microsteps.',
-								'Maximum speed that the motor is allowed to move.',
-								'Maximum acceleration that the motor is allowed to do.'
-							]),
-							multiple('Motor_axis'),
-							multiple('Motor_extruder')
-						)])!] <!-- }}} -->
-
-						[!([make_table( // Axis uvw {{{
-							multiple_titles(['axis'], [
-								'Axis',
-								'Coupling (steps/mm)',
-								'Switch pos (mm)',
-								'Motor min (mm)',
-								'Motor max (mm)',
-								'Run'
-							], [
-								'htitle5',
-								'title5',
-								'title5',
-								'title5',
-								'title5',
-								'title5'
-							], [
-								null,
-								'Number of (micro)steps that the motor needs to do to move the hardware by one mm.',
-								'Position of the limit switch.',
-								'Minimum value that the motor may move to.',
-								'Maximum value that the motor may move to.',
-								'Move motor indefinitely.'
-							]),
-							multiple('Axis_axis')
-						)])!] <!-- }}} -->
-
-						[!([make_table( // Axis xyz {{{
-							multiple_titles(['axis'], [
-								'Axis',
-								'Park pos (mm)'
+						<!-- Space settings {{{ -->
+						[!([make_table( // Space {{{
+							multiple_titles(['space'], [
+								'Spaces',
+								'Type'
 							], [
 								'htitle1',
-								'title1',
+								'title1'
 							], [
 								null,
-								'Park position of the axis.'
+								'Printer type'
 							]),
-							multiple('Park_axis')
+							multiple('Spacetype_space')
 						)])!] <!-- }}} -->
-
-						[!([make_table( // Axis delta {{{
-							multiple_titles(['axis'], [
+						[!([make_table( // Cartesian {{{
+							multiple_titles(['space'], [
+								'Cartesian',
+								'Number of axes'
+							], [
+								'htitle1',
+								'title1'
+							], [
+								null,
+								'Number of axes'
+							]),
+							multiple('Cartesian_space')
+						)])!] <!-- }}} -->
+						[!([make_table( // Delta {{{
+							multiple_titles(['space'], [
 								'Delta',
-								'Rod length (mm)',
-								'Radius (mm)',
-								'Axis min (mm)',
-								'Axis max (mm)'
+								'Min Axis Distance',
+								'Max Axis Distance',
+								'Rod Length',
+								'Radius'
 							], [
 								'htitle4',
 								'title4',
@@ -539,16 +493,65 @@
 								'title4'
 							], [
 								null,
-								'Minimum distance from tower. (Normally 0.)',
-								'Maximum distance from tower. (Normally equal to tie rod length.)',
-								'Length of the tie rods, measured between the pivot points.',
-								'Horizontal distance between the pivot points of the tie rods.  Note that this value does not include the effector or carriage offsets.'
+								'Minimum distance of end effector from nozzle.  Usually 0. (mm)',
+								'Maximum distance of end effector from nozzle.  Usually rod length. (mm)',
+								'Length of the tie rods. (mm)',
+								'Length of horizontal projection of the tie rod when the end effector is at (0, 0). (mm)'
 							]),
-							multiple('Delta_axis')
-						).AddClass('delta')])!] <!-- }}} -->
+							multiple('Delta_space'),
+						)])!] <!-- }}} -->
+						[!([make_table( // Axis {{{
+							multiple_titles(['space'], [
+								'Axes',
+								'Park pos (mm)',
+								'Max v (mm/s)',
+							], [
+								'htitle2',
+								'title2',
+								'title2'
+							], [
+								null,
+								'Park position of the nozzle.',
+								'Maximum speed that the motor is allowed to move.'
+							]),
+							multiple('Axis_axis_space')
+						)])!] <!-- }}} -->
+
+						[!([make_table( // Motor {{{
+							multiple_titles(['space'], [
+								'Motor',
+								'Coupling (steps/mm)',
+								'Microsteps',
+								'Switch pos (mm)',
+								'Motor min (mm)',
+								'Motor max (mm)',
+								'Limit v (mm/s)',
+								'Limit a (mm/s²)',
+							], [
+								'htitle7',
+								'title7',
+								'title7',
+								'title7',
+								'title7',
+								'title7',
+								'title7',
+								'title7'
+							], [
+								null,
+								'Number of (micro)steps that the motor needs to do to move the hardware by one mm.',
+								'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
+								'Position of the home switch. (mm)',
+								'Minimum value that the motor may move to. (mm)',
+								'Maximum value that the motor may move to. (mm)',
+								'Maximum speed of the motor. (mm/s)',
+								'Maximum acceleration of the motor. (m/s²)'
+							]),
+							multiple('Motor_motor_space')
+						)])!] <!-- }}} -->
+						<!-- }}} -->
 
 						[!([make_table( // Temp {{{
-							multiple_titles(['extruder', 'temp'], [
+							multiple_titles(['temp'], [
 								'Temps',
 								'R0 (kΩ)',
 								'R1 (kΩ)',
@@ -570,7 +573,6 @@
 								'Temperature at which the thermistor has value Rc.  Normally 20.',
 								"Temperature dependence of the thermistor.  Normally around 3800.  It can be found in the thermistor's data sheet."
 							]),
-							multiple('Temp_components_extruder'),
 							multiple('Temp_components_temp')
 						)])!] <!-- }}} -->
 
@@ -592,8 +594,7 @@
 						)])!] <!-- }}} -->
 
 						[!([make_table(elements[0], elements[1], // Pins {{{
-							multiple('Pins_axis', null, false),
-							multiple('Pins_extruder', null, false),
+							multiple('Pins_motor_space', null, false),
 							multiple('Pins_temp', null, false),
 							multiple('Pins_gpio', null, false))]
 							[$(Pin ['LED', [null, 'led_pin']])$]
@@ -644,7 +645,7 @@
 						</div>
 					</div> <!-- }}} -->
 					[!([make_table( // Axis xyz {{{
-						multiple_titles(['axis'], [
+						multiple_titles(['space'], [
 							'Axis',
 							'Go (mm)',
 							'Offset (mm)'
@@ -657,27 +658,7 @@
 							'Physically move the extruder to this position.  For Z, more positive numbers move the extruder away from the bed.',
 							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.'
 						]),
-						multiple('Move_axis')
-					)])!] <!-- }}} -->
-					[!([make_table( // Extruder {{{
-						multiple_titles(['extruder'], [
-							'Extruder',
-							'Coupling (steps/mm)',
-							'Extrude (mm)',
-							'Run'
-						], [
-							'htitle3',
-							'title3',
-							'title3',
-							'title3'
-						], [
-							null,
-							'Number of (micro)steps that the motor needs to do to move the filament by one mm.',
-							'Extrude or retract this amount.',
-							'Maximum speed that the axis will try to move along this coordinate.',
-							'Move motor indefinitely.'
-						]),
-						multiple('Move_extruder')
+						multiple('Move_axis_space')
 					)])!] <!-- }}} -->
 					<div class='movediv' onclick='start_move()' onkeydown='if (!key_move(event.keyCode, event.shiftKey, event.ctrlKey)) event.preventDefault()'><!-- {{{ -->
 						[!(
@@ -710,7 +691,7 @@
 					</div><!-- }}} -->
 
 					[!([make_table(	// Temp control {{{
-						multiple_titles(['extruder', 'temp'], [
+						multiple_titles(['temp'], [
 							'Temp control',
 							'Target (°C)',
 							'Current (°C)'
@@ -745,21 +726,6 @@
 
 					<div>Feedrate: [$(Float [[null, 'feedrate'], .01])$] %</div>
 
-					[!([make_table( // Max v {{{
-						multiple_titles(['axis', 'extruder'], [
-							'',
-							'Max v (mm/s)'
-						], [
-							'htitle2',
-							'title2'
-						], [
-							null,
-							'Maximum speed that the axis will try to move along this coordinate.'
-						]),
-						multiple('Maxv_axis'),
-						multiple('Maxv_extruder')
-					).AddClass('left')])!] <!-- }}} -->
-
 					[!(
 						elements[0].id = make_id(printer, [null, 'scripts']),
 						elements
@@ -767,8 +733,8 @@
 					)!]
 
 					<!-- Save and restore {{{ -->
-					[$(Button ['Save settings to EEPROM', 'save_all'])$]
-					[$(Button ['Restore settings from EEPROM', 'load_all'])$]
+					[$(Button ['Save settings to EEPROM', 'save'])$]
+					[$(Button ['Restore settings from EEPROM', 'load'])$]
 					<div>[$(File [[null, 'import', 'import_settings'], 'Import'])$]</div>
 					<div>[!(
 						elements[0].id = make_id(printer, [null, 'export']),
@@ -784,7 +750,7 @@
 				</div>
 			</div> <!-- }}} -->
 			<div id='NoPrinter'> <!-- {{{ -->
-				<div class='noprinter notconnected setup'>
+				<div class='noprinter notconnected setup hidden'>
 					[!(
 						node.id = make_id({'port': args[0]}, [null, 'nocontainer']),
 						elements[0].id = make_id({'port': args[0]}, [null, 'block2']),
