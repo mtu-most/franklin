@@ -212,7 +212,7 @@ class Connection: # {{{
 		# Forget the printer.  First tell the printer to die
 		p = ports[port]
 		ports[port] = None
-		p.call('die', ('disabled by user'), {}, lambda success, ret: None)
+		p.call('die', ('disabled by user',), {}, lambda success, ret: None)
 		cls._broadcast(None, 'del_printer', port)
 	# }}}
 	@classmethod
@@ -374,7 +374,7 @@ class Port: # {{{
 		def get_settings(success, settings):
 			self.call('import_settings', [settings], {}, lambda success, ret: None)
 			glib.source_remove(orphans[old[0]].input_handle)
-			orphans[old[0]].call('die', ('replaced by new connection'), {}, lambda success, ret: None)
+			orphans[old[0]].call('die', ('replaced by new connection',), {}, lambda success, ret: None)
 			del orphans[old[0]]
 		def get_vars(success, vars):
 			# The child has opened the port now; close our handle.

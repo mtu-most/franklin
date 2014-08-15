@@ -42,8 +42,8 @@ function init() { // {{{
 	register_update('del_port', del_port);
 	register_update('globals_update', update_globals);
 	register_update('space_update', update_space);
-	register_update('temps_update', update_temps);
-	register_update('gpios_update', update_gpios);
+	register_update('temps_update', update_temp);
+	register_update('gpios_update', update_gpio);
 	if (document.location.search.length > 0 && document.location.search[0] == '?') {
 		var things = document.location.search.split('&');
 		for (var t = 0; t < things.length; ++t) {
@@ -55,19 +55,20 @@ function init() { // {{{
 } // }}}
 
 function make_id(printer, id, extra) { // {{{
+	// [null, 'num_spaces']
+	// [['space', 1], 'num_axes']
+	// [['axis', [0, 1]], 'offset']
 	var ret = printer ? printer.port.replace(/[^a-zA-Z0-9_]/g, '') : '';
 	if (id[0] !== null) {
-		if (typeof id[0][0] == 'string')
-			ret += '_' + id[0][0];
-		else {
-			for (var i = 0; i < id[0][0].length; ++i)
-				ret += '_' + id[0][0][i];
+		ret += '_' + id[0][0];
+		if (typeof id[0][1] == 'number')
+			ret += '_' + String(id[0][1]);
+		else if (id[0][1] !== null) {
+			ret += '_' + String(id[0][1][0]);
+			ret += '_' + String(id[0][1][1]);
 		}
-		ret += '_' + String(id[0][1]);
 	}
 	ret += '_' + id[1];
-	if (id.length > 2 && typeof id[2] == 'number')
-		ret += '_' + String(id[2]);
 	if (extra !== null && extra !== undefined)
 		ret += '_' + String(extra);
 	return ret;
@@ -80,7 +81,7 @@ function set_value(printer, id, value, reply, arg) { // {{{
 		obj[id[1]] = value;
 		if (id[0] === null) {
 			// Global setting.
-			printer.call('set_variables', [], obj, reply);
+			printer.call('set_globals', [], obj, reply);
 		}
 		else if (typeof id[0][0] == 'string') {
 			// Action or top level component.
@@ -137,14 +138,6 @@ function get_value(printer, id) { // {{{
 
 function get_element(printer, id, extra) { // {{{
 	return document.getElementById(make_id(printer, id, extra));
-} // }}}
-
-function switch_show(state, which) { // {{{
-	var e = document.getElementById('container');
-	if (state)
-		e.RemoveClass('no' + which);
-	else
-		e.AddClass('no' + which);
 } // }}}
 
 function select_printer(port) { // {{{
@@ -439,40 +432,52 @@ function update_globals() { // {{{
 	// TODO: titles.
 	var t = multiples[port]['space'];
 	for (var s = 0; s < t.length; ++s) {
-		while (t[s][1].length >= printer.num_spaces)
+		while (t[s][1].length > printer.num_spaces)
 			t[s][0].removeChild(t[s][1].pop());
-		while (t[s][1].length < printer.num_spaces - 1) {
+		while (t[s][1].length < printer.num_spaces) {
 			var n = t[s][3](t[s][1].length);
 			t[s][1].push(n);
 			t[s][0].insertBefore(n, t[s][2]);
 		}
-		if (printer.num_spaces >= 2)
-			t[s][2].removeClass('hidden');
+		if (!(t[s][2] instanceof Comment)) {
+			if (printer.num_spaces >= 2)
+				t[s][2].RemoveClass('hidden');
+			else
+				t[s][2].AddClass('hidden');
+		}
 	}
 	// TODO: axes and motors.
 	t = multiples[port]['temp'];
 	for (var s = 0; s < t.length; ++s) {
-		while (t[s][1].length >= printer.num_temps)
+		while (t[s][1].length > printer.num_temps)
 			t[s][0].removeChild(t[s][1].pop());
-		while (t[s][1].length < printer.num_temps - 1) {
+		while (t[s][1].length < printer.num_temps) {
 			var n = t[s][3](t[s][1].length);
 			t[s][1].push(n);
 			t[s][0].insertBefore(n, t[s][2]);
 		}
 		if (printer.num_temps >= 2) {
-			t[s][2].removeClass('hidden');
+			if (!(t[s][2] instanceof Comment))
+				t[s][2].RemoveClass('hidden');
+			else
+				t[s][2].AddClass('hidden');
+		}
 	}
 	t = multiples[port]['gpio'];
 	for (var s = 0; s < t.length; ++s) {
-		while (t[s][1].length >= printer.num_gpios)
+		while (t[s][1].length > printer.num_gpios)
 			t[s][0].removeChild(t[s][1].pop());
-		while (t[s][1].length < printer.num_gpios - 1) {
+		while (t[s][1].length < printer.num_gpios) {
 			var n = t[s][3](t[s][1].length);
 			t[s][1].push(n);
 			t[s][0].insertBefore(n, t[s][2]);
 		}
-		if (printer.num_gpios >= 2)
-			t[s][2].removeClass('hidden');
+		if (printer.num_gpios >= 2) {
+			if (!(t[s][2] instanceof Comment))
+				t[s][2].RemoveClass('hidden');
+			else
+				t[s][2].AddClass('hidden');
+		}
 	}
 } // }}}
 
@@ -691,7 +696,7 @@ function temprange(element, attr) { // {{{
 	return ret;
 } // }}}
 
-function create_printer_type_select() { // {{{
+function create_space_type_select() { // {{{
 	var ret = document.createElement('select');
 	for (var o = 0; o < space_types.length; ++o)
 		ret.AddElement('option').AddText(space_types[o]);
@@ -769,7 +774,7 @@ function multiple(template, arg, all) { // {{{
 	};
 	var r;
 	if (all !== false) {
-		var builder = function(i) { one(template, arg, i); }
+		var builder = function(i) { return one(template, arg, i); };
 		r = [type, builder, builder(null)];
 		for (var i = 0; i < r[2].length; ++i)
 			r[2][i].AddClass('hidden');
@@ -790,6 +795,24 @@ function space_name(index) { // {{{
 	if (index === null)
 		return 'All Spaces';
 	return 'Space ' + String(index);
+} // }}}
+
+function axis_name(index) { // {{{
+	if (index === null)
+		return 'All axes';
+	return 'Axis ' + String(index);
+} // }}}
+
+function motor_name(index) { // {{{
+	if (index === null)
+		return 'All motors';
+	return 'Motor ' + String(index);
+} // }}}
+
+function delta_name(index) { // {{{
+	if (index === null)
+		return 'All Apexes';
+	return 'Apex ' + String(index);
 } // }}}
 
 function temp_name(index) { // {{{
@@ -814,7 +837,6 @@ function make_table() { // {{{
 	var t = document.createElement('table');
 	for (var r = 0; r < arguments.length; ++r) {
 		if (arguments[r] instanceof Element) {
-			dbg("element added: " + String(arguments[r]));
 			t.Add(arguments[r]);
 		}
 		else {

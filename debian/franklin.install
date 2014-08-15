@@ -4,4 +4,7 @@ firmware/build-mega/mega.hex /usr/share/franklin/firmware
 server/franklin.py /usr/share/franklin
 server/printer.py /usr/share/franklin
 server/control.py /usr/share/franklin
-server/html /usr/share/franklin
+server/html/server.js /usr/share/franklin/html
+server/html/index.html /usr/share/franklin/html
+server/html/index.js /usr/share/franklin/html
+server/html/index.css /usr/share/franklin/html

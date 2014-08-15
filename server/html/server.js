@@ -172,19 +172,19 @@ function _setup_updater() {
 			printers[port].feedrate = values[9];
 			printers[port].status = values[10];
 			trigger_update(port, 'variables_update');
-			for (var i = printer[port].num_spaces; i < new_num_spaces; ++i) {
+			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
 					'type': 0,
 					'num_axes': 0,
 					'num_motors': 0,
 					'delta': null,
 					'axis': [],
-					'motor': [],
+					'motor': []
 				});
 			}
 			printers[port].spaces.length = new_num_spaces;
 			printers[port].num_spaces = new_num_spaces;
-			for (var i = printer[port].num_temps; i < new_num_temps; ++i) {
+			for (var i = printers[port].num_temps; i < new_num_temps; ++i) {
 				printers[port].temps.push({
 					'power_pin': 0,
 					'thermistor_pin': 0,
@@ -208,6 +208,7 @@ function _setup_updater() {
 			}
 			printers[port].gpios.length = new_num_gpios;
 			printers[port].num_gpios = new_num_gpios;
+			trigger_update(port, 'globals_update');
 		},
 		'space_update': function(port, index, values) {
 			printers[port].spaces[index].type = values[0];

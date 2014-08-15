@@ -2027,6 +2027,9 @@ class Printer: # {{{
 	# }}}
 	# Space {{{
 	def get_axis_pos(self, space, axis):
+		if space >= len(self.spaces) or axis >= len(self.spaces[space].axis):
+			log('request for invalid axis position %d %d' % (space, axis))
+			return float('nan')
 		return self.spaces[space].get_current_pos(axis)
 	def set_axis_pos(self, space, axis, pos):
 		return self.spaces[space].set_current_pos(axis, pos)
