@@ -147,7 +147,7 @@
 					elements[0].printer = printer,
 					elements[0].index = args[0],
 					elements[0].obj = create_space_type_select(),
-					elements[1].id = make_id(printer, [['space_info', args[0]], 'type']),
+					elements[1].id = make_id(printer, [['space', args[0]], 'type']),
 					[elements[0].obj, elements[0], elements[1]]
 					<button type='button' onclick="set_value(this.printer, this.target, this.obj.selected.value)">Set</button>
 					<span></span>
@@ -157,7 +157,7 @@
 			<div id='Cartesian_space'> <!-- {{{ -->
 				[!(
 					[make_tablerow(space_name(args[0]), elements, ['rowtitle1'])]
-					<div>[$(Float [[['space_info', args[0]], 'num'], 1])$]</div>
+					<div>[$(Float [[['space', args[0]], 'num_axes'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Delta_content'> <!-- {{{ -->
@@ -165,38 +165,38 @@
 					[make_tablerow(delta_name(args[0], 0), elements, ['rowtitle4']),
 					make_tablerow(delta_name(args[0], 1), elements, ['rowtitle4']),
 					make_tablerow(delta_name(args[0], 2), elements, ['rowtitle4'])]
-					<div>[$(Float [[['space_info', [args[0], args[1]]], 'axis_min'], 0.001])$]</div>
-					<div>[$(Float [[['space_info', [args[0], args[1]]], 'axis_max'], 0.001])$]</div>
-					<div>[$(Float [[['space_info', [args[0], args[1]]], 'rodlength'], 0.001])$]</div>
-					<div>[$(Float [[['space_info', [args[0], args[1]]], 'radius'], 0.001])$]</div>
+					<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'axis_min'], 0.001])$]</div>
+					<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'axis_max'], 0.001])$]</div>
+					<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'rodlength'], 0.001])$]</div>
+					<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'radius'], 0.001])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Delta_space'> <!-- {{{ -->
 				[!(
-					[make_tablerow(axis_name(args[0], args[1]), elements, ['rowtitle3'])]
+					elements
 					[$(Delta_content [args[0], 0])$]
 					[$(Delta_content [args[0], 1])$]
 					[$(Delta_content [args[0], 2])$]
 				)!]
 			</div> <!-- }}} -->
-			<div id='Axis_axis_space'> <!-- {{{ -->
+			<div id='Axis_axis'> <!-- {{{ -->
 				[!(
 					[make_tablerow(axis_name(args[0], args[1]), elements, ['rowtitle3'])]
-					<div>[$(Float [[['space_axis', [args[0], args[1]]], 'offset'], 0.001])$]</div>
-					<div>[$(Float [[['space_axis', [args[0], args[1]]], 'park'], 0.001])$]</div>
-					<div>[$(Float [[['space_axis', [args[0], args[1]]], 'max_v'], 0.001])$]</div>
+					<div>[$(Float [[['axis', [args[0], args[1]]], 'offset'], 0.001])$]</div>
+					<div>[$(Float [[['axis', [args[0], args[1]]], 'park'], 0.001])$]</div>
+					<div>[$(Float [[['axis', [args[0], args[1]]], 'max_v'], 0.001])$]</div>
 				)!]
 			</div> <!-- }}} -->
-			<div id='Motor_motor_space'> <!-- {{{ -->
+			<div id='Motor_motor'> <!-- {{{ -->
 				[!(
 					[make_tablerow(motor_name(args[0], args[1]), elements, ['rowtitle7'])]
-					<div>[$(Float [[['space_motor', [args[0], args[1]]], 'steps_per_m'], 1000])$]</div>
-					<div>[$(Float [[['space_motor', [args[0], args[1]]], 'max_steps'], 1])$]</div>
-					<div>[$(Float [[['space_motor', [args[0], args[1]]], 'home_pos'], 0.001])$]</div>
-					<div>[$(Float [[['space_motor', [args[0], args[1]]], 'motor_min'], 0.001])$]</div>
-					<div>[$(Float [[['space_motor', [args[0], args[1]]], 'motor_max'], 0.001])$]</div>
-					<div>[$(Float [[['space_motor', [args[0], args[1]]], 'limit_v'], 0.001])$]</div>
-					<div>[$(Float [[['space_motor', [args[0], args[1]]], 'limit_a'], 1])$]</div>
+					<div>[$(Float [[['motor', [args[0], args[1]]], 'steps_per_m'], 1000])$]</div>
+					<div>[$(Float [[['motor', [args[0], args[1]]], 'max_steps'], 1])$]</div>
+					<div>[$(Float [[['motor', [args[0], args[1]]], 'home_pos'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[0], args[1]]], 'motor_min'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[0], args[1]]], 'motor_max'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[0], args[1]]], 'limit_v'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[0], args[1]]], 'limit_a'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Gpio_gpio'> <!-- {{{ -->
@@ -212,7 +212,7 @@
 				)!]
 			</div> <!-- }}} -->
 
-			<div id='Move_axis_space'> <!-- {{{ -->
+			<div id='Move_axis'> <!-- {{{ -->
 				[!(
 				// args = index
 				elements[1].id = make_id(printer, [['axis', args[0]], 'goto']),
@@ -229,7 +229,7 @@
 				<button class='button' type='button'>Go</button>
 				)!]
 			</div> <!-- }}} -->
-			<div id='Pins_motor_space'> <!-- {{{ -->
+			<div id='Pins_motor'> <!-- {{{ -->
 				[!(
 				make_pin_title(motor_name(args[0], args[1]), stack)
 				[$(Pin ['Step', [['motor', [args[0], args[1]]], 'step_pin']])$]
@@ -347,7 +347,6 @@
 							multiple('Cartesian_space')
 						)])!] <!-- }}} -->
 						[!(
-						function(x) { x[0].id = make_id(printer, [['space', args[0]], 'delta']); return x; } (
 						[make_table( // Delta {{{
 							multiple_titles(['space'], [
 								'Delta',
@@ -369,7 +368,7 @@
 								'Length of horizontal projection of the tie rod when the end effector is at (0, 0). (mm)'
 							]),
 							multiple('Delta_space')
-						)]))!] <!-- }}} -->
+						)])!] <!-- }}} -->
 						[!([make_table( // Axis {{{
 							multiple_titles(['space'], [
 								'Axes',
@@ -384,7 +383,7 @@
 								'Park position of the nozzle.',
 								'Maximum speed that the motor is allowed to move.'
 							]),
-							multiple('Axis_axis_space')
+							multiple('Axis_axis')
 						)])!] <!-- }}} -->
 						[!([make_table( // Motor {{{
 							multiple_titles(['space'], [
@@ -415,7 +414,7 @@
 								'Maximum speed of the motor. (mm/s)',
 								'Maximum acceleration of the motor. (m/s²)'
 							]),
-							multiple('Motor_motor_space')
+							multiple('Motor_motor')
 						)])!] <!-- }}} -->
 						<!-- }}} -->
 
@@ -463,7 +462,7 @@
 						)])!] <!-- }}} -->
 
 						[!([make_table(elements[0], elements[1], // Pins {{{
-							multiple('Pins_motor_space', null, false),
+							multiple('Pins_motor', null, false),
 							multiple('Pins_temp', null, false),
 							multiple('Pins_gpio', null, false))]
 							[$(Pin ['LED', [null, 'led_pin']])$]
@@ -527,7 +526,7 @@
 							'Physically move the extruder to this position.  For Z, more positive numbers move the extruder away from the bed.',
 							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.'
 						]),
-						multiple('Move_axis_space')
+						multiple('Move_axis')
 					)])!] <!-- }}} -->
 					<div class='movediv' onclick='start_move()' onkeydown='if (!key_move(event.keyCode, event.shiftKey, event.ctrlKey)) event.preventDefault()'><!-- {{{ -->
 						[!(

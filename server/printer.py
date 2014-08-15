@@ -158,15 +158,15 @@ class Printer: # {{{
 		self.gpios = []
 		self._read_globals()
 		for s in self.spaces:
-			s.read()
+			s.read(self._read('SPACE', i))
 		for i, t in enumerate(self.temps):
-			t.read()
+			t.read(self._read('TEMP', i))
 			# Disable heater.
-			self.settemp_temp(i, float('nan'))
+			self.settemp(i, float('nan'))
 			# Disable heater alarm.
-			self.waittemp_temp(i, None, None)
+			self.waittemp(i, None, None)
 		for g in self.gpios:
-			g.read()
+			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False)
 		self.goto()[1](None)	# This flushes the buffer, possibly causing movecbs to be sent.
@@ -439,8 +439,11 @@ class Printer: # {{{
 				num = ord(packet[1])
 				#log('movecb %d/%d (%d in queue)' % (num, self.movewait, len(self.movecb)))
 				if self.initialized:
-					assert self.movewait >= num
-					self.movewait -= num
+					if self.movewait < num:
+						log('More cbs received than requested!')
+						self.movewait = 0
+					else:
+						self.movewait -= num
 					if self.movewait == 0:
 						call_queue.extend([(x[1], [True]) for x in self.movecb])
 						self.movecb = []
@@ -977,8 +980,8 @@ class Printer: # {{{
 			self.queue_pos += 1
 			a = {}
 			a0 = 0
-			for i, s in self.spaces:
-				if i > len(axes):
+			for i, s in enumerate(self.spaces):
+				if i >= len(axes):
 					break
 				if axes[i] is None:
 					continue
@@ -1292,18 +1295,18 @@ class Printer: # {{{
 			return struct.pack('<HHHHHHfBfffff', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_m'], self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['motor_min'], self.motor[motor]['motor_max'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'])
 		def set_current_pos(self, pos):
 			#log('setting pos of %d to %f' % (self.id, pos))
-			if not self.printer._send_packet(struct.pack('<BBf', self.printer.command['SETPOS'], 2 + self.id, pos)):
+			if not self.printer._send_packet(struct.pack('<BBBf', self.printer.command['SETPOS'], self.id, axis, pos)):
 				return False
 			self.position_valid = True
 			return True
-		def get_current_pos(self):
-			if not self.printer._send_packet(struct.pack('<BB', self.printer.command['GETPOS'], 2 + self.id)):
+		def get_current_pos(self, axis):
+			if not self.printer._send_packet(struct.pack('<BBB', self.printer.command['GETPOS'], self.id, axis)):
 				return None
 			ret = self.printer._get_reply()
 			assert ret[0] == self.printer.rcommand['POS']
-			return struct.unpack('<ff', ret[1:])
+			return struct.unpack('<f', ret[1:])[0]
 		def export(self):
-			std = [self.type, [[a.park, a.offset, a.max_v] for a in self.axis], [[m.step_pin, m.dir_pin, m.enable_pin, m.limit_min_pin, m.limit_max_pin, m.sense_pin, m.steps_per_m, m.max_steps, m.home_pos, m.motor_min, m.motor_max, m.limit_v, m.limit_a] for m in self.motor]]
+			std = [self.type, [[a['park'], a['offset'], a['max_v']] for a in self.axis], [[m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['sense_pin'], m['steps_per_m'], m['max_steps'], m['home_pos'], m['motor_min'], m['motor_max'], m['limit_v'], m['limit_a']] for m in self.motor]]
 			if self.type == 0:
 				return std
 			elif self.type == 1:
@@ -1382,7 +1385,7 @@ class Printer: # {{{
 	def settemp(self, channel, temp): # {{{
 		channel = int(channel)
 		self.temps[channel].value = temp
-		self._temps_update(channel)
+		self._temp_update(channel)
 		return self._send_packet(struct.pack('<BBf', self.command['SETTEMP'], channel, temp + C0))
 	# }}}
 	def waittemp(self, channel, min, max = None): # {{{
@@ -2033,14 +2036,14 @@ class Printer: # {{{
 		return self.spaces[space].get_current_pos(axis)
 	def set_axis_pos(self, space, axis, pos):
 		return self.spaces[space].set_current_pos(axis, pos)
-	def get_space_info(self, space):
+	def get_space(self, space):
 		ret = {'num_axes': len(self.spaces[space].axis), 'num_motors': len(self.spaces[space].motor), 'type': self.spaces[space].type}
 		if self.spaces[space].type == 1:
 			delta = []
 			for i in range(3):
 				d = {}
 				for key in ('axis_min', 'axis_max', 'rodlength', 'radius'):
-					d[key] = self.spaces[space].delta[key]
+					d[key] = self.spaces[space].delta[i][key]
 				delta.append(d)
 			ret['delta'] = delta
 		return ret
@@ -2054,21 +2057,28 @@ class Printer: # {{{
 		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_m', 'max_steps', 'home_pos', 'motor_min', 'motor_max', 'limit_v', 'limit_a'):
 			ret[key] = self.spaces[space].motor[motor][key]
 		return ret
-	def set_space_info(self, space, **ka):
+	def set_space(self, space, **ka):
 		if 'type' in ka:
 			self.spaces[space].type = ka.pop('type')
 		if self.spaces[space].type == 0:
-			if 'num' in ka:
-				num_axes = int(ka.pop('num'))
+			if 'num_axes' in ka:
+				num_axes = int(ka.pop('num_axes'))
 			else:
 				num_axes = len(self.spaces[space].axis)
 			num_motors = num_axes
 		elif self.spaces[space].type == 1:
 			num_axes = 3;
 			num_motors = 3;
-			for key in ('axis_min', 'axis_max', 'rodlength', 'radius'):
-				if key in ka:
-					self.spaces[space].delta[key] = ka[key]
+			if 'delta' in ka:
+				d = ka.pop('delta')
+				assert len(d) <= 3
+				for i in range(3):
+					if i >= len(d):
+						break
+					for key in ('axis_min', 'axis_max', 'rodlength', 'radius'):
+						if key in d[i]:
+							self.spaces[space].delta[key] = d[i].pop(key)
+					assert len(d[i]) == 0
 		self._send_packet(struct.pack('<BB', self.command['WRITE_SPACE_INFO'], space) + self.spaces[space].write_info(num_axes))
 		self.spaces[space].axis = []
 		self.spaces[space].motor = []

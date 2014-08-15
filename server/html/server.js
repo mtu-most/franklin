@@ -199,7 +199,7 @@ function _setup_updater() {
 			printers[port].temps.length = new_num_temps;
 			printers[port].num_temps = new_num_temps;
 			for (var i = printers[port].num_gpios; i < new_num_gpios; ++i) {
-				printers[port].gpio.push({
+				printers[port].gpios.push({
 					'pin': 0,
 					'state': 0,
 					'master': 0xff,
@@ -214,14 +214,16 @@ function _setup_updater() {
 			printers[port].spaces[index].type = values[0];
 			printers[port].spaces[index].axis = [];
 			printers[port].spaces[index].motor = [];
-			for (var a = 0; a < values[1].length; ++a) {
+			printers[port].spaces[index].num_axes = values[1].length;
+			printers[port].spaces[index].num_motors = values[2].length;
+			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a) {
 				printers[port].spaces[index].axis.push({
 					'park': values[1][a][0],
 					'offset': values[1][a][1],
 					'max_v': values[1][a][2]
 				});
 			}
-			for (var m = 0; m < values[2].length; ++m) {
+			for (var m = 0; m < printers[port].spaces[index].num_motors; ++m) {
 				printers[port].spaces[index].motor.push({
 					'step_pin': values[2][m][0],
 					'dir_pin': values[2][m][1],
