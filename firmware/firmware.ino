@@ -223,7 +223,7 @@ static bool do_steps(Space *s, uint8_t m, float distance, unsigned long current_
 	//if (m == 2) buffered_debug("action %d old %f new %f step %d", m, F(old_pos), F(new_pos), steps);
 	// Set positive and direction pin.
 	if (mtr.positive != (steps > 0)) {
-		if (distance > 0)
+		if (steps > 0)
 			SET(mtr.dir_pin);
 		else
 			RESET(mtr.dir_pin);

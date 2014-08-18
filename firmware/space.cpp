@@ -92,6 +92,11 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 	SET_OUTPUT(motor[m]->enable_pin);
 	if (enable != motor[m]->enable_pin.write())
 		RESET(motor[m]->enable_pin);
+	RESET(motor[m]->step_pin);
+	if (motor[m]->positive)
+		SET(motor[m]->dir_pin);
+	else
+		RESET(motor[m]->dir_pin);
 	SET_INPUT(motor[m]->limit_min_pin);
 	SET_INPUT(motor[m]->limit_max_pin);
 	SET_INPUT(motor[m]->sense_pin);

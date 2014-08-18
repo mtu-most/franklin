@@ -13,6 +13,8 @@ void Temp::load (int16_t &addr, bool eeprom)
 #ifdef HAVE_GPIOS
 	for (Gpio *gpio = gpios; gpio; gpio = gpio->next)
 		gpio->adcvalue = toadc (gpio->value);
+	if (gpios)
+		adc_phase = 1;
 #endif
 	/*
 	core_C = read_float (addr, eeprom);
@@ -24,6 +26,10 @@ void Temp::load (int16_t &addr, bool eeprom)
 	power_pin.read (read_16 (addr, eeprom));
 	thermistor_pin.read (read_16 (addr, eeprom));
 	SET_OUTPUT (power_pin);
+	if (is_on)
+		SET(power_pin);
+	else
+		RESET(power_pin);
 }
 
 void Temp::save (int16_t &addr, bool eeprom)
@@ -109,10 +115,10 @@ void Temp::init() {
 	min_alarm = NAN;
 	max_alarm = NAN;
 	adcmin_alarm = -1;
-	adcmax_alarm = -1;
+	adcmax_alarm = MAXINT;
 	alarm = false;
 	target = NAN;
-	adctarget = -1;
+	adctarget = MAXINT;
 #ifdef HAVE_GPIOS
 	gpios = NULL;
 #endif
