@@ -31,8 +31,10 @@ void Gpio::load(int16_t &addr, bool eeprom)
 		break;
 	}
 #ifdef HAVE_TEMPS
-	if (master < num_temps)
+	if (master < num_temps) {
 		adcvalue = temps[master].toadc(value);
+		adc_phase = 1;
+	}
 	if (oldmaster != master)
 	{
 		// Disable old links.

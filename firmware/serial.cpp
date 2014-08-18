@@ -289,7 +289,7 @@ void try_send_next()
 		for (uint8_t m = 0; m < spaces[w].num_motors; ++m) {
 			if (!isnan(spaces[w].motor[m]->limits_pos)) {
 #ifdef DEBUG_SERIAL
-				debug("limit %d", w);
+				debug("limit %d %d", w, m);
 #endif
 				out_buffer[0] = 8;
 				out_buffer[1] = CMD_LIMIT;

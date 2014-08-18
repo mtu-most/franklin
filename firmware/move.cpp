@@ -30,6 +30,7 @@ void next_move () {
 	// If the source is unknown, determine it from current_pos.
 	//for (uint8_t a = 0; a < num_axes; ++a)
 	//	debug("target %d %f", a, F(queue[queue_start].data[a]));
+	uint8_t a0 = 0;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -40,21 +41,20 @@ void next_move () {
 				break;
 			}
 		}
-		uint8_t a0 = 0;
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			if (n != queue_end) {
 				// If only one of them is set, set the other one as well to make the rounded corner work.
 				if (!isnan(queue[queue_start].data[a0 + a]) && isnan(queue[n].data[a0 + a])) {
-					queue[n].data[a0 + a] = 0;
-					debug("filling next %d with %f", a0 + a, F(queue[n].data[a0 + a]));
+					queue[n].data[a0 + a] = sp.axis[a]->source + queue[queue_start].data[a0 + a] - sp.axis[a]->offset;
+					//debug("filling next %d with %f", a0 + a, F(queue[n].data[a0 + a]));
 				}
 				if (isnan(queue[queue_start].data[a]) && !isnan(queue[n].data[a])) {
-					queue[queue_start].data[a0 + a] = 0;
-					debug("filling %d with %f", a0 + a, F(queue[queue_start].data[a0 + a]));
+					queue[queue_start].data[a0 + a] = sp.axis[a]->source - sp.axis[a]->offset;
+					//debug("filling %d with %f", a0 + a, F(queue[queue_start].data[a0 + a]));
 				}
 			}
 			if ((!isnan(queue[queue_start].data[a0 + a]) && isnan(sp.axis[a]->source)) || (n != queue_end && !isnan(queue[n].data[a0 + a]) && isnan(sp.axis[a]->source))) {
-				debug ("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue.");
+				debug ("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue: %f %f %f", F(queue[queue_start].data[a0 + a]), F(queue[n].data[a0 + a]), F(sp.axis[a]->source));
 				// This possibly removes one move too many, but it shouldn't happen anyway.
 				if (queue[queue_start].cb) {
 					++num_movecbs;
@@ -69,8 +69,8 @@ void next_move () {
 				abort_move ();
 				return;
 			}
-			a0 += sp.num_axes;
 		}
+		a0 += sp.num_axes;
 	}
 	// }}}
 
@@ -95,7 +95,7 @@ void next_move () {
 					//debug("not using object %d", mtr);
 				}
 				else {
-					sp.axis[a]->next_dist = queue[queue_start].data[a0 + a];
+					sp.axis[a]->next_dist = queue[queue_start].data[a0 + a] - sp.axis[a]->source + sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
 					debug("next dist of %d = %f", a0 + a, F(sp.axis[a]->next_dist));
 #endif
@@ -124,7 +124,7 @@ void next_move () {
 					action = true;
 				sp.axis[a]->next_dist = 0;
 #ifdef DEBUG_MOVE
-				debug ("Last segment distance for motor %d is %f", a, F(sp.axis[a].dist));
+				debug ("Last segment distance for motor %d is %f", a, F(sp.axis[a]->dist));
 #endif
 			}
 		}
@@ -146,11 +146,11 @@ void next_move () {
 				if (isnan(queue[n].data[a0 + a]))
 					sp.axis[a]->next_dist = 0;
 				else
-					sp.axis[a]->next_dist = queue[n].data[a0 + a];
+					sp.axis[a]->next_dist = queue[n].data[a0 + a] - (sp.axis[a]->source + sp.axis[a]->dist);
 				if (sp.axis[a]->next_dist != 0 || sp.axis[a]->dist != 0)
 					action = true;
 #ifdef DEBUG_MOVE
-				debug ("Connecting distance for motor %d is %f, to %f", a, F(sp.axis[a].dist), F(sp.axis[a].next_dist));
+				debug ("Connecting distance for motor %d is %f, to %f", a, F(sp.axis[a]->dist), F(sp.axis[a]->next_dist));
 #endif
 			}
 			a0 += sp.num_axes;
@@ -286,10 +286,13 @@ void next_move () {
 	// Finish. {{{
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
+		sp.active = false;
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			if (sp.axis[a]->dist != 0 || sp.axis[a]->next_dist != 0)
+				sp.active = true;
 			sp.axis[a]->main_dist = sp.axis[a]->dist * (1 - fp);
 #ifdef DEBUG_MOVE
-			debug ("Motor %d dist %f main dist = %f, next dist = %f", mtr, F(motors[mtr]->dist), F(motors[mtr]->main_dist), F(motors[mtr]->next_dist));
+			debug ("Axis %d %d dist %f main dist = %f, next dist = %f", s, a, F(sp.axis[a]->dist), F(sp.axis[a]->main_dist), F(sp.axis[a]->next_dist));
 #endif
 		}
 	}

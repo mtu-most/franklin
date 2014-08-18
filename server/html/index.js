@@ -5,7 +5,7 @@ var labels_element, printers_element;
 var selected_port, selected_printer;
 var script_cbs;
 var multiples;
-var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios'};
+var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
 var space_types = ['Cartesian', 'Delta'];
 // }}}
 
@@ -42,8 +42,8 @@ function init() { // {{{
 	register_update('del_port', del_port);
 	register_update('globals_update', update_globals);
 	register_update('space_update', update_space);
-	register_update('temps_update', update_temp);
-	register_update('gpios_update', update_gpio);
+	register_update('temp_update', update_temp);
+	register_update('gpio_update', update_gpio);
 	if (document.location.search.length > 0 && document.location.search[0] == '?') {
 		var things = document.location.search.split('&');
 		for (var t = 0; t < things.length; ++t) {
@@ -86,19 +86,27 @@ function set_value(printer, id, value, reply, arg) { // {{{
 		var obj = {};
 		obj[id[1]] = value;
 		if (id[0] === null) {
-			// Global setting.
+			// [null, 'num_spaces']
 			printer.call('set_globals', [], obj, reply);
 		}
 		else {
-			// Action or top level component.
 			if (id[0][1] === null) {
+				// [['space', null], 'num_axes']
 				for (var n = 0; n < printer['num_' + type2plural[id[0][0]]]; ++n)
 					printer.call('set_' + id[0][0], [n], obj, reply);
 			}
-			else  if (typeof id[0][0] == 'string')
+			if (typeof id[0][1] != 'number' && id[0][1][1] == null) {
+				// [['axis', [0, null]], 'offset']
+				for (var n = 0; n < printer.spaces[id[0][1][0]]['num_' + type2plural[id[0][0]]]; ++n)
+					printer.call('set_' + id[0][0], [[id[0][1][0], n]], obj, reply);
+			}
+			else if (typeof id[0][0] == 'string') {
+				// [['space', 1], 'num_axes']
+				// [['axis', [0, 1]], 'offset']
 				printer.call('set_' + id[0][0], [id[0][1]], obj, reply);
+			}
 			else {
-				// id == [[['space', 'delta'], [0, 1]], 'radius']
+				// [[['space', 'delta'], [0, 1]], 'radius']
 				var o = {};
 				o[id[0][1][1]] = obj;
 				obj = {};
@@ -135,7 +143,6 @@ function get_value(printer, id) { // {{{
 			return printer.spaces[id[0][1][0]].motor[id[0][1][1]][id[1]];
 		}
 		else {
-			dbg('get ' + id[0][0] + ' ' + id[0][1] + ' ' + id[1]);
 			return printer[type2plural[id[0][0]]][id[0][1]][id[1]];
 		}
 	}
@@ -250,7 +257,7 @@ function queue_print() { // {{{
 			var r = selected_printer.reference;
 			var sina = Math.sin(selected_printer.local_angle);
 			var cosa = Math.cos(selected_printer.local_angle);
-			selected_printer.call('queue_print', [get_queue(), [x[1] - (r[0] * cosa - r[1] * sina), y[1] - (r[1] * cosa + r[0] * sina)], selected_printer.local_angle * 180 / Math.PI], {});
+			selected_printer.call('queue_print', [get_queue(), [x - (r[0] * cosa - r[1] * sina), y - (r[1] * cosa + r[0] * sina)], selected_printer.local_angle * 180 / Math.PI], {});
 		});
 	});
 }
@@ -263,7 +270,7 @@ function queue_mill() { // {{{
 			var r = selected_printer.reference;
 			var sina = Math.sin(selected_printer.local_angle);
 			var cosa = Math.cos(selected_printer.local_angle);
-			selected_printer.call('queue_probe', [q, [x[1] - (r[0] * cosa - r[1] * sina), y[1] - (r[1] * cosa + r[0] * sina)], selected_printer.local_angle * 180 / Math.PI], {}, function(map) {
+			selected_printer.call('queue_probe', [q, [x - (r[0] * cosa - r[1] * sina), y - (r[1] * cosa + r[0] * sina)], selected_printer.local_angle * 180 / Math.PI], {}, function(map) {
 				selected_printer.request_confirmation('Prepare for milling', [], {}, function(success) {
 					if (!success)
 						return;
@@ -432,14 +439,17 @@ function update_globals() { // {{{
 			// TODO: Remove axes and motors.
 			multiples[port]['axis'].pop();
 			multiples[port]['motor'].pop();
-			t[s][0].removeChild(t[s][1].pop());
+			var n = t[s][1].pop();
+			for (var i = 0; i < n.length; ++i)
+				t[s][0].removeChild(n[i]);
 		}
 		while (t[s][1].length < printer.num_spaces) {
 			multiples[port]['axis'].push([]);
 			multiples[port]['motor'].push([]);
-			var n = t[s][3](t[s][1].length, t[s][2].parentNode);
+			var n = t[s][3](t[s][1].length);
 			t[s][1].push(n);
-			t[s][0].insertBefore(n, t[s][2]);
+			for (var i = 0; i < n.length; ++i)
+				t[s][0].insertBefore(n[i], t[s][2]);
 		}
 		if (!(t[s][2] instanceof Comment)) {
 			if (printer.num_spaces >= 2)
@@ -450,15 +460,19 @@ function update_globals() { // {{{
 	}
 	t = multiples[port]['temp'];
 	for (var s = 0; s < t.length; ++s) {
-		while (t[s][1].length > printer.num_temps)
-			t[s][0].removeChild(t[s][1].pop());
+		while (t[s][1].length > printer.num_temps) {
+			var n = t[s][1].pop();
+			for (var i = 0; i < n.length; ++i)
+				t[s][0].removeChild(n[i]);
+		}
 		while (t[s][1].length < printer.num_temps) {
 			var n = t[s][3](t[s][1].length);
 			t[s][1].push(n);
-			t[s][0].insertBefore(n, t[s][2]);
+			for (var i = 0; i < n.length; ++i)
+				t[s][0].insertBefore(n[i], t[s][2]);
 		}
-		if (printer.num_temps >= 2) {
-			if (!(t[s][2] instanceof Comment))
+		if (!(t[s][2] instanceof Comment)) {
+			if (printer.num_temps >= 2)
 				t[s][2].RemoveClass('hidden');
 			else
 				t[s][2].AddClass('hidden');
@@ -466,25 +480,23 @@ function update_globals() { // {{{
 	}
 	t = multiples[port]['gpio'];
 	for (var s = 0; s < t.length; ++s) {
-		while (t[s][1].length > printer.num_gpios)
-			t[s][0].removeChild(t[s][1].pop());
+		while (t[s][1].length > printer.num_gpios) {
+			var n = t[s][1].pop();
+			for (var i = 0; i < n.length; ++i)
+				t[s][0].removeChild(n[i]);
+		}
 		while (t[s][1].length < printer.num_gpios) {
 			var n = t[s][3](t[s][1].length);
 			t[s][1].push(n);
-			t[s][0].insertBefore(n, t[s][2]);
+			for (var i = 0; i < n.length; ++i)
+				t[s][0].insertBefore(n[i], t[s][2]);
 		}
-		if (printer.num_gpios >= 2) {
-			if (!(t[s][2] instanceof Comment))
+		if (!(t[s][2] instanceof Comment)) {
+			if (printer.num_gpios >= 2)
 				t[s][2].RemoveClass('hidden');
 			else
 				t[s][2].AddClass('hidden');
 		}
-	}
-	for (var s = 0; s < printer.spaces.length; ++s) {
-		var e = get_element(printer, [['space', s], 'type']);
-		e.ClearAll();
-		e.AddText(space_types[printer.spaces[s].type]);
-		update_float([['space', s], 'num_axes']);
 	}
 	update_canvas_and_spans();
 } // }}}
@@ -492,17 +504,45 @@ function update_globals() { // {{{
 function update_space(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
-	var t = multiples[port]['axis'][index];
+	var e = get_element(printer, [['space', index], 'type']);
+	e.ClearAll();
+	e.AddText(space_types[printer.spaces[index].type]);
+	update_float([['space', index], 'num_axes']);
+	var t = multiples[port].axis[index];
 	for (var s = 0; s < t.length; ++s) {
-		while (t[s][1].length > printer.num_spaces)
-			t[s][0].removeChild(t[s][1].pop());
-		while (t[s][1].length < printer.num_spaces) {
+		while (t[s][1].length > printer.spaces[index].axis.length) {
+			var n = t[s][1].pop();
+			for (var i = 0; i < n.length; ++i)
+				t[s][0].removeChild(n[i]);
+		}
+		while (t[s][1].length < printer.spaces[index].axis.length) {
 			var n = t[s][3](t[s][1].length);
 			t[s][1].push(n);
-			t[s][0].insertBefore(n, t[s][2]);
+			for (var i = 0; i < n.length; ++i)
+				t[s][0].insertBefore(n[i], t[s][2]);
 		}
 		if (!(t[s][2] instanceof Comment)) {
-			if (printer.num_spaces >= 2)
+			if (printer.spaces[index].num_axes >= 2)
+				t[s][2].RemoveClass('hidden');
+			else
+				t[s][2].AddClass('hidden');
+		}
+	}
+	var t = multiples[port].motor[index];
+	for (var s = 0; s < t.length; ++s) {
+		while (t[s][1].length > printer.spaces[index].motor.length) {
+			var n = t[s][1].pop();
+			for (var i = 0; i < n.length; ++i)
+				t[s][0].removeChild(n[i]);
+		}
+		while (t[s][1].length < printer.spaces[index].motor.length) {
+			var n = t[s][3](t[s][1].length);
+			t[s][1].push(n);
+			for (var i = 0; i < n.length; ++i)
+				t[s][0].insertBefore(n[i], t[s][2]);
+		}
+		if (!(t[s][2] instanceof Comment)) {
+			if (printer.spaces[index].num_motors >= 2)
 				t[s][2].RemoveClass('hidden');
 			else
 				t[s][2].AddClass('hidden');
@@ -527,7 +567,6 @@ function update_space(index) { // {{{
 		update_float([['motor', [index, m]], 'motor_max']);
 		update_float([['motor', [index, m]], 'limit_v']);
 		update_float([['motor', [index, m]], 'limit_a']);
-		update_canvas_and_spans();
 	}
 	if (printer.spaces[index].delta === null) {
 		//get_element(printer, [['space', index], 'delta']).AddClass('hidden');
@@ -540,13 +579,27 @@ function update_space(index) { // {{{
 			update_float([[['space', 'delta'], [index, d]], 'rodlength']);
 			update_float([[['space', 'delta'], [index, d]], 'radius']);
 		}
+		update_float([['space', index], 'delta_angle']);
 	}
+	update_canvas_and_spans();
 } // }}}
 
 function update_temp(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
-	update_tempcontent(['temp', index]);
+	update_pin([['temp', index], 'power_pin']);
+	update_pin([['temp', index], 'thermistor_pin']);
+	update_float([['temp', index], 'R0']);
+	update_float([['temp', index], 'R1']);
+	update_float([['temp', index], 'Rc']);
+	update_float([['temp', index], 'Tc']);
+	update_float([['temp', index], 'beta']);
+	//update_float([['temp', index], 'core_C']);
+	//update_float([['temp', index], 'shell_C']);
+	//update_float([['temp', index], 'transfer']);
+	//update_float([['temp', index], 'radiation']);
+	//update_float([['temp', index], 'power']);
+	update_float([['temp', index], 'value', 'settemp']);
 } // }}}
 
 function update_gpio(index) { // {{{
@@ -556,13 +609,11 @@ function update_gpio(index) { // {{{
 	update_choice([['gpio', index], 'state']);
 	var master = update_temprange([['gpio', index], 'master']);
 	update_float([['gpio', index], 'value']);
-	if (master) {
+	if (master != 0xff) {
 		get_element(printer, [['gpio', index], 'state'], 0).AddClass('empty');
-		get_element(printer, [['gpio', index], 'state']).AddClass('expert');
 	}
 	else {
 		get_element(printer, [['gpio', index], 'state'], 0).RemoveClass('empty');
-		get_element(printer, [['gpio', index], 'state']).RemoveClass('expert');
 	}
 } // }}}
 // }}}
@@ -597,22 +648,6 @@ function update_motor(id) { // {{{
 		value.value = String(Math.abs(speed) * 1000.);
 	}
 	//update_float([id, 'sleeping']);
-} // }}}
-
-function update_tempcontent(id) { // {{{
-	update_pin([id, 'power_pin']);
-	update_pin([id, 'thermistor_pin']);
-	update_float([id, 'R0']);
-	update_float([id, 'R1']);
-	update_float([id, 'Rc']);
-	update_float([id, 'Tc']);
-	update_float([id, 'beta']);
-	//update_float([id, 'core_C']);
-	//update_float([id, 'shell_C']);
-	//update_float([id, 'transfer']);
-	//update_float([id, 'radiation']);
-	//update_float([id, 'power']);
-	update_float([id, 'value', 'settemp']);
 } // }}}
 
 function update_range(id) { // {{{
@@ -765,59 +800,6 @@ function choice(obj, options, element, label, classes, containerclasses) { // {{
 	return ret;
 } // }}}
 
-function multiple_titles(modes, titles, classes, mouseovers) { // {{{
-	var ret = document.createElement('tr');
-	for (var cell = 0; cell < titles.length; ++cell) {
-		var th = ret.AddElement('th', classes[cell]);
-		th.AddText(titles[cell]);
-		if (mouseovers && mouseovers[cell])
-			th.title = mouseovers[cell];
-	}
-	ret.AddClass('hidden');
-	return ret;
-} // }}}
-
-function multiple(template, arg, all) { // {{{
-	var type = template.replace(/^.*_(.*?)$/, '$1');
-	var one;
-	var theone = function(template, arg, i) {
-		var ret = [];
-		var part = build(template, [i, arg]);
-		for (var p = 0; p < part.length; ++p) {
-			if (part[p] instanceof Comment)
-				continue;
-			if (part[p] instanceof Text) {
-				if (!/^\s*$/.exec(part[p].data))
-					alert('Non-empty text node in result of multiple: ' + part[p].data);
-				continue;
-			}
-			if (i === null)
-				part[p].AddClass('all');
-			ret.push(part[p]);
-		}
-		return ret[0];
-	};
-	if (type != 'axis' && type != 'motor')
-		one = theone;
-	else {
-		all = false;
-		one = function(template, arg, i, t) {
-			var ret = document.createComment('');
-			multiples[port][type][i].push([t, [], t.Add(ret), function(j) { return theone(template, j, i); }]);
-		};
-	}
-	var r;
-	var builder = function(i, t) { return one(template, arg, i, t); };
-	if (all !== false) {
-		r = [type, builder, builder(null)];
-		for (var i = 0; i < r[2].length; ++i)
-			r[2][i].AddClass('hidden');
-	}
-	else
-		r = [type, builder, document.createComment('')];
-	return r;
-} // }}}
-
 function floats(num, title, obj) { // {{{
 	var ret = [title];
 	for (var i = 0; i < num; ++i)
@@ -831,22 +813,22 @@ function space_name(index) { // {{{
 	return 'Space ' + String(index);
 } // }}}
 
-function axis_name(index) { // {{{
-	if (index === null)
-		return 'All axes';
-	return 'Axis ' + String(index);
+function axis_name(index1, index2) { // {{{
+	if (index2 === null)
+		return 'All axes ' + String(index1);
+	return 'Axis ' + String(index1) + ';' + String(index2);
 } // }}}
 
-function motor_name(index) { // {{{
-	if (index === null)
-		return 'All motors';
-	return 'Motor ' + String(index);
+function motor_name(index1, index2) { // {{{
+	if (index2 === null)
+		return 'All motors ' + String(index1);
+	return 'Motor ' + String(index1) + ';' + String(index2);
 } // }}}
 
-function delta_name(index) { // {{{
-	if (index === null)
+function delta_name(index1, index2) { // {{{
+	if (index1 === null)
 		return 'All Apexes';
-	return 'Apex ' + String(index);
+	return 'Apex ' + String(index1) + ';' + String(index2);
 } // }}}
 
 function temp_name(index) { // {{{
@@ -861,10 +843,10 @@ function gpio_name(index) { // {{{
 	return index == 0 ? 'Fan' : 'Gpio ' + String(index);
 } // }}}
 
-function make_pin_title(title, stack) { // {{{
-	var t = document.createElement('th');
-	t.AddText(title);
-	return [t].concat(stack);
+function make_pin_title(title, content) { // {{{
+	var t = document.createElement('tr');
+	t.AddElement('th').AddText(title);
+	return [t].concat(content);
 } // }}}
 
 function make_table() { // {{{
@@ -875,11 +857,58 @@ function make_table() { // {{{
 		}
 		else {
 			if (arguments[r][0] == 'axis' || arguments[r][0] == 'motor')
-				multiples[port]['space'].push([t, [], t.Add(arguments[r][2]), arguments[r][1]]);
+				multiples[port].space.push([t, [], t.Add(arguments[r][2]), arguments[r][1]]);
 			else
 				multiples[port][arguments[r][0]].push([t, [], t.Add(arguments[r][2]), arguments[r][1]]);
 		}
 	}
+	t.AddMultiple = function(type, template, all, arg) {
+		var one = function(t, template, i, arg) {
+			var ret = [];
+			var part = build(template, [t, i, arg]);
+			for (var p = 0; p < part.length; ++p) {
+				if (part[p] instanceof Comment)
+					continue;
+				if (part[p] instanceof Text) {
+					if (!/^\s*$/.exec(part[p].data))
+						alert('Non-empty text node in result of multiple: ' + part[p].data);
+					continue;
+				}
+				if (i === null || arg === null)
+					part[p].AddClass('all').AddClass('hidden');
+				ret.push(part[p]);
+			}
+			if (ret.length < 1)
+				ret.push(document.createComment(''));
+			return ret;
+		};
+		var t = this;
+		var last;
+		if (all !== false)
+			if (type != 'axis' && type != 'motor')
+				last = one(t, template, null);
+			else
+				last = one(t, template, arg, null);
+		else
+			last = [document.createComment('')];
+		for (var i = 0; i < last.length; ++i)
+			t.appendChild(last[i]);
+		if (type != 'axis' && type != 'motor')
+			multiples[port][type].push([t, [], last[0], function(i) { return one(t, template, i); }]);
+		else
+			multiples[port][type][arg].push([t, [], last[0], function(i) { return one(t, template, arg, i); }]);
+		return t;
+	};
+	t.AddMultipleTitles = function(titles, classes, mouseovers) {
+		var tr = this.AddElement('tr');
+		for (var cell = 0; cell < titles.length; ++cell) {
+			var th = tr.AddElement('th', classes[cell]);
+			th.AddText(titles[cell]);
+			if (mouseovers && mouseovers[cell])
+				th.title = mouseovers[cell];
+		}
+		return this;
+	};
 	return t;
 } // }}}
 
@@ -955,7 +984,7 @@ function move_axis(axes, amounts, update_lock, pos) { // {{{
 		pos = [];
 	if (pos.length < axes.length) {
 		selected_printer.call('get_axis_pos', [0, axes[pos.length]], {}, function(result) {
-			pos.push(result[1] + amounts[pos.length]);
+			pos.push(result + amounts[pos.length]);
 			move_axis(axes, amounts, update_lock, pos);
 		});
 		return;
@@ -963,7 +992,7 @@ function move_axis(axes, amounts, update_lock, pos) { // {{{
 	var target = new Object;
 	for (var a = 0; a < axes.length; ++a)
 		target[axes[a]] = pos[a];
-	selected_printer.call('goto', [[0, target]], {'cb': true}, function() {
+	selected_printer.call('goto', [[target]], {'cb': true}, function() {
 		selected_printer.call('wait_for_cb', [], {}, function() {
 			update_canvas_and_spans(update_lock);
 		});
@@ -982,7 +1011,7 @@ function set_reference(x, y, ctrl) { // {{{
 				var dx = Math.cos(selected_printer.local_angle) * (x - selected_printer.reference[0]) - Math.sin(selected_printer.local_angle) * (y - selected_printer.reference[1]);
 				var dy = Math.cos(selected_printer.local_angle) * (y - selected_printer.reference[1]) + Math.sin(selected_printer.local_angle) * (x - selected_printer.reference[0]);
 				selected_printer.reference = [x, y];
-				selected_printer.call('goto', [[current_x[1] + dx, current_y[1] + dy]], {'cb': true}, function() {
+				selected_printer.call('goto', [[current_x + dx, current_y + dy]], {'cb': true}, function() {
 					selected_printer.call('wait_for_cb', [], {}, function() {
 						update_canvas_and_spans(false);
 					});
@@ -999,17 +1028,17 @@ function update_canvas_and_spans(update_lock) { // {{{
 		printer.call('get_axis_pos', [0, 1], {}, function(y) {
 			printer.call('get_axis_pos', [0, 2], {}, function(z) {
 				if (update_lock)
-					printer.lock = [[x[1], y[1]], [selected_printer.reference[0], selected_printer.reference[1]]];
+					printer.lock = [[x, y], [selected_printer.reference[0], selected_printer.reference[1]]];
 				var e = document.getElementById(make_id(selected_printer, [null, 'movespan0']));
 				e.ClearAll();
-				e.AddText((x[1] * 1000).toFixed(1));
+				e.AddText((x * 1000).toFixed(1));
 				e = document.getElementById(make_id(selected_printer, [null, 'movespan1']));
 				e.ClearAll();
-				e.AddText((y[1] * 1000).toFixed(1));
+				e.AddText((y * 1000).toFixed(1));
 				e = document.getElementById(make_id(selected_printer, [null, 'movespan2']));
 				e.ClearAll();
-				e.AddText((z[1] * 1000).toFixed(1));
-				redraw_canvas(x[1], y[1]);
+				e.AddText((z * 1000).toFixed(1));
+				redraw_canvas(x, y);
 			});
 		});
 	});

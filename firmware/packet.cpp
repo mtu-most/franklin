@@ -152,7 +152,7 @@ void packet()
 			Serial.write(CMD_STALL);
 			return;
 		}
-		if (command[2] & 0x80) {
+		if (command[2]) {
 			for (uint8_t t = 0; t < num_spaces; ++t) {
 				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
 					RESET(spaces[t].motor[m]->enable_pin);
@@ -163,14 +163,14 @@ void packet()
 					spaces[t].axis[a]->current = NAN;
 				}
 			}
-			motors_busy = true;
+			motors_busy = false;
 		}
 		else {
 			for (uint8_t t = 0; t < num_spaces; ++t) {
 				for (uint8_t m = 0; m < spaces[t].num_motors; ++m)
 					SET(spaces[t].motor[m]->enable_pin);
 			}
-			motors_busy = false;
+			motors_busy = true;
 		}
 		write_ack();
 		return;
@@ -259,6 +259,7 @@ void packet()
 			return;
 		}
 		requested_temp = which;
+		adc_phase = 1;
 		write_ack();
 		return;
 	}
@@ -302,9 +303,9 @@ void packet()
 		last_active = millis();
 		which = get_which();
 		uint8_t t = command[3];
-		if (t >= num_spaces || which >= spaces[t].num_axes)
+		if (which >= num_spaces || t >= spaces[which].num_axes)
 		{
-			debug("Invalid axis for setting position: %d %d", t, which);
+			debug("Invalid axis for setting position: %d %d", which, t);
 			Serial.write(CMD_STALL);
 			return;
 		}
@@ -320,12 +321,12 @@ void packet()
 			Serial.write(CMD_STALL);
 			return;
 		}
-		for (uint8_t a = 0; a < spaces[t].num_axes; ++a) {
-			spaces[t].axis[a]->source = NAN;
-			spaces[t].axis[a]->current = NAN;
+		for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
+			spaces[which].axis[a]->source = NAN;
+			spaces[which].axis[a]->current = NAN;
 		}
 		write_ack();
-		spaces[t].motor[which]->current_pos = get_float(4);
+		spaces[which].motor[t]->current_pos = get_float(4);
 		return;
 	}
 	case CMD_GETPOS:	// Get current position
@@ -335,19 +336,19 @@ void packet()
 #endif
 		which = get_which();
 		uint8_t t = command[3];
-		if (t >= num_spaces || which >= spaces[t].num_axes)
+		if (which >= num_spaces || t >= spaces[which].num_axes)
 		{
-			debug("Getting position of invalid axis %d %d", t, which);
+			debug("Getting position of invalid axis %d %d", which, t);
 			Serial.write(CMD_STALL);
 			return;
 		}
 		write_ack();
-		if (isnan(spaces[t].axis[which]->source))
-			space_types[spaces[t].type].reset_pos(&spaces[t]);
-			for (uint8_t a = 0; a < spaces[t].num_axes; ++a)
-				spaces[t].axis[a]->current = spaces[t].axis[a]->source;
+		if (isnan(spaces[which].axis[t]->source))
+			space_types[spaces[which].type].reset_pos(&spaces[which]);
+			for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
+				spaces[which].axis[a]->current = spaces[which].axis[a]->source;
 		ReadFloat pos;
-		pos.f = spaces[t].axis[which]->current - spaces[t].axis[which]->offset;
+		pos.f = spaces[which].axis[t]->current - spaces[which].axis[t]->offset;
 		reply[0] = 2 + sizeof(float);
 		reply[1] = CMD_POS;
 		for (uint8_t b = 0; b < sizeof(float); ++b)

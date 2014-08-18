@@ -9,6 +9,7 @@
 #define HAVE_SPACES
 #define HAVE_TEMPS
 #define HAVE_GPIOS
+#define HAVE_DELTA
 
 // If HAVE_AUDIO is not defined, nothing related to audio will be included.
 #define HAVE_AUDIO

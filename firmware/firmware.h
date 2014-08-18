@@ -224,6 +224,7 @@ struct Space
 	uint8_t num_axes, num_motors;
 	Motor **motor;
 	Axis **axis;
+	bool active;
 	void load_info(int16_t &addr, bool eeprom);
 	void load_axis(uint8_t a, int16_t &addr, bool eeprom);
 	void load_motor(uint8_t m, int16_t &addr, bool eeprom);
@@ -239,24 +240,26 @@ struct Space
 	int16_t size_std();
 };
 
-#define NUM_SPACE_TYPES 1
+#define NUM_SPACE_TYPES 2
+EXTERN bool have_type[NUM_SPACE_TYPES];
 void Cartesian_init(uint8_t num);
 #define CARTESIAN_INIT(num) Cartesian_init(num);
-
+#define HAVE_TYPE_CARTESIAN true
 #ifdef HAVE_DELTA
-#define _SPACE_TYPE_TMP NUM_SPACE_TYPES + 1
-#undef NUM_SPACE_TYPES
-#define NUM_SPACE_TYPES _SPACE_TYPE_TMP
 void Delta_init(uint8_t num);
 #define DELTA_INIT(num) Delta_init(num);
+#define HAVE_TYPE_DELTA true
 #else
 #define DELTA_INIT(num)
+#define HAVE_TYPE_DELTA false
 #endif
 
 EXTERN SpaceType space_types[NUM_SPACE_TYPES];
 #define setup_spacetypes() do { \
 	CARTESIAN_INIT(0) \
+	have_type[0] = HAVE_TYPE_CARTESIAN; \
 	DELTA_INIT(1) \
+	have_type[1] = HAVE_TYPE_DELTA; \
 } while(0)
 #endif
 

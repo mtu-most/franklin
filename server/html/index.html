@@ -142,126 +142,111 @@
 			<!-- }}} -->
 
 			<div id='Spacetype_space'> <!-- {{{ -->
-				<div>
 				[!(
 					elements[0].printer = printer,
-					elements[0].index = args[0],
+					elements[0].index = args[1],
 					elements[0].obj = create_space_type_select(),
-					elements[1].id = make_id(printer, [['space', args[0]], 'type']),
-					[elements[0].obj, elements[0], elements[1]]
-					<button type='button' onclick="set_value(this.printer, this.target, this.obj.selected.value)">Set</button>
+					elements[1].id = make_id(printer, [['space', args[1]], 'type']),
+					[make_tablerow(space_name(args[1]), [[elements[0].obj, elements[0], elements[1]]], ['rowtitle1'])]
+					<button type='button' onclick="set_value(this.printer, [['space', this.index], 'type'], this.obj.selectedIndex)">Set</button>
 					<span></span>
 				)!]
-				</div>
 			</div> <!-- }}} -->
 			<div id='Cartesian_space'> <!-- {{{ -->
 				[!(
-					[make_tablerow(space_name(args[0]), elements, ['rowtitle1'])]
-					<div>[$(Float [[['space', args[0]], 'num_axes'], 1])$]</div>
+					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'])]
+					<div>[$(Float [[['space', args[1]], 'num_axes'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Delta_content'> <!-- {{{ -->
-				[!(
-					[make_tablerow(delta_name(args[0], 0), elements, ['rowtitle4']),
-					make_tablerow(delta_name(args[0], 1), elements, ['rowtitle4']),
-					make_tablerow(delta_name(args[0], 2), elements, ['rowtitle4'])]
-					<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'axis_min'], 0.001])$]</div>
-					<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'axis_max'], 0.001])$]</div>
-					<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'rodlength'], 0.001])$]</div>
-					<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'radius'], 0.001])$]</div>
-				)!]
+				<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'axis_min'], 0.001])$]</div>
+				<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'axis_max'], 0.001])$]</div>
+				<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'rodlength'], 0.001])$]</div>
+				<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'radius'], 0.001])$]</div>
 			</div> <!-- }}} -->
 			<div id='Delta_space'> <!-- {{{ -->
 				[!(
-					elements
-					[$(Delta_content [args[0], 0])$]
-					[$(Delta_content [args[0], 1])$]
-					[$(Delta_content [args[0], 2])$]
+					[make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 0])), ['rowtitle4']),
+					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 1])), ['rowtitle4']),
+					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 2])), ['rowtitle4']),
+					make_tablerow(space_name(args[1]), elements, ['rowtitle1'])]
+				<div>[$(Float [[['space', args[1]], 'delta_angle'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Axis_axis'> <!-- {{{ -->
 				[!(
-					[make_tablerow(axis_name(args[0], args[1]), elements, ['rowtitle3'])]
-					<div>[$(Float [[['axis', [args[0], args[1]]], 'offset'], 0.001])$]</div>
-					<div>[$(Float [[['axis', [args[0], args[1]]], 'park'], 0.001])$]</div>
-					<div>[$(Float [[['axis', [args[0], args[1]]], 'max_v'], 0.001])$]</div>
+					[make_tablerow(axis_name(args[1], args[2]), elements, ['rowtitle2'])]
+					<div>[$(Float [[['axis', [args[1], args[2]]], 'park'], 0.001])$]</div>
+					<div>[$(Float [[['axis', [args[1], args[2]]], 'max_v'], 0.001])$]</div>
 				)!]
 			</div> <!-- }}} -->
+			<div id='Axis_space'> [!( args[0].AddMultiple('axis', 'Axis_axis', true, args[1]), '')!] </div>
 			<div id='Motor_motor'> <!-- {{{ -->
 				[!(
-					[make_tablerow(motor_name(args[0], args[1]), elements, ['rowtitle7'])]
-					<div>[$(Float [[['motor', [args[0], args[1]]], 'steps_per_m'], 1000])$]</div>
-					<div>[$(Float [[['motor', [args[0], args[1]]], 'max_steps'], 1])$]</div>
-					<div>[$(Float [[['motor', [args[0], args[1]]], 'home_pos'], 0.001])$]</div>
-					<div>[$(Float [[['motor', [args[0], args[1]]], 'motor_min'], 0.001])$]</div>
-					<div>[$(Float [[['motor', [args[0], args[1]]], 'motor_max'], 0.001])$]</div>
-					<div>[$(Float [[['motor', [args[0], args[1]]], 'limit_v'], 0.001])$]</div>
-					<div>[$(Float [[['motor', [args[0], args[1]]], 'limit_a'], 1])$]</div>
+					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle7'])]
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'steps_per_m'], 1000])$]</div>
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'max_steps'], 1])$]</div>
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'home_pos'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'motor_min'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'motor_max'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'limit_v'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'limit_a'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
-			<div id='Gpio_gpio'> <!-- {{{ -->
-				[!(
-				// args = index, visible
-				elements[0].id = make_id(printer, [['gpio', args[0]], 'master']),
-				elements[1].index = args[0],
-				elements[1].printer = printer,
-				[make_tablerow(gpio_name(args[0]), [[elements[0], elements[1]], elements[2]], ['rowtitle2', args[1]], undefined, [['gpio', args[0]], 'settings'])]
-				<select>[!(temprange(elements[0], 'value')<option></option>)!]</select>
-				<button class='button' type='button' onclick='set_gpio_master(this.printer, this.index)'>Set</button>
-				<div>[$(Float [[['gpio', args[0]], 'value'], 1])$]</div>
-				)!]
-			</div> <!-- }}} -->
-
+			<div id='Motor_space'> [!( args[0].AddMultiple('motor', 'Motor_motor', true, args[1]), '')!] </div>
 			<div id='Move_axis'> <!-- {{{ -->
 				[!(
-				// args = index
-				elements[1].id = make_id(printer, [['axis', args[0]], 'goto']),
+				elements[1].id = make_id(printer, [['axis', [args[1], args[2]]], 'goto']),
 				elements[2].printer = printer,
-				elements[2].index = args[0],
+				elements[2].index = [args[1], args[2]],
 				elements[2].addEventListener('click', function() {
 					var target = new Object;
-					target[String(args[0])] = Number(get_element(this.printer, [['axis', this.index], 'goto']).value) / 1000.;
-					this.printer.call('goto', [target], {});
+					target[String(args[2])] = Number(get_element(this.printer, [['axis', this.index], 'goto']).value) / 1000.;
+					var fulltarget = new Object;
+					fulltarget[String(args[1])] = target;
+					this.printer.call('goto', [fulltarget], {cb: true});
+					this.printer.call('wait_for_cb', [], {}, update_canvas_and_spans);
 				}, false),
-				[make_tablerow(axis_name(args[0], true), [[elements[1], elements[2]], elements[0]], ['rowtitle3', ''])]
-				<div>[$(Float [[['axis', args[0]], 'offset'], .001])$]</div>
+				[make_tablerow(axis_name(args[1], args[2]), [[elements[1], elements[2]], elements[0]], ['rowtitle3', ''])]
+				<div>[$(Float [[['axis', [args[1], args[2]]], 'offset'], 0.001])$]</div>
 				<input type='text'/>
 				<button class='button' type='button'>Go</button>
 				)!]
 			</div> <!-- }}} -->
+			<div id='Move_space'> [!( args[0].AddMultiple('axis', 'Move_axis', false, args[1]), '')!] </div>
 			<div id='Pins_motor'> <!-- {{{ -->
 				[!(
-				make_pin_title(motor_name(args[0], args[1]), stack)
-				[$(Pin ['Step', [['motor', [args[0], args[1]]], 'step_pin']])$]
-				[$(Pin ['Dir', [['motor', [args[0], args[1]]], 'dir_pin']])$]
-				[$(Pin ['Enable', [['motor', [args[0], args[1]]], 'enable_pin']])$]
-				[$(Pin ['Min limit', [['motor', [args[0], args[1]]], 'limit_min_pin']])$]
-				[$(Pin ['Max limit', [['motor', [args[0], args[1]]], 'limit_max_pin']])$]
-				[$(Pin ['Sense', [['motor', [args[0], args[1]]], 'sense_pin']])$]
+				make_pin_title(motor_name(args[1], args[2]), elements)
+				[$(Pin ['Step', [['motor', [args[1], args[2]]], 'step_pin']])$]
+				[$(Pin ['Dir', [['motor', [args[1], args[2]]], 'dir_pin']])$]
+				[$(Pin ['Enable', [['motor', [args[1], args[2]]], 'enable_pin']])$]
+				[$(Pin ['Min limit', [['motor', [args[1], args[2]]], 'limit_min_pin']])$]
+				[$(Pin ['Max limit', [['motor', [args[1], args[2]]], 'limit_max_pin']])$]
+				[$(Pin ['Sense', [['motor', [args[1], args[2]]], 'sense_pin']])$]
 				)!]
 			</div> <!-- }}} -->
+			<div id='Pins_space'> [!( args[0].AddMultiple('motor', 'Pins_motor', false, args[1]), '')!] </div>
+
 			<div id='Temp_temp'> <!-- {{{ -->
 				[!(
-					// args = index, class
-					[make_tablerow(temp_name(args[0]), elements, ['rowtitle5', args[1]])]
-					<div>[$(Float [[['temp', args[0]], 'R0'], 1000])$]</div>
-					<div>[$(Float [[['temp', args[0]], 'R1'], 1000])$]</div>
-					<div>[$(Float [[['temp', args[0]], 'Rc'], 1000])$]</div>
-					<div>[$(Float [[['temp', args[0]], 'Tc'], 1])$]</div>
-					<div>[$(Float [[['temp', args[0]], 'beta'], 1])$]</div>
+					[make_tablerow(temp_name(args[1]), elements, ['rowtitle5'])]
+					<div>[$(Float [[['temp', args[1]], 'R0'], 1000])$]</div>
+					<div>[$(Float [[['temp', args[1]], 'R1'], 1000])$]</div>
+					<div>[$(Float [[['temp', args[1]], 'Rc'], 1000])$]</div>
+					<div>[$(Float [[['temp', args[1]], 'Tc'], 1])$]</div>
+					<div>[$(Float [[['temp', args[1]], 'beta'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Tempcontrol_temp'> <!-- {{{ -->
 				[!(
-					// args = index
-					[make_tablerow(temp_name(args[0]), elements, ['rowtitle2', args[1]])]
-					<div>[$(Float [[['temp', args[0]], 'value', 'settemp']])$]</div>
+					[make_tablerow(temp_name(args[1]), elements, ['rowtitle2'])]
+					<div>[$(Float [[['temp', args[1]], 'value', 'settemp']])$]</div>
 					<div>[!(
 						elements[0].target = elements[1],
 						elements[0].printer = printer,
 						elements[0].addEventListener('click', function() {
 							var target = this.target;
-							this.printer.call('readtemp', [args[0]], {}, function(value) {
+							this.printer.call('readtemp', [args[1]], {}, function(value) {
 								target.ClearAll();
 								target.AddText(value.toFixed(1));
 							});
@@ -274,28 +259,37 @@
 			</div> <!-- }}} -->
 			<div id='Pins_temp'> <!-- {{{ -->
 				[!(
-				// args = index, visible
-				node.id = make_id(printer, [['temppins', args[0]], 'container']),
-				make_pin_title(temp_name(args[0]), stack)
-				[$(Pin ['Power', [['temp', args[0]], 'power_pin']])$]
-				[$(Pin ['Thermistor', [['temp', args[0]], 'thermistor_pin'], true])$]
+				node.id = make_id(printer, [['temppins', args[1]], 'container']),
+				make_pin_title(temp_name(args[1]), stack)
+				[$(Pin ['Power', [['temp', args[1]], 'power_pin']])$]
+				[$(Pin ['Thermistor', [['temp', args[1]], 'thermistor_pin'], true])$]
+				)!]
+			</div> <!-- }}} -->
+
+			<div id='Gpio_gpio'> <!-- {{{ -->
+				[!(
+				elements[0].id = make_id(printer, [['gpio', args[1]], 'master']),
+				elements[1].index = args[1],
+				elements[1].printer = printer,
+				[make_tablerow(gpio_name(args[1]), [[elements[0], elements[1]], elements[2]], ['rowtitle2'], undefined, [['gpio', args[1]], 'settings'])]
+				<select>[!(temprange(elements[0], 'value')<option></option>)!]</select>
+				<button class='button' type='button' onclick='set_gpio_master(this.printer, this.index)'>Set</button>
+				<div>[$(Float [[['gpio', args[1]], 'value'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='State_gpio'> <!-- {{{ -->
 				[!(
-				// args = index, visible
 				elements[1].id = make_id(printer, ['gpio', 'value']),
-				[make_tablerow(gpio_name(args[0]), elements, ['rowtitle2', args[1]], undefined, [['gpio', args[0]], 'state'])]
-				<div>[$(Choice [[['gpio', args[0]], 'state'], ['Off', 'On', 'Input', 'High&nbsp;Z']])$]</div>
+				[make_tablerow(gpio_name(args[1]), elements, ['rowtitle2'], undefined, [['gpio', args[1]], 'state'])]
+				<div>[$(Choice [[['gpio', args[1]], 'state'], ['Off', 'On', 'Input', 'High&nbsp;Z']])$]</div>
 				<span></span>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Pins_gpio'> <!-- {{{ -->
 				[!(
-				// args = index, visible
-				node.id = make_id(printer, [['gpiopins', args[0]], 'container']),
-				make_pin_title(gpio_name(args[0]), stack)
-				[$(Pin ['Pin', [['gpio', args[0]], 'pin']])$]
+				node.id = make_id(printer, [['gpiopins', args[1]], 'container']),
+				make_pin_title(gpio_name(args[1]), stack)
+				[$(Pin ['Pin', [['gpio', args[1]], 'pin']])$]
 				)!]
 			</div> <!-- }}} -->
 
@@ -320,8 +314,8 @@
 						<!-- }}} -->
 
 						<!-- Space settings {{{ -->
-						[!([make_table( // Space {{{
-							multiple_titles(['space'], [
+						[!([make_table().AddMultipleTitles([
+						// Space {{{
 								'Spaces',
 								'Type'
 							], [
@@ -330,11 +324,10 @@
 							], [
 								null,
 								'Printer type'
-							]),
-							multiple('Spacetype_space')
-						)])!] <!-- }}} -->
-						[!([make_table( // Cartesian {{{
-							multiple_titles(['space'], [
+							]).AddMultiple('space', 'Spacetype_space')
+						])!] <!-- }}} -->
+						[!([make_table().AddMultipleTitles([
+						// Cartesian {{{
 								'Cartesian',
 								'Number of axes'
 							], [
@@ -343,12 +336,10 @@
 							], [
 								null,
 								'Number of axes'
-							]),
-							multiple('Cartesian_space')
-						)])!] <!-- }}} -->
-						[!(
-						[make_table( // Delta {{{
-							multiple_titles(['space'], [
+							]).AddMultiple('space', 'Cartesian_space')
+						])!] <!-- }}} -->
+						[!([make_table().AddMultipleTitles([
+						// Delta {{{
 								'Delta',
 								'Min Axis Distance',
 								'Max Axis Distance',
@@ -366,27 +357,25 @@
 								'Maximum distance of end effector from nozzle.  Usually rod length. (mm)',
 								'Length of the tie rods. (mm)',
 								'Length of horizontal projection of the tie rod when the end effector is at (0, 0). (mm)'
-							]),
-							multiple('Delta_space')
-						)])!] <!-- }}} -->
-						[!([make_table( // Axis {{{
-							multiple_titles(['space'], [
+							]).AddMultiple('space', 'Delta_space', false)
+						])!] <!-- }}} -->
+						[!([make_table().AddMultipleTitles([
+						// Axis {{{
 								'Axes',
 								'Park pos (mm)',
 								'Max v (mm/s)'
 							], [
-								'htitle2',
-								'title2',
-								'title2'
+								'htitle3',
+								'title3',
+								'title3'
 							], [
 								null,
 								'Park position of the nozzle.',
 								'Maximum speed that the motor is allowed to move.'
-							]),
-							multiple('Axis_axis')
-						)])!] <!-- }}} -->
-						[!([make_table( // Motor {{{
-							multiple_titles(['space'], [
+							]).AddMultiple('space', 'Axis_space', false)
+						])!] <!-- }}} -->
+						[!([make_table().AddMultipleTitles([
+						// Motor {{{
 								'Motor',
 								'Coupling (steps/mm)',
 								'Microsteps',
@@ -413,13 +402,12 @@
 								'Maximum value that the motor may move to. (mm)',
 								'Maximum speed of the motor. (mm/s)',
 								'Maximum acceleration of the motor. (m/s²)'
-							]),
-							multiple('Motor_motor')
-						)])!] <!-- }}} -->
+							]).AddMultiple('space', 'Motor_space', false)
+						])!] <!-- }}} -->
 						<!-- }}} -->
 
-						[!([make_table( // Temp {{{
-							multiple_titles(['temp'], [
+						[!([make_table().AddMultipleTitles([
+						// Temp {{{
 								'Temps',
 								'R0 (kΩ)',
 								'R1 (kΩ)',
@@ -440,12 +428,11 @@
 								'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.',
 								'Temperature at which the thermistor has value Rc.  Normally 20.',
 								"Temperature dependence of the thermistor.  Normally around 3800.  It can be found in the thermistor's data sheet."
-							]),
-							multiple('Temp_temp')
-						)])!] <!-- }}} -->
+							]).AddMultiple('temp', 'Temp_temp')
+						])!] <!-- }}} -->
 
-						[!([make_table( // Gpio {{{
-							multiple_titles(['gpio'], [
+						[!([make_table().AddMultipleTitles([
+						// Gpio {{{
 								'Gpio',
 								'Master temp',
 								'Threshold(°C)'
@@ -457,14 +444,11 @@
 								null,
 								'If set to something other than None, the pin will automatically be set and reset depending on the value of the selected temperature control.',
 								'If a master temp is set, the pin will be on if that temp is above this value, otherwise it will be off.'
-							]),
-							multiple('Gpio_gpio')
-						)])!] <!-- }}} -->
+							]).AddMultiple('gpio', 'Gpio_gpio')
+						])!] <!-- }}} -->
 
-						[!([make_table(elements[0], elements[1], // Pins {{{
-							multiple('Pins_motor', null, false),
-							multiple('Pins_temp', null, false),
-							multiple('Pins_gpio', null, false))]
+						[!([make_table(elements[0], elements[1]).AddMultiple('space', 'Pins_space', false).AddMultiple('temp', 'Pins_temp', false).AddMultiple('gpio', 'Pins_gpio', false)]
+						// Pins {{{
 							[$(Pin ['LED', [null, 'led_pin']])$]
 							[$(Pin ['Probe', [null, 'probe_pin']])$]
 							)!] <!-- }}} -->
@@ -495,7 +479,7 @@
 									<span class='queue2'>
 										<button type='button' onclick="selected_printer.call('park', [], {}, update_canvas_and_spans)">Park</button>
 										<button type='button' onclick="selected_printer.call('home', [], {}, update_canvas_and_spans)">Home</button>
-										<button type='button' onclick="selected_printer.call('sleep_all', [], {}, update_canvas_and_spans)">Sleep</button>
+										<button type='button' onclick="selected_printer.call('sleep', [], {}, update_canvas_and_spans)">Sleep</button>
 									</span><br/>
 									<span class='queue1'>
 										[!(
@@ -512,22 +496,6 @@
 							)!]
 						</div>
 					</div> <!-- }}} -->
-					[!([make_table( // Axis xyz {{{
-						multiple_titles(['space'], [
-							'Axis',
-							'Go (mm)',
-							'Offset (mm)'
-						], [
-							'htitle2',
-							'title2',
-							'title2'
-						], [
-							null,
-							'Physically move the extruder to this position.  For Z, more positive numbers move the extruder away from the bed.',
-							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.'
-						]),
-						multiple('Move_axis')
-					)])!] <!-- }}} -->
 					<div class='movediv' onclick='start_move()' onkeydown='if (!key_move(event.keyCode, event.shiftKey, event.ctrlKey)) event.preventDefault()'><!-- {{{ -->
 						[!(
 							elements[0].id = make_id(printer, [null, 'movebox']),
@@ -557,9 +525,24 @@
 							</div>
 						)!]
 					</div><!-- }}} -->
+					[!([make_table().AddMultipleTitles([
+					// Axis xyz {{{
+							'Axis',
+							'Go (mm)',
+							'Offset (mm)'
+						], [
+							'htitle4',
+							'title4',
+							'title4'
+						], [
+							null,
+							'Physically move the extruder to this position.  For Z, more positive numbers move the extruder away from the bed.',
+							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.'
+						]).AddMultiple('space', 'Move_space', false).AddClass('left')
+					])!] <!-- }}} -->
 
-					[!([make_table(	// Temp control {{{
-						multiple_titles(['temp'], [
+					[!([make_table().AddMultipleTitles([
+					// Temp control {{{
 							'Temp control',
 							'Target (°C)',
 							'Current (°C)'
@@ -571,11 +554,10 @@
 							null,
 							'Temperature target.  Set to NaN to disable the heater completely.',
 							'Request actual temperature from sensor.'
-						]),
-						multiple('Tempcontrol_temp')
-					).AddClass('left')])!] <!-- }}} -->
-					[!([make_table( // Gpio {{{
-						multiple_titles(['gpio'], [
+						]).AddMultiple('temp', 'Tempcontrol_temp').AddClass('left')
+					])!] <!-- }}} -->
+					[!([make_table().AddMultipleTitles([
+					// Gpio {{{
 							'Gpio',
 							'State',
 							'Value'
@@ -587,9 +569,7 @@
 							null,
 							'State of the pin.',
 							'Value of the pin.'
-						]),
-						multiple('State_gpio')
-					).AddClass('left')])!] <!-- }}} -->
+						]).AddMultiple('gpio', 'State_gpio').AddClass('left')])!] <!-- }}} -->
 
 					<div>Feedrate: [$(Float [[null, 'feedrate'], .01])$] %</div>
 

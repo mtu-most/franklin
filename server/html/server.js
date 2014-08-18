@@ -96,12 +96,11 @@ function _setup_updater() {
 			printers[port] = {
 				'port': port,
 				'queue': [],
-				'namelen': constants[0],
-				'queue_length': constants[1],
-				'audio_fragments': constants[6],
-				'audio_fragment_size': constants[7],
-				'num_digital_pins': constants[8],
-				'num_pins': constants[9],
+				'queue_length': constants[0],
+				'audio_fragments': constants[1],
+				'audio_fragment_size': constants[2],
+				'num_digital_pins': constants[3],
+				'num_pins': constants[4],
 				'name': '',
 				'num_spaces': 0,
 				'num_temps': 0,
@@ -178,6 +177,7 @@ function _setup_updater() {
 					'num_axes': 0,
 					'num_motors': 0,
 					'delta': null,
+					'delta_angle': 0,
 					'axis': [],
 					'motor': []
 				});
@@ -218,8 +218,8 @@ function _setup_updater() {
 			printers[port].spaces[index].num_motors = values[2].length;
 			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a) {
 				printers[port].spaces[index].axis.push({
-					'park': values[1][a][0],
-					'offset': values[1][a][1],
+					'offset': values[1][a][0],
+					'park': values[1][a][1],
 					'max_v': values[1][a][2]
 				});
 			}
@@ -247,8 +247,9 @@ function _setup_updater() {
 						'axis_min': values[3][i][0],
 						'axis_max': values[3][i][1],
 						'rodlength': values[3][i][2],
-						'radius': values[3][i][3]
+						'radius': values[3][i][3],
 					});
+					printers[port].spaces[index].delta_angle = values[3][3];
 				}
 			}
 			else
@@ -263,6 +264,7 @@ function _setup_updater() {
 			printers[port].temps[index].beta = values[4];
 			printers[port].temps[index].power_pin = values[5];
 			printers[port].temps[index].thermistor_pin = values[6];
+			printers[port].temps[index].value = values[7];
 			trigger_update(port, 'temp_update', index);
 		},
 		'gpio_update': function(port, index, values) {

@@ -52,7 +52,7 @@ void Space::load_info(int16_t &addr, bool eeprom)
 	if (t >= NUM_SPACE_TYPES)
 		t = 0;
 	type = read_8(addr, eeprom);
-	if (type >= NUM_SPACE_TYPES) {
+	if (type >= NUM_SPACE_TYPES || !have_type[type]) {
 		debug("request for type %d ignored", type);
 		type = t;
 	}
@@ -73,6 +73,7 @@ void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
 
 void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 {
+	uint16_t enable = motor[m]->enable_pin.write();
 	motor[m]->step_pin.read(read_16(addr, eeprom));
 	motor[m]->dir_pin.read(read_16(addr, eeprom));
 	motor[m]->enable_pin.read(read_16(addr, eeprom));
@@ -89,6 +90,8 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 	SET_OUTPUT(motor[m]->step_pin);
 	SET_OUTPUT(motor[m]->dir_pin);
 	SET_OUTPUT(motor[m]->enable_pin);
+	if (enable != motor[m]->enable_pin.write())
+		RESET(motor[m]->enable_pin);
 	SET_INPUT(motor[m]->limit_min_pin);
 	SET_INPUT(motor[m]->limit_max_pin);
 	SET_INPUT(motor[m]->sense_pin);
@@ -101,8 +104,8 @@ void Space::save_info(int16_t &addr, bool eeprom)
 }
 
 void Space::save_axis(uint8_t a, int16_t &addr, bool eeprom) {
-	write_float(addr, axis[a]->park, eeprom);
 	write_float(addr, axis[a]->offset, eeprom);
+	write_float(addr, axis[a]->park, eeprom);
 	write_float(addr, axis[a]->max_v, eeprom);
 }
 

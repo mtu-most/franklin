@@ -33,7 +33,7 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 				if (((temps[next].adctarget < MAXINT && temps[next].adctarget >= 0)
 						 || (temps[next].adcmin_alarm >= 0 && temps[next].adcmin_alarm < MAXINT)
 						 || temps[next].adcmax_alarm < MAXINT
-#ifdef HAVE_GPIO
+#ifdef HAVE_GPIOS
 						 || temps[next].gpios
 #endif
 						 )
@@ -53,9 +53,12 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 		return;
 	}
 	int16_t temp = temps[temp_current].get_value();
-	if (temp < 0)	// Not done yet.
+	if (temp < 0) {	// Not done yet.
 		return;
+	}
+	//debug("done temperature %d %d", temp_current, temp);
 	if (requested_temp == temp_current) {
+		//debug("replying temp");
 		requested_temp = ~0;
 		ReadFloat f;
 		f.f = temps[temp_current].fromadc(temp);
@@ -79,9 +82,10 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 		temps[temp_current].alarm = true;
 		try_send_next();
 	}
-#ifdef HAVE_GPIO
+#ifdef HAVE_GPIOS
 	// And handle any linked gpios.
 	for (Gpio *g = temps[temp_current].gpios; g; g = g->next) {
+		//debug("setting gpio for temp %d: %d %d", temp_current, temp, g->adcvalue);
 		// adc values are lower for higher temperatures.
 		if (temp < g->adcvalue)
 			SET(g->pin);
@@ -229,7 +233,7 @@ static bool do_steps(Space *s, uint8_t m, float distance, unsigned long current_
 	float cp = mtr.current_pos;
 	if (mtr.positive ? GET(mtr.limit_max_pin, false) || cp + distance > mtr.motor_max : GET(mtr.limit_min_pin, false) || cp + distance < mtr.motor_min) {
 		// Hit endstop; abort current move and notify host.
-		debug("hit axis %d positive %d dist %f current_pos %f min %f max %f oldpos %f newpos %f last_v %f v %f", int(m - 2), mtr.positive, F(distance), F(mtr.current_pos), F(mtr.motor_min), F(mtr.motor_max), F(old_pos), F(new_pos), F(mtr.last_v), F(v));
+		debug("hit axis %d positive %d dist %f current_pos %f min %f max %f oldpos %f newpos %f last_v %f v %f", m, mtr.positive, F(distance), F(mtr.current_pos), F(mtr.motor_min), F(mtr.motor_max), F(old_pos), F(new_pos), F(mtr.last_v), F(v));
 		mtr.last_v = 0;
 		mtr.limits_pos = isnan(mtr.current_pos) ? INFINITY * (mtr.positive ? 1 : -1) : mtr.current_pos;
 		if (moving && current_move_has_cb) {
@@ -308,6 +312,8 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 		movedebug("finishing %f", F(t));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
+			if (!sp.active)
+				continue;
 			float target[sp.num_motors];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if ((isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) && (isnan(sp.axis[a]->next_dist) || sp.axis[a]->next_dist == 0)) {
@@ -352,6 +358,8 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", F(t), F(t0), F(tp), F(t_fraction), F(f1), F(f2), F(current_f));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
+			if (!sp.active)
+				continue;
 			float target[sp.num_motors];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if (isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) {
@@ -368,6 +376,8 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 		float tc = t - t0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
+			if (!sp.active)
+				continue;
 			float target[sp.num_motors];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if ((isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) && (isnan(sp.axis[a]->next_dist) || sp.axis[a]->next_dist == 0)) {

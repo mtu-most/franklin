@@ -7,15 +7,15 @@ static void xyz2motors(Space *s, float *xyz, float *motors, bool *ok) {
 }
 
 static void reset_pos (Space *s) {
-	for (uint8_t a = 0; a < s->num_axes; ++a)
+	for (uint8_t a = 0; a < s->num_axes; ++a) {
 		s->axis[a]->source = s->motor[a]->current_pos;
+	}
 }
 
 static void check_position(Space *s, float *data) {
 }
 
 static void load(Space *s, int16_t &addr, bool eeprom) {
-	debug("loading cartesian from %d", addr);
 	uint8_t num = read_8(addr, eeprom);
 	s->setup_nums(num, num);
 }
