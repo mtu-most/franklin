@@ -534,8 +534,8 @@ class Printer: # {{{
 					self._globals_update()
 				if what & 2:
 					for t in range(len(self.temps)):
-						if not math.isnan(self.temp[t].value):
-							self.temp[t].value = float('nan')
+						if not math.isnan(self.temps[t].value):
+							self.temps[t].value = float('nan')
 							self._temp_update(t)
 				continue
 			elif packet[0] == self.rcommand['SENSE']:
@@ -919,18 +919,17 @@ class Printer: # {{{
 					return self.flush()[1](None)
 				e = args['E']
 				etemp = self.temps[1 + e].value
+				self.clear_alarm()
 				if not math.isnan(etemp) and self.pin_valid(self.temps[1 + e].thermistor_pin):
-					self.clear_alarm()
 					self.waittemp(1 + e, etemp)
 					self.gcode.pop(0)
 					self.gcode_waiting += 1
 					self.wait_for_temp(1 + e)[1](None)
-				if not math.isnan(self.btemp) and self.pin_valid(self.temp[0].thermistor_pin):
-					self.clear_alarm()
-					self.waittemp_temp(0, self.btemp)
+				if not math.isnan(self.btemp) and self.pin_valid(self.temps[0].thermistor_pin):
+					self.waittemp(0, self.btemp)
 					self.gcode.pop(0)
 					self.gcode_waiting += 1
-					self.wait_for_temp_temp(0)[1](None)
+					self.wait_for_temp(0)[1](None)
 				if self.gcode_waiting > 0:
 					return
 			elif cmd == ('M', 140):
@@ -938,19 +937,19 @@ class Printer: # {{{
 					self.flushing = True
 					return self.flush()[1](None)
 				self.btemp = args['S']
-				self.settemp_temp(0, self.btemp)
+				self.settemp(0, self.btemp)
 			elif cmd == ('M', 190):
 				if not self.flushing:
 					self.flushing = True
 					return self.flush()[1](None)
 				if 'S' in args:
 					self.btemp = args['S']
-					self.settemp_temp(0, self.btemp)
-				if not math.isnan(self.btemp) and self.pin_valid(self.temp[0].thermistor_pin):
+					self.settemp(0, self.btemp)
+				if not math.isnan(self.btemp) and self.pin_valid(self.temps[0].thermistor_pin):
 					self.gcode.pop(0)
-					self.waittemp_temp(0, self.btemp)
+					self.waittemp(0, self.btemp)
 					self.gcode_waiting = True
-					return self.wait_for_temp_temp(0)[1](None)
+					return self.wait_for_temp(0)[1](None)
 			elif cmd == ('SYSTEM', 0):
 				if not self.flushing:
 					self.flushing = True
