@@ -7,8 +7,10 @@ static void xyz2motors(Space *s, float *xyz, float *motors, bool *ok) {
 }
 
 static void reset_pos (Space *s) {
+	// If positions are unknown, pretend that they are 0.
+	// This is mostly useful for extruders.
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
-		s->axis[a]->source = s->motor[a]->current_pos;
+		s->axis[a]->source = isnan(s->motor[a]->current_pos) ? 0 : s->motor[a]->current_pos;
 	}
 }
 

@@ -7,3 +7,4 @@ firmware/wshttpd.py
 firmware/xdgbasedir.py
 firmware/*.o
 calibrate/*.ini
+server/html/expressions.js

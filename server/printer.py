@@ -935,6 +935,8 @@ class Printer: # {{{
 		if self.gcode_id is not None and not self.flushing:
 			self.flushing = True
 			return self.flush()[1](None)
+		for e in range(len(self.spaces[1].axis)):
+			self.set_axis_pos(1, e, 0)
 		self._print_done(True, 'completed')
 	# }}}
 	def _print_done(self, complete, reason): # {{{
@@ -1094,7 +1096,7 @@ class Printer: # {{{
 				if self.pin_valid(m['limit_max_pin']) or (not self.pin_valid(m['limit_min_pin']) and self.pin_valid(m['sense_pin'])):
 					self.home_target[i] = m['home_pos'] + .01 - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
-				self.home_cb[0] = self.home_target.keys()
+				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
 				self.movecb.append(self.home_cb)
 				#log("N t %s" % (self.home_target))
 				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
@@ -1439,7 +1441,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False): # {{{
-		#log('goto %s' % repr(axes))
+		#log('goto %s %s %s' % (repr(moves), f0, f1))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
 		self.queue.append((id, moves, f0, f1, cb))
@@ -1840,6 +1842,7 @@ class Printer: # {{{
 			log('nothing to run')
 			ret(False, 'nothing to run')
 			return
+		self.sleep(False)
 		for e in range(len(self.spaces[1].axis)):
 			self.set_axis_pos(1, e, 0)
 		self._broadcast(None, 'printing', True)
@@ -1982,7 +1985,7 @@ class Printer: # {{{
 					continue
 				elif cmd[0] == 'M' and cmd[1] in(104, 109, 116):
 					args['E'] = current_extruder
-				if not((cmd[0] == 'G' and cmd[1] in (0, 1, 4, 28, 81, 94)) or(cmd[0] == 'M' and cmd[1] in (0, 3, 4, 5, 6, 9, 42, 84, 104, 106, 107, 109, 116, 140, 190)) or(cmd[0] in('S', 'T'))):
+				if not((cmd[0] == 'G' and cmd[1] in (0, 1, 4, 28, 81, 94)) or (cmd[0] == 'M' and cmd[1] in (0, 3, 4, 5, 6, 9, 42, 84, 104, 106, 107, 109, 116, 140, 190)) or(cmd[0] in('S', 'T'))):
 					log('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
 				elif cmd == ('G', 28):
 					ret.append((cmd, args, message))
@@ -2001,7 +2004,7 @@ class Printer: # {{{
 					oldpos = pos[0][:], pos[1][:]
 					if cmd[1] != 81:
 						if components['E'] is not None:
-							if erel or(erel is None and rel):
+							if erel or (erel is None and rel):
 								estep = components['E'] * unit
 							else:
 								estep = components['E'] * unit - pos[1][current_extruder]

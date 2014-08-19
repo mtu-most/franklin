@@ -247,7 +247,7 @@ function _setup_updater() {
 						'axis_min': values[3][i][0],
 						'axis_max': values[3][i][1],
 						'rodlength': values[3][i][2],
-						'radius': values[3][i][3],
+						'radius': values[3][i][3]
 					});
 					printers[port].spaces[index].delta_angle = values[3][3];
 				}

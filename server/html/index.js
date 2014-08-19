@@ -5,6 +5,7 @@ var labels_element, printers_element;
 var selected_port, selected_printer;
 var script_cbs;
 var multiples;
+var temptargets;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
 var space_types = ['Cartesian', 'Delta'];
 // }}}
@@ -24,6 +25,7 @@ function init() { // {{{
 	script_cbs = new Object;
 	ports = new Object;
 	multiples = new Object;
+	temptargets = [];
 	labels_element = document.getElementById('labels');
 	printers_element = document.getElementById('printers');
 	selected_port = null;
@@ -189,6 +191,27 @@ function upload_buttons(port, buttons) { // {{{
 		button.AddText(buttons[b][1]);
 	}
 	return [ret];
+}
+// }}}
+
+function update_temps(printer, t) { // {{{
+	if (t === null) {
+		for (var i = 0; i < temptargets.length; ++i) {
+			var f = function(i) {
+				printer.call('readtemp', [i], {}, function(value) {
+					temptargets[i].ClearAll();
+					temptargets[i].AddText(value.toFixed(1));
+				});
+			};
+			f(i);
+		}
+	}
+	else {
+		printer.call('readtemp', [t], {}, function(value) {
+			temptargets[t].ClearAll();
+			temptargets[t].AddText(value.toFixed(1));
+		});
+	}
 }
 // }}}
 // }}}

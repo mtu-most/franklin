@@ -168,9 +168,13 @@
 				[!(
 					[make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 0])), ['rowtitle4']),
 					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 1])), ['rowtitle4']),
-					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 2])), ['rowtitle4']),
-					make_tablerow(space_name(args[1]), elements, ['rowtitle1'])]
-				<div>[$(Float [[['space', args[1]], 'delta_angle'], 1])$]</div>
+					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 2])), ['rowtitle4'])]
+				)!]
+			</div> <!-- }}} -->
+			<div id='Deltaangle_space'> <!-- {{{ -->
+				[!(
+					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'])]
+					<div>[$(Float [[['space', args[1]], 'delta_angle'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Axis_axis'> <!-- {{{ -->
@@ -183,8 +187,7 @@
 			<div id='Axis_space'> [!( args[0].AddMultiple('axis', 'Axis_axis', true, args[1]), '')!] </div>
 			<div id='Motor_motor'> <!-- {{{ -->
 				[!(
-					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle7'])]
-					<div>[$(Float [[['motor', [args[1], args[2]]], 'steps_per_m'], 1000])$]</div>
+					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle6'])]
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'max_steps'], 1])$]</div>
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'home_pos'], 0.001])$]</div>
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'motor_min'], 0.001])$]</div>
@@ -194,6 +197,13 @@
 				)!]
 			</div> <!-- }}} -->
 			<div id='Motor_space'> [!( args[0].AddMultiple('motor', 'Motor_motor', true, args[1]), '')!] </div>
+			<div id='Steps_motor'> <!-- {{{ -->
+				[!(
+					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle2'])]
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'steps_per_m'], 1000])$]</div>
+				)!]
+			</div> <!-- }}} -->
+			<div id='Steps_space'> [!( args[0].AddMultiple('motor', 'Steps_motor', true, args[1]), '')!] </div>
 			<div id='Move_axis'> <!-- {{{ -->
 				[!(
 				elements[1].id = make_id(printer, [['axis', [args[1], args[2]]], 'goto']),
@@ -242,15 +252,11 @@
 					[make_tablerow(temp_name(args[1]), elements, ['rowtitle2'])]
 					<div>[$(Float [[['temp', args[1]], 'value', 'settemp']])$]</div>
 					<div>[!(
+						args[1] !== null ? temptargets.push(elements[1]) : 0,
+						elements[0].num = args[1],
 						elements[0].target = elements[1],
 						elements[0].printer = printer,
-						elements[0].addEventListener('click', function() {
-							var target = this.target;
-							this.printer.call('readtemp', [args[1]], {}, function(value) {
-								target.ClearAll();
-								target.AddText(value.toFixed(1));
-							});
-						}, false),
+						elements[0].addEventListener('click', function() { update_temps(this.printer, this.num); }, false),
 						elements
 						<button>Refresh</button>
 						<span></span>
@@ -360,14 +366,26 @@
 							]).AddMultiple('space', 'Delta_space', false)
 						])!] <!-- }}} -->
 						[!([make_table().AddMultipleTitles([
+						// Delta angle {{{
+								'Delta',
+								'Angle'
+							], [
+								'htitle1',
+								'title1'
+							], [
+								null,
+								'Correction angle for the printer. (degrees)'
+							]).AddMultiple('space', 'Deltaangle_space', false)
+						])!] <!-- }}} -->
+						[!([make_table().AddMultipleTitles([
 						// Axis {{{
 								'Axes',
 								'Park pos (mm)',
 								'Max v (mm/s)'
 							], [
-								'htitle3',
-								'title3',
-								'title3'
+								'htitle2',
+								'title2',
+								'title2'
 							], [
 								null,
 								'Park position of the nozzle.',
@@ -377,7 +395,6 @@
 						[!([make_table().AddMultipleTitles([
 						// Motor {{{
 								'Motor',
-								'Coupling (steps/mm)',
 								'Microsteps',
 								'Switch pos (mm)',
 								'Motor min (mm)',
@@ -385,17 +402,15 @@
 								'Limit v (mm/s)',
 								'Limit a (mm/s²)'
 							], [
-								'htitle7',
-								'title7',
-								'title7',
-								'title7',
-								'title7',
-								'title7',
-								'title7',
-								'title7'
+								'htitle6',
+								'title6',
+								'title6',
+								'title6',
+								'title6',
+								'title6',
+								'title6'
 							], [
 								null,
-								'Number of (micro)steps that the motor needs to do to move the hardware by one mm.',
 								'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
 								'Position of the home switch. (mm)',
 								'Minimum value that the motor may move to. (mm)',
@@ -525,21 +540,6 @@
 							</div>
 						)!]
 					</div><!-- }}} -->
-					[!([make_table().AddMultipleTitles([
-					// Axis xyz {{{
-							'Axis',
-							'Go (mm)',
-							'Offset (mm)'
-						], [
-							'htitle4',
-							'title4',
-							'title4'
-						], [
-							null,
-							'Physically move the extruder to this position.  For Z, more positive numbers move the extruder away from the bed.',
-							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.'
-						]).AddMultiple('space', 'Move_space', false).AddClass('left')
-					])!] <!-- }}} -->
 
 					[!([make_table().AddMultipleTitles([
 					// Temp control {{{
@@ -555,6 +555,33 @@
 							'Temperature target.  Set to NaN to disable the heater completely.',
 							'Request actual temperature from sensor.'
 						]).AddMultiple('temp', 'Tempcontrol_temp').AddClass('left')
+					])!] <!-- }}} -->
+					[!([make_table().AddMultipleTitles([
+					// Axis {{{
+							'Axis',
+							'Go (mm)',
+							'Offset (mm)'
+						], [
+							'htitle4',
+							'title4',
+							'title4'
+						], [
+							null,
+							'Physically move the extruder to this position.  For Z, more positive numbers move the extruder away from the bed.',
+							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.'
+						]).AddMultiple('space', 'Move_space', false).AddClass('left')
+					])!] <!-- }}} -->
+					[!([make_table().AddMultipleTitles([
+					// Motor {{{
+							'Motor',
+							'Coupling (steps/mm)'
+						], [
+							'htitle2',
+							'title2'
+						], [
+							null,
+							'Number of (micro)steps that the motor needs to do to move the hardware by one mm.'
+						]).AddMultiple('space', 'Steps_space', false).AddClass('left')
 					])!] <!-- }}} -->
 					[!([make_table().AddMultipleTitles([
 					// Gpio {{{

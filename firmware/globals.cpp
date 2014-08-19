@@ -48,6 +48,9 @@ bool globals_load(int16_t &addr, bool eeprom)
 			debug("New settings make size %d, which is larger than %d: rejecting.", size, E2END);
 			return false;
 		}
+		else {
+			debug("New settings make size %d out of %d", size, E2END);
+		}
 		if (nl != namelen) {
 			delete[] name;
 			namelen = nl;

@@ -208,7 +208,7 @@ void next_move () {
 			if (!isnan(sp.axis[a]->max_v)) {
 				float max;
 				if (sp.axis[a]->dist != 0) {
-					max = sp.axis[a]->max_v / sp.axis[a]->dist;
+					max = sp.axis[a]->max_v / abs(sp.axis[a]->dist);
 					if (v0 > max) {
 						v0 = max;
 						//debug("limited v0 to %f for max v %f dist %f so %f", F(v0), F(sp.axis[a].max_v), F(sp.axis[a].dist), F(max));
@@ -217,7 +217,7 @@ void next_move () {
 						vp = max;
 				}
 				if (sp.axis[a]->next_dist != 0) {
-					max = sp.axis[a]->max_v / sp.axis[a]->next_dist;
+					max = sp.axis[a]->max_v / abs(sp.axis[a]->next_dist);
 					if (vq > max)
 						vq = max;
 				}
