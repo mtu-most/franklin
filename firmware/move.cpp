@@ -45,12 +45,16 @@ void next_move () {
 			if (n != queue_end) {
 				// If only one of them is set, set the other one as well to make the rounded corner work.
 				if (!isnan(queue[queue_start].data[a0 + a]) && isnan(queue[n].data[a0 + a])) {
-					queue[n].data[a0 + a] = sp.axis[a]->source + queue[queue_start].data[a0 + a] - sp.axis[a]->offset;
-					//debug("filling next %d with %f", a0 + a, F(queue[n].data[a0 + a]));
+					queue[n].data[a0 + a] = sp.axis[a]->source + sp.axis[a]->next_dist - sp.axis[a]->offset;
+#ifdef DEBUG_MOVE
+					debug("filling next %d with %f", a0 + a, F(queue[n].data[a0 + a]));
+#endif
 				}
 				if (isnan(queue[queue_start].data[a]) && !isnan(queue[n].data[a])) {
 					queue[queue_start].data[a0 + a] = sp.axis[a]->source - sp.axis[a]->offset;
-					//debug("filling %d with %f", a0 + a, F(queue[queue_start].data[a0 + a]));
+#ifdef DEBUG_MOVE
+					debug("filling %d with %f", a0 + a, F(queue[queue_start].data[a0 + a]));
+#endif
 				}
 			}
 			if ((!isnan(queue[queue_start].data[a0 + a]) && isnan(sp.axis[a]->source)) || (n != queue_end && !isnan(queue[n].data[a0 + a]) && isnan(sp.axis[a]->source))) {
@@ -146,7 +150,7 @@ void next_move () {
 				if (isnan(queue[n].data[a0 + a]))
 					sp.axis[a]->next_dist = 0;
 				else
-					sp.axis[a]->next_dist = queue[n].data[a0 + a] - (sp.axis[a]->source + sp.axis[a]->dist);
+					sp.axis[a]->next_dist = queue[n].data[a0 + a] + sp.axis[a]->offset - (sp.axis[a]->source + sp.axis[a]->dist);
 				if (sp.axis[a]->next_dist != 0 || sp.axis[a]->dist != 0)
 					action = true;
 #ifdef DEBUG_MOVE

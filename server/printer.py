@@ -112,9 +112,12 @@ class Printer: # {{{
 		self.home_phase = None
 		self.home_cb = [False, self._do_home]
 		self.probe_cb = [False, None]
-		self.gcode = None
+		self.gcode = []
 		self.gcode_id = None
 		self.gcode_wait = None
+		self.gcode_parking = False
+		self.gcode_waiting = 0
+		self.confirmer = None
 		self.queue = []
 		self.queue_pos = 0
 		self.queue_info = None
@@ -478,6 +481,8 @@ class Printer: # {{{
 					if self.movewait == 0:
 						call_queue.extend([(x[1], [True]) for x in self.movecb])
 						self.movecb = []
+					else:
+						log('cb seen, but waiting for more')
 				else:
 					self.movewait = 0
 				continue
@@ -741,7 +746,7 @@ class Printer: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		self._broadcast(target, 'globals_update', [len(self.spaces), len(self.temps), len(self.gpios), self.name, self.max_deviation, self.led_pin, self.probe_pin, self.motor_limit, self.temp_limit, self.feedrate, self.paused])
+		self._broadcast(target, 'globals_update', [len(self.spaces), len(self.temps), len(self.gpios), self.name, self.max_deviation, self.led_pin, self.probe_pin, self.motor_limit, self.temp_limit, self.feedrate, None if len(self.gcode) == 0 else not self.paused])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		if not self.initialized:
@@ -786,8 +791,15 @@ class Printer: # {{{
 	# }}}
 	def _do_gcode(self): # {{{
 		while len(self.gcode) > 0:
+			if self.gcode_parking or self.gcode_waiting > 0 or self.confirmer is not None or self.gcode_wait is not None:
+				log('gcode waiting: %s' % repr((self.gcode_parking, self.gcode_waiting, self.confirmer, self.gcode_wait)))
+				# Wait until done.
+				return
 			if self.paused:
 				# Resume when no longer paused.
+				#log('not running gcode: paused')
+				if self.queue_info[4] is False:
+					self.queue_info[4] = None
 				return
 			cmd, args, message = self.gcode[0]
 			cmd = tuple(cmd)
@@ -797,7 +809,7 @@ class Printer: # {{{
 				pass
 			elif cmd == ('G', 1):
 				if self.flushing is None:
-					log('not filling; waiting for queue space')
+					#log('not filling; waiting for queue space')
 					return
 				#log(repr(args))
 				sina, cosa = self.gcode_angle
@@ -817,13 +829,14 @@ class Printer: # {{{
 					#log('stop filling; wait for queue space')
 					self.flushing = None
 					self.gcode.pop(0)
-					return
+					continue
 			elif cmd in (('G', 28), ('M', 6)):
 				# Home or tool change; same response: park
 				if not self.flushing:
 					self.flushing = True
 					return self.flush()[1](None)
 				self.gcode.pop(0)
+				self.gcode_parking = True
 				return self.park(self._do_gcode, abort = False)[1](None)
 			elif cmd == ('G', 4):
 				if not self.flushing:
@@ -833,6 +846,14 @@ class Printer: # {{{
 					self.gcode.pop(0)
 					self.gcode_wait = time.time() + float(args['P']) / 1000
 					return
+			elif cmd == ('G', 92):
+				if not self.flushing:
+					self.flushing = True
+					return self.flush()[1](None)
+				# Don't allow g-code to disable motors.
+				#self.sleep()
+				# But do set the position to 0, so things work as expected.
+				self.set_axis_pos(1, args['e'], args['E'])
 			elif cmd == ('G', 94):
 				# Set feed rate mode to units per minute; we don't support anything else, but shouldn't error on this request.
 				pass
@@ -857,7 +878,11 @@ class Printer: # {{{
 				if not self.flushing:
 					self.flushing = True
 					return self.flush()[1](None)
-				self.sleep()
+				# Don't allow g-code to disable motors.
+				#self.sleep()
+				# But do set the position to 0, so things work as expected.
+				for e in range(len(self.spaces[1].axis)):
+					self.set_axis_pos(1, e, 0)
 			elif cmd == ('M', 104):
 				if not self.flushing:
 					self.flushing = True
@@ -886,6 +911,7 @@ class Printer: # {{{
 					self.clear_alarm()
 					self.waittemp(1 + e, args['S'])
 					self.gcode.pop(0)
+					self.gcode_waiting += 1
 					return self.wait_for_temp(1 + e)[1](None)
 			elif cmd == ('M', 116):
 				if not self.flushing:
@@ -896,13 +922,17 @@ class Printer: # {{{
 				if not math.isnan(etemp) and self.pin_valid(self.temps[1 + e].thermistor_pin):
 					self.clear_alarm()
 					self.waittemp(1 + e, etemp)
-					self.gcode.pop(0) # TODO: wait for extruder AND bed.
-					return self.wait_for_temp(1 + e)[1](None)
+					self.gcode.pop(0)
+					self.gcode_waiting += 1
+					self.wait_for_temp(1 + e)[1](None)
 				if not math.isnan(self.btemp) and self.pin_valid(self.temp[0].thermistor_pin):
 					self.clear_alarm()
 					self.waittemp_temp(0, self.btemp)
 					self.gcode.pop(0)
-					return self.wait_for_temp_temp(0)[1](None)
+					self.gcode_waiting += 1
+					self.wait_for_temp_temp(0)[1](None)
+				if self.gcode_waiting > 0:
+					return
 			elif cmd == ('M', 140):
 				if not self.flushing:
 					self.flushing = True
@@ -919,6 +949,7 @@ class Printer: # {{{
 				if not math.isnan(self.btemp) and self.pin_valid(self.temp[0].thermistor_pin):
 					self.gcode.pop(0)
 					self.waittemp_temp(0, self.btemp)
+					self.gcode_waiting = True
 					return self.wait_for_temp_temp(0)[1](None)
 			elif cmd == ('SYSTEM', 0):
 				if not self.flushing:
@@ -932,7 +963,7 @@ class Printer: # {{{
 			else:
 				# Printing was aborted; don't call print_done, or we'll abort whatever aborted us.
 				return
-		if self.gcode_id is not None and not self.flushing:
+		if not self.flushing:
 			self.flushing = True
 			return self.flush()[1](None)
 		for e in range(len(self.spaces[1].axis)):
@@ -950,7 +981,7 @@ class Printer: # {{{
 		self.flushing = False
 		self.gcode_wait = None
 		#log('job %s' % repr(self.jobs_active))
-		if len(self.jobs_active) > 0:
+		if self.queue_info is None and len(self.jobs_active) > 0:
 			if complete:
 				if self.job_current >= len(self.jobs_active) - 1:
 					#log('job queue done')
@@ -997,17 +1028,21 @@ class Printer: # {{{
 		self.queue_info = None
 		self.paused = False
 		self._globals_update()
+		call_queue.append((self._do_gcode, []))
 	# }}}
 	def _do_queue(self): # {{{
 		#log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 		if self.paused and not self.resuming and len(self.queue) == 0:
+			#log('queue is empty')
 			return
 		while not self.wait and (self.queue_pos < len(self.queue) or self.resuming):
+			#log('queue not empty %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 			if self.queue_pos >= len(self.queue):
 				self._unpause()
 				if self.queue_pos >= len(self.queue):
 					break
 			id, axes, f0, f1, cb = self.queue[self.queue_pos]
+			#log('queueing %s' % repr((id, axes, f0, f1, cb)))
 			self.queue_pos += 1
 			a = {}
 			a0 = 0
@@ -1064,13 +1099,14 @@ class Printer: # {{{
 				p = chr(self.command['GOTOCB'])
 			else:
 				p = chr(self.command['GOTO'])
-			#log('queueing %s' % repr(axes))
+			#log('queueing %s' % repr((axes, f0, f1, cb, self.flushing)))
 			self._send_packet(p + ''.join([chr(t) for t in targets]) + args)
 			if id is not None:
 				self._send(id, 'return', None)
 			if self.flushing is None:
 				self.flushing = False
-				self._do_gcode()
+				call_queue.append((self._do_gcode, []))
+		#log('queue done %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 	# }}}
 	def _do_home(self, done = None): # {{{
 		#log('do_home: %s %s' % (self.home_phase, done))
@@ -1531,7 +1567,7 @@ class Printer: # {{{
 				# Go back to pausing position.
 				self.goto(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
-				#log('resuming')
+				log('resuming')
 				self.resuming = True
 			self._do_queue()
 		else:
@@ -1571,11 +1607,12 @@ class Printer: # {{{
 	@delayed
 	def home(self, id, space = 0, speed = .005, cb = None, abort = True): # {{{
 		#log('homing')
-		if self.home_phase is not None:
+		if self.home_phase is not None and (not abort or not self.paused):
 			log("ignoring request to home because we're already homing")
 			self._send(id, 'return', None)
 			return
-		if abort:
+		# Abort only if it is requested, and the job is not paused.
+		if abort and self.queue_info is None:
 			self._print_done(False, 'aborted by homing')
 		self.home_id = id
 		self.home_speed = speed
@@ -1594,6 +1631,7 @@ class Printer: # {{{
 			return
 		def park_cb(w):
 			#log('park cb')
+			self.gcode_parking = False
 			if cb:
 				call_queue.append((cb, []))
 			if id is not None:
@@ -1662,11 +1700,15 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def wait_for_temp(self, id, which = None): # {{{
-		ret = lambda: (id is None or self._send(id, 'return', None) or True) and self._do_gcode()
+		def cb():
+			if id is not None:
+				self._send(id, 'return', None)
+			self.gcode_waiting -= 1
+			self._do_gcode()
 		if(which is None and len(self.alarms) > 0) or which in self.alarms:
-			ret()
+			cb()
 		else:
-			self.tempcb.append((which, ret))
+			self.tempcb.append((which, cb))
 	# }}}
 	def clear_alarm(self, which = None): # {{{
 		if which is None:
@@ -1974,24 +2016,23 @@ class Printer: # {{{
 				elif cmd == ('M', 83):
 					erel = True
 					continue
+				elif cmd == ('M', 84):
+					for e in range(len(pos[1])):
+						pos[1][e] = 0.
 				elif cmd == ('G', 92):
-					which = {}
-					for w in args:
-						if w in 'XYZ':
-							# Ignore; this is only abused.
-							pass
-						elif w == 'E':
-							pos[1][current_extruder] = args[w]
-					continue
-				elif cmd[0] == 'M' and cmd[1] in(104, 109, 116):
+					if 'E' not in args:
+						continue
+					pos[1][current_extruder] = args['E']
+					args['e'] = current_extruder
+				elif cmd[0] == 'M' and cmd[1] in (104, 109, 116):
 					args['E'] = current_extruder
-				if not((cmd[0] == 'G' and cmd[1] in (0, 1, 4, 28, 81, 94)) or (cmd[0] == 'M' and cmd[1] in (0, 3, 4, 5, 6, 9, 42, 84, 104, 106, 107, 109, 116, 140, 190)) or(cmd[0] in('S', 'T'))):
+				if not((cmd[0] == 'G' and cmd[1] in (0, 1, 4, 28, 81, 94)) or (cmd[0] == 'M' and cmd[1] in (0, 3, 4, 5, 6, 9, 42, 84, 104, 106, 107, 109, 116, 140, 190)) or (cmd[0] in ('S', 'T'))):
 					log('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
 				elif cmd == ('G', 28):
 					ret.append((cmd, args, message))
 					for a in range(len(pos[0])):
 						pos[0][a] = float('nan')
-				elif cmd[0] == 'G' and cmd[1] in(0, 1, 81):
+				elif cmd[0] == 'G' and cmd[1] in (0, 1, 81):
 					if cmd[1] != 0:
 						mode = cmd
 					components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None, 'R': None}
