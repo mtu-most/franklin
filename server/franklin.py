@@ -10,7 +10,7 @@ import random
 import websockets
 from websockets import log
 import xdgbasedir
-import glib
+from gi.repository import GLib
 import subprocess
 import crypt
 import time
@@ -172,7 +172,7 @@ class Connection: # {{{
 			return False
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
-		glib.io_add_watch(process.stdout, glib.IO_IN | glib.IO_PRI | glib.IO_HUP, output)
+		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP, output)
 		cls._broadcast(None, 'blocked', port, 'uploading')
 		cls._broadcast(None, 'status', port, '')
 		d = (yield websockets.WAIT)
@@ -208,7 +208,7 @@ class Connection: # {{{
 		if port not in ports or not ports[port]:
 			#log('port is not enabled')
 			return
-		glib.source_remove(ports[port].input_handle)
+		GLib.source_remove(ports[port].input_handle)
 		# Forget the printer.  First tell the printer to die
 		p = ports[port]
 		ports[port] = None
@@ -369,11 +369,11 @@ class Port: # {{{
 		self.id = id
 		self.waiters = ({}, {}, {})
 		self.next_mid = 0
-		self.input_handle = glib.io_add_watch(process.stdout.fileno(), glib.IO_IN | glib.IO_HUP, self.printer_input)
+		self.input_handle = GLib.io_add_watch(process.stdout.fileno(), GLib.IO_IN | GLib.IO_HUP, self.printer_input)
 		old = []
 		def get_settings(success, settings):
 			self.call('import_settings', [settings], {}, lambda success, ret: None)
-			glib.source_remove(orphans[old[0]].input_handle)
+			GLib.source_remove(orphans[old[0]].input_handle)
 			orphans[old[0]].call('die', ('replaced by new connection',), {}, lambda success, ret: None)
 			del orphans[old[0]]
 		def get_vars(success, vars):
@@ -474,7 +474,7 @@ def detect(port): # {{{
 		# This is required, because the ID is not protected with a checksum.
 		def timeout():
 			# Timeout.  Give up.
-			glib.source_remove(watcher)
+			GLib.source_remove(watcher)
 			printer.close()
 			log('Timeout waiting for printer on port %s; giving up.' % port)
 			return False
@@ -502,7 +502,7 @@ def detect(port): # {{{
 				else:
 					log('accepting it anyway')
 			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset.
-			glib.source_remove(timeout_handle)
+			GLib.source_remove(timeout_handle)
 			# This printer was running and tried to send an id.  Check the id.
 			id[0] = id[0][1:]
 			if id[0] in orphans:
@@ -517,10 +517,10 @@ def detect(port): # {{{
 			ports[port] = Port(port, process, id[0], printer)
 			return False
 		printer.write(single['ID'])
-		timeout_handle = glib.timeout_add(15000, timeout)
-		watcher = glib.io_add_watch(printer.fileno(), glib.IO_IN, boot_printer_input)
+		timeout_handle = GLib.timeout_add(15000, timeout)
+		watcher = GLib.io_add_watch(printer.fileno(), GLib.IO_IN, boot_printer_input)
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
-	glib.timeout_add(1000, part2)
+	GLib.timeout_add(1000, part2)
 # }}}
 
 def nextid(): # {{{
@@ -550,7 +550,7 @@ def print_done(port, completed, reason): # {{{
 				return True
 			log('Flashing done; return: %s' % repr(p.wait()))
 			return False
-		glib.io_add_watch(p.stdout.fileno(), glib.IO_IN, process_done)
+		GLib.io_add_watch(p.stdout.fileno(), GLib.IO_IN, process_done)
 # }}}
 
 if autodetect: # {{{
