@@ -189,7 +189,7 @@ static bool do_steps(Space *s, uint8_t m, float distance, unsigned long current_
 		distance = v * dt - mtr.last_distance;
 		//if (m == 2) buffered_debug("d2 %d %f", m, F(distance));
 	}
-	//if (m == 2) buffered_debug("= %d %lf %lf %lf %lf", m, F(mtr.limit_a), F(limit_dv), F(v), F(mtr.last_v));
+	movedebug("= %d %lf %lf %lf %lf", m, F(mtr.limit_a), F(limit_dv), F(v), F(mtr.last_v));
 	// Limit v.
 	if (abs(v) > mtr.limit_v) {
 		delayed = true;
@@ -246,6 +246,7 @@ static bool do_steps(Space *s, uint8_t m, float distance, unsigned long current_
 		next_move();
 		return false;
 	}
+	movedebug("new current pos: %f", F(new_pos));
 	mtr.current_pos = new_pos;
 	// Record this iteration.
 	if (!delayed) {
@@ -270,7 +271,9 @@ static bool move_axes(Space *s, float *target, unsigned long current_time) {
 	// Try again if it didn't work; it should have moved target to a better location.
 	if (!ok)
 		space_types[s->type].xyz2motors(s, target, motors_target, &ok);
+	movedebug("ok %d", ok);
 	for (uint8_t m = 0; m < s->num_motors; ++m) {
+		movedebug("move %d %f %f %f", m, F(target[m]), F(motors_target[m]), F(s->motor[m]->current_pos));
 		if (!do_steps(s, m, motors_target[m] - s->motor[m]->current_pos, current_time))
 			return false;
 	}
@@ -358,6 +361,7 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", F(t), F(t0), F(tp), F(t_fraction), F(f1), F(f2), F(current_f));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
+			movedebug("try %d %d", s, sp.active);
 			if (!sp.active)
 				continue;
 			float target[sp.num_motors];
@@ -367,6 +371,7 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 					continue;
 				}
 				target[a] = sp.axis[a]->source + sp.axis[a]->dist * current_f;
+				movedebug("do %d %d %f %f", s, a, F(sp.axis[a]->dist), F(target[a]));
 			}
 			move_axes(&sp, target, current_time);
 		}
@@ -513,6 +518,7 @@ void loop() {
 #endif
 #ifdef HAVE_SPACES
 	if (motors_busy && (longtime - last_active) / 1e3 > motor_limit) {
+		debug("motor timeout");
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t m = 0; m < sp.num_motors; ++m) {

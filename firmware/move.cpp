@@ -34,12 +34,19 @@ void next_move () {
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+#ifdef DEBUG_MOVE
+			debug("maybe resetting: %d %f", s, F(sp.motor[0]->current_pos));
+#endif
 			if (isnan(sp.axis[a]->source)) {
 				space_types[sp.type].reset_pos(&sp);
 				for (uint8_t a = 0; a < sp.num_axes; ++a)
 					sp.axis[a]->current = sp.axis[a]->source;
 				break;
 			}
+#ifdef DEBUG_MOVE
+			else
+				debug("non-nan: %d %d %f %f", s, a, F(sp.axis[a]->source), F(sp.motor[a]->current_pos));
+#endif
 		}
 	}
 	// }}}
@@ -49,6 +56,7 @@ void next_move () {
 	if (!move_prepared) { // {{{
 #ifdef DEBUG_MOVE
 		debug ("No move prepared.");
+		debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 		f0 = 0;
 		uint8_t a0 = 0;
@@ -67,7 +75,8 @@ void next_move () {
 				else {
 					sp.axis[a]->next_dist = queue[queue_start].data[a0 + a] - sp.axis[a]->source + sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
-					debug("next dist of %d = %f", a0 + a, F(sp.axis[a]->next_dist));
+					debug("next dist of %d = %f (%f - %f + %f)", a0 + a, F(sp.axis[a]->next_dist), F(queue[queue_start].data[a0 + a]), F(sp.axis[a]->source), F(sp.axis[a]->offset));
+					debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 				}
 			}
@@ -84,12 +93,14 @@ void next_move () {
 					queue[n].data[a0 + a] = sp.axis[a]->source + sp.axis[a]->next_dist - sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
 					debug("filling next %d with %f", a0 + a, F(queue[n].data[a0 + a]));
+					debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 				}
 				if (isnan(queue[queue_start].data[a]) && !isnan(queue[n].data[a])) {
 					queue[queue_start].data[a0 + a] = sp.axis[a]->source - sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
 					debug("filling %d with %f", a0 + a, F(queue[queue_start].data[a0 + a]));
+					debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 				}
 			}
@@ -117,12 +128,14 @@ void next_move () {
 	bool action = false;
 #ifdef DEBUG_MOVE
 	debug ("Move was prepared with tp = %f", F(tp));
+	debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 	float vq;
 	if (n == queue_end) { // {{{
 		// There is no next segment; we should stop at the end.
 #ifdef DEBUG_MOVE
 		debug ("Building final segment.");
+		debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
@@ -133,6 +146,7 @@ void next_move () {
 				sp.axis[a]->next_dist = 0;
 #ifdef DEBUG_MOVE
 				debug ("Last segment distance for motor %d is %f", a, F(sp.axis[a]->dist));
+				debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 			}
 		}
@@ -144,6 +158,7 @@ void next_move () {
 		// There is a next segment; we should connect to it.
 #ifdef DEBUG_MOVE
 		debug ("Building a connecting segment.");
+		debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 		uint8_t a0 = 0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -159,6 +174,7 @@ void next_move () {
 					action = true;
 #ifdef DEBUG_MOVE
 				debug ("Connecting distance for motor %d is %f, to %f", a, F(sp.axis[a]->dist), F(sp.axis[a]->next_dist));
+				debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 			}
 			a0 += sp.num_axes;
@@ -179,6 +195,7 @@ void next_move () {
 	if (!action) {
 #ifdef DEBUG_MOVE
 		debug ("Skipping zero-distance prepared move");
+		debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 		if (current_move_has_cb) {
 			++num_movecbs;
@@ -207,6 +224,7 @@ void next_move () {
 	// mtr->next_dist: total distance of next segment (mm).
 #ifdef DEBUG_MOVE
 	debug ("Set up: tp = %f s, v0 = %f /s, vp = %f /s, vq = %f /s", F(tp), F(v0), F(vp), F(vq));
+	debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 
 	// Limit v0, vp, vq. {{{
@@ -234,12 +252,14 @@ void next_move () {
 	}
 #ifdef DEBUG_MOVE
 	debug ("After limiting, v0 = %f /s, vp = %f /s and vq = %f /s", F(v0), F(vp), F(vq));
+	debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 	// }}}
 	// Already set up: f0, v0, vp, vq, mtr->dist, mtr->next_dist.
 	// To do: start_time, t0, tp, fmain, fp, fq, mtr->main_dist, mtr->distance_done
 #ifdef DEBUG_MOVE
 	debug ("Preparation did f0 = %f", F(f0));
+	debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 
 	float fp = 0;
@@ -300,9 +320,17 @@ void next_move () {
 				sp.active = true;
 			sp.axis[a]->main_dist = sp.axis[a]->dist * (1 - fp);
 #ifdef DEBUG_MOVE
-			debug ("Axis %d %d dist %f main dist = %f, next dist = %f", s, a, F(sp.axis[a]->dist), F(sp.axis[a]->main_dist), F(sp.axis[a]->next_dist));
+			debug ("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %f", s, a, F(sp.axis[a]->dist), F(sp.axis[a]->main_dist), F(sp.axis[a]->next_dist), F(sp.motor[a]->current_pos));
 #endif
 		}
+	}
+	if (!motors_busy) {
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = spaces[s];
+			for (uint8_t m = 0; m < sp.num_motors; ++m)
+				SET(sp.motor[m]->enable_pin);
+		}
+		motors_busy = true;
 	}
 #ifdef DEBUG_MOVE
 	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f μs tp=%f μs", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), F(t0), F(tp));

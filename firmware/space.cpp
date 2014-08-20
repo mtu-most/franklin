@@ -2,6 +2,7 @@
 
 #ifdef HAVE_SPACES
 void Space::setup_nums(uint8_t na, uint8_t nm) {
+	debug("new space");
 	Axis **new_axes = new Axis *[na];
 	for (uint8_t a = 0; a < min(num_axes, na); ++a)
 		new_axes[a] = axis[a];
@@ -158,6 +159,7 @@ void Space::free() {
 }
 
 void Space::copy(Space &dst) {
+	debug("copy space");
 	dst.type = type;
 	dst.type_data = NULL;
 	dst.num_axes = 0;

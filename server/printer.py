@@ -327,12 +327,12 @@ class Printer: # {{{
 			log('End of file detected on command input; exiting.')
 			sys.exit(0)
 		self.command_buffer += data
+		die = False
 		while '\n' in self.command_buffer:
 			pos = self.command_buffer.index('\n')
 			id, func, a, ka = json.loads(self.command_buffer[:pos])
-			#log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer[pos:])))
+			log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer[pos:])))
 			self.command_buffer = self.command_buffer[pos + 1:]
-			die = False
 			try:
 				ret = getattr(self, func)(*a, **ka)
 				if isinstance(ret, tuple) and len(ret) == 2 and ret[0] is WAIT:
@@ -342,14 +342,14 @@ class Printer: # {{{
 						die = True
 					else:
 						ret[1](id)
-						return True
+						continue
 			except:
 				traceback.print_exc()
 				self._send(id, 'error', repr(sys.exc_info()))
-				return True
-			if die:
-				sys.exit(0)
+				continue
 			self._send(id, 'return', ret)
+		if die:
+			sys.exit(0)
 	# }}}
 	def _printer_input(self, ack = False, reply = False): # {{{
 		for input_limit in range(50):
