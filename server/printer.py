@@ -112,7 +112,7 @@ class Printer: # {{{
 		self.home_phase = None
 		self.home_cb = [False, self._do_home]
 		self.probe_cb = [False, None]
-		self.gcode = []
+		self.gcode = None
 		self.gcode_id = None
 		self.gcode_wait = None
 		self.gcode_parking = False
@@ -481,6 +481,9 @@ class Printer: # {{{
 					if self.movewait == 0:
 						call_queue.extend([(x[1], [True]) for x in self.movecb])
 						self.movecb = []
+						if self.flushing and self.queue_pos >= len(self.queue):
+							self.flushing = 'done'
+							call_queue.append((self._do_gcode, []))
 					else:
 						log('cb seen, but waiting for more')
 				else:
@@ -746,7 +749,7 @@ class Printer: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		self._broadcast(target, 'globals_update', [len(self.spaces), len(self.temps), len(self.gpios), self.name, self.max_deviation, self.led_pin, self.probe_pin, self.motor_limit, self.temp_limit, self.feedrate, None if len(self.gcode) == 0 else not self.paused])
+		self._broadcast(target, 'globals_update', [len(self.spaces), len(self.temps), len(self.gpios), self.name, self.max_deviation, self.led_pin, self.probe_pin, self.motor_limit, self.temp_limit, self.feedrate, not self.paused and (None if self.gcode is None else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		if not self.initialized:
@@ -790,9 +793,15 @@ class Printer: # {{{
 		return z + l * (1 - fx) + r * fx
 	# }}}
 	def _do_gcode(self): # {{{
+		if self.gcode is None:
+			return
+		flushed = False
+		if self.flushing == 'done':
+			self.flushing = False
+			flushed = True
 		while len(self.gcode) > 0:
-			if self.gcode_parking or self.gcode_waiting > 0 or self.confirmer is not None or self.gcode_wait is not None:
-				log('gcode waiting: %s' % repr((self.gcode_parking, self.gcode_waiting, self.confirmer, self.gcode_wait)))
+			if self.gcode_parking or self.gcode_waiting > 0 or self.confirmer is not None or self.gcode_wait is not None or self.flushing:
+				#log('gcode waiting: %s' % repr((self.gcode_parking, self.gcode_waiting, self.confirmer, self.gcode_wait)))
 				# Wait until done.
 				return
 			if self.paused:
@@ -806,6 +815,12 @@ class Printer: # {{{
 			#log('Running %s %s' % (cmd, args))
 			if cmd[0] == 'S':
 				# Spindle speed; not supported, but shouldn't error.
+				pass
+			elif cmd == ('G', 94):
+				# Set feed rate mode to units per minute; we don't support anything else, but shouldn't error on this request.
+				pass
+			elif cmd == ('M', 9):
+				# Coolant off.  We don't support coolant, but turning it off is not an error.
 				pass
 			elif cmd == ('G', 1):
 				if self.flushing is None:
@@ -830,154 +845,118 @@ class Printer: # {{{
 					self.flushing = None
 					self.gcode.pop(0)
 					continue
-			elif cmd in (('G', 28), ('M', 6)):
-				# Home or tool change; same response: park
-				if not self.flushing:
+			else:
+				if not flushed:
+					self.flush()[1](None)
 					self.flushing = True
-					return self.flush()[1](None)
-				self.gcode.pop(0)
-				self.gcode_parking = True
-				return self.park(self._do_gcode, abort = False)[1](None)
-			elif cmd == ('G', 4):
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				if 'P' in args:
-					self.gcode.pop(0)
-					self.gcode_wait = time.time() + float(args['P']) / 1000
 					return
-			elif cmd == ('G', 92):
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				# Don't allow g-code to disable motors.
-				#self.sleep()
-				# But do set the position to 0, so things work as expected.
-				self.set_axis_pos(1, args['e'], args['E'])
-			elif cmd == ('G', 94):
-				# Set feed rate mode to units per minute; we don't support anything else, but shouldn't error on this request.
-				pass
-			elif cmd == ('M', 0):
-				# Wait.
-				self.gcode.pop(0)
-				return self.request_confirmation(message)[1](None)
-			elif cmd[0] == 'M' and cmd[1] in (3, 4):
-				# Start spindle; we don't support speed or direction, so M3 and M4 are equal.
-				self.set_gpio(1, state = 1)
-			elif cmd == ('M', 5):
-				# Stop spindle.
-				self.set_gpio(1, state = 0)
-			elif cmd == ('M', 9):
-				# Coolant off.  We don't support coolant, but turning it off is not an error.
-				pass
-			elif cmd == ('M', 42):
-				g = args['P']
-				value = args['S']
-				self.set_gpio(int(g), state = int(value))
-			elif cmd == ('M', 84):
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				# Don't allow g-code to disable motors.
-				#self.sleep()
-				# But do set the position to 0, so things work as expected.
-				for e in range(len(self.spaces[1].axis)):
-					self.set_axis_pos(1, e, 0)
-			elif cmd == ('M', 104):
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				self.settemp(1 + args['E'], args['S'])
-			elif cmd == ('M', 106):	# Fan on
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				self.set_gpio(0, state = 1)
-			elif cmd == ('M', 107): # Fan off
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				self.set_gpio(0, state = 0)
-			elif cmd == ('M', 109):
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				e = args['E']
-				if 'S' in args:
-					self.settemp(1 + e, args['S'])
-				else:
-					args['S'] = self.temps[1 + e].value
-				if not math.isnan(args['S']) and self.pin_valid(self.temps[1 + e].thermistor_pin):
+				flushed = False
+				if cmd in (('G', 28), ('M', 6)):
+					# Home or tool change; same response: park
+					self.gcode.pop(0)
+					self.gcode_parking = True
+					return self.park(self._do_gcode, abort = False)[1](None)
+				elif cmd == ('G', 4):
+					if 'P' in args:
+						self.gcode.pop(0)
+						self.gcode_wait = time.time() + float(args['P']) / 1000
+						return
+				elif cmd == ('G', 92):
+					# Don't allow g-code to disable motors.
+					#self.sleep()
+					# But do set the position to 0, so things work as expected.
+					self.set_axis_pos(1, args['e'], args['E'])
+				elif cmd == ('M', 0):
+					# Wait.
+					self.gcode.pop(0)
+					self.request_confirmation(message or 'Continue?')[1](False)
+					return
+				elif cmd[0] == 'M' and cmd[1] in (3, 4):
+					# Start spindle; we don't support speed or direction, so M3 and M4 are equal.
+					self.set_gpio(1, state = 1)
+				elif cmd == ('M', 5):
+					# Stop spindle.
+					self.set_gpio(1, state = 0)
+				elif cmd == ('M', 42):
+					g = args['P']
+					value = args['S']
+					self.set_gpio(int(g), state = int(value))
+				elif cmd == ('M', 84):
+					# Don't allow g-code to disable motors.
+					#self.sleep()
+					# But do set the position to 0, so things work as expected.
+					for e in range(len(self.spaces[1].axis)):
+						self.set_axis_pos(1, e, 0)
+				elif cmd == ('M', 104):
+					self.settemp(1 + args['E'], args['S'])
+				elif cmd == ('M', 106):	# Fan on
+					self.set_gpio(0, state = 1)
+				elif cmd == ('M', 107): # Fan off
+					self.set_gpio(0, state = 0)
+				elif cmd == ('M', 109):
+					e = args['E']
+					if 'S' in args:
+						self.settemp(1 + e, args['S'])
+					else:
+						args['S'] = self.temps[1 + e].value
+					if not math.isnan(args['S']) and self.pin_valid(self.temps[1 + e].thermistor_pin):
+						self.clear_alarm()
+						self.waittemp(1 + e, args['S'])
+						self.gcode.pop(0)
+						self.gcode_waiting += 1
+						return self.wait_for_temp(1 + e)[1](None)
+				elif cmd == ('M', 116):
+					e = args['E']
+					etemp = self.temps[1 + e].value
 					self.clear_alarm()
-					self.waittemp(1 + e, args['S'])
-					self.gcode.pop(0)
-					self.gcode_waiting += 1
-					return self.wait_for_temp(1 + e)[1](None)
-			elif cmd == ('M', 116):
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				e = args['E']
-				etemp = self.temps[1 + e].value
-				self.clear_alarm()
-				if not math.isnan(etemp) and self.pin_valid(self.temps[1 + e].thermistor_pin):
-					self.waittemp(1 + e, etemp)
-					self.gcode.pop(0)
-					self.gcode_waiting += 1
-					self.wait_for_temp(1 + e)[1](None)
-				if not math.isnan(self.btemp) and self.pin_valid(self.temps[0].thermistor_pin):
-					self.waittemp(0, self.btemp)
-					self.gcode.pop(0)
-					self.gcode_waiting += 1
-					self.wait_for_temp(0)[1](None)
-				if self.gcode_waiting > 0:
-					return
-			elif cmd == ('M', 140):
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				self.btemp = args['S']
-				self.settemp(0, self.btemp)
-			elif cmd == ('M', 190):
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				if 'S' in args:
+					if not math.isnan(etemp) and self.pin_valid(self.temps[1 + e].thermistor_pin):
+						self.waittemp(1 + e, etemp)
+						self.gcode.pop(0)
+						self.gcode_waiting += 1
+						self.wait_for_temp(1 + e)[1](None)
+					if not math.isnan(self.btemp) and self.pin_valid(self.temps[0].thermistor_pin):
+						self.waittemp(0, self.btemp)
+						self.gcode.pop(0)
+						self.gcode_waiting += 1
+						self.wait_for_temp(0)[1](None)
+					if self.gcode_waiting > 0:
+						return
+				elif cmd == ('M', 140):
 					self.btemp = args['S']
 					self.settemp(0, self.btemp)
-				if not math.isnan(self.btemp) and self.pin_valid(self.temps[0].thermistor_pin):
-					self.gcode.pop(0)
-					self.waittemp(0, self.btemp)
-					self.gcode_waiting = True
-					return self.wait_for_temp(0)[1](None)
-			elif cmd == ('SYSTEM', 0):
-				if not self.flushing:
-					self.flushing = True
-					return self.flush()[1](None)
-				log('running system command: %s' % message)
-				os.system(message)
-			self.flushing = False
+				elif cmd == ('M', 190):
+					if 'S' in args:
+						self.btemp = args['S']
+						self.settemp(0, self.btemp)
+					if not math.isnan(self.btemp) and self.pin_valid(self.temps[0].thermistor_pin):
+						self.gcode.pop(0)
+						self.waittemp(0, self.btemp)
+						self.gcode_waiting = True
+						return self.wait_for_temp(0)[1](None)
+				elif cmd == ('SYSTEM', 0):
+					log('running system command: %s' % message)
+					os.system(message)
 			if len(self.gcode) > 0:
 				self.gcode.pop(0)
 			else:
 				# Printing was aborted; don't call print_done, or we'll abort whatever aborted us.
 				return
-		if not self.flushing:
+		if not flushed:
+			self.flush()[1](None)
 			self.flushing = True
-			return self.flush()[1](None)
+			return
 		for e in range(len(self.spaces[1].axis)):
 			self.set_axis_pos(1, e, 0)
 		self._print_done(True, 'completed')
 	# }}}
 	def _print_done(self, complete, reason): # {{{
 		#log('print done')
+		self.gcode = None
 		#traceback.print_stack()
 		if self.queue_info is None and self.gcode_id is not None:
-			log('done %d %s' % (complete, reason))
+			log('Print done (%d): %s' % (complete, reason))
 			self._send(self.gcode_id, 'return', (complete, reason))
 		self.gcode_id = None
-		self.gcode = []
-		self.flushing = False
 		self.gcode_wait = None
 		#log('job %s' % repr(self.jobs_active))
 		if self.queue_info is None and len(self.jobs_active) > 0:
@@ -1462,8 +1441,13 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def flush(self, id): # {{{
-		self.movecb.append((False, lambda w: (id is None or self._send(id, 'return', w) or True) and self._do_gcode()))
-		self.goto(cb = True)[1](None)
+		def cb(w):
+			if id is not  None:
+				self._send(id, 'return', w)
+			self._do_gcode()
+		self.movecb.append((False, cb))
+		if self.flushing is not True:
+			self.goto(cb = True)[1](None)
 	# }}}
 	@delayed
 	def probe(self, id, area, density, angle = 0, speed = 3): # {{{
@@ -1566,7 +1550,7 @@ class Printer: # {{{
 				# Go back to pausing position.
 				self.goto(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
-				log('resuming')
+				#log('resuming')
 				self.resuming = True
 			self._do_queue()
 		else:
@@ -1881,6 +1865,7 @@ class Printer: # {{{
 			self._globals_update()
 		if len(self.gcode) <= 0:
 			log('nothing to run')
+			self.gcode = None
 			ret(False, 'nothing to run')
 			return
 		self.sleep(False)
@@ -1891,9 +1876,9 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def request_confirmation(self, id, message): # {{{
+		self.confirmer = id
 		self.confirm_id += 1
 		self._broadcast(None, 'confirm', self.confirm_id, message)
-		self.confirmer = id
 	# }}}
 	def confirm(self, confirm_id, success = True): # {{{
 		if confirm_id != self.confirm_id:
@@ -1901,7 +1886,7 @@ class Printer: # {{{
 			return False
 		id = self.confirmer
 		self.confirmer = None
-		if id is not None:
+		if id not in (False, None):
 			self._send(id, 'return', success)
 		else:
 			if not success:
@@ -2025,7 +2010,7 @@ class Printer: # {{{
 					args['e'] = current_extruder
 				elif cmd[0] == 'M' and cmd[1] in (104, 109, 116):
 					args['E'] = current_extruder
-				if not((cmd[0] == 'G' and cmd[1] in (0, 1, 4, 28, 81, 94)) or (cmd[0] == 'M' and cmd[1] in (0, 3, 4, 5, 6, 9, 42, 84, 104, 106, 107, 109, 116, 140, 190)) or (cmd[0] in ('S', 'T'))):
+				if not((cmd[0] == 'G' and cmd[1] in (0, 1, 4, 28, 81, 92, 94)) or (cmd[0] == 'M' and cmd[1] in (0, 3, 4, 5, 6, 9, 42, 84, 104, 106, 107, 109, 116, 140, 190)) or (cmd[0] in ('S', 'T'))):
 					log('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
 				elif cmd == ('G', 28):
 					ret.append((cmd, args, message))

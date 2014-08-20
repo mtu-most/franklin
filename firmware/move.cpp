@@ -16,6 +16,7 @@
 
 // Used from previous segment (if move_prepared == true): tp, vq.
 void next_move () {
+	uint8_t a0;
 #ifdef HAVE_SPACES
 	if (queue_start == queue_end && !queue_full)
 		return;
@@ -30,7 +31,6 @@ void next_move () {
 	// If the source is unknown, determine it from current_pos.
 	//for (uint8_t a = 0; a < num_axes; ++a)
 	//	debug("target %d %f", a, F(queue[queue_start].data[a]));
-	uint8_t a0 = 0;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -41,6 +41,42 @@ void next_move () {
 				break;
 			}
 		}
+	}
+	// }}}
+
+	f0 = fq;
+	// If no move is prepared, set next_dist from the queue; it will be used as dist below.
+	if (!move_prepared) { // {{{
+#ifdef DEBUG_MOVE
+		debug ("No move prepared.");
+#endif
+		f0 = 0;
+		uint8_t a0 = 0;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = spaces[s];
+			space_types[sp.type].check_position(&sp, &queue[queue_start].data[a0]);
+			for (uint8_t m = 0; m < sp.num_motors; ++m) {
+				sp.motor[m]->last_v = 0;
+				sp.motor[m]->last_distance = 0;
+			}
+			for (uint8_t a = 0; a < sp.num_axes; ++a) {
+				if (isnan(queue[queue_start].data[a0 + a])) {
+					sp.axis[a]->next_dist = 0;
+					//debug("not using object %d", mtr);
+				}
+				else {
+					sp.axis[a]->next_dist = queue[queue_start].data[a0 + a] - sp.axis[a]->source + sp.axis[a]->offset;
+#ifdef DEBUG_MOVE
+					debug("next dist of %d = %f", a0 + a, F(sp.axis[a]->next_dist));
+#endif
+				}
+			}
+			a0 += sp.num_axes;
+		}
+	}
+	a0 = 0;
+	for (uint8_t s = 0; s < num_spaces; ++s) {
+		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			if (n != queue_end) {
 				// If only one of them is set, set the other one as well to make the rounded corner work.
@@ -75,38 +111,6 @@ void next_move () {
 			}
 		}
 		a0 += sp.num_axes;
-	}
-	// }}}
-
-	f0 = fq;
-	// If no move is prepared, set next_dist from the queue; it will be used as dist below.
-	if (!move_prepared) { // {{{
-#ifdef DEBUG_MOVE
-		debug ("No move prepared.");
-#endif
-		f0 = 0;
-		uint8_t a0 = 0;
-		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = spaces[s];
-			space_types[sp.type].check_position(&sp, &queue[queue_start].data[a0]);
-			for (uint8_t m = 0; m < sp.num_motors; ++m) {
-				sp.motor[m]->last_v = 0;
-				sp.motor[m]->last_distance = 0;
-			}
-			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (isnan(queue[queue_start].data[a0 + a])) {
-					sp.axis[a]->next_dist = 0;
-					//debug("not using object %d", mtr);
-				}
-				else {
-					sp.axis[a]->next_dist = queue[queue_start].data[a0 + a] - sp.axis[a]->source + sp.axis[a]->offset;
-#ifdef DEBUG_MOVE
-					debug("next dist of %d = %f", a0 + a, F(sp.axis[a]->next_dist));
-#endif
-				}
-			}
-			a0 += sp.num_axes;
-		}
 	}
 	// }}}
 	// We are prepared and can start the segment. {{{
