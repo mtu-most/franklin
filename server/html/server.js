@@ -105,7 +105,6 @@ function _setup_updater() {
 				'num_spaces': 0,
 				'num_temps': 0,
 				'num_gpios': 0,
-				'max_deviation': 0,
 				'led_pin': 0,
 				'probe_pin': 0,
 				'motor_limit': 0,
@@ -163,17 +162,17 @@ function _setup_updater() {
 			new_num_temps = values[1];
 			new_num_gpios = values[2];
 			printers[port].name = values[3];
-			printers[port].max_deviation = values[4];
-			printers[port].led_pin = values[5];
-			printers[port].probe_pin = values[6];
-			printers[port].motor_limit = values[7];
-			printers[port].temp_limit = values[8];
-			printers[port].feedrate = values[9];
-			printers[port].status = values[10];
+			printers[port].led_pin = values[4];
+			printers[port].probe_pin = values[5];
+			printers[port].motor_limit = values[6];
+			printers[port].temp_limit = values[7];
+			printers[port].feedrate = values[8];
+			printers[port].status = values[9];
 			trigger_update(port, 'variables_update');
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
 					'type': 0,
+					'max_deviation': 0,
 					'num_axes': 0,
 					'num_motors': 0,
 					'delta': null,
@@ -212,44 +211,45 @@ function _setup_updater() {
 		},
 		'space_update': function(port, index, values) {
 			printers[port].spaces[index].type = values[0];
+			printers[port].spaces[index].max_deviation = values[1];
 			printers[port].spaces[index].axis = [];
 			printers[port].spaces[index].motor = [];
-			printers[port].spaces[index].num_axes = values[1].length;
-			printers[port].spaces[index].num_motors = values[2].length;
+			printers[port].spaces[index].num_axes = values[2].length;
+			printers[port].spaces[index].num_motors = values[3].length;
 			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a) {
 				printers[port].spaces[index].axis.push({
-					'offset': values[1][a][0],
-					'park': values[1][a][1],
-					'max_v': values[1][a][2]
+					'offset': values[2][a][0],
+					'park': values[2][a][1],
+					'max_v': values[2][a][2]
 				});
 			}
 			for (var m = 0; m < printers[port].spaces[index].num_motors; ++m) {
 				printers[port].spaces[index].motor.push({
-					'step_pin': values[2][m][0],
-					'dir_pin': values[2][m][1],
-					'enable_pin': values[2][m][2],
-					'limit_min_pin': values[2][m][3],
-					'limit_max_pin': values[2][m][4],
-					'sense_pin': values[2][m][5],
-					'steps_per_m': values[2][m][6],
-					'max_steps': values[2][m][7],
-					'home_pos': values[2][m][8],
-					'motor_min': values[2][m][9],
-					'motor_max': values[2][m][10],
-					'limit_v': values[2][m][11],
-					'limit_a': values[2][m][12]
+					'step_pin': values[3][m][0],
+					'dir_pin': values[3][m][1],
+					'enable_pin': values[3][m][2],
+					'limit_min_pin': values[3][m][3],
+					'limit_max_pin': values[3][m][4],
+					'sense_pin': values[3][m][5],
+					'steps_per_m': values[3][m][6],
+					'max_steps': values[3][m][7],
+					'home_pos': values[3][m][8],
+					'motor_min': values[3][m][9],
+					'motor_max': values[3][m][10],
+					'limit_v': values[3][m][11],
+					'limit_a': values[3][m][12]
 				});
 			}
 			if (printers[port].spaces[index].type == 1) {
 				printers[port].spaces[index].delta = [];
 				for (var i = 0; i < 3; ++i) {
 					printers[port].spaces[index].delta.push({
-						'axis_min': values[3][i][0],
-						'axis_max': values[3][i][1],
-						'rodlength': values[3][i][2],
-						'radius': values[3][i][3]
+						'axis_min': values[4][i][0],
+						'axis_max': values[4][i][1],
+						'rodlength': values[4][i][2],
+						'radius': values[4][i][3]
 					});
-					printers[port].spaces[index].delta_angle = values[3][3];
+					printers[port].spaces[index].delta_angle = values[4][3];
 				}
 			}
 			else

@@ -58,7 +58,6 @@ void setup()
 	Serial.write(CMD_ID);
 	for (uint8_t i = 0; i < 8; ++i)
 		Serial.write(uint8_t(0));
-	load_all();
 	arch_setup_end();
 }
 

@@ -102,7 +102,6 @@ bool globals_load(int16_t &addr, bool eeprom)
 	}
 	for (uint8_t n = 0; n < namelen; ++n)
 		name[n] = read_8(addr, eeprom);
-	max_deviation = read_float(addr, eeprom);
 	led_pin.read(read_16(addr, eeprom));
 	probe_pin.read(read_16(addr, eeprom));
 	//room_T = read_float(addr, eeprom);
@@ -131,17 +130,22 @@ void globals_save(int16_t &addr, bool eeprom)
 	}
 #ifdef HAVE_SPACES
 	write_8(addr, num_spaces, eeprom);
+#else
+	write_8(addr, 0, eeprom);
 #endif
 #ifdef HAVE_TEMPS
 	write_8(addr, num_temps, eeprom);
+#else
+	write_8(addr, 0, eeprom);
 #endif
 #ifdef HAVE_GPIOS
 	write_8(addr, num_gpios, eeprom);
+#else
+	write_8(addr, 0, eeprom);
 #endif
 	write_8(addr, namelen, eeprom);
 	for (uint8_t i = 0; i < namelen; ++i)
 		write_8(addr, name[i], eeprom);
-	write_float(addr, max_deviation, eeprom);
 	write_16(addr, led_pin.write(), eeprom);
 	write_16(addr, probe_pin.write(), eeprom);
 	//write_float(addr, room_T, eeprom);
@@ -151,5 +155,5 @@ void globals_save(int16_t &addr, bool eeprom)
 }
 
 int16_t globals_size() {
-	return 1 * 4 + 2 * 2 + sizeof(float) * 5 + namelen;
+	return 1 * 4 + 2 * 2 + sizeof(float) * 4 + namelen;
 }

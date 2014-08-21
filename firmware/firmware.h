@@ -221,6 +221,7 @@ struct Space
 {
 	uint8_t type;
 	void *type_data;
+	float max_deviation;
 	uint8_t num_axes, num_motors;
 	Motor **motor;
 	Axis **axis;
@@ -312,7 +313,6 @@ EXTERN uint8_t num_gpios;
 #endif
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
-EXTERN float max_deviation;
 //EXTERN float room_T;	//[°C]
 EXTERN float feedrate;		// Multiplication factor for f values, used at start of move.
 // Other variables.

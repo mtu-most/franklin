@@ -445,7 +445,6 @@ function update_globals() { // {{{
 	update_float([null, 'num_spaces']);
 	update_float([null, 'num_temps']);
 	update_float([null, 'num_gpios']);
-	update_float([null, 'max_deviation']);
 	update_pin([null, 'led_pin']);
 	update_pin([null, 'probe_pin']);
 	update_float([null, 'motor_limit']);
@@ -530,6 +529,7 @@ function update_space(index) { // {{{
 	var e = get_element(printer, [['space', index], 'type']);
 	e.ClearAll();
 	e.AddText(space_types[printer.spaces[index].type]);
+	update_float([['space', index], 'max_deviation']);
 	update_float([['space', index], 'num_axes']);
 	var t = multiples[port].axis[index];
 	for (var s = 0; s < t.length; ++s) {

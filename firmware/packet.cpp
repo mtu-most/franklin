@@ -479,7 +479,7 @@ void packet()
 		which = get_which();
 		uint8_t motor = command[3];
 		if (which >= num_spaces || motor >= spaces[which].num_motors) {
-			debug("Reading invalid motor %d %d", which, motor);
+			debug("Reading invalid motor %d %d > %d %d", which, motor, num_spaces, which < num_spaces ? spaces[which].num_motors : -1);
 			Serial.write(CMD_STALL);
 			return;
 		}

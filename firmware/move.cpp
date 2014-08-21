@@ -282,11 +282,11 @@ void next_move () {
 		else {
 			float summed2 = 0;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				float s = sp.axis[a]->dist / norma + sp.axis[a]->next_dist / normb;
-				summed2 += s * s;
+				float sum = sp.axis[a]->dist / norma + sp.axis[a]->next_dist / normb;
+				summed2 += sum * sum;
 			}
 			float scale(sqrt(summed2) / 2);
-			m_round = max_deviation / scale;
+			m_round = sp.max_deviation / scale;
 		}
 		// Convert m to fraction for both p and q.
 		float new_fp = norma > 0 ? m_round / norma : 0;

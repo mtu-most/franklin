@@ -147,9 +147,10 @@
 					elements[0].index = args[1],
 					elements[0].obj = create_space_type_select(),
 					elements[1].id = make_id(printer, [['space', args[1]], 'type']),
-					[make_tablerow(space_name(args[1]), [[elements[0].obj, elements[0], elements[1]]], ['rowtitle1'])]
+					[make_tablerow(space_name(args[1]), [[elements[0].obj, elements[0], elements[1]], elements[2]], ['rowtitle1'])]
 					<button type='button' onclick="set_value(this.printer, [['space', this.index], 'type'], this.obj.selectedIndex)">Set</button>
 					<span></span>
+					<div>Max Deviation: [$(Float [[['space', args[1]], 'max_deviation'], .001])$] μm</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Cartesian_space'> <!-- {{{ -->
@@ -313,7 +314,6 @@
 						<div>[$(Text ['Name', [null, 'name']])$]</div>
 						<div>Motor Timeout: [$(Float [[null, 'motor_limit'], 60])$] min</div>
 						<div>Temp Timeout: [$(Float [[null, 'temp_limit'], 60])$] min</div>
-						<div>Max Deviation: [$(Float [[null, 'max_deviation'], .001])$] μm</div>
 						<div>Spaces: [$(Float [[null, 'num_spaces'], 1])$]</div>
 						<div>Temps: [$(Float [[null, 'num_temps'], 1])$]</div>
 						<div>Gpios: [$(Float [[null, 'num_gpios'], 1])$]</div>
@@ -323,13 +323,16 @@
 						[!([make_table().AddMultipleTitles([
 						// Space {{{
 								'Spaces',
-								'Type'
+								'Type',
+								'Max Deviation'
 							], [
-								'htitle1',
-								'title1'
+								'htitle2',
+								'title2',
+								'title2'
 							], [
 								null,
-								'Printer type'
+								'Printer type',
+								'Corners are rounded from requested path to this amount'
 							]).AddMultiple('space', 'Spacetype_space')
 						])!] <!-- }}} -->
 						[!([make_table().AddMultipleTitles([

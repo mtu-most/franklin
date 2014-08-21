@@ -2,7 +2,7 @@
 
 #ifdef HAVE_SPACES
 void Space::setup_nums(uint8_t na, uint8_t nm) {
-	debug("new space");
+	//debug("new space %d %d %d %d", na, nm, num_axes, num_motors);
 	Axis **new_axes = new Axis *[na];
 	for (uint8_t a = 0; a < min(num_axes, na); ++a)
 		new_axes[a] = axis[a];
@@ -44,7 +44,7 @@ void Space::setup_nums(uint8_t na, uint8_t nm) {
 }
 
 int16_t Space::size_std() {
-	return 2 * 3 * num_motors + sizeof(float) * (3 * num_axes + 3 * num_motors);
+	return 2 * 3 * num_motors + sizeof(float) * (1 + 3 * num_axes + 3 * num_motors);
 }
 
 void Space::load_info(int16_t &addr, bool eeprom)
@@ -62,6 +62,7 @@ void Space::load_info(int16_t &addr, bool eeprom)
 		space_types[t].free(this);
 		space_types[type].init(this);
 	}
+	max_deviation = read_float(addr, eeprom);
 	space_types[type].load(this, addr, eeprom);
 }
 
@@ -105,7 +106,9 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 
 void Space::save_info(int16_t &addr, bool eeprom)
 {
+	debug("saving info %d %f %d %d", type, F(max_deviation), num_axes, num_motors);
 	write_8(addr, type, eeprom);
+	write_float(addr, max_deviation, eeprom);
 	space_types[type].save(this, addr, eeprom);
 }
 
