@@ -153,7 +153,7 @@ void packet()
 			return;
 		}
 		if (command[2]) {
-			debug("sleeping");
+			//debug("sleeping");
 			for (uint8_t t = 0; t < num_spaces; ++t) {
 				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
 					RESET(spaces[t].motor[m]->enable_pin);
@@ -329,7 +329,7 @@ void packet()
 			spaces[which].axis[a]->current = NAN;
 		}
 		write_ack();
-		debug("Setting position of motor %d %d", which, t);
+		//debug("Setting position of motor %d %d", which, t);
 		spaces[which].motor[t]->current_pos = get_float(4);
 		return;
 	}

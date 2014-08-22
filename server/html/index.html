@@ -314,6 +314,7 @@
 						<div>[$(Text ['Name', [null, 'name']])$]</div>
 						<div>Motor Timeout: [$(Float [[null, 'motor_limit'], 60])$] min</div>
 						<div>Temp Timeout: [$(Float [[null, 'temp_limit'], 60])$] min</div>
+						<div>Max probe distance: [$(Float [[null, 'probe_dist'], .001])$] mm</div>
 						<div>Spaces: [$(Float [[null, 'num_spaces'], 1])$]</div>
 						<div>Temps: [$(Float [[null, 'num_temps'], 1])$]</div>
 						<div>Gpios: [$(Float [[null, 'num_gpios'], 1])$]</div>
@@ -484,11 +485,12 @@
 									<span class='queue2'>[$(File [[null, 'queue_add', 'queue_add'], 'Add', queue_deselect])$]</span><br/>
 									<button type='button' class='queue1' onclick='queue_del()'>×</button>
 									<span class='queue2'>
-										<button type='button' class='queue1' onclick='quick_print()'>Print selected</button>
 										[!(
-											elements[0].id = make_id(printer, [null, 'probebox']),
-											elements[1].htmlFor = elements[0].id,
+											elements[0].printer = printer,
+											elements[1].id = make_id(printer, [null, 'probebox']),
+											elements[2].htmlFor = elements[1].id,
 											elements
+											<button type='button' class='queue1' onclick='queue_print(this.printer)'>Print selected</button>
 											<input type='checkbox'/>
 											<label>Probe</label>
 										)!]

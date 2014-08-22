@@ -274,39 +274,31 @@ function get_queue(printer) { // {{{
 }
 // }}}
 
-function queue_print() { // {{{
-	selected_printer.call('get_axis_pos', [0, 0], {}, function(x) {
-		selected_printer.call('get_axis_pos', [0, 1], {}, function(y) {
-			var r = selected_printer.reference;
-			var sina = Math.sin(selected_printer.local_angle);
-			var cosa = Math.cos(selected_printer.local_angle);
-			selected_printer.call('queue_print', [get_queue(), [x - (r[0] * cosa - r[1] * sina), y - (r[1] * cosa + r[0] * sina)], selected_printer.local_angle * 180 / Math.PI], {});
-		});
-	});
-}
-// }}}
-
-function queue_mill() { // {{{
-	var q = get_queue();
-	selected_printer.call('get_axis_pos', [0, 0], {}, function(x) {
-		selected_printer.call('get_axis_pos', [0, 1], {}, function(y) {
-			var r = selected_printer.reference;
-			var sina = Math.sin(selected_printer.local_angle);
-			var cosa = Math.cos(selected_printer.local_angle);
-			selected_printer.call('queue_probe', [q, [x - (r[0] * cosa - r[1] * sina), y - (r[1] * cosa + r[0] * sina)], selected_printer.local_angle * 180 / Math.PI], {}, function(map) {
-				selected_printer.request_confirmation('Prepare for milling', [], {}, function(success) {
+function queue_print(printer) { // {{{
+	printer.call('get_axis_pos', [0, 0], {}, function(x) {
+		printer.call('get_axis_pos', [0, 1], {}, function(y) {
+			if (isNaN(x))
+				x = 0;
+			if (isNaN(y))
+				y = 0;
+			var angle = isNaN(printer.local_angle) ? 0 : printer.local_angle;
+			var r = printer.reference;
+			var sina = Math.sin(angle);
+			var cosa = Math.cos(angle);
+			var action = function(a) {
+				printer.call(a, [get_queue(), [x - (r[0] * cosa - r[1] * sina), y - (r[1] * cosa + r[0] * sina)], angle * 180 / Math.PI], {});
+			};
+			if (get_element(printer, [null, 'probebox']).checked) {
+				printer.call('request_confirmation', ['Prepare for milling'], {}, function(success) {
 					if (!success)
 						return;
-					selected_printer.call('queue_print', [q, [x[1] - (r[0] * cosa - r[1] * sina), y[1] - (r[1] * cosa + r[0] * sina)], selected_printer.local_angle * 180 / Math.PI, map], {});
+					action('queue_probe');
 				});
-			});
+			}
+			else
+				action('queue_print');
 		});
 	});
-}
-// }}}
-
-function quick_print() { // {{{
-	selected_printer.call('queue_print', [get_queue(), [0, 0], 0], {});
 }
 // }}}
 // }}}
@@ -447,6 +439,7 @@ function update_globals() { // {{{
 	update_float([null, 'num_gpios']);
 	update_pin([null, 'led_pin']);
 	update_pin([null, 'probe_pin']);
+	update_float([null, 'probe_dist']);
 	update_float([null, 'motor_limit']);
 	update_float([null, 'temp_limit']);
 	update_float([null, 'feedrate']);

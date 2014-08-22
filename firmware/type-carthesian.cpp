@@ -25,7 +25,8 @@ static void check_position(Space *s, float *data) {
 
 static void load(Space *s, int16_t &addr, bool eeprom) {
 	uint8_t num = read_8(addr, eeprom);
-	s->setup_nums(num, num);
+	if (!s->setup_nums(num, num))
+		debug("Failed to set up cartesian axes");
 }
 
 static void save(Space *s, int16_t &addr, bool eeprom) {

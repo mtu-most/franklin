@@ -10,7 +10,10 @@ import random
 import websockets
 from websockets import log
 import xdgbasedir
-from gi.repository import GLib
+try:
+	from gi.repository import GLib
+except ImportError:
+	import glib as GLib
 import subprocess
 import crypt
 import time

@@ -107,6 +107,7 @@ function _setup_updater() {
 				'num_gpios': 0,
 				'led_pin': 0,
 				'probe_pin': 0,
+				'probe_dist': Infinity,
 				'motor_limit': 0,
 				'temp_limit': 0,
 				'feedrate': 1,
@@ -164,10 +165,11 @@ function _setup_updater() {
 			printers[port].name = values[3];
 			printers[port].led_pin = values[4];
 			printers[port].probe_pin = values[5];
-			printers[port].motor_limit = values[6];
-			printers[port].temp_limit = values[7];
-			printers[port].feedrate = values[8];
-			printers[port].status = values[9];
+			printers[port].probe_dist = values[6];
+			printers[port].motor_limit = values[7];
+			printers[port].temp_limit = values[8];
+			printers[port].feedrate = values[9];
+			printers[port].status = values[10];
 			trigger_update(port, 'variables_update');
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({

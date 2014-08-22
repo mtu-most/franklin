@@ -104,7 +104,7 @@ bool globals_load(int16_t &addr, bool eeprom)
 		name[n] = read_8(addr, eeprom);
 	led_pin.read(read_16(addr, eeprom));
 	probe_pin.read(read_16(addr, eeprom));
-	//room_T = read_float(addr, eeprom);
+	probe_dist = read_float(addr, eeprom);
 	motor_limit = read_float(addr, eeprom);
 	temp_limit = read_float(addr, eeprom);
 	feedrate = read_float(addr, eeprom);
@@ -148,12 +148,12 @@ void globals_save(int16_t &addr, bool eeprom)
 		write_8(addr, name[i], eeprom);
 	write_16(addr, led_pin.write(), eeprom);
 	write_16(addr, probe_pin.write(), eeprom);
-	//write_float(addr, room_T, eeprom);
+	write_float(addr, probe_dist, eeprom);
 	write_float(addr, motor_limit, eeprom);
 	write_float(addr, temp_limit, eeprom);
 	write_float(addr, feedrate, eeprom);
 }
 
 int16_t globals_size() {
-	return 1 * 4 + 2 * 2 + sizeof(float) * 4 + namelen;
+	return 1 * 4 + 2 * 2 + sizeof(float) * 5 + namelen;
 }

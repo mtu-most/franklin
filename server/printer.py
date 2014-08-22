@@ -109,6 +109,7 @@ class Printer: # {{{
 		self.status = None
 		self.confirm_id = 0
 		self.position_valid = False
+		self.probing = False
 		self.home_phase = None
 		self.home_cb = [False, self._do_home]
 		self.probe_cb = [False, None]
@@ -208,6 +209,7 @@ class Printer: # {{{
 		self._get_reply(cb = True)
 		self.goto(cb = True)[1](None)	# This sends one new movecb, to be sure the rest is received if they were sent.
 		self._get_reply(cb = True)
+		#self.load()
 		self.initialized = True
 		global show_own_debug
 		if show_own_debug is None:
@@ -331,7 +333,7 @@ class Printer: # {{{
 		while '\n' in self.command_buffer:
 			pos = self.command_buffer.index('\n')
 			id, func, a, ka = json.loads(self.command_buffer[:pos])
-			log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer[pos:])))
+			#log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer[pos:])))
 			self.command_buffer = self.command_buffer[pos + 1:]
 			try:
 				ret = getattr(self, func)(*a, **ka)
@@ -678,11 +680,9 @@ class Printer: # {{{
 	def _read(self, cmd, channel, sub = None): # {{{
 		if cmd == 'SPACE':
 			info = self._read('SPACE_INFO', channel)
-			log(repr(info))
 			self.spaces[channel].type, self.spaces[channel].max_deviation = struct.unpack('<Bf', info[:5])
 			if self.spaces[channel].type == 0:
 				num_axes = struct.unpack('<B', info[5:])[0]
-				log('%d' % num_axes)
 				num_motors = num_axes
 			elif self.spaces[channel].type == 1:
 				self.spaces[channel].delta = [{}, {}, {}]
@@ -715,7 +715,7 @@ class Printer: # {{{
 		#log('%d' % len(data[self.namelen:]))
 		self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_pins, self.num_digital_pins, num_spaces, num_temps, num_gpios, namelen = struct.unpack('<BBBBBBBBB', data[:9])
 		self.name = unicode(data[9:9 + namelen], 'utf-8', 'replace')
-		self.led_pin, self.probe_pin, self.motor_limit, self.temp_limit, self.feedrate = struct.unpack('<HHfff', data[9 + namelen:])
+		self.led_pin, self.probe_pin, self.probe_dist, self.motor_limit, self.temp_limit, self.feedrate = struct.unpack('<HHffff', data[9 + namelen:])
 		while len(self.spaces) < num_spaces:
 			self.spaces.append(self.Space(self, len(self.spaces)))
 			data = self._read('SPACE', len(self.spaces) - 1)
@@ -741,7 +741,7 @@ class Printer: # {{{
 	# }}}
 	def _write_globals(self, ns, nt, ng): # {{{
 		name = self.name.encode('utf-8')
-		data = struct.pack('<BBBB', ns if ns is not None else len(self.spaces), nt if nt is not None else len(self.temps), ng if ng is not None else len(self.gpios), len(name)) + name + struct.pack('<HHfff', self.led_pin, self.probe_pin, self.motor_limit, self.temp_limit, self.feedrate)
+		data = struct.pack('<BBBB', ns if ns is not None else len(self.spaces), nt if nt is not None else len(self.temps), ng if ng is not None else len(self.gpios), len(name)) + name + struct.pack('<HHffff', self.led_pin, self.probe_pin, self.probe_dist, self.motor_limit, self.temp_limit, self.feedrate)
 		if not self._send_packet(struct.pack('<B', self.command['WRITE_GLOBALS']) + data):
 			return False
 		self._read_globals()
@@ -751,7 +751,7 @@ class Printer: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		self._broadcast(target, 'globals_update', [len(self.spaces), len(self.temps), len(self.gpios), self.name, self.led_pin, self.probe_pin, self.motor_limit, self.temp_limit, self.feedrate, not self.paused and (None if self.gcode is None else True)])
+		self._broadcast(target, 'globals_update', [len(self.spaces), len(self.temps), len(self.gpios), self.name, self.led_pin, self.probe_pin, self.probe_dist, self.motor_limit, self.temp_limit, self.feedrate, not self.paused and (None if self.gcode is None else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		if not self.initialized:
@@ -832,14 +832,14 @@ class Printer: # {{{
 				sina, cosa = self.gcode_angle
 				target = cosa * args['X'] - sina * args['Y'] + self.gcode_ref[0], cosa * args['Y'] + sina * args['X'] + self.gcode_ref[1]
 				if self._use_probemap and self.gcode_probemap:
-					source = cosa * args['x'] - sina * args['y'] + self.gcode_ref[0], cosa * args['y'] + sina * args['x'] + self.gcode_ref[1]
-					if args[x] is not None:
-						num = max([abs(target[t] - source[t]) / (abs(self.gcode_probemap[0][t + 2] - self.gcode_probemap[0][t]) / self.gcode_probemap[1][t]) for t in range(2)])
+					if args['x'] is not None:
+						source = cosa * args['x'] - sina * args['y'] + self.gcode_ref[0], cosa * args['y'] + sina * args['x'] + self.gcode_ref[1]
+						num = int(max([abs(target[t] - source[t]) / (abs(self.gcode_probemap[0][t + 2] - self.gcode_probemap[0][t]) / self.gcode_probemap[1][t]) for t in range(2)]))
+						for t in range(num):
+							targetpart = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
+							self.goto([[targetpart[0], targetpart[1], self._use_probemap(targetpart[0], targetpart[1], args['Z'])], [args['E']]], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
 					else:
-						num = 1
-					for t in range(num):
-						target = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
-					self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
+						self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
 				else:
 					self.goto([[target[0], target[1], args['Z']], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
 				if (self.wait or len(self.queue) - self.queue_pos > self.queue_length) and self.flushing is False:
@@ -1256,43 +1256,52 @@ class Printer: # {{{
 			return
 		log('Internal error: invalid home phase')
 	# }}}
-	def _do_probe(self, id, x, y, angle, speed, phase = 0, good = True): # {{{
+	def _do_probe(self, id, x, y, z, angle, speed, phase = 0, good = True): # {{{
 		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
 		if not good:
-			self.set_axis(2, limit_min_pin = self.probe_orig_pin)
+			self.set_axis((0, 2), limit_min_pin = self.probe_orig_pin)
+			self.probing = False
 			self._send(id, 'error', 'aborted')
 			return
-		p = self.gcode_probemap
+		self.probing = True
+		p = self.jobs_probemap
 		if phase == 0:
-			if y >= p[1][1]:
+			if y > p[1][1]:
 				# Done.
-				self._send(id, 'return', self.gcode_probemap)
+				self.probing = False
+				if id is not None:
+					self._send(id, 'return', self.jobs_probemap)
+				else:
+					#log('result: %s' % repr(self.jobs_probemap))
+					self._next_job()
 				return
 			# Goto x,y
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, angle, speed, 1, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 1, good)
 			self.movecb.append(self.probe_cb)
 			px = p[0][0] + (p[0][2] - p[0][0]) * x / p[1][0]
 			py = p[0][1] + (p[0][3] - p[0][1]) * y / p[1][1]
-			self.goto([px * self.gcode_angle[1] - py * self.gcode_angle[0], py * self.gcode_angle[1] + px * self.gcode_angle[0], .03], cb = True)[1](None)
+			self.goto([[px * self.gcode_angle[1] - py * self.gcode_angle[0], py * self.gcode_angle[1] + px * self.gcode_angle[0], z]], cb = True)[1](None)
 		elif phase == 1:
 			# Probe
-			self.probe_orig_pin = self.axis[2].limit_min_pin
-			self.set_axis(2, limit_min_pin = self.probe_pin)
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, angle, speed, 2, good)
+			self.probe_orig_pin = [m['limit_min_pin'] for m in self.spaces[0].motor]
+			for m in range(len(self.spaces[0].motor)):
+				self.set_motor((0, m), limit_min_pin = self.probe_pin)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 2, good)
 			self.movecb.append(self.probe_cb)
-			self.goto({2: -.01}, f0 = float(speed) / 13, cb = True)[1](None)
+			self.goto([{2: z - .1}], f0 = float(speed) / .1, cb = True)[1](None)
 		else:
-			self.set_axis(2, limit_min_pin = self.probe_orig_pin)
+			for m in range(len(self.spaces[0].motor)):
+				self.set_motor((0, m), limit_min_pin = self.probe_orig_pin[m])
 			# Record result
-			p[2][y][x] = self.axis[2].get_current_pos()[1]
+			p[2][y][x] = self.spaces[0].get_current_pos(2)
 			# Retract
 			x += 1
-			if x >= p[1][0]:
+			if x > p[1][0]:
 				x = 0
 				y += 1
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, angle, speed, 0, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 0, good)
 			self.movecb.append(self.probe_cb)
-			self.goto({2: .03}, cb = True)[1](None)
+			self.goto([{2: z}], cb = True)[1](None)
 	# }}}
 	def _next_job(self): # {{{
 		self.job_current += 1
@@ -1453,13 +1462,15 @@ class Printer: # {{{
 			self.goto(cb = True)[1](None)
 	# }}}
 	@delayed
-	def probe(self, id, area, density, angle = 0, speed = 3): # {{{
-		if not self.pin_valid(self.probe_pin):
-			self._send(id, 'return', None)
+	def probe(self, id, area, angle = 0, speed = .003): # {{{
+		if not self.pin_valid(self.probe_pin) or len(self.spaces) < 1 or len(self.spaces[0].axis) < 3:
+			if id is not None:
+				self._send(id, 'return', None)
 			return
-		self.gcode_probemap = [area, density, [[None for x in range(density[0])] for y in range(density[1])]]
+		density = [int(abs(area[t + 2] - area[t]) / self.probe_dist) + 1 for t in range(2)]
+		self.jobs_probemap = [area, density, [[None for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
 		self.gcode_angle = math.sin(angle), math.cos(angle)
-		self._do_probe(id, 0, 0, angle, speed)
+		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
 	# }}}
 	@delayed
 	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False): # {{{
@@ -1471,8 +1482,9 @@ class Printer: # {{{
 			self._do_queue()
 	# }}}
 	def sleep(self, sleeping = True): # {{{
-		self.position_valid = False
-		self._globals_update()
+		if sleeping:
+			self.position_valid = False
+			self._globals_update()
 		return self._send_packet(struct.pack('<BB', self.command['SLEEP'], sleeping))
 	# }}}
 	def settemp(self, channel, temp): # {{{
@@ -1737,7 +1749,7 @@ class Printer: # {{{
 		for t in ('spaces', 'temps', 'gpios'):
 			message += 'num_%s = %d\r\n' % (t, len(getattr(self, t)))
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'probe_pin')])
-		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('feedrate', 'motor_limit', 'temp_limit')])
+		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'feedrate', 'motor_limit', 'temp_limit')])
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings(i)
 		for i, t in enumerate(self.temps):
@@ -1762,7 +1774,7 @@ class Printer: # {{{
 		globals_changed = False
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'delta': set()}
 		keys = {
-				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'feedrate', 'motor_limit', 'temp_limit'},
+				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'feedrate', 'motor_limit', 'temp_limit'},
 				'space': {'type', 'max_deviation', 'num_axes', 'delta_angle'},
 				'temp': {'R0', 'R1', 'Rc', 'Tc', 'beta', 'power_pin', 'thermistor_pin'},
 				'gpio': {'pin', 'state', 'master', 'value'},
@@ -1810,7 +1822,6 @@ class Printer: # {{{
 				continue
 			if not r.group(6):
 				# Comment or empty line.
-				log('ignore')
 				continue
 			key = r.group(6)
 			value = r.group(7)
@@ -1826,7 +1837,7 @@ class Printer: # {{{
 				errors.append((l, 'invalid key for section %s' % section))
 				continue
 			if isinstance(index, tuple):
-				log('setting %s' % repr((key, value)))
+				#log('setting %s' % repr((key, value)))
 				obj[key] = value
 			else:
 				setattr(obj, key, value)
@@ -2016,6 +2027,7 @@ class Printer: # {{{
 				elif cmd == ('G', 92):
 					if 'E' not in args:
 						continue
+					args['E'] *= unit
 					pos[1][current_extruder] = args['E']
 					args['e'] = current_extruder
 				elif cmd[0] == 'M' and cmd[1] in (104, 109, 116):
@@ -2025,7 +2037,8 @@ class Printer: # {{{
 				elif cmd == ('G', 28):
 					ret.append((cmd, args, message))
 					for a in range(len(pos[0])):
-						pos[0][a] = float('nan')
+						if not math.isnan(self.spaces[0].axis[a]['park']):
+							pos[0][a] = self.spaces[0].axis[a]['park']
 				elif cmd[0] == 'G' and cmd[1] in (0, 1, 81):
 					if cmd[1] != 0:
 						mode = cmd
@@ -2129,30 +2142,32 @@ class Printer: # {{{
 		self.jobs_probemap = probemap
 		self.job_current = -1	# next_job will make it start at 0.
 		self.job_id = id
-		self._next_job()
+		if not self.probing:
+			self._next_job()
 	# }}}
 	@delayed
-	def queue_probe(self, id, names, ref = (0, 0), angle = 0, density = (4, 4)): # {{{
+	def queue_probe(self, id, names, ref = (0, 0), angle = 0, speed = .003): # {{{
 		bbox = [float('nan'), (float('nan')), float('nan'), float('nan')]
 		for n in names:
-			bb = queue[n][1]
-			if not bbox[0] < bb[0]:
-				bbox[0] = bb[0]
-			if not bbox[1] < bb[1]:
-				bbox[1] = bb[1]
-			if not bbox[2] > bb[2]:
-				bbox[2] = bb[2]
-			if not bbox[3] > bb[3]:
-				bbox[3] = bb[3]
-		# TODO: probing.
-		self.queue_print(names, ref, angle, probemap)(id)
+			bb = self.jobqueue[n][1]
+			if not bbox[0] < bb[0][0]:
+				bbox[0] = bb[0][0]
+			if not bbox[1] < bb[0][1]:
+				bbox[1] = bb[0][1]
+			if not bbox[2] > bb[1][0]:
+				bbox[2] = bb[1][0]
+			if not bbox[3] > bb[1][1]:
+				bbox[3] = bb[1][1]
+		self.probe((bbox[0] + ref[0], bbox[1] + ref[1], bbox[2] + ref[0], bbox[3] + ref[1]), angle, speed)[1](None)
+		# Pass jobs_probemap to make sure it doesn't get overwritten.
+		self.queue_print(names, ref, angle, self.jobs_probemap)[1](id)
 	# }}}
 	# }}}
 	# Accessor functions. {{{
 	# Globals. {{{
 	def get_globals(self):
 		ret = {'num_spaces': len(self.spaces), 'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('name', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'motor_limit', 'temp_limit', 'feedrate', 'paused'):
+		for key in ('name', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'motor_limit', 'temp_limit', 'feedrate', 'paused'):
 			ret[key] = getattr(self, key)
 		return ret
 	def set_globals(self, **ka):
@@ -2165,7 +2180,7 @@ class Printer: # {{{
 		for key in ('led_pin', 'probe_pin'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
-		for key in ('motor_limit', 'temp_limit', 'feedrate'):
+		for key in ('probe_dist', 'motor_limit', 'temp_limit', 'feedrate'):
 			if key in ka:
 				setattr(self, key, float(ka.pop(key)))
 		self._write_globals(ns, nt, ng)

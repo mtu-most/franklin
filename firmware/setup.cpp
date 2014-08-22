@@ -26,6 +26,7 @@ void setup()
 	reply_ready = false;
 	led_pin.read(0);
 	probe_pin.read(0);
+	probe_dist = INFINITY;
 	led_phase = 0;
 	temps_busy = 0;
 	requested_temp = ~0;
@@ -59,13 +60,16 @@ void setup()
 	for (uint8_t i = 0; i < 8; ++i)
 		Serial.write(uint8_t(0));
 	arch_setup_end();
+	load_all();
 }
 
 void load_all() {
+	//debug("loading all");
 	int16_t addr = 0;
 	globals_load(addr, true);
 #ifdef HAVE_SPACES
 	for (uint8_t t = 0; t < num_spaces; ++t) {
+		//debug("space %d", t);
 		spaces[t].load_info(addr, true);
 		for (uint8_t a = 0; a < spaces[t].num_axes; ++a)
 			spaces[t].load_axis(a, addr, true);
@@ -74,11 +78,15 @@ void load_all() {
 	}
 #endif
 #ifdef HAVE_TEMPS
-	for (uint8_t t = 0; t < num_temps; ++t)
+	for (uint8_t t = 0; t < num_temps; ++t) {
+		//debug("temp %d", t);
 		temps[t].load(addr, true);
+	}
 #endif
 #ifdef HAVE_GPIOS
-	for (uint8_t t = 0; t < num_gpios; ++t)
+	for (uint8_t t = 0; t < num_gpios; ++t) {
+		//debug("gpio %d", t);
 		gpios[t].load(addr, true);
+	}
 #endif
 }

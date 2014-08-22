@@ -1,27 +1,56 @@
 #include "firmware.h"
 
 #ifdef HAVE_SPACES
-void Space::setup_nums(uint8_t na, uint8_t nm) {
+bool Space::setup_nums(uint8_t na, uint8_t nm) {
 	//debug("new space %d %d %d %d", na, nm, num_axes, num_motors);
+	uint16_t sz = namelen + 1;
+	sz += globals_size();
+#ifdef HAVE_TEMPS
+	for (uint8_t t = 0; t < num_temps; ++t)
+		sz += t < num_temps ? temps[t].size() : Temp::size0();
+#endif
+#ifdef HAVE_GPIOS
+	for (uint8_t g = 0; g < num_gpios; ++g)
+		sz += g < num_gpios ? gpios[g].size() : Gpio::size0();
+#endif
+	for (uint8_t s = 0; s < num_spaces; ++s)
+		sz += s < num_spaces ? spaces[s].size() : Space::size0();
+	sz -= size();
+	uint8_t old_nm = num_motors;
+	uint8_t old_na = num_axes;
+	num_motors = nm;
+	num_axes = na;
+	sz += size();
+	if (sz > E2END) {
+		debug("New space settings make size %d, which is larger than %d: rejecting.", sz, E2END);
+		num_motors = old_nm;
+		num_axes = old_na;
+		return false;
+	}
 	Axis **new_axes = new Axis *[na];
-	for (uint8_t a = 0; a < min(num_axes, na); ++a)
+	//debug("new axes: %d %d %x", na, new_axes);
+	for (uint8_t a = 0; a < min(old_na, na); ++a)
 		new_axes[a] = axis[a];
-	for (uint8_t a = num_axes; a < na; ++a) {
+	for (uint8_t a = old_na; a < na; ++a) {
 		new_axes[a] = new Axis();
+		//debug("new axis %x", new_axes[a]);
 		new_axes[a]->source = NAN;
 		new_axes[a]->current = NAN;
 		new_axes[a]->dist = NAN;
 		new_axes[a]->next_dist = NAN;
 		new_axes[a]->main_dist = NAN;
 	}
+	for (uint8_t a = na; a < old_na; ++a)
+		delete axis[a];
 	delete[] axis;
 	axis = new_axes;
-	num_axes = na;
 	Motor **new_motors = new Motor *[nm];
-	for (uint8_t m = 0; m < min(num_motors, nm); ++m)
+	//debug("new motors: %d %x", nm, new_motors);
+	for (uint8_t m = 0; m < min(old_nm, nm); ++m)
 		new_motors[m] = motor[m];
-	for (uint8_t m = num_motors; m < nm; ++m) {
+	for (uint8_t m = old_nm; m < nm; ++m) {
 		new_motors[m] = new Motor();
+		//debug("new motor %x", new_motors[m]);
 		new_motors[m]->sense_state = 0;
 		new_motors[m]->sense_pos = NAN;
 		new_motors[m]->motor_min = -INFINITY;
@@ -38,9 +67,11 @@ void Space::setup_nums(uint8_t na, uint8_t nm) {
 		new_motors[m]->audio_flags = 0;
 #endif
 	}
+	for (uint8_t m = nm; m < old_nm; ++m)
+		delete motor[m];
 	delete[] motor;
 	motor = new_motors;
-	num_motors = nm;
+	return true;
 }
 
 int16_t Space::size_std() {
@@ -49,6 +80,7 @@ int16_t Space::size_std() {
 
 void Space::load_info(int16_t &addr, bool eeprom)
 {
+	//debug("loading space");
 	uint8_t t = type;
 	if (t >= NUM_SPACE_TYPES)
 		t = 0;
@@ -58,7 +90,7 @@ void Space::load_info(int16_t &addr, bool eeprom)
 		type = t;
 	}
 	if (t != type) {
-		debug("setting type to %d", type);
+		//debug("setting type to %d", type);
 		space_types[t].free(this);
 		space_types[type].init(this);
 	}
@@ -68,6 +100,7 @@ void Space::load_info(int16_t &addr, bool eeprom)
 
 void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
 {
+	//debug("loading axis %d", a);
 	axis[a]->offset = read_float(addr, eeprom);
 	axis[a]->park = read_float(addr, eeprom);
 	axis[a]->max_v = read_float(addr, eeprom);
@@ -75,6 +108,7 @@ void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
 
 void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 {
+	//debug("loading motor %d %x", m, motor[m]);
 	uint16_t enable = motor[m]->enable_pin.write();
 	motor[m]->step_pin.read(read_16(addr, eeprom));
 	motor[m]->dir_pin.read(read_16(addr, eeprom));
@@ -106,7 +140,7 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 
 void Space::save_info(int16_t &addr, bool eeprom)
 {
-	debug("saving info %d %f %d %d", type, F(max_deviation), num_axes, num_motors);
+	//debug("saving info %d %f %d %d", type, F(max_deviation), num_axes, num_motors);
 	write_8(addr, type, eeprom);
 	write_float(addr, max_deviation, eeprom);
 	space_types[type].save(this, addr, eeprom);
@@ -162,56 +196,12 @@ void Space::free() {
 }
 
 void Space::copy(Space &dst) {
-	debug("copy space");
+	//debug("copy space");
 	dst.type = type;
-	dst.type_data = NULL;
-	dst.num_axes = 0;
-	dst.num_motors = 0;
-	dst.motor = NULL;
-	dst.axis = NULL;
-	dst.setup_nums(num_axes, num_motors);
-	for (uint8_t a = 0; a < num_axes; ++a) {
-		dst.axis[a]->offset = axis[a]->offset;
-		dst.axis[a]->park = axis[a]->park;
-		dst.axis[a]->max_v = axis[a]->max_v;
-		dst.axis[a]->source = axis[a]->source;
-		dst.axis[a]->current = axis[a]->current;
-		dst.axis[a]->dist = axis[a]->dist;
-		dst.axis[a]->next_dist = axis[a]->next_dist;
-		dst.axis[a]->main_dist = axis[a]->main_dist;
-	}
-	for (uint8_t m = 0; m < num_motors; ++m) {
-		dst.motor[m]->step_pin.flags = 0;
-		dst.motor[m]->step_pin.read(motor[m]->dir_pin.write());
-		dst.motor[m]->dir_pin.flags = 0;
-		dst.motor[m]->dir_pin.read(motor[m]->dir_pin.write());
-		dst.motor[m]->enable_pin.flags = 0;
-		dst.motor[m]->enable_pin.read(motor[m]->enable_pin.write());
-		dst.motor[m]->limit_min_pin.flags = 0;
-		dst.motor[m]->limit_min_pin.read(motor[m]->limit_min_pin.write());
-		dst.motor[m]->limit_max_pin.flags = 0;
-		dst.motor[m]->limit_max_pin.read(motor[m]->limit_max_pin.write());
-		dst.motor[m]->sense_pin.flags = 0;
-		dst.motor[m]->sense_pin.read(motor[m]->sense_pin.write());
-		dst.motor[m]->steps_per_m = motor[m]->steps_per_m;
-		dst.motor[m]->max_steps = motor[m]->max_steps;
-		dst.motor[m]->home_pos = motor[m]->home_pos;
-		dst.motor[m]->motor_min = motor[m]->motor_min;
-		dst.motor[m]->motor_max = motor[m]->motor_max;
-		dst.motor[m]->sense_state = motor[m]->sense_state;
-		dst.motor[m]->sense_pos = motor[m]->sense_pos;
-		dst.motor[m]->limits_pos = motor[m]->limits_pos;
-		dst.motor[m]->limit_v = motor[m]->limit_v;
-		dst.motor[m]->limit_a = motor[m]->limit_a;
-		dst.motor[m]->last_time = motor[m]->last_time;
-		dst.motor[m]->last_v = motor[m]->last_v;
-		dst.motor[m]->last_distance = motor[m]->last_distance;
-		dst.motor[m]->positive = motor[m]->positive;
-		dst.motor[m]->current_pos = motor[m]->current_pos;
-#ifdef HAVE_AUDIO
-		dst.motor[m]->audio_flags = 0;
-#endif
-	}
-	space_types[type].copy(this, &dst);
+	dst.type_data = type_data;
+	dst.num_axes = num_axes;
+	dst.num_motors = num_motors;
+	dst.motor = motor;
+	dst.axis = axis;
 }
 #endif

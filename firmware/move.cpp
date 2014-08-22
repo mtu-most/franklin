@@ -173,7 +173,7 @@ void next_move () {
 				if (sp.axis[a]->next_dist != 0 || sp.axis[a]->dist != 0)
 					action = true;
 #ifdef DEBUG_MOVE
-				debug ("Connecting distance for motor %d is %f, to %f", a, F(sp.axis[a]->dist), F(sp.axis[a]->next_dist));
+				debug ("Connecting distance for motor %d is %f, to %f = %f + %f - (%f + %f)", a, F(sp.axis[a]->dist), F(sp.axis[a]->next_dist), F(queue[n].data[a0 + a]), F(sp.axis[a]->offset), F(sp.axis[a]->source), F(sp.axis[a]->dist));
 				debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 			}
@@ -333,7 +333,7 @@ void next_move () {
 		motors_busy = true;
 	}
 #ifdef DEBUG_MOVE
-	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f μs tp=%f μs", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), F(t0), F(tp));
+	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f s tp=%f s", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), F(t0), F(tp));
 #endif
 	//debug("moving->true");
 	moving = true;

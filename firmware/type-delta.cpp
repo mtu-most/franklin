@@ -97,6 +97,10 @@ static void check_position(Space *s, float *data) {
 }
 
 static void load(Space *s, int16_t &addr, bool eeprom) {
+	if (!s->setup_nums(3, 3)) {
+		debug("Failed to set up delta axes");
+		return;
+	}
 	for (uint8_t a = 0; a < 3; ++a) {
 		APEX(s, a).axis_min = read_float(addr, eeprom);
 		APEX(s, a).axis_max = read_float(addr, eeprom);
@@ -128,7 +132,6 @@ static void load(Space *s, int16_t &addr, bool eeprom) {
 		APEX(s, a).y = y[a] * cos(PRIVATE(s).angle) + x[a] * sin(PRIVATE(s).angle);
 		APEX(s, a).z = sqrt(APEX(s, a).rodlength * APEX(s, a).rodlength - APEX(s, a).radius * APEX(s, a).radius);
 	}
-	s->setup_nums(3, 3);
 }
 
 static void save(Space *s, int16_t &addr, bool eeprom) {

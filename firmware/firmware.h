@@ -213,7 +213,6 @@ struct SpaceType
 	void (*save)(Space *s, int16_t &addr, bool eeprom);
 	void (*init)(Space *s);
 	void (*free)(Space *s);
-	void (*copy)(Space *s, Space *d);
 	int16_t (*size)(Space *s);
 };
 
@@ -237,7 +236,7 @@ struct Space
 	void copy(Space &dst);
 	static int16_t size0();
 	int16_t size();
-	void setup_nums(uint8_t na, uint8_t nm);
+	bool setup_nums(uint8_t na, uint8_t nm);
 	int16_t size_std();
 };
 
@@ -313,6 +312,7 @@ EXTERN uint8_t num_gpios;
 #endif
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
+EXTERN float probe_dist;
 //EXTERN float room_T;	//[°C]
 EXTERN float feedrate;		// Multiplication factor for f values, used at start of move.
 // Other variables.
