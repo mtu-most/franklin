@@ -4,7 +4,9 @@ void setup()
 {
 	arch_setup_start();
 	watchdog_disable();
+#ifdef HAVE_SPACES
 	setup_spacetypes();
+#endif
 	// Initialize volatile variables.
 	Serial.begin(115200);
 	initialized = false;

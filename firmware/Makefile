@@ -22,7 +22,7 @@ CPPFLAGS += -DARCH_INCLUDE=\"arch-avr.h\"
 
 ifeq (${TARGET}, mini)
 BOARD_TAG = atmega328
-include /usr/share/arduino/Arduino.mk
+include Arduino.mk
 else
 ifeq (${TARGET}, melzi)
 BOARD_TAG = mighty_opt
