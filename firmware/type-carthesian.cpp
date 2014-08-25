@@ -39,8 +39,12 @@ static void init(Space *s) {
 static void free(Space *s) {
 }
 
-static int16_t size(Space *s) {
-	return 1 * 1 + s->size_std();
+static int16_t memsize(Space *s) {
+	return 1 * 1 + s->memsize_std();
+}
+
+static int16_t savesize(Space *s) {
+	return 1 * 1 + s->savesize_std();
 }
 
 void Cartesian_init(uint8_t num) {
@@ -51,6 +55,60 @@ void Cartesian_init(uint8_t num) {
 	space_types[num].save = save;
 	space_types[num].init = init;
 	space_types[num].free = free;
-	space_types[num].size = size;
+	space_types[num].memsize = memsize;
+	space_types[num].savesize = savesize;
 }
+
+#ifdef HAVE_EXTRUDER
+struct ExtruderData {
+	float dx, dy, dz;
+};
+
+#define EDATA(s) (*reinterpret_cast <ExtruderData *>(s->type_data))
+
+static void eload(Space *s, int16_t &addr, bool eeprom) {
+	EDATA(s).dx = read_float(addr, eeprom);
+	EDATA(s).dy = read_float(addr, eeprom);
+	EDATA(s).dz = read_float(addr, eeprom);
+	uint8_t num = read_8(addr, eeprom);
+	if (!s->setup_nums(num, num))
+		debug("Failed to set up cartesian axes");
+}
+
+static void esave(Space *s, int16_t &addr, bool eeprom) {
+	write_float(addr, EDATA(s).dx, eeprom);
+	write_float(addr, EDATA(s).dy, eeprom);
+	write_float(addr, EDATA(s).dz, eeprom);
+	write_8(addr, s->num_axes, eeprom);
+}
+
+static void einit(Space *s) {
+	s->type_data = new ExtruderData;
+}
+
+static void efree(Space *s) {
+	delete reinterpret_cast <ExtruderData *>(s->type_data);
+}
+
+static int16_t ememsize(Space *s) {
+	return 1 * 1 + s->memsize_std() + sizeof(ExtruderData);
+}
+
+static int16_t esavesize(Space *s) {
+	return 1 * 1 + 4 * 3 + s->savesize_std();
+}
+
+
+void Extruder_init(uint8_t num) {
+	space_types[num].xyz2motors = xyz2motors;
+	space_types[num].reset_pos = reset_pos;
+	space_types[num].check_position = check_position;
+	space_types[num].load = eload;
+	space_types[num].save = esave;
+	space_types[num].init = einit;
+	space_types[num].free = efree;
+	space_types[num].memsize = ememsize;
+	space_types[num].savesize = esavesize;
+}
+#endif
 #endif

@@ -18,6 +18,10 @@ var blacklist;
 var audio_list;
 var scripts;
 var data;
+
+var TYPE_EXTRUDER = 0;
+var TYPE_CARTESIAN = 1;
+var TYPE_DELTA = 2;
 // }}}
 
 function dbg(msg) {
@@ -179,6 +183,9 @@ function _setup_updater() {
 					'num_motors': 0,
 					'delta': null,
 					'delta_angle': 0,
+					'dx': 0,
+					'dy': 0,
+					'dz': 0,
 					'axis': [],
 					'motor': []
 				});
@@ -239,10 +246,18 @@ function _setup_updater() {
 					'motor_min': values[3][m][9],
 					'motor_max': values[3][m][10],
 					'limit_v': values[3][m][11],
-					'limit_a': values[3][m][12]
+					'limit_a': values[3][m][12],
+					'home_order': values[3][m][13]
 				});
 			}
-			if (printers[port].spaces[index].type == 1) {
+			if (printers[port].spaces[index].type == TYPE_EXTRUDER) {
+				printers[port].spaces[index].dx = values[4][0];
+				printers[port].spaces[index].dy = values[4][1];
+				printers[port].spaces[index].dz = values[4][2];
+			}
+			else
+				printers[port].spaces[index].extruder = null;
+			if (printers[port].spaces[index].type == TYPE_DELTA) {
 				printers[port].spaces[index].delta = [];
 				for (var i = 0; i < 3; ++i) {
 					printers[port].spaces[index].delta.push({

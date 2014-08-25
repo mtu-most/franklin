@@ -150,12 +150,20 @@
 					[make_tablerow(space_name(args[1]), [[elements[0].obj, elements[0], elements[1]], elements[2]], ['rowtitle1'])]
 					<button type='button' onclick="set_value(this.printer, [['space', this.index], 'type'], this.obj.selectedIndex)">Set</button>
 					<span></span>
-					<div>Max Deviation: [$(Float [[['space', args[1]], 'max_deviation'], .001])$] μm</div>
+					<div>Max Deviation: [$(Float [[['space', args[1]], 'max_deviation'], .001])$]</div>
+				)!]
+			</div> <!-- }}} -->
+			<div id='Extruder_space'> <!-- {{{ -->
+				[!(
+					[make_tablerow(space_name(args[1]), elements, ['rowtitle3'], undefined, 0, args[1])]
+					<div>[$(Float [[['space', args[1]], 'dx'], 1])$]</div>
+					<div>[$(Float [[['space', args[1]], 'dy'], 1])$]</div>
+					<div>[$(Float [[['space', args[1]], 'dz'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Cartesian_space'> <!-- {{{ -->
 				[!(
-					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'])]
+					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'], undefined, 0, args[1])]
 					<div>[$(Float [[['space', args[1]], 'num_axes'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
@@ -167,14 +175,14 @@
 			</div> <!-- }}} -->
 			<div id='Delta_space'> <!-- {{{ -->
 				[!(
-					[make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 0])), ['rowtitle4']),
-					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 1])), ['rowtitle4']),
-					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 2])), ['rowtitle4'])]
+					[make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 0])), ['rowtitle4'], undefined, 1, args[1]),
+					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 1])), ['rowtitle4'], undefined, 1, args[1]),
+					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 2])), ['rowtitle4'], undefined, 1, args[1])]
 				)!]
 			</div> <!-- }}} -->
 			<div id='Deltaangle_space'> <!-- {{{ -->
 				[!(
-					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'])]
+					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'], undefined, 1, args[1])]
 					<div>[$(Float [[['space', args[1]], 'delta_angle'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
@@ -186,18 +194,25 @@
 				)!]
 			</div> <!-- }}} -->
 			<div id='Axis_space'> [!( args[0].AddMultiple('axis', 'Axis_axis', true, args[1]), '')!] </div>
-			<div id='Motor_motor'> <!-- {{{ -->
+			<div id='Motor1_motor'> <!-- {{{ -->
 				[!(
-					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle6'])]
+					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle3'])]
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'max_steps'], 1])$]</div>
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'home_pos'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'home_order'], 1])$]</div>
+				)!]
+			</div> <!-- }}} -->
+			<div id='Motor1_space'> [!( args[0].AddMultiple('motor', 'Motor1_motor', true, args[1]), '')!] </div>
+			<div id='Motor2_motor'> <!-- {{{ -->
+				[!(
+					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle4'])]
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'motor_min'], 0.001])$]</div>
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'motor_max'], 0.001])$]</div>
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'limit_v'], 0.001])$]</div>
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'limit_a'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
-			<div id='Motor_space'> [!( args[0].AddMultiple('motor', 'Motor_motor', true, args[1]), '')!] </div>
+			<div id='Motor2_space'> [!( args[0].AddMultiple('motor', 'Motor2_motor', true, args[1]), '')!] </div>
 			<div id='Steps_motor'> <!-- {{{ -->
 				[!(
 					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle2'])]
@@ -278,7 +293,7 @@
 				elements[0].id = make_id(printer, [['gpio', args[1]], 'master']),
 				elements[1].index = args[1],
 				elements[1].printer = printer,
-				[make_tablerow(gpio_name(args[1]), [[elements[0], elements[1]], elements[2]], ['rowtitle2'], undefined, [['gpio', args[1]], 'settings'])]
+				[make_tablerow(gpio_name(args[1]), [[elements[0], elements[1]], elements[2]], ['rowtitle2'], [['gpio', args[1]], 'settings'])]
 				<select>[!(temprange(elements[0], 'value')<option></option>)!]</select>
 				<button class='button' type='button' onclick='set_gpio_master(this.printer, this.index)'>Set</button>
 				<div>[$(Float [[['gpio', args[1]], 'value'], 1])$]</div>
@@ -287,7 +302,7 @@
 			<div id='State_gpio'> <!-- {{{ -->
 				[!(
 				elements[1].id = make_id(printer, ['gpio', 'value']),
-				[make_tablerow(gpio_name(args[1]), elements, ['rowtitle2'], undefined, [['gpio', args[1]], 'state'])]
+				[make_tablerow(gpio_name(args[1]), elements, ['rowtitle2'], [['gpio', args[1]], 'state'])]
 				<div>[$(Choice [[['gpio', args[1]], 'state'], ['Off', 'On', 'Input', 'High&nbsp;Z']])$]</div>
 				<span></span>
 				)!]
@@ -325,7 +340,7 @@
 						// Space {{{
 								'Spaces',
 								'Type',
-								'Max Deviation'
+								'Max Deviation (μm)'
 							], [
 								'htitle2',
 								'title2',
@@ -337,6 +352,24 @@
 							]).AddMultiple('space', 'Spacetype_space')
 						])!] <!-- }}} -->
 						[!([make_table().AddMultipleTitles([
+						// Extruder {{{
+								'Extruder',
+								'Offset X',
+								'Offset Y',
+								'Offset Z'
+							], [
+								'htitle3',
+								'title3',
+								'title3',
+								'title3'
+							], [
+								null,
+								'Offset in X direction when this extruder is in use.',
+								'Offset in Y direction when this extruder is in use.',
+								'Offset in Z direction when this extruder is in use.'
+							]).AddMultiple('space', 'Extruder_space', false, 0)
+						])!] <!-- }}} -->
+						[!([make_table().AddMultipleTitles([
 						// Cartesian {{{
 								'Cartesian',
 								'Number of axes'
@@ -346,7 +379,7 @@
 							], [
 								null,
 								'Number of axes'
-							]).AddMultiple('space', 'Cartesian_space')
+							]).AddMultiple('space', 'Cartesian_space', false, 0)
 						])!] <!-- }}} -->
 						[!([make_table().AddMultipleTitles([
 						// Delta {{{
@@ -367,7 +400,7 @@
 								'Maximum distance of end effector from nozzle.  Usually rod length. (mm)',
 								'Length of the tie rods. (mm)',
 								'Length of horizontal projection of the tie rod when the end effector is at (0, 0). (mm)'
-							]).AddMultiple('space', 'Delta_space', false)
+							]).AddMultiple('space', 'Delta_space', false, 1)
 						])!] <!-- }}} -->
 						[!([make_table().AddMultipleTitles([
 						// Delta angle {{{
@@ -379,7 +412,7 @@
 							], [
 								null,
 								'Correction angle for the printer. (degrees)'
-							]).AddMultiple('space', 'Deltaangle_space', false)
+							]).AddMultiple('space', 'Deltaangle_space', false, 1)
 						])!] <!-- }}} -->
 						[!([make_table().AddMultipleTitles([
 						// Axis {{{
@@ -397,31 +430,43 @@
 							]).AddMultiple('space', 'Axis_space', false)
 						])!] <!-- }}} -->
 						[!([make_table().AddMultipleTitles([
-						// Motor {{{
+						// Motor part 1 {{{
 								'Motor',
 								'Microsteps',
 								'Switch pos (mm)',
+								'Home order'
+							], [
+								'htitle3',
+								'title3',
+								'title3',
+								'title3'
+							], [
+								null,
+								'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
+								'Position of the home switch. (mm)',
+								'Order when homing.  Equal order homes simultaneously; lower order homes first.'
+							]).AddMultiple('space', 'Motor1_space', false)
+						])!] <!-- }}} -->
+						[!([make_table().AddMultipleTitles([
+						// Motor part 1 {{{
+								'Motor',
 								'Motor min (mm)',
 								'Motor max (mm)',
 								'Limit v (mm/s)',
 								'Limit a (mm/s²)'
 							], [
-								'htitle6',
-								'title6',
-								'title6',
-								'title6',
-								'title6',
-								'title6',
-								'title6'
+								'htitle4',
+								'title4',
+								'title4',
+								'title4',
+								'title4'
 							], [
 								null,
-								'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
-								'Position of the home switch. (mm)',
 								'Minimum value that the motor may move to. (mm)',
 								'Maximum value that the motor may move to. (mm)',
 								'Maximum speed of the motor. (mm/s)',
 								'Maximum acceleration of the motor. (m/s²)'
-							]).AddMultiple('space', 'Motor_space', false)
+							]).AddMultiple('space', 'Motor2_space', false)
 						])!] <!-- }}} -->
 						<!-- }}} -->
 
@@ -572,7 +617,7 @@
 							'title4'
 						], [
 							null,
-							'Physically move the extruder to this position.  For Z, more positive numbers move the extruder away from the bed.',
+							'Physically move the nozzle to this position.  For Z, more positive numbers move the nozzle away from the bed.',
 							'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.'
 						]).AddMultiple('space', 'Move_space', false).AddClass('left')
 					])!] <!-- }}} -->

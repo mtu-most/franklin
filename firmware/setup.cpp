@@ -8,11 +8,14 @@ void setup()
 	// Initialize volatile variables.
 	Serial.begin(115200);
 	initialized = false;
+#if DEBUG_BUFFER_LENGTH > 0
 	debug_buffer_ptr = 0;
+#endif
 	adc_phase = 0;
 #ifdef HAVE_TEMPS
 	temp_current = 0;
 #endif
+	name = NULL;
 	command_end = 0;
 	motors_busy = false;
 	queue_start = 0;

@@ -1,5 +1,6 @@
 #include "firmware.h"
 
+#if DEBUG_BUFFER_LENGTH > 0
 void buffered_debug_flush() {
 	if (debug_buffer_ptr == 0)
 		return;
@@ -116,3 +117,4 @@ void buffered_debug(char const *fmt, ...) {
 	va_end(ap);
 	add_char(';');
 }
+#endif

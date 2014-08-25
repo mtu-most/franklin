@@ -6,9 +6,13 @@
 // Maximum number of move commands in the queue.
 #define QUEUE_LENGTH 10
 
+// Basic features.
 #define HAVE_SPACES
 #define HAVE_TEMPS
 #define HAVE_GPIOS
+
+// Space types.
+#define HAVE_EXTRUDER
 #define HAVE_DELTA
 
 // If HAVE_AUDIO is not defined, nothing related to audio will be included.
@@ -29,4 +33,4 @@
 // To enable, uncomment; to disable, comment it out.
 //#define WATCHDOG
 
-#define DEBUG_BUFFER_LENGTH 1000
+#define DEBUG_BUFFER_LENGTH 0

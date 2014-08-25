@@ -1,39 +1,61 @@
 #include "firmware.h"
 
+#if 1
+#define loaddebug debug
+#else
+#define loaddebug(...) do {} while(0)
+#endif
+
 #ifdef HAVE_SPACES
 bool Space::setup_nums(uint8_t na, uint8_t nm) {
-	//debug("new space %d %d %d %d", na, nm, num_axes, num_motors);
-	uint16_t sz = namelen + 1;
-	sz += globals_size();
+	loaddebug("new space %d %d %d %d", na, nm, num_axes, num_motors);
+	int16_t memsz = namelen + 1;
+	int16_t savesz = namelen + 1;
+	memsz += globals_memsize();
+	savesz += globals_savesize();
 #ifdef HAVE_TEMPS
-	for (uint8_t t = 0; t < num_temps; ++t)
-		sz += t < num_temps ? temps[t].size() : Temp::size0();
+	for (uint8_t t = 0; t < num_temps; ++t) {
+		memsz += t < num_temps ? temps[t].memsize() : Temp::memsize0();
+		savesz += t < num_temps ? temps[t].savesize() : Temp::savesize0();
+	}
 #endif
 #ifdef HAVE_GPIOS
-	for (uint8_t g = 0; g < num_gpios; ++g)
-		sz += g < num_gpios ? gpios[g].size() : Gpio::size0();
+	for (uint8_t g = 0; g < num_gpios; ++g) {
+		memsz += g < num_gpios ? gpios[g].memsize() : Gpio::memsize0();
+		savesz += g < num_gpios ? gpios[g].savesize() : Gpio::savesize0();
+	}
 #endif
-	for (uint8_t s = 0; s < num_spaces; ++s)
-		sz += s < num_spaces ? spaces[s].size() : Space::size0();
-	sz -= size();
+	for (uint8_t s = 0; s < num_spaces; ++s) {
+		memsz += s < num_spaces ? spaces[s].memsize() : Space::memsize0();
+		savesz += s < num_spaces ? spaces[s].savesize() : Space::savesize0();
+	}
+	memsz -= memsize();
+	savesz -= savesize();
 	uint8_t old_nm = num_motors;
 	uint8_t old_na = num_axes;
 	num_motors = nm;
 	num_axes = na;
-	sz += size();
-	if (sz > E2END) {
-		debug("New space settings make size %d, which is larger than %d: rejecting.", sz, E2END);
+	memsz += memsize();
+	savesz += savesize();
+	if (memsz > (XRAMEND - RAMSTART) / 2) {
+		debug("New space settings make memsize %d, which is larger than half of %d: rejecting.", memsz, XRAMEND - RAMSTART);
+		num_motors = old_nm;
+		num_axes = old_na;
+		return false;
+	}
+	if (savesz > E2END) {
+		debug("New space settings make size %d, which is larger than %d: rejecting.", savesz, E2END);
 		num_motors = old_nm;
 		num_axes = old_na;
 		return false;
 	}
 	Axis **new_axes = new Axis *[na];
-	//debug("new axes: %d %d %x", na, new_axes);
+	loaddebug("new axes: %d %d %x", na, new_axes);
 	for (uint8_t a = 0; a < min(old_na, na); ++a)
 		new_axes[a] = axis[a];
 	for (uint8_t a = old_na; a < na; ++a) {
 		new_axes[a] = new Axis();
-		//debug("new axis %x", new_axes[a]);
+		loaddebug("new axis %x", new_axes[a]);
 		new_axes[a]->source = NAN;
 		new_axes[a]->current = NAN;
 		new_axes[a]->dist = NAN;
@@ -45,12 +67,12 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 	delete[] axis;
 	axis = new_axes;
 	Motor **new_motors = new Motor *[nm];
-	//debug("new motors: %d %x", nm, new_motors);
+	loaddebug("new motors: %d %x", nm, new_motors);
 	for (uint8_t m = 0; m < min(old_nm, nm); ++m)
 		new_motors[m] = motor[m];
 	for (uint8_t m = old_nm; m < nm; ++m) {
 		new_motors[m] = new Motor();
-		//debug("new motor %x", new_motors[m]);
+		loaddebug("new motor %x", new_motors[m]);
 		new_motors[m]->sense_state = 0;
 		new_motors[m]->sense_pos = NAN;
 		new_motors[m]->motor_min = -INFINITY;
@@ -58,6 +80,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 		new_motors[m]->limits_pos = NAN;
 		new_motors[m]->limit_v = INFINITY;
 		new_motors[m]->limit_a = INFINITY;
+		new_motors[m]->home_order = 0;
 		new_motors[m]->last_time = micros();
 		new_motors[m]->last_v = 0;
 		new_motors[m]->last_distance = 0;
@@ -74,16 +97,12 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 	return true;
 }
 
-int16_t Space::size_std() {
-	return 2 * 3 * num_motors + sizeof(float) * (1 + 3 * num_axes + 3 * num_motors);
-}
-
 void Space::load_info(int16_t &addr, bool eeprom)
 {
-	//debug("loading space");
+	loaddebug("loading space");
 	uint8_t t = type;
-	if (t >= NUM_SPACE_TYPES)
-		t = 0;
+	if (t >= NUM_SPACE_TYPES || !have_type[t])
+		t = DEFAULT_TYPE;
 	type = read_8(addr, eeprom);
 	if (type >= NUM_SPACE_TYPES || !have_type[type]) {
 		debug("request for type %d ignored", type);
@@ -100,7 +119,7 @@ void Space::load_info(int16_t &addr, bool eeprom)
 
 void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
 {
-	//debug("loading axis %d", a);
+	loaddebug("loading axis %d", a);
 	axis[a]->offset = read_float(addr, eeprom);
 	axis[a]->park = read_float(addr, eeprom);
 	axis[a]->max_v = read_float(addr, eeprom);
@@ -108,7 +127,7 @@ void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
 
 void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 {
-	//debug("loading motor %d %x", m, motor[m]);
+	loaddebug("loading motor %d %x", m, motor[m]);
 	uint16_t enable = motor[m]->enable_pin.write();
 	motor[m]->step_pin.read(read_16(addr, eeprom));
 	motor[m]->dir_pin.read(read_16(addr, eeprom));
@@ -123,6 +142,7 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 	motor[m]->motor_max = read_float(addr, eeprom);
 	motor[m]->limit_v = read_float(addr, eeprom);
 	motor[m]->limit_a = read_float(addr, eeprom);
+	motor[m]->home_order = read_8(addr, eeprom);
 	SET_OUTPUT(motor[m]->step_pin);
 	SET_OUTPUT(motor[m]->dir_pin);
 	SET_OUTPUT(motor[m]->enable_pin);
@@ -166,18 +186,35 @@ void Space::save_motor(uint8_t m, int16_t &addr, bool eeprom) {
 	write_float(addr, motor[m]->motor_max, eeprom);
 	write_float(addr, motor[m]->limit_v, eeprom);
 	write_float(addr, motor[m]->limit_a, eeprom);
+	write_8(addr, motor[m]->home_order, eeprom);
 }
 
-int16_t Space::size() {
-	return 1 * 1 + space_types[type].size(this);
+int16_t Space::memsize_std() {
+	return num_axes * (sizeof(Axis) + sizeof(Axis *)) + num_motors * (sizeof(Motor) + sizeof(Motor *));
 }
 
-int16_t Space::size0() {
+int16_t Space::savesize_std() {
+	return (2 * 6 + 4 * 6 + 1 * 2) * num_motors + sizeof(float) * (1 + 3 * num_axes + 3 * num_motors);
+}
+
+int16_t Space::memsize() {
+	return 1 * 1 + space_types[type].memsize(this);
+}
+
+int16_t Space::savesize() {
+	return 1 * 1 + space_types[type].savesize(this);
+}
+
+int16_t Space::memsize0() {
+	return 2;	// Cartesian type, 0 axes.
+}
+
+int16_t Space::savesize0() {
 	return 2;	// Cartesian type, 0 axes.
 }
 
 void Space::init() {
-	type = 0;
+	type = DEFAULT_TYPE;
 	type_data = NULL;
 	num_axes = 0;
 	num_motors = 0;

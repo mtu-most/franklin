@@ -158,8 +158,10 @@ struct Temp
 	void init();
 	void free();
 	void copy(Temp &dst);
-	static int16_t size0();
-	int16_t size() { return size0(); }
+	static int16_t memsize0();
+	static int16_t savesize0();
+	int16_t memsize() { return memsize0(); }
+	int16_t savesize() { return savesize0(); }
 };
 #endif
 
@@ -189,6 +191,7 @@ struct Motor
 	float motor_min, motor_max;	// Limits for the movement of this motor.
 	float limits_pos;	// position when limit switch was hit or nan
 	float limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
+	uint8_t home_order;
 	unsigned long last_time;		// micros value when last iteration was run.
 	float last_v, last_distance;		// v at and distance since last time, for using limit_a [mm/s], [mm].
 	bool positive;				// direction of current movement.
@@ -213,7 +216,8 @@ struct SpaceType
 	void (*save)(Space *s, int16_t &addr, bool eeprom);
 	void (*init)(Space *s);
 	void (*free)(Space *s);
-	int16_t (*size)(Space *s);
+	int16_t (*memsize)(Space *s);
+	int16_t (*savesize)(Space *s);
 };
 
 struct Space
@@ -234,17 +238,32 @@ struct Space
 	void init();
 	void free();
 	void copy(Space &dst);
-	static int16_t size0();
-	int16_t size();
+	static int16_t memsize0();
+	static int16_t savesize0();
+	int16_t memsize();
+	int16_t savesize();
 	bool setup_nums(uint8_t na, uint8_t nm);
-	int16_t size_std();
+	int16_t memsize_std();
+	int16_t savesize_std();
 };
 
-#define NUM_SPACE_TYPES 2
-EXTERN bool have_type[NUM_SPACE_TYPES];
+// Type 0: Extruder.
+#ifdef HAVE_EXTRUDER
+void Extruder_init(uint8_t num);
+#define EXTRUDER_INIT(num) Extruder_init(num);
+#define HAVE_TYPE_EXTRUDER true
+#else
+#define EXTRUDER_INIT(num)
+#define HAVE_TYPE_EXTRUDER false
+#endif
+
+// Type 1: Cartesian (always available).
+#define DEFAULT_TYPE 1
 void Cartesian_init(uint8_t num);
 #define CARTESIAN_INIT(num) Cartesian_init(num);
 #define HAVE_TYPE_CARTESIAN true
+
+// Type 2: Delta.
 #ifdef HAVE_DELTA
 void Delta_init(uint8_t num);
 #define DELTA_INIT(num) Delta_init(num);
@@ -254,12 +273,16 @@ void Delta_init(uint8_t num);
 #define HAVE_TYPE_DELTA false
 #endif
 
+#define NUM_SPACE_TYPES 3
+EXTERN bool have_type[NUM_SPACE_TYPES];
 EXTERN SpaceType space_types[NUM_SPACE_TYPES];
 #define setup_spacetypes() do { \
-	CARTESIAN_INIT(0) \
-	have_type[0] = HAVE_TYPE_CARTESIAN; \
-	DELTA_INIT(1) \
-	have_type[1] = HAVE_TYPE_DELTA; \
+	EXTRUDER_INIT(0) \
+	have_type[0] = HAVE_TYPE_EXTRUDER; \
+	CARTESIAN_INIT(1) \
+	have_type[1] = HAVE_TYPE_CARTESIAN; \
+	DELTA_INIT(2) \
+	have_type[2] = HAVE_TYPE_DELTA; \
 } while(0)
 #endif
 
@@ -280,8 +303,10 @@ struct Gpio
 	void init();
 	void free();
 	void copy(Gpio &dst);
-	static int16_t size0();
-	int16_t size() { return size0(); }
+	static int16_t memsize0();
+	static int16_t savesize0();
+	int16_t memsize() { return memsize0(); }
+	int16_t savesize() { return savesize0(); }
 };
 #endif
 
@@ -295,7 +320,7 @@ struct MoveCommand
 #define COMMAND_SIZE 127
 #define COMMAND_LEN_MASK 0x7f
 
-// Code 1 variables
+// Globals
 EXTERN char *name;
 EXTERN uint8_t namelen;
 #ifdef HAVE_SPACES
@@ -364,13 +389,15 @@ EXTERN bool moving;
 EXTERN float f0, f1, f2, fp, fq, fmain;
 EXTERN bool move_prepared;
 EXTERN bool current_move_has_cb;
-EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
-EXTERN int16_t debug_buffer_ptr;
 EXTERN uint8_t requested_temp;
 
+#if DEBUG_BUFFER_LENGTH > 0
+EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
+EXTERN int16_t debug_buffer_ptr;
 // debug.cpp
 void buffered_debug_flush();
 void buffered_debug(char const *fmt, ...);
+#endif
 
 // packet.cpp
 void packet();	// A command packet has arrived; handle it.
@@ -403,7 +430,8 @@ void write_float(int16_t &address, float data, bool eeprom);
 
 bool globals_load(int16_t &address, bool eeprom);
 void globals_save(int16_t &address, bool eeprom);
-int16_t globals_size();
+int16_t globals_memsize();
+int16_t globals_savesize();
 
 #include ARCH_INCLUDE
 

@@ -152,8 +152,12 @@ static void free(Space *s) {
 	delete reinterpret_cast <Delta_private *>(s->type_data);
 }
 
-static int16_t size(Space *s) {
-	return sizeof(float) * 4 + s->size_std();
+static int16_t memsize(Space *s) {
+	return sizeof(float) * 4 + s->memsize_std();
+}
+
+static int16_t savesize(Space *s) {
+	return sizeof(float) * 4 + s->savesize_std();
 }
 
 void Delta_init(uint8_t num) {
@@ -164,7 +168,8 @@ void Delta_init(uint8_t num) {
 	space_types[num].save = save;
 	space_types[num].init = init;
 	space_types[num].free = free;
-	space_types[num].size = size;
+	space_types[num].memsize = memsize;
+	space_types[num].savesize = savesize;
 }
 #endif
 #endif

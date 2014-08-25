@@ -7,7 +7,8 @@ var script_cbs;
 var multiples;
 var temptargets;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
-var space_types = ['Cartesian', 'Delta'];
+var space_types = ['Extruder', 'Cartesian', 'Delta'];
+var hidetypes = [];
 // }}}
 
 // General supporting functions. {{{
@@ -447,13 +448,27 @@ function update_globals() { // {{{
 	e.ClearAll();
 	var stat = get_value(printer, [null, 'status']);
 	e.AddText(stat === null ? 'Idle' : stat ? 'Printing' : 'Paused');
-	// TODO: titles.
 	var t = multiples[port]['space'];
+	var showing = [], hiding = [];
 	for (var s = 0; s < t.length; ++s) {
 		while (t[s][1].length > printer.num_spaces) {
-			// TODO: Remove axes and motors.
-			multiples[port]['axis'].pop();
-			multiples[port]['motor'].pop();
+			// Remove axes and motors.
+			var a = multiples[port]['axis'].pop();
+			for (var as = 0; as < a.length; ++as) {
+				while (a[as][1].length > 0) {
+					var n = a[as][1].pop();
+					for (var i = 0; i < n.length; ++i)
+						a[as][0].removeChild(n[i]);
+				}
+			}
+			var m = multiples[port]['motor'].pop();
+			for (var ms = 0; ms < m.length; ++ms) {
+				while (m[ms][1].length > 0) {
+					var n = m[ms][1].pop();
+					for (var i = 0; i < n.length; ++i)
+						m[ms][0].removeChild(n[i]);
+				}
+			}
 			var n = t[s][1].pop();
 			for (var i = 0; i < n.length; ++i)
 				t[s][0].removeChild(n[i]);
@@ -472,6 +487,10 @@ function update_globals() { // {{{
 			else
 				t[s][2].AddClass('hidden');
 		}
+		if (printer.num_spaces > 0)
+			showing.push(t[s][0]);
+		else
+			hiding.push(t[s][0]);
 	}
 	t = multiples[port]['temp'];
 	for (var s = 0; s < t.length; ++s) {
@@ -492,6 +511,10 @@ function update_globals() { // {{{
 			else
 				t[s][2].AddClass('hidden');
 		}
+		if (printer.num_temps > 0)
+			showing.push(t[s][0]);
+		else
+			hiding.push(t[s][0]);
 	}
 	t = multiples[port]['gpio'];
 	for (var s = 0; s < t.length; ++s) {
@@ -512,7 +535,16 @@ function update_globals() { // {{{
 			else
 				t[s][2].AddClass('hidden');
 		}
+		if (printer.num_gpios > 0)
+			showing.push(t[s][0]);
+		else
+			hiding.push(t[s][0]);
 	}
+	// Update table visibility.
+	for (var h = 0; h < hiding.length; ++h)
+		hiding[h].AddClass('hidden');
+	for (var s = 0; s < showing.length; ++s)
+		showing[s].RemoveClass('hidden');
 	update_canvas_and_spans();
 } // }}}
 
@@ -583,12 +615,9 @@ function update_space(index) { // {{{
 		update_float([['motor', [index, m]], 'motor_max']);
 		update_float([['motor', [index, m]], 'limit_v']);
 		update_float([['motor', [index, m]], 'limit_a']);
+		update_float([['motor', [index, m]], 'home_order']);
 	}
-	if (printer.spaces[index].delta === null) {
-		//get_element(printer, [['space', index], 'delta']).AddClass('hidden');
-	}
-	else {
-		//get_element(printer, [['space', index], 'delta']).RemoveClass('hidden');
+	if (printer.spaces[index].delta !== null) {
 		for (var d = 0; d < 3; ++d) {
 			update_float([[['space', 'delta'], [index, d]], 'axis_min']);
 			update_float([[['space', 'delta'], [index, d]], 'axis_max']);
@@ -597,6 +626,25 @@ function update_space(index) { // {{{
 		}
 		update_float([['space', index], 'delta_angle']);
 	}
+	var showing = [], hiding = [], newhidetypes = [];
+	for (var h = 0; h < hidetypes.length; ++h) {
+		if (hidetypes[h][2].parentNode === null)
+			continue;
+		newhidetypes.push(hidetypes[h]);
+		if (printer.spaces[hidetypes[h][1]].type != hidetypes[h][0]) {
+			hidetypes[h][2].AddClass('hidden');
+			hiding.push(hidetypes[h][2].parentNode);
+		}
+		else {
+			hidetypes[h][2].RemoveClass('hidden');
+			showing.push(hidetypes[h][2].parentNode);
+		}
+	}
+	hidetypes = newhidetypes;
+	for (var h = 0; h < hiding.length; ++h)
+		hiding[h].AddClass('hidden');
+	for (var s = 0; s < showing.length; ++s)
+		showing[s].RemoveClass('hidden');
 	update_canvas_and_spans();
 } // }}}
 
@@ -635,37 +683,6 @@ function update_gpio(index) { // {{{
 // }}}
 
 // Update helpers. {{{
-function update_motor(id) { // {{{
-	update_pin([id, 'step_pin']);
-	update_pin([id, 'dir_pin']);
-	update_pin([id, 'enable_pin']);
-	update_float([id, 'steps_per_m']);
-	update_float([id, 'limit_v']);
-	update_float([id, 'max_v']);
-	update_float([id, 'limit_a']);
-	update_float([id, 'max_steps']);
-	var speed = get_value(printer, [id, 'runspeed']);
-	var minus = get_element(printer, [id, 'minus']);
-	var plus = get_element(printer, [id, 'plus']);
-	var value = get_element(printer, [id, 'value']);
-	if (isNaN(speed) || speed == 0) {
-		minus.checked = false;
-		plus.checked = false;
-	}
-	else {
-		if (speed < 0) {
-			minus.checked = true;
-			plus.checked = false;
-		}
-		else {
-			minus.checked = false;
-			plus.checked = true;
-		}
-		value.value = String(Math.abs(speed) * 1000.);
-	}
-	//update_float([id, 'sleeping']);
-} // }}}
-
 function update_range(id) { // {{{
 	get_element(printer, id).selectedIndex = get_value(printer, id);
 } // }}}
@@ -916,9 +933,9 @@ function make_table() { // {{{
 		return t;
 	};
 	t.AddMultipleTitles = function(titles, classes, mouseovers) {
-		var tr = this.AddElement('tr');
+		this.titles = this.AddElement('tr');
 		for (var cell = 0; cell < titles.length; ++cell) {
-			var th = tr.AddElement('th', classes[cell]);
+			var th = this.titles.AddElement('th', classes[cell]);
 			th.AddText(titles[cell]);
 			if (mouseovers && mouseovers[cell])
 				th.title = mouseovers[cell];
@@ -928,10 +945,8 @@ function make_table() { // {{{
 	return t;
 } // }}}
 
-function make_tablerow(title, cells, classes, mainclass, id) { // {{{
+function make_tablerow(title, cells, classes, id, onlytype, index) { // {{{
 	var ret = document.createElement('tr');
-	if (mainclass)
-		ret.AddClass(mainclass);
 	if (id)
 		ret.id = make_id(printer, id);
 	ret.AddElement('th', classes[0]).AddText(title);
@@ -953,6 +968,9 @@ function make_tablerow(title, cells, classes, mainclass, id) { // {{{
 			for (var e = 0; e < cells[cell].length; ++e)
 				current_cell.Add(cells[cell][e]);
 		}
+	}
+	if (onlytype !== undefined) {
+		hidetypes.push([onlytype, index, ret]);
 	}
 	return ret;
 } // }}}
@@ -1072,7 +1090,7 @@ function redraw_canvas(x, y) { // {{{
 	var printerheight;
 	var outline;
 	switch (selected_printer.spaces[0].type) {
-	case 0:
+	case TYPE_CARTESIAN:
 		var xaxis = selected_printer.spaces[0].axis[0];
 		var yaxis = selected_printer.spaces[0].axis[1];
 		printerwidth = 2 * Math.max(xaxis.motor_max, -xaxis.motor_min) + .010;
@@ -1089,7 +1107,7 @@ function redraw_canvas(x, y) { // {{{
 			c.stroke();
 		};
 		break;
-	case 1:
+	case TYPE_DELTA:
 		var names = ['U', 'V', 'W'];
 		var radius = [];
 		var length = [];

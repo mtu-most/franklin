@@ -80,7 +80,11 @@ void Gpio::save(int16_t &addr, bool eeprom)
 #endif
 }
 
-int16_t Gpio::size0() {
+int16_t Gpio::memsize0() {
+	return sizeof(Gpio) + sizeof(Gpio *);
+}
+
+int16_t Gpio::savesize0() {
 	return 1 * 2 + 2 * 1 + sizeof(float) * 1;
 }
 

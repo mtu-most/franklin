@@ -101,7 +101,9 @@ static inline void reset() {
 }
 
 static inline void debug (char const *fmt, ...) {
+#if DEBUG_BUFFER_LENGTH > 0
 	buffered_debug_flush();
+#endif
 	va_list ap;
 	va_start (ap, fmt);
 	Serial.write (CMD_DEBUG);

@@ -50,7 +50,11 @@ void Temp::save (int16_t &addr, bool eeprom)
 	write_16 (addr, thermistor_pin.write (), eeprom);
 }
 
-int16_t Temp::size0() {
+int16_t Temp::memsize0() {
+	return sizeof(Temp) + sizeof(Temp *);
+}
+
+int16_t Temp::savesize0() {
 	return 2 * 2 + sizeof(float) * 10;
 }
 
