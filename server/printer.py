@@ -1527,7 +1527,7 @@ class Printer: # {{{
 		channel = int(channel)
 		self.temps[channel].value = temp
 		self._temp_update(channel)
-		return self._send_packet(struct.pack('<BBf', self.command['SETTEMP'], channel, temp + C0))
+		return self._send_packet(struct.pack('<BBf', self.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
 	# }}}
 	def waittemp(self, channel, min, max = None): # {{{
 		channel = int(channel)
@@ -1535,7 +1535,7 @@ class Printer: # {{{
 			min = float('nan')
 		if max is None:
 			max = float('nan')
-		return self._send_packet(struct.pack('<BBff', self.command['WAITTEMP'], channel, min + C0, max + C0))
+		return self._send_packet(struct.pack('<BBff', self.command['WAITTEMP'], channel, min + C0 if not math.isnan(self.temps[channel].beta) else min, max + C0 if not math.isnan(self.temps[channel].beta) else max))
 	# }}}
 	def readtemp(self, channel): # {{{
 		channel = int(channel)
@@ -1543,7 +1543,7 @@ class Printer: # {{{
 			return None
 		ret = self._get_reply()
 		assert ret[0] == self.rcommand['TEMP']
-		return struct.unpack('<f', ret[1:])[0] - C0
+		return struct.unpack('<f', ret[1:])[0] - (C0 if not math.isnan(self.temps[channel].beta) else 0)
 	# }}}
 	def readpower(self, channel): # {{{
 		channel = int(channel)

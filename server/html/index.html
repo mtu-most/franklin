@@ -155,7 +155,7 @@
 			</div> <!-- }}} -->
 			<div id='Extruder_space'> <!-- {{{ -->
 				[!(
-					[make_tablerow(space_name(args[1]), elements, ['rowtitle3'], undefined, 0, args[1])]
+					[make_tablerow(space_name(args[1]), elements, ['rowtitle3'], undefined, TYPE_EXTRUDER, args[1])]
 					<div>[$(Float [[['space', args[1]], 'dx'], 1])$]</div>
 					<div>[$(Float [[['space', args[1]], 'dy'], 1])$]</div>
 					<div>[$(Float [[['space', args[1]], 'dz'], 1])$]</div>
@@ -163,7 +163,7 @@
 			</div> <!-- }}} -->
 			<div id='Cartesian_space'> <!-- {{{ -->
 				[!(
-					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'], undefined, 0, args[1])]
+					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'], undefined, TYPE_CARTESIAN, args[1])]
 					<div>[$(Float [[['space', args[1]], 'num_axes'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
@@ -175,14 +175,14 @@
 			</div> <!-- }}} -->
 			<div id='Delta_space'> <!-- {{{ -->
 				[!(
-					[make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 0])), ['rowtitle4'], undefined, 1, args[1]),
-					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 1])), ['rowtitle4'], undefined, 1, args[1]),
-					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 2])), ['rowtitle4'], undefined, 1, args[1])]
+					[make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 0])), ['rowtitle4'], undefined, TYPE_DELTA, args[1]),
+					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 1])), ['rowtitle4'], undefined, TYPE_DELTA, args[1]),
+					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 2])), ['rowtitle4'], undefined, TYPE_DELTA, args[1])]
 				)!]
 			</div> <!-- }}} -->
 			<div id='Deltaangle_space'> <!-- {{{ -->
 				[!(
-					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'], undefined, 1, args[1])]
+					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'], undefined, TYPE_DELTA, args[1])]
 					<div>[$(Float [[['space', args[1]], 'delta_angle'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->

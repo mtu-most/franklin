@@ -177,7 +177,7 @@ function _setup_updater() {
 			trigger_update(port, 'variables_update');
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
-					'type': 0,
+					'type': TYPE_CARTESIAN,
 					'max_deviation': 0,
 					'num_axes': 0,
 					'num_motors': 0,
