@@ -1238,13 +1238,12 @@ class Printer: # {{{
 				elif i in self.sense[self.home_space]:
 					# Correct for possible extra steps that were done because pausing happened later than hitting the sensor.
 					self.spaces[self.home_space].set_current_pos(i, m['home_pos'] + self.sense[self.home_space][i][-1][1] - self.spaces[self.home_space].get_current_pos(i))
-			if self.home_orig_type == 1:
+			if self.home_orig_type == TYPE_DELTA:
 				# Goto center.  Since this is only for deltas, assume that switches are not at minimum travel.
 				target = float('nan')
-				for a in range(3):
-					# Use not to handle nan correctly.
-					if not (self.spaces[self.home_space].motor[a]['home_pos'] > target):
-						target = self.spaces[self.home_space].motor[a]['home_pos']
+				for m in self.spaces[self.home_space].motor:
+					if not (m['home_pos'] > target):
+						target = m['home_pos']
 				if not math.isnan(target):
 					self.home_cb[0] = False
 					self.movecb.append(self.home_cb)
@@ -1262,14 +1261,14 @@ class Printer: # {{{
 		if self.home_phase == 6:
 			self.set_space(self.home_space, type = self.home_orig_type)
 			# Same target computation as above.
-			if self.home_orig_type == 1:
+			if self.home_orig_type == TYPE_DELTA:
 				target = float('nan')
-				for a in range(3):
-					if not (self.spaces[self.home_space].motor[a]['home_pos'] > target):
-						target = self.spaces[self.home_space].motor[a]['home_pos']
+				for m in self.spaces[self.home_space].motor:
+					if not (m['home_pos'] > target):
+						target = m['home_pos']
 				target = [target] * len(self.spaces[self.home_space].axis)
 			else:
-				target = [a['home_pos'] for a in self.spaces[self.home_space].motor]
+				target = [m['home_pos'] for m in self.spaces[self.home_space].motor]
 			for i, a in enumerate(self.spaces[self.home_space].axis):
 				self.spaces[self.home_space].set_current_pos(i, target[i])
 			if self.home_id is not None:

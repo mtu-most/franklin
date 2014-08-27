@@ -262,47 +262,45 @@ void next_move () {
 	debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 
-	float fp = 0;
 	// Use maximum deviation to find fraction where to start rounded corner.
-	float m_round;
-	float norma2 = 0, normb2 = 0, inner = 0;
-	for (uint8_t s = 0; s < num_spaces; ++s) {
-		Space &sp = spaces[s];
-		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			inner += sp.axis[a]->dist * sp.axis[a]->next_dist;
-			norma2 += sp.axis[a]->dist * sp.axis[a]->dist;
-			normb2 += sp.axis[a]->next_dist * sp.axis[a]->next_dist;
-		}
-		float norma(sqrt(norma2));
-		float normb(sqrt(normb2));
-		if (norma <= 0 || normb <= 0) {
-			// At least one of the segments is 0; no rounded corner.
-			m_round = 0;
-		}
-		else {
-			float summed2 = 0;
-			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				float sum = sp.axis[a]->dist / norma + sp.axis[a]->next_dist / normb;
-				summed2 += sum * sum;
+	float factor = vq / vp;
+	if (vq == 0) {
+		fp = 0;
+		fq = 0;
+	}
+	else {
+		fp = factor > 1 ? .5 / factor : .5;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = spaces[s];
+			if (sp.num_axes < 2)
+				continue;
+			if (sp.max_deviation == 0) {
+				fp = 0;
+				break;
 			}
-			float scale(sqrt(summed2) / 2);
-			m_round = sp.max_deviation / scale;
+			float norma2 = 0, normb2 = 0, diff2 = 0;
+			for (uint8_t a = 0; a < sp.num_axes; ++a) {
+				float nd = sp.axis[a]->next_dist * factor;
+				norma2 += sp.axis[a]->dist * sp.axis[a]->dist;
+				normb2 += nd * nd;
+				float d = sp.axis[a]->dist - sp.axis[a]->next_dist;
+				diff2 += d * d;
+			}
+			// Calculate distances and ignore spaces which don't have two segments.
+			float normb(sqrt(normb2));
+			if (normb <= 0)
+				continue;
+			float norma(sqrt(norma2));
+			if (norma <= 0)
+				continue;
+			float new_fp = sp.max_deviation / sqrt(normb / (norma + normb) * diff2);
+#ifdef DEBUG_MOVE
+			debug ("Space %d fp %f dev %f", s, F(fp), F(sp.max_deviation));
+#endif
+			if (new_fp < fp)
+				fp = new_fp;
 		}
-		// Convert m to fraction for both p and q.
-		float new_fp = norma > 0 ? m_round / norma : 0;
-		float new_fq = normb > 0 ? m_round / normb : 0;
-		if (new_fp > .5) {
-			new_fq *= .5 / new_fp;
-			new_fp = .5;
-		}
-		if (new_fq > .5) {
-			new_fp *= .5 / new_fq;
-			new_fq = .5;
-		}
-		if (new_fp < fp)
-			fp = new_fp;
-		if (new_fq < fq)
-			fq = new_fq;
+		fq = fp * factor;
 	}
 	// Set up t0, tp.
 	t0 = (1 - fp) / (abs(v0 + vp) / 2);
@@ -337,7 +335,7 @@ void next_move () {
 #endif
 	//debug("moving->true");
 	moving = true;
-	start_time = micros ();
+	start_time = micros () - long(f0 / abs(vp) * 1e6);
 	// }}}
 #endif
 }

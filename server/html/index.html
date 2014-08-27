@@ -150,7 +150,7 @@
 					[make_tablerow(space_name(args[1]), [[elements[0].obj, elements[0], elements[1]], elements[2]], ['rowtitle1'])]
 					<button type='button' onclick="set_value(this.printer, [['space', this.index], 'type'], this.obj.selectedIndex)">Set</button>
 					<span></span>
-					<div>Max Deviation: [$(Float [[['space', args[1]], 'max_deviation'], .001])$]</div>
+					<div>Max Deviation: [$(Float [[['space', args[1]], 'max_deviation'], .000001])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Extruder_space'> <!-- {{{ -->
