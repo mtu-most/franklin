@@ -486,6 +486,7 @@ class Printer: # {{{
 						call_queue.extend([(x[1], [True]) for x in self.movecb])
 						self.movecb = []
 						if self.flushing and self.queue_pos >= len(self.queue):
+							#log('done flushing')
 							self.flushing = 'done'
 							call_queue.append((self._do_gcode, []))
 					else:
@@ -1050,6 +1051,7 @@ class Printer: # {{{
 					for j, axis in enumerate(axes[i]):
 						if not math.isnan(axis):
 							a[a0 + j] = axis
+							#log('current pos: %f' % self.spaces[i].get_current_pos(j))
 				else:
 					for j, axis in tuple(axes[i].items()):
 						assert int(j) <= len(sp.axis)

@@ -1,6 +1,6 @@
 #include "firmware.h"
 
-#if 1
+#if 0
 #define loaddebug debug
 #else
 #define loaddebug(...) do {} while(0)

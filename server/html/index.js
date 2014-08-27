@@ -1045,7 +1045,7 @@ function set_reference(x, y, ctrl) { // {{{
 				var dx = Math.cos(selected_printer.local_angle) * (x - selected_printer.reference[0]) - Math.sin(selected_printer.local_angle) * (y - selected_printer.reference[1]);
 				var dy = Math.cos(selected_printer.local_angle) * (y - selected_printer.reference[1]) + Math.sin(selected_printer.local_angle) * (x - selected_printer.reference[0]);
 				selected_printer.reference = [x, y];
-				selected_printer.call('goto', [[current_x + dx, current_y + dy]], {'cb': true}, function() {
+				selected_printer.call('goto', [[[current_x + dx, current_y + dy]]], {'cb': true}, function() {
 					selected_printer.call('wait_for_cb', [], {}, function() {
 						update_canvas_and_spans(false);
 					});
