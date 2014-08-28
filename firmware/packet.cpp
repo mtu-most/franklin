@@ -146,14 +146,14 @@ void packet()
 		debug("CMD_SLEEP");
 #endif
 		last_active = millis();
-		if (moving)
-		{
-			debug("Sleeping while moving");
-			Serial.write(CMD_STALL);
-			return;
-		}
 		if (command[2]) {
 			//debug("sleeping");
+			if (moving)
+			{
+				debug("Sleeping while moving");
+				Serial.write(CMD_STALL);
+				return;
+			}
 			for (uint8_t t = 0; t < num_spaces; ++t) {
 				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
 					RESET(spaces[t].motor[m]->enable_pin);

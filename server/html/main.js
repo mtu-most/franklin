@@ -61,7 +61,7 @@ function make_id(printer, id, extra) { // {{{
 	// [null, 'num_spaces']
 	// [['space', 1], 'num_axes']
 	// [['axis', [0, 1]], 'offset']
-	// [[['space', 'delta'], [0, 1]], 'radius']
+	// [['motor', [0, 1]], 'delta_radius']
 	var ret = printer ? printer.port.replace(/[^a-zA-Z0-9_]/g, '') : '';
 	if (id[0] !== null) {
 		if (typeof id[0][0] == 'string')
@@ -100,21 +100,32 @@ function set_value(printer, id, value, reply, arg) { // {{{
 			}
 			if (typeof id[0][1] != 'number' && id[0][1][1] == null) {
 				// [['axis', [0, null]], 'offset']
-				for (var n = 0; n < printer.spaces[id[0][1][0]]['num_' + type2plural[id[0][0]]]; ++n)
-					printer.call('set_' + id[0][0], [[id[0][1][0], n]], obj, reply);
+				// [['motor', [0, null]], 'delta_radius']
+				if (id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') {
+					for (var n = 0; n < printer.spaces[id[0][1][0]]['num_' + type2plural[id[0][0]]]; ++n)
+						printer.call('set_' + id[0][0], [[id[0][1][0], n]], obj, reply);
+				}
+				else {
+					obj = {};	// obj was wrong in this case.
+					obj[id[1].substr(6)] = value;
+					var o = {};
+					for (var n = 0; n < printer.spaces[id[0][1][0]].num_motors; ++n)
+						o[n] = obj;
+					printer.call('set_space', [id[0][1][0]], {delta: o}, reply);
+				}
 			}
-			else if (typeof id[0][0] == 'string') {
+			else if (id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') {
 				// [['space', 1], 'num_axes']
 				// [['axis', [0, 1]], 'offset']
 				printer.call('set_' + id[0][0], [id[0][1]], obj, reply);
 			}
 			else {
-				// [[['space', 'delta'], [0, 1]], 'radius']
+				// [['motor', [0, 1]], 'delta_radius']
+				obj = {};	// obj was wrong in this case.
+				obj[id[1].substr(6)] = value;
 				var o = {};
 				o[id[0][1][1]] = obj;
-				obj = {};
-				obj[id[0][0][1]] = o;
-				printer.call('set_' + id[0][0][0], [id[0][1][0]], obj, reply);
+				printer.call('set_space', [id[0][1][0]], {delta: o}, reply);
 			}
 		}
 	}
@@ -138,18 +149,15 @@ function set_value(printer, id, value, reply, arg) { // {{{
 function get_value(printer, id) { // {{{
 	if (id[0] === null)
 		return printer[id[1]];
-	if (typeof id[0][0] == 'string') {
-		if (id[0][0] == 'axis') {
-			return printer.spaces[id[0][1][0]].axis[id[0][1][1]][id[1]];
-		}
-		else if (id[0][0] == 'motor') {
-			return printer.spaces[id[0][1][0]].motor[id[0][1][1]][id[1]];
-		}
-		else {
-			return printer[type2plural[id[0][0]]][id[0][1]][id[1]];
-		}
+	if (id[0][0] == 'axis') {
+		return printer.spaces[id[0][1][0]].axis[id[0][1][1]][id[1]];
 	}
-	return printer.spaces[id[0][1][0]].delta[id[0][1][1]][id[1]];
+	else if (id[0][0] == 'motor') {
+		return printer.spaces[id[0][1][0]].motor[id[0][1][1]][id[1]];
+	}
+	else {
+		return printer[type2plural[id[0][0]]][id[0][1]][id[1]];
+	}
 } // }}}
 
 function get_element(printer, id, extra) { // {{{
@@ -213,6 +221,51 @@ function update_temps(printer, t) { // {{{
 			temptargets[t].AddText(value.toFixed(1));
 		});
 	}
+}
+// }}}
+
+function floatkey(event, element) { // {{{
+	if (element.obj.length != 2)
+		return;
+	var amount;
+	if (event.keyCode == 33) { // Page Up
+		amount = 10;
+	}
+	else if (event.keyCode == 34) { // Page Down
+		amount = -10;
+	}
+	else if (event.keyCode == 38) { // Up
+		amount = 1;
+	}
+	else if (event.keyCode == 40) { // Down
+		amount = -1;
+	}
+	else
+		return;
+	event.preventDefault();
+	if (event.shiftKey)
+		amount /= 10;
+	if (element.obj[0] !== null && element.obj[0][1] === null) {
+		for (var n = 0; n < element.printer['num_' + type2plural[element.obj[0][0]]]; ++n) {
+			var obj = [[element.obj[0][0], n], element.obj[1]];
+			var value = get_value(element.printer, obj) / element.factor + amount;
+			element.value = value.toFixed(1);
+			set_value(element.printer, obj, element.factor * value);
+		}
+		return;
+	}
+	if (element.obj[0] !== null && typeof element.obj[0][1] != 'number' && element.obj[0][1][1] === null) {
+		for (var n = 0; n < element.printer.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][0]]]; ++n) {
+			var obj = [[element.obj[0][0], [element.obj[0][1][0], n]], element.obj[1]];
+			var value = get_value(element.printer, obj) / element.factor + amount;
+			element.value = value.toFixed(1);
+			set_value(element.printer, obj, element.factor * value);
+		}
+		return;
+	}
+	var value = get_value(element.printer, element.obj) / element.factor + amount;
+	element.value = value.toFixed(1);
+	set_value(element.printer, element.obj, element.factor * value);
 }
 // }}}
 // }}}
@@ -289,13 +342,8 @@ function queue_print(printer) { // {{{
 			var action = function(a) {
 				printer.call(a, [get_queue(), [x - (r[0] * cosa - r[1] * sina), y - (r[1] * cosa + r[0] * sina)], angle * 180 / Math.PI], {});
 			};
-			if (get_element(printer, [null, 'probebox']).checked) {
-				printer.call('request_confirmation', ['Prepare for milling'], {}, function(success) {
-					if (!success)
-						return;
-					action('queue_probe');
-				});
-			}
+			if (get_element(printer, [null, 'probebox']).checked)
+				action('queue_probe');
 			else
 				action('queue_print');
 		});
@@ -617,12 +665,12 @@ function update_space(index) { // {{{
 		update_float([['motor', [index, m]], 'limit_a']);
 		update_float([['motor', [index, m]], 'home_order']);
 	}
-	if (printer.spaces[index].delta !== null) {
+	if (printer.spaces[index].type == TYPE_DELTA) {
 		for (var d = 0; d < 3; ++d) {
-			update_float([[['space', 'delta'], [index, d]], 'axis_min']);
-			update_float([[['space', 'delta'], [index, d]], 'axis_max']);
-			update_float([[['space', 'delta'], [index, d]], 'rodlength']);
-			update_float([[['space', 'delta'], [index, d]], 'radius']);
+			update_float([['motor', [index, d]], 'delta_axis_min']);
+			update_float([['motor', [index, d]], 'delta_axis_max']);
+			update_float([['motor', [index, d]], 'delta_rodlength']);
+			update_float([['motor', [index, d]], 'delta_radius']);
 		}
 		update_float([['space', index], 'delta_angle']);
 	}
@@ -1112,8 +1160,8 @@ function redraw_canvas(x, y) { // {{{
 		var radius = [];
 		var length = [];
 		for (var a = 0; a < 3; ++a) {
-			radius.push(selected_printer.spaces[0].delta[a].radius);
-			length.push(selected_printer.spaces[0].delta[a].rodlength);
+			radius.push(selected_printer.spaces[0].motor[a].delta_radius);
+			length.push(selected_printer.spaces[0].motor[a].delta_rodlength);
 		}
 		//var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
 		//var dx = [0, -.8660254037844387, .8660254037844387];

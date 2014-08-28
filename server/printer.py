@@ -335,7 +335,7 @@ class Printer: # {{{
 		while '\n' in self.command_buffer:
 			pos = self.command_buffer.index('\n')
 			id, func, a, ka = json.loads(self.command_buffer[:pos])
-			#log('command: %s (rest %s)' % (repr((id, func, a, ka)), repr(self.command_buffer[pos:])))
+			#log('command: %s' % repr((id, func, a, ka)))
 			self.command_buffer = self.command_buffer[pos + 1:]
 			try:
 				ret = getattr(self, func)(*a, **ka)
@@ -777,7 +777,7 @@ class Printer: # {{{
 	def _use_probemap(self, x, y, z): # {{{
 		'''Return corrected z according to self.gcode_probemap.'''
 		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
-		if self.gcode_probemap is None:
+		if self.gcode_probemap is None or any(math.isnan(t) for t in (x, y, z)):
 			return z
 		p = self.gcode_probemap
 		x -= p[0][0]
@@ -840,10 +840,16 @@ class Printer: # {{{
 				if self._use_probemap and self.gcode_probemap:
 					if args['x'] is not None:
 						source = cosa * args['x'] - sina * args['y'] + self.gcode_ref[0], cosa * args['y'] + sina * args['x'] + self.gcode_ref[1]
-						num = int(max([abs(target[t] - source[t]) / (abs(self.gcode_probemap[0][t + 2] - self.gcode_probemap[0][t]) / self.gcode_probemap[1][t]) for t in range(2)]))
-						for t in range(num):
-							targetpart = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
-							self.goto([[targetpart[0], targetpart[1], self._use_probemap(targetpart[0], targetpart[1], args['Z'])], [args['E']]], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
+						#log('gcode %s' % repr([(target[t], source[t], self.gcode_probemap[0][t + 2], self.gcode_probemap[0][t], self.gcode_probemap[1][t]) for t in range(2)]))
+						nums = [abs(target[t] - source[t]) / (abs(self.gcode_probemap[0][t + 2] - self.gcode_probemap[0][t]) / self.gcode_probemap[1][t]) for t in range(2) if not math.isnan(target[t]) and self.gcode_probemap[0][t] != self.gcode_probemap[0][t + 2]]
+						#log('num %s' % nums)
+						if len(nums) == 0 or all(math.isnan(num) for num in nums):
+							self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
+						else:
+							num = int(max(n for n in nums if not math.isnan(n))) + 1
+							for t in range(num):
+								targetpart = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
+								self.goto([[targetpart[0], targetpart[1], self._use_probemap(targetpart[0], targetpart[1], args['Z'])], [args['E']]], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
 					else:
 						self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
 				else:
@@ -881,14 +887,17 @@ class Printer: # {{{
 					return
 				elif cmd[0] == 'M' and cmd[1] in (3, 4):
 					# Start spindle; we don't support speed or direction, so M3 and M4 are equal.
-					self.set_gpio(1, state = 1)
+					if len(self.gpios) > 1:
+						self.set_gpio(1, state = 1)
 				elif cmd == ('M', 5):
 					# Stop spindle.
-					self.set_gpio(1, state = 0)
+					if len(self.gpios) > 1:
+						self.set_gpio(1, state = 0)
 				elif cmd == ('M', 42):
-					g = args['P']
-					value = args['S']
-					self.set_gpio(int(g), state = int(value))
+					g = int(args['P'])
+					if len(self.gpios) > g:
+						value = args['S']
+						self.set_gpio(int(g), state = int(value))
 				elif cmd == ('M', 84):
 					# Don't allow g-code to disable motors.
 					#self.sleep()
@@ -898,9 +907,11 @@ class Printer: # {{{
 				elif cmd == ('M', 104):
 					self.settemp(1 + args['E'], args['S'])
 				elif cmd == ('M', 106):	# Fan on
-					self.set_gpio(0, state = 1)
+					if len(self.gpios) > 0:
+						self.set_gpio(0, state = 1)
 				elif cmd == ('M', 107): # Fan off
-					self.set_gpio(0, state = 0)
+					if len(self.gpios) > 0:
+						self.set_gpio(0, state = 0)
 				elif cmd == ('M', 109):
 					e = args['E']
 					if 'S' in args:
@@ -953,14 +964,15 @@ class Printer: # {{{
 			self.flush()[1](None)
 			self.flushing = True
 			return
-		for e in range(len(self.spaces[1].axis)):
-			self.set_axis_pos(1, e, 0)
+		if len(self.spaces) > 1:
+			for e in range(len(self.spaces[1].axis)):
+				self.set_axis_pos(1, e, 0)
 		self._print_done(True, 'completed')
 	# }}}
 	def _print_done(self, complete, reason): # {{{
-		#log('print done')
+		log('abort: %d %s' % (complete, reason))
 		self.gcode = None
-		#traceback.print_stack()
+		traceback.print_stack()
 		if self.queue_info is None and self.gcode_id is not None:
 			log('Print done (%d): %s' % (complete, reason))
 			self._send(self.gcode_id, 'return', (complete, reason))
@@ -1333,6 +1345,11 @@ class Printer: # {{{
 		if self.job_current >= len(self.jobs_active):
 			self._print_done(True, 'Queue finished')
 			return
+		if len(self.jobs_active) > 1:
+			def cb():
+				log(repr(self.jobs_active))
+				self.request_confirmation("Prepare for job '%s'." % self.jobs_active[self.job_current])[1](False)
+			self.park(cb = cb, abort = False)[1](None)
 		self.gcode_run(self.jobqueue[self.jobs_active[self.job_current]][0][:], self.jobs_ref, self.jobs_angle, self.jobs_probemap, abort = False)[1](None)
 	# }}}
 	def _audio_play(self): # {{{
@@ -1500,6 +1517,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def probe(self, id, area, angle = 0, speed = .003): # {{{
+		log('area:%s' % repr(area))
 		if not self.pin_valid(self.probe_pin) or len(self.spaces) < 1 or len(self.spaces[0].axis) < 3:
 			if id is not None:
 				self._send(id, 'return', None)
@@ -1507,6 +1525,7 @@ class Printer: # {{{
 		density = [int(abs(area[t + 2] - area[t]) / self.probe_dist) + 1 for t in range(2)]
 		self.jobs_probemap = [area, density, [[None for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
 		self.gcode_angle = math.sin(angle), math.cos(angle)
+		#log(repr(self.jobs_probemap))
 		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
 	# }}}
 	@delayed
@@ -1952,8 +1971,9 @@ class Printer: # {{{
 			ret(False, 'nothing to run')
 			return
 		self.sleep(False)
-		for e in range(len(self.spaces[1].axis)):
-			self.set_axis_pos(1, e, 0)
+		if len(self.spaces) > 1:
+			for e in range(len(self.spaces[1].axis)):
+				self.set_axis_pos(1, e, 0)
 		self._broadcast(None, 'printing', True)
 		self._do_gcode()
 	# }}}
@@ -2214,10 +2234,10 @@ class Printer: # {{{
 			bb = self.jobqueue[n][1]
 			if not bbox[0] < bb[0][0]:
 				bbox[0] = bb[0][0]
-			if not bbox[1] < bb[0][1]:
-				bbox[1] = bb[0][1]
-			if not bbox[2] > bb[1][0]:
-				bbox[2] = bb[1][0]
+			if not bbox[1] < bb[1][0]:
+				bbox[1] = bb[1][0]
+			if not bbox[2] > bb[0][1]:
+				bbox[2] = bb[0][1]
 			if not bbox[3] > bb[1][1]:
 				bbox[3] = bb[1][1]
 		self.probe((bbox[0] + ref[0], bbox[1] + ref[1], bbox[2] + ref[0], bbox[3] + ref[1]), angle, speed)[1](None)

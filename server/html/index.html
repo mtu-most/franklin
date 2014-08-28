@@ -6,9 +6,9 @@
 		<title>MOST RepRap printer interface</title>
 		<script type='application/javascript' src='rpc.js'></script>
 		<script type='application/javascript' src='server.js'></script>
-		<script type='application/javascript' src='index.js'></script>
+		<script type='application/javascript' src='main.js'></script>
 		<style type='text/css'></style>
-		<link rel='stylesheet' href='index.css'/>
+		<link rel='stylesheet' href='main.css'/>
 	</head> <!-- }}} -->
 	<body onload='init()' id='container' class='nosetup'>
 		<div id='templates'> <!-- {{{ -->
@@ -90,13 +90,15 @@
 				elements[1].factor = elements[0].factor,
 				elements[2].factor = elements[0].factor,
 				elements[1].source = elements[0].id,
+				elements[0].obj = args[0],
 				elements[1].obj = args[0],
+				elements[0].printer = printer,
 				elements[1].printer = printer,
 				args[2] ? elements[0].AddClass(args[2]) : 0,
 				args[2] ? elements[1].AddClass(args[2]) : 0,
 				args[2] ? elements[2].AddClass(args[2]) : 0,
 				stack
-				<input type='text'/>
+				<input type='text' onkeydown='floatkey(event, this)'/>
 				<button class='button' type='button' onclick='set_value(this.printer, this.obj, this.factor * Number(document.getElementById(this.source).value))'>Set</button>
 				<span></span>
 				)!]
@@ -167,19 +169,16 @@
 					<div>[$(Float [[['space', args[1]], 'num_axes'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
-			<div id='Delta_content'> <!-- {{{ -->
-				<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'axis_min'], 0.001])$]</div>
-				<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'axis_max'], 0.001])$]</div>
-				<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'rodlength'], 0.001])$]</div>
-				<div>[$(Float [[[['space', 'delta'], [args[0], args[1]]], 'radius'], 0.001])$]</div>
-			</div> <!-- }}} -->
-			<div id='Delta_space'> <!-- {{{ -->
+			<div id='Delta_motor'> <!-- {{{ -->
 				[!(
-					[make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 0])), ['rowtitle4'], undefined, TYPE_DELTA, args[1]),
-					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 1])), ['rowtitle4'], undefined, TYPE_DELTA, args[1]),
-					make_tablerow(delta_name(args[1], 0), get_elements(build('Delta_content', [args[1], 2])), ['rowtitle4'], undefined, TYPE_DELTA, args[1])]
+					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle4'], undefined, TYPE_DELTA, args[1])]
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'delta_axis_min'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'delta_axis_max'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'delta_rodlength'], 0.001])$]</div>
+					<div>[$(Float [[['motor', [args[1], args[2]]], 'delta_radius'], 0.001])$]</div>
 				)!]
 			</div> <!-- }}} -->
+			<div id='Delta_space'> [!( args[0].AddMultiple('motor', 'Delta_motor', true, args[1]), '')!] </div>
 			<div id='Deltaangle_space'> <!-- {{{ -->
 				[!(
 					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'], undefined, TYPE_DELTA, args[1])]

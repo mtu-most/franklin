@@ -258,16 +258,13 @@ function _setup_updater() {
 			else
 				printers[port].spaces[index].extruder = null;
 			if (printers[port].spaces[index].type == TYPE_DELTA) {
-				printers[port].spaces[index].delta = [];
 				for (var i = 0; i < 3; ++i) {
-					printers[port].spaces[index].delta.push({
-						'axis_min': values[4][i][0],
-						'axis_max': values[4][i][1],
-						'rodlength': values[4][i][2],
-						'radius': values[4][i][3]
-					});
-					printers[port].spaces[index].delta_angle = values[4][3];
+					printers[port].spaces[index].motor[i].delta_axis_min = values[4][i][0];
+					printers[port].spaces[index].motor[i].delta_axis_max = values[4][i][1];
+					printers[port].spaces[index].motor[i].delta_rodlength = values[4][i][2];
+					printers[port].spaces[index].motor[i].delta_radius = values[4][i][3];
 				}
+				printers[port].spaces[index].delta_angle = values[4][3];
 			}
 			else
 				printers[port].spaces[index].delta = null;
