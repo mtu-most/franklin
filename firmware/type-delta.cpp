@@ -96,7 +96,7 @@ static void check_position(Space *s, float *data) {
 	}
 }
 
-static void load(Space *s, int16_t &addr, bool eeprom) {
+static void load(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
 	if (!s->setup_nums(3, 3)) {
 		debug("Failed to set up delta axes");
 		return;

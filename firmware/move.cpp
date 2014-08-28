@@ -10,7 +10,6 @@
 // mtr->dist		total distance of this segment (mm).
 // mtr->next_dist		total distance of next segment (mm).
 // mtr->main_dist		distance of main part (mm).
-// mtr->distance_done	(extruder only): steps of this segment that have been done in preparation.
 // v0, vp		start and end velocity for main part. (fraction/s)
 // vq			end velocity of connector part. (fraction/s)
 
@@ -256,7 +255,7 @@ void next_move () {
 #endif
 	// }}}
 	// Already set up: f0, v0, vp, vq, mtr->dist, mtr->next_dist.
-	// To do: start_time, t0, tp, fmain, fp, fq, mtr->main_dist, mtr->distance_done
+	// To do: start_time, t0, tp, fmain, fp, fq, mtr->main_dist
 #ifdef DEBUG_MOVE
 	debug ("Preparation did f0 = %f", F(f0));
 	debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));

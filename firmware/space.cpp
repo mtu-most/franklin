@@ -8,6 +8,8 @@
 
 #ifdef HAVE_SPACES
 bool Space::setup_nums(uint8_t na, uint8_t nm) {
+	if (na == num_axes && nm == num_motors)
+		return true;
 	loaddebug("new space %d %d %d %d", na, nm, num_axes, num_motors);
 	int16_t memsz = namelen + 1;
 	int16_t savesz = namelen + 1;
@@ -49,52 +51,79 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 		num_axes = old_na;
 		return false;
 	}
-	Axis **new_axes = new Axis *[na];
-	loaddebug("new axes: %d %d %x", na, new_axes);
-	for (uint8_t a = 0; a < min(old_na, na); ++a)
-		new_axes[a] = axis[a];
-	for (uint8_t a = old_na; a < na; ++a) {
-		new_axes[a] = new Axis();
-		loaddebug("new axis %x", new_axes[a]);
-		new_axes[a]->source = NAN;
-		new_axes[a]->current = NAN;
-		new_axes[a]->dist = NAN;
-		new_axes[a]->next_dist = NAN;
-		new_axes[a]->main_dist = NAN;
+	if (na != old_na) {
+		Axis **new_axes = new Axis *[na];
+		loaddebug("new axes: %d %d %x", na, new_axes);
+		for (uint8_t a = 0; a < min(old_na, na); ++a)
+			new_axes[a] = axis[a];
+		for (uint8_t a = old_na; a < na; ++a) {
+			new_axes[a] = new Axis();
+			loaddebug("new axis %x", new_axes[a]);
+			new_axes[a]->source = NAN;
+			new_axes[a]->current = NAN;
+			new_axes[a]->dist = NAN;
+			new_axes[a]->next_dist = NAN;
+			new_axes[a]->main_dist = NAN;
+		}
+		for (uint8_t a = na; a < old_na; ++a)
+			delete axis[a];
+		delete[] axis;
+		axis = new_axes;
 	}
-	for (uint8_t a = na; a < old_na; ++a)
-		delete axis[a];
-	delete[] axis;
-	axis = new_axes;
-	Motor **new_motors = new Motor *[nm];
-	loaddebug("new motors: %d %x", nm, new_motors);
-	for (uint8_t m = 0; m < min(old_nm, nm); ++m)
-		new_motors[m] = motor[m];
-	for (uint8_t m = old_nm; m < nm; ++m) {
-		new_motors[m] = new Motor();
-		loaddebug("new motor %x", new_motors[m]);
-		new_motors[m]->sense_state = 0;
-		new_motors[m]->sense_pos = NAN;
-		new_motors[m]->motor_min = -INFINITY;
-		new_motors[m]->motor_max = INFINITY;
-		new_motors[m]->limits_pos = NAN;
-		new_motors[m]->limit_v = INFINITY;
-		new_motors[m]->limit_a = INFINITY;
-		new_motors[m]->home_order = 0;
-		new_motors[m]->last_time = micros();
-		new_motors[m]->last_v = 0;
-		new_motors[m]->last_distance = 0;
-		new_motors[m]->positive = false;
-		new_motors[m]->current_pos = NAN;
+	if (nm != old_nm) {
+		Motor **new_motors = new Motor *[nm];
+		loaddebug("new motors: %d %x", nm, new_motors);
+		for (uint8_t m = 0; m < min(old_nm, nm); ++m)
+			new_motors[m] = motor[m];
+		for (uint8_t m = old_nm; m < nm; ++m) {
+			new_motors[m] = new Motor();
+			loaddebug("new motor %x", new_motors[m]);
+			new_motors[m]->sense_state = 0;
+			new_motors[m]->sense_pos = NAN;
+			new_motors[m]->motor_min = -INFINITY;
+			new_motors[m]->motor_max = INFINITY;
+			new_motors[m]->limits_pos = NAN;
+			new_motors[m]->limit_v = INFINITY;
+			new_motors[m]->limit_a = INFINITY;
+			new_motors[m]->home_order = 0;
+			new_motors[m]->last_time = micros();
+			new_motors[m]->last_v = 0;
+			new_motors[m]->last_distance = 0;
+			new_motors[m]->positive = false;
+			new_motors[m]->current_pos = NAN;
 #ifdef HAVE_AUDIO
-		new_motors[m]->audio_flags = 0;
+			new_motors[m]->audio_flags = 0;
 #endif
+		}
+		for (uint8_t m = nm; m < old_nm; ++m)
+			delete motor[m];
+		delete[] motor;
+		motor = new_motors;
 	}
-	for (uint8_t m = nm; m < old_nm; ++m)
-		delete motor[m];
-	delete[] motor;
-	motor = new_motors;
 	return true;
+}
+
+static void move_to_current(Space *s) {
+	if (moving || !motors_busy)
+		return;
+	s->active = true;
+	f0 = 0;
+	fmain = 1;
+	fp = 0;
+	fq = 0;
+	t0 = 0;
+	tp = 0;
+	current_move_has_cb = 0;
+	moving = true;
+	start_time = micros();
+	for (uint8_t i = 0; i < 3; ++i) {
+		s->axis[i]->dist = 0;
+		s->axis[i]->next_dist = 0;
+		s->axis[i]->main_dist = 0;
+		s->motor[i]->last_v = 0;
+		s->motor[i]->last_time = start_time;
+		s->motor[i]->last_distance = 0;
+	}
 }
 
 void Space::load_info(int16_t &addr, bool eeprom)
@@ -108,27 +137,63 @@ void Space::load_info(int16_t &addr, bool eeprom)
 		debug("request for type %d ignored", type);
 		type = t;
 	}
+	float oldpos[num_motors], xyz[num_axes];
+	bool ok;
 	if (t != type) {
 		//debug("setting type to %d", type);
 		space_types[t].free(this);
 		space_types[type].init(this);
+		ok = false;
+	}
+	else {
+		if (moving || !motors_busy)
+			ok = false;
+		else {
+			ok = true;
+			for (uint8_t i = 0; i < num_motors; ++i) {
+				if (isnan(motor[i]->current_pos))
+					ok = false;
+			}
+			if (ok) {
+				for (uint8_t i = 0; i < num_axes; ++i)
+					xyz[i] = axis[i]->current;
+				ok = true;
+				space_types[type].xyz2motors(this, xyz, oldpos, &ok);
+			}
+		}
 	}
 	max_deviation = read_float(addr, eeprom);
-	space_types[type].load(this, addr, eeprom);
+	space_types[type].load(this, t, addr, eeprom);
+	if (ok) {
+		float newpos[num_motors];
+		space_types[type].xyz2motors(this, xyz, newpos, &ok);
+		uint8_t i;
+		for (i = 0; i < num_motors; ++i) {
+			if (oldpos[i] != newpos[i]) {
+				move_to_current(this);
+				break;
+			}
+		}
+	}
 }
 
 void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
 {
 	loaddebug("loading axis %d", a);
+	float old_offset = axis[a]->offset;
 	axis[a]->offset = read_float(addr, eeprom);
 	axis[a]->park = read_float(addr, eeprom);
 	axis[a]->max_v = read_float(addr, eeprom);
+	if (axis[a]->offset != old_offset)
+		move_to_current(this);
 }
 
 void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 {
 	loaddebug("loading motor %d %x", m, motor[m]);
 	uint16_t enable = motor[m]->enable_pin.write();
+	float old_home_pos = motor[m]->home_pos;
+	float old_steps_per_m = motor[m]->steps_per_m;
 	motor[m]->step_pin.read(read_16(addr, eeprom));
 	motor[m]->dir_pin.read(read_16(addr, eeprom));
 	motor[m]->enable_pin.read(read_16(addr, eeprom));
@@ -156,6 +221,14 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 	SET_INPUT(motor[m]->limit_min_pin);
 	SET_INPUT(motor[m]->limit_max_pin);
 	SET_INPUT(motor[m]->sense_pin);
+	if (old_steps_per_m != motor[m]->steps_per_m) {
+		motor[m]->current_pos *= motor[m]->steps_per_m / old_steps_per_m;
+		// This makes sure that the new position matches the target again, so no need to move there.
+	}
+	if (old_home_pos != motor[m]->home_pos) {
+		motor[m]->current_pos += motor[m]->home_pos - old_home_pos;
+		move_to_current(this);
+	}
 }
 
 void Space::save_info(int16_t &addr, bool eeprom)

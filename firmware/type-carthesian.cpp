@@ -23,7 +23,7 @@ static void reset_pos (Space *s) {
 static void check_position(Space *s, float *data) {
 }
 
-static void load(Space *s, int16_t &addr, bool eeprom) {
+static void load(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
 	uint8_t num = read_8(addr, eeprom);
 	if (!s->setup_nums(num, num))
 		debug("Failed to set up cartesian axes");
@@ -66,7 +66,7 @@ struct ExtruderData {
 
 #define EDATA(s) (*reinterpret_cast <ExtruderData *>(s->type_data))
 
-static void eload(Space *s, int16_t &addr, bool eeprom) {
+static void eload(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
 	EDATA(s).dx = read_float(addr, eeprom);
 	EDATA(s).dy = read_float(addr, eeprom);
 	EDATA(s).dz = read_float(addr, eeprom);

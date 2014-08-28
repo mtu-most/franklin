@@ -212,7 +212,7 @@ struct SpaceType
 	void (*xyz2motors)(Space *s, float *xyz, float *motors, bool *ok);
 	void (*reset_pos)(Space *s);
 	void (*check_position)(Space *s, float *data);
-	void (*load)(Space *s, int16_t &addr, bool eeprom);
+	void (*load)(Space *s, uint8_t old_type, int16_t &addr, bool eeprom);
 	void (*save)(Space *s, int16_t &addr, bool eeprom);
 	void (*init)(Space *s);
 	void (*free)(Space *s);

@@ -183,7 +183,7 @@
 			<div id='Deltaangle_space'> <!-- {{{ -->
 				[!(
 					[make_tablerow(space_name(args[1]), elements, ['rowtitle1'], undefined, TYPE_DELTA, args[1])]
-					<div>[$(Float [[['space', args[1]], 'delta_angle'], 1])$]</div>
+					<div>[$(Float [[['space', args[1]], 'delta_angle'], Math.PI / 180])$]</div>
 				)!]
 			</div> <!-- }}} -->
 			<div id='Axis_axis'> <!-- {{{ -->
