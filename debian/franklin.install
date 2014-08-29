@@ -6,5 +6,5 @@ server/printer.py /usr/share/franklin
 server/control.py /usr/share/franklin
 server/html/server.js /usr/share/franklin/html
 server/html/index.html /usr/share/franklin/html
-server/html/index.js /usr/share/franklin/html
-server/html/index.css /usr/share/franklin/html
+server/html/main.js /usr/share/franklin/html
+server/html/main.css /usr/share/franklin/html

@@ -32,10 +32,12 @@ include Arduino.mk
 else
 ifeq (${TARGET}, mega)
 BOARD_TAG = mega
+CPPFLAGS += -DRAMSTART=0x200
 include Arduino.mk
 else
 ifeq (${TARGET}, ramps)
 BOARD_TAG = mega2560
+CPPFLAGS += -DRAMSTART=0x200
 include Arduino.mk
 #include /usr/share/arduino/Arduino.mk
 else

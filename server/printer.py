@@ -2113,7 +2113,7 @@ class Printer: # {{{
 					pos[1][current_extruder] = args['E']
 					args['e'] = current_extruder
 				elif cmd[0] == 'M' and cmd[1] in (104, 109, 116):
-					args['E'] = current_extruder
+					args['E'] = int(args['T']) if 'T' in args else current_extruder
 				if not((cmd[0] == 'G' and cmd[1] in (0, 1, 4, 28, 81, 92, 94)) or (cmd[0] == 'M' and cmd[1] in (0, 3, 4, 5, 6, 9, 42, 84, 104, 106, 107, 109, 116, 140, 190)) or (cmd[0] in ('S', 'T'))):
 					log('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
 				elif cmd == ('G', 28):
