@@ -86,6 +86,7 @@ class Server(websockets.RPChttpd): # {{{
 		return False
 	def page(self, connection):
 		if 'port' in connection.query:
+			# Export request.
 			port = connection.query['port'][0]
 			if port not in ports or not ports[port]:
 				self.reply(connection, 404)
@@ -97,6 +98,10 @@ class Server(websockets.RPChttpd): # {{{
 				return True
 		else:
 			websockets.RPChttpd.page(self, connection)
+	def post(self, connection):
+		# Add to queue (POST).
+		log('POST: %s' % repr(connection.post))
+		return False
 # }}}
 
 class Connection: # {{{

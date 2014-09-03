@@ -2,7 +2,7 @@
 # vim: set foldmethod=marker fileencoding=utf8 :
 
 show_own_debug = False
-#show_own_debug = True
+show_own_debug = True
 show_firmware_debug = True
 
 # Imports.  {{{
@@ -351,7 +351,8 @@ class Printer: # {{{
 				traceback.print_exc()
 				self._send(id, 'error', repr(sys.exc_info()))
 				continue
-			self._send(id, 'return', ret)
+			if not die:
+				self._send(id, 'return', ret)
 		if die:
 			sys.exit(0)
 	# }}}
@@ -808,15 +809,9 @@ class Printer: # {{{
 			self.flushing = False
 			flushed = True
 		while len(self.gcode) > 0:
-			if self.gcode_parking or self.gcode_waiting > 0 or self.confirmer is not None or self.gcode_wait is not None or self.flushing:
+			if self.gcode_parking or self.gcode_waiting > 0 or self.confirmer is not None or self.gcode_wait is not None or self.flushing or self.paused:
 				#log('gcode waiting: %s' % repr((self.gcode_parking, self.gcode_waiting, self.confirmer, self.gcode_wait)))
 				# Wait until done.
-				return
-			if self.paused:
-				# Resume when no longer paused.
-				#log('not running gcode: paused')
-				if self.queue_info[4] is False:
-					self.queue_info[4] = None
 				return
 			cmd, args, message = self.gcode[0]
 			cmd = tuple(cmd)
@@ -844,17 +839,22 @@ class Printer: # {{{
 						nums = [abs(target[t] - source[t]) / (abs(self.gcode_probemap[0][t + 2] - self.gcode_probemap[0][t]) / self.gcode_probemap[1][t]) for t in range(2) if not math.isnan(target[t]) and self.gcode_probemap[0][t] != self.gcode_probemap[0][t + 2]]
 						#log('num %s' % nums)
 						if len(nums) == 0 or all(math.isnan(num) for num in nums):
-							self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
+							num = 1
 						else:
 							num = int(max(n for n in nums if not math.isnan(n))) + 1
+						if num == 1:
+							log('debugpart: %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3))
+							self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
+						else:
 							for t in range(num):
 								targetpart = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
+								log('debugpart: %.2f %.2f %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, source[0] * 1e3, source[1] * 1e3, targetpart[0] * 1e3, targetpart[1] * 1e3))
 								self.goto([[targetpart[0], targetpart[1], self._use_probemap(targetpart[0], targetpart[1], args['Z'])], [args['E']]], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
 					else:
 						self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
 				else:
 					self.goto([[target[0], target[1], args['Z']], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
-				if (self.wait or len(self.queue) - self.queue_pos > self.queue_length) and self.flushing is False:
+				if self.wait and self.flushing is False:
 					#log('stop filling; wait for queue space')
 					self.flushing = None
 					self.gcode.pop(0)
@@ -1296,9 +1296,12 @@ class Printer: # {{{
 	def _do_probe(self, id, x, y, z, angle, speed, phase = 0, good = True): # {{{
 		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
 		if not good:
-			self.set_axis((0, 2), limit_min_pin = self.probe_orig_pin)
+			# This means the probe has been aborted.
+			for m in range(len(self.spaces[0].motor)):
+				self.set_motor((0, m), limit_min_pin = self.probe_orig_pin[m])
 			self.probing = False
-			self._send(id, 'error', 'aborted')
+			if id is not None:
+				self._send(id, 'error', 'aborted')
 			return
 		self.probing = True
 		p = self.jobs_probemap
@@ -1306,6 +1309,8 @@ class Printer: # {{{
 			if y > p[1][1]:
 				# Done.
 				self.probing = False
+				for m in range(len(self.spaces[0].motor)):
+					self.set_motor((0, m), limit_min_pin = self.probe_orig_pin[m])
 				if id is not None:
 					self._send(id, 'return', self.jobs_probemap)
 				else:
@@ -1322,22 +1327,22 @@ class Printer: # {{{
 			# Probe
 			self.probe_orig_pin = [m['limit_min_pin'] for m in self.spaces[0].motor]
 			for m in range(len(self.spaces[0].motor)):
-				self.set_motor((0, m), limit_min_pin = self.probe_pin)
+				self.set_motor((0, m), limit_min_pin = self.probe_pin, readback = False)
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 2, good)
 			self.movecb.append(self.probe_cb)
 			self.goto([{2: z - .1}], f0 = float(speed) / .1, cb = True)[1](None)
 		else:
 			for m in range(len(self.spaces[0].motor)):
-				self.set_motor((0, m), limit_min_pin = self.probe_orig_pin[m])
+				self.set_motor((0, m), limit_min_pin = self.probe_orig_pin[m], readback = False)
 			# Record result
 			p[2][y][x] = self.spaces[0].get_current_pos(2)
-			# Retract
 			x += 1
 			if x > p[1][0]:
 				x = 0
 				y += 1
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 0, good)
 			self.movecb.append(self.probe_cb)
+			# Retract
 			self.goto([{2: z}], cb = True)[1](None)
 	# }}}
 	def _next_job(self): # {{{
@@ -1629,7 +1634,20 @@ class Printer: # {{{
 			if not was_paused:
 				#log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
 				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - reply[1] >= 0:
+					if self.home_phase is not None:
+						#log('killing homer')
+						self.home_phase = None
+						self.set_variables(printer_type = self.home_orig_type)
+						if self.home_cb in self.movecb:
+							self.movecb.remove(self.home_cb)
+							self._send(self.home_id, 'return', None)
+					if self.probe_cb in self.movecb:
+						#log('killing prober')
+						self.movecb.remove(self.probe_cb)
+						self.probe_cb(False)
 					#log('pausing gcode %d/%d/%d' % (self.queue_pos, reply[1], len(self.queue)))
+					if self.flushing is None:
+						self.flushing = False
 					self.queue_info = [self.queue_pos - reply[1], [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing, self.gcode_wait]
 				else:
 					#log('stopping')
@@ -1962,14 +1980,15 @@ class Printer: # {{{
 		self.queue_info = None
 		self.gcode = code
 		self.gcode_id = id
-		if self.paused:
-			self.paused = False
-			self._globals_update()
 		if len(self.gcode) <= 0:
 			log('nothing to run')
 			self.gcode = None
 			ret(False, 'nothing to run')
+			self.paused = None
+			self._globals_update()
 			return
+		self.paused = False
+		self._globals_update()
 		self.sleep(False)
 		if len(self.spaces) > 1:
 			for e in range(len(self.spaces[1].axis)):

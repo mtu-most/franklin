@@ -83,7 +83,7 @@ float Temp::fromadc (int16_t adc) {
 	// T = beta/log(R/K)=-beta/log(K*Am/R0/As-K/R0-K/R1)
 	if (isnan(beta)) {
 		// beta == NAN is used for calibration: return raw value as K.
-		return adc;
+		return adc * R0 + R1;
 	}
 	//debug("K: %f adc: %d beta: %f", F(K), adc, F(beta));
 	return -beta / log(K * (1024 / R0 / adc - 1 / R0 - 1 / R1));
@@ -94,6 +94,9 @@ int16_t Temp::toadc (float T) {
 		return MAXINT;
 	if (isinf(T) && T > 0)
 		return -1;
+	if (isnan(beta)) {
+		return T - R1 / R0;
+	}
 	float Rs = K * exp (beta * 1. / T);
 	//debug("K %f Rs %f R0 %f logRc %f Tc %f beta %f", F(K), F(Rs), F(R0), F(logRc), F(Tc), F(beta));
 	return ((1 << 10) - 1) * Rs / (Rs + R0);

@@ -221,21 +221,18 @@ static bool do_steps(Space *s, uint8_t m, float distance, unsigned long current_
 		//v = distance / dt;	Not used anymore, so don't waste time on it.
 	}
 	//if (m == 2) buffered_debug("action %d old %f new %f step %d", m, F(old_pos), F(new_pos), steps);
-	// Set positive and direction pin.
-	if (mtr.positive != (steps > 0)) {
-		if (steps > 0)
-			SET(mtr.dir_pin);
-		else
-			RESET(mtr.dir_pin);
-		mtr.positive = (steps > 0);
-	}
+	// Set direction pin.
+	if (steps > 0)
+		SET(mtr.dir_pin);
+	else
+		RESET(mtr.dir_pin);
 	// Check limit switches.
 	float cp = mtr.current_pos;
-	if (mtr.positive ? GET(mtr.limit_max_pin, false) || cp + distance > mtr.motor_max : GET(mtr.limit_min_pin, false) || cp + distance < mtr.motor_min) {
+	if (steps > 0 ? GET(mtr.limit_max_pin, false) || cp + distance > mtr.motor_max : GET(mtr.limit_min_pin, false) || cp + distance < mtr.motor_min) {
 		// Hit endstop; abort current move and notify host.
-		debug("hit axis %d positive %d dist %f current_pos %f min %f max %f oldpos %f newpos %f last_v %f v %f", m, mtr.positive, F(distance), F(mtr.current_pos), F(mtr.motor_min), F(mtr.motor_max), F(old_pos), F(new_pos), F(mtr.last_v), F(v));
+		debug("hit axis %d dist %f current_pos %f min %f max %f oldpos %f newpos %f last_v %f v %f", m, F(distance), F(mtr.current_pos), F(mtr.motor_min), F(mtr.motor_max), F(old_pos), F(new_pos), F(mtr.last_v), F(v));
 		mtr.last_v = 0;
-		mtr.limits_pos = isnan(mtr.current_pos) ? INFINITY * (mtr.positive ? 1 : -1) : mtr.current_pos;
+		mtr.limits_pos = isnan(mtr.current_pos) ? INFINITY * (steps > 0 ? 1 : -1) : mtr.current_pos;
 		if (moving && current_move_has_cb) {
 			//debug("movecb 3");
 			++num_movecbs;
@@ -446,18 +443,10 @@ static void handle_audio(unsigned long current_time, unsigned long longtime) {
 				for (uint8_t m = 0; m < sp.num_motors; ++m) {
 					if (!(sp.motor[m]->audio_flags & Motor::PLAYING))
 						continue;
-					if (audio_state) {
-						if (!sp.motor[m]->positive) {
-							SET(sp.motor[m]->dir_pin);
-							sp.motor[m]->positive = true;
-						}
-					}
-					else {
-						if (sp.motor[m]->positive) {
-							RESET(sp.motor[m]->dir_pin);
-							sp.motor[m]->positive = false;
-						}
-					}
+					if (audio_state)
+						SET(sp.motor[m]->dir_pin);
+					else
+						RESET(sp.motor[m]->dir_pin);
 					SET(sp.motor[m]->step_pin);
 					RESET(sp.motor[m]->step_pin);
 				}

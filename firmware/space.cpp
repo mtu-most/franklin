@@ -89,7 +89,6 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_motors[m]->last_time = micros();
 			new_motors[m]->last_v = 0;
 			new_motors[m]->last_distance = 0;
-			new_motors[m]->positive = false;
 			new_motors[m]->current_pos = NAN;
 #ifdef HAVE_AUDIO
 			new_motors[m]->audio_flags = 0;
@@ -214,10 +213,6 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 	if (enable != motor[m]->enable_pin.write())
 		RESET(motor[m]->enable_pin);
 	RESET(motor[m]->step_pin);
-	if (motor[m]->positive)
-		SET(motor[m]->dir_pin);
-	else
-		RESET(motor[m]->dir_pin);
 	SET_INPUT(motor[m]->limit_min_pin);
 	SET_INPUT(motor[m]->limit_max_pin);
 	SET_INPUT(motor[m]->sense_pin);

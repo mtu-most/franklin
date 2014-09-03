@@ -194,7 +194,6 @@ struct Motor
 	uint8_t home_order;
 	unsigned long last_time;		// micros value when last iteration was run.
 	float last_v, last_distance;		// v at and distance since last time, for using limit_a [mm/s], [mm].
-	bool positive;				// direction of current movement.
 	float current_pos;	// Current position of motor (in μm).
 #ifdef HAVE_AUDIO
 	uint8_t audio_flags;
