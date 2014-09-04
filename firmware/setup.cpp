@@ -32,6 +32,7 @@ void setup()
 	led_pin.read(0);
 	probe_pin.read(0);
 	probe_dist = INFINITY;
+	probe_safe_dist = INFINITY;
 	led_phase = 0;
 	temps_busy = 0;
 	requested_temp = ~0;

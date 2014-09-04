@@ -28,6 +28,7 @@ ifeq (${TARGET}, melzi)
 BOARD_TAG = mighty_opt
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
 BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
+CPPFLAGS += -DUSE_SERIAL1
 include Arduino.mk
 else
 ifeq (${TARGET}, mega)

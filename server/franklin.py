@@ -226,9 +226,9 @@ class Connection: # {{{
 	@classmethod
 	def detect(cls, port): # {{{
 		resumeinfo = [(yield), None]
-		#log('detecting printer on %s' % port)
+		log('detecting printer on %s' % port)
 		if port not in ports or ports[port] != None:
-			#log('port is not in detectable state')
+			log('port is not in detectable state')
 			return
 		ports[port] = False
 		c = websockets.call(resumeinfo, detect, port)

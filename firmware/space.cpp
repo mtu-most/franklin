@@ -182,7 +182,10 @@ void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
 	float old_offset = axis[a]->offset;
 	axis[a]->offset = read_float(addr, eeprom);
 	axis[a]->park = read_float(addr, eeprom);
+	axis[a]->park_order = read_8(addr, eeprom);
 	axis[a]->max_v = read_float(addr, eeprom);
+	axis[a]->min = read_float(addr, eeprom);
+	axis[a]->max = read_float(addr, eeprom);
 	if (axis[a]->offset != old_offset)
 		move_to_current(this);
 }
@@ -237,7 +240,10 @@ void Space::save_info(int16_t &addr, bool eeprom)
 void Space::save_axis(uint8_t a, int16_t &addr, bool eeprom) {
 	write_float(addr, axis[a]->offset, eeprom);
 	write_float(addr, axis[a]->park, eeprom);
+	write_8(addr, axis[a]->park_order, eeprom);
 	write_float(addr, axis[a]->max_v, eeprom);
+	write_float(addr, axis[a]->min, eeprom);
+	write_float(addr, axis[a]->max, eeprom);
 }
 
 void Space::save_motor(uint8_t m, int16_t &addr, bool eeprom) {

@@ -59,6 +59,10 @@ static inline void adc_start(uint8_t adcpin) {
 }
 
 #ifdef __cplusplus
+#ifdef USE_SERIAL1
+#define Serial Serial1
+#endif
+
 static inline bool adc_ready(uint8_t pin) {
 	if (bit_is_set(ADCSRA, ADSC))
 		return false;

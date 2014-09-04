@@ -489,6 +489,7 @@ function update_globals() { // {{{
 	update_pin([null, 'led_pin']);
 	update_pin([null, 'probe_pin']);
 	update_float([null, 'probe_dist']);
+	update_float([null, 'probe_safe_dist']);
 	update_float([null, 'motor_limit']);
 	update_float([null, 'temp_limit']);
 	update_float([null, 'feedrate']);
@@ -647,7 +648,10 @@ function update_space(index) { // {{{
 	for (var a = 0; a < printer.spaces[index].num_axes; ++a) {
 		update_float([['axis', [index, a]], 'offset']);
 		update_float([['axis', [index, a]], 'park']);
+		update_float([['axis', [index, a]], 'park_order']);
 		update_float([['axis', [index, a]], 'max_v']);
+		update_float([['axis', [index, a]], 'min']);
+		update_float([['axis', [index, a]], 'max']);
 	}
 	for (var m = 0; m < printer.spaces[index].num_motors; ++m) {
 		update_pin([['motor', [index, m]], 'step_pin']);

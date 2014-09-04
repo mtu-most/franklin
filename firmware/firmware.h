@@ -170,8 +170,10 @@ struct Axis
 {
 	float offset;		// Position where axis claims to be when it is at 0.
 	float park;		// Park position; not used by the firmware, but stored for use by the host.
+	uint8_t park_order;
 	float source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
 	float max_v;
+	float min, max;
 	float dist, next_dist, main_dist;
 };
 
@@ -336,7 +338,7 @@ EXTERN uint8_t num_gpios;
 #endif
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
-EXTERN float probe_dist;
+EXTERN float probe_dist, probe_safe_dist;
 //EXTERN float room_T;	//[°C]
 EXTERN float feedrate;		// Multiplication factor for f values, used at start of move.
 // Other variables.
