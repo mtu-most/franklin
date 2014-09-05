@@ -22,24 +22,25 @@ CPPFLAGS += -DARCH_INCLUDE=\"arch-avr.h\"
 
 ifeq (${TARGET}, mini)
 BOARD_TAG = atmega328
-include Arduino.mk
 else
-ifeq (${TARGET}, melzi)
+ifeq (${TARGET}, melzi0)
+BOARD_TAG = mighty_opt
+ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
+BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
+else
+ifeq (${TARGET}, melzi1)
 BOARD_TAG = mighty_opt
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
 BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
 CPPFLAGS += -DUSE_SERIAL1
-include Arduino.mk
 else
 ifeq (${TARGET}, mega)
 BOARD_TAG = mega
 CPPFLAGS += -DRAMSTART=0x200
-include Arduino.mk
 else
 ifeq (${TARGET}, ramps)
 BOARD_TAG = mega2560
 CPPFLAGS += -DRAMSTART=0x200
-include Arduino.mk
 #include /usr/share/arduino/Arduino.mk
 else
 $(error Invalid TARGET)
@@ -47,4 +48,6 @@ endif
 endif
 endif
 endif
+endif
+include Arduino.mk
 endif

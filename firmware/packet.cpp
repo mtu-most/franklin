@@ -94,14 +94,11 @@ void packet()
 				ReadFloat f;
 				for (uint8_t i = 0; i < sizeof(float); ++i)
 					f.b[i] = command[offset + i + t * sizeof(float)];
-				if (ch < 2) {
+				if (ch < 2)
 					queue[queue_end].f[ch] = f.f;
-					//debug("goto %d %f", ch, F(f.f));
-				}
-				else {
+				else
 					queue[queue_end].data[ch - 2] = f.f;
-					//debug("goto %d %f", ch, F(f.f));
-				}
+				//debug("goto (%d) %d %f", queue_end, ch, F(f.f));
 				initialized = true;
 				++t;
 			}

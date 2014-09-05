@@ -10,7 +10,9 @@ override_dh_auto_build:
 	dh_auto_build
 	${MAKE} -C server/html
 	ronn -r server/franklin.8.ronn
-	${MAKE} -C firmware TARGET=melzi
+	${MAKE} -C firmware TARGET=melzi0
+	mv firmware/build-mighty_opt firmware/build-mighty_opt0
+	${MAKE} -C firmware TARGET=melzi1
 	${MAKE} -C firmware TARGET=ramps
 	${MAKE} -C firmware TARGET=mega
 

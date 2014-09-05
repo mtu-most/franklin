@@ -785,14 +785,16 @@ class Printer: # {{{
 		y /= (p[0][3] - p[0][1]) / p[1][1]
 		if x < 0:
 			x = 0
+		ix = int(x)
 		if x >= p[1][0]:
-			x = p[1][0] - 1
+			x = p[1][0]
+			ix = int(x) - 1
 		if y < 0:
 			y = 0
-		if y >= p[1][1]:
-			y = p[1][1] - 1
-		ix = int(x)
 		iy = int(y)
+		if y >= p[1][1]:
+			y = p[1][1]
+			iy = int(y) - 1
 		fx = x - ix
 		fy = y - iy
 		l = p[2][iy][ix] * (1 - fy) + p[2][iy + 1][ix] * fy
@@ -841,13 +843,17 @@ class Printer: # {{{
 						else:
 							num = int(max(n for n in nums if not math.isnan(n))) + 1
 						if num == 1:
-							log('debugpart: %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, args['f'], args['F']))
-							self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
+							#log('debugpart: %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, args['f'], args['F']))
+							z = self._use_probemap(target[0], target[1], args['Z'])
+							log('go to one %f %f %f' % (target[0], target[1], z))
+							self.goto([[target[0], target[1], z], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
 						else:
 							for t in range(num):
 								targetpart = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
-								log('debugpart: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, source[0] * 1e3, source[1] * 1e3, targetpart[0] * 1e3, targetpart[1] * 1e3, args['f'], args['F']))
-								self.goto([[targetpart[0], targetpart[1], self._use_probemap(targetpart[0], targetpart[1], args['Z'])], [args['E']]], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
+								#log('debugpart: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, source[0] * 1e3, source[1] * 1e3, targetpart[0] * 1e3, targetpart[1] * 1e3, args['f'], args['F']))
+								z = self._use_probemap(targetpart[0], targetpart[1], args['Z'])
+								log('go to part %f %f %f' % (targetpart[0], targetpart[1], z))
+								self.goto([[targetpart[0], targetpart[1], z], [args['E']]], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
 					else:
 						self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
 				else:
@@ -1106,7 +1112,7 @@ class Printer: # {{{
 		#log('queue done %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 	# }}}
 	def _do_home(self, done = None): # {{{
-		log('do_home: %s %s' % (self.home_phase, done))
+		#log('do_home: %s %s' % (self.home_phase, done))
 		# 0: Prepare for next order.
 		# 1: Move to max limit switch or find sense switch.
 		# 2: Move to min limit switch or find sense switch.
@@ -1291,7 +1297,7 @@ class Printer: # {{{
 			self.home_phase = 6
 			# Fall through
 		if self.home_phase == 6:
-			log('home 6')
+			#log('home 6')
 			self.set_space(self.home_space, type = self.home_orig_type)
 			target = {}
 			for i, a in enumerate(self.spaces[0].axis):
@@ -1304,12 +1310,12 @@ class Printer: # {{{
 			if len(target) > 0:
 				self.home_cb[0] = False
 				self.movecb.append(self.home_cb)
-				log('target: %s' % repr(target))
+				#log('target: %s' % repr(target))
 				self.goto([target], cb = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 7:
-			log('home 7')
+			#log('home 7')
 			self.home_phase = None
 			self.position_valid = True
 			if self.home_id is not None:
@@ -1341,8 +1347,17 @@ class Printer: # {{{
 				if id is not None:
 					self._send(id, 'return', self.jobs_probemap)
 				else:
+					for y, c in enumerate(p[2]):
+						for x, o in enumerate(c):
+							log('map %f %f %f' % (p[0][0] + (p[0][2] - p[0][0]) * x / p[1][0], p[0][1] + (p[0][3] - p[0][1]) * y / p[1][1], o))
 					#log('result: %s' % repr(self.jobs_probemap))
-					self._next_job()
+					if len(self.jobs_active) == 1:
+						def cb():
+							self.request_confirmation("Probing done; prepare for job.")[1](False)
+							self._next_job()
+						self.park(cb = cb, abort = False)[1](None)
+					else:
+						self._next_job()
 				return
 			# Goto x,y
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 1, good)
@@ -1361,10 +1376,16 @@ class Printer: # {{{
 			z = self.spaces[0].get_current_pos(2)
 			p[2][y][x] = z + self.spaces[0].axis[2]['offset']
 			z += self.probe_safe_dist
-			x += 1
-			if x > p[1][0]:
-				x = 0
-				y += 1
+			if y & 1:
+				x -= 1
+				if x < 0:
+					x = 0
+					y += 1
+			else:
+				x += 1
+				if x > p[1][0]:
+					x = p[1][0]
+					y += 1
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 0, good)
 			self.movecb.append(self.probe_cb)
 			# Retract
@@ -1377,8 +1398,8 @@ class Printer: # {{{
 			return
 		if len(self.jobs_active) > 1:
 			def cb():
-				log(repr(self.jobs_active))
 				self.request_confirmation("Prepare for job '%s'." % self.jobs_active[self.job_current])[1](False)
+			self.gcode_parking = True
 			self.park(cb = cb, abort = False)[1](None)
 		self.gcode_run(self.jobqueue[self.jobs_active[self.job_current]][0][:], self.jobs_ref, self.jobs_angle, self.jobs_probemap, abort = False)[1](None)
 	# }}}
@@ -1737,7 +1758,7 @@ class Printer: # {{{
 		for s in self.spaces:
 			topark = [a['park_order'] for a in s.axis if not math.isnan(a['park']) and a['park_order'] >= order]
 			if len(topark) > 0 and (next_order is None or min(topark) > next_order):
-				next_order = topark[0]
+				next_order = min(topark)
 		if next_order is None:
 			self.gcode_parking = False
 			if cb:

@@ -21,7 +21,7 @@ static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
 	float dy = target[1] - APEX(s, a).y;
 	float r2 = dx * dx + dy * dy;
 	if (r2 > APEX(s, a).axis_max * APEX(s, a).axis_max) {
-		//debug ("not ok 1: %f %f %f %f %f %f %f", F(target[0]), F(target[1]), F(dx), F(dy), F(r2), F(axis[a].rodlength), F(axis[a].axis_max));
+		debug ("not ok 1: %f %f %f %f %f %f %f", F(target[0]), F(target[1]), F(dx), F(dy), F(r2), F(APEX(s, a).rodlength), F(APEX(s, a).axis_max));
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
 		float factor(APEX(s, a).axis_max / sqrt(r2));
@@ -32,10 +32,10 @@ static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
 	// Inner product shows if projection is inside or outside the printable region.
 	float projection = -(dx / APEX(s, a).radius * APEX(s, a).x + dy / APEX(s, a).radius * APEX(s, a).y);
 	if (projection < APEX(s, a).axis_min) {
-		//debug ("not ok 2: %f %f %f %f %f", F(projection), F(dx), F(dy), F(APEX(s, a).x), F(APEX(s, a).y));
+		debug ("not ok 2: %f %f %f %f %f", F(projection), F(dx), F(dy), F(APEX(s, a).x), F(APEX(s, a).y));
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
-		target[0] -= (APEX(s, a).axis_min - projection - 1) / APEX(s, a).radius * APEX(s, a).x;
-		target[1] -= (APEX(s, a).axis_min - projection - 1) / APEX(s, a).radius * APEX(s, a).y;
+		target[0] -= ((APEX(s, a).axis_min - projection) / APEX(s, a).radius - .001) * APEX(s, a).x;
+		target[1] -= ((APEX(s, a).axis_min - projection) / APEX(s, a).radius - .001) * APEX(s, a).y;
 		// Assume this was a small correction; that way, things will work even if numerical errors cause this to be called for the real move.
 		return false;
 	}

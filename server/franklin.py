@@ -142,7 +142,7 @@ class Connection: # {{{
 	@classmethod
 	def upload(cls, port, board): # {{{
 		resumeinfo = [(yield), None]
-		if board == 'melzi':
+		if board in ('melzi0', 'melzi1'):
 			protocol = 'arduino'
 			baudrate = '115200'
 			mcu = 'atmega1284p'
