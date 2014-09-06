@@ -727,13 +727,13 @@ class Printer: # {{{
 		while len(self.temps) < num_temps:
 			self.temps.append(self.Temp())
 			if update:
-				data = self._read('TEMP', len(self.temps))
+				data = self._read('TEMP', len(self.temps) - 1)
 				self.temps[-1].read(data)
 		self.temps = self.temps[:num_temps]
 		while len(self.gpios) < num_gpios:
 			self.gpios.append(self.Gpio())
 			if update:
-				data = self._read('GPIO', len(self.gpios))
+				data = self._read('GPIO', len(self.gpios) - 1)
 				self.gpios[-1].read(data)
 		self.gpios = self.gpios[:num_gpios]
 		while len(self.limits) < num_spaces:
@@ -1066,12 +1066,22 @@ class Printer: # {{{
 					assert len(axes[i]) <= len(sp.axis)
 					for j, axis in enumerate(axes[i]):
 						if not math.isnan(axis):
-							a[a0 + j] = axis
+							# Limit values for axis.
+							if axis > sp.axis[int(j)]['max']:
+								axis = sp.axis[int(j)]['max']
+							if axis < sp.axis[int(j)]['min']:
+								axis = sp.axis[int(j)]['min']
+							a[a0 + int(j)] = axis
 							#log('current pos: %f' % self.spaces[i].get_current_pos(j))
 				else:
 					for j, axis in tuple(axes[i].items()):
 						assert int(j) <= len(sp.axis)
 						if not math.isnan(axis):
+							# Limit values for axis.
+							if axis > sp.axis[int(j)]['max']:
+								axis = sp.axis[int(j)]['max']
+							if axis < sp.axis[int(j)]['min']:
+								axis = sp.axis[int(j)]['min']
 							a[a0 + int(j)] = axis
 				a0 += len(sp.axis)
 			targets = [0] * (((2 + a0 - 1) >> 3) + 1)
@@ -1280,9 +1290,9 @@ class Printer: # {{{
 			for i, m in self.home_motors:
 				if i in self.limits[self.home_space]:
 					if self.home_orig_type == TYPE_DELTA:
-						self.spaces[self.home_space].set_current_pos(i, m['home_pos'])
-					else:
 						self.spaces[self.home_space].set_current_pos(i, self.home_delta_target)
+					else:
+						self.spaces[self.home_space].set_current_pos(i, m['home_pos'])
 				elif i in self.sense[self.home_space]:
 					# Correct for possible extra steps that were done because pausing happened later than hitting the sensor.
 					if self.home_orig_type == TYPE_DELTA:
@@ -1305,7 +1315,7 @@ class Printer: # {{{
 				if current > a['max'] - a['offset']:
 					target[i] = a['max'] - a['offset']
 				elif current < a['min'] - a['offset']:
-					target[i] = a['max'] - a['offset']
+					target[i] = a['min'] - a['offset']
 			self.home_phase = 7
 			if len(target) > 0:
 				self.home_cb[0] = False

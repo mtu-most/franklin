@@ -1145,17 +1145,17 @@ function redraw_canvas(x, y) { // {{{
 	case TYPE_CARTESIAN:
 		var xaxis = selected_printer.spaces[0].axis[0];
 		var yaxis = selected_printer.spaces[0].axis[1];
-		printerwidth = 2 * Math.max(xaxis.motor_max, -xaxis.motor_min) + .010;
-		printerheight = 2 * Math.max(yaxis.motor_max, -yaxis.motor_min) + .010;
+		printerwidth = 2 * Math.max(xaxis.max, -xaxis.min) + .010;
+		printerheight = 2 * Math.max(yaxis.max, -yaxis.min) + .010;
 		outline = function(c) {
 			c.beginPath();
 			// Why does this not work?
 			//c.rect(xaxis.axis_min, yaxis.axis_min, xaxis.axis_max - xaxis.axis_min, yaxis.axis_max - y.axis_min);
-			c.moveTo(xaxis.motor_min, yaxis.motor_min);
-			c.lineTo(xaxis.motor_min, yaxis.motor_max);
-			c.lineTo(xaxis.motor_max, yaxis.motor_max);
-			c.lineTo(xaxis.motor_max, yaxis.motor_min);
-			c.lineTo(xaxis.motor_min, yaxis.motor_min);
+			c.moveTo(xaxis.min, yaxis.min);
+			c.lineTo(xaxis.min, yaxis.max);
+			c.lineTo(xaxis.max, yaxis.max);
+			c.lineTo(xaxis.max, yaxis.min);
+			c.lineTo(xaxis.min, yaxis.min);
 			c.stroke();
 		};
 		break;
