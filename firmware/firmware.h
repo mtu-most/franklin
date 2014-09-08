@@ -175,6 +175,7 @@ struct Axis
 	float max_v;
 	float min, max;
 	float dist, next_dist, main_dist;
+	float target;
 };
 
 struct Motor
@@ -194,9 +195,11 @@ struct Motor
 	float limits_pos;	// position when limit switch was hit or nan
 	float limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
-	unsigned long last_time;		// micros value when last iteration was run.
-	float last_v, last_distance;		// v at and distance since last time, for using limit_a [mm/s], [mm].
+	float last_v;		// v during last iteration, for using limit_a [m/s].
+	int16_t steps;
+	float target_v, target_dist;	// Internal values for moving.
 	float current_pos;	// Current position of motor (in μm).
+	float endpos;
 #ifdef HAVE_AUDIO
 	uint8_t audio_flags;
 	enum Flags {
@@ -210,7 +213,7 @@ struct Space;
 
 struct SpaceType
 {
-	void (*xyz2motors)(Space *s, float *xyz, float *motors, bool *ok);
+	void (*xyz2motors)(Space *s, float *motors, bool *ok);
 	void (*reset_pos)(Space *s);
 	void (*check_position)(Space *s, float *data);
 	void (*load)(Space *s, uint8_t old_type, int16_t &addr, bool eeprom);
@@ -383,8 +386,7 @@ EXTERN uint8_t audio_head, audio_tail, audio_state;
 EXTERN unsigned long audio_start;
 EXTERN int16_t audio_us_per_bit;
 #endif
-EXTERN unsigned long start_time;
-EXTERN float freeze_time;
+EXTERN unsigned long start_time, last_time;
 EXTERN float t0, tp;
 EXTERN bool moving;
 EXTERN float f0, f1, f2, fp, fq, fmain;

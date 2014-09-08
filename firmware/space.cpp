@@ -86,9 +86,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
 			new_motors[m]->home_order = 0;
-			new_motors[m]->last_time = micros();
 			new_motors[m]->last_v = 0;
-			new_motors[m]->last_distance = 0;
 			new_motors[m]->current_pos = NAN;
 #ifdef HAVE_AUDIO
 			new_motors[m]->audio_flags = 0;
@@ -115,13 +113,12 @@ static void move_to_current(Space *s) {
 	current_move_has_cb = 0;
 	moving = true;
 	start_time = micros();
+	last_time = start_time;
 	for (uint8_t i = 0; i < 3; ++i) {
 		s->axis[i]->dist = 0;
 		s->axis[i]->next_dist = 0;
 		s->axis[i]->main_dist = 0;
 		s->motor[i]->last_v = 0;
-		s->motor[i]->last_time = start_time;
-		s->motor[i]->last_distance = 0;
 	}
 }
 
@@ -136,7 +133,7 @@ void Space::load_info(int16_t &addr, bool eeprom)
 		debug("request for type %d ignored", type);
 		type = t;
 	}
-	float oldpos[num_motors], xyz[num_axes];
+	float oldpos[num_motors];
 	bool ok;
 	if (t != type) {
 		//debug("setting type to %d", type);
@@ -155,9 +152,9 @@ void Space::load_info(int16_t &addr, bool eeprom)
 			}
 			if (ok) {
 				for (uint8_t i = 0; i < num_axes; ++i)
-					xyz[i] = axis[i]->current;
+					axis[i]->target = axis[i]->current;
 				ok = true;
-				space_types[type].xyz2motors(this, xyz, oldpos, &ok);
+				space_types[type].xyz2motors(this, oldpos, &ok);
 			}
 		}
 	}
@@ -165,7 +162,7 @@ void Space::load_info(int16_t &addr, bool eeprom)
 	space_types[type].load(this, t, addr, eeprom);
 	if (ok) {
 		float newpos[num_motors];
-		space_types[type].xyz2motors(this, xyz, newpos, &ok);
+		space_types[type].xyz2motors(this, newpos, &ok);
 		uint8_t i;
 		for (i = 0; i < num_motors; ++i) {
 			if (oldpos[i] != newpos[i]) {

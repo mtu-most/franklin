@@ -1,6 +1,6 @@
 MONITOR_PORT = /dev/ttyACM* /dev/ttyUSB*
 
-CPPFLAGS = -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2
+CPPFLAGS = -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow
 SOURCES = axis.cpp extruder.cpp gpio.cpp motor.cpp move.cpp packet.cpp serial.cpp settings.cpp setup.cpp storage.cpp temp.cpp
 HEADERS = configuration.h firmware.h
 

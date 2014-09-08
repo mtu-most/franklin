@@ -24,7 +24,6 @@ void next_move () {
 	debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 	// Set everything up for running queue[queue_start].
-	freeze_time = NAN;
 	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
 
 	// Make sure printer state is good. {{{
@@ -39,8 +38,8 @@ void next_move () {
 #endif
 			if (isnan(sp.axis[a]->source)) {
 				space_types[sp.type].reset_pos(&sp);
-				for (uint8_t a = 0; a < sp.num_axes; ++a)
-					sp.axis[a]->current = sp.axis[a]->source;
+				for (uint8_t aa = 0; aa < sp.num_axes; ++aa)
+					sp.axis[aa]->current = sp.axis[aa]->source;
 				break;
 			}
 #ifdef DEBUG_MOVE
@@ -60,14 +59,12 @@ void next_move () {
 		debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 		f0 = 0;
-		uint8_t a0 = 0;
+		a0 = 0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[queue_start].data[a0]);
-			for (uint8_t m = 0; m < sp.num_motors; ++m) {
+			for (uint8_t m = 0; m < sp.num_motors; ++m)
 				sp.motor[m]->last_v = 0;
-				sp.motor[m]->last_distance = 0;
-			}
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if (isnan(queue[queue_start].data[a0 + a])) {
 					sp.axis[a]->next_dist = 0;
@@ -168,7 +165,7 @@ void next_move () {
 		debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 		debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
-		uint8_t a0 = 0;
+		a0 = 0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[n].data[a0]);
@@ -326,10 +323,18 @@ void next_move () {
 			if (sp.axis[a]->dist != 0 || sp.axis[a]->next_dist != 0)
 				sp.active = true;
 			sp.axis[a]->main_dist = sp.axis[a]->dist * (1 - fp);
+			// Fill target for filling endpos below.
+			if ((sp.axis[a]->dist > 0 && sp.axis[a]->next_dist < 0) || (sp.axis[a]->dist < 0 && sp.axis[a]->next_dist > 0))
+				sp.axis[a]->target = sp.axis[a]->source + sp.axis[a]->dist;
+			else
+				sp.axis[a]->target = sp.axis[a]->source + sp.axis[a]->dist + sp.axis[a]->next_dist;
 #ifdef DEBUG_MOVE
 			debug ("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %f", s, a, F(sp.axis[a]->dist), F(sp.axis[a]->main_dist), F(sp.axis[a]->next_dist), F(sp.motor[a]->current_pos));
 #endif
 		}
+		bool ok = true;
+		// Using NULL as target fills endpos.
+		space_types[sp.type].xyz2motors(&sp, NULL, &ok);
 	}
 	if (!motors_busy) {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -345,6 +350,7 @@ void next_move () {
 	//debug("moving->true");
 	moving = true;
 	start_time = micros () - long(f0 / abs(vp) * 1e6);
+	last_time = start_time;
 	// }}}
 #endif
 }

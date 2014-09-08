@@ -1,9 +1,13 @@
 #include <firmware.h>
 
 #ifdef HAVE_SPACES
-static void xyz2motors(Space *s, float *xyz, float *motors, bool *ok) {
-	for (uint8_t a = 0; a < s->num_axes; ++a)
-		motors[a] = xyz[a];
+static void xyz2motors(Space *s, float *motors, bool *ok) {
+	for (uint8_t a = 0; a < s->num_axes; ++a) {
+		if (motors)
+			motors[a] = s->axis[a]->target;
+		else
+			s->motor[a]->endpos = s->axis[a]->target;
+	}
 }
 
 static void reset_pos (Space *s) {

@@ -43,10 +43,10 @@ static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
 	return true;
 }	// }}}
 
-static inline float delta_to_axis(Space *s, uint8_t a, float *target, bool *ok) {
-	float dx = target[0] - APEX(s, a).x;
-	float dy = target[1] - APEX(s, a).y;
-	float dz = target[2] - APEX(s, a).z;
+static inline float delta_to_axis(Space *s, uint8_t a, bool *ok) {
+	float dx = s->axis[0]->target - APEX(s, a).x;
+	float dy = s->axis[1]->target - APEX(s, a).y;
+	float dz = s->axis[2]->target - APEX(s, a).z;
 	float r2 = dx * dx + dy * dy;
 	float l2 = APEX(s, a).rodlength * APEX(s, a).rodlength;
 	float dest = sqrt(l2 - r2) + dz;
@@ -54,16 +54,20 @@ static inline float delta_to_axis(Space *s, uint8_t a, float *target, bool *ok) 
 	return dest;
 }
 
-static void xyz2motors(Space *s, float *xyz, float *motors, bool *ok) {
-	if (isnan(xyz[0]) || isnan(xyz[1]) || isnan(xyz[2])) {
+static void xyz2motors(Space *s, float *motors, bool *ok) {
+	if (isnan(s->axis[0]->target) || isnan(s->axis[1]->target) || isnan(s->axis[2]->target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 3; ++aa) {
-			if (isnan(xyz[aa]))
-				xyz[aa] = s->axis[aa]->current;
+			if (isnan(s->axis[aa]->target))
+				s->axis[aa]->target = s->axis[aa]->current;
 		}
 	}
-	for (uint8_t a = 0; a < 3; ++a)
-		motors[a] = delta_to_axis(s, a, xyz, ok);
+	for (uint8_t a = 0; a < 3; ++a) {
+		if (motors)
+			motors[a] = delta_to_axis(s, a, ok);
+		else
+			s->motor[a]->endpos = delta_to_axis(s, a, ok);
+	}
 }
 
 static void reset_pos (Space *s) {

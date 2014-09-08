@@ -33,4 +33,4 @@
 // To enable, uncomment; to disable, comment it out.
 //#define WATCHDOG
 
-#define DEBUG_BUFFER_LENGTH 0
+#define DEBUG_BUFFER_LENGTH 2000

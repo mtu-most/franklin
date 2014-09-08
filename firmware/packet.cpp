@@ -114,12 +114,12 @@ void packet()
 			queue[queue_end].f[0] = INFINITY;
 		if (!(command[2] & 0x2) || isnan(queue[queue_end].f[1]))
 			queue[queue_end].f[1] = queue[queue_end].f[0];
-		// f0 and f1 must be valid.
-		float f0 = queue[queue_end].f[0];
-		float f1 = queue[queue_end].f[1];
-		if (isnan(f0) || isnan(f1) || f0 < 0 || f1 < 0 || (f0 == 0 && f1 == 0))
+		// F0 and F1 must be valid.
+		float F0 = queue[queue_end].f[0];
+		float F1 = queue[queue_end].f[1];
+		if (isnan(F0) || isnan(F1) || F0 < 0 || F1 < 0 || (F0 == 0 && F1 == 0))
 		{
-			debug("Invalid f0 or f1: %f %f", F(f0), F(f1));
+			debug("Invalid F0 or F1: %f %f", F(F0), F(F1));
 			Serial.write(CMD_STALL);
 			return;
 		}
@@ -309,9 +309,9 @@ void packet()
 		}
 		if (!motors_busy)
 		{
-			for (uint8_t t = 0; t < num_spaces; ++t) {
-				for (uint8_t m = 0; m < spaces[t].num_motors; ++m)
-					SET(spaces[t].motor[m]->enable_pin);
+			for (uint8_t s = 0; s < num_spaces; ++s) {
+				for (uint8_t m = 0; m < spaces[s].num_motors; ++m)
+					SET(spaces[s].motor[m]->enable_pin);
 			}
 			motors_busy = true;
 		}
