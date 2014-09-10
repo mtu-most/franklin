@@ -76,7 +76,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 		mem_alloc(sizeof(Motor *) * nm, &new_motors, "motors");
 		loaddebug("new motors: %d %x", nm, new_motors);
 		for (uint8_t m = 0; m < min(old_nm, nm); ++m)
-			new_motors[m] = motor[m];
+			mem_retarget(&motor[m], &new_motors[m]);
 		for (uint8_t m = old_nm; m < nm; ++m) {
 			mem_alloc(sizeof(Motor), &new_motors[m], "motor");
 			loaddebug("new motor %x", new_motors[m]);
@@ -173,7 +173,7 @@ void Space::load_info(int16_t &addr, bool eeprom)
 			}
 		}
 	}
-	debug("done loading space");
+	loaddebug("done loading space");
 }
 
 void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)

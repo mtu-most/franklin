@@ -40,12 +40,12 @@ else
 ifeq (${TARGET}, mega)
 BOARD_TAG = mega
 CPPFLAGS += -DRAMSTART=0x200
-CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x280
+CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x800
 else
 ifeq (${TARGET}, ramps)
 BOARD_TAG = mega2560
 CPPFLAGS += -DRAMSTART=0x200
-CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x280
+CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x800
 #include /usr/share/arduino/Arduino.mk
 else
 $(error Invalid TARGET)

@@ -1143,7 +1143,6 @@ class Printer: # {{{
 			self.home_orig_limits = [[(a['min'], a['max']) for a in self.spaces[self.home_space].axis], [m['max_steps'] for m in self.spaces[self.home_space].motor]]
 			self.set_space(self.home_space, type = TYPE_CARTESIAN)
 			for i, m in enumerate(self.spaces[self.home_space].motor):
-				self.set_motor((self.home_space, i), max_steps = 1)
 				self.set_axis((self.home_space, i), min = m['motor_min'], max = m['motor_max'])
 			# If it is currently moving, doing the things below without pausing causes stall responses.
 			self.pause(True, False)
@@ -1244,6 +1243,7 @@ class Printer: # {{{
 			self.sense[self.home_space].clear()
 			small_dist = .01
 			for i, m in self.home_motors:
+				self.set_motor((self.home_space, i), max_steps = 1)
 				if self.pin_valid(m['limit_max_pin']) or (not self.pin_valid(m['limit_min_pin']) and self.pin_valid(m['sense_pin'])):
 					self.spaces[self.home_space].set_current_pos(i, m['motor_min'] - 2 * small_dist)
 					self.home_target[i] = m['motor_min'] - self.spaces[self.home_space].axis[i]['offset']
@@ -1463,7 +1463,6 @@ class Printer: # {{{
 			for m in range(len(motors)):
 				self.motor.append({})
 				self.motor[-1]['step_pin'], self.motor[-1]['dir_pin'], self.motor[-1]['enable_pin'], self.motor[-1]['limit_min_pin'], self.motor[-1]['limit_max_pin'], self.motor[-1]['sense_pin'], self.motor[-1]['steps_per_m'], self.motor[-1]['max_steps'], self.motor[-1]['home_pos'], self.motor[-1]['motor_min'], self.motor[-1]['motor_max'], self.motor[-1]['limit_v'], self.motor[-1]['limit_a'], self.motor[-1]['home_order'] = struct.unpack('<HHHHHHfBfffffB', motors[m])
-				log('received min %f max %f v %f a %f' % tuple(self.motor[-1][x] for x in ('motor_min', 'motor_max', 'limit_v', 'limit_a')))
 		def write_info(self, num_axes = None):
 			data = struct.pack('<Bf', self.type, self.max_deviation)
 			if self.type == TYPE_EXTRUDER:
@@ -1483,7 +1482,7 @@ class Printer: # {{{
 		def write_motor(self, motor):
 			return struct.pack('<HHHHHHfBfffffB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_m'], self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['motor_min'], self.motor[motor]['motor_max'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
 		def set_current_pos(self, axis, pos):
-			log('setting pos of %d %d to %f' % (self.id, axis, pos))
+			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
 			if not self.printer._send_packet(struct.pack('<BBBf', self.printer.command['SETPOS'], self.id, axis, pos)):
 				return False
 			return True
