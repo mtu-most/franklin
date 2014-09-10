@@ -149,11 +149,11 @@ static void save(Space *s, int16_t &addr, bool eeprom) {
 }
 
 static void init(Space *s) {
-	s->type_data = new Delta_private;
+	mem_alloc(sizeof(Delta_private), &s->type_data, "delta");
 }
 
 static void free(Space *s) {
-	delete reinterpret_cast <Delta_private *>(s->type_data);
+	mem_free(&s->type_data);
 }
 
 static int16_t memsize(Space *s) {

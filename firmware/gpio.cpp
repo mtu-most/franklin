@@ -1,7 +1,7 @@
 #include "firmware.h"
 
 #ifdef HAVE_GPIOS
-void Gpio::load(int16_t &addr, bool eeprom)
+void Gpio::load(uint8_t self, int16_t &addr, bool eeprom)
 {
 	pin.read(read_16(addr, eeprom));
 	state = read_8(addr, eeprom);
@@ -40,28 +40,28 @@ void Gpio::load(int16_t &addr, bool eeprom)
 		// Disable old links.
 		if (oldmaster < num_temps)
 		{
-			if (prev)
-				prev->next = next;
+			if (prev < num_gpios)
+				gpios[prev].next = next;
 			else
-				temps[oldmaster].gpios = next;
-			if (next)
-				next->prev = prev;
+				temps[oldmaster].following_gpios = next;
+			if (next < num_gpios)
+				gpios[next].prev = prev;
 		}
 		// Set new links.
 		if (master < num_temps)
 		{
-			prev = NULL;
-			next = temps[master].gpios;
-			temps[master].gpios = this;
-			if (next)
-				next->prev = this;
+			prev = ~0;
+			next = temps[master].following_gpios;
+			temps[master].following_gpios = self;
+			if (next < num_gpios)
+				gpios[next].prev = self;
 			// Also, set pin to output.
 			SET_OUTPUT(pin);
 		}
 		else
 		{
-			prev = NULL;
-			next = NULL;
+			prev = ~0;
+			next = ~0;
 		}
 	}
 #endif
@@ -94,18 +94,18 @@ void Gpio::init() {
 	state = 0;
 	value = NAN;
 	master = ~0;
-	prev = NULL;
-	next = NULL;
+	prev = ~0;
+	next = ~0;
 }
 
 void Gpio::free() {
 	if (master < num_temps) {
-		if (prev)
-			prev->next = next;
+		if (prev < num_gpios)
+			gpios[prev].next = next;
 		else
-			temps[master].gpios = next;
-		if (next)
-			next->prev = prev;
+			temps[master].following_gpios = next;
+		if (next < num_gpios)
+			gpios[next].prev = prev;
 	}
 }
 
@@ -114,17 +114,8 @@ void Gpio::copy(Gpio &dst) {
 	dst.pin.read(pin.write());
 	dst.state = state;
 	dst.value = value;
-	if (master < num_temps) {
-		dst.next = next;
-		if (next)
-			next->prev = &dst;
-		dst.prev = prev;
-		if (prev)
-			prev->next = &dst;
-		else
-			temps[master].gpios = &dst;
-	}
-	else
-		dst.master = ~0;
+	dst.next = next;
+	dst.prev = prev;
+	dst.master = master;
 }
 #endif

@@ -87,11 +87,11 @@ static void esave(Space *s, int16_t &addr, bool eeprom) {
 }
 
 static void einit(Space *s) {
-	s->type_data = new ExtruderData;
+	mem_alloc(sizeof(ExtruderData), &s->type_data, "extruder");
 }
 
 static void efree(Space *s) {
-	delete reinterpret_cast <ExtruderData *>(s->type_data);
+	mem_free(&s->type_data);
 }
 
 static int16_t ememsize(Space *s) {

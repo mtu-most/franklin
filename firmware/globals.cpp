@@ -76,9 +76,9 @@ bool globals_load(int16_t &addr, bool eeprom)
 		}
 		if (nl != namelen) {
 			ldebug("new name");
-			delete[] name;
+			mem_free(&name);
 			namelen = nl;
-			name = new char[nl];
+			mem_alloc(namelen, &name, "name");
 		}
 		// Free the old memory and initialize the new memory.
 #ifdef HAVE_SPACES
@@ -86,14 +86,15 @@ bool globals_load(int16_t &addr, bool eeprom)
 			ldebug("new space");
 			for (uint8_t s = ns; s < num_spaces; ++s)
 				spaces[s].free();
-			Space *new_spaces = new Space[ns];
+			Space *new_spaces;
+			mem_alloc(sizeof(Space) * ns, &new_spaces, "spaces");
 			for (uint8_t s = 0; s < min(ns, num_spaces); ++s)
 				spaces[s].copy(new_spaces[s]);
 			for (uint8_t s = num_spaces; s < ns; ++s)
 				new_spaces[s].init();
-			delete[] spaces;
+			mem_free (&spaces);
 			num_spaces = ns;
-			spaces = new_spaces;
+			mem_retarget(&new_spaces, &spaces);
 		}
 #endif
 		ldebug("new done");
@@ -102,14 +103,15 @@ bool globals_load(int16_t &addr, bool eeprom)
 			ldebug("new temp");
 			for (uint8_t t = nt; t < num_temps; ++t)
 				temps[t].free();
-			Temp *new_temps = new Temp[nt];
+			Temp *new_temps;
+			mem_alloc(sizeof(Temp) * nt, &new_temps, "temps");
 			for (uint8_t t = 0; t < min(nt, num_temps); ++t)
 				temps[t].copy(new_temps[t]);
 			for (uint8_t t = num_temps; t < nt; ++t)
 				new_temps[t].init();
-			delete[] temps;
+			mem_free(&temps);
 			num_temps = nt;
-			temps = new_temps;
+			mem_retarget(&new_temps, &temps);
 		}
 #endif
 		ldebug("new done");
@@ -117,14 +119,15 @@ bool globals_load(int16_t &addr, bool eeprom)
 		if (ng != num_gpios) {
 			for (uint8_t g = ng; g < num_gpios; ++g)
 				gpios[g].free();
-			Gpio *new_gpios = new Gpio[ng];
+			Gpio *new_gpios;
+			mem_alloc(sizeof(Gpio) * ng, &new_gpios, "gpios");
 			for (uint8_t g = 0; g < min(ng, num_gpios); ++g)
 				gpios[g].copy(new_gpios[g]);
 			for (uint8_t g = num_gpios; g < ng; ++g)
 				new_gpios[g].init();
-			delete[] gpios;
+			mem_free(&gpios);
 			num_gpios = ng;
-			gpios = new_gpios;
+			mem_retarget(&new_gpios, &gpios);
 		}
 #endif
 		ldebug("new done");

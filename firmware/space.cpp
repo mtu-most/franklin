@@ -52,12 +52,13 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 		return false;
 	}
 	if (na != old_na) {
-		Axis **new_axes = new Axis *[na];
+		Axis **new_axes;
+		mem_alloc(sizeof(Axis *) * na, &new_axes, "axes");
 		loaddebug("new axes: %d %d %x", na, new_axes);
 		for (uint8_t a = 0; a < min(old_na, na); ++a)
-			new_axes[a] = axis[a];
+			mem_retarget(&axis[a], &new_axes[a]);
 		for (uint8_t a = old_na; a < na; ++a) {
-			new_axes[a] = new Axis();
+			mem_alloc(sizeof(Axis), &new_axes[a], "axis");
 			loaddebug("new axis %x", new_axes[a]);
 			new_axes[a]->source = NAN;
 			new_axes[a]->current = NAN;
@@ -66,17 +67,18 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_axes[a]->main_dist = NAN;
 		}
 		for (uint8_t a = na; a < old_na; ++a)
-			delete axis[a];
-		delete[] axis;
-		axis = new_axes;
+			mem_free(&axis[a]);
+		mem_free(&axis);
+		mem_retarget(&new_axes, &axis);
 	}
 	if (nm != old_nm) {
-		Motor **new_motors = new Motor *[nm];
+		Motor **new_motors;
+		mem_alloc(sizeof(Motor *) * nm, &new_motors, "motors");
 		loaddebug("new motors: %d %x", nm, new_motors);
 		for (uint8_t m = 0; m < min(old_nm, nm); ++m)
 			new_motors[m] = motor[m];
 		for (uint8_t m = old_nm; m < nm; ++m) {
-			new_motors[m] = new Motor();
+			mem_alloc(sizeof(Motor), &new_motors[m], "motor");
 			loaddebug("new motor %x", new_motors[m]);
 			new_motors[m]->sense_state = 0;
 			new_motors[m]->sense_pos = NAN;
@@ -93,9 +95,9 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 #endif
 		}
 		for (uint8_t m = nm; m < old_nm; ++m)
-			delete motor[m];
-		delete[] motor;
-		motor = new_motors;
+			mem_free(&motor[m]);
+		mem_free(&motor);
+		mem_retarget(&new_motors, &motor);
 	}
 	return true;
 }
@@ -171,6 +173,7 @@ void Space::load_info(int16_t &addr, bool eeprom)
 			}
 		}
 	}
+	debug("done loading space");
 }
 
 void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
@@ -296,20 +299,20 @@ void Space::init() {
 void Space::free() {
 	space_types[type].free(this);
 	for (uint8_t a = 0; a < num_axes; ++a)
-		delete axis[a];
+		mem_free(&axis[a]);
+	mem_free(&axis);
 	for (uint8_t m = 0; m < num_motors; ++m)
-		delete motor[m];
-	delete motor;
-	delete axis;
+		mem_free(&motor[m]);
+	mem_free(&motor);
 }
 
 void Space::copy(Space &dst) {
 	//debug("copy space");
 	dst.type = type;
-	dst.type_data = type_data;
+	mem_retarget(&type_data, &dst.type_data);
 	dst.num_axes = num_axes;
 	dst.num_motors = num_motors;
-	dst.motor = motor;
-	dst.axis = axis;
+	mem_retarget(&axis, &dst.axis);
+	mem_retarget(&motor, &dst.motor);
 }
 #endif

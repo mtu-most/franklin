@@ -12,23 +12,6 @@
 #define RESET(pin_no) do { if ((pin_no).valid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? HIGH : LOW); } } while (0)
 #define GET(pin_no, _default) ((pin_no).valid () ? digitalRead ((pin_no).pin) == HIGH ? !(pin_no).inverted () : (pin_no).inverted () : _default)
 
-#if SERIAL_BUFFERSIZE > 0
-// This is really ugly, but it's how it's done in the arduino sources, and no other variables are defined.
-#if defined(UBRR3H)
-#define NUMSERIALS 4
-#define SETUP_SERIALS do { serialport[0] = &Serial; serialport[1] = &Serial1; serialport[2] = &Serial2; serialport[3] = &Serial3; } while (0)
-#elif defined(UBRR2H)
-#define NUMSERIALS 3
-#define SETUP_SERIALS do { serialport[0] = &Serial; serialport[1] = &Serial1; serialport[2] = &Serial2; } while (0)
-#elif defined(UBRR1H)
-#define NUMSERIALS 2
-#define SETUP_SERIALS do { serialport[0] = &Serial; serialport[1] = &Serial1; } while (0)
-#else
-#define NUMSERIALS 1
-#define SETUP_SERIALS do { serialport[0] = &Serial; } while (0)
-#endif
-#endif
-
 // Everything before this line is used at the start of firmware.h; everything after it at the end.
 #else
 
@@ -189,10 +172,12 @@ static inline void debug (char const *fmt, ...) {
 #endif
 #define F(x) &(x)
 
-static uint8_t mcusr;
+EXTERN uint8_t mcusr;
+EXTERN uint16_t mem_used;
 
 static inline void arch_setup_start() {
 	mcusr = MCUSR;
+	mem_used = 0;
 	MCUSR = 0;
 }
 
@@ -208,5 +193,119 @@ static inline void write_eeprom(uint16_t address, uint8_t data) {
 	EEPROM.write(address, data);
 }
 
+// Memory handling
+EXTERN char storage[DYNAMIC_MEM_SIZE];
+struct Memrecord {
+	uint16_t size;
+	void **target;
+	inline Memrecord *next() { return reinterpret_cast <Memrecord *>(&(reinterpret_cast <char *>(this))[sizeof(Memrecord) + size]); }
+};
+
+//#define DEBUG_ALLOC
+
+#ifdef DEBUG_ALLOC
+#define mem_alloc(s, t, d) do { debug("mem alloc " #d " at %x size %x used %x", unsigned(&storage) + mem_used, s, mem_used); _mem_alloc((s), reinterpret_cast <void **>(t)); } while (false)
+#else
+#define mem_alloc(s, t, d) _mem_alloc((s), reinterpret_cast <void **>(t))
+#endif
+static inline void _mem_alloc(uint16_t size, void **target) {
+	if (size + sizeof(Memrecord) > sizeof(storage) - mem_used) {
+		debug("Out of memory");
+		*target = NULL;
+		return;
+	}
+	Memrecord *record = reinterpret_cast <Memrecord *>(&storage[mem_used]);
+	record->size = size;
+	record->target = target;
+	*record->target = &record[1];
+	mem_used += sizeof(Memrecord) + size;
+}
+
+#define mem_retarget(t1, t2) _mem_retarget(reinterpret_cast <void **>(t1), reinterpret_cast <void **>(t2))
+static inline void _mem_retarget(void **target, void **newtarget) {
+	if (*target == NULL) {
+#ifdef DEBUG_ALLOC
+		debug("mem retarget NULL used %x", mem_used);
+#endif
+		*newtarget = NULL;
+		return;
+	}
+	Memrecord *record = &reinterpret_cast <Memrecord *>(*target)[-1];
+#ifdef DEBUG_ALLOC
+	debug("mem retarget size %x used %x value %x record %x", record->size, mem_used, unsigned(*target), unsigned(record));
+#endif
+	*newtarget = *target;
+	*target = NULL;
+	record->target = newtarget;
+}
+
+static inline void _mem_dump() {
+	uint16_t start = unsigned(&storage);
+	debug("Memory dump.  Total size: %x, used %x, storage at %x", DYNAMIC_MEM_SIZE, mem_used, start);
+	uint16_t addr = 0;
+	while (addr < mem_used) {
+		Memrecord *record = reinterpret_cast <Memrecord *>(&storage[addr]);
+		if (unsigned(*record->target) - 4 == start + addr)
+			debug("  Record at %x+%x=%x, size %x, pointer at %x", addr, start, start + addr, record->size, unsigned(record->target));
+		else
+			debug("  Record at %x+%x=%x, size %x, pointer at %x, pointing at %x+4", addr, start, start + addr, record->size, unsigned(record->target), unsigned(*record->target) - 4);
+		addr += sizeof(Memrecord) + record->size;
+	}
+}
+
+#define mem_free(t) _mem_free(reinterpret_cast <void **>(t))
+static inline void _mem_free(void **target) {
+	if (*target == NULL) {
+#ifdef DEBUG_ALLOC
+		debug("mem free NULL");
+#endif
+		return;
+	}
+	Memrecord *record = &reinterpret_cast <Memrecord *>(*target)[-1];
+	*target = NULL;
+	uint16_t oldsize = record->size;
+	uint16_t start = reinterpret_cast <char *>(record) - storage + sizeof(Memrecord) + record->size;
+#ifdef DEBUG_ALLOC
+	debug("mem free size %x at %x, next %x, used %x", record->size, unsigned(record), start, mem_used);
+	_mem_dump();
+#endif
+	Memrecord *current = reinterpret_cast <Memrecord *>(&storage[start]);
+	while (start < mem_used) {
+#ifdef DEBUG_ALLOC
+		debug("moving %x for free from start %x", current->size, start);
+#endif
+		Memrecord *next = current->next();
+		char *src = reinterpret_cast <char *>(current);
+		char *dst = reinterpret_cast <char *>(record);
+		uint16_t sz = current->size + sizeof(Memrecord);
+		for (uint16_t i = 0; i < sz; ++i)
+			dst[i] = src[i];
+		*record->target = &record[1];
+		// record is new location of moved part.
+		// current is old location.
+		// next is location of next part.
+		for (Memrecord *m = reinterpret_cast <Memrecord *>(storage); unsigned(m) <= unsigned(record); m = m->next()) {
+			//debug("check1 %x %x %x", unsigned(m->target), unsigned(current), unsigned(current) + record->size);
+			if (unsigned(m->target) >= unsigned(current) && unsigned(m->target) < unsigned(current) + sizeof(Memrecord) + record->size) {
+				//debug("hit!");
+				m->target = reinterpret_cast <void **>(&reinterpret_cast <char *>(m->target)[-oldsize - sizeof(Memrecord)]);
+			}
+		}
+		for (Memrecord *m = reinterpret_cast <Memrecord *>(next); unsigned(m) < unsigned(&storage[mem_used]); m = m->next()) {
+			//debug("check2 %x %x %x", unsigned(m->target), unsigned(current), unsigned(current) + record->size);
+			if (unsigned(m->target) >= unsigned(current) && unsigned(m->target) < unsigned(current) + sizeof(Memrecord) + record->size) {
+				//debug("hit!");
+				m->target = reinterpret_cast <void **>(&reinterpret_cast <char *>(m->target)[-oldsize - sizeof(Memrecord)]);
+			}
+		}
+		record = reinterpret_cast <Memrecord *>(&reinterpret_cast <char *>(record)[sz]);
+		current = next;
+		start += sz;
+	}
+	mem_used -= sizeof(Memrecord) + oldsize;
+#ifdef DEBUG_ALLOC
+	_mem_dump();
+#endif
+}
 #endif
 #endif

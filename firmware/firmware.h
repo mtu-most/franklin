@@ -106,11 +106,6 @@ enum Command {
 	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
 };
 
-#ifdef HAVE_GPIOS
-// Need this declaration to have the pointer in Temp.
-struct Gpio;
-#endif
-
 #ifdef HAVE_TEMPS
 // All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp
@@ -137,7 +132,7 @@ struct Temp
 	float core_T, shell_T;	// current temperatures. [K]
 	*/
 #ifdef HAVE_GPIOS
-	Gpio *gpios;			// linked list of gpios monitoring this temp.
+	uint8_t following_gpios;	// linked list of gpios monitoring this temp.
 #endif
 	float min_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
 	float max_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
@@ -299,10 +294,10 @@ struct Gpio
 	uint8_t master;
 	float value;
 	int16_t adcvalue;
-	Gpio *prev, *next;
+	uint8_t prev, next;
 #endif
 	void setup(uint8_t new_state);
-	void load(int16_t &addr, bool eeprom);
+	void load(uint8_t self, int16_t &addr, bool eeprom);
 	void save(int16_t &addr, bool eeprom);
 	void init();
 	void free();
@@ -431,6 +426,7 @@ void write_16(int16_t &address, int16_t data, bool eeprom);
 float read_float(int16_t &address, bool eeprom);
 void write_float(int16_t &address, float data, bool eeprom);
 
+// globals.cpp
 bool globals_load(int16_t &address, bool eeprom);
 void globals_save(int16_t &address, bool eeprom);
 int16_t globals_memsize();

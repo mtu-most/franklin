@@ -13,6 +13,7 @@ void setup()
 #if DEBUG_BUFFER_LENGTH > 0
 	debug_buffer_ptr = 0;
 #endif
+	debug("Starting");
 	adc_phase = 0;
 #ifdef HAVE_TEMPS
 	temp_current = 0;
@@ -55,13 +56,17 @@ void setup()
 		printerid[i] = 0;
 #ifdef HAVE_SPACES
 	num_spaces = 0;
+	spaces = NULL;
 #endif
 #ifdef HAVE_TEMPS
 	num_temps = 0;
+	temps = NULL;
 #endif
 #ifdef HAVE_GPIOS
 	num_gpios = 0;
+	gpios = NULL;
 #endif
+	debug("running arch end");
 	Serial.write(CMD_ID);
 	for (uint8_t i = 0; i < 8; ++i)
 		Serial.write(uint8_t(0));
@@ -92,7 +97,7 @@ void load_all() {
 #ifdef HAVE_GPIOS
 	for (uint8_t t = 0; t < num_gpios; ++t) {
 		//debug("gpio %d", t);
-		gpios[t].load(addr, true);
+		gpios[t].load(t, addr, true);
 	}
 #endif
 }

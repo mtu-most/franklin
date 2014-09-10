@@ -34,7 +34,7 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 						 || (temps[next].adcmin_alarm >= 0 && temps[next].adcmin_alarm < MAXINT)
 						 || temps[next].adcmax_alarm < MAXINT
 #ifdef HAVE_GPIOS
-						 || temps[next].gpios
+						 || temps[next].following_gpios < num_gpios
 #endif
 						 )
 						&& temps[next].thermistor_pin.valid()) {
@@ -84,13 +84,13 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 	}
 #ifdef HAVE_GPIOS
 	// And handle any linked gpios.
-	for (Gpio *g = temps[temp_current].gpios; g; g = g->next) {
+	for (uint8_t g = temps[temp_current].following_gpios; g < num_gpios; g = gpios[g].next) {
 		//debug("setting gpio for temp %d: %d %d", temp_current, temp, g->adcvalue);
 		// adc values are lower for higher temperatures.
-		if (temp < g->adcvalue)
-			SET(g->pin);
+		if (temp < gpios[g].adcvalue)
+			SET(gpios[g].pin);
 		else
-			RESET(g->pin);
+			RESET(gpios[g].pin);
 	}
 #endif
 	// If we don't have model settings, simply use the target as a switch between on and off.

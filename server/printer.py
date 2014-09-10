@@ -1009,8 +1009,9 @@ class Printer: # {{{
 			#log('killing homer')
 			self.home_phase = None
 			self.set_space(self.home_space, type = self.home_orig_type)
-			for i, a in enumerate(self.spaces[self.home_space].axis):
+			for i in range(len(self.spaces[self.home_space].axis)):
 				self.set_axis((self.home_space, i), min = self.home_orig_limits[i][0], max = self.home_orig_limits[i][1])
+				self.set_motor((self.home_space, i), max_steps = self.home_orig_limits[1][i])
 			if self.home_cb in self.movecb:
 				self.movecb.remove(self.home_cb)
 				self._send(self.home_id, 'return', None)
@@ -1134,15 +1135,15 @@ class Printer: # {{{
 		# 4: Move slowly to switch.
 		# 5: Repeat until all home orders are done.
 		# 6: Set current position; move to center (delta only).
-		small_dist = .01
+		small_dist = .005
 		if self.home_phase is None:
 			# Initial call; start homing.
 			self.home_phase = 0
 			self.home_orig_type = self.spaces[self.home_space].type
-			self.home_orig_limits = [(a['min'], a['max']) for a in self.spaces[self.home_space].axis]
+			self.home_orig_limits = [[(a['min'], a['max']) for a in self.spaces[self.home_space].axis], [m['max_steps'] for m in self.spaces[self.home_space].motor]]
 			self.set_space(self.home_space, type = TYPE_CARTESIAN)
-			for i, a in enumerate(self.spaces[self.home_space].axis):
-				m = self.spaces[self.home_space].motor[i]
+			for i, m in enumerate(self.spaces[self.home_space].motor):
+				self.set_motor((self.home_space, i), max_steps = 1)
 				self.set_axis((self.home_space, i), min = m['motor_min'], max = m['motor_max'])
 			# If it is currently moving, doing the things below without pausing causes stall responses.
 			self.pause(True, False)
@@ -1286,7 +1287,7 @@ class Printer: # {{{
 				target = {}
 				for i, m in self.home_motors:
 					self.spaces[self.home_space].set_current_pos(i, m['motor_min'] + m['home_pos'] - self.home_delta_target)
-					target[i] = m['motor_min'] - self.spaces[0].axis[i]['offset']
+					target[i] = m['motor_min'] - self.spaces[self.home_space].axis[i]['offset']
 				if len(target) > 0:
 					self.home_cb[0] = False
 					self.movecb.append(self.home_cb)
@@ -1317,8 +1318,9 @@ class Printer: # {{{
 		if self.home_phase == 6:
 			#log('home 6')
 			self.set_space(self.home_space, type = self.home_orig_type)
-			for i, a in enumerate(self.spaces[self.home_space].axis):
-				self.set_axis((self.home_space, i), min = self.home_orig_limits[i][0], max = self.home_orig_limits[i][1])
+			for i in range(len(self.spaces[self.home_space].motor)):
+				self.set_axis((self.home_space, i), min = self.home_orig_limits[0][i][0], max = self.home_orig_limits[0][i][1])
+				self.set_motor((self.home_space, i), max_steps = self.home_orig_limits[1][i])
 			target = {}
 			for i, a in enumerate(self.spaces[self.home_space].axis):
 				current = self.spaces[self.home_space].get_current_pos(i)
@@ -1351,7 +1353,7 @@ class Printer: # {{{
 		if not good:
 			# This means the probe has been aborted.
 			for m in range(len(self.spaces[0].motor)):
-				self.set_motor((0, m), limit_min_pin = self.probe_orig_pin[m])
+				self.set_motor((0, m), limit_min_pin = self.probe_orig[m][0], max_steps = self.probe_orig[m][1])
 			self.probing = False
 			if id is not None:
 				self._send(id, 'error', 'aborted')
@@ -1363,7 +1365,7 @@ class Printer: # {{{
 				# Done.
 				self.probing = False
 				for m in range(len(self.spaces[0].motor)):
-					self.set_motor((0, m), limit_min_pin = self.probe_orig_pin[m])
+					self.set_motor((0, m), limit_min_pin = self.probe_orig[m][0], max_steps = self.probe_orig[m][1])
 				if id is not None:
 					self._send(id, 'return', self.jobs_probemap)
 				else:
@@ -1461,6 +1463,7 @@ class Printer: # {{{
 			for m in range(len(motors)):
 				self.motor.append({})
 				self.motor[-1]['step_pin'], self.motor[-1]['dir_pin'], self.motor[-1]['enable_pin'], self.motor[-1]['limit_min_pin'], self.motor[-1]['limit_max_pin'], self.motor[-1]['sense_pin'], self.motor[-1]['steps_per_m'], self.motor[-1]['max_steps'], self.motor[-1]['home_pos'], self.motor[-1]['motor_min'], self.motor[-1]['motor_max'], self.motor[-1]['limit_v'], self.motor[-1]['limit_a'], self.motor[-1]['home_order'] = struct.unpack('<HHHHHHfBfffffB', motors[m])
+				log('received min %f max %f v %f a %f' % tuple(self.motor[-1][x] for x in ('motor_min', 'motor_max', 'limit_v', 'limit_a')))
 		def write_info(self, num_axes = None):
 			data = struct.pack('<Bf', self.type, self.max_deviation)
 			if self.type == TYPE_EXTRUDER:
@@ -1597,14 +1600,14 @@ class Printer: # {{{
 		self.jobs_probemap = [area, density, [[None for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
 		self.gcode_angle = math.sin(angle), math.cos(angle)
 		#log(repr(self.jobs_probemap))
-		self.probe_orig_pin = [m['limit_min_pin'] for m in self.spaces[0].motor]
+		self.probe_orig = [(m['limit_min_pin'], m['max_steps']) for m in self.spaces[0].motor]
 		for m in range(len(self.spaces[0].motor)):
-			self.set_motor((0, m), limit_min_pin = self.probe_pin, readback = False)
+			self.set_motor((0, m), limit_min_pin = self.probe_pin, max_steps = 1, readback = False)
 		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
 	# }}}
 	@delayed
 	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False): # {{{
-		log('goto %s %s %s' % (repr(moves), f0, f1))
+		#log('goto %s %s %s' % (repr(moves), f0, f1))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
 		self.queue.append((id, moves, f0, f1, cb))
@@ -1633,6 +1636,9 @@ class Printer: # {{{
 	# }}}
 	def readtemp(self, channel): # {{{
 		channel = int(channel)
+		if channel >= len(self.temps):
+			log('Trying to read invalid temp %d' % channel)
+			return float('nan')
 		if not self._send_packet(struct.pack('<BB', self.command['READTEMP'], channel)):
 			return None
 		ret = self._get_reply()
@@ -1641,6 +1647,9 @@ class Printer: # {{{
 	# }}}
 	def readpower(self, channel): # {{{
 		channel = int(channel)
+		if channel >= len(self.temps):
+			log('Trying to read invalid power %d' % channel)
+			return float('nan')
 		if not self._send_packet(struct.pack('<BB', self.command['READPOWER'], channel)):
 			return None
 		ret = self._get_reply()
@@ -1707,8 +1716,9 @@ class Printer: # {{{
 						#log('killing homer')
 						self.home_phase = None
 						self.set_space(self.home_space, type = self.home_orig_type)
-						for i, a in enumerate(self.spaces[self.home_space].axis):
+						for i in range(len(self.spaces[self.home_space].axis)):
 							self.set_axis((self.home_space, i), min = self.home_orig_limits[i][0], max = self.home_orig_limits[i][1])
+							self.set_motor((self.home_space, i), max_steps = self.home_orig_limits[1][i])
 						if self.home_cb in self.movecb:
 							self.movecb.remove(self.home_cb)
 							self._send(self.home_id, 'return', None)
