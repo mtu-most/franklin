@@ -92,13 +92,16 @@ void Gpio::init() {
 	pin.flags = 0;
 	pin.read(0);
 	state = 0;
+#ifdef HAVE_TEMPS
 	value = NAN;
 	master = ~0;
 	prev = ~0;
 	next = ~0;
+#endif
 }
 
 void Gpio::free() {
+#ifdef HAVE_TEMPS
 	if (master < num_temps) {
 		if (prev < num_gpios)
 			gpios[prev].next = next;
@@ -107,15 +110,18 @@ void Gpio::free() {
 		if (next < num_gpios)
 			gpios[next].prev = prev;
 	}
+#endif
 }
 
 void Gpio::copy(Gpio &dst) {
 	dst.pin.flags = 0;
 	dst.pin.read(pin.write());
 	dst.state = state;
+#ifdef HAVE_TEMPS
 	dst.value = value;
 	dst.next = next;
 	dst.prev = prev;
 	dst.master = master;
+#endif
 }
 #endif

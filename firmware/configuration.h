@@ -3,6 +3,9 @@
 // EEPROM, so all your old settings are lost when you upload firmware with
 // different settings for these values.
 
+// Uncomment to disable all debugging output.
+//#define NO_DEBUG
+
 // Maximum number of move commands in the queue.
 #define QUEUE_LENGTH 10
 
@@ -17,6 +20,7 @@
 
 // If HAVE_AUDIO is not defined, nothing related to audio will be included.
 #define HAVE_AUDIO
+
 // Audio settings.  The audio buffer is split in fragments.  New data is sent
 // in complete fragment sizes.  Because handshaking may cost time, more  than 2
 // fragments is a good idea.
@@ -31,6 +35,6 @@
 // work properly.  However, it may also trigger when too much time is spent
 // outputting debugging info.
 // To enable, uncomment; to disable, comment it out.
-//#define WATCHDOG
+#define WATCHDOG
 
 #define DEBUG_BUFFER_LENGTH 0

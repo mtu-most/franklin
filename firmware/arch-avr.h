@@ -15,8 +15,14 @@
 // Everything before this line is used at the start of firmware.h; everything after it at the end.
 #else
 
+#ifdef __cplusplus
+#ifdef USE_SERIAL1
+#define Serial Serial1
+#endif
+
 // Defined by arduino: NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS
 
+#ifdef HAVE_TEMPS
 EXTERN uint8_t adc_last_pin;
 
 static inline void adc_start(uint8_t adcpin) {
@@ -41,11 +47,6 @@ static inline void adc_start(uint8_t adcpin) {
 	adc_last_pin = ~0;
 }
 
-#ifdef __cplusplus
-#ifdef USE_SERIAL1
-#define Serial Serial1
-#endif
-
 static inline bool adc_ready(uint8_t pin) {
 	if (bit_is_set(ADCSRA, ADSC))
 		return false;
@@ -62,6 +63,7 @@ static inline int16_t adc_get(uint8_t pin) {
 	int16_t high = uint8_t(ADCH);
 	return (high << 8) | low;
 }
+#endif
 
 static inline void watchdog_enable() {
 #ifdef WATCHDOG
@@ -87,6 +89,7 @@ static inline void reset() {
 	while(1) {}
 }
 
+#ifndef NO_DEBUG
 static inline void debug (char const *fmt, ...) {
 #if DEBUG_BUFFER_LENGTH > 0
 	buffered_debug_flush();
@@ -167,6 +170,10 @@ static inline void debug (char const *fmt, ...) {
 	Serial.write ((uint8_t)0);
 	Serial.flush ();
 }
+#else
+#define debug(...) do {} while (0)
+#endif
+
 #ifdef F
 #undef F
 #endif

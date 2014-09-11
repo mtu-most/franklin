@@ -22,7 +22,7 @@ CPPFLAGS += -DARCH_INCLUDE=\"arch-avr.h\"
 
 ifeq (${TARGET}, mini)
 BOARD_TAG = atmega328
-CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x400
+CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x100
 else
 ifeq (${TARGET}, melzi0)
 BOARD_TAG = mighty_opt
