@@ -261,7 +261,6 @@ function floatkey(event, element) { // {{{
 				value = amount;
 			else
 				value = get_value(element.printer, obj) / element.factor + amount;
-			element.value = value.toFixed(1);
 			set_value(element.printer, obj, element.factor * value);
 		}
 		return;
@@ -274,7 +273,6 @@ function floatkey(event, element) { // {{{
 				value = amount;
 			else
 				value = get_value(element.printer, obj) / element.factor + amount;
-			element.value = value.toFixed(1);
 			set_value(element.printer, obj, element.factor * value);
 		}
 		return;
@@ -284,7 +282,6 @@ function floatkey(event, element) { // {{{
 		value = amount;
 	else
 		value = get_value(element.printer, element.obj) / element.factor + amount;
-	element.value = value.toFixed(1);
 	set_value(element.printer, element.obj, element.factor * value);
 }
 // }}}
@@ -384,6 +381,7 @@ function new_printer() { // {{{
 	printer.reference = [0, 0];
 	printer.local_angle = 0;
 	printer.lock = null;
+	printer.temptargets = [];
 	multiples[port] = {space: [], axis: [], motor: [], temp: [], gpio: []};
 	ports[port][2] = get_elements(build('Printer', [port]))[0];
 	printers_element.Add(ports[port][2]);

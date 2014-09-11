@@ -186,8 +186,11 @@ void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
 	axis[a]->max_v = read_float(addr, eeprom);
 	axis[a]->min = read_float(addr, eeprom);
 	axis[a]->max = read_float(addr, eeprom);
-	if (axis[a]->offset != old_offset)
+	if (axis[a]->offset != old_offset) {
+		axis[a]->current += axis[a]->offset - old_offset;
+		axis[a]->source += axis[a]->offset - old_offset;
 		move_to_current(this);
+	}
 }
 
 void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)

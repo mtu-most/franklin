@@ -99,7 +99,7 @@
 				args[2] ? elements[2].AddClass(args[2]) : 0,
 				stack
 				<input type='text' onkeydown='floatkey(event, this)'/>
-				<button class='button' type='button' onclick='floatkey({keyCode: 13}, document.getElementById(this.source))'>Set</button>
+				<button class='button' type='button' onclick='floatkey({keyCode: 13, preventDefault: function() {}}, document.getElementById(this.source))'>Set</button>
 				<span></span>
 				)!]
 			</div> <!-- }}} -->
