@@ -116,7 +116,7 @@ static void move_to_current(Space *s) {
 	moving = true;
 	start_time = micros();
 	last_time = start_time;
-	for (uint8_t i = 0; i < 3; ++i) {
+	for (uint8_t i = 0; i < min(s->num_axes, s->num_motors); ++i) {
 		s->axis[i]->dist = 0;
 		s->axis[i]->next_dist = 0;
 		s->axis[i]->main_dist = 0;
@@ -219,14 +219,18 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 	SET_INPUT(motor[m]->limit_min_pin);
 	SET_INPUT(motor[m]->limit_max_pin);
 	SET_INPUT(motor[m]->sense_pin);
-	if (old_steps_per_m != motor[m]->steps_per_m) {
-		motor[m]->current_pos *= motor[m]->steps_per_m / old_steps_per_m;
-		// This makes sure that the new position matches the target again, so no need to move there.
+	bool must_move = false;
+	if (old_steps_per_m != motor[m]->steps_per_m && !isnan(motor[m]->home_pos)) {
+		float diff = motor[m]->current_pos - motor[m]->home_pos;
+		motor[m]->current_pos = motor[m]->home_pos + diff * old_steps_per_m / motor[m]->steps_per_m;
+		must_move = true;
 	}
 	if (old_home_pos != motor[m]->home_pos) {
 		motor[m]->current_pos += motor[m]->home_pos - old_home_pos;
-		move_to_current(this);
+		must_move = true;
 	}
+	if (must_move)
+		move_to_current(this);
 }
 
 void Space::save_info(int16_t &addr, bool eeprom)

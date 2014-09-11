@@ -85,7 +85,7 @@ enum Command {
 	CMD_WRITE_GPIO,	// 1 byte: which channel; n bytes: data.
 	CMD_QUEUED,	// 1 byte: 0: query queue length; 1: stop and query queue length.  Reply: QUEUE.
 	CMD_READPIN,	// 1 byte: which channel. Reply: GPIO.
-	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_bit.
+	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_sample.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	// to host
 		// responses to host requests; only one active at a time.
@@ -379,7 +379,7 @@ EXTERN uint8_t temp_current;
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
 EXTERN uint8_t audio_head, audio_tail, audio_state;
 EXTERN unsigned long audio_start;
-EXTERN int16_t audio_us_per_bit;
+EXTERN int16_t audio_us_per_sample;
 #endif
 EXTERN unsigned long start_time, last_time;
 EXTERN float t0, tp;

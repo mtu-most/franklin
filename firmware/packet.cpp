@@ -674,7 +674,7 @@ void packet()
 		debug("CMD_AUDIO_SETUP");
 #endif
 		last_active = millis();
-		audio_us_per_bit = get_int16(2);
+		audio_us_per_sample = get_int16(2);
 		uint8_t m0 = 0;
 		for (uint8_t t = 0; t < num_spaces; ++t) {
 			for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {

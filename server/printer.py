@@ -1822,24 +1822,27 @@ class Printer: # {{{
 		wav = wave.open(io.BytesIO(base64.b64decode(data)))
 		assert wav.getnchannels() == 1
 		data = [ord(x) for x in wav.readframes(wav.getnframes())]
+		# Data is 16 bit signed ints per channel, but it is read as bytes.  First convert it to 16 bit numbers.
 		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2], data[1::2])]
+		# Determine minimum and scale.
 		minimum = min(data)
 		maximum = max(data)
-		level = (minimum + maximum) / 2
+		scale = maximum - minimum + 1;
 		s = ''
-		for t in range(0, len(data) - 7, 8):
+		for t in range(0, len(data) - 3, 4):
 			c = 0
-			for b in range(8):
-				if data[t + b] > level:
-					c += 1 << b
+			for b in range(4):
+				c += ((data[t + b] - minimum) * 4 // scale) << (b * 2)
 			s += chr(c)
 		if not os.path.exists(self.audiodir):
 			os.makedirs(self.audiodir)
 		with open(os.path.join(self.audiodir, name), 'wb') as f:
-			f.write(struct.pack('<H', 1000000 / wav.getframerate()) + s)
+			f.write(struct.pack('<H', 1000000 // wav.getframerate()) + s)
 	# }}}
 	def audio_list(self): # {{{
 		ret = []
+		if not os.path.exists(self.audiodir):
+			return ret
 		for x in os.listdir(self.audiodir):
 			try:
 				with open(os.path.join(self.audiodir, x), 'rb') as f:

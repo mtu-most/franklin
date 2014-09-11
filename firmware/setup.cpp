@@ -50,7 +50,7 @@ void setup()
 	audio_head = 0;
 	audio_tail = 0;
 	audio_state = 0;
-	audio_us_per_bit = 125; // 1000000 / 8000;
+	audio_us_per_sample = 125; // 1000000 / 8000;
 #endif
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
 		printerid[i] = 0;

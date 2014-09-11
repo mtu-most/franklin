@@ -99,7 +99,7 @@
 				args[2] ? elements[2].AddClass(args[2]) : 0,
 				stack
 				<input type='text' onkeydown='floatkey(event, this)'/>
-				<button class='button' type='button' onclick='set_value(this.printer, this.obj, this.factor * Number(document.getElementById(this.source).value))'>Set</button>
+				<button class='button' type='button' onclick='floatkey({keyCode: 13}, document.getElementById(this.source))'>Set</button>
 				<span></span>
 				)!]
 			</div> <!-- }}} -->
@@ -270,7 +270,7 @@
 					[make_tablerow(temp_name(args[1]), elements, ['rowtitle2'])]
 					<div>[$(Float [[['temp', args[1]], 'value', 'settemp']])$]</div>
 					<div>[!(
-						args[1] !== null ? temptargets.push(elements[1]) : 0,
+						args[1] !== null ? printer.temptargets.push(elements[1]) : 0,
 						elements[0].num = args[1],
 						elements[0].target = elements[1],
 						elements[0].printer = printer,
@@ -465,7 +465,7 @@
 								'Motor min (mm)',
 								'Motor max (mm)',
 								'Limit v (mm/s)',
-								'Limit a (mm/s²)'
+								'Limit a (m/s²)'
 							], [
 								'htitle4',
 								'title4',

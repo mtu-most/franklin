@@ -5,7 +5,6 @@ var labels_element, printers_element;
 var selected_port, selected_printer;
 var script_cbs;
 var multiples;
-var temptargets;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
 var space_types = ['Extruder', 'Cartesian', 'Delta'];
 var hidetypes = [];
@@ -26,7 +25,6 @@ function init() { // {{{
 	script_cbs = new Object;
 	ports = new Object;
 	multiples = new Object;
-	temptargets = [];
 	labels_element = document.getElementById('labels');
 	printers_element = document.getElementById('printers');
 	selected_port = null;
@@ -205,11 +203,11 @@ function upload_buttons(port, buttons) { // {{{
 
 function update_temps(printer, t) { // {{{
 	if (t === null) {
-		for (var i = 0; i < temptargets.length; ++i) {
+		for (var i = 0; i < printer.temptargets.length; ++i) {
 			var f = function(i) {
 				printer.call('readtemp', [i], {}, function(value) {
-					temptargets[i].ClearAll();
-					temptargets[i].AddText(value.toFixed(1));
+					printer.temptargets[i].ClearAll();
+					printer.temptargets[i].AddText(value.toFixed(1));
 				});
 			};
 			f(i);
@@ -217,8 +215,8 @@ function update_temps(printer, t) { // {{{
 	}
 	else {
 		printer.call('readtemp', [t], {}, function(value) {
-			temptargets[t].ClearAll();
-			temptargets[t].AddText(value.toFixed(1));
+			printer.temptargets[t].ClearAll();
+			printer.temptargets[t].AddText(value.toFixed(1));
 		});
 	}
 }
@@ -228,7 +226,17 @@ function floatkey(event, element) { // {{{
 	if (element.obj.length != 2)
 		return;
 	var amount;
-	if (event.keyCode == 33) { // Page Up
+	var set = false;
+	if (event.keyCode == 13) { // Enter
+		var v = element.value;
+		if (v[0] == '+')
+			amount = Number(v.substr(1));
+		else {
+			amount = Number(v);
+			set = true;
+		}
+	}
+	else if (event.keyCode == 33) { // Page Up
 		amount = 10;
 	}
 	else if (event.keyCode == 34) { // Page Down
@@ -248,7 +256,11 @@ function floatkey(event, element) { // {{{
 	if (element.obj[0] !== null && element.obj[0][1] === null) {
 		for (var n = 0; n < element.printer['num_' + type2plural[element.obj[0][0]]]; ++n) {
 			var obj = [[element.obj[0][0], n], element.obj[1]];
-			var value = get_value(element.printer, obj) / element.factor + amount;
+			var value;
+			if (set)
+				value = amount;
+			else
+				value = get_value(element.printer, obj) / element.factor + amount;
 			element.value = value.toFixed(1);
 			set_value(element.printer, obj, element.factor * value);
 		}
@@ -257,13 +269,21 @@ function floatkey(event, element) { // {{{
 	if (element.obj[0] !== null && typeof element.obj[0][1] != 'number' && element.obj[0][1][1] === null) {
 		for (var n = 0; n < element.printer.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][0]]]; ++n) {
 			var obj = [[element.obj[0][0], [element.obj[0][1][0], n]], element.obj[1]];
-			var value = get_value(element.printer, obj) / element.factor + amount;
+			var value;
+			if (set)
+				value = amount;
+			else
+				value = get_value(element.printer, obj) / element.factor + amount;
 			element.value = value.toFixed(1);
 			set_value(element.printer, obj, element.factor * value);
 		}
 		return;
 	}
-	var value = get_value(element.printer, element.obj) / element.factor + amount;
+	var value;
+	if (set)
+		value = amount;
+	else
+		value = get_value(element.printer, element.obj) / element.factor + amount;
 	element.value = value.toFixed(1);
 	set_value(element.printer, element.obj, element.factor * value);
 }
