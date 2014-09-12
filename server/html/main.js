@@ -223,8 +223,6 @@ function update_temps(printer, t) { // {{{
 // }}}
 
 function floatkey(event, element) { // {{{
-	if (element.obj.length != 2)
-		return;
 	var amount;
 	var set = false;
 	if (event.keyCode == 13) { // Enter
@@ -259,8 +257,10 @@ function floatkey(event, element) { // {{{
 			var value;
 			if (set)
 				value = amount;
-			else
+			else if (element.obj.length == 2)
 				value = get_value(element.printer, obj) / element.factor + amount;
+			else
+				continue;
 			set_value(element.printer, obj, element.factor * value);
 		}
 		return;
@@ -271,8 +271,10 @@ function floatkey(event, element) { // {{{
 			var value;
 			if (set)
 				value = amount;
-			else
+			else if (element.obj.length == 2)
 				value = get_value(element.printer, obj) / element.factor + amount;
+			else
+				continue;
 			set_value(element.printer, obj, element.factor * value);
 		}
 		return;
@@ -280,8 +282,10 @@ function floatkey(event, element) { // {{{
 	var value;
 	if (set)
 		value = amount;
-	else
+	else if (element.obj.length == 2)
 		value = get_value(element.printer, element.obj) / element.factor + amount;
+	else
+		return;
 	set_value(element.printer, element.obj, element.factor * value);
 }
 // }}}

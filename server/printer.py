@@ -844,20 +844,21 @@ class Printer: # {{{
 							num = int(max(n for n in nums if not math.isnan(n))) + 1
 						if num == 1:
 							#log('debugpart: %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, args['f'], args['F']))
-							z = self._use_probemap(target[0], target[1], args['Z'])
+							z = self.
+							#_use_probemap(target[0], target[1], args['Z'])
 							log('go to one %f %f %f' % (target[0], target[1], z))
-							self.goto([[target[0], target[1], z], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
+							self.goto([[target[0], target[1], z], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
 						else:
 							for t in range(num):
 								targetpart = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
 								#log('debugpart: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, source[0] * 1e3, source[1] * 1e3, targetpart[0] * 1e3, targetpart[1] * 1e3, args['f'], args['F']))
 								z = self._use_probemap(targetpart[0], targetpart[1], args['Z'])
-								log('go to part %f %f %f' % (targetpart[0], targetpart[1], z))
-								self.goto([[targetpart[0], targetpart[1], z], [args['E']]], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
+								#log('go to part %f %f %f' % (targetpart[0], targetpart[1], z))
+								self.goto([[targetpart[0], targetpart[1], z], {args['T']: args['E']}], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
 					else:
 						self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
 				else:
-					self.goto([[target[0], target[1], args['Z']], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
+					self.goto([[target[0], target[1], args['Z']], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
 				if self.wait and self.flushing is False:
 					#log('stop filling; wait for queue space')
 					self.flushing = None
@@ -2280,24 +2281,24 @@ class Printer: # {{{
 								f0 = float('inf')
 						if math.isnan(dist):
 							dist = 0
-						args = {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf')}
+						args = {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder}
 						cmd = ('G', 1)
 						ret.append((cmd, args, message))
 					else:
 						# Drill cycle.
 						# Only support OLD_Z (G90) retract mode; don't support repeats(L).
 						# goto x,y
-						ret.append((('G', 1), {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf')}, message))
+						ret.append((('G', 1), {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, message))
 						# goto r
-						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
+						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, None))
 						# goto z; this is always straight down, because the move before and after it are also vertical.
 						if z != r:
 							f0 = pos[2] / abs(z - r) / 60
-							ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'e': 0, 'E': 0, 'f': f0, 'F': f0}, None))
+							ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'e': 0, 'E': 0, 'f': f0, 'F': f0, 'T': current_extruder}, None))
 						# retract; this is always straight up, because the move before and after it are also non-horizontal.
-						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
+						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, None))
 						# empty move; this makes sure the previous move is entirely vertical.
-						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf')}, None))
+						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, None))
 						# Set up current z position so next G81 will work.
 						pos[0][2] = oldpos[0][2]
 				else:
@@ -2317,9 +2318,6 @@ class Printer: # {{{
 		for cmd, args, message in code:
 			if tuple(cmd) != ('G', 1):
 				continue
-			inspect(args['x'], ret[0])
-			inspect(args['y'], ret[1])
-			inspect(args['z'], ret[2])
 			inspect(args['X'], ret[0])
 			inspect(args['Y'], ret[1])
 			inspect(args['Z'], ret[2])

@@ -239,7 +239,7 @@ static bool do_steps(float factor, unsigned long current_time) {
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
 			float target = mtr.current_pos + mtr.target_dist * factor;
-			mtr.steps = int32_t(target * mtr.steps_per_m) - int32_t(mtr.current_pos * mtr.steps_per_m);
+			mtr.steps = int32_t(target * mtr.steps_per_m + .5) - int32_t(mtr.current_pos * mtr.steps_per_m + .5);
 			if (abs(mtr.steps) > max_steps)
 				max_steps = abs(mtr.steps);
 		}

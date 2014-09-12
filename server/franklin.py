@@ -485,6 +485,7 @@ def detect(port): # {{{
 			GLib.source_remove(watcher)
 			printer.close()
 			log('Timeout waiting for printer on port %s; giving up.' % port)
+			ports[port] = None
 			return False
 		def boot_printer_input(fd, cond):
 			while len(id[0]) < 9:
