@@ -11,40 +11,27 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 	if (na == num_axes && nm == num_motors)
 		return true;
 	loaddebug("new space %d %d %d %d", na, nm, num_axes, num_motors);
-	int16_t memsz = namelen + 1;
 	int16_t savesz = namelen + 1;
-	memsz += globals_memsize();
 	savesz += globals_savesize();
 #ifdef HAVE_TEMPS
 	for (uint8_t t = 0; t < num_temps; ++t) {
-		memsz += t < num_temps ? temps[t].memsize() : Temp::memsize0();
 		savesz += t < num_temps ? temps[t].savesize() : Temp::savesize0();
 	}
 #endif
 #ifdef HAVE_GPIOS
 	for (uint8_t g = 0; g < num_gpios; ++g) {
-		memsz += g < num_gpios ? gpios[g].memsize() : Gpio::memsize0();
 		savesz += g < num_gpios ? gpios[g].savesize() : Gpio::savesize0();
 	}
 #endif
 	for (uint8_t s = 0; s < num_spaces; ++s) {
-		memsz += s < num_spaces ? spaces[s].memsize() : Space::memsize0();
 		savesz += s < num_spaces ? spaces[s].savesize() : Space::savesize0();
 	}
-	memsz -= memsize();
 	savesz -= savesize();
 	uint8_t old_nm = num_motors;
 	uint8_t old_na = num_axes;
 	num_motors = nm;
 	num_axes = na;
-	memsz += memsize();
 	savesz += savesize();
-	if (memsz > (XRAMEND - RAMSTART) / 2) {
-		debug("New space settings make memsize %d, which is larger than half of %d: rejecting.", memsz, XRAMEND - RAMSTART);
-		num_motors = old_nm;
-		num_axes = old_na;
-		return false;
-	}
 	if (savesz > E2END) {
 		debug("New space settings make size %d, which is larger than %d: rejecting.", savesz, E2END);
 		num_motors = old_nm;
@@ -54,11 +41,21 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 	if (na != old_na) {
 		Axis **new_axes;
 		mem_alloc(sizeof(Axis *) * na, &new_axes, "axes");
+		if (!new_axes) {
+			num_motors = old_nm;
+			num_axes = old_na;
+			return false;
+		}
 		loaddebug("new axes: %d %d %x", na, new_axes);
 		for (uint8_t a = 0; a < min(old_na, na); ++a)
 			mem_retarget(&axis[a], &new_axes[a]);
 		for (uint8_t a = old_na; a < na; ++a) {
 			mem_alloc(sizeof(Axis), &new_axes[a], "axis");
+			if (!new_axes[a]) {
+				num_motors = old_nm;
+				num_axes = a;
+				return false;
+			}
 			loaddebug("new axis %x", new_axes[a]);
 			new_axes[a]->source = NAN;
 			new_axes[a]->current = NAN;
@@ -74,11 +71,19 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 	if (nm != old_nm) {
 		Motor **new_motors;
 		mem_alloc(sizeof(Motor *) * nm, &new_motors, "motors");
+		if (!new_motors) {
+			num_motors = old_nm;
+			return false;
+		}
 		loaddebug("new motors: %d %x", nm, new_motors);
 		for (uint8_t m = 0; m < min(old_nm, nm); ++m)
 			mem_retarget(&motor[m], &new_motors[m]);
 		for (uint8_t m = old_nm; m < nm; ++m) {
 			mem_alloc(sizeof(Motor), &new_motors[m], "motor");
+			if (!new_motors[m]) {
+				num_motors = m;
+				return false;
+			}
 			loaddebug("new motor %x", new_motors[m]);
 			new_motors[m]->sense_state = 0;
 			new_motors[m]->sense_pos = NAN;
@@ -140,7 +145,10 @@ void Space::load_info(int16_t &addr, bool eeprom)
 	if (t != type) {
 		//debug("setting type to %d", type);
 		space_types[t].free(this);
-		space_types[type].init(this);
+		if (!space_types[type].init(this)) {
+			type = DEFAULT_TYPE;
+			return;	// The rest of the package is not meant for DEFAULT_TYPE, so ignore it.
+		}
 		ok = false;
 	}
 	else {
@@ -270,24 +278,12 @@ void Space::save_motor(uint8_t m, int16_t &addr, bool eeprom) {
 	write_8(addr, motor[m]->home_order, eeprom);
 }
 
-int16_t Space::memsize_std() {
-	return num_axes * (sizeof(Axis) + sizeof(Axis *)) + num_motors * (sizeof(Motor) + sizeof(Motor *));
-}
-
 int16_t Space::savesize_std() {
 	return (2 * 6 + 4 * 6 + 1 * 2) * num_motors + sizeof(float) * (1 + 3 * num_axes + 3 * num_motors);
 }
 
-int16_t Space::memsize() {
-	return 1 * 1 + space_types[type].memsize(this);
-}
-
 int16_t Space::savesize() {
 	return 1 * 1 + space_types[type].savesize(this);
-}
-
-int16_t Space::memsize0() {
-	return 2;	// Cartesian type, 0 axes.
 }
 
 int16_t Space::savesize0() {
@@ -321,5 +317,18 @@ void Space::copy(Space &dst) {
 	dst.num_motors = num_motors;
 	mem_retarget(&axis, &dst.axis);
 	mem_retarget(&motor, &dst.motor);
+}
+
+void Space::cancel_update() {
+	// setup_nums failed; restore system to a usable state.
+	type = DEFAULT_TYPE;
+	uint8_t n = min(num_axes, num_motors);
+	if (!setup_nums(n, n)) {
+		debug("Failed to free memory; erasing name and removing all motors and axes to make sure it works");
+		mem_free(&name);
+		namelen = 0;
+		if (!setup_nums(0, 0))
+			debug("You're in trouble; this shouldn't be possible");
+	}
 }
 #endif

@@ -200,7 +200,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	}
 	int16_t steps;
 	if (!isnan(mtr->current_pos))
-		steps = int32_t((mtr->current_pos + distance) * mtr->steps_per_m) - int32_t(mtr->current_pos * mtr->steps_per_m);
+		steps = int32_t((mtr->current_pos + distance) * mtr->steps_per_m + .5) - int32_t(mtr->current_pos * mtr->steps_per_m + .5);
 	else
 		steps = distance * mtr->steps_per_m;
 	// Limit steps per iteration.

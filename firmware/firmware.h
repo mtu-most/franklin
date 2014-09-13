@@ -153,9 +153,7 @@ struct Temp
 	void init();
 	void free();
 	void copy(Temp &dst);
-	static int16_t memsize0();
 	static int16_t savesize0();
-	int16_t memsize() { return memsize0(); }
 	int16_t savesize() { return savesize0(); }
 };
 #endif
@@ -213,10 +211,12 @@ struct SpaceType
 	void (*check_position)(Space *s, float *data);
 	void (*load)(Space *s, uint8_t old_type, int16_t &addr, bool eeprom);
 	void (*save)(Space *s, int16_t &addr, bool eeprom);
-	void (*init)(Space *s);
+	bool (*init)(Space *s);
 	void (*free)(Space *s);
-	int16_t (*memsize)(Space *s);
 	int16_t (*savesize)(Space *s);
+#ifdef HAVE_EXTRUDER
+	bool (*change0)(Space *s);
+#endif
 };
 
 struct Space
@@ -237,12 +237,10 @@ struct Space
 	void init();
 	void free();
 	void copy(Space &dst);
-	static int16_t memsize0();
 	static int16_t savesize0();
-	int16_t memsize();
 	int16_t savesize();
 	bool setup_nums(uint8_t na, uint8_t nm);
-	int16_t memsize_std();
+	void cancel_update();
 	int16_t savesize_std();
 };
 
@@ -302,9 +300,7 @@ struct Gpio
 	void init();
 	void free();
 	void copy(Gpio &dst);
-	static int16_t memsize0();
 	static int16_t savesize0();
-	int16_t memsize() { return memsize0(); }
 	int16_t savesize() { return savesize0(); }
 };
 #endif
@@ -429,7 +425,6 @@ void write_float(int16_t &address, float data, bool eeprom);
 // globals.cpp
 bool globals_load(int16_t &address, bool eeprom);
 void globals_save(int16_t &address, bool eeprom);
-int16_t globals_memsize();
 int16_t globals_savesize();
 
 #include ARCH_INCLUDE

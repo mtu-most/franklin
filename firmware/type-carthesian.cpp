@@ -29,26 +29,29 @@ static void check_position(Space *s, float *data) {
 
 static void load(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
 	uint8_t num = read_8(addr, eeprom);
-	if (!s->setup_nums(num, num))
+	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up cartesian axes");
+		s->cancel_update();
+	}
 }
 
 static void save(Space *s, int16_t &addr, bool eeprom) {
 	write_8(addr, s->num_axes, eeprom);
 }
 
-static void init(Space *s) {
+static bool init(Space *s) {
+	return true;
 }
 
 static void free(Space *s) {
 }
 
-static int16_t memsize(Space *s) {
-	return 1 * 1 + s->memsize_std();
-}
-
 static int16_t savesize(Space *s) {
 	return 1 * 1 + s->savesize_std();
+}
+
+static bool change0(Space *s) {
+	return true;
 }
 
 void Cartesian_init(uint8_t num) {
@@ -59,8 +62,10 @@ void Cartesian_init(uint8_t num) {
 	space_types[num].save = save;
 	space_types[num].init = init;
 	space_types[num].free = free;
-	space_types[num].memsize = memsize;
 	space_types[num].savesize = savesize;
+#ifdef HAVE_EXTRUDER
+	space_types[num].change0 = change0;
+#endif
 }
 
 #ifdef HAVE_EXTRUDER
@@ -75,8 +80,14 @@ static void eload(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
 	EDATA(s).dy = read_float(addr, eeprom);
 	EDATA(s).dz = read_float(addr, eeprom);
 	uint8_t num = read_8(addr, eeprom);
-	if (!s->setup_nums(num, num))
+	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up cartesian axes");
+		uint8_t n = min(s->num_axes, s->num_motors);
+		if (!s->setup_nums(n, n)) {
+			debug("Trouble!  Failed to abort.  Cancelling.");
+			s->cancel_update();
+		}
+	}
 }
 
 static void esave(Space *s, int16_t &addr, bool eeprom) {
@@ -86,22 +97,24 @@ static void esave(Space *s, int16_t &addr, bool eeprom) {
 	write_8(addr, s->num_axes, eeprom);
 }
 
-static void einit(Space *s) {
+static bool einit(Space *s) {
 	mem_alloc(sizeof(ExtruderData), &s->type_data, "extruder");
+	if (!s->type_data)
+		return false;
+	return true;
 }
 
 static void efree(Space *s) {
 	mem_free(&s->type_data);
 }
 
-static int16_t ememsize(Space *s) {
-	return 1 * 1 + s->memsize_std() + sizeof(ExtruderData);
-}
-
 static int16_t esavesize(Space *s) {
 	return 1 * 1 + 4 * 3 + s->savesize_std();
 }
 
+static bool echange0(Space *s) {
+	return true;	// TODO
+}
 
 void Extruder_init(uint8_t num) {
 	space_types[num].xyz2motors = xyz2motors;
@@ -111,8 +124,8 @@ void Extruder_init(uint8_t num) {
 	space_types[num].save = esave;
 	space_types[num].init = einit;
 	space_types[num].free = efree;
-	space_types[num].memsize = ememsize;
 	space_types[num].savesize = esavesize;
+	space_types[num].change0 = echange0;
 }
 #endif
 #endif

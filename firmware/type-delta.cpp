@@ -103,6 +103,7 @@ static void check_position(Space *s, float *data) {
 static void load(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
 	if (!s->setup_nums(3, 3)) {
 		debug("Failed to set up delta axes");
+		s->cancel_update();
 		return;
 	}
 	for (uint8_t a = 0; a < 3; ++a) {
@@ -148,20 +149,23 @@ static void save(Space *s, int16_t &addr, bool eeprom) {
 	write_float(addr, PRIVATE(s).angle, eeprom);
 }
 
-static void init(Space *s) {
+static bool init(Space *s) {
 	mem_alloc(sizeof(Delta_private), &s->type_data, "delta");
+	if (!s->type_data)
+		return false;
+	return true;
 }
 
 static void free(Space *s) {
 	mem_free(&s->type_data);
 }
 
-static int16_t memsize(Space *s) {
-	return sizeof(float) * 4 + s->memsize_std();
-}
-
 static int16_t savesize(Space *s) {
 	return sizeof(float) * 4 + s->savesize_std();
+}
+
+static bool change0(Space *s) {
+	return true;
 }
 
 void Delta_init(uint8_t num) {
@@ -172,8 +176,10 @@ void Delta_init(uint8_t num) {
 	space_types[num].save = save;
 	space_types[num].init = init;
 	space_types[num].free = free;
-	space_types[num].memsize = memsize;
 	space_types[num].savesize = savesize;
+#ifdef HAVE_EXTRUDER
+	space_types[num].change0 = change0;
+#endif
 }
 #endif
 #endif

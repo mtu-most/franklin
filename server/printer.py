@@ -844,8 +844,7 @@ class Printer: # {{{
 							num = int(max(n for n in nums if not math.isnan(n))) + 1
 						if num == 1:
 							#log('debugpart: %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, args['f'], args['F']))
-							z = self.
-							#_use_probemap(target[0], target[1], args['Z'])
+							z = self._use_probemap(target[0], target[1], args['Z'])
 							log('go to one %f %f %f' % (target[0], target[1], z))
 							self.goto([[target[0], target[1], z], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
 						else:

@@ -37,48 +37,43 @@ bool globals_load(int16_t &addr, bool eeprom)
 #endif
 		       	nl != namelen) {
 		ldebug("something changed %d %d %d %d %d %d %d %d", ns, num_spaces, nt, num_temps, ng, num_gpios, nl, namelen);
-		uint16_t memsize = nl + 1;
 		uint16_t savesize = nl + 1;
-		memsize += globals_memsize();
 		savesize += globals_savesize();
 		ldebug("size");
 #ifdef HAVE_SPACES
 		for (uint8_t s = 0; s < ns; ++s) {
-			memsize += s < num_spaces ? spaces[s].memsize() : Space::memsize0();
 			savesize += s < num_spaces ? spaces[s].savesize() : Space::savesize0();
 		}
 #endif
 		ldebug("space size");
 #ifdef HAVE_TEMPS
 		for (uint8_t t = 0; t < nt; ++t) {
-			memsize += t < num_temps ? temps[t].memsize() : Temp::memsize0();
 			savesize += t < num_temps ? temps[t].savesize() : Temp::savesize0();
 		}
 #endif
 		ldebug("temps size");
 #ifdef HAVE_GPIOS
 		for (uint8_t g = 0; g < ng; ++g) {
-			memsize += g < num_gpios ? gpios[g].memsize() : Gpio::memsize0();
 			savesize += g < num_gpios ? gpios[g].savesize() : Gpio::savesize0();
 		}
 #endif
 		ldebug("size done");
-		if (memsize > (XRAMEND - RAMSTART) / 2) {
-			debug("New settings make memsize %d, which is larger than half of %d: rejecting.", memsize, XRAMEND - RAMSTART);
-			return false;
-		}
 		if (savesize > E2END) {
 			debug("New settings make savesize %d, which is larger than %d: rejecting.", savesize, E2END);
 			return false;
 		}
 		else {
-			ldebug("New settings make size %d out of %d, and savesize %d out of %d.", memsize, (XRAMEND - RAMSTART) / 2, savesize, E2END);
+			ldebug("New settings make savesize %d out of %d.", savesize, E2END);
 		}
 		if (nl != namelen) {
 			ldebug("new name");
-			mem_free(&name);
-			namelen = nl;
-			mem_alloc(namelen, &name, "name");
+			char *newname;
+			mem_alloc(nl, &newname, "name");
+			if (newname) {
+				mem_free(&name);
+				mem_retarget(&newname, &name);
+				namelen = nl;
+			}
 		}
 		// Free the old memory and initialize the new memory.
 #ifdef HAVE_SPACES
@@ -88,13 +83,15 @@ bool globals_load(int16_t &addr, bool eeprom)
 				spaces[s].free();
 			Space *new_spaces;
 			mem_alloc(sizeof(Space) * ns, &new_spaces, "spaces");
-			for (uint8_t s = 0; s < min(ns, num_spaces); ++s)
-				spaces[s].copy(new_spaces[s]);
-			for (uint8_t s = num_spaces; s < ns; ++s)
-				new_spaces[s].init();
-			mem_free (&spaces);
-			num_spaces = ns;
-			mem_retarget(&new_spaces, &spaces);
+			if (new_spaces) {
+				for (uint8_t s = 0; s < min(ns, num_spaces); ++s)
+					spaces[s].copy(new_spaces[s]);
+				for (uint8_t s = num_spaces; s < ns; ++s)
+					new_spaces[s].init();
+				mem_free (&spaces);
+				num_spaces = ns;
+				mem_retarget(&new_spaces, &spaces);
+			}
 		}
 #endif
 		ldebug("new done");
@@ -105,13 +102,15 @@ bool globals_load(int16_t &addr, bool eeprom)
 				temps[t].free();
 			Temp *new_temps;
 			mem_alloc(sizeof(Temp) * nt, &new_temps, "temps");
-			for (uint8_t t = 0; t < min(nt, num_temps); ++t)
-				temps[t].copy(new_temps[t]);
-			for (uint8_t t = num_temps; t < nt; ++t)
-				new_temps[t].init();
-			mem_free(&temps);
-			num_temps = nt;
-			mem_retarget(&new_temps, &temps);
+			if (new_temps) {
+				for (uint8_t t = 0; t < min(nt, num_temps); ++t)
+					temps[t].copy(new_temps[t]);
+				for (uint8_t t = num_temps; t < nt; ++t)
+					new_temps[t].init();
+				mem_free(&temps);
+				num_temps = nt;
+				mem_retarget(&new_temps, &temps);
+			}
 		}
 #endif
 		ldebug("new done");
@@ -121,20 +120,25 @@ bool globals_load(int16_t &addr, bool eeprom)
 				gpios[g].free();
 			Gpio *new_gpios;
 			mem_alloc(sizeof(Gpio) * ng, &new_gpios, "gpios");
-			for (uint8_t g = 0; g < min(ng, num_gpios); ++g)
-				gpios[g].copy(new_gpios[g]);
-			for (uint8_t g = num_gpios; g < ng; ++g)
-				new_gpios[g].init();
-			mem_free(&gpios);
-			num_gpios = ng;
-			mem_retarget(&new_gpios, &gpios);
+			if (new_gpios) {
+				for (uint8_t g = 0; g < min(ng, num_gpios); ++g)
+					gpios[g].copy(new_gpios[g]);
+				for (uint8_t g = num_gpios; g < ng; ++g)
+					new_gpios[g].init();
+				mem_free(&gpios);
+				num_gpios = ng;
+				mem_retarget(&new_gpios, &gpios);
+			}
 		}
 #endif
 		ldebug("new done");
 	}
-	for (uint8_t n = 0; n < namelen; ++n)
-		name[n] = read_8(addr, eeprom);
-	ldebug("name done");
+	// If allocation failed, namelen may not be large enough.  Read all the bytes anyway.
+	for (uint8_t n = 0; n < nl; ++n) {
+		char c = read_8(addr, eeprom);
+		if (n < namelen)
+			name[n] = c;
+	}
 	led_pin.read(read_16(addr, eeprom));
 	probe_pin.read(read_16(addr, eeprom));
 	probe_dist = read_float(addr, eeprom);
@@ -188,10 +192,6 @@ void globals_save(int16_t &addr, bool eeprom)
 	write_float(addr, motor_limit, eeprom);
 	write_float(addr, temp_limit, eeprom);
 	write_float(addr, feedrate, eeprom);
-}
-
-int16_t globals_memsize() {
-	return 1 * 4 + 2 * 2 + sizeof(float) * 5 + namelen;
 }
 
 int16_t globals_savesize() {
