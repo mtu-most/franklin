@@ -117,7 +117,7 @@ static void move_to_current(Space *s) {
 	fq = 0;
 	t0 = 0;
 	tp = 0;
-	current_move_has_cb = 0;
+	cbs_after_current_move = 0;
 	moving = true;
 	start_time = micros();
 	last_time = start_time;

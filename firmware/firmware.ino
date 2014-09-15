@@ -2,10 +2,10 @@
 #define EXTERN	// This must be done in exactly one source file.
 #include "firmware.h"
 
-#if 1
-#define movedebug(...) do {} while (0)
-#else
+#if 0
 #define movedebug(...) debug(__VA_ARGS__)
+#else
+#define movedebug(...) do {} while (0)
 #endif
 
 //#define TIMING
@@ -19,7 +19,7 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 		sleeper -= 1;
 		return;
 	}
-	sleeper = 1000;
+	sleeper = 100;
 	if (adc_phase == 0)
 		return;
 	if (adc_phase == 1) {
@@ -164,7 +164,6 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 #endif
 
 #ifdef HAVE_SPACES
-static bool delayed;
 
 static void check_distance(Motor *mtr, float distance, float dt, float &factor) {
 	if (isnan(distance) || distance == 0) {
@@ -202,7 +201,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	if (!isnan(mtr->current_pos))
 		steps = int32_t((mtr->current_pos + distance) * mtr->steps_per_m + .5) - int32_t(mtr->current_pos * mtr->steps_per_m + .5);
 	else
-		steps = distance * mtr->steps_per_m;
+		steps = int16_t(distance * mtr->steps_per_m + .5);
 	// Limit steps per iteration.
 	if (abs(steps) > mtr->max_steps) {
 		//debug("s %d", steps);
@@ -228,7 +227,7 @@ static void move_axes(Space *s, unsigned long current_time, float &factor) {
 	}
 }
 
-static bool do_steps(float factor, unsigned long current_time) {
+static bool do_steps(float &factor, unsigned long current_time) {
 	if (factor == 0)
 		return true;
 	int16_t max_steps = 0;
@@ -244,9 +243,13 @@ static bool do_steps(float factor, unsigned long current_time) {
 				max_steps = abs(mtr.steps);
 		}
 	}
-	//debug("%f %d", F(factor), max_steps);
-	if (max_steps == 0)
+	movedebug("do steps %f %d", F(factor), max_steps);
+	if (max_steps == 0) {
+		if (factor < 1)
+			factor = 0;
+		movedebug("do steps0 %f", F(factor));
 		return true;
+	}
 	if (factor < 1)
 		start_time += (current_time - last_time) * (1 - factor);
 	last_time = current_time;
@@ -269,14 +272,15 @@ static bool do_steps(float factor, unsigned long current_time) {
 				debug("hit limit %d %d %d", s, m, mtr.target_dist > 0);
 				mtr.last_v = 0;
 				mtr.limits_pos = isnan(mtr.current_pos) ? INFINITY * (mtr.target_dist > 0 ? 1 : -1) : mtr.current_pos;
-				if (moving && current_move_has_cb) {
+				if (moving && cbs_after_current_move > 0) {
 					//debug("movecb 3");
-					++num_movecbs;
+					num_movecbs += cbs_after_current_move;
+					cbs_after_current_move = 0;
 				}
-				try_send_next();
 				//debug("aborting for limit");
 				abort_move();
-				next_move();
+				num_movecbs += next_move();
+				try_send_next();
 				return false;
 			}
 			mtr.last_v = mtr.target_v * factor;
@@ -324,48 +328,61 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 	if (!moving)
 		return;
 	last_active = longtime;
-	float t = (current_time - start_time) / 1e6;
-	delayed = false;
 	float factor = 1;
+	float t = (current_time - start_time) / 1e6;
+	//buffered_debug("f%f %f %f", F(t), F(t0), F(tp));
 	if (t >= t0 + tp) {	// Finish this move and prepare next.
 		movedebug("finishing %f", F(t));
+		//buffered_debug("a");
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			if (!sp.active)
 				continue;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if ((isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) && (isnan(sp.axis[a]->next_dist) || sp.axis[a]->next_dist == 0)) {
-					sp.axis[a]->target = NAN;
-					continue;
+				//debug("before source %d %f %f", a, F(axis[a].source), F(axis[a].motor.dist));
+				if (!isnan(sp.axis[a]->dist)) {
+					sp.axis[a]->source += sp.axis[a]->dist;
+					sp.axis[a]->dist = NAN;
 				}
-				sp.axis[a]->target = sp.axis[a]->source + sp.axis[a]->dist + sp.axis[a]->next_dist * fq;
+				//debug("after source %d %f %f %f", a, F(axis[a].source), F(axis[a].motor.dist), F(axis[a].current_pos));
+				sp.axis[a]->target = sp.axis[a]->source;
 			}
 			move_axes(&sp, current_time, factor);
 		}
 		if (!do_steps(factor, current_time))
 			return;
-		if (factor < 1) // Not really done yet.
-			return;
-		if (moving && current_move_has_cb) {
-			//debug("movecb 1");
-			++num_movecbs;
-			try_send_next();
-		}
-		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = spaces[s];
-			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				//debug("before source %d %f %f", a, F(axis[a].source), F(axis[a].motor.dist));
-				sp.axis[a]->source += sp.axis[a]->dist;
-				//debug("after source %d %f %f %f", a, F(axis[a].source), F(axis[a].motor.dist), F(axis[a].current_pos));
+		// Start time may have changed; recalculate t.
+		t = (current_time - start_time) / 1e6;
+		if (t / (t0 + tp) >= done_factor) {
+			//buffered_debug("b");
+			moving = false;
+			uint8_t had_cbs = cbs_after_current_move;
+			cbs_after_current_move = 0;
+			had_cbs += next_move();
+			if (moving) {
+				//buffered_debug("c");
+				if (had_cbs > 0) {
+					//debug("movecb 1");
+					num_movecbs += had_cbs;
+					try_send_next();
+				}
+				return;
 			}
-			// Mark motors as not moving.
-			for (uint8_t a = 0; a < sp.num_axes; ++a)
-				sp.axis[a]->dist = NAN;
+			//buffered_debug("d");
+			moving = true;
+			cbs_after_current_move += had_cbs;
+			if (factor == 1) {
+				//buffered_debug("e");
+				moving = false;
+				if (cbs_after_current_move > 0) {
+					//debug("movecb 1");
+					num_movecbs += cbs_after_current_move;
+					cbs_after_current_move = 0;
+					try_send_next();
+				}
+				debug("done");
+			}
 		}
-		//debug("motors done");
-		//debug("moving->false");
-		moving = false;
-		next_move();
 		return;
 	}
 	if (t < t0) {	// Main part.

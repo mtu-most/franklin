@@ -382,7 +382,8 @@ EXTERN float t0, tp;
 EXTERN bool moving;
 EXTERN float f0, f1, f2, fp, fq, fmain;
 EXTERN bool move_prepared;
-EXTERN bool current_move_has_cb;
+EXTERN uint8_t cbs_after_current_move;
+EXTERN float done_factor;
 EXTERN uint8_t requested_temp;
 
 #if DEBUG_BUFFER_LENGTH > 0
@@ -404,7 +405,7 @@ void write_ack();
 void write_ackwait();
 
 // move.cpp
-void next_move();
+uint8_t next_move();
 void abort_move();
 
 // setup.cpp

@@ -131,8 +131,11 @@ void packet()
 		}
 		else
 			write_ack();
-		if (!moving)
-			next_move();
+		if (!moving) {
+			num_movecbs += next_move();
+			if (num_movecbs > 0)
+				try_send_next();
+		}
 		//else
 			//debug("waiting with move");
 		break;

@@ -68,7 +68,7 @@ static inline int16_t adc_get(uint8_t pin) {
 static inline void watchdog_enable() {
 #ifdef WATCHDOG
 	wdt_reset();
-	wdt_enable(WDTO_120MS);
+	wdt_enable(WDTO_1S);
 #endif
 }
 

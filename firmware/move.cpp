@@ -14,11 +14,12 @@
 // vq			end velocity of connector part. (fraction/s)
 
 // Used from previous segment (if move_prepared == true): tp, vq.
-void next_move () {
+uint8_t next_move () {
+	uint8_t num_cbs = 0;
 #ifdef HAVE_SPACES
 	uint8_t a0;
 	if (queue_start == queue_end && !queue_full)
-		return;
+		return num_cbs;
 #ifdef DEBUG_MOVE
 	debug ("Next move; queue start = %d, end = %d", queue_start, queue_end);
 	debug ("queue start.y = %f", F(queue[queue_start].data[1]));
@@ -108,10 +109,8 @@ void next_move () {
 			if ((!isnan(queue[queue_start].data[a0 + a]) && isnan(sp.axis[a]->source)) || (n != queue_end && !isnan(queue[n].data[a0 + a]) && isnan(sp.axis[a]->source))) {
 				debug ("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue: %f %f %f", F(queue[queue_start].data[a0 + a]), F(queue[n].data[a0 + a]), F(sp.axis[a]->source));
 				// This possibly removes one move too many, but it shouldn't happen anyway.
-				if (queue[queue_start].cb) {
-					++num_movecbs;
-					try_send_next ();
-				}
+				if (queue[queue_start].cb)
+					++num_cbs;
 				if (queue_end == queue_start) {
 					continue_cb |= 1;
 					try_send_next ();
@@ -119,7 +118,7 @@ void next_move () {
 				queue_start = n;
 				queue_full = false;
 				abort_move ();
-				return;
+				return num_cbs;
 			}
 		}
 		a0 += sp.num_axes;
@@ -191,7 +190,8 @@ void next_move () {
 	// }}}
 	float v0 = queue[queue_start].f[0] * feedrate;
 	float vp = queue[queue_start].f[1] * feedrate;
-	current_move_has_cb = queue[queue_start].cb;
+	if (queue[queue_start].cb)
+		cbs_after_current_move += 1;
 	if (queue_end == queue_start) {
 		continue_cb |= 1;
 		try_send_next ();
@@ -203,10 +203,8 @@ void next_move () {
 		debug ("Skipping zero-distance prepared move");
 		debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
-		if (current_move_has_cb) {
-			++num_movecbs;
-			try_send_next ();
-		}
+		num_cbs += cbs_after_current_move;
+		cbs_after_current_move = 0;
 		//debug("moving->false");
 		moving = false;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -215,7 +213,7 @@ void next_move () {
 				sp.axis[a]->dist = NAN;
 		}
 		fq = 0;
-		return next_move ();
+		return num_cbs + next_move ();
 	}
 	// }}}
 
@@ -224,7 +222,7 @@ void next_move () {
 	// v0: this move's requested starting speed.
 	// vp: this move's requested ending speed.
 	// vq: next move's requested starting speed.
-	// current_move_has_cb: if a cb should be fired after this segment is complete.
+	// cbs_after_current_move: number of cbs that should be fired after this segment is complete.
 	// move_prepared: if this segment connects to a following segment.
 	// mtr->dist: total distance of this segment (mm).
 	// mtr->next_dist: total distance of next segment (mm).
@@ -270,6 +268,7 @@ void next_move () {
 
 	// Use maximum deviation to find fraction where to start rounded corner.
 	float factor = vq / vp;
+	done_factor = 0;
 	if (vq == 0) {
 		fp = 0;
 		fq = 0;
@@ -299,6 +298,9 @@ void next_move () {
 			float norma(sqrt(norma2));
 			if (norma <= 0)
 				continue;
+			float done = 1 - sp.max_deviation / norma;
+			if (done > done_factor)
+				done_factor = done;
 			float new_fp = sp.max_deviation / sqrt(normb / (norma + normb) * diff2);
 #ifdef DEBUG_MOVE
 			debug ("Space %d fp %f dev %f", s, F(fp), F(sp.max_deviation));
@@ -319,7 +321,9 @@ void next_move () {
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		sp.active = false;
+		//debug("space %d axes %d motors %d", s, sp.num_axes, sp.num_motors);
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			//debug("axis %d", a);
 			if (sp.axis[a]->dist != 0 || sp.axis[a]->next_dist != 0)
 				sp.active = true;
 			sp.axis[a]->main_dist = sp.axis[a]->dist * (1 - fp);
@@ -353,6 +357,7 @@ void next_move () {
 	last_time = start_time;
 	// }}}
 #endif
+	return num_cbs;
 }
 
 void abort_move () { // {{{

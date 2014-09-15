@@ -44,7 +44,7 @@ void setup()
 	//debug("moving->false");
 	moving = false;
 	move_prepared = false;
-	current_move_has_cb = false;
+	cbs_after_current_move = 0;
 	which_autosleep = 0;
 #ifdef HAVE_AUDIO
 	audio_head = 0;
