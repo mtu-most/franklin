@@ -224,8 +224,12 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 	SET_OUTPUT(motor[m]->step_pin);
 	SET_OUTPUT(motor[m]->dir_pin);
 	SET_OUTPUT(motor[m]->enable_pin);
-	if (enable != motor[m]->enable_pin.write())
-		RESET(motor[m]->enable_pin);
+	if (enable != motor[m]->enable_pin.write()) {
+		if (motors_busy)
+			SET(motor[m]->enable_pin);
+		else
+			RESET(motor[m]->enable_pin);
+	}
 	RESET(motor[m]->step_pin);
 	SET_INPUT(motor[m]->limit_min_pin);
 	SET_INPUT(motor[m]->limit_max_pin);

@@ -502,6 +502,7 @@ class Printer: # {{{
 						call_queue.append((self.tempcb.pop(t)[1], []))
 					else:
 						t += 1
+				call_queue.append((self._do_gcode, []))
 				continue
 			elif packet[0] == self.rcommand['CONTINUE']:
 				if not self.initialized:

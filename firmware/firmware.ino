@@ -291,10 +291,13 @@ static bool do_steps(float &factor, unsigned long current_time) {
 				SET(mtr.dir_pin);
 			else
 				RESET(mtr.dir_pin);
+			delayMicroseconds(1);
 			// Move.
 			for (int16_t st = 0; st < abs(mtr.steps); ++st) {
 				SET(mtr.step_pin);
+				delayMicroseconds(1);
 				RESET(mtr.step_pin);
+				delayMicroseconds(1);
 			}
 		}
 	}
@@ -465,9 +468,12 @@ static void handle_audio(unsigned long current_time, unsigned long longtime) {
 						SET(sp.motor[m]->dir_pin);
 					else
 						RESET(sp.motor[m]->dir_pin);
+					delayMicroseconds(1);
 					for (uint8_t st = 0; st < steps; ++st) {
 						SET(sp.motor[m]->step_pin);
+						delayMicroseconds(1);
 						RESET(sp.motor[m]->step_pin);
+						delayMicroseconds(1);
 					}
 				}
 			}
