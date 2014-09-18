@@ -856,7 +856,7 @@ class Printer: # {{{
 								#log('go to part %f %f %f' % (targetpart[0], targetpart[1], z))
 								self.goto([[targetpart[0], targetpart[1], z], {args['T']: args['E']}], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
 					else:
-						self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], [args['E']]], f0 = args['f'], f1 = args['F'])[1](None)
+						self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
 				else:
 					self.goto([[target[0], target[1], args['Z']], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
 				if self.wait and self.flushing is False:
@@ -1050,22 +1050,25 @@ class Printer: # {{{
 			id, axes, f0, f1, cb = self.queue[self.queue_pos]
 			#log('queueing %s' % repr((id, axes, f0, f1, cb)))
 			self.queue_pos += 1
-			a = {}
-			a0 = 0
-			i = 0
+			# Turn sequences into a dict.
 			if isinstance(axes, (list, tuple)):
 				adict = {}
 				for s, data in enumerate(axes):
 					adict[s] = data
 				axes = adict
+			# Make sure the keys are ints.
 			adict = {}
 			for k in axes:
 				adict[int(k)] = axes[k]
 			axes = adict
+			a = {}
+			a0 = 0
 			for i, sp in enumerate(self.spaces):
+				# Only handle spaces that are specified.
 				if i not in axes or axes[i] is None:
 					a0 += len(sp.axis)
 					continue
+				# Handle sequences.
 				if isinstance(axes[i], (list, tuple)):
 					assert len(axes[i]) <= len(sp.axis)
 					for j, axis in enumerate(axes[i]):
@@ -1073,11 +1076,12 @@ class Printer: # {{{
 						if axis is not None and not math.isnan(axis):
 							# Limit values for axis.
 							if axis > sp.axis[ij]['max'] - sp.axis[ij]['offset']:
+								log('limiting %d %d to %f because it exceeds max' % (i, ij, axis))
 								axis = sp.axis[ij]['max'] - sp.axis[ij]['offset']
 							if axis < sp.axis[ij]['min'] - sp.axis[ij]['offset']:
+								log('limiting %d %d to %f because it exceeds min' % (i, ij, axis))
 								axis = sp.axis[ij]['min'] - sp.axis[ij]['offset']
 							a[a0 + ij] = axis
-							#log('current pos: %f' % self.spaces[i].get_current_pos(j))
 				else:
 					for j, axis in tuple(axes[i].items()):
 						ij = int(j)
@@ -1085,18 +1089,22 @@ class Printer: # {{{
 						if axis is not None and not math.isnan(axis):
 							# Limit values for axis.
 							if axis > sp.axis[ij]['max'] - sp.axis[ij]['offset']:
+								log('limiting %d %d to %f because it exceeds max' % (i, ij, axis))
 								axis = sp.axis[ij]['max'] - sp.axis[ij]['offset']
 							if axis < sp.axis[ij]['min'] - sp.axis[ij]['offset']:
+								log('limiting %d %d to %f because it exceeds min' % (i, ij, axis))
 								axis = sp.axis[ij]['min'] - sp.axis[ij]['offset']
 							a[a0 + ij] = axis
 				a0 += len(sp.axis)
 			targets = [0] * (((2 + a0 - 1) >> 3) + 1)
 			axes = a
 			args = ''
+			# Set defaults for feedrates.
 			if f0 is None:
 				f0 = float('inf')
 			if f1 is None:
 				f1 = f0
+			# If feedrates are equal to firmware defaults, don't send them.
 			if f0 != float('inf'):
 				targets[0] |= 1 << 0
 				args += struct.pack('<f', f0)
@@ -1109,7 +1117,7 @@ class Printer: # {{{
 			for axis in a:
 				if math.isnan(axes[axis]):
 					continue
-				targets[(axis + 2) >> 3] |= 1 <<((axis + 2) & 0x7)
+				targets[(axis + 2) >> 3] |= 1 << ((axis + 2) & 0x7)
 				args += struct.pack('<f', axes[axis])
 				#log('axis %d: %f' %(axis, axes[axis]))
 			if cb:
@@ -2302,7 +2310,7 @@ class Printer: # {{{
 								f0 = float('inf')
 						if math.isnan(dist):
 							dist = 0
-						args = {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist / 60 if dist != 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder}
+						args = {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist / 60 if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist / 60 if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder}
 						cmd = ('G', 1)
 						ret.append((cmd, args, message))
 					else:

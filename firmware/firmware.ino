@@ -164,7 +164,6 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 #endif
 
 #ifdef HAVE_SPACES
-
 static void check_distance(Motor *mtr, float distance, float dt, float &factor) {
 	if (isnan(distance) || distance == 0) {
 		mtr->target_dist = 0;
@@ -230,6 +229,7 @@ static void move_axes(Space *s, unsigned long current_time, float &factor) {
 static bool do_steps(float &factor, unsigned long current_time) {
 	if (factor == 0)
 		return true;
+	// Find out if there is any movement at all; if not, set factor to 0 so there will eventually be a step that is large enough for movement.
 	int16_t max_steps = 0;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
@@ -253,6 +253,7 @@ static bool do_steps(float &factor, unsigned long current_time) {
 	if (factor < 1)
 		start_time += (current_time - last_time) * (1 - factor);
 	last_time = current_time;
+	// Move the motors.
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		if (!sp.active)
