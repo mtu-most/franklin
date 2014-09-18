@@ -196,25 +196,17 @@
 				)!]
 			</div> <!-- }}} -->
 			<div id='Axis_space'> [!( args[0].AddMultiple('axis', 'Axis_axis', true, args[1]), '')!] </div>
-			<div id='Motor1_motor'> <!-- {{{ -->
+			<div id='Motor_motor'> <!-- {{{ -->
 				[!(
-					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle3'])]
+					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle5'])]
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'max_steps'], 1])$]</div>
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'home_pos'], 0.001])$]</div>
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'home_order'], 1])$]</div>
-				)!]
-			</div> <!-- }}} -->
-			<div id='Motor1_space'> [!( args[0].AddMultiple('motor', 'Motor1_motor', true, args[1]), '')!] </div>
-			<div id='Motor2_motor'> <!-- {{{ -->
-				[!(
-					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle4'])]
-					<div>[$(Float [[['motor', [args[1], args[2]]], 'motor_min'], 0.001])$]</div>
-					<div>[$(Float [[['motor', [args[1], args[2]]], 'motor_max'], 0.001])$]</div>
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'limit_v'], 0.001])$]</div>
 					<div>[$(Float [[['motor', [args[1], args[2]]], 'limit_a'], 1])$]</div>
 				)!]
 			</div> <!-- }}} -->
-			<div id='Motor2_space'> [!( args[0].AddMultiple('motor', 'Motor2_motor', true, args[1]), '')!] </div>
+			<div id='Motor_space'> [!( args[0].AddMultiple('motor', 'Motor_motor', true, args[1]), '')!] </div>
 			<div id='Steps_motor'> <!-- {{{ -->
 				[!(
 					[make_tablerow(motor_name(args[1], args[2]), elements, ['rowtitle2'])]
@@ -442,43 +434,28 @@
 							]).AddMultiple('space', 'Axis_space', false)
 						])!] <!-- }}} -->
 						[!([make_table().AddMultipleTitles([
-						// Motor part 1 {{{
+						// Motor {{{
 								'Motor',
 								'Microsteps',
 								'Switch pos (mm)',
-								'Home order'
+								'Home order',
+								'Limit v (mm/s)',
+								'Limit a (m/s²)'
 							], [
-								'htitle3',
-								'title3',
-								'title3',
-								'title3'
+								'htitle5',
+								'title5',
+								'title5',
+								'title5',
+								'title5',
+								'title5'
 							], [
 								null,
 								'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
 								'Position of the home switch. (mm)',
-								'Order when homing.  Equal order homes simultaneously; lower order homes first.'
-							]).AddMultiple('space', 'Motor1_space', false)
-						])!] <!-- }}} -->
-						[!([make_table().AddMultipleTitles([
-						// Motor part 1 {{{
-								'Motor',
-								'Motor min (mm)',
-								'Motor max (mm)',
-								'Limit v (mm/s)',
-								'Limit a (m/s²)'
-							], [
-								'htitle4',
-								'title4',
-								'title4',
-								'title4',
-								'title4'
-							], [
-								null,
-								'Minimum value that the motor may move to. (mm)',
-								'Maximum value that the motor may move to. (mm)',
+								'Order when homing.  Equal order homes simultaneously; lower order homes first.',
 								'Maximum speed of the motor. (mm/s)',
 								'Maximum acceleration of the motor. (m/s²)'
-							]).AddMultiple('space', 'Motor2_space', false)
+							]).AddMultiple('space', 'Motor_space', false)
 						])!] <!-- }}} -->
 						<!-- }}} -->
 

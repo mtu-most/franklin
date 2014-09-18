@@ -184,7 +184,6 @@ struct Motor
 	Pin_t sense_pin;
 	uint8_t sense_state;
 	float sense_pos;
-	float motor_min, motor_max;	// Limits for the movement of this motor.
 	float limits_pos;	// position when limit switch was hit or nan
 	float limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;

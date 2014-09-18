@@ -685,8 +685,6 @@ function update_space(index) { // {{{
 		update_float([['motor', [index, m]], 'steps_per_m']);
 		update_float([['motor', [index, m]], 'max_steps']);
 		update_float([['motor', [index, m]], 'home_pos']);
-		update_float([['motor', [index, m]], 'motor_min']);
-		update_float([['motor', [index, m]], 'motor_max']);
 		update_float([['motor', [index, m]], 'limit_v']);
 		update_float([['motor', [index, m]], 'limit_a']);
 		update_float([['motor', [index, m]], 'home_order']);

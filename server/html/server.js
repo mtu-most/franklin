@@ -248,11 +248,9 @@ function _setup_updater() {
 					'steps_per_m': values[3][m][6],
 					'max_steps': values[3][m][7],
 					'home_pos': values[3][m][8],
-					'motor_min': values[3][m][9],
-					'motor_max': values[3][m][10],
-					'limit_v': values[3][m][11],
-					'limit_a': values[3][m][12],
-					'home_order': values[3][m][13]
+					'limit_v': values[3][m][9],
+					'limit_a': values[3][m][10],
+					'home_order': values[3][m][11]
 				});
 			}
 			if (printers[port].spaces[index].type == TYPE_EXTRUDER) {

@@ -266,8 +266,7 @@ static bool do_steps(float &factor, unsigned long current_time) {
 				mtr.current_pos = target;
 				continue;
 			}
-			float cp = mtr.current_pos;
-			if (mtr.steps > 0 ? GET(mtr.limit_max_pin, false) || cp + mtr.target_dist * factor > mtr.motor_max : GET(mtr.limit_min_pin, false) || cp + mtr.target_dist * factor < mtr.motor_min) {
+			if (mtr.steps > 0 ? GET(mtr.limit_max_pin, false) : GET(mtr.limit_min_pin, false)) {
 				// Hit endstop; abort current move and notify host.
 				debug("hit limit %d %d %d", s, m, mtr.target_dist > 0);
 				mtr.last_v = 0;
@@ -383,7 +382,7 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 					cbs_after_current_move = 0;
 					try_send_next();
 				}
-				debug("done");
+				//debug("done");
 			}
 		}
 		return;

@@ -87,8 +87,6 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			loaddebug("new motor %x", new_motors[m]);
 			new_motors[m]->sense_state = 0;
 			new_motors[m]->sense_pos = NAN;
-			new_motors[m]->motor_min = -INFINITY;
-			new_motors[m]->motor_max = INFINITY;
 			new_motors[m]->limits_pos = NAN;
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
@@ -216,8 +214,6 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 	motor[m]->steps_per_m = read_float(addr, eeprom);
 	motor[m]->max_steps = read_8(addr, eeprom);
 	motor[m]->home_pos = read_float(addr, eeprom);
-	motor[m]->motor_min = read_float(addr, eeprom);
-	motor[m]->motor_max = read_float(addr, eeprom);
 	motor[m]->limit_v = read_float(addr, eeprom);
 	motor[m]->limit_a = read_float(addr, eeprom);
 	motor[m]->home_order = read_8(addr, eeprom);
@@ -235,14 +231,16 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 	SET_INPUT(motor[m]->limit_max_pin);
 	SET_INPUT(motor[m]->sense_pin);
 	bool must_move = false;
-	if (old_steps_per_m != motor[m]->steps_per_m && !isnan(motor[m]->home_pos)) {
-		float diff = motor[m]->current_pos - motor[m]->home_pos;
-		motor[m]->current_pos = motor[m]->home_pos + diff * old_steps_per_m / motor[m]->steps_per_m;
-		must_move = true;
-	}
-	if (old_home_pos != motor[m]->home_pos) {
-		motor[m]->current_pos += motor[m]->home_pos - old_home_pos;
-		must_move = true;
+	if (!isnan(motor[m]->home_pos)) {
+		if (old_steps_per_m != motor[m]->steps_per_m) {
+			float diff = motor[m]->current_pos - motor[m]->home_pos;
+			motor[m]->current_pos = motor[m]->home_pos + diff * old_steps_per_m / motor[m]->steps_per_m;
+			must_move = true;
+		}
+		if (old_home_pos != motor[m]->home_pos) {
+			motor[m]->current_pos += motor[m]->home_pos - old_home_pos;
+			must_move = true;
+		}
 	}
 	if (must_move)
 		move_to_current(this);
@@ -275,8 +273,6 @@ void Space::save_motor(uint8_t m, int16_t &addr, bool eeprom) {
 	write_float(addr, motor[m]->steps_per_m, eeprom);
 	write_8(addr, motor[m]->max_steps, eeprom);
 	write_float(addr, motor[m]->home_pos, eeprom);
-	write_float(addr, motor[m]->motor_min, eeprom);
-	write_float(addr, motor[m]->motor_max, eeprom);
 	write_float(addr, motor[m]->limit_v, eeprom);
 	write_float(addr, motor[m]->limit_a, eeprom);
 	write_8(addr, motor[m]->home_order, eeprom);
