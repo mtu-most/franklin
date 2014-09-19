@@ -958,8 +958,11 @@ class Printer: # {{{
 						self.gcode_waiting = True
 						return self.wait_for_temp(0)[1](None)
 				elif cmd == ('SYSTEM', 0):
-					log('running system command: %s' % message)
-					os.system(message)
+					if not re.match(config['allow-system'], message):
+						log('Refusing to run forbidden system command: %s' % message)
+					else:
+						log('Running system command: %s' % message)
+						os.system(message)
 			if len(self.gcode) > 0:
 				self.gcode.pop(0)
 			else:
@@ -1619,6 +1622,13 @@ class Printer: # {{{
 		if not self.wait:
 			self._do_queue()
 	# }}}
+	@delayed
+	def gotocb(self, id, moves = (), f0 = None, f1 = None): # {{{
+		self.queue.append((None, moves, f0, f1, True))
+		if not self.wait:
+			self._do_queue()
+		self.wait_for_cb(False)[1](id)
+	# }}}
 	def sleep(self, sleeping = True): # {{{
 		if sleeping:
 			self.position_valid = False
@@ -2189,9 +2199,8 @@ class Printer: # {{{
 				message = comment[4:].strip()
 			elif comment.startswith('SYSTEM:'):
 				if not re.match(config['allow-system'], comment[7:]):
-					log('refusing to run forbidden system command')
-				else:
-					ret.append((('SYSTEM', 0), {}, comment[7:]))
+					log('Warning: system command %s is forbidden and will not be run' % comment[7:])
+				ret.append((('SYSTEM', 0), {}, comment[7:]))
 				continue
 			if line == '':
 				continue

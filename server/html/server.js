@@ -313,13 +313,12 @@ function _reconnect() {
 		if (typeof scripts[s] == 'object')
 			_updater.del_script(s);
 	}
-	for (var p in printers) {
-		if (typeof printers[p] == 'object') {
+	while (_ports.length > 0) {
+		var p = _ports[0];
+		if (printers[p] !== undefined)
 			_updater.del_printer(p);
-		}
+		_updater.del_port(p);
 	}
-	while (_ports.length > 0)
-		_updater.del_port(_ports.pop());
 	if (!confirm('The connection to the server was lost.  Reconnect?'))
 		return;
 	// Wait a moment before retrying.
