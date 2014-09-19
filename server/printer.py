@@ -1877,6 +1877,9 @@ class Printer: # {{{
 		else:
 			self.movecb.append((sense, ret))
 	# }}}
+	def waiting_for_cb(self): # {{{
+		return self.movewait > 0
+	# }}}
 	@delayed
 	def wait_for_temp(self, id, which = None): # {{{
 		def cb():
