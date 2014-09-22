@@ -2313,8 +2313,8 @@ class Printer: # {{{
 					if cmd[1] != 81:
 						dist = sum([(pos[0][x] - oldpos[0][x]) ** 2 for x in range(3)]) ** .5
 						if dist == 0:
-							dist = abs(estep)
-						if dist > 0:
+							dist = 0	# use 0 instead of esteps, so retraction always happens at maximum speed.
+						elif dist > 0:
 							#if f0 is None:
 							#	f0 = pos[1][current_extruder]
 							f0 = pos[2]	# Always use new value.
