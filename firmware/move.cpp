@@ -56,8 +56,6 @@ uint8_t next_move () {
 	if (!move_prepared) { // {{{
 #ifdef DEBUG_MOVE
 		debug ("No move prepared.");
-		debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
-		debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 		f0 = 0;
 		a0 = 0;
@@ -75,8 +73,6 @@ uint8_t next_move () {
 					sp.axis[a]->next_dist = queue[queue_start].data[a0 + a] - sp.axis[a]->source + sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
 					debug("next dist of %d = %f (%f - %f + %f)", a0 + a, F(sp.axis[a]->next_dist), F(queue[queue_start].data[a0 + a]), F(sp.axis[a]->source), F(sp.axis[a]->offset));
-					debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
-					debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 				}
 			}
@@ -93,16 +89,12 @@ uint8_t next_move () {
 					queue[n].data[a0 + a] = sp.axis[a]->source + sp.axis[a]->next_dist - sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
 					debug("filling next %d with %f", a0 + a, F(queue[n].data[a0 + a]));
-					debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
-					debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 				}
 				if (isnan(queue[queue_start].data[a]) && !isnan(queue[n].data[a])) {
 					queue[queue_start].data[a0 + a] = sp.axis[a]->source - sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
 					debug("filling %d with %f", a0 + a, F(queue[queue_start].data[a0 + a]));
-					debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
-					debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 				}
 			}
@@ -128,16 +120,12 @@ uint8_t next_move () {
 	bool action = false;
 #ifdef DEBUG_MOVE
 	debug ("Move was prepared with tp = %f", F(tp));
-	debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
-	debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 	float vq;
 	if (n == queue_end) { // {{{
 		// There is no next segment; we should stop at the end.
 #ifdef DEBUG_MOVE
 		debug ("Building final segment.");
-		debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
-		debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
@@ -148,8 +136,6 @@ uint8_t next_move () {
 				sp.axis[a]->next_dist = 0;
 #ifdef DEBUG_MOVE
 				debug ("Last segment distance for motor %d is %f", a, F(sp.axis[a]->dist));
-				debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
-				debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 			}
 		}
@@ -161,8 +147,6 @@ uint8_t next_move () {
 		// There is a next segment; we should connect to it.
 #ifdef DEBUG_MOVE
 		debug ("Building a connecting segment.");
-		debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
-		debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 		a0 = 0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -178,8 +162,6 @@ uint8_t next_move () {
 					action = true;
 #ifdef DEBUG_MOVE
 				debug ("Connecting distance for motor %d is %f, to %f = %f + %f - (%f + %f)", a, F(sp.axis[a]->dist), F(sp.axis[a]->next_dist), F(queue[n].data[a0 + a]), F(sp.axis[a]->offset), F(sp.axis[a]->source), F(sp.axis[a]->dist));
-				debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
-				debug ("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 			}
 			a0 += sp.num_axes;
@@ -201,7 +183,6 @@ uint8_t next_move () {
 	if (!action) {
 #ifdef DEBUG_MOVE
 		debug ("Skipping zero-distance prepared move");
-		debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 		num_cbs += cbs_after_current_move;
 		cbs_after_current_move = 0;
@@ -228,7 +209,6 @@ uint8_t next_move () {
 	// mtr->next_dist: total distance of next segment (mm).
 #ifdef DEBUG_MOVE
 	debug ("Set up: tp = %f s, v0 = %f /s, vp = %f /s, vq = %f /s", F(tp), F(v0), F(vp), F(vq));
-	debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 
 	// Limit v0, vp, vq. {{{
@@ -256,14 +236,12 @@ uint8_t next_move () {
 	}
 #ifdef DEBUG_MOVE
 	debug ("After limiting, v0 = %f /s, vp = %f /s and vq = %f /s", F(v0), F(vp), F(vq));
-	debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 	// }}}
 	// Already set up: f0, v0, vp, vq, mtr->dist, mtr->next_dist.
 	// To do: start_time, t0, tp, fmain, fp, fq, mtr->main_dist
 #ifdef DEBUG_MOVE
 	debug ("Preparation did f0 = %f", F(f0));
-	debug ("currentpos10 = %f", F(spaces[1].motor[0]->current_pos));
 #endif
 
 	// Use maximum deviation to find fraction where to start rounded corner.
