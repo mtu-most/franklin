@@ -324,7 +324,7 @@ EXTERN uint8_t num_spaces;
 EXTERN uint8_t num_extruders;
 #endif
 #ifdef HAVE_TEMPS
-EXTERN uint8_t num_temps;
+EXTERN uint8_t num_temps, bed_id;
 #endif
 #ifdef HAVE_GPIOS
 EXTERN uint8_t num_gpios;

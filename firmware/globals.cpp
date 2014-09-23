@@ -143,6 +143,11 @@ bool globals_load(int16_t &addr, bool eeprom)
 	probe_pin.read(read_16(addr, eeprom));
 	probe_dist = read_float(addr, eeprom);
 	probe_safe_dist = read_float(addr, eeprom);
+#ifdef HAVE_TEMPS
+	bed_id = read_8(addr, eeprom);
+#else
+	read_8(addr, eeprom);
+#endif
 	motor_limit = read_float(addr, eeprom);
 	temp_limit = read_float(addr, eeprom);
 	feedrate = read_float(addr, eeprom);
@@ -189,6 +194,11 @@ void globals_save(int16_t &addr, bool eeprom)
 	write_16(addr, probe_pin.write(), eeprom);
 	write_float(addr, probe_dist, eeprom);
 	write_float(addr, probe_safe_dist, eeprom);
+#ifdef HAVE_TEMPS
+	write_8(addr, bed_id, eeprom);
+#else
+	write_8(addr, ~0, eeprom);
+#endif
 	write_float(addr, motor_limit, eeprom);
 	write_float(addr, temp_limit, eeprom);
 	write_float(addr, feedrate, eeprom);

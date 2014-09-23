@@ -83,7 +83,7 @@ function make_id(printer, id, extra) { // {{{
 
 function set_value(printer, id, value, reply, arg) { // {{{
 	var target;
-	if (id.length == 2) {
+	if (id.length == 2 || id[2] === undefined) {
 		var obj = {};
 		obj[id[1]] = value;
 		if (id[0] === null) {
@@ -96,7 +96,7 @@ function set_value(printer, id, value, reply, arg) { // {{{
 				for (var n = 0; n < printer['num_' + type2plural[id[0][0]]]; ++n)
 					printer.call('set_' + id[0][0], [n], obj, reply);
 			}
-			if (typeof id[0][1] != 'number' && id[0][1][1] == null) {
+			else if (typeof id[0][1] != 'number' && id[0][1][1] == null) {
 				// [['axis', [0, null]], 'offset']
 				// [['motor', [0, null]], 'delta_radius']
 				if (id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') {
@@ -138,6 +138,11 @@ function set_value(printer, id, value, reply, arg) { // {{{
 				printer.call(id[2], val, {}, reply);
 			else
 				rpc.call(id[2], val, {}, reply);
+		}
+		else if (id[0][1] === null) {
+			// [['space', null], 'num_axes']
+			for (var n = 0; n < printer['num_' + type2plural[id[0][0]]]; ++n)
+				printer.call(id[2], [n, value], {}, reply);
 		}
 		else
 			printer.call(id[2], [id[0][1], value], {}, reply);
@@ -253,7 +258,7 @@ function floatkey(event, element) { // {{{
 		amount /= 10;
 	if (element.obj[0] !== null && element.obj[0][1] === null) {
 		for (var n = 0; n < element.printer['num_' + type2plural[element.obj[0][0]]]; ++n) {
-			var obj = [[element.obj[0][0], n], element.obj[1]];
+			var obj = [[element.obj[0][0], n], element.obj[1], element.obj[2]];
 			var value;
 			if (set)
 				value = amount;
@@ -512,6 +517,7 @@ function update_globals() { // {{{
 	update_pin([null, 'probe_pin']);
 	update_float([null, 'probe_dist']);
 	update_float([null, 'probe_safe_dist']);
+	update_float([null, 'bed_id']);
 	update_float([null, 'motor_limit']);
 	update_float([null, 'temp_limit']);
 	update_float([null, 'feedrate']);
@@ -853,7 +859,7 @@ function temprange(element, attr) { // {{{
 	var ret = [node];
 	for (var i = 0; i < printer.num_temps; ++i) {
 		node = element.cloneNode(true);
-		node.AddText(temp_name(i));
+		node.AddText(temp_name(printer, i));
 		node[attr] = String(i);
 		ret.push(node);
 	}
@@ -936,10 +942,14 @@ function delta_name(index1, index2) { // {{{
 	return 'Apex ' + String(index1) + ';' + String(index2);
 } // }}}
 
-function temp_name(index) { // {{{
+function temp_name(printer, index) { // {{{
 	if (index === null)
 		return 'All Temps';
-	return index == 0 ? 'Bed' : 'Temp ' + String(index);
+	if (index == printer.bed_id)
+		return 'Bed';
+	if (printer.spaces.length > 1 && index < printer.spaces[1].num_axes)
+		return 'Extruder ' + String(index);
+	return 'Temp ' + String(index);
 } // }}}
 
 function gpio_name(index) { // {{{

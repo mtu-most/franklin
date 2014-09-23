@@ -249,7 +249,7 @@
 
 			<div id='Temp_temp'> <!-- {{{ -->
 				[!(
-					[make_tablerow(temp_name(args[1]), elements, ['rowtitle5'])]
+					[make_tablerow(temp_name(printer, args[1]), elements, ['rowtitle5'])]
 					<div>[$(Float [[['temp', args[1]], 'R0'], 1000])$]</div>
 					<div>[$(Float [[['temp', args[1]], 'R1'], 1000])$]</div>
 					<div>[$(Float [[['temp', args[1]], 'Rc'], 1000])$]</div>
@@ -259,7 +259,7 @@
 			</div> <!-- }}} -->
 			<div id='Tempcontrol_temp'> <!-- {{{ -->
 				[!(
-					[make_tablerow(temp_name(args[1]), elements, ['rowtitle2'])]
+					[make_tablerow(temp_name(printer, args[1]), elements, ['rowtitle2'])]
 					<div>[$(Float [[['temp', args[1]], 'value', 'settemp']])$]</div>
 					<div>[!(
 						args[1] !== null ? printer.temptargets.push(elements[1]) : 0,
@@ -276,7 +276,7 @@
 			<div id='Pins_temp'> <!-- {{{ -->
 				[!(
 				node.id = make_id(printer, [['temppins', args[1]], 'container']),
-				make_pin_title(temp_name(args[1]), stack)
+				make_pin_title(temp_name(printer, args[1]), stack)
 				[$(Pin ['Power', [['temp', args[1]], 'power_pin']])$]
 				[$(Pin ['Thermistor', [['temp', args[1]], 'thermistor_pin'], true])$]
 				)!]
@@ -325,6 +325,7 @@
 						<div>Temp Timeout: [$(Float [[null, 'temp_limit'], 60])$] min</div>
 						<div>Max probe distance: [$(Float [[null, 'probe_dist'], .001])$] mm</div>
 						<div>Probe safe retract distance: [$(Float [[null, 'probe_safe_dist'], .001])$] mm</div>
+						<div>ID of Bed Temp (255 for None): [$(Float [[null, 'bed_id'], 1])$]</div>
 						<div>Spaces: [$(Float [[null, 'num_spaces'], 1])$]</div>
 						<div>Temps: [$(Float [[null, 'num_temps'], 1])$]</div>
 						<div>Gpios: [$(Float [[null, 'num_gpios'], 1])$]</div>

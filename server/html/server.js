@@ -113,6 +113,7 @@ function _setup_updater() {
 				'probe_pin': 0,
 				'probe_dist': Infinity,
 				'probe_safe_dist': Infinity,
+				'bed_id': 255,
 				'motor_limit': 0,
 				'temp_limit': 0,
 				'feedrate': 1,
@@ -172,10 +173,11 @@ function _setup_updater() {
 			printers[port].probe_pin = values[5];
 			printers[port].probe_dist = values[6];
 			printers[port].probe_safe_dist = values[7];
-			printers[port].motor_limit = values[8];
-			printers[port].temp_limit = values[9];
-			printers[port].feedrate = values[10];
-			printers[port].status = values[11];
+			printers[port].bed_id = values[8];
+			printers[port].motor_limit = values[9];
+			printers[port].temp_limit = values[10];
+			printers[port].feedrate = values[11];
+			printers[port].status = values[12];
 			trigger_update(port, 'variables_update');
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({

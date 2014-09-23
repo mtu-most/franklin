@@ -220,8 +220,9 @@ class Connection: # {{{
 		# Forget the printer.  First tell the printer to die
 		p = ports[port]
 		ports[port] = None
-		p.call('die', ('disabled by user',), {}, lambda success, ret: None)
-		cls._broadcast(None, 'del_printer', port)
+		if p.name is not None:
+			p.call('die', ('disabled by user',), {}, lambda success, ret: None)
+			cls._broadcast(None, 'del_printer', port)
 	# }}}
 	@classmethod
 	def detect(cls, port): # {{{
