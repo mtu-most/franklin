@@ -1315,9 +1315,9 @@ class Printer: # {{{
 					else:
 						self.spaces[self.home_space].set_current_pos(i, m['home_pos'])
 				elif i in self.sense[self.home_space]:
-					# Correct for possible extra steps that were done because pausing happened later than hitting the sensor.
+					# Correct for possible extra steps that were done because pausing happened later than hitting the sensor (only on cartesian).
 					if self.home_orig_type == TYPE_DELTA:
-						self.spaces[self.home_space].set_current_pos(i, m['home_pos'] + self.sense[self.home_space][i][-1][1] - self.spaces[self.home_space].get_current_pos(i))
+						self.spaces[self.home_space].set_current_pos(i, self.home_delta_target)
 					else:
 						self.spaces[self.home_space].set_current_pos(i, self.home_delta_target + self.sense[self.home_space][i][-1][1] - self.spaces[self.home_space].get_current_pos(i))
 			n = [m['home_order'] for m in self.spaces[self.home_space].motor if m['home_order'] > self.home_order]
