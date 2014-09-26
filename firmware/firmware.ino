@@ -74,7 +74,8 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 	// Set the phase so next time another temp is measured.
 	adc_phase = 1;
 	// First of all, if an alarm should be triggered, do so.  Adc values are higher for lower temperatures.
-	if ((temps[temp_current].adcmin_alarm < MAXINT && temps[temp_current].adcmin_alarm > temp) || temps[temp_current].adcmax_alarm < temp) {
+	//debug("alarms: %d %d %d %d", temp_current, temps[temp_current].adcmin_alarm, temps[temp_current].adcmax_alarm, temp);
+	if ((temps[temp_current].adcmin_alarm < MAXINT && temps[temp_current].adcmin_alarm >= temp) || temps[temp_current].adcmax_alarm <= temp) {
 		temps[temp_current].min_alarm = NAN;
 		temps[temp_current].max_alarm = NAN;
 		temps[temp_current].adcmin_alarm = MAXINT;

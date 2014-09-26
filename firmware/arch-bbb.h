@@ -2,9 +2,13 @@
 #ifndef _ARCH_AVR_H
 #define _ARCH_AVR_H
 #include <stdint.h>
-#include <stdlib.h>
+#include <unistd.h>
+#include <cstdlib>
 #include <iostream>
-#include <cstdio>
+#include <fstream>
+#include <sstream>
+//#include <cstdio>
+#include <sys/time.h>
 
 #define SET_OUTPUT(pin_no) do { if ((pin_no).valid ()) {}} while (0)
 #define SET_INPUT(pin_no) do { if ((pin_no).valid ()) {}} while (0)
@@ -18,14 +22,27 @@
 #define NUM_DIGITAL_PINS A0 + NUM_ANALOG_INPUTS	// Not true, but otherwise the last pins will be displayed as analog.  Now there are some unusable analog pins displayed.
 
 #ifdef WATCHDOG
-#warning Watchdog is not supported on BeagleBone; ignoring request to use it.
+//#warning Watchdog is not supported on BeagleBone; ignoring request to use it.
 #undef WATCHDOG
 #endif
 
+extern std::string _adc[NUM_ANALOG_INPUTS];
+
 static inline void arch_setup_start() {
 	for (int i = 0; i < A0; ++i) {
-		FILE *f = fopen("sys/class/gpio/export", "w");
-		fprintf(f, "%d", i);
+		std::ofstream f("/sys/class/gpio/export");
+		f << i << '\n';
+		f.close();
+	}
+	// TODO: find correct filename.
+	std::ofstream f("/sys/devices/bone_capemgr.*/slots");
+	f << "cape-bone-iio\n";
+	f.close();
+	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
+		std::ostringstream s;
+		// TODO: find out where these things are, and if it varies, implement a search.
+		s << "/sys/devices/ocp.2/helper.14/AIN" << i;
+		_adc[i] = s.str();
 	}
 }
 
@@ -36,11 +53,14 @@ static inline void adc_start(uint8_t pin) {
 }
 
 static inline bool adc_ready(uint8_t pin) {
-	return false;
+	return true;
 }
 
 static inline int16_t adc_get(uint8_t pin) {
-	return 0;
+	std::ifstream f(_adc[pin].c_str());
+	int16_t value;
+	f >> value;
+	return value;
 }
 
 static inline void reset() {
@@ -61,8 +81,6 @@ public:
 	void flush() {}
 	int available() { return 0; }
 };
-
-EXTERN FakeSerial Serial;
 
 #define debug(...) do { buffered_debug_flush(); fprintf(stderr, __VA_ARGS__); } while (0)
 #define F(x) (x)
@@ -92,6 +110,9 @@ static inline void write_eeprom(uint16_t address, uint8_t data) {
 #define E2END 0xffffffff
 
 #else
+
+EXTERN FakeSerial Serial;
+EXTERN std::string _adc[NUM_ANALOG_INPUTS];
 
 // Memory handling
 EXTERN uint16_t mem_used;

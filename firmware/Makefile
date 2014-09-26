@@ -1,7 +1,7 @@
 MONITOR_PORT = /dev/ttyACM* /dev/ttyUSB*
 
 CPPFLAGS = -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow
-SOURCES = debug.cpp globals.cpp gpio.cpp move.cpp packet.cpp serial.cpp setup.cpp space.cpp storage.cpp temp.cpp type-carthesian.cpp type-delta.cpp main.cpp
+SOURCES = debug.cpp globals.cpp gpio.cpp move.cpp packet.cpp serial.cpp setup.cpp space.cpp storage.cpp temp.cpp type-carthesian.cpp type-delta.cpp base.cpp
 HEADERS = configuration.h firmware.h
 
 ifeq (${TARGET}, bbb)
@@ -12,6 +12,9 @@ franklin: $(OBJECTS) Makefile
 	g++ $(LDFLAGS) $(OBJECTS) -o $@
 %.o: %.cpp $(HEADERS) Makefile
 	g++ $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+
+clean:
+	rm -rf build-* $(OBJECTS) franklin
 
 else
 
@@ -28,24 +31,24 @@ ifeq (${TARGET}, melzi0)
 BOARD_TAG = mighty_opt
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
 BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
-CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x800
+CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x600
 else
 ifeq (${TARGET}, melzi1)
 BOARD_TAG = mighty_opt
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
 BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
 CPPFLAGS += -DUSE_SERIAL1
-CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x800
+CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x600
 else
 ifeq (${TARGET}, mega)
 BOARD_TAG = mega
 CPPFLAGS += -DRAMSTART=0x200
-CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x800
+CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x600
 else
 ifeq (${TARGET}, ramps)
 BOARD_TAG = mega2560
 CPPFLAGS += -DRAMSTART=0x200
-CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x800
+CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x600
 #include /usr/share/arduino/Arduino.mk
 else
 $(error Invalid TARGET)
@@ -56,6 +59,3 @@ endif
 endif
 include Arduino.mk
 endif
-
-clean:
-	rm -rf build-* $(OBJECTS) franklin
