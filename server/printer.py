@@ -1403,7 +1403,7 @@ class Printer: # {{{
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 2, good)
 			self.movecb.append(self.probe_cb)
 			z_low = self.spaces[0].axis[2]['min']
-			self.goto([{2: z_low}], f0 = float(speed) / (z - z_low), cb = True)[1](None)
+			self.goto([{2: z_low}], f0 = float(speed) / (z - z_low) if z > z_low else float('inf'), cb = True)[1](None)
 		else:
 			# Record result
 			z = self.spaces[0].get_current_pos(2)

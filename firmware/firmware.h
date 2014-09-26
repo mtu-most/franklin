@@ -391,6 +391,9 @@ EXTERN int16_t debug_buffer_ptr;
 // debug.cpp
 void buffered_debug_flush();
 void buffered_debug(char const *fmt, ...);
+#else
+#define buffered_debug debug
+#define buffered_debug_flush() do {} while(0)
 #endif
 
 // packet.cpp

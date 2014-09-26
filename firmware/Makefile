@@ -1,12 +1,12 @@
 MONITOR_PORT = /dev/ttyACM* /dev/ttyUSB*
 
 CPPFLAGS = -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow
-SOURCES = axis.cpp extruder.cpp gpio.cpp motor.cpp move.cpp packet.cpp serial.cpp settings.cpp setup.cpp storage.cpp temp.cpp
+SOURCES = debug.cpp globals.cpp gpio.cpp move.cpp packet.cpp serial.cpp setup.cpp space.cpp storage.cpp temp.cpp type-carthesian.cpp type-delta.cpp main.cpp
 HEADERS = configuration.h firmware.h
 
-ifeq (${TARGET}, pi)
-HEADERS += arch-pi.h
-CPPFLAGS += -DARCH_INCLUDE=\"arch-pi.h\"
+ifeq (${TARGET}, bbb)
+HEADERS += arch-bbb.h
+CPPFLAGS += -DARCH_INCLUDE=\"arch-bbb.h\" -DDYNAMIC_MEM_SIZE=0x10000 -DDEFINE_MAIN
 OBJECTS = $(patsubst %.cpp,%.o,$(SOURCES))
 franklin: $(OBJECTS) Makefile
 	g++ $(LDFLAGS) $(OBJECTS) -o $@
@@ -56,3 +56,6 @@ endif
 endif
 include Arduino.mk
 endif
+
+clean:
+	rm -rf build-* $(OBJECTS) franklin
