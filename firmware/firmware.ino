@@ -1,5 +1,4 @@
 // vim: set filetype=cpp foldmethod=marker foldmarker={,} :
-#define EXTERN	// This must be done in exactly one source file.
 #include "firmware.h"
 
 #if 0
@@ -14,14 +13,13 @@
 
 #ifdef HAVE_TEMPS
 static void handle_temps(unsigned long current_time, unsigned long longtime) {
-	static int sleeper = 0;
-	if (sleeper > 0 && requested_temp >= num_temps) {
-		sleeper -= 1;
+	if (next_temp_time > 0)
+		return;
+	if (adc_phase == 0) {
+		next_temp_time = ~0;
 		return;
 	}
-	sleeper = 100;
-	if (adc_phase == 0)
-		return;
+	next_temp_time = 100000;
 	if (adc_phase == 1) {
 		if (requested_temp < num_temps)
 			temp_current = requested_temp;
@@ -172,7 +170,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	}
 	mtr->target_dist = distance;
 	mtr->target_v = distance / dt;
-	float v = abs(distance / dt);
+	float v = fabs(distance / dt);
 	int8_t s = (mtr->target_v < 0 ? -1 : 1);
 	// When turning around, ignore limits (they shouldn't have been violated anyway).
 	if (mtr->last_v * s < 0)
@@ -180,22 +178,22 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	// Limit a-.
 	float max_dist = (mtr->endpos - mtr->current_pos) * s;
 	if (max_dist > 0 && v * v / 2 / mtr->limit_a > max_dist) {
-		//debug("a- %f %f %f %f %d", F(mtr->endpos), F(mtr->limit_a), F(max_dist), F(mtr->current_pos), s);
+		movedebug("a- %f %f %f %f %d", F(mtr->endpos), F(mtr->limit_a), F(max_dist), F(mtr->current_pos), s);
 		v = sqrt(max_dist * 2 * mtr->limit_a);
 		distance = s * v * dt;
 	}
 	// Limit a+.
 	float limit_dv = mtr->limit_a * dt;
 	if (v - mtr->last_v * s > limit_dv) {
-		//debug("a+ %f %f %f %d", F(mtr->target_v), F(limit_dv), F(mtr->last_v), s);
+		movedebug("a+ %f %f %f %d", F(mtr->target_v), F(limit_dv), F(mtr->last_v), s);
 		distance = (limit_dv * s + mtr->last_v) * dt;
-		v = abs(distance / dt);
+		v = fabs(distance / dt);
 	}
 	// Limit v.
 	if (v > mtr->limit_v) {
-		//debug("v");
+		movedebug("v %f %f", F(v), F(mtr->limit_v));
 		distance = (s * mtr->limit_v) * dt;
-		v = abs(distance / dt);
+		v = fabs(distance / dt);
 	}
 	int16_t steps;
 	if (!isnan(mtr->current_pos))
@@ -204,11 +202,11 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 		steps = int16_t(distance * mtr->steps_per_m + .5);
 	// Limit steps per iteration.
 	if (abs(steps) > mtr->max_steps) {
-		//debug("s %d", steps);
+		movedebug("s %d", steps);
 		distance = s * (mtr->max_steps + .1) / mtr->steps_per_m;
 	}
 	float f = distance / mtr->target_dist;
-	//debug("%f %f", F(mtr->target_dist), F(distance));
+	//movedebug("checked %f %f", F(mtr->target_dist), F(distance));
 	if (f < factor)
 		factor = f;
 }
@@ -220,7 +218,7 @@ static void move_axes(Space *s, unsigned long current_time, float &factor) {
 	// Try again if it didn't work; it should have moved target to a better location.
 	if (!ok)
 		space_types[s->type].xyz2motors(s, motors_target, &ok);
-	movedebug("ok %d", ok);
+	//movedebug("ok %d", ok);
 	for (uint8_t m = 0; m < s->num_motors; ++m) {
 		//movedebug("move %d %f %f %f", m, F(target[m]), F(motors_target[m]), F(s->motor[m]->current_pos));
 		check_distance(s->motor[m], motors_target[m] - s->motor[m]->current_pos, (current_time - last_time) / 1e6, factor);
@@ -228,31 +226,61 @@ static void move_axes(Space *s, unsigned long current_time, float &factor) {
 }
 
 static bool do_steps(float &factor, unsigned long current_time) {
-	if (factor == 0)
+	if (factor == 0) {
+		next_motor_time = 0;
 		return true;
+	}
 	// Find out if there is any movement at all; if not, set factor to 0 so there will eventually be a step that is large enough for movement.
 	int16_t max_steps = 0;
+	float f_correction = 0;
+	float factor1 = INFINITY;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		if (!sp.active)
 			continue;
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
-			float target = mtr.current_pos + mtr.target_dist * factor;
-			mtr.steps = int32_t(target * mtr.steps_per_m + .5) - int32_t(mtr.current_pos * mtr.steps_per_m + .5);
+			float targetsteps(fabs(mtr.target_dist) * mtr.steps_per_m + .5);
+			float myfactor = .5 / targetsteps;
+			if (myfactor < factor1)
+				factor1 = factor;
+			if (targetsteps < .5) {
+				mtr.steps = 0;
+				continue;
+			}
+			if (!isnan(mtr.current_pos)) {
+				float target = mtr.current_pos + mtr.target_dist * factor;
+				mtr.steps = int32_t(target * mtr.steps_per_m + .5) - int32_t(mtr.current_pos * mtr.steps_per_m + .5);
+			}
+			else
+				mtr.steps = int16_t(mtr.target_dist * factor * mtr.steps_per_m + .5);
 			if (abs(mtr.steps) > max_steps)
 				max_steps = abs(mtr.steps);
+			if (factor < 1) {
+				if (fabs(mtr.steps + 1.0) / int16_t(targetsteps) > f_correction)
+					f_correction = fabs(mtr.steps + 1.0) / int16_t(targetsteps);
+			}
 		}
 	}
-	movedebug("do steps %f %d", F(factor), max_steps);
+	//movedebug("do steps %f %d", F(factor), max_steps);
 	if (max_steps == 0) {
+		if (!isinf(factor1)) {
+			next_motor_time = (last_time - current_time) * factor1;
+			//debug("setting next motor time to %ld", next_motor_time);
+			next_motor_time = 0;
+		}
 		if (factor < 1)
 			factor = 0;
-		movedebug("do steps0 %f", F(factor));
+		//movedebug("do steps0 %f", F(factor));
 		return true;
 	}
-	if (factor < 1)
-		start_time += (current_time - last_time) * (1 - factor);
+	next_motor_time = 0;
+	if (f_correction > 0 && f_correction < 1) {
+		start_time += (current_time - last_time) * (1 - f_correction);
+		movedebug("correct: %f %d", F(f_correction), int(start_time));
+	}
+	else
+		movedebug("no correct: %f %d", F(f_correction), int(start_time));
 	last_time = current_time;
 	// Move the motors.
 	for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -292,13 +320,11 @@ static bool do_steps(float &factor, unsigned long current_time) {
 				SET(mtr.dir_pin);
 			else
 				RESET(mtr.dir_pin);
-			delayMicroseconds(1);
+			microdelay();
 			// Move.
 			for (int16_t st = 0; st < abs(mtr.steps); ++st) {
 				SET(mtr.step_pin);
-				delayMicroseconds(1);
 				RESET(mtr.step_pin);
-				delayMicroseconds(1);
 			}
 		}
 	}
@@ -314,6 +340,8 @@ static bool do_steps(float &factor, unsigned long current_time) {
 
 
 static void handle_motors(unsigned long current_time, unsigned long longtime) {
+	if (next_motor_time > 0)
+		return;
 	// Check sense pins.
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
@@ -329,8 +357,11 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 		}
 	}
 	// Check for move.
-	if (!moving)
+	if (!moving) {
+		next_motor_time = ~0;
+		//debug("setting next motor time to ~0");
 		return;
+	}
 	last_active = longtime;
 	float factor = 1;
 	float t = (current_time - start_time) / 1e6;
@@ -374,6 +405,7 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 			}
 			//buffered_debug("d");
 			moving = true;
+			next_motor_time = 0;
 			cbs_after_current_move += had_cbs;
 			if (factor == 1) {
 				//buffered_debug("e");
@@ -395,7 +427,7 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", F(t), F(t0), F(tp), F(t_fraction), F(f1), F(f2), F(current_f));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
-			movedebug("try %d %d", s, sp.active);
+			//movedebug("try %d %d", s, sp.active);
 			if (!sp.active)
 				continue;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -438,7 +470,7 @@ static void handle_audio(unsigned long current_time, unsigned long longtime) {
 	if (audio_head != audio_tail) {
 		last_active = longtime;
 		int16_t sample = (current_time - audio_start) / audio_us_per_sample;
-		int16_t audio_byte = sample >> 2;
+		int16_t audio_byte = sample >> 3;
 		while (audio_byte >= AUDIO_FRAGMENT_SIZE) {
 			//debug("next audio fragment");
 			if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
@@ -450,16 +482,16 @@ static void handle_audio(unsigned long current_time, unsigned long longtime) {
 			audio_head = (audio_head + 1) % AUDIO_FRAGMENTS;
 			if (audio_tail == audio_head) {
 				//debug("audio done");
+				next_audio_time = ~0;
 				return;
 			}
 			audio_byte -= AUDIO_FRAGMENT_SIZE;
 			// us per fragment = us/sample*sample/fragment
-			audio_start += audio_us_per_sample * 4 * AUDIO_FRAGMENT_SIZE;
+			audio_start += audio_us_per_sample * 8 * AUDIO_FRAGMENT_SIZE;
 		}
 		uint8_t old_state = audio_state;
-		audio_state = (audio_buffer[audio_head][audio_byte] >> (2 * (sample & 3))) & 3;
+		audio_state = (audio_buffer[audio_head][audio_byte] >> (sample & 7)) & 1;
 		if (audio_state != old_state) {
-			uint8_t steps = abs(audio_state - old_state);
 			for (uint8_t s = 0; s < num_spaces; ++s) {
 				Space &sp = spaces[s];
 				for (uint8_t m = 0; m < sp.num_motors; ++m) {
@@ -469,13 +501,9 @@ static void handle_audio(unsigned long current_time, unsigned long longtime) {
 						SET(sp.motor[m]->dir_pin);
 					else
 						RESET(sp.motor[m]->dir_pin);
-					delayMicroseconds(1);
-					for (uint8_t st = 0; st < steps; ++st) {
-						SET(sp.motor[m]->step_pin);
-						delayMicroseconds(1);
-						RESET(sp.motor[m]->step_pin);
-						delayMicroseconds(1);
-					}
+					microdelay();
+					SET(sp.motor[m]->step_pin);
+					RESET(sp.motor[m]->step_pin);
 				}
 			}
 		}
@@ -484,10 +512,16 @@ static void handle_audio(unsigned long current_time, unsigned long longtime) {
 #endif
 
 static void handle_led(unsigned long current_time) {
-	unsigned timing = temps_busy > 0 ? 1000 / 100 : 1000 / 50;
-	if (current_time - led_last < timing)
+	if (!led_pin.valid()) {
+		next_led_time = ~0;
 		return;
-	led_last += timing;
+	}
+	if (next_led_time > 0)
+		return;
+	unsigned timing = temps_busy > 0 ? 1000000 / 100 : 1000000 / 50;
+	while (current_time - led_last >= timing)
+		led_last += timing;
+	next_led_time = timing - (current_time - led_last);
 	led_phase += 1;
 	led_phase %= 50;
 	// Timings read from https://en.wikipedia.org/wiki/File:Wiggers_Diagram.png (phonocardiogram).
@@ -499,6 +533,7 @@ static void handle_led(unsigned long current_time) {
 }
 
 void loop() {
+	unsigned long next_time = ~0;
 #ifdef TIMING
 	unsigned long first_t = micros();
 #endif
@@ -511,23 +546,35 @@ void loop() {
 #endif
 	unsigned long longtime = millis();
 #ifdef HAVE_TEMPS
-	handle_temps(current_time, longtime);	// Periodic temps stuff: temperature regulation.
+	if (current_time >= next_temp_time)
+		handle_temps(current_time, longtime);	// Periodic temps stuff: temperature regulation.
+	if (next_temp_time < next_time)
+		next_time = next_temp_time;
 #endif
 #ifdef TIMING
 	unsigned long temp_t = micros() - current_time;
 #endif
 #ifdef HAVE_SPACES
-	handle_motors(current_time, longtime);	// Movement.
+	if (current_time >= next_motor_time)
+		handle_motors(current_time, longtime);	// Movement.
+	if (next_motor_time < next_time)
+		next_time = next_motor_time;
 #endif
 #ifdef TIMING
 	unsigned long motor_t = micros() - current_time;
 #endif
-	handle_led(longtime);	// heart beat.
+	if (current_time >= next_led_time)
+		handle_led(current_time);	// heart beat.
+	if (next_led_time < next_time)
+		next_time = next_led_time;
 #ifdef TIMING
 	unsigned long led_t = micros() - current_time;
 #endif
 #ifdef HAVE_AUDIO
-	handle_audio(current_time, longtime);
+	if (current_time >= next_audio_time)
+		handle_audio(current_time, longtime);
+	if (next_audio_time < next_time)
+		next_time = next_audio_time;
 #endif
 #ifdef TIMING
 	unsigned long audio_t = micros() - current_time;
@@ -578,5 +625,21 @@ void loop() {
 		waiter = 977;
 		debug("t: serial %ld temp %ld motor %ld led %ld audio %ld end %ld", F(serial_t), F(temp_t), F(motor_t), F(led_t), F(audio_t), F(end_t));
 	}
+#endif
+	unsigned long delta = micros() - current_time;
+	if (next_time > delta + 1000) {
+		// Wait for next event; compensate for time already during this iteration; don't alter "infitity" flag.
+		wait_for_event(~next_time ? next_time - delta : ~0, current_time);
+		delta = micros() - current_time;
+	}
+#ifdef HAVE_SPACES
+	next_motor_time = ~next_motor_time ? next_motor_time > delta ? next_motor_time - delta : 0 : ~0;
+#endif
+#ifdef HAVE_TEMPS
+	next_temp_time = ~next_temp_time ? next_temp_time > delta ? next_temp_time - delta : 0 : ~0;
+#endif
+	next_led_time = ~next_led_time ? next_led_time > delta ? next_led_time - delta : 0 : ~0;
+#ifdef HAVE_AUDIO
+	next_audio_time = ~next_audio_time ? next_audio_time > delta ? next_audio_time - delta : 0 : ~0;
 #endif
 }

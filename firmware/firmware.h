@@ -12,7 +12,7 @@
 #define ID_SIZE 8	// Number of bytes in printerid.
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
-#define MAXINT (int16_t((uint16_t(1) << 15) - 1))
+#define MAXINT ((1 << ADCBITS) + 1)
 
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
@@ -342,12 +342,18 @@ EXTERN char reply[COMMAND_SIZE];
 EXTERN char out_buffer[16];
 #ifdef HAVE_SPACES
 EXTERN Space *spaces;
+EXTERN unsigned long next_motor_time;
 #endif
 #ifdef HAVE_TEMPS
 EXTERN Temp *temps;
+EXTERN unsigned long next_temp_time;
 #endif
 #ifdef HAVE_GPIOS
 EXTERN Gpio *gpios;
+#endif
+EXTERN unsigned long next_led_time;
+#ifdef HAVE_AUDIO
+EXTERN unsigned long next_audio_time;
 #endif
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];

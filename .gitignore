@@ -1,10 +1,7 @@
-network.py
-gui.py
 *.pyc
-*.gui
 firmware/build-*
-firmware/wshttpd.py
-firmware/xdgbasedir.py
 firmware/*.o
+firmware/firmware
 calibrate/*.ini
 server/html/expressions.js
+server/firmware

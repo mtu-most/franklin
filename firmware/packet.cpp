@@ -217,6 +217,7 @@ void packet()
 			initialized = true;
 		}
 		adc_phase = 1;
+		next_temp_time = 0;
 		write_ack();
 		return;
 	}
@@ -245,6 +246,7 @@ void packet()
 		temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm);
 		write_ack();
 		adc_phase = 1;
+		next_temp_time = 0;
 		return;
 	}
 	case CMD_READTEMP:	// read temperature
@@ -261,6 +263,7 @@ void packet()
 		}
 		requested_temp = which;
 		adc_phase = 1;
+		next_temp_time = 0;
 		write_ack();
 		return;
 	}
@@ -722,6 +725,7 @@ void packet()
 			write_ackwait();
 		else
 			write_ack();
+		next_audio_time = 0;
 		return;
 	}
 #endif

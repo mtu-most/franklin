@@ -34,6 +34,7 @@ config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'login': '',
 		'passwordfile': '',
 		'done': '',
+		'local': 'False',
 		'printercmd': (tuple(xdgbasedir.data_files_read(packagename = 'franklin', filename = 'printer.py')) + ('',))[0]
 	})
 # }}}
@@ -43,6 +44,7 @@ httpd = None
 default_printer = (None, None)
 ports = {}
 autodetect = config['autodetect'].lower() == 'true'
+local = config['local'].lower() == 'true'
 blacklist = config['blacklist']
 orphans = {}
 scripts = {}
@@ -223,6 +225,8 @@ class Connection: # {{{
 		if p.name is not None:
 			p.call('die', ('disabled by user',), {}, lambda success, ret: None)
 			cls._broadcast(None, 'del_printer', port)
+		p.process.kill()
+		p.process.communicate()
 	# }}}
 	@classmethod
 	def detect(cls, port): # {{{
@@ -384,10 +388,13 @@ class Port: # {{{
 			self.call('import_settings', [settings], {}, lambda success, ret: None)
 			GLib.source_remove(orphans[old[0]].input_handle)
 			orphans[old[0]].call('die', ('replaced by new connection',), {}, lambda success, ret: None)
+			orphans[old[0]].process.kill()
+			orphans[old[0]].process.communicate()
 			del orphans[old[0]]
 		def get_vars(success, vars):
 			# The child has opened the port now; close our handle.
-			detectport.close()
+			if detectport is not None:
+				detectport.close()
 			self.name = vars['name']
 			# Copy settings from orphan with the same name, then kill the orphan.
 			old[:] = [x for x in orphans if orphans[x].name == self.name]
@@ -420,7 +427,7 @@ class Port: # {{{
 		line = self.process.stdout.readline()
 		if line == '':
 			log('%s died.' % self.name)
-			self.process.wait()	# Clean up the zombie.
+			self.process.communicate()	# Clean up the zombie.
 			for t in range(3):
 				for w in self.waiters[t]:
 					self.waiters[t][w](False, 'Printer died')
@@ -462,7 +469,12 @@ class Port: # {{{
 # }}}
 
 def detect(port): # {{{
-	if not os.path.exists(port):
+	if port == '-':
+		fake_id = 'xxxxxxxx'
+		process = subprocess.Popen((config['printercmd'], port, config['audiodir'], fake_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		ports[port] = Port(port, process, fake_id, None)
+		return False
+	if not os.path.exists(port) and port != '-':
 		log("not detecting on %s, because file doesn't exist." % port)
 		return False
 	log('detecting on %s' % port)
@@ -530,7 +542,11 @@ def detect(port): # {{{
 		timeout_handle = GLib.timeout_add(15000, timeout)
 		watcher = GLib.io_add_watch(printer.fileno(), GLib.IO_IN, boot_printer_input)
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
-	GLib.timeout_add(1000, part2)
+	# This is only a problem for ramps; don't wait for ports that cannot be ramps.
+	if 'ACM' in port:
+		GLib.timeout_add(1000, part2)
+	else:
+		part2()
 # }}}
 
 def nextid(): # {{{
@@ -565,9 +581,11 @@ def print_done(port, completed, reason): # {{{
 
 if autodetect: # {{{
 	# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
-	if os.path.exists('/sys/class/tty'):
+	if local:
+		websockets.call(None, Connection.add_port, '-')()
+	elif os.path.exists('/sys/class/tty'):
 		for tty in os.listdir('/sys/class/tty'):
-			websockets.call(None, Connection.add_port, '/dev/' + tty) ()
+			websockets.call(None, Connection.add_port, '/dev/' + tty)()
 # }}}
 
 # Set default printer. {{{

@@ -5,6 +5,11 @@
 #include <avr/wdt.h>
 #include <EEPROM.h>
 
+// Arduino is slow enough to not need explicit microsecond delays.
+#define microdelay() do {} while(0)
+// We don't care about using full cpu power on Arduino.
+#define wait_for_event(x, t) do {} while(0)
+
 #define SET_OUTPUT(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, OUTPUT); }} while (0)
 #define SET_INPUT(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, INPUT_PULLUP); }} while (0)
 #define SET_INPUT_NOPULLUP(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, INPUT); }} while (0)
@@ -24,6 +29,9 @@
 
 #ifdef HAVE_TEMPS
 EXTERN uint8_t adc_last_pin;
+#define ADCBITS 10
+
+#define fabs abs
 
 static inline void adc_start(uint8_t adcpin) {
 	// Mostly copied from /usr/share/arduino/hardware/arduino/cores/arduino/wiring_analog.c.

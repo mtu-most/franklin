@@ -34,6 +34,7 @@ void Gpio::load(uint8_t self, int16_t &addr, bool eeprom)
 	if (master < num_temps) {
 		adcvalue = temps[master].toadc(value);
 		adc_phase = 1;
+		next_temp_time = 0;
 	}
 	if (oldmaster != master)
 	{

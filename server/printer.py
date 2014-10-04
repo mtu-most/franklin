@@ -22,6 +22,7 @@ import base64
 import json
 import fcntl
 import select
+import subprocess
 import traceback
 # }}}
 
@@ -51,6 +52,27 @@ class delayed: # {{{
 			#log('wrap called with id %s' % (repr(id)))
 			return self.f(printer, id, *a, **ka)
 		return (WAIT, wrap)
+# }}}
+
+# class for handling beaglebone: driver running on same machine.
+class Driver: # {{{
+	def __init__(self):
+		self.driver = subprocess.Popen(('./firmware',), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		self.infd = self.driver.stdout.fileno()
+		self.outfd = self.driver.stdin.fileno()
+	def write(self, data):
+		self.driver.stdin.write(data)
+	def read(self, length = None):
+		if length is None:
+			return ''
+		else:
+			fds = select.select([self.infd], [], [self.infd], 0)
+			if len(fds[0]) == 0 and len(fds[2]) == 0:
+				return ''
+			return self.driver.stdout.read(length)
+	def close(self):
+		log('Closing printer driver; exiting.')
+		sys.exit(0)
 # }}}
 
 # Reading and writing pins to and from ini files. {{{
@@ -96,7 +118,12 @@ class Printer: # {{{
 		# HACK: this variable needs to have its value before init is done, to make the above HACK in the generator work.
 		global printer
 		printer = self
-		self.printer = serial.Serial(port, baudrate = 115200, timeout = 0)
+		if port == '-':
+			self.printer = Driver()
+		else:
+			self.printer = serial.Serial(port, baudrate = 115200, timeout = 0)
+			self.printer.infd = self.printer.fileno()
+			self.printer.outfd = self.printer.fileno()
 		# Discard pending data.
 		while self.printer.read() != '':
 			pass
@@ -151,7 +178,7 @@ class Printer: # {{{
 		for i in range(15):
 			#log('writing ID')
 			self.printer.write(self.single['ID'])
-			ret = select.select([self.printer], [], [self.printer], 1)
+			ret = select.select([self.printer.infd], [], [self.printer.infd], 1)
 			#log(repr(ret))
 			if len(ret[0]) != 0:
 				break
@@ -206,7 +233,8 @@ class Printer: # {{{
 			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False)
-		#self.load()
+		if port == '-':
+			self.import_settings(open('/root/bbb-settings.ini').read())
 		self.initialized = True
 		global show_own_debug
 		if show_own_debug is None:
@@ -408,8 +436,8 @@ class Printer: # {{{
 					# Check which by reading the id.
 					buffer = ''
 					while len(buffer) < 8:
-						ret = select.select([self.printer], [], [self.printer], .100)
-						if self.printer not in ret[0]:
+						ret = select.select([self.printer.infd], [], [self.printer.infd], .100)
+						if self.printer.infd not in ret[0]:
 							# Something was wrong with the packet; ignore all.
 							break
 						ret = self.printer.read(1)
@@ -420,9 +448,10 @@ class Printer: # {{{
 						# ID has been received.
 						if buffer == '\x00' * 8:
 							# Printer has reset.
-							self._broadcast(None, 'reset')
 							log('printer reset')
-							sys.exit(0)
+							if self.initialized:
+								self._broadcast(None, 'reset')
+								sys.exit(0)
 						# Regular id has been sent; ignore.
 						continue
 				if(ord(r) & 0x80) != 0 or ord(r) in (0, 1):
@@ -440,8 +469,8 @@ class Printer: # {{{
 				self.printer_buffer += r
 				if len(self.printer_buffer) >= packet_len:
 					break
-				ret = select.select([self.printer], [], [self.printer], .100)
-				if self.printer not in ret[0]:
+				ret = select.select([self.printer.infd], [], [self.printer.infd], .100)
+				if self.printer.infd not in ret[0]:
 					dprint('writing(5)', self.single['NACK']);
 					self._printer_write(self.single['NACK'])
 					self.printer_buffer = ''
@@ -625,8 +654,8 @@ class Printer: # {{{
 			self._printer_write(data)
 			while True:
 				ack = None
-				ret = select.select([self.printer], [], [self.printer], .300)
-				if self.printer not in ret[0] and self.printer not in ret[2]:
+				ret = select.select([self.printer.infd], [], [self.printer.infd], .300)
+				if self.printer.infd not in ret[0] and self.printer.infd not in ret[2]:
 					# No response; retry.
 					log('no response waiting for ack')
 					maxtries -= 1
@@ -663,7 +692,7 @@ class Printer: # {{{
 	# }}}
 	def _get_reply(self, cb = False): # {{{
 		while self.printer is not None:
-			ret = select.select([self.printer], [], [self.printer], .150)
+			ret = select.select([self.printer.infd], [], [self.printer.infd], .150)
 			if len(ret[0]) == 0:
 				log('no reply received')
 				return None
@@ -1846,10 +1875,10 @@ class Printer: # {{{
 		maximum = max(data)
 		scale = maximum - minimum + 1;
 		s = ''
-		for t in range(0, len(data) - 3, 4):
+		for t in range(0, len(data) - 7, 8):
 			c = 0
-			for b in range(4):
-				c += ((data[t + b] - minimum) * 4 // scale) << (b * 2)
+			for b in range(8):
+				c += ((data[t + b] - minimum) * 2 // scale) << b
 			s += chr(c)
 		if not os.path.exists(self.audiodir):
 			os.makedirs(self.audiodir)
@@ -2588,7 +2617,7 @@ while True: # {{{
 		f, a = call_queue.pop(0)
 		f(*a)
 	now = time.time()
-	fds = [sys.stdin, printer.printer]
+	fds = [sys.stdin, printer.printer.infd]
 	found = select.select(fds, [], fds, printer.gcode_wait and max(0, printer.gcode_wait - now))
 	#log(repr(found))
 	if len(found[0]) == 0:
@@ -2600,7 +2629,7 @@ while True: # {{{
 	if sys.stdin in found[0] or sys.stdin in found[2]:
 		#log('command')
 		printer._command_input()
-	if printer.printer in found[0] or printer.printer in found[2]:
+	if printer.printer.infd in found[0] or printer.printer.infd in found[2]:
 		#log('printer')
 		printer._printer_input()
 # }}}

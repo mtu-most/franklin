@@ -218,7 +218,7 @@ uint8_t next_move () {
 			if (!isnan(sp.axis[a]->max_v)) {
 				float max;
 				if (sp.axis[a]->dist != 0) {
-					max = sp.axis[a]->max_v / abs(sp.axis[a]->dist);
+					max = sp.axis[a]->max_v / fabs(sp.axis[a]->dist);
 					if (v0 > max) {
 						v0 = max;
 						//debug("limited v0 to %f for max v %f dist %f so %f", F(v0), F(sp.axis[a].max_v), F(sp.axis[a].dist), F(max));
@@ -227,7 +227,7 @@ uint8_t next_move () {
 						vp = max;
 				}
 				if (sp.axis[a]->next_dist != 0) {
-					max = sp.axis[a]->max_v / abs(sp.axis[a]->next_dist);
+					max = sp.axis[a]->max_v / fabs(sp.axis[a]->next_dist);
 					if (vq > max)
 						vq = max;
 				}
@@ -289,10 +289,10 @@ uint8_t next_move () {
 		fq = fp * factor;
 	}
 	// Set up t0, tp.
-	t0 = (1 - fp) / (abs(v0 + vp) / 2);
-	tp = fp / (abs(vp) / 2);
+	t0 = (1 - fp) / (fabs(v0 + vp) / 2);
+	tp = fp / (fabs(vp) / 2);
 	// Set up f1, f2.
-	f1 = .5 * abs(v0) * t0;
+	f1 = .5 * fabs(v0) * t0;
 	f2 = 1 - fp - f1;
 
 	// Finish. {{{
@@ -331,8 +331,9 @@ uint8_t next_move () {
 #endif
 	//debug("moving->true");
 	moving = true;
-	start_time = micros () - long(f0 / abs(vp) * 1e6);
-	last_time = start_time;
+	next_motor_time = 0;
+	last_time = micros();
+	start_time = last_time - long(f0 / fabs(vp) * 1e6);
 	// }}}
 #endif
 	return num_cbs;

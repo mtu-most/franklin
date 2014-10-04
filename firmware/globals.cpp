@@ -140,6 +140,8 @@ bool globals_load(int16_t &addr, bool eeprom)
 			name[n] = c;
 	}
 	led_pin.read(read_16(addr, eeprom));
+	if (led_pin.valid())
+		next_led_time = 0;
 	probe_pin.read(read_16(addr, eeprom));
 	probe_dist = read_float(addr, eeprom);
 	probe_safe_dist = read_float(addr, eeprom);

@@ -6,15 +6,16 @@ HEADERS = configuration.h firmware.h
 
 ifeq (${TARGET}, bbb)
 HEADERS += arch-bbb.h
-CPPFLAGS += -DARCH_INCLUDE=\"arch-bbb.h\" -DDYNAMIC_MEM_SIZE=0x10000 -DDEFINE_MAIN
+CPPFLAGS += -DARCH_INCLUDE=\"arch-bbb.h\"
 OBJECTS = $(patsubst %.cpp,%.o,$(SOURCES))
-franklin: $(OBJECTS) Makefile
+firmware: $(OBJECTS) Makefile
 	g++ $(LDFLAGS) $(OBJECTS) -o $@
 %.o: %.cpp $(HEADERS) Makefile
 	g++ $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+base.o: firmware.ino
 
 clean:
-	rm -rf build-* $(OBJECTS) franklin
+	rm -rf build-* $(OBJECTS) firmware
 
 else
 

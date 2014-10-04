@@ -117,6 +117,7 @@ static void move_to_current(Space *s) {
 	tp = 0;
 	cbs_after_current_move = 0;
 	moving = true;
+	next_motor_time = 0;
 	start_time = micros();
 	last_time = start_time;
 	for (uint8_t i = 0; i < min(s->num_axes, s->num_motors); ++i) {

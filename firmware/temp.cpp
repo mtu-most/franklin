@@ -13,8 +13,10 @@ void Temp::load(int16_t &addr, bool eeprom)
 #ifdef HAVE_GPIOS
 	for (uint8_t gpio = following_gpios; gpio < num_gpios; gpio = gpios[gpio].next)
 		gpios[gpio].adcvalue = toadc(gpios[gpio].value);
-	if (following_gpios < num_gpios)
+	if (following_gpios < num_gpios) {
 		adc_phase = 1;
+		next_temp_time = 0;
+	}
 #endif
 	/*
 	core_C = read_float(addr, eeprom);
@@ -84,7 +86,7 @@ float Temp::fromadc(int16_t adc) {
 		return adc * R0 + R1;
 	}
 	//debug("K: %f adc: %d beta: %f", F(K), adc, F(beta));
-	return -beta / log(K * (1024 / R0 / adc - 1 / R0 - 1 / R1));
+	return -beta / log(K * ((1 << ADCBITS) / R0 / adc - 1 / R0 - 1 / R1));
 }
 
 int16_t Temp::toadc(float T) {
@@ -97,7 +99,7 @@ int16_t Temp::toadc(float T) {
 	}
 	float Rs = K * exp(beta * 1. / T);
 	//debug("K %f Rs %f R0 %f logRc %f Tc %f beta %f", F(K), F(Rs), F(R0), F(logRc), F(Tc), F(beta));
-	return ((1 << 10) - 1) * Rs / (Rs + R0);
+	return ((1 << ADCBITS) - 1) * Rs / (Rs + R0);
 }
 
 void Temp::init() {

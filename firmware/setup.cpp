@@ -1,3 +1,4 @@
+#define EXTERN	// This must be done in exactly one source file.
 #include "firmware.h"
 
 void setup()
@@ -57,14 +58,20 @@ void setup()
 #ifdef HAVE_SPACES
 	num_spaces = 0;
 	spaces = NULL;
+	next_motor_time = ~0;
 #endif
 #ifdef HAVE_TEMPS
 	num_temps = 0;
 	temps = NULL;
+	next_temp_time = ~0;
 #endif
 #ifdef HAVE_GPIOS
 	num_gpios = 0;
 	gpios = NULL;
+#endif
+	next_led_time = 0;
+#ifdef HAVE_AUDIO
+	next_audio_time = ~0;
 #endif
 	debug("running arch end");
 	Serial.write(CMD_ID);
