@@ -19,7 +19,6 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 		next_temp_time = ~0;
 		return;
 	}
-	next_temp_time = 100000;
 	if (adc_phase == 1) {
 		if (requested_temp < num_temps)
 			temp_current = requested_temp;
@@ -54,6 +53,7 @@ static void handle_temps(unsigned long current_time, unsigned long longtime) {
 	if (temp < 0) {	// Not done yet.
 		return;
 	}
+	next_temp_time = 100000;
 	//debug("done temperature %d %d", temp_current, temp);
 	if (requested_temp == temp_current) {
 		//debug("replying temp");
@@ -226,7 +226,7 @@ static void move_axes(Space *s, unsigned long current_time, float &factor) {
 }
 
 static bool do_steps(float &factor, unsigned long current_time) {
-	if (factor == 0) {
+	if (factor <= 0) {
 		next_motor_time = 0;
 		return true;
 	}
@@ -244,7 +244,7 @@ static bool do_steps(float &factor, unsigned long current_time) {
 			float myfactor = .5 / targetsteps;
 			if (myfactor < factor1)
 				factor1 = factor;
-			if (targetsteps < .5) {
+			if (int16_t(targetsteps) < 1) {
 				mtr.steps = 0;
 				continue;
 			}
@@ -276,7 +276,7 @@ static bool do_steps(float &factor, unsigned long current_time) {
 	}
 	next_motor_time = 0;
 	if (f_correction > 0 && f_correction < 1) {
-		start_time += (current_time - last_time) * (1 - f_correction);
+		start_time += (current_time - last_time) * ((1 - f_correction) * .9);
 		movedebug("correct: %f %d", F(f_correction), int(start_time));
 	}
 	else
@@ -512,13 +512,13 @@ static void handle_audio(unsigned long current_time, unsigned long longtime) {
 #endif
 
 static void handle_led(unsigned long current_time) {
+	if (next_led_time > 0)
+		return;
 	if (!led_pin.valid()) {
 		next_led_time = ~0;
 		return;
 	}
-	if (next_led_time > 0)
-		return;
-	unsigned timing = temps_busy > 0 ? 1000000 / 100 : 1000000 / 50;
+	unsigned long timing = temps_busy > 0 ? 1000000 / 100 : 1000000 / 50;
 	while (current_time - led_last >= timing)
 		led_last += timing;
 	next_led_time = timing - (current_time - led_last);
@@ -541,12 +541,13 @@ void loop() {
 #ifdef TIMING
 	unsigned long serial_t = micros() - first_t;
 #endif
-#if defined(HAVE_TEMPS) || defined(HAVE_SPACES) || defined(HAVE_AUDIO)
-	unsigned long current_time = micros();
-#endif
-	unsigned long longtime = millis();
+	unsigned long current_time;
+	unsigned long longtime;
+	get_current_times(&current_time, &longtime);
+	unsigned long dt = current_time - last_current_time;
+	last_current_time = current_time;
 #ifdef HAVE_TEMPS
-	if (current_time >= next_temp_time)
+	if (dt >= next_temp_time)
 		handle_temps(current_time, longtime);	// Periodic temps stuff: temperature regulation.
 	if (next_temp_time < next_time)
 		next_time = next_temp_time;
@@ -555,7 +556,7 @@ void loop() {
 	unsigned long temp_t = micros() - current_time;
 #endif
 #ifdef HAVE_SPACES
-	if (current_time >= next_motor_time)
+	if (dt >= next_motor_time)
 		handle_motors(current_time, longtime);	// Movement.
 	if (next_motor_time < next_time)
 		next_time = next_motor_time;
@@ -563,7 +564,7 @@ void loop() {
 #ifdef TIMING
 	unsigned long motor_t = micros() - current_time;
 #endif
-	if (current_time >= next_led_time)
+	if (dt >= next_led_time)
 		handle_led(current_time);	// heart beat.
 	if (next_led_time < next_time)
 		next_time = next_led_time;
@@ -571,7 +572,7 @@ void loop() {
 	unsigned long led_t = micros() - current_time;
 #endif
 #ifdef HAVE_AUDIO
-	if (current_time >= next_audio_time)
+	if (dt >= next_audio_time)
 		handle_audio(current_time, longtime);
 	if (next_audio_time < next_time)
 		next_time = next_audio_time;
@@ -628,18 +629,22 @@ void loop() {
 #endif
 	unsigned long delta = micros() - current_time;
 	if (next_time > delta + 1000) {
-		// Wait for next event; compensate for time already during this iteration; don't alter "infitity" flag.
-		wait_for_event(~next_time ? next_time - delta : ~0, current_time);
+		// Wait for next event; compensate for time already during this iteration (+1ms, to be sure); don't alter "infitity" flag.
+		wait_for_event(~next_time ? next_time - delta - 1000: ~0, current_time);
 		delta = micros() - current_time;
 	}
 #ifdef HAVE_SPACES
-	next_motor_time = ~next_motor_time ? next_motor_time > delta ? next_motor_time - delta : 0 : ~0;
+	if (~next_motor_time)
+		next_motor_time = next_motor_time > delta ? next_motor_time - delta : 0;
 #endif
 #ifdef HAVE_TEMPS
-	next_temp_time = ~next_temp_time ? next_temp_time > delta ? next_temp_time - delta : 0 : ~0;
+	if (~next_temp_time)
+		next_temp_time = next_temp_time > delta ? next_temp_time - delta : 0;
 #endif
-	next_led_time = ~next_led_time ? next_led_time > delta ? next_led_time - delta : 0 : ~0;
+	if (~next_led_time)
+		next_led_time = next_led_time > delta ? next_led_time - delta : 0;
 #ifdef HAVE_AUDIO
-	next_audio_time = ~next_audio_time ? next_audio_time > delta ? next_audio_time - delta : 0 : ~0;
+	if (~next_audio_time)
+		next_audio_time = next_audio_time > delta ? next_audio_time - delta : 0;
 #endif
 }

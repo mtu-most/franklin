@@ -58,21 +58,21 @@ class delayed: # {{{
 class Driver: # {{{
 	def __init__(self):
 		self.driver = subprocess.Popen(('./firmware',), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-		self.infd = self.driver.stdout.fileno()
-		self.outfd = self.driver.stdin.fileno()
 	def write(self, data):
 		self.driver.stdin.write(data)
 	def read(self, length = None):
 		if length is None:
 			return ''
 		else:
-			fds = select.select([self.infd], [], [self.infd], 0)
+			fds = select.select([self], [], [self], 0)
 			if len(fds[0]) == 0 and len(fds[2]) == 0:
 				return ''
 			return self.driver.stdout.read(length)
 	def close(self):
 		log('Closing printer driver; exiting.')
 		sys.exit(0)
+	def fileno(self):
+		return self.driver.stdout.fileno()
 # }}}
 
 # Reading and writing pins to and from ini files. {{{
@@ -122,8 +122,6 @@ class Printer: # {{{
 			self.printer = Driver()
 		else:
 			self.printer = serial.Serial(port, baudrate = 115200, timeout = 0)
-			self.printer.infd = self.printer.fileno()
-			self.printer.outfd = self.printer.fileno()
 		# Discard pending data.
 		while self.printer.read() != '':
 			pass
@@ -178,7 +176,7 @@ class Printer: # {{{
 		for i in range(15):
 			#log('writing ID')
 			self.printer.write(self.single['ID'])
-			ret = select.select([self.printer.infd], [], [self.printer.infd], 1)
+			ret = select.select([self.printer], [], [self.printer], 1)
 			#log(repr(ret))
 			if len(ret[0]) != 0:
 				break
@@ -436,8 +434,8 @@ class Printer: # {{{
 					# Check which by reading the id.
 					buffer = ''
 					while len(buffer) < 8:
-						ret = select.select([self.printer.infd], [], [self.printer.infd], .100)
-						if self.printer.infd not in ret[0]:
+						ret = select.select([self.printer], [], [self.printer], .100)
+						if self.printer not in ret[0]:
 							# Something was wrong with the packet; ignore all.
 							break
 						ret = self.printer.read(1)
@@ -469,8 +467,8 @@ class Printer: # {{{
 				self.printer_buffer += r
 				if len(self.printer_buffer) >= packet_len:
 					break
-				ret = select.select([self.printer.infd], [], [self.printer.infd], .100)
-				if self.printer.infd not in ret[0]:
+				ret = select.select([self.printer], [], [self.printer], .100)
+				if self.printer not in ret[0]:
 					dprint('writing(5)', self.single['NACK']);
 					self._printer_write(self.single['NACK'])
 					self.printer_buffer = ''
@@ -654,8 +652,8 @@ class Printer: # {{{
 			self._printer_write(data)
 			while True:
 				ack = None
-				ret = select.select([self.printer.infd], [], [self.printer.infd], .300)
-				if self.printer.infd not in ret[0] and self.printer.infd not in ret[2]:
+				ret = select.select([self.printer], [], [self.printer], 1)
+				if self.printer not in ret[0] and self.printer not in ret[2]:
 					# No response; retry.
 					log('no response waiting for ack')
 					maxtries -= 1
@@ -692,7 +690,7 @@ class Printer: # {{{
 	# }}}
 	def _get_reply(self, cb = False): # {{{
 		while self.printer is not None:
-			ret = select.select([self.printer.infd], [], [self.printer.infd], .150)
+			ret = select.select([self.printer], [], [self.printer], 1)
 			if len(ret[0]) == 0:
 				log('no reply received')
 				return None
@@ -1848,13 +1846,16 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def audio_play(self, id, name, motors = None): # {{{
+		log('motors: %s' % repr(motors))
 		assert os.path.basename(name) == name
 		self.audiofile = open(os.path.join(self.audiodir, name), 'rb')
 		channels = [0] *(((sum([len(s.motor) for s in self.spaces]) - 1) >> 3) + 1)
 		m0 = 0
-		for s in self.spaces:
+		for i, s in enumerate(self.spaces):
 			for m in range(len(s.motor)):
-				if motors is None or m in motors:
+				log('checking %s' % repr([i, m]))
+				if motors is None or [i, m] in motors:
+					log('yes')
 					channels[(m0 + m) >> 3] |= 1 <<((m0 + m) & 0x7)
 			m0 += len(s.motor)
 		us_per_bit = self.audiofile.read(2)
@@ -2617,7 +2618,7 @@ while True: # {{{
 		f, a = call_queue.pop(0)
 		f(*a)
 	now = time.time()
-	fds = [sys.stdin, printer.printer.infd]
+	fds = [sys.stdin, printer.printer]
 	found = select.select(fds, [], fds, printer.gcode_wait and max(0, printer.gcode_wait - now))
 	#log(repr(found))
 	if len(found[0]) == 0:
@@ -2629,7 +2630,7 @@ while True: # {{{
 	if sys.stdin in found[0] or sys.stdin in found[2]:
 		#log('command')
 		printer._command_input()
-	if printer.printer.infd in found[0] or printer.printer.infd in found[2]:
+	if printer.printer in found[0] or printer.printer in found[2]:
 		#log('printer')
 		printer._printer_input()
 # }}}

@@ -340,6 +340,7 @@ EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
 EXTERN char reply[COMMAND_SIZE];
 EXTERN char out_buffer[16];
+EXTERN unsigned long last_current_time;
 #ifdef HAVE_SPACES
 EXTERN Space *spaces;
 EXTERN unsigned long next_motor_time;

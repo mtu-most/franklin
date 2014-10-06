@@ -228,8 +228,15 @@ static inline unsigned long millis() {
 //#define microdelay() usleep(1)
 #define microdelay() do {} while(0)
 
-#define min(a, b) (a < b ? a : b)
-#define max(a, b) (a > b ? a : b)
+static inline void get_current_times(unsigned long *current_time, unsigned long *longtime) {
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	*current_time = tv.tv_sec * 1000000 + tv.tv_usec;
+	*longtime = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
 
 static inline uint8_t read_eeprom(uint16_t address) {
 	return 0;

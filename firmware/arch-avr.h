@@ -322,5 +322,11 @@ static inline void _mem_free(void **target) {
 	_mem_dump();
 #endif
 }
+
+
+static inline void get_current_times(unsigned long *current_time, unsigned long *longtime) {
+	*current_time = micros();
+	*longtime = millis();
+}
 #endif
 #endif

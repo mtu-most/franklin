@@ -55,6 +55,7 @@ void setup()
 #endif
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
 		printerid[i] = 0;
+	last_current_time = micros();
 #ifdef HAVE_SPACES
 	num_spaces = 0;
 	spaces = NULL;
