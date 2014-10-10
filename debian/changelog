@@ -1,5 +1,5 @@
-franklin (0.1-1) UNRELEASED; urgency=low
+franklin (0.1-1) unstable; urgency=low
 
-  * Initial release. (Closes: #XXXXXX)
+  * Initial release.
 
  -- Bas Wijnen <wijnen@debian.org>  Fri, 21 Mar 2014 00:18:18 -0400

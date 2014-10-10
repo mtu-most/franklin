@@ -55,7 +55,7 @@ void setup()
 #endif
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
 		printerid[i] = 0;
-	last_current_time = micros();
+	last_current_time = utime();
 #ifdef HAVE_SPACES
 	num_spaces = 0;
 	spaces = NULL;
@@ -74,7 +74,6 @@ void setup()
 #ifdef HAVE_AUDIO
 	next_audio_time = ~0;
 #endif
-	debug("running arch end");
 	Serial.write(CMD_ID);
 	for (uint8_t i = 0; i < 8; ++i)
 		Serial.write(uint8_t(0));

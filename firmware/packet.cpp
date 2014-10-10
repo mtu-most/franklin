@@ -283,7 +283,7 @@ void packet()
 		reply[0] = 10;
 		reply[1] = CMD_POWER;
 		ReadFloat on, current;
-		unsigned long t = micros();
+		unsigned long t = utime();
 		if (temps[which].is_on) {
 			// This causes an insignificant error in the model, but when using this you probably aren't using the model anyway, and besides you won't notice the error even if you do.
 			temps[which].time_on += t - temps[which].last_time;
@@ -637,6 +637,7 @@ void packet()
 			queue_end = 0;
 			queue_full = false;
 			//debug("aborting at request");
+			num_movecbs = 0;
 			abort_move();
 		}
 		write_ack();
@@ -719,7 +720,7 @@ void packet()
 		for (uint8_t i = 0; i < AUDIO_FRAGMENT_SIZE; ++i)
 			audio_buffer[audio_tail][i] = command[2 + i];
 		if (audio_tail == audio_head)
-			audio_start = micros();
+			audio_start = utime();
 		audio_tail = (audio_tail + 1) % AUDIO_FRAGMENTS;
 		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
 			write_ackwait();

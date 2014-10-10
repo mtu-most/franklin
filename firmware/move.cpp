@@ -4,7 +4,7 @@
 //#define DEBUG_MOVE
 
 // Set up:
-// start_time		micros() at start of move.
+// start_time		utime() at start of move.
 // t0			time to do main part.
 // tp			time to do connection.
 // mtr->dist		total distance of this segment (mm).
@@ -332,7 +332,7 @@ uint8_t next_move () {
 	//debug("moving->true");
 	moving = true;
 	next_motor_time = 0;
-	last_time = micros();
+	last_time = utime();
 	start_time = last_time - long(f0 / fabs(vp) * 1e6);
 	// }}}
 #endif

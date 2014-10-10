@@ -138,6 +138,9 @@ static inline void arch_setup_start() {
 static inline void arch_setup_end() {
 }
 
+static inline void arch_run() {
+}
+
 static inline void adc_start(uint8_t _pin) {
 }
 
@@ -152,10 +155,7 @@ static inline int16_t adc_get(uint8_t _pin) {
 	return value;
 }
 
-static inline void reset() {
-	// This shouldn't happen.  But if it does, die.
-	exit(0);
-}
+void reset();
 
 static inline void watchdog_reset() {}
 static inline void watchdog_enable() {}
@@ -187,7 +187,7 @@ public:
 		}
 		if (end == 0 && bbb_pollfd.revents) {
 			fprintf(stderr, "EOF detected on standard input; exiting.\n");
-			exit(0);
+			reset();
 		}
 		bbb_pollfd.revents = 0;
 	}
@@ -196,7 +196,7 @@ public:
 			refill();
 		if (start == end) {
 			fprintf(stderr, "eof on input; exiting.\n");
-			exit(0);
+			reset();
 		}
 		int ret = buffer[start++];
 		//fprintf(stderr, "Firmware read byte: %x\n", ret);
@@ -215,7 +215,7 @@ public:
 	}
 };
 
-static inline unsigned long micros() {
+static inline unsigned long utime() {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1000000 + tv.tv_usec;

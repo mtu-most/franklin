@@ -189,11 +189,29 @@ static inline void debug (char const *fmt, ...) {
 
 EXTERN uint8_t mcusr;
 EXTERN uint16_t mem_used;
+EXTERN uint32_t time_h;
 
 static inline void arch_setup_start() {
 	mcusr = MCUSR;
 	mem_used = 0;
 	MCUSR = 0;
+	// Setup timer1 for microsecond counting.
+	TCCR1A = 0;
+	TCCR1B = 2;	// Clock/8, in other words with 16MHz clock, 2MHz counting; 2 counts/us.
+}
+
+static inline unsigned long utime() {
+	uint8_t l = TCNT1L;
+	uint16_t h = TCNT1H;
+	// Don't use 16,8,0, because we have 2 counts/us, not 1.
+	return time_h << 15 | h << 7 | l >> 1;
+}
+
+static inline void arch_run() {
+	if (TIFR1 & (1 << TOV1)) {
+		TIFR1 = 1 << TOV1;
+		time_h += 1;
+	}
 }
 
 static inline void arch_setup_end() {
@@ -325,7 +343,7 @@ static inline void _mem_free(void **target) {
 
 
 static inline void get_current_times(unsigned long *current_time, unsigned long *longtime) {
-	*current_time = micros();
+	*current_time = utime();
 	*longtime = millis();
 }
 #endif

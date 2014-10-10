@@ -33,7 +33,7 @@ static const uint8_t MASK[5][4] = {
 // There may be serial data available.
 void serial()
 {
-	if (!had_data && command_end > 0 && micros() - last_micros >= 100000)
+	if (!had_data && command_end > 0 && utime() - last_micros >= 100000)
 	{
 		// Command not finished; ignore it and wait for next.
 		watchdog_reset();
@@ -91,7 +91,7 @@ void serial()
 			continue;
 		}
 		command_end = 1;
-		last_micros = micros();
+		last_micros = utime();
 	}
 	int len = Serial.available();
 	if (len == 0)
@@ -101,7 +101,7 @@ void serial()
 #endif
 		watchdog_reset();
 		// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
-		if (out_busy && micros() - out_time >= 200000) {
+		if (out_busy && utime() - out_time >= 200000) {
 #ifdef DEBUG_SERIAL
 			debug("resending packet");
 #endif
@@ -120,7 +120,7 @@ void serial()
 #ifdef DEBUG_SERIAL
 	debug("read %d bytes", len);
 #endif
-	last_micros = micros();
+	last_micros = utime();
 	command_end += len;
 	if (command_end < cmd_len)
 	{
@@ -267,7 +267,7 @@ void send_packet(char *the_packet)
 	for (uint8_t t = 0; t < cmd_len + (cmd_len + 2) / 3; ++t)
 		Serial.write(the_packet[t]);
 	out_busy = true;
-	out_time = micros();
+	out_time = utime();
 }
 
 // Call send_packet if we can.
@@ -314,7 +314,7 @@ void try_send_next()
 			if (spaces[w].motor[m]->sense_state & 1)
 			{
 #ifdef DEBUG_SERIAL
-				debug("sense %d %d %f", w, spaces[w].motor[m]->sense_state, F(spaces[w].motor[m]->sense_pos));
+				debug("sense (%d %d) %d %f", w, m, spaces[w].motor[m]->sense_state, F(spaces[w].motor[m]->sense_pos));
 #endif
 				out_buffer[0] = 8;
 				out_buffer[1] = CMD_SENSE;
@@ -421,6 +421,9 @@ void try_send_next()
 	}
 	if (which_autosleep != 0)
 	{
+#ifdef DEBUG_SERIAL
+		debug("autosleep");
+#endif
 		out_buffer[0] = 3;
 		out_buffer[1] = CMD_AUTOSLEEP;
 		out_buffer[2] = which_autosleep;
@@ -436,6 +439,9 @@ void try_send_next()
 	}
 	if (ping != 0)
 	{
+#ifdef DEBUG_SERIAL
+		debug("pong %d", ping);
+#endif
 		for (uint8_t b = 0; b < 8; ++b)
 		{
 			if (ping & 1 << b)

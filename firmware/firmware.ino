@@ -396,11 +396,9 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 			had_cbs += next_move();
 			if (moving) {
 				//buffered_debug("c");
-				if (had_cbs > 0) {
-					//debug("movecb 1");
-					num_movecbs += had_cbs;
-					try_send_next();
-				}
+				//debug("movecb 1");
+				num_movecbs += had_cbs;
+				try_send_next();
 				return;
 			}
 			//buffered_debug("d");
@@ -410,12 +408,10 @@ static void handle_motors(unsigned long current_time, unsigned long longtime) {
 			if (factor == 1) {
 				//buffered_debug("e");
 				moving = false;
-				if (cbs_after_current_move > 0) {
-					//debug("movecb 1");
-					num_movecbs += cbs_after_current_move;
-					cbs_after_current_move = 0;
-					try_send_next();
-				}
+				//debug("movecb 1");
+				num_movecbs += cbs_after_current_move;
+				cbs_after_current_move = 0;
+				try_send_next();
 				//debug("done");
 			}
 		}
@@ -533,13 +529,14 @@ static void handle_led(unsigned long current_time) {
 }
 
 void loop() {
+	arch_run();
 	unsigned long next_time = ~0;
 #ifdef TIMING
-	unsigned long first_t = micros();
+	unsigned long first_t = utime();
 #endif
 	serial();
 #ifdef TIMING
-	unsigned long serial_t = micros() - first_t;
+	unsigned long serial_t = utime() - first_t;
 #endif
 	unsigned long current_time;
 	unsigned long longtime;
@@ -553,7 +550,7 @@ void loop() {
 		next_time = next_temp_time;
 #endif
 #ifdef TIMING
-	unsigned long temp_t = micros() - current_time;
+	unsigned long temp_t = utime() - current_time;
 #endif
 #ifdef HAVE_SPACES
 	if (dt >= next_motor_time)
@@ -562,14 +559,14 @@ void loop() {
 		next_time = next_motor_time;
 #endif
 #ifdef TIMING
-	unsigned long motor_t = micros() - current_time;
+	unsigned long motor_t = utime() - current_time;
 #endif
 	if (dt >= next_led_time)
 		handle_led(current_time);	// heart beat.
 	if (next_led_time < next_time)
 		next_time = next_led_time;
 #ifdef TIMING
-	unsigned long led_t = micros() - current_time;
+	unsigned long led_t = utime() - current_time;
 #endif
 #ifdef HAVE_AUDIO
 	if (dt >= next_audio_time)
@@ -578,7 +575,7 @@ void loop() {
 		next_time = next_audio_time;
 #endif
 #ifdef TIMING
-	unsigned long audio_t = micros() - current_time;
+	unsigned long audio_t = utime() - current_time;
 #endif
 #ifdef HAVE_SPACES
 	if (motors_busy && (longtime - last_active) / 1e3 > motor_limit) {
@@ -614,7 +611,7 @@ void loop() {
 	if (which_autosleep != 0)
 		try_send_next();
 #ifdef TIMING
-	unsigned long end_t = micros() - current_time;
+	unsigned long end_t = utime() - current_time;
 	end_t -= audio_t;
 	audio_t -= led_t;
 	led_t -= motor_t;
@@ -627,11 +624,11 @@ void loop() {
 		debug("t: serial %ld temp %ld motor %ld led %ld audio %ld end %ld", F(serial_t), F(temp_t), F(motor_t), F(led_t), F(audio_t), F(end_t));
 	}
 #endif
-	unsigned long delta = micros() - current_time;
+	unsigned long delta = utime() - current_time;
 	if (next_time > delta + 1000) {
 		// Wait for next event; compensate for time already during this iteration (+1ms, to be sure); don't alter "infitity" flag.
 		wait_for_event(~next_time ? next_time - delta - 1000: ~0, current_time);
-		delta = micros() - current_time;
+		delta = utime() - current_time;
 	}
 #ifdef HAVE_SPACES
 	if (~next_motor_time)

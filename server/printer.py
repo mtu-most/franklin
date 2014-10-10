@@ -26,6 +26,13 @@ import subprocess
 import traceback
 # }}}
 
+if False:
+	def trace(frame, why, arg):
+		if why == 'call':
+			code = frame.f_code
+			log('call: %s' % code.co_name)
+	sys.settrace(trace)
+
 fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 
 def dprint(x, data): # {{{
@@ -58,16 +65,30 @@ class delayed: # {{{
 class Driver: # {{{
 	def __init__(self):
 		self.driver = subprocess.Popen(('./firmware',), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		fcntl.fcntl(self.driver.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
+		self.buffer = ''
+	def available(self):
+		return len(self.buffer) > 0
 	def write(self, data):
 		self.driver.stdin.write(data)
+		self.driver.stdin.flush()
 	def read(self, length = None):
 		if length is None:
 			return ''
-		else:
-			fds = select.select([self], [], [self], 0)
-			if len(fds[0]) == 0 and len(fds[2]) == 0:
-				return ''
-			return self.driver.stdout.read(length)
+		while True:
+			try:
+				r = self.driver.stdout.read()
+			except IOError:
+				r = self.buffer[:length]
+				self.buffer = self.buffer[length:]
+				return r
+			if r == '':
+				log('EOF?')
+			self.buffer += r
+			if len(self.buffer) >= length:
+				ret = self.buffer[:length]
+				self.buffer = self.buffer[length:]
+				return ret
 	def close(self):
 		log('Closing printer driver; exiting.')
 		sys.exit(0)
@@ -122,6 +143,7 @@ class Printer: # {{{
 			self.printer = Driver()
 		else:
 			self.printer = serial.Serial(port, baudrate = 115200, timeout = 0)
+			self.printer.available = lambda: False
 		# Discard pending data.
 		while self.printer.read() != '':
 			pass
@@ -434,10 +456,11 @@ class Printer: # {{{
 					# Check which by reading the id.
 					buffer = ''
 					while len(buffer) < 8:
-						ret = select.select([self.printer], [], [self.printer], .100)
-						if self.printer not in ret[0]:
-							# Something was wrong with the packet; ignore all.
-							break
+						if not self.printer.available():
+							ret = select.select([self.printer], [], [self.printer], .100)
+							if self.printer not in ret[0]:
+								# Something was wrong with the packet; ignore all.
+								break
 						ret = self.printer.read(1)
 						if ret == '':
 							break
@@ -467,16 +490,18 @@ class Printer: # {{{
 				self.printer_buffer += r
 				if len(self.printer_buffer) >= packet_len:
 					break
-				ret = select.select([self.printer], [], [self.printer], .100)
-				if self.printer not in ret[0]:
-					dprint('writing(5)', self.single['NACK']);
-					self._printer_write(self.single['NACK'])
-					self.printer_buffer = ''
-					if self.debug_buffer is not None:
-						if show_firmware_debug:
-							log('Debug(partial): %s' % self.debug_buffer)
-						self.debug_buffer = None
-					return (None, None)
+				if not self.printer.available():
+					log('waiting for more data (%d/%d)' % (len(self.printer_buffer), packet_len))
+					ret = select.select([self.printer], [], [self.printer], 1)
+					if self.printer not in ret[0]:
+						dprint('writing(5)', self.single['NACK']);
+						self._printer_write(self.single['NACK'])
+						self.printer_buffer = ''
+						if self.debug_buffer is not None:
+							if show_firmware_debug:
+								log('Debug(partial): %s' % self.debug_buffer)
+							self.debug_buffer = None
+						return (None, None)
 			packet = self._parse_packet(self.printer_buffer)
 			self.printer_buffer = ''
 			if packet is None:
@@ -621,6 +646,7 @@ class Printer: # {{{
 	def _parse_packet(self, data): # {{{
 		#log(' '.join(['%02x' % ord(x) for x in data]))
 		if ord(data[0]) + (ord(data[0]) + 2) / 3 != len(data):
+			log('not ok length')
 			return None
 		length = ord(data[0])
 		checksum = data[length:]
@@ -638,6 +664,7 @@ class Printer: # {{{
 				sum ^= sum >> 2
 				sum ^= sum >> 1
 				if(sum & 1) != 0:
+					log('not ok checksum')
 					return None
 		return data[1:length]
 	# }}}
@@ -652,12 +679,13 @@ class Printer: # {{{
 			self._printer_write(data)
 			while True:
 				ack = None
-				ret = select.select([self.printer], [], [self.printer], 1)
-				if self.printer not in ret[0] and self.printer not in ret[2]:
-					# No response; retry.
-					log('no response waiting for ack')
-					maxtries -= 1
-					break
+				if not self.printer.available():
+					ret = select.select([self.printer], [], [self.printer], 1)
+					if self.printer not in ret[0] and self.printer not in ret[2]:
+						# No response; retry.
+						log('no response waiting for ack')
+						maxtries -= 1
+						break
 				ack = self._printer_input(ack = True)
 				if ack[0] != 'ack':
 					#log('no response yet waiting for ack')
@@ -690,10 +718,11 @@ class Printer: # {{{
 	# }}}
 	def _get_reply(self, cb = False): # {{{
 		while self.printer is not None:
-			ret = select.select([self.printer], [], [self.printer], 1)
-			if len(ret[0]) == 0:
-				log('no reply received')
-				return None
+			if not self.printer.available():
+				ret = select.select([self.printer], [], [self.printer], 1)
+				if len(ret[0]) == 0:
+					log('no reply received')
+					return None
 			ret = self._printer_input(reply = True)
 			if ret[0] == 'packet' or (cb and ret[0] == 'no data'):
 				return ret[1]
@@ -1311,7 +1340,7 @@ class Printer: # {{{
 				key = self.home_target.keys()[0]
 				dist = abs(self.home_target[key] - self.spaces[self.home_space].get_current_pos(key))
 				#log("sp %s d %s t %s" % (self.home_speed, dist, self.home_target))
-				self.goto({self.home_space: self.home_target}, f0 = self.home_speed / dist, cb = True)[1](None)
+				self.goto({self.home_space: self.home_target}, f0 = self.home_speed / dist if dist != 0 else float('inf'), cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
 				log('Warning: not all limits were hit during homing')
@@ -1736,11 +1765,11 @@ class Printer: # {{{
 			if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], True)):
 				log('failed to pause printer')
 				return False
-			self.movewait = 0
 			reply = struct.unpack('<BB', self._get_reply())
 			if reply[0] != ord(self.rcommand['QUEUE']):
 				log('invalid reply to queued command')
 				return False
+			self.movewait = 0
 			self.wait = False
 		self.paused = pausing
 		if not self.paused:
@@ -2618,6 +2647,8 @@ while True: # {{{
 		f, a = call_queue.pop(0)
 		f(*a)
 	now = time.time()
+	while printer.printer.available():
+		printer._printer_input()
 	fds = [sys.stdin, printer.printer]
 	found = select.select(fds, [], fds, printer.gcode_wait and max(0, printer.gcode_wait - now))
 	#log(repr(found))
