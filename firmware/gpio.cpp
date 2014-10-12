@@ -1,7 +1,7 @@
 #include "firmware.h"
 
 #ifdef HAVE_GPIOS
-void Gpio::load(uint8_t self, int16_t &addr, bool eeprom)
+void Gpio::load(uint8_t self, int32_t &addr, bool eeprom)
 {
 	pin.read(read_16(addr, eeprom));
 	state = read_8(addr, eeprom);
@@ -68,7 +68,7 @@ void Gpio::load(uint8_t self, int16_t &addr, bool eeprom)
 #endif
 }
 
-void Gpio::save(int16_t &addr, bool eeprom)
+void Gpio::save(int32_t &addr, bool eeprom)
 {
 	write_16(addr, pin.write(), eeprom);
 	write_8(addr, state, eeprom);
@@ -81,7 +81,7 @@ void Gpio::save(int16_t &addr, bool eeprom)
 #endif
 }
 
-int16_t Gpio::savesize0() {
+int32_t Gpio::savesize0() {
 	return 1 * 2 + 2 * 1 + sizeof(float) * 1;
 }
 

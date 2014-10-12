@@ -3,7 +3,7 @@
 #ifdef DEFINE_MAIN
 #include "firmware.ino"
 // Memory handling
-void _mem_alloc(uint16_t size, void **target) {
+void _mem_alloc(uint32_t size, void **target) {
 	*target = malloc(size);
 	if (!*target) {
 		debug("unable to allocate memory");

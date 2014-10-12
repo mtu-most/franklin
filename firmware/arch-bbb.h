@@ -133,6 +133,7 @@ static inline void arch_setup_start() {
 		bbb_gpio[i] = (volatile bbb_Gpio *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, gpio_base[i]);
 	bbb_pollfd.fd = 0; // standard input.
 	bbb_pollfd.events = POLLIN | POLLPRI;
+	bbb_pollfd.revents = 0;
 }
 
 static inline void arch_setup_end() {
@@ -148,7 +149,7 @@ static inline bool adc_ready(uint8_t _pin) {
 	return _pin < NUM_ANALOG_INPUTS;
 }
 
-static inline int16_t adc_get(uint8_t _pin) {
+static inline int32_t adc_get(uint8_t _pin) {
 	FILE *f = fopen(bbb_adc[_pin], "r");
 	int value;
 	fscanf(f, "%d", &value);
@@ -180,6 +181,7 @@ public:
 	void refill() {
 		start = 0;
 		end = ::read(0, buffer, sizeof(buffer));
+		//fprintf(stderr, "refill %d bytes\n", end);
 		if (end < 0) {
 			if (errno != EAGAIN && errno != EWOULDBLOCK)
 				fprintf(stderr, "read returned error: %s\n", strerror(errno));
@@ -215,12 +217,12 @@ public:
 	}
 };
 
-static inline unsigned long utime() {
+static inline uint32_t utime() {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1000000 + tv.tv_usec;
 }
-static inline unsigned long millis() {
+static inline uint32_t millis() {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return tv.tv_sec * 1000 + tv.tv_usec / 1000;
@@ -228,7 +230,7 @@ static inline unsigned long millis() {
 //#define microdelay() usleep(1)
 #define microdelay() do {} while(0)
 
-static inline void get_current_times(unsigned long *current_time, unsigned long *longtime) {
+static inline void get_current_times(uint32_t *current_time, uint32_t *longtime) {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	*current_time = tv.tv_sec * 1000000 + tv.tv_usec;
@@ -238,14 +240,14 @@ static inline void get_current_times(unsigned long *current_time, unsigned long 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
-static inline uint8_t read_eeprom(uint16_t address) {
+static inline uint8_t read_eeprom(uint32_t address) {
 	return 0;
 }
 
-static inline void write_eeprom(uint16_t address, uint8_t data) {
+static inline void write_eeprom(uint32_t address, uint8_t data) {
 }
 
-static inline void wait_for_event(unsigned long micro, unsigned long current_time) {
+static inline void wait_for_event(uint32_t micro, uint32_t current_time) {
 	bbb_pollfd.revents = 0;
 	//fprintf(stderr, "polling with micro %ld\n", micro);
 	poll(&bbb_pollfd, 1, micro == ~0 ? -1 : micro / 1000);
@@ -263,7 +265,7 @@ EXTERN struct pollfd bbb_pollfd;
 
 // Memory handling
 #define mem_alloc(s, t, d) _mem_alloc((s), reinterpret_cast <void **>(t))
-void _mem_alloc(uint16_t size, void **target);
+void _mem_alloc(uint32_t size, void **target);
 #define mem_retarget(t1, t2) _mem_retarget(reinterpret_cast <void **>(t1), reinterpret_cast <void **>(t2))
 void _mem_retarget(void **target, void **newtarget);
 #define _mem_dump() do {} while(0)

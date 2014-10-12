@@ -29,7 +29,7 @@ void packet()
 	// command[0] is the length not including checksum bytes.
 	// command[1] is the command.
 	uint8_t which;
-	int16_t addr;
+	int32_t addr;
 	switch (command[1])
 	{
 	case CMD_BEGIN:	// begin: request response
@@ -193,7 +193,7 @@ void packet()
 		}
 		temps[which].target = get_float(3);
 		temps[which].adctarget = temps[which].toadc(temps[which].target);
-		//debug("adc target %d from %d", temps[which]->adctarget, int16_t(temps[which]->target / 1024));
+		//debug("adc target %d from %d", temps[which]->adctarget, int32_t(temps[which]->target / 1024));
 		if (temps[which].adctarget >= MAXINT) {
 			// loop() doesn't handle it anymore, so it isn't disabled there.
 			//debug("Temp %d disabled", which);
@@ -283,7 +283,7 @@ void packet()
 		reply[0] = 10;
 		reply[1] = CMD_POWER;
 		ReadFloat on, current;
-		unsigned long t = utime();
+		uint32_t t = utime();
 		if (temps[which].is_on) {
 			// This causes an insignificant error in the model, but when using this you probably aren't using the model anyway, and besides you won't notice the error even if you do.
 			temps[which].time_on += t - temps[which].last_time;
@@ -291,7 +291,7 @@ void packet()
 		}
 		on.ui = temps[which].time_on;
 		current.ui = t;
-		for (uint8_t b = 0; b < sizeof(unsigned long); ++b)
+		for (uint8_t b = 0; b < sizeof(uint32_t); ++b)
 		{
 			reply[2 + b] = on.b[b];
 			reply[6 + b] = current.b[b];
@@ -333,6 +333,7 @@ void packet()
 		}
 		write_ack();
 		spaces[which].motor[t]->current_pos = get_float(4);
+		debug("setpos %d %d %f", which, t, F(spaces[which].motor[t]->current_pos));
 		return;
 	}
 	case CMD_GETPOS:	// Get current position

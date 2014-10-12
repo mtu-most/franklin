@@ -100,7 +100,7 @@ static void check_position(Space *s, float *data) {
 	}
 }
 
-static void load(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
+static void load(Space *s, uint8_t old_type, int32_t &addr, bool eeprom) {
 	if (!s->setup_nums(3, 3)) {
 		debug("Failed to set up delta axes");
 		s->cancel_update();
@@ -139,7 +139,7 @@ static void load(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
 	}
 }
 
-static void save(Space *s, int16_t &addr, bool eeprom) {
+static void save(Space *s, int32_t &addr, bool eeprom) {
 	for (uint8_t a = 0; a < 3; ++a) {
 		write_float(addr, APEX(s, a).axis_min, eeprom);
 		write_float(addr, APEX(s, a).axis_max, eeprom);
@@ -160,7 +160,7 @@ static void free(Space *s) {
 	mem_free(&s->type_data);
 }
 
-static int16_t savesize(Space *s) {
+static int32_t savesize(Space *s) {
 	return sizeof(float) * 4 + s->savesize_std();
 }
 

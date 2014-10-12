@@ -19,7 +19,7 @@
 
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
-static unsigned long last_micros = 0;
+static uint32_t last_micros = 0;
 static bool had_data = false;
 
 // Parity masks for decoding.
@@ -57,7 +57,7 @@ void serial()
 		case CMD_ACK0:
 		case CMD_ACK1:
 			// Ack: everything was ok; flip the flipflop.
-			if (out_busy && (!ff_out ^ (command[0] == CMD_ACK1))) {	// Only if we expected it and it is the right type.
+			if (out_busy && ((!ff_out) ^ (command[0] == CMD_ACK1))) {	// Only if we expected it and it is the right type.
 				ff_out ^= 0x80;
 #ifdef DEBUG_FF
 				debug("new ff_out: %d", ff_out);

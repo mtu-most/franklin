@@ -26,6 +26,7 @@ import subprocess
 import traceback
 # }}}
 
+# Enable code trace.
 if False:
 	def trace(frame, why, arg):
 		if why == 'call':
@@ -491,7 +492,7 @@ class Printer: # {{{
 				if len(self.printer_buffer) >= packet_len:
 					break
 				if not self.printer.available():
-					log('waiting for more data (%d/%d)' % (len(self.printer_buffer), packet_len))
+					#log('waiting for more data (%d/%d)' % (len(self.printer_buffer), packet_len))
 					ret = select.select([self.printer], [], [self.printer], 1)
 					if self.printer not in ret[0]:
 						dprint('writing(5)', self.single['NACK']);
@@ -617,7 +618,7 @@ class Printer: # {{{
 				continue
 			elif not self.initialized and packet[0] == self.rcommand['PONG'] and ord(packet[1]) < 2:
 				# PONGs during initialization are possible.
-				dprint('ignore pong', packet)
+				#log('ignore pong %d' % ord(packet[1]))
 				continue
 			if reply:
 				return ('packet', packet)
@@ -720,7 +721,7 @@ class Printer: # {{{
 		while self.printer is not None:
 			if not self.printer.available():
 				ret = select.select([self.printer], [], [self.printer], 1)
-				if len(ret[0]) == 0:
+				if len(ret[0]) == 0 and len(ret[2]) == 0:
 					log('no reply received')
 					return None
 			ret = self._printer_input(reply = True)
@@ -1354,7 +1355,11 @@ class Printer: # {{{
 						self.home_delta_target = m['home_pos']
 				target = {}
 				for i, a, m in self.home_motors:
-					self.spaces[self.home_space].set_current_pos(i, a['min'] + m['home_pos'] - self.home_delta_target)
+					if i in self.sense[self.home_space]:
+						# Correct for possible extra steps that were done between hitting the sensor and pausing.
+						self.spaces[self.home_space].set_current_pos(i, a['min'] + m['home_pos'] - self.home_delta_target + self.sense[self.home_space][i][-1][1] - self.spaces[self.home_space].get_current_pos(i))
+					else:
+						self.spaces[self.home_space].set_current_pos(i, a['min'] + m['home_pos'] - self.home_delta_target)
 					target[i] = a['min'] - self.spaces[self.home_space].axis[i]['offset']
 				if len(target) > 0:
 					self.home_cb[0] = False
@@ -1371,7 +1376,7 @@ class Printer: # {{{
 					else:
 						self.spaces[self.home_space].set_current_pos(i, m['home_pos'])
 				elif i in self.sense[self.home_space]:
-					# Correct for possible extra steps that were done because pausing happened later than hitting the sensor (only on cartesian).
+					# Correct for possible extra steps that were done because pausing happened later than hitting the sensor (only on cartesian; delta was done above).
 					if self.home_orig_type == TYPE_DELTA:
 						self.spaces[self.home_space].set_current_pos(i, self.home_delta_target)
 					else:

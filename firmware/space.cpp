@@ -11,7 +11,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 	if (na == num_axes && nm == num_motors)
 		return true;
 	loaddebug("new space %d %d %d %d", na, nm, num_axes, num_motors);
-	int16_t savesz = namelen + 1;
+	int32_t savesz = namelen + 1;
 	savesz += globals_savesize();
 #ifdef HAVE_TEMPS
 	for (uint8_t t = 0; t < num_temps; ++t) {
@@ -128,7 +128,7 @@ static void move_to_current(Space *s) {
 	}
 }
 
-void Space::load_info(int16_t &addr, bool eeprom)
+void Space::load_info(int32_t &addr, bool eeprom)
 {
 	loaddebug("loading space");
 	uint8_t t = type;
@@ -183,7 +183,7 @@ void Space::load_info(int16_t &addr, bool eeprom)
 	loaddebug("done loading space");
 }
 
-void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
+void Space::load_axis(uint8_t a, int32_t &addr, bool eeprom)
 {
 	loaddebug("loading axis %d", a);
 	float old_offset = axis[a]->offset;
@@ -200,7 +200,7 @@ void Space::load_axis(uint8_t a, int16_t &addr, bool eeprom)
 	}
 }
 
-void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
+void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 {
 	loaddebug("loading motor %d %x", m, motor[m]);
 	uint16_t enable = motor[m]->enable_pin.write();
@@ -247,7 +247,7 @@ void Space::load_motor(uint8_t m, int16_t &addr, bool eeprom)
 		move_to_current(this);
 }
 
-void Space::save_info(int16_t &addr, bool eeprom)
+void Space::save_info(int32_t &addr, bool eeprom)
 {
 	//debug("saving info %d %f %d %d", type, F(max_deviation), num_axes, num_motors);
 	write_8(addr, type, eeprom);
@@ -255,7 +255,7 @@ void Space::save_info(int16_t &addr, bool eeprom)
 	space_types[type].save(this, addr, eeprom);
 }
 
-void Space::save_axis(uint8_t a, int16_t &addr, bool eeprom) {
+void Space::save_axis(uint8_t a, int32_t &addr, bool eeprom) {
 	write_float(addr, axis[a]->offset, eeprom);
 	write_float(addr, axis[a]->park, eeprom);
 	write_8(addr, axis[a]->park_order, eeprom);
@@ -264,7 +264,7 @@ void Space::save_axis(uint8_t a, int16_t &addr, bool eeprom) {
 	write_float(addr, axis[a]->max, eeprom);
 }
 
-void Space::save_motor(uint8_t m, int16_t &addr, bool eeprom) {
+void Space::save_motor(uint8_t m, int32_t &addr, bool eeprom) {
 	write_16(addr, motor[m]->step_pin.write(), eeprom);
 	write_16(addr, motor[m]->dir_pin.write(), eeprom);
 	write_16(addr, motor[m]->enable_pin.write(), eeprom);
@@ -279,15 +279,15 @@ void Space::save_motor(uint8_t m, int16_t &addr, bool eeprom) {
 	write_8(addr, motor[m]->home_order, eeprom);
 }
 
-int16_t Space::savesize_std() {
+int32_t Space::savesize_std() {
 	return (2 * 6 + 4 * 6 + 1 * 2) * num_motors + sizeof(float) * (1 + 3 * num_axes + 3 * num_motors);
 }
 
-int16_t Space::savesize() {
+int32_t Space::savesize() {
 	return 1 * 1 + space_types[type].savesize(this);
 }
 
-int16_t Space::savesize0() {
+int32_t Space::savesize0() {
 	return 2;	// Cartesian type, 0 axes.
 }
 

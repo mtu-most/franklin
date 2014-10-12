@@ -27,7 +27,7 @@ static void reset_pos (Space *s) {
 static void check_position(Space *s, float *data) {
 }
 
-static void load(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
+static void load(Space *s, uint8_t old_type, int32_t &addr, bool eeprom) {
 	uint8_t num = read_8(addr, eeprom);
 	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up cartesian axes");
@@ -35,7 +35,7 @@ static void load(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
 	}
 }
 
-static void save(Space *s, int16_t &addr, bool eeprom) {
+static void save(Space *s, int32_t &addr, bool eeprom) {
 	write_8(addr, s->num_axes, eeprom);
 }
 
@@ -46,7 +46,7 @@ static bool init(Space *s) {
 static void free(Space *s) {
 }
 
-static int16_t savesize(Space *s) {
+static int32_t savesize(Space *s) {
 	return 1 * 1 + s->savesize_std();
 }
 
@@ -75,7 +75,7 @@ struct ExtruderData {
 
 #define EDATA(s) (*reinterpret_cast <ExtruderData *>(s->type_data))
 
-static void eload(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
+static void eload(Space *s, uint8_t old_type, int32_t &addr, bool eeprom) {
 	EDATA(s).dx = read_float(addr, eeprom);
 	EDATA(s).dy = read_float(addr, eeprom);
 	EDATA(s).dz = read_float(addr, eeprom);
@@ -90,7 +90,7 @@ static void eload(Space *s, uint8_t old_type, int16_t &addr, bool eeprom) {
 	}
 }
 
-static void esave(Space *s, int16_t &addr, bool eeprom) {
+static void esave(Space *s, int32_t &addr, bool eeprom) {
 	write_float(addr, EDATA(s).dx, eeprom);
 	write_float(addr, EDATA(s).dy, eeprom);
 	write_float(addr, EDATA(s).dz, eeprom);
@@ -108,7 +108,7 @@ static void efree(Space *s) {
 	mem_free(&s->type_data);
 }
 
-static int16_t esavesize(Space *s) {
+static int32_t esavesize(Space *s) {
 	return 1 * 1 + 4 * 3 + s->savesize_std();
 }
 

@@ -83,7 +83,7 @@ void setup()
 
 void load_all() {
 	//debug("loading all");
-	int16_t addr = 0;
+	int32_t addr = 0;
 	globals_load(addr, true);
 #ifdef HAVE_SPACES
 	for (uint8_t t = 0; t < num_spaces; ++t) {

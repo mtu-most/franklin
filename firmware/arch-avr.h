@@ -66,9 +66,9 @@ static inline bool adc_ready(uint8_t pin) {
 	return true;
 }
 
-static inline int16_t adc_get(uint8_t pin) {
-	int16_t low = uint8_t(ADCL);
-	int16_t high = uint8_t(ADCH);
+static inline int32_t adc_get(uint8_t pin) {
+	int32_t low = uint8_t(ADCL);
+	int32_t high = uint8_t(ADCH);
 	return (high << 8) | low;
 }
 #endif
@@ -200,11 +200,16 @@ static inline void arch_setup_start() {
 	TCCR1B = 2;	// Clock/8, in other words with 16MHz clock, 2MHz counting; 2 counts/us.
 }
 
-static inline unsigned long utime() {
-	uint8_t l = TCNT1L;
-	uint16_t h = TCNT1H;
+static inline uint32_t utime() {
+	uint32_t l = uint8_t(TCNT1L);
+	uint32_t h = uint8_t(TCNT1H);
 	// Don't use 16,8,0, because we have 2 counts/us, not 1.
-	return time_h << 15 | h << 7 | l >> 1;
+	return (time_h << 15) | (h << 7) | (l >> 1);
+}
+
+static inline void get_current_times(uint32_t *current_time, uint32_t *longtime) {
+	*current_time = utime();
+	*longtime = millis();
 }
 
 static inline void arch_run() {
@@ -218,11 +223,11 @@ static inline void arch_setup_end() {
 	debug ("Startup.  MCUSR: %x", mcusr);
 }
 
-static inline uint8_t read_eeprom(uint16_t address) {
+static inline uint8_t read_eeprom(uint32_t address) {
 	return EEPROM.read(address);
 }
 
-static inline void write_eeprom(uint16_t address, uint8_t data) {
+static inline void write_eeprom(uint32_t address, uint8_t data) {
 	EEPROM.write(address, data);
 }
 
@@ -241,7 +246,7 @@ struct Memrecord {
 #else
 #define mem_alloc(s, t, d) _mem_alloc((s), reinterpret_cast <void **>(t))
 #endif
-static inline void _mem_alloc(uint16_t size, void **target) {
+static inline void _mem_alloc(uint32_t size, void **target) {
 	if (size + sizeof(Memrecord) > sizeof(storage) - mem_used) {
 		debug("Out of memory");
 		*target = NULL;
@@ -339,12 +344,6 @@ static inline void _mem_free(void **target) {
 #ifdef DEBUG_ALLOC
 	_mem_dump();
 #endif
-}
-
-
-static inline void get_current_times(unsigned long *current_time, unsigned long *longtime) {
-	*current_time = utime();
-	*longtime = millis();
 }
 #endif
 #endif

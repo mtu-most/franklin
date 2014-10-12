@@ -1,7 +1,7 @@
 #include "firmware.h"
 
 #ifdef HAVE_TEMPS
-void Temp::load(int16_t &addr, bool eeprom)
+void Temp::load(int32_t &addr, bool eeprom)
 {
 	R0 = read_float(addr, eeprom);
 	R1 = read_float(addr, eeprom);
@@ -34,7 +34,7 @@ void Temp::load(int16_t &addr, bool eeprom)
 		RESET(power_pin);
 }
 
-void Temp::save(int16_t &addr, bool eeprom)
+void Temp::save(int32_t &addr, bool eeprom)
 {
 	write_float(addr, R0, eeprom);
 	write_float(addr, R1, eeprom);
@@ -52,11 +52,11 @@ void Temp::save(int16_t &addr, bool eeprom)
 	write_16(addr, thermistor_pin.write(), eeprom);
 }
 
-int16_t Temp::savesize0() {
+int32_t Temp::savesize0() {
 	return 2 * 2 + sizeof(float) * 10;
 }
 
-int16_t Temp::get_value() {
+int32_t Temp::get_value() {
 	if (!thermistor_pin.valid())
 		return MAXINT;
 	if (!adc_ready(thermistor_pin.pin))
@@ -66,7 +66,7 @@ int16_t Temp::get_value() {
 	return adclast;
 }
 
-float Temp::fromadc(int16_t adc) {
+float Temp::fromadc(int32_t adc) {
 	if (adc < 0)
 		return INFINITY;
 	if (adc >= MAXINT)
@@ -89,7 +89,7 @@ float Temp::fromadc(int16_t adc) {
 	return -beta / log(K * ((1 << ADCBITS) / R0 / adc - 1 / R0 - 1 / R1));
 }
 
-int16_t Temp::toadc(float T) {
+int32_t Temp::toadc(float T) {
 	if (isnan(T) || T <= 0)
 		return MAXINT;
 	if (isinf(T) && T > 0)

@@ -246,7 +246,7 @@ uint8_t next_move () {
 
 	// Use maximum deviation to find fraction where to start rounded corner.
 	float factor = vq / vp;
-	done_factor = 0;
+	done_factor = NAN;
 	if (vq == 0) {
 		fp = 0;
 		fq = 0;
@@ -277,7 +277,8 @@ uint8_t next_move () {
 			if (norma <= 0)
 				continue;
 			float done = 1 - sp.max_deviation / norma;
-			if (done > done_factor)
+			// Set it also if done_factor is NaN.
+			if (!(done <= done_factor))
 				done_factor = done;
 			float new_fp = sp.max_deviation / sqrt(normb / (norma + normb) * diff2);
 #ifdef DEBUG_MOVE
@@ -288,6 +289,8 @@ uint8_t next_move () {
 		}
 		fq = fp * factor;
 	}
+	if (isnan(done_factor))
+		done_factor = 1;
 	// Set up t0, tp.
 	t0 = (1 - fp) / (fabs(v0 + vp) / 2);
 	tp = fp / (fabs(vp) / 2);
@@ -329,10 +332,11 @@ uint8_t next_move () {
 #ifdef DEBUG_MOVE
 	debug ("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f s tp=%f s", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), F(t0), F(tp));
 #endif
+	if (!moving)
+		last_time = utime();
 	//debug("moving->true");
 	moving = true;
 	next_motor_time = 0;
-	last_time = utime();
 	start_time = last_time - long(f0 / fabs(vp) * 1e6);
 	// }}}
 #endif

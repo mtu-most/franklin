@@ -6,7 +6,7 @@
 #define ldebug(...) do {} while(0)
 #endif
 
-bool globals_load(int16_t &addr, bool eeprom)
+bool globals_load(int32_t &addr, bool eeprom)
 {
 #ifdef HAVE_SPACES
 	uint8_t ns = read_8(addr, eeprom);
@@ -37,7 +37,7 @@ bool globals_load(int16_t &addr, bool eeprom)
 #endif
 		       	nl != namelen) {
 		ldebug("something changed %d %d %d %d %d %d %d %d", ns, num_spaces, nt, num_temps, ng, num_gpios, nl, namelen);
-		uint16_t savesize = nl + 1;
+		uint32_t savesize = nl + 1;
 		savesize += globals_savesize();
 		ldebug("size");
 #ifdef HAVE_SPACES
@@ -140,8 +140,12 @@ bool globals_load(int16_t &addr, bool eeprom)
 			name[n] = c;
 	}
 	led_pin.read(read_16(addr, eeprom));
-	if (!~next_led_time && led_pin.valid())
-		next_led_time = 0;
+	if (led_pin.valid()) {
+		if (!~next_led_time)
+			next_led_time = 0;
+	}
+	else
+		next_led_time = ~0;
 	probe_pin.read(read_16(addr, eeprom));
 	probe_dist = read_float(addr, eeprom);
 	probe_safe_dist = read_float(addr, eeprom);
@@ -160,7 +164,7 @@ bool globals_load(int16_t &addr, bool eeprom)
 	return true;
 }
 
-void globals_save(int16_t &addr, bool eeprom)
+void globals_save(int32_t &addr, bool eeprom)
 {
 	if (!eeprom) {
 		write_8(addr, QUEUE_LENGTH, false);
@@ -206,6 +210,6 @@ void globals_save(int16_t &addr, bool eeprom)
 	write_float(addr, feedrate, eeprom);
 }
 
-int16_t globals_savesize() {
+int32_t globals_savesize() {
 	return 1 * 4 + 2 * 2 + sizeof(float) * 5 + namelen;
 }

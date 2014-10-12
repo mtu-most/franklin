@@ -126,8 +126,8 @@ struct Temp
 	Pin_t thermistor_pin;
 	// Volatile variables.
 	float target;			// target temperature; NAN to disable. [K]
-	int16_t adctarget;		// target temperature in adc counts; -1 for disabled. [adccounts]
-	int16_t adclast;		// last measured temperature. [adccounts]
+	int32_t adctarget;		// target temperature in adc counts; -1 for disabled. [adccounts]
+	int32_t adclast;		// last measured temperature. [adccounts]
 	/*
 	float core_T, shell_T;	// current temperatures. [K]
 	*/
@@ -136,25 +136,25 @@ struct Temp
 #endif
 	float min_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
 	float max_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
-	int16_t adcmin_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
-	int16_t adcmax_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
+	int32_t adcmin_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
+	int32_t adcmax_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
 	bool alarm;
 	// Internal variables.
-	unsigned long last_time;	// last value of micros when this heater was handled.
-	unsigned long time_on;		// Time that the heater has been on since last reading.  [μs]
+	uint32_t last_time;	// last value of micros when this heater was handled.
+	uint32_t time_on;		// Time that the heater has been on since last reading.  [μs]
 	bool is_on;			// If the heater is currently on.
 	float K;			// Thermistor constant; kept in memory for performance.
 	// Functions.
-	int16_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
-	float fromadc(int16_t adc);	// convert ADC to K.
-	int16_t toadc(float T);	// convert K to ADC.
-	void load(int16_t &addr, bool eeprom);
-	void save(int16_t &addr, bool eeprom);
+	int32_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
+	float fromadc(int32_t adc);	// convert ADC to K.
+	int32_t toadc(float T);	// convert K to ADC.
+	void load(int32_t &addr, bool eeprom);
+	void save(int32_t &addr, bool eeprom);
 	void init();
 	void free();
 	void copy(Temp &dst);
-	static int16_t savesize0();
-	int16_t savesize() { return savesize0(); }
+	static int32_t savesize0();
+	int32_t savesize() { return savesize0(); }
 };
 #endif
 
@@ -188,7 +188,7 @@ struct Motor
 	float limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
 	float last_v;		// v during last iteration, for using limit_a [m/s].
-	int16_t steps;
+	int32_t steps;
 	float target_v, target_dist;	// Internal values for moving.
 	float current_pos;	// Current position of motor (in μm).
 	float endpos;
@@ -208,11 +208,11 @@ struct SpaceType
 	void (*xyz2motors)(Space *s, float *motors, bool *ok);
 	void (*reset_pos)(Space *s);
 	void (*check_position)(Space *s, float *data);
-	void (*load)(Space *s, uint8_t old_type, int16_t &addr, bool eeprom);
-	void (*save)(Space *s, int16_t &addr, bool eeprom);
+	void (*load)(Space *s, uint8_t old_type, int32_t &addr, bool eeprom);
+	void (*save)(Space *s, int32_t &addr, bool eeprom);
 	bool (*init)(Space *s);
 	void (*free)(Space *s);
-	int16_t (*savesize)(Space *s);
+	int32_t (*savesize)(Space *s);
 #ifdef HAVE_EXTRUDER
 	bool (*change0)(Space *s);
 #endif
@@ -227,20 +227,20 @@ struct Space
 	Motor **motor;
 	Axis **axis;
 	bool active;
-	void load_info(int16_t &addr, bool eeprom);
-	void load_axis(uint8_t a, int16_t &addr, bool eeprom);
-	void load_motor(uint8_t m, int16_t &addr, bool eeprom);
-	void save_info(int16_t &addr, bool eeprom);
-	void save_axis(uint8_t a, int16_t &addr, bool eeprom);
-	void save_motor(uint8_t m, int16_t &addr, bool eeprom);
+	void load_info(int32_t &addr, bool eeprom);
+	void load_axis(uint8_t a, int32_t &addr, bool eeprom);
+	void load_motor(uint8_t m, int32_t &addr, bool eeprom);
+	void save_info(int32_t &addr, bool eeprom);
+	void save_axis(uint8_t a, int32_t &addr, bool eeprom);
+	void save_motor(uint8_t m, int32_t &addr, bool eeprom);
 	void init();
 	void free();
 	void copy(Space &dst);
-	static int16_t savesize0();
-	int16_t savesize();
+	static int32_t savesize0();
+	int32_t savesize();
 	bool setup_nums(uint8_t na, uint8_t nm);
 	void cancel_update();
-	int16_t savesize_std();
+	int32_t savesize_std();
 };
 
 // Type 0: Extruder.
@@ -290,17 +290,17 @@ struct Gpio
 #ifdef HAVE_TEMPS
 	uint8_t master;
 	float value;
-	int16_t adcvalue;
+	int32_t adcvalue;
 	uint8_t prev, next;
 #endif
 	void setup(uint8_t new_state);
-	void load(uint8_t self, int16_t &addr, bool eeprom);
-	void save(int16_t &addr, bool eeprom);
+	void load(uint8_t self, int32_t &addr, bool eeprom);
+	void save(int32_t &addr, bool eeprom);
 	void init();
 	void free();
 	void copy(Gpio &dst);
-	static int16_t savesize0();
-	int16_t savesize() { return savesize0(); }
+	static int32_t savesize0();
+	int32_t savesize() { return savesize0(); }
 };
 #endif
 
@@ -340,21 +340,21 @@ EXTERN unsigned char command[COMMAND_SIZE];
 EXTERN uint8_t command_end;
 EXTERN char reply[COMMAND_SIZE];
 EXTERN char out_buffer[16];
-EXTERN unsigned long last_current_time;
+EXTERN uint32_t last_current_time;
 #ifdef HAVE_SPACES
 EXTERN Space *spaces;
-EXTERN unsigned long next_motor_time;
+EXTERN long next_motor_time;
 #endif
 #ifdef HAVE_TEMPS
 EXTERN Temp *temps;
-EXTERN unsigned long next_temp_time;
+EXTERN long next_temp_time;
 #endif
 #ifdef HAVE_GPIOS
 EXTERN Gpio *gpios;
 #endif
-EXTERN unsigned long next_led_time;
+EXTERN long next_led_time;
 #ifdef HAVE_AUDIO
-EXTERN unsigned long next_audio_time;
+EXTERN long next_audio_time;
 #endif
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];
@@ -367,10 +367,10 @@ EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
 EXTERN bool motors_busy;
 EXTERN bool out_busy;
-EXTERN unsigned long out_time;
+EXTERN uint32_t out_time;
 EXTERN bool reply_ready;
 EXTERN char *last_packet;
-EXTERN unsigned long last_active, led_last;
+EXTERN uint32_t last_active, led_last;
 EXTERN float motor_limit, temp_limit;
 EXTERN int16_t led_phase;
 EXTERN uint8_t adc_phase;
@@ -380,10 +380,10 @@ EXTERN uint8_t temp_current;
 #ifdef HAVE_AUDIO
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
 EXTERN uint8_t audio_head, audio_tail, audio_state;
-EXTERN unsigned long audio_start;
+EXTERN uint32_t audio_start;
 EXTERN int16_t audio_us_per_sample;
 #endif
-EXTERN unsigned long start_time, last_time;
+EXTERN uint32_t start_time, last_time;
 EXTERN float t0, tp;
 EXTERN bool moving;
 EXTERN float f0, f1, f2, fp, fq, fmain;
@@ -425,17 +425,17 @@ void load_all();
 void loop();	// Do stuff which needs doing: moving motors and adjusting heaters.
 
 // storage.cpp
-uint8_t read_8(int16_t &address, bool eeprom);
-void write_8(int16_t &address, uint8_t data, bool eeprom);
-int16_t read_16(int16_t &address, bool eeprom);
-void write_16(int16_t &address, int16_t data, bool eeprom);
-float read_float(int16_t &address, bool eeprom);
-void write_float(int16_t &address, float data, bool eeprom);
+uint8_t read_8(int32_t &address, bool eeprom);
+void write_8(int32_t &address, uint8_t data, bool eeprom);
+int16_t read_16(int32_t &address, bool eeprom);
+void write_16(int32_t &address, int16_t data, bool eeprom);
+float read_float(int32_t &address, bool eeprom);
+void write_float(int32_t &address, float data, bool eeprom);
 
 // globals.cpp
-bool globals_load(int16_t &address, bool eeprom);
-void globals_save(int16_t &address, bool eeprom);
-int16_t globals_savesize();
+bool globals_load(int32_t &address, bool eeprom);
+void globals_save(int32_t &address, bool eeprom);
+int32_t globals_savesize();
 
 #include ARCH_INCLUDE
 
