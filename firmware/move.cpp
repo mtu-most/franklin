@@ -351,7 +351,7 @@ void abort_move () { // {{{
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				//debug ("setting axis %d source to %f", a, F(axis[a].current));
+				debug ("setting axis %d source to %f", a, F(sp.axis[a]->current));
 				sp.axis[a]->source = sp.axis[a]->current;
 				sp.axis[a]->dist = NAN;
 				sp.axis[a]->next_dist = NAN;

@@ -84,7 +84,8 @@ class Driver: # {{{
 				self.buffer = self.buffer[length:]
 				return r
 			if r == '':
-				log('EOF?')
+				log('EOF!')
+				self.close()
 			self.buffer += r
 			if len(self.buffer) >= length:
 				ret = self.buffer[:length]
@@ -400,6 +401,23 @@ class Printer: # {{{
 		if die:
 			sys.exit(0)
 	# }}}
+	def _trigger_movewaits(self, num):
+		#traceback.print_stack()
+		#log('trigger %s' % repr(self.movecb))
+		if self.movewait < num:
+			log('More cbs received than requested!')
+			self.movewait = 0
+		else:
+			self.movewait -= num
+		if self.movewait == 0:
+			call_queue.extend([(x[1], [True]) for x in self.movecb])
+			self.movecb = []
+			if self.flushing and self.queue_pos >= len(self.queue):
+				#log('done flushing')
+				self.flushing = 'done'
+				call_queue.append((self._do_gcode, []))
+		else:
+			log('cb seen, but waiting for more')
 	def _printer_input(self, ack = False, reply = False): # {{{
 		for input_limit in range(50):
 			while self.debug_buffer is not None:
@@ -526,20 +544,7 @@ class Printer: # {{{
 				num = ord(packet[1])
 				#log('movecb %d/%d (%d in queue)' % (num, self.movewait, len(self.movecb)))
 				if self.initialized:
-					if self.movewait < num:
-						log('More cbs received than requested!')
-						self.movewait = 0
-					else:
-						self.movewait -= num
-					if self.movewait == 0:
-						call_queue.extend([(x[1], [True]) for x in self.movecb])
-						self.movecb = []
-						if self.flushing and self.queue_pos >= len(self.queue):
-							#log('done flushing')
-							self.flushing = 'done'
-							call_queue.append((self._do_gcode, []))
-					else:
-						log('cb seen, but waiting for more')
+					self._trigger_movewaits(num)
 				else:
 					self.movewait = 0
 				continue
@@ -580,7 +585,9 @@ class Printer: # {{{
 					continue
 				space = ord(packet[1])
 				motor = ord(packet[2])
-				self.limits[space][motor] = struct.unpack('<f', packet[3:])[0]
+				cbs = ord(packet[3])
+				self.limits[space][motor] = struct.unpack('<f', packet[4:])[0]
+				self._trigger_movewaits(cbs)
 				continue
 			elif packet[0] == self.rcommand['AUTOSLEEP']:
 				if not self.initialized:
@@ -667,6 +674,7 @@ class Printer: # {{{
 				if(sum & 1) != 0:
 					log('not ok checksum')
 					return None
+		#log('parsed %x' % ord(data[1]))
 		return data[1:length]
 	# }}}
 	def _send_packet(self, data, audio = False): # {{{
@@ -702,6 +710,7 @@ class Printer: # {{{
 					maxtries -= 1
 					continue
 				elif ack[1] in ('ack0', 'ack1'):
+					#log('sent %x' % ord(data[1]))
 					return True
 				elif ack[1] in ('wait0', 'wait1'):
 					#log('ackwait response waiting for ack')
@@ -1236,8 +1245,9 @@ class Printer: # {{{
 					self.home_target[i] = a['max'] - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
-				self.movecb.append(self.home_cb)
-				#log("N t %s" % (self.home_target))
+				if self.home_cb not in self.movecb:
+					self.movecb.append(self.home_cb)
+				log("N t %s" % (self.home_target))
 				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
 				return
 			# Fall through.
@@ -1252,10 +1262,12 @@ class Printer: # {{{
 			# Repeat until move is done, or all limits are hit.
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
-				self.movecb.append(self.home_cb)
-				#log("0 t %s" % (self.home_target))
+				if self.home_cb not in self.movecb:
+					self.movecb.append(self.home_cb)
+				log("0 t %s" % (self.home_target))
 				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
 				return
+			log('done 1')
 			self.home_phase = 2
 			# Move down to find limit or sense switch.
 			for i, a, m in self.home_motors:
@@ -1265,8 +1277,9 @@ class Printer: # {{{
 					self.home_target[i] = a['min'] - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
-				self.movecb.append(self.home_cb)
-				#log("1 t %s" % (self.home_target))
+				if self.home_cb not in self.movecb:
+					self.movecb.append(self.home_cb)
+				log("1 t %s" % (self.home_target))
 				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
 				return
 			# Fall through.
@@ -1281,7 +1294,8 @@ class Printer: # {{{
 			# Repeat until move is done, or all limits are hit.
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
-				self.movecb.append(self.home_cb)
+				if self.home_cb not in self.movecb:
+					self.movecb.append(self.home_cb)
 				#log("2 t %s" % (self.home_target))
 				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
 				return
@@ -1299,7 +1313,8 @@ class Printer: # {{{
 					self.home_target[i] = a['max'] - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
 				self.home_cb[0] = False
-				self.movecb.append(self.home_cb)
+				if self.home_cb not in self.movecb:
+					self.movecb.append(self.home_cb)
 				#log("back t %s" % (self.home_target))
 				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
 				return
@@ -1321,8 +1336,9 @@ class Printer: # {{{
 					self.home_target[i] = a['max'] - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
-				self.movecb.append(self.home_cb)
-				#log("sp %s t %s" % (self.home_speed, self.home_target))
+				if self.home_cb not in self.movecb:
+					self.movecb.append(self.home_cb)
+				log("sp %s t %s" % (self.home_speed, self.home_target))
 				self.goto({self.home_space: self.home_target}, f0 = self.home_speed / (2 * small_dist), cb = True)[1](None)
 				return
 			# Fall through
@@ -1337,14 +1353,15 @@ class Printer: # {{{
 			# Repeat until move is done, or all limits are hit.
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
-				self.movecb.append(self.home_cb)
+				if self.home_cb not in self.movecb:
+					self.movecb.append(self.home_cb)
 				key = self.home_target.keys()[0]
 				dist = abs(self.home_target[key] - self.spaces[self.home_space].get_current_pos(key))
-				#log("sp %s d %s t %s" % (self.home_speed, dist, self.home_target))
+				log("sp2 %s d %s t %s" % (self.home_speed, dist, self.home_target))
 				self.goto({self.home_space: self.home_target}, f0 = self.home_speed / dist if dist != 0 else float('inf'), cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
-				log('Warning: not all limits were hit during homing')
+				log('Warning: not all limits were hit during homing %d %d %s' % (done, found_limits, repr(self.home_target)))
 			self.home_phase = 5
 			# Move delta to center.
 			if self.home_orig_type == TYPE_DELTA:
@@ -1363,7 +1380,8 @@ class Printer: # {{{
 					target[i] = a['min'] - self.spaces[self.home_space].axis[i]['offset']
 				if len(target) > 0:
 					self.home_cb[0] = False
-					self.movecb.append(self.home_cb)
+					if self.home_cb not in self.movecb:
+						self.movecb.append(self.home_cb)
 					self.goto({self.home_space: target}, cb = True)[1](None)
 					return
 			# Fall through.
@@ -1403,7 +1421,8 @@ class Printer: # {{{
 			self.home_phase = 7
 			if len(target) > 0:
 				self.home_cb[0] = False
-				self.movecb.append(self.home_cb)
+				if self.home_cb not in self.movecb:
+					self.movecb.append(self.home_cb)
 				#log('target: %s' % repr(target))
 				self.goto({self.home_space: target}, cb = True)[1](None)
 				return
@@ -1678,7 +1697,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False): # {{{
-		#log('goto %s %s %s' % (repr(moves), f0, f1))
+		log('goto %s %s %s' % (repr(moves), f0, f1))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
 		self.queue.append((id, moves, f0, f1, cb))

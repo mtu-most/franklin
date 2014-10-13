@@ -1,7 +1,7 @@
 // vim: set filetype=cpp foldmethod=marker foldmarker={,} :
 #include "firmware.h"
 
-#if 0
+#if 1
 #define movedebug(...) debug(__VA_ARGS__)
 #else
 #define movedebug(...) do {} while (0)
@@ -181,7 +181,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	}
 	// Limit v.
 	if (v > mtr->limit_v) {
-		movedebug("v %f %f", F(v), F(mtr->limit_v));
+		//movedebug("v %f %f", F(v), F(mtr->limit_v));
 		distance = (s * mtr->limit_v) * dt;
 		v = fabs(distance / dt);
 	}
@@ -189,7 +189,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	// Limit a+.
 	float limit_dv = mtr->limit_a * dt;
 	if (v - mtr->last_v * s > limit_dv) {
-		movedebug("a+ %f %f %f %d", F(mtr->target_v), F(limit_dv), F(mtr->last_v), s);
+		//movedebug("a+ %f %f %f %d", F(mtr->target_v), F(limit_dv), F(mtr->last_v), s);
 		distance = (limit_dv * s + mtr->last_v) * dt;
 		v = fabs(distance / dt);
 	}
@@ -197,7 +197,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	// Limit a-.
 	float max_dist = (mtr->endpos - mtr->current_pos) * s;
 	if (max_dist > 0 && v * v / 2 / mtr->limit_a > max_dist) {
-		movedebug("a- %f %f %f %f %d", F(mtr->endpos), F(mtr->limit_a), F(max_dist), F(mtr->current_pos), s);
+		//movedebug("a- %f %f %f %f %d", F(mtr->endpos), F(mtr->limit_a), F(max_dist), F(mtr->current_pos), s);
 		v = sqrt(max_dist * 2 * mtr->limit_a);
 		distance = s * v * dt;
 	}
@@ -242,6 +242,7 @@ static bool do_steps(float &factor, uint32_t current_time) {
 	int32_t max_steps = 0;
 	float f_correction = 1;
 	float factor1 = INFINITY;
+	// See if any motor does any steps; if not: wait.
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		if (!sp.active)
@@ -266,7 +267,7 @@ static bool do_steps(float &factor, uint32_t current_time) {
 			if (abs(mtr.steps) > max_steps)
 				max_steps = abs(mtr.steps);
 			if (factor < 1) {
-				if (fabs(mtr.steps + 1.0) / int32_t(targetsteps) < f_correction)
+				if ((fabs(mtr.steps) + 1.0) / int32_t(targetsteps) < f_correction)
 					f_correction = (fabs(mtr.steps) + 1.0) / int32_t(targetsteps);
 			}
 		}
@@ -288,6 +289,7 @@ static bool do_steps(float &factor, uint32_t current_time) {
 	nums += 1;
 	currents = 0;
 	next_motor_time = 0;
+	// Adjust start time if factor < 1.
 	if (f_correction > 0 && f_correction < 1) {
 		start_time += (current_time - last_time) * ((1 - f_correction) * .99);
 		movedebug("correct: %f %d", F(f_correction), int(start_time));
@@ -313,11 +315,10 @@ static bool do_steps(float &factor, uint32_t current_time) {
 			}
 			if (mtr.steps > 0 ? GET(mtr.limit_max_pin, false) : GET(mtr.limit_min_pin, false)) {
 				// Hit endstop; abort current move and notify host.
-				debug("hit limit %d %d %d %ld", s, m, mtr.target_dist > 0, F(mtr.steps));
+				debug("hit limit %d %d %d %ld", s, m, mtr.target_dist > 0, F(long(mtr.steps)));
 				mtr.last_v = 0;
 				mtr.limits_pos = isnan(mtr.current_pos) ? INFINITY * (mtr.target_dist > 0 ? 1 : -1) : mtr.current_pos;
 				if (moving && cbs_after_current_move > 0) {
-					//debug("movecb 3");
 					num_movecbs += cbs_after_current_move;
 					cbs_after_current_move = 0;
 				}
@@ -393,9 +394,11 @@ static void handle_motors(uint32_t current_time, uint32_t longtime) {
 				if (!isnan(sp.axis[a]->dist)) {
 					sp.axis[a]->source += sp.axis[a]->dist;
 					sp.axis[a]->dist = NAN;
+					// Set this here, so it isn't set if dist was NaN to begin with.
+					// Note that target is not set for future iterations, but it isn't changed.
+					sp.axis[a]->target = sp.axis[a]->source;
 				}
 				//debug("after source %d %f %f %f %f", a, F(sp.axis[a]->source), F(sp.axis[a]->dist), F(sp.motor[a]->current_pos), F(factor));
-				sp.axis[a]->target = sp.axis[a]->source;
 			}
 			move_axes(&sp, current_time, factor);
 			//debug("f %f", F(factor));
@@ -452,7 +455,7 @@ static void handle_motors(uint32_t current_time, uint32_t longtime) {
 				continue;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if (isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) {
-					sp.axis[a]->target = sp.axis[a]->source;
+					sp.axis[a]->target = NAN;
 					continue;
 				}
 				sp.axis[a]->target = sp.axis[a]->source + sp.axis[a]->dist * current_f;
@@ -470,7 +473,7 @@ static void handle_motors(uint32_t current_time, uint32_t longtime) {
 				continue;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if ((isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) && (isnan(sp.axis[a]->next_dist) || sp.axis[a]->next_dist == 0)) {
-					sp.axis[a]->target = sp.axis[a]->source;
+					sp.axis[a]->target = NAN;
 					continue;
 				}
 				float t_fraction = tc / tp;
@@ -596,7 +599,7 @@ void loop() {
 	// Timeouts.  Do this before calling other things, because last_active may be updated and become larger than longtime.
 #ifdef HAVE_SPACES
 	if (motors_busy && (longtime - last_active) / 1e3 > motor_limit) {
-		debug("motor timeout %ld %ld %f", F(longtime), F(last_active), F(motor_limit));
+		debug("motor timeout %ld %ld %f", F(long(longtime)), F(long(last_active)), F(motor_limit));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t m = 0; m < sp.num_motors; ++m) {

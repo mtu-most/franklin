@@ -291,17 +291,19 @@ void try_send_next()
 #ifdef DEBUG_SERIAL
 				debug("limit %d %d", w, m);
 #endif
-				out_buffer[0] = 8;
+				out_buffer[0] = 9;
 				out_buffer[1] = CMD_LIMIT;
 				out_buffer[2] = w;
 				out_buffer[3] = m;
+				out_buffer[4] = num_movecbs;
 				ReadFloat f;
 				f.f = spaces[w].motor[m]->limits_pos;
-				out_buffer[4] = f.b[0];
-				out_buffer[5] = f.b[1];
-				out_buffer[6] = f.b[2];
-				out_buffer[7] = f.b[3];
+				out_buffer[5] = f.b[0];
+				out_buffer[6] = f.b[1];
+				out_buffer[7] = f.b[2];
+				out_buffer[8] = f.b[3];
 				spaces[w].motor[m]->limits_pos = NAN;
+				num_movecbs = 0;
 				if (initialized)
 				{
 					prepare_packet(out_buffer);
