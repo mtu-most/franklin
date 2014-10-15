@@ -115,10 +115,8 @@ void Temp::init() {
 	radiation = NAN;
 	power = NAN;
 	*/
-	power_pin.flags = 0;
-	power_pin.read(0);
-	thermistor_pin.flags = 0;
-	thermistor_pin.read(0);
+	power_pin.init();
+	thermistor_pin.init();
 	min_alarm = NAN;
 	max_alarm = NAN;
 	adcmin_alarm = -1;
@@ -129,13 +127,15 @@ void Temp::init() {
 #ifdef HAVE_GPIOS
 	following_gpios = ~0;
 #endif
-	last_time = millis();
+	last_temp_time = utime();
 	time_on = 0;
 	is_on = false;
 	K = NAN;
 }
 
 void Temp::free() {
+	power_pin.read(0);
+	thermistor_pin.read(0);
 }
 
 void Temp::copy(Temp &dst) {
@@ -151,9 +151,7 @@ void Temp::copy(Temp &dst) {
 	dst.radiation = radiation;
 	dst.power = power;
 	*/
-	dst.power_pin.flags = 0;
 	dst.power_pin.read(power_pin.write());
-	dst.thermistor_pin.flags = 0;
 	dst.thermistor_pin.read(thermistor_pin.write());
 	dst.min_alarm = min_alarm;
 	dst.max_alarm = max_alarm;
@@ -165,7 +163,7 @@ void Temp::copy(Temp &dst) {
 #ifdef HAVE_GPIOS
 	dst.following_gpios = following_gpios;
 #endif
-	dst.last_time = last_time;
+	dst.last_temp_time = last_temp_time;
 	dst.time_on = time_on;
 	dst.is_on = is_on;
 	dst.K = K;

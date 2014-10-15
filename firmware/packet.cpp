@@ -286,8 +286,8 @@ void packet()
 		uint32_t t = utime();
 		if (temps[which].is_on) {
 			// This causes an insignificant error in the model, but when using this you probably aren't using the model anyway, and besides you won't notice the error even if you do.
-			temps[which].time_on += t - temps[which].last_time;
-			temps[which].last_time = t;
+			temps[which].time_on += t - temps[which].last_temp_time;
+			temps[which].last_temp_time = t;
 		}
 		on.ui = temps[which].time_on;
 		current.ui = t;

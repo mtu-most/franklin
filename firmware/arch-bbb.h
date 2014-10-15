@@ -1,6 +1,6 @@
 // This is not an include quard.  This file is included twice; the first time the first part of the file is used, the second time the second part.
-#ifndef _ARCH_AVR_H
-#define _ARCH_AVR_H
+#ifndef _ARCH_BBB_H
+#define _ARCH_BBB_H
 #include <stdint.h>
 #include <unistd.h>
 #include <cstdlib>
@@ -217,25 +217,28 @@ public:
 	}
 };
 
-static inline uint32_t utime() {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1000000 + tv.tv_usec;
-}
-static inline uint32_t millis() {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
-//#define microdelay() usleep(1)
-#define microdelay() do {} while(0)
-
 static inline void get_current_times(uint32_t *current_time, uint32_t *longtime) {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	*current_time = tv.tv_sec * 1000000 + tv.tv_usec;
-	*longtime = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+	if (current_time)
+		*current_time = tv.tv_sec * 1000000 + tv.tv_usec;
+	if (longtime)
+		*longtime = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+	//fprintf(stderr, "current times: %d %d\n", *current_time, *longtime);
 }
+
+static inline uint32_t utime() {
+	uint32_t ret;
+	get_current_times(&ret, NULL);
+	return ret;
+}
+static inline uint32_t millis() {
+	uint32_t ret;
+	get_current_times(NULL, &ret);
+	return ret;
+}
+//#define microdelay() usleep(1)
+#define microdelay() do {} while(0)
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))

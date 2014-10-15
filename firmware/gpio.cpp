@@ -86,8 +86,7 @@ int32_t Gpio::savesize0() {
 }
 
 void Gpio::init() {
-	pin.flags = 0;
-	pin.read(0);
+	pin.init();
 	state = 0;
 #ifdef HAVE_TEMPS
 	value = NAN;
@@ -98,6 +97,7 @@ void Gpio::init() {
 }
 
 void Gpio::free() {
+	pin.read(0);
 #ifdef HAVE_TEMPS
 	if (master < num_temps) {
 		if (prev < num_gpios)
@@ -111,7 +111,6 @@ void Gpio::free() {
 }
 
 void Gpio::copy(Gpio &dst) {
-	dst.pin.flags = 0;
 	dst.pin.read(pin.write());
 	dst.state = state;
 #ifdef HAVE_TEMPS

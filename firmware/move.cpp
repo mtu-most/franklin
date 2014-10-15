@@ -334,10 +334,12 @@ uint8_t next_move () {
 #endif
 	if (!moving)
 		last_time = utime();
+	//debug("last=%ld", F(long(last_time)));
 	//debug("moving->true");
 	moving = true;
 	next_motor_time = 0;
-	start_time = last_time - long(f0 / fabs(vp) * 1e6);
+	start_time = last_time - uint32_t(f0 / fabs(vp) * 1e6);
+	//debug("start=%ld, last-start=%ld", F(long(start_time)), F(long(last_time - start_time)));
 	// }}}
 #endif
 	return num_cbs;

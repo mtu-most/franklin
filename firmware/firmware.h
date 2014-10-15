@@ -25,6 +25,7 @@ struct Pin_t {
 	bool valid() { return flags & 1; }
 	bool inverted() { return flags & 2; }
 	uint16_t write() { return flags << 8 | pin; }
+	void init() { flags = 0; pin = 0; }
 	void read(uint16_t data) {
 		if ((data & 0xff) != pin)
 			SET_INPUT_NOPULLUP(*this);
@@ -140,7 +141,7 @@ struct Temp
 	int32_t adcmax_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
 	bool alarm;
 	// Internal variables.
-	uint32_t last_time;	// last value of micros when this heater was handled.
+	uint32_t last_temp_time;	// last value of micros when this heater was handled.
 	uint32_t time_on;		// Time that the heater has been on since last reading.  [μs]
 	bool is_on;			// If the heater is currently on.
 	float K;			// Thermistor constant; kept in memory for performance.
@@ -343,18 +344,18 @@ EXTERN char out_buffer[16];
 EXTERN uint32_t last_current_time;
 #ifdef HAVE_SPACES
 EXTERN Space *spaces;
-EXTERN long next_motor_time;
+EXTERN uint32_t next_motor_time;
 #endif
 #ifdef HAVE_TEMPS
 EXTERN Temp *temps;
-EXTERN long next_temp_time;
+EXTERN uint32_t next_temp_time;
 #endif
 #ifdef HAVE_GPIOS
 EXTERN Gpio *gpios;
 #endif
-EXTERN long next_led_time;
+EXTERN uint32_t next_led_time;
 #ifdef HAVE_AUDIO
-EXTERN long next_audio_time;
+EXTERN uint32_t next_audio_time;
 #endif
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];

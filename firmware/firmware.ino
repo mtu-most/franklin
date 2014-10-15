@@ -1,7 +1,7 @@
 // vim: set filetype=cpp foldmethod=marker foldmarker={,} :
 #include "firmware.h"
 
-#if 1
+#if 0
 #define movedebug(...) debug(__VA_ARGS__)
 #else
 #define movedebug(...) do {} while (0)
@@ -103,18 +103,18 @@ static void handle_temps(uint32_t current_time, uint32_t longtime) {
 				//debug("switching on %d", temp_current);
 				SET(temps[temp_current].power_pin);
 				temps[temp_current].is_on = true;
-				temps[temp_current].last_time = current_time;
+				temps[temp_current].last_temp_time = current_time;
 				++temps_busy;
 			}
 			else
-				temps[temp_current].time_on += current_time - temps[temp_current].last_time;
+				temps[temp_current].time_on += current_time - temps[temp_current].last_temp_time;
 		}
 		else {
 			if (temps[temp_current].is_on) {
 				//debug("switching off %d", temp_current);
 				RESET(temps[temp_current].power_pin);
 				temps[temp_current].is_on = false;
-				temps[temp_current].time_on += current_time - temps[temp_current].last_time;
+				temps[temp_current].time_on += current_time - temps[temp_current].last_temp_time;
 				--temps_busy;
 			}
 		}
@@ -123,10 +123,10 @@ static void handle_temps(uint32_t current_time, uint32_t longtime) {
 	/*
 	// TODO: Make this work and decide on units.
 	// We have model settings.
-	uint32_t dt = current_time - temps[temp_current].last_time;
+	uint32_t dt = current_time - temps[temp_current].last_temp_time;
 	if (dt == 0)
 		return;
-	temps[temp_current].last_time = current_time;
+	temps[temp_current].last_temp_time = current_time;
 	// Heater and core/shell transfer.
 	if (temps[temp_current].is_on)
 		temps[temp_current].core_T += temps[temp_current].power / temps[temp_current].core_C * dt;
@@ -148,13 +148,13 @@ static void handle_temps(uint32_t current_time, uint32_t longtime) {
 			++temps_busy;
 		}
 		else
-			temps[temp_current].time_on += current_time - temps[temp_current].last_time;
+			temps[temp_current].time_on += current_time - temps[temp_current].last_temp_time;
 	}
 	else {
 		if (temps[temp_current].is_on) {
 			RESET(temps[temp_current].power_pin);
 			temps[temp_current].is_on = false;
-			temps[temp_current].time_on += current_time - temps[temp_current].last_time;
+			temps[temp_current].time_on += current_time - temps[temp_current].last_temp_time;
 			--temps_busy;
 		}
 	}
@@ -163,6 +163,7 @@ static void handle_temps(uint32_t current_time, uint32_t longtime) {
 #endif
 
 #ifdef HAVE_SPACES
+static bool steps_limited;
 static float nums = 0, avgs = 0, currents = 0;
 static void check_distance(Motor *mtr, float distance, float dt, float &factor) {
 	if (isnan(distance) || distance == 0) {
@@ -211,6 +212,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	if (abs(steps) > mtr->max_steps) {
 		//debug("s %f %f %f %ld %f", F(distance), F(mtr->current_pos), F(mtr->steps_per_m), F(steps), F(dt));
 		distance = s * (mtr->max_steps + .1) / mtr->steps_per_m;
+		steps_limited = true;
 	}
 	//debug("cd5 %f %f", F(distance), F(dt));
 	float f = distance / mtr->target_dist;
@@ -276,7 +278,7 @@ static bool do_steps(float &factor, uint32_t current_time) {
 	if (max_steps == 0) {
 		currents += 1;
 		if (!isinf(factor1)) {
-			next_motor_time = (last_time - current_time) * factor1;
+			next_motor_time = (current_time - last_time) * factor1;
 			//debug("setting next motor time to %ld", next_motor_time);
 			next_motor_time = 0;
 		}
@@ -328,7 +330,8 @@ static bool do_steps(float &factor, uint32_t current_time) {
 				try_send_next();
 				return false;
 			}
-			mtr.last_v = mtr.target_v * factor;
+			if (!steps_limited)
+				mtr.last_v = mtr.target_v * factor;
 			//debug("%f %f %d", F(mtr.current_pos), F(target), mtr.steps);
 			mtr.current_pos = target;
 			// Set direction pin.
@@ -379,11 +382,12 @@ static void handle_motors(uint32_t current_time, uint32_t longtime) {
 		return;
 	}
 	last_active = longtime;
+	steps_limited = false;
 	float factor = 1;
 	float t = (current_time - start_time) / 1e6;
-	//buffered_debug("f%f %f %f", F(t), F(t0), F(tp));
+	//buffered_debug("f%f %f %f %ld %ld", F(t), F(t0), F(tp), F(long(current_time)), F(long(start_time)));
 	if (t >= t0 + tp) {	// Finish this move and prepare next.
-		movedebug("finishing %f %f %f", F(t), F(t0), F(tp));
+		movedebug("finishing %f %f %f %ld %ld", F(t), F(t0), F(tp), F(long(current_time)), F(long(start_time)));
 		//buffered_debug("a");
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
@@ -555,12 +559,14 @@ void loop() {
 	// Handle any arch-specific periodic things.
 	arch_run();
 	// Timekeeping.
+	//debug("last current time %ld", F(long(last_current_time)));
 	uint32_t current_time;
 	uint32_t longtime;
 	get_current_times(&current_time, &longtime);
-	long delta = current_time - last_current_time;
+	uint32_t delta = current_time - last_current_time;
+	//debug("delta: %ld", F(long(delta)));
 	if (!Serial.available()) {
-		long next_time = next_led_time;
+		uint32_t next_time = next_led_time;
 #ifdef HAVE_TEMPS
 		if (next_temp_time < next_time)
 			next_time = next_temp_time;
@@ -622,7 +628,6 @@ void loop() {
 			temps[current_t].target = NAN;
 			temps[current_t].adctarget = MAXINT;
 			temps[current_t].is_on = false;
-			last_active = longtime;
 		}
 		temps_busy = 0;
 		which_autosleep |= 2;
@@ -635,10 +640,6 @@ void loop() {
 		handle_led(current_time);	// heart beat.
 #ifdef TIMING
 	uint32_t first_t = utime();
-#endif
-	serial();
-#ifdef TIMING
-	uint32_t serial_t = utime() - first_t;
 #endif
 #ifdef HAVE_TEMPS
 	if (!next_temp_time)
@@ -663,6 +664,10 @@ void loop() {
 #endif
 #ifdef TIMING
 	uint32_t audio_t = utime() - current_time;
+#endif
+	serial();
+#ifdef TIMING
+	uint32_t serial_t = utime() - first_t;
 #endif
 #ifdef TIMING
 	uint32_t end_t = utime() - current_time;

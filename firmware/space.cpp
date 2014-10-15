@@ -62,6 +62,13 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_axes[a]->dist = NAN;
 			new_axes[a]->next_dist = NAN;
 			new_axes[a]->main_dist = NAN;
+			new_axes[a]->offset = 0;
+			new_axes[a]->park = NAN;
+			new_axes[a]->park_order = 0;
+			new_axes[a]->max_v = INFINITY;
+			new_axes[a]->min = -INFINITY;
+			new_axes[a]->max = INFINITY;
+			new_axes[a]->target = NAN;
 		}
 		for (uint8_t a = na; a < old_na; ++a)
 			mem_free(&axis[a]);
@@ -85,17 +92,35 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 				return false;
 			}
 			loaddebug("new motor %x", new_motors[m]);
+			new_motors[m]->step_pin.init();
+			new_motors[m]->dir_pin.init();
+			new_motors[m]->enable_pin.init();
+			new_motors[m]->limit_min_pin.init();
+			new_motors[m]->limit_max_pin.init();
+			new_motors[m]->sense_pin.init();
 			new_motors[m]->sense_state = 0;
 			new_motors[m]->sense_pos = NAN;
+			new_motors[m]->steps_per_m = NAN;
+			new_motors[m]->max_steps = 1;
 			new_motors[m]->limits_pos = NAN;
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
+			new_motors[m]->home_pos = NAN;
 			new_motors[m]->home_order = 0;
 			new_motors[m]->last_v = 0;
 			new_motors[m]->current_pos = NAN;
+			new_motors[m]->limits_pos = NAN;
+			new_motors[m]->limit_v = INFINITY;
+			new_motors[m]->limit_a = INFINITY;
 #ifdef HAVE_AUDIO
 			new_motors[m]->audio_flags = 0;
 #endif
+			new_motors[m]->last_v = NAN;
+			new_motors[m]->steps = 0;
+			new_motors[m]->target_v = NAN;
+			new_motors[m]->target_dist = NAN;
+			new_motors[m]->current_pos = NAN;
+			new_motors[m]->endpos = NAN;
 		}
 		for (uint8_t m = nm; m < old_nm; ++m)
 			mem_free(&motor[m]);
@@ -293,6 +318,7 @@ int32_t Space::savesize0() {
 
 void Space::init() {
 	type = DEFAULT_TYPE;
+	max_deviation = 0;
 	type_data = NULL;
 	num_axes = 0;
 	num_motors = 0;
@@ -305,8 +331,15 @@ void Space::free() {
 	for (uint8_t a = 0; a < num_axes; ++a)
 		mem_free(&axis[a]);
 	mem_free(&axis);
-	for (uint8_t m = 0; m < num_motors; ++m)
+	for (uint8_t m = 0; m < num_motors; ++m) {
+		motor[m]->step_pin.read(0);
+		motor[m]->dir_pin.read(0);
+		motor[m]->enable_pin.read(0);
+		motor[m]->limit_min_pin.read(0);
+		motor[m]->limit_max_pin.read(0);
+		motor[m]->sense_pin.read(0);
 		mem_free(&motor[m]);
+	}
 	mem_free(&motor);
 }
 

@@ -162,6 +162,7 @@ class Printer: # {{{
 		self.position_valid = False
 		self.probing = False
 		self.home_phase = None
+		self.home_target = None
 		self.home_cb = [False, self._do_home]
 		self.probe_cb = [False, None]
 		self.gcode = None
@@ -1215,6 +1216,7 @@ class Printer: # {{{
 		# 4: Move slowly to switch.
 		# 5: Repeat until all home orders are done.
 		# 6: Set current position; move to center (delta only).
+		#log('home %s %s' % (self.home_phase, repr(self.home_target)))
 		small_dist = .005
 		if self.home_phase is None:
 			# Initial call; start homing.

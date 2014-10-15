@@ -31,8 +31,8 @@ void setup()
 	last_packet = NULL;
 	out_busy = false;
 	reply_ready = false;
-	led_pin.read(0);
-	probe_pin.read(0);
+	led_pin.init();
+	probe_pin.init();
 	probe_dist = INFINITY;
 	probe_safe_dist = INFINITY;
 	led_phase = 0;
