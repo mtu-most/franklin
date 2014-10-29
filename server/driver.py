@@ -65,7 +65,7 @@ class delayed: # {{{
 # class for handling beaglebone: driver running on same machine.
 class Driver: # {{{
 	def __init__(self):
-		self.driver = subprocess.Popen(('./firmware',), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		self.driver = subprocess.Popen(('./cdriver/cdriver',), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		fcntl.fcntl(self.driver.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 		self.buffer = ''
 	def available(self):
@@ -257,7 +257,8 @@ class Printer: # {{{
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False)
 		if port == '-':
-			self.import_settings(open('/root/bbb-settings.ini').read())
+			#self.import_settings(open('/root/bbb-settings.ini').read())
+			pass
 		self.initialized = True
 		global show_own_debug
 		if show_own_debug is None:
@@ -271,7 +272,7 @@ class Printer: # {{{
 			[0x95, 0x6c, 0xd5, 0x43],
 			[0x4b, 0xdc, 0xe2, 0x83]]
 	# Single-byte commands.  See firmware/serial.cpp for an explanation of the codes.
-	single = { 'NACK': '\x80', 'ACK0': '\xb3', 'ACKWAIT0': '\xb4', 'STALL': '\x87', 'ACKWAIT1': '\x99', 'ID': '\xaa', 'ACK1': '\xad', 'DEBUG': '\x9e' }
+	single = { 'NACK': '\x80', 'ACK0': '\xb3', 'ACKWAIT0': '\xb4', 'STALL0': '\x87', 'STALL1': '\x9e', 'ACKWAIT1': '\x99', 'ID': '\xaa', 'ACK1': '\xad', 'DEBUG': '\x81' }
 	command = {
 			'BEGIN': 0x00,
 			'PING': 0x01,
@@ -361,10 +362,11 @@ class Printer: # {{{
 				self._close()
 				# _close will return when the connection returns.
 	# }}}
-	def _printer_write(self, *a, **ka): # {{{
+	def _printer_write(self, data): # {{{
+		#log('writing %s' % ' '.join(['%02x' % ord(x) for x in data]))
 		while True:
 			try:
-				return self.printer.write(*a, **ka)
+				return self.printer.write(data)
 			except:
 				log('error writing')
 				traceback.print_exc()
@@ -393,7 +395,10 @@ class Printer: # {{{
 					else:
 						ret[1](id)
 						continue
+			except SystemExit:
+				sys.exit(0)
 			except:
+				log('error handling command input')
 				traceback.print_exc()
 				self._send(id, 'error', repr(sys.exc_info()))
 				continue
@@ -464,13 +469,18 @@ class Printer: # {{{
 					if ack:
 						return ('ack', 'wait1')
 					continue
-				if r == self.single['STALL']:
+				if r == self.single['STALL0']:
 					# There is a problem we can't solve.
 					if ack:
-						return ('ack', 'stall')
+						return ('ack', 'stall0')
 					else:
 						log('printer sent unsolicited stall')
-						sys.exit(0)
+				if r == self.single['STALL1']:
+					# There is a problem we can't solve.
+					if ack:
+						return ('ack', 'stall1')
+					else:
+						log('printer sent unsolicited stall')
 				if r == self.single['ID']:
 					# The printer has reset, or some extra data was received after reconnect.
 					# Check which by reading the id.
@@ -720,7 +730,7 @@ class Printer: # {{{
 					else:
 						self.wait = True
 					return True
-				else: # ack[1] == 'stall'
+				else: # ack[1] in ('stall0', 'stall1')
 					log('stall response waiting for ack')
 					self._unpause()
 					self._print_done(False, 'printer sent stall')
@@ -1032,7 +1042,7 @@ class Printer: # {{{
 					else:
 						log('Running system command: %s' % message)
 						os.system(message)
-			if len(self.gcode) > 0:
+			if self.gcode is not None and len(self.gcode) > 0:
 				self.gcode.pop(0)
 			else:
 				# Printing was aborted; don't call print_done, or we'll abort whatever aborted us.
@@ -1610,7 +1620,7 @@ class Printer: # {{{
 				ret += 'delta_angle = %f\r\n' % self.delta_angle
 				for i in range(3):
 					ret += '[delta %d %d]\r\n' % (num, i)
-					ret += ''.join(['%s = %f\r\n' % (x, self.delta[i][x]) for x in ('axis_min', 'axis_max', 'rodlength', 'radius')])
+					ret += ''.join(['%s = %f\r\n' % (x, self.delta[i][x]) for x in ('rodlength', 'radius', 'axis_min', 'axis_max')])
 			for i, a in enumerate(self.axis):
 				ret += '[axis %d %d]\r\n' % (num, i)
 				ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('offset', 'park', 'park_order', 'max_v', 'min', 'max')])

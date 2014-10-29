@@ -12,10 +12,6 @@
 #include <errno.h>
 #include <math.h>
 #include <sys/mman.h>
-#include <poll.h>
-
-// Use the contents of base.cpp
-#define DEFINE_MAIN
 
 #define SET_OUTPUT(pin_no) do { \
 	if ((pin_no).valid()) { \
@@ -252,7 +248,7 @@ static inline void write_eeprom(uint32_t address, uint8_t data) {
 
 static inline void wait_for_event(uint32_t micro, uint32_t current_time) {
 	bbb_pollfd.revents = 0;
-	//fprintf(stderr, "polling with micro %ld\n", micro);
+	fprintf(stderr, "polling with micro %d\n", micro);
 	poll(&bbb_pollfd, 1, micro == ~0 ? -1 : micro / 1000);
 }
 
@@ -275,4 +271,68 @@ void _mem_retarget(void **target, void **newtarget);
 #define mem_free(t) _mem_free(reinterpret_cast <void **>(t))
 void _mem_free(void **target);
 
+/* TODO: merge this with arch_run.
+static void handle_led(uint32_t current_time) {
+	uint32_t timing = temps_busy > 0 ? 1000000 / 100 : 1000000 / 50;
+	while (current_time - led_last >= timing) {
+		//debug("led thing");
+		led_last += timing;
+		led_phase += 1;
+	}
+	next_led_time = timing - (current_time - led_last);
+	//debug("t %ld", F(next_led_time));
+	led_phase %= 50;
+	// Timings read from https://en.wikipedia.org/wiki/File:Wiggers_Diagram.png (phonocardiogram).
+	bool state = (led_phase <= 4 || (led_phase >= 14 && led_phase <= 17));
+	if (state)
+		SET(led_pin);
+	else
+		RESET(led_pin);
+}
+
+#ifdef HAVE_AUDIO
+static void handle_audio(uint32_t current_time, uint32_t longtime) {
+	if (audio_head != audio_tail) {
+		last_active = longtime;
+		int32_t sample = (current_time - audio_start) / audio_us_per_sample;
+		int32_t audio_byte = sample >> 3;
+		while (audio_byte >= AUDIO_FRAGMENT_SIZE) {
+			debug("next audio fragment");
+			if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
+			{
+				//debug("continue audio");
+				continue_cb |= 2;
+				try_send_next();
+			}
+			audio_head = (audio_head + 1) % AUDIO_FRAGMENTS;
+			if (audio_tail == audio_head) {
+				//debug("audio done");
+				next_audio_time = ~0;
+				return;
+			}
+			audio_byte -= AUDIO_FRAGMENT_SIZE;
+			// us per fragment = us/sample*sample/fragment
+			audio_start += audio_us_per_sample * 8 * AUDIO_FRAGMENT_SIZE;
+		}
+		uint8_t old_state = audio_state;
+		audio_state = (audio_buffer[audio_head][audio_byte] >> (sample & 7)) & 1;
+		if (audio_state != old_state) {
+			for (uint8_t s = 0; s < num_spaces; ++s) {
+				Space &sp = spaces[s];
+				for (uint8_t m = 0; m < sp.num_motors; ++m) {
+					if (!(sp.motor[m]->audio_flags & Motor::PLAYING))
+						continue;
+					if (audio_state > old_state)
+						SET(sp.motor[m]->dir_pin);
+					else
+						RESET(sp.motor[m]->dir_pin);
+					SET(sp.motor[m]->step_pin);
+					RESET(sp.motor[m]->step_pin);
+				}
+			}
+		}
+	}
+}
+#endif
+*/
 #endif

@@ -3,19 +3,36 @@
 #define _ARCH_AVR_H
 #include <Arduino.h>
 #include <avr/wdt.h>
-#include <EEPROM.h>
+
+#ifndef NO_DEBUG
+static inline void debug(char const *fmt, ...);
+#else
+#define debug(...) do {} while (0)
+#endif
+
+#ifdef F
+#undef F
+#endif
+#define F(x) &(x)
 
 // Arduino is slow enough to not need explicit microsecond delays.
 #define microdelay() do {} while(0)
 // We don't care about using full cpu power on Arduino.
 #define wait_for_event(x, t) do {} while(0)
 
-#define SET_OUTPUT(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, OUTPUT); }} while (0)
-#define SET_INPUT(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, INPUT_PULLUP); }} while (0)
-#define SET_INPUT_NOPULLUP(pin_no) do { if ((pin_no).valid ()) { pinMode ((pin_no).pin, INPUT); }} while (0)
-#define SET(pin_no) do { if ((pin_no).valid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? LOW : HIGH); } } while (0)
-#define RESET(pin_no) do { if ((pin_no).valid ()) { digitalWrite ((pin_no).pin, (pin_no).inverted () ? HIGH : LOW); } } while (0)
-#define GET(pin_no, _default) ((pin_no).valid () ? digitalRead ((pin_no).pin) == HIGH ? !(pin_no).inverted () : (pin_no).inverted () : _default)
+#define RAW_SET_OUTPUT(pin_no) do { pinMode((pin_no), OUTPUT); } while (0)
+#define RAW_SET_INPUT(pin_no) do { pinMode((pin_no), INPUT_PULLUP); } while (0)
+#define RAW_SET_INPUT_NOPULLUP(pin_no) do { pinMode((pin_no), INPUT); } while (0)
+#define RAW_SET(pin_no) do { digitalWrite((pin_no), HIGH); } while (0)
+#define RAW_RESET(pin_no) do { digitalWrite((pin_no), LOW); } while (0)
+#define RAW_GET(pin_no) (digitalRead(pin_no) == HIGH)
+
+#define SET_OUTPUT(pin_no) do { if ((pin_no).valid()) { pinMode((pin_no).pin, OUTPUT); }} while (0)
+#define SET_INPUT(pin_no) do { if ((pin_no).valid()) { pinMode((pin_no).pin, INPUT_PULLUP); }} while (0)
+#define SET_INPUT_NOPULLUP(pin_no) do { if ((pin_no).valid()) { pinMode((pin_no).pin, INPUT); }} while (0)
+#define SET(pin_no) do { if ((pin_no).valid()) { digitalWrite((pin_no).pin, (pin_no).inverted() ? LOW : HIGH); } } while (0)
+#define RESET(pin_no) do { if ((pin_no).valid()) { digitalWrite((pin_no).pin, (pin_no).inverted() ? HIGH : LOW); } } while (0)
+#define GET(pin_no, _default) ((pin_no).valid() ? digitalRead((pin_no).pin) == HIGH ? !(pin_no).inverted() : (pin_no).inverted() : _default)
 
 // Everything before this line is used at the start of firmware.h; everything after it at the end.
 #else
@@ -27,7 +44,89 @@
 
 // Defined by arduino: NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS
 
-#ifdef HAVE_TEMPS
+#ifndef NO_DEBUG
+static inline void debug(char const *fmt, ...) {
+#if DEBUG_BUFFER_LENGTH > 0
+	buffered_debug_flush();
+#endif
+	va_list ap;
+	va_start(ap, fmt);
+	Serial.write(CMD_DEBUG);
+	for (char const *p = fmt; *p; ++p) {
+		if (*p == '%') {
+			bool longvalue = false;
+			while (true) {
+				++p;
+				switch (*p) {
+				case 0: {
+					Serial.write('%');
+					--p;
+					break;
+				}
+				case 'l': {
+					longvalue = true;
+					continue;
+				}
+				case '%': {
+					Serial.write('%');
+					break;
+				}
+				case 'd': {
+					if (longvalue) {
+						int32_t *arg = va_arg(ap, int32_t *);
+						Serial.print(*arg, DEC);
+					}
+					else {
+						int arg = va_arg(ap, int);
+						Serial.print(arg, DEC);
+					}
+					break;
+				}
+				case 'x': {
+					if (longvalue) {
+						int32_t *arg = va_arg(ap, int32_t *);
+						Serial.print(*arg, HEX);
+					}
+					else {
+						int arg = va_arg(ap, int);
+						Serial.print(arg, HEX);
+					}
+					break;
+				}
+				case 'f': {
+					float *arg = va_arg(ap, float *);
+					Serial.print(*arg, 5);
+					break;
+				}
+				case 's': {
+					char const *arg = va_arg(ap, char const *);
+					Serial.print(arg);
+					break;
+				}
+				case 'c': {
+					char arg = va_arg(ap, int);
+					Serial.write(arg);
+					break;
+				}
+				default: {
+					Serial.write('%');
+					Serial.write(*p);
+					break;
+				}
+				}
+				break;
+			}
+		}
+		else {
+			Serial.write(*p);
+		}
+	}
+	va_end(ap);
+	Serial.write((uint8_t)0);
+	Serial.flush();
+}
+#endif
+
 EXTERN uint8_t adc_last_pin;
 #define ADCBITS 10
 
@@ -69,9 +168,10 @@ static inline bool adc_ready(uint8_t pin) {
 static inline int32_t adc_get(uint8_t pin) {
 	int32_t low = uint8_t(ADCL);
 	int32_t high = uint8_t(ADCH);
-	return (high << 8) | low;
+	int32_t ret = (high << 8) | low;
+	//debug("adc: %ld", F(ret));
+	return ret;
 }
-#endif
 
 static inline void watchdog_enable() {
 #ifdef WATCHDOG
@@ -97,96 +197,6 @@ static inline void reset() {
 	while(1) {}
 }
 
-#ifndef NO_DEBUG
-static inline void debug (char const *fmt, ...) {
-#if DEBUG_BUFFER_LENGTH > 0
-	buffered_debug_flush();
-#endif
-	va_list ap;
-	va_start (ap, fmt);
-	Serial.write (CMD_DEBUG);
-	for (char const *p = fmt; *p; ++p) {
-		if (*p == '%') {
-			bool longvalue = false;
-			while (true) {
-				++p;
-				switch (*p) {
-				case 0: {
-					Serial.write ('%');
-					--p;
-					break;
-				}
-				case 'l': {
-					longvalue = true;
-					continue;
-				}
-				case '%': {
-					Serial.write ('%');
-					break;
-				}
-				case 'd': {
-					if (longvalue) {
-						int32_t *arg = va_arg (ap, int32_t *);
-						Serial.print (*arg, DEC);
-					}
-					else {
-						int arg = va_arg (ap, int);
-						Serial.print (arg, DEC);
-					}
-					break;
-				}
-				case 'x': {
-					if (longvalue) {
-						int32_t *arg = va_arg (ap, int32_t *);
-						Serial.print (*arg, HEX);
-					}
-					else {
-						int arg = va_arg (ap, int);
-						Serial.print (arg, HEX);
-					}
-					break;
-				}
-				case 'f': {
-					float *arg = va_arg (ap, float *);
-					Serial.print (*arg, 5);
-					break;
-				}
-				case 's': {
-					char const *arg = va_arg (ap, char const *);
-					Serial.print (arg);
-					break;
-				}
-				case 'c': {
-					char arg = va_arg (ap, int);
-					Serial.write (arg);
-					break;
-				}
-				default: {
-					Serial.write ('%');
-					Serial.write (*p);
-					break;
-				}
-				}
-				break;
-			}
-		}
-		else {
-			Serial.write (*p);
-		}
-	}
-	va_end (ap);
-	Serial.write ((uint8_t)0);
-	Serial.flush ();
-}
-#else
-#define debug(...) do {} while (0)
-#endif
-
-#ifdef F
-#undef F
-#endif
-#define F(x) &(x)
-
 EXTERN uint8_t mcusr;
 EXTERN uint16_t mem_used;
 EXTERN uint32_t time_h;
@@ -194,15 +204,37 @@ EXTERN uint32_t time_h;
 static inline void arch_setup_start() {
 	mcusr = MCUSR;
 	mem_used = 0;
+	time_h = 0;
 	MCUSR = 0;
 	// Setup timer1 for microsecond counting.
 	TCCR1A = 0;
 	TCCR1B = 2;	// Clock/8, in other words with 16MHz clock, 2MHz counting; 2 counts/us.
+	// Disable all outputs.
+	for (uint8_t i = 0; i < NUM_DIGITAL_PINS; ++i)
+		RAW_SET_INPUT_NOPULLUP(i);
+}
+
+static inline bool arch_run() {
+	if (TIFR1 & (1 << TOV1)) {
+		TIFR1 = 1 << TOV1;
+		time_h += 1;
+		return true;
+	}
+	return false;
+}
+
+static inline void arch_setup_end() {
+	debug("Startup.  MCUSR: %x", mcusr);
 }
 
 static inline uint32_t utime() {
 	uint32_t l = uint8_t(TCNT1L);
 	uint32_t h = uint8_t(TCNT1H);
+	// If a  carry happened just now, get new values.
+	if (arch_run()) {
+		l = uint8_t(TCNT1L);
+		h = uint8_t(TCNT1H);
+	}
 	// Don't use 16,8,0, because we have 2 counts/us, not 1.
 	return (time_h << 15) | (h << 7) | (l >> 1);
 }
@@ -210,25 +242,6 @@ static inline uint32_t utime() {
 static inline void get_current_times(uint32_t *current_time, uint32_t *longtime) {
 	*current_time = utime();
 	*longtime = millis();
-}
-
-static inline void arch_run() {
-	if (TIFR1 & (1 << TOV1)) {
-		TIFR1 = 1 << TOV1;
-		time_h += 1;
-	}
-}
-
-static inline void arch_setup_end() {
-	debug ("Startup.  MCUSR: %x", mcusr);
-}
-
-static inline uint8_t read_eeprom(uint32_t address) {
-	return EEPROM.read(address);
-}
-
-static inline void write_eeprom(uint32_t address, uint8_t data) {
-	EEPROM.write(address, data);
 }
 
 // Memory handling

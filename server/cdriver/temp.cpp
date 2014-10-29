@@ -1,6 +1,5 @@
-#include "firmware.h"
+#include "cdriver.h"
 
-#ifdef HAVE_TEMPS
 void Temp::load(int32_t &addr, bool eeprom)
 {
 	R0 = read_float(addr, eeprom);
@@ -10,14 +9,12 @@ void Temp::load(int32_t &addr, bool eeprom)
 	beta = read_float(addr, eeprom);
 	K = exp(logRc - beta / Tc);
 	//debug("K %f R0 %f R1 %f logRc %f Tc %f beta %f", F(K), F(R0), F(R1), F(logRc), F(Tc), F(beta));
-#ifdef HAVE_GPIOS
 	for (uint8_t gpio = following_gpios; gpio < num_gpios; gpio = gpios[gpio].next)
 		gpios[gpio].adcvalue = toadc(gpios[gpio].value);
 	if (following_gpios < num_gpios) {
 		adc_phase = 1;
 		next_temp_time = 0;
 	}
-#endif
 	/*
 	core_C = read_float(addr, eeprom);
 	shell_C = read_float(addr, eeprom);
@@ -124,9 +121,7 @@ void Temp::init() {
 	alarm = false;
 	target = NAN;
 	adctarget = MAXINT;
-#ifdef HAVE_GPIOS
 	following_gpios = ~0;
-#endif
 	last_temp_time = utime();
 	time_on = 0;
 	is_on = false;
@@ -160,12 +155,9 @@ void Temp::copy(Temp &dst) {
 	dst.alarm = alarm;
 	dst.target = target;
 	dst.adctarget = adctarget;
-#ifdef HAVE_GPIOS
 	dst.following_gpios = following_gpios;
-#endif
 	dst.last_temp_time = last_temp_time;
 	dst.time_on = time_on;
 	dst.is_on = is_on;
 	dst.K = K;
 }
-#endif

@@ -1,6 +1,5 @@
-#include "firmware.h"
+#include "cdriver.h"
 
-#ifdef HAVE_SPACES
 static void xyz2motors(Space *s, float *motors, bool *ok) {
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
 		if (motors)
@@ -10,16 +9,11 @@ static void xyz2motors(Space *s, float *motors, bool *ok) {
 	}
 }
 
-static void reset_pos (Space *s) {
+static void reset_pos(Space *s) {
 	// If positions are unknown, pretend that they are 0.
 	// This is mostly useful for extruders.
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
-		if (isnan(s->motor[a]->current_pos)) {
-			s->axis[a]->source = 0;
-			s->motor[a]->current_pos = 0;
-		}
-		else
-			s->axis[a]->source = s->motor[a]->current_pos;
+		s->axis[a]->source = s->motor[a]->current_pos / s->motor[a]->steps_per_m;
 		//debug("set pos for %d to %f", a, F(s->axis[a]->source));
 	}
 }
@@ -63,12 +57,9 @@ void Cartesian_init(uint8_t num) {
 	space_types[num].init = init;
 	space_types[num].free = free;
 	space_types[num].savesize = savesize;
-#ifdef HAVE_EXTRUDER
 	space_types[num].change0 = change0;
-#endif
 }
 
-#ifdef HAVE_EXTRUDER
 struct ExtruderData {
 	float dx, dy, dz;
 };
@@ -127,5 +118,3 @@ void Extruder_init(uint8_t num) {
 	space_types[num].savesize = esavesize;
 	space_types[num].change0 = echange0;
 }
-#endif
-#endif

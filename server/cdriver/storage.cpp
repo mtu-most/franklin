@@ -1,10 +1,10 @@
-#include "firmware.h"
+#include "cdriver.h"
 
 uint8_t read_8(int32_t &address, bool eeprom)
 {
 	if (eeprom)
 		return read_eeprom(address++);
-	return command[address++];
+	return command[0][address++];
 }
 
 void write_8(int32_t &address, uint8_t data, bool eeprom)

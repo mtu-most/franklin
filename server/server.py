@@ -35,7 +35,7 @@ config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'passwordfile': '',
 		'done': '',
 		'local': 'False',
-		'printercmd': (tuple(xdgbasedir.data_files_read(packagename = 'franklin', filename = 'printer.py')) + ('',))[0]
+		'driver': (tuple(xdgbasedir.data_files_read(packagename = 'franklin', filename = 'driver.py')) + ('',))[0]
 	})
 # }}}
 
@@ -471,7 +471,7 @@ class Port: # {{{
 def detect(port): # {{{
 	if port == '-':
 		fake_id = 'xxxxxxxx'
-		process = subprocess.Popen((config['printercmd'], port, config['audiodir'], fake_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = subprocess.Popen((config['driver'], port, config['audiodir'], fake_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		ports[port] = Port(port, process, fake_id, None)
 		return False
 	if not os.path.exists(port) and port != '-':
@@ -535,7 +535,7 @@ def detect(port): # {{{
 			log('accepting unknown printer on port %s (id was %s)' % (port, repr(id[0])))
 			id[0] = nextid()
 			log('new id %s' % repr(id[0]))
-			process = subprocess.Popen((config['printercmd'], port, config['audiodir'], id[0]), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+			process = subprocess.Popen((config['driver'], port, config['audiodir'], id[0]), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, id[0], printer)
 			return False
 		printer.write(single['ID'])

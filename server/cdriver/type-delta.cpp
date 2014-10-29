@@ -1,7 +1,5 @@
-#include "firmware.h"
+#include "cdriver.h"
 
-#ifdef HAVE_SPACES
-#ifdef HAVE_DELTA
 struct Apex {
 	float axis_min, axis_max;	// Limits for the movement of this axis.
 	float rodlength, radius;	// Length of the tie rod and the horizontal distance between the vertical position and the zero position.
@@ -72,7 +70,10 @@ static void xyz2motors(Space *s, float *motors, bool *ok) {
 
 static void reset_pos (Space *s) {
 	// All axes' current_pos must be valid and equal, in other words, x=y=0.
-	if (s->motor[0]->current_pos != s->motor[1]->current_pos || s->motor[0]->current_pos != s->motor[2]->current_pos) {
+	float p[3];
+	for (uint8_t i = 0; i < 3; ++i)
+		p[i] = s->motor[i]->current_pos / s->motor[i]->steps_per_m;
+	if (p[0] != p[1] || p[0] != p[2]) {
 		//debug("resetpos fails");
 		s->axis[0]->source = NAN;
 		s->axis[1]->source = NAN;
@@ -82,7 +83,7 @@ static void reset_pos (Space *s) {
 		//debug("resetpos %f", F(APEX(s, a).current_pos));
 		s->axis[0]->source = 0;
 		s->axis[1]->source = 0;
-		s->axis[2]->source = s->motor[0]->current_pos;
+		s->axis[2]->source = p[0];
 	}
 }
 
@@ -177,9 +178,5 @@ void Delta_init(uint8_t num) {
 	space_types[num].init = init;
 	space_types[num].free = free;
 	space_types[num].savesize = savesize;
-#ifdef HAVE_EXTRUDER
 	space_types[num].change0 = change0;
-#endif
 }
-#endif
-#endif

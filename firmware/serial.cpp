@@ -19,6 +19,7 @@
 
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
+static bool had_stall = true;
 static uint32_t last_micros = 0;
 static bool had_data = false;
 
@@ -33,10 +34,11 @@ static const uint8_t MASK[5][4] = {
 // There may be serial data available.
 void serial()
 {
-	if (!had_data && command_end > 0 && utime() - last_micros >= 100000)
+	if (!had_data && command_end > 0 && utime() - last_micros >= 300000)
 	{
 		// Command not finished; ignore it and wait for next.
 		watchdog_reset();
+		debug("fail %d %x %ld", command_end, command[0], F(last_micros));
 		command_end = 0;
 	}
 	had_data = false;
@@ -63,6 +65,8 @@ void serial()
 				debug("new ff_out: %d", ff_out);
 #endif
 				out_busy = false;
+				if (stopping == 2)
+					stopping = 0;
 				try_send_next();
 			}
 			continue;
@@ -70,7 +74,7 @@ void serial()
 			// Nack: the host didn't properly receive the packet: resend.
 			// Unless the last packet was already received; in that case ignore the NACK.
 			if (out_busy)
-				send_packet(last_packet);
+				send_packet();
 			continue;
 		case CMD_ID:
 			// Request printer id.  This is called when the host
@@ -105,7 +109,7 @@ void serial()
 #ifdef DEBUG_SERIAL
 			debug("resending packet");
 #endif
-			send_packet(last_packet);
+			send_packet();
 		}
 		return;
 	}
@@ -177,14 +181,17 @@ void serial()
 	if ((command[1] & 0x80) != ff_in)
 	{
 		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
-		// Resend the ack, but don't do anything (the action has already been taken).
+		// Resend the ack (or stall), but don't do anything (the action has already been taken).
 #ifdef DEBUG_SERIAL
 		debug("duplicate");
 #endif
 #ifdef DEBUG_FF
 		debug("old ff_in: %d", ff_in);
 #endif
-		Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
+		if (had_stall)
+			Serial.write(ff_in ? CMD_STALL0 : CMD_STALL1);
+		else
+			Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
 		return;
 	}
 	// Right: update flip-flop and send ack.
@@ -250,22 +257,23 @@ static void prepare_packet(char *the_packet)
 			check ^= check >> 2;
 			check ^= check >> 1;
 			if (check & 1)
-				sum |= 1 << (bit + 3);
+				sum ^= 1 << (bit + 3);
 		}
 		the_packet[cmd_len + t] = sum;
 	}
+	for (uint8_t i = 0; i < cmd_len + (cmd_len + 2) / 3; ++i)
+		pending_packet[i] = the_packet[i];
 }
 
 // Send packet to host.
-void send_packet(char *the_packet)
+void send_packet()
 {
 #ifdef DEBUG_SERIAL
 	debug("send");
 #endif
-	last_packet = the_packet;
-	uint8_t cmd_len = the_packet[0] & COMMAND_LEN_MASK;
+	uint8_t cmd_len = pending_packet[0] & COMMAND_LEN_MASK;
 	for (uint8_t t = 0; t < cmd_len + (cmd_len + 2) / 3; ++t)
-		Serial.write(the_packet[t]);
+		Serial.write(pending_packet[t]);
 	out_busy = true;
 	out_time = utime();
 }
@@ -284,161 +292,80 @@ void try_send_next()
 		// Still busy sending other packet.
 		return;
 	}
-#ifdef HAVE_SPACES
-	for (uint8_t w = 0; w < num_spaces; ++w) {
-		for (uint8_t m = 0; m < spaces[w].num_motors; ++m) {
-			if (!isnan(spaces[w].motor[m]->limits_pos)) {
+	if (stopping) {
+		for (uint8_t m = 0; m < num_motors; ++m) {
+			if (motor[m]->switch_pos != MAXLONG) {
+				if (stopping == 1) {
+					stopping = 2;
+				}
+				else {
+					// Still more limits to send; set stopping accordingly.
+					stopping = 1;
+					break;
+				}
 #ifdef DEBUG_SERIAL
-				debug("limit %d %d", w, m);
+				debug("limit %d", m);
 #endif
-				out_buffer[0] = 9;
+				out_buffer[0] = 7;
 				out_buffer[1] = CMD_LIMIT;
-				out_buffer[2] = w;
-				out_buffer[3] = m;
-				out_buffer[4] = num_movecbs;
-				ReadFloat f;
-				f.f = spaces[w].motor[m]->limits_pos;
-				out_buffer[5] = f.b[0];
-				out_buffer[6] = f.b[1];
-				out_buffer[7] = f.b[2];
-				out_buffer[8] = f.b[3];
-				spaces[w].motor[m]->limits_pos = NAN;
-				num_movecbs = 0;
-				if (initialized)
-				{
-					prepare_packet(out_buffer);
-					send_packet(out_buffer);
-				}
-				else
-					try_send_next();
-				return;
-			}
-			if (spaces[w].motor[m]->sense_state & 1)
-			{
-#ifdef DEBUG_SERIAL
-				debug("sense (%d %d) %d %f", w, m, spaces[w].motor[m]->sense_state, F(spaces[w].motor[m]->sense_pos));
-#endif
-				out_buffer[0] = 8;
-				out_buffer[1] = CMD_SENSE;
-				out_buffer[2] = w | (spaces[w].motor[m]->sense_state & 0x80);
-				out_buffer[3] = m;
-				ReadFloat f;
-				f.f = spaces[w].motor[m]->sense_pos;
-				out_buffer[4] = f.b[0];
-				out_buffer[5] = f.b[1];
-				out_buffer[6] = f.b[2];
-				out_buffer[7] = f.b[3];
-				spaces[w].motor[m]->sense_state &= ~1;
-				if (initialized)
-				{
-					prepare_packet(out_buffer);
-					send_packet(out_buffer);
-				}
-				else
-					try_send_next();
-				return;
+				out_buffer[2] = m;
+				*reinterpret_cast <int32_t *>(&out_buffer[3]) = motor[m]->switch_pos;
+				motor[m]->switch_pos = MAXLONG;
+				prepare_packet(out_buffer);
 			}
 		}
-	}
-#endif
-	if (num_movecbs > 0)
-	{
-#ifdef DEBUG_SERIAL
-		debug("sending %d movecbs", num_movecbs);
-#endif
-		out_buffer[0] = 3;
-		out_buffer[1] = CMD_MOVECB;
-		out_buffer[2] = num_movecbs;
-		num_movecbs = 0;
-		prepare_packet(out_buffer);
-		send_packet(out_buffer);
+		send_packet();
 		return;
 	}
-#ifdef HAVE_TEMPS
-	for (uint8_t t = 0; t < num_temps; ++t) {
-		if (temps[t].alarm) {
+	for (uint8_t m = 0; m < num_motors; ++m) {
+		if (motor[m]->sense_state & 1) {
 #ifdef DEBUG_SERIAL
-			debug("tempcb %d", t);
+			debug("sense %d %d %f", m, motor[m]->sense_state, F(motor[m]->sense_pos));
 #endif
-			out_buffer[0] = 3;
-			out_buffer[1] = CMD_TEMPCB;
-			out_buffer[2] = t;
-			temps[t].alarm = false;
-			if (initialized)
-			{
-				prepare_packet(out_buffer);
-				send_packet(out_buffer);
-			}
-			else
-				try_send_next();
+			out_buffer[0] = 7;
+			out_buffer[1] = motor[m]->sense_state & 0x80 ? CMD_SENSE1 : CMD_SENSE0;
+			out_buffer[2] = m;
+			*reinterpret_cast <int32_t *>(&out_buffer[3]) = motor[m]->sense_pos;
+			motor[m]->sense_state &= ~1;
+			prepare_packet(out_buffer);
+			send_packet();
 			return;
 		}
 	}
+	if (adcreply_ready)
+	{
+#ifdef DEBUG_SERIAL
+		debug("adcreply %x %d", adcreply[1], adcreply[0]);
 #endif
+		prepare_packet(adcreply);
+		send_packet();
+		adcreply_ready = false;
+		return;
+	}
 	if (reply_ready)
 	{
 #ifdef DEBUG_SERIAL
 		debug("reply %x %d", reply[1], reply[0]);
 #endif
 		prepare_packet(reply);
-		send_packet(reply);
+		send_packet();
 		reply_ready = false;
 		return;
 	}
-	if (continue_cb & 1)
-	{
-#ifdef DEBUG_SERIAL
-		debug("continue move");
-#endif
-		out_buffer[0] = 3;
-		out_buffer[1] = CMD_CONTINUE;
-		out_buffer[2] = 0;
-		continue_cb &= ~1;
-		if (initialized)
-		{
-			prepare_packet(out_buffer);
-			send_packet(out_buffer);
-		}
-		else
-			try_send_next();
-		return;
-	}
-	if (continue_cb & 2)
+#ifdef AUDIO
+	if (continue_cb)
 	{
 #ifdef DEBUG_SERIAL
 		debug("continue audio");
 #endif
-		out_buffer[0] = 3;
+		out_buffer[0] = 2;
 		out_buffer[1] = CMD_CONTINUE;
-		out_buffer[2] = 1;
-		continue_cb &= ~2;
-		if (initialized)
-		{
-			prepare_packet(out_buffer);
-			send_packet(out_buffer);
-		}
-		else
-			try_send_next();
+		continue_cb = false;
+		prepare_packet(out_buffer);
+		send_packet();
 		return;
 	}
-	if (which_autosleep != 0)
-	{
-#ifdef DEBUG_SERIAL
-		debug("autosleep");
 #endif
-		out_buffer[0] = 3;
-		out_buffer[1] = CMD_AUTOSLEEP;
-		out_buffer[2] = which_autosleep;
-		which_autosleep = 0;
-		if (initialized)
-		{
-			prepare_packet(out_buffer);
-			send_packet(out_buffer);
-		}
-		else
-			try_send_next();
-		return;
-	}
 	if (ping != 0)
 	{
 #ifdef DEBUG_SERIAL
@@ -448,11 +375,11 @@ void try_send_next()
 		{
 			if (ping & 1 << b)
 			{
-				reply[0] = 3;
-				reply[1] = CMD_PONG;
-				reply[2] = b;
-				prepare_packet(reply);
-				send_packet(reply);
+				out_buffer[0] = 3;
+				out_buffer[1] = CMD_PONG;
+				out_buffer[2] = b;
+				prepare_packet(out_buffer);
+				send_packet();
 				ping &= ~(1 << b);
 				return;
 			}
@@ -462,10 +389,18 @@ void try_send_next()
 
 void write_ack()
 {
+	had_stall = false;
 	Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
 }
 
 void write_ackwait()
 {
+	had_stall = false;
 	Serial.write(ff_in ? CMD_ACKWAIT0 : CMD_ACKWAIT1);
+}
+
+void write_stall()
+{
+	had_stall = true;
+	Serial.write(ff_in ? CMD_STALL0 : CMD_STALL1);
 }

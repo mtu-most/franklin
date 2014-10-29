@@ -1,4 +1,4 @@
-#include "firmware.h"
+#include "cdriver.h"
 
 #if 0
 #define loaddebug debug
@@ -6,23 +6,18 @@
 #define loaddebug(...) do {} while(0)
 #endif
 
-#ifdef HAVE_SPACES
 bool Space::setup_nums(uint8_t na, uint8_t nm) {
 	if (na == num_axes && nm == num_motors)
 		return true;
 	loaddebug("new space %d %d %d %d", na, nm, num_axes, num_motors);
 	int32_t savesz = namelen + 1;
 	savesz += globals_savesize();
-#ifdef HAVE_TEMPS
 	for (uint8_t t = 0; t < num_temps; ++t) {
 		savesz += t < num_temps ? temps[t].savesize() : Temp::savesize0();
 	}
-#endif
-#ifdef HAVE_GPIOS
 	for (uint8_t g = 0; g < num_gpios; ++g) {
 		savesz += g < num_gpios ? gpios[g].savesize() : Gpio::savesize0();
 	}
-#endif
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		savesz += s < num_spaces ? spaces[s].savesize() : Space::savesize0();
 	}
@@ -108,7 +103,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_motors[m]->home_pos = NAN;
 			new_motors[m]->home_order = 0;
 			new_motors[m]->last_v = 0;
-			new_motors[m]->current_pos = NAN;
+			new_motors[m]->current_pos = 0;
 			new_motors[m]->limits_pos = NAN;
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
@@ -116,16 +111,16 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_motors[m]->audio_flags = 0;
 #endif
 			new_motors[m]->last_v = NAN;
-			new_motors[m]->steps = 0;
 			new_motors[m]->target_v = NAN;
 			new_motors[m]->target_dist = NAN;
-			new_motors[m]->current_pos = NAN;
+			new_motors[m]->current_pos = 0;
 			new_motors[m]->endpos = NAN;
 		}
 		for (uint8_t m = nm; m < old_nm; ++m)
 			mem_free(&motor[m]);
 		mem_free(&motor);
 		mem_retarget(&new_motors, &motor);
+		arch_motors_change();
 	}
 	return true;
 }
@@ -179,17 +174,10 @@ void Space::load_info(int32_t &addr, bool eeprom)
 		if (moving || !motors_busy)
 			ok = false;
 		else {
+			for (uint8_t i = 0; i < num_axes; ++i)
+				axis[i]->target = axis[i]->current;
 			ok = true;
-			for (uint8_t i = 0; i < num_motors; ++i) {
-				if (isnan(motor[i]->current_pos))
-					ok = false;
-			}
-			if (ok) {
-				for (uint8_t i = 0; i < num_axes; ++i)
-					axis[i]->target = axis[i]->current;
-				ok = true;
-				space_types[type].xyz2motors(this, oldpos, &ok);
-			}
+			space_types[type].xyz2motors(this, oldpos, &ok);
 		}
 	}
 	max_deviation = read_float(addr, eeprom);
@@ -243,14 +231,13 @@ void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 	motor[m]->limit_v = read_float(addr, eeprom);
 	motor[m]->limit_a = read_float(addr, eeprom);
 	motor[m]->home_order = read_8(addr, eeprom);
-	SET_OUTPUT(motor[m]->step_pin);
-	SET_OUTPUT(motor[m]->dir_pin);
 	SET_OUTPUT(motor[m]->enable_pin);
 	if (enable != motor[m]->enable_pin.write()) {
 		if (motors_busy)
 			SET(motor[m]->enable_pin);
-		else
+		else {
 			RESET(motor[m]->enable_pin);
+		}
 	}
 	RESET(motor[m]->step_pin);
 	SET_INPUT(motor[m]->limit_min_pin);
@@ -259,12 +246,12 @@ void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 	bool must_move = false;
 	if (!isnan(motor[m]->home_pos)) {
 		if (old_steps_per_m != motor[m]->steps_per_m) {
-			float diff = motor[m]->current_pos - motor[m]->home_pos;
-			motor[m]->current_pos = motor[m]->home_pos + diff * old_steps_per_m / motor[m]->steps_per_m;
+			float diff = motor[m]->current_pos / old_steps_per_m - motor[m]->home_pos;
+			motor[m]->current_pos = (motor[m]->home_pos + diff) * motor[m]->steps_per_m;
 			must_move = true;
 		}
 		if (old_home_pos != motor[m]->home_pos) {
-			motor[m]->current_pos += motor[m]->home_pos - old_home_pos;
+			motor[m]->current_pos += (motor[m]->home_pos - old_home_pos) * motor[m]->steps_per_m;
 			must_move = true;
 		}
 	}
@@ -365,4 +352,3 @@ void Space::cancel_update() {
 			debug("You're in trouble; this shouldn't be possible");
 	}
 }
-#endif

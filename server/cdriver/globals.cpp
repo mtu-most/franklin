@@ -1,4 +1,4 @@
-#include "firmware.h"
+#include "cdriver.h"
 
 #if 0
 #define ldebug debug
@@ -8,55 +8,31 @@
 
 bool globals_load(int32_t &addr, bool eeprom)
 {
-#ifdef HAVE_SPACES
 	uint8_t ns = read_8(addr, eeprom);
-#else
-	read_8(addr, eeprom);
-#endif
-#ifdef HAVE_TEMPS
 	uint8_t nt = read_8(addr, eeprom);
-#else
-	read_8(addr, eeprom);
-#endif
-#ifdef HAVE_GPIOS
 	uint8_t ng = read_8(addr, eeprom);
-#else
-	read_8(addr, eeprom);
-#endif
 	uint8_t nl = read_8(addr, eeprom);
 	// Check if there is enough memory for the new values.
 	if (
-#ifdef HAVE_SPACES
 			ns != num_spaces ||
-#endif
-#ifdef HAVE_TEMPS
 		       	nt != num_temps ||
-#endif
-#ifdef HAVE_GPIOS
 		       	ng != num_gpios ||
-#endif
 		       	nl != namelen) {
 		ldebug("something changed %d %d %d %d %d %d %d %d", ns, num_spaces, nt, num_temps, ng, num_gpios, nl, namelen);
 		uint32_t savesize = nl + 1;
 		savesize += globals_savesize();
 		ldebug("size");
-#ifdef HAVE_SPACES
 		for (uint8_t s = 0; s < ns; ++s) {
 			savesize += s < num_spaces ? spaces[s].savesize() : Space::savesize0();
 		}
-#endif
 		ldebug("space size");
-#ifdef HAVE_TEMPS
 		for (uint8_t t = 0; t < nt; ++t) {
 			savesize += t < num_temps ? temps[t].savesize() : Temp::savesize0();
 		}
-#endif
 		ldebug("temps size");
-#ifdef HAVE_GPIOS
 		for (uint8_t g = 0; g < ng; ++g) {
 			savesize += g < num_gpios ? gpios[g].savesize() : Gpio::savesize0();
 		}
-#endif
 		ldebug("size done");
 		if (savesize > E2END) {
 			debug("New settings make savesize %d, which is larger than %d: rejecting.", savesize, E2END);
@@ -76,7 +52,6 @@ bool globals_load(int32_t &addr, bool eeprom)
 			}
 		}
 		// Free the old memory and initialize the new memory.
-#ifdef HAVE_SPACES
 		if (ns != num_spaces) {
 			ldebug("new space");
 			for (uint8_t s = ns; s < num_spaces; ++s)
@@ -93,9 +68,7 @@ bool globals_load(int32_t &addr, bool eeprom)
 				mem_retarget(&new_spaces, &spaces);
 			}
 		}
-#endif
 		ldebug("new done");
-#ifdef HAVE_TEMPS
 		if (nt != num_temps) {
 			ldebug("new temp");
 			for (uint8_t t = nt; t < num_temps; ++t)
@@ -112,9 +85,7 @@ bool globals_load(int32_t &addr, bool eeprom)
 				mem_retarget(&new_temps, &temps);
 			}
 		}
-#endif
 		ldebug("new done");
-#ifdef HAVE_GPIOS
 		if (ng != num_gpios) {
 			for (uint8_t g = ng; g < num_gpios; ++g)
 				gpios[g].free();
@@ -130,7 +101,6 @@ bool globals_load(int32_t &addr, bool eeprom)
 				mem_retarget(&new_gpios, &gpios);
 			}
 		}
-#endif
 		ldebug("new done");
 	}
 	// If allocation failed, namelen may not be large enough.  Read all the bytes anyway.
@@ -140,27 +110,17 @@ bool globals_load(int32_t &addr, bool eeprom)
 			name[n] = c;
 	}
 	led_pin.read(read_16(addr, eeprom));
-	if (led_pin.valid()) {
-		if (!~next_led_time)
-			next_led_time = 0;
-	}
-	else
-		next_led_time = ~0;
 	probe_pin.read(read_16(addr, eeprom));
 	probe_dist = read_float(addr, eeprom);
 	probe_safe_dist = read_float(addr, eeprom);
-#ifdef HAVE_TEMPS
 	bed_id = read_8(addr, eeprom);
-#else
-	read_8(addr, eeprom);
-#endif
 	motor_limit = read_float(addr, eeprom);
 	temp_limit = read_float(addr, eeprom);
 	feedrate = read_float(addr, eeprom);
 	if (isnan(feedrate) || isinf(feedrate) || feedrate <= 0)
 		feedrate = 1;
 	ldebug("all done");
-	SET_OUTPUT(led_pin);
+	arch_motors_change();
 	return true;
 }
 
@@ -178,21 +138,9 @@ void globals_save(int32_t &addr, bool eeprom)
 		write_8(addr, NUM_DIGITAL_PINS, false);
 		write_8(addr, NUM_DIGITAL_PINS - NUM_ANALOG_INPUTS, false);
 	}
-#ifdef HAVE_SPACES
 	write_8(addr, num_spaces, eeprom);
-#else
-	write_8(addr, 0, eeprom);
-#endif
-#ifdef HAVE_TEMPS
 	write_8(addr, num_temps, eeprom);
-#else
-	write_8(addr, 0, eeprom);
-#endif
-#ifdef HAVE_GPIOS
 	write_8(addr, num_gpios, eeprom);
-#else
-	write_8(addr, 0, eeprom);
-#endif
 	write_8(addr, namelen, eeprom);
 	for (uint8_t i = 0; i < namelen; ++i)
 		write_8(addr, name[i], eeprom);
@@ -200,11 +148,7 @@ void globals_save(int32_t &addr, bool eeprom)
 	write_16(addr, probe_pin.write(), eeprom);
 	write_float(addr, probe_dist, eeprom);
 	write_float(addr, probe_safe_dist, eeprom);
-#ifdef HAVE_TEMPS
 	write_8(addr, bed_id, eeprom);
-#else
-	write_8(addr, ~0, eeprom);
-#endif
 	write_float(addr, motor_limit, eeprom);
 	write_float(addr, temp_limit, eeprom);
 	write_float(addr, feedrate, eeprom);
