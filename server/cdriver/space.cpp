@@ -97,14 +97,12 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_motors[m]->sense_pos = NAN;
 			new_motors[m]->steps_per_m = NAN;
 			new_motors[m]->max_steps = 1;
-			new_motors[m]->limits_pos = NAN;
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
 			new_motors[m]->home_pos = NAN;
 			new_motors[m]->home_order = 0;
 			new_motors[m]->last_v = 0;
 			new_motors[m]->current_pos = 0;
-			new_motors[m]->limits_pos = NAN;
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
 #ifdef HAVE_AUDIO

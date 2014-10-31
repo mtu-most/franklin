@@ -1,6 +1,8 @@
 // vim: set foldmethod=marker :
 #ifndef _ARCH_AVR_H
 // Includes and defines. {{{
+//#define DEBUG_AVRCOMM
+
 #define _ARCH_AVR_H
 #include <stdint.h>
 #include <unistd.h>
@@ -19,12 +21,11 @@
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
-//#define DEBUG_AVRCOMM
-
 // Not defines, because they can change value, but they are expected to be defines.
 EXTERN uint8_t NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, ADCBITS;
 EXTERN uint16_t E2END;
 // }}}
+
 
 enum HWCommands { // {{{
 	HWC_BEGIN,	// 00
@@ -107,7 +108,7 @@ EXTERN bool avr_wait_for_reply;
 EXTERN uint8_t avr_num_motors;
 EXTERN uint8_t avr_pong;
 EXTERN char avr_buffer[256];
-EXTERN int avr_limiter, avr_limiter_space;
+EXTERN int avr_limiter_space;
 // }}}
 
 // Timekeeping. {{{
@@ -138,11 +139,12 @@ static inline int32_t arch_getpos(uint8_t s, uint8_t m);
 // Serial port communication. {{{
 static inline void avr_send() {
 	//debug("avr_send");
-	send_packet(1);
-	uint32_t now = millis();
-	while (out_busy[1]) {
+	send_packet();
+	uint32_t start = millis();
+	while (out_busy) {
+		uint32_t now = millis();
 		//debug("avr send");
-		if (millis() - now > 1000) {
+		if (now - start > 1000) {
 			debug("avr_send failed, packet start: %02x %02x %02x", avr_buffer[0], avr_buffer[1], avr_buffer[2]);
 			break;
 		}
@@ -150,6 +152,8 @@ static inline void avr_send() {
 		serial(1);
 		//if (out_busy[1])
 		//	debug("avr waiting for ack");
+		if ((now - start) % 100 == 99)
+			send_packet();
 	}
 }
 
@@ -157,7 +161,7 @@ static inline void avr_call1(uint8_t cmd, uint8_t arg) {
 	avr_buffer[0] = 3;
 	avr_buffer[1] = cmd;
 	avr_buffer[2] = arg;
-	prepare_packet(1, avr_buffer);
+	prepare_packet(avr_buffer);
 	avr_send();
 }
 
@@ -193,12 +197,9 @@ static inline void hwpacket() {
 		uint8_t which = command[1][2];
 		if (which >= avr_num_motors) {
 			debug("cdriver: Invalid limit or sense for avr motor %d", which);
-			write_stall(1);
+			write_stall();
 			return;
 		}
-		ReadFloat f;
-		for (uint8_t i = 0; i < sizeof(int32_t); ++i)
-			f.b[i] = command[1][3 + i];
 		int s = 0, m = 0;
 		for (s = 0; s < num_spaces; ++s) {
 			if (which < spaces[s].num_motors) {
@@ -207,31 +208,29 @@ static inline void hwpacket() {
 			}
 			which -= spaces[s].num_motors;
 		}
+		ReadFloat f;
+		for (uint8_t i = 0; i < sizeof(int32_t); ++i)
+			f.b[i] = command[1][3 + i];
 		spaces[s].motor[m]->current_pos = f.i;
 		if (command[1][1] == HWC_LIMIT) {
-			spaces[s].motor[m]->limits_pos = f.i;
 			avr_limiter_space = s;
-			avr_limiter = m;
-			if (moving && cbs_after_current_move > 0) {
-				num_movecbs += cbs_after_current_move;
-				cbs_after_current_move = 0;
-			}
 			abort_move(false);
+			int num_movecbs = cbs_after_current_move;
+			cbs_after_current_move = 0;
 			num_movecbs += next_move();
+			send_host(CMD_LIMIT, s, m, f.i / spaces[s].motor[m]->steps_per_m, num_movecbs);
 		}
 		else {
 			spaces[s].motor[m]->sense_pos = f.i;
 			spaces[s].motor[m]->sense_state = 1;
-			if (command[1][1] == HWC_SENSE1)
-				spaces[s].motor[m]->sense_state |= 0x80;
+			send_host(CMD_SENSE, s, m, 0, command[1][1] == HWC_SENSE1);
 		}
-		write_ack(1);
-		try_send_next();
+		write_ack();
 		return;
 	}
 	case HWC_PONG:
 		avr_pong = command[1][2];
-		write_ack(1);
+		write_ack();
 		return;
 	default:
 		if (!avr_wait_for_reply)
@@ -242,13 +241,10 @@ static inline void hwpacket() {
 }
 
 static inline void arch_ack() {
-	if (avr_limiter < 0)
+	if (avr_limiter_space < 0)
 		return;
-	int skip = avr_limiter;
-	avr_limiter = -1;
+	avr_limiter_space = -1;
 	for (uint8_t m = 0; m < spaces[avr_limiter_space].num_motors; ++m) {
-		if (m == skip)
-			continue;
 		spaces[avr_limiter_space].motor[m]->current_pos = arch_getpos(avr_limiter_space, m);
 	}
 }
@@ -309,34 +305,28 @@ static inline bool GET(Pin_t _pin, bool _default) {
 	avr_wait_for_reply = true;
 	avr_call1(HWC_GETPIN, _pin.pin);
 	avr_get_reply();
-	write_ack(1);
+	write_ack();
 	return _pin.inverted() ^ command[1][2];
 }
 // }}}
 
 // Setup hooks. {{{
-static inline void arch_setup_start() {
-	// Set up arch variables.
-	avr_wait_for_reply = false;
-	avr_num_motors = 0;
-	avr_pong = ~0;
-	avr_limiter = -1;
-	avr_limiter_space = -1;
-	for (int i = 0; i < 0x100; ++i)
-		avr_pins[i] = 3;	// INPUT_NOPULLUP.
-	// Set up serial port.
-	avr_serial.begin(115200);
-	serialdev[1] = &avr_serial;
+static inline void arch_reset() {
 	// Initialize connection.
+	if (avr_pong == 2) {
+		debug("reset ignored");
+		return;
+	}
 	avr_serial.write(CMD_ACK0);
 	avr_serial.write(CMD_ACK1);
 	avr_call1(HWC_PING, 0);
 	avr_call1(HWC_PING, 1);
 	avr_call1(HWC_PING, 2);
-	uint32_t now = millis();
+	uint32_t start = millis();
 	while (avr_pong != 2) {
-		debug("avr pongwait");
-		if (millis() - now >= 1000) {
+		//debug("avr pongwait %d", avr_pong);
+		uint32_t now = millis();
+		if (now - start >= 1000) {
 			debug("no pong seen; giving up.\n");
 			reset();
 		}
@@ -344,7 +334,22 @@ static inline void arch_setup_start() {
 	}
 }
 
-static inline void arch_begin() {
+static inline void arch_setup_start() {
+	// Set up arch variables.
+	avr_wait_for_reply = false;
+	avr_num_motors = 0;
+	avr_pong = ~0;
+	avr_limiter_space = -1;
+	avr_limiter_space = -1;
+	for (int i = 0; i < 0x100; ++i)
+		avr_pins[i] = 3;	// INPUT_NOPULLUP.
+	// Set up serial port.
+	avr_serial.begin(115200);
+	serialdev[1] = &avr_serial;
+	arch_reset();
+}
+
+static inline void arch_setup_end() {
 	// Get constants.
 	avr_buffer[0] = 2 + ID_SIZE;
 	avr_buffer[1] = HWC_BEGIN;
@@ -353,10 +358,10 @@ static inline void arch_begin() {
 	if (avr_wait_for_reply)
 		debug("avr_wait_for_reply already set in begin");
 	avr_wait_for_reply = true;
-	prepare_packet(1, avr_buffer);
+	prepare_packet(avr_buffer);
 	avr_send();
 	avr_get_reply();
-	write_ack(1);
+	write_ack();
 	ReadFloat f;
 	for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
 		f.b[i] = command[1][2 + i];
@@ -365,9 +370,7 @@ static inline void arch_begin() {
 	NUM_ANALOG_INPUTS = command[1][7];
 	E2END = (command[1][8] & 0xff) | ((command[1][9] & 0xff) << 8);
 	ADCBITS = command[1][10];
-}
-
-static inline void arch_setup_end() {
+	avr_pong = -1;	// Choke on reset again.
 }
 
 static inline void arch_motor_change(uint8_t s, uint8_t sm) {
@@ -394,7 +397,7 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 	avr_buffer[11] = p & 0xff;
 	avr_buffer[12] = (p >> 8) & 0xff;
 	avr_buffer[13] = mtr.max_steps;
-	prepare_packet(1, avr_buffer);
+	prepare_packet(avr_buffer);
 	avr_send();
 }
 
@@ -409,7 +412,7 @@ static inline void arch_change(bool motors) {
 	avr_buffer[3] = p & 0xff;
 	avr_buffer[4] = (p >> 8) & 0xff;
 	avr_buffer[5] = 10; // speed_error.
-	prepare_packet(1, avr_buffer);
+	prepare_packet(avr_buffer);
 	avr_send();
 	if (motors) {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -446,13 +449,13 @@ static inline int32_t arch_getpos(uint8_t s, uint8_t m) {
 	avr_buffer[0] = 3;
 	avr_buffer[1] = HWC_GETPOS;
 	avr_buffer[2] = m;
-	prepare_packet(1, avr_buffer);
+	prepare_packet(avr_buffer);
 	if (avr_wait_for_reply)
 		debug("avr_wait_for_reply already set in getpos");
 	avr_wait_for_reply = true;
 	avr_send();
 	avr_get_reply();
-	write_ack(1);
+	write_ack();
 	ReadFloat pos;
 	for (uint8_t i = 0; i < sizeof(int32_t); ++i)
 		pos.b[i] = command[1][2 + i];
@@ -470,7 +473,7 @@ static inline void arch_setpos(uint8_t s, uint8_t m) {
 	avr_buffer[2] = m;
 	for (uint8_t i = 0; i < sizeof(int32_t); ++i)
 		avr_buffer[3 + i] = pos.b[i];
-	prepare_packet(1, avr_buffer);
+	prepare_packet(avr_buffer);
 	avr_send();
 }
 // }}}
@@ -505,7 +508,7 @@ static inline void arch_move() {
 			avr_make_speed(mtr.last_v * mtr.steps_per_m, &mspeed, &espeed);
 			limit.i = mspeed < 0 ? -MAXLONG : MAXLONG;
 			current.i = mtr.current_pos;
-			debug("move %d %d %d %d %d", m, mspeed, espeed, limit.i, current.i);
+			//debug("move %d %d %d %d %d", m, mspeed, espeed, limit.i, current.i);
 			avr_buffer[2 + wlen + mi * 10] = mspeed;
 			avr_buffer[2 + wlen + mi * 10 + 1] = espeed;
 			for (uint8_t i = 0; i < 4; ++i) {
@@ -517,7 +520,7 @@ static inline void arch_move() {
 	}
 	avr_buffer[0] = 2 + wlen + mi * 10;
 	avr_buffer[1] = HWC_MOVE;
-	prepare_packet(1, avr_buffer);
+	prepare_packet(avr_buffer);
 	avr_send();
 }
 
@@ -530,7 +533,7 @@ static inline int adc_get(uint8_t _pin) {
 	avr_call1(HWC_GETADC, _pin);
 	//debug("wait adc");
 	avr_get_reply();
-	write_ack(1);
+	write_ack();
 	//debug("got adc %x %x", command[1][2] & 0xff, command[1][3] & 0xff);
 	return (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
 }
@@ -584,8 +587,8 @@ void AVRSerial::begin(int baud) {
 	avr_pollfds[1].revents = 0;
 	start = 0;
 	end = 0;
-	fcntl(0, F_SETFL, O_NONBLOCK);
-	// TODO: Set baud rate.
+	fcntl(fd, F_SETFL, O_NONBLOCK);
+	// TODO: Set baud rate and control.
 }
 
 void AVRSerial::write(char c) {
@@ -600,6 +603,7 @@ void AVRSerial::write(char c) {
 		debug("write to avr failed: %d %s", ret, strerror(errno));
 	}
 }
+
 void AVRSerial::refill() {
 	start = 0;
 	end = ::read(fd, buffer, sizeof(buffer));
@@ -615,6 +619,7 @@ void AVRSerial::refill() {
 	}
 	avr_pollfds[1].revents = 0;
 }
+
 int AVRSerial::read() {
 	if (start == end)
 		refill();
@@ -639,6 +644,7 @@ void FakeSerial::begin(int baud) {
 	end = 0;
 	fcntl(0, F_SETFL, O_NONBLOCK);
 }
+
 void FakeSerial::write(char c) {
 	//debug("Firmware write byte: %x", c);
 	while (true) {
@@ -652,6 +658,7 @@ void FakeSerial::write(char c) {
 		}
 	}
 }
+
 void FakeSerial::refill() {
 	start = 0;
 	end = ::read(0, buffer, sizeof(buffer));
@@ -667,6 +674,7 @@ void FakeSerial::refill() {
 	}
 	avr_pollfds[0].revents = 0;
 }
+
 int FakeSerial::read() {
 	if (start == end)
 		refill();
@@ -679,4 +687,5 @@ int FakeSerial::read() {
 	return ret;
 }
 // }}}
+
 #endif

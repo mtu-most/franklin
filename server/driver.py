@@ -64,18 +64,17 @@ class delayed: # {{{
 
 # class for handling beaglebone: driver running on same machine.
 class Driver: # {{{
-	def __init__(self):
+	def __init__(self, newid):
 		self.driver = subprocess.Popen(('./cdriver/cdriver',), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		fcntl.fcntl(self.driver.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 		self.buffer = ''
+		self.write(newid)
 	def available(self):
 		return len(self.buffer) > 0
 	def write(self, data):
 		self.driver.stdin.write(data)
 		self.driver.stdin.flush()
-	def read(self, length = None):
-		if length is None:
-			return ''
+	def read(self, length):
 		while True:
 			try:
 				r = self.driver.stdout.read()
@@ -132,6 +131,10 @@ def write_pin(pin):
 
 class Printer: # {{{
 	# Internal stuff.  {{{
+	def _read_data(self, data): # {{{
+		cmd, s, m, e, f = struct.unpack('<BLLLf', data[:17])
+		return cmd, s, m, f, e, data[17:]
+	# }}}
 	def _send(self, *data): # {{{
 		#sys.stderr.write(repr(data) + '\n')
 		sys.stdout.write(json.dumps(data) + '\n')
@@ -141,14 +144,7 @@ class Printer: # {{{
 		# HACK: this variable needs to have its value before init is done, to make the above HACK in the generator work.
 		global printer
 		printer = self
-		if port == '-':
-			self.printer = Driver()
-		else:
-			self.printer = serial.Serial(port, baudrate = 115200, timeout = 0)
-			self.printer.available = lambda: False
-		# Discard pending data.
-		while self.printer.read() != '':
-			pass
+		self.printer = Driver(newid)
 		self.jobqueue = {}
 		self.job_output = ''
 		self.jobs_active = []
@@ -176,7 +172,6 @@ class Printer: # {{{
 		self.queue_info = None
 		self.resuming = False
 		self.flushing = False
-		self.initialized = False
 		self.debug_buffer = None
 		self.printer_buffer = ''
 		self.command_buffer = ''
@@ -184,8 +179,6 @@ class Printer: # {{{
 		# Set up state.
 		self.sending = False
 		self.paused = False
-		self.ff_in = False
-		self.ff_out = False
 		self.limits = []
 		self.sense = []
 		self.wait = False
@@ -196,50 +189,8 @@ class Printer: # {{{
 		self.tempcb = []
 		self.alarms = set()
 		self.audiodir = audiodir
-		# The printer may be resetting.  If it is, it will send data
-		# when it's done.  If not, request some data.
-		for i in range(15):
-			#log('writing ID')
-			self.printer.write(self.single['ID'])
-			ret = select.select([self.printer], [], [self.printer], 1)
-			#log(repr(ret))
-			if len(ret[0]) != 0:
-				break
-		else:
-			log("Printer doesn't respond: giving up.")
-			sys.exit(0)
-		time.sleep(.150)	# Make sure data is received.
-		# Discard pending data.
-		while self.printer.read() != '':
-			pass
-		# Send several ping commands, to get the flip flops synchronized.
-		# If the output flipflop is out of sync, the first ping will not generate a reply.
-		# If the input flipflop is out of sync, the first reply will be ignored.
-		# Whatever happens, the third ping must be recognized by both sides.
-		# But first send an ack, so any transmission in progress is considered finished.
-		# This does no harm, because spurious acks are ignored (and the current state is not precious).
-		self.printer.write(self.single['ACK0'])
-		self.printer.write(self.single['ACK1'])
-		self._send_packet(struct.pack('<BB', self.command['PING'], 0))
-		self._send_packet(struct.pack('<BB', self.command['PING'], 1))
-		self._send_packet(struct.pack('<BB', self.command['PING'], 2))
-		t = time.time()
-		while time.time() - t < 15:
-			reply = self._get_reply()
-			if reply is None:
-				log('No ping reply: giving up.')
-				sys.exit(0)
-			if reply[0] == self.rcommand['PONG'] and ord(reply[1]) == 2:
-				break
-		else:
-			log('Timeout waiting for pongs: giving up.')
-			sys.exit(0)
-		# Now we're in sync.
 		# Get the printer state.
 		self.printerid = newid
-		if not self._begin(newid):
-			log('Incorrect reply to BEGIN, probably due to version mismatch.  Giving up.')
-			sys.exit(0)
 		self.spaces = []
 		self.temps = []
 		self.gpios = []
@@ -256,69 +207,57 @@ class Printer: # {{{
 			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False)
-		if port == '-':
-			#self.import_settings(open('/root/bbb-settings.ini').read())
-			pass
-		self.initialized = True
+		#self.import_settings(open('/root/bbb-settings.ini').read())
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
 	# }}}
 	# Constants.  {{{
-	# Masks for computing checksums.
-	mask = [	[0xc0, 0xc3, 0xff, 0x09],
-			[0x38, 0x3a, 0x7e, 0x13],
-			[0x26, 0xb5, 0xb9, 0x23],
-			[0x95, 0x6c, 0xd5, 0x43],
-			[0x4b, 0xdc, 0xe2, 0x83]]
-	# Single-byte commands.  See firmware/serial.cpp for an explanation of the codes.
-	single = { 'NACK': '\x80', 'ACK0': '\xb3', 'ACKWAIT0': '\xb4', 'STALL0': '\x87', 'STALL1': '\x9e', 'ACKWAIT1': '\x99', 'ID': '\xaa', 'ACK1': '\xad', 'DEBUG': '\x81' }
+	# Single-byte commands.
+	single = {'OK': '\xb3', 'WAIT': '\xad' }
+	# Regular commands.
 	command = {
-			'BEGIN': 0x00,
-			'PING': 0x01,
-			'RESET': 0x02,
-			'GOTO': 0x03,
-			'GOTOCB': 0x04,
-			'SLEEP': 0x05,
-			'SETTEMP': 0x06,
-			'WAITTEMP': 0x07,
-			'READTEMP': 0x08,
-			'READPOWER': 0x09,
-			'SETPOS': 0x0a,
-			'GETPOS': 0x0b,
-			'LOAD': 0x0c,
-			'SAVE': 0x0d,
-			'READ_GLOBALS': 0x0e,
-			'WRITE_GLOBALS': 0x0f,
-			'READ_SPACE_INFO': 0x10,
-			'READ_SPACE_AXIS': 0x11,
-			'READ_SPACE_MOTOR': 0x12,
-			'WRITE_SPACE_INFO': 0x13,
-			'WRITE_SPACE_AXIS': 0x14,
-			'WRITE_SPACE_MOTOR': 0x15,
-			'READ_TEMP': 0x16,
-			'WRITE_TEMP': 0x17,
-			'READ_GPIO': 0x18,
-			'WRITE_GPIO': 0x19,
-			'QUEUED': 0x1a,
-			'READPIN': 0x1b,
-			'AUDIO_SETUP': 0x1c,
-			'AUDIO_DATA': 0x1d}
+			'RESET': 0x00,
+			'GOTO': 0x01,
+			'GOTOCB': 0x02,
+			'SLEEP': 0x03,
+			'SETTEMP': 0x04,
+			'WAITTEMP': 0x05,
+			'READTEMP': 0x06,
+			'READPOWER': 0x07,
+			'SETPOS': 0x08,
+			'GETPOS': 0x09,
+			'LOAD': 0x0a,
+			'SAVE': 0x0b,
+			'READ_GLOBALS': 0x0c,
+			'WRITE_GLOBALS': 0x0d,
+			'READ_SPACE_INFO': 0x0e,
+			'READ_SPACE_AXIS': 0x0f,
+			'READ_SPACE_MOTOR': 0x10,
+			'WRITE_SPACE_INFO': 0x11,
+			'WRITE_SPACE_AXIS': 0x12,
+			'WRITE_SPACE_MOTOR': 0x13,
+			'READ_TEMP': 0x14,
+			'WRITE_TEMP': 0x15,
+			'READ_GPIO': 0x16,
+			'WRITE_GPIO': 0x17,
+			'QUEUED': 0x18,
+			'READPIN': 0x19,
+			'AUDIO_SETUP': 0x1a,
+			'AUDIO_DATA': 0x1b}
 	rcommand = {
-			'START': '\x1e',
-			'TEMP': '\x1f',
-			'POWER': '\x20',
-			'POS': '\x21',
-			'DATA': '\x22',
-			'PONG': '\x23',
-			'PIN': '\x24',
-			'QUEUE': '\x25',
-			'MOVECB': '\x26',
-			'TEMPCB': '\x27',
-			'CONTINUE': '\x28',
-			'LIMIT': '\x29',
-			'AUTOSLEEP': '\x2a',
-			'SENSE': '\x2b'}
+			'TEMP': 0x1c,
+			'POWER': 0x1d,
+			'POS': 0x1e,
+			'DATA': 0x1f,
+			'PIN': 0x20,
+			'QUEUE': 0x21,
+			'MOVECB': 0x22,
+			'TEMPCB': 0x23,
+			'CONTINUE': 0x24,
+			'LIMIT': 0x25,
+			'AUTOSLEEP': 0x26,
+			'SENSE': 0x27}
 	# }}}
 	def _broadcast(self, *a): # {{{
 		self._send(None, 'broadcast', *a)
@@ -407,7 +346,7 @@ class Printer: # {{{
 		if die:
 			sys.exit(0)
 	# }}}
-	def _trigger_movewaits(self, num):
+	def _trigger_movewaits(self, num): # {{{
 		#traceback.print_stack()
 		#log('trigger %s' % repr(self.movecb))
 		if self.movewait < num:
@@ -424,94 +363,21 @@ class Printer: # {{{
 				call_queue.append((self._do_gcode, []))
 		else:
 			log('cb seen, but waiting for more')
-	def _printer_input(self, ack = False, reply = False): # {{{
-		for input_limit in range(50):
-			while self.debug_buffer is not None:
-				r = self._printer_read(1)
-				if r == '':
-					return ('no data', None)
-				if r == '\x00':
-					if show_firmware_debug:
-						for ln in self.debug_buffer.split(';'):
-							log('Debug: %s' % ln)
-					self.debug_buffer = None
-				else:
-					self.debug_buffer += r
+	# }}}
+	def _printer_input(self, reply = False): # {{{
+		while True:
 			if len(self.printer_buffer) == 0:
 				r = self._printer_read(1)
-				if r != self.single['DEBUG']:
-					dprint('(1) read', r)
+				dprint('(1) read', r)
 				if r == '':
 					return ('no data', None)
-				if r == self.single['DEBUG']:
-					self.debug_buffer = ''
-					continue
-				if r == self.single['ACK0']:
-					# Ack is special in that if it isn't expected, it is not an error.
-					if ack:
-						return ('ack', 'ack0')
-					continue
-				if r == self.single['ACK1']:
-					# Ack is special in that if it isn't expected, it is not an error.
-					if ack:
-						return ('ack', 'ack1')
-					continue
-				if r == self.single['NACK']:
-					# Nack is special in that it should only be handled if an ack is expected.
-					if ack:
-						return ('ack', 'nack')
-					continue
-				if r == self.single['ACKWAIT0']:
-					if ack:
-						return ('ack', 'wait0')
-					continue
-				if r == self.single['ACKWAIT1']:
-					if ack:
-						return ('ack', 'wait1')
-					continue
-				if r == self.single['STALL0']:
-					# There is a problem we can't solve.
-					if ack:
-						return ('ack', 'stall0')
-					else:
-						log('printer sent unsolicited stall')
-				if r == self.single['STALL1']:
-					# There is a problem we can't solve.
-					if ack:
-						return ('ack', 'stall1')
-					else:
-						log('printer sent unsolicited stall')
-				if r == self.single['ID']:
-					# The printer has reset, or some extra data was received after reconnect.
-					# Check which by reading the id.
-					buffer = ''
-					while len(buffer) < 8:
-						if not self.printer.available():
-							ret = select.select([self.printer], [], [self.printer], .100)
-							if self.printer not in ret[0]:
-								# Something was wrong with the packet; ignore all.
-								break
-						ret = self.printer.read(1)
-						if ret == '':
-							break
-						buffer += ret
-					else:
-						# ID has been received.
-						if buffer == '\x00' * 8:
-							# Printer has reset.
-							log('printer reset')
-							if self.initialized:
-								self._broadcast(None, 'reset')
-								sys.exit(0)
-						# Regular id has been sent; ignore.
-						continue
-				if(ord(r) & 0x80) != 0 or ord(r) in (0, 1):
-					dprint('writing(1)', self.single['NACK'])
-					self._printer_write(self.single['NACK'])
-					continue
+				if r == self.single['WAIT']:
+					return ('wait', None)
+				if r == self.single['OK']:
+					return ('ok', None)
 				# Regular packet.
 				self.printer_buffer = r
-			packet_len = ord(self.printer_buffer[0]) + (ord(self.printer_buffer[0]) + 2) / 3
+			packet_len = ord(self.printer_buffer[0])
 			while True:
 				r = self._printer_read(packet_len - len(self.printer_buffer))
 				dprint('rest of packet read', r)
@@ -524,47 +390,18 @@ class Printer: # {{{
 					#log('waiting for more data (%d/%d)' % (len(self.printer_buffer), packet_len))
 					ret = select.select([self.printer], [], [self.printer], 1)
 					if self.printer not in ret[0]:
-						dprint('writing(5)', self.single['NACK']);
-						self._printer_write(self.single['NACK'])
-						self.printer_buffer = ''
-						if self.debug_buffer is not None:
-							if show_firmware_debug:
-								log('Debug(partial): %s' % self.debug_buffer)
-							self.debug_buffer = None
+						log('broken packet?')
 						return (None, None)
-			packet = self._parse_packet(self.printer_buffer)
+			self.printer.write(self.single['OK'])
+			cmd, s, m, f, e, data = self._read_data(self.printer_buffer[1:])
 			self.printer_buffer = ''
-			if packet is None:
-				dprint('writing(4)', self.single['NACK']);
-				self._printer_write(self.single['NACK'])
-				continue	# Start over.
-			if bool(ord(packet[0]) & 0x80) != self.ff_in:
-				# This was a retry of the previous packet; accept it and retry.
-				dprint('(2) writing', self.single['ACK0'] if self.ff_in else self.single['ACK1']);
-				self._printer_write(self.single['ACK0'] if self.ff_in else self.single['ACK1'])
-				continue	# Start over.
-			# Packet successfully received.
-			dprint('(3) writing', self.single['ACK1'] if self.ff_in else self.single['ACK0']);
-			self._printer_write(self.single['ACK1'] if self.ff_in else self.single['ACK0'])
-			# Clear the flip flop.
-			packet = chr(ord(packet[0]) & ~0x80) + packet[1:]
-			# Flip it.
-			self.ff_in = not self.ff_in
 			# Handle the asynchronous events.
-			if packet[0] == self.rcommand['MOVECB']:
-				num = ord(packet[1])
-				#log('movecb %d/%d (%d in queue)' % (num, self.movewait, len(self.movecb)))
-				if self.initialized:
-					self._trigger_movewaits(num)
-				else:
-					self.movewait = 0
+			if cmd == self.rcommand['MOVECB']:
+				#log('movecb %d/%d (%d in queue)' % (s, self.movewait, len(self.movecb)))
+				self._trigger_movewaits(s)
 				continue
-			if packet[0] == self.rcommand['TEMPCB']:
-				if not self.initialized:
-					# Ignore this while connecting.
-					continue
-				t = ord(packet[1])
-				self.alarms.add(t)
+			if cmd == self.rcommand['TEMPCB']:
+				self.alarms.add(s)
 				t = 0
 				while t < len(self.tempcb):
 					if self.tempcb[t][0] is None or self.tempcb[t][0] in self.alarms:
@@ -573,11 +410,8 @@ class Printer: # {{{
 						t += 1
 				call_queue.append((self._do_gcode, []))
 				continue
-			elif packet[0] == self.rcommand['CONTINUE']:
-				if not self.initialized:
-					# Ignore this while connecting.
-					continue
-				if packet[1] == '\x00':
+			elif cmd == self.rcommand['CONTINUE']:
+				if s == 0:
 					# Move continue.
 					self.wait = False
 					#log('resuming queue %d' % len(self.queue))
@@ -590,151 +424,64 @@ class Printer: # {{{
 					self.waitaudio = False
 					self._audio_play()
 				continue
-			elif packet[0] == self.rcommand['LIMIT']:
-				if not self.initialized:
-					# Ignore this while connecting.
-					continue
-				space = ord(packet[1])
-				motor = ord(packet[2])
-				cbs = ord(packet[3])
-				self.limits[space][motor] = struct.unpack('<f', packet[4:])[0]
-				self._trigger_movewaits(cbs)
+			elif cmd == self.rcommand['LIMIT']:
+				self.limits[s][m] = f
+				self._trigger_movewaits(e)
 				continue
-			elif packet[0] == self.rcommand['AUTOSLEEP']:
-				if not self.initialized:
-					# Ignore this while connecting.
-					continue
-				what = ord(packet[1])
-				if what & 1:
+			elif cmd == self.rcommand['AUTOSLEEP']:
+				if s == 0:
 					self.position_valid = False
 					self._globals_update()
-				if what & 2:
+				if s == 1:
 					for t in range(len(self.temps)):
 						if not math.isnan(self.temps[t].value):
 							self.temps[t].value = float('nan')
 							self._temp_update(t)
 				continue
-			elif packet[0] == self.rcommand['SENSE']:
-				if not self.initialized:
-					# Ignore this while connecting.
-					continue
-				w = ord(packet[1])
-				which = w & 0x7f
-				motor = ord(packet[2])
-				state = bool(w & 0x80)
-				pos = struct.unpack('<f', packet[3:])[0]
-				if motor not in self.sense[which]:
-					self.sense[which][motor] = []
-				self.sense[which][motor].append((state, pos))
+			elif cmd == self.rcommand['SENSE']:
+				if m not in self.sense[s]:
+					self.sense[s][m] = []
+				self.sense[s][m].append((e, f))
 				s = 0
-				tocall = []
 				while s < len(self.movecb):
 					if self.movecb[s][0] is not False and any(x[1] in self.sense[x[0]] for x in self.movecb[s][0]):
 						call_queue.append((self.movecb.pop(s)[1], [self.movewait == 0]))
 					else:
 						s += 1
 				continue
-			elif not self.initialized and packet[0] == self.rcommand['PONG'] and ord(packet[1]) < 2:
-				# PONGs during initialization are possible.
-				#log('ignore pong %d' % ord(packet[1]))
-				continue
 			if reply:
-				return ('packet', packet)
+				return ('packet', (cmd, s, m, f, e, data))
 			dprint('unexpected packet', packet)
-			if self.initialized:
-				raise AssertionError('Received unexpected reply packet')
+			raise AssertionError('Received unexpected reply packet')
 	# }}}
-	def _make_packet(self, data): # {{{
-		checklen = len(data) / 3 + 1
-		fulldata = list(chr(len(data) + 1) + data + '\x00' * checklen)
-		for t in range(checklen):
-			check = t & 0x7
-			for bit in range(5):
-				sum = check & Printer.mask[bit][3]
-				for byte in range(3):
-					sum ^= ord(fulldata[3 * t + byte]) & Printer.mask[bit][byte]
-				sum ^= sum >> 4
-				sum ^= sum >> 2
-				sum ^= sum >> 1
-				if sum & 1:
-					check |= 1 <<(bit + 3)
-			fulldata[len(data) + 1 + t] = chr(check)
-		#log(' '.join(['%02x' % ord(x) for x in fulldata]))
-		return ''.join(fulldata)
-	# }}}
-	def _parse_packet(self, data): # {{{
-		#log(' '.join(['%02x' % ord(x) for x in data]))
-		if ord(data[0]) + (ord(data[0]) + 2) / 3 != len(data):
-			log('not ok length')
-			return None
-		length = ord(data[0])
-		checksum = data[length:]
-		for t in range(len(checksum)):
-			r = data[3 * t:3 * t + 3] + checksum[t]
-			if length in (2, 4):
-				r = r[0:2] + '\x00' + r[3:]
-			if(ord(checksum[t]) & 0x7) != (t & 7):
-				return None
-			for bit in range(5):
-				sum = 0
-				for byte in range(4):
-					sum ^= ord(r[byte]) & Printer.mask[bit][byte]
-				sum ^= sum >> 4
-				sum ^= sum >> 2
-				sum ^= sum >> 1
-				if(sum & 1) != 0:
-					log('not ok checksum')
-					return None
-		#log('parsed %x' % ord(data[1]))
-		return data[1:length]
-	# }}}
-	def _send_packet(self, data, audio = False): # {{{
-		if self.ff_out:
-			data = chr(ord(data[0]) | 0x80) + data[1:]
-		self.ff_out = not self.ff_out
-		data = self._make_packet(data)
+	def _send_packet(self, data, move = False, audio = False): # {{{
+		data = chr(len(data) + 1) + data
 		maxtries = 10
 		while maxtries > 0:
 			dprint('(1) writing', data);
 			self._printer_write(data)
-			while True:
-				ack = None
+			if not move and not audio:
+				return True
+			while maxtries > 0:
 				if not self.printer.available():
 					ret = select.select([self.printer], [], [self.printer], 1)
 					if self.printer not in ret[0] and self.printer not in ret[2]:
 						# No response; retry.
-						log('no response waiting for ack')
+						log('no response')
 						maxtries -= 1
 						break
-				ack = self._printer_input(ack = True)
-				if ack[0] != 'ack':
-					#log('no response yet waiting for ack')
-					maxtries -= 1
-					continue
-				if ack[1] == 'nack':
-					log('nack response waiting for ack')
-					maxtries -= 1
-					continue
-				elif (not self.ff_out and ack[1] in ('ack0', 'wait0')) or (self.ff_out and ack[1] in ('ack1', 'wait1')):
-					log('wrong ack response waiting for ack')
-					traceback.print_stack()
-					maxtries -= 1
-					continue
-				elif ack[1] in ('ack0', 'ack1'):
-					#log('sent %x' % ord(data[1]))
-					return True
-				elif ack[1] in ('wait0', 'wait1'):
-					#log('ackwait response waiting for ack')
+				ret = self._printer_input()
+				if ret[0] == 'wait':
 					if audio:
 						self.waitaudio = True
 					else:
 						self.wait = True
 					return True
-				else: # ack[1] in ('stall0', 'stall1')
-					log('stall response waiting for ack')
-					self._unpause()
-					self._print_done(False, 'printer sent stall')
-					return False
+				elif ret[0] == 'ok':
+					return True
+				#log('no response yet')
+				maxtries -= 1
+				continue
 		return False
 	# }}}
 	def _get_reply(self, cb = False): # {{{
@@ -748,11 +495,6 @@ class Printer: # {{{
 			if ret[0] == 'packet' or (cb and ret[0] == 'no data'):
 				return ret[1]
 			#log('no response yet waiting for reply')
-	# }}}
-	def _begin(self, newid): # {{{
-		if not self._send_packet(struct.pack('<BL', self.command['BEGIN'], 0) + newid):
-			return False
-		return struct.unpack('<BL', self._get_reply()) == (ord(self.rcommand['START']), 0)
 	# }}}
 	def _read(self, cmd, channel, sub = None): # {{{
 		if cmd == 'SPACE':
@@ -784,9 +526,9 @@ class Printer: # {{{
 			packet = struct.pack('<BB', self.command['READ_' + cmd], channel)
 		if not self._send_packet(packet):
 			return None
-		reply = self._get_reply()
-		assert reply[0] == self.rcommand['DATA']
-		return reply[1:]
+		cmd, s, m, f, e, data = self._get_reply()
+		assert cmd == self.rcommand['DATA']
+		return data
 	# }}}
 	def _read_globals(self, update = True): # {{{
 		data = self._read('GLOBALS', None)
@@ -832,23 +574,15 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _globals_update(self, target = None): # {{{
-		if not self.initialized:
-			return
 		self._broadcast(target, 'globals_update', [len(self.spaces), len(self.temps), len(self.gpios), self.name, self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.motor_limit, self.temp_limit, self.feedrate, not self.paused and (None if self.gcode is None else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
-		if not self.initialized:
-			return
 		self._broadcast(target, 'space_update', which, self.spaces[which].export())
 	# }}}
 	def _temp_update(self, which, target = None): # {{{
-		if not self.initialized:
-			return
 		self._broadcast(target, 'temp_update', which, self.temps[which].export())
 	# }}}
 	def _gpio_update(self, which, target = None): # {{{
-		if not self.initialized:
-			return
 		self._broadcast(target, 'gpio_update', which, self.gpios[which].export())
 	# }}}
 	def _use_probemap(self, x, y, z): # {{{
@@ -1209,7 +943,7 @@ class Printer: # {{{
 			else:
 				p = chr(self.command['GOTO'])
 			#log('queueing %s' % repr((axes, f0, f1, cb, self.flushing)))
-			self._send_packet(p + ''.join([chr(t) for t in targets]) + args)
+			self._send_packet(p + ''.join([chr(t) for t in targets]) + args, move = True)
 			if id is not None:
 				self._send(id, 'return', None)
 			if self.flushing is None:
@@ -1592,9 +1326,9 @@ class Printer: # {{{
 		def get_current_pos(self, axis):
 			if not self.printer._send_packet(struct.pack('<BBB', self.printer.command['GETPOS'], self.id, axis)):
 				return None
-			ret = self.printer._get_reply()
-			assert ret[0] == self.printer.rcommand['POS']
-			return struct.unpack('<f', ret[1:])[0]
+			cmd, s, m, f, e, data = self.printer._get_reply()
+			assert cmd == self.printer.rcommand['POS']
+			return f
 		def export(self):
 			std = [self.type, self.max_deviation, [[a['offset'], a['park'], a['park_order'], a['max_v'], a['min'], a['max']] for a in self.axis], [[m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['sense_pin'], m['steps_per_m'], m['max_steps'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for m in self.motor]]
 			if self.type == TYPE_EXTRUDER:
@@ -1750,9 +1484,9 @@ class Printer: # {{{
 			return float('nan')
 		if not self._send_packet(struct.pack('<BB', self.command['READTEMP'], channel)):
 			return None
-		ret = self._get_reply()
-		assert ret[0] == self.rcommand['TEMP']
-		return struct.unpack('<f', ret[1:])[0] - (C0 if not math.isnan(self.temps[channel].beta) else 0)
+		cmd, s, m, f, e, data = self._get_reply()
+		assert cmd == self.rcommand['TEMP']
+		return f - (C0 if not math.isnan(self.temps[channel].beta) else 0)
 	# }}}
 	def readpower(self, channel): # {{{
 		channel = int(channel)
@@ -1761,16 +1495,16 @@ class Printer: # {{{
 			return float('nan')
 		if not self._send_packet(struct.pack('<BB', self.command['READPOWER'], channel)):
 			return None
-		ret = self._get_reply()
-		assert ret[0] == self.rcommand['POWER']
-		return struct.unpack('<LL', ret[1:])
+		cmd, s, m, f, e, data = self._get_reply()
+		assert cmd == self.rcommand['POWER']
+		return s, m
 	# }}}
 	def readpin(self, pin): # {{{
 		if not self._send_packet(struct.pack('<BB', self.command['READPIN'], pin)):
 			return None
-		ret = self._get_reply()
-		assert ret[0] == self.rcommand['PIN']
-		return bool(ord(ret[1]))
+		cmd, s, m, f, e, data = self._get_reply()
+		assert cmd == self.rcommand['PIN']
+		return bool(s)
 	# }}}
 	def load(self): # {{{
 		if not self._send_packet(struct.pack('<B', self.command['LOAD'])):
@@ -1801,8 +1535,8 @@ class Printer: # {{{
 			if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], True)):
 				log('failed to pause printer')
 				return False
-			reply = struct.unpack('<BB', self._get_reply())
-			if reply[0] != ord(self.rcommand['QUEUE']):
+			cmd, s, m, f, e, data = self._get_reply()
+			if cmd != self.rcommand['QUEUE']:
 				log('invalid reply to queued command')
 				return False
 			self.movewait = 0
@@ -1819,8 +1553,8 @@ class Printer: # {{{
 		else:
 			#log('pausing')
 			if not was_paused:
-				#log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, reply[1]))
-				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - reply[1] >= 0:
+				#log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, s))
+				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - s >= 0:
 					if self.home_phase is not None:
 						#log('killing homer')
 						self.home_phase = None
@@ -1834,10 +1568,10 @@ class Printer: # {{{
 						#log('killing prober')
 						self.movecb.remove(self.probe_cb)
 						self.probe_cb(False)
-					#log('pausing gcode %d/%d/%d' % (self.queue_pos, reply[1], len(self.queue)))
+					#log('pausing gcode %d/%d/%d' % (self.queue_pos, s, len(self.queue)))
 					if self.flushing is None:
 						self.flushing = False
-					self.queue_info = [self.queue_pos - reply[1], [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing, self.gcode_wait]
+					self.queue_info = [self.queue_pos - s, [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing, self.gcode_wait]
 				else:
 					#log('stopping')
 					self.paused = False
@@ -1853,17 +1587,11 @@ class Printer: # {{{
 	def queued(self): # {{{
 		if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], False)):
 			return None
-		reply = struct.unpack('<BB', self._get_reply())
-		if reply[0] != ord(self.rcommand['QUEUE']):
+		cmd, s, m, f, e, data = self._get_reply()
+		if cmd != self.rcommand['QUEUE']:
 			log('invalid reply to queued command')
 			return None
-		return reply[1]
-	# }}}
-	def ping(self, arg = 0): # {{{
-		if not self._send_packet(struct.pack('<BB', self.command['PING'], arg)):
-			return False
-		reply = self._get_reply()
-		return struct.unpack('<BB', reply) == (ord(self.rcommand['PONG']), arg)
+		return s
 	# }}}
 	@delayed
 	def home(self, id, space = 0, speed = .005, cb = None, abort = True): # {{{

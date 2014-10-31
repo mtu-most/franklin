@@ -30,41 +30,11 @@ void packet()
 	int32_t addr;
 	switch (command[0][1])
 	{
-	case CMD_BEGIN:	// begin: request response
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_BEGIN");
-#endif
-		// A server is running; start the watchdog.
-		watchdog_enable();
-		for (uint8_t i = 0; i < 4; ++i) {
-			if (command[0][2 + i] != 0) {
-				debug("Server version is not supported");
-				write_stall(0);
-				return;
-			}
-		}
-		for (uint8_t i = 0; i < ID_SIZE; ++i)
-			printerid[i] = command[0][6 + i];
-		arch_begin();
-		write_ack(0);
-		reply[0] = 2 + sizeof(uint32_t);
-		reply[1] = CMD_START;
-		ReadFloat f;
-		f.ui = protocol_version;
-		for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
-			reply[2 + i] = f.b[i];
-		reply_ready = true;
-		try_send_next();
-		return;
-	}
 	case CMD_RESET: // reset controller; used before reprogramming flash.
 	{
 #ifdef DEBUG_CMD
 		debug("CMD_RESET");
 #endif
-		write_ack(0);
-		serialdev[0]->flush();
 		reset();
 	}
 	case CMD_GOTO:	// goto
@@ -77,7 +47,6 @@ void packet()
 		if (queue_full)
 		{
 			debug("Host ignores wait request");
-			write_stall(0);
 			return;
 		}
 		uint8_t num = 2;
@@ -118,21 +87,20 @@ void packet()
 		if (isnan(F0) || isnan(F1) || F0 < 0 || F1 < 0 || (F0 == 0 && F1 == 0))
 		{
 			debug("Invalid F0 or F1: %f %f", F(F0), F(F1));
-			write_stall(0);
 			return;
 		}
 		queue[queue_end].cb = command[0][1] == CMD_GOTOCB;
 		queue_end = (queue_end + 1) % QUEUE_LENGTH;
 		if (queue_end == queue_start) {
 			queue_full = true;
-			write_ack(0);
+			serialdev[0]->write(WAIT);
 		}
 		else
-			write_ack(0);
+			serialdev[0]->write(OK);
 		if (!moving) {
-			num_movecbs += next_move();
+			int num_movecbs = next_move();
 			if (num_movecbs > 0)
-				try_send_next();
+				send_host(CMD_MOVECB, num_movecbs);
 		}
 		//else
 			//debug("waiting with move");
@@ -149,7 +117,6 @@ void packet()
 			if (moving)
 			{
 				debug("Sleeping while moving");
-				write_stall(0);
 				return;
 			}
 			for (uint8_t t = 0; t < num_spaces; ++t) {
@@ -171,7 +138,6 @@ void packet()
 			}
 			motors_busy = true;
 		}
-		write_ack(0);
 		return;
 	}
 	case CMD_SETTEMP:	// set target temperature and enable control
@@ -184,7 +150,6 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Setting invalid temp %d", which);
-			write_stall(0);
 			return;
 		}
 		temps[which].target = get_float(3);
@@ -214,7 +179,6 @@ void packet()
 		}
 		adc_phase = 1;
 		next_temp_time = 0;
-		write_ack(0);
 		return;
 	}
 	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
@@ -227,7 +191,6 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Waiting for invalid temp %d", which);
-			write_stall(0);
 			return;
 		}
 		ReadFloat min, max;
@@ -240,7 +203,6 @@ void packet()
 		temps[which].max_alarm = max.f;
 		temps[which].adcmin_alarm = temps[which].toadc(temps[which].min_alarm);
 		temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm);
-		write_ack(0);
 		adc_phase = 1;
 		next_temp_time = 0;
 		return;
@@ -254,13 +216,11 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Reading invalid temp %d", which);
-			write_stall(0);
 			return;
 		}
 		requested_temp = which;
 		adc_phase = 1;
 		next_temp_time = 0;
-		write_ack(0);
 		return;
 	}
 	case CMD_READPOWER:	// read used power
@@ -272,26 +232,16 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Reading power of invalid temp %d", which);
-			write_stall(0);
 			return;
 		}
-		write_ack(0);
-		reply[0] = 10;
-		reply[1] = CMD_POWER;
-		ReadFloat on, current;
 		uint32_t t = utime();
 		if (temps[which].is_on) {
 			// This causes an insignificant error in the model, but when using this you probably aren't using the model anyway, and besides you won't notice the error even if you do.
 			temps[which].time_on += t - temps[which].last_temp_time;
 			temps[which].last_temp_time = t;
 		}
-		on.i = temps[which].time_on;
-		current.i = t;
-		for (uint8_t b = 0; b < sizeof(uint32_t); ++b)
-		{
-			reply[2 + b] = on.b[b];
-			reply[6 + b] = current.b[b];
-		}
+		send_host(CMD_POWER, temps[which].time_on, t);
+		temps[which].time_on = 0;
 	}
 	case CMD_SETPOS:	// Set current position
 	{
@@ -304,7 +254,6 @@ void packet()
 		if (which >= num_spaces || t >= spaces[which].num_axes)
 		{
 			debug("Invalid axis for setting position: %d %d", which, t);
-			write_stall(0);
 			return;
 		}
 		if (!motors_busy)
@@ -318,14 +267,12 @@ void packet()
 		if (moving)
 		{
 			debug("Setting position while moving");
-			write_stall(0);
 			return;
 		}
 		for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
 			spaces[which].axis[a]->source = NAN;
 			spaces[which].axis[a]->current = NAN;
 		}
-		write_ack(0);
 		spaces[which].motor[t]->current_pos = (get_float(4) * spaces[which].motor[t]->steps_per_m);
 		arch_setpos(which, t);
 		//debug("setpos %d %d %f", which, t, F(spaces[which].motor[t]->current_pos));
@@ -341,22 +288,13 @@ void packet()
 		if (which >= num_spaces || t >= spaces[which].num_axes)
 		{
 			debug("Getting position of invalid axis %d %d", which, t);
-			write_stall(0);
 			return;
 		}
-		write_ack(0);
 		if (isnan(spaces[which].axis[t]->source))
 			space_types[spaces[which].type].reset_pos(&spaces[which]);
 			for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
 				spaces[which].axis[a]->current = spaces[which].axis[a]->source;
-		ReadFloat pos;
-		pos.f = spaces[which].axis[t]->current - spaces[which].axis[t]->offset;
-		reply[0] = 2 + sizeof(float);
-		reply[1] = CMD_POS;
-		for (uint8_t b = 0; b < sizeof(float); ++b)
-			reply[2 + b] = pos.b[b];
-		reply_ready = true;
-		try_send_next();
+		send_host(CMD_POS, which, t, spaces[which].axis[t]->current - spaces[which].axis[t]->offset);
 		return;
 	}
 	case CMD_LOAD:	// reload settings from eeprom
@@ -365,7 +303,6 @@ void packet()
 		debug("CMD_LOAD");
 #endif
 		load_all();
-		write_ack(0);
 		return;
 	}
 	case CMD_SAVE:	// save settings to eeprom
@@ -376,7 +313,6 @@ void packet()
 		if (moving)
 		{
 			debug("Saving while moving would disrupt move");
-			write_stall(0);
 			return;
 		}
 		addr = 0;
@@ -392,7 +328,6 @@ void packet()
 			temps[t].save(addr, true);
 		for (uint8_t t = 0; t < num_gpios; ++t)
 			gpios[t].save(addr, true);
-		write_ack(0);
 		return;
 	}
 	case CMD_READ_GLOBALS:
@@ -400,13 +335,9 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_READ_GLOBALS");
 #endif
-		addr = 2;
+		addr = 0;
 		globals_save(addr, false);
-		reply[0] = addr;
-		reply[1] = CMD_DATA;
-		write_ack(0);
-		reply_ready = true;
-		try_send_next();
+		send_host(CMD_DATA, 0, 0, 0, 0, addr);
 		return;
 	}
 	case CMD_WRITE_GLOBALS:
@@ -416,7 +347,6 @@ void packet()
 #endif
 		addr = 2;
 		globals_load(addr, false);
-		write_ack(0);
 		return;
 	}
 	case CMD_READ_SPACE_INFO:
@@ -424,19 +354,14 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_READ_SPACE_INFO");
 #endif
-		addr = 2;
+		addr = 0;
 		which = get_which();
 		if (which >= num_spaces) {
 			debug("Reading invalid space %d", which);
-			write_stall(0);
 			return;
 		}
 		spaces[which].save_info(addr, false);
-		reply[0] = addr;
-		reply[1] = CMD_DATA;
-		write_ack(0);
-		reply_ready = true;
-		try_send_next();
+		send_host(CMD_DATA, 0, 0, 0, 0, addr);
 		return;
 	}
 	case CMD_READ_SPACE_AXIS:
@@ -444,20 +369,15 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_READ_SPACE_AXIS");
 #endif
-		addr = 2;
+		addr = 0;
 		which = get_which();
 		uint8_t axis = command[0][3];
 		if (which >= num_spaces || axis >= spaces[which].num_axes) {
 			debug("Reading invalid axis %d %d", which, axis);
-			write_stall(0);
 			return;
 		}
 		spaces[which].save_axis(axis, addr, false);
-		reply[0] = addr;
-		reply[1] = CMD_DATA;
-		write_ack(0);
-		reply_ready = true;
-		try_send_next();
+		send_host(CMD_DATA, 0, 0, 0, 0, addr);
 		return;
 	}
 	case CMD_READ_SPACE_MOTOR:
@@ -465,20 +385,15 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_READ_SPACE_MOTOR");
 #endif
-		addr = 2;
+		addr = 0;
 		which = get_which();
 		uint8_t motor = command[0][3];
 		if (which >= num_spaces || motor >= spaces[which].num_motors) {
 			debug("Reading invalid motor %d %d > %d %d", which, motor, num_spaces, which < num_spaces ? spaces[which].num_motors : -1);
-			write_stall(0);
 			return;
 		}
 		spaces[which].save_motor(motor, addr, false);
-		reply[0] = addr;
-		reply[1] = CMD_DATA;
-		write_ack(0);
-		reply_ready = true;
-		try_send_next();
+		send_host(CMD_DATA, 0, 0, 0, 0, addr);
 		return;
 	}
 	case CMD_WRITE_SPACE_INFO:
@@ -489,7 +404,6 @@ void packet()
 #endif
 		if (which >= num_spaces) {
 			debug("Writing invalid space %d", which);
-			write_stall(0);
 			return;
 		}
 		addr = 3;
@@ -497,7 +411,6 @@ void packet()
 		if (which == 0)
 			for (uint8_t s = 0; s < num_spaces; ++s)
 				space_types[spaces[s].type].change0(&spaces[s]);
-		write_ack(0);
 		return;
 	}
 	case CMD_WRITE_SPACE_AXIS:
@@ -509,12 +422,10 @@ void packet()
 #endif
 		if (which >= num_spaces || axis >= spaces[which].num_axes) {
 			debug("Writing invalid axis %d %d", which, axis);
-			write_stall(0);
 			return;
 		}
 		addr = 4;
 		spaces[which].load_axis(axis, addr, false);
-		write_ack(0);
 		return;
 	}
 	case CMD_WRITE_SPACE_MOTOR:
@@ -526,12 +437,10 @@ void packet()
 #endif
 		if (which >= num_spaces || motor >= spaces[which].num_motors) {
 			debug("Writing invalid motor %d %d", which, motor);
-			write_stall(0);
 			return;
 		}
 		addr = 4;
 		spaces[which].load_motor(motor, addr, false);
-		write_ack(0);
 		return;
 	}
 	case CMD_READ_TEMP:
@@ -539,19 +448,14 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_READ_TEMP");
 #endif
-		addr = 2;
+		addr = 0;
 		which = get_which();
 		if (which >= num_temps) {
 			debug("Reading invalid temp %d", which);
-			write_stall(0);
 			return;
 		}
 		temps[which].save(addr, false);
-		reply[0] = addr;
-		reply[1] = CMD_DATA;
-		write_ack(0);
-		reply_ready = true;
-		try_send_next();
+		send_host(CMD_DATA, 0, 0, 0, 0, addr);
 		return;
 	}
 	case CMD_WRITE_TEMP:
@@ -562,12 +466,10 @@ void packet()
 #endif
 		if (which >= num_temps) {
 			debug("Writing invalid temp %d", which);
-			write_stall(0);
 			return;
 		}
 		addr = 3;
 		temps[which].load(addr, false);
-		write_ack(0);
 		return;
 	}
 	case CMD_READ_GPIO:
@@ -575,19 +477,14 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_READ_GPIO");
 #endif
-		addr = 2;
+		addr = 0;
 		which = get_which();
 		if (which >= num_gpios) {
 			debug("Reading invalid gpio %d", which);
-			write_stall(0);
 			return;
 		}
 		gpios[which].save(addr, false);
-		reply[0] = addr;
-		reply[1] = CMD_DATA;
-		write_ack(0);
-		reply_ready = true;
-		try_send_next();
+		send_host(CMD_DATA, 0, 0, 0, 0, addr);
 		return;
 	}
 	case CMD_WRITE_GPIO:
@@ -598,12 +495,10 @@ void packet()
 #endif
 		if (which >= num_gpios) {
 			debug("Writing invalid gpio %d", which);
-			write_stall(0);
 			return;
 		}
 		addr = 3;
 		gpios[which].load(which, addr, false);
-		write_ack(0);
 		return;
 	}
 	case CMD_QUEUED:
@@ -612,30 +507,14 @@ void packet()
 		debug("CMD_QUEUED");
 #endif
 		last_active = millis();
-		reply[0] = 3;
-		reply[1] = CMD_QUEUE;
-		reply[2] = queue_full ? QUEUE_LENGTH : (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH;
 		if (command[0][2]) {
 			queue_start = 0;
 			queue_end = 0;
 			queue_full = false;
 			//debug("aborting at request");
-			num_movecbs = 0;
 			abort_move(true);
 		}
-		write_ack(0);
-		reply_ready = true;
-		try_send_next();
-		return;
-	}
-	case CMD_PING:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_PING");
-#endif
-		write_ack(0);
-		ping |= 1 << command[0][2];
-		try_send_next();
+		send_host(CMD_QUEUE, queue_full ? QUEUE_LENGTH : (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH);
 		return;
 	}
 	case CMD_READPIN:
@@ -647,15 +526,9 @@ void packet()
 		if (which >= num_gpios)
 		{
 			debug("Reading invalid gpio %d", which);
-			write_stall(0);
 			return;
 		}
-		write_ack(0);
-		reply[0] = 3;
-		reply[1] = CMD_PIN;
-		reply[2] = GET(gpios[which].pin, false) ? 1 : 0;
-		reply_ready = true;
-		try_send_next();
+		send_host(CMD_PIN, GET(gpios[which].pin, false) ? 1 : 0);
 		return;
 	}
 #ifdef HAVE_AUDIO
@@ -682,7 +555,6 @@ void packet()
 		// Abort any currently playing sample.
 		audio_head = 0;
 		audio_tail = 0;
-		write_ack(0);
 		return;
 	}
 	case CMD_AUDIO_DATA:
@@ -695,7 +567,6 @@ void packet()
 		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
 		{
 			debug("Audio buffer is full");
-			write_stall(0);
 			return;
 		}
 		for (uint8_t i = 0; i < AUDIO_FRAGMENT_SIZE; ++i)
@@ -704,9 +575,9 @@ void packet()
 			audio_start = utime();
 		audio_tail = (audio_tail + 1) % AUDIO_FRAGMENTS;
 		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
-			write_ackwait(0);
+			serialdev[0]->write(WAIT);
 		else
-			write_ack(0);
+			serialdev[0]->write(OK);
 		next_audio_time = 0;
 		return;
 	}
@@ -714,7 +585,6 @@ void packet()
 	default:
 	{
 		debug("Invalid command %x %x %x %x", command[0][0], command[0][1], command[0][2], command[0][3]);
-		write_stall(0);
 		return;
 	}
 	}

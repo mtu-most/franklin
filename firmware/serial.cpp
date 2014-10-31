@@ -90,7 +90,7 @@ void serial()
 		}
 		if (command[0] < 2 || command[0] >= 0x80) {
 			// These lengths are not allowed; this cannot be a good packet.
-			debug("invalid length %d", int(command[0]));
+			debug("invalid length %x", int(command[0]));
 			Serial.write(CMD_NACK);
 			continue;
 		}

@@ -56,15 +56,8 @@ static void handle_temps(uint32_t current_time, uint32_t longtime) { // {{{
 	if (requested_temp == temp_current) {
 		//debug("replying temp");
 		requested_temp = ~0;
-		ReadFloat f;
-		f.f = temps[temp_current].fromadc(temp);
-		//debug("read temp %f", F(f.f));
-		reply[0] = 2 + sizeof(float);
-		reply[1] = CMD_TEMP;
-		for (uint8_t b = 0; b < sizeof(float); ++b)
-			reply[2 + b] = f.b[b];
-		reply_ready = true;
-		try_send_next();
+		float result = temps[temp_current].fromadc(temp);
+		send_host(CMD_TEMP, 0, 0, result);
 	}
 	//debug("temp for %d: %d", temp_current, temp);
 	// Set the phase so next time another temp is measured.
@@ -76,8 +69,7 @@ static void handle_temps(uint32_t current_time, uint32_t longtime) { // {{{
 		temps[temp_current].max_alarm = NAN;
 		temps[temp_current].adcmin_alarm = MAXINT;
 		temps[temp_current].adcmax_alarm = MAXINT;
-		temps[temp_current].alarm = true;
-		try_send_next();
+		send_host(CMD_TEMPCB, temp_current);
 	}
 	// And handle any linked gpios.
 	for (uint8_t g = temps[temp_current].following_gpios; g < num_gpios; g = gpios[g].next) {
@@ -218,8 +210,10 @@ static void move_axes(Space *s, uint32_t current_time, float &factor) { // {{{
 } // }}}
 
 static bool do_steps(float &factor, uint32_t current_time) { // {{{
+	//debug("steps");
 	if (factor <= 0) {
 		next_motor_time = 0;
+		movedebug("end move");
 		return true;
 	}
 	//movedebug("do steps %f %d", F(factor), max_steps);
@@ -244,7 +238,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 				continue;
 			}
 			float target = mtr.current_pos / mtr.steps_per_m + mtr.target_dist * factor;
-			//debug("%f %f %d", F(mtr.current_pos), F(target), mtr.steps);
+			movedebug("%d %f %f", mtr.current_pos, F(target), F(mtr.last_v));
 			mtr.current_pos = target * mtr.steps_per_m;
 			mtr.last_v = mtr.target_v * factor;
 		}
@@ -261,6 +255,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 } // }}}
 
 static void handle_motors(uint32_t current_time, uint32_t longtime) { // {{{
+	//debug("handle");
 	if (next_motor_time > 0)
 		return;
 	// Check for move.
@@ -309,8 +304,8 @@ static void handle_motors(uint32_t current_time, uint32_t longtime) { // {{{
 			if (moving) {
 				//buffered_debug("c");
 				//debug("movecb 1");
-				num_movecbs += had_cbs;
-				try_send_next();
+				if (had_cbs > 0)
+					send_host(CMD_MOVECB, had_cbs);
 				return;
 			}
 			//buffered_debug("d");
@@ -320,9 +315,10 @@ static void handle_motors(uint32_t current_time, uint32_t longtime) { // {{{
 				moving = false;
 				arch_move();
 				//debug("movecb 1");
-				num_movecbs += cbs_after_current_move;
-				cbs_after_current_move = 0;
-				try_send_next();
+				if (cbs_after_current_move > 0) {
+					send_host(CMD_MOVECB, cbs_after_current_move);
+					cbs_after_current_move = 0;
+				}
 			}
 			else {
 				moving = true;
@@ -440,6 +436,7 @@ int main(int argc, char **argv) { // {{{
 				next_time = next_temp_time;
 			if (next_motor_time < next_time)
 				next_time = next_motor_time;
+			//debug("next time: %d", next_time);
 			if (next_time > delta + 10000) {
 				// Wait for next event; compensate for time already during this iteration (+10ms, to be sure); don't alter "infitity" flag.
 				wait_for_event(~next_time ? next_time - delta - 10000: ~0, last_current_time);
@@ -447,6 +444,7 @@ int main(int argc, char **argv) { // {{{
 				delta = current_time - last_current_time;
 			}
 		}
+		//debug("event");
 		last_current_time = current_time;
 		// Update next_*_time.
 		if (~next_motor_time)
@@ -468,7 +466,7 @@ int main(int argc, char **argv) { // {{{
 				}
 			}
 			motors_busy = false;
-			which_autosleep |= 1;
+			send_host(CMD_AUTOSLEEP, 0);
 		}
 		if (temps_busy > 0 && (longtime - last_active) / 1e3 > temp_limit) {
 			for (uint8_t current_t = 0; current_t < num_temps; ++current_t) {
@@ -478,10 +476,8 @@ int main(int argc, char **argv) { // {{{
 				temps[current_t].is_on = false;
 			}
 			temps_busy = 0;
-			which_autosleep |= 2;
+			send_host(CMD_AUTOSLEEP, 1);
 		}
-		if (which_autosleep != 0)
-			try_send_next();
 		// Handle all periodic things.
 #ifdef TIMING
 		uint32_t first_t = utime();
@@ -496,9 +492,12 @@ int main(int argc, char **argv) { // {{{
 #ifdef TIMING
 		uint32_t motor_t = utime() - current_time;
 #endif
+		//debug("serial");
 		serial(0);
+		//debug("serial 0 done");
 		if (serialdev[1])
 			serial(1);
+		//debug("serial 1 done");
 #ifdef TIMING
 		uint32_t serial_t = utime() - first_t;
 		uint32_t end_t = utime() - current_time;

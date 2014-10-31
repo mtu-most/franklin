@@ -38,7 +38,7 @@ void packet()
 	case CMD_PING:
 	{
 #ifdef DEBUG_CMD
-		debug("CMD_PING");
+		//debug("CMD_PING");
 #endif
 		write_ack();
 		ping |= 1 << command[2];

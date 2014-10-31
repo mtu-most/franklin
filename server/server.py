@@ -385,6 +385,9 @@ class Port: # {{{
 		self.input_handle = GLib.io_add_watch(process.stdout.fileno(), GLib.IO_IN | GLib.IO_HUP, self.printer_input)
 		old = []
 		def get_settings(success, settings):
+			if not success:
+				log('failed to get settings')
+				return
 			self.call('import_settings', [settings], {}, lambda success, ret: None)
 			GLib.source_remove(orphans[old[0]].input_handle)
 			orphans[old[0]].call('die', ('replaced by new connection',), {}, lambda success, ret: None)
@@ -392,6 +395,9 @@ class Port: # {{{
 			orphans[old[0]].process.communicate()
 			del orphans[old[0]]
 		def get_vars(success, vars):
+			if not success:
+				log('failed to get vars')
+				return
 			# The child has opened the port now; close our handle.
 			if detectport is not None:
 				detectport.close()
@@ -400,7 +406,7 @@ class Port: # {{{
 			old[:] = [x for x in orphans if orphans[x].name == self.name]
 			if len(old) > 0:
 				orphans[old[0]].call('export_settings', (), {}, get_settings)
-		self.call('send_printer', [None], {}, lambda success, data: self.call('get_globals', (), {}, get_vars))
+		self.call('send_printer', [None], {}, lambda success, data: success and self.call('get_globals', (), {}, get_vars))
 	# }}}
 	def call(self, name, args, kargs, cb): # {{{
 		data = json.dumps([self.next_mid, name, args, kargs]) + '\n'

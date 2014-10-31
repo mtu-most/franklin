@@ -4,7 +4,7 @@
 void setup()
 {
 	serialdev[0] = &real_serial;
-	Serial.begin(115200);
+	serialdev[0]->begin(115200);
 	serialdev[1] = NULL;
 	arch_setup_start();
 	watchdog_disable();
@@ -24,14 +24,10 @@ void setup()
 	queue_start = 0;
 	queue_end = 0;
 	queue_full = false;
-	num_movecbs = 0;
 	continue_cb = 0;
 	ping = 0;
-	pending_packet[0][0] = 0;
-	pending_packet[1][0] = 0;
-	out_busy[0] = false;
-	out_busy[1] = false;
-	reply_ready = false;
+	pending_packet[0] = 0;
+	out_busy = false;
 	led_pin.init();
 	probe_pin.init();
 	probe_dist = INFINITY;
@@ -53,8 +49,6 @@ void setup()
 	audio_state = 0;
 	audio_us_per_sample = 125; // 1000000 / 8000;
 #endif
-	for (uint8_t i = 0; i < ID_SIZE; ++i)
-		printerid[i] = 0;
 	last_current_time = utime();
 	num_spaces = 0;
 	spaces = NULL;
@@ -67,9 +61,8 @@ void setup()
 #ifdef HAVE_AUDIO
 	next_audio_time = ~0;
 #endif
-	serialdev[0]->write(CMD_ID);
-	for (uint8_t i = 0; i < 8; ++i)
-		serialdev[0]->write(uint8_t(0));
+	for (uint8_t i = 0; i < ID_SIZE; ++i)
+		printerid[i] = 0;
 	arch_setup_end();
 	load_all();
 }

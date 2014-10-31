@@ -118,7 +118,6 @@ void Temp::init() {
 	max_alarm = NAN;
 	adcmin_alarm = -1;
 	adcmax_alarm = MAXINT;
-	alarm = false;
 	target = NAN;
 	adctarget = MAXINT;
 	following_gpios = ~0;
@@ -152,7 +151,6 @@ void Temp::copy(Temp &dst) {
 	dst.max_alarm = max_alarm;
 	dst.adcmin_alarm = adcmin_alarm;
 	dst.adcmax_alarm = adcmax_alarm;
-	dst.alarm = alarm;
 	dst.target = target;
 	dst.adctarget = adctarget;
 	dst.following_gpios = following_gpios;

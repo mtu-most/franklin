@@ -79,7 +79,7 @@ enum Command {
 	CMD_ADC,	// 2:adc reading
 
 		// asynchronous events.
-	CMD_LIMIT,	// 1:which, 4:pos
+	CMD_LIMIT,	// 1:which
 	CMD_SENSE0,	// 1:which, 4:pos
 	CMD_SENSE1,	// 1:which, 4:pos
 };

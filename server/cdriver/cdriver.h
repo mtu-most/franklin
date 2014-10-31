@@ -33,8 +33,12 @@ union ReadFloat {
 	uint8_t b[sizeof(float)];
 };
 
-enum SingleByteCommands {	// See serial.cpp for computation of command values.
-// These bytes (except RESET) are sent in reply to a received packet only.
+enum SingleByteHostCommands {
+	OK = 0xb3,
+	WAIT = 0xad
+};
+
+enum SingleByteCommands {	// See serial.cpp for computation of command values. {{{
 	CMD_NACK = 0x80,	// Incorrect packet; please resend.
 	CMD_ACK0 = 0xb3,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
 	CMD_ACKWAIT0 = 0xb4,	// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
@@ -44,12 +48,10 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values.
 	CMD_ID = 0xaa,		// Request/reply printer ID code.
 	CMD_ACK1 = 0xad,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
 	CMD_DEBUG = 0x81	// Debug message; a nul-terminated message follows (no checksum; no resend).
-};
+}; // }}}
 
 enum Command {
 	// from host
-	CMD_BEGIN,	// 4 byte: 0 (preferred protocol version). Reply: START.
-	CMD_PING,	// 1 byte: code.  Reply: PONG.
 	CMD_RESET,	// 1 byte: 0.
 	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].
 	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
@@ -80,12 +82,10 @@ enum Command {
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	// to host
 		// responses to host requests; only one active at a time.
-	CMD_START,	// 4 byte: 0 (protocol version).
 	CMD_TEMP,	// 4 byte: requested channel's temperature. [°C]
 	CMD_POWER,	// 4 byte: requested channel's power time; 4 bytes: current time. [μs, μs]
 	CMD_POS,	// 4 byte: pos [steps]; 4 byte: current [mm].
 	CMD_DATA,	// n byte: requested data.
-	CMD_PONG,	// 1 byte: PING argument.
 	CMD_PIN,	// 1 byte: 0 or 1: pin state.
 	CMD_QUEUE,	// 1 byte: current number of records in queue.
 		// asynchronous events.
@@ -126,7 +126,6 @@ struct Temp
 	float max_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
 	int32_t adcmin_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
 	int32_t adcmax_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
-	bool alarm;
 	// Internal variables.
 	uint32_t last_temp_time;	// last value of micros when this heater was handled.
 	uint32_t time_on;		// Time that the heater has been on since last reading.  [μs]
@@ -170,7 +169,6 @@ struct Motor
 	Pin_t sense_pin;
 	uint8_t sense_state;
 	float sense_pos;
-	float limits_pos;	// position when limit switch was hit or nan
 	float limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
 	float last_v;		// v during last iteration, for using limit_a [m/s].
@@ -311,7 +309,6 @@ EXTERN Serial_t *serialdev[2];
 EXTERN char printerid[ID_SIZE];
 EXTERN unsigned char command[2][FULL_COMMAND_SIZE];
 EXTERN uint8_t command_end[2];
-EXTERN char reply[FULL_COMMAND_SIZE];
 EXTERN uint32_t last_current_time;
 EXTERN Space *spaces;
 EXTERN uint32_t next_motor_time;
@@ -325,16 +322,16 @@ EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];
 EXTERN uint8_t queue_start, queue_end;
 EXTERN bool queue_full;
-EXTERN uint8_t num_movecbs;		// number of event notifications waiting to be sent out.
 EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
+EXTERN int cbs_after_current_move;
 EXTERN bool motors_busy;
-EXTERN bool out_busy[2];
-EXTERN uint32_t out_time[2];
-EXTERN bool reply_ready;
-EXTERN char pending_packet[2][FULL_COMMAND_SIZE];
+EXTERN bool out_busy;
+EXTERN uint32_t out_time;
+EXTERN char pending_packet[FULL_COMMAND_SIZE];
+EXTERN char datastore[FULL_COMMAND_SIZE];
 EXTERN uint32_t last_active;
 EXTERN float motor_limit, temp_limit;
 EXTERN int16_t led_phase;
@@ -351,7 +348,6 @@ EXTERN float t0, tp;
 EXTERN bool moving;
 EXTERN float f0, f1, f2, fp, fq, fmain;
 EXTERN bool move_prepared;
-EXTERN uint8_t cbs_after_current_move;
 EXTERN float done_factor;
 EXTERN uint8_t requested_temp;
 
@@ -371,12 +367,12 @@ void packet();	// A command packet has arrived; handle it.
 
 // serial.cpp
 void serial(uint8_t which);	// Handle commands from serial.
-void prepare_packet(uint8_t which, char *the_packet);
-void send_packet(uint8_t which);
-void try_send_next();
-void write_ack(uint8_t which);
-void write_ackwait(uint8_t which);
-void write_stall(uint8_t which);
+void prepare_packet(char *the_packet);
+void send_packet();
+void write_ack();
+void write_ackwait();
+void write_stall();
+void send_host(char cmd, int s = 0, int m = 0, float f = 0, int e = 0, int len = 0);
 
 // move.cpp
 uint8_t next_move();
@@ -425,6 +421,8 @@ void Pin_t::read(uint16_t data) {
 struct RealSerial : public Serial_t {
 	void begin(int baud) {
 		Serial.begin(baud);
+		for (uint8_t i = 0; i < ID_SIZE; ++i)
+			printerid[i] = this->read();
 	}
 	void write(char c) {
 		Serial.write(c);

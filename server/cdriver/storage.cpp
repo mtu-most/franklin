@@ -16,7 +16,7 @@ void write_8(int32_t &address, uint8_t data, bool eeprom)
 		watchdog_reset();
 		return;
 	}
-	reply[address++] = data;
+	datastore[address++] = data;
 }
 
 int16_t read_16(int32_t &address, bool eeprom)

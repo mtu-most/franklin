@@ -1,5 +1,5 @@
 CPPFLAGS = -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow
-SOURCES = debug.cpp globals.cpp gpio.cpp move.cpp packet.cpp serial.cpp setup.cpp space.cpp storage.cpp temp.cpp type-carthesian.cpp type-delta.cpp base.cpp
+SOURCES = debug.cpp globals.cpp gpio.cpp move.cpp packet.cpp serial.cpp setup.cpp space.cpp storage.cpp temp.cpp type-cartesian.cpp type-delta.cpp base.cpp
 HEADERS = configuration.h cdriver.h
 
 ifeq (${TARGET}, bbb)

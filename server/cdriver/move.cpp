@@ -102,10 +102,8 @@ uint8_t next_move() {
 				// This possibly removes one move too many, but it shouldn't happen anyway.
 				if (queue[queue_start].cb)
 					++num_cbs;
-				if (queue_end == queue_start) {
-					continue_cb |= 1;
-					try_send_next();
-				}
+				if (queue_end == queue_start)
+					send_host(CMD_CONTINUE, 0);
 				queue_start = n;
 				queue_full = false;
 				abort_move(true);
@@ -173,10 +171,8 @@ uint8_t next_move() {
 	float vp = queue[queue_start].f[1] * feedrate;
 	if (queue[queue_start].cb)
 		cbs_after_current_move += 1;
-	if (queue_end == queue_start) {
-		continue_cb |= 1;
-		try_send_next();
-	}
+	if (queue_end == queue_start)
+		send_host(CMD_CONTINUE, 0);
 	queue_start = n;
 	queue_full = false;
 	if (!action) {
@@ -369,14 +365,11 @@ void abort_move(bool move) { // {{{
 		if (t0 == 0 && (queue_end != queue_start || queue_full)) {
 			// This was probably the preparation for a move; remove the move itself from the queue.
 			// If it wasn't, doing this doesn't really harm either.
-			if (queue_end == queue_start) {
-				continue_cb |= 1;
-				try_send_next();
-			}
+			if (queue_end == queue_start)
+				send_host(CMD_CONTINUE, 0);
 			if (queue[queue_start].cb) {
 				//debug("movecb 4");
-				++num_movecbs;
-				try_send_next();
+				send_host(CMD_MOVECB, 1);
 			}
 			queue_start = (queue_start + 1) % QUEUE_LENGTH;
 			queue_full = false;
