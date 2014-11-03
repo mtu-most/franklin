@@ -229,6 +229,7 @@ void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 	motor[m]->limit_v = read_float(addr, eeprom);
 	motor[m]->limit_a = read_float(addr, eeprom);
 	motor[m]->home_order = read_8(addr, eeprom);
+	arch_motors_change();
 	SET_OUTPUT(motor[m]->enable_pin);
 	if (enable != motor[m]->enable_pin.write()) {
 		if (motors_busy)

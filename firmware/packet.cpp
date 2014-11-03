@@ -109,6 +109,7 @@ void packet()
 			return;
 		}
 		motor[which]->step_pin.read(*reinterpret_cast <uint16_t *>(&command[3]));
+		//debug("m %d step pin %d %d", which, motor[which]->step_pin.pin, motor[which]->step_pin.flags);
 		motor[which]->dir_pin.read(*reinterpret_cast <uint16_t *>(&command[5]));
 		motor[which]->limit_min_pin.read(*reinterpret_cast <uint16_t *>(&command[7]));
 		motor[which]->limit_max_pin.read(*reinterpret_cast <uint16_t *>(&command[9]));
@@ -147,14 +148,20 @@ void packet()
 			motor[m]->vexp = command[current + 1];
 			motor[m]->end_pos = *reinterpret_cast <int32_t *>(&command[current + 2]);
 			motor[m]->start_pos = *reinterpret_cast <int32_t *>(&command[current + sizeof(int32_t) + 2]);
-			if (motor[m]->start_current_pos < motor[m]->start_pos)
-				motor[m]->v2 = motor[m]->v + speed_error;
-			else
-				motor[m]->v2 = motor[m]->v - speed_error;
-			motor[m]->dt2 = ((motor[m]->start_pos - motor[m]->start_current_pos) << 20) / (motor[m]->v2 - motor[m]->v);
+			if (speed_error == 0) {
+				motor[m]->v2 = motor[m]->v;
+				motor[m]->dt2 = MAXLONG;
+			}
+			else {
+				if (motor[m]->start_current_pos < motor[m]->start_pos)
+					motor[m]->v2 = motor[m]->v + speed_error;
+				else
+					motor[m]->v2 = motor[m]->v - speed_error;
+				motor[m]->dt2 = ((motor[m]->start_pos - motor[m]->start_current_pos) << -motor[m]->vexp) / (motor[m]->v2 - motor[m]->v);
+			}
 			motor[m]->start_t2 = motor[m]->last_step_t;
 			current += sizeof(int32_t) * 2 + 2;
-			//debug("cp %ld ep %ld sp %ld v %d v2 %d dt2 %ld", F(motor[m]->current_pos), F(motor[m]->end_pos), F(motor[m]->start_pos), motor[m]->v, motor[m]->v2, F(motor[m]->dt2));
+			//debug("m %d cp %ld ep %ld sp %ld v %d v2 %d dt2 %ld", m, F(motor[m]->current_pos), F(motor[m]->end_pos), F(motor[m]->start_pos), motor[m]->v, motor[m]->v2, F(motor[m]->dt2));
 		}
 		start_time = utime();
 		write_ack();

@@ -207,7 +207,7 @@ class Printer: # {{{
 			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False)
-		#self.import_settings(open('/root/bbb-settings.ini').read())
+		self.import_settings(open('/home/shevek/work/franklin/calibrate/Wijnen.ini').read())
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
@@ -353,6 +353,7 @@ class Printer: # {{{
 			log('More cbs received than requested!')
 			self.movewait = 0
 		else:
+			#log('movewait %d/%d' % (num, self.movewait))
 			self.movewait -= num
 		if self.movewait == 0:
 			call_queue.extend([(x[1], [True]) for x in self.movecb])
@@ -426,6 +427,7 @@ class Printer: # {{{
 				continue
 			elif cmd == self.rcommand['LIMIT']:
 				self.limits[s][m] = f
+				#log('limit; %d waits' % e)
 				self._trigger_movewaits(e)
 				continue
 			elif cmd == self.rcommand['AUTOSLEEP']:
@@ -615,11 +617,14 @@ class Printer: # {{{
 	# }}}
 	def _do_gcode(self): # {{{
 		if self.gcode is None:
+			log('end of gcode')
 			return
 		flushed = False
 		if self.flushing == 'done':
+			#log('done flushing; continuing gcode')
 			self.flushing = False
 			flushed = True
+		#log('len gcode = %d' % len(self.gcode))
 		while len(self.gcode) > 0:
 			if self.gcode_parking or self.gcode_waiting > 0 or self.confirmer is not None or self.gcode_wait is not None or self.flushing or self.paused:
 				#log('gcode waiting: %s' % repr((self.gcode_parking, self.gcode_waiting, self.confirmer, self.gcode_wait)))
@@ -657,7 +662,7 @@ class Printer: # {{{
 						if num == 1:
 							#log('debugpart: %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, args['f'], args['F']))
 							z = self._use_probemap(target[0], target[1], args['Z'])
-							log('go to one %f %f %f' % (target[0], target[1], z))
+							#log('go to one %f %f %f' % (target[0], target[1], z))
 							self.goto([[target[0], target[1], z], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
 						else:
 							for t in range(num):
@@ -679,6 +684,7 @@ class Printer: # {{{
 				if not flushed:
 					self.flush()[1](None)
 					self.flushing = True
+					#log('flush set')
 					return
 				flushed = False
 				if cmd in (('G', 28), ('M', 6)):
@@ -784,6 +790,7 @@ class Printer: # {{{
 		if not flushed:
 			self.flush()[1](None)
 			self.flushing = True
+			#log('flush set')
 			return
 		if len(self.spaces) > 1:
 			for e in range(len(self.spaces[1].axis)):
@@ -993,7 +1000,7 @@ class Printer: # {{{
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
-				log("N t %s" % (self.home_target))
+				#log("N t %s" % (self.home_target))
 				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
 				return
 			# Fall through.
@@ -1010,10 +1017,10 @@ class Printer: # {{{
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
-				log("0 t %s" % (self.home_target))
+				#log("0 t %s" % (self.home_target))
 				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
 				return
-			log('done 1')
+			#log('done 1')
 			self.home_phase = 2
 			# Move down to find limit or sense switch.
 			for i, a, m in self.home_motors:
@@ -1025,7 +1032,7 @@ class Printer: # {{{
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
-				log("1 t %s" % (self.home_target))
+				#log("1 t %s" % (self.home_target))
 				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
 				return
 			# Fall through.
@@ -1075,16 +1082,16 @@ class Printer: # {{{
 			for i, a, m in self.home_motors:
 				self.set_motor((self.home_space, i), max_steps = 1)
 				if self.pin_valid(m['limit_max_pin']) or (not self.pin_valid(m['limit_min_pin']) and self.pin_valid(m['sense_pin'])):
-					self.spaces[self.home_space].set_current_pos(i, a['min'] - 2 * small_dist)
-					self.home_target[i] = a['min'] - self.spaces[self.home_space].axis[i]['offset']
-				elif self.pin_valid(m['limit_min_pin']):
-					self.spaces[self.home_space].set_current_pos(i, a['max'] + 2 * small_dist)
+					self.spaces[self.home_space].set_current_pos(i, a['max'] - 2 * small_dist)
 					self.home_target[i] = a['max'] - self.spaces[self.home_space].axis[i]['offset']
+				elif self.pin_valid(m['limit_min_pin']):
+					self.spaces[self.home_space].set_current_pos(i, a['min'] + 2 * small_dist)
+					self.home_target[i] = a['min'] - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
-				log("sp %s t %s" % (self.home_speed, self.home_target))
+				#log("sp %s t %s" % (self.home_speed, self.home_target))
 				self.goto({self.home_space: self.home_target}, f0 = self.home_speed / (2 * small_dist), cb = True)[1](None)
 				return
 			# Fall through
@@ -1103,7 +1110,7 @@ class Printer: # {{{
 					self.movecb.append(self.home_cb)
 				key = self.home_target.keys()[0]
 				dist = abs(self.home_target[key] - self.spaces[self.home_space].get_current_pos(key))
-				log("sp2 %s d %s t %s" % (self.home_speed, dist, self.home_target))
+				#log("sp2 %s d %s t %s" % (self.home_speed, dist, self.home_target))
 				self.goto({self.home_space: self.home_target}, f0 = self.home_speed / dist if dist != 0 else float('inf'), cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
@@ -1417,13 +1424,16 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def flush(self, id): # {{{
+		#log('flush start')
 		def cb(w):
+			#log('flush done')
 			if id is not  None:
 				self._send(id, 'return', w)
-			self._do_gcode()
+			call_queue.append((self._do_gcode, []))
 		self.movecb.append((False, cb))
 		if self.flushing is not True:
 			self.goto(cb = True)[1](None)
+		#log('end flush')
 	# }}}
 	@delayed
 	def probe(self, id, area, angle = 0, speed = .003): # {{{
@@ -1443,7 +1453,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False): # {{{
-		log('goto %s %s %s' % (repr(moves), f0, f1))
+		#log('goto %s %s %s' % (repr(moves), f0, f1))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
 		self.queue.append((id, moves, f0, f1, cb))
@@ -1698,8 +1708,10 @@ class Printer: # {{{
 	def wait_for_cb(self, id, sense = False): # {{{
 		ret = lambda w: id is None or self._send(id, 'return', w)
 		if self.movewait == 0 or sense is not False and sense[1] in self.sense[sense[0]]:
+			log('not delaying with wait_for_cb, because there is no cb waiting')
 			ret(self.movewait == 0)
 		else:
+			log('waiting for cb')
 			self.movecb.append((sense, ret))
 	# }}}
 	def waiting_for_cb(self): # {{{
@@ -1711,7 +1723,7 @@ class Printer: # {{{
 			if id is not None:
 				self._send(id, 'return', None)
 			self.gcode_waiting -= 1
-			self._do_gcode()
+			call_queue.append((self._do_gcode, []))
 		if(which is None and len(self.alarms) > 0) or which in self.alarms:
 			cb()
 		else:
@@ -1957,7 +1969,7 @@ class Printer: # {{{
 			for e in range(len(self.spaces[1].axis)):
 				self.set_axis_pos(1, e, 0)
 		self._broadcast(None, 'printing', True)
-		self._do_gcode()
+		call_queue.append((self._do_gcode, []))
 	# }}}
 	@delayed
 	def request_confirmation(self, id, message): # {{{
@@ -1978,7 +1990,7 @@ class Printer: # {{{
 				self._unpause()
 				self._print_done(False, 'aborted by failed confirmation')
 			else:
-				self._do_gcode()
+				call_queue.append((self._do_gcode, []))
 		return True
 	# }}}
 	def queue_add(self, data, name): # {{{
@@ -2410,10 +2422,13 @@ while True: # {{{
 	while len(call_queue) > 0:
 		f, a = call_queue.pop(0)
 		f(*a)
-	now = time.time()
 	while printer.printer.available():
 		printer._printer_input()
+	if len(call_queue) > 0:
+		continue	# Handle this first.
 	fds = [sys.stdin, printer.printer]
+	#log('waiting; movewait = %d' % printer.movewait)
+	now = time.time()
 	found = select.select(fds, [], fds, printer.gcode_wait and max(0, printer.gcode_wait - now))
 	#log(repr(found))
 	if len(found[0]) == 0:

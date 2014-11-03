@@ -141,6 +141,7 @@ static inline void avr_send() {
 	//debug("avr_send");
 	send_packet();
 	uint32_t start = millis();
+	int phase = 0;
 	while (out_busy) {
 		uint32_t now = millis();
 		//debug("avr send");
@@ -152,8 +153,10 @@ static inline void avr_send() {
 		serial(1);
 		//if (out_busy[1])
 		//	debug("avr waiting for ack");
-		if ((now - start) % 100 == 99)
+		if ((now - start) / 100 > phase) {
 			send_packet();
+			phase = (now - start) / 100;
+		}
 	}
 }
 
@@ -243,9 +246,10 @@ static inline void hwpacket() {
 static inline void arch_ack() {
 	if (avr_limiter_space < 0)
 		return;
+	int space = avr_limiter_space;
 	avr_limiter_space = -1;
-	for (uint8_t m = 0; m < spaces[avr_limiter_space].num_motors; ++m) {
-		spaces[avr_limiter_space].motor[m]->current_pos = arch_getpos(avr_limiter_space, m);
+	for (uint8_t m = 0; m < spaces[space].num_motors; ++m) {
+		spaces[space].motor[m]->current_pos = arch_getpos(space, m);
 	}
 }
 // }}}
@@ -382,6 +386,7 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 	avr_buffer[2] = m;
 	Motor &mtr = *spaces[s].motor[sm];
 	uint16_t p = mtr.step_pin.write();
+	//debug("arch motor change %d %d %d %x", s, sm, m, p);
 	avr_buffer[3] = p & 0xff;
 	avr_buffer[4] = (p >> 8) & 0xff;
 	p = mtr.dir_pin.write();
@@ -411,7 +416,7 @@ static inline void arch_change(bool motors) {
 	uint16_t p = led_pin.write();
 	avr_buffer[3] = p & 0xff;
 	avr_buffer[4] = (p >> 8) & 0xff;
-	avr_buffer[5] = 10; // speed_error.
+	avr_buffer[5] = 1; // speed_error.
 	prepare_packet(avr_buffer);
 	avr_send();
 	if (motors) {
@@ -465,7 +470,7 @@ static inline int32_t arch_getpos(uint8_t s, uint8_t m) {
 static inline void arch_setpos(uint8_t s, uint8_t m) {
 	ReadFloat pos;
 	pos.i = spaces[s].motor[m]->current_pos;
-	debug("setpos %d", pos.i);
+	//debug("setpos %d", pos.i);
 	for (uint8_t st = 0; st < s; ++st)
 		m += spaces[st].num_motors;
 	avr_buffer[0] = 3 + sizeof(int32_t);
@@ -478,6 +483,7 @@ static inline void arch_setpos(uint8_t s, uint8_t m) {
 }
 // }}}
 
+// Move. {{{
 static inline void avr_make_speed(float speed, int8_t *mantissa, int8_t *exp) {
 	if (speed == 0 || !moving) {
 		*mantissa = 0;
@@ -523,6 +529,7 @@ static inline void arch_move() {
 	prepare_packet(avr_buffer);
 	avr_send();
 }
+// }}}
 
 // ADC hooks. {{{
 static inline int adc_get(uint8_t _pin) {
@@ -600,7 +607,8 @@ void AVRSerial::write(char c) {
 		int ret = ::write(fd, &c, 1);
 		if (ret == 1)
 			break;
-		debug("write to avr failed: %d %s", ret, strerror(errno));
+		if (errno != EAGAIN && errno != EWOULDBLOCK)
+			debug("write to avr failed: %d %s", ret, strerror(errno));
 	}
 }
 

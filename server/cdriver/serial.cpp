@@ -17,7 +17,21 @@
 // Codes which have duplicates in printer id codes are not used.
 // These are defined in cdriver.h.
 
-static int needcount = 0;
+struct Record {
+	int32_t s, m, e;
+	float f;
+};
+
+struct Queuerecord {
+	Record r;
+	Queuerecord *next;
+	int len;
+	char cmd;
+};
+
+static bool sending_to_host = false;
+static Queuerecord *hostqueue_head = NULL;
+static Queuerecord *hostqueue_tail = NULL;
 static uint32_t last_micros = 0;
 static bool had_data = false;
 static bool had_stall = false;
@@ -35,6 +49,22 @@ static const uint8_t MASK[5][4] = {
 	{0x26, 0xb5, 0xb9, 0x23},
 	{0x95, 0x6c, 0xd5, 0x43},
 	{0x4b, 0xdc, 0xe2, 0x83}};
+
+static void send_to_host() {
+	sending_to_host = true;
+	Queuerecord *r = hostqueue_head;
+	hostqueue_head = r->next;
+	if (!hostqueue_head)
+		hostqueue_tail = NULL;
+	//debug("sending to host cmd %x", r->cmd);
+	serialdev[0]->write(18 + r->len);
+	serialdev[0]->write(r->cmd);
+	for (unsigned i = 0; i < sizeof(Record); ++i)
+		serialdev[0]->write(reinterpret_cast <char *>(&r->r)[i]);
+	for (unsigned i = 0; i < r->len; ++i)
+		serialdev[0]->write(reinterpret_cast <char *>(r)[sizeof(Queuerecord) + i]);
+	free(r);
+}
 
 // There may be serial data available.
 void serial(uint8_t which)
@@ -134,8 +164,12 @@ void serial(uint8_t which)
 		else {
 			// Message received.
 			if (command[which][0] == OK) {
-				if (needcount > 0)
-					needcount -= 1;
+				if (sending_to_host) {
+					sending_to_host = false;
+					//debug("received OK; sending next to host (if any)");
+					if (hostqueue_head)
+						send_to_host();
+				}
 				else
 					debug("received unexpected OK");
 				continue;
@@ -334,11 +368,11 @@ void prepare_packet(char *the_packet)
 		pending_packet[i] = the_packet[i];
 }
 
-// Send packet to host.
+// Send packet to firmware.
 void send_packet()
 {
 #ifdef DEBUG_SERIAL
-	debug("send 0");
+	debug("send 1");
 #endif
 	uint8_t cmd_len = pending_packet[0] & COMMAND_LEN_MASK;
 	//fprintf(stderr, "send %d:", which);
@@ -369,26 +403,24 @@ void write_stall()
 	serialdev[1]->write(ff_in ? CMD_STALL0 : CMD_STALL1);
 }
 
-struct Record {
-	int32_t s, m, e;
-	float f;
-};
-
 void send_host(char cmd, int s, int m, float f, int e, int len)
 {
-	Record record;
-	record.s = s;
-	record.m = m;
-	record.f = f;
-	record.e = e;
-	serialdev[0]->write(18 + len);
-	serialdev[0]->write(cmd);
-	for (unsigned i = 0; i < sizeof(Record); ++i)
-		serialdev[0]->write(reinterpret_cast <char *>(&record)[i]);
+	//debug("queueing for host cmd %x", cmd);
+	// Use malloc, not mem_alloc, because there are multiple pointers to the same memory and mem_alloc cannot handle that.
+	Queuerecord *record = reinterpret_cast <Queuerecord *>(malloc(sizeof(Queuerecord) + len));
+	if (hostqueue_head)
+		hostqueue_tail->next = record;
+	else
+		hostqueue_head = record;
+	hostqueue_tail = record;
+	record->r.s = s;
+	record->r.m = m;
+	record->r.f = f;
+	record->r.e = e;
+	record->cmd = cmd;
+	record->len = len;
 	for (unsigned i = 0; i < len; ++i)
-		serialdev[0]->write(datastore[i]);
-	int target = needcount;
-	needcount += 1;
-	while (needcount > target)
-		serial(0);
+		reinterpret_cast <char *>(record)[sizeof(Queuerecord) + i] = datastore[i];
+	if (!sending_to_host)
+		send_to_host();
 }
