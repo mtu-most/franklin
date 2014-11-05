@@ -207,7 +207,9 @@ class Printer: # {{{
 			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False)
-		self.import_settings(open('/home/shevek/work/franklin/calibrate/Wijnen.ini').read())
+		ini = os.getenv('FRANKLIN_INI')
+		if ini is not None:
+			self.import_settings(open(ini).read())
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True

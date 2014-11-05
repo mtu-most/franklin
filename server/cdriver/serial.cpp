@@ -419,6 +419,7 @@ void send_host(char cmd, int s, int m, float f, int e, int len)
 	record->r.e = e;
 	record->cmd = cmd;
 	record->len = len;
+	record->next = NULL;
 	for (unsigned i = 0; i < len; ++i)
 		reinterpret_cast <char *>(record)[sizeof(Queuerecord) + i] = datastore[i];
 	if (!sending_to_host)

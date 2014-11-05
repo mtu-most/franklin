@@ -2,7 +2,6 @@
 #include "firmware.h"
 
 static void handle_motors(uint32_t current_time) {
-	int32_t dt = current_time - start_time;
 	for (uint8_t m = 0; m < num_motors; ++m) {
 		// Check sense pins.
 		if (motor[m]->sense_pin.valid()) {
@@ -17,33 +16,45 @@ static void handle_motors(uint32_t current_time) {
 			motor[m]->last_step_t = current_time;
 			continue;
 		}
-		int8_t e1, e2;
-		// Note that the exponent is always negative, so the left shifts below are really right shifts.
-		if (motor[m]->vexp < -20) {
-			e1 = motor[m]->vexp + 20;
-			e2 = -20;
-		}
-		else {
-			e1 = 0;
-			e2 = motor[m]->vexp;
-		}
-		int32_t target = motor[m]->start_pos + ((motor[m]->v * (dt >> -e1)) >> -e2);
-		//debug("target1 %ld", F(target));
-		if (dt < motor[m]->dt2) {
-			int32_t dt2 = current_time - motor[m]->start_t2;
-			int32_t target2 = motor[m]->start_current_pos + ((motor[m]->v2 * (dt2 >> -e1)) >> -e2);
-			if (!(target <= target2 && target >= motor[m]->current_pos) && !(target >= target2 && target <= motor[m]->current_pos))
-				target = target2;
-			//debug("target2 %ld", F(target));
+		int32_t target = motor[m]->start_pos + motor[m]->v * (current_time - start_time);
+		uint32_t dt = current_time - motor[m]->last_step_t;
+		if (!motor[m]->on_track) {
+			if (abs(target - motor[m]->current_pos) <= motor[m]->max_steps && fabs(motor[m]->v - motor[m]->target_v) / dt < motor[m]->a) {
+				motor[m]->on_track = true;
+				motor[m]->v = motor[m]->target_v;
+				//debug("n %d %f", m, F(motor[m]->v));
+			}
+			else {
+				uint32_t tt = fabs(motor[m]->v - motor[m]->target_v) / motor[m]->a;
+				if (motor[m]->start_pos + motor[m]->target_v * (current_time - start_time + tt) < motor[m]->current_pos + (motor[m]->target_v + motor[m]->v) / 2 * fabs(motor[m]->target_v - motor[m]->v) / motor[m]->a) {
+					// Use -a.
+					motor[m]->v -= motor[m]->a * dt;
+					if (motor[m]->v < -motor[m]->max_v)
+						motor[m]->v = -motor[m]->max_v;
+				}
+				else {
+					// Use +a.
+					motor[m]->v += motor[m]->a * dt;
+					if (motor[m]->v > motor[m]->max_v)
+						motor[m]->v = motor[m]->max_v;
+				}
+				target = motor[m]->current_pos + motor[m]->v * dt;
+				//debug("v %d %f", m, F(motor[m]->v));
+			}
 		}
 		int32_t steps = target - motor[m]->current_pos;
+		if ((target >= motor[m]->end_pos && motor[m]->target_v > 0) || (target <= motor[m]->end_pos && motor[m]->target_v < 0)) {
+			debug("finish %d %ld %ld %ld", m, F(motor[m]->current_pos), F(target), F(motor[m]->end_pos));
+			steps = motor[m]->end_pos - motor[m]->current_pos;
+		}
+		// (Try to) go to target.
 		if (abs(steps) > motor[m]->max_steps) {
 			steps = motor[m]->max_steps * (steps > 0 ? 1 : -1);
 			target = motor[m]->current_pos + steps;
+			motor[m]->on_track = false;	// No longer on track.
+			motor[m]->v = motor[m]->max_steps / dt;
+			//debug("nv %d %f", m, F(motor[m]->v));
 		}
-		//debug("motor %d target %ld dt %ld dt2 %ld scp %ld sp %ld v %d v2 %d ve %d", m, F(target), F(dt), F(motor[m]->dt2), F(motor[m]->start_current_pos), F(motor[m]->start_pos), motor[m]->v, motor[m]->v2, motor[m]->vexp);
-		if ((target >= motor[m]->end_pos && motor[m]->v > 0) || (target <= motor[m]->end_pos && motor[m]->v < 0))
-			steps = motor[m]->end_pos - motor[m]->current_pos;
 		if (steps == 0)
 			continue;
 		motor[m]->last_step_t = current_time;
@@ -55,15 +66,15 @@ static void handle_motors(uint32_t current_time) {
 			// Stop moving.
 			for (uint8_t mm = 0; mm < num_motors; ++mm) {
 				motor[mm]->start_pos = motor[mm]->current_pos;
-				motor[mm]->dt2 = 0;
+				motor[mm]->target_v = 0;
 				motor[mm]->v = 0;
-				motor[mm]->v2 = 0;
 			}
 			stopping = 1;
 			try_send_next();
 			return;
 		}
 		motor[m]->current_pos = target;
+		//debug("s %d %ld", m, F(steps));
 		// Set direction pin.
 		if (steps > 0)
 			SET(motor[m]->dir_pin);

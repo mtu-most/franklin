@@ -115,6 +115,9 @@ void packet()
 		motor[which]->limit_max_pin.read(*reinterpret_cast <uint16_t *>(&command[9]));
 		motor[which]->sense_pin.read(*reinterpret_cast <uint16_t *>(&command[11]));
 		motor[which]->max_steps = command[13];
+		motor[which]->max_v = *reinterpret_cast <float *>(&command[14]);
+		motor[which]->a = *reinterpret_cast <float *>(&command[18]);
+		//debug("limits %d %f %f", which, F(motor[which]->max_v), F(motor[which]->a));
 		SET_OUTPUT(motor[which]->step_pin);
 		SET_OUTPUT(motor[which]->dir_pin);
 		SET_INPUT(motor[which]->limit_min_pin);
@@ -136,32 +139,17 @@ void packet()
 		uint8_t whichlen = ((num_motors - 1) >> 3) + 1;
 		uint8_t current = 2 + whichlen;
 		for (uint8_t m = 0; m < num_motors; ++m) {
-			motor[m]->start_current_pos = motor[m]->current_pos;
 			if (!(command[2 + (m >> 3)] & (1 << (m & 0x7)))) {
 				motor[m]->start_pos = motor[m]->current_pos;
-				motor[m]->dt2 = 0;
-				motor[m]->v = 0;
-				motor[m]->v2 = 0;
+				motor[m]->target_v = 0;
 				continue;
 			}
-			motor[m]->v = int8_t(command[current]);
-			motor[m]->vexp = command[current + 1];
-			motor[m]->end_pos = *reinterpret_cast <int32_t *>(&command[current + 2]);
-			motor[m]->start_pos = *reinterpret_cast <int32_t *>(&command[current + sizeof(int32_t) + 2]);
-			if (speed_error == 0) {
-				motor[m]->v2 = motor[m]->v;
-				motor[m]->dt2 = MAXLONG;
-			}
-			else {
-				if (motor[m]->start_current_pos < motor[m]->start_pos)
-					motor[m]->v2 = motor[m]->v + speed_error;
-				else
-					motor[m]->v2 = motor[m]->v - speed_error;
-				motor[m]->dt2 = ((motor[m]->start_pos - motor[m]->start_current_pos) << -motor[m]->vexp) / (motor[m]->v2 - motor[m]->v);
-			}
-			motor[m]->start_t2 = motor[m]->last_step_t;
-			current += sizeof(int32_t) * 2 + 2;
-			//debug("m %d cp %ld ep %ld sp %ld v %d v2 %d dt2 %ld", m, F(motor[m]->current_pos), F(motor[m]->end_pos), F(motor[m]->start_pos), motor[m]->v, motor[m]->v2, F(motor[m]->dt2));
+			motor[m]->target_v = *reinterpret_cast <float *>(&command[current]);
+			motor[m]->end_pos = *reinterpret_cast <int32_t *>(&command[current + sizeof(float)]);
+			motor[m]->start_pos = *reinterpret_cast <int32_t *>(&command[current + sizeof(int32_t) + sizeof(float)]);
+			motor[m]->on_track = false;
+			current += sizeof(int32_t) * 2 + sizeof(float);
+			//debug("m %d cp %ld ep %ld sp %ld v %f", m, F(motor[m]->current_pos), F(motor[m]->end_pos), F(motor[m]->start_pos), F(motor[m]->v));
 		}
 		start_time = utime();
 		write_ack();
@@ -178,12 +166,14 @@ void packet()
 			write_stall();
 			return;
 		}
-		motor[which]->current_pos = *reinterpret_cast <int32_t *>(&command[3]);
-		// Stop moving.
+		if (motor[which]->target_v != 0) {
+			debug("SETPOS called for moving motor %d (v=%f)", which, F(motor[which]->target_v));
+			write_stall();
+			return;
+		}
+		motor[which]->current_pos += *reinterpret_cast <int32_t *>(&command[3]) - motor[which]->start_pos;
+		// Don't start moving.
 		motor[which]->start_pos = motor[which]->current_pos;
-		motor[which]->dt2 = 0;
-		motor[which]->v = 0;
-		motor[which]->v2 = 0;
 		write_ack();
 		return;
 	}

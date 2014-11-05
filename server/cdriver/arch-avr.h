@@ -381,7 +381,7 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 	uint8_t m = sm;
 	for (uint8_t st = 0; st < s; ++st)
 		m += spaces[st].num_motors;
-	avr_buffer[0] = 14;
+	avr_buffer[0] = 22;
 	avr_buffer[1] = HWC_MSETUP;
 	avr_buffer[2] = m;
 	Motor &mtr = *spaces[s].motor[sm];
@@ -402,6 +402,13 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 	avr_buffer[11] = p & 0xff;
 	avr_buffer[12] = (p >> 8) & 0xff;
 	avr_buffer[13] = mtr.max_steps;
+	ReadFloat max_v, a;
+	max_v.f = mtr.limit_v * mtr.steps_per_m / 1e6;
+	a.f = mtr.limit_a * mtr.steps_per_m / 1e12;
+	for (int i = 0; i < sizeof(float); ++i) {
+		avr_buffer[14 + i] = max_v.b[i];
+		avr_buffer[14 + i + sizeof(float)] = a.b[i];
+	}
 	prepare_packet(avr_buffer);
 	avr_send();
 }
@@ -416,7 +423,7 @@ static inline void arch_change(bool motors) {
 	uint16_t p = led_pin.write();
 	avr_buffer[3] = p & 0xff;
 	avr_buffer[4] = (p >> 8) & 0xff;
-	avr_buffer[5] = 1; // speed_error.
+	avr_buffer[5] = 100; // speed_error.
 	prepare_packet(avr_buffer);
 	avr_send();
 	if (motors) {
@@ -464,15 +471,16 @@ static inline int32_t arch_getpos(uint8_t s, uint8_t m) {
 	ReadFloat pos;
 	for (uint8_t i = 0; i < sizeof(int32_t); ++i)
 		pos.b[i] = command[1][2 + i];
+	//debug("getpos %d %d", m, pos.i);
 	return pos.i;
 }
 
 static inline void arch_setpos(uint8_t s, uint8_t m) {
 	ReadFloat pos;
 	pos.i = spaces[s].motor[m]->current_pos;
-	//debug("setpos %d", pos.i);
 	for (uint8_t st = 0; st < s; ++st)
 		m += spaces[st].num_motors;
+	//debug("setpos %d %d", m, pos.i);
 	avr_buffer[0] = 3 + sizeof(int32_t);
 	avr_buffer[1] = HWC_SETPOS;
 	avr_buffer[2] = m;
@@ -483,19 +491,7 @@ static inline void arch_setpos(uint8_t s, uint8_t m) {
 }
 // }}}
 
-// Move. {{{
-static inline void avr_make_speed(float speed, int8_t *mantissa, int8_t *exp) {
-	if (speed == 0 || !moving) {
-		*mantissa = 0;
-		*exp = 0;
-		return;
-	}
-	speed /= 1e6;	// Steps per μs.
-	*exp = log(fabs(speed)) / log(2) - 7;	// Keep 7 bits in the mantissa.
-	*mantissa = speed / pow(2, *exp);
-}
-
-static inline void arch_move() {
+static inline void arch_move() { // {{{
 	uint8_t wlen = ((avr_num_motors - 1) >> 3) + 1;
 	for (uint8_t i = 0; i < wlen; ++i)
 		avr_buffer[2 + i] = 0;
@@ -509,22 +505,20 @@ static inline void arch_move() {
 		for (uint8_t sm = 0; sm < sp.num_motors; ++sm, ++m) {
 			Motor &mtr = *sp.motor[sm];
 			avr_buffer[2 + (m >> 3)] |= 1 << (m & 0x7);
-			ReadFloat limit, current;
-			int8_t mspeed, espeed;
-			avr_make_speed(mtr.last_v * mtr.steps_per_m, &mspeed, &espeed);
-			limit.i = mspeed < 0 ? -MAXLONG : MAXLONG;
+			ReadFloat limit, current, speed;
+			speed.f = moving ? mtr.last_v * mtr.steps_per_m / 1e6 : 0;
+			limit.i = speed.f < 0 ? -MAXLONG : MAXLONG;
 			current.i = mtr.current_pos;
-			//debug("move %d %d %d %d %d", m, mspeed, espeed, limit.i, current.i);
-			avr_buffer[2 + wlen + mi * 10] = mspeed;
-			avr_buffer[2 + wlen + mi * 10 + 1] = espeed;
+			//debug("move %d %f %d %d", m, speed.f, limit.i, current.i);
 			for (uint8_t i = 0; i < 4; ++i) {
-				avr_buffer[2 + wlen + mi * 10 + 2 + i] = limit.b[i];
-				avr_buffer[2 + wlen + mi * 10 + 6 + i] = current.b[i];
+				avr_buffer[2 + wlen + mi * 12 + i] = speed.b[i];
+				avr_buffer[2 + wlen + mi * 12 + 4 + i] = limit.b[i];
+				avr_buffer[2 + wlen + mi * 12 + 8 + i] = current.b[i];
 			}
 			mi += 1;
 		}
 	}
-	avr_buffer[0] = 2 + wlen + mi * 10;
+	avr_buffer[0] = 2 + wlen + mi * 12;
 	avr_buffer[1] = HWC_MOVE;
 	prepare_packet(avr_buffer);
 	avr_send();

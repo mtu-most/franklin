@@ -88,16 +88,17 @@ struct Motor
 {
 	Pin_t step_pin;
 	Pin_t dir_pin;
-	uint8_t max_steps;			// maximum number of steps in one iteration.
+	uint8_t max_steps;	// maximum number of steps in one iteration.
+	float a;		// steps/μs²
+	float max_v;		// steps/μs
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;
 	Pin_t sense_pin;
 	uint8_t sense_state;
-	int32_t sense_pos, switch_pos, current_pos, start_pos, start_current_pos, end_pos;
-	int16_t v, v2;	// speed is v * 2 ** vexp in steps/μs.
-	int8_t vexp;
-	int32_t dt2;
-	uint32_t start_t2, last_step_t;	// time in μs
+	int32_t sense_pos, switch_pos, current_pos, start_pos, end_pos;
+	float v, target_v;	// steps/μs
+	uint32_t last_step_t;	// time in μs
+	bool on_track;
 #ifdef HAVE_AUDIO
 	uint8_t audio_flags;
 	enum Flags {
@@ -188,13 +189,10 @@ void Motor::init() {
 	switch_pos = MAXLONG;
 	current_pos = 0;
 	start_pos = 0;
-	start_current_pos = 0;
 	end_pos = MAXLONG;
 	v = 0;
-	v2 = 0;
-	dt2 = 0;
-	start_t2 = utime();
-	last_step_t = start_t2;
+	target_v = 0;
+	last_step_t = utime();
 #ifdef HAVE_AUDIO
 	audio_flags = 0;
 #endif

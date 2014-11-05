@@ -188,8 +188,10 @@ void serial()
 #ifdef DEBUG_FF
 		debug("old ff_in: %d", ff_in);
 #endif
-		if (had_stall)
+		if (had_stall) {
+			debug("repeating stall");
 			Serial.write(ff_in ? CMD_STALL0 : CMD_STALL1);
+		}
 		else
 			Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
 		return;
@@ -389,18 +391,21 @@ void try_send_next()
 
 void write_ack()
 {
+	//debug("acking");
 	had_stall = false;
 	Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
 }
 
 void write_ackwait()
 {
+	//debug("ackwaiting");
 	had_stall = false;
 	Serial.write(ff_in ? CMD_ACKWAIT0 : CMD_ACKWAIT1);
 }
 
 void write_stall()
 {
+	//debug("stalling");
 	had_stall = true;
 	Serial.write(ff_in ? CMD_STALL0 : CMD_STALL1);
 }
