@@ -16,7 +16,7 @@ static void handle_motors(uint32_t current_time) {
 			motor[m]->last_step_t = current_time;
 			continue;
 		}
-		int32_t target = motor[m]->start_pos + motor[m]->v * (current_time - start_time);
+		int32_t target = motor[m]->start_pos + motor[m]->target_v * (current_time - start_time);
 		uint32_t dt = current_time - motor[m]->last_step_t;
 		if (!motor[m]->on_track) {
 			if (abs(target - motor[m]->current_pos) <= motor[m]->max_steps && fabs(motor[m]->v - motor[m]->target_v) / dt < motor[m]->a) {
@@ -26,7 +26,7 @@ static void handle_motors(uint32_t current_time) {
 			}
 			else {
 				uint32_t tt = fabs(motor[m]->v - motor[m]->target_v) / motor[m]->a;
-				if (motor[m]->start_pos + motor[m]->target_v * (current_time - start_time + tt) < motor[m]->current_pos + (motor[m]->target_v + motor[m]->v) / 2 * fabs(motor[m]->target_v - motor[m]->v) / motor[m]->a) {
+				if (motor[m]->start_pos + motor[m]->target_v * (current_time - start_time + tt) < motor[m]->current_pos + (motor[m]->target_v + motor[m]->v) / 2 * tt) {
 					// Use -a.
 					motor[m]->v -= motor[m]->a * dt;
 					if (motor[m]->v < -motor[m]->max_v)
