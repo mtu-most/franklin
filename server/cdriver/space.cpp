@@ -247,6 +247,7 @@ void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 		if (old_steps_per_m != motor[m]->steps_per_m) {
 			float diff = motor[m]->current_pos / old_steps_per_m - motor[m]->home_pos;
 			motor[m]->current_pos = (motor[m]->home_pos + diff) * motor[m]->steps_per_m;
+			arch_setpos(id, m);
 			must_move = true;
 		}
 		if (old_home_pos != motor[m]->home_pos) {
@@ -302,8 +303,9 @@ int32_t Space::savesize0() {
 	return 2;	// Cartesian type, 0 axes.
 }
 
-void Space::init() {
+void Space::init(uint8_t space_id) {
 	type = DEFAULT_TYPE;
+	id = space_id;
 	max_deviation = 0;
 	type_data = NULL;
 	num_axes = 0;

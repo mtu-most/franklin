@@ -1,12 +1,12 @@
 #define EXTERN	// This must be done in exactly one source file.
 #include "cdriver.h"
 
-void setup()
+void setup(char const *port)
 {
 	serialdev[0] = &real_serial;
-	serialdev[0]->begin(115200);
+	real_serial.begin(115200);
 	serialdev[1] = NULL;
-	arch_setup_start();
+	arch_setup_start(port);
 	watchdog_disable();
 	setup_spacetypes();
 	// Initialize volatile variables.

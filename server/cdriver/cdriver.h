@@ -202,6 +202,7 @@ struct SpaceType
 struct Space
 {
 	uint8_t type;
+	uint8_t id;
 	void *type_data;
 	float max_deviation;
 	uint8_t num_axes, num_motors;
@@ -214,7 +215,7 @@ struct Space
 	void save_info(int32_t &addr, bool eeprom);
 	void save_axis(uint8_t a, int32_t &addr, bool eeprom);
 	void save_motor(uint8_t m, int32_t &addr, bool eeprom);
-	void init();
+	void init(uint8_t space_id);
 	void free();
 	void copy(Space &dst);
 	static int32_t savesize0();
@@ -279,7 +280,6 @@ struct MoveCommand
 };
 
 struct Serial_t {
-	virtual void begin(int baud) = 0;
 	virtual void write(char c) = 0;
 	virtual int read() = 0;
 	virtual int readBytes (char *target, int len) = 0;
@@ -379,7 +379,7 @@ uint8_t next_move();
 void abort_move(bool move);
 
 // setup.cpp
-void setup();
+void setup(char const *port);
 void load_all();
 
 // storage.cpp

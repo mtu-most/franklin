@@ -82,7 +82,6 @@ function make_id(printer, id, extra) { // {{{
 } // }}}
 
 function set_value(printer, id, value, reply, arg) { // {{{
-	var target;
 	if (id.length == 2 || id[2] === undefined) {
 		var obj = {};
 		obj[id[1]] = value;
@@ -379,8 +378,8 @@ function queue_print(printer) { // {{{
 // }}}
 
 // Non-update events. {{{
-function new_port(port) { // {{{
-	ports[port] = [get_elements(build('Label', [port]))[0], get_elements(build('NoPrinter', [port]))[0], null, ''];
+function new_port() { // {{{
+	ports[port] = [Label(), NoPrinter(), null, ''];
 	ports[port][0].AddClass('setup');
 	labels_element.Add(ports[port][0]);
 	printers_element.Add(ports[port][1]);
@@ -392,8 +391,8 @@ function new_printer() { // {{{
 	printer.lock = null;
 	printer.temptargets = [];
 	multiples[port] = {space: [], axis: [], motor: [], temp: [], gpio: []};
-	ports[port][2] = get_elements(build('Printer', [port]))[0];
-	printers_element.Add(ports[port][2]);
+	ports[port][2] = Printer();
+	ports[port][1] = printers_element.Add(ports[port][2]);
 	ports[port][0].RemoveClass('setup');
 	ports[port][1].RemoveClass('notconnected');
 	ports[port][1].AddClass('connected');
@@ -504,7 +503,7 @@ function update_globals() { // {{{
 		return;
 	if (ports[port][3] != printer.name) {
 		labels_element.removeChild(ports[port][0]);
-		ports[port][0] = get_elements(build('Label', [port]))[0];
+		ports[port][0] = Label();
 		labels_element.Add(ports[port][0]);
 		ports[port][3] = printer.name;
 		select_printer();
@@ -525,12 +524,12 @@ function update_globals() { // {{{
 	e.ClearAll();
 	var stat = get_value(printer, [null, 'status']);
 	e.AddText(stat === null ? 'Idle' : stat ? 'Printing' : 'Paused');
-	var t = multiples[port]['space'];
+	var t = multiples[port].space;
 	var showing = [], hiding = [];
 	for (var s = 0; s < t.length; ++s) {
 		while (t[s][1].length > printer.num_spaces) {
 			// Remove axes and motors.
-			var a = multiples[port]['axis'].pop();
+			var a = multiples[port].axis.pop();
 			for (var as = 0; as < a.length; ++as) {
 				while (a[as][1].length > 0) {
 					var n = a[as][1].pop();
@@ -538,7 +537,7 @@ function update_globals() { // {{{
 						a[as][0].removeChild(n[i]);
 				}
 			}
-			var m = multiples[port]['motor'].pop();
+			var m = multiples[port].motor.pop();
 			for (var ms = 0; ms < m.length; ++ms) {
 				while (m[ms][1].length > 0) {
 					var n = m[ms][1].pop();
@@ -551,12 +550,13 @@ function update_globals() { // {{{
 				t[s][0].removeChild(n[i]);
 		}
 		while (t[s][1].length < printer.num_spaces) {
-			multiples[port]['axis'].push([]);
-			multiples[port]['motor'].push([]);
+			multiples[port].axis.push([]);
+			multiples[port].motor.push([]);
 			var n = t[s][3](t[s][1].length);
 			t[s][1].push(n);
-			for (var i = 0; i < n.length; ++i)
+			for (var i = 0; i < n.length; ++i) {
 				t[s][0].insertBefore(n[i], t[s][2]);
+			}
 		}
 		if (!(t[s][2] instanceof Comment)) {
 			if (printer.num_spaces >= 2)
@@ -569,7 +569,7 @@ function update_globals() { // {{{
 		else
 			hiding.push(t[s][0]);
 	}
-	t = multiples[port]['temp'];
+	t = multiples[port].temp;
 	for (var s = 0; s < t.length; ++s) {
 		while (t[s][1].length > printer.num_temps) {
 			var n = t[s][1].pop();
@@ -593,7 +593,7 @@ function update_globals() { // {{{
 		else
 			hiding.push(t[s][0]);
 	}
-	t = multiples[port]['gpio'];
+	t = multiples[port].gpio;
 	for (var s = 0; s < t.length; ++s) {
 		while (t[s][1].length > printer.num_gpios) {
 			var n = t[s][1].pop();
@@ -761,10 +761,6 @@ function update_gpio(index) { // {{{
 // }}}
 
 // Update helpers. {{{
-function update_range(id) { // {{{
-	get_element(printer, id).selectedIndex = get_value(printer, id);
-} // }}}
-
 function update_choice(id) { // {{{
 	var value = get_value(printer, id);
 	var list = choices[make_id(printer, id)][1];
@@ -819,48 +815,35 @@ function update_temprange(id) { // {{{
 // }}}
 
 // Builders. {{{
-function range(num, element, attr) { // {{{
-	var ret = [];
-	for (var i = 0; i < num + 1; ++i) {
-		var node = element.cloneNode(true);
-		node.AddText(String(i));
-		node[attr] = String(i);
-		ret.push(node);
-	}
-	return ret;
-} // }}}
-
-function pinrange(only_analog, element, attr) { // {{{
+function pinrange(only_analog) { // {{{
 	var ret = [];
 	var pin = 0;
 	if (!only_analog) {
 		for (var i = 0; i < printer.num_digital_pins; ++i) {
-			var node = element.cloneNode(true);
-			node.AddText('D' + String(i));
-			node[attr] = String(pin);
+			var node = Create('option').AddText('D' + String(i));
+			node.value = String(pin);
 			ret.push(node);
 			pin += 1;
 		}
 	}
 	for (var i = 0; i < printer.num_pins - printer.num_digital_pins; ++i) {
-		var node = element.cloneNode(true);
-		node.AddText('A' + String(i));
-		node[attr] = String(pin);
+		var node = Create('option').AddText('A' + String(i));
+		node.value = String(pin);
 		ret.push(node);
 		pin += 1;
 	}
 	return ret;
 } // }}}
 
-function temprange(element, attr) { // {{{
-	var node = element.cloneNode(true);
+function temprange() { // {{{
+	var node = Create('option');
 	node.AddText('None');
-	node[attr] = String(0xff);
+	node.value = String(0xff);
 	var ret = [node];
 	for (var i = 0; i < printer.num_temps; ++i) {
-		node = element.cloneNode(true);
+		node = Create('option');
 		node.AddText(temp_name(printer, i));
-		node[attr] = String(i);
+		node.value = String(i);
 		ret.push(node);
 	}
 	return ret;
@@ -875,12 +858,13 @@ function create_space_type_select() { // {{{
 
 var choices = new Object;
 
-function choice(obj, options, element, label, classes, containerclasses) { // {{{
+function Choice(obj, options, classes, containerclasses) { // {{{
 	var ret = [];
 	var id = make_id(printer, obj);
 	choices[id] = [obj, []];
 	for (var i = 0; i < options.length; ++i) {
-		var e = element.cloneNode(true);
+		var e = Create('input');
+		e.type = 'radio';
 		if (classes) {
 			if (typeof classes == 'string')
 				e.AddClass(classes);
@@ -897,7 +881,7 @@ function choice(obj, options, element, label, classes, containerclasses) { // {{
 		e.addEventListener('click', function() {
 		       	set_value(this.printer, choices[this.name][0], Number(this.value));
 		}, false);
-		var l = label.cloneNode(true);
+		var l = Create('label');
 		if (classes) {
 			if (typeof classes == 'string')
 				l.AddClass(classes);
@@ -908,13 +892,6 @@ function choice(obj, options, element, label, classes, containerclasses) { // {{
 		l.AddText(options[i]);
 		ret.push(e, l);
 	}
-	return ret;
-} // }}}
-
-function floats(num, title, obj) { // {{{
-	var ret = [title];
-	for (var i = 0; i < num; ++i)
-		ret = ret.concat(build('Float', [String(i), obj.concat([i])]));
 	return ret;
 } // }}}
 
@@ -980,7 +957,9 @@ function make_table() { // {{{
 	t.AddMultiple = function(type, template, all, arg) {
 		var one = function(t, template, i, arg) {
 			var ret = [];
-			var part = build(template, [t, i, arg]);
+			var part = template(i, arg, t);
+			if (!(part instanceof Array))
+				part = [part];
 			for (var p = 0; p < part.length; ++p) {
 				if (part[p] instanceof Comment)
 					continue;
@@ -990,7 +969,7 @@ function make_table() { // {{{
 					continue;
 				}
 				if (i === null || arg === null)
-					part[p].AddClass('all').AddClass('hidden');
+					part[p].AddClass('all hidden');
 				ret.push(part[p]);
 			}
 			if (ret.length < 1)
@@ -1034,17 +1013,14 @@ function make_tablerow(title, cells, classes, id, onlytype, index) { // {{{
 	ret.AddElement('th', classes[0]).AddText(title);
 	for (var cell = 0; cell < cells.length; ++cell) {
 		var current_cell;
-		if (!classes[1] || typeof classes[1] == 'string')
+		if (!classes[1] || classes[1] == 'string')
 			current_cell = ret.AddElement('td', classes[1]);
 		else
 			current_cell = ret.AddElement('td', classes[1][cell]);
 		if (id)
 			current_cell.id = make_id(printer, id, cell);
 		if (cells[cell] instanceof Element) {
-			while (cells[cell].childNodes.length > 0) {
-				var n = cells[cell].removeChild(cells[cell].childNodes[0]);
-				current_cell.Add(n);
-			}
+			current_cell.Add(cells[cell]);
 		}
 		else {
 			for (var e = 0; e < cells[cell].length; ++e)

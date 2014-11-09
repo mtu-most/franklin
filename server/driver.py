@@ -64,8 +64,8 @@ class delayed: # {{{
 
 # class for handling beaglebone: driver running on same machine.
 class Driver: # {{{
-	def __init__(self, newid):
-		self.driver = subprocess.Popen(('./cdriver/cdriver',), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+	def __init__(self, port, newid):
+		self.driver = subprocess.Popen(('./cdriver/cdriver', port), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		fcntl.fcntl(self.driver.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 		self.buffer = ''
 		self.write(newid)
@@ -144,7 +144,7 @@ class Printer: # {{{
 		# HACK: this variable needs to have its value before init is done, to make the above HACK in the generator work.
 		global printer
 		printer = self
-		self.printer = Driver(newid)
+		self.printer = Driver(port, newid)
 		self.jobqueue = {}
 		self.job_output = ''
 		self.jobs_active = []

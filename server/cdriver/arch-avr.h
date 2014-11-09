@@ -62,7 +62,7 @@ struct AVRMotor { // {{{
 struct AVRSerial : public Serial_t { // {{{
 	char buffer[256];
 	int start, end, fd;
-	inline void begin(int baud);
+	inline void begin(char const *port, int baud);
 	inline void write(char c);
 	inline void refill();
 	inline int read();
@@ -135,6 +135,7 @@ static inline uint32_t millis() {
 // }}}
 
 static inline int32_t arch_getpos(uint8_t s, uint8_t m);
+static inline void avr_write_ack();
 
 // Serial port communication. {{{
 static inline void avr_send() {
@@ -154,6 +155,7 @@ static inline void avr_send() {
 		//if (out_busy[1])
 		//	debug("avr waiting for ack");
 		if ((now - start) / 100 > phase) {
+			debug("resending packet");
 			send_packet();
 			phase = (now - start) / 100;
 		}
@@ -228,12 +230,12 @@ static inline void hwpacket() {
 			spaces[s].motor[m]->sense_state = 1;
 			send_host(CMD_SENSE, s, m, 0, command[1][1] == HWC_SENSE1);
 		}
-		write_ack();
+		avr_write_ack();
 		return;
 	}
 	case HWC_PONG:
 		avr_pong = command[1][2];
-		write_ack();
+		avr_write_ack();
 		return;
 	default:
 		if (!avr_wait_for_reply)
@@ -244,6 +246,8 @@ static inline void hwpacket() {
 }
 
 static inline void arch_ack() {
+	if (avr_wait_for_reply)
+		return;
 	if (avr_limiter_space < 0)
 		return;
 	int space = avr_limiter_space;
@@ -251,6 +255,12 @@ static inline void arch_ack() {
 	for (uint8_t m = 0; m < spaces[space].num_motors; ++m) {
 		spaces[space].motor[m]->current_pos = arch_getpos(space, m);
 	}
+}
+
+static inline void avr_write_ack() {
+	write_ack();
+	if (!out_busy)
+		arch_ack();
 }
 // }}}
 
@@ -309,7 +319,7 @@ static inline bool GET(Pin_t _pin, bool _default) {
 	avr_wait_for_reply = true;
 	avr_call1(HWC_GETPIN, _pin.pin);
 	avr_get_reply();
-	write_ack();
+	avr_write_ack();
 	return _pin.inverted() ^ command[1][2];
 }
 // }}}
@@ -338,7 +348,7 @@ static inline void arch_reset() {
 	}
 }
 
-static inline void arch_setup_start() {
+static inline void arch_setup_start(char const *port) {
 	// Set up arch variables.
 	avr_wait_for_reply = false;
 	avr_num_motors = 0;
@@ -348,7 +358,7 @@ static inline void arch_setup_start() {
 	for (int i = 0; i < 0x100; ++i)
 		avr_pins[i] = 3;	// INPUT_NOPULLUP.
 	// Set up serial port.
-	avr_serial.begin(115200);
+	avr_serial.begin(port, 115200);
 	serialdev[1] = &avr_serial;
 	arch_reset();
 }
@@ -365,7 +375,7 @@ static inline void arch_setup_end() {
 	prepare_packet(avr_buffer);
 	avr_send();
 	avr_get_reply();
-	write_ack();
+	avr_write_ack();
 	ReadFloat f;
 	for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
 		f.b[i] = command[1][2 + i];
@@ -462,12 +472,14 @@ static inline int32_t arch_getpos(uint8_t s, uint8_t m) {
 	avr_buffer[1] = HWC_GETPOS;
 	avr_buffer[2] = m;
 	prepare_packet(avr_buffer);
-	if (avr_wait_for_reply)
+	if (avr_wait_for_reply) {
 		debug("avr_wait_for_reply already set in getpos");
+		abort();
+	}
 	avr_wait_for_reply = true;
 	avr_send();
 	avr_get_reply();
-	write_ack();
+	avr_write_ack();
 	ReadFloat pos;
 	for (uint8_t i = 0; i < sizeof(int32_t); ++i)
 		pos.b[i] = command[1][2 + i];
@@ -534,7 +546,7 @@ static inline int adc_get(uint8_t _pin) {
 	avr_call1(HWC_GETADC, _pin);
 	//debug("wait adc");
 	avr_get_reply();
-	write_ack();
+	avr_write_ack();
 	//debug("got adc %x %x", command[1][2] & 0xff, command[1][3] & 0xff);
 	return (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
 }
@@ -580,9 +592,9 @@ static inline void write_eeprom(uint32_t address, uint8_t data) {
 // }}}
 
 // Inline AVRSerial methods. {{{
-void AVRSerial::begin(int baud) {
-	// Open serial port and prepare pollfd.	TODO: flexible filename.
-	fd = open("/dev/ttyUSB0", O_RDWR);
+void AVRSerial::begin(char const *port, int baud) {
+	// Open serial port and prepare pollfd.
+	fd = open(port, O_RDWR);
 	avr_pollfds[1].fd = fd;
 	avr_pollfds[1].events = POLLIN | POLLPRI;
 	avr_pollfds[1].revents = 0;
@@ -601,8 +613,10 @@ void AVRSerial::write(char c) {
 		int ret = ::write(fd, &c, 1);
 		if (ret == 1)
 			break;
-		if (errno != EAGAIN && errno != EWOULDBLOCK)
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
 			debug("write to avr failed: %d %s", ret, strerror(errno));
+			abort();
+		}
 	}
 }
 

@@ -25,7 +25,11 @@ var TYPE_DELTA = 2;
 // }}}
 
 function dbg(msg) {
-	document.getElementById('debug').AddElement('p').AddText(msg);
+	// Don't use Add, because this should be callable from anywhere, including Add.
+	var div = document.getElementById('debug');
+	var p = document.createElement('p');
+	div.appendChild(p);
+	p.appendChild(document.createTextNode(msg));
 }
 
 // {{{ Events from server.
@@ -63,7 +67,7 @@ function _setup_updater() {
 		},
 		'new_port': function(port) {
 			_ports.push(port);
-			trigger_update('', 'new_port', port);
+			trigger_update(port, 'new_port');
 		},
 		'del_port': function(port) {
 			trigger_update(port, 'del_port');
@@ -329,6 +333,10 @@ function _reconnect() {
 	}, 500);
 }
 
+function Create(name, className) {
+	return document.createElement(name).AddClass(className);
+}
+
 function setup() {
 	// Make sure the globals have a value of the correct type.
 	printers = new Object;
@@ -337,17 +345,31 @@ function setup() {
 	autodetect = true;
 	blacklist = '';
 	var proto = Object.prototype;
-	proto.Add = function(object, className) { this.appendChild(object); if (className) object.className = className; return object; };
+	proto.Add = function(object, className) {
+		if (!(object instanceof Array))
+			object = [object];
+		for (var i = 0; i < object.length; ++i) {
+			if (typeof object[i] == 'string')
+				this.AddText(object[i]);
+			else {
+				this.appendChild(object[i]);
+				object[i].AddClass(className);
+			}
+		}
+		return object[0];
+	};
 	proto.AddElement = function(name, className) { var element = document.createElement(name); return this.Add(element, className); };
-	proto.AddText = function(text) { var t = document.createTextNode(text); return this.Add(t); };
+	proto.AddText = function(text) { var t = document.createTextNode(text); this.Add(t); return this; };
 	proto.ClearAll = function() { while (this.firstChild) this.removeChild(this.firstChild); return this; };
 	proto.AddClass = function(className) {
 		if (!className)
 			return this;
 		var classes = this.className.split(' ');
-		if (classes.indexOf(className) >= 0)
-			return this;
-		classes.push(className);
+		var newclasses = className.split(' ');
+		for (var i = 0; i < newclasses.length; ++i) {
+			if (classes.indexOf(newclasses[i]) < 0)
+				classes.push(newclasses[i]);
+		}
 		this.className = classes.join(' ');
 		return this;
 	};
@@ -355,14 +377,20 @@ function setup() {
 		if (!className)
 			return this;
 		var classes = this.className.split(' ');
-		var pos = classes.indexOf(className);
-		if (pos < 0)
-			return this;
-		classes.splice(pos, 1);
+		var oldclasses = className.split(' ');
+		for (var i = 0; i < oldclasses.length; ++i) {
+			var pos = classes.indexOf(oldclasses[i]);
+			if (pos < 0)
+				return this;
+			classes.splice(pos, 1);
+		}
 		this.className = classes.join(' ');
 		return this;
 	};
-	_init_templates();
+	proto.AddEvent = function(name, impl) {
+		this.addEventListener(name, impl, false);
+		return this;
+	};
 	_setup_updater();
 	rpc = Rpc(_updater, _setup_connection, _reconnect);
 }
@@ -401,181 +429,5 @@ function _update_temps() {
 		else
 			_do_update_temps(p[1].monitor_queue);
 	}
-}
-// }}}
-
-// {{{ Template handling.
-function _init_templates() {
-	_templates = new Object;
-	var templatediv = document.getElementById('templates');
-	templatediv.parentNode.removeChild(templatediv);
-	while (templatediv.firstChild) {
-		var current = templatediv.firstChild;
-		templatediv.removeChild(current);
-		if (current instanceof Text || current instanceof Comment)
-			continue;
-		_templates[current.id] = current;
-	}
-	_parse_node(document.getElementById('container'));
-}
-
-function build(template, args) {
-	var ret = [];
-	if (!args)
-		args = [];
-	if (!(template in _templates)) {
-		alert('Pages uses undefined template ' + template);
-		return [];
-	}
-	var newnode = _parse_node(_templates[template].cloneNode(true), args)[0];
-	for (var i = 0; i < newnode.childNodes.length; ++i)
-		ret.push(newnode.childNodes[i]);
-	return ret;
-}
-
-function _parse_node(node, args) {
-	// Recursively parse all special things in a node.
-	var current = node.firstChild;
-	var eval_level = 0;
-	while (current) {
-		var next = current.nextSibling;
-		if (current instanceof Comment) {
-			current = next;
-			continue;
-		}
-		if (current instanceof Text) {
-			// Look for codes.
-			var pos = current.data.indexOf(ref_code[0]);
-			var result;
-			if (pos >= 0) {
-				current = _parse_ref(node, current, next, pos, args);
-				continue;
-			}
-			pos = current.data.indexOf(eval_code[0]);
-			if (pos >= 0) {
-				// Parse evaluations.
-				node.removeChild(current);
-				var first = document.createTextNode(current.data.substring(0, pos));
-				node.insertBefore(first, next);
-				var end = current.data.indexOf(eval_code[1], pos);
-				var expr;
-				if (end >= 0) {
-					// Split the text node in two, so the end will be found by the code below.
-					next = node.insertBefore(document.createTextNode(current.data.substring(end)), next);
-					expr = current.data.substring(pos + eval_code[0].length, end);
-				}
-				else
-					expr = current.data.substring(pos + eval_code[0].length);
-				//dbg('expr:' + expr);
-				var stack = [];
-				var elements = [];
-				current = next;
-				while (true) {
-					if (!current) {
-						alert('unterminated eval');
-						break;
-					}
-					next = current.nextSibling;
-					node.removeChild(current);
-					if (current instanceof Comment) {
-						current = next;
-						continue;
-					}
-					if (current instanceof Text) {
-						pos = current.data.indexOf(ref_code[0]);
-						if (pos >= 0) {
-							current = _parse_ref(node, current, next, pos, args);
-							continue;
-						}
-						pos = current.data.indexOf(eval_code[1]);
-						if (pos >= 0) {
-							if (pos > 0)
-								stack.push(current.data.substring(0, pos));
-							if (pos + eval_code[1].length < current.data.length) {
-								next = node.insertBefore(document.createTextNode(current.data.substring(pos + eval_code[1].length)), next);
-							}
-							//dbg(expr);
-							result = eval('(' + expr + ')');
-							if (typeof result == 'string')
-								result = [document.createTextNode(String(result))];
-							for (var i = 0; i < result.length; ++i) {
-								if (typeof result[i] == 'string')
-									node.insertBefore(document.createTextNode(result[i]), next);
-								else
-									node.insertBefore(result[i], next);
-							}
-							current = next;
-							break;
-						}
-					}
-					else {
-						// This is always exactly one element, because only Text nodes can expand.
-						current = _parse_node(current, args)[0];
-						elements.push(current);
-					}
-					stack.push(current);
-					current = next;
-				}
-				continue;
-			}
-		}
-		else {
-			// Because this is not a Text node, it will always return itself, so no need to replace it.
-			_parse_node(current, args);
-		}
-		current = next;
-	}
-	node.normalize();
-	return [node];
-}
-
-function _parse_ref(node, current, next, pos, args)
-{
-	var result;
-	var end = current.data.indexOf(ref_code[1], pos);
-	if (end < 0) {
-		alert('unmatched ' + ref_code[0]);
-		return null;
-	}
-	if (node == current.parentNode)
-		node.removeChild(current);
-	var data = /\s*(\w+)(?:\s+(.*?))?\s*$/.exec(current.data.substring(pos + ref_code[0].length, end));
-	if (end + ref_code[1].length < current.data.length) {
-		var rest = document.createTextNode(current.data.substring(end + ref_code[1].length));
-		next = node.insertBefore(rest, next);
-	}
-	if (pos > 0) {
-		current = document.createTextNode(current.data.substring(0, pos));
-		node.insertBefore(current, next);
-	}
-	else
-		current = null;
-	var newargs;
-	if (data[2] !== undefined) {
-		if (data[2][0] == '[' && data[2][data[2].length - 1] == ']')
-			newargs = eval('(' + data[2] + ')');
-		else {
-			result = data[2];
-			pos = 0;
-			while (true) {
-				pos = result.indexOf(eval_code[0], pos);
-				if (pos < 0)
-					break;
-				end = result.indexOf(eval_code[1], pos);
-				result = result.substring(0, pos) + String(eval('(' + result.substring(pos + eval_code[0].length, end) + ')')) + result.substring(end + eval_code[1].length);
-				pos = end + eval_code[1].length;
-			}
-			newargs = result.split('|');
-		}
-	}
-	result = build(data[1], newargs);
-	for (var i = 0; i < result.length; ++i) {
-		node.insertBefore(result[i], next);
-		if (current == null)
-			current = result[i];
-	}
-	if (current == null)
-		current = next;
-	return current;
 }
 // }}}

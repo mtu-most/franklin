@@ -480,7 +480,7 @@ def detect(port): # {{{
 		process = subprocess.Popen((config['driver'], port, config['audiodir'], fake_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		ports[port] = Port(port, process, fake_id, None)
 		return False
-	if not os.path.exists(port) and port != '-':
+	if not os.path.exists(port):
 		log("not detecting on %s, because file doesn't exist." % port)
 		return False
 	log('detecting on %s' % port)

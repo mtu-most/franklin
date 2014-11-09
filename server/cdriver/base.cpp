@@ -420,7 +420,11 @@ void reset() { // {{{
 } // }}}
 
 int main(int argc, char **argv) { // {{{
-	setup();
+	if (argc != 2) {
+		debug("Franklin cdriver is not intended to be called directly.\n");
+		exit(1);
+	}
+	setup(argv[1]);
 	while(true) {
 		// Handle any arch-specific periodic things.
 		arch_run();

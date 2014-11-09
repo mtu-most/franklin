@@ -62,7 +62,7 @@ bool globals_load(int32_t &addr, bool eeprom)
 				for (uint8_t s = 0; s < min(ns, num_spaces); ++s)
 					spaces[s].copy(new_spaces[s]);
 				for (uint8_t s = num_spaces; s < ns; ++s)
-					new_spaces[s].init();
+					new_spaces[s].init(s);
 				mem_free (&spaces);
 				num_spaces = ns;
 				mem_retarget(&new_spaces, &spaces);
