@@ -44,11 +44,12 @@ function Pin(title, obj, only_analog) {
 	var button = Create('button', 'button');
 	button.type = 'button';
 	button.AddText('Set');
+	button.printer = printer;
 	button.AddEvent('click', function() { set_pin(this.printer, obj); });
 	return make_tablerow(title, [[pinselect], [validinput, validlabel], [invertedinput, invertedlabel], [button]], ['pintitle', 'pinvalue']);
 }
 
-function Float(obj, factor, className) {
+function Float(obj, factor, className, set) {
 	var input = Create('input', className);
 	var button = Create('button', className).AddText('Set');
 	var span = Create('span', className);
@@ -63,6 +64,8 @@ function Float(obj, factor, className) {
 	span.id = make_id(printer, obj);
 	button.source = input;
 	input.type = 'text';
+	input.set = set;
+	input.printer = printer;
 	input.AddEvent('keydown', function(event) { floatkey(event, this); });
 	button.AddEvent('click', function() { floatkey({keyCode: 13, preventDefault: function() {}}, this.source); });
 	return [input, button, span];
@@ -71,12 +74,13 @@ function Float(obj, factor, className) {
 function File(obj, buttontext, cb) {
 	var input = Create('input');
 	input.type = 'file';
+	input.id = make_id(printer, obj);
 	var button = Create('button', 'button').AddText(buttontext);
 	button.type = 'button';
-	button.AddEvent('click', function() { set_file(this.printer, this.source); if (this.extra !== undefined) this.extra(); });
-	input.id = make_id(printer, obj);
 	button.source = obj;
 	button.extra = cb;
+	button.printer = printer;
+	button.AddEvent('click', function() { set_file(this.printer, this.source); if (this.extra !== undefined) this.extra(); });
 	return [input, button];
 }
 
@@ -149,7 +153,7 @@ function Axis(num, dummy, table) {
 }
 
 function Motor_motor(space, motor) {
-	var e = [['steps_per_m', 1], ['max_steps', 1], ['home_pos', 1e-3], ['home_order', 1], ['limit_v', 1e-3], ['limit_a', 1]];
+	var e = [['steps_per_m', 1e3], ['max_steps', 1], ['home_pos', 1e-3], ['home_order', 1], ['limit_v', 1e-3], ['limit_a', 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1]));
@@ -248,14 +252,6 @@ function Gpio_setup(num) {
 	return make_tablerow(gpio_name(num), [[select, button], value], ['rowtitle2'], [['gpio', num], 'settings']);
 }
 
-function Gpio(num) {
-	var choice = Create('div');
-	choice.Add(Choice([['gpio', num], 'state'], ['Off', 'On', 'Input', 'High Z']));
-	var span = Create('span');
-	span.id = make_id(printer, ['gpio', 'value']);
-	return make_tablerow(gpio_name(num), [choice, span], ['rowtitle2'], [['gpio', num], 'state']);
-}
-
 function Pins_gpio(num) {
 	var e = [['Pin', 'pin']];
 	for (var i = 0; i < e.length; ++i)
@@ -268,21 +264,186 @@ function Pins_gpio(num) {
 function Label() {	// {{{
 	var ret = Create('div', 'tab');
 	ret.AddEvent('click', function() { select_printer(this.port); });
-	if (printer)
+	if (printer) {
+		// TODO: profile selection.
 		return ret.AddText(printer.name);
+	}
 	ret.AddElement('span', 'port setup').AddText('@' + port);
 	return ret;
 }
 // }}}
 
+// Printer parts. {{{
+function Top() { // {{{
+	var ret = Create('div', 'top');
+	// Profile choice. TODO {{{
+	// }}}
+	// Up/remove/down. {{{
+	var e = ret.AddElement('div', 'updown');
+	e.AddElement('button', 'queue1').AddEvent('click', queue_up).AddText('⬆').type = 'button';
+	e.AddElement('br');
+	e.AddElement('button', 'queue1').AddEvent('click', queue_del).AddText('×').type = 'button';
+	e.AddElement('br');
+	e.AddElement('button', 'queue1').AddEvent('click', queue_down).AddText('⬇').type = 'button';
+	// }}}
+	// Jobs. {{{
+	e = ret.AddElement('div', 'jobs').AddElement('select');
+	e.multiple = true;
+	e.id = make_id(printer, [null, 'queue']);
+	// }}}
+	// Jobbuttons. {{{
+	e = ret.AddElement('div', 'jobbuttons');
+	e.Add(File([null, 'queue_add', 'queue_add'], 'Add', queue_deselect));
+	e.AddElement('br');
+	var b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(this.printer); }).AddText('Print selected');
+	b.type = 'button';
+	b.printer = printer;
+	b = e.AddElement('input', 'jobbutton');
+	var id = make_id(printer, [null, 'probebox']);
+	b.id = id;
+	b.type = 'checkbox';
+	b = e.AddElement('label').AddText('Probe');
+	b.htmlFor = id;
+	// }}}
+	// Stop buttons. {{{
+	e = ret.AddElement('div', 'stop');
+	b = e.AddElement('button', 'abort').AddText('Abort').AddEvent('click', function() { this.printer.call('abort', [], {}); });
+	b.type = 'button';
+	b.printer = printer;
+	e.AddElement('br');
+	b = e.AddElement('button').AddText('Home').AddEvent('click', function() { this.printer.call('home', [], {}); });
+	b.type = 'button';
+	b.printer = printer;
+	b = e.AddElement('button').AddText('Pause').AddEvent('click', function() { this.printer.call('pause', [true], {}); });
+	b.type = 'button';
+	b.printer = printer;
+	b = e.AddElement('button').AddText('Resume').AddEvent('click', function() { this.printer.call('pause', [false], {}); });
+	b.type = 'button';
+	b.printer = printer;
+	b = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { this.printer.call('sleep', [], {}); });
+	b.type = 'button';
+	b.printer = printer;
+	// }}}
+	return ret;
+}
+// }}}
+
+function Map() { // {{{
+	var ret = Create('div', 'map');
+	ret.id = make_id(printer, [null, 'map']);
+	// Current position buttons.
+	var t = ret.Add(make_table().AddMultipleTitles([
+		'',
+		'X (mm)',
+		'Y (mm)',
+		'Z (mm)',
+		'',
+		'',
+		''
+	], ['', '', '', '', '', ''], null), 'maptable');
+	var b = Create('button').AddText('Park').AddEvent('click', function() { this.printer.call('park', [], {}); });
+	b.type = 'button';
+	b.printer = printer;
+	t.Add(make_tablerow('Position:', [
+		Float([null, 'currentx'], 1e-3, '', function(v) { b.printer.call('goto', [[{0: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
+		Float([null, 'currenty'], 1e-3, '', function(v) { b.printer.call('goto', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
+		Float([null, 'currentz'], 1e-3, '', function(v) { b.printer.call('goto', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
+		b,
+		'',
+		['Z Offset:', Float([null, 'zoffset'], 1e-3), 'mm']
+	], ['', '', '', '', '', '']));
+	// Target position buttons.
+	var b = Create('button').AddText('Use current').AddEvent('click', function() {
+		for (var i = 0; i < (GetElement(this.printer, [null, 'zlock']).checked ? 2 : 3); ++i)
+			target[i] = current[i];
+		update_canvas_and_spans();
+	});
+	b.printer = printer;
+	b.type = 'button';
+	var c = Create('input');
+	c.type = 'checkbox';
+	c.id = make_id(printer, [null, 'zlock']);
+	c.checked = true;
+	var l = Create('label').AddText('Lock Z');
+	l.htmlFor = c.id;
+	t.Add(make_tablerow('Target:', [
+		Float([null, 'targetx'], 1e-3),
+		Float([null, 'targety'], 1e-3),
+		Float([null, 'targetz'], 1e-3),
+		b,
+		[c, l],
+		['Angle:', Float([null, 'targetangle'], Math.PI / 180), '°']
+	], ['', '', '', '', '', '']));
+	// Canvas for xy and for z.
+	ret.AddElement('canvas', 'xymap').id = make_id(printer, [null, 'xymap']);
+	ret.AddElement('canvas', 'zmap').id = make_id(printer, [null, 'zmap']);
+	return ret;
+}
+// }}}
+
+function Temps() { // {{{
+	var ret = Create('div', 'temp');
+	ret.Add(make_table().AddMultipleTitles([
+		'Temp control',
+		'Target (°C)',
+		'Current (°C)'
+	], [
+		'htitle4',
+		'title4',
+		'title4'
+	], [
+		null,
+		'Temperature target.  Set to NaN to disable the heater completely.',
+		'Request actual temperature from sensor.'
+	]).AddMultiple('temp', Temp));
+	ret.AddElement('canvas', 'tempgraph').id = make_id(printer, [null, 'tempgraph']);
+	return ret;
+}
+// }}}
+
+function Multipliers() { // {{{
+	var ret = Create('div', 'multipliers');
+	var e = ret.AddElement('div').AddText('Feedrate: ');
+	e.Add(Float([null, 'feedrate'], 1e-2));
+	e.AddText(' %');
+	ret.AddMultiple('axis', function(i) {
+		var e = Create('div').AddText(axis_name(1, i) + ': ');
+		e.Add(Float([['axis', i], 'multiplier'], 1e-2));
+		e.AddText(' %');
+		return e;
+	}, true, 1);
+	return ret;
+}
+// }}}
+
+function Gpios() { // {{{
+	var ret = Create('div', 'gpios');
+	var p = printer;
+	ret.AddMultiple('gpio', function(i) {
+		var ret = Create('span');
+		var input = ret.AddElement('input');
+		input.type = 'checkbox';
+		input.id = make_id(p, [['gpio', i], 'on']);
+		ret.AddElement('label').AddText(gpio_name(i)).htmlFor = input.id;
+		return ret;
+	}, false);
+	return ret;
+}
+// }}}
+// }}}
+
 function Printer() {	// {{{
 	var ret = Create('div', 'printer');
+	// Blocker bar. {{{
 	ret.id = make_id(printer, [null, 'container']);
 	var blocker = ret.AddElement('div', 'hidden blocker');
 	blocker.id = make_id(printer, [null, 'block1']);
+	// }}}
+	ret.AddElement('div', 'message').id = make_id(printer, [null, 'message1']);
 	// Setup. {{{
 	var setup = ret.AddElement('div', 'setup');
 	setup.AddElement('div').Add(Text('Name', [null, 'name']));
+	// TODO: Profile copy+remove.
 	var e = setup.AddElement('div').AddText('Motor Timeout:');
 	e.Add(Float([null, 'motor_limit'], 60));
 	e.AddText(' min');
@@ -471,135 +632,27 @@ function Printer() {	// {{{
 	pins.AddMultiple('temp', Pins_temp, false);
 	pins.AddMultiple('gpio', Pins_gpio, false);
 	// }}}
+	// Save and restore. {{{
+	//ret.Add(Button('Save settings to EEPROM', 'save'));
+	//ret.Add(Button('Restore settings from EEPROM', 'load'));
+	setup.AddElement('div').Add(File([null, 'import', 'import_settings'], 'Import'));
+	e = setup.AddElement('a', 'title').AddText('Export settings to file');
+	e.id = make_id(printer, [null, 'export']);
+	e.title = 'Save settings to disk.';
+	// }}}
 	var disable = setup.AddElement('div').AddElement('button').AddText('Disable Printer');
 	disable.port = port;
 	disable.type = 'button';
 	disable.AddEvent('click', function() { rpc.call('disable', [this.port], {}); });
 	// }}}
-	// Queue. {{{
-	var queue = ret.AddElement('div', 'queuediv').AddElement('div');
-	var select = queue.AddElement('select');
-	select.multiple = true;
-	select.id = make_id(printer, [null, 'queue']);
-	var list = queue.AddElement('div', 'queuelist');
-	var e = list.AddElement('button', 'queue1').AddEvent('click', queue_up).AddText('⬆');
-	e.type = 'button';
-	list.AddElement('span', 'queue2').Add(File([null, 'queue_add', 'queue_add'], 'Add', queue_deselect));
-	list.AddElement('br');
-	e = list.AddElement('button', 'queue1').AddEvent('click', queue_del).AddText('×');
-	e.type = 'button';
-	e = list.AddElement('span', 'queue2');
-	var e2 = e.AddElement('button', 'queue1').AddEvent('click', function() { queue_print(this.printer); }).AddText('Print selected');
-	e2.type = 'button';
-	e2.printer = printer;
-	e2 = e.AddElement('input');
-	var id = make_id(printer, [null, 'probebox']);
-	e2.id = id;
-	e2.type = 'checkbox';
-	e2 = e.AddElement('label').AddText('Probe');
-	e2.htmlFor = id;
-	list.AddElement('br');
-	e = list.AddElement('button', 'queue1').AddEvent('click', queue_down).AddText('⬇');
-	e.type = 'button';
-	e = list.AddElement('span', 'queue2');
-	e2 = e.AddElement('button').AddText('Park').AddEvent('click', function() { this.printer.call('park', [], {}, update_canvas_and_spans); });
-	e2.printer = printer;
-	e2.type = 'button';
-	e2 = e.AddElement('button').AddText('Home').AddEvent('click', function() { this.printer.call('home', [], {}, update_canvas_and_spans); });
-	e2.printer = printer;
-	e2.type = 'button';
-	e2 = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { this.printer.call('sleep', [], {}, update_canvas_and_spans); });
-	e2.printer = printer;
-	e2.type = 'button';
-	list.AddElement('br');
-	e = list.AddElement('span', 'queue1').AddElement('span').AddText('Idle');
-	e.id = make_id(printer, [null, 'status']);
-	e = list.AddElement('span', 'queue2');
-	e2 = e.AddElement('button').AddText('Stop').AddEvent('click', function() { this.printer.call('pause', [true], {}, update_canvas_and_spans); });
-	e2.type = 'button';
-	e2.printer = printer;
-	e2 = e.AddElement('button').AddText('Resume').AddEvent('click', function() { this.printer.call('pause', [false], {}, update_canvas_and_spans); });
-	e2.type = 'button';
-	e2.printer = printer;
-	// }}}
-	// Map. {{{
-	e = ret.AddElement('div', 'movediv').AddEvent('click', start_move).AddEvent('keydown', function(event) { if (!key_move(event.keyCode, event.shiftKey, event.ctrlKey)) event.preventDefault(); }).AddElement('div', 'movebox');
-	e.id = make_id(printer, [null, 'movebox']);
-	e2 = e.AddElement('p').AddText('Amount per keypress: ');
-	var e3 = e2.AddElement('input', 'title');
-	e3.type = 'text';
-	e3.id = make_id(printer, [null, 'move_amount']);
-	e3.value = '10';
-	e2.AddText('mm');
-	e2 = e.AddElement('div', 'move_viewbox').AddElement('canvas');
-	e2.id = make_id(printer, [null, 'move_view']);
-	e2 = e.AddElement('p');
-	for (var i = 0; i < 3; ++i) {
-		e3 = e2.AddElement('span');
-		e3.id = make_id(printer, [null, 'movespan' + i]);
-		e2.AddText(i < 2 ? ', ' : ' mm');
-	}
-	e.AddElement('p').AddElement('button').AddText('Reset Position').AddEvent('click', reset_position).type = 'button';
-	// }}}
 
-	// Temp control. {{{
-	ret.Add([make_table().AddMultipleTitles([
-		'Temp control',
-		'Target (°C)',
-		'Current (°C)'
-	], [
-		'htitle4',
-		'title4',
-		'title4'
-	], [
-		null,
-		'Temperature target.  Set to NaN to disable the heater completely.',
-		'Request actual temperature from sensor.'
-	]).AddMultiple('temp', Temp).AddClass('left')]);
-	// }}}
-	// Axis. {{{
-	ret.Add([make_table().AddMultipleTitles([
-		'Axis',
-		'Go (mm)',
-		'Offset (mm)'
-	], [
-		'htitle4',
-		'title4',
-		'title4'
-	], [
-		null,
-		'Physically move the nozzle to this position.  For Z, more positive numbers move the nozzle away from the bed.',
-		'Displacement of origin.  When instructed to go to a position, it will add this value to the position before going there.'
-	]).AddMultiple('space', Move, false).AddClass('left')]);
-	// }}}
-	// Gpio. {{{
-	ret.Add([make_table().AddMultipleTitles([
-		'Gpio',
-		'State',
-		'Value'
-	], [
-		'htitle4',
-		'title3',
-		'title6'
-	], [
-		null,
-		'State of the pin.',
-		'Value of the pin.'
-	]).AddMultiple('gpio', Gpio).AddClass('left')]);
-	// }}}
-	e = ret.AddElement('div').AddText('Feedrate: ');
-	e.Add(Float([null, 'feedrate'], 1e-2));
-	e.AddText(' %');
-	ret.AddElement('div').id = make_id(printer, [null, 'scripts']);
-	// Save and restore. {{{
-	//ret.Add(Button('Save settings to EEPROM', 'save'));
-	//ret.Add(Button('Restore settings from EEPROM', 'load'));
-	ret.AddElement('div').Add(File([null, 'import', 'import_settings'], 'Import'));
-	e = ret.AddElement('a', 'title').AddText('Export settings to file');
-	e.id = make_id(printer, [null, 'export']);
-	e.title = 'Save settings to disk.';
-	// }}}
-	ret.AddElement('div', 'message').id = make_id(printer, [null, 'message1']);
+	ret.Add(Top());
+	ret.AddElement('div', 'spacer');
+	ret.Add(Map());
+	ret.Add(Gpios());
+	ret.Add(Multipliers());
+	ret.Add(Temps());
+	ret.AddElement('div', 'bottom');
 	return ret;
 }
 // }}}
@@ -609,18 +662,14 @@ function NoPrinter() { // {{{
 	ret.id = make_id({'port': port}, [null, 'nocontainer']);
 	var blocker = ret.AddElement('div', 'hidden blocker');
 	blocker.id = make_id({'port': port}, [null, 'block2']);
-	var detect = Create('button').AddText('Detect');
+	ret.AddElement('h2').AddText('No printer is found on port ' + port + '.');
+	var detect = ret.AddElement('p').AddText('If autodetect does not work, you can request to detect a printer:').AddElement('button').AddText('Detect');
 	detect.type = 'button';
 	detect.port = port;
 	detect.AddEvent('click', function() { rpc.call('detect', [this.port], {}); });
-	var buttons = upload_buttons(port, [['melzi0', 'mega1284p (Melzi, Sanguinololu)'], ['melzi1', 'mega1284p using serial port 1'], ['ramps', 'mega2560 (Ramps)'], ['mega', 'mega1280']]);
-	var message = Create('div', 'message');
+	ret.AddElement('p').AddText('Or you can upload the firmware that fits your hardware.').Add(upload_buttons(port, [['melzi0', 'mega1284p (Melzi, Sanguinololu)'], ['melzi1', 'mega1284p using serial port 1'], ['ramps', 'mega2560 (Ramps)'], ['mega', 'mega1280']]));
+	var message = ret.AddElement('div', 'message');
 	message.id = make_id({'port': port}, [null, 'message2']);
-	return [
-		blocker,
-		Create('h2').AddText('No printer is found on this port.'),
-		Create('p').AddText('If autodetect does not work, you can request to detect a printer:').Add(detect),
-		Create('p').AddText('Or you can upload the firmware that fits your hardware.').Add(buttons),
-		message];
+	return ret;
 }
 // }}}

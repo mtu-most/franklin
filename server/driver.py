@@ -896,8 +896,7 @@ class Printer: # {{{
 				# Handle sequences.
 				if isinstance(axes[i], (list, tuple)):
 					assert len(axes[i]) <= len(sp.axis)
-					for j, axis in enumerate(axes[i]):
-						ij = int(j)
+					for ij, axis in enumerate(axes[i]):
 						if axis is not None and not math.isnan(axis):
 							# Limit values for axis.
 							if axis > sp.axis[ij]['max'] - sp.axis[ij]['offset']:
@@ -910,7 +909,9 @@ class Printer: # {{{
 				else:
 					for j, axis in tuple(axes[i].items()):
 						ij = int(j)
-						assert ij <= len(sp.axis)
+						if ij >= len(sp.axis):
+							log('ignoring nonexistent axis %d %d' % (i, ij))
+							continue
 						if axis is not None and not math.isnan(axis):
 							# Limit values for axis.
 							if axis > sp.axis[ij]['max'] - sp.axis[ij]['offset']:
@@ -1540,6 +1541,10 @@ class Printer: # {{{
 		ret = self._send_packet(struct.pack('<B', self.command['SAVE']))
 		self._broadcast(None, 'blocked', None)
 		return ret
+	# }}}
+	def abort(self): # {{{
+		# TODO: really abort.
+		self.pause();
 	# }}}
 	def pause(self, pausing = True, store = True): # {{{
 		was_paused = self.paused

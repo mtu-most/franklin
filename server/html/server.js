@@ -380,9 +380,8 @@ function setup() {
 		var oldclasses = className.split(' ');
 		for (var i = 0; i < oldclasses.length; ++i) {
 			var pos = classes.indexOf(oldclasses[i]);
-			if (pos < 0)
-				return this;
-			classes.splice(pos, 1);
+			if (pos >= 0)
+				classes.splice(pos, 1);
 		}
 		this.className = classes.join(' ');
 		return this;

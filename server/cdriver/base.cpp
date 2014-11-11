@@ -214,6 +214,9 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 	if (factor <= 0) {
 		next_motor_time = 0;
 		movedebug("end move");
+		for (uint8_t s = 0; s < num_spaces; ++s)
+			spaces[s].active = false;
+		arch_move();
 		return true;
 	}
 	//movedebug("do steps %f %d", F(factor), max_steps);

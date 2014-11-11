@@ -290,7 +290,10 @@ function floatkey(event, element) { // {{{
 		value = get_value(element.printer, element.obj) / element.factor + amount;
 	else
 		return;
-	set_value(element.printer, element.obj, element.factor * value);
+	if (element.set !== undefined)
+		element.set(element.factor * value);
+	else
+		set_value(element.printer, element.obj, element.factor * value);
 }
 // }}}
 // }}}
@@ -520,10 +523,15 @@ function update_globals() { // {{{
 	update_float([null, 'motor_limit']);
 	update_float([null, 'temp_limit']);
 	update_float([null, 'feedrate']);
-	e = document.getElementById(make_id(printer, [null, 'status']));
-	e.ClearAll();
 	var stat = get_value(printer, [null, 'status']);
-	e.AddText(stat === null ? 'Idle' : stat ? 'Printing' : 'Paused');
+	var c = document.getElementById('container');
+	c.RemoveClass('idle printing paused');
+	if (stat === null)
+		c.AddClass('idle');
+	else if (stat)
+		c.AddClass('printing');
+	else
+		c.AddClass('paused');
 	var t = multiples[port].space;
 	var showing = [], hiding = [];
 	for (var s = 0; s < t.length; ++s) {
@@ -603,8 +611,16 @@ function update_globals() { // {{{
 		while (t[s][1].length < printer.num_gpios) {
 			var n = t[s][3](t[s][1].length);
 			t[s][1].push(n);
-			for (var i = 0; i < n.length; ++i)
-				t[s][0].insertBefore(n[i], t[s][2]);
+			for (var i = 0; i < n.length; ++i) {
+				var src;
+				if (n[i] instanceof Array)
+					src = n[i];
+				else
+					src = [n[i]];
+				for (var j = 0; j < src.length; ++j) {
+					t[s][0].insertBefore(src[j], t[s][2]);
+				}
+			}
 		}
 		if (!(t[s][2] instanceof Comment)) {
 			if (printer.num_gpios >= 2)
@@ -674,7 +690,6 @@ function update_space(index) { // {{{
 		}
 	}
 	for (var a = 0; a < printer.spaces[index].num_axes; ++a) {
-		update_float([['axis', [index, a]], 'offset']);
 		update_float([['axis', [index, a]], 'park']);
 		update_float([['axis', [index, a]], 'park_order']);
 		update_float([['axis', [index, a]], 'max_v']);
@@ -748,21 +763,22 @@ function update_gpio(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
 	update_pin([['gpio', index], 'pin']);
-	update_choice([['gpio', index], 'state']);
+	// TODO: checkbox.
 	var master = update_temprange([['gpio', index], 'master']);
 	update_float([['gpio', index], 'value']);
-	if (master != 0xff) {
-		get_element(printer, [['gpio', index], 'state'], 0).AddClass('empty');
-	}
-	else {
-		get_element(printer, [['gpio', index], 'state'], 0).RemoveClass('empty');
-	}
+	//if (master != 0xff) {
+		//get_element(printer, [['gpio', index], 'state'], 0).AddClass('empty');
+	//}
+	//else {
+		//get_element(printer, [['gpio', index], 'state'], 0).RemoveClass('empty');
+	//}
 } // }}}
 // }}}
 
 // Update helpers. {{{
 function update_choice(id) { // {{{
 	var value = get_value(printer, id);
+	dbg(id);
 	var list = choices[make_id(printer, id)][1];
 	var container = get_element(printer, [null, 'container']);
 	for (var i = 0; i < list.length; ++i) {
@@ -941,6 +957,48 @@ function make_pin_title(title, content) { // {{{
 	return [t].concat(content);
 } // }}}
 
+Object.prototype.AddMultiple = function(type, template, all, arg) { // {{{
+	var one = function(t, template, i, arg) {
+		var ret = [];
+		var part = template(i, arg, t);
+		if (!(part instanceof Array))
+			part = [part];
+		for (var p = 0; p < part.length; ++p) {
+			if (part[p] instanceof Comment)
+				continue;
+			if (part[p] instanceof Text) {
+				if (!/^\s*$/.exec(part[p].data))
+					alert('Non-empty text node in result of multiple: ' + part[p].data);
+				continue;
+			}
+			if (i === null || arg === null)
+				part[p].AddClass('all hidden');
+			ret.push(part[p]);
+		}
+		if (ret.length < 1)
+			ret.push(document.createComment(''));
+		return ret;
+	};
+	var t = this;
+	var last;
+	if (all !== false)
+		if (type != 'axis' && type != 'motor')
+			last = one(t, template, null);
+		else
+			last = one(t, template, arg, null);
+	else
+		last = [document.createComment('')];
+	for (var i = 0; i < last.length; ++i)
+		t.appendChild(last[i]);
+	if (type != 'axis' && type != 'motor')
+		multiples[port][type].push([t, [], last[0], function(i) { return one(t, template, i); }]);
+	else {
+		if (multiples[port][type][arg] !== undefined)
+			multiples[port][type][arg].push([t, [], last[0], function(i) { return one(t, template, arg, i); }]);
+	}
+	return t;
+}; // }}}
+
 function make_table() { // {{{
 	var t = document.createElement('table');
 	for (var r = 0; r < arguments.length; ++r) {
@@ -954,45 +1012,6 @@ function make_table() { // {{{
 				multiples[port][arguments[r][0]].push([t, [], t.Add(arguments[r][2]), arguments[r][1]]);
 		}
 	}
-	t.AddMultiple = function(type, template, all, arg) {
-		var one = function(t, template, i, arg) {
-			var ret = [];
-			var part = template(i, arg, t);
-			if (!(part instanceof Array))
-				part = [part];
-			for (var p = 0; p < part.length; ++p) {
-				if (part[p] instanceof Comment)
-					continue;
-				if (part[p] instanceof Text) {
-					if (!/^\s*$/.exec(part[p].data))
-						alert('Non-empty text node in result of multiple: ' + part[p].data);
-					continue;
-				}
-				if (i === null || arg === null)
-					part[p].AddClass('all hidden');
-				ret.push(part[p]);
-			}
-			if (ret.length < 1)
-				ret.push(document.createComment(''));
-			return ret;
-		};
-		var t = this;
-		var last;
-		if (all !== false)
-			if (type != 'axis' && type != 'motor')
-				last = one(t, template, null);
-			else
-				last = one(t, template, arg, null);
-		else
-			last = [document.createComment('')];
-		for (var i = 0; i < last.length; ++i)
-			t.appendChild(last[i]);
-		if (type != 'axis' && type != 'motor')
-			multiples[port][type].push([t, [], last[0], function(i) { return one(t, template, i); }]);
-		else
-			multiples[port][type][arg].push([t, [], last[0], function(i) { return one(t, template, arg, i); }]);
-		return t;
-	};
 	t.AddMultipleTitles = function(titles, classes, mouseovers) {
 		this.titles = this.AddElement('tr');
 		for (var cell = 0; cell < titles.length; ++cell) {
@@ -1121,13 +1140,13 @@ function update_canvas_and_spans(update_lock) { // {{{
 			printer.call('get_axis_pos', [0, 2], {}, function(z) {
 				if (update_lock)
 					printer.lock = [[x, y], [selected_printer.reference[0], selected_printer.reference[1]]];
-				var e = document.getElementById(make_id(selected_printer, [null, 'movespan0']));
+				var e = document.getElementById(make_id(selected_printer, [null, 'currentx']));
 				e.ClearAll();
 				e.AddText((x * 1000).toFixed(1));
-				e = document.getElementById(make_id(selected_printer, [null, 'movespan1']));
+				e = document.getElementById(make_id(selected_printer, [null, 'currenty']));
 				e.ClearAll();
 				e.AddText((y * 1000).toFixed(1));
-				e = document.getElementById(make_id(selected_printer, [null, 'movespan2']));
+				e = document.getElementById(make_id(selected_printer, [null, 'currentz']));
 				e.ClearAll();
 				e.AddText((z * 1000).toFixed(1));
 				redraw_canvas(x, y);
@@ -1140,9 +1159,11 @@ function update_canvas_and_spans(update_lock) { // {{{
 function redraw_canvas(x, y) { // {{{
 	if (!selected_printer || selected_printer.spaces.length < 1 || selected_printer.spaces[0].axis.length < 3)
 		return;
-	var canvas = document.getElementById(make_id(selected_printer, [null, 'move_view']));
+	var canvas = document.getElementById(make_id(selected_printer, [null, 'xymap']));
+	var zcanvas = document.getElementById(make_id(selected_printer, [null, 'zmap']));
 	var c = canvas.getContext('2d');
-	var box = document.getElementById(make_id(selected_printer, [null, 'movebox']));
+	var zc = zcanvas.getContext('2d');
+	var box = document.getElementById(make_id(selected_printer, [null, 'map']));
 	var extra_height = box.clientHeight - canvas.clientHeight;
 	var printerwidth;
 	var printerheight;
@@ -1214,6 +1235,7 @@ function redraw_canvas(x, y) { // {{{
 				c.lineTo(intersects[a][1][0], intersects[a][1][1]);
 				c.arc(origin[B][0], origin[B][1], length[B], angles[B][1], angles[B][0], false);
 			}
+			c.closePath();
 			c.stroke();
 			for (var a = 0; a < 3; ++a) {
 				var w = c.measureText(names[a]).width / 1000;
@@ -1232,13 +1254,12 @@ function redraw_canvas(x, y) { // {{{
 		printerheight = 2 * (maxy + extra);
 		break;
 	}
-	var r = Math.sqrt(printerwidth * printerwidth + printerheight * printerheight);
-	var factor = Math.min(window.innerWidth, window.innerHeight) / r;
-	factor /= 2;
-	var size = r * factor + .005;
-	canvas.height = size;
-	canvas.width = size;
-	box.style.marginTop = String((window.innerHeight - canvas.height - extra_height) / 2) + 'px';
+	//var factor = Math.sqrt(printerwidth * printerwidth + printerheight * printerheight);
+	var factor = Math.max(printerwidth, printerheight);
+	canvas.style.height = canvas.clientWidth + 'px';
+	zcanvas.style.height = canvas.clientWidth + 'px';
+	canvas.width = canvas.clientWidth;
+	canvas.height = canvas.clientWidth;
 
 	var r = selected_printer.reference;
 	var b = selected_printer.bbox;
@@ -1253,11 +1274,11 @@ function redraw_canvas(x, y) { // {{{
 
 	c.save();
 	// Clear canvas.
-	c.clearRect(0, 0, canvas.width, canvas.height);
+	c.clearRect(0, 0, canvas.width, canvas.width);
 
-	c.translate(canvas.width / 2, canvas.height / 2);
-	c.scale(factor, -factor);
-	c.lineWidth = 1. / factor;
+	c.translate(canvas.width / 2, canvas.width / 2);
+	c.scale(canvas.width / factor, -canvas.width / factor);
+	c.lineWidth = 1.5 * factor / canvas.width;
 
 	// Draw outline.
 	c.strokeStyle = '#888';
