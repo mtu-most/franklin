@@ -59,6 +59,7 @@ enum Command {
 	CMD_MOVE,	// ?:which, (4:speed, 4:limit, 4:current)*
 
 	CMD_SETPOS,	// 1:which, 4:pos
+	CMD_ADDPOS,	// 1:which, 4:pos
 	CMD_GETPOS,	// 1:which
 	CMD_RESETPIN,	// 1:dpin
 	CMD_SETPIN,	// 1:dpin

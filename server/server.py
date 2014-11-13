@@ -585,14 +585,12 @@ def print_done(port, completed, reason): # {{{
 		GLib.io_add_watch(p.stdout.fileno(), GLib.IO_IN, process_done)
 # }}}
 
-if autodetect: # {{{
-	# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
-	if local:
-		websockets.call(None, Connection.add_port, '-')()
-	elif os.path.exists('/sys/class/tty'):
-		for tty in os.listdir('/sys/class/tty'):
-			websockets.call(None, Connection.add_port, '/dev/' + tty)()
-# }}}
+# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
+if local:
+	websockets.call(None, Connection.add_port, '-')()
+elif os.path.exists('/sys/class/tty'):
+	for tty in os.listdir('/sys/class/tty'):
+		websockets.call(None, Connection.add_port, '/dev/' + tty)()
 
 # Set default printer. {{{
 if ' ' in config['printer']:

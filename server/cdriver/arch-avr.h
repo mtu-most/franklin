@@ -35,25 +35,26 @@ enum HWCommands { // {{{
 	HWC_MSETUP,	// 04
 	HWC_MOVE,	// 05
 	HWC_SETPOS,	// 06
-	HWC_GETPOS,	// 07
-	HWC_RESETPIN,	// 08
-	HWC_SETPIN,	// 09
-	HWC_UNSETPIN,	// 0a
-	HWC_INPUTPIN,	// 0b
-	HWC_GETPIN,	// 0c
-	HWC_GETADC,	// 0d
-	HWC_AUDIO_SETUP,// 0e
-	HWC_AUDIO_DATA,	// 0f
+	HWC_ADDPOS,	// 07
+	HWC_GETPOS,	// 08
+	HWC_RESETPIN,	// 09
+	HWC_SETPIN,	// 0a
+	HWC_UNSETPIN,	// 0b
+	HWC_INPUTPIN,	// 0c
+	HWC_GETPIN,	// 0d
+	HWC_GETADC,	// 0e
+	HWC_AUDIO_SETUP,// 0f
+	HWC_AUDIO_DATA,	// 10
 
-	HWC_START,	// 10
-	HWC_PONG,	// 11
-	HWC_POS,	// 12
-	HWC_PIN,	// 13
-	HWC_ADC,	// 14
+	HWC_START,	// 11
+	HWC_PONG,	// 12
+	HWC_POS,	// 13
+	HWC_PIN,	// 14
+	HWC_ADC,	// 15
 
-	HWC_LIMIT,	// 15
-	HWC_SENSE0,	// 16
-	HWC_SENSE1	// 17
+	HWC_LIMIT,	// 16
+	HWC_SENSE0,	// 17
+	HWC_SENSE1	// 18
 };
 // }}}
 struct AVRMotor { // {{{
@@ -512,7 +513,21 @@ static inline void arch_setpos(uint8_t s, uint8_t m) {
 	prepare_packet(avr_buffer);
 	avr_send();
 }
-// }}}
+
+static inline int32_t arch_addpos(uint8_t s, uint8_t m, uint32_t diff) {
+	ReadFloat pos;
+	pos.i = diff;
+	for (uint8_t st = 0; st < s; ++st)
+		m += spaces[st].num_motors;
+	//debug("setpos %d %d", m, pos.i);
+	avr_buffer[0] = 3 + sizeof(int32_t);
+	avr_buffer[1] = HWC_ADDPOS;
+	avr_buffer[2] = m;
+	for (uint8_t i = 0; i < sizeof(int32_t); ++i)
+		avr_buffer[3 + i] = pos.b[i];
+	prepare_packet(avr_buffer);
+	avr_send();
+}
 
 static inline void arch_move() { // {{{
 	uint8_t wlen = ((avr_num_motors - 1) >> 3) + 1;
@@ -546,6 +561,7 @@ static inline void arch_move() { // {{{
 	prepare_packet(avr_buffer);
 	avr_send();
 }
+// }}}
 // }}}
 
 // ADC hooks. {{{

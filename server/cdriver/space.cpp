@@ -251,7 +251,9 @@ void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 			must_move = true;
 		}
 		if (old_home_pos != motor[m]->home_pos) {
-			motor[m]->current_pos += (motor[m]->home_pos - old_home_pos) * motor[m]->steps_per_m;
+			uint32_t diff = (motor[m]->home_pos - old_home_pos) * motor[m]->steps_per_m;
+			motor[m]->current_pos += diff;
+			arch_addpos(id, m, diff);
 			must_move = true;
 		}
 	}

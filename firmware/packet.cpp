@@ -177,6 +177,21 @@ void packet()
 		write_ack();
 		return;
 	}
+	case CMD_ADDPOS:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_ADDPOS");
+#endif
+		which = get_which();
+		if (which >= num_motors) {
+			debug("SETPOS called for invalid motor %d", which);
+			write_stall();
+			return;
+		}
+		motor[which]->current_pos += *reinterpret_cast <int32_t *>(&command[3]);
+		write_ack();
+		return;
+	}
 	case CMD_GETPOS:	// Get current position
 	{
 #ifdef DEBUG_CMD

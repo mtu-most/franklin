@@ -264,6 +264,7 @@ function Pins_gpio(num) {
 function Label() {	// {{{
 	var ret = Create('div', 'tab');
 	ret.AddEvent('click', function() { select_printer(this.port); });
+	ret.port = port;
 	if (printer) {
 		// TODO: profile selection.
 		return ret.AddText(printer.name);
