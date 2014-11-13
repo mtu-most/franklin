@@ -51,24 +51,24 @@ function Pin(title, obj, only_analog) {
 
 function Float(obj, factor, className, set) {
 	var input = Create('input', className);
-	var button = Create('button', className).AddText('Set');
+	//var button = Create('button', className).AddText('Set');
 	var span = Create('span', className);
 	input.obj = obj;
-	button.obj = obj;
+	//button.obj = obj;
 	if (factor === undefined)
 		factor = 1;
 	input.factor = factor;
-	button.factor = factor;
+	//button.factor = factor;
 	span.factor = factor;
 	input.id = make_id(printer, obj, 'new');
 	span.id = make_id(printer, obj);
-	button.source = input;
+	//button.source = input;
 	input.type = 'text';
 	input.set = set;
 	input.printer = printer;
 	input.AddEvent('keydown', function(event) { floatkey(event, this); });
-	button.AddEvent('click', function() { floatkey({keyCode: 13, preventDefault: function() {}}, this.source); });
-	return [input, button, span];
+	//button.AddEvent('click', function() { floatkey({keyCode: 13, preventDefault: function() {}}, this.source); });
+	return [input, /*button,*/ span];
 }
 
 function File(obj, buttontext, cb) {
@@ -353,9 +353,11 @@ function Map() { // {{{
 		['Z Offset:', Float([null, 'zoffset'], 1e-3), 'mm']
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
-	var b = Create('button').AddText('Use current').AddEvent('click', function() {
-		for (var i = 0; i < (GetElement(this.printer, [null, 'zlock']).checked ? 2 : 3); ++i)
-			target[i] = current[i];
+	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
+		b.printer.targetx = b.printer.currentx;
+		b.printer.targety = b.printer.currenty;
+		if (!get_element(b.printer, [null, 'zlock']).checked)
+			b.printer.targetz = b.printer.currentz;
 		update_canvas_and_spans();
 	});
 	b.printer = printer;
@@ -367,12 +369,12 @@ function Map() { // {{{
 	var l = Create('label').AddText('Lock Z');
 	l.htmlFor = c.id;
 	t.Add(make_tablerow('Target:', [
-		Float([null, 'targetx'], 1e-3),
-		Float([null, 'targety'], 1e-3),
-		Float([null, 'targetz'], 1e-3),
+		Float([null, 'targetx'], 1e-3, '', function(v) { b.printer.targetx = v; update_canvas_and_spans(); }),
+		Float([null, 'targety'], 1e-3, '', function(v) { b.printer.targety = v; update_canvas_and_spans(); }),
+		Float([null, 'targetz'], 1e-3, '', function(v) { b.printer.targetz = v; update_canvas_and_spans(); }),
 		b,
 		[c, l],
-		['Angle:', Float([null, 'targetangle'], Math.PI / 180), '°']
+		['Angle:', Float([null, 'targetangle'], Math.PI / 180, '', function(v) { b.printer.targetangle = v; update_canvas_and_spans(); }), '°']
 	], ['', '', '', '', '', '']));
 	// Canvas for xy and for z.
 	ret.AddElement('canvas', 'xymap').id = make_id(printer, [null, 'xymap']);
@@ -422,8 +424,10 @@ function Gpios() { // {{{
 	ret.AddMultiple('gpio', function(i) {
 		var ret = Create('span');
 		var input = ret.AddElement('input');
+		var index = i;
+		input.AddEvent('change', function() { set_value(p, [['gpio', index], 'state'], input.checked ? 1 : 0) });
 		input.type = 'checkbox';
-		input.id = make_id(p, [['gpio', i], 'on']);
+		input.id = make_id(p, [['gpio', i], 'state']);
 		ret.AddElement('label').AddText(gpio_name(i)).htmlFor = input.id;
 		return ret;
 	}, false);

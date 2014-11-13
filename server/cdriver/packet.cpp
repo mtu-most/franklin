@@ -511,6 +511,7 @@ void packet()
 			queue_start = 0;
 			queue_end = 0;
 			queue_full = false;
+			cbs_after_current_move = 0;
 			//debug("aborting at request");
 			abort_move(true);
 		}

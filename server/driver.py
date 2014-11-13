@@ -200,16 +200,16 @@ class Printer: # {{{
 		for i, t in enumerate(self.temps):
 			t.read(self._read('TEMP', i))
 			# Disable heater.
-			self.settemp(i, float('nan'))
+			self.settemp(i, float('nan'), update = False)
 			# Disable heater alarm.
 			self.waittemp(i, None, None)
 		for i, g in enumerate(self.gpios):
 			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
-		self.pause(True, False)
+		self.pause(True, False, update = False)
 		ini = os.getenv('FRANKLIN_INI')
 		if ini is not None:
-			self.import_settings(open(ini).read())
+			self.import_settings(open(ini).read(), update = False)
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
@@ -351,6 +351,7 @@ class Printer: # {{{
 	def _trigger_movewaits(self, num): # {{{
 		#traceback.print_stack()
 		#log('trigger %s' % repr(self.movecb))
+		log('movecbs: %d/%d' % (num, self.movewait))
 		if self.movewait < num:
 			log('More cbs received than requested!')
 			self.movewait = 0
@@ -568,13 +569,14 @@ class Printer: # {{{
 			self.sense.pop()
 		return True
 	# }}}
-	def _write_globals(self, ns, nt, ng): # {{{
+	def _write_globals(self, ns, nt, ng, update = True): # {{{
 		name = self.name.encode('utf-8')
 		data = struct.pack('<BBBB', ns if ns is not None else len(self.spaces), nt if nt is not None else len(self.temps), ng if ng is not None else len(self.gpios), len(name)) + name + struct.pack('<HHffBfff', self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.motor_limit, self.temp_limit, self.feedrate)
 		if not self._send_packet(struct.pack('<B', self.command['WRITE_GLOBALS']) + data):
 			return False
 		self._read_globals()
-		self._globals_update()
+		if update:
+			self._globals_update()
 		return True
 	# }}}
 	def _globals_update(self, target = None): # {{{
@@ -948,7 +950,7 @@ class Printer: # {{{
 				#log('axis %d: %f' %(axis, axes[axis]))
 			if cb:
 				self.movewait += 1
-				#log('movewait +1 -> %d' % self.movewait)
+				log('movewait +1 -> %d' % self.movewait)
 				p = chr(self.command['GOTOCB'])
 			else:
 				p = chr(self.command['GOTO'])
@@ -1456,7 +1458,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False): # {{{
-		#log('goto %s %s %s' % (repr(moves), f0, f1))
+		log('goto %s %s %s %d' % (repr(moves), f0, f1, cb))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
 		self.queue.append((id, moves, f0, f1, cb))
@@ -1476,10 +1478,11 @@ class Printer: # {{{
 			self._globals_update()
 		return self._send_packet(struct.pack('<BB', self.command['SLEEP'], sleeping))
 	# }}}
-	def settemp(self, channel, temp): # {{{
+	def settemp(self, channel, temp, update = True): # {{{
 		channel = int(channel)
 		self.temps[channel].value = temp
-		self._temp_update(channel)
+		if update:
+			self._temp_update(channel)
 		return self._send_packet(struct.pack('<BBf', self.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
 	# }}}
 	def waittemp(self, channel, min, max = None): # {{{
@@ -1546,7 +1549,7 @@ class Printer: # {{{
 		# TODO: really abort.
 		self.pause();
 	# }}}
-	def pause(self, pausing = True, store = True): # {{{
+	def pause(self, pausing = True, store = True, update = True): # {{{
 		was_paused = self.paused
 		if pausing:
 			if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], True)):
@@ -1599,7 +1602,8 @@ class Printer: # {{{
 				self.flushing = False
 				self.gcode_wait = None
 				self.queue_pos = 0
-		self._globals_update()
+		if update:
+			self._globals_update()
 	# }}}
 	def queued(self): # {{{
 		if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], False)):
@@ -1786,7 +1790,7 @@ class Printer: # {{{
 			message += g.export_settings(i)
 		return message
 	# }}}
-	def import_settings(self, settings, filename = None): # {{{
+	def import_settings(self, settings, filename = None, update = True): # {{{
 		self._broadcast(None, 'blocked', 'importing settings')
 		self.sleep()
 		section = 'general'
@@ -1878,13 +1882,13 @@ class Printer: # {{{
 			# Ignore performance: always update instantly.
 			if index is None:
 				#log('setting globals %s:%s' % (key, value))
-				self.set_globals(**{key: value})
+				self.set_globals(update = update, **{key: value})
 			elif section == 'delta':
 				#log('setting delta %d %d %s:%s' % (index[0], index[1], key, value))
-				self.set_space(index[0], delta = {index[1]: {key: value}})
+				self.set_space(index[0], delta = {index[1]: {key: value}}, update = update)
 			else:
 				#log('setting %s %s %s:%s' % (section, repr(index), key, value))
-				getattr(self, 'set_' + section)(index, **{key: value})
+				getattr(self, 'set_' + section)(index, update = update, **{key: value})
 			'''
 			# If the number of things is changed, update instantly.
 			if key.startswith('num') or key == 'type':
@@ -2258,7 +2262,7 @@ class Printer: # {{{
 		for key in ('name', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit', 'feedrate', 'paused'):
 			ret[key] = getattr(self, key)
 		return ret
-	def set_globals(self, **ka):
+	def set_globals(self, update = True, **ka):
 		#log('setting variables with %s' % repr(ka))
 		if 'name' in ka:
 			self.name = str(ka.pop('name'))
@@ -2271,7 +2275,7 @@ class Printer: # {{{
 		for key in ('probe_dist', 'probe_safe_dist', 'motor_limit', 'temp_limit', 'feedrate'):
 			if key in ka:
 				setattr(self, key, float(ka.pop(key)))
-		self._write_globals(ns, nt, ng)
+		self._write_globals(ns, nt, ng, update = update)
 		assert len(ka) == 0
 	# }}}
 	# Space {{{
@@ -2312,7 +2316,7 @@ class Printer: # {{{
 		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_m', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
 			ret[key] = self.spaces[space].motor[motor][key]
 		return ret
-	def set_space(self, space, readback = True, **ka):
+	def set_space(self, space, readback = True, update = True, **ka):
 		if 'type' in ka:
 			self.spaces[space].type = int(ka.pop('type'))
 		if 'max_deviation' in ka:
@@ -2349,26 +2353,29 @@ class Printer: # {{{
 		self.spaces[space].motor = []
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
-			self._space_update(space)
+			if update:
+				self._space_update(space)
 		if len(ka) != 0:
 			log('invalid input ignored: %s' % repr(ka))
-	def set_axis(self, (space, axis), readback = True, **ka):
+	def set_axis(self, (space, axis), readback = True, update = True, **ka):
 		for key in ('offset', 'park', 'park_order', 'max_v', 'min', 'max'):
 			if key in ka:
 				self.spaces[space].axis[axis][key] = ka.pop(key)
 		self._send_packet(struct.pack('<BBB', self.command['WRITE_SPACE_AXIS'], space, axis) + self.spaces[space].write_axis(axis))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
-			self._space_update(space)
+			if update:
+				self._space_update(space)
 		assert len(ka) == 0
-	def set_motor(self, (space, motor), readback = True, **ka):
+	def set_motor(self, (space, motor), readback = True, update = True, **ka):
 		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_m', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
 			if key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
 		self._send_packet(struct.pack('<BBB', self.command['WRITE_SPACE_MOTOR'], space, motor) + self.spaces[space].write_motor(motor))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
-			self._space_update(space)
+			if update:
+				self._space_update(space)
 		assert len(ka) == 0
 	# }}}
 	# Temp {{{
@@ -2377,14 +2384,15 @@ class Printer: # {{{
 		for key in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'power_pin', 'thermistor_pin'):
 			ret[key] = getattr(self.temps[temp], key)
 		return ret
-	def set_temp(self, temp, **ka):
+	def set_temp(self, temp, update = True, **ka):
 		ret = {}
 		for key in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'power_pin', 'thermistor_pin'):
 			if key in ka:
 				setattr(self.temps[temp], key, ka.pop(key))
 		self._send_packet(struct.pack('<BB', self.command['WRITE_TEMP'], temp) + self.temps[temp].write())
 		self.temps[temp].read(self._read('TEMP', temp))
-		self._temp_update(temp)
+		if update:
+			self._temp_update(temp)
 		if len(ka) != 0:
 			log('problem: %s' % repr(ka))
 		assert len(ka) == 0
@@ -2395,13 +2403,14 @@ class Printer: # {{{
 		for key in ('pin', 'state', 'master', 'value'):
 			ret[key] = getattr(self.gpios[gpio], key)
 		return ret
-	def set_gpio(self, gpio, **ka):
+	def set_gpio(self, gpio, update = True, **ka):
 		for key in ('pin', 'state', 'master', 'value'):
 			if key in ka:
 				setattr(self.gpios[gpio], key, ka.pop(key))
 		self._send_packet(struct.pack('<BB', self.command['WRITE_GPIO'], gpio) + self.gpios[gpio].write())
 		self.gpios[gpio].read(self._read('GPIO', gpio))
-		self._gpio_update(gpio)
+		if update:
+			self._gpio_update(gpio)
 		assert len(ka) == 0
 	# }}}
 	def send_printer(self, target): # {{{

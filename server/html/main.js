@@ -363,7 +363,7 @@ function queue_print(printer) { // {{{
 				x = 0;
 			if (isNaN(y))
 				y = 0;
-			var angle = isNaN(printer.local_angle) ? 0 : printer.local_angle;
+			var angle = isNaN(printer.targetangle) ? 0 : printer.targetangle;
 			var r = printer.reference;
 			var sina = Math.sin(angle);
 			var cosa = Math.cos(angle);
@@ -390,7 +390,11 @@ function new_port() { // {{{
 
 function new_printer() { // {{{
 	printer.reference = [0, 0];
-	printer.local_angle = 0;
+	printer.targetangle = 0;
+	printer.targetx = 0;
+	printer.targety = 0;
+	printer.targetz = 0;
+	printer.targetangle = 0;
 	printer.lock = null;
 	printer.temptargets = [];
 	multiples[port] = {space: [], axis: [], motor: [], temp: [], gpio: []};
@@ -399,6 +403,9 @@ function new_printer() { // {{{
 	ports[port][0].RemoveClass('setup');
 	ports[port][1].RemoveClass('notconnected');
 	ports[port][1].AddClass('connected');
+	update_float(printer, [null, 'targetx']);
+	update_float(printer, [null, 'targety']);
+	update_float(printer, [null, 'targetz']);
 	select_printer(port);
 } // }}}
 
@@ -512,17 +519,17 @@ function update_globals() { // {{{
 		select_printer();
 	}
 	get_element(printer, [null, 'export']).href = printer.name + '.ini?port=' + encodeURIComponent(port);
-	update_float([null, 'num_spaces']);
-	update_float([null, 'num_temps']);
-	update_float([null, 'num_gpios']);
+	update_float(printer, [null, 'num_spaces']);
+	update_float(printer, [null, 'num_temps']);
+	update_float(printer, [null, 'num_gpios']);
 	update_pin([null, 'led_pin']);
 	update_pin([null, 'probe_pin']);
-	update_float([null, 'probe_dist']);
-	update_float([null, 'probe_safe_dist']);
-	update_float([null, 'bed_id']);
-	update_float([null, 'motor_limit']);
-	update_float([null, 'temp_limit']);
-	update_float([null, 'feedrate']);
+	update_float(printer, [null, 'probe_dist']);
+	update_float(printer, [null, 'probe_safe_dist']);
+	update_float(printer, [null, 'bed_id']);
+	update_float(printer, [null, 'motor_limit']);
+	update_float(printer, [null, 'temp_limit']);
+	update_float(printer, [null, 'feedrate']);
 	var stat = get_value(printer, [null, 'status']);
 	var c = document.getElementById('container');
 	c.RemoveClass('idle printing paused');
@@ -647,8 +654,8 @@ function update_space(index) { // {{{
 	var e = get_element(printer, [['space', index], 'type']);
 	e.ClearAll();
 	e.AddText(space_types[printer.spaces[index].type]);
-	update_float([['space', index], 'max_deviation']);
-	update_float([['space', index], 'num_axes']);
+	update_float(printer, [['space', index], 'max_deviation']);
+	update_float(printer, [['space', index], 'num_axes']);
 	var t = multiples[port].axis[index];
 	for (var s = 0; s < t.length; ++s) {
 		while (t[s][1].length > printer.spaces[index].axis.length) {
@@ -690,11 +697,11 @@ function update_space(index) { // {{{
 		}
 	}
 	for (var a = 0; a < printer.spaces[index].num_axes; ++a) {
-		update_float([['axis', [index, a]], 'park']);
-		update_float([['axis', [index, a]], 'park_order']);
-		update_float([['axis', [index, a]], 'max_v']);
-		update_float([['axis', [index, a]], 'min']);
-		update_float([['axis', [index, a]], 'max']);
+		update_float(printer, [['axis', [index, a]], 'park']);
+		update_float(printer, [['axis', [index, a]], 'park_order']);
+		update_float(printer, [['axis', [index, a]], 'max_v']);
+		update_float(printer, [['axis', [index, a]], 'min']);
+		update_float(printer, [['axis', [index, a]], 'max']);
 	}
 	for (var m = 0; m < printer.spaces[index].num_motors; ++m) {
 		update_pin([['motor', [index, m]], 'step_pin']);
@@ -703,21 +710,21 @@ function update_space(index) { // {{{
 		update_pin([['motor', [index, m]], 'limit_min_pin']);
 		update_pin([['motor', [index, m]], 'limit_max_pin']);
 		update_pin([['motor', [index, m]], 'sense_pin']);
-		update_float([['motor', [index, m]], 'steps_per_m']);
-		update_float([['motor', [index, m]], 'max_steps']);
-		update_float([['motor', [index, m]], 'home_pos']);
-		update_float([['motor', [index, m]], 'limit_v']);
-		update_float([['motor', [index, m]], 'limit_a']);
-		update_float([['motor', [index, m]], 'home_order']);
+		update_float(printer, [['motor', [index, m]], 'steps_per_m']);
+		update_float(printer, [['motor', [index, m]], 'max_steps']);
+		update_float(printer, [['motor', [index, m]], 'home_pos']);
+		update_float(printer, [['motor', [index, m]], 'limit_v']);
+		update_float(printer, [['motor', [index, m]], 'limit_a']);
+		update_float(printer, [['motor', [index, m]], 'home_order']);
 	}
 	if (printer.spaces[index].type == TYPE_DELTA) {
 		for (var d = 0; d < 3; ++d) {
-			update_float([['motor', [index, d]], 'delta_axis_min']);
-			update_float([['motor', [index, d]], 'delta_axis_max']);
-			update_float([['motor', [index, d]], 'delta_rodlength']);
-			update_float([['motor', [index, d]], 'delta_radius']);
+			update_float(printer, [['motor', [index, d]], 'delta_axis_min']);
+			update_float(printer, [['motor', [index, d]], 'delta_axis_max']);
+			update_float(printer, [['motor', [index, d]], 'delta_rodlength']);
+			update_float(printer, [['motor', [index, d]], 'delta_radius']);
 		}
-		update_float([['space', index], 'delta_angle']);
+		update_float(printer, [['space', index], 'delta_angle']);
 	}
 	var showing = [], hiding = [], newhidetypes = [];
 	for (var h = 0; h < hidetypes.length; ++h) {
@@ -746,26 +753,29 @@ function update_temp(index) { // {{{
 		return;
 	update_pin([['temp', index], 'power_pin']);
 	update_pin([['temp', index], 'thermistor_pin']);
-	update_float([['temp', index], 'R0']);
-	update_float([['temp', index], 'R1']);
-	update_float([['temp', index], 'Rc']);
-	update_float([['temp', index], 'Tc']);
-	update_float([['temp', index], 'beta']);
-	//update_float([['temp', index], 'core_C']);
-	//update_float([['temp', index], 'shell_C']);
-	//update_float([['temp', index], 'transfer']);
-	//update_float([['temp', index], 'radiation']);
-	//update_float([['temp', index], 'power']);
-	update_float([['temp', index], 'value', 'settemp']);
+	update_float(printer, [['temp', index], 'R0']);
+	update_float(printer, [['temp', index], 'R1']);
+	update_float(printer, [['temp', index], 'Rc']);
+	update_float(printer, [['temp', index], 'Tc']);
+	update_float(printer, [['temp', index], 'beta']);
+	//update_float(printer, [['temp', index], 'core_C']);
+	//update_float(printer, [['temp', index], 'shell_C']);
+	//update_float(printer, [['temp', index], 'transfer']);
+	//update_float(printer, [['temp', index], 'radiation']);
+	//update_float(printer, [['temp', index], 'power']);
+	update_float(printer, [['temp', index], 'value', 'settemp']);
 } // }}}
 
 function update_gpio(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
 	update_pin([['gpio', index], 'pin']);
-	// TODO: checkbox.
+	if (printer.gpios[index].state == 1)
+		get_element(printer, [['gpio', index], 'state']).checked = true;
+	else
+		get_element(printer, [['gpio', index], 'state']).checked = false;
 	var master = update_temprange([['gpio', index], 'master']);
-	update_float([['gpio', index], 'value']);
+	update_float(printer, [['gpio', index], 'value']);
 	//if (master != 0xff) {
 		//get_element(printer, [['gpio', index], 'state'], 0).AddClass('empty');
 	//}
@@ -809,7 +819,7 @@ function update_pin(id) { // {{{
 	get_element(printer, id, 'inverted').checked = Boolean(get_value(printer, id) & 0x200);
 } // }}}
 
-function update_float(id) { // {{{
+function update_float(printer, id) { // {{{
 	var e = get_element(printer, id);
 	e.ClearAll();
 	e.AddText((get_value(printer, id) / e.factor).toFixed(1));
@@ -1119,8 +1129,8 @@ function set_reference(x, y, ctrl) { // {{{
 				update_canvas_and_spans(false);
 			}
 			else {
-				var dx = Math.cos(selected_printer.local_angle) * (x - selected_printer.reference[0]) - Math.sin(selected_printer.local_angle) * (y - selected_printer.reference[1]);
-				var dy = Math.cos(selected_printer.local_angle) * (y - selected_printer.reference[1]) + Math.sin(selected_printer.local_angle) * (x - selected_printer.reference[0]);
+				var dx = Math.cos(selected_printer.targetangle) * (x - selected_printer.reference[0]) - Math.sin(selected_printer.targetangle) * (y - selected_printer.reference[1]);
+				var dy = Math.cos(selected_printer.targetangle) * (y - selected_printer.reference[1]) + Math.sin(selected_printer.targetangle) * (x - selected_printer.reference[0]);
 				selected_printer.reference = [x, y];
 				selected_printer.call('goto', [[[current_x + dx, current_y + dy]]], {'cb': true}, function() {
 					selected_printer.call('wait_for_cb', [], {}, function() {
@@ -1139,16 +1149,17 @@ function update_canvas_and_spans(update_lock) { // {{{
 		printer.call('get_axis_pos', [0, 1], {}, function(y) {
 			printer.call('get_axis_pos', [0, 2], {}, function(z) {
 				if (update_lock)
-					printer.lock = [[x, y], [selected_printer.reference[0], selected_printer.reference[1]]];
-				var e = document.getElementById(make_id(selected_printer, [null, 'currentx']));
-				e.ClearAll();
-				e.AddText((x * 1000).toFixed(1));
-				e = document.getElementById(make_id(selected_printer, [null, 'currenty']));
-				e.ClearAll();
-				e.AddText((y * 1000).toFixed(1));
-				e = document.getElementById(make_id(selected_printer, [null, 'currentz']));
-				e.ClearAll();
-				e.AddText((z * 1000).toFixed(1));
+					printer.lock = [[x, y], [printer.reference[0], printer.reference[1]]];
+				printer.currentx = x;
+				printer.currenty = y;
+				printer.currentz = z;
+				update_float(printer, [null, 'currentx']);
+				update_float(printer, [null, 'currenty']);
+				update_float(printer, [null, 'currentz']);
+				update_float(printer, [null, 'targetx']);
+				update_float(printer, [null, 'targety']);
+				update_float(printer, [null, 'targetz']);
+				update_float(printer, [null, 'targetangle']);
 				redraw_canvas(x, y);
 			});
 		});
@@ -1187,7 +1198,7 @@ function redraw_canvas(x, y) { // {{{
 		};
 		break;
 	case TYPE_DELTA:
-		var names = ['U', 'V', 'W'];
+		var names = ['X', 'Y', 'Z'];
 		var radius = [];
 		var length = [];
 		for (var a = 0; a < 3; ++a) {
@@ -1197,9 +1208,9 @@ function redraw_canvas(x, y) { // {{{
 		//var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
 		//var dx = [0, -.8660254037844387, .8660254037844387];
 		//var dy = [1, -.5, -.5];
-		var origin = [[radius[0] * .8660254037844387, radius[0] * -.5], [0, radius[1]], [radius[2] * -.8660254037844387, radius[2] * -.5]];
-		var dx = [.5, -1, .5];
-		var dy = [.8660254037844387, 0, -.8660254037844387];
+		var origin = [[radius[0] * -.8660254037844387, radius[0] * -.5], [radius[1] * .8660254037844387, radius[1] * -.5], [0, radius[2]]];
+		var dx = [.5, .5, -1];
+		var dy = [-.8660254037844387, .8660254037844387, 0];
 		var intersects = [];
 		var intersect = function(x0, y0, r, x1, y1, dx1, dy1, positive) {
 			// Find intersection of circle(x-x0)^2+(y-y0)^2==r^2 and line l=(x1,y1)+t(dx1,dy1); use positive of negative solution for t.
@@ -1269,7 +1280,7 @@ function redraw_canvas(x, y) { // {{{
 	if (l !== null && l[1] !== r) {
 		var real = [l[0][0] - x, l[0][1] - y];
 		var target = [l[1][0] - r[0], l[1][1] - r[1]];
-		selected_printer.local_angle = Math.atan2(real[1], real[0]) - Math.atan2(target[1], target[0]);
+		selected_printer.targetangle = Math.atan2(real[1], real[0]) - Math.atan2(target[1], target[0]);
 	}
 
 	c.save();
@@ -1313,12 +1324,12 @@ function redraw_canvas(x, y) { // {{{
 
 
 	c.save();
-	c.translate(x, y);
-	c.rotate(selected_printer.local_angle);
+	c.translate(selected_printer.targetx, selected_printer.targety);
+	c.rotate(selected_printer.targetangle);
 	c.translate(-r[0], -r[1]);
 
 	c.beginPath();
-	if (b !== undefined) {
+	if (b[0][0] != b[0][1] && b[1][0] != b[1][1]) {
 		// Draw print bounding box.
 		c.rect(b[0][0], b[1][0], b[0][1] - b[0][0], b[1][1] - b[1][0]);
 
@@ -1467,7 +1478,7 @@ function start_move() { // {{{
 
 function reset_position() { // {{{
 	selected_printer.lock = null;
-	selected_printer.local_angle = 0;
+	selected_printer.targetangle = 0;
 	selected_printer.reference = [0, 0];
 	update_canvas_and_spans(false);
 } // }}}
