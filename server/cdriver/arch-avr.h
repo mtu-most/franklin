@@ -109,6 +109,8 @@ EXTERN uint8_t avr_num_motors;
 EXTERN uint8_t avr_pong;
 EXTERN char avr_buffer[256];
 EXTERN int avr_limiter_space;
+EXTERN int avr_adc;
+EXTERN bool avr_wait_for_adc;
 // }}}
 
 // Timekeeping. {{{
@@ -237,6 +239,13 @@ static inline void hwpacket() {
 		avr_pong = command[1][2];
 		avr_write_ack();
 		return;
+	case HWC_ADC:
+		if (!avr_wait_for_adc)
+			debug("received unexpected adc reading");
+		avr_wait_for_adc = false;
+		avr_adc = (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
+		avr_write_ack();
+		return;
 	default:
 		if (!avr_wait_for_reply)
 			debug("received unexpected reply!");
@@ -351,6 +360,8 @@ static inline void arch_reset() {
 static inline void arch_setup_start(char const *port) {
 	// Set up arch variables.
 	avr_wait_for_reply = false;
+	avr_wait_for_adc = false;
+	avr_adc = -1;
 	avr_num_motors = 0;
 	avr_pong = ~0;
 	avr_limiter_space = -1;
@@ -539,23 +550,20 @@ static inline void arch_move() { // {{{
 
 // ADC hooks. {{{
 static inline int adc_get(uint8_t _pin) {
-	//debug("getting adc");
-	if (avr_wait_for_reply)
-		debug("avr_wait_for_reply already set in adc_get");
-	avr_wait_for_reply = true;
-	avr_call1(HWC_GETADC, _pin);
-	//debug("wait adc");
-	avr_get_reply();
-	avr_write_ack();
-	//debug("got adc %x %x", command[1][2] & 0xff, command[1][3] & 0xff);
-	return (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
+	return avr_adc;
 }
 
 static inline void adc_start(uint8_t _pin) {
+	//debug("getting adc");
+	if (avr_wait_for_adc)
+		debug("avr_wait_for_adc already set");
+	avr_wait_for_adc = true;
+	avr_adc = -1;
+	avr_call1(HWC_GETADC, _pin);
 }
 
 static inline bool adc_ready(uint8_t _pin) {
-	return _pin < NUM_ANALOG_INPUTS;
+	return avr_adc >= 0;
 }
 // }}}
 

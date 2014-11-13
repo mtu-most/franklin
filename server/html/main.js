@@ -1237,7 +1237,7 @@ function redraw_canvas(x, y) { // {{{
 		}
 		outline = function(c) {
 			c.save();
-			c.rotate(-selected_printer.angle * Math.PI / 180);
+			c.rotate(-selected_printer.spaces[0].delta_angle);
 			c.beginPath();
 			c.moveTo(intersects[0][0][0], intersects[0][0][1]);
 			for (var a = 0; a < 3; ++a) {
@@ -1253,7 +1253,7 @@ function redraw_canvas(x, y) { // {{{
 				c.beginPath();
 				c.save();
 				c.translate(origin[a][0] + dy[a] * .015 - w / 2, origin[a][1] - dx[a] * .015);
-				c.rotate(selected_printer.angle * Math.PI / 180);
+				c.rotate(selected_printer.spaces[0].delta_angle);
 				c.scale(.001, -.001);
 				c.fillText(names[a], 0, 0);
 				c.restore();

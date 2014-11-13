@@ -351,7 +351,7 @@ class Printer: # {{{
 	def _trigger_movewaits(self, num): # {{{
 		#traceback.print_stack()
 		#log('trigger %s' % repr(self.movecb))
-		log('movecbs: %d/%d' % (num, self.movewait))
+		#log('movecbs: %d/%d' % (num, self.movewait))
 		if self.movewait < num:
 			log('More cbs received than requested!')
 			self.movewait = 0
@@ -950,7 +950,7 @@ class Printer: # {{{
 				#log('axis %d: %f' %(axis, axes[axis]))
 			if cb:
 				self.movewait += 1
-				log('movewait +1 -> %d' % self.movewait)
+				#log('movewait +1 -> %d' % self.movewait)
 				p = chr(self.command['GOTOCB'])
 			else:
 				p = chr(self.command['GOTO'])
@@ -1458,7 +1458,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False): # {{{
-		log('goto %s %s %s %d' % (repr(moves), f0, f1, cb))
+		#log('goto %s %s %s %d' % (repr(moves), f0, f1, cb))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
 		self.queue.append((id, moves, f0, f1, cb))
