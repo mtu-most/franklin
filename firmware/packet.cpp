@@ -189,6 +189,7 @@ void packet()
 			return;
 		}
 		motor[which]->current_pos += *reinterpret_cast <int32_t *>(&command[3]);
+		motor[which]->v = 0;
 		write_ack();
 		return;
 	}

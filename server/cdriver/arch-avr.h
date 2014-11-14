@@ -426,7 +426,7 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 	avr_buffer[13] = mtr.max_steps;
 	ReadFloat max_v, a;
 	max_v.f = mtr.limit_v * mtr.steps_per_m / 1e6;
-	a.f = mtr.limit_a * mtr.steps_per_m / 1e12;
+	a.f = 1.1 * mtr.limit_a * mtr.steps_per_m / 1e12;
 	for (int i = 0; i < sizeof(float); ++i) {
 		avr_buffer[14 + i] = max_v.b[i];
 		avr_buffer[14 + i + sizeof(float)] = a.b[i];
@@ -514,7 +514,7 @@ static inline void arch_setpos(uint8_t s, uint8_t m) {
 	avr_send();
 }
 
-static inline int32_t arch_addpos(uint8_t s, uint8_t m, uint32_t diff) {
+static inline int32_t arch_addpos(uint8_t s, uint8_t m, int32_t diff) {
 	ReadFloat pos;
 	pos.i = diff;
 	for (uint8_t st = 0; st < s; ++st)
