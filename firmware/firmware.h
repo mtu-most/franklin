@@ -57,6 +57,7 @@ enum Command {
 	CMD_MSETUP,	// 1:motor, 2:step_pin, 2:dir_pin, 2:limit_min_pin, 2:limit_max_pin, 2:sense_pin, 1:max_steps
 
 	CMD_MOVE,	// ?:which, (4:speed, 4:limit, 4:current)*
+	CMD_ABORT,
 
 	CMD_SETPOS,	// 1:which, 4:pos
 	CMD_ADDPOS,	// 1:which, 4:pos
@@ -182,6 +183,8 @@ void Motor::init() {
 	step_pin.init();
 	dir_pin.init();
 	max_steps = 0;
+	a = 0;
+	max_v = 0;
 	limit_min_pin.init();
 	limit_max_pin.init();
 	sense_pin.init();
@@ -194,6 +197,7 @@ void Motor::init() {
 	v = 0;
 	target_v = 0;
 	last_step_t = utime();
+	on_track = true;
 #ifdef HAVE_AUDIO
 	audio_flags = 0;
 #endif

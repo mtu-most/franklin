@@ -74,6 +74,7 @@ static void handle_motors(uint32_t current_time) {
 			motor[m]->switch_pos = motor[m]->current_pos;
 			// Stop moving.
 			for (uint8_t mm = 0; mm < num_motors; ++mm) {
+				debug("stopping %d, sp->%ld", m, F(motor[mm]->current_pos));
 				motor[mm]->start_pos = motor[mm]->current_pos;
 				motor[mm]->target_v = 0;
 				motor[mm]->v = 0;

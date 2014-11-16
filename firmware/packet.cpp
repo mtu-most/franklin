@@ -138,10 +138,13 @@ void packet()
 		}
 		uint8_t whichlen = ((num_motors - 1) >> 3) + 1;
 		uint8_t current = 2 + whichlen;
+		uint32_t now = utime();
 		for (uint8_t m = 0; m < num_motors; ++m) {
 			if (!(command[2 + (m >> 3)] & (1 << (m & 0x7)))) {
-				motor[m]->start_pos = motor[m]->current_pos;
-				motor[m]->target_v = 0;
+				if (motor[m]->target_v != 0) {
+					motor[m]->start_pos += motor[m]->target_v * (now - start_time);
+					motor[m]->target_v = 0;
+				}
 				continue;
 			}
 			motor[m]->target_v = *reinterpret_cast <float *>(&command[current]);
@@ -151,7 +154,19 @@ void packet()
 			current += sizeof(int32_t) * 2 + sizeof(float);
 			//debug("m %d cp %ld ep %ld sp %ld v %f", m, F(motor[m]->current_pos), F(motor[m]->end_pos), F(motor[m]->start_pos), F(motor[m]->v));
 		}
-		start_time = utime();
+		start_time = now;
+		write_ack();
+		return;
+	}
+	case CMD_ABORT:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_ABORT");
+#endif
+		for (uint8_t m = 0; m < num_motors; ++m) {
+			motor[m]->start_pos = motor[m]->current_pos;
+			motor[m]->target_v = 0;
+		}
 		write_ack();
 		return;
 	}
@@ -171,9 +186,11 @@ void packet()
 			write_stall();
 			return;
 		}
-		motor[which]->current_pos += *reinterpret_cast <int32_t *>(&command[3]) - motor[which]->start_pos;
+		int32_t diff = *reinterpret_cast <int32_t *>(&command[3]) - motor[which]->start_pos;
+		motor[which]->current_pos += diff;
 		// Don't start moving.
-		motor[which]->start_pos = motor[which]->current_pos;
+		debug("set %d start %ld diff %ld", which, F(motor[which]->start_pos), F(diff));
+		motor[which]->start_pos += diff;
 		write_ack();
 		return;
 	}
@@ -188,8 +205,10 @@ void packet()
 			write_stall();
 			return;
 		}
-		motor[which]->current_pos += *reinterpret_cast <int32_t *>(&command[3]);
-		motor[which]->v = 0;
+		int32_t diff = *reinterpret_cast <int32_t *>(&command[3]);
+		motor[which]->current_pos += diff;
+		debug("add %d start %ld diff %ld", which, F(motor[which]->start_pos), F(diff));
+		motor[which]->start_pos += diff;
 		write_ack();
 		return;
 	}

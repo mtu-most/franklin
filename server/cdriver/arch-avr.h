@@ -34,27 +34,28 @@ enum HWCommands { // {{{
 	HWC_SETUP,	// 03
 	HWC_MSETUP,	// 04
 	HWC_MOVE,	// 05
-	HWC_SETPOS,	// 06
-	HWC_ADDPOS,	// 07
-	HWC_GETPOS,	// 08
-	HWC_RESETPIN,	// 09
-	HWC_SETPIN,	// 0a
-	HWC_UNSETPIN,	// 0b
-	HWC_INPUTPIN,	// 0c
-	HWC_GETPIN,	// 0d
-	HWC_GETADC,	// 0e
-	HWC_AUDIO_SETUP,// 0f
-	HWC_AUDIO_DATA,	// 10
+	HWC_ABORT,	// 06
+	HWC_SETPOS,	// 07
+	HWC_ADDPOS,	// 08
+	HWC_GETPOS,	// 09
+	HWC_RESETPIN,	// 0a
+	HWC_SETPIN,	// 0b
+	HWC_UNSETPIN,	// 0c
+	HWC_INPUTPIN,	// 0d
+	HWC_GETPIN,	// 0e
+	HWC_GETADC,	// 0f
+	HWC_AUDIO_SETUP,// 10
+	HWC_AUDIO_DATA,	// 11
 
-	HWC_START,	// 11
-	HWC_PONG,	// 12
-	HWC_POS,	// 13
-	HWC_PIN,	// 14
-	HWC_ADC,	// 15
+	HWC_START,	// 12
+	HWC_PONG,	// 13
+	HWC_POS,	// 14
+	HWC_PIN,	// 15
+	HWC_ADC,	// 16
 
-	HWC_LIMIT,	// 16
-	HWC_SENSE0,	// 17
-	HWC_SENSE1	// 18
+	HWC_LIMIT,	// 17
+	HWC_SENSE0,	// 18
+	HWC_SENSE1	// 19
 };
 // }}}
 struct AVRMotor { // {{{
@@ -547,7 +548,7 @@ static inline void arch_move() { // {{{
 			speed.f = moving ? mtr.last_v * mtr.steps_per_m / 1e6 : 0;
 			limit.i = speed.f < 0 ? -MAXLONG : MAXLONG;
 			current.i = mtr.current_pos;
-			//debug("move %d %f %d %d", m, speed.f, limit.i, current.i);
+			//debug("move %d %x %f %d %d", m, avr_buffer[2], speed.f, limit.i, current.i);
 			for (uint8_t i = 0; i < 4; ++i) {
 				avr_buffer[2 + wlen + mi * 12 + i] = speed.b[i];
 				avr_buffer[2 + wlen + mi * 12 + 4 + i] = limit.b[i];
