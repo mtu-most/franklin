@@ -40,6 +40,7 @@ void setup(char const *port)
 	f0 = 0;
 	//debug("moving->false");
 	moving = false;
+	stopping = false;
 	move_prepared = false;
 	cbs_after_current_move = 0;
 	which_autosleep = 0;

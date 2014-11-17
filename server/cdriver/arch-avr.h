@@ -111,6 +111,8 @@ EXTERN uint8_t avr_num_motors;
 EXTERN uint8_t avr_pong;
 EXTERN char avr_buffer[256];
 EXTERN int avr_limiter_space;
+EXTERN int avr_limiter_motor;
+EXTERN int avr_num_movecbs;;
 EXTERN int avr_adc;
 EXTERN bool avr_wait_for_adc;
 // }}}
@@ -221,13 +223,14 @@ static inline void hwpacket() {
 		for (uint8_t i = 0; i < sizeof(int32_t); ++i)
 			f.b[i] = command[1][3 + i];
 		spaces[s].motor[m]->current_pos = f.i;
+		debug("cp1 %d", spaces[s].motor[m]->current_pos);
 		if (command[1][1] == HWC_LIMIT) {
 			avr_limiter_space = s;
+			avr_limiter_motor = m;
 			abort_move(false);
-			int num_movecbs = cbs_after_current_move;
+			avr_num_movecbs = cbs_after_current_move;
 			cbs_after_current_move = 0;
-			num_movecbs += next_move();
-			send_host(CMD_LIMIT, s, m, f.i / spaces[s].motor[m]->steps_per_m, num_movecbs);
+			stopping = true;
 		}
 		else {
 			spaces[s].motor[m]->sense_pos = f.i;
@@ -262,10 +265,13 @@ static inline void arch_ack() {
 	if (avr_limiter_space < 0)
 		return;
 	int space = avr_limiter_space;
+	int motor = avr_limiter_motor;
 	avr_limiter_space = -1;
 	for (uint8_t m = 0; m < spaces[space].num_motors; ++m) {
 		spaces[space].motor[m]->current_pos = arch_getpos(space, m);
+		debug("cp2 %d %d", m, spaces[space].motor[m]->current_pos);
 	}
+	send_host(CMD_LIMIT, space, motor, spaces[space].motor[motor]->current_pos / spaces[space].motor[motor]->steps_per_m, avr_num_movecbs);
 }
 
 static inline void avr_write_ack() {
@@ -367,7 +373,8 @@ static inline void arch_setup_start(char const *port) {
 	avr_num_motors = 0;
 	avr_pong = ~0;
 	avr_limiter_space = -1;
-	avr_limiter_space = -1;
+	avr_limiter_motor = 0;
+	avr_num_movecbs = 0;
 	for (int i = 0; i < 0x100; ++i)
 		avr_pins[i] = 3;	// INPUT_NOPULLUP.
 	// Set up serial port.
@@ -427,7 +434,7 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 	avr_buffer[13] = mtr.max_steps;
 	ReadFloat max_v, a;
 	max_v.f = mtr.limit_v * mtr.steps_per_m / 1e6;
-	a.f = 1.1 * mtr.limit_a * mtr.steps_per_m / 1e12;
+	a.f = 2.1 * mtr.limit_a * mtr.steps_per_m / 1e12;
 	for (int i = 0; i < sizeof(float); ++i) {
 		avr_buffer[14 + i] = max_v.b[i];
 		avr_buffer[14 + i + sizeof(float)] = a.b[i];
@@ -548,7 +555,7 @@ static inline void arch_move() { // {{{
 			speed.f = moving ? mtr.last_v * mtr.steps_per_m / 1e6 : 0;
 			limit.i = speed.f < 0 ? -MAXLONG : MAXLONG;
 			current.i = mtr.current_pos;
-			//debug("move %d %x %f %d %d", m, avr_buffer[2], speed.f, limit.i, current.i);
+			debug("move %d %x %f %d %d", m, avr_buffer[2], speed.f, limit.i, current.i);
 			for (uint8_t i = 0; i < 4; ++i) {
 				avr_buffer[2 + wlen + mi * 12 + i] = speed.b[i];
 				avr_buffer[2 + wlen + mi * 12 + 4 + i] = limit.b[i];

@@ -186,12 +186,16 @@ void packet()
 			write_stall();
 			return;
 		}
-		int32_t diff = *reinterpret_cast <int32_t *>(&command[3]) - motor[which]->start_pos;
-		motor[which]->current_pos += diff;
-		// Don't start moving.
-		debug("set %d start %ld diff %ld", which, F(motor[which]->start_pos), F(diff));
-		motor[which]->start_pos += diff;
-		write_ack();
+		int32_t pos = *reinterpret_cast <int32_t *>(&command[3]);
+		debug("set %d %ld", which, F(pos));
+		if (motor[which]->v == 0) {
+			motor[which]->current_pos = pos;
+			motor[which]->start_pos = pos;
+			write_ack();
+			return;
+		}
+		motor[which]->setpos = pos;
+		// ACK will be sent when move is done.
 		return;
 	}
 	case CMD_ADDPOS:

@@ -35,18 +35,18 @@ function Pin(title, obj, only_analog) {
 	validinput.type = 'checkbox';
 	validinput.id = make_id(printer, obj, 'valid');
 	var validlabel = Create('label').AddText('Valid');
-	validlabel.htmlFor = validinput;
+	validlabel.htmlFor = validinput.id;
 	var invertedinput = Create('input');
 	invertedinput.type = 'checkbox';
 	invertedinput.id = make_id(printer, obj, 'inverted');
 	var invertedlabel = Create('label').AddText('Inverted');
-	invertedlabel.htmlFor = invertedinput;
+	invertedlabel.htmlFor = invertedinput.id;
 	var button = Create('button', 'button');
 	button.type = 'button';
 	button.AddText('Set');
 	button.printer = printer;
 	button.AddEvent('click', function() { set_pin(this.printer, obj); });
-	return make_tablerow(title, [[pinselect], [validinput, validlabel], [invertedinput, invertedlabel], [button]], ['pintitle', 'pinvalue']);
+	return make_tablerow(title, [[pinselect], [validinput, validlabel], [invertedinput, invertedlabel], [button]], ['pintitle', ['pinvalue', 'pinvalue', 'pinvalue', 'pinvalue']]);
 }
 
 function Float(obj, factor, className, set) {

@@ -345,7 +345,7 @@ EXTERN int16_t audio_us_per_sample;
 #endif
 EXTERN uint32_t start_time, last_time;
 EXTERN float t0, tp;
-EXTERN bool moving;
+EXTERN bool moving, stopping;
 EXTERN float f0, f1, f2, fp, fq, fmain;
 EXTERN bool move_prepared;
 EXTERN float done_factor;

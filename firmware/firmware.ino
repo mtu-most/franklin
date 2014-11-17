@@ -14,6 +14,13 @@ static void handle_motors(uint32_t current_time) {
 		}
 		if (motor[m]->v == 0 && motor[m]->start_pos == motor[m]->current_pos) {
 			motor[m]->last_step_t = current_time;
+			if (motor[m]->setpos != MAXLONG) {
+				debug("setpos %d delayed %ld", m, F(motor[m]->setpos));
+				motor[m]->current_pos = motor[m]->setpos;
+				motor[m]->start_pos = motor[m]->setpos;
+				motor[m]->setpos = MAXLONG;
+				write_ack();
+			}
 			continue;
 		}
 		int32_t target = motor[m]->start_pos + motor[m]->target_v * (current_time - start_time);
@@ -70,7 +77,7 @@ static void handle_motors(uint32_t current_time) {
 		// Check limit switches.
 		if (steps > 0 ? GET(motor[m]->limit_max_pin, false) : GET(motor[m]->limit_min_pin, false)) {
 			// Hit endstop; abort current move and notify host.
-			debug("hit limit %d %ld %ld %ld", m, F(target), F(motor[m]->current_pos), F(steps));
+			debug("hit limit %d %ld %ld %ld %f %f %d %ld %d", m, F(target), F(motor[m]->current_pos), F(steps), F(motor[m]->target_v), F(motor[m]->v), motor[m]->on_track, F(motor[m]->start_pos), int(current_time - start_time));
 			motor[m]->switch_pos = motor[m]->current_pos;
 			// Stop moving.
 			for (uint8_t mm = 0; mm < num_motors; ++mm) {

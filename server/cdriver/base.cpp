@@ -230,6 +230,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 		movedebug("no correct: %f %d", F(factor), int(start_time));
 	last_time = current_time;
 	// Move the motors.
+	debug("start move");
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		if (!sp.active)
@@ -241,8 +242,9 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 				continue;
 			}
 			float target = mtr.current_pos / mtr.steps_per_m + mtr.target_dist * factor;
-			movedebug("%d %f %f", mtr.current_pos, F(target), F(mtr.last_v));
-			mtr.current_pos = target * mtr.steps_per_m;
+			debug("ccp3 %d %d %d %f %f %f %f %f", m, stopping, mtr.current_pos, F(target), F(mtr.last_v), mtr.steps_per_m, mtr.target_dist, factor);
+			mtr.current_pos = (target * mtr.steps_per_m + (target > 0 ? .49 : -.49));
+			debug("cp3 %d", mtr.current_pos);
 			mtr.last_v = mtr.target_v * factor;
 		}
 	}
@@ -262,7 +264,7 @@ static void handle_motors(uint32_t current_time, uint32_t longtime) { // {{{
 	if (next_motor_time > 0)
 		return;
 	// Check for move.
-	if (!moving) {
+	if (!moving || stopping) {
 		next_motor_time = ~0;
 		//debug("setting next motor time to ~0");
 		return;
@@ -489,15 +491,15 @@ int main(int argc, char **argv) { // {{{
 #ifdef TIMING
 		uint32_t first_t = utime();
 #endif
-		if (!next_temp_time)
-			handle_temps(current_time, longtime);	// Periodic temps stuff: temperature regulation.
-#ifdef TIMING
-		uint32_t temp_t = utime() - current_time;
-#endif
 		if (!next_motor_time)
 			handle_motors(current_time, longtime);	// Movement.
 #ifdef TIMING
 		uint32_t motor_t = utime() - current_time;
+#endif
+		if (!next_temp_time)
+			handle_temps(current_time, longtime);	// Periodic temps stuff: temperature regulation.
+#ifdef TIMING
+		uint32_t temp_t = utime() - current_time;
 #endif
 		//debug("serial");
 		serial(0);

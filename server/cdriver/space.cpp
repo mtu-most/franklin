@@ -111,7 +111,6 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_motors[m]->last_v = NAN;
 			new_motors[m]->target_v = NAN;
 			new_motors[m]->target_dist = NAN;
-			new_motors[m]->current_pos = 0;
 			new_motors[m]->endpos = NAN;
 		}
 		for (uint8_t m = nm; m < old_nm; ++m)
@@ -246,13 +245,17 @@ void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 	if (!isnan(motor[m]->home_pos)) {
 		if (old_steps_per_m != motor[m]->steps_per_m) {
 			float diff = motor[m]->current_pos / old_steps_per_m - motor[m]->home_pos;
-			motor[m]->current_pos = (motor[m]->home_pos + diff) * motor[m]->steps_per_m;
+			float f = motor[m]->home_pos + diff;
+			motor[m]->current_pos = f * motor[m]->steps_per_m + (f > 0 ? .49 : -.49);
+			debug("cp5 %d", motor[m]->current_pos);
 			arch_setpos(id, m);
 			must_move = true;
 		}
-		if (old_home_pos != motor[m]->home_pos) {
-			int32_t diff = (motor[m]->home_pos - old_home_pos) * motor[m]->steps_per_m;
+		if (motors_busy && old_home_pos != motor[m]->home_pos) {
+			float f = motor[m]->home_pos - old_home_pos;
+			int32_t diff = f * motor[m]->steps_per_m + (f > 0 ? .49 : -.49);
 			motor[m]->current_pos += diff;
+			debug("cp6 %d", motor[m]->current_pos);
 			arch_addpos(id, m, diff);
 			must_move = true;
 		}

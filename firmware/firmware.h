@@ -97,7 +97,7 @@ struct Motor
 	Pin_t limit_max_pin;
 	Pin_t sense_pin;
 	uint8_t sense_state;
-	int32_t sense_pos, switch_pos, current_pos, start_pos, end_pos;
+	int32_t sense_pos, switch_pos, current_pos, start_pos, end_pos, setpos;
 	float v, target_v;	// steps/μs
 	uint32_t last_step_t;	// time in μs
 	bool on_track;
@@ -194,6 +194,7 @@ void Motor::init() {
 	current_pos = 0;
 	start_pos = 0;
 	end_pos = MAXLONG;
+	setpos = MAXLONG;
 	v = 0;
 	target_v = 0;
 	last_step_t = utime();
