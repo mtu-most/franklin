@@ -23,7 +23,8 @@ PORT=8080
 ADDRESS=
 
 # Program to manage the printer.
-PRINTERCMD=/usr/share/franklin/printer.py
+DRIVER=/usr/share/franklin/driver.py
+CDRIVER=/usr/lib/franklin/cdriver
 
 # Location where audio files are stored.
 AUDIODIR=/var/cache/franklin/audio
@@ -73,7 +74,7 @@ NAME=franklin
 DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/franklin
 ARGS="--make-pidfile --pidfile $PIDFILE --chuid franklin3d:franklin3d $ARGS"
-START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --autodetect=$AUTODETECT --port=$PORT --address=$ADDRESS --printer=$PRINTER --audiodir=$AUDIODIR --blacklist=$BLACKLIST --printercmd=$PRINTERCMD --login=$LOGIN --passwordfile=$PASSWORDFILE --done=$DONE --avrdude=$AVRDUDE"
+START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --autodetect=$AUTODETECT --port=$PORT --address=$ADDRESS --printer=$PRINTER --audiodir=$AUDIODIR --blacklist=$BLACKLIST --driver=$DRIVER --cdriver=$CDRIVER --login=$LOGIN --passwordfile=$PASSWORDFILE --done=$DONE --avrdude=$AVRDUDE"
 STOP_ARGS="--oknodo --stop $ARGS"
 
 if test ! -x "$DAEMON"; then

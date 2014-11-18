@@ -394,7 +394,6 @@ function new_printer() { // {{{
 	printer.targetx = 0;
 	printer.targety = 0;
 	printer.targetz = 0;
-	printer.targetangle = 0;
 	printer.lock = null;
 	printer.temptargets = [];
 	multiples[port] = {space: [], axis: [], motor: [], temp: [], gpio: []};
@@ -1277,11 +1276,12 @@ function redraw_canvas(x, y) { // {{{
 	var l = selected_printer.lock;
 	var true_pos = [x, y];
 
+	/*
 	if (l !== null && l[1] !== r) {
 		var real = [l[0][0] - x, l[0][1] - y];
 		var target = [l[1][0] - r[0], l[1][1] - r[1]];
 		selected_printer.targetangle = Math.atan2(real[1], real[0]) - Math.atan2(target[1], target[0]);
-	}
+	}*/
 
 	c.save();
 	// Clear canvas.

@@ -275,7 +275,7 @@ void packet()
 		}
 		float f = get_float(4);
 		spaces[which].motor[t]->current_pos = f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49);
-		debug("cp4 %d", spaces[which].motor[t]->current_pos);
+		//debug("cp4 %d", spaces[which].motor[t]->current_pos);
 		arch_setpos(which, t);
 		//debug("setpos %d %d %f", which, t, F(spaces[which].motor[t]->current_pos));
 		return;

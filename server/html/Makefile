@@ -1,2 +1,2 @@
 check:
-	gjslint --disable 5,110 server.js main.js templates.js
+	gjslint --disable 5,110,220 server.js main.js templates.js

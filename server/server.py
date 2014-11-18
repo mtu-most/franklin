@@ -35,7 +35,8 @@ config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'passwordfile': '',
 		'done': '',
 		'local': 'False',
-		'driver': (tuple(xdgbasedir.data_files_read(packagename = 'franklin', filename = 'driver.py')) + ('',))[0]
+		'driver': (tuple(xdgbasedir.data_files_read(packagename = 'franklin', filename = 'driver.py')) + ('',))[0],
+		'cdriver': '/usr/lib/franklin/cdriver'
 	})
 # }}}
 
@@ -175,7 +176,7 @@ class Connection: # {{{
 				resumeinfo[0](data[0])
 				return False
 			if d != '':
-				cls._broadcast(None, 'status', port, '\n'.join(data[0].split('\n')[-4:]))
+				cls._broadcast(None, 'message', port, '\n'.join(data[0].split('\n')[-4:]))
 				data[0] += d
 				return True
 			resumeinfo[0](data[0])
@@ -184,12 +185,12 @@ class Connection: # {{{
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
 		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP, output)
 		cls._broadcast(None, 'blocked', port, 'uploading')
-		cls._broadcast(None, 'status', port, '')
+		cls._broadcast(None, 'message', port, '')
 		d = (yield websockets.WAIT)
 		process.kill()	# In case it wasn't dead yet.
 		process.communicate()	# Clean up.
 		cls._broadcast(None, 'blocked', port, None)
-		cls._broadcast(None, 'status', port, '')
+		cls._broadcast(None, 'message', port, '')
 		if autodetect:
 			websockets.call(None, cls.detect, port)()
 		yield (d or 'firmware successfully uploaded')
@@ -477,7 +478,7 @@ class Port: # {{{
 def detect(port): # {{{
 	if port == '-':
 		fake_id = 'xxxxxxxx'
-		process = subprocess.Popen((config['driver'], port, config['audiodir'], fake_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = subprocess.Popen((config['driver'], config['cdriver'], port, config['audiodir'], fake_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		ports[port] = Port(port, process, fake_id, None)
 		return False
 	if not os.path.exists(port):
@@ -541,7 +542,7 @@ def detect(port): # {{{
 			log('accepting unknown printer on port %s (id was %s)' % (port, repr(id[0])))
 			id[0] = nextid()
 			log('new id %s' % repr(id[0]))
-			process = subprocess.Popen((config['driver'], port, config['audiodir'], id[0]), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+			process = subprocess.Popen((config['driver'], config['cdriver'], port, config['audiodir'], id[0]), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, id[0], printer)
 			return False
 		printer.write(single['ID'])

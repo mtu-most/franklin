@@ -247,7 +247,7 @@ void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 			float diff = motor[m]->current_pos / old_steps_per_m - motor[m]->home_pos;
 			float f = motor[m]->home_pos + diff;
 			motor[m]->current_pos = f * motor[m]->steps_per_m + (f > 0 ? .49 : -.49);
-			debug("cp5 %d", motor[m]->current_pos);
+			//debug("cp5 %d", motor[m]->current_pos);
 			arch_setpos(id, m);
 			must_move = true;
 		}
@@ -255,7 +255,7 @@ void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 			float f = motor[m]->home_pos - old_home_pos;
 			int32_t diff = f * motor[m]->steps_per_m + (f > 0 ? .49 : -.49);
 			motor[m]->current_pos += diff;
-			debug("cp6 %d", motor[m]->current_pos);
+			//debug("cp6 %d", motor[m]->current_pos);
 			arch_addpos(id, m, diff);
 			must_move = true;
 		}

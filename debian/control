@@ -6,8 +6,8 @@ Build-Depends: debhelper (>= 9), python-all, dh-python, gcc-avr, arduino-mighty-
 Standards-Version: 3.9.5
 
 Package: franklin
-Architecture: all
-Depends: ${misc:Depends}, python, python-websockets, python-network, python-serial, avrdude, python-xdgbasedir, adduser, python-gi
+Architecture: any
+Depends: ${misc:Depends}, ${shlibs:Depends}, python, python-websockets, python-network, python-serial, avrdude, python-xdgbasedir, adduser, python-gi
 Description: server for controlling RepRap 3-D printers
  3-D printers need firmware and host software to work.  This package contains
  both.  The following hardware is currently supported:

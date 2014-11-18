@@ -230,7 +230,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 		movedebug("no correct: %f %d", F(factor), int(start_time));
 	last_time = current_time;
 	// Move the motors.
-	debug("start move");
+	//debug("start move");
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		if (!sp.active)
@@ -242,9 +242,9 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 				continue;
 			}
 			float target = mtr.current_pos / mtr.steps_per_m + mtr.target_dist * factor;
-			debug("ccp3 %d %d %d %f %f %f %f %f", m, stopping, mtr.current_pos, F(target), F(mtr.last_v), mtr.steps_per_m, mtr.target_dist, factor);
+			//debug("ccp3 %d %d %d %f %f %f %f %f", m, stopping, mtr.current_pos, F(target), F(mtr.last_v), mtr.steps_per_m, mtr.target_dist, factor);
 			mtr.current_pos = (target * mtr.steps_per_m + (target > 0 ? .49 : -.49));
-			debug("cp3 %d", mtr.current_pos);
+			//debug("cp3 %d", mtr.current_pos);
 			mtr.last_v = mtr.target_v * factor;
 		}
 	}

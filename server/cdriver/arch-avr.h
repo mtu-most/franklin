@@ -223,7 +223,7 @@ static inline void hwpacket() {
 		for (uint8_t i = 0; i < sizeof(int32_t); ++i)
 			f.b[i] = command[1][3 + i];
 		spaces[s].motor[m]->current_pos = f.i;
-		debug("cp1 %d", spaces[s].motor[m]->current_pos);
+		//debug("cp1 %d", spaces[s].motor[m]->current_pos);
 		if (command[1][1] == HWC_LIMIT) {
 			avr_limiter_space = s;
 			avr_limiter_motor = m;
@@ -269,7 +269,7 @@ static inline void arch_ack() {
 	avr_limiter_space = -1;
 	for (uint8_t m = 0; m < spaces[space].num_motors; ++m) {
 		spaces[space].motor[m]->current_pos = arch_getpos(space, m);
-		debug("cp2 %d %d", m, spaces[space].motor[m]->current_pos);
+		//debug("cp2 %d %d", m, spaces[space].motor[m]->current_pos);
 	}
 	send_host(CMD_LIMIT, space, motor, spaces[space].motor[motor]->current_pos / spaces[space].motor[motor]->steps_per_m, avr_num_movecbs);
 }
@@ -555,7 +555,7 @@ static inline void arch_move() { // {{{
 			speed.f = moving ? mtr.last_v * mtr.steps_per_m / 1e6 : 0;
 			limit.i = speed.f < 0 ? -MAXLONG : MAXLONG;
 			current.i = mtr.current_pos;
-			debug("move %d %x %f %d %d", m, avr_buffer[2], speed.f, limit.i, current.i);
+			//debug("move %d %x %f %d %d", m, avr_buffer[2], speed.f, limit.i, current.i);
 			for (uint8_t i = 0; i < 4; ++i) {
 				avr_buffer[2 + wlen + mi * 12 + i] = speed.b[i];
 				avr_buffer[2 + wlen + mi * 12 + 4 + i] = limit.b[i];

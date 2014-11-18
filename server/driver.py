@@ -65,7 +65,7 @@ class delayed: # {{{
 # class for handling beaglebone: driver running on same machine.
 class Driver: # {{{
 	def __init__(self, port, newid):
-		self.driver = subprocess.Popen(('./cdriver/cdriver', port), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		self.driver = subprocess.Popen((sys.argv[1], port), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		fcntl.fcntl(self.driver.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 		self.buffer = ''
 		self.write(newid)
@@ -2430,7 +2430,7 @@ class Printer: # {{{
 # }}}
 
 call_queue = []
-printer = Printer(*sys.argv[1:])
+printer = Printer(*sys.argv[2:])
 if printer.printer is None:
 	sys.exit(0)
 

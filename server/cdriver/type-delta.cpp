@@ -70,7 +70,10 @@ static void xyz2motors(Space *s, float *motors, bool *ok) {
 
 static void reset_pos (Space *s) {
 	// All axes' current_pos must be valid and equal, in other words, x=y=0.
-	if (s->motor[0]->current_pos != s->motor[1]->current_pos || s->motor[0]->current_pos != s->motor[2]->current_pos) {
+	float p[3];
+	for (uint8_t i = 0; i < 3; ++i)
+		p[i] = s->motor[i]->current_pos / s->motor[i]->steps_per_m;
+	if (p[0] != p[1] || p[0] != p[2]) {
 		//debug("resetpos fails");
 		s->axis[0]->source = NAN;
 		s->axis[1]->source = NAN;
@@ -80,7 +83,7 @@ static void reset_pos (Space *s) {
 		//debug("resetpos %f", F(APEX(s, a).current_pos));
 		s->axis[0]->source = 0;
 		s->axis[1]->source = 0;
-		s->axis[2]->source = s->motor[0]->current_pos / s->motor[i]->steps_per_m;
+		s->axis[2]->source = p[0];
 	}
 }
 

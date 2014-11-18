@@ -1,15 +1,15 @@
 #!/usr/bin/make -f
 
-# gcc-avr does not support stack protection.
-export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector
-
 %:
 	dh $@ --with python2
+
+export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector
 
 override_dh_auto_build:
 	dh_auto_build
 	${MAKE} -C server/html
 	ronn -r server/franklin.8.ronn
+	${MAKE} -C server/cdriver
 	${MAKE} -C firmware TARGET=melzi0
 	mv firmware/build-mighty_opt firmware/build-mighty_opt0
 	${MAKE} -C firmware TARGET=melzi1
@@ -20,4 +20,3 @@ override_dh_auto_clean:
 	dh_auto_clean
 	rm -f *.pyc *.pyo server/franklin.8
 	rm -rf firmware/build-*
-	$(MAKE) -C server/html clean

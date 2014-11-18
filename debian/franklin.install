@@ -2,8 +2,9 @@ firmware/build-mighty_opt0/melzi0.hex /usr/share/franklin/firmware
 firmware/build-mighty_opt/melzi1.hex /usr/share/franklin/firmware
 firmware/build-mega2560/ramps.hex /usr/share/franklin/firmware
 firmware/build-mega/mega.hex /usr/share/franklin/firmware
-server/franklin.py /usr/share/franklin
-server/printer.py /usr/share/franklin
+server/server.py /usr/share/franklin
+server/driver.py /usr/share/franklin
+server/cdriver/cdriver /usr/lib/franklin
 server/control.py /usr/share/franklin
 server/html/server.js /usr/share/franklin/html
 server/html/index.html /usr/share/franklin/html
