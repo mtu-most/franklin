@@ -189,6 +189,7 @@ class Printer: # {{{
 		self.tempcb = []
 		self.alarms = set()
 		self.audiodir = audiodir
+		self.zoffset = 0.
 		# Get the printer state.
 		self.printerid = newid
 		self.spaces = []
@@ -580,7 +581,7 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _globals_update(self, target = None): # {{{
-		self._broadcast(target, 'globals_update', [len(self.spaces), len(self.temps), len(self.gpios), self.name, self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.motor_limit, self.temp_limit, self.feedrate, not self.paused and (None if self.gcode is None else True)])
+		self._broadcast(target, 'globals_update', [len(self.spaces), len(self.temps), len(self.gpios), self.name, self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.motor_limit, self.temp_limit, self.feedrate, self.zoffset, not self.paused and (None if self.gcode is None else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		self._broadcast(target, 'space_update', which, self.spaces[which].export())
@@ -652,7 +653,7 @@ class Printer: # {{{
 					return
 				#log(repr(args))
 				sina, cosa = self.gcode_angle
-				target = cosa * args['X'] - sina * args['Y'] + self.gcode_ref[0], cosa * args['Y'] + sina * args['X'] + self.gcode_ref[1]
+				target = cosa * args['X'] - sina * args['Y'] + self.gcode_ref[0], cosa * args['Y'] + sina * args['X'] + self.gcode_ref[1], args['Z'] + self.gcode_ref[2]
 				if self._use_probemap and self.gcode_probemap:
 					if args['x'] is not None:
 						source = cosa * args['x'] - sina * args['y'] + self.gcode_ref[0], cosa * args['y'] + sina * args['x'] + self.gcode_ref[1]
@@ -665,20 +666,20 @@ class Printer: # {{{
 							num = int(max(n for n in nums if not math.isnan(n))) + 1
 						if num == 1:
 							#log('debugpart: %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, args['f'], args['F']))
-							z = self._use_probemap(target[0], target[1], args['Z'])
+							z = self._use_probemap(*target)
 							#log('go to one %f %f %f' % (target[0], target[1], z))
 							self.goto([[target[0], target[1], z], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
 						else:
 							for t in range(num):
 								targetpart = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
 								#log('debugpart: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, source[0] * 1e3, source[1] * 1e3, targetpart[0] * 1e3, targetpart[1] * 1e3, args['f'], args['F']))
-								z = self._use_probemap(targetpart[0], targetpart[1], args['Z'])
+								z = self._use_probemap(targetpart[0], targetpart[1], target[2])
 								#log('go to part %f %f %f' % (targetpart[0], targetpart[1], z))
 								self.goto([[targetpart[0], targetpart[1], z], {args['T']: args['E']}], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
 					else:
-						self.goto([[target[0], target[1], self._use_probemap(target[0], target[1], args['Z'])], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
+						self.goto([[target[0], target[1], self._use_probemap(*target)], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
 				else:
-					self.goto([[target[0], target[1], args['Z']], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
+					self.goto([target, {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
 				if self.wait and self.flushing is False:
 					#log('stop filling; wait for queue space')
 					self.flushing = None
@@ -1309,6 +1310,8 @@ class Printer: # {{{
 			for a in range(len(axes)):
 				self.axis.append({})
 				self.axis[-1]['offset'], self.axis[-1]['park'], self.axis[-1]['park_order'], self.axis[-1]['max_v'], self.axis[-1]['min'], self.axis[-1]['max'] = struct.unpack('<ffBfff', axes[a])
+				if self.id == 0 and a == 2:
+					self.axis[-1]['offset'] -= self.printer.zoffset
 			for m in range(len(motors)):
 				self.motor.append({})
 				self.motor[-1]['step_pin'], self.motor[-1]['dir_pin'], self.motor[-1]['enable_pin'], self.motor[-1]['limit_min_pin'], self.motor[-1]['limit_max_pin'], self.motor[-1]['sense_pin'], self.motor[-1]['steps_per_m'], self.motor[-1]['max_steps'], self.motor[-1]['home_pos'], self.motor[-1]['limit_v'], self.motor[-1]['limit_a'], self.motor[-1]['home_order'] = struct.unpack('<HHHHHHfBfffB', motors[m])
@@ -1327,7 +1330,7 @@ class Printer: # {{{
 				raise AssertionError('invalid space type')
 			return data
 		def write_axis(self, axis):
-			return struct.pack('<ffBfff', self.axis[axis]['offset'], self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['max_v'], self.axis[axis]['min'], self.axis[axis]['max'])
+			return struct.pack('<ffBfff', self.axis[axis]['offset'] + (self.printer.zoffset if self.id == 0 and axis == 2 else 0), self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['max_v'], self.axis[axis]['min'], self.axis[axis]['max'])
 		def write_motor(self, motor):
 			return struct.pack('<HHHHHHfBfffB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_m'], self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
 		def set_current_pos(self, axis, pos):
@@ -1781,7 +1784,7 @@ class Printer: # {{{
 		for t in ('spaces', 'temps', 'gpios'):
 			message += 'num_%s = %d\r\n' % (t, len(getattr(self, t)))
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'probe_pin')])
-		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_safe_dist', 'bed_id', 'feedrate', 'motor_limit', 'temp_limit')])
+		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit')])
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings(i)
 		for i, t in enumerate(self.temps):
@@ -1808,7 +1811,7 @@ class Printer: # {{{
 		globals_changed = False
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set()}
 		keys = {
-				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'feedrate', 'motor_limit', 'temp_limit'},
+				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit'},
 				'space': {'type', 'max_deviation', 'num_axes', 'delta_angle'},
 				'temp': {'R0', 'R1', 'Rc', 'Tc', 'beta', 'power_pin', 'thermistor_pin'},
 				'gpio': {'pin', 'state', 'master', 'value'},
@@ -1947,7 +1950,7 @@ class Printer: # {{{
 		return errors
 	# }}}
 	@delayed
-	def gcode_run(self, id, code, ref = (0, 0), angle = 0, probemap = None, abort = True): # {{{
+	def gcode_run(self, id, code, ref = (0, 0, 0), angle = 0, probemap = None, abort = True): # {{{
 		self.gcode_ref = ref
 		angle = math.radians(angle)
 		self.gcode_angle = math.sin(angle), math.cos(angle)
@@ -2225,7 +2228,7 @@ class Printer: # {{{
 		return ret
 	# }}}
 	@delayed
-	def queue_print(self, id, names, ref = (0, 0), angle = 0, probemap = None): # {{{
+	def queue_print(self, id, names, ref = (0, 0, 0), angle = 0, probemap = None): # {{{
 		self._broadcast(None, 'printing', True)
 		self.job_output = ''
 		self.jobs_active = names
@@ -2238,7 +2241,7 @@ class Printer: # {{{
 			self._next_job()
 	# }}}
 	@delayed
-	def queue_probe(self, id, names, ref = (0, 0), angle = 0, speed = .003): # {{{
+	def queue_probe(self, id, names, ref = (0, 0, 0), angle = 0, speed = .003): # {{{
 		bbox = [float('nan'), (float('nan')), float('nan'), float('nan')]
 		for n in names:
 			bb = self.jobqueue[n][1]
@@ -2259,7 +2262,7 @@ class Printer: # {{{
 	# Globals. {{{
 	def get_globals(self):
 		ret = {'num_spaces': len(self.spaces), 'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('name', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit', 'feedrate', 'paused'):
+		for key in ('name', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit', 'feedrate', 'zoffset', 'paused'):
 			ret[key] = getattr(self, key)
 		return ret
 	def set_globals(self, update = True, **ka):
@@ -2272,10 +2275,13 @@ class Printer: # {{{
 		for key in ('led_pin', 'probe_pin', 'bed_id'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
-		for key in ('probe_dist', 'probe_safe_dist', 'motor_limit', 'temp_limit', 'feedrate'):
+		oldzoffset = self.zoffset
+		for key in ('probe_dist', 'probe_safe_dist', 'motor_limit', 'temp_limit', 'feedrate', 'zoffset'):
 			if key in ka:
 				setattr(self, key, float(ka.pop(key)))
 		self._write_globals(ns, nt, ng, update = update)
+		if self.zoffset != oldzoffset and len(self.spaces) > 0 and len(self.spaces[0].axis) > 2:
+			self.set_axis((0, 2))
 		assert len(ka) == 0
 	# }}}
 	# Space {{{

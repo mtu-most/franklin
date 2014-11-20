@@ -121,6 +121,7 @@ function _setup_updater() {
 				'motor_limit': 0,
 				'temp_limit': 0,
 				'feedrate': 1,
+				'zoffset': 0,
 				'message': null,
 				'spaces': [],
 				'temps': [],
@@ -181,7 +182,8 @@ function _setup_updater() {
 			printers[port].motor_limit = values[9];
 			printers[port].temp_limit = values[10];
 			printers[port].feedrate = values[11];
-			printers[port].status = values[12];
+			printers[port].zoffset = values[12];
+			printers[port].status = values[13];
 			trigger_update(port, 'variables_update');
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
