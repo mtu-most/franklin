@@ -5,6 +5,15 @@ show_own_debug = False
 #show_own_debug = True
 show_firmware_debug = True
 
+# Constants {{{
+C0 = 273.15	# Conversion between K and °C
+WAIT = object()	# Sentinel for blocking functions.
+# Space types
+TYPE_EXTRUDER = 0
+TYPE_CARTESIAN = 1
+TYPE_DELTA = 2
+# }}}
+
 # Imports.  {{{
 import websockets
 from websockets import log
@@ -26,13 +35,14 @@ import subprocess
 import traceback
 # }}}
 
-# Enable code trace.
+# Enable code trace. {{{
 if False:
 	def trace(frame, why, arg):
 		if why == 'call':
 			code = frame.f_code
 			log('call: %s' % code.co_name)
 	sys.settrace(trace)
+# }}}
 
 fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 
@@ -40,14 +50,6 @@ def dprint(x, data): # {{{
 	if show_own_debug:
 		log('%s: %s' %(x, ' '.join(['%02x' % ord(c) for c in data])))
 # }}}
-
-# Constants
-C0 = 273.15	# Conversion between K and °C
-WAIT = object()	# Sentinel for blocking functions.
-# Space types
-TYPE_EXTRUDER = 0
-TYPE_CARTESIAN = 1
-TYPE_DELTA = 2
 
 # Decorator for functions which block.
 class delayed: # {{{
@@ -190,6 +192,7 @@ class Printer: # {{{
 		self.alarms = set()
 		self.audiodir = audiodir
 		self.zoffset = 0.
+		self.multipliers = []
 		# Get the printer state.
 		self.printerid = newid
 		self.spaces = []
@@ -550,6 +553,8 @@ class Printer: # {{{
 				data = self._read('SPACE', len(self.spaces) - 1)
 				self.spaces[-1].read(data)
 		self.spaces = self.spaces[:num_spaces]
+		if num_spaces < 2:
+			self.multipliers = []
 		while len(self.temps) < num_temps:
 			self.temps.append(self.Temp())
 			if update:
@@ -911,6 +916,7 @@ class Printer: # {{{
 							a[a0 + ij] = axis
 				else:
 					for j, axis in tuple(axes[i].items()):
+						log('goto %s' % repr(j))
 						ij = int(j)
 						if ij >= len(sp.axis):
 							log('ignoring nonexistent axis %d %d' % (i, ij))
@@ -1088,10 +1094,10 @@ class Printer: # {{{
 			for i, a, m in self.home_motors:
 				self.set_motor((self.home_space, i), max_steps = 1)
 				if self.pin_valid(m['limit_max_pin']) or (not self.pin_valid(m['limit_min_pin']) and self.pin_valid(m['sense_pin'])):
-					self.spaces[self.home_space].set_current_pos(i, a['max'] - 2 * small_dist)
+					self.spaces[self.home_space].set_current_pos(i, a['max'] - 10 * small_dist)
 					self.home_target[i] = a['max'] - self.spaces[self.home_space].axis[i]['offset']
 				elif self.pin_valid(m['limit_min_pin']):
-					self.spaces[self.home_space].set_current_pos(i, a['min'] + 2 * small_dist)
+					self.spaces[self.home_space].set_current_pos(i, a['min'] + 10 * small_dist)
 					self.home_target[i] = a['min'] - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
 				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
@@ -1307,6 +1313,8 @@ class Printer: # {{{
 			axes, motors = data
 			self.axis = []
 			self.motor = []
+			if self.id == 1:
+				self.printer.multipliers = (self.printer.multipliers + [1.] * len(axes))[:len(axes)]
 			for a in range(len(axes)):
 				self.axis.append({})
 				self.axis[-1]['offset'], self.axis[-1]['park'], self.axis[-1]['park_order'], self.axis[-1]['max_v'], self.axis[-1]['min'], self.axis[-1]['max'] = struct.unpack('<ffBfff', axes[a])
@@ -1315,6 +1323,8 @@ class Printer: # {{{
 			for m in range(len(motors)):
 				self.motor.append({})
 				self.motor[-1]['step_pin'], self.motor[-1]['dir_pin'], self.motor[-1]['enable_pin'], self.motor[-1]['limit_min_pin'], self.motor[-1]['limit_max_pin'], self.motor[-1]['sense_pin'], self.motor[-1]['steps_per_m'], self.motor[-1]['max_steps'], self.motor[-1]['home_pos'], self.motor[-1]['limit_v'], self.motor[-1]['limit_a'], self.motor[-1]['home_order'] = struct.unpack('<HHHHHHfBfffB', motors[m])
+				if self.id == 1 and m < len(self.printer.multipliers):
+					self.motor[-1]['steps_per_m'] /= self.printer.multipliers[m]
 		def write_info(self, num_axes = None):
 			data = struct.pack('<Bf', self.type, self.max_deviation)
 			if self.type == TYPE_EXTRUDER:
@@ -1332,7 +1342,7 @@ class Printer: # {{{
 		def write_axis(self, axis):
 			return struct.pack('<ffBfff', self.axis[axis]['offset'] + (self.printer.zoffset if self.id == 0 and axis == 2 else 0), self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['max_v'], self.axis[axis]['min'], self.axis[axis]['max'])
 		def write_motor(self, motor):
-			return struct.pack('<HHHHHHfBfffB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_m'], self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
+			return struct.pack('<HHHHHHfBfffB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_m'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
 		def set_current_pos(self, axis, pos):
 			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
 			if not self.printer._send_packet(struct.pack('<BBBf', self.printer.command['SETPOS'], self.id, axis, pos)):
@@ -1345,7 +1355,7 @@ class Printer: # {{{
 			assert cmd == self.printer.rcommand['POS']
 			return f
 		def export(self):
-			std = [self.type, self.max_deviation, [[a['offset'], a['park'], a['park_order'], a['max_v'], a['min'], a['max']] for a in self.axis], [[m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['sense_pin'], m['steps_per_m'], m['max_steps'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for m in self.motor]]
+			std = [self.type, self.max_deviation, [[a['offset'], a['park'], a['park_order'], a['max_v'], a['min'], a['max']] for a in self.axis], [[m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['sense_pin'], m['steps_per_m'], m['max_steps'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for m in self.motor], None if self.id != 1 else self.printer.multipliers]
 			if self.type == TYPE_EXTRUDER:
 				return std + [[e for e in self.extruder]]
 			elif self.type == TYPE_CARTESIAN:
@@ -2010,11 +2020,13 @@ class Printer: # {{{
 	def queue_add(self, data, name): # {{{
 		assert name not in self.jobqueue
 		self._broadcast(None, 'blocked', 'parsing g-code')
-		parsed = self.gcode_parse(data)
+		parsed, errors = self.gcode_parse(data)
 		self.jobqueue[name] = (parsed, self.gcode_bbox(parsed))
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
 		self._broadcast(None, 'blocked', None)
-		return ''
+		for e in errors:
+			log(e)
+		return errors
 	# }}}
 	def queue_remove(self, name): # {{{
 		assert name in self.jobqueue
@@ -2022,6 +2034,7 @@ class Printer: # {{{
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
 	# }}}
 	def gcode_parse(self, code): # {{{
+		errors = []
 		mode = None
 		message = None
 		ret = []
@@ -2036,7 +2049,7 @@ class Printer: # {{{
 				r = re.match('N\d+\s*(.*?)\*\d+$')
 				if not r:
 					# Invalid line; ignore it.
-					log('%d:ignoring invalid gcode: %s' % (lineno, origline))
+					errors.append('%d:ignoring invalid gcode: %s' % (lineno, origline))
 					continue
 				line = r.group(1)
 			comment = ''
@@ -2044,7 +2057,7 @@ class Printer: # {{{
 				b = line.index('(')
 				e = line.find(')', b)
 				if e < 0:
-					log('%d:ignoring line with unterminated comment: %s' % (lineno, origline))
+					errors.append('%d:ignoring line with unterminated comment: %s' % (lineno, origline))
 					continue
 				comment = line[b + 1:e].strip()
 				line = line[:b] + line[e + 1:].strip()
@@ -2056,7 +2069,7 @@ class Printer: # {{{
 				message = comment[4:].strip()
 			elif comment.startswith('SYSTEM:'):
 				if not re.match(config['allow-system'], comment[7:]):
-					log('Warning: system command %s is forbidden and will not be run' % comment[7:])
+					errors.append('Warning: system command %s is forbidden and will not be run' % comment[7:])
 				ret.append((('SYSTEM', 0), {}, comment[7:]))
 				continue
 			if line == '':
@@ -2064,12 +2077,12 @@ class Printer: # {{{
 			line = line.split()
 			if mode is None or line[0][0] in 'GMT':
 				if len(line[0]) < 2:
-					log('%d:ignoring unparsable line: %s' % (lineno, origline))
+					errors.append('%d:ignoring unparsable line: %s' % (lineno, origline))
 					continue
 				try:
 					cmd = line[0][0], int(line[0][1:])
 				except:
-					log('%d:parse error in line: %s' % (lineno, origline))
+					errors.append('%d:parse error in line: %s' % (lineno, origline))
 					traceback.print_exc()
 					continue
 				line = line[1:]
@@ -2080,7 +2093,7 @@ class Printer: # {{{
 				try:
 					args[a[0]] = float(a[1:])
 				except:
-					log('%d:ignoring invalid gcode: %s' % (lineno, origline))
+					errors.append('%d:ignoring invalid gcode: %s' % (lineno, origline))
 					break
 			else:
 				if cmd == ('M', 2):
@@ -2122,7 +2135,7 @@ class Printer: # {{{
 				elif cmd[0] == 'M' and cmd[1] in (104, 109, 116):
 					args['E'] = int(args['T']) if 'T' in args else current_extruder
 				if not((cmd[0] == 'G' and cmd[1] in (0, 1, 4, 28, 81, 92, 94)) or (cmd[0] == 'M' and cmd[1] in (0, 3, 4, 5, 6, 9, 42, 84, 104, 106, 107, 109, 116, 140, 190)) or (cmd[0] in ('S', 'T'))):
-					log('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
+					errors.append('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
 				elif cmd == ('G', 28):
 					ret.append((cmd, args, message))
 					for a in range(len(pos[0])):
@@ -2199,7 +2212,7 @@ class Printer: # {{{
 				else:
 					ret.append((cmd, args, message))
 				message = None
-		return ret
+		return ret, errors
 	# }}}
 	def gcode_bbox(self, code): # {{{
 		ret = [[None, None], [None, None], [None, None]]
@@ -2314,6 +2327,8 @@ class Printer: # {{{
 		return ret
 	def get_axis(self, space, axis):
 		ret = {}
+		if space == 1:
+			ret['multiplier'] = self.multipliers[axis]
 		for key in ('offset', 'park', 'park_order', 'max_v', 'min', 'max'):
 			ret[key] = self.spaces[space].axis[axis][key]
 		return ret
@@ -2367,6 +2382,10 @@ class Printer: # {{{
 		for key in ('offset', 'park', 'park_order', 'max_v', 'min', 'max'):
 			if key in ka:
 				self.spaces[space].axis[axis][key] = ka.pop(key)
+		if space == 1 and 'multiplier' in ka and axis < len(self.spaces[space].motor):
+			assert(ka['multiplier'] > 0)
+			self.multipliers[axis] = ka['multiplier']
+			self.set_motor((space, axis), readback, update)
 		self._send_packet(struct.pack('<BBB', self.command['WRITE_SPACE_AXIS'], space, axis) + self.spaces[space].write_axis(axis))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))

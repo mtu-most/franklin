@@ -49,7 +49,7 @@ function Pin(title, obj, only_analog) {
 	return make_tablerow(title, [[pinselect], [validinput, validlabel], [invertedinput, invertedlabel], [button]], ['pintitle', ['pinvalue', 'pinvalue', 'pinvalue', 'pinvalue']]);
 }
 
-function Float(obj, factor, className, set) {
+function Float(obj, digits, factor, className, set) {
 	var input = Create('input', className);
 	//var button = Create('button', className).AddText('Set');
 	var span = Create('span', className);
@@ -62,6 +62,7 @@ function Float(obj, factor, className, set) {
 	span.factor = factor;
 	input.id = make_id(printer, obj, 'new');
 	span.id = make_id(printer, obj);
+	span.digits = digits;
 	//button.source = input;
 	input.type = 'text';
 	input.set = set;
@@ -95,7 +96,7 @@ function Spacetype(num) {
 	var span = Create('span');
 	span.id = make_id(printer, [['space', num], 'type']);
 	var div = Create('div').AddText('Max Deviation');
-	div.Add(Float([['space', num], 'max_deviation'], 1e-3));
+	div.Add(Float([['space', num], 'max_deviation'], 2, 1e-3));
 	return make_tablerow(space_name(num), [[select, button, span], div], ['rowtitle1']);
 }
 // }}}
@@ -106,21 +107,21 @@ function Extruder(num) {
 	var e = ['dx', 'dy', 'dz'];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float([['space', num], e[i]], 1));
+		div.Add(Float([['space', num], e[i]], 1, 1));
 		e[i] = div;
 	}
 	return make_tablerow(space_name(num), e, ['rowtitle3'], undefined, TYPE_EXTRUDER, num);
 }
 
 function Cartesian(num) {
-	return make_tablerow(space_name(num), [Float([['space', num], 'num_axes'], 1)], ['rowtitle1'], undefined, TYPE_CARTESIAN, num);
+	return make_tablerow(space_name(num), [Float([['space', num], 'num_axes'], 0, 1)], ['rowtitle1'], undefined, TYPE_CARTESIAN, num);
 }
 
 function Delta_motor(space, motor) {
-	var e = ['delta_axis_min', 'delta_axis_max', 'delta_rodlength', 'delta_radius'];
+	var e = [['delta_axis_min', 1], ['delta_axis_max', 1], ['delta_rodlength', 3], ['delta_radius', 3]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float([['motor', [space, motor]], e[i]], 1e-3));
+		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], 1e-3));
 		e[i] = div;
 	}
 	return make_tablerow(motor_name(space, motor), e, ['rowtitle4'], undefined, TYPE_DELTA, space);
@@ -133,15 +134,15 @@ function Delta(num, dummy, table) {
 
 function Delta_space(num) {
 	var div = Create('div');
-	div.Add(Float([['space', num], 'delta_angle'], Math.PI / 180));
+	div.Add(Float([['space', num], 'delta_angle'], 2, Math.PI / 180));
 	return make_tablerow(space_name(num), [div], ['rowtitle1'], undefined, TYPE_DELTA, num);
 }
 
 function Axis_axis(space, axis) {
-	var e = [['park', 1e-3], ['park_order', 1], ['max_v', 1e-3], ['min', 1e-3], ['max', 1e-3]];
+	var e = [['park', 1, 1e-3], ['park_order', 0, 1], ['max_v', 0, 1e-3], ['min', 1, 1e-3], ['max', 1, 1e-3]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float([['axis', [space, axis]], e[i][0]], e[i][1]));
+		div.Add(Float([['axis', [space, axis]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
 	return make_tablerow(axis_name(space, axis), e, ['rowtitle5']);
@@ -153,10 +154,10 @@ function Axis(num, dummy, table) {
 }
 
 function Motor_motor(space, motor) {
-	var e = [['steps_per_m', 1e3], ['max_steps', 1], ['home_pos', 1e-3], ['home_order', 1], ['limit_v', 1e-3], ['limit_a', 1]];
+	var e = [['steps_per_m', 3, 1e3], ['max_steps', 0, 1], ['home_pos', 3, 1e-3], ['home_order', 0, 1], ['limit_v', 0, 1e-3], ['limit_a', 1, 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1]));
+		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
 	return make_tablerow(motor_name(space, motor), e, ['rowtitle6']);
@@ -165,31 +166,6 @@ function Motor_motor(space, motor) {
 
 function Motor(num, dummy, table) {
 	table.AddMultiple('motor', Motor_motor, true, num);
-	return [];
-}
-
-function Move_axis(space, axis) {
-	var input = Create('input');
-	input.type = 'text';
-	input.id = make_id(printer, [['axis', [space, axis]], 'goto']);
-	var button = Create('button').AddText('Go');
-	button.printer = printer;
-	button.index = [space, axis];
-	button.AddEvent('click', function() {
-		var target = new Object;
-		target[String(this.index[1])] = Number(get_element(this.printer, [['axis', this.index], 'goto']).value) / 1000.;
-		var fulltarget = new Object;
-		fulltarget[String(this.index[0])] = target;
-		this.printer.call('goto', [fulltarget], {cb: true});
-		this.printer.call('wait_for_cb', [], {}, update_canvas_and_spans);
-	});
-	var offset = Create('div');
-	offset.Add(Float([['axis', [space, axis]], 'offset'], 1e-3));
-	return make_tablerow(axis_name(space, axis), [[input, button], offset], ['rowtitle3', '']);
-}
-
-function Move(num, dummy, table) {
-	table.AddMultiple('axis', Move_axis, false, num);
 	return [];
 }
 
@@ -208,25 +184,22 @@ function Pins_space(num, dummy, table) {
 
 // Temp. {{{
 function Temp_setup(num) {
-	var e = [['R0', 1e3], ['R1', 1e3], ['Rc', 1e3], ['Tc', 1], ['beta', 1]];
+	var e = [['R0', 1, 1e3], ['R1', 1, 1e3], ['Rc', 1, 1e3], ['Tc', 0, 1], ['beta', 0, 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float([['temp', num], e[i][0]], e[i][1]));
+		div.Add(Float([['temp', num], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
 	return make_tablerow(temp_name(printer, num), e, ['rowtitle5']);
 }
 
 function Temp(num) {
+	var div = Create(div);
+	div.Add(Float([['temp', num], 'value', 'settemp'], 0));
 	var current = Create('div');
-	var button = current.AddElement('button').AddText('Refresh');
-	button.num = num;
-	button.printer = printer;
+	current.id = make_id(printer, [['temp', num], 'temp']);
 	if (num !== null)
 		printer.temptargets.push(current.AddElement('span'));
-	button.AddEvent('click', function() { update_temps(this.printer, this.num); });
-	var div = Create(div);
-	div.Add(Float([['temp', num], 'value', 'settemp']));
 	return make_tablerow(temp_name(printer, num), [div, current], ['rowtitle2']);
 }
 
@@ -248,7 +221,7 @@ function Gpio_setup(num) {
 	button.index = num;
 	button.printer = printer;
 	button.AddEvent('click', function() { set_gpio_master(this.printer, this.index); });
-	var value = Float([['gpio', num], 'value'], 1);
+	var value = Float([['gpio', num], 'value'], 1, 1);
 	return make_tablerow(gpio_name(num), [[select, button], value], ['rowtitle2'], [['gpio', num], 'settings']);
 }
 
@@ -346,19 +319,19 @@ function Map() { // {{{
 	b.type = 'button';
 	b.printer = printer;
 	t.Add(make_tablerow('Position:', [
-		Float([null, 'currentx'], 1e-3, '', function(v) { b.printer.call('goto', [[{0: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
-		Float([null, 'currenty'], 1e-3, '', function(v) { b.printer.call('goto', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
-		Float([null, 'currentz'], 1e-3, '', function(v) { b.printer.call('goto', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
+		Float([['axis', [0, 0]], 'current'], 2, 1e-3, '', function(v) { b.printer.call('goto', [[{0: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
+		Float([['axis', [0, 1]], 'current'], 2, 1e-3, '', function(v) { b.printer.call('goto', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
+		Float([['axis', [0, 2]], 'current'], 2, 1e-3, '', function(v) { b.printer.call('goto', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
 		b,
 		'',
-		['Z Offset:', Float([null, 'zoffset'], 1e-3), 'mm']
+		['Z Offset:', Float([null, 'zoffset'], 2, 1e-3), 'mm']
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
 	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
-		b.printer.targetx = b.printer.currentx;
-		b.printer.targety = b.printer.currenty;
+		b.printer.targetx = b.printer.spaces[0].axis[0].current;
+		b.printer.targety = b.printer.spaces[0].axis[1].current;
 		if (!get_element(b.printer, [null, 'zlock']).checked)
-			b.printer.targetz = b.printer.currentz;
+			b.printer.targetz = b.printer.spaces[0].axis[2].current;
 		update_canvas_and_spans();
 	});
 	b.printer = printer;
@@ -370,16 +343,22 @@ function Map() { // {{{
 	var l = Create('label').AddText('Lock Z');
 	l.htmlFor = c.id;
 	t.Add(make_tablerow('Target:', [
-		Float([null, 'targetx'], 1e-3, '', function(v) { b.printer.targetx = v; update_canvas_and_spans(); }),
-		Float([null, 'targety'], 1e-3, '', function(v) { b.printer.targety = v; update_canvas_and_spans(); }),
-		Float([null, 'targetz'], 1e-3, '', function(v) { b.printer.targetz = v; update_canvas_and_spans(); }),
+		Float([null, 'targetx'], 2, 1e-3, '', function(v) { b.printer.targetx = v; update_canvas_and_spans(); }),
+		Float([null, 'targety'], 2, 1e-3, '', function(v) { b.printer.targety = v; update_canvas_and_spans(); }),
+		Float([null, 'targetz'], 2, 1e-3, '', function(v) { b.printer.targetz = v; update_canvas_and_spans(); }),
 		b,
 		[c, l],
-		['Angle:', Float([null, 'targetangle'], Math.PI / 180, '', function(v) { b.printer.targetangle = v; update_canvas_and_spans(); }), '°']
+		['Angle:', Float([null, 'targetangle'], 1, Math.PI / 180, '', function(v) { b.printer.targetangle = v; update_canvas_and_spans(); }), '°']
 	], ['', '', '', '', '', '']));
 	// Canvas for xy and for z.
-	ret.AddElement('canvas', 'xymap').id = make_id(printer, [null, 'xymap']);
-	ret.AddElement('canvas', 'zmap').id = make_id(printer, [null, 'zmap']);
+	c = ret.AddElement('canvas', 'xymap');
+	c.AddEvent('mousemove', xymove).AddEvent('mousedown', xydown);
+	c.id = make_id(printer, [null, 'xymap']);
+	c.printer = printer;
+	c = ret.AddElement('canvas', 'zmap');
+	c.AddEvent('mousemove', zmove).AddEvent('mousedown', zdown);
+	c.id = make_id(printer, [null, 'zmap']);
+	c.printer = printer;
 	return ret;
 }
 // }}}
@@ -407,14 +386,27 @@ function Temps() { // {{{
 function Multipliers() { // {{{
 	var ret = Create('div', 'multipliers');
 	var e = ret.AddElement('div').AddText('Feedrate: ');
-	e.Add(Float([null, 'feedrate'], 1e-2));
+	e.Add(Float([null, 'feedrate'], 0, 1e-2));
 	e.AddText(' %');
-	ret.AddMultiple('axis', function(i) {
-		var e = Create('div').AddText(axis_name(1, i) + ': ');
-		e.Add(Float([['axis', i], 'multiplier'], 1e-2));
-		e.AddText(' %');
-		return e;
-	}, true, 1);
+	ret.AddMultiple('space', function(space, dummy, obj) {
+		if (space == 1)
+			obj.AddMultiple('axis', function(space, i) {
+				var e = Create('div').AddText(axis_name(1, i) + ': ');
+				e.printer = printer;
+				e.Add(Float([['axis', [1, i]], 'multiplier'], 0, 1e-2));
+				e.AddText(' %');
+				e.Add(Float([['axis', [1, i]], 'current'], 1, 1e-3, '', function(v) {
+					var obj = {};
+					obj[i] = v;
+					e.printer.call('goto', [{1: obj}], {cb: true}, function() {
+						e.printer.call('wait_for_cb', [], {}, update_canvas_and_spans);
+					});
+				}));
+				e.AddText(' mm');
+				return e;
+			}, true, 1);
+		return [];
+	}, false);
 	return ret;
 }
 // }}}
@@ -450,21 +442,21 @@ function Printer() {	// {{{
 	setup.AddElement('div').Add(Text('Name', [null, 'name']));
 	// TODO: Profile copy+remove.
 	var e = setup.AddElement('div').AddText('Motor Timeout:');
-	e.Add(Float([null, 'motor_limit'], 60));
+	e.Add(Float([null, 'motor_limit'], 0, 60));
 	e.AddText(' min');
 	e = setup.AddElement('div').AddText('Temp Timeout:');
-	e.Add(Float([null, 'temp_limit'], 60));
+	e.Add(Float([null, 'temp_limit'], 0, 60));
 	e.AddText(' min');
 	e = setup.AddElement('div').AddText('Max Probe Distance:');
-	e.Add(Float([null, 'probe_dist'], 1e-3));
+	e.Add(Float([null, 'probe_dist'], 0, 1e-3));
 	e.AddText(' mm');
 	e = setup.AddElement('div').AddText('Probe Safe Retract Distance:');
-	e.Add(Float([null, 'probe_safe_dist'], 1e-3));
+	e.Add(Float([null, 'probe_safe_dist'], 0, 1e-3));
 	e.AddText(' mm');
-	e = setup.AddElement('div').AddText('ID of Bed Temp (255 for None):').Add(Float([null, 'bed_id']));
-	e = setup.AddElement('div').AddText('Spaces:').Add(Float([null, 'num_spaces']));
-	e = setup.AddElement('div').AddText('Temps:').Add(Float([null, 'num_temps']));
-	e = setup.AddElement('div').AddText('Gpios:').Add(Float([null, 'num_gpios']));
+	e = setup.AddElement('div').AddText('ID of Bed Temp (255 for None):').Add(Float([null, 'bed_id'], 0));
+	e = setup.AddElement('div').AddText('Spaces:').Add(Float([null, 'num_spaces'], 0));
+	e = setup.AddElement('div').AddText('Temps:').Add(Float([null, 'num_temps'], 0));
+	e = setup.AddElement('div').AddText('Gpios:').Add(Float([null, 'num_gpios'], 0));
 	// Space. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Spaces',

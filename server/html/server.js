@@ -211,7 +211,9 @@ function _setup_updater() {
 					'Rc': 0,
 					'Tc': 0,
 					'beta': 0,
-					'value': 0
+					'value': 0,
+					'temp': NaN,
+					'history': []
 				});
 			}
 			printers[port].temps.length = new_num_temps;
@@ -231,12 +233,16 @@ function _setup_updater() {
 		'space_update': function(port, index, values) {
 			printers[port].spaces[index].type = values[0];
 			printers[port].spaces[index].max_deviation = values[1];
-			printers[port].spaces[index].axis = [];
-			printers[port].spaces[index].motor = [];
 			printers[port].spaces[index].num_axes = values[2].length;
 			printers[port].spaces[index].num_motors = values[3].length;
+			var current = [];
+			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a)
+				current.push(a < printers[port].spaces[index].axis.length ? printers[port].spaces[index].axis[a].current : NaN);
+			printers[port].spaces[index].axis = [];
+			printers[port].spaces[index].motor = [];
 			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a) {
 				printers[port].spaces[index].axis.push({
+					'current': current[a],
 					'offset': values[2][a][0],
 					'park': values[2][a][1],
 					'park_order': values[2][a][2],
@@ -261,21 +267,25 @@ function _setup_updater() {
 					'home_order': values[3][m][11]
 				});
 			}
+			if (index == 1) {
+				for (var a = 0; a < values[4].length; ++a)
+					printers[port].spaces[index].axis[a].multiplier = values[4][a];
+			}
 			if (printers[port].spaces[index].type == TYPE_EXTRUDER) {
-				printers[port].spaces[index].dx = values[4][0];
-				printers[port].spaces[index].dy = values[4][1];
-				printers[port].spaces[index].dz = values[4][2];
+				printers[port].spaces[index].dx = values[5][0];
+				printers[port].spaces[index].dy = values[5][1];
+				printers[port].spaces[index].dz = values[5][2];
 			}
 			else
 				printers[port].spaces[index].extruder = null;
 			if (printers[port].spaces[index].type == TYPE_DELTA) {
 				for (var i = 0; i < 3; ++i) {
-					printers[port].spaces[index].motor[i].delta_axis_min = values[4][i][0];
-					printers[port].spaces[index].motor[i].delta_axis_max = values[4][i][1];
-					printers[port].spaces[index].motor[i].delta_rodlength = values[4][i][2];
-					printers[port].spaces[index].motor[i].delta_radius = values[4][i][3];
+					printers[port].spaces[index].motor[i].delta_axis_min = values[5][i][0];
+					printers[port].spaces[index].motor[i].delta_axis_max = values[5][i][1];
+					printers[port].spaces[index].motor[i].delta_rodlength = values[5][i][2];
+					printers[port].spaces[index].motor[i].delta_radius = values[5][i][3];
 				}
-				printers[port].spaces[index].delta_angle = values[4][3];
+				printers[port].spaces[index].delta_angle = values[5][3];
 			}
 			else
 				printers[port].spaces[index].delta = null;
