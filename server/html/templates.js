@@ -13,16 +13,16 @@ function Button(title, action, className) {
 function Text(title, obj, className) {
 	var span = Create('span', 'blocktitle').AddClass(className);
 	span.AddText(title);
-	var input = Create('input', 'title').AddClass(className);
+	var input = Create('input', 'text').AddClass(className);
 	input.type = 'text';
-	input.id = make_id(printer, obj, 'source');
-	var button = Create('button', 'button title').AddClass(className);
-	button.AddEvent('click', function() { set_value(this.printer, this.obj, document.getElementById(this.source).value); });
-	button.AddText('Set');
-	button.type = 'button';
-	button.source = input.id;
-	button.obj = input;
-	return [span, input, button];
+	input.printer = printer;
+	input.AddEvent('keydown', function(event) {
+		if (event.keyCode == 13) {
+			set_value(this.printer, obj, this.value);
+			event.preventDefault();
+		}
+	});
+	return [span, input];
 }
 
 function Pin(title, obj, only_analog) {
@@ -239,8 +239,13 @@ function Label() {	// {{{
 	ret.AddEvent('click', function() { select_printer(this.port); });
 	ret.port = port;
 	if (printer) {
-		// TODO: profile selection.
-		return ret.AddText(printer.name);
+		ret.AddText(printer.name);
+		selector = ret.AddElement('select', 'hidden').AddEvent('change', function() {
+			this.printer.call('load', [selector.value], {});
+		});
+		selector.printer = printer;
+		selector.id = make_id(printer, [null, 'profiles']);
+		update_profiles(printer);
 	}
 	ret.AddElement('span', 'port setup').AddText('@' + port);
 	return ret;
@@ -285,16 +290,16 @@ function Top() { // {{{
 	b.type = 'button';
 	b.printer = printer;
 	e.AddElement('br');
-	b = e.AddElement('button').AddText('Home').AddEvent('click', function() { this.printer.call('home', [], {}); });
+	b = e.AddElement('button').AddText('Home').AddEvent('click', function() { this.printer.call('home', [], {}, update_canvas_and_spans); });
 	b.type = 'button';
 	b.printer = printer;
-	b = e.AddElement('button').AddText('Pause').AddEvent('click', function() { this.printer.call('pause', [true], {}); });
+	b = e.AddElement('button').AddText('Pause').AddEvent('click', function() { this.printer.call('pause', [true], {}, update_canvas_and_spans); });
 	b.type = 'button';
 	b.printer = printer;
 	b = e.AddElement('button').AddText('Resume').AddEvent('click', function() { this.printer.call('pause', [false], {}); });
 	b.type = 'button';
 	b.printer = printer;
-	b = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { this.printer.call('sleep', [], {}); });
+	b = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { this.printer.call('sleep', [], {}, update_canvas_and_spans); });
 	b.type = 'button';
 	b.printer = printer;
 	// }}}
@@ -436,12 +441,31 @@ function Printer() {	// {{{
 	var blocker = ret.AddElement('div', 'hidden blocker');
 	blocker.id = make_id(printer, [null, 'block1']);
 	// }}}
-	ret.AddElement('div', 'message').id = make_id(printer, [null, 'message1']);
+	ret.AddElement('div', 'message hidden').id = make_id(printer, [null, 'message1']);
+	ret.AddElement('div', 'message hidden').id = make_id(printer, [null, 'confirm']);
 	// Setup. {{{
 	var setup = ret.AddElement('div', 'setup');
+	// Save and restore. {{{
+	var e = setup.AddElement('div');
+	e.AddText('Profile');
+	var b = e.AddElement('button').AddText('Save as').AddEvent('click', function() {
+		this.printer.call('save', [this.saveas.value], {});
+	});
+	b.type = 'button';
+	b.printer = printer;
+	b.saveas = e.AddElement('input');
+	b.saveas.type = 'text';
+	setup.AddElement('div').Add(File([null, 'import', 'import_settings'], 'Import'));
+	e = setup.AddElement('a', 'title').AddText('Export settings to file');
+	e.id = make_id(printer, [null, 'export']);
+	e.title = 'Save settings to disk.';
+	// }}}
+	var disable = setup.AddElement('div').AddElement('button').AddText('Disable Printer');
+	disable.port = port;
+	disable.type = 'button';
+	disable.AddEvent('click', function() { rpc.call('disable', [this.port], {}); });
 	setup.AddElement('div').Add(Text('Name', [null, 'name']));
-	// TODO: Profile copy+remove.
-	var e = setup.AddElement('div').AddText('Motor Timeout:');
+	e = setup.AddElement('div').AddText('Motor Timeout:');
 	e.Add(Float([null, 'motor_limit'], 0, 60));
 	e.AddText(' min');
 	e = setup.AddElement('div').AddText('Temp Timeout:');
@@ -629,18 +653,6 @@ function Printer() {	// {{{
 	pins.AddMultiple('temp', Pins_temp, false);
 	pins.AddMultiple('gpio', Pins_gpio, false);
 	// }}}
-	// Save and restore. {{{
-	//ret.Add(Button('Save settings to EEPROM', 'save'));
-	//ret.Add(Button('Restore settings from EEPROM', 'load'));
-	setup.AddElement('div').Add(File([null, 'import', 'import_settings'], 'Import'));
-	e = setup.AddElement('a', 'title').AddText('Export settings to file');
-	e.id = make_id(printer, [null, 'export']);
-	e.title = 'Save settings to disk.';
-	// }}}
-	var disable = setup.AddElement('div').AddElement('button').AddText('Disable Printer');
-	disable.port = port;
-	disable.type = 'button';
-	disable.AddEvent('click', function() { rpc.call('disable', [this.port], {}); });
 	// }}}
 
 	ret.Add(Top());

@@ -327,8 +327,10 @@ uint8_t next_move() {
 #ifdef DEBUG_MOVE
 	debug("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f s tp=%f s", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), F(t0), F(tp));
 #endif
-	if (!moving)
+	if (!moving) {
 		last_time = utime();
+		last_current_time = last_time;
+	}
 	//debug("last=%ld", F(long(last_time)));
 	//debug("moving->true");
 	moving = true;

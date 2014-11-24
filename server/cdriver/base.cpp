@@ -159,7 +159,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	//debug("cd %f %f", F(distance), F(dt));
 	mtr->target_dist = distance;
 	mtr->target_v = distance / dt;
-	float v = fabs(distance / dt);
+	float v = fabs(mtr->target_v);
 	int8_t s = (mtr->target_v < 0 ? -1 : 1);
 	// When turning around, ignore limits (they shouldn't have been violated anyway).
 	if (mtr->last_v * s < 0) {
@@ -168,7 +168,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	}
 	// Limit v.
 	if (v > mtr->limit_v) {
-		//movedebug("v %f %f", F(v), F(mtr->limit_v));
+		//debug("v %f %f", F(v), F(mtr->limit_v));
 		distance = (s * mtr->limit_v) * dt;
 		v = fabs(distance / dt);
 	}
@@ -176,19 +176,28 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	// Limit a+.
 	float limit_dv = mtr->limit_a * dt;
 	if (v - mtr->last_v * s > limit_dv) {
-		//movedebug("a+ %f %f %f %d", F(mtr->target_v), F(limit_dv), F(mtr->last_v), s);
+		//debug("a+ %f %f %f %d", F(mtr->target_v), F(limit_dv), F(mtr->last_v), s);
 		distance = (limit_dv * s + mtr->last_v) * dt;
 		v = fabs(distance / dt);
 	}
 	//debug("cd3 %f %f", F(distance), F(dt));
 	// Limit a-.
+	// Distance to travel until end of segment or connection.
 	float max_dist = (mtr->endpos - mtr->current_pos / mtr->steps_per_m) * s;
-	if (max_dist > 0 && v * v / 2 / mtr->limit_a > max_dist) {
-		//movedebug("a- %f %f %f %f %d", F(mtr->endpos), F(mtr->limit_a), F(max_dist), F(mtr->current_pos), s);
+	// Find distance traveled when slowing down at maximum a.
+	// x = 1/2 at²
+	// t = sqrt(2x/a)
+	// v = at
+	// v² = 2a²x/a = 2ax
+	// x = v²/2a
+	float limit_dist = v * v / 2 / mtr->limit_a;
+	//debug("max %f limit %f v %f a %f", max_dist, limit_dist, v, mtr->limit_a);
+	if (max_dist > 0 && limit_dist > max_dist) {
+		//debug("a- %f %f %f %d %d %f", F(mtr->endpos), F(mtr->limit_a), F(max_dist), F(mtr->current_pos), s, dt);
 		v = sqrt(max_dist * 2 * mtr->limit_a);
 		distance = s * v * dt;
 	}
-	//debug("cd4 %f %f", F(distance), F(dt));
+	//debug("cd4 %f %f", F(distance), F(dt)); */
 	float f = distance / mtr->target_dist;
 	//movedebug("checked %f %f", F(mtr->target_dist), F(distance));
 	if (f < factor)
@@ -209,21 +218,43 @@ static void move_axes(Space *s, uint32_t current_time, float &factor) { // {{{
 	}
 } // }}}
 
-static bool do_steps(float &factor, uint32_t current_time) { // {{{
+static void do_steps(float &factor, uint32_t current_time) { // {{{
 	//debug("steps");
 	if (factor <= 0) {
 		next_motor_time = 0;
 		movedebug("end move");
 		for (uint8_t s = 0; s < num_spaces; ++s)
 			spaces[s].active = false;
+		moving = false;
 		arch_move();
-		return true;
+		return;
 	}
 	//movedebug("do steps %f %d", F(factor), max_steps);
 	next_motor_time = 0;
+	bool have_steps = false;
+	for (uint8_t s = 0; !have_steps && s < num_spaces; ++s) {
+		Space &sp = spaces[s];
+		if (!sp.active)
+			continue;
+		for (uint8_t m = 0; m < sp.num_motors; ++m) {
+			Motor &mtr = *sp.motor[m];
+			float num = (mtr.current_pos / mtr.steps_per_m + mtr.target_dist * factor) * mtr.steps_per_m;
+			if (mtr.current_pos != int(num + (num > 0 ? .49 : -.49))) {
+				//debug("have steps %d %f %f", mtr.current_pos, mtr.target_dist, factor);
+				have_steps = true;
+				break;
+			}
+			//debug("no steps yet %d %d", s, m);
+		}
+	}
+	uint32_t the_last_time = last_current_time;
+	last_current_time = current_time;
+	// If there are no steps to take, wait until there are.
+	if (!have_steps)
+		return;
 	// Adjust start time if factor < 1.
 	if (factor > 0 && factor < 1) {
-		start_time += (current_time - last_time) * ((1 - factor) * .99);
+		start_time += (current_time - the_last_time) * ((1 - factor) * .99);
 		movedebug("correct: %f %d", F(factor), int(start_time));
 	}
 	else
@@ -256,7 +287,6 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 		for (uint8_t a = 0; a < sp.num_axes; ++a)
 			sp.axis[a]->current += (sp.axis[a]->target - sp.axis[a]->current) * factor;
 	}
-	return true;
 } // }}}
 
 static void handle_motors(uint32_t current_time, uint32_t longtime) { // {{{
@@ -295,8 +325,7 @@ static void handle_motors(uint32_t current_time, uint32_t longtime) { // {{{
 			//debug("f %f", F(factor));
 		}
 		//debug("f2 %f %ld %ld", F(factor), F(last_time), F(current_time));
-		if (!do_steps(factor, current_time))
-			return;
+		do_steps(factor, current_time);
 		//debug("f3 %f", F(factor));
 		// Start time may have changed; recalculate t.
 		t = (current_time - start_time) / 1e6;

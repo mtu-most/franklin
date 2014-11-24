@@ -6,7 +6,8 @@
 #include <stdarg.h>
 #include <stdint.h>
 
-#define ID_SIZE 8	// Number of bytes in printerid.
+#define PROTOCOL_VERSION ((uint32_t)0)	// Required version response in BEGIN.
+#define ID_SIZE 16
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
 #define MAXINT MAXLONG
@@ -306,10 +307,8 @@ EXTERN float probe_dist, probe_safe_dist;
 EXTERN float feedrate;		// Multiplication factor for f values, used at start of move.
 // Other variables.
 EXTERN Serial_t *serialdev[2];
-EXTERN char printerid[ID_SIZE];
 EXTERN unsigned char command[2][FULL_COMMAND_SIZE];
 EXTERN uint8_t command_end[2];
-EXTERN uint32_t last_current_time;
 EXTERN Space *spaces;
 EXTERN uint32_t next_motor_time;
 EXTERN Temp *temps;
@@ -343,7 +342,7 @@ EXTERN uint8_t audio_head, audio_tail, audio_state;
 EXTERN uint32_t audio_start;
 EXTERN int16_t audio_us_per_sample;
 #endif
-EXTERN uint32_t start_time, last_time;
+EXTERN uint32_t start_time, last_time, last_current_time;
 EXTERN float t0, tp;
 EXTERN bool moving, stopping;
 EXTERN float f0, f1, f2, fp, fq, fmain;
@@ -421,8 +420,6 @@ void Pin_t::read(uint16_t data) {
 struct RealSerial : public Serial_t {
 	void begin(int baud) {
 		Serial.begin(baud);
-		for (uint8_t i = 0; i < ID_SIZE; ++i)
-			printerid[i] = this->read();
 	}
 	void write(char c) {
 		Serial.write(c);

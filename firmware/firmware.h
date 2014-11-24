@@ -5,7 +5,7 @@
 #include <stdarg.h>
 #include ARCH_INCLUDE
 
-#define ID_SIZE 8	// Number of bytes in printerid.
+#define ID_SIZE 16	// Number of bytes in printerid; it's a UUID which is always 16 bytes.
 #define PROTOCOL_VERSION 0
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
@@ -50,7 +50,7 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values.
 
 enum Command {
 	// from host
-	CMD_BEGIN,	// 8:id
+	CMD_BEGIN,	// 0
 	CMD_PING,	// 1:code
 	CMD_RESET,	// 4:magic
 	CMD_SETUP,	// 1:num_motors, 2:led_pin, 4:speedfactor

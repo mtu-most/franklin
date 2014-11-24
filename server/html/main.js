@@ -418,7 +418,7 @@ function queue_print(printer) { // {{{
 
 // Non-update events. {{{
 function new_port() { // {{{
-	ports[port] = [Label(), NoPrinter(), null, ''];
+	ports[port] = [Label(), NoPrinter(), null, null];
 	ports[port][0].AddClass('setup');
 	labels_element.Add(ports[port][0]);
 	printers_element.Add(ports[port][1]);
@@ -488,7 +488,7 @@ function del_printer() { // {{{
 	printers_element.removeChild(ports[port][2]);
 	ports[port][2] = null;
 	delete multiples[port];
-	ports[port][3] = '';
+	ports[port][3] = null;
 	if (selected_port == port)
 		selected_printer = null;
 } // }}}
@@ -501,8 +501,36 @@ function del_port() { // {{{
 } // }}}
 
 function do_confirm(id, message) { // {{{
-	var the_printer = printer;
-	the_printer.call('confirm', [id, confirm(message)], {});
+	update_canvas_and_spans();
+	var e = get_element(printer, [null, 'confirm']);
+	e.ClearAll();
+	if (id === null) {
+		e.AddClass('hidden');
+		return;
+	}
+	e.RemoveClass('hidden');
+	// Cancel button.
+	var button = e.AddElement('button', 'confirmabort').AddText('Abort').AddEvent('click', function() {
+		var e = get_element(this.printer, [null, 'confirm']);
+		e.ClearAll();
+		e.AddClass('hidden');
+		this.printer.call('confirm', [this.confirm_id, false], {});
+	});
+	button.type = 'button';
+	button.printer = printer;
+	button.confirm_id = id;
+	// Message
+	e.AddText(message);
+	// Ok button.
+	button = e.AddElement('button', 'confirmok').AddText('Ok').AddEvent('click', function() {
+		var e = get_element(this.printer, [null, 'confirm']);
+		e.ClearAll();
+		e.AddClass('hidden');
+		this.printer.call('confirm', [this.confirm_id, true], {});
+	});
+	button.type = 'button';
+	button.printer = printer;
+	button.confirm_id = id;
 } // }}}
 
 function do_queue() { // {{{
@@ -679,6 +707,7 @@ function update_globals() { // {{{
 		hiding[h].AddClass('hidden');
 	for (var s = 0; s < showing.length; ++s)
 		showing[s].RemoveClass('hidden');
+	update_profiles(printer);
 	update_canvas_and_spans();
 } // }}}
 
@@ -824,7 +853,6 @@ function update_gpio(index) { // {{{
 // Update helpers. {{{
 function update_choice(id) { // {{{
 	var value = get_value(printer, id);
-	dbg(id);
 	var list = choices[make_id(printer, id)][1];
 	var container = get_element(printer, [null, 'container']);
 	for (var i = 0; i < list.length; ++i) {
@@ -873,6 +901,22 @@ function update_temprange(id) { // {{{
 	var value = get_value(printer, id);
 	get_element(printer, id).selectedIndex = value != 255 ? 1 + value : 0;
 	return value;
+} // }}}
+
+function update_profiles(printer) { // {{{
+	printer.call('list_profiles', [], {}, function(profiles) {
+		var selector = get_element(printer, [null, 'profiles']);
+		selector.ClearAll();
+		for (var i = 0; i < profiles.length; ++i) {
+			selector.AddElement('option').AddText(profiles[i]).value = profiles[i];
+			if (printer.profile == profiles[i])
+				selector.selectedIndex = i;
+		}
+		if (profiles.length < 2)
+			selector.AddClass('hidden');
+		else
+			selector.RemoveClass('hidden');
+	});
 } // }}}
 // }}}
 

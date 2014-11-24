@@ -3,6 +3,7 @@
 #define _ARCH_AVR_H
 #include <Arduino.h>
 #include <avr/wdt.h>
+#include <EEPROM.h>
 
 #ifndef NO_DEBUG
 static inline void debug(char const *fmt, ...);
@@ -212,6 +213,14 @@ static inline void arch_setup_start() {
 	// Disable all outputs.
 	for (uint8_t i = 0; i < NUM_DIGITAL_PINS; ++i)
 		RAW_SET_INPUT_NOPULLUP(i);
+	// Initialize printer id from EEPROM.
+	for (uint8_t i = 0; i < ID_SIZE; ++i)
+		printerid[i] = EEPROM.read(i);
+	// Make it a UUID (version 4).
+	printerid[7] &= 0x0f;
+	printerid[7] |= 0x40;
+	printerid[9] &= 0x3f;
+	printerid[9] |= 0x80;
 }
 
 static inline bool arch_run() {

@@ -21,8 +21,6 @@ void packet()
 #endif
 		// A server is running; start the watchdog.
 		watchdog_enable();
-		for (uint8_t i = 0; i < ID_SIZE; ++i)
-			printerid[i] = command[2 + i];
 		write_ack();
 		reply[0] = 2 + sizeof(uint32_t) + 2 + sizeof(uint16_t) + 1;
 		reply[1] = CMD_START;

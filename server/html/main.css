@@ -81,14 +81,21 @@
 	left: 0px;
 	width: 100%;
 }
-.status {
+.message {
 	background: #ff8;
 	padding: 1em 1em 1em 1em;
 	white-space: pre-line;
 	position: fixed;
 	bottom: 0px;
 	left: 0px;
-	width: 100%;
+	right: 0px;
+	text-align: center;
+}
+.message button.confirmabort {
+	float: left;
+}
+.message button.confirmok {
+	float: right;
 }
 body {
 	margin-top: 3em;

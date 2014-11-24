@@ -15,6 +15,8 @@ TYPE_DELTA = 2
 # }}}
 
 # Imports.  {{{
+import xdgbasedir
+xdgbasedir.packagename('franklin')
 import websockets
 from websockets import log
 import serial
@@ -64,13 +66,12 @@ class delayed: # {{{
 		return (WAIT, wrap)
 # }}}
 
-# class for handling beaglebone: driver running on same machine.
+# Call cdriver running on same machine.
 class Driver: # {{{
-	def __init__(self, port, newid):
+	def __init__(self, port):
 		self.driver = subprocess.Popen((sys.argv[1], port), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		fcntl.fcntl(self.driver.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 		self.buffer = ''
-		self.write(newid)
 	def available(self):
 		return len(self.buffer) > 0
 	def write(self, data):
@@ -142,11 +143,12 @@ class Printer: # {{{
 		sys.stdout.write(json.dumps(data) + '\n')
 		sys.stdout.flush()
 	# }}}
-	def __init__(self, port, audiodir, newid): # {{{
+	def __init__(self, port, uuid): # {{{
 		# HACK: this variable needs to have its value before init is done, to make the above HACK in the generator work.
 		global printer
 		printer = self
-		self.printer = Driver(port, newid)
+		self.printer = Driver(port)
+		self.profile = 'default'
 		self.jobqueue = {}
 		self.job_output = ''
 		self.jobs_active = []
@@ -155,8 +157,9 @@ class Printer: # {{{
 		self.jobs_probemap = None
 		self.job_current = 0
 		self.job_id = None
-		self.status = None
 		self.confirm_id = 0
+		self.confirm_message = None
+		self.confirmer = None
 		self.position_valid = False
 		self.probing = False
 		self.home_phase = None
@@ -168,7 +171,6 @@ class Printer: # {{{
 		self.gcode_wait = None
 		self.gcode_parking = False
 		self.gcode_waiting = 0
-		self.confirmer = None
 		self.queue = []
 		self.queue_pos = 0
 		self.queue_info = None
@@ -190,11 +192,10 @@ class Printer: # {{{
 		self.movecb = []
 		self.tempcb = []
 		self.alarms = set()
-		self.audiodir = audiodir
+		self.uuid = uuid
 		self.zoffset = 0.
 		self.multipliers = []
 		# Get the printer state.
-		self.printerid = newid
 		self.spaces = []
 		self.temps = []
 		self.gpios = []
@@ -211,9 +212,7 @@ class Printer: # {{{
 			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False, update = False)
-		ini = os.getenv('FRANKLIN_INI')
-		if ini is not None:
-			self.import_settings(open(ini).read(), update = False)
+		self.load()
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
@@ -311,7 +310,8 @@ class Printer: # {{{
 		#log('writing %s' % ' '.join(['%02x' % ord(x) for x in data]))
 		while True:
 			try:
-				return self.printer.write(data)
+				self.printer.write(data)
+				return
 			except:
 				log('error writing')
 				traceback.print_exc()
@@ -586,7 +586,7 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _globals_update(self, target = None): # {{{
-		self._broadcast(target, 'globals_update', [len(self.spaces), len(self.temps), len(self.gpios), self.name, self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.motor_limit, self.temp_limit, self.feedrate, self.zoffset, not self.paused and (None if self.gcode is None else True)])
+		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.name, self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.motor_limit, self.temp_limit, self.feedrate, self.zoffset, not self.paused and (None if self.gcode is None else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		self._broadcast(target, 'space_update', which, self.spaces[which].export())
@@ -639,6 +639,9 @@ class Printer: # {{{
 			if self.gcode_parking or self.gcode_waiting > 0 or self.confirmer is not None or self.gcode_wait is not None or self.flushing or self.paused:
 				#log('gcode waiting: %s' % repr((self.gcode_parking, self.gcode_waiting, self.confirmer, self.gcode_wait)))
 				# Wait until done.
+				return
+			if not self.position_valid:
+				self.home(cb = lambda: self._do_gcode(), abort = False)[1](None)
 				return
 			cmd, args, message = self.gcode[0]
 			cmd = tuple(cmd)
@@ -916,7 +919,6 @@ class Printer: # {{{
 							a[a0 + ij] = axis
 				else:
 					for j, axis in tuple(axes[i].items()):
-						log('goto %s' % repr(j))
 						ij = int(j)
 						if ij >= len(sp.axis):
 							log('ignoring nonexistent axis %d %d' % (i, ij))
@@ -1205,23 +1207,29 @@ class Printer: # {{{
 		log('Internal error: invalid home phase')
 	# }}}
 	def _do_probe(self, id, x, y, z, angle, speed, phase = 0, good = True): # {{{
+		log('probe %d' % phase)
 		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
 		if not good:
 			# This means the probe has been aborted.
-			for m in range(len(self.spaces[0].motor)):
-				self.set_motor((0, m), limit_min_pin = self.probe_orig[m][0], max_steps = self.probe_orig[m][1])
+			if self.pin_valid(self.probe_pin):
+				for m in range(len(self.spaces[0].motor)):
+					self.set_motor((0, m), limit_min_pin = self.probe_orig[m][0], max_steps = self.probe_orig[m][1])
 			self.probing = False
 			if id is not None:
 				self._send(id, 'error', 'aborted')
 			return
 		self.probing = True
+		if not self.position_valid:
+			self.home(cb = lambda: self._do_probe(id, x, y, z, angle, speed, phase, good), abort = False)[1](None)
+			return
 		p = self.jobs_probemap
 		if phase == 0:
 			if y > p[1][1]:
 				# Done.
 				self.probing = False
-				for m in range(len(self.spaces[0].motor)):
-					self.set_motor((0, m), limit_min_pin = self.probe_orig[m][0], max_steps = self.probe_orig[m][1])
+				if self.pin_valid(self.probe_pin):
+					for m in range(len(self.spaces[0].motor)):
+						self.set_motor((0, m), limit_min_pin = self.probe_orig[m][0], max_steps = self.probe_orig[m][1])
 				if id is not None:
 					self._send(id, 'return', self.jobs_probemap)
 				else:
@@ -1246,9 +1254,12 @@ class Printer: # {{{
 		elif phase == 1:
 			# Probe
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 2, good)
-			self.movecb.append(self.probe_cb)
-			z_low = self.spaces[0].axis[2]['min']
-			self.goto([{2: z_low}], f0 = float(speed) / (z - z_low) if z > z_low else float('inf'), cb = True)[1](None)
+			if self.pin_valid(self.probe_pin):
+				self.movecb.append(self.probe_cb)
+				z_low = self.spaces[0].axis[2]['min']
+				self.goto([{2: z_low}], f0 = float(speed) / (z - z_low) if z > z_low else float('inf'), cb = True)[1](None)
+			else:
+				self.request_confirmation('Please move the tool to the surface')[1](False)
 		else:
 			# Record result
 			z = self.spaces[0].get_current_pos(2)
@@ -1455,8 +1466,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def probe(self, id, area, angle = 0, speed = .003): # {{{
-		log('area:%s' % repr(area))
-		if not self.pin_valid(self.probe_pin) or len(self.spaces) < 1 or len(self.spaces[0].axis) < 3 or not self.probe_safe_dist > 0:
+		if len(self.spaces) < 1 or len(self.spaces[0].axis) < 3 or not self.probe_safe_dist > 0:
 			if id is not None:
 				self._send(id, 'return', None)
 			return
@@ -1464,9 +1474,10 @@ class Printer: # {{{
 		self.jobs_probemap = [area, density, [[None for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
 		self.gcode_angle = math.sin(angle), math.cos(angle)
 		#log(repr(self.jobs_probemap))
-		self.probe_orig = [(m['limit_min_pin'], m['max_steps']) for m in self.spaces[0].motor]
-		for m in range(len(self.spaces[0].motor)):
-			self.set_motor((0, m), limit_min_pin = self.probe_pin, max_steps = 1, readback = False)
+		if self.pin_valid(self.probe_pin):
+			self.probe_orig = [(m['limit_min_pin'], m['max_steps']) for m in self.spaces[0].motor]
+			for m in range(len(self.spaces[0].motor)):
+				self.set_motor((0, m), limit_min_pin = self.probe_pin, max_steps = 1, readback = False)
 		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
 	# }}}
 	@delayed
@@ -1535,28 +1546,37 @@ class Printer: # {{{
 		assert cmd == self.rcommand['PIN']
 		return bool(s)
 	# }}}
-	def load(self): # {{{
-		if not self._send_packet(struct.pack('<B', self.command['LOAD'])):
-			return False
-		if not self._read_globals(False):
-			return False
-		self._globals_update()
-		for i, s in enumerate(self.spaces):
-			self.spaces[i].read(self._read('SPACE', i))
-			self._space_update(i)
-		for i, t in enumerate(self.temps):
-			self.temps[i].read(self._read('TEMP', i))
-			self._temp_update(i)
-		for i, g in enumerate(self.gpios):
-			self.gpios[i].read(self._read('GPIO', i))
-			self._gpio_update(i)
-		return True
+	def load(self, profile = None): # {{{
+		filenames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'profiles', (profile or self.profile) + os.extsep + 'ini'))
+		if profile and self.profile != profile:
+			self.profile = profile
+			self._globals_update()
+		for filename in filenames:
+			with open(filename) as f:
+				self.import_settings(f.read())
 	# }}}
-	def save(self): # {{{
-		self._broadcast(None, 'blocked', 'saving')
-		ret = self._send_packet(struct.pack('<B', self.command['SAVE']))
-		self._broadcast(None, 'blocked', None)
+	def save(self, profile = None): # {{{
+		if profile and self.profile != profile:
+			self.profile = profile
+			self._globals_update()
+		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'profiles', (profile or self.profile) + os.extsep + 'ini'))
+		with open(filename, 'w') as f:
+			f.write(self.export_settings())
+	# }}}
+	def list_profiles(self): # {{{
+		dirnames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'profiles'))
+		ret = []
+		for d in dirnames:
+			ret += [os.path.splitext(f)[0] for f in os.listdir(d)]
+		ret.sort(key = lambda x: x if x != 'default' else '')
 		return ret
+	# }}}
+	def remove_profile(self, profile): # {{{
+		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'profiles', (profile or self.profile) + os.extsep + 'ini'), makedirs = False)
+		if os.path.exists(filename):
+			os.unlink(filename)
+			return True
+		return False
 	# }}}
 	def abort(self): # {{{
 		# TODO: really abort.
@@ -1675,7 +1695,9 @@ class Printer: # {{{
 	def audio_play(self, id, name, motors = None): # {{{
 		log('motors: %s' % repr(motors))
 		assert os.path.basename(name) == name
-		self.audiofile = open(os.path.join(self.audiodir, name), 'rb')
+		filenames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'audio', name))
+		assert len(filenames) == 1
+		self.audiofile = open(filenames[0], 'rb')
 		channels = [0] *(((sum([len(s.motor) for s in self.spaces]) - 1) >> 3) + 1)
 		m0 = 0
 		for i, s in enumerate(self.spaces):
@@ -1708,8 +1730,7 @@ class Printer: # {{{
 			for b in range(8):
 				c += ((data[t + b] - minimum) * 2 // scale) << b
 			s += chr(c)
-		if not os.path.exists(self.audiodir):
-			os.makedirs(self.audiodir)
+		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'audio', name))
 		with open(os.path.join(self.audiodir, name), 'wb') as f:
 			f.write(struct.pack('<H', 1000000 // wav.getframerate()) + s)
 	# }}}
@@ -1790,7 +1811,7 @@ class Printer: # {{{
 	def export_settings(self): # {{{
 		message = '[general]\r\n'
 		# Don't export the name.
-		#message += 'name=' + self.name.replace('\\', '\\\\').replace('\n', '\\n') + '\r\n'
+		message += 'name=' + self.name.replace('\\', '\\\\').replace('\n', '\\n') + '\r\n'
 		for t in ('spaces', 'temps', 'gpios'):
 			message += 'num_%s = %d\r\n' % (t, len(getattr(self, t)))
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'probe_pin')])
@@ -1821,7 +1842,7 @@ class Printer: # {{{
 		globals_changed = False
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set()}
 		keys = {
-				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit'},
+				'general': {'name', 'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit'},
 				'space': {'type', 'max_deviation', 'num_axes', 'delta_angle'},
 				'temp': {'R0', 'R1', 'Rc', 'Tc', 'beta', 'power_pin', 'thermistor_pin'},
 				'gpio': {'pin', 'state', 'master', 'value'},
@@ -1881,7 +1902,7 @@ class Printer: # {{{
 				continue
 			key = r.group(6)
 			value = r.group(7)
-			if key == 'name':
+			if key.endswith('name'):
 				pass
 			elif key.endswith('pin'):
 				value = read_pin(value)
@@ -1997,24 +2018,34 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def request_confirmation(self, id, message): # {{{
+		# Abort pending confirmation, if any.
+		if self.confirmer not in (False, None):
+			self._send(self.confirmer, 'return', False)
 		self.confirmer = id
 		self.confirm_id += 1
-		self._broadcast(None, 'confirm', self.confirm_id, message)
+		self.confirm_message = message
+		self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
 	def confirm(self, confirm_id, success = True): # {{{
 		if confirm_id != self.confirm_id:
 			# Confirmation was already sent.
+			log('no confirm %s' % repr((confirm_id, self.confirm_id)))
 			return False
 		id = self.confirmer
 		self.confirmer = None
+		self.confirm_message = None
+		self._broadcast(None, 'confirm', None)
 		if id not in (False, None):
 			self._send(id, 'return', success)
 		else:
-			if not success:
-				self._unpause()
-				self._print_done(False, 'aborted by failed confirmation')
+			if self.probing:
+				call_queue.append((self.probe_cb[1], [success]))
 			else:
-				call_queue.append((self._do_gcode, []))
+				if not success:
+					self._unpause()
+					self._print_done(False, 'aborted by failed confirmation')
+				else:
+					call_queue.append((self._do_gcode, []))
 		return True
 	# }}}
 	def queue_add(self, data, name): # {{{
@@ -2450,6 +2481,8 @@ class Printer: # {{{
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
 		if self.gcode is not None:
 			self._broadcast(target, 'printing', True)
+		if self.confirmer is not None:
+			self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
 	# }}}
 # }}}

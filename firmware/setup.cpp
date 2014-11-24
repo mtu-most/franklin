@@ -33,10 +33,8 @@ void setup()
 	audio_us_per_sample = 125; // 1000000 / 8000;
 	continue_cb = false;
 #endif
-	for (uint8_t i = 0; i < ID_SIZE; ++i)
-		printerid[i] = 0;
+	arch_setup_end();	// This fills printerid.
 	Serial.write(CMD_ID);
-	for (uint8_t i = 0; i < 8; ++i)
+	for (uint8_t i = 0; i < ID_SIZE; ++i)
 		Serial.write(printerid[i]);
-	arch_setup_end();
 }

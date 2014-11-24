@@ -62,9 +62,15 @@ void setup(char const *port)
 #ifdef HAVE_AUDIO
 	next_audio_time = ~0;
 #endif
-	for (uint8_t i = 0; i < ID_SIZE; ++i)
-		printerid[i] = 0;
 	arch_setup_end();
+	if (protocol_version < PROTOCOL_VERSION) {
+		debug("Printer has older Franklin version than host; please flash newer firmware.");
+		exit(1);
+	}
+	else if (protocol_version > PROTOCOL_VERSION) {
+		debug("Printer has newer Franklin version than host; please upgrade your host software.");
+		exit(1);
+	}
 	load_all();
 }
 

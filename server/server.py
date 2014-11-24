@@ -365,7 +365,9 @@ class Connection: # {{{
 	# }}}
 	def _call (self, name, a, ka): # {{{
 		resumeinfo = [(yield), None]
-		assert self.printer is not None
+		if not self.printer or self.printer not in ports or not ports[self.printer]:
+			self.printer = self.find_printer()
+			assert self.printer
 		#log('other: %s' % attr)
 		ports[self.printer].call(name, a, ka, lambda success, ret: resumeinfo[0](ret))
 		yield (yield websockets.WAIT)
@@ -376,11 +378,10 @@ class Connection: # {{{
 # }}}
 
 class Port: # {{{
-	def __init__(self, port, process, id, detectport): # {{{
+	def __init__(self, port, process, detectport): # {{{
 		self.name = None
 		self.port = port
 		self.process = process
-		self.id = id
 		self.waiters = ({}, {}, {})
 		self.next_mid = 0
 		self.input_handle = GLib.io_add_watch(process.stdout.fileno(), GLib.IO_IN | GLib.IO_HUP, self.printer_input)
@@ -477,9 +478,8 @@ class Port: # {{{
 
 def detect(port): # {{{
 	if port == '-':
-		fake_id = 'xxxxxxxx'
-		process = subprocess.Popen((config['driver'], config['cdriver'], port, config['audiodir'], fake_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-		ports[port] = Port(port, process, fake_id, None)
+		process = subprocess.Popen((config['driver'], config['cdriver'], port, 'local'), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		ports[port] = Port(port, process, None)
 		return False
 	if not os.path.exists(port):
 		log("not detecting on %s, because file doesn't exist." % port)
@@ -508,42 +508,42 @@ def detect(port): # {{{
 			ports[port] = None
 			return False
 		def boot_printer_input(fd, cond):
-			while len(id[0]) < 9:
-				id[0] += printer.read(9 - len(id[0]))
-				if len(id[0]) < 9:
+			hexid = '%02x' % ord(single['ID'])
+			while len(id[0]) < 2 * 17:
+				id[0] += ''.join(['%02x' % ord(x) for x in printer.read(17 - len(id[0]) // 2)])
+				if len(id[0]) < 2 * 17:
 					printer.write(single['ID'])
 					return True
-				if id[0][0] != single['ID']:
-					log('skip non-id: %s %s' % (' '.join(['%02x' % ord(x) for x in id[0]]), id[0]))
-					if single['ID'] in id[0]:
-						id[0] = id[0][id[0].index(single['ID']):]
-						log('keeping some: %s %s' % (' '.join(['%02x' % ord(x) for x in id[0]]), id[0]))
+				if not id[0].startswith(hexid):
+					log('skip non-id: %s' % id[0])
+					if hexid in id[0]:
+						id[0] = id[0][id[0].index(hexid):]
+						log('keeping some: %s' % id[0])
 					else:
 						id[0] = ''
 						log('discarding all')
-			if not all([x in str_id_map for x in id[0][1:]]) and not all([ord(x) == 0 for x in id[0][1:]]):
-				log('received invalid id: %s' % id[0]) #' '.join(['%02x' % ord(x) for x in id[0][1:]]))
-				if id[1] > 0:
-					id[1] -= 1
-					id[0] = id[0][9:]
-					printer.write(single['ID'])
-					return True
-				else:
-					log('accepting it anyway')
+			#if not all([x in str_id_map for x in id[0][1:]]) and not all([ord(x) == 0 for x in id[0][1:]]):
+			#	log('received invalid id: %s' % id[0]) #' '.join(['%02x' % ord(x) for x in id[0][1:]]))
+			#	if id[1] > 0:
+			#		id[1] -= 1
+			#		id[0] = id[0][2 * 17:]
+			#		printer.write(single['ID'])
+			#		return True
+			#	else:
+			#		log('accepting it anyway')
 			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset.
 			GLib.source_remove(timeout_handle)
 			# This printer was running and tried to send an id.  Check the id.
-			id[0] = id[0][1:]
+			id[0] = id[0][len(hexid):]
+			id[0] = id[0][:8] + '-' + id[0][8:12] + '-' + id[0][12:16] + '-' + id[0][16:20] + '-' + id[0][20:32]
 			if id[0] in orphans:
-				log('accepting orphan %s on %s' % (repr(id[0]), port))
+				log('accepting orphan %s on %s' % (id[0], port))
 				ports[port] = orphans[id[0]]
 				ports[port].call('reconnect', [port], {}, lambda success, ret: ports[port].call('send_printer', [None], {}, lambda success, data: printer.close()))
 				return False
-			log('accepting unknown printer on port %s (id was %s)' % (port, repr(id[0])))
-			id[0] = nextid()
-			log('new id %s' % repr(id[0]))
-			process = subprocess.Popen((config['driver'], config['cdriver'], port, config['audiodir'], id[0]), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-			ports[port] = Port(port, process, id[0], printer)
+			log('accepting unknown printer on port %s (id %s)' % (port, id[0]))
+			process = subprocess.Popen((config['driver'], config['cdriver'], port, id[0]), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+			ports[port] = Port(port, process, printer)
 			return False
 		printer.write(single['ID'])
 		timeout_handle = GLib.timeout_add(15000, timeout)

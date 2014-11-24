@@ -385,10 +385,8 @@ static inline void arch_setup_start(char const *port) {
 
 static inline void arch_setup_end() {
 	// Get constants.
-	avr_buffer[0] = 2 + ID_SIZE;
+	avr_buffer[0] = 2;
 	avr_buffer[1] = HWC_BEGIN;
-	for (uint8_t i = 0; i < ID_SIZE; ++i)
-		avr_buffer[2 + i] = printerid[i];
 	if (avr_wait_for_reply)
 		debug("avr_wait_for_reply already set in begin");
 	avr_wait_for_reply = true;
@@ -434,7 +432,7 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 	avr_buffer[13] = mtr.max_steps;
 	ReadFloat max_v, a;
 	max_v.f = mtr.limit_v * mtr.steps_per_m / 1e6;
-	a.f = 2.1 * mtr.limit_a * mtr.steps_per_m / 1e12;
+	a.f = INFINITY; //1.1 * mtr.limit_a * mtr.steps_per_m / 1e12;
 	for (int i = 0; i < sizeof(float); ++i) {
 		avr_buffer[14 + i] = max_v.b[i];
 		avr_buffer[14 + i + sizeof(float)] = a.b[i];

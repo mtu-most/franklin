@@ -6,6 +6,8 @@ EXTRA_FLAGS = --param=ssp-buffer-size=4
 OPTIMIZATION_LEVEL = 5
 CPPFLAGS += -DARCH_INCLUDE=\"arch-avr.h\"
 
+ARDUINO_LIBS = EEPROM
+
 ifeq (${TARGET}, mini)
 BOARD_TAG = atmega328
 CPPFLAGS += -DDYNAMIC_MEM_SIZE=0x100
@@ -39,4 +41,4 @@ endif
 endif
 endif
 endif
-include Arduino.mk
+include /usr/share/arduino/Arduino.mk
