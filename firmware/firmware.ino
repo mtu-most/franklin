@@ -26,7 +26,8 @@ static void handle_motors(uint32_t current_time) {
 		int32_t target = motor[m]->start_pos + motor[m]->target_v * (current_time - start_time);
 		uint32_t dt = current_time - motor[m]->last_step_t;
 		if (!motor[m]->on_track) {
-			if (abs(target - motor[m]->current_pos) <= motor[m]->max_steps && fabs(motor[m]->v - motor[m]->target_v) / dt <= motor[m]->a) {
+			int8_t s = motor[m]->target_v < 0 ? -1 : 1;
+			if ((target - motor[m]->current_pos) * s >= 0 && (target - motor[m]->current_pos) * s <= motor[m]->max_steps && fabs(motor[m]->v - motor[m]->target_v) / dt <= motor[m]->a) {
 				motor[m]->on_track = true;
 				motor[m]->v = motor[m]->target_v;
 				//debug("n %d %f", m, F(motor[m]->v));
@@ -39,7 +40,10 @@ static void handle_motors(uint32_t current_time) {
 					//	float f = motor[m]->a * dt;
 					//	debug("v- %f %f %ld %ld %ld %ld %f %f", F(motor[m]->v), F(motor[m]->target_v), F(target), F(motor[m]->start_pos), F(motor[m]->current_pos), F(dt), F(motor[m]->a), F(f));
 					//}
-					motor[m]->v -= motor[m]->a * dt;
+					if (motor[m]->target_v == 0)
+						motor[m]->v = motor[m]->v - motor[m]->a * dt;
+					else
+						motor[m]->v = max(0, fabs(motor[m]->v - motor[m]->a * dt)) * s;
 					//if (m == 0)
 					//	debug("%f", F(motor[m]->v));
 					if (motor[m]->v < -motor[m]->max_v) {
@@ -51,7 +55,10 @@ static void handle_motors(uint32_t current_time) {
 					// Use +a.
 					//if (m == 0)
 					//	debug("v+ %f %f %ld %ld %ld", F(motor[m]->v), F(motor[m]->target_v), F(target), F(motor[m]->start_pos), F(motor[m]->current_pos));
-					motor[m]->v += motor[m]->a * dt;
+					if (motor[m]->target_v == 0)
+						motor[m]->v = motor[m]->v + motor[m]->a * dt;
+					else
+						motor[m]->v = max(0, fabs(motor[m]->v + motor[m]->a * dt)) * s;
 					if (motor[m]->v > motor[m]->max_v)
 						motor[m]->v = motor[m]->max_v;
 				}

@@ -431,8 +431,8 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 	avr_buffer[12] = (p >> 8) & 0xff;
 	avr_buffer[13] = mtr.max_steps;
 	ReadFloat max_v, a;
-	max_v.f = mtr.limit_v * mtr.steps_per_m / 1e6;
-	a.f = INFINITY; //1.1 * mtr.limit_a * mtr.steps_per_m / 1e12;
+	max_v.f = 1.1 * mtr.limit_v * mtr.steps_per_m / 1e6;
+	a.f = 1.1 * mtr.limit_a * mtr.steps_per_m / 1e12;
 	for (int i = 0; i < sizeof(float); ++i) {
 		avr_buffer[14 + i] = max_v.b[i];
 		avr_buffer[14 + i + sizeof(float)] = a.b[i];
