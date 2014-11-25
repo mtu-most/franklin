@@ -434,7 +434,7 @@ class Printer: # {{{
 				continue
 			elif cmd == self.rcommand['LIMIT']:
 				self.limits[s][m] = f
-				#log('limit; %d waits' % e)
+				log('limit; %d waits' % e)
 				self._trigger_movewaits(e)
 				continue
 			elif cmd == self.rcommand['AUTOSLEEP']:

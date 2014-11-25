@@ -66,7 +66,7 @@ static void handle_motors(uint32_t current_time) {
 			}
 		}
 		int32_t steps = target - motor[m]->current_pos;
-		if ((target >= motor[m]->end_pos && motor[m]->target_v > 0) || (target <= motor[m]->end_pos && motor[m]->target_v < 0)) {
+		if ((target >= motor[m]->end_pos && motor[m]->target_v > 0 && (motor[m]->target_v == 0 || motor[m]->end_pos >= motor[m]->start_pos)) || (target <= motor[m]->end_pos && motor[m]->target_v < 0 && (motor[m]->target_v == 0 || motor[m]->end_pos <= motor[m]->start_pos))) {
 			debug("finish %d %ld %ld %ld", m, F(motor[m]->current_pos), F(target), F(motor[m]->end_pos));
 			steps = motor[m]->end_pos - motor[m]->current_pos;
 		}

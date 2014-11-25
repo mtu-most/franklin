@@ -271,6 +271,7 @@ static inline void arch_ack() {
 		spaces[space].motor[m]->current_pos = arch_getpos(space, m);
 		//debug("cp2 %d %d", m, spaces[space].motor[m]->current_pos);
 	}
+	debug("limit!");
 	send_host(CMD_LIMIT, space, motor, spaces[space].motor[motor]->current_pos / spaces[space].motor[motor]->steps_per_m, avr_num_movecbs);
 }
 
@@ -551,9 +552,9 @@ static inline void arch_move() { // {{{
 			avr_buffer[2 + (m >> 3)] |= 1 << (m & 0x7);
 			ReadFloat limit, current, speed;
 			speed.f = moving ? mtr.last_v * mtr.steps_per_m / 1e6 : 0;
-			limit.i = speed.f < 0 ? -MAXLONG : MAXLONG;
+			limit.i = mtr.endpos * mtr.steps_per_m + (mtr.endpos > 0 ? .49 : -.49);
 			current.i = mtr.current_pos;
-			//debug("move %d %x %f %d %d", m, avr_buffer[2], speed.f, limit.i, current.i);
+			debug("move %d %x %f %d %d", m, avr_buffer[2], speed.f, limit.i, current.i);
 			for (uint8_t i = 0; i < 4; ++i) {
 				avr_buffer[2 + wlen + mi * 12 + i] = speed.b[i];
 				avr_buffer[2 + wlen + mi * 12 + 4 + i] = limit.b[i];
