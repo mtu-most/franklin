@@ -460,7 +460,7 @@ class Printer: # {{{
 				continue
 			if reply:
 				return ('packet', (cmd, s, m, f, e, data))
-			dprint('unexpected packet', packet)
+			dprint('unexpected packet %02x' % cmd)
 			raise AssertionError('Received unexpected reply packet')
 	# }}}
 	def _send_packet(self, data, move = False, audio = False): # {{{
@@ -2415,7 +2415,7 @@ class Printer: # {{{
 				self.spaces[space].axis[axis][key] = ka.pop(key)
 		if space == 1 and 'multiplier' in ka and axis < len(self.spaces[space].motor):
 			assert(ka['multiplier'] > 0)
-			self.multipliers[axis] = ka['multiplier']
+			self.multipliers[axis] = ka.pop('multiplier')
 			self.set_motor((space, axis), readback, update)
 		self._send_packet(struct.pack('<BBB', self.command['WRITE_SPACE_AXIS'], space, axis) + self.spaces[space].write_axis(axis))
 		if readback:

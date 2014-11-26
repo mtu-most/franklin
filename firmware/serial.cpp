@@ -192,8 +192,13 @@ void serial()
 			debug("repeating stall");
 			Serial.write(ff_in ? CMD_STALL0 : CMD_STALL1);
 		}
-		else
-			Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
+		else {
+			if (num_setpos == 0)
+				Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
+			else {
+				debug("not sending duplicate ack: still waiting for setpos");
+			}
+		}
 		return;
 	}
 	// Right: update flip-flop and send ack.

@@ -145,11 +145,14 @@ void packet()
 				}
 				continue;
 			}
+			float old = motor[m]->target_v;
 			motor[m]->target_v = *reinterpret_cast <float *>(&command[current]);
 			motor[m]->end_pos = *reinterpret_cast <int32_t *>(&command[current + sizeof(float)]);
 			motor[m]->start_pos = *reinterpret_cast <int32_t *>(&command[current + sizeof(int32_t) + sizeof(float)]);
 			motor[m]->on_track = false;
 			current += sizeof(int32_t) * 2 + sizeof(float);
+			if (fabs(old) > 1e-7 && fabs(motor[m]->target_v) < 1e-7)
+				debug("stop %d %ld %ld %ld %lx %lx", m, F(motor[m]->current_pos), F(motor[m]->start_pos), F(motor[m]->end_pos), F(old), F(motor[m]->target_v));
 			//debug("m %d cp %ld ep %ld sp %ld v %f", m, F(motor[m]->current_pos), F(motor[m]->end_pos), F(motor[m]->start_pos), F(motor[m]->v));
 		}
 		start_time = now;
@@ -179,20 +182,22 @@ void packet()
 			write_stall();
 			return;
 		}
-		if (motor[which]->target_v != 0) {
+		if (fabs(motor[which]->target_v) > 1e-7) {
 			debug("SETPOS called for moving motor %d (v=%f)", which, F(motor[which]->target_v));
 			write_stall();
 			return;
 		}
 		int32_t pos = *reinterpret_cast <int32_t *>(&command[3]);
 		debug("set %d %ld", which, F(pos));
-		if (motor[which]->v == 0) {
+		if (motor[which]->current_pos == motor[which]->start_pos) {
 			motor[which]->current_pos = pos;
 			motor[which]->start_pos = pos;
 			write_ack();
 			return;
 		}
+		debug("setpos delayed %d %f %ld %ld", which, F(motor[which]->v), F(motor[which]->current_pos), F(motor[which]->start_pos));
 		motor[which]->setpos = pos;
+		num_setpos += 1;
 		// ACK will be sent when move is done.
 		return;
 	}

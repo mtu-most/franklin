@@ -244,6 +244,7 @@ void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 	SET_INPUT(motor[m]->sense_pin);
 	bool must_move = false;
 	if (!isnan(motor[m]->home_pos)) {
+		// Axes with a limit switch.
 		if (old_steps_per_m != motor[m]->steps_per_m) {
 			float diff = motor[m]->current_pos / old_steps_per_m - motor[m]->home_pos;
 			float f = motor[m]->home_pos + diff;
@@ -259,6 +260,15 @@ void Space::load_motor(uint8_t m, int32_t &addr, bool eeprom)
 			//debug("cp6 %d", motor[m]->current_pos);
 			arch_addpos(id, m, diff);
 			must_move = true;
+		}
+	}
+	else {
+		// Axes without a limit switch: extruders.
+		if (motors_busy && old_steps_per_m != motor[m]->steps_per_m) {
+			int32_t cp = motor[m]->current_pos;
+			float pos = motor[m]->current_pos / old_steps_per_m;
+			motor[m]->current_pos = pos * motor[m]->steps_per_m;
+			arch_addpos(id, m, motor[m]->current_pos - cp);
 		}
 	}
 	if (must_move)

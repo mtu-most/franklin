@@ -153,7 +153,7 @@ static void handle_temps(uint32_t current_time, uint32_t longtime) { // {{{
 static void check_distance(Motor *mtr, float distance, float dt, float &factor) { // {{{
 	if (isnan(distance) || distance == 0) {
 		mtr->target_dist = 0;
-		mtr->last_v = 0;
+		//mtr->last_v = 0;
 		return;
 	}
 	//debug("cd %f %f", F(distance), F(dt));
@@ -269,7 +269,8 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
 			if (mtr.target_dist == 0) {
-				mtr.last_v = 0;
+				//if (mtr.target_v == 0)
+					//mtr.last_v = 0;
 				continue;
 			}
 			float target = mtr.current_pos / mtr.steps_per_m + mtr.target_dist * factor;

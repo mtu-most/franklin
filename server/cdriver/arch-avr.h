@@ -554,7 +554,7 @@ static inline void arch_move() { // {{{
 			speed.f = moving ? mtr.last_v * mtr.steps_per_m / 1e6 : 0;
 			limit.i = mtr.endpos * mtr.steps_per_m + (mtr.endpos > 0 ? .49 : -.49);
 			current.i = mtr.current_pos;
-			debug("move %d %x %f %d %d", m, avr_buffer[2], speed.f, limit.i, current.i);
+			//debug("move %d %x %f %d %d", m, avr_buffer[2], speed.f, limit.i, current.i);
 			for (uint8_t i = 0; i < 4; ++i) {
 				avr_buffer[2 + wlen + mi * 12 + i] = speed.b[i];
 				avr_buffer[2 + wlen + mi * 12 + 4 + i] = limit.b[i];

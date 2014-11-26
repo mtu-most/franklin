@@ -26,6 +26,7 @@ void setup()
 	motor = NULL;
 	stopping = false;
 	adc_current = ~0;
+	num_setpos = 0;
 #ifdef HAVE_AUDIO
 	audio_head = 0;
 	audio_tail = 0;

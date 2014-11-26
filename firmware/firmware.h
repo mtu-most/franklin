@@ -141,6 +141,7 @@ EXTERN uint32_t led_last, led_phase, start_time;
 EXTERN Pin_t led_pin;
 EXTERN int8_t speed_error;	// Acceptable error in v to correct position.
 EXTERN uint8_t adc_current;
+EXTERN uint8_t num_setpos;
 #ifdef HAVE_AUDIO
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
 EXTERN uint8_t audio_head, audio_tail, audio_state;

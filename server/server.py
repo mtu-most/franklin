@@ -511,6 +511,7 @@ def detect(port): # {{{
 			hexid = '%02x' % ord(single['ID'])
 			while len(id[0]) < 2 * 17:
 				id[0] += ''.join(['%02x' % ord(x) for x in printer.read(17 - len(id[0]) // 2)])
+				log('incomplete id: ' + id[0])
 				if len(id[0]) < 2 * 17:
 					printer.write(single['ID'])
 					return True

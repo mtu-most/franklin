@@ -4,7 +4,7 @@
 static void handle_motors(uint32_t current_time) {
 	for (uint8_t m = 0; m < num_motors; ++m) {
 		// Check sense pins.
-		if (motor[m]->sense_pin.valid()) {
+		if (motor[m]->sense_pin.valid()) { // Activate delayed setpos.
 			if (GET(motor[m]->sense_pin, false) ^ bool(motor[m]->sense_state & 0x80)) {
 				motor[m]->sense_state ^= 0x80;
 				motor[m]->sense_state |= 1;
@@ -12,6 +12,7 @@ static void handle_motors(uint32_t current_time) {
 				try_send_next();
 			}
 		}
+		// If arrived, activate delayed setpos.
 		if (motor[m]->v == 0 && motor[m]->start_pos == motor[m]->current_pos) {
 			motor[m]->last_step_t = current_time;
 			if (motor[m]->setpos != MAXLONG) {
@@ -19,58 +20,65 @@ static void handle_motors(uint32_t current_time) {
 				motor[m]->current_pos = motor[m]->setpos;
 				motor[m]->start_pos = motor[m]->setpos;
 				motor[m]->setpos = MAXLONG;
+				num_setpos -= 1;
 				write_ack();
 			}
 			continue;
 		}
+		// target is where we should be without any limits applied.
 		int32_t target = motor[m]->start_pos + motor[m]->target_v * (current_time - start_time);
+		// dt is used for converting v and a.
 		uint32_t dt = current_time - motor[m]->last_step_t;
+		// Try to get on track if we're not.
 		if (!motor[m]->on_track) {
+			// Sign of the target v.
 			int8_t s = motor[m]->target_v < 0 ? -1 : 1;
-			if ((target - motor[m]->current_pos) * s >= 0 && (target - motor[m]->current_pos) * s <= motor[m]->max_steps && fabs(motor[m]->v - motor[m]->target_v) / dt <= motor[m]->a) {
+			// If moving in the target direction and the number of steps to reach the target is allowed, be on track.
+			if ((target - motor[m]->current_pos) * s >= 0 && (target - motor[m]->current_pos) * s <= motor[m]->max_steps) {
 				motor[m]->on_track = true;
 				motor[m]->v = motor[m]->target_v;
 				//debug("n %d %f", m, F(motor[m]->v));
 			}
 			else {
+				// Cannot be on track yet; try to get there.
+				// tt is the time it takes to change from v to target_v with maximum a.
 				uint32_t tt = fabs(motor[m]->v - motor[m]->target_v) / motor[m]->a;
+				// if target position after tt < actual position after this speed change, we need to correct negatively; otherwise positively.
 				if (target + motor[m]->target_v * tt < motor[m]->current_pos + (motor[m]->target_v + motor[m]->v) / 2 * tt) {
 					// Use -a.
-					//if (m == 0) {
-					//	float f = motor[m]->a * dt;
-					//	debug("v- %f %f %ld %ld %ld %ld %f %f", F(motor[m]->v), F(motor[m]->target_v), F(target), F(motor[m]->start_pos), F(motor[m]->current_pos), F(dt), F(motor[m]->a), F(f));
-					//}
+					// When moving to a rest position, allow any move; otherwise, refuse to correct against requested direction; stand still instead.
 					if (motor[m]->target_v == 0)
 						motor[m]->v = motor[m]->v - motor[m]->a * dt;
 					else
 						motor[m]->v = max(0, fabs(motor[m]->v - motor[m]->a * dt)) * s;
-					//if (m == 0)
-					//	debug("%f", F(motor[m]->v));
-					if (motor[m]->v < -motor[m]->max_v) {
-						//debug("min %f", F(motor[m]->max_v));
+					// Don't go faster than max_v.
+					if (motor[m]->v < -motor[m]->max_v)
 						motor[m]->v = -motor[m]->max_v;
-					}
 				}
 				else {
 					// Use +a.
-					//if (m == 0)
-					//	debug("v+ %f %f %ld %ld %ld", F(motor[m]->v), F(motor[m]->target_v), F(target), F(motor[m]->start_pos), F(motor[m]->current_pos));
+					// When moving to a rest position, allow any move; otherwise, refuse to correct against requested direction; stand still instead.
 					if (motor[m]->target_v == 0)
 						motor[m]->v = motor[m]->v + motor[m]->a * dt;
 					else
 						motor[m]->v = max(0, fabs(motor[m]->v + motor[m]->a * dt)) * s;
+					// Don't go faster than max_v.
 					if (motor[m]->v > motor[m]->max_v)
 						motor[m]->v = motor[m]->max_v;
 				}
+				// Using this new v, determine the corrected target.
 				target = motor[m]->current_pos + motor[m]->v * dt;
 			}
 		}
 		int32_t steps = target - motor[m]->current_pos;
-		if ((target >= motor[m]->end_pos && motor[m]->target_v > 0 && (motor[m]->target_v == 0 || motor[m]->end_pos >= motor[m]->start_pos)) || (target <= motor[m]->end_pos && motor[m]->target_v < 0 && (motor[m]->target_v == 0 || motor[m]->end_pos <= motor[m]->start_pos))) {
-			debug("finish %d %ld %ld %ld", m, F(motor[m]->current_pos), F(target), F(motor[m]->end_pos));
+		// If this takes the position further than end_pos, stop there.
+		if ((target >= motor[m]->end_pos && motor[m]->end_pos >= motor[m]->start_pos)
+				|| (target <= motor[m]->end_pos && motor[m]->end_pos <= motor[m]->start_pos)) {
+			//debug("finish %d %ld %ld %ld %ld %f %ld %ld", m, F(motor[m]->current_pos), F(target), F(motor[m]->end_pos), F(motor[m]->start_pos), F(motor[m]->target_v), F(current_time), F(start_time));
 			steps = motor[m]->end_pos - motor[m]->current_pos;
+			target = motor[m]->current_pos + steps;
 		}
-		// (Try to) go to target.
+		// Limit steps per iteration.
 		if (abs(steps) > motor[m]->max_steps) {
 			steps = motor[m]->max_steps * (steps > 0 ? 1 : -1);
 			target = motor[m]->current_pos + steps;
@@ -80,11 +88,13 @@ static void handle_motors(uint32_t current_time) {
 		}
 		if (steps == 0)
 			continue;
+		// Update time for future dt computations.
 		motor[m]->last_step_t = current_time;
 		// Check limit switches.
 		if (steps > 0 ? GET(motor[m]->limit_max_pin, false) : GET(motor[m]->limit_min_pin, false)) {
 			// Hit endstop; abort current move and notify host.
-			debug("hit limit %d %ld %ld %ld %f %f %d %ld %d", m, F(target), F(motor[m]->current_pos), F(steps), F(motor[m]->target_v), F(motor[m]->v), motor[m]->on_track, F(motor[m]->start_pos), int(current_time - start_time));
+			int32_t ddt = current_time - start_time;
+			debug("hit limit %d target %ld curpos %ld steps %ld targetv %f curv %f ontrack %d startpos %ld dt %ld", m, F(target), F(motor[m]->current_pos), F(steps), F(motor[m]->target_v), F(motor[m]->v), motor[m]->on_track, F(motor[m]->start_pos), F(ddt));
 			motor[m]->switch_pos = motor[m]->current_pos;
 			// Stop moving.
 			for (uint8_t mm = 0; mm < num_motors; ++mm) {
@@ -97,8 +107,10 @@ static void handle_motors(uint32_t current_time) {
 			try_send_next();
 			return;
 		}
+		// Record move.
+		if (abs(motor[m]->current_pos - target) > motor[m]->max_steps)
+			debug("woah %d %ld %ld", m, F(motor[m]->current_pos), F(target));
 		motor[m]->current_pos = target;
-		//debug("s %d %ld", m, F(steps));
 		// Set direction pin.
 		if (steps > 0)
 			SET(motor[m]->dir_pin);
