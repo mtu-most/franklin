@@ -825,7 +825,8 @@ class Printer: # {{{
 			if complete:
 				if self.job_current >= len(self.jobs_active) - 1:
 					#log('job queue done')
-					self._send(self.job_id, 'return', (True, reason))
+					if self.job_id is not None:
+						self._send(self.job_id, 'return', (True, reason))
 					self.job_id = None
 					self.jobs_active = []
 				else:
@@ -833,7 +834,8 @@ class Printer: # {{{
 					self._next_job()
 			else:
 				#log('job aborted')
-				self._send(self.job_id, 'return', (False, reason))
+				if self.job_id is not None:
+					self._send(self.job_id, 'return', (False, reason))
 				self.job_id = None
 				self.jobs_active = []
 		while self.queue_pos < len(self.queue):
@@ -851,7 +853,8 @@ class Printer: # {{{
 				self.set_motor((self.home_space, i), max_steps = self.home_orig_steps[i])
 			if self.home_cb in self.movecb:
 				self.movecb.remove(self.home_cb)
-				self._send(self.home_id, 'return', None)
+				if self.home_id is not None:
+					self._send(self.home_id, 'return', None)
 		if self.probe_cb in self.movecb:
 			#log('killing prober')
 			self.movecb.remove(self.probe_cb)
@@ -1295,19 +1298,19 @@ class Printer: # {{{
 	def _audio_play(self): # {{{
 		if self.audiofile is None:
 			if self.audioid is not None:
-				self._send(id, 'return', True)
+				self._send(self.audioid, 'return', True)
 			return
 		while not self.waitaudio:
 			data = self.audiofile.read(self.audio_fragment_size)
 			if len(data) < self.audio_fragment_size:
 				self.audiofile = None
 				if self.audioid is not None:
-					self._send(id, 'return', True)
+					self._send(self.audioid, 'return', True)
 				return
 			if not self._send_packet(chr(self.command['AUDIO_DATA']) + data, audio = True):
 				self.audiofile = None
 				if self.audioid is not None:
-					self._send(id, 'return', False)
+					self._send(self.audioid, 'return', False)
 				return
 	# }}}
 	# Subclasses.  {{{
@@ -1616,7 +1619,8 @@ class Printer: # {{{
 							self.set_motor((self.home_space, i), max_steps = self.home_orig_steps[i])
 						if self.home_cb in self.movecb:
 							self.movecb.remove(self.home_cb)
-							self._send(self.home_id, 'return', None)
+							if self.home_id is not None:
+								self._send(self.home_id, 'return', None)
 					if self.probe_cb in self.movecb:
 						#log('killing prober')
 						self.movecb.remove(self.probe_cb)
@@ -1652,7 +1656,8 @@ class Printer: # {{{
 		#log('homing')
 		if self.home_phase is not None and not self.paused:
 			log("ignoring request to home because we're already homing")
-			self._send(id, 'return', None)
+			if id is not None:
+				self._send(id, 'return', None)
 			return
 		# Abort only if it is requested, and the job is not paused.
 		if abort and self.queue_info is None:

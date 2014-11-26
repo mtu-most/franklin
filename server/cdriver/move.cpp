@@ -61,8 +61,6 @@ uint8_t next_move() {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[queue_start].data[a0]);
-			for (uint8_t m = 0; m < sp.num_motors; ++m)
-				sp.motor[m]->last_v = 0;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if (isnan(queue[queue_start].data[a0 + a])) {
 					sp.axis[a]->next_dist = 0;

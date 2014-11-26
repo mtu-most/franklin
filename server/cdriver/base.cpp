@@ -348,6 +348,13 @@ static void handle_motors(uint32_t current_time, uint32_t longtime) { // {{{
 			if (factor == 1) {
 				//buffered_debug("e");
 				moving = false;
+				for (uint8_t s = 0; s < num_spaces; ++s) {
+					Space &sp = spaces[s];
+					if (!sp.active)
+						continue;
+					for (uint8_t m = 0; m < sp.num_motors; ++m)
+						sp.motor[m]->last_v = 0;
+				}
 				arch_move();
 				//debug("movecb 1");
 				if (cbs_after_current_move > 0) {

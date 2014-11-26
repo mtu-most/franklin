@@ -138,6 +138,7 @@ static void move_to_current(Space *s) {
 	start_time = utime();
 	last_time = start_time;
 	last_current_time = start_time;
+	//debug("move to current");
 	for (uint8_t i = 0; i < min(s->num_axes, s->num_motors); ++i) {
 		s->axis[i]->dist = 0;
 		s->axis[i]->next_dist = 0;
