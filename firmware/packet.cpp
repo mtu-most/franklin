@@ -2,17 +2,9 @@
 
 //#define DEBUG_CMD
 
-static uint8_t get_which()
-{
-	return command[2] & 0x3f;
-}
-
 void packet()
 {
-	// command[0] is the length not including checksum bytes.
-	// command[1] is the command.
-	uint8_t which;
-	switch (command[1])
+	switch (command[0])
 	{
 	case CMD_BEGIN:	// begin: request response
 	{
@@ -22,14 +14,15 @@ void packet()
 		// A server is running; start the watchdog.
 		watchdog_enable();
 		write_ack();
-		reply[0] = 2 + sizeof(uint32_t) + 2 + sizeof(uint16_t) + 1;
-		reply[1] = CMD_START;
-		*reinterpret_cast <uint32_t *>(&reply[2]) = 0;
-		reply[6] = NUM_DIGITAL_PINS;
-		reply[7] = NUM_ANALOG_INPUTS;
-		*reinterpret_cast <uint16_t *>(&reply[8]) = E2END;
-		reply[10] = ADCBITS;
-		reply_ready = true;
+		reply[0] = CMD_READY;
+		*reinterpret_cast <uint32_t *>(&reply[1]) = 0;
+		reply[5] = NUM_DIGITAL_PINS;
+		reply[6] = NUM_ANALOG_INPUTS;
+		reply[7] = NUM_MOTORS;
+		reply[8] = NUM_BUFFERS;
+		reply[9] = FRAGMENTS_PER_BUFFER;
+		reply[10] = BYTES_PER_FRAGMENT;
+		reply_ready = 11;
 		try_send_next();
 		return;
 	}
@@ -39,7 +32,7 @@ void packet()
 		//debug("CMD_PING");
 #endif
 		write_ack();
-		ping |= 1 << command[2];
+		ping |= 1 << command[1];
 		try_send_next();
 		return;
 	}
@@ -48,6 +41,12 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_RESET");
 #endif
+		uint32_t magic = *reinterpret_cast <int32_t *>(&command[1]);
+		if (magic != RESET_MAGIC) {
+			debug("invalid reset magic %lx", F(magic));
+			write_stall();
+			return;
+		}
 		write_ack();
 		Serial.flush();
 		reset();
@@ -57,42 +56,39 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_SETUP");
 #endif
-		uint8_t nm = command[2];
-		Motor **mtrs;
-		mem_alloc(nm * sizeof(Motor *), &mtrs, "motor array");
-		if (mtrs) {
-			uint8_t cm;
-			for (cm = num_motors; cm < nm; ++cm) {
-				mem_alloc(sizeof(Motor), &mtrs[cm], "single motor");
-				if (!mtrs[cm])
-					break;
+		led_pin = command[1];
+		write_ack();
+		return;
+	}
+	case CMD_CONTROL:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_CONTROL");
+#endif
+		uint8_t num = command[1];
+		for (uint8_t i = 0; i < num; ++i) {
+			if (command[2 + i + 1] >= NUM_DIGITAL_PINS) {
+				debug("invalid pin in control: %d", command[2 + i + 1]);
+				continue;
 			}
-			if (cm >= nm) {
-				for (cm = nm; cm < num_motors; ++cm) {
-					motor[cm]->fini();
-					mem_free(&motor[cm]);
-				}
-				for (cm = num_motors; cm < nm; ++cm)
-					mtrs[cm]->init();
-				for (cm = 0; cm < min(nm, num_motors); ++cm)
-					mem_retarget(&motor[cm], &mtrs[cm]);
-				mem_free(&motor);
-				mem_retarget(&mtrs, &motor);
-				num_motors = nm;
-				led_pin.read(*reinterpret_cast <uint16_t *>(&command[3]));
-				speed_error = command[5];
-				SET_OUTPUT(led_pin);
-				write_ack();
-				return;
+			pin[command[2 + i + 1]].state &= ~0xc;
+			pin[command[2 + i + 1]].state |= command[2 + i] & 0xc;
+			switch (CONTROL_CURRENT(command[2 + i])) {
+			case CTRL_RESET:
+				RESET(command[2 + i + 1]);
+				break;
+			case CTRL_SET:
+				SET(command[2 + i + 1]);
+				break;
+			case CTRL_UNSET:
+				UNSET(command[2 + i + 1]);
+				break;
+			case CTRL_INPUT:
+				SET_INPUT(command[2 + i + 1]);
+				break;
 			}
-			for (uint8_t cm2 = num_motors; cm2 < cm; ++cm2) {
-				mtrs[cm2]->fini();
-				mem_free(&mtrs[cm2]);
-			}
-			mem_free(&mtrs);
 		}
-		debug("Out of memory for setup %d motors", nm);
-		write_stall();
+		write_ack();
 		return;
 	}
 	case CMD_MSETUP:
@@ -100,27 +96,81 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_MSETUP");
 #endif
-		which = get_which();
-		if (which >= num_motors) {
-			debug("MSETUP called for invalid motor %d", which);
+		uint8_t m = command[1];
+		if (m >= NUM_MOTORS) {
+			debug("MSETUP called for invalid motor %d", m);
 			write_stall();
 			return;
 		}
-		motor[which]->step_pin.read(*reinterpret_cast <uint16_t *>(&command[3]));
-		//debug("m %d step pin %d %d", which, motor[which]->step_pin.pin, motor[which]->step_pin.flags);
-		motor[which]->dir_pin.read(*reinterpret_cast <uint16_t *>(&command[5]));
-		motor[which]->limit_min_pin.read(*reinterpret_cast <uint16_t *>(&command[7]));
-		motor[which]->limit_max_pin.read(*reinterpret_cast <uint16_t *>(&command[9]));
-		motor[which]->sense_pin.read(*reinterpret_cast <uint16_t *>(&command[11]));
-		motor[which]->max_steps = command[13];
-		motor[which]->max_v = *reinterpret_cast <float *>(&command[14]);
-		motor[which]->a = *reinterpret_cast <float *>(&command[18]);
-		//debug("limits %d %f %f", which, F(motor[which]->max_v), F(motor[which]->a));
-		SET_OUTPUT(motor[which]->step_pin);
-		SET_OUTPUT(motor[which]->dir_pin);
-		SET_INPUT(motor[which]->limit_min_pin);
-		SET_INPUT(motor[which]->limit_max_pin);
-		SET_INPUT(motor[which]->sense_pin);
+		motor[m].step_pin = command[2];
+		motor[m].dir_pin = command[3];
+		motor[m].limit_min_pin = command[4];
+		motor[m].limit_max_pin = command[5];
+		motor[m].sense_pin = command[6];
+		if (motor[m].flags & Motor::ACTIVE)
+			active_motors -= 1;
+		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX | Motor::INVERT_STEP | Motor::ACTIVE;
+		motor[m].flags &= ~mask;
+		motor[m].flags |= command[7] & mask;
+		if (motor[m].flags & Motor::ACTIVE)
+			active_motors += 1;
+		if (motor[m].flags & Motor::INVERT_STEP)
+			SET(motor[m].step_pin);
+		else
+			RESET(motor[m].step_pin);
+		if (motor[m].flags & Motor::INVERT_STEP)
+			SET(motor[m].dir_pin);
+		else
+			RESET(motor[m].dir_pin);
+		SET_INPUT(motor[m].limit_min_pin);
+		SET_INPUT(motor[m].limit_max_pin);
+		SET_INPUT(motor[m].sense_pin);
+		write_ack();
+		return;
+	}
+	case CMD_ASETUP:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_ASETUP");
+#endif
+		uint8_t a = command[1];
+		if (a >= NUM_ANALOG_INPUTS) {
+			debug("ASETUP called for invalid adc %d", a);
+			write_stall();
+			return;
+		}
+		for (uint8_t i = 0; i < 2; ++i) {
+			adc[a].linked[i] = command[2 + i];
+			adc[a].value[i] = *reinterpret_cast <uint16_t *>(&command[4 + 2 * i]);
+		}
+		if (adc_phase == INACTIVE) {
+			adc_phase = PREPARING;
+			adc_ready(a);
+		}
+		write_ack();
+		return;
+	}
+	case CMD_START_MOVE:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_START_MOVE");
+#endif
+		if (stopping) {
+			debug("ignoring start move while stopping");
+			write_ack();
+			return;
+		}
+		if (filling > 0)
+			debug("START_MOVE seen while filling (%d)", filling);
+		last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
+		fragment_time[last_fragment] = *reinterpret_cast <uint32_t *>(&command[1]);
+		filling = command[5];
+		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
+			if (!(motor[m].flags & Motor::ACTIVE))
+				continue;
+			buffer[motor[m].buffer][last_fragment].dir = DIR_NONE;
+		}
+		//debug("new filling: %d %d", filling, last_fragment);
 		write_ack();
 		return;
 	}
@@ -129,34 +179,64 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_MOVE");
 #endif
+		if (command[1] >= NUM_BUFFERS) {
+			debug("invalid buffer %d to fill", command[1]);
+			write_stall();
+			return;
+		}
 		if (stopping) {
-			// Ignore all moves while stopping.
+			debug("ignoring move while stopping");
 			write_ack();
 			return;
 		}
-		uint8_t whichlen = ((num_motors - 1) >> 3) + 1;
-		uint8_t current = 2 + whichlen;
-		uint32_t now = utime();
-		for (uint8_t m = 0; m < num_motors; ++m) {
-			if (!(command[2 + (m >> 3)] & (1 << (m & 0x7)))) {
-				if (motor[m]->target_v != 0) {
-					motor[m]->start_pos += motor[m]->target_v * (now - start_time);
-					motor[m]->target_v = 0;
-				}
-				continue;
-			}
-			float old = motor[m]->target_v;
-			motor[m]->target_v = *reinterpret_cast <float *>(&command[current]);
-			motor[m]->end_pos = *reinterpret_cast <int32_t *>(&command[current + sizeof(float)]);
-			motor[m]->start_pos = *reinterpret_cast <int32_t *>(&command[current + sizeof(int32_t) + sizeof(float)]);
-			motor[m]->on_track = false;
-			current += sizeof(int32_t) * 2 + sizeof(float);
-			if (fabs(old) > 1e-7 && fabs(motor[m]->target_v) < 1e-7)
-				debug("stop %d %ld %ld %ld %lx %lx", m, F(motor[m]->current_pos), F(motor[m]->start_pos), F(motor[m]->end_pos), F(old), F(motor[m]->target_v));
-			//debug("m %d cp %ld ep %ld sp %ld v %f", m, F(motor[m]->current_pos), F(motor[m]->end_pos), F(motor[m]->start_pos), F(motor[m]->v));
+		if (filling == 0)
+			debug("MOVE seen while not filling");
+		filling -= 1;
+		Fragment &fragment = buffer[command[1]][last_fragment];
+		fragment.us_per_sample = *reinterpret_cast <uint32_t *>(&command[2]);
+		fragment.dir = Dir(command[6]);
+		fragment.num_samples = fragment_time[last_fragment] / fragment.us_per_sample;
+		for (uint8_t b = 0; b < (fragment.num_samples + 7) / 8; ++b) {
+			fragment.samples[b] = command[7 + b];
 		}
-		start_time = now;
 		write_ack();
+		return;
+	}
+	case CMD_START:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_START");
+#endif
+		if (stopping) {
+			debug("ignoring start while stopping");
+			write_ack();
+			return;
+		}
+		start_time = utime();
+		last_current_time = start_time;
+		stopped = false;
+		write_ack();
+		return;
+	}
+	case CMD_STOP:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_STOP");
+#endif
+		stopped = true;
+		write_ack();
+		reply[0] = CMD_STOPPED;
+		reply[1] = current_fragment;
+		*reinterpret_cast <uint32_t *>(&reply[2]) = last_current_time - start_time;
+		uint8_t mi = 0;
+		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
+			if (!(motor[m].flags & Motor::ACTIVE))
+				continue;
+			*reinterpret_cast <uint32_t *>(&reply[6 + 4 * mi]) = motor[m].current_pos;
+			++mi;
+		}
+		reply_ready = 6 + 4 * mi;
+		try_send_next();
 		return;
 	}
 	case CMD_ABORT:
@@ -164,136 +244,39 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_ABORT");
 #endif
-		for (uint8_t m = 0; m < num_motors; ++m) {
-			motor[m]->start_pos = motor[m]->current_pos;
-			motor[m]->target_v = 0;
+		for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
+			switch (CONTROL_RESET(pin[p].state)) {
+			case CTRL_RESET:
+				RESET(p);
+				break;
+			case CTRL_SET:
+				SET(p);
+				break;
+			case CTRL_UNSET:
+				UNSET(p);
+				break;
+			case CTRL_INPUT:
+				SET_INPUT(p);
+				break;
+			}
 		}
+		stopped = true;
 		write_ack();
-		return;
-	}
-	case CMD_SETPOS:	// Set current position
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_SETPOS");
-#endif
-		which = get_which();
-		if (which >= num_motors) {
-			debug("SETPOS called for invalid motor %d", which);
-			write_stall();
-			return;
+		reply[0] = CMD_STOPPED;
+		reply[1] = current_fragment;
+		*reinterpret_cast <uint32_t *>(&reply[2]) = last_current_time - start_time;
+		uint8_t mi = 0;
+		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
+			if (!(motor[m].flags & Motor::ACTIVE)) {
+				debug("skip abortpos %d", m);
+				continue;
+			}
+			*reinterpret_cast <uint32_t *>(&reply[6 + 4 * mi]) = motor[m].current_pos;
+			debug("abort pos %d %ld", m, motor[m].current_pos);
+			++mi;
 		}
-		if (fabs(motor[which]->target_v) > 1e-7) {
-			debug("SETPOS called for moving motor %d (v=%f)", which, F(motor[which]->target_v));
-			write_stall();
-			return;
-		}
-		int32_t pos = *reinterpret_cast <int32_t *>(&command[3]);
-		debug("set %d %ld", which, F(pos));
-		if (motor[which]->current_pos == motor[which]->start_pos) {
-			motor[which]->current_pos = pos;
-			motor[which]->start_pos = pos;
-			write_ack();
-			return;
-		}
-		debug("setpos delayed %d %f %ld %ld", which, F(motor[which]->v), F(motor[which]->current_pos), F(motor[which]->start_pos));
-		motor[which]->setpos = pos;
-		num_setpos += 1;
-		// ACK will be sent when move is done.
-		return;
-	}
-	case CMD_ADDPOS:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_ADDPOS");
-#endif
-		which = get_which();
-		if (which >= num_motors) {
-			debug("SETPOS called for invalid motor %d", which);
-			write_stall();
-			return;
-		}
-		int32_t diff = *reinterpret_cast <int32_t *>(&command[3]);
-		motor[which]->current_pos += diff;
-		debug("add %d start %ld diff %ld", which, F(motor[which]->start_pos), F(diff));
-		motor[which]->start_pos += diff;
-		write_ack();
-		return;
-	}
-	case CMD_GETPOS:	// Get current position
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_GETPOS");
-#endif
-		which = get_which();
-		if (which >= num_motors) {
-			debug("GETPOS called for invalid motor %d", which);
-			write_stall();
-			return;
-		}
-		write_ack();
-		reply[0] = 6;
-		reply[1] = CMD_POS;
-		*reinterpret_cast <int32_t *>(&reply[2]) = motor[which]->current_pos;
-		reply_ready = true;
+		reply_ready = 6 + 4 * mi;
 		try_send_next();
-		return;
-	}
-	case CMD_RESETPIN:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_RESETPIN");
-#endif
-		if (command[2] >= NUM_DIGITAL_PINS) {
-			debug("RESETPIN called for invalid pin %d", command[2]);
-			write_stall();
-			return;
-		}
-		RAW_SET_OUTPUT(command[2]);
-		RAW_RESET(command[2]);
-		write_ack();
-		return;
-	}
-	case CMD_SETPIN:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_SETPIN");
-#endif
-		if (command[2] >= NUM_DIGITAL_PINS) {
-			debug("SETPIN called for invalid pin %d", command[2]);
-			write_stall();
-			return;
-		}
-		RAW_SET_OUTPUT(command[2]);
-		RAW_SET(command[2]);
-		write_ack();
-		return;
-	}
-	case CMD_UNSETPIN:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_UNSETPIN");
-#endif
-		if (command[2] >= NUM_DIGITAL_PINS) {
-			debug("UNSETPIN called for invalid pin %d", command[2]);
-			write_stall();
-			return;
-		}
-		RAW_SET_INPUT_NOPULLUP(command[2]);
-		write_ack();
-		return;
-	}
-	case CMD_INPUTPIN:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_INPUTPIN");
-#endif
-		if (command[2] >= NUM_DIGITAL_PINS) {
-			debug("INPUTPIN called for invalid pin %d", command[2]);
-			write_stall();
-			return;
-		}
-		RAW_SET_INPUT(command[2]);
-		write_ack();
 		return;
 	}
 	case CMD_GETPIN:
@@ -301,90 +284,21 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_GETPIN");
 #endif
-		if (command[2] >= NUM_DIGITAL_PINS) {
-			debug("Reading invalid pin %d", command[2]);
+		if (command[1] >= NUM_DIGITAL_PINS) {
+			debug("invalid pin %02x for GETPIN", uint8_t(command[1]));
 			write_stall();
 			return;
 		}
 		write_ack();
-		reply[0] = 3;
-		reply[1] = CMD_PIN;
-		reply[2] = RAW_GET(command[2]);
-		reply_ready = true;
+		reply[0] = CMD_PIN;
+		reply[1] = GET(command[1]);
+		reply_ready = 2;
 		try_send_next();
 		return;
 	}
-	case CMD_GETADC:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_GETADC");
-#endif
-		if (command[2] >= NUM_ANALOG_INPUTS) {
-			debug("Reading invalid adc %d", command[2]);
-			write_stall();
-			return;
-		}
-		//debug("get adc %d", command[2]);
-		adc_current = command[2];
-		adc_start(command[2]);
-		write_ack();
-		return;
-	}
-#ifdef HAVE_AUDIO
-	case CMD_AUDIO_SETUP:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_AUDIO_SETUP");
-#endif
-		audio_us_per_sample = get_int16(2);
-		uint8_t m0 = 0;
-		for (uint8_t t = 0; t < num_spaces; ++t) {
-			for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
-				if (command[4 + ((m0 + m) >> 3)] & (1 << ((m0 + m) & 0x7))) {
-					spaces[t].motor[m]->audio_flags |= Motor::PLAYING;
-					SET(spaces[t].motor[m]->enable_pin);
-					motors_busy = true;
-				}
-				else
-					spaces[t].motor[m]->audio_flags &= ~Motor::PLAYING;
-			}
-			m0 += spaces[t].num_motors;
-		}
-		// Abort any currently playing sample.
-		audio_head = 0;
-		audio_tail = 0;
-		write_ack();
-		return;
-	}
-	case CMD_AUDIO_DATA:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_AUDIO_DATA");
-#endif
-		initialized = true;
-		last_active = millis();
-		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
-		{
-			debug("Audio buffer is full");
-			write_stall();
-			return;
-		}
-		for (uint8_t i = 0; i < AUDIO_FRAGMENT_SIZE; ++i)
-			audio_buffer[audio_tail][i] = command[2 + i];
-		if (audio_tail == audio_head)
-			audio_start = utime();
-		audio_tail = (audio_tail + 1) % AUDIO_FRAGMENTS;
-		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
-			write_ackwait();
-		else
-			write_ack();
-		next_audio_time = 0;
-		return;
-	}
-#endif
 	default:
 	{
-		debug("Invalid command %x %x %x %x", command[0], command[1], command[2], command[3]);
+		debug("Invalid command %x %x %x %x", uint8_t(command[0]), uint8_t(command[1]), uint8_t(command[2]), uint8_t(command[3]));
 		write_stall();
 		return;
 	}

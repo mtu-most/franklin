@@ -154,10 +154,6 @@ static inline int32_t adc_get(uint8_t _pin) {
 
 void reset();
 
-static inline void watchdog_reset() {}
-static inline void watchdog_enable() {}
-static inline void watchdog_disable() {}
-
 class FakeSerial {
 	struct pollfd mypollfd;
 	char buffer[256];
@@ -252,8 +248,6 @@ static inline void wait_for_event(uint32_t micro, uint32_t current_time) {
 	poll(&bbb_pollfd, 1, micro == ~0 ? -1 : micro / 1000);
 }
 
-#define E2END 0xffffffff
-
 #else
 
 EXTERN FakeSerial Serial;
@@ -262,34 +256,7 @@ EXTERN char *bbb_adc[NUM_ANALOG_INPUTS];
 EXTERN int bbb_devmem;
 EXTERN struct pollfd bbb_pollfd;
 
-// Memory handling
-#define mem_alloc(s, t, d) _mem_alloc((s), reinterpret_cast <void **>(t))
-void _mem_alloc(uint32_t size, void **target);
-#define mem_retarget(t1, t2) _mem_retarget(reinterpret_cast <void **>(t1), reinterpret_cast <void **>(t2))
-void _mem_retarget(void **target, void **newtarget);
-#define _mem_dump() do {} while(0)
-#define mem_free(t) _mem_free(reinterpret_cast <void **>(t))
-void _mem_free(void **target);
-
 /* TODO: merge this with arch_run.
-static void handle_led(uint32_t current_time) {
-	uint32_t timing = temps_busy > 0 ? 1000000 / 100 : 1000000 / 50;
-	while (current_time - led_last >= timing) {
-		//debug("led thing");
-		led_last += timing;
-		led_phase += 1;
-	}
-	next_led_time = timing - (current_time - led_last);
-	//debug("t %ld", F(next_led_time));
-	led_phase %= 50;
-	// Timings read from https://en.wikipedia.org/wiki/File:Wiggers_Diagram.png (phonocardiogram).
-	bool state = (led_phase <= 4 || (led_phase >= 14 && led_phase <= 17));
-	if (state)
-		SET(led_pin);
-	else
-		RESET(led_pin);
-}
-
 #ifdef HAVE_AUDIO
 static void handle_audio(uint32_t current_time, uint32_t longtime) {
 	if (audio_head != audio_tail) {
@@ -307,7 +274,6 @@ static void handle_audio(uint32_t current_time, uint32_t longtime) {
 			audio_head = (audio_head + 1) % AUDIO_FRAGMENTS;
 			if (audio_tail == audio_head) {
 				//debug("audio done");
-				next_audio_time = ~0;
 				return;
 			}
 			audio_byte -= AUDIO_FRAGMENT_SIZE;

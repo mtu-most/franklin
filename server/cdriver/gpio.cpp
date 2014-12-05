@@ -1,12 +1,12 @@
 #include "cdriver.h"
 
-void Gpio::load(uint8_t self, int32_t &addr, bool eeprom)
+void Gpio::load(uint8_t self, int32_t &addr)
 {
-	pin.read(read_16(addr, eeprom));
-	state = read_8(addr, eeprom);
+	pin.read(read_16(addr));
+	state = read_8(addr);
 	uint8_t oldmaster = master;
-	master = read_8(addr, eeprom);
-	value = read_float(addr, eeprom);
+	master = read_8(addr);
+	value = read_float(addr);
 	// State:  0: off, 1: on, 2: pullup input, 3: disabled
 	switch (state) {
 	case 0:
@@ -26,8 +26,6 @@ void Gpio::load(uint8_t self, int32_t &addr, bool eeprom)
 	}
 	if (master < num_temps) {
 		adcvalue = temps[master].toadc(value);
-		adc_phase = 1;
-		next_temp_time = 0;
 	}
 	if (oldmaster != master)
 	{
@@ -60,12 +58,12 @@ void Gpio::load(uint8_t self, int32_t &addr, bool eeprom)
 	}
 }
 
-void Gpio::save(int32_t &addr, bool eeprom)
+void Gpio::save(int32_t &addr)
 {
-	write_16(addr, pin.write(), eeprom);
-	write_8(addr, state, eeprom);
-	write_8(addr, master, eeprom);
-	write_float(addr, value, eeprom);
+	write_16(addr, pin.write());
+	write_8(addr, state);
+	write_8(addr, master);
+	write_float(addr, value);
 }
 
 int32_t Gpio::savesize0() {

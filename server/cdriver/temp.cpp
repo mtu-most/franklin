@@ -1,52 +1,56 @@
 #include "cdriver.h"
 
-void Temp::load(int32_t &addr, bool eeprom)
+void Temp::load(int32_t &addr)
 {
-	R0 = read_float(addr, eeprom);
-	R1 = read_float(addr, eeprom);
-	logRc = read_float(addr, eeprom);
-	Tc = read_float(addr, eeprom);
-	beta = read_float(addr, eeprom);
+	R0 = read_float(addr);
+	R1 = read_float(addr);
+	logRc = read_float(addr);
+	Tc = read_float(addr);
+	beta = read_float(addr);
 	K = exp(logRc - beta / Tc);
 	//debug("K %f R0 %f R1 %f logRc %f Tc %f beta %f", F(K), F(R0), F(R1), F(logRc), F(Tc), F(beta));
 	for (uint8_t gpio = following_gpios; gpio < num_gpios; gpio = gpios[gpio].next)
 		gpios[gpio].adcvalue = toadc(gpios[gpio].value);
-	if (following_gpios < num_gpios) {
-		adc_phase = 1;
-		next_temp_time = 0;
-	}
 	/*
-	core_C = read_float(addr, eeprom);
-	shell_C = read_float(addr, eeprom);
-	transfer = read_float(addr, eeprom);
-	radiation = read_float(addr, eeprom);
-	power = read_float(addr, eeprom);
+	core_C = read_float(addr);
+	shell_C = read_float(addr);
+	transfer = read_float(addr);
+	radiation = read_float(addr);
+	power = read_float(addr);
 	*/
-	power_pin.read(read_16(addr, eeprom));
-	thermistor_pin.read(read_16(addr, eeprom));
+	power_pin.read(read_16(addr));
+	int old_pin = thermistor_pin.write();
+	bool old_valid = thermistor_pin.valid();
+	thermistor_pin.read(read_16(addr));
 	SET_OUTPUT(power_pin);
 	if (is_on)
 		SET(power_pin);
 	else
 		RESET(power_pin);
+	if (old_pin != thermistor_pin.write()) {
+		if (old_valid)
+			arch_setup_temp(old_pin, false);
+		if (thermistor_pin.valid())
+			arch_setup_temp(thermistor_pin.pin, true, power_pin.valid() ? power_pin.pin : ~0, power_pin.inverted(), adctarget);
+	}
 }
 
-void Temp::save(int32_t &addr, bool eeprom)
+void Temp::save(int32_t &addr)
 {
-	write_float(addr, R0, eeprom);
-	write_float(addr, R1, eeprom);
-	write_float(addr, logRc, eeprom);
-	write_float(addr, Tc, eeprom);
-	write_float(addr, beta, eeprom);
+	write_float(addr, R0);
+	write_float(addr, R1);
+	write_float(addr, logRc);
+	write_float(addr, Tc);
+	write_float(addr, beta);
 	/*
-	write_float(addr, core_C, eeprom);
-	write_float(addr, shell_C, eeprom);
-	write_float(addr, transfer, eeprom);
-	write_float(addr, radiation, eeprom);
-	write_float(addr, power, eeprom);
+	write_float(addr, core_C);
+	write_float(addr, shell_C);
+	write_float(addr, transfer);
+	write_float(addr, radiation);
+	write_float(addr, power);
 	*/
-	write_16(addr, power_pin.write(), eeprom);
-	write_16(addr, thermistor_pin.write(), eeprom);
+	write_16(addr, power_pin.write());
+	write_16(addr, thermistor_pin.write());
 }
 
 int32_t Temp::savesize0() {
@@ -159,3 +163,70 @@ void Temp::copy(Temp &dst) {
 	dst.is_on = is_on;
 	dst.K = K;
 }
+
+void handle_temp(int id, int temp) { // {{{
+	if (requested_temp == id) {
+		//debug("replying temp");
+		float result = temps[requested_temp].fromadc(temp);
+		requested_temp = ~0;
+		send_host(CMD_TEMP, 0, 0, result);
+	}
+	//debug("temp for %d: %d", id, temp);
+	// If an alarm should be triggered, do so.  Adc values are higher for lower temperatures.
+	//debug("alarms: %d %d %d %d", id, temps[id].adcmin_alarm, temps[id].adcmax_alarm, temp);
+	if ((temps[id].adcmin_alarm < MAXINT && temps[id].adcmin_alarm >= temp) || temps[id].adcmax_alarm <= temp) {
+		temps[id].min_alarm = NAN;
+		temps[id].max_alarm = NAN;
+		temps[id].adcmin_alarm = MAXINT;
+		temps[id].adcmax_alarm = MAXINT;
+		send_host(CMD_TEMPCB, id);
+	}
+	// And handle any linked gpios.
+	for (uint8_t g = temps[id].following_gpios; g < num_gpios; g = gpios[g].next) {
+		//debug("setting gpio for temp %d: %d %d", id, temp, g->adcvalue);
+		// adc values are lower for higher temperatures.
+		if (temp < gpios[g].adcvalue)
+			SET(gpios[g].pin);
+		else
+			RESET(gpios[g].pin);
+	}
+	/*
+	// TODO: Make this work and decide on units.
+	// We have model settings.
+	uint32_t dt = current_time - temps[id].last_temp_time;
+	if (dt == 0)
+		return;
+	temps[id].last_temp_time = current_time;
+	// Heater and core/shell transfer.
+	if (temps[id].is_on)
+		temps[id].core_T += temps[id].power / temps[id].core_C * dt;
+	float Q = temps[id].transfer * (temps[id].core_T - temps[id].shell_T) * dt;
+	temps[id].core_T -= Q / temps[id].core_C;
+	temps[id].shell_T += Q / temps[id].shell_C;
+	if (temps[id].is_on)
+		temps[id].core_T += temps[id].power / temps[id].core_C * dt / 2;
+	// Set shell to measured value.
+	temps[id].shell_T = temp;
+	// Add energy if required.
+	float E = temps[id].core_T * temps[id].core_C + temps[id].shell_T * temps[id].shell_C;
+	float T = E / (temps[id].core_C + temps[id].shell_C);
+	// Set the pin to correct value.
+	if (T < temps[id].target) {
+		if (!temps[id].is_on) {
+			SET(temps[id].power_pin);
+			temps[id].is_on = true;
+			++temps_busy;
+		}
+		else
+			temps[id].time_on += current_time - temps[id].last_temp_time;
+	}
+	else {
+		if (temps[id].is_on) {
+			RESET(temps[id].power_pin);
+			temps[id].is_on = false;
+			temps[id].time_on += current_time - temps[id].last_temp_time;
+			--temps_busy;
+		}
+	}
+	*/
+} // }}}

@@ -21,20 +21,6 @@ static inline void debug(char const *fmt, ...);
 // We don't care about using full cpu power on Arduino.
 #define wait_for_event(x, t) do {} while(0)
 
-#define RAW_SET_OUTPUT(pin_no) do { pinMode((pin_no), OUTPUT); } while (0)
-#define RAW_SET_INPUT(pin_no) do { pinMode((pin_no), INPUT_PULLUP); } while (0)
-#define RAW_SET_INPUT_NOPULLUP(pin_no) do { pinMode((pin_no), INPUT); } while (0)
-#define RAW_SET(pin_no) do { digitalWrite((pin_no), HIGH); } while (0)
-#define RAW_RESET(pin_no) do { digitalWrite((pin_no), LOW); } while (0)
-#define RAW_GET(pin_no) (digitalRead(pin_no) == HIGH)
-
-#define SET_OUTPUT(pin_no) do { if ((pin_no).valid()) { pinMode((pin_no).pin, OUTPUT); }} while (0)
-#define SET_INPUT(pin_no) do { if ((pin_no).valid()) { pinMode((pin_no).pin, INPUT_PULLUP); }} while (0)
-#define SET_INPUT_NOPULLUP(pin_no) do { if ((pin_no).valid()) { pinMode((pin_no).pin, INPUT); }} while (0)
-#define SET(pin_no) do { if ((pin_no).valid()) { digitalWrite((pin_no).pin, (pin_no).inverted() ? LOW : HIGH); } } while (0)
-#define RESET(pin_no) do { if ((pin_no).valid()) { digitalWrite((pin_no).pin, (pin_no).inverted() ? HIGH : LOW); } } while (0)
-#define GET(pin_no, _default) ((pin_no).valid() ? digitalRead((pin_no).pin) == HIGH ? !(pin_no).inverted() : (pin_no).inverted() : _default)
-
 // Everything before this line is used at the start of firmware.h; everything after it at the end.
 #else
 
@@ -136,37 +122,43 @@ EXTERN uint8_t adc_last_pin;
 static inline void adc_start(uint8_t adcpin) {
 	// Mostly copied from /usr/share/arduino/hardware/arduino/cores/arduino/wiring_analog.c.
 #if defined(__AVR_ATmega32U4__)
-	uint8_t pin = analogPinToChannel(adcpin);
-	ADCSRB = (ADCSRB & ~(1 << MUX5)) | (((pin >> 3) & 0x01) << MUX5);
+	uint8_t pin_ = analogPinToChannel(adcpin);
+	ADCSRB = (ADCSRB & ~(1 << MUX5)) | (((pin_ >> 3) & 0x01) << MUX5);
 #elif defined(ADCSRB) && defined(MUX5)
 	// the MUX5 bit of ADCSRB selects whether we're reading from channels
 	// 0 to 7 (MUX5 low) or 8 to 15 (MUX5 high).
-	uint8_t pin = adcpin;
-	ADCSRB = (ADCSRB & ~(1 << MUX5)) | (((pin >> 3) & 0x01) << MUX5);
+	uint8_t pin_ = adcpin;
+	ADCSRB = (ADCSRB & ~(1 << MUX5)) | (((pin_ >> 3) & 0x01) << MUX5);
 #else
-	uint8_t pin = adcpin;
+	uint8_t pin_ = adcpin;
 #endif
 
 #if defined(ADMUX)
-	ADMUX = (DEFAULT << 6) | (pin & 0x7);
+	ADMUX = (DEFAULT << 6) | (pin_ & 0x7);
 #endif
 	// Start the conversion.
 	ADCSRA |= 1 << ADSC;
 	adc_last_pin = ~0;
 }
 
-static inline bool adc_ready(uint8_t pin) {
+static inline bool adc_ready(uint8_t pin_) {
 	if (bit_is_set(ADCSRA, ADSC))
 		return false;
-	if (pin != adc_last_pin) {
-		adc_last_pin = pin;
+	if (pin_ != adc_last_pin) {
+		adc_phase = PREPARING;
+		adc_last_pin = pin_;
+		ADCSRA |= 1 << ADSC;
+		return false;
+	}
+	if (adc_phase == PREPARING) {
+		adc_phase = MEASURING;
 		ADCSRA |= 1 << ADSC;
 		return false;
 	}
 	return true;
 }
 
-static inline int32_t adc_get(uint8_t pin) {
+static inline int16_t adc_get(uint8_t pin_) {
 	int32_t low = uint8_t(ADCL);
 	int32_t high = uint8_t(ADCH);
 	int32_t ret = (high << 8) | low;
@@ -204,7 +196,6 @@ EXTERN uint32_t time_h;
 
 static inline void arch_setup_start() {
 	mcusr = MCUSR;
-	mem_used = 0;
 	time_h = 0;
 	MCUSR = 0;
 	// Setup timer1 for microsecond counting.
@@ -212,7 +203,7 @@ static inline void arch_setup_start() {
 	TCCR1B = 2;	// Clock/8, in other words with 16MHz clock, 2MHz counting; 2 counts/us.
 	// Disable all outputs.
 	for (uint8_t i = 0; i < NUM_DIGITAL_PINS; ++i)
-		RAW_SET_INPUT_NOPULLUP(i);
+		UNSET(i);
 	// Initialize printer id from EEPROM.
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
 		printerid[i] = EEPROM.read(i);
@@ -253,7 +244,7 @@ static inline void get_current_times(uint32_t *current_time, uint32_t *longtime)
 	*longtime = millis();
 }
 
-// Memory handling
+/* Memory handling
 EXTERN char storage[DYNAMIC_MEM_SIZE];
 struct Memrecord {
 	uint16_t size;
@@ -367,5 +358,6 @@ static inline void _mem_free(void **target) {
 	_mem_dump();
 #endif
 }
+*/
 #endif
 #endif

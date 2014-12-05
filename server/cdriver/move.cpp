@@ -326,13 +326,14 @@ uint8_t next_move() {
 	debug("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f s tp=%f s", F(f0), F(fp), F(fq), F(v0), F(vp), F(vq), F(t0), F(tp));
 #endif
 	if (!moving) {
-		last_time = utime();
-		last_current_time = last_time;
+		hwtime = 0;
+		hwstart_time = 0;
+		last_time = 0;
+		last_current_time = 0;
 	}
 	//debug("last=%ld", F(long(last_time)));
 	//debug("moving->true");
 	moving = true;
-	next_motor_time = 0;
 	start_time = last_time - uint32_t(f0 / fabs(vp) * 1e6);
 	//debug("start=%ld, last-start=%ld", F(long(start_time)), F(long(last_time - start_time)));
 	// }}}
@@ -356,8 +357,14 @@ void abort_move(bool move) { // {{{
 		}
 		//debug("moving->false");
 		moving = false;
-		if (move)
-			arch_move();
+		current_fragment_pos = 0;
+		debug("reset abort");
+		reset_dirs(current_fragment);
+		if (move) {
+			debug("refill abort");
+			buffer_refill();
+			debug("refill abort done");
+		}
 		move_prepared = false;
 #ifdef DEBUG_MOVE
 		debug("move no longer prepared");

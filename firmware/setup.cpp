@@ -5,35 +5,42 @@ void setup()
 {
 	arch_setup_start();
 	watchdog_disable();
-	// Initialize volatile variables.
 	Serial.begin(115200);
-#if DEBUG_BUFFER_LENGTH > 0
-	debug_buffer_ptr = 0;
-#endif
-	debug("Starting");
+	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
+		pin[p].state = CTRL_UNSET << 2 | CTRL_RESET;
+		UNSET(p);
+	}
+	for (uint8_t m = 0; m < NUM_MOTORS; ++m)
+		motor[m].init(m);
+	for (uint8_t b = 0; b < NUM_BUFFERS; ++b) {
+		for (uint8_t f = 0; f < FRAGMENTS_PER_BUFFER; ++f)
+			buffer[b][f].num_samples = 0;
+	}
+	notified_current_fragment = 0;
+	current_fragment = notified_current_fragment;
+	last_fragment = FRAGMENTS_PER_BUFFER - 1;
+	filling = 0;
+	for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a) {
+		for (uint8_t i = 0; i < 2; ++i) {
+			adc[a].linked[i] = ~0;
+			adc[a].value[i] = 1 << 15;
+		}
+	}
+	adc_phase = INACTIVE;
 	command_end = 0;
 	ping = 0;
-	pending_packet[0] = 0;
 	out_busy = false;
-	reply_ready = false;
-	adcreply_ready = false;
-	start_time = utime();
-	led_pin.init();
-	led_phase = 0;
-	led_fast = false;
-	led_last = start_time;
-	num_motors = 0;
-	motor = NULL;
+	reply_ready = 0;
+	adcreply_ready = 0;
+	stopped = true;
 	stopping = false;
-	adc_current = ~0;
-	num_setpos = 0;
-#ifdef HAVE_AUDIO
-	audio_head = 0;
-	audio_tail = 0;
-	audio_state = 0;
-	audio_us_per_sample = 125; // 1000000 / 8000;
-	continue_cb = false;
-#endif
+	underrun = false;
+	led_fast = false;
+	led_last = utime();
+	led_phase = 0;
+	led_pin = ~0;
+	active_motors = 0;
+	
 	arch_setup_end();	// This fills printerid.
 	Serial.write(CMD_ID);
 	for (uint8_t i = 0; i < ID_SIZE; ++i)

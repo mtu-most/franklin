@@ -21,16 +21,16 @@ static void reset_pos(Space *s) {
 static void check_position(Space *s, float *data) {
 }
 
-static void load(Space *s, uint8_t old_type, int32_t &addr, bool eeprom) {
-	uint8_t num = read_8(addr, eeprom);
+static void load(Space *s, uint8_t old_type, int32_t &addr) {
+	uint8_t num = read_8(addr);
 	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up cartesian axes");
 		s->cancel_update();
 	}
 }
 
-static void save(Space *s, int32_t &addr, bool eeprom) {
-	write_8(addr, s->num_axes, eeprom);
+static void save(Space *s, int32_t &addr) {
+	write_8(addr, s->num_axes);
 }
 
 static bool init(Space *s) {
@@ -66,11 +66,11 @@ struct ExtruderData {
 
 #define EDATA(s) (*reinterpret_cast <ExtruderData *>(s->type_data))
 
-static void eload(Space *s, uint8_t old_type, int32_t &addr, bool eeprom) {
-	EDATA(s).dx = read_float(addr, eeprom);
-	EDATA(s).dy = read_float(addr, eeprom);
-	EDATA(s).dz = read_float(addr, eeprom);
-	uint8_t num = read_8(addr, eeprom);
+static void eload(Space *s, uint8_t old_type, int32_t &addr) {
+	EDATA(s).dx = read_float(addr);
+	EDATA(s).dy = read_float(addr);
+	EDATA(s).dz = read_float(addr);
+	uint8_t num = read_8(addr);
 	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up cartesian axes");
 		uint8_t n = min(s->num_axes, s->num_motors);
@@ -81,22 +81,20 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr, bool eeprom) {
 	}
 }
 
-static void esave(Space *s, int32_t &addr, bool eeprom) {
-	write_float(addr, EDATA(s).dx, eeprom);
-	write_float(addr, EDATA(s).dy, eeprom);
-	write_float(addr, EDATA(s).dz, eeprom);
-	write_8(addr, s->num_axes, eeprom);
+static void esave(Space *s, int32_t &addr) {
+	write_float(addr, EDATA(s).dx);
+	write_float(addr, EDATA(s).dy);
+	write_float(addr, EDATA(s).dz);
+	write_8(addr, s->num_axes);
 }
 
 static bool einit(Space *s) {
-	mem_alloc(sizeof(ExtruderData), &s->type_data, "extruder");
-	if (!s->type_data)
-		return false;
+	s->type_data = new ExtruderData;
 	return true;
 }
 
 static void efree(Space *s) {
-	mem_free(&s->type_data);
+	delete reinterpret_cast <ExtruderData *>(s->type_data);
 }
 
 static int32_t esavesize(Space *s) {

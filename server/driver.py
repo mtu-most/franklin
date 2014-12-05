@@ -496,9 +496,10 @@ class Printer: # {{{
 	def _get_reply(self, cb = False): # {{{
 		while self.printer is not None:
 			if not self.printer.available():
-				ret = select.select([self.printer], [], [self.printer], 1)
+				ret = select.select([self.printer], [], [self.printer], 3)
 				if len(ret[0]) == 0 and len(ret[2]) == 0:
 					log('no reply received')
+					traceback.print_stack()
 					return None
 			ret = self._printer_input(reply = True)
 			if ret[0] == 'packet' or (cb and ret[0] == 'no data'):

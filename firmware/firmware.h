@@ -1,165 +1,269 @@
 #ifndef _FIRMWARE_H
 #define _FIRMWARE_H
 
-#include <math.h>
 #include <stdarg.h>
 #include ARCH_INCLUDE
 
 #define ID_SIZE 16	// Number of bytes in printerid; it's a UUID which is always 16 bytes.
 #define PROTOCOL_VERSION 0
 
+#ifndef NUM_MOTORS
+#error "NUM_MOTORS must be defined in the Makefile"
+#endif
+#ifndef NUM_BUFFERS
+#error "NUM_BUFFERS must be defined in the Makefile"
+#endif
+#ifndef FRAGMENTS_PER_BUFFER
+#error "FRAGMENTS_PER_BUFFER must be defined in the Makefile"
+#endif
+#ifndef BYTES_PER_FRAGMENT
+#error "BYTES_PER_FRAGMENT must be defined in the Makefile"
+#endif
+
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
 #define MAXINT ((1 << ADCBITS) + 1)
+
+#define RESET_MAGIC 0xDEADBEEF
 
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
 #define EXTERN extern
 #endif
 
-struct Pin_t {
-	uint8_t flags;
-	uint8_t pin;
-	bool valid() { return flags & 1; }
-	bool inverted() { return flags & 2; }
-	uint16_t write() { return flags << 8 | pin; }
-	void init() { flags = 0; pin = 0; }
-	void read(uint16_t data) {
-		if ((data & 0xff) != pin)
-			SET_INPUT_NOPULLUP(*this);
-		pin = data & 0xff;
-		flags = data >> 8;
-		if (flags & ~3 || pin >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS) {
-			flags = 0;
-			pin = 0;
-		}
-	}
-};
+#define COMMAND_SIZE 256
+#define FULL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
+
+EXTERN char printerid[ID_SIZE];
+EXTERN unsigned char command[FULL_COMMAND_SIZE];
+EXTERN uint16_t command_end;
+EXTERN char reply[FULL_COMMAND_SIZE], adcreply[6];
+EXTERN uint8_t ping;			// bitmask of waiting ping replies.
+EXTERN bool out_busy;
+EXTERN uint32_t out_time;
+EXTERN uint8_t reply_ready, adcreply_ready;
+EXTERN char pending_packet[FULL_COMMAND_SIZE];
+EXTERN uint16_t pending_len;
+EXTERN bool stopped, underrun;
+EXTERN uint8_t filling;
+EXTERN bool led_fast;
+EXTERN uint32_t led_last, led_phase, start_time;
+EXTERN uint8_t led_pin;
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
 // These bytes (except RESET) are sent in reply to a received packet only.
 	CMD_NACK = 0x80,	// Incorrect packet; please resend.
 	CMD_ACK0 = 0xb3,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_ACKWAIT0 = 0xb4,	// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
 	CMD_STALL0 = 0x87,	// Packet properly received, but not accepted; don't resend packet unmodified.
 	CMD_STALL1 = 0x9e,	// Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_ACKWAIT1 = 0x99,	// Printer started and is ready for commands.
 	CMD_ID = 0xaa,		// Request/reply printer ID code.
 	CMD_ACK1 = 0xad,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_DEBUG = 0x81	// Debug message; a nul-terminated message follows (no checksum; no resend).
+	CMD_DEBUG = 0xb4,	// Debug message; a nul-terminated message follows (no checksum; no resend).
+	UNUSED = 0x99
 };
+
+enum Control {
+	// Control is 0x0000rrcc, with R=read request, r=reset value, c=current value.
+	CTRL_RESET,
+	CTRL_SET,
+	CTRL_UNSET,
+	CTRL_INPUT
+};
+#define CONTROL_RESET(x) (((x) >> 2) & 0x3)
+#define CONTROL_CURRENT(x) ((x) & 0x3)
 
 enum Command {
 	// from host
-	CMD_BEGIN,	// 0
+	CMD_BEGIN = 0x40,	// 0
 	CMD_PING,	// 1:code
-	CMD_RESET,	// 4:magic
-	CMD_SETUP,	// 1:num_motors, 2:led_pin, 4:speedfactor
-	CMD_MSETUP,	// 1:motor, 2:step_pin, 2:dir_pin, 2:limit_min_pin, 2:limit_max_pin, 2:sense_pin, 1:max_steps
+	CMD_RESET,	// 4:magic	reset the mcu.
+	CMD_SETUP,	// 1:led_pin
+	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
+	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:sense_pin, 1:flags
+	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:values	(including flags)
 
-	CMD_MOVE,	// ?:which, (4:speed, 4:limit, 4:current)*
-	CMD_ABORT,
-
-	CMD_SETPOS,	// 1:which, 4:pos
-	CMD_ADDPOS,	// 1:which, 4:pos
-	CMD_GETPOS,	// 1:which
-	CMD_RESETPIN,	// 1:dpin
-	CMD_SETPIN,	// 1:dpin
-	CMD_UNSETPIN,	// 1:dpin
-	CMD_INPUTPIN,	// 1:dpin
-	CMD_GETPIN,	// 1:dpin
-	CMD_GETADC,	// 1:apin
-
-	CMD_AUDIO_SETUP,	// ?:which, 4:samples/s
-	CMD_AUDIO_DATA,		// X:data
+	CMD_START_MOVE,	// 4:us, 1:num_moving_motors
+	CMD_MOVE,	// 1:which, 4:us_per_sample, 1:dir, *:samples	// dir: 0:positive, 1:negative, 2:audio; bit 7 set: last.
+	CMD_START,	// 0 start moving.
+	CMD_STOP,	// 0 stop moving.
+	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.
+	CMD_GETPIN,	// 1:pin
 
 	// to host
 		// responses to host requests; only one active at a time.
-	CMD_START,	// 4:version, 1:num_dpins, 1:num_apins
+	CMD_READY = 0x60,	// 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:num_buffers, 1:fragments/buffer, 1:bytes/fragment
 	CMD_PONG,	// 1:code
-	CMD_POS,	// 4:pos
 	CMD_PIN,	// 1:state
-	CMD_ADC,	// 2:adc reading
+	CMD_STOPPED,	// 1:fragment, 4:fragment_pos, {4:motor_pos}*
 
 		// asynchronous events.
-	CMD_LIMIT,	// 1:which
-	CMD_SENSE0,	// 1:which, 4:pos
-	CMD_SENSE1,	// 1:which, 4:pos
+	CMD_DONE,	// 1:num
+	CMD_UNDERRUN,	// 1:num
+	CMD_ADC,	// 1:which, 2:adc reading
+	CMD_LIMIT,	// 1:which, 4:time, {4:motor_pos}*
+	CMD_SENSE0,	// 1:which, {4:motor_pos}*
+	CMD_SENSE1	// 1:which, {4:motor_pos}*
 };
+
+static inline uint8_t minpacketlen() {
+	switch (command[0] & ~0x10) {
+	case CMD_BEGIN:
+		return 1;
+	case CMD_PING:
+		return 2;
+	case CMD_RESET:
+		return 5;
+	case CMD_SETUP:
+		return 2;
+	case CMD_CONTROL:
+		return 2;
+	case CMD_MSETUP:
+		return 8;
+	case CMD_ASETUP:
+		return 8;
+	case CMD_START_MOVE:
+		return 6;
+	case CMD_MOVE:
+		return 6;
+	case CMD_START:
+		return 1;
+	case CMD_STOP:
+		return 1;
+	case CMD_ABORT:
+		return 1;
+	default:
+		debug("invalid command passed to minpacketlen: %x", int(uint8_t(command[0])));
+		return 1;
+	};
+}
+
+struct Pin_t {
+	uint8_t state;
+};
+EXTERN Pin_t pin[NUM_DIGITAL_PINS];
+
+inline void SET_OUTPUT(uint8_t pin_no) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	if ((pin[pin_no].state & 0x3) == CTRL_SET || (pin[pin_no].state & 0x3) == CTRL_RESET)
+		return;
+	digitalWrite(pin_no, LOW);
+	pinMode(pin_no, OUTPUT);
+	pin[pin_no].state &= ~0x3;
+	pin[pin_no].state |= CTRL_RESET;
+}
+inline void SET_INPUT(uint8_t pin_no) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	pinMode(pin_no, INPUT_PULLUP);
+	pin[pin_no].state &= ~0x3;
+	pin[pin_no].state |= CTRL_INPUT;
+}
+inline void UNSET(uint8_t pin_no) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	pinMode(pin_no, INPUT);
+	pin[pin_no].state &= ~0x3;
+	pin[pin_no].state |= CTRL_UNSET;
+}
+inline void SET(uint8_t pin_no) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	if ((pin[pin_no].state & 0x3) == CTRL_SET)
+		return;
+	SET_OUTPUT(pin_no);
+	digitalWrite(pin_no, HIGH);
+	pin[pin_no].state &= ~0x3;
+	pin[pin_no].state |= CTRL_SET;
+}
+inline void RESET(uint8_t pin_no) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	if ((pin[pin_no].state & 0x3) != CTRL_SET)
+		return;
+	SET_OUTPUT(pin_no);
+	digitalWrite(pin_no, LOW);
+	pin[pin_no].state &= ~0x3;
+	pin[pin_no].state |= CTRL_RESET;
+}
+inline bool GET(uint8_t pin_no) {
+	return digitalRead(pin_no) == HIGH;
+}
 
 struct Motor
 {
-	Pin_t step_pin;
-	Pin_t dir_pin;
-	uint8_t max_steps;	// maximum number of steps in one iteration.
-	float a;		// steps/μs²
-	float max_v;		// steps/μs
-	Pin_t limit_min_pin;
-	Pin_t limit_max_pin;
-	Pin_t sense_pin;
-	uint8_t sense_state;
-	int32_t sense_pos, switch_pos, current_pos, start_pos, end_pos, setpos;
-	float v, target_v;	// steps/μs
-	uint32_t last_step_t;	// time in μs
-	bool on_track;
-#ifdef HAVE_AUDIO
-	uint8_t audio_flags;
+	int32_t current_pos, sense_pos[2];
+	uint8_t step_pin;
+	uint8_t dir_pin;
+	uint8_t limit_min_pin;
+	uint8_t limit_max_pin;
+	uint8_t sense_pin;
+	uint8_t buffer;
+	uint8_t flags;
+	uint16_t pos;
 	enum Flags {
-		PLAYING = 1,
-		STATE = 2
+		LIMIT = 1,
+		SENSE0 = 2,
+		SENSE1 = 4,
+		INVERT_LIMIT_MIN = 8,
+		INVERT_LIMIT_MAX = 16,
+		INVERT_STEP = 32,
+		SENSE_STATE = 64,
+		ACTIVE = 128
 	};
-#endif
-	inline void init();
-	void fini() {
-		step_pin.read(0);
-		dir_pin.read(0);
-		limit_min_pin.read(0);
-		limit_max_pin.read(0);
-		sense_pin.read(0);
+	void init(uint8_t b) {
+		buffer = b;
+		current_pos = 0;
+		sense_pos[0] = 0xBEEFBEEF;
+		sense_pos[1] = 0xFACEFACE;
+		flags = 0;
+		pos = 0;
 	}
 };
 
-#define COMMAND_SIZE 127
-#define COMMAND_LEN_MASK 0x7f
-#define FULL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
+EXTERN Motor motor[NUM_MOTORS];
+EXTERN int active_motors;
+EXTERN bool stopping;
 
-EXTERN char printerid[ID_SIZE];
-EXTERN unsigned char command[FULL_COMMAND_SIZE];
-EXTERN uint8_t command_end;
-EXTERN char reply[FULL_COMMAND_SIZE], adcreply[6];
-EXTERN char out_buffer[16];
-EXTERN uint8_t ping;			// bitmask of waiting ping replies.
-EXTERN bool out_busy;
-EXTERN uint32_t out_time;
-EXTERN bool reply_ready, adcreply_ready;
-EXTERN char pending_packet[FULL_COMMAND_SIZE];
-EXTERN uint8_t adc_phase;
-EXTERN uint8_t num_motors;
-EXTERN Motor **motor;
-EXTERN uint8_t stopping;
-EXTERN bool led_fast;
-EXTERN uint32_t led_last, led_phase, start_time;
-EXTERN Pin_t led_pin;
-EXTERN int8_t speed_error;	// Acceptable error in v to correct position.
+enum Dir {
+	DIR_POSITIVE,
+	DIR_NEGATIVE,
+	DIR_AUDIO,
+	DIR_NONE
+};
+
+struct Fragment {
+	Dir dir;
+	uint32_t us_per_sample;
+	uint16_t num_samples;
+	uint8_t samples[BYTES_PER_FRAGMENT];
+};
+
+typedef Fragment Buffer[FRAGMENTS_PER_BUFFER];
+
+EXTERN Buffer buffer[NUM_BUFFERS];
+EXTERN uint32_t fragment_time[FRAGMENTS_PER_BUFFER];
+EXTERN uint8_t notified_current_fragment;
+EXTERN uint8_t current_fragment;
+EXTERN uint8_t last_fragment;
+EXTERN uint32_t limit_time;
+EXTERN uint8_t limit_fragment;
+EXTERN uint32_t last_current_time;
+
+struct Adc {
+	uint8_t linked[2];
+	uint16_t value[2];	// bit 15 in [0] set => invalid; bit 14 set => linked inverted.
+};
+
+enum AdcPhase {
+	INACTIVE,	// No ADCs need to be measured.
+	PREPARING,	// Measuring an Adc the first time.
+	MEASURING,	// Measuring an Adc the second time.
+	WAITING		// Measured an Adc, but the previous value was not sent yet.
+};
+
+EXTERN Adc adc[NUM_ANALOG_INPUTS];
 EXTERN uint8_t adc_current;
-EXTERN uint8_t num_setpos;
-#ifdef HAVE_AUDIO
-EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
-EXTERN uint8_t audio_head, audio_tail, audio_state;
-EXTERN uint32_t audio_start;
-EXTERN int16_t audio_us_per_sample;
-EXTERN bool continue_cb;
-#endif
-
-#if DEBUG_BUFFER_LENGTH > 0
-EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
-EXTERN int16_t debug_buffer_ptr;
-// debug.cpp
-void buffered_debug_flush();
-void buffered_debug(char const *fmt, ...);
-#else
-#define buffered_debug debug
-#define buffered_debug_flush() do {} while(0)
-#endif
+EXTERN AdcPhase adc_phase;
 
 // packet.cpp
 void packet();	// A command packet has arrived; handle it.
@@ -169,7 +273,6 @@ void serial();	// Handle commands from serial.
 void send_packet();
 void try_send_next();
 void write_ack();
-void write_ackwait();
 void write_stall();
 
 // setup.cpp
@@ -180,28 +283,4 @@ void loop();	// Do stuff which needs doing: moving motors and adjusting heaters.
 
 #include ARCH_INCLUDE
 
-void Motor::init() {
-	step_pin.init();
-	dir_pin.init();
-	max_steps = 0;
-	a = 0;
-	max_v = 0;
-	limit_min_pin.init();
-	limit_max_pin.init();
-	sense_pin.init();
-	sense_state = 0;
-	sense_pos = MAXLONG;
-	switch_pos = MAXLONG;
-	current_pos = 0;
-	start_pos = 0;
-	end_pos = MAXLONG;
-	setpos = MAXLONG;
-	v = 0;
-	target_v = 0;
-	last_step_t = utime();
-	on_track = true;
-#ifdef HAVE_AUDIO
-	audio_flags = 0;
-#endif
-}
 #endif

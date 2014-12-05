@@ -101,23 +101,23 @@ static void check_position(Space *s, float *data) {
 	}
 }
 
-static void load(Space *s, uint8_t old_type, int32_t &addr, bool eeprom) {
+static void load(Space *s, uint8_t old_type, int32_t &addr) {
 	if (!s->setup_nums(3, 3)) {
 		debug("Failed to set up delta axes");
 		s->cancel_update();
 		return;
 	}
 	for (uint8_t a = 0; a < 3; ++a) {
-		APEX(s, a).axis_min = read_float(addr, eeprom);
-		APEX(s, a).axis_max = read_float(addr, eeprom);
-		APEX(s, a).rodlength = read_float(addr, eeprom);
-		APEX(s, a).radius = read_float(addr, eeprom);
+		APEX(s, a).axis_min = read_float(addr);
+		APEX(s, a).axis_max = read_float(addr);
+		APEX(s, a).rodlength = read_float(addr);
+		APEX(s, a).radius = read_float(addr);
 		if (APEX(s, a).axis_max > APEX(s, a).rodlength || APEX(s, a).axis_max < 0)
 			APEX(s, a).axis_max = APEX(s, a).rodlength;
 		if (APEX(s, a).axis_min > APEX(s, a).axis_max)
 			APEX(s, a).axis_min = 0;
 	}
-	PRIVATE(s).angle = read_float(addr, eeprom);
+	PRIVATE(s).angle = read_float(addr);
 	if (isinf(PRIVATE(s).angle) || isnan(PRIVATE(s).angle))
 		PRIVATE(s).angle = 0;
 #define sin210 -.5
@@ -140,25 +140,25 @@ static void load(Space *s, uint8_t old_type, int32_t &addr, bool eeprom) {
 	}
 }
 
-static void save(Space *s, int32_t &addr, bool eeprom) {
+static void save(Space *s, int32_t &addr) {
 	for (uint8_t a = 0; a < 3; ++a) {
-		write_float(addr, APEX(s, a).axis_min, eeprom);
-		write_float(addr, APEX(s, a).axis_max, eeprom);
-		write_float(addr, APEX(s, a).rodlength, eeprom);
-		write_float(addr, APEX(s, a).radius, eeprom);
+		write_float(addr, APEX(s, a).axis_min);
+		write_float(addr, APEX(s, a).axis_max);
+		write_float(addr, APEX(s, a).rodlength);
+		write_float(addr, APEX(s, a).radius);
 	}
-	write_float(addr, PRIVATE(s).angle, eeprom);
+	write_float(addr, PRIVATE(s).angle);
 }
 
 static bool init(Space *s) {
-	mem_alloc(sizeof(Delta_private), &s->type_data, "delta");
+	s->type_data = new Delta_private;
 	if (!s->type_data)
 		return false;
 	return true;
 }
 
 static void free(Space *s) {
-	mem_free(&s->type_data);
+	delete reinterpret_cast <Delta_private *>(s->type_data);
 }
 
 static int32_t savesize(Space *s) {

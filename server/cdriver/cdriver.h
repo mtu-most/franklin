@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdarg.h>
 #include <stdint.h>
+#include <poll.h>
 
 #define PROTOCOL_VERSION ((uint32_t)0)	// Required version response in BEGIN.
 #define ID_SIZE 16
@@ -42,13 +43,12 @@ enum SingleByteHostCommands {
 enum SingleByteCommands {	// See serial.cpp for computation of command values. {{{
 	CMD_NACK = 0x80,	// Incorrect packet; please resend.
 	CMD_ACK0 = 0xb3,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_ACKWAIT0 = 0xb4,	// Packet properly received and accepted, but queue is full so no new GOTO commands are allowed until CONTINUE.  (Never sent from host.)
 	CMD_STALL0 = 0x87,	// Packet properly received, but not accepted; don't resend packet unmodified.
 	CMD_STALL1 = 0x9e,	// Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_ACKWAIT1 = 0x99,	// Printer started and is ready for commands.
 	CMD_ID = 0xaa,		// Request/reply printer ID code.
 	CMD_ACK1 = 0xad,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_DEBUG = 0x81	// Debug message; a nul-terminated message follows (no checksum; no resend).
+	CMD_DEBUG = 0xb4,	// Debug message; a nul-terminated message follows (no checksum; no resend).
+	CMD_UNUSED = 0x99
 }; // }}}
 
 enum Command {
@@ -136,8 +136,8 @@ struct Temp
 	int32_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
 	float fromadc(int32_t adc);	// convert ADC to K.
 	int32_t toadc(float T);	// convert K to ADC.
-	void load(int32_t &addr, bool eeprom);
-	void save(int32_t &addr, bool eeprom);
+	void load(int32_t &addr);
+	void save(int32_t &addr);
 	void init();
 	void free();
 	void copy(Temp &dst);
@@ -174,8 +174,10 @@ struct Motor
 	uint8_t home_order;
 	float last_v;		// v during last iteration, for using limit_a [m/s].
 	float target_v, target_dist;	// Internal values for moving.
-	int32_t current_pos;	// Current position of motor (in steps).
+	int32_t current_pos, hwcurrent_pos;	// Current position of motor (in steps), and what the hardware currently thinks.
+	bool hwdir;
 	float endpos;
+	int *dir;
 #ifdef HAVE_AUDIO
 	uint8_t audio_flags;
 	enum Flags {
@@ -192,8 +194,8 @@ struct SpaceType
 	void (*xyz2motors)(Space *s, float *motors, bool *ok);
 	void (*reset_pos)(Space *s);
 	void (*check_position)(Space *s, float *data);
-	void (*load)(Space *s, uint8_t old_type, int32_t &addr, bool eeprom);
-	void (*save)(Space *s, int32_t &addr, bool eeprom);
+	void (*load)(Space *s, uint8_t old_type, int32_t &addr);
+	void (*save)(Space *s, int32_t &addr);
 	bool (*init)(Space *s);
 	void (*free)(Space *s);
 	int32_t (*savesize)(Space *s);
@@ -210,12 +212,12 @@ struct Space
 	Motor **motor;
 	Axis **axis;
 	bool active;
-	void load_info(int32_t &addr, bool eeprom);
-	void load_axis(uint8_t a, int32_t &addr, bool eeprom);
-	void load_motor(uint8_t m, int32_t &addr, bool eeprom);
-	void save_info(int32_t &addr, bool eeprom);
-	void save_axis(uint8_t a, int32_t &addr, bool eeprom);
-	void save_motor(uint8_t m, int32_t &addr, bool eeprom);
+	void load_info(int32_t &addr);
+	void load_axis(uint8_t a, int32_t &addr);
+	void load_motor(uint8_t m, int32_t &addr);
+	void save_info(int32_t &addr);
+	void save_axis(uint8_t a, int32_t &addr);
+	void save_motor(uint8_t m, int32_t &addr);
 	void init(uint8_t space_id);
 	void free();
 	void copy(Space &dst);
@@ -264,8 +266,8 @@ struct Gpio
 	int32_t adcvalue;
 	uint8_t prev, next;
 	void setup(uint8_t new_state);
-	void load(uint8_t self, int32_t &addr, bool eeprom);
-	void save(int32_t &addr, bool eeprom);
+	void load(uint8_t self, int32_t &addr);
+	void save(int32_t &addr);
 	void init();
 	void free();
 	void copy(Gpio &dst);
@@ -310,13 +312,8 @@ EXTERN Serial_t *serialdev[2];
 EXTERN unsigned char command[2][FULL_COMMAND_SIZE];
 EXTERN uint8_t command_end[2];
 EXTERN Space *spaces;
-EXTERN uint32_t next_motor_time;
 EXTERN Temp *temps;
-EXTERN uint32_t next_temp_time;
 EXTERN Gpio *gpios;
-#ifdef HAVE_AUDIO
-EXTERN uint32_t next_audio_time;
-#endif
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];
 EXTERN uint8_t queue_start, queue_end;
@@ -330,11 +327,11 @@ EXTERN bool motors_busy;
 EXTERN bool out_busy;
 EXTERN uint32_t out_time;
 EXTERN char pending_packet[FULL_COMMAND_SIZE];
+EXTERN int pending_len;
 EXTERN char datastore[FULL_COMMAND_SIZE];
 EXTERN uint32_t last_active;
 EXTERN float motor_limit, temp_limit;
 EXTERN int16_t led_phase;
-EXTERN uint8_t adc_phase;
 EXTERN uint8_t temp_current;
 #ifdef HAVE_AUDIO
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
@@ -344,11 +341,22 @@ EXTERN int16_t audio_us_per_sample;
 #endif
 EXTERN uint32_t start_time, last_time, last_current_time;
 EXTERN float t0, tp;
-EXTERN bool moving, stopping;
+EXTERN bool moving;
+EXTERN int stopping;
 EXTERN float f0, f1, f2, fp, fq, fmain;
 EXTERN bool move_prepared;
 EXTERN float done_factor;
 EXTERN uint8_t requested_temp;
+EXTERN bool refilling;
+EXTERN int current_fragment;
+EXTERN int current_fragment_pos;
+EXTERN int hwtime;
+EXTERN int hwstart_time;
+EXTERN int hwtime_step;
+EXTERN int *fragment_len;	// Fragment length in us.
+EXTERN int free_fragments;
+EXTERN struct pollfd pollfds[2];
+EXTERN int *num_active_motors;
 
 #if DEBUG_BUFFER_LENGTH > 0
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
@@ -366,7 +374,7 @@ void packet();	// A command packet has arrived; handle it.
 
 // serial.cpp
 void serial(uint8_t which);	// Handle commands from serial.
-void prepare_packet(char *the_packet);
+void prepare_packet(char *the_packet, int len);
 void send_packet();
 void write_ack();
 void write_ackwait();
@@ -379,30 +387,29 @@ void abort_move(bool move);
 
 // setup.cpp
 void setup(char const *port);
-void load_all();
 
 // storage.cpp
-uint8_t read_8(int32_t &address, bool eeprom);
-void write_8(int32_t &address, uint8_t data, bool eeprom);
-int16_t read_16(int32_t &address, bool eeprom);
-void write_16(int32_t &address, int16_t data, bool eeprom);
-float read_float(int32_t &address, bool eeprom);
-void write_float(int32_t &address, float data, bool eeprom);
+uint8_t read_8(int32_t &address);
+void write_8(int32_t &address, uint8_t data);
+int16_t read_16(int32_t &address);
+void write_16(int32_t &address, int16_t data);
+float read_float(int32_t &address);
+void write_float(int32_t &address, float data);
+
+// temp.cpp
+void handle_temp(int id, int temp);
+
+// space.cpp
+void reset_dirs(int fragment);
+void buffer_refill();
 
 // globals.cpp
-bool globals_load(int32_t &address, bool eeprom);
-void globals_save(int32_t &address, bool eeprom);
+bool globals_load(int32_t &address);
+void globals_save(int32_t &address);
 int32_t globals_savesize();
 
 // base.cpp
 void reset();
-#define mem_alloc(s, t, d) _mem_alloc((s), reinterpret_cast <void **>(t))
-void _mem_alloc(uint32_t size, void **target);
-#define mem_retarget(t1, t2) _mem_retarget(reinterpret_cast <void **>(t1), reinterpret_cast <void **>(t2))
-void _mem_retarget(void **target, void **newtarget);
-#define _mem_dump() do {} while(0)
-#define mem_free(t) _mem_free(reinterpret_cast <void **>(t))
-void _mem_free(void **target);
 
 #include ARCH_INCLUDE
 
@@ -416,26 +423,3 @@ void Pin_t::read(uint16_t data) {
 		pin = 0;
 	}
 }
-
-struct RealSerial : public Serial_t {
-	void begin(int baud) {
-		Serial.begin(baud);
-	}
-	void write(char c) {
-		Serial.write(c);
-	}
-	int read() {
-		return Serial.read();
-	}
-	int readBytes (char *target, int len) {
-		return Serial.readBytes(target, len);
-	}
-	void flush() {
-		Serial.flush();
-	}
-	int available() {
-		return Serial.available();
-	}
-};
-
-EXTERN RealSerial real_serial;

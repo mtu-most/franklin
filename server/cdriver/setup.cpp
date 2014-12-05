@@ -3,11 +3,10 @@
 
 void setup(char const *port)
 {
-	serialdev[0] = &real_serial;
-	real_serial.begin(115200);
+	serialdev[0] = &host_serial;
+	host_serial.begin(115200);
 	serialdev[1] = NULL;
 	arch_setup_start(port);
-	watchdog_disable();
 	setup_spacetypes();
 	// Initialize volatile variables.
 	initialized = false;
@@ -15,7 +14,6 @@ void setup(char const *port)
 	debug_buffer_ptr = 0;
 #endif
 	debug("Starting");
-	adc_phase = 0;
 	temp_current = 0;
 	name = NULL;
 	command_end[0] = 0;
@@ -26,7 +24,7 @@ void setup(char const *port)
 	queue_full = false;
 	continue_cb = 0;
 	ping = 0;
-	pending_packet[0] = 0;
+	pending_len = 0;
 	out_busy = false;
 	led_pin.init();
 	probe_pin.init();
@@ -38,9 +36,16 @@ void setup(char const *port)
 	last_active = millis();
 	t0 = 0;
 	f0 = 0;
+	free_fragments = 0;
+	refilling = false;
+	current_fragment = 0;
+	current_fragment_pos = 0;
+	hwtime = 0;
+	hwstart_time = 0;
+	hwtime_step = 200;	// TODO: make this dynamic.
 	//debug("moving->false");
 	moving = false;
-	stopping = false;
+	stopping = 0;
 	move_prepared = false;
 	cbs_after_current_move = 0;
 	which_autosleep = 0;
@@ -53,15 +58,10 @@ void setup(char const *port)
 	last_current_time = utime();
 	num_spaces = 0;
 	spaces = NULL;
-	next_motor_time = ~0;
 	num_temps = 0;
 	temps = NULL;
-	next_temp_time = ~0;
 	num_gpios = 0;
 	gpios = NULL;
-#ifdef HAVE_AUDIO
-	next_audio_time = ~0;
-#endif
 	arch_setup_end();
 	if (protocol_version < PROTOCOL_VERSION) {
 		debug("Printer has older Franklin version than host; please flash newer firmware.");
@@ -70,28 +70,5 @@ void setup(char const *port)
 	else if (protocol_version > PROTOCOL_VERSION) {
 		debug("Printer has newer Franklin version than host; please upgrade your host software.");
 		exit(1);
-	}
-	load_all();
-}
-
-void load_all() {
-	//debug("loading all");
-	int32_t addr = 0;
-	globals_load(addr, true);
-	for (uint8_t t = 0; t < num_spaces; ++t) {
-		//debug("space %d", t);
-		spaces[t].load_info(addr, true);
-		for (uint8_t a = 0; a < spaces[t].num_axes; ++a)
-			spaces[t].load_axis(a, addr, true);
-		for (uint8_t m = 0; m < spaces[t].num_motors; ++m)
-			spaces[t].load_motor(m, addr, true);
-	}
-	for (uint8_t t = 0; t < num_temps; ++t) {
-		//debug("temp %d", t);
-		temps[t].load(addr, true);
-	}
-	for (uint8_t t = 0; t < num_gpios; ++t) {
-		//debug("gpio %d", t);
-		gpios[t].load(t, addr, true);
 	}
 }

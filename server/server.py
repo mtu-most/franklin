@@ -552,7 +552,7 @@ def detect(port): # {{{
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
 	# This is only a problem for ramps; don't wait for ports that cannot be ramps.
 	if 'ACM' in port:
-		GLib.timeout_add(1000, part2)
+		GLib.timeout_add(1500, part2)
 	else:
 		part2()
 # }}}
