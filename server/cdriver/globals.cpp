@@ -95,7 +95,7 @@ void globals_save(int32_t &addr)
 	write_8(addr, 0);
 #endif
 	write_8(addr, NUM_DIGITAL_PINS);
-	write_8(addr, NUM_DIGITAL_PINS - NUM_ANALOG_INPUTS);
+	write_8(addr, NUM_ANALOG_INPUTS);
 	write_8(addr, num_spaces);
 	write_8(addr, num_temps);
 	write_8(addr, num_gpios);

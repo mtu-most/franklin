@@ -98,7 +98,6 @@ void packet()
 		else
 			serialdev[0]->write(OK);
 		if (!moving) {
-			debug("going!");
 			int num_movecbs = next_move();
 			if (num_movecbs > 0)
 				send_host(CMD_MOVECB, num_movecbs);
@@ -221,8 +220,7 @@ void packet()
 			send_host(CMD_TEMP);
 			return;
 		}
-		//requested_temp = which;
-		send_host(CMD_TEMP);
+		requested_temp = which;
 		return;
 	}
 	case CMD_READPOWER:	// read used power
@@ -443,7 +441,7 @@ void packet()
 			return;
 		}
 		addr = 3;
-		temps[which].load(addr);
+		temps[which].load(addr, which);
 		return;
 	}
 	case CMD_READ_GPIO:

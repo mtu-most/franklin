@@ -478,7 +478,7 @@ class Port: # {{{
 
 def detect(port): # {{{
 	if port == '-':
-		process = subprocess.Popen((config['driver'], config['cdriver'], port, 'local'), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = subprocess.Popen((config['driver'], config['cdriver'], port, 'local', config['allow-system']), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		ports[port] = Port(port, process, None)
 		return False
 	if not os.path.exists(port):
@@ -543,7 +543,7 @@ def detect(port): # {{{
 				ports[port].call('reconnect', [port], {}, lambda success, ret: ports[port].call('send_printer', [None], {}, lambda success, data: printer.close()))
 				return False
 			log('accepting unknown printer on port %s (id %s)' % (port, id[0]))
-			process = subprocess.Popen((config['driver'], config['cdriver'], port, id[0]), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+			process = subprocess.Popen((config['driver'], config['cdriver'], port, id[0], config['allow-system']), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, printer)
 			return False
 		printer.write(single['ID'])

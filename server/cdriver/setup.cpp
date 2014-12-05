@@ -42,7 +42,7 @@ void setup(char const *port)
 	current_fragment_pos = 0;
 	hwtime = 0;
 	hwstart_time = 0;
-	hwtime_step = 200;	// TODO: make this dynamic.
+	hwtime_step = 1000;	// TODO: make this dynamic.
 	//debug("moving->false");
 	moving = false;
 	stopping = 0;

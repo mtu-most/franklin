@@ -143,11 +143,12 @@ class Printer: # {{{
 		sys.stdout.write(json.dumps(data) + '\n')
 		sys.stdout.flush()
 	# }}}
-	def __init__(self, port, uuid): # {{{
+	def __init__(self, port, uuid, allow_system): # {{{
 		# HACK: this variable needs to have its value before init is done, to make the above HACK in the generator work.
 		global printer
 		printer = self
 		self.printer = Driver(port)
+		self.allow_system = allow_system
 		self.profile = 'default'
 		self.jobqueue = {}
 		self.job_output = ''
@@ -545,7 +546,7 @@ class Printer: # {{{
 		if data is None:
 			return False
 		#log('%d' % len(data[self.namelen:]))
-		self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_pins, self.num_digital_pins, num_spaces, num_temps, num_gpios, namelen = struct.unpack('<BBBBBBBBB', data[:9])
+		self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins, num_spaces, num_temps, num_gpios, namelen = struct.unpack('<BBBBBBBBB', data[:9])
 		self.name = unicode(data[9:9 + namelen], 'utf-8', 'replace')
 		self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.motor_limit, self.temp_limit, self.feedrate = struct.unpack('<HHffBfff', data[9 + namelen:])
 		while len(self.spaces) < num_spaces:
@@ -791,7 +792,7 @@ class Printer: # {{{
 						self.gcode_waiting = True
 						return self.wait_for_temp(0)[1](None)
 				elif cmd == ('SYSTEM', 0):
-					if not re.match(config['allow-system'], message):
+					if not re.match(self.allow_system, message):
 						log('Refusing to run forbidden system command: %s' % message)
 					else:
 						log('Running system command: %s' % message)
@@ -2105,7 +2106,7 @@ class Printer: # {{{
 			if comment.upper().startswith('MSG,'):
 				message = comment[4:].strip()
 			elif comment.startswith('SYSTEM:'):
-				if not re.match(config['allow-system'], comment[7:]):
+				if not re.match(self.allow_system, comment[7:]):
 					errors.append('Warning: system command %s is forbidden and will not be run' % comment[7:])
 				ret.append((('SYSTEM', 0), {}, comment[7:]))
 				continue
@@ -2312,7 +2313,7 @@ class Printer: # {{{
 	# Globals. {{{
 	def get_globals(self):
 		ret = {'num_spaces': len(self.spaces), 'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('name', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit', 'feedrate', 'zoffset', 'paused'):
+		for key in ('name', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit', 'feedrate', 'zoffset', 'paused'):
 			ret[key] = getattr(self, key)
 		return ret
 	def set_globals(self, update = True, **ka):
@@ -2476,7 +2477,7 @@ class Printer: # {{{
 		assert len(ka) == 0
 	# }}}
 	def send_printer(self, target): # {{{
-		self._broadcast(target, 'new_printer', [self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_pins])
+		self._broadcast(target, 'new_printer', [self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins])
 		self._globals_update(target)
 		for i, s in enumerate(self.spaces):
 			self._space_update(i, target)

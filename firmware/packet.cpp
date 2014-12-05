@@ -143,8 +143,10 @@ void packet()
 			adc[a].linked[i] = command[2 + i];
 			adc[a].value[i] = *reinterpret_cast <uint16_t *>(&command[4 + 2 * i]);
 		}
-		if (adc_phase == INACTIVE) {
+		if (adc_phase == INACTIVE && (adc[a].value[0] & 0x8000) == 0) {
 			adc_phase = PREPARING;
+			adc_current = a;
+			adc_next = a;
 			adc_ready(a);
 		}
 		write_ack();
@@ -196,7 +198,7 @@ void packet()
 		fragment.us_per_sample = *reinterpret_cast <uint32_t *>(&command[2]);
 		fragment.dir = Dir(command[6]);
 		fragment.num_samples = fragment_time[last_fragment] / fragment.us_per_sample;
-		for (uint8_t b = 0; b < (fragment.num_samples + 7) / 8; ++b) {
+		for (uint8_t b = 0; b < (fragment.num_samples + 1) / 2; ++b) {
 			fragment.samples[b] = command[7 + b];
 		}
 		write_ack();

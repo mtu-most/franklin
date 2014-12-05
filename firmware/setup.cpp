@@ -5,6 +5,7 @@ void setup()
 {
 	arch_setup_start();
 	watchdog_disable();
+	uint32_t current_time = utime();
 	Serial.begin(115200);
 	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
 		pin[p].state = CTRL_UNSET << 2 | CTRL_RESET;
@@ -27,6 +28,9 @@ void setup()
 		}
 	}
 	adc_phase = INACTIVE;
+	adc_current = ~0;
+	adc_next = ~0;
+	last_adc_time = current_time;
 	command_end = 0;
 	ping = 0;
 	out_busy = false;
@@ -36,7 +40,7 @@ void setup()
 	stopping = false;
 	underrun = false;
 	led_fast = false;
-	led_last = utime();
+	led_last = current_time;
 	led_phase = 0;
 	led_pin = ~0;
 	active_motors = 0;

@@ -142,14 +142,14 @@ static inline void adc_start(uint8_t adcpin) {
 }
 
 static inline bool adc_ready(uint8_t pin_) {
-	if (bit_is_set(ADCSRA, ADSC))
-		return false;
 	if (pin_ != adc_last_pin) {
 		adc_phase = PREPARING;
 		adc_last_pin = pin_;
 		ADCSRA |= 1 << ADSC;
 		return false;
 	}
+	if (bit_is_set(ADCSRA, ADSC))
+		return false;
 	if (adc_phase == PREPARING) {
 		adc_phase = MEASURING;
 		ADCSRA |= 1 << ADSC;
@@ -159,9 +159,9 @@ static inline bool adc_ready(uint8_t pin_) {
 }
 
 static inline int16_t adc_get(uint8_t pin_) {
-	int32_t low = uint8_t(ADCL);
-	int32_t high = uint8_t(ADCH);
-	int32_t ret = (high << 8) | low;
+	int16_t low = uint8_t(ADCL);
+	int16_t high = uint8_t(ADCH);
+	int16_t ret = (high << 8) | low;
 	//debug("adc: %ld", F(ret));
 	return ret;
 }

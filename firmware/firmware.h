@@ -7,6 +7,8 @@
 #define ID_SIZE 16	// Number of bytes in printerid; it's a UUID which is always 16 bytes.
 #define PROTOCOL_VERSION 0
 
+#define ADC_INTERVAL 1000	// Delay 1 ms between ADC measurements.
+
 #ifndef NUM_MOTORS
 #error "NUM_MOTORS must be defined in the Makefile"
 #endif
@@ -257,13 +259,13 @@ struct Adc {
 enum AdcPhase {
 	INACTIVE,	// No ADCs need to be measured.
 	PREPARING,	// Measuring an Adc the first time.
-	MEASURING,	// Measuring an Adc the second time.
-	WAITING		// Measured an Adc, but the previous value was not sent yet.
+	MEASURING	// Measuring an Adc the second time.
 };
 
 EXTERN Adc adc[NUM_ANALOG_INPUTS];
-EXTERN uint8_t adc_current;
+EXTERN uint8_t adc_current, adc_next;
 EXTERN AdcPhase adc_phase;
+EXTERN uint32_t last_adc_time;
 
 // packet.cpp
 void packet();	// A command packet has arrived; handle it.

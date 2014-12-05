@@ -39,7 +39,7 @@ static inline uint8_t fullpacketlen() {
 	else if ((command[0] & ~0x10) == CMD_MOVE) {
 		uint32_t us_per_sample = *reinterpret_cast <uint32_t *>(&command[2]);
 		uint32_t time = fragment_time[last_fragment];
-		uint8_t bytes = (time / us_per_sample + 7) / 8;
+		uint8_t bytes = (time / us_per_sample + 1) / 2;
 		return 7 + bytes;
 	}
 	else
@@ -367,7 +367,7 @@ void try_send_next()
 		return;
 	}
 	for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-		if ((motor[m].flags & (Motor::ACTIVE | Motor::LIMIT)) == (Motor::ACTIVE | Motor::LIMIT)) {
+		if (motor[m].flags & Motor::LIMIT) {
 #ifdef DEBUG_SERIAL
 			debug("limit %d", m);
 #endif

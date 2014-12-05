@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-void Temp::load(int32_t &addr)
+void Temp::load(int32_t &addr, int id)
 {
 	R0 = read_float(addr);
 	R1 = read_float(addr);
@@ -29,9 +29,9 @@ void Temp::load(int32_t &addr)
 		RESET(power_pin);
 	if (old_pin != thermistor_pin.write()) {
 		if (old_valid)
-			arch_setup_temp(old_pin, false);
+			arch_setup_temp(~0, old_pin, false);
 		if (thermistor_pin.valid())
-			arch_setup_temp(thermistor_pin.pin, true, power_pin.valid() ? power_pin.pin : ~0, power_pin.inverted(), adctarget);
+			arch_setup_temp(id, thermistor_pin.pin, true, power_pin.valid() ? power_pin.pin : ~0, power_pin.inverted(), adctarget);
 	}
 }
 
@@ -68,7 +68,7 @@ int32_t Temp::get_value() {
 }
 
 float Temp::fromadc(int32_t adc) {
-	if (adc < 0)
+	if (adc <= 0)
 		return INFINITY;
 	if (adc >= MAXINT)
 		return NAN;

@@ -77,8 +77,6 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_motors[m]->dir = new int[FRAGMENTS_PER_BUFFER];
 			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f)
 				new_motors[m]->dir[f] = 0;
-			// Not exactly right, but good enough for now.
-			arch_clear_fragment();
 		}
 		for (uint8_t m = nm; m < old_nm; ++m) {
 			delete[] motor[m]->dir;
@@ -685,17 +683,18 @@ void buffer_refill() {
 				continue;
 			for (uint8_t m = 0; m < sp.num_motors; ++m) {
 				Motor &mtr = *sp.motor[m];
-				if (mtr.current_pos == mtr.hwcurrent_pos)
-					continue;
-				arch_set_bit(mi + m);
-				mtr.hwcurrent_pos += mtr.dir[current_fragment];
+				int value = (mtr.current_pos - mtr.hwcurrent_pos) * mtr.dir[current_fragment];
+				if (value > 15)
+					value = 15;
+				arch_set_value(mi + m, value);
+				mtr.hwcurrent_pos += mtr.dir[current_fragment] * value;
 			}
 		}
 		current_fragment_pos += 1;
 		hwtime += hwtime_step;
 		handle_motors(hwtime);
-		if ((!moving && current_fragment_pos > 0) || current_fragment_pos >= BYTES_PER_FRAGMENT * 8) {
-			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT * 8);
+		if ((!moving && current_fragment_pos > 0) || current_fragment_pos >= BYTES_PER_FRAGMENT * 2) {
+			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT * 2);
 			send_fragment();
 		}
 	}

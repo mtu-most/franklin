@@ -25,28 +25,35 @@ function Text(title, obj, className) {
 	return [span, input];
 }
 
-function Pin(title, obj, only_analog) {
+function Pin(title, obj, analog) {
 	var pinselect = Create('select', 'pinselect');
 	pinselect.id = make_id(printer, obj);
 	pinselect.obj = obj;
 	pinselect.printer = printer;
-	pinselect.Add(pinrange());
+	pinselect.Add(pinrange(analog));
+	pinselect.analog = analog;
 	var validinput = Create('input');
 	validinput.type = 'checkbox';
 	validinput.id = make_id(printer, obj, 'valid');
 	var validlabel = Create('label').AddText('Valid');
 	validlabel.htmlFor = validinput.id;
-	var invertedinput = Create('input');
-	invertedinput.type = 'checkbox';
-	invertedinput.id = make_id(printer, obj, 'inverted');
-	var invertedlabel = Create('label').AddText('Inverted');
-	invertedlabel.htmlFor = invertedinput.id;
+	var inverts;
+	if (!analog) {
+		var invertedinput = Create('input');
+		invertedinput.type = 'checkbox';
+		invertedinput.id = make_id(printer, obj, 'inverted');
+		var invertedlabel = Create('label').AddText('Inverted');
+		invertedlabel.htmlFor = invertedinput.id;
+		inverts = [invertedinput, invertedlabel];
+	}
+	else
+		inverts = [];
 	var button = Create('button', 'button');
 	button.type = 'button';
 	button.AddText('Set');
 	button.printer = printer;
 	button.AddEvent('click', function() { set_pin(this.printer, obj); });
-	return make_tablerow(title, [[pinselect], [validinput, validlabel], [invertedinput, invertedlabel], [button]], ['pintitle', ['pinvalue', 'pinvalue', 'pinvalue', 'pinvalue']]);
+	return make_tablerow(title, [[pinselect], [validinput, validlabel], inverts, [button]], ['pintitle', ['pinvalue', 'pinvalue', 'pinvalue', 'pinvalue']]);
 }
 
 function Float(obj, digits, factor, className, set) {
@@ -204,9 +211,9 @@ function Temp(num) {
 }
 
 function Pins_temp(num, dummy, table) {
-	var e = [['Power', 'power'], ['Thermistor', 'thermistor']];
+	var e = [['Power', 'power', false], ['Thermistor', 'thermistor', true]];
 	for (var i = 0; i < e.length; ++i)
-		e[i] = Pin(e[i][0], [['temp', num], e[i][1] + '_pin']);
+		e[i] = Pin(e[i][0], [['temp', num], e[i][1] + '_pin'], e[i][2]);
 	return make_pin_title(temp_name(num), e);
 }
 // }}}

@@ -109,7 +109,7 @@ function _setup_updater() {
 				audio_fragments: constants[1],
 				audio_fragment_size: constants[2],
 				num_digital_pins: constants[3],
-				num_pins: constants[4],
+				num_analog_pins: constants[4],
 				name: '',
 				num_spaces: 0,
 				num_temps: 0,

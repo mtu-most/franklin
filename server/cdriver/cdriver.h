@@ -136,7 +136,7 @@ struct Temp
 	int32_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
 	float fromadc(int32_t adc);	// convert ADC to K.
 	int32_t toadc(float T);	// convert K to ADC.
-	void load(int32_t &addr);
+	void load(int32_t &addr, int id);
 	void save(int32_t &addr);
 	void init();
 	void free();

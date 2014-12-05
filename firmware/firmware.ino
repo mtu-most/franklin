@@ -56,11 +56,12 @@ static void handle_motors(uint32_t current_time) {
 		}
 		uint16_t pos = (last_current_time - start_time) / fragment.us_per_sample;
 		while (motor[m].pos < pos && pos < fragment.num_samples) {
-			if (fragment.samples[motor[m].pos >> 3] & (1 << (motor[m].pos & 7))) {
+			uint8_t value = (fragment.samples[motor[m].pos >> 1] >> (4 * (motor[m].pos & 1))) & 0xf;
+			for (uint8_t s = 0; s < value; ++s) {
 				SET(motor[m].step_pin);
 				RESET(motor[m].step_pin);
-				motor[m].current_pos += (fragment.dir ? -1 : 1);
 			}
+			motor[m].current_pos += (fragment.dir ? -1 : 1) * value;
 			++motor[m].pos;
 		}
 	}
@@ -87,37 +88,50 @@ static void handle_motors(uint32_t current_time) {
 		try_send_next();
 }
 
-static void handle_adc() {
-	if (adc_phase == INACTIVE || adc_phase == WAITING)
+static uint8_t next_adc(uint8_t old) {
+	for (uint8_t a = 0; a <= NUM_ANALOG_INPUTS; ++a) {
+		uint8_t n = (old + a) % NUM_ANALOG_INPUTS;
+		if (adc[n].value[0] & 0x8000)
+			// Invalid pin.
+			continue;
+		return n;
+	}
+	return ~0;
+}
+
+static void handle_adc(uint32_t current_time) {
+	if (current_time - last_adc_time < ADC_INTERVAL)
 		return;
+	if (adc_phase == INACTIVE) {
+		last_adc_time += ADC_INTERVAL;
+		return;
+	}
 	if (!adc_ready(adc_current)) {
 		//debug("adc %d not ready", adc_current);
 		return;
 	}
-	if (adcreply_ready) {
-		adc_phase = WAITING;
-		return;
+	last_adc_time += ADC_INTERVAL;
+	uint16_t value = adc_get(adc_current);
+	//debug("adc %d = %d", adc_current, value);
+	if (adc_current == adc_next && !adcreply_ready) {
+		adcreply[0] = CMD_ADC;
+		adcreply[1] = adc_current;
+		*reinterpret_cast <int16_t *>(&adcreply[2]) = value;
+		adcreply_ready = 4;
+		try_send_next();
+		adc_next = next_adc(adc_next);
 	}
-	adcreply[0] = CMD_ADC;
-	adcreply[1] = adc_current;
-	*reinterpret_cast <int16_t *>(&adcreply[2]) = adc_get(adc_current);
-	adcreply_ready = 4;
-	try_send_next();
 	for (uint8_t n = 0; n < 2; ++n) {
 		if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS) {
-			if ((adc[adc_current].value[n] & 0x4000) ^ ((adc[adc_current].value[n] & 0x3fff) > adc[adc_current].value[n]))
+			if ((adc[adc_current].value[n] & 0x4000) ^ ((adc[adc_current].value[n] & 0x3fff) > value))
 				SET(adc[adc_current].linked[n]);
 			else
 				RESET(adc[adc_current].linked[n]);
 		}
 	}
-	for (uint8_t a = 0; a <= NUM_ANALOG_INPUTS; ++a) {
-		if (adc[(adc_current + a) % NUM_ANALOG_INPUTS].value[0] & 0x8000)
-			// Invalid pin.
-			continue;
-		adc_current = (adc_current + a) % NUM_ANALOG_INPUTS;
+	adc_current = next_adc(adc_current);
+	if (adc_current != uint8_t(~0)) {
 		// Start new measurement.
-		adc_phase = PREPARING;
 		adc_ready(adc_current);
 		return;
 	}
@@ -154,7 +168,7 @@ void loop() {
 	if (!stopped)
 		handle_motors(current_time);
 	// ADC
-	handle_adc();
+	handle_adc(current_time);
 	// Serial
 	serial();
 }

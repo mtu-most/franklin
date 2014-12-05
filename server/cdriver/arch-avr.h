@@ -275,11 +275,13 @@ static inline void hwpacket(int len) {
 	{
 		int pin = command[1][1];
 		if (pin < 0 || pin >= NUM_ANALOG_INPUTS)
-			debug("invalid adc received");
-		else
+			debug("invalid adc %d received", pin);
+		else {
 			avr_adc[pin] = (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
+			//debug("adc %d = %d", pin, avr_adc[pin]);
+		}
 		avr_write_ack();
-		if (~avr_adc_id[pin])
+		if (avr_adc_id[pin] != ~0)
 			handle_temp(avr_adc_id[pin], avr_adc[pin]);
 		return;
 	}
@@ -525,8 +527,10 @@ static inline void arch_setup_end() {
 	avr_buffers = new char **[NUM_BUFFERS];
 	for (int b = 0; b < NUM_BUFFERS; ++b) {
 		avr_buffers[b] = new char *[FRAGMENTS_PER_BUFFER];
-		for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f)
+		for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
 			avr_buffers[b][f] = new char[BYTES_PER_FRAGMENT];
+			memset(avr_buffers[b][f], 0, BYTES_PER_FRAGMENT);
+		}
 	}
 	avr_pos_offset = new int32_t[NUM_MOTORS];
 	for (int m = 0; m < NUM_MOTORS; ++m)
@@ -534,13 +538,15 @@ static inline void arch_setup_end() {
 	reset_dirs(0);
 }
 
-static inline void arch_setup_temp(int thermistor_pin, bool active, int power_pin = ~0, bool invert = false, int adctemp = 0) {
+static inline void arch_setup_temp(int id, int thermistor_pin, bool active, int power_pin = ~0, bool invert = false, int adctemp = 0) {
+	avr_adc_id[thermistor_pin] = id;
+	adctemp &= 0x3fff;
 	avr_buffer[0] = HWC_ASETUP;
 	avr_buffer[1] = thermistor_pin;
 	avr_buffer[2] = power_pin;
 	avr_buffer[3] = ~0;
 	avr_buffer[4] = adctemp & 0xff;
-	avr_buffer[5] = (adctemp >> 8) & 0xff | (invert ? 0x80 : 0);
+	avr_buffer[5] = (adctemp >> 8) & 0xff | (invert ? 0x40 : 0) | (active ? 0 : 0x80);
 	avr_buffer[6] = ~0;
 	avr_buffer[7] = ~0;
 	prepare_packet(avr_buffer, 8);
@@ -584,7 +590,7 @@ static inline void arch_send_fragment(int fragment) {
 			for (int i = 0; i < 4; ++i)
 				avr_buffer[2 + i] = (hwtime_step >> (i * 8)) & 0xff;
 			avr_buffer[6] = (spaces[s].motor[m]->dir[fragment] < 0 ? 1 : 0);
-			int bytes = (fragment_len[fragment] / hwtime_step + 7) / 8;
+			int bytes = (fragment_len[fragment] / hwtime_step + 1) / 2;
 			for (int i = 0; i < bytes; ++i) {
 				avr_buffer[7 + i] = avr_buffers[m + mi][fragment][i];
 			}
@@ -595,8 +601,8 @@ static inline void arch_send_fragment(int fragment) {
 	fragment = (fragment + 1) % FRAGMENTS_PER_BUFFER;
 }
 
-static inline void arch_set_bit(int m) {
-	avr_buffers[m][current_fragment][current_fragment_pos >> 3] |= 1 << (current_fragment_pos & 0x7);
+static inline void arch_set_value(int m, int value) {
+	avr_buffers[m][current_fragment][current_fragment_pos >> 1] |= value << (4 * (current_fragment_pos & 0x1));
 }
 
 static inline void arch_start_move() {

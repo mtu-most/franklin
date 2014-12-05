@@ -878,9 +878,11 @@ function update_toggle(id) { // {{{
 } // }}}
 
 function update_pin(id) { // {{{
-	get_element(printer, id).selectedIndex = get_value(printer, id) & 0xff;
+	var e = get_element(printer, id);
+	e.selectedIndex = get_value(printer, id) & 0xff;
 	get_element(printer, id, 'valid').checked = Boolean(get_value(printer, id) & 0x100);
-	get_element(printer, id, 'inverted').checked = Boolean(get_value(printer, id) & 0x200);
+	if (!e.analog)
+		get_element(printer, id, 'inverted').checked = Boolean(get_value(printer, id) & 0x200);
 } // }}}
 
 function update_float(printer, id) { // {{{
@@ -921,22 +923,24 @@ function update_profiles(printer) { // {{{
 // }}}
 
 // Builders. {{{
-function pinrange(only_analog) { // {{{
+function pinrange(analog) { // {{{
 	var ret = [];
 	var pin = 0;
-	if (!only_analog) {
+	if (analog) {
+		for (var i = 0; i < printer.num_analog_pins; ++i) {
+			var node = Create('option').AddText('A' + String(i));
+			node.value = String(pin);
+			ret.push(node);
+			pin += 1;
+		}
+	}
+	else {
 		for (var i = 0; i < printer.num_digital_pins; ++i) {
 			var node = Create('option').AddText('D' + String(i));
 			node.value = String(pin);
 			ret.push(node);
 			pin += 1;
 		}
-	}
-	for (var i = 0; i < printer.num_pins - printer.num_digital_pins; ++i) {
-		var node = Create('option').AddText('A' + String(i));
-		node.value = String(pin);
-		ret.push(node);
-		pin += 1;
 	}
 	return ret;
 } // }}}
@@ -1145,10 +1149,14 @@ function make_tablerow(title, cells, classes, id, onlytype, index) { // {{{
 
 // Set helpers(to server). {{{
 function set_pin(printer, id) { // {{{
-	var value = get_element(printer, id).selectedIndex;
+	var e = get_element(printer, id);
 	var valid = get_element(printer, id, 'valid').checked;
-	var inverted = get_element(printer, id, 'inverted').checked;
-	set_value(printer, id, value + 0x100 * valid + 0x200 * inverted);
+	var inverted;
+	if (e.analog)
+		inverted = false;
+	else
+		inverted = get_element(printer, id, 'inverted').checked;
+	set_value(printer, id, e.selectedIndex + 0x100 * valid + 0x200 * inverted);
 } // }}}
 
 function set_file(printer, id) { // {{{
