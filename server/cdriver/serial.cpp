@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-//#define DEBUG_DATA
+#define DEBUG_DATA
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
@@ -203,7 +203,7 @@ void serial(uint8_t which)
 			len = COMMAND_SIZE - command_end[which];
 		uint8_t cmd_len;
 		if (which == 1) {
-			cmd_len = hwpacketsize();
+			cmd_len = hwpacketsize(command_end[which], len);
 			cmd_len += (cmd_len + 2) / 3;
 		}
 		else
@@ -235,11 +235,12 @@ void serial(uint8_t which)
 			fprintf(stderr, "\n");
 		}
 #endif
+		int end = command_end[which];
 		command_end[which] = 0;
 		// Check packet integrity.
 		if (which == 1) {
 			// Checksum must be good.
-			len = hwpacketsize();
+			len = hwpacketsize(end, 0);
 			for (uint8_t t = 0; t < (len + 2) / 3; ++t)
 			{
 				uint8_t sum = command[which][len + t];

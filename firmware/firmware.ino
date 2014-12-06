@@ -26,9 +26,9 @@ static void handle_motors(uint32_t current_time) {
 				// Hit endstop.
 				debug("hit limit %d curpos %ld dir %d frag %d", m, F(motor[m].current_pos), fragment.dir, current_fragment);
 				// Notify host.
-				limit_time = last_current_time - start_time;
 				motor[m].flags |= Motor::LIMIT;
 				limit_fragment = current_fragment;
+				limit_fragment_pos = current_fragment_pos;
 				stopped = true;
 				filling = 0;
 				current_fragment = 0;
@@ -40,49 +40,47 @@ static void handle_motors(uint32_t current_time) {
 			}
 		}
 	}
-	last_current_time = current_time;
 	// Move motors.
-	for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-		if (!(motor[m].flags & Motor::ACTIVE))
-			continue;
-		Fragment &fragment = buffer[motor[m].buffer][current_fragment];
-		if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
-			continue;
-		if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
-			if (fragment.dir)
-				RESET(motor[m].dir_pin);
-			else
-				SET(motor[m].dir_pin);
+	bool want_send = false;
+	int8_t fragment_diff = (current_time - start_time) / time_per_sample - current_fragment_pos;
+	while (!stopped && fragment_diff > 0) {
+		// Move to next buffer.
+		while (!stopped && current_fragment_pos >= fragment_len[current_fragment]) {
+			start_time += fragment_len[current_fragment] * time_per_sample;
+			current_fragment_pos -= fragment_len[current_fragment];
+			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
+			if (last_fragment == (filling > 0 ? new_current_fragment : current_fragment)) {
+				// Underrun.
+				stopped = true;
+				underrun = true;
+			}
+			current_fragment = new_current_fragment;
+			//debug("new fragment: %d", current_fragment);
+			want_send = true;
 		}
-		uint16_t pos = (last_current_time - start_time) / fragment.us_per_sample;
-		while (motor[m].pos < pos && pos < fragment.num_samples) {
-			uint8_t value = (fragment.samples[motor[m].pos >> 1] >> (4 * (motor[m].pos & 1))) & 0xf;
+		if (stopped)
+			break;
+		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
+			if (!(motor[m].flags & Motor::ACTIVE))
+				continue;
+			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+			if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
+				continue;
+			if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
+				if (fragment.dir)
+					RESET(motor[m].dir_pin);
+				else
+					SET(motor[m].dir_pin);
+			}
+			uint8_t value = (fragment.samples[current_fragment_pos >> 1] >> (4 * (current_fragment_pos & 1))) & 0xf;
 			for (uint8_t s = 0; s < value; ++s) {
 				SET(motor[m].step_pin);
 				RESET(motor[m].step_pin);
 			}
 			motor[m].current_pos += (fragment.dir ? -1 : 1) * value;
-			++motor[m].pos;
 		}
-	}
-	// Move to next buffer.
-	bool want_send = false;
-	while (last_current_time - start_time >= fragment_time[current_fragment]) {
-		start_time += fragment_time[current_fragment];
-		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-			if (!(motor[m].flags & Motor::ACTIVE))
-				continue;
-			motor[m].pos = 0;
-		}
-		uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
-		if (last_fragment == (filling > 0 ? new_current_fragment : current_fragment)) {
-			// Underrun.
-			stopped = true;
-			underrun = true;
-		}
-		current_fragment = new_current_fragment;
-		//debug("new fragment: %d", current_fragment);
-		want_send = true;
+		current_fragment_pos += 1;
+		fragment_diff -= 1;
 	}
 	if (want_send)
 		try_send_next();
@@ -168,7 +166,7 @@ void loop() {
 	if (!stopped)
 		handle_motors(current_time);
 	// ADC
-	handle_adc(current_time);
+	//handle_adc(current_time);
 	// Serial
 	serial();
 }

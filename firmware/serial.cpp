@@ -37,10 +37,8 @@ static inline uint8_t fullpacketlen() {
 		return 2 + command[1] * 2;
 	}
 	else if ((command[0] & ~0x10) == CMD_MOVE) {
-		uint32_t us_per_sample = *reinterpret_cast <uint32_t *>(&command[2]);
-		uint32_t time = fragment_time[last_fragment];
-		uint8_t bytes = (time / us_per_sample + 1) / 2;
-		return 7 + bytes;
+		uint8_t bytes = (fragment_len[last_fragment] + 1) / 2;
+		return 3 + bytes;
 	}
 	else
 		return minpacketlen();

@@ -48,7 +48,7 @@ EXTERN uint16_t pending_len;
 EXTERN bool stopped, underrun;
 EXTERN uint8_t filling;
 EXTERN bool led_fast;
-EXTERN uint32_t led_last, led_phase, start_time;
+EXTERN uint32_t led_last, led_phase, start_time, time_per_sample;
 EXTERN uint8_t led_pin;
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
@@ -78,13 +78,13 @@ enum Command {
 	CMD_BEGIN = 0x40,	// 0
 	CMD_PING,	// 1:code
 	CMD_RESET,	// 4:magic	reset the mcu.
-	CMD_SETUP,	// 1:led_pin
+	CMD_SETUP,	// 1:led_pin, 4:us/sample
 	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
 	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:sense_pin, 1:flags
 	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:values	(including flags)
 
-	CMD_START_MOVE,	// 4:us, 1:num_moving_motors
-	CMD_MOVE,	// 1:which, 4:us_per_sample, 1:dir, *:samples	// dir: 0:positive, 1:negative, 2:audio; bit 7 set: last.
+	CMD_START_MOVE,	// 1:num_samples, 1:num_moving_motors
+	CMD_MOVE,	// 1:which, 1:dir, *:samples	// dir: 0:positive, 1:negative, 2:audio
 	CMD_START,	// 0 start moving.
 	CMD_STOP,	// 0 stop moving.
 	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.
@@ -92,7 +92,7 @@ enum Command {
 
 	// to host
 		// responses to host requests; only one active at a time.
-	CMD_READY = 0x60,	// 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:num_buffers, 1:fragments/buffer, 1:bytes/fragment
+	CMD_READY = 0x60,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:num_buffers, 1:fragments/buffer, 1:bytes/fragment
 	CMD_PONG,	// 1:code
 	CMD_PIN,	// 1:state
 	CMD_STOPPED,	// 1:fragment, 4:fragment_pos, {4:motor_pos}*
@@ -115,7 +115,7 @@ static inline uint8_t minpacketlen() {
 	case CMD_RESET:
 		return 5;
 	case CMD_SETUP:
-		return 2;
+		return 6;
 	case CMD_CONTROL:
 		return 2;
 	case CMD_MSETUP:
@@ -123,15 +123,17 @@ static inline uint8_t minpacketlen() {
 	case CMD_ASETUP:
 		return 8;
 	case CMD_START_MOVE:
-		return 6;
+		return 3;
 	case CMD_MOVE:
-		return 6;
+		return 3;
 	case CMD_START:
 		return 1;
 	case CMD_STOP:
 		return 1;
 	case CMD_ABORT:
 		return 1;
+	case CMD_GETPIN:
+		return 2;
 	default:
 		debug("invalid command passed to minpacketlen: %x", int(uint8_t(command[0])));
 		return 1;
@@ -243,13 +245,14 @@ struct Fragment {
 typedef Fragment Buffer[FRAGMENTS_PER_BUFFER];
 
 EXTERN Buffer buffer[NUM_BUFFERS];
-EXTERN uint32_t fragment_time[FRAGMENTS_PER_BUFFER];
+EXTERN uint8_t fragment_len[FRAGMENTS_PER_BUFFER];
 EXTERN uint8_t notified_current_fragment;
 EXTERN uint8_t current_fragment;
 EXTERN uint8_t last_fragment;
 EXTERN uint32_t limit_time;
 EXTERN uint8_t limit_fragment;
-EXTERN uint32_t last_current_time;
+EXTERN uint8_t limit_fragment_pos;
+EXTERN uint8_t current_fragment_pos;
 
 struct Adc {
 	uint8_t linked[2];

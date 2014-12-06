@@ -220,7 +220,8 @@ void packet()
 			send_host(CMD_TEMP);
 			return;
 		}
-		requested_temp = which;
+		//requested_temp = which;
+		send_host(CMD_TEMP);
 		return;
 	}
 	case CMD_READPOWER:	// read used power

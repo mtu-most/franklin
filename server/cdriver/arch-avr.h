@@ -64,12 +64,20 @@ enum HWCommands { // {{{
 // }}}
 
 extern int avr_active_motors;
-static inline int hwpacketsize() {
-	int const arch_packetsize[16] = { 11, 2, 2, 0, 2, 2, 4, 0, 0, 0, -1, -1, -1, -1, -1, -1 };
+static inline int hwpacketsize(int len, int available) {
+	int const arch_packetsize[16] = { 0, 2, 2, 0, 2, 2, 4, 0, 0, 0, -1, -1, -1, -1, -1, -1 };
 	switch (command[1][0] & ~0x10) {
+	case HWC_BEGIN:
+		if (len >= 2)
+			return command[1][1];
+		if (available == 0)
+			return 2;	// The data is not available, so this will not trigger the packet to be parsed yet.
+		command[1][1] = serialdev[1]->read();
+		command_end[1] += 1;
+		return command[1][1];
 	case HWC_STOPPED:
 	case HWC_LIMIT:
-		return 6 + 4 * avr_active_motors;
+		return 3 + 4 * avr_active_motors;
 	case HWC_SENSE0:
 	case HWC_SENSE1:
 		return 2 + 4 * avr_active_motors;
@@ -234,7 +242,7 @@ static inline void hwpacket(int len) {
 		int offset;
 		if ((command[1][0] & ~0x10) == HWC_LIMIT) {
 			debug("limit!");
-			offset = 6;
+			offset = 3;
 		}
 		else
 			offset = 2;
@@ -429,8 +437,14 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 	//debug("arch motor change %d %d %d %x", s, sm, m, p);
 	avr_buffer[2] = (mtr.step_pin.valid() ? mtr.step_pin.pin : ~0);
 	avr_buffer[3] = (mtr.dir_pin.valid() ? mtr.dir_pin.pin : ~0);
-	avr_buffer[4] = (mtr.limit_min_pin.valid() ? mtr.limit_min_pin.pin : ~0);
-	avr_buffer[5] = (mtr.limit_max_pin.valid() ? mtr.limit_max_pin.pin : ~0);
+	if (mtr.dir_pin.inverted()) {
+		avr_buffer[4] = (mtr.limit_max_pin.valid() ? mtr.limit_max_pin.pin : ~0);
+		avr_buffer[5] = (mtr.limit_min_pin.valid() ? mtr.limit_min_pin.pin : ~0);
+	}
+	else {
+		avr_buffer[4] = (mtr.limit_min_pin.valid() ? mtr.limit_min_pin.pin : ~0);
+		avr_buffer[5] = (mtr.limit_max_pin.valid() ? mtr.limit_max_pin.pin : ~0);
+	}
 	avr_buffer[6] = (mtr.sense_pin.valid() ? mtr.sense_pin.pin : ~0);
 	avr_buffer[7] = ACTIVE | (mtr.step_pin.inverted() ? INVERT_STEP : 0) | (mtr.limit_min_pin.inverted() ? INVERT_LIMIT_MIN : 0) | (mtr.limit_max_pin.inverted() ? INVERT_LIMIT_MAX : 0);
 	prepare_packet(avr_buffer, 8);
@@ -440,7 +454,9 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 static inline void arch_change(bool motors) {
 	avr_buffer[0] = HWC_SETUP;
 	avr_buffer[1] = led_pin.valid() ? led_pin.pin : ~0;
-	prepare_packet(avr_buffer, 2);
+	for (int i = 0; i < 4; ++i)
+		avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
+	prepare_packet(avr_buffer, 6);
 	avr_send();
 	if (motors) {
 		int num_motors = 0;
@@ -504,13 +520,13 @@ static inline void arch_setup_end() {
 	avr_write_ack();
 	protocol_version = 0;
 	for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
-		protocol_version |= int(uint8_t(command[1][1 + i])) << (i * 8);
-	NUM_DIGITAL_PINS = command[1][5];
-	NUM_ANALOG_INPUTS = command[1][6];
-	NUM_MOTORS = command[1][7];
-	NUM_BUFFERS = command[1][8];
-	FRAGMENTS_PER_BUFFER = command[1][9];
-	BYTES_PER_FRAGMENT = command[1][10];
+		protocol_version |= int(uint8_t(command[1][2 + i])) << (i * 8);
+	NUM_DIGITAL_PINS = command[1][6];
+	NUM_ANALOG_INPUTS = command[1][7];
+	NUM_MOTORS = command[1][8];
+	NUM_BUFFERS = command[1][9];
+	FRAGMENTS_PER_BUFFER = command[1][10];
+	BYTES_PER_FRAGMENT = command[1][11];
 	free_fragments = FRAGMENTS_PER_BUFFER;
 	fragment_len = new int[FRAGMENTS_PER_BUFFER];
 	num_active_motors = new int[FRAGMENTS_PER_BUFFER];
@@ -572,10 +588,9 @@ static inline void arch_send_fragment(int fragment) {
 		return;
 	avr_buffer[0] = HWC_START_MOVE;
 	//debug("send fragment %d %d", fragment_len[fragment], fragment);
-	for (int i = 0; i < 4; ++i)
-		avr_buffer[1 + i] = (fragment_len[fragment] >> (8 * i)) & 0xff;
-	avr_buffer[5] = num_active_motors[fragment];
-	prepare_packet(avr_buffer, 6);
+	avr_buffer[1] = fragment_len[fragment];
+	avr_buffer[2] = num_active_motors[fragment];
+	prepare_packet(avr_buffer, 3);
 	avr_send();
 	int mi = 0;
 	for (int s = 0; !stopping && s < num_spaces; mi += spaces[s++].num_motors) {
@@ -587,14 +602,12 @@ static inline void arch_send_fragment(int fragment) {
 			//debug("sending %d %d %d", s, m, spaces[s].motor[m]->dir[fragment]);
 			avr_buffer[0] = HWC_MOVE;
 			avr_buffer[1] = mi + m;
-			for (int i = 0; i < 4; ++i)
-				avr_buffer[2 + i] = (hwtime_step >> (i * 8)) & 0xff;
-			avr_buffer[6] = (spaces[s].motor[m]->dir[fragment] < 0 ? 1 : 0);
-			int bytes = (fragment_len[fragment] / hwtime_step + 1) / 2;
+			avr_buffer[2] = ((spaces[s].motor[m]->dir[fragment] < 0) ^ (spaces[s].motor[m]->dir_pin.inverted()) ? 1 : 0);
+			int bytes = (fragment_len[fragment] + 1) / 2;
 			for (int i = 0; i < bytes; ++i) {
-				avr_buffer[7 + i] = avr_buffers[m + mi][fragment][i];
+				avr_buffer[3 + i] = avr_buffers[m + mi][fragment][i];
 			}
-			prepare_packet(avr_buffer, 7 + bytes);
+			prepare_packet(avr_buffer, 3 + bytes);
 			avr_send();
 		}
 	}

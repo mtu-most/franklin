@@ -461,7 +461,7 @@ class Printer: # {{{
 				continue
 			if reply:
 				return ('packet', (cmd, s, m, f, e, data))
-			dprint('unexpected packet %02x' % cmd)
+			log('unexpected packet %02x' % cmd)
 			raise AssertionError('Received unexpected reply packet')
 	# }}}
 	def _send_packet(self, data, move = False, audio = False): # {{{

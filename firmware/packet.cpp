@@ -15,14 +15,15 @@ void packet()
 		watchdog_enable();
 		write_ack();
 		reply[0] = CMD_READY;
-		*reinterpret_cast <uint32_t *>(&reply[1]) = 0;
-		reply[5] = NUM_DIGITAL_PINS;
-		reply[6] = NUM_ANALOG_INPUTS;
-		reply[7] = NUM_MOTORS;
-		reply[8] = NUM_BUFFERS;
-		reply[9] = FRAGMENTS_PER_BUFFER;
-		reply[10] = BYTES_PER_FRAGMENT;
-		reply_ready = 11;
+		reply[1] = 12;
+		*reinterpret_cast <uint32_t *>(&reply[2]) = 0;
+		reply[6] = NUM_DIGITAL_PINS;
+		reply[7] = NUM_ANALOG_INPUTS;
+		reply[8] = NUM_MOTORS;
+		reply[9] = NUM_BUFFERS;
+		reply[10] = FRAGMENTS_PER_BUFFER;
+		reply[11] = BYTES_PER_FRAGMENT;
+		reply_ready = 12;
 		try_send_next();
 		return;
 	}
@@ -57,6 +58,7 @@ void packet()
 		debug("CMD_SETUP");
 #endif
 		led_pin = command[1];
+		time_per_sample = *reinterpret_cast <int32_t *>(&command[2]);
 		write_ack();
 		return;
 	}
@@ -165,8 +167,8 @@ void packet()
 		if (filling > 0)
 			debug("START_MOVE seen while filling (%d)", filling);
 		last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
-		fragment_time[last_fragment] = *reinterpret_cast <uint32_t *>(&command[1]);
-		filling = command[5];
+		fragment_len[last_fragment] = command[1];
+		filling = command[2];
 		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
 			if (!(motor[m].flags & Motor::ACTIVE))
 				continue;
@@ -195,11 +197,9 @@ void packet()
 			debug("MOVE seen while not filling");
 		filling -= 1;
 		Fragment &fragment = buffer[command[1]][last_fragment];
-		fragment.us_per_sample = *reinterpret_cast <uint32_t *>(&command[2]);
-		fragment.dir = Dir(command[6]);
-		fragment.num_samples = fragment_time[last_fragment] / fragment.us_per_sample;
-		for (uint8_t b = 0; b < (fragment.num_samples + 1) / 2; ++b) {
-			fragment.samples[b] = command[7 + b];
+		fragment.dir = Dir(command[2]);
+		for (uint8_t b = 0; b < (fragment_len[last_fragment] + 1) / 2; ++b) {
+			fragment.samples[b] = command[3 + b];
 		}
 		write_ack();
 		return;
@@ -215,7 +215,7 @@ void packet()
 			return;
 		}
 		start_time = utime();
-		last_current_time = start_time;
+		current_fragment_pos = 0;
 		stopped = false;
 		write_ack();
 		return;
@@ -229,15 +229,15 @@ void packet()
 		write_ack();
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment;
-		*reinterpret_cast <uint32_t *>(&reply[2]) = last_current_time - start_time;
+		reply[2] = current_fragment_pos;
 		uint8_t mi = 0;
 		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
 			if (!(motor[m].flags & Motor::ACTIVE))
 				continue;
-			*reinterpret_cast <uint32_t *>(&reply[6 + 4 * mi]) = motor[m].current_pos;
+			*reinterpret_cast <uint32_t *>(&reply[3 + 4 * mi]) = motor[m].current_pos;
 			++mi;
 		}
-		reply_ready = 6 + 4 * mi;
+		reply_ready = 3 + 4 * mi;
 		try_send_next();
 		return;
 	}
@@ -266,18 +266,18 @@ void packet()
 		write_ack();
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment;
-		*reinterpret_cast <uint32_t *>(&reply[2]) = last_current_time - start_time;
+		reply[2] = current_fragment_pos;
 		uint8_t mi = 0;
 		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
 			if (!(motor[m].flags & Motor::ACTIVE)) {
 				debug("skip abortpos %d", m);
 				continue;
 			}
-			*reinterpret_cast <uint32_t *>(&reply[6 + 4 * mi]) = motor[m].current_pos;
+			*reinterpret_cast <uint32_t *>(&reply[3 + 4 * mi]) = motor[m].current_pos;
 			debug("abort pos %d %ld", m, motor[m].current_pos);
 			++mi;
 		}
-		reply_ready = 6 + 4 * mi;
+		reply_ready = 3 + 4 * mi;
 		try_send_next();
 		return;
 	}
