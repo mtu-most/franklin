@@ -178,6 +178,7 @@ void packet()
 			//debug("Temp %d set to %f", which, F(target));
 			initialized = true;
 		}
+		arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin.valid() ? temps[which].power_pin.pin : ~0, temps[which].power_pin.inverted(), temps[which].adctarget);
 		return;
 	}
 	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
@@ -220,8 +221,7 @@ void packet()
 			send_host(CMD_TEMP);
 			return;
 		}
-		//requested_temp = which;
-		send_host(CMD_TEMP);
+		requested_temp = which;
 		return;
 	}
 	case CMD_READPOWER:	// read used power

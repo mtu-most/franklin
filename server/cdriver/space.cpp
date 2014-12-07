@@ -625,7 +625,7 @@ void reset_dirs(int fragment) {
 
 static void send_fragment() {
 	//debug("sending %d", current_fragment);
-	fragment_len[current_fragment] = hwtime - hwstart_time;
+	fragment_len[current_fragment] = current_fragment_pos;
 	free_fragments -= 1;
 	arch_send_fragment(current_fragment);
 	if (stopping)
@@ -653,7 +653,7 @@ void buffer_refill() {
 				if (mtr.current_pos == mtr.hwcurrent_pos)
 					continue;
 				if (mtr.dir[current_fragment] == 0) {
-					debug("active %d %d %d %d", s, m, F(mtr.current_pos), F(mtr.hwcurrent_pos));
+					//debug("active %d %d %d %d", s, m, F(mtr.current_pos), F(mtr.hwcurrent_pos));
 					mtr.dir[current_fragment] = (mtr.current_pos < mtr.hwcurrent_pos ? -1 : 1);
 					num_active_motors[current_fragment] += 1;
 					continue;

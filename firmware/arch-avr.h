@@ -138,19 +138,18 @@ static inline void adc_start(uint8_t adcpin) {
 #endif
 	// Start the conversion.
 	ADCSRA |= 1 << ADSC;
-	adc_last_pin = ~0;
+	adc_last_pin = adcpin;
 }
 
 static inline bool adc_ready(uint8_t pin_) {
 	if (pin_ != adc_last_pin) {
 		adc_phase = PREPARING;
-		adc_last_pin = pin_;
-		ADCSRA |= 1 << ADSC;
+		adc_start(pin_);
 		return false;
 	}
 	if (bit_is_set(ADCSRA, ADSC))
 		return false;
-	if (adc_phase == PREPARING) {
+	if (adc_phase != MEASURING) {
 		adc_phase = MEASURING;
 		ADCSRA |= 1 << ADSC;
 		return false;
@@ -162,7 +161,7 @@ static inline int16_t adc_get(uint8_t pin_) {
 	int16_t low = uint8_t(ADCL);
 	int16_t high = uint8_t(ADCH);
 	int16_t ret = (high << 8) | low;
-	//debug("adc: %ld", F(ret));
+	adc_phase = INACTIVE;
 	return ret;
 }
 

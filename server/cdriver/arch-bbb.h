@@ -138,20 +138,6 @@ static inline void arch_setup_end() {
 static inline void arch_run() {
 }
 
-static inline void adc_start(uint8_t _pin) {
-}
-
-static inline bool adc_ready(uint8_t _pin) {
-	return _pin < NUM_ANALOG_INPUTS;
-}
-
-static inline int32_t adc_get(uint8_t _pin) {
-	FILE *f = fopen(bbb_adc[_pin], "r");
-	int value;
-	fscanf(f, "%d", &value);
-	return value;
-}
-
 void reset();
 
 class FakeSerial {

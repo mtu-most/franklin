@@ -98,17 +98,12 @@ static uint8_t next_adc(uint8_t old) {
 }
 
 static void handle_adc(uint32_t current_time) {
-	if (current_time - last_adc_time < ADC_INTERVAL)
+	if (adc_phase == INACTIVE)
 		return;
-	if (adc_phase == INACTIVE) {
-		last_adc_time += ADC_INTERVAL;
-		return;
-	}
 	if (!adc_ready(adc_current)) {
 		//debug("adc %d not ready", adc_current);
 		return;
 	}
-	last_adc_time += ADC_INTERVAL;
 	uint16_t value = adc_get(adc_current);
 	//debug("adc %d = %d", adc_current, value);
 	if (adc_current == adc_next && !adcreply_ready) {
@@ -122,9 +117,9 @@ static void handle_adc(uint32_t current_time) {
 	for (uint8_t n = 0; n < 2; ++n) {
 		if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS) {
 			if ((adc[adc_current].value[n] & 0x4000) ^ ((adc[adc_current].value[n] & 0x3fff) > value))
-				SET(adc[adc_current].linked[n]);
-			else
 				RESET(adc[adc_current].linked[n]);
+			else
+				SET(adc[adc_current].linked[n]);
 		}
 	}
 	adc_current = next_adc(adc_current);
@@ -133,7 +128,6 @@ static void handle_adc(uint32_t current_time) {
 		adc_ready(adc_current);
 		return;
 	}
-	adc_phase = INACTIVE;
 	adc_current = ~0;
 }
 
@@ -166,7 +160,7 @@ void loop() {
 	if (!stopped)
 		handle_motors(current_time);
 	// ADC
-	//handle_adc(current_time);
+	handle_adc(current_time);
 	// Serial
 	serial();
 }

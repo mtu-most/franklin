@@ -64,16 +64,17 @@ enum HWCommands { // {{{
 // }}}
 
 extern int avr_active_motors;
-static inline int hwpacketsize(int len, int available) {
+static inline int hwpacketsize(int len, int *available) {
 	int const arch_packetsize[16] = { 0, 2, 2, 0, 2, 2, 4, 0, 0, 0, -1, -1, -1, -1, -1, -1 };
 	switch (command[1][0] & ~0x10) {
-	case HWC_BEGIN:
+	case HWC_READY:
 		if (len >= 2)
 			return command[1][1];
-		if (available == 0)
+		if (*available == 0)
 			return 2;	// The data is not available, so this will not trigger the packet to be parsed yet.
 		command[1][1] = serialdev[1]->read();
 		command_end[1] += 1;
+		*available -= 1;
 		return command[1][1];
 	case HWC_STOPPED:
 	case HWC_LIMIT:
@@ -142,6 +143,9 @@ EXTERN int32_t *avr_pos_offset;
 EXTERN char ***avr_buffers;
 EXTERN int avr_active_motors;
 EXTERN int *avr_adc_id;
+EXTERN uint8_t *avr_control_queue;
+EXTERN bool *avr_in_control_queue;
+EXTERN int avr_control_queue_length;
 // }}}
 
 // Time handling.  {{{
@@ -170,6 +174,23 @@ static inline uint32_t millis() {
 static inline void avr_write_ack();
 
 // Serial port communication. {{{
+static inline void avr_send();
+
+static inline void try_send_control() {
+	if (out_busy || avr_control_queue_length == 0)
+		return;
+	avr_buffer[0] = HWC_CONTROL;
+	avr_buffer[1] = avr_control_queue_length;
+	for (int i = 0; i < avr_control_queue_length; ++i) {
+		avr_buffer[2 + i * 2] = avr_control_queue[i * 2];
+		avr_buffer[3 + i * 2] = avr_control_queue[i * 2 + 1];
+		avr_in_control_queue[avr_control_queue[i * 2 + 1]] = false;
+	}
+	prepare_packet(avr_buffer, 2 + avr_control_queue_length * 2);
+	avr_control_queue_length = 0;
+	avr_send();
+}
+
 static inline void avr_send() {
 	//debug("avr_send");
 	send_packet();
@@ -188,6 +209,7 @@ static inline void avr_send() {
 		debug("avr_send failed, packet start: %02x %02x %02x", avr_buffer[0], avr_buffer[1], avr_buffer[2]);
 		out_busy = false;
 	}
+	try_send_control();
 }
 
 static inline void avr_call1(uint8_t cmd, uint8_t arg) {
@@ -282,12 +304,12 @@ static inline void hwpacket(int len) {
 	case HWC_ADC:
 	{
 		int pin = command[1][1];
-		if (pin < 0 || pin >= NUM_ANALOG_INPUTS)
+		if (pin < 0 || pin >= NUM_ANALOG_INPUTS) {
 			debug("invalid adc %d received", pin);
-		else {
-			avr_adc[pin] = (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
-			//debug("adc %d = %d", pin, avr_adc[pin]);
+			avr_write_ack();
+			return;
 		}
+		avr_adc[pin] = (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
 		avr_write_ack();
 		if (avr_adc_id[pin] != ~0)
 			handle_temp(avr_adc_id[pin], avr_adc[pin]);
@@ -303,7 +325,8 @@ static inline void hwpacket(int len) {
 	{
 		free_fragments += command[1][1];
 		avr_write_ack();
-		buffer_refill();
+		if (!out_busy)
+			buffer_refill();
 		return;
 	}
 	default:
@@ -327,12 +350,19 @@ static inline bool arch_active() {
 
 // Hardware interface {{{
 static inline void avr_setup_pin(int pin, int type) {
-	avr_buffer[0] = HWC_CONTROL;
-	avr_buffer[1] = 1;
-	avr_buffer[2] = 0xc | type;
-	avr_buffer[3] = pin;
-	prepare_packet(avr_buffer, 4);
-	avr_send();
+	if (avr_in_control_queue[pin])
+	{
+		for (int i = 0; i < avr_control_queue_length; ++i) {
+			if (avr_control_queue[i * 2 + 1] != pin)
+				continue;
+			avr_control_queue[i * 2] = type | 0xc;
+			return;
+		}
+	}
+	avr_control_queue[avr_control_queue_length * 2] = type | 0xc;
+	avr_control_queue[avr_control_queue_length * 2 + 1] = pin;
+	avr_control_queue_length += 1;
+	try_send_control();
 }
 
 static inline void SET_INPUT(Pin_t _pin) {
@@ -527,13 +557,18 @@ static inline void arch_setup_end() {
 	NUM_BUFFERS = command[1][9];
 	FRAGMENTS_PER_BUFFER = command[1][10];
 	BYTES_PER_FRAGMENT = command[1][11];
+	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * 2];
+	avr_in_control_queue = new bool[NUM_DIGITAL_PINS];
+	avr_control_queue_length = 0;
 	free_fragments = FRAGMENTS_PER_BUFFER;
 	fragment_len = new int[FRAGMENTS_PER_BUFFER];
 	num_active_motors = new int[FRAGMENTS_PER_BUFFER];
 	avr_pong = -1;	// Choke on reset again.
 	avr_pins = new char[NUM_DIGITAL_PINS];
-	for (int i = 0; i < NUM_DIGITAL_PINS; ++i)
+	for (int i = 0; i < NUM_DIGITAL_PINS; ++i) {
 		avr_pins[i] = 3;	// INPUT_NOPULLUP.
+		avr_in_control_queue[i] = false;
+	}
 	avr_adc = new int[NUM_ANALOG_INPUTS];
 	avr_adc_id = new int[NUM_ANALOG_INPUTS];
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
@@ -556,13 +591,18 @@ static inline void arch_setup_end() {
 
 static inline void arch_setup_temp(int id, int thermistor_pin, bool active, int power_pin = ~0, bool invert = false, int adctemp = 0) {
 	avr_adc_id[thermistor_pin] = id;
-	adctemp &= 0x3fff;
 	avr_buffer[0] = HWC_ASETUP;
 	avr_buffer[1] = thermistor_pin;
 	avr_buffer[2] = power_pin;
 	avr_buffer[3] = ~0;
-	avr_buffer[4] = adctemp & 0xff;
-	avr_buffer[5] = (adctemp >> 8) & 0xff | (invert ? 0x40 : 0) | (active ? 0 : 0x80);
+	int32_t t;
+	if (active)
+		t = (min(0x3fff, max(0, adctemp))) | (invert ? 0x4000 : 0);
+	else
+		t = 0xffff;
+	//debug("setup adc %d 0x%x", id, t);
+	avr_buffer[4] = t & 0xff;
+	avr_buffer[5] = (t >> 8) & 0xff;
 	avr_buffer[6] = ~0;
 	avr_buffer[7] = ~0;
 	prepare_packet(avr_buffer, 8);
@@ -594,8 +634,6 @@ static inline void arch_send_fragment(int fragment) {
 	avr_send();
 	int mi = 0;
 	for (int s = 0; !stopping && s < num_spaces; mi += spaces[s++].num_motors) {
-		if (!spaces[s].active)
-			continue;
 		for (uint8_t m = 0; !stopping && m < spaces[s].num_motors; ++m) {
 			if (spaces[s].motor[m]->dir[fragment] == 0)
 				continue;
@@ -625,26 +663,6 @@ static inline void arch_start_move() {
 	avr_buffer[0] = HWC_START;
 	prepare_packet(avr_buffer, 1);
 	avr_send();
-}
-// }}}
-
-// ADC hooks. {{{
-static inline int adc_get(uint8_t _pin) {
-	if (_pin >= NUM_ANALOG_INPUTS) {
-		debug("request for invalid adc input %d", _pin);
-		return ~0;
-	}
-	int ret = avr_adc[_pin];
-	avr_adc[_pin] = ~0;
-	return ret;
-}
-
-static inline bool adc_ready(uint8_t _pin) {
-	if (_pin >= NUM_ANALOG_INPUTS) {
-		debug("request for state of invalid adc input %d", _pin);
-		return false;
-	}
-	return ~avr_adc[_pin];
 }
 // }}}
 

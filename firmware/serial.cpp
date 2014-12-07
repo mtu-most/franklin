@@ -191,7 +191,7 @@ void serial()
 			command[fulllen + t] = 0;
 		if ((sum & 0x7) != (t & 0x7))
 		{
-			debug("incorrect extra bit %d %d", fulllen, t);
+			debug("incorrect extra bit %d %d %x %x %x", fulllen, t, command[0], sum, command[fulllen - 1]);
 			Serial.write(CMD_NACK);
 			return;
 		}
@@ -311,9 +311,9 @@ void send_packet()
 #ifdef DEBUG_SERIAL
 	debug("send");
 #endif
+	out_busy = true;
 	for (uint8_t t = 0; t < pending_len; ++t)
 		Serial.write(pending_packet[t]);
-	out_busy = true;
 	out_time = utime();
 }
 
@@ -352,18 +352,6 @@ void try_send_next()
 			return;
 		}
 	}
-	if (adcreply_ready)
-	{
-#ifdef DEBUG_SERIAL
-		debug("adcreply %x %d", adcreply[1], adcreply[0]);
-#endif
-		for (uint8_t i = 0; i < adcreply_ready; ++i)
-			pending_packet[i] = adcreply[i];
-		prepare_packet(adcreply_ready);
-		send_packet();
-		adcreply_ready = 0;
-		return;
-	}
 	for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
 		if (motor[m].flags & Motor::LIMIT) {
 #ifdef DEBUG_SERIAL
@@ -371,17 +359,17 @@ void try_send_next()
 #endif
 			pending_packet[0] = CMD_LIMIT;
 			pending_packet[1] = m;
-			*reinterpret_cast <int32_t *>(&pending_packet[2]) = limit_time;
+			pending_packet[2] = limit_fragment_pos;
 			uint8_t mii = 0;
 			for (uint8_t mi = 0; mi < NUM_MOTORS; ++mi) {
 				if (!(motor[mi].flags & Motor::ACTIVE))
 					continue;
-				*reinterpret_cast <int32_t *>(&pending_packet[6 + 4 * mii]) = motor[mi].current_pos;
+				*reinterpret_cast <int32_t *>(&pending_packet[3 + 4 * mii]) = motor[mi].current_pos;
 				debug("current pos %d %ld", mii, F(motor[mi].current_pos));
 				++mii;
 			}
 			motor[m].flags &= ~Motor::LIMIT;
-			prepare_packet(6 + 4 * mii);
+			prepare_packet(3 + 4 * mii);
 			send_packet();
 			return;
 		}
@@ -407,8 +395,8 @@ void try_send_next()
 		for (uint8_t i = 0; i < reply_ready; ++i)
 			pending_packet[i] = reply[i];
 		prepare_packet(reply_ready);
-		send_packet();
 		reply_ready = 0;
+		send_packet();
 		return;
 	}
 	if (ping != 0)
@@ -422,12 +410,24 @@ void try_send_next()
 			{
 				pending_packet[0] = CMD_PONG;
 				pending_packet[1] = b;
+				ping &= ~(1 << b);
 				prepare_packet(2);
 				send_packet();
-				ping &= ~(1 << b);
 				return;
 			}
 		}
+	}
+	if (adcreply_ready) // This is pretty much always true, so make it the least important (nothing below this will ever be sent).
+	{
+#ifdef DEBUG_SERIAL
+		debug("adcreply %x %d", adcreply[1], adcreply[0]);
+#endif
+		for (uint8_t i = 0; i < adcreply_ready; ++i)
+			pending_packet[i] = adcreply[i];
+		prepare_packet(adcreply_ready);
+		adcreply_ready = 0;
+		send_packet();
+		return;
 	}
 }
 

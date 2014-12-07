@@ -30,7 +30,6 @@ void setup()
 	adc_phase = INACTIVE;
 	adc_current = ~0;
 	adc_next = ~0;
-	last_adc_time = current_time;
 	command_end = 0;
 	ping = 0;
 	out_busy = false;

@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-#define DEBUG_DATA
+//#define DEBUG_DATA
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
@@ -132,6 +132,8 @@ void serial(uint8_t which)
 						debug("new ff_out: %d", ff_out[which]);
 #endif
 						out_busy = false;
+						if (free_fragments > 0 && moving && !stopping)
+							buffer_refill();
 					}
 					continue;
 				case CMD_NACK:
@@ -156,7 +158,7 @@ void serial(uint8_t which)
 				}
 				if ((command[1][0] & 0xe0) != 0x60) {
 					// These lengths are not allowed; this cannot be a good packet.
-					debug("invalid command %02x", command[1][0]);
+					debug("invalid firmware command code %02x", command[1][0]);
 					serialdev[which]->write(CMD_NACK);
 					continue;
 				}
@@ -203,7 +205,7 @@ void serial(uint8_t which)
 			len = COMMAND_SIZE - command_end[which];
 		uint8_t cmd_len;
 		if (which == 1) {
-			cmd_len = hwpacketsize(command_end[which], len);
+			cmd_len = hwpacketsize(command_end[which], &len);
 			cmd_len += (cmd_len + 2) / 3;
 		}
 		else
@@ -240,7 +242,7 @@ void serial(uint8_t which)
 		// Check packet integrity.
 		if (which == 1) {
 			// Checksum must be good.
-			len = hwpacketsize(end, 0);
+			len = hwpacketsize(end, NULL);
 			for (uint8_t t = 0; t < (len + 2) / 3; ++t)
 			{
 				uint8_t sum = command[which][len + t];

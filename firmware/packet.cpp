@@ -195,7 +195,8 @@ void packet()
 		}
 		if (filling == 0)
 			debug("MOVE seen while not filling");
-		filling -= 1;
+		else
+			filling -= 1;
 		Fragment &fragment = buffer[command[1]][last_fragment];
 		fragment.dir = Dir(command[2]);
 		for (uint8_t b = 0; b < (fragment_len[last_fragment] + 1) / 2; ++b) {

@@ -57,16 +57,6 @@ int32_t Temp::savesize0() {
 	return 2 * 2 + sizeof(float) * 10;
 }
 
-int32_t Temp::get_value() {
-	if (!thermistor_pin.valid())
-		return MAXINT;
-	if (!adc_ready(thermistor_pin.pin))
-		return -1;
-	adclast = adc_get(thermistor_pin.pin);
-	//debug("adc: %d", adclast);
-	return adclast;
-}
-
 float Temp::fromadc(int32_t adc) {
 	if (adc <= 0)
 		return INFINITY;
@@ -185,6 +175,7 @@ void handle_temp(int id, int temp) { // {{{
 	for (uint8_t g = temps[id].following_gpios; g < num_gpios; g = gpios[g].next) {
 		//debug("setting gpio for temp %d: %d %d", id, temp, g->adcvalue);
 		// adc values are lower for higher temperatures.
+		//debug("check %d %d", temp, int(gpios[g].adcvalue));
 		if (temp < gpios[g].adcvalue)
 			SET(gpios[g].pin);
 		else

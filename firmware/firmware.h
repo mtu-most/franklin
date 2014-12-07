@@ -249,7 +249,6 @@ EXTERN uint8_t fragment_len[FRAGMENTS_PER_BUFFER];
 EXTERN uint8_t notified_current_fragment;
 EXTERN uint8_t current_fragment;
 EXTERN uint8_t last_fragment;
-EXTERN uint32_t limit_time;
 EXTERN uint8_t limit_fragment;
 EXTERN uint8_t limit_fragment_pos;
 EXTERN uint8_t current_fragment_pos;
@@ -268,7 +267,6 @@ enum AdcPhase {
 EXTERN Adc adc[NUM_ANALOG_INPUTS];
 EXTERN uint8_t adc_current, adc_next;
 EXTERN AdcPhase adc_phase;
-EXTERN uint32_t last_adc_time;
 
 // packet.cpp
 void packet();	// A command packet has arrived; handle it.
