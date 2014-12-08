@@ -82,20 +82,23 @@ enum Command {
 	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
 	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:sense_pin, 1:flags
 	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:values	(including flags)
+	CMD_HOME,	// 4:us/step, {1:dir}*
 
 	CMD_START_MOVE,	// 1:num_samples, 1:num_moving_motors
 	CMD_MOVE,	// 1:which, 1:dir, *:samples	// dir: 0:positive, 1:negative, 2:audio
 	CMD_START,	// 0 start moving.
 	CMD_STOP,	// 0 stop moving.
 	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.
+	CMD_DISCARD,	// 1:num_buffers
 	CMD_GETPIN,	// 1:pin
 
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_READY = 0x60,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:num_buffers, 1:fragments/buffer, 1:bytes/fragment
 	CMD_PONG,	// 1:code
+	CMD_HOMED,	// 1:code, {4:motor_pos}*
 	CMD_PIN,	// 1:state
-	CMD_STOPPED,	// 1:fragment, 4:fragment_pos, {4:motor_pos}*
+	CMD_STOPPED,	// 1:fragment, 1:fragment_pos, {4:motor_pos}*
 
 		// asynchronous events.
 	CMD_DONE,	// 1:num
@@ -122,6 +125,8 @@ static inline uint8_t minpacketlen() {
 		return 8;
 	case CMD_ASETUP:
 		return 8;
+	case CMD_HOME:
+		return 5;
 	case CMD_START_MOVE:
 		return 3;
 	case CMD_MOVE:
@@ -132,6 +137,8 @@ static inline uint8_t minpacketlen() {
 		return 1;
 	case CMD_ABORT:
 		return 1;
+	case CMD_DISCARD:
+		return 2;
 	case CMD_GETPIN:
 		return 2;
 	default:
@@ -225,8 +232,10 @@ struct Motor
 };
 
 EXTERN Motor motor[NUM_MOTORS];
-EXTERN int active_motors;
+EXTERN uint8_t active_motors;
 EXTERN bool stopping;
+EXTERN uint32_t home_step_time;
+EXTERN uint8_t homers;
 
 enum Dir {
 	DIR_POSITIVE,
@@ -237,7 +246,6 @@ enum Dir {
 
 struct Fragment {
 	Dir dir;
-	uint32_t us_per_sample;
 	uint16_t num_samples;
 	uint8_t samples[BYTES_PER_FRAGMENT];
 };
@@ -247,8 +255,8 @@ typedef Fragment Buffer[FRAGMENTS_PER_BUFFER];
 EXTERN Buffer buffer[NUM_BUFFERS];
 EXTERN uint8_t fragment_len[FRAGMENTS_PER_BUFFER];
 EXTERN uint8_t notified_current_fragment;
-EXTERN uint8_t current_fragment;
-EXTERN uint8_t last_fragment;
+EXTERN uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
+EXTERN uint8_t last_fragment;	// Fragment that is currently being filled, or has last been filled.
 EXTERN uint8_t limit_fragment;
 EXTERN uint8_t limit_fragment_pos;
 EXTERN uint8_t current_fragment_pos;

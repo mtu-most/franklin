@@ -1,6 +1,22 @@
 // vim: set filetype=cpp foldmethod=marker foldmarker={,} :
 #include "firmware.h"
 
+static void do_steps(Dir dir, uint8_t m, uint8_t value) {
+	if (dir == DIR_NONE || dir == DIR_AUDIO)
+		return;
+	if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
+		if (dir)
+			RESET(motor[m].dir_pin);
+		else
+			SET(motor[m].dir_pin);
+	}
+	for (uint8_t s = 0; s < value; ++s) {
+		SET(motor[m].step_pin);
+		RESET(motor[m].step_pin);
+	}
+	motor[m].current_pos += (dir ? -1 : 1) * value;
+}
+
 static void handle_motors(uint32_t current_time) {
 	// Check sensors.
 	for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
@@ -31,8 +47,7 @@ static void handle_motors(uint32_t current_time) {
 				limit_fragment_pos = current_fragment_pos;
 				stopped = true;
 				filling = 0;
-				current_fragment = 0;
-				last_fragment = FRAGMENTS_PER_BUFFER - 1;
+				current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 				notified_current_fragment = current_fragment;
 				stopping = true;
 				try_send_next();
@@ -41,49 +56,65 @@ static void handle_motors(uint32_t current_time) {
 		}
 	}
 	// Move motors.
-	bool want_send = false;
-	int8_t fragment_diff = (current_time - start_time) / time_per_sample - current_fragment_pos;
-	while (!stopped && fragment_diff > 0) {
-		// Move to next buffer.
-		while (!stopped && current_fragment_pos >= fragment_len[current_fragment]) {
-			start_time += fragment_len[current_fragment] * time_per_sample;
-			current_fragment_pos -= fragment_len[current_fragment];
-			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
-			if (last_fragment == (filling > 0 ? new_current_fragment : current_fragment)) {
-				// Underrun.
-				stopped = true;
-				underrun = true;
-			}
-			current_fragment = new_current_fragment;
-			//debug("new fragment: %d", current_fragment);
-			want_send = true;
-		}
-		if (stopped)
-			break;
+	if (homers > 0) {
+		// Homing.
+		if (current_time - start_time < home_step_time)
+			return;
+		start_time += home_step_time;
 		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
 			if (!(motor[m].flags & Motor::ACTIVE))
 				continue;
 			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
-			if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
+			if (fragment.dir > 1)
 				continue;
-			if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
-				if (fragment.dir)
-					RESET(motor[m].dir_pin);
-				else
-					SET(motor[m].dir_pin);
+			// Get twe "wrong" limit pin for the given direction.
+			uint8_t limit_pin = (fragment.dir ? motor[m].limit_max_pin : motor[m].limit_min_pin);
+			bool inverted = motor[m].flags & (fragment.dir ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
+			if (GET(limit_pin) ^ inverted) {
+				// Limit pin still triggered; continue moving.
+				do_steps(fragment.dir, m, 1);
+				continue;
 			}
-			uint8_t value = (fragment.samples[current_fragment_pos >> 1] >> (4 * (current_fragment_pos & 1))) & 0xf;
-			for (uint8_t s = 0; s < value; ++s) {
-				SET(motor[m].step_pin);
-				RESET(motor[m].step_pin);
-			}
-			motor[m].current_pos += (fragment.dir ? -1 : 1) * value;
+			// Limit pin no longer triggered.  Stop moving and possibly notify host.
+			fragment.dir = DIR_NONE;
+			if (!--homers)
+				try_send_next();
 		}
-		current_fragment_pos += 1;
-		fragment_diff -= 1;
 	}
-	if (want_send)
-		try_send_next();
+	else {
+		// Regular move.  (Not homing.)
+		bool want_send = false;
+		int8_t fragment_diff = (current_time - start_time) / time_per_sample - current_fragment_pos;
+		while (!stopped && fragment_diff > 0) {
+			// Move to next buffer.
+			while (!stopped && current_fragment_pos >= fragment_len[current_fragment]) {
+				start_time += fragment_len[current_fragment] * time_per_sample;
+				current_fragment_pos -= fragment_len[current_fragment];
+				uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
+				if (last_fragment == (filling > 0 ? new_current_fragment : current_fragment)) {
+					// Underrun.
+					stopped = true;
+					underrun = true;
+				}
+				current_fragment = new_current_fragment;
+				//debug("new fragment: %d", current_fragment);
+				want_send = true;
+			}
+			if (stopped)
+				break;
+			for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
+				if (!(motor[m].flags & Motor::ACTIVE))
+					continue;
+				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+				uint8_t value = (fragment.samples[current_fragment_pos >> 1] >> (4 * (current_fragment_pos & 1))) & 0xf;
+				do_steps(fragment.dir, m, value);
+			}
+			current_fragment_pos += 1;
+			fragment_diff -= 1;
+		}
+		if (want_send)
+			try_send_next();
+	}
 }
 
 static uint8_t next_adc(uint8_t old) {

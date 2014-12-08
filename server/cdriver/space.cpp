@@ -661,9 +661,10 @@ void buffer_refill() {
 				if ((mtr.dir[current_fragment] < 0 && mtr.current_pos > mtr.hwcurrent_pos) || (mtr.dir[current_fragment] > 0 && mtr.current_pos < mtr.hwcurrent_pos)) {
 					//debug("dir change %d %d", s, m);
 					send_fragment();
+					if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
+						arch_start_move();
 					if (free_fragments <= 0 && !stopping) {
 						refilling = false;
-						arch_start_move();
 						return;
 					}
 					break;
@@ -695,6 +696,8 @@ void buffer_refill() {
 		handle_motors(hwtime);
 		if ((!moving && current_fragment_pos > 0) || current_fragment_pos >= BYTES_PER_FRAGMENT * 2) {
 			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT * 2);
+			if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
+				arch_start_move();
 			send_fragment();
 		}
 	}

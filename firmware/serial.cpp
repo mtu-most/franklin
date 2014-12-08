@@ -36,6 +36,9 @@ static inline uint8_t fullpacketlen() {
 	if ((command[0] & ~0x10) == CMD_CONTROL) {
 		return 2 + command[1] * 2;
 	}
+	else if ((command[0] & ~0x10) == CMD_HOME) {
+		return 5 + active_motors;
+	}
 	else if ((command[0] & ~0x10) == CMD_MOVE) {
 		uint8_t bytes = (fragment_len[last_fragment] + 1) / 2;
 		return 3 + bytes;
@@ -365,7 +368,7 @@ void try_send_next()
 				if (!(motor[mi].flags & Motor::ACTIVE))
 					continue;
 				*reinterpret_cast <int32_t *>(&pending_packet[3 + 4 * mii]) = motor[mi].current_pos;
-				debug("current pos %d %ld", mii, F(motor[mi].current_pos));
+				//debug("current pos %d %ld", mii, F(motor[mi].current_pos));
 				++mii;
 			}
 			motor[m].flags &= ~Motor::LIMIT;
@@ -396,6 +399,21 @@ void try_send_next()
 			pending_packet[i] = reply[i];
 		prepare_packet(reply_ready);
 		reply_ready = 0;
+		send_packet();
+		return;
+	}
+	if (home_step_time > 0 && homers == 0)
+	{
+		pending_packet[0] = CMD_HOMED;
+		uint8_t mi = 0;
+		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
+			if (!(motor[m].flags & Motor::ACTIVE))
+				continue;
+			*reinterpret_cast <int32_t *>(&pending_packet[1 + 4 * mi]) = motor[m].current_pos;
+			++mi;
+		}
+		home_step_time = 0;
+		prepare_packet(1 + 4 * mi);
 		send_packet();
 		return;
 	}

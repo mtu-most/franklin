@@ -42,30 +42,33 @@ enum HWCommands { // {{{
 	HWC_CONTROL,	// 44
 	HWC_MSETUP,	// 45
 	HWC_ASETUP,	// 46
-	HWC_START_MOVE,	// 47
-	HWC_MOVE,	// 48
-	HWC_START,	// 49
-	HWC_STOP,	// 4a
-	HWC_ABORT,	// 4b
-	HWC_GETPIN,	// 4c
+	HWC_HOME,	// 47
+	HWC_START_MOVE,	// 48
+	HWC_MOVE,	// 49
+	HWC_START,	// 4a
+	HWC_STOP,	// 4b
+	HWC_ABORT,	// 4c
+	HWC_DISCARD,	// 4d
+	HWC_GETPIN,	// 4e
 
 	HWC_READY = 0x60,
 	HWC_PONG,	// 61
-	HWC_PIN,	// 62
-	HWC_STOPPED,	// 63
+	HWC_HOMED,	// 62
+	HWC_PIN,	// 63
+	HWC_STOPPED,	// 64
 
-	HWC_DONE,	// 64
-	HWC_UNDERRUN,	// 65
-	HWC_ADC,	// 66
-	HWC_LIMIT,	// 67
-	HWC_SENSE0,	// 68
-	HWC_SENSE1	// 69
+	HWC_DONE,	// 65
+	HWC_UNDERRUN,	// 66
+	HWC_ADC,	// 67
+	HWC_LIMIT,	// 68
+	HWC_SENSE0,	// 69
+	HWC_SENSE1	// 6a
 };
 // }}}
 
 extern int avr_active_motors;
 static inline int hwpacketsize(int len, int *available) {
-	int const arch_packetsize[16] = { 0, 2, 2, 0, 2, 2, 4, 0, 0, 0, -1, -1, -1, -1, -1, -1 };
+	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 2, 2, 4, 0, 0, 0, -1, -1, -1, -1, -1 };
 	switch (command[1][0] & ~0x10) {
 	case HWC_READY:
 		if (len >= 2)
@@ -76,6 +79,8 @@ static inline int hwpacketsize(int len, int *available) {
 		command_end[1] += 1;
 		*available -= 1;
 		return command[1][1];
+	case HWC_HOMED:
+		return 1 + 4 * avr_active_motors;
 	case HWC_STOPPED:
 	case HWC_LIMIT:
 		return 3 + 4 * avr_active_motors;
@@ -194,13 +199,13 @@ static inline void try_send_control() {
 static inline void avr_send() {
 	//debug("avr_send");
 	send_packet();
-	for (int counter = 0; counter < 0x20 && out_busy; ++counter) {
+	for (int counter = 0; counter < 0x28 && out_busy; ++counter) {
 		//debug("avr send");
 		poll(&pollfds[1], 1, 100);
 		serial(1);
 		//if (out_busy[1])
 		//	debug("avr waiting for ack");
-		if (out_busy && (counter & 0x7) == 0x7) {
+		if (out_busy && (counter & 0xf) == 0xf) {
 			debug("resending packet");
 			send_packet();
 		}
@@ -228,6 +233,20 @@ static inline void avr_get_reply() {
 		if (avr_wait_for_reply && (counter & 0x7) == 0x7) {
 			debug("no reply; resending");
 			avr_send();
+		}
+	}
+}
+
+static inline void avr_get_current_pos(int offset) {
+	int mi = 0;
+	for (int ts = 0; ts < num_spaces; mi += spaces[ts++].num_motors) {
+		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
+			spaces[ts].motor[tm]->current_pos = -avr_pos_offset[tm + mi];
+			for (int i = 0; i < 4; ++i) {
+				spaces[ts].motor[tm]->current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
+			}
+			spaces[ts].motor[tm]->hwcurrent_pos = spaces[ts].motor[tm]->current_pos;
+			//debug("cp %d %d %d", ts, tm, spaces[ts].motor[tm]->hwcurrent_pos);
 		}
 	}
 }
@@ -268,17 +287,7 @@ static inline void hwpacket(int len) {
 		}
 		else
 			offset = 2;
-		int mi = 0;
-		for (int ts = 0; ts < num_spaces; mi += spaces[ts++].num_motors) {
-			for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
-				spaces[ts].motor[tm]->current_pos = -avr_pos_offset[tm + mi];
-				for (int i = 0; i < 4; ++i) {
-					spaces[ts].motor[tm]->current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
-				}
-				spaces[ts].motor[tm]->hwcurrent_pos = spaces[ts].motor[tm]->current_pos;
-				debug("current pos %d %d %d %d %d", ts, tm, spaces[ts].motor[tm]->current_pos, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->current_pos + avr_pos_offset[tm + mi]);
-			}
-		}
+		avr_get_current_pos(offset);
 		if ((command[1][0] & ~0x10) == HWC_LIMIT) {
 			debug("limit!");
 			abort_move(false);
@@ -649,7 +658,6 @@ static inline void arch_send_fragment(int fragment) {
 			avr_send();
 		}
 	}
-	fragment = (fragment + 1) % FRAGMENTS_PER_BUFFER;
 }
 
 static inline void arch_set_value(int m, int value) {
@@ -663,6 +671,19 @@ static inline void arch_start_move() {
 	avr_buffer[0] = HWC_START;
 	prepare_packet(avr_buffer, 1);
 	avr_send();
+}
+
+static inline void arch_stop() {
+	avr_running = false;
+	avr_buffer[0] = HWC_STOP;
+	if (avr_wait_for_reply)
+		debug("avr_wait_for_reply already set in stop");
+	avr_wait_for_reply = true;
+	prepare_packet(avr_buffer, 1);
+	avr_send();
+	avr_get_reply();
+	avr_write_ack();
+	avr_get_current_pos(3);
 }
 // }}}
 

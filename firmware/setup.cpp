@@ -43,6 +43,8 @@ void setup()
 	led_phase = 0;
 	led_pin = ~0;
 	active_motors = 0;
+	homers = 0;
+	home_step_time = 0;
 	
 	arch_setup_end();	// This fills printerid.
 	Serial.write(CMD_ID);

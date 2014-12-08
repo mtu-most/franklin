@@ -9,6 +9,10 @@
 // Maximum number of move commands in the queue.
 #define QUEUE_LENGTH 10
 
+// Number of buffers to fill before sending START_MOVE.  Lower number makes it
+// start faster, but may cause buffer underruns.
+#define MIN_BUFFER_FILL 3
+
 // If HAVE_AUDIO is not defined, nothing related to audio will be included.
 #define HAVE_AUDIO
 

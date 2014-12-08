@@ -154,13 +154,61 @@ void packet()
 		write_ack();
 		return;
 	}
+	case CMD_HOME:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_HOME");
+#endif
+		if (!stopped || stopping) {
+			debug("HOME seen while moving");
+			write_stall();
+			return;
+		}
+		if (current_fragment != last_fragment) {
+			debug("HOME seen with non-empty buffer");
+			write_stall();
+			return;
+		}
+		uint8_t mi = 0;
+		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
+			if (!(motor[m].flags & Motor::ACTIVE))
+				continue;
+			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+			switch (command[5 + mi]) {
+			case 0:
+				fragment.dir = DIR_POSITIVE;
+				break;
+			case 1:
+				fragment.dir = DIR_NEGATIVE;
+				break;
+			case 3:
+				fragment.dir = DIR_NONE;
+				break;
+			default:
+				debug("invalid dir in HOME: %d", command[5 + mi]);
+				homers = 0;
+				write_stall();
+				return;
+			}
+			if (fragment.dir <= 1)
+				homers += 1;
+			mi += 1;
+		}
+		home_step_time = *reinterpret_cast <uint32_t *>(&command[1]);
+		if (homers > 0) {
+			stopped = false;
+		}
+		start_time = utime();
+		write_ack();
+		return;
+	}
 	case CMD_START_MOVE:
 	{
 #ifdef DEBUG_CMD
 		debug("CMD_START_MOVE");
 #endif
 		if (stopping) {
-			debug("ignoring start move while stopping");
+			//debug("ignoring start move while stopping");
 			write_ack();
 			return;
 		}
@@ -189,7 +237,7 @@ void packet()
 			return;
 		}
 		if (stopping) {
-			debug("ignoring move while stopping");
+			//debug("ignoring move while stopping");
 			write_ack();
 			return;
 		}
@@ -211,7 +259,7 @@ void packet()
 		debug("CMD_START");
 #endif
 		if (stopping) {
-			debug("ignoring start while stopping");
+			//debug("ignoring start while stopping");
 			write_ack();
 			return;
 		}
@@ -227,6 +275,8 @@ void packet()
 		debug("CMD_STOP");
 #endif
 		stopped = true;
+		homers = 0;
+		home_step_time = 0;
 		write_ack();
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment;
@@ -236,10 +286,13 @@ void packet()
 			if (!(motor[m].flags & Motor::ACTIVE))
 				continue;
 			*reinterpret_cast <uint32_t *>(&reply[3 + 4 * mi]) = motor[m].current_pos;
+			//debug("cp %d %ld", m, F(motor[m].current_pos));
 			++mi;
 		}
 		reply_ready = 3 + 4 * mi;
 		try_send_next();
+		filling = 0;
+		current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		return;
 	}
 	case CMD_ABORT:
@@ -264,6 +317,8 @@ void packet()
 			}
 		}
 		stopped = true;
+		homers = 0;
+		home_step_time = 0;
 		write_ack();
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment;
@@ -280,6 +335,21 @@ void packet()
 		}
 		reply_ready = 3 + 4 * mi;
 		try_send_next();
+		return;
+	}
+	case CMD_DISCARD:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_DISCARD");
+#endif
+		if (command[1] > (last_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER) {
+			debug("discarding more than entire buffer");
+			write_stall();
+			return;
+		}
+		last_fragment = (last_fragment - command[1] + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		filling = 0;
+		write_ack();
 		return;
 	}
 	case CMD_GETPIN:

@@ -132,7 +132,11 @@ void serial(uint8_t which)
 						debug("new ff_out: %d", ff_out[which]);
 #endif
 						out_busy = false;
-						if (free_fragments > 0 && moving && !stopping)
+						if (stop_pending) {
+							stop_pending = false;
+							arch_stop();
+						}
+						else if (free_fragments > 0 && moving && !stopping)
 							buffer_refill();
 					}
 					continue;
@@ -370,16 +374,16 @@ void prepare_packet(char *the_packet, int size)
 		the_packet[size + t] = sum;
 	}
 	pending_len = size + (size + 2) / 3;
-#ifdef DEBUG_DATA
+#ifdef DEBUG_SERIAL
 	fprintf(stderr, "prepare %d:", 1);
 #endif
 	for (uint8_t i = 0; i < pending_len; ++i) {
 		pending_packet[i] = the_packet[i];
-#ifdef DEBUG_DATA
+#ifdef DEBUG_SERIAL
 		fprintf(stderr, " %02x", int(uint8_t(pending_packet[i])));
 #endif
 	}
-#ifdef DEBUG_DATA
+#ifdef DEBUG_SERIAL
 	fprintf(stderr, "\n");
 #endif
 }
@@ -387,8 +391,8 @@ void prepare_packet(char *the_packet, int size)
 // Send packet to firmware.
 void send_packet()
 {
-#ifdef DEBUG_SERIAL
-	fprintf(stderr, "send %d:", 1);
+#ifdef DEBUG_DATA
+	fprintf(stderr, "send %d: ", 1);
 	for (uint8_t i = 0; i < pending_len; ++i)
 		fprintf(stderr, " %02x", int(uint8_t(pending_packet[i])));
 	fprintf(stderr, "\n");

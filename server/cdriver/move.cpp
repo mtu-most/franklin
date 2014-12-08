@@ -104,7 +104,7 @@ uint8_t next_move() {
 					send_host(CMD_CONTINUE, 0);
 				queue_start = n;
 				queue_full = false;
-				abort_move(true);
+				abort_move(false);
 				return num_cbs;
 			}
 		}
@@ -342,6 +342,12 @@ uint8_t next_move() {
 
 void abort_move(bool move) { // {{{
 	//debug("try aborting move");
+	if (move) {
+		if (out_busy)
+			stop_pending = true;
+		else
+			arch_stop();
+	}
 	if (moving) {
 		//debug("aborting move");
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -358,12 +364,9 @@ void abort_move(bool move) { // {{{
 		//debug("moving->false");
 		moving = false;
 		current_fragment_pos = 0;
-		debug("reset abort");
 		reset_dirs(current_fragment);
 		if (move) {
-			debug("refill abort");
 			buffer_refill();
-			debug("refill abort done");
 		}
 		move_prepared = false;
 #ifdef DEBUG_MOVE
