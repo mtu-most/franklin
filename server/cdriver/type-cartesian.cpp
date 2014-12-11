@@ -3,9 +3,9 @@
 static void xyz2motors(Space *s, float *motors, bool *ok) {
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
 		if (motors)
-			motors[a] = s->axis[a]->target;
+			motors[a] = s->axis[a]->settings[current_fragment].target;
 		else
-			s->motor[a]->endpos = s->axis[a]->target;
+			s->motor[a]->settings[current_fragment].endpos = s->axis[a]->settings[current_fragment].target;
 	}
 }
 
@@ -13,7 +13,7 @@ static void reset_pos(Space *s) {
 	// If positions are unknown, pretend that they are 0.
 	// This is mostly useful for extruders.
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
-		s->axis[a]->source = s->motor[a]->current_pos / s->motor[a]->steps_per_m;
+		s->axis[a]->source = s->motor[a]->settings[current_fragment].current_pos / s->motor[a]->steps_per_m;
 		//debug("set pos for %d to %f", a, F(s->axis[a]->source));
 	}
 }

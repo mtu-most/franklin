@@ -123,7 +123,7 @@ void packet()
 			for (uint8_t t = 0; t < num_spaces; ++t) {
 				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
 					RESET(spaces[t].motor[m]->enable_pin);
-					spaces[t].motor[m]->current_pos = 0;
+					spaces[t].motor[m]->settings[current_fragment].current_pos = 0;
 				}
 				for (uint8_t a = 0; a < spaces[t].num_axes; ++a) {
 					spaces[t].axis[a]->source = NAN;
@@ -275,9 +275,9 @@ void packet()
 			spaces[which].axis[a]->current = NAN;
 		}
 		float f = get_float(4);
-		uint32_t diff = f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49) - spaces[which].motor[t]->current_pos;
-		spaces[which].motor[t]->current_pos += diff;
-		spaces[which].motor[t]->hwcurrent_pos += diff;
+		uint32_t diff = f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49) - spaces[which].motor[t]->settings[current_fragment].current_pos;
+		spaces[which].motor[t]->settings[current_fragment].current_pos += diff;
+		spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
 		//debug("cp4 %d", spaces[which].motor[t]->current_pos);
 		arch_addpos(which, t, diff);
 		//debug("setpos %d %d %f", which, t, F(spaces[which].motor[t]->current_pos));
@@ -485,8 +485,7 @@ void packet()
 			queue_end = 0;
 			queue_full = false;
 			cbs_after_current_move = 0;
-			//debug("aborting at request");
-			abort_move(true);
+			arch_stop();
 		}
 		send_host(CMD_QUEUE, queue_full ? QUEUE_LENGTH : (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH);
 		return;

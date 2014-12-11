@@ -104,7 +104,7 @@ enum Command {
 	CMD_DONE,	// 1:num
 	CMD_UNDERRUN,	// 1:num
 	CMD_ADC,	// 1:which, 2:adc reading
-	CMD_LIMIT,	// 1:which, 4:time, {4:motor_pos}*
+	CMD_LIMIT,	// 1:which, 1:pos, {4:motor_pos}*
 	CMD_SENSE0,	// 1:which, {4:motor_pos}*
 	CMD_SENSE1	// 1:which, {4:motor_pos}*
 };

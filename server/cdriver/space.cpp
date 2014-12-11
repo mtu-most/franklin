@@ -24,19 +24,24 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			loaddebug("new axis %x", new_axes[a]);
 			new_axes[a]->source = NAN;
 			new_axes[a]->current = NAN;
-			new_axes[a]->dist = NAN;
-			new_axes[a]->next_dist = NAN;
-			new_axes[a]->main_dist = NAN;
 			new_axes[a]->offset = 0;
 			new_axes[a]->park = NAN;
 			new_axes[a]->park_order = 0;
 			new_axes[a]->max_v = INFINITY;
 			new_axes[a]->min = -INFINITY;
 			new_axes[a]->max = INFINITY;
-			new_axes[a]->target = NAN;
+			new_axes[a]->settings = new Axis_History[FRAGMENTS_PER_BUFFER];
+			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
+				new_axes[a]->settings[f].dist = NAN;
+				new_axes[a]->settings[f].next_dist = NAN;
+				new_axes[a]->settings[f].main_dist = NAN;
+				new_axes[a]->settings[f].target = NAN;
+			}
 		}
-		for (uint8_t a = na; a < old_na; ++a)
+		for (uint8_t a = na; a < old_na; ++a) {
+			delete[] axis[a]->settings;
 			delete axis[a];
+		}
 		delete[] axis;
 		axis = new_axes;
 	}
@@ -62,24 +67,29 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_motors[m]->limit_a = INFINITY;
 			new_motors[m]->home_pos = NAN;
 			new_motors[m]->home_order = 0;
-			new_motors[m]->last_v = 0;
-			new_motors[m]->current_pos = 0;
-			new_motors[m]->hwcurrent_pos = 0;
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
 #ifdef HAVE_AUDIO
 			new_motors[m]->audio_flags = 0;
 #endif
-			new_motors[m]->last_v = NAN;
-			new_motors[m]->target_v = NAN;
-			new_motors[m]->target_dist = NAN;
-			new_motors[m]->endpos = NAN;
-			new_motors[m]->dir = new int[FRAGMENTS_PER_BUFFER];
-			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f)
-				new_motors[m]->dir[f] = 0;
+			new_motors[m]->settings = new Motor_History[FRAGMENTS_PER_BUFFER];
+			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
+				new_motors[m]->settings[f].dir = 0;
+				new_motors[m]->settings[f].data = new char[BYTES_PER_FRAGMENT];
+				memset(new_motors[m]->settings[f].data, 0, BYTES_PER_FRAGMENT);
+				new_motors[m]->settings[f].last_v = 0;
+				new_motors[m]->settings[f].current_pos = 0;
+				new_motors[m]->settings[f].hwcurrent_pos = 0;
+				new_motors[m]->settings[f].last_v = NAN;
+				new_motors[m]->settings[f].target_v = NAN;
+				new_motors[m]->settings[f].target_dist = NAN;
+				new_motors[m]->settings[f].endpos = NAN;
+			}
 		}
 		for (uint8_t m = nm; m < old_nm; ++m) {
-			delete[] motor[m]->dir;
+			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f)
+				delete[] motor[m]->settings[f].data;
+			delete[] motor[m]->settings;
 			delete motor[m];
 		}
 		delete[] motor;
@@ -93,25 +103,24 @@ static void move_to_current(Space *s) {
 	if (moving || !motors_busy)
 		return;
 	s->active = true;
-	f0 = 0;
-	fmain = 1;
-	fp = 0;
-	fq = 0;
-	t0 = 0;
-	tp = 0;
+	settings[current_fragment].f0 = 0;
+	settings[current_fragment].fmain = 1;
+	settings[current_fragment].fp = 0;
+	settings[current_fragment].fq = 0;
+	settings[current_fragment].t0 = 0;
+	settings[current_fragment].tp = 0;
 	cbs_after_current_move = 0;
 	moving = true;
-	hwtime = 0;
-	hwstart_time = 0;
-	start_time = 0;
+	settings[current_fragment].hwtime = 0;
+	settings[current_fragment].start_time = 0;
 	last_time = 0;
 	last_current_time = 0;
 	//debug("move to current");
 	for (uint8_t i = 0; i < min(s->num_axes, s->num_motors); ++i) {
-		s->axis[i]->dist = 0;
-		s->axis[i]->next_dist = 0;
-		s->axis[i]->main_dist = 0;
-		s->motor[i]->last_v = 0;
+		s->axis[i]->settings[current_fragment].dist = 0;
+		s->axis[i]->settings[current_fragment].next_dist = 0;
+		s->axis[i]->settings[current_fragment].main_dist = 0;
+		s->motor[i]->settings[current_fragment].last_v = 0;
 	}
 }
 
@@ -142,7 +151,7 @@ void Space::load_info(int32_t &addr)
 			ok = false;
 		else {
 			for (uint8_t i = 0; i < num_axes; ++i)
-				axis[i]->target = axis[i]->current;
+				axis[i]->settings[current_fragment].target = axis[i]->current;
 			ok = true;
 			space_types[type].xyz2motors(this, oldpos, &ok);
 		}
@@ -215,11 +224,11 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 	if (!isnan(motor[m]->home_pos)) {
 		// Axes with a limit switch.
 		if (old_steps_per_m != motor[m]->steps_per_m) {
-			float diff = motor[m]->current_pos / old_steps_per_m - motor[m]->home_pos;
+			float diff = motor[m]->settings[current_fragment].current_pos / old_steps_per_m - motor[m]->home_pos;
 			float f = motor[m]->home_pos + diff;
-			uint32_t cpdiff = f * motor[m]->steps_per_m + (f > 0 ? .49 : -.49) - motor[m]->current_pos;
-			motor[m]->current_pos += cpdiff;
-			motor[m]->hwcurrent_pos += cpdiff;
+			uint32_t cpdiff = f * motor[m]->steps_per_m + (f > 0 ? .49 : -.49) - motor[m]->settings[current_fragment].current_pos;
+			motor[m]->settings[current_fragment].current_pos += cpdiff;
+			motor[m]->settings[current_fragment].hwcurrent_pos += cpdiff;
 			//debug("cp5 %d", motor[m]->current_pos);
 			arch_addpos(id, m, cpdiff);
 			must_move = true;
@@ -227,7 +236,7 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 		if (motors_busy && old_home_pos != motor[m]->home_pos) {
 			float f = motor[m]->home_pos - old_home_pos;
 			int32_t diff = f * motor[m]->steps_per_m + (f > 0 ? .49 : -.49);
-			motor[m]->current_pos += diff;
+			motor[m]->settings[current_fragment].current_pos += diff;
 			//debug("cp6 %d", motor[m]->current_pos);
 			arch_addpos(id, m, diff);
 			must_move = true;
@@ -236,11 +245,11 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 	else {
 		// Axes without a limit switch: extruders.
 		if (motors_busy && old_steps_per_m != motor[m]->steps_per_m) {
-			int32_t cp = motor[m]->current_pos;
-			float pos = motor[m]->current_pos / old_steps_per_m;
-			motor[m]->current_pos = pos * motor[m]->steps_per_m;
-			motor[m]->hwcurrent_pos += motor[m]->current_pos - cp;
-			arch_addpos(id, m, motor[m]->current_pos - cp);
+			int32_t cp = motor[m]->settings[current_fragment].current_pos;
+			float pos = motor[m]->settings[current_fragment].current_pos / old_steps_per_m;
+			motor[m]->settings[current_fragment].current_pos = pos * motor[m]->steps_per_m;
+			motor[m]->settings[current_fragment].hwcurrent_pos += motor[m]->settings[current_fragment].current_pos - cp;
+			arch_addpos(id, m, motor[m]->settings[current_fragment].current_pos - cp);
 		}
 	}
 	if (must_move)
@@ -351,19 +360,19 @@ void Space::cancel_update() {
 // Space things. {{{
 static void check_distance(Motor *mtr, float distance, float dt, float &factor) { // {{{
 	if (isnan(distance) || distance == 0) {
-		mtr->target_dist = 0;
+		mtr->settings[current_fragment].target_dist = 0;
 		//mtr->last_v = 0;
 		return;
 	}
 	//debug("cd %f %f", F(distance), F(dt));
-	mtr->target_dist = distance;
-	mtr->target_v = distance / dt;
-	float v = fabs(mtr->target_v);
-	int8_t s = (mtr->target_v < 0 ? -1 : 1);
+	mtr->settings[current_fragment].target_dist = distance;
+	mtr->settings[current_fragment].target_v = distance / dt;
+	float v = fabs(mtr->settings[current_fragment].target_v);
+	int8_t s = (mtr->settings[current_fragment].target_v < 0 ? -1 : 1);
 	// When turning around, ignore limits (they shouldn't have been violated anyway).
-	if (mtr->last_v * s < 0) {
+	if (mtr->settings[current_fragment].last_v * s < 0) {
 		//debug("!");
-		mtr->last_v = 0;
+		mtr->settings[current_fragment].last_v = 0;
 	}
 	// Limit v.
 	if (v > mtr->limit_v) {
@@ -374,15 +383,15 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	//debug("cd2 %f %f", F(distance), F(dt));
 	// Limit a+.
 	float limit_dv = mtr->limit_a * dt;
-	if (v - mtr->last_v * s > limit_dv) {
+	if (v - mtr->settings[current_fragment].last_v * s > limit_dv) {
 		//debug("a+ %f %f %f %d", F(mtr->target_v), F(limit_dv), F(mtr->last_v), s);
-		distance = (limit_dv * s + mtr->last_v) * dt;
+		distance = (limit_dv * s + mtr->settings[current_fragment].last_v) * dt;
 		v = fabs(distance / dt);
 	}
 	//debug("cd3 %f %f", F(distance), F(dt));
 	// Limit a-.
 	// Distance to travel until end of segment or connection.
-	float max_dist = (mtr->endpos - mtr->current_pos / mtr->steps_per_m) * s;
+	float max_dist = (mtr->settings[current_fragment].endpos - mtr->settings[current_fragment].current_pos / mtr->steps_per_m) * s;
 	// Find distance traveled when slowing down at maximum a.
 	// x = 1/2 at²
 	// t = sqrt(2x/a)
@@ -397,7 +406,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 		distance = s * v * dt;
 	}
 	//debug("cd4 %f %f", F(distance), F(dt)); */
-	float f = distance / mtr->target_dist;
+	float f = distance / mtr->settings[current_fragment].target_dist;
 	//movedebug("checked %f %f", F(mtr->target_dist), F(distance));
 	if (f < factor)
 		factor = f;
@@ -413,7 +422,7 @@ static void move_axes(Space *s, uint32_t current_time, float &factor) { // {{{
 	//movedebug("ok %d", ok);
 	for (uint8_t m = 0; m < s->num_motors; ++m) {
 		//movedebug("move %d %f %f %f", m, F(target[m]), F(motors_target[m]), F(s->motor[m]->current_pos));
-		check_distance(s->motor[m], motors_target[m] - s->motor[m]->current_pos / s->motor[m]->steps_per_m, (current_time - last_time) / 1e6, factor);
+		check_distance(s->motor[m], motors_target[m] - s->motor[m]->settings[current_fragment].current_pos / s->motor[m]->steps_per_m, (current_time - last_time) / 1e6, factor);
 	}
 } // }}}
 
@@ -434,8 +443,8 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 			continue;
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
-			float num = (mtr.current_pos / mtr.steps_per_m + mtr.target_dist * factor) * mtr.steps_per_m;
-			if (mtr.current_pos != int(num + (num > 0 ? .49 : -.49))) {
+			float num = (mtr.settings[current_fragment].current_pos / mtr.steps_per_m + mtr.settings[current_fragment].target_dist * factor) * mtr.steps_per_m;
+			if (mtr.settings[current_fragment].current_pos != int(num + (num > 0 ? .49 : -.49))) {
 				//debug("have steps %d %f %f", mtr.current_pos, mtr.target_dist, factor);
 				have_steps = true;
 				break;
@@ -450,11 +459,11 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 		return;
 	// Adjust start time if factor < 1.
 	if (factor > 0 && factor < 1) {
-		start_time += (current_time - the_last_time) * ((1 - factor) * .99);
-		movedebug("correct: %f %d", F(factor), int(start_time));
+		settings[current_fragment].start_time += (current_time - the_last_time) * ((1 - factor) * .99);
+		movedebug("correct: %f %d", F(factor), int(settings[current_fragment].start_time));
 	}
 	else
-		movedebug("no correct: %f %d", F(factor), int(start_time));
+		movedebug("no correct: %f %d", F(factor), int(settings[current_fragment].start_time));
 	last_time = current_time;
 	// Move the motors.
 	//debug("start move");
@@ -464,16 +473,16 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 			continue;
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
-			if (mtr.target_dist == 0) {
+			if (mtr.settings[current_fragment].target_dist == 0) {
 				//if (mtr.target_v == 0)
 					//mtr.last_v = 0;
 				continue;
 			}
-			float target = mtr.current_pos / mtr.steps_per_m + mtr.target_dist * factor;
+			float target = mtr.settings[current_fragment].current_pos / mtr.steps_per_m + mtr.settings[current_fragment].target_dist * factor;
 			//debug("ccp3 %d %d %d %f %f %f %f %f", m, stopping, mtr.current_pos, F(target), F(mtr.last_v), mtr.steps_per_m, mtr.target_dist, factor);
-			mtr.current_pos = (target * mtr.steps_per_m + (target > 0 ? .49 : -.49));
+			mtr.settings[current_fragment].current_pos = (target * mtr.steps_per_m + (target > 0 ? .49 : -.49));
 			//debug("cp3 %d", mtr.current_pos);
-			mtr.last_v = mtr.target_v * factor;
+			mtr.settings[current_fragment].last_v = mtr.settings[current_fragment].target_v * factor;
 		}
 	}
 	for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -481,21 +490,21 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 		if (!sp.active)
 			continue;
 		for (uint8_t a = 0; a < sp.num_axes; ++a)
-			sp.axis[a]->current += (sp.axis[a]->target - sp.axis[a]->current) * factor;
+			sp.axis[a]->current += (sp.axis[a]->settings[current_fragment].target - sp.axis[a]->current) * factor;
 	}
 	return;
 } // }}}
 
-static void handle_motors(unsigned long long current_time) { // {{{
+void handle_motors(unsigned long long current_time) { // {{{
 	// Check for move.
 	if (!moving)
 		return;
 	last_active = current_time;
 	float factor = 1;
-	float t = (current_time - start_time) / 1e6;
-	//buffered_debug("f%f %f %f %ld %ld", F(t), F(t0), F(tp), F(long(current_time)), F(long(start_time)));
-	if (t >= t0 + tp) {	// Finish this move and prepare next.
-		movedebug("finishing %f %f %f %ld %ld", F(t), F(t0), F(tp), F(long(current_time)), F(long(start_time)));
+	float t = (current_time - settings[current_fragment].start_time) / 1e6;
+	//buffered_debug("f%f %f %f %ld %ld", F(t), F(t0), F(tp), F(long(current_time)), F(long(settings[current_fragment].start_time)));
+	if (t >= settings[current_fragment].t0 + settings[current_fragment].tp) {	// Finish this move and prepare next.
+		movedebug("finishing %f %f %f %ld %ld", F(t), F(t0), F(tp), F(long(current_time)), F(long(settings[current_fragment].start_time)));
 		//buffered_debug("a");
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
@@ -503,12 +512,12 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				continue;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				//debug("before source %d %f %f", a, F(axis[a].source), F(axis[a].motor.dist));
-				if (!isnan(sp.axis[a]->dist)) {
-					sp.axis[a]->source += sp.axis[a]->dist;
-					sp.axis[a]->dist = NAN;
+				if (!isnan(sp.axis[a]->settings[current_fragment].dist)) {
+					sp.axis[a]->source += sp.axis[a]->settings[current_fragment].dist;
+					sp.axis[a]->settings[current_fragment].dist = NAN;
 					// Set this here, so it isn't set if dist was NaN to begin with.
 					// Note that target is not set for future iterations, but it isn't changed.
-					sp.axis[a]->target = sp.axis[a]->source;
+					sp.axis[a]->settings[current_fragment].target = sp.axis[a]->source;
 				}
 				//debug("after source %d %f %f %f %f", a, F(sp.axis[a]->source), F(sp.axis[a]->dist), F(sp.motor[a]->current_pos), F(factor));
 			}
@@ -519,8 +528,8 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		do_steps(factor, current_time);
 		//debug("f3 %f", F(factor));
 		// Start time may have changed; recalculate t.
-		t = (current_time - start_time) / 1e6;
-		if (t / (t0 + tp) >= done_factor) {
+		t = (current_time - settings[current_fragment].start_time) / 1e6;
+		if (t / (settings[current_fragment].t0 + settings[current_fragment].tp) >= done_factor) {
 			//buffered_debug("b");
 			moving = false;
 			uint8_t had_cbs = cbs_after_current_move;
@@ -544,7 +553,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 					if (!sp.active)
 						continue;
 					for (uint8_t m = 0; m < sp.num_motors; ++m)
-						sp.motor[m]->last_v = 0;
+						sp.motor[m]->settings[current_fragment].last_v = 0;
 				}
 				//debug("movecb 1");
 				if (cbs_after_current_move > 0) {
@@ -560,9 +569,9 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		}
 		return;
 	}
-	if (t < t0) {	// Main part.
-		float t_fraction = t / t0;
-		float current_f = (f1 * (2 - t_fraction) + f2 * t_fraction) * t_fraction;
+	if (t < settings[current_fragment].t0) {	// Main part.
+		float t_fraction = t / settings[current_fragment].t0;
+		float current_f = (settings[current_fragment].f1 * (2 - t_fraction) + settings[current_fragment].f2 * t_fraction) * t_fraction;
 		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", F(t), F(t0), F(tp), F(t_fraction), F(f1), F(f2), F(current_f));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
@@ -570,11 +579,11 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			if (!sp.active)
 				continue;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) {
-					sp.axis[a]->target = NAN;
+				if (isnan(sp.axis[a]->settings[current_fragment].dist) || sp.axis[a]->settings[current_fragment].dist == 0) {
+					sp.axis[a]->settings[current_fragment].target = NAN;
 					continue;
 				}
-				sp.axis[a]->target = sp.axis[a]->source + sp.axis[a]->dist * current_f;
+				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->source + sp.axis[a]->settings[current_fragment].dist * current_f;
 				//movedebug("do %d %d %f %f", s, a, F(sp.axis[a]->dist), F(target[a]));
 			}
 			move_axes(&sp, current_time, factor);
@@ -582,20 +591,20 @@ static void handle_motors(unsigned long long current_time) { // {{{
 	}
 	else {	// Connector part.
 		movedebug("connector %f %f %f", F(t), F(t0), F(tp));
-		float tc = t - t0;
+		float tc = t - settings[current_fragment].t0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			if (!sp.active)
 				continue;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if ((isnan(sp.axis[a]->dist) || sp.axis[a]->dist == 0) && (isnan(sp.axis[a]->next_dist) || sp.axis[a]->next_dist == 0)) {
-					sp.axis[a]->target = NAN;
+				if ((isnan(sp.axis[a]->settings[current_fragment].dist) || sp.axis[a]->settings[current_fragment].dist == 0) && (isnan(sp.axis[a]->settings[current_fragment].next_dist) || sp.axis[a]->settings[current_fragment].next_dist == 0)) {
+					sp.axis[a]->settings[current_fragment].target = NAN;
 					continue;
 				}
-				float t_fraction = tc / tp;
-				float current_f2 = fp * (2 - t_fraction) * t_fraction;
-				float current_f3 = fq * t_fraction * t_fraction;
-				sp.axis[a]->target = sp.axis[a]->source + sp.axis[a]->main_dist + sp.axis[a]->dist * current_f2 + sp.axis[a]->next_dist * current_f3;
+				float t_fraction = tc / settings[current_fragment].tp;
+				float current_f2 = settings[current_fragment].fp * (2 - t_fraction) * t_fraction;
+				float current_f3 = settings[current_fragment].fq * t_fraction * t_fraction;
+				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->source + sp.axis[a]->settings[current_fragment].main_dist + sp.axis[a]->settings[current_fragment].dist * current_f2 + sp.axis[a]->settings[current_fragment].next_dist * current_f3;
 			}
 			move_axes(&sp, current_time, factor);
 		}
@@ -605,37 +614,75 @@ static void handle_motors(unsigned long long current_time) { // {{{
 
 void reset_dirs(int fragment) {
 	//debug("resetting %d", fragment);
-	num_active_motors[fragment] = 0;
+	settings[fragment].num_active_motors = 0;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
-			if (moving && sp.active && mtr.current_pos != mtr.hwcurrent_pos) {
+			if (moving && sp.active && mtr.settings[fragment].current_pos != mtr.settings[fragment].hwcurrent_pos) {
 				//debug("preactive %d %d %d %d %d", s, m, fragment, mtr.current_pos, mtr.hwcurrent_pos);
-				num_active_motors[fragment] += 1;
-				mtr.dir[fragment] = mtr.current_pos < mtr.hwcurrent_pos ? -1 : 1;
+				settings[fragment].num_active_motors += 1;
+				mtr.settings[fragment].dir = mtr.settings[fragment].current_pos < mtr.settings[fragment].hwcurrent_pos ? -1 : 1;
 			}
 			else {
 				//debug("inactive %d %d %d", s, m, fragment);
-				mtr.dir[fragment] = 0;
+				mtr.settings[fragment].dir = 0;
 			}
 		}
 	}
 }
 
+void set_current_fragment(int fragment) {
+	settings[fragment].t0 = settings[current_fragment].t0;
+	settings[fragment].tp = settings[current_fragment].tp;
+	settings[fragment].f0 = settings[current_fragment].f0;
+	settings[fragment].f1 = settings[current_fragment].f1;
+	settings[fragment].f2 = settings[current_fragment].f2;
+	settings[fragment].fp = settings[current_fragment].fp;
+	settings[fragment].fq = settings[current_fragment].fq;
+	settings[fragment].fmain = settings[current_fragment].fmain;
+	settings[fragment].fragment_length = 0;
+	settings[fragment].num_active_motors = settings[current_fragment].num_active_motors;
+	settings[fragment].hwtime = settings[current_fragment].hwtime;
+	settings[fragment].start_time = settings[current_fragment].start_time;
+	for (int s = 0; s < num_spaces; ++s) {
+		Space &sp = spaces[s];
+		for (int m = 0; m < sp.num_motors; ++m) {
+			sp.motor[m]->settings[fragment].dir = 0;
+			sp.motor[m]->settings[fragment].last_v = sp.motor[m]->settings[current_fragment].last_v;
+			sp.motor[m]->settings[fragment].target_v = sp.motor[m]->settings[current_fragment].target_v;
+			sp.motor[m]->settings[fragment].target_dist = sp.motor[m]->settings[current_fragment].target_dist;
+			sp.motor[m]->settings[fragment].current_pos = sp.motor[m]->settings[current_fragment].current_pos;
+			sp.motor[m]->settings[fragment].hwcurrent_pos = sp.motor[m]->settings[current_fragment].hwcurrent_pos;
+			sp.motor[m]->settings[fragment].hwdir = sp.motor[m]->settings[current_fragment].hwdir;
+			sp.motor[m]->settings[fragment].endpos = sp.motor[m]->settings[current_fragment].endpos;
+		}
+		for (int a = 0; a < sp.num_axes; ++a) {
+			sp.axis[a]->settings[fragment].dist = sp.axis[a]->settings[current_fragment].dist;
+			sp.axis[a]->settings[fragment].next_dist = sp.axis[a]->settings[current_fragment].next_dist;
+			sp.axis[a]->settings[fragment].main_dist = sp.axis[a]->settings[current_fragment].main_dist;
+			sp.axis[a]->settings[fragment].target = sp.axis[a]->settings[current_fragment].target;
+		}
+	}
+	current_fragment = fragment;
+	current_fragment_pos = 0;
+	reset_dirs(current_fragment);
+}
+
 static void send_fragment() {
 	//debug("sending %d", current_fragment);
-	fragment_len[current_fragment] = current_fragment_pos;
+	settings[current_fragment].fragment_length = current_fragment_pos;
 	free_fragments -= 1;
 	arch_send_fragment(current_fragment);
 	if (stopping)
 		return;
 	// Prepare new fragment.
-	hwstart_time = hwtime;
-	current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
-	current_fragment_pos = 0;
-	reset_dirs(current_fragment);
-	arch_clear_fragment();
+	set_current_fragment((current_fragment + 1) % FRAGMENTS_PER_BUFFER);
+	for (int s = 0; s < num_spaces; ++s) {
+		Space &sp = spaces[s];
+		for (int m = 0; m < sp.num_motors; ++m)
+			memset(sp.motor[m]->settings[current_fragment].data, 0, BYTES_PER_FRAGMENT);
+	}
 }
 
 void buffer_refill() {
@@ -650,15 +697,15 @@ void buffer_refill() {
 				continue;
 			for (uint8_t m = 0; m < sp.num_motors && !stopping; ++m) {
 				Motor &mtr = *sp.motor[m];
-				if (mtr.current_pos == mtr.hwcurrent_pos)
+				if (mtr.settings[current_fragment].current_pos == mtr.settings[current_fragment].hwcurrent_pos)
 					continue;
-				if (mtr.dir[current_fragment] == 0) {
+				if (mtr.settings[current_fragment].dir == 0) {
 					//debug("active %d %d %d %d", s, m, F(mtr.current_pos), F(mtr.hwcurrent_pos));
-					mtr.dir[current_fragment] = (mtr.current_pos < mtr.hwcurrent_pos ? -1 : 1);
-					num_active_motors[current_fragment] += 1;
+					mtr.settings[current_fragment].dir = (mtr.settings[current_fragment].current_pos < mtr.settings[current_fragment].hwcurrent_pos ? -1 : 1);
+					settings[current_fragment].num_active_motors += 1;
 					continue;
 				}
-				if ((mtr.dir[current_fragment] < 0 && mtr.current_pos > mtr.hwcurrent_pos) || (mtr.dir[current_fragment] > 0 && mtr.current_pos < mtr.hwcurrent_pos)) {
+				if ((mtr.settings[current_fragment].dir < 0 && mtr.settings[current_fragment].current_pos > mtr.settings[current_fragment].hwcurrent_pos) || (mtr.settings[current_fragment].dir > 0 && mtr.settings[current_fragment].current_pos < mtr.settings[current_fragment].hwcurrent_pos)) {
 					//debug("dir change %d %d", s, m);
 					send_fragment();
 					if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
@@ -677,23 +724,22 @@ void buffer_refill() {
 			return;
 		}
 		// All directions are correct, or the fragment is sent and the new fragment is empty (and therefore all directions are correct).
-		int mi = 0;
-		for (uint8_t s = 0; (s == 0 || current_fragment_pos > 0) && s < num_spaces; mi += spaces[s].num_motors, ++s) {
+		for (uint8_t s = 0; (s == 0 || current_fragment_pos > 0) && s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			if (!sp.active)
 				continue;
 			for (uint8_t m = 0; m < sp.num_motors; ++m) {
 				Motor &mtr = *sp.motor[m];
-				int value = (mtr.current_pos - mtr.hwcurrent_pos) * mtr.dir[current_fragment];
+				int value = (mtr.settings[current_fragment].current_pos - mtr.settings[current_fragment].hwcurrent_pos) * mtr.settings[current_fragment].dir;
 				if (value > 15)
 					value = 15;
-				arch_set_value(mi + m, value);
-				mtr.hwcurrent_pos += mtr.dir[current_fragment] * value;
+				mtr.settings[current_fragment].data[current_fragment_pos >> 1] |= value << (4 * (current_fragment_pos & 0x1));
+				mtr.settings[current_fragment].hwcurrent_pos += mtr.settings[current_fragment].dir * value;
 			}
 		}
 		current_fragment_pos += 1;
-		hwtime += hwtime_step;
-		handle_motors(hwtime);
+		settings[current_fragment].hwtime += hwtime_step;
+		handle_motors(settings[current_fragment].hwtime);
 		if ((!moving && current_fragment_pos > 0) || current_fragment_pos >= BYTES_PER_FRAGMENT * 2) {
 			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT * 2);
 			if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)

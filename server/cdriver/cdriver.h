@@ -145,20 +145,46 @@ struct Temp
 	int32_t savesize() { return savesize0(); }
 };
 
+struct History
+{
+	float t0, tp;
+	float f0, f1, f2, fp, fq, fmain;
+	int fragment_length;
+	int num_active_motors;
+	uint32_t hwtime, start_time;
+};
+
+struct Motor_History
+{
+	int dir;
+	char *data;
+	float last_v;		// v during last iteration, for using limit_a [m/s].
+	float target_v, target_dist;	// Internal values for moving.
+	int32_t current_pos, hwcurrent_pos;	// Current position of motor (in steps), and what the hardware currently thinks.
+	bool hwdir;
+	float endpos;
+};
+
+struct Axis_History
+{
+	float dist, next_dist, main_dist;
+	float target;
+};
+
 struct Axis
 {
+	Axis_History *settings;
 	float offset;		// Position where axis claims to be when it is at 0.
 	float park;		// Park position; not used by the firmware, but stored for use by the host.
 	uint8_t park_order;
 	float source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
 	float max_v;
 	float min, max;
-	float dist, next_dist, main_dist;
-	float target;
 };
 
 struct Motor
 {
+	Motor_History *settings;
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	Pin_t enable_pin;
@@ -172,12 +198,6 @@ struct Motor
 	float sense_pos;
 	float limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
-	float last_v;		// v during last iteration, for using limit_a [m/s].
-	float target_v, target_dist;	// Internal values for moving.
-	int32_t current_pos, hwcurrent_pos;	// Current position of motor (in steps), and what the hardware currently thinks.
-	bool hwdir;
-	float endpos;
-	int *dir;
 #ifdef HAVE_AUDIO
 	uint8_t audio_flags;
 	enum Flags {
@@ -333,31 +353,26 @@ EXTERN uint32_t last_active;
 EXTERN float motor_limit, temp_limit;
 EXTERN int16_t led_phase;
 EXTERN uint8_t temp_current;
+EXTERN History *settings;
 #ifdef HAVE_AUDIO
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
 EXTERN uint8_t audio_head, audio_tail, audio_state;
 EXTERN uint32_t audio_start;
 EXTERN int16_t audio_us_per_sample;
 #endif
-EXTERN uint32_t start_time, last_time, last_current_time;
-EXTERN float t0, tp;
 EXTERN bool moving;
 EXTERN int stopping;		// From limit.
 EXTERN bool stop_pending;	// From abort_move.
-EXTERN float f0, f1, f2, fp, fq, fmain;
-EXTERN bool move_prepared;
 EXTERN float done_factor;
 EXTERN uint8_t requested_temp;
 EXTERN bool refilling;
+EXTERN bool move_prepared;
 EXTERN int current_fragment;
 EXTERN int current_fragment_pos;
-EXTERN int hwtime;
-EXTERN int hwstart_time;
 EXTERN int hwtime_step;
-EXTERN int *fragment_len;	// Fragment length in us.
 EXTERN int free_fragments;
 EXTERN struct pollfd pollfds[2];
-EXTERN int *num_active_motors;
+EXTERN uint32_t last_time, last_current_time;
 
 #if DEBUG_BUFFER_LENGTH > 0
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
@@ -384,7 +399,7 @@ void send_host(char cmd, int s = 0, int m = 0, float f = 0, int e = 0, int len =
 
 // move.cpp
 uint8_t next_move();
-void abort_move(bool move);
+void abort_move(int fragment, int pos);
 
 // setup.cpp
 void setup(char const *port);
@@ -403,6 +418,8 @@ void handle_temp(int id, int temp);
 // space.cpp
 void reset_dirs(int fragment);
 void buffer_refill();
+void set_current_fragment(int fragment);
+void handle_motors(unsigned long long current_time);
 
 // globals.cpp
 bool globals_load(int32_t &address);

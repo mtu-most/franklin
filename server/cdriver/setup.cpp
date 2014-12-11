@@ -34,14 +34,10 @@ void setup(char const *port)
 	temps_busy = 0;
 	requested_temp = ~0;
 	last_active = millis();
-	t0 = 0;
-	f0 = 0;
 	free_fragments = 0;
 	refilling = false;
 	current_fragment = 0;
 	current_fragment_pos = 0;
-	hwtime = 0;
-	hwstart_time = 0;
 	hwtime_step = 1000;	// TODO: make this dynamic.
 	//debug("moving->false");
 	moving = false;
@@ -72,4 +68,11 @@ void setup(char const *port)
 		debug("Printer has newer Franklin version than host; please upgrade your host software.");
 		exit(1);
 	}
+	// Now set things up that need information from the firmware.
+	settings = new History[FRAGMENTS_PER_BUFFER];
+	settings[current_fragment].t0 = 0;
+	settings[current_fragment].f0 = 0;
+	settings[current_fragment].num_active_motors = 0;
+	settings[current_fragment].hwtime = 0;
+	free_fragments = FRAGMENTS_PER_BUFFER;
 }
