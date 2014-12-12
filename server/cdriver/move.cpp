@@ -319,14 +319,14 @@ uint8_t next_move() {
 #ifdef DEBUG_MOVE
 	debug("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f s tp=%f s", F(settings[current_fragment].f0), F(settings[current_fragment].fp), F(settings[current_fragment].fq), F(v0), F(vp), F(vq), F(settings[current_fragment].t0), F(settings[current_fragment].tp));
 #endif
-	if (!moving) {
+	if (!moving && current_fragment_pos == 0) {
 #ifdef DEBUG_MOVE
 		debug("starting new move");
 #endif
+		debug("starting new move");
 		// Copy all settings to previous fragment, in case this fragment gets interrupted.
-		int cf = current_fragment;
-		set_current_fragment((current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
-		current_fragment = cf;
+		copy_fragment_settings(current_fragment, (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
+		current_fragment_pos = 0;
 		//debug("curf1 %d", current_fragment);
 		// Reset time.
 		settings[current_fragment].hwtime = 0;
@@ -346,23 +346,22 @@ void abort_move(int pos) { // {{{
 	if (!moving)
 		return;
 	aborting = true;
-	//debug("abort; discarding %d fragments, regenerating %d ticks", FRAGMENTS_PER_BUFFER - free_fragments, pos);
+	debug("abort; discarding %d fragments, regenerating %d ticks", FRAGMENTS_PER_BUFFER - free_fragments, pos);
 	//debug("try aborting move");
 	// Copy over all settings from end of previous fragment.
 	int f = (current_fragment + free_fragments) % FRAGMENTS_PER_BUFFER;
 	int prev_f = (f - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-	current_fragment = prev_f;
-	set_current_fragment(f);
-	//debug("curf2 %d", current_fragment);
+	copy_fragment_settings(prev_f, f);
+	current_fragment = f;
 	current_fragment_pos = 0;
 	free_fragments = FRAGMENTS_PER_BUFFER;
 	while (current_fragment_pos < pos)
 		apply_tick();
 	// Copy settings back to previous fragment.
-	set_current_fragment(prev_f);
-	current_fragment = f;
-	//debug("curf3 %d", current_fragment);
+	copy_fragment_settings(f, prev_f);
 	current_fragment_pos = 0;
+	current_fragment = f;
+	debug("curf3 %d", current_fragment);
 	//debug("aborting move");
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
