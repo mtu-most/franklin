@@ -275,10 +275,10 @@ void packet()
 			spaces[which].axis[a]->current = NAN;
 		}
 		float f = get_float(4);
-		uint32_t diff = f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49) - spaces[which].motor[t]->settings[current_fragment].current_pos;
+		int32_t diff = f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49) - spaces[which].motor[t]->settings[current_fragment].current_pos;
 		spaces[which].motor[t]->settings[current_fragment].current_pos += diff;
 		spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
-		//debug("cp4 %d", spaces[which].motor[t]->current_pos);
+		//debug("cp4 %d %d", spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
 		arch_addpos(which, t, diff);
 		//debug("setpos %d %d %f", which, t, F(spaces[which].motor[t]->current_pos));
 		return;

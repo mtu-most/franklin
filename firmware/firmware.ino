@@ -10,9 +10,11 @@ static void do_steps(Dir dir, uint8_t m, uint8_t value) {
 		else
 			SET(motor[m].dir_pin);
 	}
-	for (uint8_t s = 0; s < value; ++s) {
-		SET(motor[m].step_pin);
-		RESET(motor[m].step_pin);
+	if (motor[m].step_pin < NUM_DIGITAL_PINS) {
+		for (uint8_t s = 0; s < value; ++s) {
+			SET(motor[m].step_pin);
+			RESET(motor[m].step_pin);
+		}
 	}
 	motor[m].current_pos += (dir ? -1 : 1) * value;
 }
@@ -40,11 +42,11 @@ static void handle_motors(uint32_t current_time) {
 			bool inverted = motor[m].flags & (fragment.dir ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
 			if (GET(limit_pin) ^ inverted) {
 				// Hit endstop.
-				debug("hit limit %d curpos %ld dir %d frag %d", m, F(motor[m].current_pos), fragment.dir, current_fragment);
+				debug("hit limit %d curpos %ld dir %d frag %d;%d;%d;%d", m, F(motor[m].current_pos), fragment.dir, current_fragment, notified_current_fragment, last_fragment, current_fragment_pos);
 				// Notify host.
 				motor[m].flags |= Motor::LIMIT;
-				limit_fragment = current_fragment;
 				limit_fragment_pos = current_fragment_pos;
+				current_fragment_pos = 0;
 				stopped = true;
 				filling = 0;
 				current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;

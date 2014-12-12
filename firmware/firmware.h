@@ -98,7 +98,7 @@ enum Command {
 	CMD_PONG,	// 1:code
 	CMD_HOMED,	// 1:code, {4:motor_pos}*
 	CMD_PIN,	// 1:state
-	CMD_STOPPED,	// 1:fragment, 1:fragment_pos, {4:motor_pos}*
+	CMD_STOPPED,	// 1:fragment_pos, {4:motor_pos}*
 
 		// asynchronous events.
 	CMD_DONE,	// 1:num
@@ -257,7 +257,6 @@ EXTERN uint8_t fragment_len[FRAGMENTS_PER_BUFFER];
 EXTERN uint8_t notified_current_fragment;
 EXTERN uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
 EXTERN uint8_t last_fragment;	// Fragment that is currently being filled, or has last been filled.
-EXTERN uint8_t limit_fragment;
 EXTERN uint8_t limit_fragment_pos;
 EXTERN uint8_t current_fragment_pos;
 

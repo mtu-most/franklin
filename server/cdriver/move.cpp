@@ -33,9 +33,6 @@ uint8_t next_move() {
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-#ifdef DEBUG_MOVE
-			debug("maybe resetting: %d %d", s, sp.motor[0]->current_pos);
-#endif
 			if (isnan(sp.axis[a]->source)) {
 				space_types[sp.type].reset_pos(&sp);
 				for (uint8_t aa = 0; aa < sp.num_axes; ++aa)
@@ -44,7 +41,7 @@ uint8_t next_move() {
 			}
 #ifdef DEBUG_MOVE
 			else
-				debug("non-nan: %d %d %f %d", s, a, F(sp.axis[a]->source), sp.motor[a]->current_pos);
+				debug("non-nan: %d %d %f %d", s, a, F(sp.axis[a]->source), sp.motor[a]->settings[current_fragment].current_pos);
 #endif
 		}
 	}
@@ -104,7 +101,7 @@ uint8_t next_move() {
 					send_host(CMD_CONTINUE, 0);
 				queue_start = n;
 				queue_full = false;
-				abort_move(0, current_fragment_pos);
+				abort_move(current_fragment_pos);
 				return num_cbs;
 			}
 		}
@@ -114,7 +111,7 @@ uint8_t next_move() {
 	// We are prepared and can start the segment. {{{
 	bool action = false;
 #ifdef DEBUG_MOVE
-	debug("Move was prepared with tp = %f", F(settings[current_fragment].tp));
+	debug("Move was prepared");
 #endif
 	float vq;
 	if (n == queue_end) { // {{{
@@ -201,7 +198,7 @@ uint8_t next_move() {
 	// mtr->dist: total distance of this segment (mm).
 	// mtr->next_dist: total distance of next segment (mm).
 #ifdef DEBUG_MOVE
-	debug("Set up: tp = %f s, v0 = %f /s, vp = %f /s, vq = %f /s", F(settings[current_fragment].tp), F(v0), F(vp), F(vq));
+	debug("Set up: v0 = %f /s, vp = %f /s, vq = %f /s", F(v0), F(vp), F(vq));
 #endif
 
 	// Limit v0, vp, vq. {{{
@@ -294,12 +291,9 @@ uint8_t next_move() {
 	// Finish. {{{
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
-		sp.active = false;
 		//debug("space %d axes %d motors %d", s, sp.num_axes, sp.num_motors);
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			//debug("axis %d", a);
-			if (sp.axis[a]->settings[current_fragment].dist != 0 || sp.axis[a]->settings[current_fragment].next_dist != 0)
-				sp.active = true;
 			sp.axis[a]->settings[current_fragment].main_dist = sp.axis[a]->settings[current_fragment].dist * (1 - settings[current_fragment].fp);
 			// Fill target for filling endpos below.
 			if ((sp.axis[a]->settings[current_fragment].dist > 0 && sp.axis[a]->settings[current_fragment].next_dist < 0) || (sp.axis[a]->settings[current_fragment].dist < 0 && sp.axis[a]->settings[current_fragment].next_dist > 0))
@@ -307,7 +301,7 @@ uint8_t next_move() {
 			else
 				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->source + sp.axis[a]->settings[current_fragment].dist + sp.axis[a]->settings[current_fragment].next_dist;
 #ifdef DEBUG_MOVE
-			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d", s, a, F(sp.axis[a]->settings[current_fragment].dist), F(sp.axis[a]->settings[current_fragment].main_dist), F(sp.axis[a]->settings[current_fragment].next_dist), sp.motor[a]->current_pos);
+			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d", s, a, F(sp.axis[a]->settings[current_fragment].dist), F(sp.axis[a]->settings[current_fragment].main_dist), F(sp.axis[a]->settings[current_fragment].next_dist), sp.motor[a]->settings[current_fragment].current_pos);
 #endif
 		}
 		bool ok = true;
@@ -326,75 +320,67 @@ uint8_t next_move() {
 	debug("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f s tp=%f s", F(settings[current_fragment].f0), F(settings[current_fragment].fp), F(settings[current_fragment].fq), F(v0), F(vp), F(vq), F(settings[current_fragment].t0), F(settings[current_fragment].tp));
 #endif
 	if (!moving) {
-		settings[current_fragment].hwtime = 0;
-		last_time = 0;
-		last_current_time = 0;
+#ifdef DEBUG_MOVE
+		debug("starting new move");
+#endif
+		// Copy all settings to previous fragment, in case this fragment gets interrupted.
+		int cf = current_fragment;
 		set_current_fragment((current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
-		current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
+		current_fragment = cf;
+		//debug("curf1 %d", current_fragment);
+		// Reset time.
+		settings[current_fragment].hwtime = 0;
+		settings[current_fragment].last_time = 0;
+		settings[current_fragment].last_current_time = 0;
 	}
 	//debug("last=%ld", F(long(settings[current_fragment].last_time)));
 	//debug("moving->true");
 	moving = true;
-	settings[current_fragment].start_time = last_time - uint32_t(settings[current_fragment].f0 / fabs(vp) * 1e6);
+	settings[current_fragment].start_time = settings[current_fragment].last_time - uint32_t(settings[current_fragment].f0 / fabs(vp) * 1e6);
 	//debug("start=%ld, last-start=%ld", F(long(settings[current_fragment].start_time)), F(long(settings[current_fragment].last_time - settings[current_fragment].start_time)));
 	// }}}
 	return num_cbs;
 }
 
-void abort_move(int fragment, int pos) { // {{{
+void abort_move(int pos) { // {{{
+	if (!moving)
+		return;
+	aborting = true;
+	//debug("abort; discarding %d fragments, regenerating %d ticks", FRAGMENTS_PER_BUFFER - free_fragments, pos);
 	//debug("try aborting move");
 	// Copy over all settings from end of previous fragment.
-	int f = (current_fragment - fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-	current_fragment = (f - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+	int f = (current_fragment + free_fragments) % FRAGMENTS_PER_BUFFER;
+	int prev_f = (f - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+	current_fragment = prev_f;
 	set_current_fragment(f);
+	//debug("curf2 %d", current_fragment);
 	current_fragment_pos = 0;
-	while (current_fragment_pos < pos) {
-		for (int s = 0; s < num_spaces; ++s) {
-			Space &sp = spaces[s];
-			for (int m = 0; m < sp.num_motors; ++m) {
-				debug("pos %d %d %d", current_fragment_pos, pos, m);
-				int value = sp.motor[m]->settings[current_fragment].data[current_fragment_pos >> 1] >> (4 * current_fragment_pos & 0x1);
-				sp.motor[m]->settings[current_fragment].hwcurrent_pos += sp.motor[m]->settings[current_fragment].dir * value;
-			}
+	free_fragments = FRAGMENTS_PER_BUFFER;
+	while (current_fragment_pos < pos)
+		apply_tick();
+	// Copy settings back to previous fragment.
+	set_current_fragment(prev_f);
+	current_fragment = f;
+	//debug("curf3 %d", current_fragment);
+	current_fragment_pos = 0;
+	//debug("aborting move");
+	for (uint8_t s = 0; s < num_spaces; ++s) {
+		Space &sp = spaces[s];
+		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			//debug("setting axis %d source to %f", a, F(sp.axis[a]->current));
+			sp.axis[a]->source = sp.axis[a]->current;
+			sp.axis[a]->settings[current_fragment].dist = NAN;
+			sp.axis[a]->settings[current_fragment].next_dist = NAN;
 		}
-		current_fragment_pos += 1;
-		if (current_fragment_pos == pos)
-			break;
-		settings[current_fragment].hwtime += hwtime_step;
-		handle_motors(settings[current_fragment].hwtime);
+		for (uint8_t m = 0; m < sp.num_motors; ++m)
+			sp.motor[m]->settings[current_fragment].last_v = 0;
 	}
-	if (moving) {
-		//debug("aborting move");
-		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = spaces[s];
-			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				//debug("setting axis %d source to %f", a, F(sp.axis[a]->current));
-				sp.axis[a]->source = sp.axis[a]->current;
-				sp.axis[a]->settings[current_fragment].dist = NAN;
-				sp.axis[a]->settings[current_fragment].next_dist = NAN;
-			}
-			for (uint8_t m = 0; m < sp.num_motors; ++m)
-				sp.motor[m]->settings[current_fragment].last_v = 0;
-		}
-		//debug("moving->false");
-		moving = false;
-		current_fragment_pos = 0;
-		reset_dirs(current_fragment);
-		move_prepared = false;
+	//debug("moving->false");
+	moving = false;
+	reset_dirs(current_fragment);
+	move_prepared = false;
 #ifdef DEBUG_MOVE
-		debug("move no longer prepared");
+	debug("move no longer prepared");
 #endif
-		if (settings[current_fragment].t0 == 0 && (queue_end != queue_start || queue_full)) {
-			// This was probably the preparation for a move; remove the move itself from the queue.
-			// If it wasn't, doing this doesn't really harm either.
-			if (queue_end == queue_start)
-				send_host(CMD_CONTINUE, 0);
-			if (queue[queue_start].cb) {
-				//debug("movecb 4");
-				send_host(CMD_MOVECB, 1);
-			}
-			queue_start = (queue_start + 1) % QUEUE_LENGTH;
-			queue_full = false;
-		}
-	}
+	aborting = false;
 } // }}}

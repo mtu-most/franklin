@@ -122,6 +122,8 @@ void Temp::init() {
 }
 
 void Temp::free() {
+	if (thermistor_pin.valid())
+		arch_setup_temp(~0, thermistor_pin.pin, false);
 	power_pin.read(0);
 	thermistor_pin.read(0);
 }

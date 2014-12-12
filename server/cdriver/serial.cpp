@@ -175,7 +175,7 @@ void serial(uint8_t which)
 						sending_to_host = false;
 						//debug("received OK; sending next to host (if any)");
 						if (stopping == 1) {
-							debug("done stopping");
+							//debug("done stopping");
 							stopping = 0;
 						}
 						if (hostqueue_head)

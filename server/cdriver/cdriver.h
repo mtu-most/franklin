@@ -151,7 +151,8 @@ struct History
 	float f0, f1, f2, fp, fq, fmain;
 	int fragment_length;
 	int num_active_motors;
-	uint32_t hwtime, start_time;
+	uint32_t hwtime, start_time, last_time, last_current_time;
+	int cbs;
 };
 
 struct Motor_History
@@ -161,7 +162,6 @@ struct Motor_History
 	float last_v;		// v during last iteration, for using limit_a [m/s].
 	float target_v, target_dist;	// Internal values for moving.
 	int32_t current_pos, hwcurrent_pos;	// Current position of motor (in steps), and what the hardware currently thinks.
-	bool hwdir;
 	float endpos;
 };
 
@@ -231,7 +231,6 @@ struct Space
 	uint8_t num_axes, num_motors;
 	Motor **motor;
 	Axis **axis;
-	bool active;
 	void load_info(int32_t &addr);
 	void load_axis(uint8_t a, int32_t &addr);
 	void load_motor(uint8_t m, int32_t &addr);
@@ -360,9 +359,9 @@ EXTERN uint8_t audio_head, audio_tail, audio_state;
 EXTERN uint32_t audio_start;
 EXTERN int16_t audio_us_per_sample;
 #endif
-EXTERN bool moving;
+EXTERN bool moving, aborting;
 EXTERN int stopping;		// From limit.
-EXTERN bool stop_pending;	// From abort_move.
+EXTERN bool stop_pending;
 EXTERN float done_factor;
 EXTERN uint8_t requested_temp;
 EXTERN bool refilling;
@@ -372,7 +371,6 @@ EXTERN int current_fragment_pos;
 EXTERN int hwtime_step;
 EXTERN int free_fragments;
 EXTERN struct pollfd pollfds[2];
-EXTERN uint32_t last_time, last_current_time;
 
 #if DEBUG_BUFFER_LENGTH > 0
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
@@ -399,7 +397,7 @@ void send_host(char cmd, int s = 0, int m = 0, float f = 0, int e = 0, int len =
 
 // move.cpp
 uint8_t next_move();
-void abort_move(int fragment, int pos);
+void abort_move(int pos);
 
 // setup.cpp
 void setup(char const *port);
@@ -419,7 +417,7 @@ void handle_temp(int id, int temp);
 void reset_dirs(int fragment);
 void buffer_refill();
 void set_current_fragment(int fragment);
-void handle_motors(unsigned long long current_time);
+void apply_tick();
 
 // globals.cpp
 bool globals_load(int32_t &address);

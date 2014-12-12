@@ -82,6 +82,7 @@ static inline int hwpacketsize(int len, int *available) {
 	case HWC_HOMED:
 		return 1 + 4 * avr_active_motors;
 	case HWC_STOPPED:
+		return 2 + 4 * avr_active_motors;
 	case HWC_LIMIT:
 		return 3 + 4 * avr_active_motors;
 	case HWC_SENSE0:
@@ -245,10 +246,12 @@ static inline void avr_get_current_pos(int offset) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			//debug("cp %d %d %d", ts, tm, spaces[ts].motor[tm]->hwcurrent_pos);
+			debug("cp %d %d %d", ts, tm, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
 		}
 	}
 }
+
+static inline void arch_stop();
 
 static inline void hwpacket(int len) {
 	// Handle data in command[1].
@@ -279,21 +282,18 @@ static inline void hwpacket(int len) {
 			which -= spaces[s].num_motors;
 		}
 		//debug("cp1 %d", spaces[s].motor[m]->current_pos);
-		int offset, fragment, pos;
+		int offset, pos;
 		bool limit = (command[1][0] & ~0x10) == HWC_LIMIT;
 		if (limit) {
-			debug("limit!");
+			//debug("limit!");
 			offset = 3;
-			fragment = command[1][1];
 			pos = command[1][2];
 		}
 		else
 			offset = 2;
 		avr_get_current_pos(offset);
 		if (limit) {
-			debug("limit!");
-			abort_move(fragment, pos);
-			stopping = 2;
+			abort_move(pos);
 			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_m, cbs_after_current_move);
 			cbs_after_current_move = 0;
 			avr_running = false;
@@ -301,7 +301,7 @@ static inline void hwpacket(int len) {
 		}
 		else {
 			spaces[s].motor[m]->sense_state = 1;
-			send_host(CMD_SENSE, s, m, 0, (command[1][1] & ~0x10) == HWC_SENSE1);
+			send_host(CMD_SENSE, s, m, 0, (command[1][0] & ~0x10) == HWC_SENSE1);
 		}
 		return;
 	}
@@ -321,7 +321,7 @@ static inline void hwpacket(int len) {
 		}
 		avr_adc[pin] = (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
 		avr_write_ack();
-		if (avr_adc_id[pin] != ~0)
+		if (avr_adc_id[pin] >= 0 && avr_adc_id[pin] < num_temps)
 			handle_temp(avr_adc_id[pin], avr_adc[pin]);
 		return;
 	}
@@ -333,6 +333,11 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_DONE:
 	{
+		int cbs = 0;
+		for (int i = 0; i < command[1][1]; ++i)
+			cbs += settings[(current_fragment + free_fragments + i + (moving ? 1 : 0)) % FRAGMENTS_PER_BUFFER].cbs;
+		if (cbs)
+			send_host(CMD_MOVECB, cbs);
 		free_fragments += command[1][1];
 		avr_write_ack();
 		if (!out_busy)
@@ -652,6 +657,10 @@ static inline void arch_start_move() {
 }
 
 static inline void arch_stop() {
+	if (out_busy) {
+		stop_pending = true;
+		return;
+	}
 	avr_running = false;
 	avr_buffer[0] = HWC_STOP;
 	if (avr_wait_for_reply)
@@ -661,9 +670,9 @@ static inline void arch_stop() {
 	avr_send();
 	avr_get_reply();
 	avr_write_ack();
-	avr_get_current_pos(3);
+	avr_get_current_pos(2);
 	//debug("aborting at request");
-	abort_move(command[1][1], command[1][2]);
+	abort_move(command[1][1]);
 }
 // }}}
 

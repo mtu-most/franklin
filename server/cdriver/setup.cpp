@@ -41,6 +41,7 @@ void setup(char const *port)
 	hwtime_step = 1000;	// TODO: make this dynamic.
 	//debug("moving->false");
 	moving = false;
+	aborting = false;
 	stopping = 0;
 	stop_pending = false;
 	move_prepared = false;
@@ -52,7 +53,6 @@ void setup(char const *port)
 	audio_state = 0;
 	audio_us_per_sample = 125; // 1000000 / 8000;
 #endif
-	last_current_time = utime();
 	num_spaces = 0;
 	spaces = NULL;
 	num_temps = 0;
@@ -70,9 +70,14 @@ void setup(char const *port)
 	}
 	// Now set things up that need information from the firmware.
 	settings = new History[FRAGMENTS_PER_BUFFER];
-	settings[current_fragment].t0 = 0;
-	settings[current_fragment].f0 = 0;
-	settings[current_fragment].num_active_motors = 0;
-	settings[current_fragment].hwtime = 0;
+	for (int i = 0; i < 2; ++i) {
+		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		settings[f].t0 = 0;
+		settings[f].f0 = 0;
+		settings[f].num_active_motors = 0;
+		settings[f].hwtime = 0;
+		settings[f].last_current_time = 0;
+		settings[f].cbs = 0;
+	}
 	free_fragments = FRAGMENTS_PER_BUFFER;
 }
