@@ -219,19 +219,6 @@ function Pins_temp(num, dummy, table) {
 // }}}
 
 // Gpio. {{{
-function Gpio_setup(num) {
-	var select = Create('select');
-	select.Add(temprange());
-	select.id = make_id(printer, [['gpio', num], 'master']);
-	var button = Create('button', 'button').AddText('Set');
-	button.type = 'button';
-	button.index = num;
-	button.printer = printer;
-	button.AddEvent('click', function() { set_gpio_master(this.printer, this.index); });
-	var value = Float([['gpio', num], 'value'], 1, 1);
-	return make_tablerow(gpio_name(num), [[select, button], value], ['rowtitle2'], [['gpio', num], 'settings']);
-}
-
 function Pins_gpio(num) {
 	var e = [['Pin', 'pin']];
 	for (var i = 0; i < e.length; ++i)
@@ -638,21 +625,6 @@ function Printer() {	// {{{
 		'Temperature at which the thermistor has value Rc.  Normally 20.',
 		"Temperature dependence of the thermistor.  Normally around 3800.  It can be found in the thermistor's data sheet.  Or, if β is NaN, the result is ax+b with x the measured ADC value."
 	]).AddMultiple('temp', Temp_setup)]);
-	// }}}
-	// Gpio. {{{
-	setup.Add([make_table().AddMultipleTitles([
-		'Gpio',
-		'Master temp',
-		'Threshold(°C)'
-	], [
-		'htitle2',
-		'title2',
-		'title2'
-	], [
-		null,
-		'If set to something other than None, the pin will automatically be set and reset depending on the value of the selected temperature control.',
-		'If a master temp is set, the pin will be on if that temp is above this value, otherwise it will be off.'
-	]).AddMultiple('gpio', Gpio_setup)]);
 	// }}}
 	// Pins. {{{
 	var pins = setup.Add(make_table(Pin('LED', [null, 'led_pin']), Pin('Probe', [null, 'probe_pin'])));

@@ -9,8 +9,6 @@ void Temp::load(int32_t &addr, int id)
 	beta = read_float(addr);
 	K = exp(logRc - beta / Tc);
 	//debug("K %f R0 %f R1 %f logRc %f Tc %f beta %f", F(K), F(R0), F(R1), F(logRc), F(Tc), F(beta));
-	for (uint8_t gpio = following_gpios; gpio < num_gpios; gpio = gpios[gpio].next)
-		gpios[gpio].adcvalue = toadc(gpios[gpio].value);
 	/*
 	core_C = read_float(addr);
 	shell_C = read_float(addr);
@@ -172,16 +170,6 @@ void handle_temp(int id, int temp) { // {{{
 		temps[id].adcmin_alarm = MAXINT;
 		temps[id].adcmax_alarm = MAXINT;
 		send_host(CMD_TEMPCB, id);
-	}
-	// And handle any linked gpios.
-	for (uint8_t g = temps[id].following_gpios; g < num_gpios; g = gpios[g].next) {
-		//debug("setting gpio for temp %d: %d %d", id, temp, g->adcvalue);
-		// adc values are lower for higher temperatures.
-		//debug("check %d %d", temp, int(gpios[g].adcvalue));
-		if (temp < gpios[g].adcvalue)
-			SET(gpios[g].pin);
-		else
-			RESET(gpios[g].pin);
 	}
 	/*
 	// TODO: Make this work and decide on units.

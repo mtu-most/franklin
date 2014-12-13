@@ -280,10 +280,6 @@ struct Gpio
 {
 	Pin_t pin;
 	uint8_t state;
-	uint8_t master;
-	float value;
-	int32_t adcvalue;
-	uint8_t prev, next;
 	void setup(uint8_t new_state);
 	void load(uint8_t self, int32_t &addr);
 	void save(int32_t &addr);

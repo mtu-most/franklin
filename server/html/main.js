@@ -839,14 +839,6 @@ function update_gpio(index) { // {{{
 		get_element(printer, [['gpio', index], 'state']).checked = true;
 	else
 		get_element(printer, [['gpio', index], 'state']).checked = false;
-	var master = update_temprange([['gpio', index], 'master']);
-	update_float(printer, [['gpio', index], 'value']);
-	//if (master != 0xff) {
-		//get_element(printer, [['gpio', index], 'state'], 0).AddClass('empty');
-	//}
-	//else {
-		//get_element(printer, [['gpio', index], 'state'], 0).RemoveClass('empty');
-	//}
 } // }}}
 // }}}
 
@@ -1178,12 +1170,6 @@ function set_file(printer, id) { // {{{
 		set_value(printer, id, this.result, errors, this.name);
 	};
 	reader.readAsBinaryString(element.files[0]);
-} // }}}
-
-function set_gpio_master(printer, index) { // {{{
-	var id = [['gpio', index], 'master'];
-	var e = get_element(printer, id);
-	set_value(printer, id, Number(e.childNodes[e.selectedIndex].value));
 } // }}}
 // }}}
 

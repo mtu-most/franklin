@@ -253,7 +253,7 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 		// Axes without a limit switch: extruders.
 		if (motors_busy && old_steps_per_m != motor[m]->steps_per_m) {
 			int32_t cp = motor[m]->settings[current_fragment].current_pos;
-			float pos = motor[m]->settings[current_fragment].current_pos / old_steps_per_m;
+			float pos = cp / old_steps_per_m;
 			motor[m]->settings[current_fragment].current_pos = pos * motor[m]->steps_per_m;
 			motor[m]->settings[current_fragment].hwcurrent_pos += motor[m]->settings[current_fragment].current_pos - cp;
 			arch_addpos(id, m, motor[m]->settings[current_fragment].current_pos - cp);
@@ -662,7 +662,7 @@ void set_current_fragment(int fragment) {
 	settings[fragment].fragment_length = 0;
 	settings[fragment].cbs = 0;
 	current_fragment = fragment;
-	debug("curf4 %d", current_fragment);
+	//debug("curf4 %d", current_fragment);
 	current_fragment_pos = 0;
 	reset_dirs(current_fragment);
 }
@@ -670,7 +670,7 @@ void set_current_fragment(int fragment) {
 void send_fragment() {
 	if (current_fragment_pos == 0)
 		return;
-	debug("sending %d", current_fragment);
+	//debug("sending %d", current_fragment);
 	settings[current_fragment].fragment_length = current_fragment_pos;
 	free_fragments -= 1;
 	arch_send_fragment(current_fragment);
@@ -684,6 +684,8 @@ void send_fragment() {
 		for (int m = 0; m < sp.num_motors; ++m)
 			memset(sp.motor[m]->settings[current_fragment].data, 0, BYTES_PER_FRAGMENT);
 	}
+	if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
+		arch_start_move();
 }
 
 void apply_tick() {
@@ -711,7 +713,7 @@ void buffer_refill() {
 	refilling = true;
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
 	while (moving && !stopping && free_fragments > 1) {
-		debug("refill %d %d %d", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings[current_fragment].current_pos);
+		//debug("refill %d %d %d", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings[current_fragment].current_pos);
 		// fill fragment until full or dirchange.
 		for (uint8_t s = 0; s < num_spaces && !stopping; ++s) {
 			Space &sp = spaces[s];
@@ -725,11 +727,9 @@ void buffer_refill() {
 					settings[current_fragment].num_active_motors += 1;
 					continue;
 				}
-				if (current_fragment_pos > 0 && ((mtr.settings[current_fragment].dir < 0 && mtr.settings[current_fragment].current_pos > mtr.settings[current_fragment].hwcurrent_pos) || (mtr.settings[current_fragment].dir > 0 && mtr.settings[current_fragment].current_pos < mtr.settings[current_fragment].hwcurrent_pos))) {
+				if ((mtr.settings[current_fragment].dir < 0 && mtr.settings[current_fragment].current_pos > mtr.settings[current_fragment].hwcurrent_pos) || (mtr.settings[current_fragment].dir > 0 && mtr.settings[current_fragment].current_pos < mtr.settings[current_fragment].hwcurrent_pos)) {
 					//debug("dir change %d %d", s, m);
 					send_fragment();
-					if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
-						arch_start_move();
 					if (free_fragments <= 0 && !stopping) {
 						refilling = false;
 						return;
@@ -744,7 +744,7 @@ void buffer_refill() {
 			return;
 		}
 		apply_tick();
-		debug("refill2 %d %d", current_fragment, spaces[0].motor[0]->settings[current_fragment].current_pos);
+		//debug("refill2 %d %d", current_fragment, spaces[0].motor[0]->settings[current_fragment].current_pos);
 		if ((!moving && current_fragment_pos > 0) || current_fragment_pos >= BYTES_PER_FRAGMENT * 2) {
 			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT * 2);
 			if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)

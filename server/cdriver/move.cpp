@@ -361,7 +361,7 @@ void abort_move(int pos) { // {{{
 	copy_fragment_settings(f, prev_f);
 	current_fragment_pos = 0;
 	current_fragment = f;
-	debug("curf3 %d", current_fragment);
+	//debug("curf3 %d", current_fragment);
 	//debug("aborting move");
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];

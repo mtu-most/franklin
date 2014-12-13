@@ -1432,17 +1432,15 @@ class Printer: # {{{
 	# }}}
 	class Gpio: # {{{
 		def read(self, data):
-			self.pin, self.state, self.master, value = struct.unpack('<HBBf', data)
-			self.value = value - C0
+			self.pin, self.state, = struct.unpack('<HB', data)
 		def write(self):
-			return struct.pack('<HBBf', self.pin, self.state, self.master, self.value + C0)
+			return struct.pack('<HB', self.pin, self.state)
 		def export(self):
-			return [self.pin, self.state, self.master, self.value]
+			return [self.pin, self.state]
 		def export_settings(self, num):
 			ret = '[gpio %d]\r\n' % num
 			ret += 'pin = %s\r\n' % write_pin(self.pin)
-			ret += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('state', 'master')])
-			ret += 'value = %f\r\n' % self.value
+			ret += 'state = %d\r\n' % self.state
 			return ret
 	# }}}
 	# }}}
@@ -1852,7 +1850,7 @@ class Printer: # {{{
 				'general': {'name', 'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit'},
 				'space': {'type', 'max_deviation', 'num_axes', 'delta_angle'},
 				'temp': {'R0', 'R1', 'Rc', 'Tc', 'beta', 'power_pin', 'thermistor_pin'},
-				'gpio': {'pin', 'state', 'master', 'value'},
+				'gpio': {'pin', 'state'},
 				'axis': {'offset', 'park', 'park_order', 'max_v', 'min', 'max'},
 				'motor': {'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_m', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'},
 				'extruder': {'dx', 'dy', 'dz'},
@@ -2463,11 +2461,11 @@ class Printer: # {{{
 	# Gpio {{{
 	def get_gpio(self, gpio):
 		ret = {}
-		for key in ('pin', 'state', 'master', 'value'):
+		for key in ('pin', 'state'):
 			ret[key] = getattr(self.gpios[gpio], key)
 		return ret
 	def set_gpio(self, gpio, update = True, **ka):
-		for key in ('pin', 'state', 'master', 'value'):
+		for key in ('pin', 'state'):
 			if key in ka:
 				setattr(self.gpios[gpio], key, ka.pop(key))
 		self._send_packet(struct.pack('<BB', self.command['WRITE_GPIO'], gpio) + self.gpios[gpio].write())

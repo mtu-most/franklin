@@ -246,7 +246,7 @@ static inline void avr_get_current_pos(int offset) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			debug("cp %d %d %d", ts, tm, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
+			//debug("cp %d %d %d", ts, tm, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
 		}
 	}
 }
@@ -433,7 +433,7 @@ static inline bool GET(Pin_t _pin, bool _default) {
 	avr_call1(HWC_GETPIN, _pin.pin);
 	avr_get_reply();
 	avr_write_ack();
-	return _pin.inverted() ^ command[1][2];
+	return _pin.inverted() ^ command[1][1];
 }
 // }}}
 
@@ -482,16 +482,21 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 	//debug("arch motor change %d %d %d %x", s, sm, m, p);
 	avr_buffer[2] = (mtr.step_pin.valid() ? mtr.step_pin.pin : ~0);
 	avr_buffer[3] = (mtr.dir_pin.valid() ? mtr.dir_pin.pin : ~0);
+	bool mininvert, maxinvert;
 	if (mtr.dir_pin.inverted()) {
 		avr_buffer[4] = (mtr.limit_max_pin.valid() ? mtr.limit_max_pin.pin : ~0);
 		avr_buffer[5] = (mtr.limit_min_pin.valid() ? mtr.limit_min_pin.pin : ~0);
+		mininvert = mtr.limit_max_pin.inverted();
+		maxinvert = mtr.limit_min_pin.inverted();
 	}
 	else {
 		avr_buffer[4] = (mtr.limit_min_pin.valid() ? mtr.limit_min_pin.pin : ~0);
 		avr_buffer[5] = (mtr.limit_max_pin.valid() ? mtr.limit_max_pin.pin : ~0);
+		mininvert = mtr.limit_min_pin.inverted();
+		maxinvert = mtr.limit_max_pin.inverted();
 	}
 	avr_buffer[6] = (mtr.sense_pin.valid() ? mtr.sense_pin.pin : ~0);
-	avr_buffer[7] = ACTIVE | (mtr.step_pin.inverted() ? INVERT_STEP : 0) | (mtr.limit_min_pin.inverted() ? INVERT_LIMIT_MIN : 0) | (mtr.limit_max_pin.inverted() ? INVERT_LIMIT_MAX : 0);
+	avr_buffer[7] = ACTIVE | (mtr.step_pin.inverted() ? INVERT_STEP : 0) | (mininvert ? INVERT_LIMIT_MIN : 0) | (maxinvert ? INVERT_LIMIT_MAX : 0);
 	prepare_packet(avr_buffer, 8);
 	avr_send();
 }

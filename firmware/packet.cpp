@@ -120,10 +120,7 @@ void packet()
 			SET(motor[m].step_pin);
 		else
 			RESET(motor[m].step_pin);
-		if (motor[m].flags & Motor::INVERT_STEP)
-			SET(motor[m].dir_pin);
-		else
-			RESET(motor[m].dir_pin);
+		RESET(motor[m].dir_pin);
 		SET_INPUT(motor[m].limit_min_pin);
 		SET_INPUT(motor[m].limit_max_pin);
 		SET_INPUT(motor[m].sense_pin);
