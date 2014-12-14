@@ -20,3 +20,4 @@ override_dh_auto_clean:
 	dh_auto_clean
 	rm -f *.pyc *.pyo server/franklin.8
 	rm -rf firmware/build-*
+	$(MAKE) -C server/cdriver clean

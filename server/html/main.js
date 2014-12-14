@@ -1,7 +1,7 @@
 // vim: set foldmethod=marker :
 // Variables.  {{{
-var get_pointer_pos_xy = function() { return [NaN, NaN]; }
-var get_pointer_pos_z = function() { return [NaN, NaN]; }
+var get_pointer_pos_xy = function() { return [NaN, NaN]; };
+var get_pointer_pos_z = function() { return [NaN, NaN]; };
 var ports;
 var labels_element, printers_element;
 var selected_port, selected_printer;
@@ -1371,7 +1371,7 @@ function redraw_canvas() { // {{{
 		x /= canvas.width / factor;
 		y /= -canvas.width / factor;
 		return [x, y];
-	}
+	};
 
 	// Draw outline.
 	c.strokeStyle = '#888';
@@ -1446,7 +1446,7 @@ function redraw_canvas() { // {{{
 		z /= -zfactor;
 		z += zaxis.max;
 		return z;
-	}
+	};
 
 	// Draw current position.
 	zc.beginPath();
