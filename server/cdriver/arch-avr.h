@@ -246,7 +246,7 @@ static inline void avr_get_current_pos(int offset) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			//debug("cp %d %d %d", ts, tm, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
+			debug("cp %d %d %d", ts, tm, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
 		}
 	}
 }
@@ -342,6 +342,13 @@ static inline void hwpacket(int len) {
 		avr_write_ack();
 		if (!out_busy)
 			buffer_refill();
+		return;
+	}
+	case HWC_HOMED:
+	{
+		avr_get_current_pos(1);
+		avr_write_ack();
+		send_host(CMD_HOMED);
 		return;
 	}
 	default:
@@ -468,8 +475,7 @@ enum MotorFlags {
 	INVERT_LIMIT_MIN = 8,
 	INVERT_LIMIT_MAX = 16,
 	INVERT_STEP = 32,
-	SENSE_STATE = 64,
-	ACTIVE = 128
+	SENSE_STATE = 64
 };
 
 static inline void arch_motor_change(uint8_t s, uint8_t sm) {
@@ -496,27 +502,35 @@ static inline void arch_motor_change(uint8_t s, uint8_t sm) {
 		maxinvert = mtr.limit_max_pin.inverted();
 	}
 	avr_buffer[6] = (mtr.sense_pin.valid() ? mtr.sense_pin.pin : ~0);
-	avr_buffer[7] = ACTIVE | (mtr.step_pin.inverted() ? INVERT_STEP : 0) | (mininvert ? INVERT_LIMIT_MIN : 0) | (maxinvert ? INVERT_LIMIT_MAX : 0);
+	avr_buffer[7] = (mtr.step_pin.inverted() ? INVERT_STEP : 0) | (mininvert ? INVERT_LIMIT_MIN : 0) | (maxinvert ? INVERT_LIMIT_MAX : 0);
 	prepare_packet(avr_buffer, 8);
 	avr_send();
 }
 
 static inline void arch_change(bool motors) {
+	int old_active_motors = avr_active_motors;
+	if (motors) {
+		avr_active_motors = 0;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			for (uint8_t m = 0; m < spaces[s].num_motors; ++m) {
+				avr_active_motors += 1;
+			}
+		}
+	}
 	avr_buffer[0] = HWC_SETUP;
-	avr_buffer[1] = led_pin.valid() ? led_pin.pin : ~0;
+	avr_buffer[1] = avr_active_motors;
 	for (int i = 0; i < 4; ++i)
 		avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
-	prepare_packet(avr_buffer, 6);
+	avr_buffer[6] = led_pin.valid() ? led_pin.pin : ~0;
+	prepare_packet(avr_buffer, 7);
 	avr_send();
 	if (motors) {
-		int num_motors = 0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			for (uint8_t m = 0; m < spaces[s].num_motors; ++m) {
 				arch_motor_change(s, m);
-				num_motors += 1;
 			}
 		}
-		for (int m = num_motors; m < avr_active_motors; ++m) {
+		for (int m = old_active_motors; m < avr_active_motors; ++m) {
 			avr_buffer[0] = HWC_MSETUP;
 			avr_buffer[1] = m;
 			//debug("arch motor change %d %d %d %x", s, sm, m, p);
@@ -529,7 +543,6 @@ static inline void arch_change(bool motors) {
 			prepare_packet(avr_buffer, 8);
 			avr_send();
 		}
-		avr_active_motors = num_motors;
 	}
 }
 
@@ -678,6 +691,17 @@ static inline void arch_stop() {
 	avr_get_current_pos(2);
 	//debug("aborting at request");
 	abort_move(command[1][1]);
+}
+
+static inline void arch_home() {
+	avr_buffer[0] = HWC_HOME;
+	int speed = 10000;	// μs/step.
+	for (int i = 0; i < 4; ++i)
+		avr_buffer[1 + i] = (speed >> (8 * i)) & 0xff;
+	for (int m = 0; m < avr_active_motors; ++m)
+		avr_buffer[5 + m] = command[0][2 + m];
+	prepare_packet(avr_buffer, 5 + avr_active_motors);
+	avr_send();
 }
 // }}}
 

@@ -79,6 +79,7 @@ enum Command {
 	CMD_WRITE_GPIO,	// 1 byte: which channel; n bytes: data.
 	CMD_QUEUED,	// 1 byte: 0: query queue length; 1: stop and query queue length.  Reply: QUEUE.
 	CMD_READPIN,	// 1 byte: which channel. Reply: GPIO.
+	CMD_HOME,	// 1 byte: homing space; n bytes: homing type (0=pos, 1=neg, 3=no)
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_sample.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	// to host
@@ -89,6 +90,7 @@ enum Command {
 	CMD_DATA,	// n byte: requested data.
 	CMD_PIN,	// 1 byte: 0 or 1: pin state.
 	CMD_QUEUE,	// 1 byte: current number of records in queue.
+	CMD_HOMED,	// 0
 		// asynchronous events.
 	CMD_MOVECB,	// 1 byte: number of movecb events.
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
@@ -412,7 +414,6 @@ void handle_temp(int id, int temp);
 // space.cpp
 void reset_dirs(int fragment);
 void buffer_refill();
-void set_current_fragment(int fragment);
 void copy_fragment_settings(int src, int dst);
 void apply_tick();
 void send_fragment();

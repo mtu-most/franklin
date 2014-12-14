@@ -21,9 +21,7 @@ static void do_steps(Dir dir, uint8_t m, uint8_t value) {
 
 static void handle_motors(uint32_t current_time) {
 	// Check sensors.
-	for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-		if (!(motor[m].flags & Motor::ACTIVE))
-			continue;
+	for (uint8_t m = 0; m < active_motors; ++m) {
 		Fragment &fragment = buffer[motor[m].buffer][current_fragment];
 		if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
 			continue;
@@ -63,9 +61,7 @@ static void handle_motors(uint32_t current_time) {
 		if (current_time - start_time < home_step_time)
 			return;
 		start_time += home_step_time;
-		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-			if (!(motor[m].flags & Motor::ACTIVE))
-				continue;
+		for (uint8_t m = 0; m < active_motors; ++m) {
 			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
 			if (fragment.dir > 1)
 				continue;
@@ -79,8 +75,10 @@ static void handle_motors(uint32_t current_time) {
 			}
 			// Limit pin no longer triggered.  Stop moving and possibly notify host.
 			fragment.dir = DIR_NONE;
-			if (!--homers)
+			if (!--homers) {
+				stopped = true;
 				try_send_next();
+			}
 		}
 	}
 	else {
@@ -104,9 +102,7 @@ static void handle_motors(uint32_t current_time) {
 			}
 			if (stopped)
 				break;
-			for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-				if (!(motor[m].flags & Motor::ACTIVE))
-					continue;
+			for (uint8_t m = 0; m < active_motors; ++m) {
 				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
 				uint8_t value = (fragment.samples[current_fragment_pos >> 1] >> (4 * (current_fragment_pos & 1))) & 0xf;
 				do_steps(fragment.dir, m, value);

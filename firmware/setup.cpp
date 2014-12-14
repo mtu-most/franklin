@@ -45,6 +45,7 @@ void setup()
 	active_motors = 0;
 	homers = 0;
 	home_step_time = 0;
+	temps_disabled = true;
 	
 	arch_setup_end();	// This fills printerid.
 	Serial.write(CMD_ID);

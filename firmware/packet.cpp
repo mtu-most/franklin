@@ -14,6 +14,8 @@ void packet()
 		// A server is running; start the watchdog.
 		watchdog_enable();
 		write_ack();
+		// Because this is a new connection: reset active_motors.
+		active_motors = 0;
 		reply[0] = CMD_READY;
 		reply[1] = 12;
 		*reinterpret_cast <uint32_t *>(&reply[2]) = 0;
@@ -24,6 +26,7 @@ void packet()
 		reply[10] = FRAGMENTS_PER_BUFFER;
 		reply[11] = BYTES_PER_FRAGMENT;
 		reply_ready = 12;
+		temps_disabled = false;
 		try_send_next();
 		return;
 	}
@@ -57,8 +60,15 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_SETUP");
 #endif
-		led_pin = command[1];
+		if (command[1] > NUM_MOTORS) {
+			debug("num motors %d > available %d", command[1], NUM_MOTORS);
+			write_stall();
+			return;
+		}
+		active_motors = command[1];
 		time_per_sample = *reinterpret_cast <int32_t *>(&command[2]);
+		led_pin = command[6];
+		temps_disabled = false;
 		write_ack();
 		return;
 	}
@@ -99,7 +109,7 @@ void packet()
 		debug("CMD_MSETUP");
 #endif
 		uint8_t m = command[1];
-		if (m >= NUM_MOTORS) {
+		if (m >= active_motors) {
 			debug("MSETUP called for invalid motor %d", m);
 			write_stall();
 			return;
@@ -109,13 +119,9 @@ void packet()
 		motor[m].limit_min_pin = command[4];
 		motor[m].limit_max_pin = command[5];
 		motor[m].sense_pin = command[6];
-		if (motor[m].flags & Motor::ACTIVE)
-			active_motors -= 1;
-		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX | Motor::INVERT_STEP | Motor::ACTIVE;
+		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX | Motor::INVERT_STEP;
 		motor[m].flags &= ~mask;
 		motor[m].flags |= command[7] & mask;
-		if (motor[m].flags & Motor::ACTIVE)
-			active_motors += 1;
 		if (motor[m].flags & Motor::INVERT_STEP)
 			SET(motor[m].step_pin);
 		else
@@ -161,17 +167,14 @@ void packet()
 			write_stall();
 			return;
 		}
-		if (current_fragment != last_fragment) {
+		if (current_fragment != (last_fragment + 1) % FRAGMENTS_PER_BUFFER) {
 			debug("HOME seen with non-empty buffer");
 			write_stall();
 			return;
 		}
-		uint8_t mi = 0;
-		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-			if (!(motor[m].flags & Motor::ACTIVE))
-				continue;
+		for (uint8_t m = 0; m < active_motors; ++m) {
 			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
-			switch (command[5 + mi]) {
+			switch (command[5 + m]) {
 			case 0:
 				fragment.dir = DIR_POSITIVE;
 				break;
@@ -182,19 +185,17 @@ void packet()
 				fragment.dir = DIR_NONE;
 				break;
 			default:
-				debug("invalid dir in HOME: %d", command[5 + mi]);
+				debug("invalid dir in HOME: %d", command[5 + m]);
 				homers = 0;
 				write_stall();
 				return;
 			}
 			if (fragment.dir <= 1)
 				homers += 1;
-			mi += 1;
 		}
 		home_step_time = *reinterpret_cast <uint32_t *>(&command[1]);
-		if (homers > 0) {
+		if (homers > 0)
 			stopped = false;
-		}
 		start_time = utime();
 		write_ack();
 		return;
@@ -214,9 +215,7 @@ void packet()
 		last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		fragment_len[last_fragment] = command[1];
 		filling = command[2];
-		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-			if (!(motor[m].flags & Motor::ACTIVE))
-				continue;
+		for (uint8_t m = 0; m < active_motors; ++m) {
 			buffer[motor[m].buffer][last_fragment].dir = DIR_NONE;
 		}
 		//debug("new filling: %d %d", filling, last_fragment);
@@ -278,9 +277,7 @@ void packet()
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment_pos;
 		uint8_t mi = 0;
-		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-			if (!(motor[m].flags & Motor::ACTIVE))
-				continue;
+		for (uint8_t m = 0; m < active_motors; ++m) {
 			*reinterpret_cast <uint32_t *>(&reply[2 + 4 * mi]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));
 			++mi;
@@ -321,11 +318,7 @@ void packet()
 		reply[1] = current_fragment_pos;
 		current_fragment_pos = 0;
 		uint8_t mi = 0;
-		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-			if (!(motor[m].flags & Motor::ACTIVE)) {
-				debug("skip abortpos %d", m);
-				continue;
-			}
+		for (uint8_t m = 0; m < active_motors; ++m) {
 			*reinterpret_cast <uint32_t *>(&reply[2 + 4 * mi]) = motor[m].current_pos;
 			debug("abort pos %d %ld", m, motor[m].current_pos);
 			++mi;

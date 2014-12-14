@@ -249,21 +249,23 @@ class Printer: # {{{
 			'WRITE_GPIO': 0x17,
 			'QUEUED': 0x18,
 			'READPIN': 0x19,
-			'AUDIO_SETUP': 0x1a,
-			'AUDIO_DATA': 0x1b}
+			'HOME': 0x1a,
+			'AUDIO_SETUP': 0x1b,
+			'AUDIO_DATA': 0x1c}
 	rcommand = {
-			'TEMP': 0x1c,
-			'POWER': 0x1d,
-			'POS': 0x1e,
-			'DATA': 0x1f,
-			'PIN': 0x20,
-			'QUEUE': 0x21,
-			'MOVECB': 0x22,
-			'TEMPCB': 0x23,
-			'CONTINUE': 0x24,
-			'LIMIT': 0x25,
-			'AUTOSLEEP': 0x26,
-			'SENSE': 0x27}
+			'TEMP': 0x1d,
+			'POWER': 0x1e,
+			'POS': 0x1f,
+			'DATA': 0x20,
+			'PIN': 0x21,
+			'QUEUE': 0x22,
+			'HOMED': 0x23,
+			'MOVECB': 0x24,
+			'TEMPCB': 0x25,
+			'CONTINUE': 0x26,
+			'LIMIT': 0x27,
+			'AUTOSLEEP': 0x28,
+			'SENSE': 0x29}
 	# }}}
 	def _broadcast(self, *a): # {{{
 		self._send(None, 'broadcast', *a)
@@ -458,6 +460,9 @@ class Printer: # {{{
 						call_queue.append((self.movecb.pop(s)[1], [self.movewait == 0]))
 					else:
 						s += 1
+				continue
+			elif cmd == self.rcommand['HOMED']:
+				self._do_home(True)
 				continue
 			if reply:
 				return ('packet', (cmd, s, m, f, e, data))
@@ -982,13 +987,15 @@ class Printer: # {{{
 		# 0: Prepare for next order.
 		# 1: Move to max limit switch or find sense switch.
 		# 2: Move to min limit switch or find sense switch.
-		# 3: Back off.
-		# 4: Move slowly to switch.
-		# 5: Repeat until all home orders are done.
-		# 6: Set current position; move to center (delta only).
-		#log('home %s %s' % (self.home_phase, repr(self.home_target)))
+		# 3: Move slowly away from switch.
+		# 4: Repeat until all home orders are done.
+		# 5: Set current position; move to center (delta only).
+		log('home %s %s' % (self.home_phase, repr(self.home_target)))
 		small_dist = .005
 		if self.home_phase is None:
+			if done is not None:
+				# Continuing call received after homing was aborted; ignore.
+				return
 			# Initial call; start homing.
 			self.home_phase = 0
 			self.home_orig_type = self.spaces[self.home_space].type
@@ -1073,67 +1080,37 @@ class Printer: # {{{
 				return
 			if len(self.home_target) > 0:
 				log('Warning: not all limits were found during homing')
-			# Back off.
 			self.home_phase = 3
-			self.home_target = {}
-			for i, a, m in self.home_motors:
-				if self.pin_valid(m['limit_max_pin']) or (not self.pin_valid(m['limit_min_pin']) and self.pin_valid(m['sense_pin'])):
-					self.spaces[self.home_space].set_current_pos(i, a['min'] + small_dist)
-					self.home_target[i] = a['min'] - self.spaces[self.home_space].axis[i]['offset']
-				elif self.pin_valid(m['limit_min_pin']):
-					self.spaces[self.home_space].set_current_pos(i, a['max'] - small_dist)
-					self.home_target[i] = a['max'] - self.spaces[self.home_space].axis[i]['offset']
-			if len(self.home_target) > 0:
-				self.home_cb[0] = False
-				if self.home_cb not in self.movecb:
-					self.movecb.append(self.home_cb)
-				#log("back t %s" % (self.home_target))
-				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
-				return
-			# Fall through
+			# Fall through.
 		if self.home_phase == 3:
-			# Goto switch slowly.
+			# Move away slowly.
 			self.home_phase = 4
-			self.home_target = {}
-			self.limits[self.home_space].clear()
-			self.sense[self.home_space].clear()
-			small_dist = .01
-			for i, a, m in self.home_motors:
-				self.set_motor((self.home_space, i), max_steps = 1)
-				if self.pin_valid(m['limit_max_pin']) or (not self.pin_valid(m['limit_min_pin']) and self.pin_valid(m['sense_pin'])):
-					self.spaces[self.home_space].set_current_pos(i, a['max'] - 10 * small_dist)
-					self.home_target[i] = a['max'] - self.spaces[self.home_space].axis[i]['offset']
-				elif self.pin_valid(m['limit_min_pin']):
-					self.spaces[self.home_space].set_current_pos(i, a['min'] + 10 * small_dist)
-					self.home_target[i] = a['min'] - self.spaces[self.home_space].axis[i]['offset']
-			if len(self.home_target) > 0:
-				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
-				if self.home_cb not in self.movecb:
-					self.movecb.append(self.home_cb)
-				#log("sp %s t %s" % (self.home_speed, self.home_target))
-				self.goto({self.home_space: self.home_target}, f0 = self.home_speed / (2 * small_dist), cb = True)[1](None)
+			# self.home_space
+			# self.home_motors
+			data = ''
+			num = 0
+			for s, spc in enumerate(self.spaces):
+				if s != self.home_space:
+					data += '\x03' * len(spc.motor)
+				else:
+					for m in spc.motor:
+						if m['home_order'] != self.home_order:
+							data += '\x03'
+						elif self.pin_valid(m['limit_max_pin']) or (not self.pin_valid(m['limit_min_pin']) and self.pin_valid(m['sense_pin'])):
+							data += '\x01'
+							num += 1
+						elif self.pin_valid(m['limit_min_pin']):
+							data += '\x00'
+							num += 1
+						else:
+							data += '\x03'
+			self.home_phase = 4
+			if num > 0:
+				dprint('homing', data)
+				self._send_packet(chr(self.command['HOME']) + data)
 				return
-			# Fall through
+			# Fall through.
 		if self.home_phase == 4:
-			# Continue going to switch slowly.
-			self.pause(True, False)	# Needed if we hit a sense switch.
-			found_limits = False
-			for a in self.limits[self.home_space].keys() + self.sense[self.home_space].keys():
-				if a in self.home_target:
-					self.home_target.pop(a)
-					found_limits = True
-			# Repeat until move is done, or all limits are hit.
-			if (not done or found_limits) and len(self.home_target) > 0:
-				self.home_cb[0] = [(self.home_space, k) for k in self.home_target.keys()]
-				if self.home_cb not in self.movecb:
-					self.movecb.append(self.home_cb)
-				key = self.home_target.keys()[0]
-				dist = abs(self.home_target[key] - self.spaces[self.home_space].get_current_pos(key))
-				#log("sp2 %s d %s t %s" % (self.home_speed, dist, self.home_target))
-				self.goto({self.home_space: self.home_target}, f0 = self.home_speed / dist if dist != 0 else float('inf'), cb = True)[1](None)
-				return
-			if len(self.home_target) > 0:
-				log('Warning: not all limits were hit during homing %d %d %s' % (done, found_limits, repr(self.home_target)))
 			self.home_phase = 5
 			# Move delta to center.
 			if self.home_orig_type == TYPE_DELTA:
@@ -1179,7 +1156,6 @@ class Printer: # {{{
 			self.home_phase = 6
 			# Fall through
 		if self.home_phase == 6:
-			#log('home 6')
 			self.set_space(self.home_space, type = self.home_orig_type)
 			for i in range(len(self.spaces[self.home_space].motor)):
 				self.set_motor((self.home_space, i), max_steps = self.home_orig_steps[i])
@@ -1200,7 +1176,6 @@ class Printer: # {{{
 				return
 			# Fall through.
 		if self.home_phase == 7:
-			#log('home 7')
 			self.home_phase = None
 			self.position_valid = True
 			if self.home_id is not None:

@@ -275,7 +275,7 @@ void packet()
 			spaces[which].axis[a]->current = NAN;
 		}
 		float f = get_float(4);
-		int32_t diff = f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49) - spaces[which].motor[t]->settings[current_fragment].current_pos;
+		int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings[current_fragment].current_pos;
 		spaces[which].motor[t]->settings[current_fragment].current_pos += diff;
 		spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
 		//debug("cp4 %d %d", spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
@@ -488,6 +488,14 @@ void packet()
 			arch_stop();
 		}
 		send_host(CMD_QUEUE, queue_full ? QUEUE_LENGTH : (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH);
+		return;
+	}
+	case CMD_HOME:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_HOME");
+#endif
+		arch_home();
 		return;
 	}
 	case CMD_READPIN:

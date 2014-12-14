@@ -605,6 +605,7 @@ void reset_dirs(int fragment) {
 		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
+			memset(mtr.settings[current_fragment].data, 0, BYTES_PER_FRAGMENT);
 			if (moving && mtr.settings[fragment].current_pos != mtr.settings[fragment].hwcurrent_pos) {
 				//debug("preactive %d %d %d %d %d", s, m, fragment, mtr.current_pos, mtr.hwcurrent_pos);
 				settings[fragment].num_active_motors += 1;
@@ -655,7 +656,7 @@ void copy_fragment_settings(int src, int dst) {
 	}
 }
 
-void set_current_fragment(int fragment) {
+static void set_current_fragment(int fragment) {
 	if (!moving && current_fragment_pos > 0)
 		send_fragment();
 	copy_fragment_settings(current_fragment, fragment);
@@ -679,11 +680,6 @@ void send_fragment() {
 	// Prepare new fragment.
 	current_fragment_pos = 0;
 	set_current_fragment((current_fragment + 1) % FRAGMENTS_PER_BUFFER);
-	for (int s = 0; s < num_spaces; ++s) {
-		Space &sp = spaces[s];
-		for (int m = 0; m < sp.num_motors; ++m)
-			memset(sp.motor[m]->settings[current_fragment].data, 0, BYTES_PER_FRAGMENT);
-	}
 	if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
 		arch_start_move();
 }
@@ -695,8 +691,12 @@ void apply_tick() {
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
 			int value = (mtr.settings[current_fragment].current_pos - mtr.settings[current_fragment].hwcurrent_pos) * mtr.settings[current_fragment].dir;
-			if (value > 15)
+			if (value > 15) {
+				//debug("overflow %d %d", mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos);
 				value = 15;
+			}
+			//else
+				//debug("no overflow %d %d %d", mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos, value);
 			mtr.settings[current_fragment].data[current_fragment_pos >> 1] |= value << (4 * (current_fragment_pos & 0x1));
 			mtr.settings[current_fragment].hwcurrent_pos += mtr.settings[current_fragment].dir * value;
 			//debug("move pos %d %d %d %d %d", m, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos, sp.motor[m]->settings[current_fragment].hwcurrent_pos, sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos);

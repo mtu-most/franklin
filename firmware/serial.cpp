@@ -97,10 +97,11 @@ void serial()
 			// Request printer id.  This is called when the host
 			// connects to the printer.  This may be a reconnect,
 			// and can happen at any time.
-			// Response is to send the printer id.
+			// Response is to send the printer id, and temporarily disable all temperature readings.
 			Serial.write(CMD_ID);
 			for (uint8_t i = 0; i < ID_SIZE; ++i)
 				Serial.write(printerid[i]);
+			temps_disabled = true;
 			continue;
 		default:
 			break;
@@ -334,8 +335,8 @@ void try_send_next()
 		// Still busy sending other packet.
 		return;
 	}
-	for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-		if (motor[m].flags & Motor::ACTIVE && motor[m].flags & (Motor::SENSE0 | Motor::SENSE1)) {
+	for (uint8_t m = 0; m < active_motors; ++m) {
+		if (motor[m].flags & (Motor::SENSE0 | Motor::SENSE1)) {
 #ifdef DEBUG_SERIAL
 			debug("sense %d", m);
 #endif
@@ -343,9 +344,7 @@ void try_send_next()
 			pending_packet[0] = (type ? CMD_SENSE1 : CMD_SENSE0);
 			pending_packet[1] = m;
 			uint8_t mii = 0;
-			for (uint8_t mi = 0; mi < NUM_MOTORS; ++mi) {
-				if (!(motor[mi].flags & Motor::ACTIVE))
-					continue;
+			for (uint8_t mi = 0; mi < active_motors; ++mi) {
 				++mii;
 				*reinterpret_cast <int32_t *>(&pending_packet[2 + 4 * mii]) = motor[mi].sense_pos[type];
 			}
@@ -355,7 +354,7 @@ void try_send_next()
 			return;
 		}
 	}
-	for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
+	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (motor[m].flags & Motor::LIMIT) {
 #ifdef DEBUG_SERIAL
 			debug("limit %d", m);
@@ -364,9 +363,7 @@ void try_send_next()
 			pending_packet[1] = m;
 			pending_packet[2] = limit_fragment_pos;
 			uint8_t mii = 0;
-			for (uint8_t mi = 0; mi < NUM_MOTORS; ++mi) {
-				if (!(motor[mi].flags & Motor::ACTIVE))
-					continue;
+			for (uint8_t mi = 0; mi < active_motors; ++mi) {
 				*reinterpret_cast <int32_t *>(&pending_packet[3 + 4 * mii]) = motor[mi].current_pos;
 				//debug("current pos %d %ld", mii, F(motor[mi].current_pos));
 				++mii;
@@ -385,6 +382,7 @@ void try_send_next()
 		else
 			pending_packet[0] = CMD_DONE;
 		pending_packet[1] = (current_fragment - notified_current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		//debug("done %d %d %d", current_fragment, notified_current_fragment, last_fragment);
 		notified_current_fragment = current_fragment;
 		prepare_packet(2);
 		send_packet();
@@ -405,15 +403,10 @@ void try_send_next()
 	if (home_step_time > 0 && homers == 0)
 	{
 		pending_packet[0] = CMD_HOMED;
-		uint8_t mi = 0;
-		for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
-			if (!(motor[m].flags & Motor::ACTIVE))
-				continue;
-			*reinterpret_cast <int32_t *>(&pending_packet[1 + 4 * mi]) = motor[m].current_pos;
-			++mi;
-		}
+		for (uint8_t m = 0; m < active_motors; ++m)
+			*reinterpret_cast <int32_t *>(&pending_packet[1 + 4 * m]) = motor[m].current_pos;
 		home_step_time = 0;
-		prepare_packet(1 + 4 * mi);
+		prepare_packet(1 + 4 * active_motors);
 		send_packet();
 		return;
 	}
@@ -435,7 +428,7 @@ void try_send_next()
 			}
 		}
 	}
-	if (adcreply_ready) // This is pretty much always true, so make it the least important (nothing below this will ever be sent).
+	if (!temps_disabled && adcreply_ready) // This is pretty much always true, so make it the least important (nothing below this will ever be sent).
 	{
 #ifdef DEBUG_SERIAL
 		debug("adcreply %x %d", adcreply[1], adcreply[0]);

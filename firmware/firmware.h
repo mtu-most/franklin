@@ -50,6 +50,7 @@ EXTERN uint8_t filling;
 EXTERN bool led_fast;
 EXTERN uint32_t led_last, led_phase, start_time, time_per_sample;
 EXTERN uint8_t led_pin;
+EXTERN bool temps_disabled;
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
 // These bytes (except RESET) are sent in reply to a received packet only.
@@ -78,7 +79,7 @@ enum Command {
 	CMD_BEGIN = 0x40,	// 0
 	CMD_PING,	// 1:code
 	CMD_RESET,	// 4:magic	reset the mcu.
-	CMD_SETUP,	// 1:led_pin, 4:us/sample
+	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin
 	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
 	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:sense_pin, 1:flags
 	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:values	(including flags)
@@ -96,7 +97,7 @@ enum Command {
 		// responses to host requests; only one active at a time.
 	CMD_READY = 0x60,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:num_buffers, 1:fragments/buffer, 1:bytes/fragment
 	CMD_PONG,	// 1:code
-	CMD_HOMED,	// 1:code, {4:motor_pos}*
+	CMD_HOMED,	// {4:motor_pos}*
 	CMD_PIN,	// 1:state
 	CMD_STOPPED,	// 1:fragment_pos, {4:motor_pos}*
 
@@ -118,7 +119,7 @@ static inline uint8_t minpacketlen() {
 	case CMD_RESET:
 		return 5;
 	case CMD_SETUP:
-		return 6;
+		return 7;
 	case CMD_CONTROL:
 		return 2;
 	case CMD_MSETUP:
@@ -218,8 +219,7 @@ struct Motor
 		INVERT_LIMIT_MIN = 8,
 		INVERT_LIMIT_MAX = 16,
 		INVERT_STEP = 32,
-		SENSE_STATE = 64,
-		ACTIVE = 128
+		SENSE_STATE = 64
 	};
 	void init(uint8_t b) {
 		buffer = b;
