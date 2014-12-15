@@ -343,14 +343,13 @@ uint8_t next_move() {
 
 void abort_move(int pos) { // {{{
 	aborting = true;
-	//debug("abort; discarding %d fragments, regenerating %d ticks", FRAGMENTS_PER_BUFFER - free_fragments, pos);
+	//debug("abort; cf %d discarding %d fragments, regenerating %d ticks", current_fragment, FRAGMENTS_PER_BUFFER - free_fragments, pos);
 	//debug("try aborting move");
 	// Copy over all settings from end of previous fragment.
 	int prev_f = (current_fragment + free_fragments - (moving ? 0 : 1)) % FRAGMENTS_PER_BUFFER;
 	int f = (prev_f + 1) % FRAGMENTS_PER_BUFFER;
 	copy_fragment_settings(prev_f, f);
 	current_fragment = f;
-	current_fragment_pos = 0;
 	reset_dirs(f);
 	free_fragments = FRAGMENTS_PER_BUFFER;
 	while (current_fragment_pos < pos)
@@ -358,7 +357,6 @@ void abort_move(int pos) { // {{{
 	//debug("done restoring position");
 	// Copy settings back to previous fragment.
 	copy_fragment_settings(f, prev_f);
-	current_fragment_pos = 0;
 	reset_dirs(f);
 	//debug("curf3 %d", current_fragment);
 	//debug("aborting move");

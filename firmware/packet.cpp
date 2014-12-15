@@ -147,6 +147,7 @@ void packet()
 		for (uint8_t i = 0; i < 2; ++i) {
 			adc[a].linked[i] = command[2 + i];
 			adc[a].value[i] = *reinterpret_cast <uint16_t *>(&command[4 + 2 * i]);
+			//debug("adc %d link %d pin %d value %x", a, i, adc[a].linked[i], adc[a].value[i]);
 		}
 		if (adc_phase == INACTIVE && (adc[a].value[0] & 0x8000) == 0) {
 			adc_phase = PREPARING;

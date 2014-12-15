@@ -153,24 +153,24 @@ void packet()
 			debug("Setting invalid temp %d", which);
 			return;
 		}
-		temps[which].target = get_float(3);
-		temps[which].adctarget = temps[which].toadc(temps[which].target);
+		temps[which].target[0] = get_float(3);
+		temps[which].adctarget[0] = temps[which].toadc(temps[which].target[0]);
 		//debug("adc target %d from %d", temps[which]->adctarget, int32_t(temps[which]->target / 1024));
-		if (temps[which].adctarget >= MAXINT) {
+		if (temps[which].adctarget[0] >= MAXINT) {
 			// main loop doesn't handle it anymore, so it isn't disabled there.
 			//debug("Temp %d disabled", which);
-			if (temps[which].is_on) {
-				RESET(temps[which].power_pin);
-				temps[which].is_on = false;
+			if (temps[which].is_on[0]) {
+				RESET(temps[which].power_pin[0]);
+				temps[which].is_on[0] = false;
 				--temps_busy;
 			}
 		}
-		else if (temps[which].adctarget < 0) {
+		else if (temps[which].adctarget[0] < 0) {
 			// main loop doesn't handle it anymore, so it isn't enabled there.
 			//debug("Temp %d enabled", which);
-			if (!temps[which].is_on) {
-				SET(temps[which].power_pin);
-				temps[which].is_on = true;
+			if (!temps[which].is_on[0]) {
+				SET(temps[which].power_pin[0]);
+				temps[which].is_on[0] = true;
 				++temps_busy;
 			}
 		}
@@ -178,7 +178,7 @@ void packet()
 			//debug("Temp %d set to %f", which, F(target));
 			initialized = true;
 		}
-		arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin.valid() ? temps[which].power_pin.pin : ~0, temps[which].power_pin.inverted(), temps[which].adctarget);
+		arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin[0].valid() ? temps[which].power_pin[0].pin : ~0, temps[which].power_pin[0].inverted(), temps[which].adctarget[0], temps[which].power_pin[1].valid() ? temps[which].power_pin[1].pin : ~0, temps[which].power_pin[1].inverted(), temps[which].adctarget[1]);
 		return;
 	}
 	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
@@ -510,6 +510,18 @@ void packet()
 			return;
 		}
 		send_host(CMD_PIN, GET(gpios[which].pin, false) ? 1 : 0);
+		return;
+	}
+	case CMD_RECONNECT:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_RECONNECT");
+#endif
+		if (arch_connected()) {
+			debug("Unexpected reconnect");
+			return;
+		}
+		arch_reconnect(reinterpret_cast <char *>(&command[1][1]));
 		return;
 	}
 #ifdef HAVE_AUDIO

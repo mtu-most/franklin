@@ -191,7 +191,7 @@ function Pins_space(num, dummy, table) {
 
 // Temp. {{{
 function Temp_setup(num) {
-	var e = [['R0', 1, 1e3], ['R1', 1, 1e3], ['Rc', 1, 1e3], ['Tc', 0, 1], ['beta', 0, 1]];
+	var e = [['fan_temp', 0], ['R0', 1, 1e3], ['R1', 1, 1e3], ['Rc', 1, 1e3], ['Tc', 0, 1], ['beta', 0, 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['temp', num], e[i][0]], e[i][1], e[i][2]));
@@ -211,7 +211,7 @@ function Temp(num) {
 }
 
 function Pins_temp(num, dummy, table) {
-	var e = [['Power', 'power', false], ['Thermistor', 'thermistor', true]];
+	var e = [['Heater', 'heater', false], ['Fan', 'fan', false], ['Thermistor', 'thermistor', true]];
 	for (var i = 0; i < e.length; ++i)
 		e[i] = Pin(e[i][0], [['temp', num], e[i][1] + '_pin'], e[i][2]);
 	return make_pin_title(temp_name(num), e);
@@ -605,20 +605,23 @@ function Printer() {	// {{{
 	// Temp. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Temps',
+		'Fan temp (°C)',
 		'R0 (kΩ) or a (1000)',
 		'R1 (kΩ) or b (1000)',
 		'Rc (kΩ)',
 		'Tc (°C)',
 		'β (1) or NaN'
 	], [
-		'htitle5',
-		'title5',
-		'title5',
-		'title5',
-		'title5',
-		'title5'
+		'htitle6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6'
 	], [
 		null,
+		'Temerature above which the fan is turned on.',
 		'Resistance on the board in series with the thermistor.  Normally 4.7 or 10.  Or, if β is NaN, the result is ax+b with x the measured ADC value; this value is a/1000.',
 		'Resistance on the board in parallel with the thermistor.  Normally Infinity.  Or, if β is NaN, the result is ax+b with x the measured ADC value; this value is b/1000.',
 		'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.',

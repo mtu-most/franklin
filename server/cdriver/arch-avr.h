@@ -95,8 +95,9 @@ static inline int hwpacketsize(int len, int *available) {
 
 struct AVRSerial : public Serial_t { // {{{
 	char buffer[256];
-	int start, end, fd;
+	int start, end_, fd;
 	inline void begin(char const *port, int baud);
+	inline void end() { close(fd); }
 	inline void write(char c);
 	inline void refill();
 	inline int read();
@@ -107,9 +108,9 @@ struct AVRSerial : public Serial_t { // {{{
 	}
 	void flush() {}
 	int available() {
-		if (start == end)
+		if (start == end_)
 			refill();
-		return end - start;
+		return end_ - start;
 	}
 };
 // }}}
@@ -151,6 +152,7 @@ EXTERN int *avr_adc_id;
 EXTERN uint8_t *avr_control_queue;
 EXTERN bool *avr_in_control_queue;
 EXTERN int avr_control_queue_length;
+EXTERN bool avr_connected;
 // }}}
 
 // Time handling.  {{{
@@ -230,10 +232,6 @@ static inline void avr_get_reply() {
 		pollfds[1].revents = 0;
 		poll(&pollfds[1], 1, 100);
 		serial(1);
-		if (avr_wait_for_reply && (counter & 0x7) == 0x7) {
-			debug("no reply; resending");
-			avr_send();
-		}
 	}
 }
 
@@ -246,7 +244,7 @@ static inline void avr_get_current_pos(int offset) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			debug("cp %d %d %d", ts, tm, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
+			//debug("cp %d %d %d", ts, tm, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
 		}
 	}
 }
@@ -327,7 +325,7 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_UNDERRUN:
 	{
-		debug("underrun");
+		//debug("underrun");
 		avr_running = false;
 		// Fall through.
 	}
@@ -464,7 +462,7 @@ static inline void arch_reset() {
 	}
 	if (avr_pong != 2) {
 		debug("no pong seen; giving up.\n");
-		reset();
+		exit(0);
 	}
 }
 
@@ -565,6 +563,7 @@ static inline void arch_setup_start(char const *port) {
 	avr_limiter_motor = 0;
 	avr_active_motors = 0;
 	// Set up serial port.
+	avr_connected = true;
 	avr_serial.begin(port, 115200);
 	serialdev[1] = &avr_serial;
 	arch_reset();
@@ -609,24 +608,43 @@ static inline void arch_setup_end() {
 		avr_pos_offset[m] = 0;
 }
 
-static inline void arch_setup_temp(int id, int thermistor_pin, bool active, int power_pin = ~0, bool invert = false, int adctemp = 0) {
+static inline void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0) {
 	avr_adc_id[thermistor_pin] = id;
 	avr_buffer[0] = HWC_ASETUP;
 	avr_buffer[1] = thermistor_pin;
-	avr_buffer[2] = power_pin;
-	avr_buffer[3] = ~0;
-	int32_t t;
-	if (active)
-		t = (min(0x3fff, max(0, adctemp))) | (invert ? 0x4000 : 0);
-	else
-		t = 0xffff;
-	//debug("setup adc %d 0x%x", id, t);
-	avr_buffer[4] = t & 0xff;
-	avr_buffer[5] = (t >> 8) & 0xff;
-	avr_buffer[6] = ~0;
-	avr_buffer[7] = ~0;
+	avr_buffer[2] = heater_pin;
+	avr_buffer[3] = fan_pin;
+	int32_t th, tf;
+	if (active) {
+		th = (min(0x3fff, max(0, heater_adctemp))) | (heater_invert ? 0x4000 : 0);
+		tf = (min(0x3fff, max(0, fan_adctemp))) | (fan_invert ? 0x4000 : 0);
+	}
+	else {
+		th = 0xffff;
+		tf = 0xffff;
+	}
+	//debug("setup adc %d 0x%x 0x%x", id, heater_adctemp, fan_adctemp);
+	avr_buffer[4] = th & 0xff;
+	avr_buffer[5] = (th >> 8) & 0xff;
+	avr_buffer[6] = tf & 0xff;
+	avr_buffer[7] = (tf >> 8) & 0xff;
 	prepare_packet(avr_buffer, 8);
 	avr_send();
+}
+
+static inline void arch_disconnect() {
+	avr_connected = false;
+	avr_serial.end();
+}
+
+static inline bool arch_connected() {
+	return avr_connected;
+}
+
+static inline void arch_reconnect(char *port) {
+	avr_connected = true;
+	avr_serial.begin(port, 115200);
+	avr_serial.write(CMD_NACK);	// Just to be sure.
 }
 // }}}
 
@@ -731,7 +749,7 @@ void AVRSerial::begin(char const *port, int baud) {
 	pollfds[1].events = POLLIN | POLLPRI;
 	pollfds[1].revents = 0;
 	start = 0;
-	end = 0;
+	end_ = 0;
 	fcntl(fd, F_SETFL, O_NONBLOCK);
 #if 0
 	// Set baud rate and control.
@@ -768,26 +786,28 @@ void AVRSerial::write(char c) {
 
 void AVRSerial::refill() {
 	start = 0;
-	end = ::read(fd, buffer, sizeof(buffer));
-	//debug("refill %d bytes", end);
-	if (end < 0) {
+	end_ = ::read(fd, buffer, sizeof(buffer));
+	//debug("refill %d bytes", end_);
+	if (end_ < 0) {
 		if (errno != EAGAIN && errno != EWOULDBLOCK)
 			debug("read returned error: %s", strerror(errno));
-		end = 0;
+		end_ = 0;
 	}
-	if (end == 0 && pollfds[1].revents) {
-		debug("EOF detected on serial port; exiting.");
-		reset();
+	if (end_ == 0 && pollfds[1].revents) {
+		debug("EOF detected on serial port; waiting for reconnect.");
+		disconnect();
 	}
 	pollfds[1].revents = 0;
 }
 
 int AVRSerial::read() {
-	if (start == end)
-		refill();
-	if (start == end) {
-		debug("eof on input; exiting.");
-		reset();
+	while (true) {
+		if (start == end_)
+			refill();
+		if (start != end_)
+			break;
+		debug("eof on input; waiting for reconnect.");
+		disconnect();
 	}
 	int ret = buffer[start++];
 #ifdef DEBUG_AVRCOMM
@@ -832,7 +852,7 @@ void HostSerial::refill() {
 	}
 	if (end == 0 && pollfds[0].revents) {
 		debug("EOF detected on standard input; exiting.");
-		reset();
+		exit(0);
 	}
 	pollfds[0].revents = 0;
 }
@@ -841,8 +861,8 @@ int HostSerial::read() {
 	if (start == end)
 		refill();
 	if (start == end) {
-		debug("eof on input; exiting.");
-		reset();
+		debug("EOF on standard input; exiting.");
+		exit(0);
 	}
 	int ret = buffer[start++];
 	//debug("Firmware read byte: %x", ret);

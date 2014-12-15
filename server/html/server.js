@@ -206,13 +206,15 @@ function _setup_updater() {
 			printers[port].num_spaces = new_num_spaces;
 			for (var i = printers[port].num_temps; i < new_num_temps; ++i) {
 				printers[port].temps.push({
-					power_pin: 0,
+					heater_pin: 0,
+					fan_pin: 0,
 					thermistor_pin: 0,
 					R0: 0,
 					R1: 0,
 					Rc: 0,
 					Tc: 0,
 					beta: 0,
+					fan_temp: 0,
 					value: 0,
 					temp: NaN,
 					history: []
@@ -297,9 +299,11 @@ function _setup_updater() {
 			printers[port].temps[index].Rc = values[2];
 			printers[port].temps[index].Tc = values[3];
 			printers[port].temps[index].beta = values[4];
-			printers[port].temps[index].power_pin = values[5];
-			printers[port].temps[index].thermistor_pin = values[6];
-			printers[port].temps[index].value = values[7];
+			printers[port].temps[index].heater_pin = values[5];
+			printers[port].temps[index].fan_pin = values[6];
+			printers[port].temps[index].thermistor_pin = values[7];
+			printers[port].temps[index].fan_temp = values[8];
+			printers[port].temps[index].value = values[9];
 			trigger_update(port, 'temp_update', index);
 		},
 		gpio_update: function(port, index, values) {

@@ -816,8 +816,10 @@ function update_space(index) { // {{{
 function update_temp(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
-	update_pin([['temp', index], 'power_pin']);
+	update_pin([['temp', index], 'heater_pin']);
+	update_pin([['temp', index], 'fan_pin']);
 	update_pin([['temp', index], 'thermistor_pin']);
+	update_float(printer, [['temp', index], 'fan_temp']);
 	update_float(printer, [['temp', index], 'R0']);
 	update_float(printer, [['temp', index], 'R1']);
 	update_float(printer, [['temp', index], 'Rc']);

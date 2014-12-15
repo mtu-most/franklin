@@ -601,6 +601,8 @@ static void handle_motors(unsigned long long current_time) { // {{{
 void reset_dirs(int fragment) {
 	//debug("resetting %d", fragment);
 	settings[fragment].num_active_motors = 0;
+	settings[fragment].cbs = 0;
+	current_fragment_pos = 0;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
@@ -661,10 +663,8 @@ static void set_current_fragment(int fragment) {
 		send_fragment();
 	copy_fragment_settings(current_fragment, fragment);
 	settings[fragment].fragment_length = 0;
-	settings[fragment].cbs = 0;
 	current_fragment = fragment;
 	//debug("curf4 %d", current_fragment);
-	current_fragment_pos = 0;
 	reset_dirs(current_fragment);
 }
 

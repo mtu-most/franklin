@@ -16,21 +16,24 @@ void Temp::load(int32_t &addr, int id)
 	radiation = read_float(addr);
 	power = read_float(addr);
 	*/
-	power_pin.read(read_16(addr));
+	power_pin[0].read(read_16(addr));
+	power_pin[1].read(read_16(addr));
 	int old_pin = thermistor_pin.write();
 	bool old_valid = thermistor_pin.valid();
 	thermistor_pin.read(read_16(addr));
-	SET_OUTPUT(power_pin);
-	if (is_on)
-		SET(power_pin);
-	else
-		RESET(power_pin);
-	if (old_pin != thermistor_pin.write()) {
-		if (old_valid)
-			arch_setup_temp(~0, old_pin, false);
-		if (thermistor_pin.valid())
-			arch_setup_temp(id, thermistor_pin.pin, true, power_pin.valid() ? power_pin.pin : ~0, power_pin.inverted(), adctarget);
+	target[1] = read_float(addr);
+	for (int i = 0; i < 2; ++i) {
+		adctarget[i] = toadc(target[i]);
+		SET_OUTPUT(power_pin[i]);
+		if (is_on[i])
+			SET(power_pin[i]);
+		else
+			RESET(power_pin[i]);
 	}
+	if (old_pin != thermistor_pin.write() && old_valid)
+		arch_setup_temp(~0, old_pin, false);
+	if (thermistor_pin.valid())
+		arch_setup_temp(id, thermistor_pin.pin, true, power_pin[0].valid() ? power_pin[0].pin : ~0, power_pin[0].inverted(), adctarget[0], power_pin[1].valid() ? power_pin[1].pin : ~0, power_pin[1].inverted(), adctarget[1]);
 }
 
 void Temp::save(int32_t &addr)
@@ -47,8 +50,10 @@ void Temp::save(int32_t &addr)
 	write_float(addr, radiation);
 	write_float(addr, power);
 	*/
-	write_16(addr, power_pin.write());
+	write_16(addr, power_pin[0].write());
+	write_16(addr, power_pin[1].write());
 	write_16(addr, thermistor_pin.write());
+	write_float(addr, target[1]);
 }
 
 int32_t Temp::savesize0() {
@@ -104,25 +109,28 @@ void Temp::init() {
 	radiation = NAN;
 	power = NAN;
 	*/
-	power_pin.init();
 	thermistor_pin.init();
 	min_alarm = NAN;
 	max_alarm = NAN;
 	adcmin_alarm = -1;
 	adcmax_alarm = MAXINT;
-	target = NAN;
-	adctarget = MAXINT;
+	for (int i = 0; i < 2; ++i) {
+		power_pin[i].init();
+		target[i] = NAN;
+		adctarget[i] = MAXINT;
+		is_on[i] = false;
+	}
 	following_gpios = ~0;
 	last_temp_time = utime();
 	time_on = 0;
-	is_on = false;
 	K = NAN;
 }
 
 void Temp::free() {
 	if (thermistor_pin.valid())
 		arch_setup_temp(~0, thermistor_pin.pin, false);
-	power_pin.read(0);
+	power_pin[0].read(0);
+	power_pin[1].read(0);
 	thermistor_pin.read(0);
 }
 
@@ -139,18 +147,20 @@ void Temp::copy(Temp &dst) {
 	dst.radiation = radiation;
 	dst.power = power;
 	*/
-	dst.power_pin.read(power_pin.write());
+	for (int i = 0; i < 2; ++i) {
+		dst.power_pin[i].read(power_pin[i].write());
+		dst.target[i] = target[i];
+		dst.adctarget[i] = adctarget[i];
+		dst.is_on[i] = is_on[i];
+	}
 	dst.thermistor_pin.read(thermistor_pin.write());
 	dst.min_alarm = min_alarm;
 	dst.max_alarm = max_alarm;
 	dst.adcmin_alarm = adcmin_alarm;
 	dst.adcmax_alarm = adcmax_alarm;
-	dst.target = target;
-	dst.adctarget = adctarget;
 	dst.following_gpios = following_gpios;
 	dst.last_temp_time = last_temp_time;
 	dst.time_on = time_on;
-	dst.is_on = is_on;
 	dst.K = K;
 }
 

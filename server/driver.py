@@ -250,22 +250,24 @@ class Printer: # {{{
 			'QUEUED': 0x18,
 			'READPIN': 0x19,
 			'HOME': 0x1a,
-			'AUDIO_SETUP': 0x1b,
-			'AUDIO_DATA': 0x1c}
+			'RECONNECT': 0x1b,
+			'AUDIO_SETUP': 0x1c,
+			'AUDIO_DATA': 0x1d}
 	rcommand = {
-			'TEMP': 0x1d,
-			'POWER': 0x1e,
-			'POS': 0x1f,
-			'DATA': 0x20,
-			'PIN': 0x21,
-			'QUEUE': 0x22,
-			'HOMED': 0x23,
-			'MOVECB': 0x24,
-			'TEMPCB': 0x25,
-			'CONTINUE': 0x26,
-			'LIMIT': 0x27,
-			'AUTOSLEEP': 0x28,
-			'SENSE': 0x29}
+			'TEMP': 0x1e,
+			'POWER': 0x1f,
+			'POS': 0x20,
+			'DATA': 0x21,
+			'PIN': 0x22,
+			'QUEUE': 0x23,
+			'HOMED': 0x24,
+			'MOVECB': 0x25,
+			'TEMPCB': 0x26,
+			'CONTINUE': 0x27,
+			'LIMIT': 0x28,
+			'AUTOSLEEP': 0x29,
+			'SENSE': 0x2a,
+			'DISCONNECT': 0x2b}
 	# }}}
 	def _broadcast(self, *a): # {{{
 		self._send(None, 'broadcast', *a)
@@ -284,9 +286,8 @@ class Printer: # {{{
 				self.command_buffer = self.command_buffer[pos + 1:]
 				id, func, a, ka = json.loads(ln)
 				if func == 'reconnect':
-					self.printer = serial.Serial(a[0], baudrate = 115200, timeout = 0)
+					self._send_packet(chr(command['RECONNECT']) + a[0] + '\x00')
 					self.command_buffer = waiting_commands + self.command_buffer
-					self.printer.write(self.single['NACK'])	# Just to be sure.
 					self._send(id, 'return', None)
 					return
 				elif func in ('export_settings', 'die'):
@@ -306,8 +307,7 @@ class Printer: # {{{
 			except:
 				log('error reading')
 				traceback.print_exc()
-				self._close()
-				# _close will return when the connection returns.
+				sys.exit(0)
 	# }}}
 	def _printer_write(self, data): # {{{
 		#log('writing %s' % ' '.join(['%02x' % ord(x) for x in data]))
@@ -318,8 +318,7 @@ class Printer: # {{{
 			except:
 				log('error writing')
 				traceback.print_exc()
-				self._close()
-				# _close will return when the connection returns.
+				sys.exit(0)
 	# }}}
 	def _command_input(self): # {{{
 		data = sys.stdin.read()
@@ -437,7 +436,7 @@ class Printer: # {{{
 				continue
 			elif cmd == self.rcommand['LIMIT']:
 				self.limits[s][m] = f
-				log('limit; %d waits' % e)
+				#log('limit; %d waits' % e)
 				self._trigger_movewaits(e)
 				continue
 			elif cmd == self.rcommand['AUTOSLEEP']:
@@ -463,6 +462,10 @@ class Printer: # {{{
 				continue
 			elif cmd == self.rcommand['HOMED']:
 				self._do_home(True)
+				continue
+			elif cmd == self.rcommand['DISCONNECT']:
+				self._close()
+				# _close returns after reconnect.
 				continue
 			if reply:
 				return ('packet', (cmd, s, m, f, e, data))
@@ -990,7 +993,7 @@ class Printer: # {{{
 		# 3: Move slowly away from switch.
 		# 4: Repeat until all home orders are done.
 		# 5: Set current position; move to center (delta only).
-		log('home %s %s' % (self.home_phase, repr(self.home_target)))
+		#log('home %s %s' % (self.home_phase, repr(self.home_target)))
 		small_dist = .005
 		if self.home_phase is None:
 			if done is not None:
@@ -1385,24 +1388,25 @@ class Printer: # {{{
 		def __init__(self):
 			self.value = float('nan')
 		def read(self, data):
-			self.R0, self.R1, logRc, Tc, self.beta, self.power_pin, self.thermistor_pin = struct.unpack('<fffffHH', data)
+			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp = struct.unpack('<fffffHHHf', data)
 			try:
 				self.Rc = math.exp(logRc)
 			except:
 				self.Rc = float('nan')
 			self.Tc = Tc - C0
+			self.fan_temp = fan_temp - C0
 		def write(self):
 			try:
 				logRc = math.log(self.Rc)
 			except:
 				logRc = float('nan')
-			return struct.pack('<fffffHH', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.power_pin, self.thermistor_pin)
+			return struct.pack('<fffffHHHf', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp + C0)
 		def export(self):
-			return [self.R0, self.R1, self.Rc, self.Tc, self.beta, self.power_pin, self.thermistor_pin, self.value]
+			return [self.R0, self.R1, self.Rc, self.Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp, self.value]
 		def export_settings(self, num):
 			ret = '[temp %d]\r\n' % num
-			ret += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('power_pin', 'thermistor_pin')])
-			ret += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('R0', 'R1', 'Rc', 'Tc', 'beta')])
+			ret += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('heater_pin', 'fan_pin', 'thermistor_pin')])
+			ret += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('fan_temp', 'R0', 'R1', 'Rc', 'Tc', 'beta')])
 			return ret
 	# }}}
 	class Gpio: # {{{
@@ -1824,7 +1828,7 @@ class Printer: # {{{
 		keys = {
 				'general': {'name', 'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'motor_limit', 'temp_limit'},
 				'space': {'type', 'max_deviation', 'num_axes', 'delta_angle'},
-				'temp': {'R0', 'R1', 'Rc', 'Tc', 'beta', 'power_pin', 'thermistor_pin'},
+				'temp': {'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'},
 				'gpio': {'pin', 'state'},
 				'axis': {'offset', 'park', 'park_order', 'max_v', 'min', 'max'},
 				'motor': {'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_m', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'},
@@ -2417,12 +2421,12 @@ class Printer: # {{{
 	# Temp {{{
 	def get_temp(self, temp):
 		ret = {}
-		for key in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'power_pin', 'thermistor_pin'):
+		for key in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'):
 			ret[key] = getattr(self.temps[temp], key)
 		return ret
 	def set_temp(self, temp, update = True, **ka):
 		ret = {}
-		for key in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'power_pin', 'thermistor_pin'):
+		for key in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'):
 			if key in ka:
 				setattr(self.temps[temp], key, ka.pop(key))
 		self._send_packet(struct.pack('<BB', self.command['WRITE_TEMP'], temp) + self.temps[temp].write())

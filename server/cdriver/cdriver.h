@@ -80,6 +80,7 @@ enum Command {
 	CMD_QUEUED,	// 1 byte: 0: query queue length; 1: stop and query queue length.  Reply: QUEUE.
 	CMD_READPIN,	// 1 byte: which channel. Reply: GPIO.
 	CMD_HOME,	// 1 byte: homing space; n bytes: homing type (0=pos, 1=neg, 3=no)
+	CMD_RECONNECT,	// 1 byte: name length, n bytes: port name
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_sample.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	// to host
@@ -98,6 +99,7 @@ enum Command {
 	CMD_LIMIT,	// 1 byte: which channel.
 	CMD_AUTOSLEEP,	// 1 byte: what: 1: motor; 2: temp; 3: both.
 	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
+	CMD_DISCONNECT	// 0
 };
 
 // All temperatures are stored in Kelvin, but communicated in °C.
@@ -115,11 +117,11 @@ struct Temp
 	float convection;		// convected power = convection * (shell_T - room_T) [W/K]
 	*/
 	// Pins.
-	Pin_t power_pin;
+	Pin_t power_pin[2];
 	Pin_t thermistor_pin;
 	// Volatile variables.
-	float target;			// target temperature; NAN to disable. [K]
-	int32_t adctarget;		// target temperature in adc counts; -1 for disabled. [adccounts]
+	float target[2];			// target temperature; NAN to disable. [K]
+	int32_t adctarget[2];		// target temperature in adc counts; -1 for disabled. [adccounts]
 	int32_t adclast;		// last measured temperature. [adccounts]
 	/*
 	float core_T, shell_T;	// current temperatures. [K]
@@ -132,7 +134,7 @@ struct Temp
 	// Internal variables.
 	uint32_t last_temp_time;	// last value of micros when this heater was handled.
 	uint32_t time_on;		// Time that the heater has been on since last reading.  [μs]
-	bool is_on;			// If the heater is currently on.
+	bool is_on[2];			// If the heater is currently on.
 	float K;			// Thermistor constant; kept in memory for performance.
 	// Functions.
 	int32_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
@@ -425,6 +427,7 @@ int32_t globals_savesize();
 
 // base.cpp
 void reset();
+void disconnect();
 
 #include ARCH_INCLUDE
 

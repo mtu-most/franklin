@@ -144,8 +144,10 @@ static void handle_adc(uint32_t current_time) {
 		adc_next = next_adc(adc_next);
 	}
 	for (uint8_t n = 0; n < 2; ++n) {
+		/*if (n == 0)
+			debug("adc %d link %d pin %d value %x target %x", adc_current, n, adc[adc_current].linked[n], value, adc[adc_current].value[n] & 0x3fff);*/
 		if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS) {
-			if ((adc[adc_current].value[n] & 0x4000) ^ ((adc[adc_current].value[n] & 0x3fff) > value))
+			if (((adc[adc_current].value[n] & 0x4000) != 0) ^ ((adc[adc_current].value[n] & 0x3fff) > value))
 				RESET(adc[adc_current].linked[n]);
 			else
 				SET(adc[adc_current].linked[n]);

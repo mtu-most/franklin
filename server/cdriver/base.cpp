@@ -20,13 +20,25 @@ void reset() { // {{{
 		}
 	}
 	for (uint8_t t = 0; t < num_temps; ++t) {
-		temps[t].power_pin.read(0);
+		temps[t].power_pin[0].read(0);
+		temps[t].power_pin[1].read(0);
 		temps[t].thermistor_pin.read(0);
 	}
 	for (uint8_t g = 0; g < num_gpios; ++g)
 		gpios[g].pin.read(0);
 	exit(0);
 } // }}}
+
+void disconnect() { // {{{
+	// Hardware has disconnected.  Notify host and wait for reconnect.
+	arch_disconnect();
+	send_host(CMD_DISCONNECT);
+	while (!arch_connected()) {
+		poll(&pollfds[0], 1, -1);
+		serial(0);
+	}
+}
+// }}}
 
 int main(int argc, char **argv) { // {{{
 	if (argc != 2) {

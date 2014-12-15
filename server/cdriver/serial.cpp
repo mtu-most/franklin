@@ -118,7 +118,7 @@ void serial(uint8_t which)
 				case CMD_DEBUG:
 					if (which == 0) {
 						debug("wtf?");
-						reset();
+						exit(0);
 					}
 					doing_debug = true;
 					START_DEBUG();
