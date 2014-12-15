@@ -325,7 +325,8 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_UNDERRUN:
 	{
-		//debug("underrun");
+		if (moving)
+			debug("underrun");
 		avr_running = false;
 		// Fall through.
 	}
@@ -716,8 +717,26 @@ static inline void arch_home() {
 	int speed = 10000;	// μs/step.
 	for (int i = 0; i < 4; ++i)
 		avr_buffer[1 + i] = (speed >> (8 * i)) & 0xff;
-	for (int m = 0; m < avr_active_motors; ++m)
-		avr_buffer[5 + m] = command[0][2 + m];
+	int mi = 0;
+	for (int s = 0; s < num_spaces; mi += spaces[s++].num_motors) {
+		Space &sp = spaces[s];
+		for (int m = 0; m < sp.num_motors; ++m) {
+			switch (command[0][2 + mi + m]) {
+			case 0:
+				avr_buffer[5 + mi + m] = sp.motor[m]->dir_pin.inverted() ? 1 : 0;
+				break;
+			case 1:
+				avr_buffer[5 + mi + m] = sp.motor[m]->dir_pin.inverted() ? 0 : 1;
+				break;
+			case 3:
+				avr_buffer[5 + mi + m] = 3;
+				break;
+			default:
+				debug("invalid code in home: %d", command[0][2 + m]);
+				return;
+			}
+		}
+	}
 	prepare_packet(avr_buffer, 5 + avr_active_motors);
 	avr_send();
 }

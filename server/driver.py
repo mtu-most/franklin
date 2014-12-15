@@ -165,6 +165,8 @@ class Printer: # {{{
 		self.probing = False
 		self.home_phase = None
 		self.home_target = None
+		self.home_space = None
+		self.home_spaces = []
 		self.home_cb = [False, self._do_home]
 		self.probe_cb = [False, None]
 		self.gcode = None
@@ -1000,6 +1002,10 @@ class Printer: # {{{
 				# Continuing call received after homing was aborted; ignore.
 				return
 			# Initial call; start homing.
+			if len(self.home_spaces) == 0:
+				return
+			self.home_space = self.home_spaces.pop(0)
+			#log('homing %s' % repr(self.home_space))
 			self.home_phase = 0
 			self.home_orig_type = self.spaces[self.home_space].type
 			self.home_orig_steps = [m['max_steps'] for m in self.spaces[self.home_space].motor]
@@ -1180,6 +1186,8 @@ class Printer: # {{{
 			# Fall through.
 		if self.home_phase == 7:
 			self.home_phase = None
+			if len(self.home_spaces) > 0:
+				return self._do_home()
 			self.position_valid = True
 			if self.home_id is not None:
 				self._send(self.home_id, 'return', None)
@@ -1631,7 +1639,7 @@ class Printer: # {{{
 		return s
 	# }}}
 	@delayed
-	def home(self, id, space = 0, speed = .005, cb = None, abort = True): # {{{
+	def home(self, id, spaces = None, speed = .005, cb = None, abort = True): # {{{
 		#log('homing')
 		if self.home_phase is not None and not self.paused:
 			log("ignoring request to home because we're already homing")
@@ -1644,7 +1652,11 @@ class Printer: # {{{
 		self.home_id = id
 		self.home_speed = speed
 		self.home_done_cb = cb
-		self.home_space = space
+		if spaces is None:
+			self.home_spaces = range(len(self.spaces))
+		else:
+			self.home_spaces = list(spaces)
+		#log('homing %s' % repr(self.home_spaces))
 		self._do_home()
 	# }}}
 	@delayed
