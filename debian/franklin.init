@@ -38,7 +38,7 @@ PRINTER=''
 AUTODETECT=True
 
 # Regular expression of serial ports to ignore.
-BLACKLIST='/dev/(ptmx|console|tty(printk|(S?|GS)\\d*))$'
+BLACKLIST='/dev/(ptmx|console|tty(printk|(S|GS)?\\d*))$'
 
 # Required credentials as user:password or just a user (password is ignored).
 LOGIN=''

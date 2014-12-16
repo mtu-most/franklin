@@ -511,7 +511,8 @@ class Printer: # {{{
 				if len(ret[0]) == 0 and len(ret[2]) == 0:
 					log('no reply received')
 					traceback.print_stack()
-					return None
+					self._close()
+					continue
 			ret = self._printer_input(reply = True)
 			if ret[0] == 'packet' or (cb and ret[0] == 'no data'):
 				return ret[1]
@@ -639,7 +640,7 @@ class Printer: # {{{
 	# }}}
 	def _do_gcode(self): # {{{
 		if self.gcode is None:
-			log('end of gcode')
+			#log('end of gcode')
 			return
 		flushed = False
 		if self.flushing == 'done':
@@ -1749,10 +1750,10 @@ class Printer: # {{{
 	def wait_for_cb(self, id, sense = False): # {{{
 		ret = lambda w: id is None or self._send(id, 'return', w)
 		if self.movewait == 0 or sense is not False and sense[1] in self.sense[sense[0]]:
-			log('not delaying with wait_for_cb, because there is no cb waiting')
+			#log('not delaying with wait_for_cb, because there is no cb waiting')
 			ret(self.movewait == 0)
 		else:
-			log('waiting for cb')
+			#log('waiting for cb')
 			self.movecb.append((sense, ret))
 	# }}}
 	def waiting_for_cb(self): # {{{

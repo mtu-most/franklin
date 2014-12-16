@@ -484,8 +484,10 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 	}
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
-		for (uint8_t a = 0; a < sp.num_axes; ++a)
-			sp.axis[a]->current += (sp.axis[a]->settings[current_fragment].target - sp.axis[a]->current) * factor;
+		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			if (!isnan(sp.axis[a]->settings[current_fragment].target))
+				sp.axis[a]->current += (sp.axis[a]->settings[current_fragment].target - sp.axis[a]->current) * factor;
+		}
 	}
 	return;
 } // }}}
