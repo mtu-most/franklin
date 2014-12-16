@@ -922,8 +922,10 @@ class Printer: # {{{
 					continue
 				# Handle sequences.
 				if isinstance(axes[i], (list, tuple)):
-					assert len(axes[i]) <= len(sp.axis)
 					for ij, axis in enumerate(axes[i]):
+						if ij >= len(sp.axis):
+							log('ignoring nonexistent axis %d %d' % (i, ij))
+							continue
 						if axis is not None and not math.isnan(axis):
 							# Limit values for axis.
 							if axis > sp.axis[ij]['max'] - sp.axis[ij]['offset']:
@@ -2167,7 +2169,7 @@ class Printer: # {{{
 				elif cmd == ('G', 28):
 					ret.append((cmd, args, message))
 					for a in range(len(pos[0])):
-						if not math.isnan(self.spaces[0].axis[a]['park']):
+						if len(self.spaces[0].axis) > a and not math.isnan(self.spaces[0].axis[a]['park']):
 							pos[0][a] = self.spaces[0].axis[a]['park']
 				elif cmd[0] == 'G' and cmd[1] in (0, 1, 81):
 					if cmd[1] != 0:
