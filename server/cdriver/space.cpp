@@ -470,7 +470,7 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
-			if (mtr.settings[current_fragment].target_dist == 0) {
+			if (isnan(mtr.settings[current_fragment].target_dist) || mtr.settings[current_fragment].target_dist == 0) {
 				//if (mtr.target_v == 0)
 					//mtr.last_v = 0;
 				continue;

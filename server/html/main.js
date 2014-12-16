@@ -1248,236 +1248,240 @@ function update_canvas_and_spans(space, axis) { // {{{
 // }}}
 
 function redraw_canvas() { // {{{
-	if (!selected_printer || selected_printer.spaces.length < 1 || selected_printer.spaces[0].axis.length < 3)
+	if (!selected_printer || selected_printer.spaces.length < 1 || selected_printer.spaces[0].axis.length < 1)
 		return;
 	var canvas = document.getElementById(make_id(selected_printer, [null, 'xymap']));
-	var zcanvas = document.getElementById(make_id(selected_printer, [null, 'zmap']));
-	var c = canvas.getContext('2d');
-	var zc = zcanvas.getContext('2d');
-	var box = document.getElementById(make_id(selected_printer, [null, 'map']));
-	var extra_height = box.clientHeight - canvas.clientHeight;
-	var printerwidth;
-	var printerheight;
-	var outline;
-	switch (selected_printer.spaces[0].type) {
-	case TYPE_CARTESIAN:
-		var xaxis = selected_printer.spaces[0].axis[0];
-		var yaxis = selected_printer.spaces[0].axis[1];
-		printerwidth = 2 * Math.max(xaxis.max, -xaxis.min) + .010;
-		printerheight = 2 * Math.max(yaxis.max, -yaxis.min) + .010;
-		outline = function(c) {
-			c.beginPath();
-			// Why does this not work?
-			//c.rect(xaxis.axis_min, yaxis.axis_min, xaxis.axis_max - xaxis.axis_min, yaxis.axis_max - y.axis_min);
-			c.moveTo(xaxis.min, yaxis.min);
-			c.lineTo(xaxis.min, yaxis.max);
-			c.lineTo(xaxis.max, yaxis.max);
-			c.lineTo(xaxis.max, yaxis.min);
-			c.lineTo(xaxis.min, yaxis.min);
-			c.stroke();
-		};
-		break;
-	case TYPE_DELTA:
-		var names = ['X', 'Y', 'Z'];
-		var radius = [];
-		var length = [];
-		for (var a = 0; a < 3; ++a) {
-			radius.push(selected_printer.spaces[0].motor[a].delta_radius);
-			length.push(selected_printer.spaces[0].motor[a].delta_rodlength);
-		}
-		//var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
-		//var dx = [0, -.8660254037844387, .8660254037844387];
-		//var dy = [1, -.5, -.5];
-		var origin = [[radius[0] * -.8660254037844387, radius[0] * -.5], [radius[1] * .8660254037844387, radius[1] * -.5], [0, radius[2]]];
-		var dx = [.5, .5, -1];
-		var dy = [-.8660254037844387, .8660254037844387, 0];
-		var intersects = [];
-		var intersect = function(x0, y0, r, x1, y1, dx1, dy1, positive) {
-			// Find intersection of circle(x-x0)^2+(y-y0)^2==r^2 and line l=(x1,y1)+t(dx1,dy1); use positive of negative solution for t.
-			// Return coordinate.
-			var s = positive ? 1 : -1;
-			var k = (dx1 * (x1 - x0) + dy1 * (y1 - y0)) / (dx1 * dx1 + dy1 * dy1);
-			var t = s * Math.sqrt(r * r - (x1 - x0) * (x1 - x0) - (y1 - y0) * (y1 - y0) + k * k) - k;
-			return [x1 + t * dx1, y1 + t * dy1];
-		};
-		var angles = [[null, null], [null, null], [null, null]];
-		var maxx = 0, maxy = 0;
-		for (var a = 0; a < 3; ++a) {
-			intersects.push([]);
-			for (var aa = 0; aa < 2; ++aa) {
-				var A = (a + aa + 1) % 3;
-				var point = intersect(origin[A][0], origin[A][1], length[A], origin[a][0], origin[a][1], dx[a], dy[a], aa);
-				intersects[a].push(point);
-				if (Math.abs(point[0]) > maxx)
-					maxx = Math.abs(point[0]);
-				if (Math.abs(point[1]) > maxy)
-					maxy = Math.abs(point[1]);
-				angles[A][aa] = Math.atan2(point[1] - origin[A][1], point[0] - origin[A][0]);
-			}
-		}
-		outline = function(c) {
-			c.save();
-			c.rotate(-selected_printer.spaces[0].delta_angle);
-			c.beginPath();
-			c.moveTo(intersects[0][0][0], intersects[0][0][1]);
-			for (var a = 0; a < 3; ++a) {
-				var A = (a + 1) % 3;
-				var B = (a + 2) % 3;
-				c.lineTo(intersects[a][1][0], intersects[a][1][1]);
-				c.arc(origin[B][0], origin[B][1], length[B], angles[B][1], angles[B][0], false);
-			}
-			c.closePath();
-			c.stroke();
-			for (var a = 0; a < 3; ++a) {
-				var w = c.measureText(names[a]).width / 1000;
+	if (selected_printer.spaces[0].axis.length >= 2) {
+		var c = canvas.getContext('2d');
+		var box = document.getElementById(make_id(selected_printer, [null, 'map']));
+		var extra_height = box.clientHeight - canvas.clientHeight;
+		var printerwidth;
+		var printerheight;
+		var outline;
+		switch (selected_printer.spaces[0].type) {
+		case TYPE_CARTESIAN:
+			var xaxis = selected_printer.spaces[0].axis[0];
+			var yaxis = selected_printer.spaces[0].axis[1];
+			printerwidth = 2 * Math.max(xaxis.max, -xaxis.min) + .010;
+			printerheight = 2 * Math.max(yaxis.max, -yaxis.min) + .010;
+			outline = function(c) {
 				c.beginPath();
-				c.save();
-				c.translate(origin[a][0] + dy[a] * .015 - w / 2, origin[a][1] - dx[a] * .015);
-				c.rotate(selected_printer.spaces[0].delta_angle);
-				c.scale(.001, -.001);
-				c.fillText(names[a], 0, 0);
-				c.restore();
+				// Why does this not work?
+				//c.rect(xaxis.axis_min, yaxis.axis_min, xaxis.axis_max - xaxis.axis_min, yaxis.axis_max - y.axis_min);
+				c.moveTo(xaxis.min, yaxis.min);
+				c.lineTo(xaxis.min, yaxis.max);
+				c.lineTo(xaxis.max, yaxis.max);
+				c.lineTo(xaxis.max, yaxis.min);
+				c.lineTo(xaxis.min, yaxis.min);
+				c.stroke();
+			};
+			break;
+		case TYPE_DELTA:
+			var names = ['X', 'Y', 'Z'];
+			var radius = [];
+			var length = [];
+			for (var a = 0; a < 3; ++a) {
+				radius.push(selected_printer.spaces[0].motor[a].delta_radius);
+				length.push(selected_printer.spaces[0].motor[a].delta_rodlength);
 			}
-			c.restore();
+			//var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
+			//var dx = [0, -.8660254037844387, .8660254037844387];
+			//var dy = [1, -.5, -.5];
+			var origin = [[radius[0] * -.8660254037844387, radius[0] * -.5], [radius[1] * .8660254037844387, radius[1] * -.5], [0, radius[2]]];
+			var dx = [.5, .5, -1];
+			var dy = [-.8660254037844387, .8660254037844387, 0];
+			var intersects = [];
+			var intersect = function(x0, y0, r, x1, y1, dx1, dy1, positive) {
+				// Find intersection of circle(x-x0)^2+(y-y0)^2==r^2 and line l=(x1,y1)+t(dx1,dy1); use positive of negative solution for t.
+				// Return coordinate.
+				var s = positive ? 1 : -1;
+				var k = (dx1 * (x1 - x0) + dy1 * (y1 - y0)) / (dx1 * dx1 + dy1 * dy1);
+				var t = s * Math.sqrt(r * r - (x1 - x0) * (x1 - x0) - (y1 - y0) * (y1 - y0) + k * k) - k;
+				return [x1 + t * dx1, y1 + t * dy1];
+			};
+			var angles = [[null, null], [null, null], [null, null]];
+			var maxx = 0, maxy = 0;
+			for (var a = 0; a < 3; ++a) {
+				intersects.push([]);
+				for (var aa = 0; aa < 2; ++aa) {
+					var A = (a + aa + 1) % 3;
+					var point = intersect(origin[A][0], origin[A][1], length[A], origin[a][0], origin[a][1], dx[a], dy[a], aa);
+					intersects[a].push(point);
+					if (Math.abs(point[0]) > maxx)
+						maxx = Math.abs(point[0]);
+					if (Math.abs(point[1]) > maxy)
+						maxy = Math.abs(point[1]);
+					angles[A][aa] = Math.atan2(point[1] - origin[A][1], point[0] - origin[A][0]);
+				}
+			}
+			outline = function(c) {
+				c.save();
+				c.rotate(-selected_printer.spaces[0].delta_angle);
+				c.beginPath();
+				c.moveTo(intersects[0][0][0], intersects[0][0][1]);
+				for (var a = 0; a < 3; ++a) {
+					var A = (a + 1) % 3;
+					var B = (a + 2) % 3;
+					c.lineTo(intersects[a][1][0], intersects[a][1][1]);
+					c.arc(origin[B][0], origin[B][1], length[B], angles[B][1], angles[B][0], false);
+				}
+				c.closePath();
+				c.stroke();
+				for (var a = 0; a < 3; ++a) {
+					var w = c.measureText(names[a]).width / 1000;
+					c.beginPath();
+					c.save();
+					c.translate(origin[a][0] + dy[a] * .015 - w / 2, origin[a][1] - dx[a] * .015);
+					c.rotate(selected_printer.spaces[0].delta_angle);
+					c.scale(.001, -.001);
+					c.fillText(names[a], 0, 0);
+					c.restore();
+				}
+				c.restore();
+			};
+			var extra = c.measureText(names[0]).width / 1000 + .02;
+			printerwidth = 2 * (maxx + extra);
+			printerheight = 2 * (maxy + extra);
+			break;
+		}
+		//var factor = Math.sqrt(printerwidth * printerwidth + printerheight * printerheight);
+		var factor = Math.max(printerwidth, printerheight);
+		canvas.style.height = canvas.clientWidth + 'px';
+		canvas.width = canvas.clientWidth;
+		canvas.height = canvas.clientWidth;
+
+		var b = selected_printer.bbox;
+		var true_pos = [selected_printer.spaces[0].axis[0].current, selected_printer.spaces[0].axis[1].current];
+
+		c.save();
+		// Clear canvas.
+		c.clearRect(0, 0, canvas.width, canvas.width);
+
+		c.translate(canvas.width / 2, canvas.width / 2);
+		c.scale(canvas.width / factor, -canvas.width / factor);
+		c.lineWidth = 1.5 * factor / canvas.width;
+
+		get_pointer_pos_xy = function(printer, e) {
+			var rect = canvas.getBoundingClientRect();
+			var x = e.clientX - rect.left - canvas.width / 2;
+			var y = e.clientY - rect.top - canvas.width / 2;
+			x /= canvas.width / factor;
+			y /= -canvas.width / factor;
+			return [x, y];
 		};
-		var extra = c.measureText(names[0]).width / 1000 + .02;
-		printerwidth = 2 * (maxx + extra);
-		printerheight = 2 * (maxy + extra);
-		break;
-	}
-	//var factor = Math.sqrt(printerwidth * printerwidth + printerheight * printerheight);
-	var factor = Math.max(printerwidth, printerheight);
-	canvas.style.height = canvas.clientWidth + 'px';
-	zcanvas.style.height = canvas.clientWidth + 'px';
-	canvas.width = canvas.clientWidth;
-	canvas.height = canvas.clientWidth;
-	var zratio = .15 / .85;
-	zcanvas.width = canvas.clientWidth * zratio;
-	zcanvas.height = canvas.clientWidth;
 
-	var b = selected_printer.bbox;
-	var true_pos = [selected_printer.spaces[0].axis[0].current, selected_printer.spaces[0].axis[1].current];
+		// Draw outline.
+		c.strokeStyle = '#888';
+		c.fillStyle = '#888';
+		outline(c);
+		// Draw center.
+		c.beginPath();
+		c.moveTo(.001, 0);
+		c.arc(0, 0, .001, 0, 2 * Math.PI);
+		c.fillStyle = '#888';
+		c.fill();
 
-	c.save();
-	// Clear canvas.
-	c.clearRect(0, 0, canvas.width, canvas.width);
+		// Draw current location.
+		c.beginPath();
+		c.fillStyle = '#44f';
+		c.moveTo(true_pos[0] + .003, true_pos[1]);
+		c.arc(true_pos[0], true_pos[1], .003, 0, 2 * Math.PI);
+		c.fill();
 
-	c.translate(canvas.width / 2, canvas.width / 2);
-	c.scale(canvas.width / factor, -canvas.width / factor);
-	c.lineWidth = 1.5 * factor / canvas.width;
+		c.save();
+		c.translate(selected_printer.targetx, selected_printer.targety);
+		c.rotate(selected_printer.targetangle);
 
-	get_pointer_pos_xy = function(printer, e) {
-		var rect = canvas.getBoundingClientRect();
-		var x = e.clientX - rect.left - canvas.width / 2;
-		var y = e.clientY - rect.top - canvas.width / 2;
-		x /= canvas.width / factor;
-		y /= -canvas.width / factor;
-		return [x, y];
-	};
+		c.beginPath();
+		if (b[0][0] != b[0][1] && b[1][0] != b[1][1]) {
+			// Draw print bounding box.
+			c.rect(b[0][0], b[1][0], b[0][1] - b[0][0], b[1][1] - b[1][0]);
 
-	// Draw outline.
-	c.strokeStyle = '#888';
-	c.fillStyle = '#888';
-	outline(c);
-	// Draw center.
-	c.beginPath();
-	c.moveTo(.001, 0);
-	c.arc(0, 0, .001, 0, 2 * Math.PI);
-	c.fillStyle = '#888';
-	c.fill();
+			// Draw tick marks.
+			c.moveTo((b[0][1] + b[0][0]) / 2, b[1][0]);
+			c.lineTo((b[0][1] + b[0][0]) / 2, b[1][0] + .005);
 
-	// Draw current location.
-	c.beginPath();
-	c.fillStyle = '#44f';
-	c.moveTo(true_pos[0] + .003, true_pos[1]);
-	c.arc(true_pos[0], true_pos[1], .003, 0, 2 * Math.PI);
-	c.fill();
+			c.moveTo((b[0][1] + b[0][0]) / 2, b[1][1]);
+			c.lineTo((b[0][1] + b[0][0]) / 2, b[1][1] - .005);
 
-	c.save();
-	c.translate(selected_printer.targetx, selected_printer.targety);
-	c.rotate(selected_printer.targetangle);
+			c.moveTo(b[0][0], (b[1][1] + b[1][0]) / 2);
+			c.lineTo(b[0][0] + .005, (b[1][1] + b[1][0]) / 2);
 
-	c.beginPath();
-	if (b[0][0] != b[0][1] && b[1][0] != b[1][1]) {
-		// Draw print bounding box.
-		c.rect(b[0][0], b[1][0], b[0][1] - b[0][0], b[1][1] - b[1][0]);
+			c.moveTo(b[0][1], (b[1][1] + b[1][0]) / 2);
+			c.lineTo(b[0][1] - .005, (b[1][1] + b[1][0]) / 2);
 
-		// Draw tick marks.
-		c.moveTo((b[0][1] + b[0][0]) / 2, b[1][0]);
-		c.lineTo((b[0][1] + b[0][0]) / 2, b[1][0] + .005);
+			// Draw central cross.
+			c.moveTo((b[0][1] + b[0][0]) / 2 - .005, (b[1][1] + b[1][0]) / 2);
+			c.lineTo((b[0][1] + b[0][0]) / 2 + .005, (b[1][1] + b[1][0]) / 2);
+			c.moveTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 + .005);
+			c.lineTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 - .005);
+		}
 
-		c.moveTo((b[0][1] + b[0][0]) / 2, b[1][1]);
-		c.lineTo((b[0][1] + b[0][0]) / 2, b[1][1] - .005);
+		// Draw zero.
+		c.moveTo(.003, 0);
+		c.arc(0, 0, .003, 0, 2 * Math.PI);
 
-		c.moveTo(b[0][0], (b[1][1] + b[1][0]) / 2);
-		c.lineTo(b[0][0] + .005, (b[1][1] + b[1][0]) / 2);
+		// Update it on screen.
+		c.strokeStyle = '#000';
+		c.stroke();
 
-		c.moveTo(b[0][1], (b[1][1] + b[1][0]) / 2);
-		c.lineTo(b[0][1] - .005, (b[1][1] + b[1][0]) / 2);
-
-		// Draw central cross.
-		c.moveTo((b[0][1] + b[0][0]) / 2 - .005, (b[1][1] + b[1][0]) / 2);
-		c.lineTo((b[0][1] + b[0][0]) / 2 + .005, (b[1][1] + b[1][0]) / 2);
-		c.moveTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 + .005);
-		c.lineTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 - .005);
+		c.restore();
+		c.restore();
 	}
 
-	// Draw zero.
-	c.moveTo(.003, 0);
-	c.arc(0, 0, .003, 0, 2 * Math.PI);
+	if (selected_printer.spaces[0].axis.length != 2) {
+		var zaxis = selected_printer.spaces[0].axis[selected_printer.spaces[0].axis.length >= 3 ? 2 : 0];
+		var zcanvas = document.getElementById(make_id(selected_printer, [null, 'zmap']));
+		var zc = zcanvas.getContext('2d');
+		zcanvas.style.height = canvas.clientWidth + 'px';
+		var zratio = .15 / .85;
+		zcanvas.width = canvas.clientWidth * zratio;
+		zcanvas.height = canvas.clientWidth;
+		// Z graph.
+		zc.clearRect(0, 0, zcanvas.width, zcanvas.height);
+		var d = (zaxis.max - zaxis.min) * .03;
+		var zfactor = zcanvas.height / (zaxis.max - zaxis.min) * .9;
+		zc.translate(zcanvas.width * .8, zcanvas.height * .05);
+		zc.scale(zfactor, -zfactor);
+		zc.translate(0, -zaxis.max);
 
-	// Update it on screen.
-	c.strokeStyle = '#000';
-	c.stroke();
+		get_pointer_pos_z = function(printer, e) {
+			var rect = zcanvas.getBoundingClientRect();
+			var z = e.clientY - rect.top + zcanvas.height * .05;
+			z /= -zfactor;
+			z += zaxis.max;
+			return z;
+		};
 
-	c.restore();
-	c.restore();
+		// Draw current position.
+		zc.beginPath();
+		zc.moveTo(0, zaxis.current);
+		zc.lineTo(-d, zaxis.current - d);
+		zc.lineTo(-d, zaxis.current + d);
+		zc.closePath();
+		zc.fillStyle = '#44f';
+		zc.fill();
 
-	// Z graph.
-	zc.clearRect(0, 0, zcanvas.width, zcanvas.height);
-	var zaxis = selected_printer.spaces[0].axis[2];
-	var d = (zaxis.max - zaxis.min) * .03;
-	var zfactor = zcanvas.height / (zaxis.max - zaxis.min) * .9;
-	zc.translate(zcanvas.width * .8, zcanvas.height * .05);
-	zc.scale(zfactor, -zfactor);
-	zc.translate(0, -zaxis.max);
+		// Draw Axes.
+		zc.beginPath();
+		zc.moveTo(0, zaxis.min);
+		zc.lineTo(0, zaxis.max);
+		zc.moveTo(0, 0);
+		zc.lineTo(-d * 2, 0);
+		zc.strokeStyle = '#888';
+		zc.lineWidth = 1.2 / zfactor;
+		zc.stroke();
 
-	get_pointer_pos_z = function(printer, e) {
-		var rect = zcanvas.getBoundingClientRect();
-		var z = e.clientY - rect.top + zcanvas.height * .05;
-		z /= -zfactor;
-		z += zaxis.max;
-		return z;
-	};
-
-	// Draw current position.
-	zc.beginPath();
-	zc.moveTo(0, selected_printer.spaces[0].axis[2].current);
-	zc.lineTo(-d, selected_printer.spaces[0].axis[2].current - d);
-	zc.lineTo(-d, selected_printer.spaces[0].axis[2].current + d);
-	zc.closePath();
-	zc.fillStyle = '#44f';
-	zc.fill();
-
-	// Draw Axes.
-	zc.beginPath();
-	zc.moveTo(0, zaxis.min);
-	zc.lineTo(0, zaxis.max);
-	zc.moveTo(0, 0);
-	zc.lineTo(-d * 2, 0);
-	zc.strokeStyle = '#888';
-	zc.lineWidth = 1.2 / zfactor;
-	zc.stroke();
-
-	// Draw target position.
-	zc.beginPath();
-	zc.moveTo(0, selected_printer.targetz);
-	zc.lineTo(-d, selected_printer.targetz - d);
-	zc.lineTo(-d, selected_printer.targetz + d);
-	zc.closePath();
-	zc.strokeStyle = '#000';
-	zc.lineWidth = 1.5 / zfactor;
-	zc.stroke();
+		// Draw target position.
+		zc.beginPath();
+		zc.moveTo(0, selected_printer.targetz);
+		zc.lineTo(-d, selected_printer.targetz - d);
+		zc.lineTo(-d, selected_printer.targetz + d);
+		zc.closePath();
+		zc.strokeStyle = '#000';
+		zc.lineWidth = 1.5 / zfactor;
+		zc.stroke();
+	}
 }
 // }}}
 
