@@ -275,7 +275,6 @@ class Printer: # {{{
 		self._send(None, 'broadcast', *a)
 	# }}}
 	def _close(self): # {{{
-		self.printer.close()
 		log('disconnecting')
 		self._send(None, 'disconnect')
 		waiting_commands = ''
@@ -288,7 +287,8 @@ class Printer: # {{{
 				self.command_buffer = self.command_buffer[pos + 1:]
 				id, func, a, ka = json.loads(ln)
 				if func == 'reconnect':
-					self._send_packet(chr(command['RECONNECT']) + a[0] + '\x00')
+					log('reconnect %s' % a[0])
+					self._send_packet(chr(self.command['RECONNECT']) + a[0] + '\x00')
 					self.command_buffer = waiting_commands + self.command_buffer
 					self._send(id, 'return', None)
 					return

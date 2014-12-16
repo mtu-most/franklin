@@ -23,11 +23,11 @@ import traceback
 import fcntl
 
 config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
-		'port': 8080,
+		'port': 8000,
 		'address': '',
 		'printer': '',
 		'audiodir': xdgbasedir.cache_filename_write(packagename = 'franklin', filename = 'audio', makedirs = False),
-		'blacklist': '/dev/(ptmx|console|tty(printk|S?\\d*))$',
+		'blacklist': '/dev/(ptmx|console|tty(printk|(S?|GS)\\d*))$',
 		'autodetect': 'True',
 		'avrdude': '/usr/bin/avrdude',
 		'allow-system': '^$',
@@ -545,6 +545,7 @@ def detect(port): # {{{
 			log('accepting unknown printer on port %s (id %s)' % (port, id[0]))
 			process = subprocess.Popen((config['driver'], config['cdriver'], port, id[0], config['allow-system']), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, printer)
+			ports[port].id = id[0]
 			return False
 		printer.write(single['ID'])
 		timeout_handle = GLib.timeout_add(15000, timeout)

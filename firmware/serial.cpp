@@ -343,13 +343,10 @@ void try_send_next()
 			uint8_t type = (motor[m].flags & Motor::SENSE1 ? 1 : 0);
 			pending_packet[0] = (type ? CMD_SENSE1 : CMD_SENSE0);
 			pending_packet[1] = m;
-			uint8_t mii = 0;
-			for (uint8_t mi = 0; mi < active_motors; ++mi) {
-				++mii;
-				*reinterpret_cast <int32_t *>(&pending_packet[2 + 4 * mii]) = motor[mi].sense_pos[type];
-			}
+			for (uint8_t mi = 0; mi < active_motors; ++mi)
+				*reinterpret_cast <int32_t *>(&pending_packet[2 + 4 * mi]) = motor[mi].sense_pos[type];
 			motor[m].flags &= ~(type ? Motor::SENSE1 : Motor::SENSE0);
-			prepare_packet(2 + 4 * mii);
+			prepare_packet(2 + 4 * active_motors);
 			send_packet();
 			return;
 		}
@@ -362,14 +359,10 @@ void try_send_next()
 			pending_packet[0] = CMD_LIMIT;
 			pending_packet[1] = m;
 			pending_packet[2] = limit_fragment_pos;
-			uint8_t mii = 0;
-			for (uint8_t mi = 0; mi < active_motors; ++mi) {
-				*reinterpret_cast <int32_t *>(&pending_packet[3 + 4 * mii]) = motor[mi].current_pos;
-				//debug("current pos %d %ld", mii, F(motor[mi].current_pos));
-				++mii;
-			}
+			for (uint8_t mi = 0; mi < active_motors; ++mi)
+				*reinterpret_cast <int32_t *>(&pending_packet[3 + 4 * mi]) = motor[mi].current_pos;
 			motor[m].flags &= ~Motor::LIMIT;
-			prepare_packet(3 + 4 * mii);
+			prepare_packet(3 + 4 * active_motors);
 			send_packet();
 			return;
 		}

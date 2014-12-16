@@ -244,7 +244,8 @@ static inline void avr_get_current_pos(int offset) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			//debug("cp %d %d %d", ts, tm, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
+			debug("cp %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
+			//debug("cp %d %d %d", ts, tm, avr_pos_offset[tm + mi]);
 		}
 	}
 }
@@ -332,12 +333,23 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_DONE:
 	{
+		if (FRAGMENTS_PER_BUFFER == 0) {
+			debug("Done received while fragments per buffer is zero");
+			avr_write_ack();
+			return;
+		}
 		int cbs = 0;
 		for (int i = 0; i < command[1][1]; ++i)
 			cbs += settings[(current_fragment + free_fragments + i + (moving ? 1 : 0)) % FRAGMENTS_PER_BUFFER].cbs;
 		if (cbs)
 			send_host(CMD_MOVECB, cbs);
 		free_fragments += command[1][1];
+		if (free_fragments > FRAGMENTS_PER_BUFFER) {
+			debug("Done count higher than busy fragments; clipping");
+			free_fragments = FRAGMENTS_PER_BUFFER;
+			avr_write_ack();
+			return;
+		}
 		avr_write_ack();
 		if (!out_busy)
 			buffer_refill();
@@ -511,9 +523,7 @@ static inline void arch_change(bool motors) {
 	if (motors) {
 		avr_active_motors = 0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
-			for (uint8_t m = 0; m < spaces[s].num_motors; ++m) {
-				avr_active_motors += 1;
-			}
+			avr_active_motors += spaces[s].num_motors;
 		}
 	}
 	avr_buffer[0] = HWC_SETUP;
@@ -763,6 +773,7 @@ static inline void END_DEBUG() {
 // Inline AVRSerial methods. {{{
 void AVRSerial::begin(char const *port, int baud) {
 	// Open serial port and prepare pollfd.
+	debug("opening %s", port);
 	fd = open(port, O_RDWR);
 	pollfds[1].fd = fd;
 	pollfds[1].events = POLLIN | POLLPRI;

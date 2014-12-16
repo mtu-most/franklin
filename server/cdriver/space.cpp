@@ -239,7 +239,7 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 			arch_addpos(id, m, cpdiff);
 			must_move = true;
 		}
-		if (motors_busy && old_home_pos != motor[m]->home_pos) {
+		if (motors_busy && old_home_pos != motor[m]->home_pos && !isnan(old_home_pos)) {
 			float f = motor[m]->home_pos - old_home_pos;
 			int32_t diff = f * motor[m]->steps_per_m + (f > 0 ? .49 : -.49);
 			motor[m]->settings[current_fragment].current_pos += diff;

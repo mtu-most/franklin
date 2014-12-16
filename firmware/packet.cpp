@@ -277,13 +277,11 @@ void packet()
 		write_ack();
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment_pos;
-		uint8_t mi = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			*reinterpret_cast <uint32_t *>(&reply[2 + 4 * mi]) = motor[m].current_pos;
+			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));
-			++mi;
 		}
-		reply_ready = 2 + 4 * mi;
+		reply_ready = 2 + 4 * active_motors;
 		try_send_next();
 		filling = 0;
 		current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
@@ -318,13 +316,11 @@ void packet()
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment_pos;
 		current_fragment_pos = 0;
-		uint8_t mi = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			*reinterpret_cast <uint32_t *>(&reply[2 + 4 * mi]) = motor[m].current_pos;
+			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			debug("abort pos %d %ld", m, motor[m].current_pos);
-			++mi;
 		}
-		reply_ready = 2 + 4 * mi;
+		reply_ready = 2 + 4 * active_motors;
 		try_send_next();
 		return;
 	}

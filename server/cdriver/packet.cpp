@@ -278,9 +278,9 @@ void packet()
 		int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings[current_fragment].current_pos;
 		spaces[which].motor[t]->settings[current_fragment].current_pos += diff;
 		spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
-		//debug("cp4 %d %d", spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
+		debug("cp4 %d %d", spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
 		arch_addpos(which, t, diff);
-		//debug("setpos %d %d %f", which, t, F(spaces[which].motor[t]->current_pos));
+		debug("setpos %d %d %d", which, t, F(spaces[which].motor[t]->settings[current_fragment].current_pos));
 		return;
 	}
 	case CMD_GETPOS:	// Get current position
@@ -521,7 +521,7 @@ void packet()
 			debug("Unexpected reconnect");
 			return;
 		}
-		arch_reconnect(reinterpret_cast <char *>(&command[1][1]));
+		arch_reconnect(reinterpret_cast <char *>(&command[0][2]));
 		return;
 	}
 #ifdef HAVE_AUDIO

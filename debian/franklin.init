@@ -17,7 +17,7 @@ CONFIG_FILE=/etc/default/franklin
 RUN=1
 
 # Port to listen for browser requests.
-PORT=8080
+PORT=8000
 
 # Address to listen on.  Set to 0.0.0.0 to disable IPv6 (needed on Raspberry Pi).
 ADDRESS=
@@ -38,7 +38,7 @@ PRINTER=''
 AUTODETECT=True
 
 # Regular expression of serial ports to ignore.
-BLACKLIST='/dev/(ptmx$|console$|ttyS?\d*|ttyprintk)$'
+BLACKLIST='/dev/(ptmx|console|tty(printk|(S?|GS)\\d*))$'
 
 # Required credentials as user:password or just a user (password is ignored).
 LOGIN=''

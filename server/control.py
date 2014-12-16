@@ -3,7 +3,7 @@
 import websockets
 import os
 
-port = 8080
+port = 8000
 
 with open ('/etc/default/franklin') as f:
 	for l in f.readlines ():

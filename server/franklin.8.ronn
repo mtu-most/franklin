@@ -43,7 +43,7 @@ control those printers.
  * `--passwordfile`=[file]
 	Read names and encrypted passwords from a file.  The file format is the same as for /etc/shadow, so it is possible to use that file directly.  There is no permission system; every logged in user is allowed to do everything the server supports.  Like with login, you should use --tls when using this option.
  * `--port`=<port>:
-	Network port to listen on for browser requests.  The default is 8080.
+	Network port to listen on for browser requests.  The default is 8000.
  * `--blacklist`=<regular expression>:
 	Any serial port device that matches this expression is ignored.
  * `--avrdude`=<path>:
