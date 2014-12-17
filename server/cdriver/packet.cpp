@@ -381,9 +381,6 @@ void packet()
 		}
 		addr = 3;
 		spaces[which].load_info(addr);
-		if (which == 0)
-			for (uint8_t s = 0; s < num_spaces; ++s)
-				space_types[spaces[s].type].change0(&spaces[s]);
 		return;
 	}
 	case CMD_WRITE_SPACE_AXIS:

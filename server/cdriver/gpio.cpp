@@ -29,10 +29,6 @@ void Gpio::save(int32_t &addr)
 	write_8(addr, state);
 }
 
-int32_t Gpio::savesize0() {
-	return 3;
-}
-
 void Gpio::init() {
 	pin.init();
 	state = 0;

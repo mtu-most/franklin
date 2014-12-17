@@ -145,8 +145,6 @@ struct Temp
 	void init();
 	void free();
 	void copy(Temp &dst);
-	static int32_t savesize0();
-	int32_t savesize() { return savesize0(); }
 };
 
 struct History
@@ -184,6 +182,7 @@ struct Axis
 	float source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
 	float max_v;
 	float min, max;
+	void *type_data;
 };
 
 struct Motor
@@ -222,8 +221,8 @@ struct SpaceType
 	void (*save)(Space *s, int32_t &addr);
 	bool (*init)(Space *s);
 	void (*free)(Space *s);
-	int32_t (*savesize)(Space *s);
-	bool (*change0)(Space *s);
+	void (*afree)(Space *s, int a);
+	void (*change0)(Space *s, int qpos);
 };
 
 struct Space
@@ -244,11 +243,8 @@ struct Space
 	void init(uint8_t space_id);
 	void free();
 	void copy(Space &dst);
-	static int32_t savesize0();
-	int32_t savesize();
 	bool setup_nums(uint8_t na, uint8_t nm);
 	void cancel_update();
-	int32_t savesize_std();
 };
 
 // Type 0: Extruder.
@@ -290,8 +286,6 @@ struct Gpio
 	void init();
 	void free();
 	void copy(Gpio &dst);
-	static int32_t savesize0();
-	int32_t savesize() { return savesize0(); }
 };
 
 struct MoveCommand
@@ -423,7 +417,6 @@ void send_fragment();
 // globals.cpp
 bool globals_load(int32_t &address);
 void globals_save(int32_t &address);
-int32_t globals_savesize();
 
 // base.cpp
 void reset();

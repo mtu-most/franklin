@@ -13,6 +13,14 @@
 // v0, vp		start and end velocity for main part. (fraction/s)
 // vq			end velocity of connector part. (fraction/s)
 
+static void change0(int qpos) {
+	// Ignore space 0; it shouldn't be able to change itself.
+	for (int s = 1; s < num_spaces; ++s) {
+		Space &sp = spaces[s];
+		space_types[sp.type].change0(&sp, qpos);
+	}
+}
+
 // Used from previous segment (if move_prepared == true): tp, vq.
 uint8_t next_move() {
 	uint8_t num_cbs = 0;
@@ -55,6 +63,7 @@ uint8_t next_move() {
 #endif
 		settings[current_fragment].f0 = 0;
 		a0 = 0;
+		change0(queue_start);
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[queue_start].data[a0]);
@@ -141,6 +150,7 @@ uint8_t next_move() {
 		debug("Building a connecting segment.");
 #endif
 		a0 = 0;
+		change0(n);
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[n].data[a0]);

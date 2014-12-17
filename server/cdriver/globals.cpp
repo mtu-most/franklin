@@ -111,7 +111,3 @@ void globals_save(int32_t &addr)
 	write_float(addr, temp_limit);
 	write_float(addr, feedrate);
 }
-
-int32_t globals_savesize() {
-	return 1 * 4 + 2 * 2 + sizeof(float) * 5 + namelen;
-}

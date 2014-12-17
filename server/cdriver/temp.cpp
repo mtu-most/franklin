@@ -56,10 +56,6 @@ void Temp::save(int32_t &addr)
 	write_float(addr, target[1]);
 }
 
-int32_t Temp::savesize0() {
-	return 2 * 2 + sizeof(float) * 10;
-}
-
 float Temp::fromadc(int32_t adc) {
 	if (adc <= 0)
 		return INFINITY;

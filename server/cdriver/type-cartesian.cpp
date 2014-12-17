@@ -40,12 +40,10 @@ static bool init(Space *s) {
 static void free(Space *s) {
 }
 
-static int32_t savesize(Space *s) {
-	return 1 * 1 + s->savesize_std();
+static void afree(Space *s, int a) {
 }
 
-static bool change0(Space *s) {
-	return true;
+static void change0(Space *s, int qpos) {
 }
 
 void Cartesian_init(uint8_t num) {
@@ -56,20 +54,22 @@ void Cartesian_init(uint8_t num) {
 	space_types[num].save = save;
 	space_types[num].init = init;
 	space_types[num].free = free;
-	space_types[num].savesize = savesize;
+	space_types[num].afree = afree;
 	space_types[num].change0 = change0;
 }
 
 struct ExtruderData {
-	float dx, dy, dz;
+	int current;
+};
+
+struct ExtruderAxisData {
+	float offset[3];
 };
 
 #define EDATA(s) (*reinterpret_cast <ExtruderData *>(s->type_data))
+#define EADATA(s, a) (*reinterpret_cast <ExtruderAxisData *>(s->axis[a]->type_data))
 
 static void eload(Space *s, uint8_t old_type, int32_t &addr) {
-	EDATA(s).dx = read_float(addr);
-	EDATA(s).dy = read_float(addr);
-	EDATA(s).dz = read_float(addr);
 	uint8_t num = read_8(addr);
 	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up cartesian axes");
@@ -79,17 +79,24 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) {
 			s->cancel_update();
 		}
 	}
+	for (int a = 0; a < s->num_axes; ++a) {
+		s->axis[a]->type_data = new ExtruderAxisData;
+		for (int o = 0; o < 3; ++o)
+			EADATA(s, a).offset[o] = read_float(addr);
+	}
 }
 
 static void esave(Space *s, int32_t &addr) {
-	write_float(addr, EDATA(s).dx);
-	write_float(addr, EDATA(s).dy);
-	write_float(addr, EDATA(s).dz);
 	write_8(addr, s->num_axes);
+	for (int a = 0; a < s->num_axes; ++a) {
+		for (int o = 0; o < 3; ++o)
+			write_float(addr, EADATA(s, a).offset[o]);
+	}
 }
 
 static bool einit(Space *s) {
 	s->type_data = new ExtruderData;
+	EDATA(s).current = 0;
 	return true;
 }
 
@@ -97,12 +104,25 @@ static void efree(Space *s) {
 	delete reinterpret_cast <ExtruderData *>(s->type_data);
 }
 
-static int32_t esavesize(Space *s) {
-	return 1 * 1 + 4 * 3 + s->savesize_std();
+static void eafree(Space *s, int a) {
+	delete reinterpret_cast <ExtruderAxisData *>(s->axis[a]->type_data);
 }
 
-static bool echange0(Space *s) {
-	return true;	// TODO
+static void echange0(Space *s, int qpos) {
+	int o = 0;
+	for (int ss = 0; &spaces[ss] != s; ++ss)
+		o += spaces[ss].num_axes;
+	for (int c = 0; c < s->num_axes; ++c) {
+		if (!isnan(queue[qpos].data[o + c])) {
+			EDATA(s).current = c;
+			break;
+		}
+	}
+	if (EDATA(s).current >= s->num_axes)
+		return;
+	for (int a = 0; a < min(3, spaces[0].num_axes); ++a)
+		queue[qpos].data[a] -= EADATA(s, EDATA(s).current).offset[a];
+	return;
 }
 
 void Extruder_init(uint8_t num) {
@@ -113,6 +133,6 @@ void Extruder_init(uint8_t num) {
 	space_types[num].save = esave;
 	space_types[num].init = einit;
 	space_types[num].free = efree;
-	space_types[num].savesize = esavesize;
+	space_types[num].afree = eafree;
 	space_types[num].change0 = echange0;
 }

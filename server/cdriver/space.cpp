@@ -35,6 +35,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_axes[a]->max_v = INFINITY;
 			new_axes[a]->min = -INFINITY;
 			new_axes[a]->max = INFINITY;
+			new_axes[a]->type_data = NULL;
 			new_axes[a]->settings = new Axis_History[FRAGMENTS_PER_BUFFER];
 			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
 				new_axes[a]->settings[f].dist = NAN;
@@ -44,6 +45,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			}
 		}
 		for (uint8_t a = na; a < old_na; ++a) {
+			space_types[type].afree(this, a);
 			delete[] axis[a]->settings;
 			delete axis[a];
 		}
@@ -293,18 +295,6 @@ void Space::save_motor(uint8_t m, int32_t &addr) {
 	write_float(addr, motor[m]->limit_v);
 	write_float(addr, motor[m]->limit_a);
 	write_8(addr, motor[m]->home_order);
-}
-
-int32_t Space::savesize_std() {
-	return (2 * 6 + 4 * 6 + 1 * 2) * num_motors + sizeof(float) * (1 + 3 * num_axes + 3 * num_motors);
-}
-
-int32_t Space::savesize() {
-	return 1 * 1 + space_types[type].savesize(this);
-}
-
-int32_t Space::savesize0() {
-	return 2;	// Cartesian type, 0 axes.
 }
 
 void Space::init(uint8_t space_id) {

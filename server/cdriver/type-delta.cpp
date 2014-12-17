@@ -18,22 +18,24 @@ static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
 	float dx = target[0] - APEX(s, a).x;
 	float dy = target[1] - APEX(s, a).y;
 	float r2 = dx * dx + dy * dy;
-	if (r2 > APEX(s, a).axis_max * APEX(s, a).axis_max) {
+	float amax = min(APEX(s, a).axis_max, APEX(s, a).rodlength);
+	if (r2 > amax * amax) {
 		debug ("not ok 1: %f %f %f %f %f %f %f", F(target[0]), F(target[1]), F(dx), F(dy), F(r2), F(APEX(s, a).rodlength), F(APEX(s, a).axis_max));
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
-		float factor(APEX(s, a).axis_max / sqrt(r2));
+		float factor(amax / sqrt(r2));
 		target[0] = APEX(s, a).x + (target[0] - APEX(s, a).x) * factor;
 		target[1] = APEX(s, a).y + (target[1] - APEX(s, a).y) * factor;
 		return false;
 	}
 	// Inner product shows if projection is inside or outside the printable region.
 	float projection = -(dx / APEX(s, a).radius * APEX(s, a).x + dy / APEX(s, a).radius * APEX(s, a).y);
-	if (projection < APEX(s, a).axis_min) {
+	float amin = max(APEX(s, a).axis_min, -APEX(s, a).rodlength);
+	if (projection < amin) {
 		debug ("not ok 2: %f %f %f %f %f", F(projection), F(dx), F(dy), F(APEX(s, a).x), F(APEX(s, a).y));
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
-		target[0] -= ((APEX(s, a).axis_min - projection) / APEX(s, a).radius - .001) * APEX(s, a).x;
-		target[1] -= ((APEX(s, a).axis_min - projection) / APEX(s, a).radius - .001) * APEX(s, a).y;
+		target[0] -= ((amin - projection) / APEX(s, a).radius - .001) * APEX(s, a).x;
+		target[1] -= ((amin - projection) / APEX(s, a).radius - .001) * APEX(s, a).y;
 		// Assume this was a small correction; that way, things will work even if numerical errors cause this to be called for the real move.
 		return false;
 	}
@@ -112,10 +114,6 @@ static void load(Space *s, uint8_t old_type, int32_t &addr) {
 		APEX(s, a).axis_max = read_float(addr);
 		APEX(s, a).rodlength = read_float(addr);
 		APEX(s, a).radius = read_float(addr);
-		if (APEX(s, a).axis_max > APEX(s, a).rodlength || APEX(s, a).axis_max < 0)
-			APEX(s, a).axis_max = APEX(s, a).rodlength;
-		if (APEX(s, a).axis_min > APEX(s, a).axis_max)
-			APEX(s, a).axis_min = 0;
 	}
 	PRIVATE(s).angle = read_float(addr);
 	if (isinf(PRIVATE(s).angle) || isnan(PRIVATE(s).angle))
@@ -161,12 +159,7 @@ static void free(Space *s) {
 	delete reinterpret_cast <Delta_private *>(s->type_data);
 }
 
-static int32_t savesize(Space *s) {
-	return sizeof(float) * 4 + s->savesize_std();
-}
-
-static bool change0(Space *s) {
-	return true;
+static void change0(Space *s, int qpos) {
 }
 
 void Delta_init(uint8_t num) {
@@ -177,6 +170,5 @@ void Delta_init(uint8_t num) {
 	space_types[num].save = save;
 	space_types[num].init = init;
 	space_types[num].free = free;
-	space_types[num].savesize = savesize;
 	space_types[num].change0 = change0;
 }
