@@ -13,13 +13,33 @@ static void do_steps(Dir dir, uint8_t m, uint8_t value) {
 			RESET(motor[m].dir_pin);
 	}
 	if (motor[m].step_pin < NUM_DIGITAL_PINS) {
-		for (uint8_t s = 0; s < value; ++s) {
+		for (uint8_t i = 0; i < value; ++i) {
 			SET(motor[m].step_pin);
 			RESET(motor[m].step_pin);
 		}
 	}
 	motor[m].current_pos += (dir == DIR_POSITIVE ? value : -value);
 }
+
+// When to do the steps.
+static uint16_t const lookup[] = {
+	0x0000,
+	0x0040,
+	0x0204,
+	0x0842,
+	0x0889,
+	0x1249,
+	0x14a5,
+	0x1555,
+	0x5555,
+	0x56b5,
+	0x5b6d,
+	0x5bbb,
+	0x5ef7,
+	0x5fbf,
+	0x5fff,
+	0x7fff
+};
 
 static void handle_motors(uint32_t current_time) {
 	// Check sensors.
@@ -47,7 +67,7 @@ static void handle_motors(uint32_t current_time) {
 				debug("hit limit %d curpos %ld dir %d frag %d;%d;%d;%d", m, F(motor[m].current_pos), fragment.dir, current_fragment, notified_current_fragment, last_fragment, current_fragment_pos);
 				// Notify host.
 				motor[m].flags |= Motor::LIMIT;
-				limit_fragment_pos = current_fragment_pos;
+				limit_fragment_pos = current_fragment_pos / 15;
 				current_fragment_pos = 0;
 				stopped = true;
 				filling = 0;
@@ -88,12 +108,22 @@ static void handle_motors(uint32_t current_time) {
 	else {
 		// Regular move.  (Not homing.)
 		bool want_send = false;
-		int8_t fragment_diff = (current_time - start_time) / time_per_sample - current_fragment_pos;
+		int16_t fragment_diff = (current_time - start_time) * 15 / time_per_sample - current_fragment_pos;
+		uint8_t steps[active_motors];
+		for (uint8_t m = 0; m < active_motors; ++m)
+			steps[m] = 0;
 		while (!stopped && fragment_diff > 0) {
 			// Move to next buffer.
-			while (!stopped && current_fragment_pos >= fragment_len[current_fragment]) {
+			while (!stopped && current_fragment_pos >= 15 * fragment_len[current_fragment]) {
+				for (uint8_t m = 0; m < active_motors; ++m) {
+					if (steps[m] > 0) {
+						Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+						do_steps(fragment.dir, m, steps[m]);
+						steps[m] = 0;
+					}
+				}
 				start_time += fragment_len[current_fragment] * time_per_sample;
-				current_fragment_pos -= fragment_len[current_fragment];
+				current_fragment_pos -= 15 * fragment_len[current_fragment];
 				uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 				if (last_fragment == (filling > 0 ? new_current_fragment : current_fragment)) {
 					// Underrun.
@@ -110,11 +140,23 @@ static void handle_motors(uint32_t current_time) {
 				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
 				if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
 					continue;
-				uint8_t value = (fragment.samples[current_fragment_pos >> 1] >> (4 * (current_fragment_pos & 1))) & 0xf;
-				do_steps(fragment.dir, m, value);
+				int16_t pos = current_fragment_pos / 15;
+				uint8_t item = fragment.samples[pos >> 1];
+				if (pos & 1)
+					item >>= 4;
+				item &= 0xf;
+				bool bit = (lookup[item] >> (pos % 15)) & 1;
+				if (bit)
+					steps[m] += 1;
 			}
 			current_fragment_pos += 1;
 			fragment_diff -= 1;
+		}
+		for (uint8_t m = 0; m < active_motors; ++m) {
+			if (steps[m] > 0) {
+				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+				do_steps(fragment.dir, m, steps[m]);
+			}
 		}
 		if (want_send)
 			try_send_next();
@@ -155,13 +197,17 @@ static void handle_adc(uint32_t current_time) {
 		if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS) {
 			if (((adc[adc_current].value[n] & 0x4000) != 0) ^ ((adc[adc_current].value[n] & 0x3fff) > value)) {
 				RESET(adc[adc_current].linked[n]);
-				if (n == 0)
+				if (n == 0 && adc[adc_current].is_on) {
 					led_fast -= 1;
+					adc[adc_current].is_on = false;
+				}
 			}
 			else {
 				SET(adc[adc_current].linked[n]);
-				if (n == 0)
+				if (n == 0 && !adc[adc_current].is_on) {
 					led_fast += 1;
+					adc[adc_current].is_on = true;
+				}
 			}
 		}
 	}

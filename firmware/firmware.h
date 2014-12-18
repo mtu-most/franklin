@@ -258,11 +258,12 @@ EXTERN uint8_t notified_current_fragment;
 EXTERN uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
 EXTERN uint8_t last_fragment;	// Fragment that is currently being filled, or has last been filled.
 EXTERN uint8_t limit_fragment_pos;
-EXTERN uint8_t current_fragment_pos;
+EXTERN uint16_t current_fragment_pos;
 
 struct Adc {
 	uint8_t linked[2];
 	uint16_t value[2];	// bit 15 in [0] set => invalid; bit 14 set => linked inverted.
+	bool is_on;
 };
 
 enum AdcPhase {

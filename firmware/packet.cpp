@@ -145,11 +145,21 @@ void packet()
 			return;
 		}
 		for (uint8_t i = 0; i < 2; ++i) {
+			if (~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS && (command[2 + i] != adc[a].linked[i] || command[5] & 0x80)) {
+				if (adc[a].value[i] & 0x4000)
+					SET(adc[a].linked[i]);
+				else
+					RESET(adc[a].linked[i]);
+				if (i == 0 && adc[a].is_on) {
+					adc[a].is_on = false;
+					led_fast -= 1;
+				}
+			}
 			adc[a].linked[i] = command[2 + i];
 			adc[a].value[i] = *reinterpret_cast <uint16_t *>(&command[4 + 2 * i]);
 			//debug("adc %d link %d pin %d value %x", a, i, adc[a].linked[i], adc[a].value[i]);
 		}
-		if (adc_phase == INACTIVE && (adc[a].value[0] & 0x8000) == 0) {
+		if (adc_phase == INACTIVE && ~adc[a].value[0] & 0x8000) {
 			adc_phase = PREPARING;
 			adc_current = a;
 			adc_next = a;
@@ -281,7 +291,7 @@ void packet()
 		home_step_time = 0;
 		write_ack();
 		reply[0] = CMD_STOPPED;
-		reply[1] = current_fragment_pos;
+		reply[1] = current_fragment_pos / 15;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));
@@ -319,7 +329,7 @@ void packet()
 		home_step_time = 0;
 		write_ack();
 		reply[0] = CMD_STOPPED;
-		reply[1] = current_fragment_pos;
+		reply[1] = current_fragment_pos / 15;
 		current_fragment_pos = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
