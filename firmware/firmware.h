@@ -47,7 +47,7 @@ EXTERN char pending_packet[FULL_COMMAND_SIZE];
 EXTERN uint16_t pending_len;
 EXTERN bool stopped, underrun;
 EXTERN uint8_t filling;
-EXTERN bool led_fast;
+EXTERN uint8_t led_fast;
 EXTERN uint32_t led_last, led_phase, start_time, time_per_sample;
 EXTERN uint8_t led_pin;
 EXTERN bool temps_disabled;

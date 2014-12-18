@@ -38,7 +38,7 @@ void setup()
 	stopped = true;
 	stopping = false;
 	underrun = false;
-	led_fast = false;
+	led_fast = 0;
 	led_last = current_time;
 	led_phase = 0;
 	led_pin = ~0;

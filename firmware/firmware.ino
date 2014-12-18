@@ -2,13 +2,15 @@
 #include "firmware.h"
 
 static void do_steps(Dir dir, uint8_t m, uint8_t value) {
-	if (dir == DIR_NONE || dir == DIR_AUDIO)
+	if (dir != DIR_POSITIVE && dir != DIR_NEGATIVE) {
+		debug("Invalid direction in do_steps");
 		return;
+	}
 	if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
-		if (dir)
-			RESET(motor[m].dir_pin);
-		else
+		if (dir == DIR_POSITIVE)
 			SET(motor[m].dir_pin);
+		else
+			RESET(motor[m].dir_pin);
 	}
 	if (motor[m].step_pin < NUM_DIGITAL_PINS) {
 		for (uint8_t s = 0; s < value; ++s) {
@@ -16,7 +18,7 @@ static void do_steps(Dir dir, uint8_t m, uint8_t value) {
 			RESET(motor[m].step_pin);
 		}
 	}
-	motor[m].current_pos += (dir ? -1 : 1) * value;
+	motor[m].current_pos += (dir == DIR_POSITIVE ? value : -value);
 }
 
 static void handle_motors(uint32_t current_time) {
@@ -28,9 +30,11 @@ static void handle_motors(uint32_t current_time) {
 		// Check sense pins.
 		if (motor[m].sense_pin < NUM_DIGITAL_PINS) {
 			if (GET(motor[m].sense_pin) ^ bool(motor[m].flags & Motor::SENSE_STATE)) {
-				motor[m].flags |= (motor[m].flags & Motor::SENSE_STATE ? Motor::SENSE1 : Motor::SENSE0);
+				debug("sense %d %x", m, motor[m].flags);
 				motor[m].flags ^= Motor::SENSE_STATE;
-				motor[m].sense_pos[(motor[m].flags & Motor::SENSE_STATE) ? 1 : 0] = motor[m].current_pos;
+				motor[m].flags |= (motor[m].flags & Motor::SENSE_STATE ? Motor::SENSE1 : Motor::SENSE0);
+				for (int mi = 0; mi < active_motors; ++mi)
+					motor[mi].sense_pos[(motor[m].flags & Motor::SENSE_STATE) ? 1 : 0] = motor[mi].current_pos;
 				try_send_next();
 			}
 		}
@@ -63,7 +67,7 @@ static void handle_motors(uint32_t current_time) {
 		start_time += home_step_time;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
-			if (fragment.dir > 1)
+			if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
 				continue;
 			// Get twe "wrong" limit pin for the given direction.
 			uint8_t limit_pin = (fragment.dir ? motor[m].limit_max_pin : motor[m].limit_min_pin);
@@ -104,6 +108,8 @@ static void handle_motors(uint32_t current_time) {
 				break;
 			for (uint8_t m = 0; m < active_motors; ++m) {
 				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+				if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
+					continue;
 				uint8_t value = (fragment.samples[current_fragment_pos >> 1] >> (4 * (current_fragment_pos & 1))) & 0xf;
 				do_steps(fragment.dir, m, value);
 			}
@@ -116,7 +122,7 @@ static void handle_motors(uint32_t current_time) {
 }
 
 static uint8_t next_adc(uint8_t old) {
-	for (uint8_t a = 0; a <= NUM_ANALOG_INPUTS; ++a) {
+	for (uint8_t a = 1; a <= NUM_ANALOG_INPUTS; ++a) {
 		uint8_t n = (old + a) % NUM_ANALOG_INPUTS;
 		if (adc[n].value[0] & 0x8000)
 			// Invalid pin.
@@ -135,6 +141,7 @@ static void handle_adc(uint32_t current_time) {
 	}
 	uint16_t value = adc_get(adc_current);
 	//debug("adc %d = %d", adc_current, value);
+	// Send to host if it is waiting and buffer is free.
 	if (adc_current == adc_next && !adcreply_ready) {
 		adcreply[0] = CMD_ADC;
 		adcreply[1] = adc_current;
@@ -143,23 +150,26 @@ static void handle_adc(uint32_t current_time) {
 		try_send_next();
 		adc_next = next_adc(adc_next);
 	}
+	// Adjust heater and fan.
 	for (uint8_t n = 0; n < 2; ++n) {
-		/*if (n == 0)
-			debug("adc %d link %d pin %d value %x target %x", adc_current, n, adc[adc_current].linked[n], value, adc[adc_current].value[n] & 0x3fff);*/
 		if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS) {
-			if (((adc[adc_current].value[n] & 0x4000) != 0) ^ ((adc[adc_current].value[n] & 0x3fff) > value))
+			if (((adc[adc_current].value[n] & 0x4000) != 0) ^ ((adc[adc_current].value[n] & 0x3fff) > value)) {
 				RESET(adc[adc_current].linked[n]);
-			else
+				if (n == 0)
+					led_fast -= 1;
+			}
+			else {
 				SET(adc[adc_current].linked[n]);
+				if (n == 0)
+					led_fast += 1;
+			}
 		}
 	}
 	adc_current = next_adc(adc_current);
-	if (adc_current != uint8_t(~0)) {
-		// Start new measurement.
-		adc_ready(adc_current);
+	if (adc_current == uint8_t(~0))
 		return;
-	}
-	adc_current = ~0;
+	// Start new measurement.
+	adc_ready(adc_current);
 }
 
 static void handle_led(uint32_t current_time) {

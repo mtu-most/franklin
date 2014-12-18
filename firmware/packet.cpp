@@ -191,14 +191,19 @@ void packet()
 				write_stall();
 				return;
 			}
-			if (fragment.dir <= 1)
+			if (fragment.dir == DIR_POSITIVE || fragment.dir == DIR_NEGATIVE)
 				homers += 1;
 		}
 		home_step_time = *reinterpret_cast <uint32_t *>(&command[1]);
-		if (homers > 0)
+		if (homers > 0) {
 			stopped = false;
-		start_time = utime();
-		write_ack();
+			start_time = utime();
+			write_ack();
+		}
+		else {
+			debug("nothing to home");
+			write_stall();
+		}
 		return;
 	}
 	case CMD_START_MOVE:

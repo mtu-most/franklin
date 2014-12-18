@@ -213,15 +213,6 @@ static inline void arch_setup_start() {
 	printerid[9] |= 0x80;
 }
 
-static inline bool arch_run() {
-	if (TIFR1 & (1 << TOV1)) {
-		TIFR1 = 1 << TOV1;
-		time_h += 1;
-		return true;
-	}
-	return false;
-}
-
 static inline void arch_setup_end() {
 	debug("Startup.  MCUSR: %x", mcusr);
 }
@@ -230,17 +221,14 @@ static inline uint32_t utime() {
 	uint32_t l = uint8_t(TCNT1L);
 	uint32_t h = uint8_t(TCNT1H);
 	// If a  carry happened just now, get new values.
-	if (arch_run()) {
+	if (TIFR1 & (1 << TOV1)) {
+		TIFR1 = 1 << TOV1;
+		time_h += 1;
 		l = uint8_t(TCNT1L);
 		h = uint8_t(TCNT1H);
 	}
 	// Don't use 16,8,0, because we have 2 counts/us, not 1.
 	return (time_h << 15) | (h << 7) | (l >> 1);
-}
-
-static inline void get_current_times(uint32_t *current_time, uint32_t *longtime) {
-	*current_time = utime();
-	*longtime = millis();
 }
 
 /* Memory handling
