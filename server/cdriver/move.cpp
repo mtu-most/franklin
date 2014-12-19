@@ -174,6 +174,7 @@ uint8_t next_move() {
 	// }}}
 	float v0 = queue[queue_start].f[0] * feedrate;
 	float vp = queue[queue_start].f[1] * feedrate;
+	debug("mv %f %f %f %f", feedrate, v0, vp, vq);
 	if (queue[queue_start].cb)
 		cbs_after_current_move += 1;
 	if (queue_end == queue_start)

@@ -35,6 +35,7 @@ import fcntl
 import select
 import subprocess
 import traceback
+import protocol
 # }}}
 
 # Enable code trace. {{{
@@ -223,53 +224,6 @@ class Printer: # {{{
 	# Constants.  {{{
 	# Single-byte commands.
 	single = {'OK': '\xb3', 'WAIT': '\xad' }
-	# Regular commands.
-	command = {
-			'RESET': 0x00,
-			'GOTO': 0x01,
-			'GOTOCB': 0x02,
-			'SLEEP': 0x03,
-			'SETTEMP': 0x04,
-			'WAITTEMP': 0x05,
-			'READTEMP': 0x06,
-			'READPOWER': 0x07,
-			'SETPOS': 0x08,
-			'GETPOS': 0x09,
-			'LOAD': 0x0a,
-			'SAVE': 0x0b,
-			'READ_GLOBALS': 0x0c,
-			'WRITE_GLOBALS': 0x0d,
-			'READ_SPACE_INFO': 0x0e,
-			'READ_SPACE_AXIS': 0x0f,
-			'READ_SPACE_MOTOR': 0x10,
-			'WRITE_SPACE_INFO': 0x11,
-			'WRITE_SPACE_AXIS': 0x12,
-			'WRITE_SPACE_MOTOR': 0x13,
-			'READ_TEMP': 0x14,
-			'WRITE_TEMP': 0x15,
-			'READ_GPIO': 0x16,
-			'WRITE_GPIO': 0x17,
-			'QUEUED': 0x18,
-			'READPIN': 0x19,
-			'HOME': 0x1a,
-			'RECONNECT': 0x1b,
-			'AUDIO_SETUP': 0x1c,
-			'AUDIO_DATA': 0x1d}
-	rcommand = {
-			'TEMP': 0x1e,
-			'POWER': 0x1f,
-			'POS': 0x20,
-			'DATA': 0x21,
-			'PIN': 0x22,
-			'QUEUE': 0x23,
-			'HOMED': 0x24,
-			'MOVECB': 0x25,
-			'TEMPCB': 0x26,
-			'CONTINUE': 0x27,
-			'LIMIT': 0x28,
-			'AUTOSLEEP': 0x29,
-			'SENSE': 0x2a,
-			'DISCONNECT': 0x2b}
 	# }}}
 	def _broadcast(self, *a): # {{{
 		self._send(None, 'broadcast', *a)
@@ -288,7 +242,7 @@ class Printer: # {{{
 				id, func, a, ka = json.loads(ln)
 				if func == 'reconnect':
 					log('reconnect %s' % a[0])
-					self._send_packet(chr(self.command['RECONNECT']) + a[0] + '\x00')
+					self._send_packet(chr(protocol.command['RECONNECT']) + a[0] + '\x00')
 					self.command_buffer = waiting_commands + self.command_buffer
 					self._send(id, 'return', None)
 					return
@@ -408,11 +362,11 @@ class Printer: # {{{
 			cmd, s, m, f, e, data = self._read_data(self.printer_buffer[1:])
 			self.printer_buffer = ''
 			# Handle the asynchronous events.
-			if cmd == self.rcommand['MOVECB']:
+			if cmd == protocol.rcommand['MOVECB']:
 				#log('movecb %d/%d (%d in queue)' % (s, self.movewait, len(self.movecb)))
 				self._trigger_movewaits(s)
 				continue
-			if cmd == self.rcommand['TEMPCB']:
+			if cmd == protocol.rcommand['TEMPCB']:
 				self.alarms.add(s)
 				t = 0
 				while t < len(self.tempcb):
@@ -422,7 +376,7 @@ class Printer: # {{{
 						t += 1
 				call_queue.append((self._do_gcode, []))
 				continue
-			elif cmd == self.rcommand['CONTINUE']:
+			elif cmd == protocol.rcommand['CONTINUE']:
 				if s == 0:
 					# Move continue.
 					self.wait = False
@@ -436,12 +390,12 @@ class Printer: # {{{
 					self.waitaudio = False
 					self._audio_play()
 				continue
-			elif cmd == self.rcommand['LIMIT']:
+			elif cmd == protocol.rcommand['LIMIT']:
 				self.limits[s][m] = f
 				#log('limit; %d waits' % e)
 				self._trigger_movewaits(e)
 				continue
-			elif cmd == self.rcommand['AUTOSLEEP']:
+			elif cmd == protocol.rcommand['AUTOSLEEP']:
 				if s == 0:
 					self.position_valid = False
 					self._globals_update()
@@ -451,7 +405,7 @@ class Printer: # {{{
 							self.temps[t].value = float('nan')
 							self._temp_update(t)
 				continue
-			elif cmd == self.rcommand['SENSE']:
+			elif cmd == protocol.rcommand['SENSE']:
 				if m not in self.sense[s]:
 					self.sense[s][m] = []
 				self.sense[s][m].append((e, f))
@@ -462,10 +416,10 @@ class Printer: # {{{
 					else:
 						s += 1
 				continue
-			elif cmd == self.rcommand['HOMED']:
+			elif cmd == protocol.rcommand['HOMED']:
 				self._do_home(True)
 				continue
-			elif cmd == self.rcommand['DISCONNECT']:
+			elif cmd == protocol.rcommand['DISCONNECT']:
 				self._close()
 				# _close returns after reconnect.
 				continue
@@ -541,15 +495,15 @@ class Printer: # {{{
 			self.spaces[channel].axis = []
 			return ([self._read('SPACE_AXIS', channel, axis) for axis in range(num_axes)], [self._read('SPACE_MOTOR', channel, motor) for motor in range(num_motors)])
 		if cmd == 'GLOBALS':
-			packet = struct.pack('<B', self.command['READ_' + cmd])
+			packet = struct.pack('<B', protocol.command['READ_' + cmd])
 		elif sub is not None and cmd.startswith('SPACE'):
-			packet = struct.pack('<BBB', self.command['READ_' + cmd], channel, sub)
+			packet = struct.pack('<BBB', protocol.command['READ_' + cmd], channel, sub)
 		else:
-			packet = struct.pack('<BB', self.command['READ_' + cmd], channel)
+			packet = struct.pack('<BB', protocol.command['READ_' + cmd], channel)
 		if not self._send_packet(packet):
 			return None
 		cmd, s, m, f, e, data = self._get_reply()
-		assert cmd == self.rcommand['DATA']
+		assert cmd == protocol.rcommand['DATA']
 		return data
 	# }}}
 	def _read_globals(self, update = True): # {{{
@@ -591,7 +545,7 @@ class Printer: # {{{
 	def _write_globals(self, ns, nt, ng, update = True): # {{{
 		name = self.name.encode('utf-8')
 		data = struct.pack('<BBBB', ns if ns is not None else len(self.spaces), nt if nt is not None else len(self.temps), ng if ng is not None else len(self.gpios), len(name)) + name + struct.pack('<HHffBfff', self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.motor_limit, self.temp_limit, self.feedrate)
-		if not self._send_packet(struct.pack('<B', self.command['WRITE_GLOBALS']) + data):
+		if not self._send_packet(struct.pack('<B', protocol.command['WRITE_GLOBALS']) + data):
 			return False
 		self._read_globals()
 		if update:
@@ -978,9 +932,9 @@ class Printer: # {{{
 			if cb:
 				self.movewait += 1
 				#log('movewait +1 -> %d' % self.movewait)
-				p = chr(self.command['GOTOCB'])
+				p = chr(protocol.command['GOTOCB'])
 			else:
-				p = chr(self.command['GOTO'])
+				p = chr(protocol.command['GOTO'])
 			#log('queueing %s' % repr((axes, f0, f1, cb, self.flushing)))
 			self._send_packet(p + ''.join([chr(t) for t in targets]) + args, move = True)
 			if id is not None:
@@ -1119,7 +1073,7 @@ class Printer: # {{{
 			self.home_phase = 4
 			if num > 0:
 				dprint('homing', data)
-				self._send_packet(chr(self.command['HOME']) + data)
+				self._send_packet(chr(protocol.command['HOME']) + data)
 				return
 			# Fall through.
 		if self.home_phase == 4:
@@ -1298,7 +1252,7 @@ class Printer: # {{{
 				if self.audioid is not None:
 					self._send(self.audioid, 'return', True)
 				return
-			if not self._send_packet(chr(self.command['AUDIO_DATA']) + data, audio = True):
+			if not self._send_packet(chr(protocol.command['AUDIO_DATA']) + data, audio = True):
 				self.audiofile = None
 				if self.audioid is not None:
 					self._send(self.audioid, 'return', False)
@@ -1350,14 +1304,14 @@ class Printer: # {{{
 			return struct.pack('<HHHHHHfBfffB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_m'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
 		def set_current_pos(self, axis, pos):
 			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
-			if not self.printer._send_packet(struct.pack('<BBBf', self.printer.command['SETPOS'], self.id, axis, pos)):
+			if not self.printer._send_packet(struct.pack('<BBBf', protocol.command['SETPOS'], self.id, axis, pos)):
 				return False
 			return True
 		def get_current_pos(self, axis):
-			if not self.printer._send_packet(struct.pack('<BBB', self.printer.command['GETPOS'], self.id, axis)):
+			if not self.printer._send_packet(struct.pack('<BBB', protocol.command['GETPOS'], self.id, axis)):
 				return None
 			cmd, s, m, f, e, data = self.printer._get_reply()
-			assert cmd == self.printer.rcommand['POS']
+			assert cmd == protocol.rcommand['POS']
 			return f
 		def export(self):
 			std = [self.type, self.max_deviation, [[a['offset'], a['park'], a['park_order'], a['max_v'], a['min'], a['max']] for a in self.axis], [[m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['sense_pin'], m['steps_per_m'], m['max_steps'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for m in self.motor], None if self.id != 1 else self.printer.multipliers]
@@ -1438,7 +1392,7 @@ class Printer: # {{{
 	# Useful commands.  {{{
 	def reset(self): # {{{
 		log('%s resetting and dying.' % self.name)
-		return self._send_packet(struct.pack('<BB', self.command['RESET'], 0))
+		return self._send_packet(struct.pack('<BB', protocol.command['RESET'], 0))
 	# }}}
 	def die(self, reason): # {{{
 		log('%s dying as requested by host (%s).' % (self.name, reason))
@@ -1493,14 +1447,14 @@ class Printer: # {{{
 		if sleeping:
 			self.position_valid = False
 			self._globals_update()
-		return self._send_packet(struct.pack('<BB', self.command['SLEEP'], sleeping))
+		return self._send_packet(struct.pack('<BB', protocol.command['SLEEP'], sleeping))
 	# }}}
 	def settemp(self, channel, temp, update = True): # {{{
 		channel = int(channel)
 		self.temps[channel].value = temp
 		if update:
 			self._temp_update(channel)
-		return self._send_packet(struct.pack('<BBf', self.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
+		return self._send_packet(struct.pack('<BBf', protocol.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
 	# }}}
 	def waittemp(self, channel, min, max = None): # {{{
 		channel = int(channel)
@@ -1508,17 +1462,17 @@ class Printer: # {{{
 			min = float('nan')
 		if max is None:
 			max = float('nan')
-		return self._send_packet(struct.pack('<BBff', self.command['WAITTEMP'], channel, min + C0 if not math.isnan(self.temps[channel].beta) else min, max + C0 if not math.isnan(self.temps[channel].beta) else max))
+		return self._send_packet(struct.pack('<BBff', protocol.command['WAITTEMP'], channel, min + C0 if not math.isnan(self.temps[channel].beta) else min, max + C0 if not math.isnan(self.temps[channel].beta) else max))
 	# }}}
 	def readtemp(self, channel): # {{{
 		channel = int(channel)
 		if channel >= len(self.temps):
 			log('Trying to read invalid temp %d' % channel)
 			return float('nan')
-		if not self._send_packet(struct.pack('<BB', self.command['READTEMP'], channel)):
+		if not self._send_packet(struct.pack('<BB', protocol.command['READTEMP'], channel)):
 			return None
 		cmd, s, m, f, e, data = self._get_reply()
-		assert cmd == self.rcommand['TEMP']
+		assert cmd == protocol.rcommand['TEMP']
 		return f - (C0 if not math.isnan(self.temps[channel].beta) else 0)
 	# }}}
 	def readpower(self, channel): # {{{
@@ -1526,17 +1480,17 @@ class Printer: # {{{
 		if channel >= len(self.temps):
 			log('Trying to read invalid power %d' % channel)
 			return float('nan')
-		if not self._send_packet(struct.pack('<BB', self.command['READPOWER'], channel)):
+		if not self._send_packet(struct.pack('<BB', protocol.command['READPOWER'], channel)):
 			return None
 		cmd, s, m, f, e, data = self._get_reply()
-		assert cmd == self.rcommand['POWER']
+		assert cmd == protocol.rcommand['POWER']
 		return s, m
 	# }}}
 	def readpin(self, pin): # {{{
-		if not self._send_packet(struct.pack('<BB', self.command['READPIN'], pin)):
+		if not self._send_packet(struct.pack('<BB', protocol.command['READPIN'], pin)):
 			return None
 		cmd, s, m, f, e, data = self._get_reply()
-		assert cmd == self.rcommand['PIN']
+		assert cmd == protocol.rcommand['PIN']
 		return bool(s)
 	# }}}
 	def load(self, profile = None): # {{{
@@ -1578,11 +1532,11 @@ class Printer: # {{{
 	def pause(self, pausing = True, store = True, update = True): # {{{
 		was_paused = self.paused
 		if pausing:
-			if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], True)):
+			if not self._send_packet(struct.pack('<BB', protocol.command['QUEUED'], True)):
 				log('failed to pause printer')
 				return False
 			cmd, s, m, f, e, data = self._get_reply()
-			if cmd != self.rcommand['QUEUE']:
+			if cmd != protocol.rcommand['QUEUE']:
 				log('invalid reply to queued command')
 				return False
 			self.movewait = 0
@@ -1633,10 +1587,10 @@ class Printer: # {{{
 			self._globals_update()
 	# }}}
 	def queued(self): # {{{
-		if not self._send_packet(struct.pack('<BB', self.command['QUEUED'], False)):
+		if not self._send_packet(struct.pack('<BB', protocol.command['QUEUED'], False)):
 			return None
 		cmd, s, m, f, e, data = self._get_reply()
-		if cmd != self.rcommand['QUEUE']:
+		if cmd != protocol.rcommand['QUEUE']:
 			log('invalid reply to queued command')
 			return None
 		return s
@@ -1707,7 +1661,7 @@ class Printer: # {{{
 					channels[(m0 + m) >> 3] |= 1 <<((m0 + m) & 0x7)
 			m0 += len(s.motor)
 		us_per_bit = self.audiofile.read(2)
-		if not self._send_packet(chr(self.command['AUDIO_SETUP']) + us_per_bit + ''.join([chr(x) for x in channels])):
+		if not self._send_packet(chr(protocol.command['AUDIO_SETUP']) + us_per_bit + ''.join([chr(x) for x in channels])):
 			return False
 		self.audio_id = id
 		self._audio_play()
@@ -2399,7 +2353,7 @@ class Printer: # {{{
 					assert len(di) == 0
 			if 'delta_angle' in ka:
 				self.spaces[space].delta_angle = ka.pop('delta_angle')
-		self._send_packet(struct.pack('<BB', self.command['WRITE_SPACE_INFO'], space) + self.spaces[space].write_info(num_axes))
+		self._send_packet(struct.pack('<BB', protocol.command['WRITE_SPACE_INFO'], space) + self.spaces[space].write_info(num_axes))
 		self.spaces[space].axis = []
 		self.spaces[space].motor = []
 		if readback:
@@ -2416,7 +2370,7 @@ class Printer: # {{{
 			assert(ka['multiplier'] > 0)
 			self.multipliers[axis] = ka.pop('multiplier')
 			self.set_motor((space, axis), readback, update)
-		self._send_packet(struct.pack('<BBB', self.command['WRITE_SPACE_AXIS'], space, axis) + self.spaces[space].write_axis(axis))
+		self._send_packet(struct.pack('<BBB', protocol.command['WRITE_SPACE_AXIS'], space, axis) + self.spaces[space].write_axis(axis))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
 			if update:
@@ -2426,7 +2380,7 @@ class Printer: # {{{
 		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_m', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
 			if key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
-		self._send_packet(struct.pack('<BBB', self.command['WRITE_SPACE_MOTOR'], space, motor) + self.spaces[space].write_motor(motor))
+		self._send_packet(struct.pack('<BBB', protocol.command['WRITE_SPACE_MOTOR'], space, motor) + self.spaces[space].write_motor(motor))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
 			if update:
@@ -2444,7 +2398,7 @@ class Printer: # {{{
 		for key in ('R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'):
 			if key in ka:
 				setattr(self.temps[temp], key, ka.pop(key))
-		self._send_packet(struct.pack('<BB', self.command['WRITE_TEMP'], temp) + self.temps[temp].write())
+		self._send_packet(struct.pack('<BB', protocol.command['WRITE_TEMP'], temp) + self.temps[temp].write())
 		self.temps[temp].read(self._read('TEMP', temp))
 		if update:
 			self._temp_update(temp)
@@ -2462,7 +2416,7 @@ class Printer: # {{{
 		for key in ('pin', 'state'):
 			if key in ka:
 				setattr(self.gpios[gpio], key, ka.pop(key))
-		self._send_packet(struct.pack('<BB', self.command['WRITE_GPIO'], gpio) + self.gpios[gpio].write())
+		self._send_packet(struct.pack('<BB', protocol.command['WRITE_GPIO'], gpio) + self.gpios[gpio].write())
 		self.gpios[gpio].read(self._read('GPIO', gpio))
 		if update:
 			self._gpio_update(gpio)

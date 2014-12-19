@@ -38,6 +38,7 @@
 EXTERN char printerid[ID_SIZE];
 EXTERN unsigned char command[FULL_COMMAND_SIZE];
 EXTERN uint16_t command_end;
+EXTERN bool had_data;
 EXTERN char reply[FULL_COMMAND_SIZE], adcreply[6];
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool out_busy;
@@ -48,7 +49,7 @@ EXTERN uint16_t pending_len;
 EXTERN bool stopped, underrun;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
-EXTERN uint32_t led_last, led_phase, start_time, time_per_sample;
+EXTERN uint32_t led_last, led_phase, time_per_sample;
 EXTERN uint8_t led_pin;
 EXTERN bool temps_disabled;
 
@@ -61,7 +62,7 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values.
 	CMD_ID = 0xaa,		// Request/reply printer ID code.
 	CMD_ACK1 = 0xad,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
 	CMD_DEBUG = 0xb4,	// Debug message; a nul-terminated message follows (no checksum; no resend).
-	UNUSED = 0x99
+	CMD_STARTUP = 0x99	// Starting up.
 };
 
 enum Control {
@@ -275,6 +276,9 @@ enum AdcPhase {
 EXTERN Adc adc[NUM_ANALOG_INPUTS];
 EXTERN uint8_t adc_current, adc_next;
 EXTERN AdcPhase adc_phase;
+
+// timer.cpp
+void set_speed(uint16_t count);
 
 // packet.cpp
 void packet();	// A command packet has arrived; handle it.

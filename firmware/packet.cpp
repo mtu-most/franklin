@@ -27,7 +27,6 @@ void packet()
 		reply[11] = BYTES_PER_FRAGMENT;
 		reply_ready = 12;
 		temps_disabled = false;
-		try_send_next();
 		return;
 	}
 	case CMD_PING:
@@ -37,7 +36,6 @@ void packet()
 #endif
 		write_ack();
 		ping |= 1 << command[1];
-		try_send_next();
 		return;
 	}
 	case CMD_RESET: // reset controller; used before reprogramming flash.
@@ -206,8 +204,7 @@ void packet()
 		}
 		home_step_time = *reinterpret_cast <uint32_t *>(&command[1]);
 		if (homers > 0) {
-			stopped = false;
-			start_time = utime();
+			set_speed(home_step_time);
 			write_ack();
 		}
 		else {
@@ -275,9 +272,8 @@ void packet()
 			write_ack();
 			return;
 		}
-		start_time = utime();
 		current_fragment_pos = 0;
-		stopped = false;
+		set_speed(time_per_sample);
 		write_ack();
 		return;
 	}
@@ -286,18 +282,17 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_STOP");
 #endif
-		stopped = true;
+		set_speed(0);
 		homers = 0;
 		home_step_time = 0;
 		write_ack();
 		reply[0] = CMD_STOPPED;
-		reply[1] = current_fragment_pos / 15;
+		reply[1] = current_fragment_pos;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));
 		}
 		reply_ready = 2 + 4 * active_motors;
-		try_send_next();
 		filling = 0;
 		current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		current_fragment_pos = 0;
@@ -324,19 +319,18 @@ void packet()
 				break;
 			}
 		}
-		stopped = true;
+		set_speed(0);
 		homers = 0;
 		home_step_time = 0;
 		write_ack();
 		reply[0] = CMD_STOPPED;
-		reply[1] = current_fragment_pos / 15;
+		reply[1] = current_fragment_pos;
 		current_fragment_pos = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			debug("abort pos %d %ld", m, motor[m].current_pos);
 		}
 		reply_ready = 2 + 4 * active_motors;
-		try_send_next();
 		return;
 	}
 	case CMD_DISCARD:
@@ -368,7 +362,6 @@ void packet()
 		reply[0] = CMD_PIN;
 		reply[1] = GET(command[1]);
 		reply_ready = 2;
-		try_send_next();
 		return;
 	}
 	default:

@@ -199,7 +199,9 @@ static inline void arch_setup_start() {
 	MCUSR = 0;
 	// Setup timer1 for microsecond counting.
 	TCCR1A = 0;
-	TCCR1B = 2;	// Clock/8, in other words with 16MHz clock, 2MHz counting; 2 counts/us.
+	TCCR1B = 0x0a;	// Clock/8, in other words with 16MHz clock, 2MHz counting; 2 counts/us.
+	TIMSK1 = 0;	// Disable the interrupt while the motors are disabled.
+	TIFR1 = 0xff;
 	// Disable all outputs.
 	for (uint8_t i = 0; i < NUM_DIGITAL_PINS; ++i)
 		UNSET(i);

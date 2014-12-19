@@ -20,8 +20,7 @@
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
 static bool had_stall = true;
-static uint32_t last_micros = 0;
-static bool had_data = false;
+static uint32_t last_millis;
 
 // Parity masks for decoding.
 static const uint8_t MASK[5][4] = {
@@ -50,11 +49,11 @@ static inline uint8_t fullpacketlen() {
 // There may be serial data available.
 void serial()
 {
-	if (!had_data && command_end > 0 && utime() - last_micros >= 300000)
+	if (!had_data && command_end > 0 && millis() - last_millis >= 300)
 	{
 		// Command not finished; ignore it and wait for next.
 		watchdog_reset();
-		debug("fail %d %x %ld", command_end, command[0], F(last_micros));
+		debug("fail %d %x %ld", command_end, command[0], F(last_millis));
 		command_end = 0;
 	}
 	had_data = false;
@@ -84,7 +83,6 @@ void serial()
 				if ((pending_packet[0] & ~0x10) == CMD_LIMIT) {
 					stopping = false;
 				}
-				try_send_next();
 			}
 			continue;
 		case CMD_NACK:
@@ -113,7 +111,7 @@ void serial()
 			continue;
 		}
 		command_end = 1;
-		last_micros = utime();
+		last_millis = millis();
 	}
 	int len = Serial.available();
 	if (len == 0)
@@ -123,7 +121,7 @@ void serial()
 #endif
 		watchdog_reset();
 		// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
-		if (out_busy && utime() - out_time >= 200000) {
+		if (out_busy && millis() - out_time >= 200) {
 #ifdef DEBUG_SERIAL
 			debug("resending packet");
 #endif
@@ -171,7 +169,7 @@ void serial()
 #ifdef DEBUG_SERIAL
 		debug("not read %d bytes", len);
 #endif
-	last_micros = utime();
+	last_millis = millis();
 	if (command_end < cmd_len)
 	{
 #ifdef DEBUG_SERIAL
@@ -254,10 +252,8 @@ void serial()
 // When sending a command:
 // - fill appropriate command buffer
 // - set flag to signal data is ready
-// - call try_send_next
 //
 // When ACK is received:
-// - call try_send_next
 //
 // When NACK is received:
 // - call send_packet to resend the last packet
@@ -318,7 +314,7 @@ void send_packet()
 	out_busy = true;
 	for (uint8_t t = 0; t < pending_len; ++t)
 		Serial.write(pending_packet[t]);
-	out_time = utime();
+	out_time = millis();
 }
 
 // Call send_packet if we can.
@@ -447,4 +443,9 @@ void write_stall()
 	//debug("stalling");
 	had_stall = true;
 	Serial.write(ff_in ? CMD_STALL0 : CMD_STALL1);
+}
+
+ISR(USART0_RX_vect) {
+	serial_buffer[serial_buffer_head] = UDR0;
+	serial_buffer_head = (serial_buffer_head + 1) % SERIAL_BUFFER_SIZE;
 }

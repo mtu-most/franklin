@@ -21,6 +21,7 @@ import serial
 import json
 import traceback
 import fcntl
+import protocol
 
 config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'port': 8000,
@@ -49,8 +50,6 @@ local = config['local'].lower() == 'true'
 blacklist = config['blacklist']
 orphans = {}
 scripts = {}
-# These are defined in printer, but ID is required here.
-single = { 'NACK': '\x80', 'ACK0': '\xb3', 'ACKWAIT0': '\xb4', 'STALL': '\x87', 'ACKWAIT1': '\x99', 'ID': '\xaa', 'ACK1': '\xad', 'DEBUG': '\x9e' }
 # }}}
 
 # Load scripts. {{{
@@ -508,12 +507,12 @@ def detect(port): # {{{
 			ports[port] = None
 			return False
 		def boot_printer_input(fd, cond):
-			hexid = '%02x' % ord(single['ID'])
+			hexid = '%02x' % ord(protocol.single['ID'])
 			while len(id[0]) < 2 * 17:
 				id[0] += ''.join(['%02x' % ord(x) for x in printer.read(17 - len(id[0]) // 2)])
 				log('incomplete id: ' + id[0])
 				if len(id[0]) < 2 * 17:
-					printer.write(single['ID'])
+					printer.write(protocol.single['ID'])
 					return True
 				if not id[0].startswith(hexid):
 					log('skip non-id: %s' % id[0])
@@ -528,7 +527,7 @@ def detect(port): # {{{
 			#	if id[1] > 0:
 			#		id[1] -= 1
 			#		id[0] = id[0][2 * 17:]
-			#		printer.write(single['ID'])
+			#		printer.write(protocol.single['ID'])
 			#		return True
 			#	else:
 			#		log('accepting it anyway')
@@ -547,7 +546,7 @@ def detect(port): # {{{
 			ports[port] = Port(port, process, printer)
 			ports[port].id = id[0]
 			return False
-		printer.write(single['ID'])
+		printer.write(protocol.single['ID'])
 		timeout_handle = GLib.timeout_add(15000, timeout)
 		watcher = GLib.io_add_watch(printer.fileno(), GLib.IO_IN, boot_printer_input)
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.

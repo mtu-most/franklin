@@ -326,7 +326,7 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_UNDERRUN:
 	{
-		if (moving)
+		//if (moving)
 			debug("underrun");
 		avr_running = false;
 		// Fall through.
@@ -345,7 +345,7 @@ static inline void hwpacket(int len) {
 			send_host(CMD_MOVECB, cbs);
 		free_fragments += command[1][1];
 		if (free_fragments > FRAGMENTS_PER_BUFFER) {
-			debug("Done count higher than busy fragments; clipping");
+			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], free_fragments - command[1][1]);
 			free_fragments = FRAGMENTS_PER_BUFFER;
 			avr_write_ack();
 			return;
