@@ -3,11 +3,22 @@
 #ifndef _ARCH_AVR_H
 #define _ARCH_AVR_H
 
-// Define things that pins_arduino needs from Arduino.h (which shouldn't be included).
+// Define things that pins_arduino.h needs from Arduino.h (which shouldn't be included).
 #define ARDUINO_MAIN
 #define NOT_A_PIN 0
 #define NOT_A_PORT 0
 #define NOT_ON_TIMER 0
+#define PA 1
+#define PB 2
+#define PC 3
+#define PD 4
+#define PE 5
+#define PF 6
+#define PG 7
+#define PH 8
+#define PJ 10
+#define PK 11
+#define PL 12
 #define TIMER0A 1
 #define TIMER0B 2
 #define TIMER1A 3
@@ -25,6 +36,8 @@
 #define TIMER5A 15
 #define TIMER5B 16
 #define TIMER5C 17
+
+
 
 #include <pins_arduino.h>
 #include <avr/wdt.h>

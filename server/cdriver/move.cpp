@@ -364,6 +364,12 @@ void abort_move(int pos) { // {{{
 	int f = (prev_f + 1) % FRAGMENTS_PER_BUFFER;
 	copy_fragment_settings(prev_f, f);
 	current_fragment = f;
+	//debug("moving->false");
+	moving = false;
+	move_prepared = false;
+#ifdef DEBUG_MOVE
+	debug("move no longer prepared");
+#endif
 	reset_dirs(f);
 	free_fragments = FRAGMENTS_PER_BUFFER;
 	while (current_fragment_pos < pos)
@@ -387,11 +393,5 @@ void abort_move(int pos) { // {{{
 			sp.motor[m]->settings[current_fragment].hwcurrent_pos = sp.motor[m]->settings[current_fragment].current_pos;
 		}
 	}
-	//debug("moving->false");
-	moving = false;
-	move_prepared = false;
-#ifdef DEBUG_MOVE
-	debug("move no longer prepared");
-#endif
 	aborting = false;
 } // }}}
