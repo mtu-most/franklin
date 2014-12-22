@@ -195,11 +195,11 @@ class Connection: # {{{
 		yield (d or 'firmware successfully uploaded')
 	# }}}
 	@classmethod
-	def find_printer(cls, name = None, port = None): # {{{
+	def find_printer(cls, uuid = None, port = None): # {{{
 		for p in ports:
-			if not ports[p] or ports[p].name is None:
+			if not ports[p]:
 				continue
-			if (name is None or re.match(name, ports[p].name)) and (port is None or re.match(port, p)):
+			if (uuid is None or uuid == ports[p].uuid) and (port is None or re.match(port, p)):
 				return p
 		return None
 	# }}}
@@ -377,9 +377,11 @@ class Connection: # {{{
 # }}}
 
 class Port: # {{{
-	def __init__(self, port, process, detectport): # {{{
+	def __init__(self, port, process, detectport, uuid, run_id): # {{{
 		self.name = None
 		self.port = port
+		self.uuid = uuid
+		self.run_id = run_id
 		self.process = process
 		self.waiters = ({}, {}, {})
 		self.next_mid = 0
@@ -401,10 +403,10 @@ class Port: # {{{
 				return
 			# The child has opened the port now; close our handle.
 			if detectport is not None:
+				log('got vars; closing server port')
 				detectport.close()
-			self.name = vars['name']
-			# Copy settings from orphan with the same name, then kill the orphan.
-			old[:] = [x for x in orphans if orphans[x].name == self.name]
+			# Copy settings from orphan with the same run_id, then kill the orphan.
+			old[:] = [x for x in orphans if x[0] == self.uuid]
 			if len(old) > 0:
 				orphans[old[0]].call('export_settings', (), {}, get_settings)
 		self.call('send_printer', [None], {}, lambda success, data: success and self.call('get_globals', (), {}, get_vars))
@@ -417,6 +419,7 @@ class Port: # {{{
 		except IOError:
 			log('killing printer handle because of IOError')
 			traceback.print_exc()
+			cb(False, None)
 			Connection.disable(self.port)
 			return
 		self.waiters[0][self.next_mid] = cb
@@ -448,12 +451,12 @@ class Port: # {{{
 			# Don't remember a printer that hasn't sent its name yet.
 			port = self.port
 			ports[self.port] = None
-			if self.name is not None:
-				# If there already is an orphan with the same name, kill the old orphan.
-				for o in [x for x in orphans if orphans[x].name == self.name]:
-					# This for loop always runs 0 or 1 times, never more.
-					del orphans[x]
-				orphans[self.id] = self
+			# If there already is an orphan with the same uuid, kill the old orphan.
+			for o in [x for x in orphans if x[0] == self.uuid]:
+				# This for loop always runs 0 or 1 times, never more.
+				log('killing duplicate orphan')
+				del orphans[x]
+			orphans[(self.uuid, self.run_id)] = self
 			Connection._broadcast(None, 'del_printer', port)
 			if autodetect:
 				websockets.call(None, Connection.detect, self.port)()
@@ -477,8 +480,10 @@ class Port: # {{{
 
 def detect(port): # {{{
 	if port == '-':
-		process = subprocess.Popen((config['driver'], config['cdriver'], port, 'local', config['allow-system']), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-		ports[port] = Port(port, process, None)
+		uuid = '00000000-0000-4000-8000-000000000000'
+		run_id = nextid()
+		process = subprocess.Popen((config['driver'], config['cdriver'], port, uuid, run_id, config['allow-system']), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		ports[port] = Port(port, process, None, uuid, run_id)
 		return False
 	if not os.path.exists(port):
 		log("not detecting on %s, because file doesn't exist." % port)
@@ -492,11 +497,12 @@ def detect(port): # {{{
 	while printer.read() != '':
 		pass
 	# We need to get the printer id first.  If the printer is booting, this can take a while.
-	id = [None, None]
+	id = [None, None, None]
 	# Wait to make sure the command is interpreted as a new packet.
 	def part2():
 		id[0] = ''
 		id[1] = 10
+		id[2] = ''
 		# How many times to try before accepting an invalid id.
 		# This is required, because the ID is not protected with a checksum.
 		def timeout():
@@ -507,26 +513,34 @@ def detect(port): # {{{
 			ports[port] = None
 			return False
 		def boot_printer_input(fd, cond):
-			hexid = '%02x' % ord(protocol.single['ID'])
-			while len(id[0]) < 2 * 17:
-				id[0] += ''.join(['%02x' % ord(x) for x in printer.read(17 - len(id[0]) // 2)])
+			hexids = ['%02x' % ord(protocol.single[code]) for code in ('ID', 'STARTUP')]
+			while len(id[2]) < 25:
+				data = printer.read(25 - len(id[2]))
+				id[2] += data
+				id[0] += ''.join(['%02x' % ord(x) for x in data])
 				log('incomplete id: ' + id[0])
-				if len(id[0]) < 2 * 17:
+				if len(id[2]) < 25:
 					printer.write(protocol.single['ID'])
 					return True
-				if not id[0].startswith(hexid):
-					log('skip non-id: %s' % id[0])
-					if hexid in id[0]:
-						id[0] = id[0][id[0].index(hexid):]
+				if not id[2][0] not in hexids or not id[0].endswith(protocol.ID_MAGIC) or (not all(x in str_id_map for x in id[2][17:21]) and id[2][17:21] != '\x00' * 4):
+					log('skip non-id: %s %s' % (id[0], id[2]))
+					if hexids[0] in id[0]:
+						id[0] = id[0][id[0].index(hexids[0]):]
+						id[2] = id[2][-len(id[0]) // 2:]
+						log('keeping some: %s' % id[0])
+					elif hexids[1] in id[0]:
+						id[0] = id[0][id[0].index(hexids[1]):]
+						id[2] = id[2][-len(id[0]) // 2:]
 						log('keeping some: %s' % id[0])
 					else:
 						id[0] = ''
+						id[2] = ''
 						log('discarding all')
 			#if not all([x in str_id_map for x in id[0][1:]]) and not all([ord(x) == 0 for x in id[0][1:]]):
 			#	log('received invalid id: %s' % id[0]) #' '.join(['%02x' % ord(x) for x in id[0][1:]]))
 			#	if id[1] > 0:
 			#		id[1] -= 1
-			#		id[0] = id[0][2 * 17:]
+			#		id[0] = id[0][2 * 25:]
 			#		printer.write(protocol.single['ID'])
 			#		return True
 			#	else:
@@ -534,17 +548,23 @@ def detect(port): # {{{
 			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset.
 			GLib.source_remove(timeout_handle)
 			# This printer was running and tried to send an id.  Check the id.
-			id[0] = id[0][len(hexid):]
+			id[0] = id[0][len(hexids[0]):]
 			id[0] = id[0][:8] + '-' + id[0][8:12] + '-' + id[0][12:16] + '-' + id[0][16:20] + '-' + id[0][20:32]
-			if id[0] in orphans:
+			if (id[0], id[2][17:21]) in orphans:
 				log('accepting orphan %s on %s' % (id[0], port))
-				ports[port] = orphans[id[0]]
-				ports[port].call('reconnect', [port], {}, lambda success, ret: ports[port].call('send_printer', [None], {}, lambda success, data: printer.close()))
+				ports[port] = orphans.pop((id[0], id[2][17:21]))
+				ports[port].port = port
+				def close_port(success, data):
+					log('printer sent; closing server port')
+					printer.close()
+				log('reconnecting %s' % port)
+				ports[port].call('reconnect', [port], {}, lambda success, ret: ports[port].call('send_printer', [None], {}, close_port) if success else close_port)
 				return False
-			log('accepting unknown printer on port %s (id %s)' % (port, id[0]))
-			process = subprocess.Popen((config['driver'], config['cdriver'], port, id[0], config['allow-system']), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-			ports[port] = Port(port, process, printer)
-			ports[port].id = id[0]
+			run_id = nextid()
+			log('accepting unknown printer on port %s (id %s %s -> %s)' % (port, id[0], repr(id[2][17:21]), repr(run_id)))
+			log('orphans: %s' % repr(orphans.keys()))
+			process = subprocess.Popen((config['driver'], config['cdriver'], port, id[0], run_id, config['allow-system']), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+			ports[port] = Port(port, process, printer, id[0], run_id)
 			return False
 		printer.write(protocol.single['ID'])
 		timeout_handle = GLib.timeout_add(15000, timeout)
@@ -559,12 +579,12 @@ def detect(port): # {{{
 
 def nextid(): # {{{
 	global last_id
-	# 0x23456789 is an arbitrary number with bits set in every nybble, that
-	# is odd(so it doesn't visit the same number twice until it did all of
+	# 0x6789 is an arbitrary number with bits set in every nybble, that is
+	# odd(so it doesn't visit the same number twice until it did all of
 	# them, because it loops at 2**32, which is not divisible by anything
 	# except 2).
-	last_id = (last_id + 0x23456789) & 0xffffffff
-	return ''.join([chr(id_map[(last_id >> (4 * c)) & 0xf]) for c in range(8)])
+	last_id = (last_id + 0x6789) & 0xffff
+	return ''.join([chr(id_map[(last_id >> (4 * c)) & 0xf]) for c in range(4)])
 last_id = random.randrange(1 << 32)
 # Parity table is [0x8b, 0x2d, 0x1e]; half of these codes overlap with codes from the single command map; those single commands are not used.
 id_map = [0x40, 0xe1, 0xd2, 0x73, 0x74, 0xd5, 0xe6, 0x47, 0xf8, 0x59, 0x6a, 0xcb, 0xcc, 0x6d, 0x5e, 0xff]

@@ -1,23 +1,30 @@
 #include "firmware.h"
 
-static void do_steps(Dir dir, uint8_t m, uint8_t value) {
-	if (dir != DIR_POSITIVE && dir != DIR_NEGATIVE) {
-		debug("Invalid direction in do_steps");
+void do_steps() {
+	// Only move if the move was prepared.
+	if (steps_prepared != 1)
 		return;
-	}
-	if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
-		if (dir == DIR_POSITIVE)
-			SET(motor[m].dir_pin);
-		else
-			RESET(motor[m].dir_pin);
-	}
-	if (motor[m].step_pin < NUM_DIGITAL_PINS) {
-		for (uint8_t i = 0; i < value; ++i) {
-			SET(motor[m].step_pin);
-			RESET(motor[m].step_pin);
+	// Enable interrupts as soon as possible, so the uart doesn't overrun.
+	steps_prepared = 2;	// Protect against reentry.
+	sei();
+	for (uint8_t m = 0; m < active_motors; ++m) {
+		if (motor[m].dir != DIR_POSITIVE && motor[m].dir != DIR_NEGATIVE)
+			continue;
+		if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
+			if (motor[m].dir == DIR_POSITIVE)
+				SET(motor[m].dir_pin);
+			else
+				RESET(motor[m].dir_pin);
 		}
+		if (motor[m].step_pin < NUM_DIGITAL_PINS) {
+			for (uint8_t i = 0; i < motor[m].next_steps; ++i) {
+				SET(motor[m].step_pin);
+				RESET(motor[m].step_pin);
+			}
+		}
+		motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? motor[m].next_steps : -motor[m].next_steps);
 	}
-	motor[m].current_pos += (dir == DIR_POSITIVE ? value : -value);
+	steps_prepared = 0;
 }
 
 // When to do the steps.
@@ -40,7 +47,7 @@ static uint16_t const lookup[] = {
 	0x7fff
 };
 
-ISR(TIMER1_COMPA_vect) {
+void handle_motors() {
 	// Check sensors.
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		Fragment &fragment = buffer[motor[m].buffer][current_fragment];
@@ -52,8 +59,10 @@ ISR(TIMER1_COMPA_vect) {
 				//debug("sense %d %x", m, motor[m].flags);
 				motor[m].flags ^= Motor::SENSE_STATE;
 				motor[m].flags |= (motor[m].flags & Motor::SENSE_STATE ? Motor::SENSE1 : Motor::SENSE0);
+				cli();
 				for (int mi = 0; mi < active_motors; ++mi)
 					motor[mi].sense_pos[(motor[m].flags & Motor::SENSE_STATE) ? 1 : 0] = motor[mi].current_pos;
+				sei();
 			}
 		}
 		// Check limit switches.
@@ -88,14 +97,13 @@ ISR(TIMER1_COMPA_vect) {
 			bool inverted = motor[m].flags & (fragment.dir ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
 			if (GET(limit_pin) ^ inverted) {
 				// Limit pin still triggered; continue moving.
-				do_steps(fragment.dir, m, 1);
 				continue;
 			}
 			// Limit pin no longer triggered.  Stop moving and possibly notify host.
+			motor[m].dir = DIR_NONE;
 			fragment.dir = DIR_NONE;
-			if (!--homers) {
+			if (!--homers)
 				set_speed(0);
-			}
 		}
 	}
 	else {
@@ -109,6 +117,12 @@ ISR(TIMER1_COMPA_vect) {
 				set_speed(0);
 				underrun = true;
 			}
+			else {
+				for (uint8_t m = 0; m < active_motors; ++m) {
+					Fragment &fragment = buffer[motor[m].buffer][new_current_fragment];
+					motor[m].dir = fragment.dir;
+				}
+			}
 			current_fragment = new_current_fragment;
 			//debug("new fragment: %d", current_fragment);
 		}
@@ -117,27 +131,11 @@ ISR(TIMER1_COMPA_vect) {
 				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
 				if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
 					continue;
-				uint8_t value = (fragment.samples[current_fragment_pos >> 1] >> (4 * (current_fragment_pos & 1))) & 0xf;
-				do_steps(fragment.dir, m, value);
+				motor[m].next_steps = (fragment.samples[current_fragment_pos >> 1] >> (4 * (current_fragment_pos & 1))) & 0xf;
 			}
 			current_fragment_pos += 1;
 		}
 	}
-}
-
-void set_speed(uint16_t count) {
-	stopped = (count == 0);
-	if (stopped)
-		TIMSK1 = 0;
-	else {
-		// Set TOP.
-		OCR1AH = (count >> 7) & 0xff;
-		OCR1AL = (count << 1) & 0xff;
-		// Clear counter.
-		TCNT1H = 0;
-		TCNT1L = 0;
-		// Clear and enable interrupt.
-		TIFR1 = 1 << OCF1A;
-		TIMSK1 = 1 << OCIE1A;
-	}
+	if (!stopped)
+		steps_prepared = 1;
 }

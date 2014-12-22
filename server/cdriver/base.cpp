@@ -41,11 +41,11 @@ void disconnect() { // {{{
 // }}}
 
 int main(int argc, char **argv) { // {{{
-	if (argc != 2) {
-		debug("Franklin cdriver is not intended to be called directly.\n");
+	if (argc != 3) {
+		debug("Franklin cdriver is not intended to be called directly (argc = %d).\n", argc);
 		exit(1);
 	}
-	setup(argv[1]);
+	setup(argv[1], argv[2]);
 	while(true) {
 		for (int i = 0; i < 2; ++i)
 			pollfds[i].revents = 0;

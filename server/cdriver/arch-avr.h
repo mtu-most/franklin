@@ -62,13 +62,14 @@ enum HWCommands { // {{{
 	HWC_ADC,	// 67
 	HWC_LIMIT,	// 68
 	HWC_SENSE0,	// 69
-	HWC_SENSE1	// 6a
+	HWC_SENSE1,	// 6a
+	HWC_TIMEOUT,	// 6b
 };
 // }}}
 
 extern int avr_active_motors;
 static inline int hwpacketsize(int len, int *available) {
-	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 2, 2, 4, 0, 0, 0, -1, -1, -1, -1, -1 };
+	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 2, 2, 4, 0, 0, 0, 1, -1, -1, -1, -1 };
 	switch (command[1][0] & ~0x10) {
 	case HWC_READY:
 		if (len >= 2)
@@ -326,7 +327,7 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_UNDERRUN:
 	{
-		//if (moving)
+		if (moving)
 			debug("underrun");
 		avr_running = false;
 		// Fall through.
@@ -360,6 +361,12 @@ static inline void hwpacket(int len) {
 		avr_get_current_pos(1);
 		avr_write_ack();
 		send_host(CMD_HOMED);
+		return;
+	}
+	case HWC_TIMEOUT:
+	{
+		debug("timeout from firmware");
+		avr_write_ack();
 		return;
 	}
 	default:
@@ -531,7 +538,9 @@ static inline void arch_change(bool motors) {
 	for (int i = 0; i < 4; ++i)
 		avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
 	avr_buffer[6] = led_pin.valid() ? led_pin.pin : ~0;
-	prepare_packet(avr_buffer, 7);
+	avr_buffer[7] = timeout & 0xff;
+	avr_buffer[8] = (timeout >> 8) & 0xff;
+	prepare_packet(avr_buffer, 9);
 	avr_send();
 	if (motors) {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -580,13 +589,16 @@ static inline void arch_setup_start(char const *port) {
 	arch_reset();
 }
 
-static inline void arch_setup_end() {
+static inline void arch_setup_end(char const *run_id) {
 	// Get constants.
 	avr_buffer[0] = HWC_BEGIN;
+	avr_buffer[1] = 6;
+	for (int i = 0; i < 4; ++i)
+		avr_buffer[2 + i] = run_id[i];
 	if (avr_wait_for_reply)
 		debug("avr_wait_for_reply already set in begin");
 	avr_wait_for_reply = true;
-	prepare_packet(avr_buffer, 1);
+	prepare_packet(avr_buffer, 6);
 	avr_send();
 	avr_get_reply();
 	avr_write_ack();

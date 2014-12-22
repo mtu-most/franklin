@@ -1,7 +1,7 @@
 #define EXTERN	// This must be done in exactly one source file.
 #include "cdriver.h"
 
-void setup(char const *port)
+void setup(char const *port, char const *run_id)
 {
 	serialdev[0] = &host_serial;
 	host_serial.begin(115200);
@@ -47,6 +47,7 @@ void setup(char const *port)
 	move_prepared = false;
 	cbs_after_current_move = 0;
 	which_autosleep = 0;
+	timeout = 0;
 #ifdef HAVE_AUDIO
 	audio_head = 0;
 	audio_tail = 0;
@@ -59,7 +60,7 @@ void setup(char const *port)
 	temps = NULL;
 	num_gpios = 0;
 	gpios = NULL;
-	arch_setup_end();
+	arch_setup_end(run_id);
 	if (protocol_version < PROTOCOL_VERSION) {
 		debug("Printer has older Franklin version than host; please flash newer firmware.");
 		exit(1);
@@ -80,4 +81,6 @@ void setup(char const *port)
 		settings[f].cbs = 0;
 	}
 	free_fragments = FRAGMENTS_PER_BUFFER;
+	// Update current position.
+	arch_stop();
 }

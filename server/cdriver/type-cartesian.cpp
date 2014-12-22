@@ -13,8 +13,8 @@ static void reset_pos(Space *s) {
 	// If positions are unknown, pretend that they are 0.
 	// This is mostly useful for extruders.
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
-		s->axis[a]->source = s->motor[a]->settings[current_fragment].current_pos / s->motor[a]->steps_per_m;
-		//debug("set pos for %d to %f", a, F(s->axis[a]->source));
+		s->axis[a]->settings[current_fragment].source = s->motor[a]->settings[current_fragment].current_pos / s->motor[a]->steps_per_m;
+		//debug("set pos for %d to %f", a, F(s->axis[a]->settings[current_fragment].source));
 	}
 }
 
@@ -46,7 +46,7 @@ static void afree(Space *s, int a) {
 static void change0(Space *s, int qpos) {
 }
 
-void Cartesian_init(uint8_t num) {
+void Cartesian_init(int num) {
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].reset_pos = reset_pos;
 	space_types[num].check_position = check_position;
@@ -125,7 +125,7 @@ static void echange0(Space *s, int qpos) {
 	return;
 }
 
-void Extruder_init(uint8_t num) {
+void Extruder_init(int num) {
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].reset_pos = reset_pos;
 	space_types[num].check_position = check_position;

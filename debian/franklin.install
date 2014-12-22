@@ -1,5 +1,4 @@
-firmware/build-mighty_opt0/melzi0.hex /usr/share/franklin/firmware
-firmware/build-mighty_opt/melzi1.hex /usr/share/franklin/firmware
+firmware/build-mighty_opt/melzi.hex /usr/share/franklin/firmware
 firmware/build-mega2560/ramps.hex /usr/share/franklin/firmware
 firmware/build-mega/mega.hex /usr/share/franklin/firmware
 server/server.py /usr/share/franklin

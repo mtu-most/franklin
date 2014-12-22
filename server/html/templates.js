@@ -459,11 +459,8 @@ function Printer() {	// {{{
 	disable.type = 'button';
 	disable.AddEvent('click', function() { rpc.call('disable', [this.port], {}); });
 	setup.AddElement('div').Add(Text('Name', [null, 'name']));
-	e = setup.AddElement('div').AddText('Motor Timeout:');
-	e.Add(Float([null, 'motor_limit'], 0, 60));
-	e.AddText(' min');
-	e = setup.AddElement('div').AddText('Temp Timeout:');
-	e.Add(Float([null, 'temp_limit'], 0, 60));
+	e = setup.AddElement('div').AddText('Timeout:');
+	e.Add(Float([null, 'timeout'], 0, 60));
 	e.AddText(' min');
 	e = setup.AddElement('div').AddText('Max Probe Distance:');
 	e.Add(Float([null, 'probe_dist'], 0, 1e-3));

@@ -19,9 +19,9 @@ var audio_list;
 var scripts;
 var data;
 
-var TYPE_EXTRUDER = 0;
-var TYPE_CARTESIAN = 1;
-var TYPE_DELTA = 2;
+var TYPE_CARTESIAN = 0;
+var TYPE_DELTA = 1;
+var TYPE_EXTRUDER = 2;
 // }}}
 
 function dbg(msg) {
@@ -119,8 +119,7 @@ function _setup_updater() {
 				probe_dist: Infinity,
 				probe_safe_dist: Infinity,
 				bed_id: 255,
-				motor_limit: 0,
-				temp_limit: 0,
+				timeout: 0,
 				feedrate: 1,
 				zoffset: 0,
 				message: null,
@@ -181,11 +180,10 @@ function _setup_updater() {
 			printers[port].probe_dist = values[7];
 			printers[port].probe_safe_dist = values[8];
 			printers[port].bed_id = values[9];
-			printers[port].motor_limit = values[10];
-			printers[port].temp_limit = values[11];
-			printers[port].feedrate = values[12];
-			printers[port].zoffset = values[13];
-			printers[port].status = values[14];
+			printers[port].timeout = values[10];
+			printers[port].feedrate = values[11];
+			printers[port].zoffset = values[12];
+			printers[port].status = values[13];
 			trigger_update(port, 'variables_update');
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({

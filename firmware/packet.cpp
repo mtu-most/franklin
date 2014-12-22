@@ -4,6 +4,7 @@
 
 void packet()
 {
+	last_active = seconds();
 	switch (command[0])
 	{
 	case CMD_BEGIN:	// begin: request response
@@ -14,6 +15,7 @@ void packet()
 		// A server is running; start the watchdog.
 		watchdog_enable();
 		write_ack();
+		*reinterpret_cast <uint32_t *>(&printerid[16]) = *reinterpret_cast <uint32_t *>(&command[2]);
 		// Because this is a new connection: reset active_motors.
 		active_motors = 0;
 		reply[0] = CMD_READY;
@@ -26,7 +28,6 @@ void packet()
 		reply[10] = FRAGMENTS_PER_BUFFER;
 		reply[11] = BYTES_PER_FRAGMENT;
 		reply_ready = 12;
-		temps_disabled = false;
 		return;
 	}
 	case CMD_PING:
@@ -50,7 +51,7 @@ void packet()
 			return;
 		}
 		write_ack();
-		Serial.flush();
+		serial_flush();
 		reset();
 	}
 	case CMD_SETUP:
@@ -63,10 +64,13 @@ void packet()
 			write_stall();
 			return;
 		}
+		// Reset newly activated motors.
+		for (uint8_t m = active_motors; m < command[1]; ++m)
+			motor[m].disable();
 		active_motors = command[1];
 		time_per_sample = *reinterpret_cast <int32_t *>(&command[2]);
 		led_pin = command[6];
-		temps_disabled = false;
+		timeout_time = *reinterpret_cast <uint16_t *>(&command[7]);
 		write_ack();
 		return;
 	}
@@ -81,8 +85,7 @@ void packet()
 				debug("invalid pin in control: %d", command[2 + i + 1]);
 				continue;
 			}
-			pin[command[2 + i + 1]].state &= ~0xc;
-			pin[command[2 + i + 1]].state |= command[2 + i] & 0xc;
+			pin[command[2 + i + 1]].set_state((pin[command[2 + i + 1]].state & ~0xc) | (command[2 + i] & 0xc));
 			switch (CONTROL_CURRENT(command[2 + i])) {
 			case CTRL_RESET:
 				RESET(command[2 + i + 1]);
@@ -199,8 +202,11 @@ void packet()
 				write_stall();
 				return;
 			}
-			if (fragment.dir == DIR_POSITIVE || fragment.dir == DIR_NEGATIVE)
+			if (fragment.dir == DIR_POSITIVE || fragment.dir == DIR_NEGATIVE) {
+				motor[m].next_steps = 1;
+				motor[m].dir = fragment.dir;
 				homers += 1;
+			}
 		}
 		home_step_time = *reinterpret_cast <uint32_t *>(&command[1]);
 		if (homers > 0) {
@@ -228,9 +234,8 @@ void packet()
 		last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		fragment_len[last_fragment] = command[1];
 		filling = command[2];
-		for (uint8_t m = 0; m < active_motors; ++m) {
+		for (uint8_t m = 0; m < active_motors; ++m)
 			buffer[motor[m].buffer][last_fragment].dir = DIR_NONE;
-		}
 		//debug("new filling: %d %d", filling, last_fragment);
 		write_ack();
 		return;
@@ -273,6 +278,10 @@ void packet()
 			return;
 		}
 		current_fragment_pos = 0;
+		for (uint8_t m = 0; m < active_motors; ++m) {
+			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+			motor[m].dir = fragment.dir;
+		}
 		set_speed(time_per_sample);
 		write_ack();
 		return;
@@ -288,10 +297,14 @@ void packet()
 		write_ack();
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment_pos;
+		cli();
 		for (uint8_t m = 0; m < active_motors; ++m) {
+			motor[m].dir = DIR_NONE;
+			motor[m].next_steps = 0;
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));
 		}
+		sei();
 		reply_ready = 2 + 4 * active_motors;
 		filling = 0;
 		current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
@@ -326,10 +339,11 @@ void packet()
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment_pos;
 		current_fragment_pos = 0;
+		cli();
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
-			debug("abort pos %d %ld", m, motor[m].current_pos);
 		}
+		sei();
 		reply_ready = 2 + 4 * active_motors;
 		return;
 	}

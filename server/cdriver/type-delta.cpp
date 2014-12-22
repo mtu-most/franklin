@@ -59,7 +59,7 @@ static void xyz2motors(Space *s, float *motors, bool *ok) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 3; ++aa) {
 			if (isnan(s->axis[aa]->settings[current_fragment].target))
-				s->axis[aa]->settings[current_fragment].target = s->axis[aa]->current;
+				s->axis[aa]->settings[current_fragment].target = s->axis[aa]->settings[current_fragment].current;
 		}
 	}
 	for (uint8_t a = 0; a < 3; ++a) {
@@ -77,15 +77,15 @@ static void reset_pos (Space *s) {
 		p[i] = s->motor[i]->settings[current_fragment].current_pos / s->motor[i]->steps_per_m;
 	if (p[0] != p[1] || p[0] != p[2]) {
 		//debug("resetpos fails");
-		s->axis[0]->source = NAN;
-		s->axis[1]->source = NAN;
-		s->axis[2]->source = NAN;
+		s->axis[0]->settings[current_fragment].source = NAN;
+		s->axis[1]->settings[current_fragment].source = NAN;
+		s->axis[2]->settings[current_fragment].source = NAN;
 	}
 	else {
 		//debug("resetpos %f", F(APEX(s, a).current_pos));
-		s->axis[0]->source = 0;
-		s->axis[1]->source = 0;
-		s->axis[2]->source = p[0];
+		s->axis[0]->settings[current_fragment].source = 0;
+		s->axis[1]->settings[current_fragment].source = 0;
+		s->axis[2]->settings[current_fragment].source = p[0];
 	}
 }
 
@@ -94,7 +94,7 @@ static void check_position(Space *s, float *data) {
 		// Cannot check; assume it's ok.
 		return;
 	}
-	for (uint8_t timeout = 0; timeout < 2; ++timeout) {
+	for (uint8_t counter = 0; counter < 2; ++counter) {
 		bool ok = true;
 		for (uint8_t a = 0; a < s->num_axes; ++a)
 			ok &= check_delta(s, a, data);
@@ -162,7 +162,7 @@ static void free(Space *s) {
 static void change0(Space *s, int qpos) {
 }
 
-void Delta_init(uint8_t num) {
+void Delta_init(int num) {
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].reset_pos = reset_pos;
 	space_types[num].check_position = check_position;

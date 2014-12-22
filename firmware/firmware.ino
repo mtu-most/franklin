@@ -54,8 +54,9 @@ static void handle_adc() {
 	adc_ready(adc_current);
 }
 
-static void handle_led(uint32_t current_time) {
-	uint32_t timing = led_fast ? 1000 / 100 : 1000 / 50;
+static void handle_led() {
+	uint16_t timing = led_fast ? 1000 / 100 : 1000 / 50;
+	uint16_t current_time = millis();
 	if (current_time - led_last < timing)
 		return;
 	while (current_time - led_last >= timing) {
@@ -72,17 +73,36 @@ static void handle_led(uint32_t current_time) {
 		RESET(led_pin);
 }
 
-void loop() {
-	// Timekeeping.
-	uint32_t current_time = millis();
-	// Handle all periodic things.
-	// LED
-	if (led_pin < NUM_DIGITAL_PINS)
-		handle_led(current_time);	// heart beat.
-	// ADC
-	handle_adc();
-	// Serial
-	serial();
-	// Send serial data, if any.
-	try_send_next();
+int main(void) {
+	setup();
+	while (true) {
+		// Handle all periodic things.
+		// LED
+		if (led_pin < NUM_DIGITAL_PINS)
+			handle_led();	// heart beat.
+		// ADC
+		handle_adc();
+		// Serial
+		serial();
+		// Send serial data, if any.
+		try_send_next();
+		// Motor precompute steps.
+		if (!stopped && steps_prepared == 0) {
+			last_active = seconds();
+			handle_motors();
+		}
+		uint16_t dt = (seconds() - last_active + 0x10000) & 0xffff;
+		if (enabled_pins > 0 && timeout_time > 0 && timeout_time <= dt) {
+			// Disable LED.
+			led_pin = ~0;
+			// Disable adcs.
+			for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
+				adc[a].disable();
+			// Disable pins.
+			for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p)
+				pin[p].disable(p);
+			debug("timeout %d %d %d", seconds(), dt, last_active);
+			timeout = true;
+		}
+	}
 }

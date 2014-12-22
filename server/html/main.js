@@ -8,7 +8,7 @@ var selected_port, selected_printer;
 var script_cbs;
 var multiples;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
-var space_types = ['Extruder', 'Cartesian', 'Delta'];
+var space_types = ['Cartesian', 'Delta', 'Extruder'];
 var hidetypes = [];
 // }}}
 
@@ -588,8 +588,7 @@ function update_globals() { // {{{
 	update_float(printer, [null, 'probe_dist']);
 	update_float(printer, [null, 'probe_safe_dist']);
 	update_float(printer, [null, 'bed_id']);
-	update_float(printer, [null, 'motor_limit']);
-	update_float(printer, [null, 'temp_limit']);
+	update_float(printer, [null, 'timeout']);
 	update_float(printer, [null, 'feedrate']);
 	update_float(printer, [null, 'zoffset']);
 	var stat = get_value(printer, [null, 'status']);

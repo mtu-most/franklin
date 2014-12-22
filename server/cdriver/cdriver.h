@@ -8,7 +8,7 @@
 #include <poll.h>
 
 #define PROTOCOL_VERSION ((uint32_t)0)	// Required version response in BEGIN.
-#define ID_SIZE 16
+#define ID_SIZE 24
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
 #define MAXINT MAXLONG
@@ -48,7 +48,7 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values. {
 	CMD_ID = 0xaa,		// Request/reply printer ID code.
 	CMD_ACK1 = 0xad,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
 	CMD_DEBUG = 0xb4,	// Debug message; a nul-terminated message follows (no checksum; no resend).
-	CMD_UNUSED = 0x99
+	CMD_STARTUP = 0x99
 }; // }}}
 
 enum Command {
@@ -56,6 +56,7 @@ enum Command {
 	CMD_RESET,	// 1 byte: 0.
 	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].
 	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
+	CMD_PROBE,	// 2 byte: probe pin, then same as GOTO[CB]. Reply MOVECB.
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
 	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [°C].
 	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [°C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
@@ -170,6 +171,7 @@ struct Motor_History
 struct Axis_History
 {
 	float dist, next_dist, main_dist;
+	float source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
 	float target;
 };
 
@@ -179,7 +181,6 @@ struct Axis
 	float offset;		// Position where axis claims to be when it is at 0.
 	float park;		// Park position; not used by the firmware, but stored for use by the host.
 	uint8_t park_order;
-	float source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
 	float max_v;
 	float min, max;
 	void *type_data;
@@ -247,32 +248,17 @@ struct Space
 	void cancel_update();
 };
 
-// Type 0: Extruder.
-void Extruder_init(uint8_t num);
-#define EXTRUDER_INIT(num) Extruder_init(num);
-#define HAVE_TYPE_EXTRUDER true
-
-// Type 1: Cartesian (always available).
-#define DEFAULT_TYPE 1
-void Cartesian_init(uint8_t num);
-#define CARTESIAN_INIT(num) Cartesian_init(num);
-#define HAVE_TYPE_CARTESIAN true
-
-// Type 2: Delta.
-void Delta_init(uint8_t num);
-#define DELTA_INIT(num) Delta_init(num);
-#define HAVE_TYPE_DELTA true
+#define DEFAULT_TYPE 0
+void Cartesian_init(int num);
+void Delta_init(int num);
+void Extruder_init(int num);
 
 #define NUM_SPACE_TYPES 3
-EXTERN bool have_type[NUM_SPACE_TYPES];
 EXTERN SpaceType space_types[NUM_SPACE_TYPES];
 #define setup_spacetypes() do { \
-	EXTRUDER_INIT(0) \
-	have_type[0] = HAVE_TYPE_EXTRUDER; \
-	CARTESIAN_INIT(1) \
-	have_type[1] = HAVE_TYPE_CARTESIAN; \
-	DELTA_INIT(2) \
-	have_type[2] = HAVE_TYPE_DELTA; \
+	Cartesian_init(0); \
+	Delta_init(1); \
+	Extruder_init(2); \
 } while(0)
 #endif
 
@@ -318,6 +304,7 @@ EXTERN uint32_t protocol_version;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
 EXTERN float probe_dist, probe_safe_dist;
+EXTERN uint16_t timeout;
 //EXTERN float room_T;	//[°C]
 EXTERN float feedrate;		// Multiplication factor for f values, used at start of move.
 // Other variables.
@@ -343,7 +330,6 @@ EXTERN char pending_packet[FULL_COMMAND_SIZE];
 EXTERN int pending_len;
 EXTERN char datastore[FULL_COMMAND_SIZE];
 EXTERN uint32_t last_active;
-EXTERN float motor_limit, temp_limit;
 EXTERN int16_t led_phase;
 EXTERN uint8_t temp_current;
 EXTERN History *settings;
@@ -394,7 +380,7 @@ uint8_t next_move();
 void abort_move(int pos);
 
 // setup.cpp
-void setup(char const *port);
+void setup(char const *port, char const *run_id);
 
 // storage.cpp
 uint8_t read_8(int32_t &address);

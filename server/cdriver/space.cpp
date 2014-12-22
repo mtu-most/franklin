@@ -27,8 +27,6 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_axes[a] = axis[a];
 		for (uint8_t a = old_na; a < na; ++a) {
 			new_axes[a] = new Axis;
-			new_axes[a]->source = NAN;
-			new_axes[a]->current = NAN;
 			new_axes[a]->offset = 0;
 			new_axes[a]->park = NAN;
 			new_axes[a]->park_order = 0;
@@ -42,6 +40,8 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 				new_axes[a]->settings[f].next_dist = NAN;
 				new_axes[a]->settings[f].main_dist = NAN;
 				new_axes[a]->settings[f].target = NAN;
+				new_axes[a]->settings[f].source = NAN;
+				new_axes[a]->settings[f].current = NAN;
 			}
 		}
 		for (uint8_t a = na; a < old_na; ++a) {
@@ -129,6 +129,9 @@ static void move_to_current(Space *s) {
 		s->axis[i]->settings[current_fragment].main_dist = 0;
 		s->motor[i]->settings[current_fragment].last_v = 0;
 	}
+#ifdef DEBUG_PATH
+	fprintf(stderr, "\n");
+#endif
 	buffer_refill();
 }
 
@@ -136,10 +139,10 @@ void Space::load_info(int32_t &addr)
 {
 	loaddebug("loading space");
 	uint8_t t = type;
-	if (t >= NUM_SPACE_TYPES || !have_type[t])
+	if (t >= NUM_SPACE_TYPES)
 		t = DEFAULT_TYPE;
 	type = read_8(addr);
-	if (type >= NUM_SPACE_TYPES || !have_type[type]) {
+	if (type >= NUM_SPACE_TYPES) {
 		debug("request for type %d ignored", type);
 		type = t;
 	}
@@ -159,7 +162,7 @@ void Space::load_info(int32_t &addr)
 			ok = false;
 		else {
 			for (uint8_t i = 0; i < num_axes; ++i)
-				axis[i]->settings[current_fragment].target = axis[i]->current;
+				axis[i]->settings[current_fragment].target = axis[i]->settings[current_fragment].current;
 			ok = true;
 			space_types[type].xyz2motors(this, oldpos, &ok);
 		}
@@ -191,8 +194,8 @@ void Space::load_axis(uint8_t a, int32_t &addr)
 	axis[a]->min = read_float(addr);
 	axis[a]->max = read_float(addr);
 	if (axis[a]->offset != old_offset) {
-		axis[a]->current += axis[a]->offset - old_offset;
-		axis[a]->source += axis[a]->offset - old_offset;
+		axis[a]->settings[current_fragment].current += axis[a]->offset - old_offset;
+		axis[a]->settings[current_fragment].source += axis[a]->offset - old_offset;
 		move_to_current(this);
 	}
 }
@@ -350,6 +353,10 @@ void Space::cancel_update() {
 
 // Space things. {{{
 static void check_distance(Motor *mtr, float distance, float dt, float &factor) { // {{{
+	if (dt == 0) {
+		factor = 0;
+		return;
+	}
 	if (isnan(distance) || distance == 0) {
 		mtr->settings[current_fragment].target_dist = 0;
 		//mtr->last_v = 0;
@@ -391,11 +398,11 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	// x = v²/2a
 	float limit_dist = v * v / 2 / mtr->limit_a;
 	//debug("max %f limit %f v %f a %f", max_dist, limit_dist, v, mtr->limit_a);
-	if (max_dist > 0 && limit_dist > max_dist) {
+	/*if (max_dist > 0 && limit_dist > max_dist) {
 		movedebug("a- %f %f %f %d %d %f", F(mtr->settings[current_fragment].endpos), F(mtr->limit_a), F(max_dist), F(mtr->settings[current_fragment].current_pos), s, dt);
 		v = sqrt(max_dist * 2 * mtr->limit_a);
 		distance = s * v * dt;
-	}
+	}*/
 	//debug("cd4 %f %f", F(distance), F(dt)); */
 	float f = distance / mtr->settings[current_fragment].target_dist;
 	//movedebug("checked %f %f", F(mtr->target_dist), F(distance));
@@ -404,6 +411,16 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 } // }}}
 
 static void move_axes(Space *s, uint32_t current_time, float &factor) { // {{{
+#ifdef DEBUG_PATH
+	fprintf(stderr, "%d\t%d", current_time, s->id);
+	for (int a = 0; a < s->num_axes; ++a) {
+		if (isnan(s->axis[a]->settings[current_fragment].target))
+			fprintf(stderr, "\t%f", s->axis[a]->settings[current_fragment].source);
+		else
+			fprintf(stderr, "\t%f", s->axis[a]->settings[current_fragment].target);
+	}
+	fprintf(stderr, "\n");
+#endif
 	float motors_target[s->num_motors];
 	bool ok = true;
 	space_types[s->type].xyz2motors(s, motors_target, &ok);
@@ -423,6 +440,25 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 		movedebug("end move");
 		moving = false;
 		return;
+	}
+	for (uint8_t s = 0; s < num_spaces; ++s) {
+		Space &sp = spaces[s];
+		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			if (!isnan(sp.axis[a]->settings[current_fragment].target))
+				sp.axis[a]->settings[current_fragment].current += (sp.axis[a]->settings[current_fragment].target - sp.axis[a]->settings[current_fragment].current) * factor;
+		}
+	}
+	if (factor < 1) {
+		// Recalculate steps; ignore resulting factor.
+		float dummy_factor = 1;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = spaces[s];
+			for (uint8_t a = 0; a < sp.num_axes; ++a) {
+				if (!isnan(sp.axis[a]->settings[current_fragment].target))
+					sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].current;
+			}
+			move_axes(&sp, settings[current_fragment].last_time, dummy_factor);
+		}
 	}
 	//movedebug("do steps %f %d", F(factor), max_steps);
 	bool have_steps = false;
@@ -447,7 +483,7 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 		return;
 	}
 	// Adjust start time if factor < 1.
-	if (factor > 0 && factor < 1) {
+	if (factor < 1) {
 		settings[current_fragment].start_time += (current_time - the_last_time) * ((1 - factor) * .99);
 		movedebug("correct: %f %d", F(factor), int(settings[current_fragment].start_time));
 	}
@@ -472,13 +508,6 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 			mtr.settings[current_fragment].last_v = mtr.settings[current_fragment].target_v * factor;
 		}
 	}
-	for (uint8_t s = 0; s < num_spaces; ++s) {
-		Space &sp = spaces[s];
-		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			if (!isnan(sp.axis[a]->settings[current_fragment].target))
-				sp.axis[a]->current += (sp.axis[a]->settings[current_fragment].target - sp.axis[a]->current) * factor;
-		}
-	}
 	return;
 } // }}}
 
@@ -495,15 +524,15 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				//debug("before source %d %f %f", a, F(axis[a].source), F(axis[a].motor.dist));
+				//debug("before source %d %f %f", a, F(axis[a].settings[current_fragment].source), F(axis[a].motor.dist));
 				if (!isnan(sp.axis[a]->settings[current_fragment].dist)) {
-					sp.axis[a]->source += sp.axis[a]->settings[current_fragment].dist;
+					sp.axis[a]->settings[current_fragment].source += sp.axis[a]->settings[current_fragment].dist;
 					sp.axis[a]->settings[current_fragment].dist = NAN;
 					// Set this here, so it isn't set if dist was NaN to begin with.
 					// Note that target is not set for future iterations, but it isn't changed.
-					sp.axis[a]->settings[current_fragment].target = sp.axis[a]->source;
+					sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source;
 				}
-				//debug("after source %d %f %f %f %f", a, F(sp.axis[a]->source), F(sp.axis[a]->dist), F(sp.motor[a]->current_pos), F(factor));
+				//debug("after source %d %f %f %f %f", a, F(sp.axis[a]->settings[current_fragment].source), F(sp.axis[a]->dist), F(sp.motor[a]->current_pos), F(factor));
 			}
 			move_axes(&sp, current_time, factor);
 			//debug("f %f", F(factor));
@@ -563,7 +592,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 					sp.axis[a]->settings[current_fragment].target = NAN;
 					continue;
 				}
-				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->source + sp.axis[a]->settings[current_fragment].dist * current_f;
+				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist * current_f;
 				//movedebug("do %d %d %f %f", s, a, F(sp.axis[a]->dist), F(target[a]));
 			}
 			move_axes(&sp, current_time, factor);
@@ -582,7 +611,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				float t_fraction = tc / settings[current_fragment].tp;
 				float current_f2 = settings[current_fragment].fp * (2 - t_fraction) * t_fraction;
 				float current_f3 = settings[current_fragment].fq * t_fraction * t_fraction;
-				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->source + sp.axis[a]->settings[current_fragment].main_dist + sp.axis[a]->settings[current_fragment].dist * current_f2 + sp.axis[a]->settings[current_fragment].next_dist * current_f3;
+				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].main_dist + sp.axis[a]->settings[current_fragment].dist * current_f2 + sp.axis[a]->settings[current_fragment].next_dist * current_f3;
 			}
 			move_axes(&sp, current_time, factor);
 		}
@@ -646,6 +675,8 @@ void copy_fragment_settings(int src, int dst) {
 			sp.axis[a]->settings[dst].next_dist = sp.axis[a]->settings[src].next_dist;
 			sp.axis[a]->settings[dst].main_dist = sp.axis[a]->settings[src].main_dist;
 			sp.axis[a]->settings[dst].target = sp.axis[a]->settings[src].target;
+			sp.axis[a]->settings[dst].source = sp.axis[a]->settings[src].source;
+			sp.axis[a]->settings[dst].current = sp.axis[a]->settings[src].current;
 		}
 	}
 }

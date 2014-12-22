@@ -4,8 +4,7 @@
 void setup()
 {
 	arch_setup_start();
-	watchdog_disable();
-	Serial.begin(115200);
+	enabled_pins = NUM_DIGITAL_PINS;
 	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
 		// Reset state is unset, then unset the pin.
 		pin[p].state = CTRL_UNSET << 2 | CTRL_RESET;
@@ -34,7 +33,6 @@ void setup()
 	adc_phase = INACTIVE;
 	adc_current = ~0;
 	adc_next = ~0;
-	temps_disabled = true;
 	// Set up communication state.
 	command_end = 0;
 	had_data = false;
@@ -42,6 +40,8 @@ void setup()
 	out_busy = false;
 	reply_ready = 0;
 	adcreply_ready = 0;
+	timeout = false;
+	timeout_time = 0;
 	// Set up homing state.
 	homers = 0;
 	home_step_time = 0;
@@ -50,6 +50,7 @@ void setup()
 	stopping = false;
 	underrun = false;
 	active_motors = 0;
+	steps_prepared = 0;
 	// Set up led state.
 	led_fast = 0;
 	led_last = millis();
@@ -58,8 +59,7 @@ void setup()
 	// Do arch-specific things.  This fills printerid.
 	arch_setup_end();
 	// Inform host of reset.
-	Serial.write(CMD_STARTUP);
+	serial_write(CMD_STARTUP);
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
-		Serial.write(printerid[i]);
-	Serial.write(CMD_STARTUP);
+		serial_write(printerid[i]);
 }

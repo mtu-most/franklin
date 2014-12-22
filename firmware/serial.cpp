@@ -20,7 +20,7 @@
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
 static bool had_stall = true;
-static uint32_t last_millis;
+static uint16_t last_millis;
 
 // Parity masks for decoding.
 static const uint8_t MASK[5][4] = {
@@ -31,40 +31,58 @@ static const uint8_t MASK[5][4] = {
 	{0x4b, 0xdc, 0xe2, 0x83}
 };
 
-static inline uint8_t fullpacketlen() {
-	if ((command[0] & ~0x10) == CMD_CONTROL) {
+static inline uint16_t fullpacketlen() {
+	if ((command[0] & ~0x10) == CMD_BEGIN) {
+		return command[1];
+	}
+	else if ((command[0] & ~0x10) == CMD_CONTROL) {
 		return 2 + command[1] * 2;
 	}
 	else if ((command[0] & ~0x10) == CMD_HOME) {
 		return 5 + active_motors;
 	}
 	else if ((command[0] & ~0x10) == CMD_MOVE) {
-		uint8_t bytes = (fragment_len[last_fragment] + 1) / 2;
+		uint16_t bytes = (fragment_len[last_fragment] + 1) / 2;
 		return 3 + bytes;
 	}
 	else
 		return minpacketlen();
 }
 
+static void clear_overflow() {
+	command_end = 0;
+	serial_buffer_head = 0;
+	serial_buffer_tail = 0;
+	serial_overflow = false;
+	debug("serial flushed after overflow");
+	debug_dump();
+	serial_write(CMD_NACK);
+}
+
 // There may be serial data available.
 void serial()
 {
-	if (!had_data && command_end > 0 && millis() - last_millis >= 300)
+	uint16_t milliseconds = millis();
+	if (!had_data && command_end > 0 && milliseconds - last_millis >= 100)
 	{
 		// Command not finished; ignore it and wait for next.
 		watchdog_reset();
-		debug("fail %d %x %ld", command_end, command[0], F(last_millis));
+		debug("fail %d %x %ld %ld", command_end, command[0], F(last_millis), F(milliseconds));
 		command_end = 0;
+		if (serial_overflow)
+			clear_overflow();
 	}
 	had_data = false;
 	while (command_end == 0)
 	{
-		if (!Serial.available()) {
+		if (!serial_available()) {
 			watchdog_reset();
+			if (serial_overflow)
+				clear_overflow();
 			return;
 		}
 		had_data = true;
-		command[0] = Serial.read();
+		command[0] = serial_read();
 #ifdef DEBUG_SERIAL
 		debug("received: %x", command[0]);
 #endif
@@ -96,24 +114,24 @@ void serial()
 			// connects to the printer.  This may be a reconnect,
 			// and can happen at any time.
 			// Response is to send the printer id, and temporarily disable all temperature readings.
-			Serial.write(CMD_ID);
+			serial_write(CMD_ID);
 			for (uint8_t i = 0; i < ID_SIZE; ++i)
-				Serial.write(printerid[i]);
-			temps_disabled = true;
+				serial_write(printerid[i]);
 			continue;
 		default:
 			break;
 		}
 		if ((command[0] & 0xe0) != 0x40) {
 			// This cannot be a good packet.
-			debug("invalid command %x", int(uint8_t(command[0])));
-			Serial.write(CMD_NACK);
+			debug("invalid command %x %d", command[0], serial_buffer_tail);
+			// Fake a serial overflow.
+			serial_overflow = true;
 			continue;
 		}
 		command_end = 1;
 		last_millis = millis();
 	}
-	int len = Serial.available();
+	uint16_t len = serial_available();
 	if (len == 0)
 	{
 #ifdef DEBUG_SERIAL
@@ -121,7 +139,7 @@ void serial()
 #endif
 		watchdog_reset();
 		// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
-		if (out_busy && millis() - out_time >= 200) {
+		if (out_busy && millis() - out_time >= 1000) {
 #ifdef DEBUG_SERIAL
 			debug("resending packet");
 #endif
@@ -132,10 +150,11 @@ void serial()
 	had_data = true;
 	if (len + command_end > COMMAND_SIZE)
 		len = COMMAND_SIZE - command_end;
-	uint8_t cmd_len = minpacketlen();
+	uint16_t cmd_len = minpacketlen();
 	if (command_end < cmd_len) {
-		uint8_t num = min(cmd_len - command_end, unsigned(len));
-		Serial.readBytes(reinterpret_cast <char *> (&command[command_end]), num);
+		uint16_t num = min(cmd_len - command_end, len);
+		for (uint16_t n = 0; n < num; ++n)
+			command[command_end + n] = serial_read();
 		command_end += num;
 		len -= num;
 #ifdef DEBUG_SERIAL
@@ -149,7 +168,7 @@ void serial()
 			return;
 		}
 	}
-	uint8_t fulllen = fullpacketlen();
+	uint16_t fulllen = fullpacketlen();
 	//debug("len %d %d", cmd_len, fulllen);
 	cmd_len = fulllen + (fulllen + 2) / 3;
 	if (command_end + len > cmd_len) {
@@ -159,15 +178,11 @@ void serial()
 #endif
 	}
 	if (len > 0) {
-		Serial.readBytes(reinterpret_cast <char *> (&command[command_end]), len);
-		command_end += len;
-#ifdef DEBUG_SERIAL
-		debug("read %d bytes", len);
-#endif
+		for (uint16_t n = 0; n < len; ++n)
+			command[command_end++] = serial_read();
 	}
-	else
 #ifdef DEBUG_SERIAL
-		debug("not read %d bytes", len);
+	debug("check %d %x %x", fulllen, command[0], command[fulllen - 1], command[fulllen]);
 #endif
 	last_millis = millis();
 	if (command_end < cmd_len)
@@ -182,7 +197,7 @@ void serial()
 	watchdog_reset();
 	// Check packet integrity.
 	// Checksum must be good.
-	for (uint8_t t = 0; t < (fulllen + 2) / 3; ++t)
+	for (uint16_t t = 0; t < (fulllen + 2) / 3; ++t)
 	{
 		uint8_t sum = command[fulllen + t];
 		if (fulllen == 1) {
@@ -193,8 +208,11 @@ void serial()
 			command[fulllen + t] = 0;
 		if ((sum & 0x7) != (t & 0x7))
 		{
-			debug("incorrect extra bit %d %d %x %x %x", fulllen, t, command[0], sum, command[fulllen - 1]);
-			Serial.write(CMD_NACK);
+			debug("incorrect extra bit %d %d %x %x %x %d", fulllen, t, command[0], sum, command[fulllen - 1], serial_buffer_tail);
+			debug_dump();
+			// Fake a serial overflow.
+			command_end = 1;
+			serial_overflow = true;
 			return;
 		}
 		for (uint8_t bit = 0; bit < 5; ++bit)
@@ -207,8 +225,11 @@ void serial()
 			check ^= check >> 1;
 			if (check & 1)
 			{
-				debug("incorrect checksum");
-				Serial.write(CMD_NACK);
+				debug("incorrect checksum %d %d %d %x %x %d %d %x", fulllen, t, bit, command[0], command[fulllen - 1], command[fulllen + t], serial_buffer_tail, sum);
+				debug_dump();
+				// Fake a serial overflow.
+				command_end = 1;
+				serial_overflow = true;
 				return;
 			}
 		}
@@ -230,11 +251,11 @@ void serial()
 #endif
 		if (had_stall) {
 			debug("repeating stall");
-			Serial.write(ff_in ? CMD_STALL0 : CMD_STALL1);
+			serial_write(ff_in ? CMD_STALL0 : CMD_STALL1);
 		}
 		else {
 			debug("repeating ack");
-			Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
+			serial_write(ff_in ? CMD_ACK0 : CMD_ACK1);
 		}
 		return;
 	}
@@ -259,7 +280,7 @@ void serial()
 // - call send_packet to resend the last packet
 
 // Set checksum bytes.
-static void prepare_packet(uint8_t len)
+static void prepare_packet(uint16_t len)
 {
 #ifdef DEBUG_SERIAL
 	debug("prepare");
@@ -276,16 +297,20 @@ static void prepare_packet(uint8_t len)
 	debug("use ff_out: %d", ff_out);
 #endif
 	// Compute the checksums.  This doesn't work for size in (1, 2, 4), so
-	// the protocol doesn't allow 1, and requires an initial 0 at position
-	// 2 and 5 to make the checksum of 2 and 4 byte packets work.
-	// For size % 3 != 0, the first checksums are part of the data for the
-	// last checksum.  This means they must have been filled in at that
-	// point.  (This is also the reason (1, 2, 4) are not allowed.)
-	if (len == 2)
+	// the protocol requires an initial 0 at positions 1, 2 and 5 to make
+	// the checksum of those packets work.  For size % 3 != 0, the first
+	// checksums are part of the data for the last checksum.  This means
+	// they must have been filled in at that point.  (This is also the
+	// reason (1, 2, 4) need special handling.)
+	if (len == 1) {
+		pending_packet[1] = 0;
+		pending_packet[2] = 0;
+	}
+	else if (len == 2)
 		pending_packet[2] = 0;
 	else if (len == 4)
 		pending_packet[5] = 0;
-	for (uint8_t t = 0; t < (len + 2) / 3; ++t)
+	for (uint16_t t = 0; t < (len + 2) / 3; ++t)
 	{
 		uint8_t sum = t & 7;
 		for (uint8_t bit = 0; bit < 5; ++bit)
@@ -312,8 +337,8 @@ void send_packet()
 	debug("send");
 #endif
 	out_busy = true;
-	for (uint8_t t = 0; t < pending_len; ++t)
-		Serial.write(pending_packet[t]);
+	for (uint16_t t = 0; t < pending_len; ++t)
+		serial_write(pending_packet[t]);
 	out_time = millis();
 }
 
@@ -321,12 +346,12 @@ void send_packet()
 void try_send_next()
 {
 #ifdef DEBUG_SERIAL
-	debug("try send");
+	//debug("try send");
 #endif
 	if (out_busy)
 	{
 #ifdef DEBUG_SERIAL
-		debug("still busy");
+		//debug("still busy");
 #endif
 		// Still busy sending other packet.
 		return;
@@ -355,13 +380,22 @@ void try_send_next()
 			pending_packet[0] = CMD_LIMIT;
 			pending_packet[1] = m;
 			pending_packet[2] = limit_fragment_pos;
+			cli();
 			for (uint8_t mi = 0; mi < active_motors; ++mi)
 				*reinterpret_cast <int32_t *>(&pending_packet[3 + 4 * mi]) = motor[mi].current_pos;
+			sei();
 			motor[m].flags &= ~Motor::LIMIT;
 			prepare_packet(3 + 4 * active_motors);
 			send_packet();
 			return;
 		}
+	}
+	if (timeout) {
+		pending_packet[0] = CMD_TIMEOUT;
+		timeout = false;
+		prepare_packet(1);
+		send_packet();
+		return;
 	}
 	if (notified_current_fragment != current_fragment) {
 		if (underrun) {
@@ -392,8 +426,10 @@ void try_send_next()
 	if (home_step_time > 0 && homers == 0)
 	{
 		pending_packet[0] = CMD_HOMED;
+		cli();
 		for (uint8_t m = 0; m < active_motors; ++m)
 			*reinterpret_cast <int32_t *>(&pending_packet[1 + 4 * m]) = motor[m].current_pos;
+		sei();
 		home_step_time = 0;
 		prepare_packet(1 + 4 * active_motors);
 		send_packet();
@@ -406,7 +442,7 @@ void try_send_next()
 #endif
 		for (uint8_t b = 0; b < 8; ++b)
 		{
-			if (ping & 1 << b)
+			if (ping & (1 << b))
 			{
 				pending_packet[0] = CMD_PONG;
 				pending_packet[1] = b;
@@ -417,7 +453,7 @@ void try_send_next()
 			}
 		}
 	}
-	if (!temps_disabled && adcreply_ready) // This is pretty much always true, so make it the least important (nothing below this will ever be sent).
+	if (adcreply_ready) // This is pretty much always true, so make it the least important (nothing below this will ever be sent).
 	{
 #ifdef DEBUG_SERIAL
 		debug("adcreply %x %d", adcreply[1], adcreply[0]);
@@ -435,17 +471,12 @@ void write_ack()
 {
 	//debug("acking");
 	had_stall = false;
-	Serial.write(ff_in ? CMD_ACK0 : CMD_ACK1);
+	serial_write(ff_in ? CMD_ACK0 : CMD_ACK1);
 }
 
 void write_stall()
 {
 	//debug("stalling");
 	had_stall = true;
-	Serial.write(ff_in ? CMD_STALL0 : CMD_STALL1);
-}
-
-ISR(USART0_RX_vect) {
-	serial_buffer[serial_buffer_head] = UDR0;
-	serial_buffer_head = (serial_buffer_head + 1) % SERIAL_BUFFER_SIZE;
+	serial_write(ff_in ? CMD_STALL0 : CMD_STALL1);
 }

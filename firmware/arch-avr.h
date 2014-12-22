@@ -1,8 +1,36 @@
-// This is not an include quard.  This file is included twice; the first time the first part of the file is used, the second time the second part.
+// vim: set foldmethod=marker :
+// This is not an include quard.  This file is included twice; the first time the first part of the file is used, the second time the second part. {{{
 #ifndef _ARCH_AVR_H
 #define _ARCH_AVR_H
-#include <Arduino.h>
+
+// Define things that pins_arduino needs from Arduino.h (which shouldn't be included).
+#define ARDUINO_MAIN
+#define NOT_A_PIN 0
+#define NOT_A_PORT 0
+#define NOT_ON_TIMER 0
+#define TIMER0A 1
+#define TIMER0B 2
+#define TIMER1A 3
+#define TIMER1B 4
+#define TIMER2  5
+#define TIMER2A 6
+#define TIMER2B 7
+#define TIMER3A 8
+#define TIMER3B 9
+#define TIMER3C 10
+#define TIMER4A 11
+#define TIMER4B 12
+#define TIMER4C 13
+#define TIMER4D 14      
+#define TIMER5A 15
+#define TIMER5B 16
+#define TIMER5C 17
+
+#include <pins_arduino.h>
 #include <avr/wdt.h>
+#include <avr/io.h>
+#include <avr/pgmspace.h>
+#include <avr/interrupt.h>
 #include <EEPROM.h>
 
 #ifndef NO_DEBUG
@@ -16,29 +44,153 @@ static inline void debug(char const *fmt, ...);
 #endif
 #define F(x) &(x)
 
-// Arduino is slow enough to not need explicit microsecond delays.
-#define microdelay() do {} while(0)
-// We don't care about using full cpu power on Arduino.
-#define wait_for_event(x, t) do {} while(0)
+inline void SET_OUTPUT(uint8_t pin_no);
+inline void SET_INPUT(uint8_t pin_no);
+inline void UNSET(uint8_t pin_no);
+inline void SET(uint8_t pin_no);
+inline void RESET(uint8_t pin_no);
+inline bool GET(uint8_t pin_no);
 
 // Everything before this line is used at the start of firmware.h; everything after it at the end.
 #else
+EXTERN Pin_t pin[NUM_DIGITAL_PINS];
+// }}}
 
 #ifdef __cplusplus
-#ifdef USE_SERIAL1
-#define Serial Serial1
-#endif
-
 // Defined by arduino: NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS
 
+// Serial communication. {{{
+static inline void debug_add(int i);
+#define SERIAL_BUFFER_SIZE (FULL_COMMAND_SIZE + 1)
+EXTERN volatile bool serial_overflow;
+EXTERN volatile uint8_t which_serial;
+EXTERN volatile uint16_t serial_buffer_head;
+EXTERN volatile uint16_t serial_buffer_tail;
+EXTERN volatile uint8_t serial_buffer[SERIAL_BUFFER_SIZE];
+
+static inline void serial_write(uint8_t data) {
+#ifndef NO_SERIAL1
+	if (which_serial != 1) {
+#endif
+		while (~UCSR0A & (1 << UDRE0)) {}
+		UDR0 = data;
+#ifndef NO_SERIAL1
+	}
+	else {
+		while (~UCSR1A & (1 << UDRE1)) {}
+		UDR1 = data;
+	}
+#endif
+}
+
+static inline uint16_t serial_available() {
+	cli();
+	uint16_t ret = (SERIAL_BUFFER_SIZE + serial_buffer_head - serial_buffer_tail) % SERIAL_BUFFER_SIZE;
+	sei();
+	return ret;
+}
+
+static inline uint8_t serial_read() {
+	cli();
+	uint8_t ret = serial_buffer[serial_buffer_tail];
+	//debug("%x", ret);
+	serial_buffer_tail = (serial_buffer_tail + 1) % SERIAL_BUFFER_SIZE;
+	sei();
+	return ret;
+}
+
+static inline void serial_flush() {
+	if (which_serial == 0)
+		while (~UCSR0A & (1 << TXC0)) {}
+#ifndef NO_SERIAL1
+	else if (which_serial == 1)
+		while (~UCSR1A & (1 << TXC1)) {}
+#endif
+}
+
+#ifdef DEFINE_VARIABLES
+static inline void handle_serial_input(uint8_t which, uint8_t data, uint8_t status) {
+	if (which_serial != which) {
+		if (status != 0 || data != CMD_ID)
+			return;
+		which_serial = which;
+#ifndef NO_SERIAL1
+		// Disable other port so the pins can be used.
+		if (which == 0)
+			UCSR1B = 0;
+		else
+			UCSR0B = 0;
+#endif
+	}
+	if (serial_overflow)
+		return;
+	uint16_t next = (serial_buffer_head + 1) % SERIAL_BUFFER_SIZE;
+	if (status != 0 || next == serial_buffer_tail) {
+		debug_add(0xb00);
+		debug_add(status);
+		debug_add(serial_buffer_head);
+		debug_add(serial_buffer_tail);
+		serial_overflow = true;
+		return;
+	}
+	serial_buffer[serial_buffer_head] = data;
+	serial_buffer_head = next;
+}
+
+ISR(USART0_RX_vect) {
+	uint8_t status = UCSR0A;
+	handle_serial_input(0, UDR0, status & ((1 << FE0) | (1 << DOR0)));
+}
+
+#ifndef NO_SERIAL1
+ISR(USART1_RX_vect) {
+	uint8_t status = UCSR1A;
+	handle_serial_input(1, UDR1, status & ((1 << FE1) | (1 << DOR1)));
+}
+#endif
+#endif
+// }}}
+
+// Debugging. {{{
 #ifndef NO_DEBUG
+#define AVR_NUM_DEBUG 20
+EXTERN int avr_debug[AVR_NUM_DEBUG];
+EXTERN int avr_debug_ptr;
+static inline void debug_add(int i) {
+	avr_debug[avr_debug_ptr] = i;
+	avr_debug_ptr = (avr_debug_ptr + 1) % AVR_NUM_DEBUG;
+}
+
+static inline void debug_dump() {
+	debug("Debug dump (most recent last):");
+	for (int i = 0; i < AVR_NUM_DEBUG; ++i)
+		debug("%x", avr_debug[(avr_debug_ptr + i) % AVR_NUM_DEBUG]);
+	debug("dump done");
+}
+static inline void print_num(uint32_t num, int base) {
+	int digits = 1;
+	num &= 0x00ffffff;
+	uint32_t power = base;
+	while (num / power > 0) {
+		digits += 1;
+		power *= base;
+	}
+	power /= base;
+	for (int d = 0; d < digits; ++d) {
+		uint8_t c = num / power;
+		num -= c * power;
+		power /= base;
+		serial_write(c < 10 ? '0' + c : 'a' + c - 10);
+	}
+}
+
 static inline void debug(char const *fmt, ...) {
 #if DEBUG_BUFFER_LENGTH > 0
 	buffered_debug_flush();
 #endif
 	va_list ap;
 	va_start(ap, fmt);
-	Serial.write(CMD_DEBUG);
+	serial_write(CMD_DEBUG);
 	for (char const *p = fmt; *p; ++p) {
 		if (*p == '%') {
 			bool longvalue = false;
@@ -46,7 +198,7 @@ static inline void debug(char const *fmt, ...) {
 				++p;
 				switch (*p) {
 				case 0: {
-					Serial.write('%');
+					serial_write('%');
 					--p;
 					break;
 				}
@@ -55,49 +207,45 @@ static inline void debug(char const *fmt, ...) {
 					continue;
 				}
 				case '%': {
-					Serial.write('%');
+					serial_write('%');
 					break;
 				}
 				case 'd': {
 					if (longvalue) {
-						int32_t *arg = va_arg(ap, int32_t *);
-						Serial.print(*arg, DEC);
+						uint32_t *arg = va_arg(ap, uint32_t *);
+						print_num(*arg, 10);
 					}
 					else {
 						int arg = va_arg(ap, int);
-						Serial.print(arg, DEC);
+						print_num(arg, 10);
 					}
 					break;
 				}
 				case 'x': {
 					if (longvalue) {
-						int32_t *arg = va_arg(ap, int32_t *);
-						Serial.print(*arg, HEX);
+						uint32_t *arg = va_arg(ap, uint32_t *);
+						print_num(*arg, 16);
 					}
 					else {
 						int arg = va_arg(ap, int);
-						Serial.print(arg, HEX);
+						print_num(arg, 16);
 					}
-					break;
-				}
-				case 'f': {
-					float *arg = va_arg(ap, float *);
-					Serial.print(*arg, 5);
 					break;
 				}
 				case 's': {
 					char const *arg = va_arg(ap, char const *);
-					Serial.print(arg);
+					while (*arg)
+						serial_write(*arg++);
 					break;
 				}
 				case 'c': {
 					char arg = va_arg(ap, int);
-					Serial.write(arg);
+					serial_write(arg);
 					break;
 				}
 				default: {
-					Serial.write('%');
-					Serial.write(*p);
+					serial_write('%');
+					serial_write(*p);
 					break;
 				}
 				}
@@ -105,26 +253,25 @@ static inline void debug(char const *fmt, ...) {
 			}
 		}
 		else {
-			Serial.write(*p);
+			serial_write(*p);
 		}
 	}
 	va_end(ap);
-	Serial.write((uint8_t)0);
-	Serial.flush();
+	serial_write((uint8_t)0);
 }
 #endif
+// }}}
 
+// ADC. {{{
 EXTERN uint8_t adc_last_pin;
 #define ADCBITS 10
+#define AVR_ADCSRA_BASE	((1 << ADEN) | 7)	// Prescaler set to 128.
 
 #define fabs abs
 
 static inline void adc_start(uint8_t adcpin) {
 	// Mostly copied from /usr/share/arduino/hardware/arduino/cores/arduino/wiring_analog.c.
-#if defined(__AVR_ATmega32U4__)
-	uint8_t pin_ = analogPinToChannel(adcpin);
-	ADCSRB = (ADCSRB & ~(1 << MUX5)) | (((pin_ >> 3) & 0x01) << MUX5);
-#elif defined(ADCSRB) && defined(MUX5)
+#if defined(ADCSRB) && defined(MUX5)
 	// the MUX5 bit of ADCSRB selects whether we're reading from channels
 	// 0 to 7 (MUX5 low) or 8 to 15 (MUX5 high).
 	uint8_t pin_ = adcpin;
@@ -133,11 +280,9 @@ static inline void adc_start(uint8_t adcpin) {
 	uint8_t pin_ = adcpin;
 #endif
 
-#if defined(ADMUX)
-	ADMUX = (DEFAULT << 6) | (pin_ & 0x7);
-#endif
+	ADMUX = pin_ & 0x7;
 	// Start the conversion.
-	ADCSRA |= 1 << ADSC;
+	ADCSRA = AVR_ADCSRA_BASE | (1 << ADSC);
 	adc_last_pin = adcpin;
 }
 
@@ -151,20 +296,23 @@ static inline bool adc_ready(uint8_t pin_) {
 		return false;
 	if (adc_phase != MEASURING) {
 		adc_phase = MEASURING;
-		ADCSRA |= 1 << ADSC;
+		ADCSRA = AVR_ADCSRA_BASE | (1 << ADSC);
 		return false;
 	}
 	return true;
 }
 
 static inline int16_t adc_get(uint8_t pin_) {
+	(void)&pin_;
 	int16_t low = uint8_t(ADCL);
 	int16_t high = uint8_t(ADCH);
 	int16_t ret = (high << 8) | low;
 	adc_phase = INACTIVE;
 	return ret;
 }
+// }}}
 
+// Watchdog and reset. {{{
 static inline void watchdog_enable() {
 #ifdef WATCHDOG
 	wdt_reset();
@@ -188,53 +336,194 @@ static inline void reset() {
 	wdt_enable(WDTO_15MS);	// As short as possible.
 	while(1) {}
 }
+// }}}
 
+// Setup. {{{
 EXTERN uint8_t mcusr;
-EXTERN uint16_t mem_used;
-EXTERN uint32_t time_h;
+EXTERN volatile uint32_t avr_time_h, avr_seconds_h, avr_seconds;
 
 static inline void arch_setup_start() {
+	cli();
 	mcusr = MCUSR;
-	time_h = 0;
+	avr_time_h = 0;
+	avr_seconds_h = 0;
+	avr_seconds = 0;
 	MCUSR = 0;
+	watchdog_disable();
+	// Serial ports.
+	UCSR0A = 1 << U2X0;
+	UCSR0B = (1 << RXCIE0) | (1 << RXEN0) | (1 << TXEN0);
+	UCSR0C = 6;
+	UBRR0H = 0;
+	UBRR0L = 16;
+#ifndef NO_SERIAL1
+	UCSR1A = 1 << U2X1;
+	UCSR1B = (1 << RXCIE1) | (1 << RXEN1) | (1 << TXEN1);
+	UCSR1C = 6;
+	UBRR1H = 0;
+	UBRR1L = 16;
+	which_serial = -1;
+#endif
+	serial_overflow = false;
+	serial_buffer_tail = 0;
+	serial_buffer_head = 0;
 	// Setup timer1 for microsecond counting.
 	TCCR1A = 0;
 	TCCR1B = 0x0a;	// Clock/8, in other words with 16MHz clock, 2MHz counting; 2 counts/us.
 	TIMSK1 = 0;	// Disable the interrupt while the motors are disabled.
 	TIFR1 = 0xff;
-	// Disable all outputs.
-	for (uint8_t i = 0; i < NUM_DIGITAL_PINS; ++i)
-		UNSET(i);
+	// Setup timer0 for millis().
+	TCCR0A = 0;
+	TCCR0B = 4;	// Clock/256: 62.5 ticks/millisecond.
+	TIFR0 = 1 << TOV0;
+	TIMSK0 = 1 << TOIE0;
+	// Setup ADC.
+	ADCSRA = AVR_ADCSRA_BASE;
+	// Enable interrupts.
+	sei();
 	// Initialize printer id from EEPROM.
-	for (uint8_t i = 0; i < ID_SIZE; ++i)
+	for (uint8_t i = 0; i < 16; ++i)
 		printerid[i] = EEPROM.read(i);
 	// Make it a UUID (version 4).
 	printerid[7] &= 0x0f;
 	printerid[7] |= 0x40;
 	printerid[9] &= 0x3f;
 	printerid[9] |= 0x80;
+	// printerid[16:20] will be filled by CMD_BEGIN.  Initialize it to 0.
+	for (uint8_t i = 0; i < 4; ++i)
+		printerid[16 + i] = 0;
+	// Fill magic.
+	printerid[20] = 0xe1;
+	printerid[21] = 0xd5;
+	printerid[22] = 0xe6;
+	printerid[23] = 0xcb;
 }
 
 static inline void arch_setup_end() {
 	debug("Startup.  MCUSR: %x", mcusr);
 }
 
-static inline uint32_t utime() {
-	uint32_t l = uint8_t(TCNT1L);
-	uint32_t h = uint8_t(TCNT1H);
-	// If a  carry happened just now, get new values.
-	if (TIFR1 & (1 << TOV1)) {
-		TIFR1 = 1 << TOV1;
-		time_h += 1;
-		l = uint8_t(TCNT1L);
-		h = uint8_t(TCNT1H);
+static inline void set_speed(uint16_t count) {
+	stopped = (count == 0);
+	if (stopped) {
+		TIMSK1 = 0;
 	}
-	// Don't use 16,8,0, because we have 2 counts/us, not 1.
-	return (time_h << 15) | (h << 7) | (l >> 1);
+	else {
+		// Set TOP.
+		OCR1AH = (count >> 7) & 0xff;
+		OCR1AL = (count << 1) & 0xff;
+		// Clear counter.
+		TCNT1H = 0;
+		TCNT1L = 0;
+		// Clear and enable interrupt.
+		TIFR1 = 1 << OCF1A;
+		TIMSK1 = 1 << OCIE1A;
+	}
+}
+// }}}
+
+// Timekeeping. {{{
+static inline uint16_t millis() {
+	cli();
+	uint8_t l = TCNT0;
+	uint32_t h = avr_time_h;
+	if (TIFR0 & (1 << TOV0)) {
+		l = TCNT0;
+		h += 0x100;
+	}
+	sei();
+	return ((h | l) << 1) / 125;
 }
 
-/* Memory handling
+static inline uint16_t seconds() {
+	return avr_seconds;
+}
+
+#ifdef DEFINE_VARIABLES
+ISR(TIMER0_OVF_vect) {
+	uint32_t top = uint32_t(125) << 16;
+	avr_time_h += 0x100;
+	avr_time_h %= top;	// Wrap at the right number.
+	if (((avr_time_h - avr_seconds_h + top) % top) >= 62500) {
+		avr_seconds_h += 62500;
+		avr_seconds_h %= top;	// Wrap at the right number.
+		avr_seconds += 1;
+	}
+}
+
+ISR(TIMER1_COMPA_vect) {
+	do_steps();
+}
+#endif
+// }}}
+
+// Pin control. {{{
+inline void SET_OUTPUT(uint8_t pin_no) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	if ((pin[pin_no].state & 0x3) == CTRL_SET || (pin[pin_no].state & 0x3) == CTRL_RESET)
+		return;
+	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
+	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port)) &= ~bit;
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) |= bit;
+	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
+}
+
+inline void SET_INPUT(uint8_t pin_no) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
+	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) &= ~bit;
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port)) |= bit;
+	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_INPUT);
+}
+
+inline void UNSET(uint8_t pin_no) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
+	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) &= ~bit;
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port)) &= ~bit;
+	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_UNSET);
+}
+
+inline void SET(uint8_t pin_no) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	if ((pin[pin_no].state & 0x3) == CTRL_SET)
+		return;
+	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
+	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port)) |= bit;
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) |= bit;
+	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_SET);
+}
+
+inline void RESET(uint8_t pin_no) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	if ((pin[pin_no].state & 0x3) != CTRL_SET)
+		return;
+	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
+	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port)) &= ~bit;
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) |= bit;
+	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
+}
+
+inline bool GET(uint8_t pin_no) {
+	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
+	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
+	return *reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_input_PGM + port)) & bit;
+}
+// }}}
+
+/* Memory handling (disabled) {{{
 EXTERN char storage[DYNAMIC_MEM_SIZE];
+EXTERN uint16_t mem_used;
 struct Memrecord {
 	uint16_t size;
 	void **target;
@@ -347,6 +636,6 @@ static inline void _mem_free(void **target) {
 	_mem_dump();
 #endif
 }
-*/
+// }}}*/
 #endif
 #endif

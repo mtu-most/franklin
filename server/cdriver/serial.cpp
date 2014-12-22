@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-#define DEBUG_DATA
+//#define DEBUG_DATA
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
@@ -108,7 +108,7 @@ void serial(uint8_t which)
 					if (!need_id) {
 						// Firmware has reset.
 						//arch_reset();
-						debug("firmware has reset");
+						debug("firmware sent id");
 					}
 					continue;
 				}
@@ -131,6 +131,7 @@ void serial(uint8_t which)
 #ifdef DEBUG_FF
 						debug("new ff_out: %d", ff_out[which]);
 #endif
+						//debug("recv ack");
 						out_busy = false;
 						if (stop_pending) {
 							stop_pending = false;
@@ -147,6 +148,7 @@ void serial(uint8_t which)
 						send_packet();
 					continue;
 				case CMD_ID:
+				case CMD_STARTUP:
 					// Request printer id.  This is called when the host
 					// connects to the printer.  This may be a reconnect,
 					// and can happen at any time.
@@ -195,7 +197,7 @@ void serial(uint8_t which)
 			//debug("no more data available on %d now", which);
 #endif
 			// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
-			if (which == 1 && out_busy && utime() - out_time >= 200000) {
+			if (which == 1 && out_busy && utime() - out_time >= 1000000) {
 #ifdef DEBUG_SERIAL
 				debug("resending packet on %d", which);
 #endif
@@ -235,7 +237,7 @@ void serial(uint8_t which)
 		}
 #ifdef DEBUG_DATA
 		if (which == 1) {
-			fprintf(stderr, "recv %d:", which);
+			fprintf(stderr, "recv:");
 			for (uint8_t i = 0; i < command_end[which]; ++i)
 				fprintf(stderr, " %02x", command[which][i]);
 			fprintf(stderr, "\n");
@@ -250,7 +252,9 @@ void serial(uint8_t which)
 			for (uint8_t t = 0; t < (len + 2) / 3; ++t)
 			{
 				uint8_t sum = command[which][len + t];
-				if (len == 2 || (len == 4 && t == 1))
+				if (len == 1)
+					command[which][2] = 0;
+				if (len <= 2 || (len == 4 && t == 1))
 					command[which][len + t] = 0;
 				if ((sum & 0x7) != (t & 0x7))
 				{
@@ -392,7 +396,7 @@ void prepare_packet(char *the_packet, int size)
 void send_packet()
 {
 #ifdef DEBUG_DATA
-	fprintf(stderr, "send %d: ", 1);
+	fprintf(stderr, "send: ");
 	for (uint8_t i = 0; i < pending_len; ++i)
 		fprintf(stderr, " %02x", int(uint8_t(pending_packet[i])));
 	fprintf(stderr, "\n");

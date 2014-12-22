@@ -39,9 +39,10 @@ void packet()
 	}
 	case CMD_GOTO:	// goto
 	case CMD_GOTOCB:	// goto with callback
+	case CMD_PROBE:	// probe
 	{
 #ifdef DEBUG_CMD
-		debug("CMD_GOTO(CB)");
+		debug("CMD_GOTO(CB)/PROBE");
 #endif
 		last_active = millis();
 		if (queue_full)
@@ -52,7 +53,7 @@ void packet()
 		uint8_t num = 2;
 		for (uint8_t t = 0; t < num_spaces; ++t)
 			num += spaces[t].num_axes;
-		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
+		uint8_t const offset = (command[0][0] == CMD_PROBE ? 4 : 2) + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
 		uint8_t t = 0;
 		for (uint8_t ch = 0; ch < num; ++ch)
 		{
@@ -89,7 +90,7 @@ void packet()
 			debug("Invalid F0 or F1: %f %f", F(F0), F(F1));
 			return;
 		}
-		queue[queue_end].cb = command[0][1] == CMD_GOTOCB;
+		queue[queue_end].cb = command[0][1] != CMD_GOTO;
 		queue_end = (queue_end + 1) % QUEUE_LENGTH;
 		if (queue_end == queue_start) {
 			queue_full = true;
@@ -126,8 +127,8 @@ void packet()
 					spaces[t].motor[m]->settings[current_fragment].current_pos = 0;
 				}
 				for (uint8_t a = 0; a < spaces[t].num_axes; ++a) {
-					spaces[t].axis[a]->source = NAN;
-					spaces[t].axis[a]->current = NAN;
+					spaces[t].axis[a]->settings[current_fragment].source = NAN;
+					spaces[t].axis[a]->settings[current_fragment].current = NAN;
 				}
 			}
 			motors_busy = false;
@@ -271,8 +272,8 @@ void packet()
 			return;
 		}
 		for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
-			spaces[which].axis[a]->source = NAN;
-			spaces[which].axis[a]->current = NAN;
+			spaces[which].axis[a]->settings[current_fragment].source = NAN;
+			spaces[which].axis[a]->settings[current_fragment].current = NAN;
 		}
 		float f = get_float(4);
 		int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings[current_fragment].current_pos;
@@ -295,12 +296,12 @@ void packet()
 			debug("Getting position of invalid axis %d %d", which, t);
 			return;
 		}
-		if (isnan(spaces[which].axis[t]->source)) {
+		if (isnan(spaces[which].axis[t]->settings[current_fragment].source)) {
 			space_types[spaces[which].type].reset_pos(&spaces[which]);
 			for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
-				spaces[which].axis[a]->current = spaces[which].axis[a]->source;
+				spaces[which].axis[a]->settings[current_fragment].current = spaces[which].axis[a]->settings[current_fragment].source;
 		}
-		send_host(CMD_POS, which, t, spaces[which].axis[t]->current - spaces[which].axis[t]->offset);
+		send_host(CMD_POS, which, t, spaces[which].axis[t]->settings[current_fragment].current - spaces[which].axis[t]->offset);
 		return;
 	}
 	case CMD_READ_GLOBALS:

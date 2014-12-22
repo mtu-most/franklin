@@ -41,15 +41,15 @@ uint8_t next_move() {
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			if (isnan(sp.axis[a]->source)) {
+			if (isnan(sp.axis[a]->settings[current_fragment].source)) {
 				space_types[sp.type].reset_pos(&sp);
 				for (uint8_t aa = 0; aa < sp.num_axes; ++aa)
-					sp.axis[aa]->current = sp.axis[aa]->source;
+					sp.axis[aa]->settings[current_fragment].current = sp.axis[aa]->settings[current_fragment].source;
 				break;
 			}
 #ifdef DEBUG_MOVE
 			else
-				debug("non-nan: %d %d %f %d", s, a, F(sp.axis[a]->source), sp.motor[a]->settings[current_fragment].current_pos);
+				debug("non-nan: %d %d %f %d", s, a, F(sp.axis[a]->settings[current_fragment].source), sp.motor[a]->settings[current_fragment].current_pos);
 #endif
 		}
 	}
@@ -73,9 +73,9 @@ uint8_t next_move() {
 					//debug("not using object %d", mtr);
 				}
 				else {
-					sp.axis[a]->settings[current_fragment].next_dist = queue[queue_start].data[a0 + a] - sp.axis[a]->source + sp.axis[a]->offset;
+					sp.axis[a]->settings[current_fragment].next_dist = queue[queue_start].data[a0 + a] - sp.axis[a]->settings[current_fragment].source + sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
-					debug("next dist of %d = %f (%f - %f + %f)", a0 + a, F(sp.axis[a]->settings[current_fragment].next_dist), F(queue[queue_start].data[a0 + a]), F(sp.axis[a]->source), F(sp.axis[a]->offset));
+					debug("next dist of %d = %f (%f - %f + %f)", a0 + a, F(sp.axis[a]->settings[current_fragment].next_dist), F(queue[queue_start].data[a0 + a]), F(sp.axis[a]->settings[current_fragment].source), F(sp.axis[a]->offset));
 #endif
 				}
 			}
@@ -89,20 +89,20 @@ uint8_t next_move() {
 			if (n != queue_end) {
 				// If only one of them is set, set the other one as well to make the rounded corner work.
 				if (!isnan(queue[queue_start].data[a0 + a]) && isnan(queue[n].data[a0 + a])) {
-					queue[n].data[a0 + a] = sp.axis[a]->source + sp.axis[a]->settings[current_fragment].next_dist - sp.axis[a]->offset;
+					queue[n].data[a0 + a] = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].next_dist - sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
 					debug("filling next %d with %f", a0 + a, F(queue[n].data[a0 + a]));
 #endif
 				}
 				if (isnan(queue[queue_start].data[a]) && !isnan(queue[n].data[a])) {
-					queue[queue_start].data[a0 + a] = sp.axis[a]->source - sp.axis[a]->offset;
+					queue[queue_start].data[a0 + a] = sp.axis[a]->settings[current_fragment].source - sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
 					debug("filling %d with %f", a0 + a, F(queue[queue_start].data[a0 + a]));
 #endif
 				}
 			}
-			if ((!isnan(queue[queue_start].data[a0 + a]) && isnan(sp.axis[a]->source)) || (n != queue_end && !isnan(queue[n].data[a0 + a]) && isnan(sp.axis[a]->source))) {
-				debug("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue: %f %f %f", F(queue[queue_start].data[a0 + a]), F(queue[n].data[a0 + a]), F(sp.axis[a]->source));
+			if ((!isnan(queue[queue_start].data[a0 + a]) && isnan(sp.axis[a]->settings[current_fragment].source)) || (n != queue_end && !isnan(queue[n].data[a0 + a]) && isnan(sp.axis[a]->settings[current_fragment].source))) {
+				debug("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue: %f %f %f", F(queue[queue_start].data[a0 + a]), F(queue[n].data[a0 + a]), F(sp.axis[a]->settings[current_fragment].source));
 				// This possibly removes one move too many, but it shouldn't happen anyway.
 				if (queue[queue_start].cb)
 					++num_cbs;
@@ -159,11 +159,11 @@ uint8_t next_move() {
 				if (isnan(queue[n].data[a0 + a]))
 					sp.axis[a]->settings[current_fragment].next_dist = 0;
 				else
-					sp.axis[a]->settings[current_fragment].next_dist = queue[n].data[a0 + a] + sp.axis[a]->offset - (sp.axis[a]->source + sp.axis[a]->settings[current_fragment].dist);
+					sp.axis[a]->settings[current_fragment].next_dist = queue[n].data[a0 + a] + sp.axis[a]->offset - (sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist);
 				if (sp.axis[a]->settings[current_fragment].next_dist != 0 || sp.axis[a]->settings[current_fragment].dist != 0)
 					action = true;
 #ifdef DEBUG_MOVE
-				debug("Connecting distance for motor %d is %f, to %f = %f + %f - (%f + %f)", a, F(sp.axis[a]->settings[current_fragment].dist), F(sp.axis[a]->settings[current_fragment].next_dist), F(queue[n].data[a0 + a]), F(sp.axis[a]->offset), F(sp.axis[a]->source), F(sp.axis[a]->settings[current_fragment].dist));
+				debug("Connecting distance for motor %d is %f, to %f = %f + %f - (%f + %f)", a, F(sp.axis[a]->settings[current_fragment].dist), F(sp.axis[a]->settings[current_fragment].next_dist), F(queue[n].data[a0 + a]), F(sp.axis[a]->offset), F(sp.axis[a]->settings[current_fragment].source), F(sp.axis[a]->settings[current_fragment].dist));
 #endif
 			}
 			a0 += sp.num_axes;
@@ -174,7 +174,7 @@ uint8_t next_move() {
 	// }}}
 	float v0 = queue[queue_start].f[0] * feedrate;
 	float vp = queue[queue_start].f[1] * feedrate;
-	debug("mv %f %f %f %f", feedrate, v0, vp, vq);
+	//debug("mv %f %f %f %f", feedrate, v0, vp, vq);
 	if (queue[queue_start].cb)
 		cbs_after_current_move += 1;
 	if (queue_end == queue_start)
@@ -308,9 +308,9 @@ uint8_t next_move() {
 			sp.axis[a]->settings[current_fragment].main_dist = sp.axis[a]->settings[current_fragment].dist * (1 - settings[current_fragment].fp);
 			// Fill target for filling endpos below.
 			if ((sp.axis[a]->settings[current_fragment].dist > 0 && sp.axis[a]->settings[current_fragment].next_dist < 0) || (sp.axis[a]->settings[current_fragment].dist < 0 && sp.axis[a]->settings[current_fragment].next_dist > 0))
-				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->source + sp.axis[a]->settings[current_fragment].dist;
+				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist;
 			else
-				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->source + sp.axis[a]->settings[current_fragment].dist + sp.axis[a]->settings[current_fragment].next_dist;
+				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist + sp.axis[a]->settings[current_fragment].next_dist;
 #ifdef DEBUG_MOVE
 			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d hw = %d", s, a, F(sp.axis[a]->settings[current_fragment].dist), F(sp.axis[a]->settings[current_fragment].main_dist), F(sp.axis[a]->settings[current_fragment].next_dist), sp.motor[a]->settings[current_fragment].current_pos, sp.motor[a]->settings[current_fragment].hwcurrent_pos);
 #endif
@@ -342,6 +342,9 @@ uint8_t next_move() {
 		settings[current_fragment].hwtime = 0;
 		settings[current_fragment].last_time = 0;
 		settings[current_fragment].last_current_time = 0;
+#ifdef DEBUG_PATH
+		fprintf(stderr, "\n");
+#endif
 	}
 	//debug("last=%ld", F(long(settings[current_fragment].last_time)));
 	//debug("moving->true");
@@ -374,8 +377,8 @@ void abort_move(int pos) { // {{{
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			//debug("setting axis %d source to %f", a, F(sp.axis[a]->current));
-			sp.axis[a]->source = sp.axis[a]->current;
+			//debug("setting axis %d source to %f", a, F(sp.axis[a]->settings[current_fragment].current));
+			sp.axis[a]->settings[current_fragment].source = sp.axis[a]->settings[current_fragment].current;
 			sp.axis[a]->settings[current_fragment].dist = NAN;
 			sp.axis[a]->settings[current_fragment].next_dist = NAN;
 		}
