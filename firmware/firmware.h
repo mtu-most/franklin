@@ -34,24 +34,29 @@
 #define DEFINE_VARIABLES
 #endif
 
-#define COMMAND_SIZE 256
-#define FULL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
+#define MAX_REPLY_LEN (2 + 4 * NUM_MOTORS)
+#define REPLY_BUFFER_SIZE (MAX_REPLY_LEN + (MAX_REPLY_LEN + 2) / 3)
+
+#define MAX_COMMAND_LEN1 (5 + NUM_MOTORS)
+#define MAX_COMMAND_LEN2 (3 + BYTES_PER_FRAGMENT)
+#define MAX_COMMAND_LEN (MAX_COMMAND_LEN1 > MAX_COMMAND_LEN2 ? MAX_COMMAND_LEN1 : MAX_COMMAND_LEN2)
+#define COMMAND_BUFFER_SIZE (MAX_COMMAND_LEN + (MAX_COMMAND_LEN + 2) / 3)
 
 template <typename _A> _A min(_A a, _A b) { return a < b ? a : b; }
 template <typename _A> _A max(_A a, _A b) { return a > b ? a : b; }
 template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 
 EXTERN uint8_t printerid[ID_SIZE];
-EXTERN uint8_t command[FULL_COMMAND_SIZE];
+EXTERN uint8_t command[COMMAND_BUFFER_SIZE];
 EXTERN uint16_t command_end;
 EXTERN bool had_data;
-EXTERN uint8_t reply[FULL_COMMAND_SIZE], adcreply[6];
+EXTERN uint8_t reply[REPLY_BUFFER_SIZE], adcreply[6];
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool out_busy;
 EXTERN uint16_t out_time;
 EXTERN uint8_t reply_ready, adcreply_ready;
 EXTERN bool timeout;
-EXTERN uint8_t pending_packet[FULL_COMMAND_SIZE];
+EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE > 6 ? REPLY_BUFFER_SIZE : 6];
 EXTERN uint16_t pending_len;
 EXTERN bool stopped, underrun;
 EXTERN uint8_t filling;

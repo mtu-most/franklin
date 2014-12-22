@@ -144,7 +144,7 @@ class Connection: # {{{
 	@classmethod
 	def upload(cls, port, board): # {{{
 		resumeinfo = [(yield), None]
-		if board in ('melzi0', 'melzi1'):
+		if board == 'melzi':
 			protocol = 'arduino'
 			baudrate = '115200'
 			mcu = 'atmega1284p'
@@ -156,6 +156,10 @@ class Connection: # {{{
 			protocol = 'arduino'
 			baudrate = '57600'
 			mcu = 'atmega1280'
+		elif board == 'mini':
+			protocol = 'wiring'
+			baudrate = '115200'
+			mcu = 'atmega328'
 		else:
 			raise ValueError('board type not supported')
 		if ports[port] not in (False, None):

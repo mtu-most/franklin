@@ -148,8 +148,8 @@ void serial()
 		return;
 	}
 	had_data = true;
-	if (len + command_end > COMMAND_SIZE)
-		len = COMMAND_SIZE - command_end;
+	if (len + command_end > MAX_COMMAND_LEN)
+		len = MAX_COMMAND_LEN - command_end;
 	uint16_t cmd_len = minpacketlen();
 	if (command_end < cmd_len) {
 		uint16_t num = min(cmd_len - command_end, len);
@@ -285,9 +285,9 @@ static void prepare_packet(uint16_t len)
 #ifdef DEBUG_SERIAL
 	debug("prepare");
 #endif
-	if (len >= COMMAND_SIZE)
+	if (len >= MAX_COMMAND_LEN)
 	{
-		debug("packet is too large: %d > %d", len, COMMAND_SIZE);
+		debug("packet is too large: %d > %d", len, MAX_COMMAND_LEN);
 		return;
 	}
 	// Set flipflop bit.
