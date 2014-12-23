@@ -496,10 +496,12 @@ def detect(port): # {{{
 	try:
 		printer = serial.Serial(port, baudrate = 115200, timeout = 0)
 	except serial.SerialException:
+		log('failed to open serial port.')
+		traceback.print_exc();
 		return False
 	# flush buffer.
-	while printer.read() != '':
-		pass
+	#while printer.read() != '':
+	#	pass
 	# We need to get the printer id first.  If the printer is booting, this can take a while.
 	id = [None, None, None]
 	# Wait to make sure the command is interpreted as a new packet.

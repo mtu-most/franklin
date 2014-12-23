@@ -1,7 +1,7 @@
 // vim: set foldmethod=marker :
 #ifndef _ARCH_AVR_H
 // Includes and defines. {{{
-//#define DEBUG_AVRCOMM
+#define DEBUG_AVRCOMM
 
 #define _ARCH_AVR_H
 #include <stdint.h>
@@ -179,7 +179,10 @@ static inline uint32_t millis() {
 }
 // }}}
 
-static inline void avr_write_ack();
+#define avr_write_ack(reason) do { \
+	/*debug("ack: %s", reason); */\
+	write_ack(); \
+} while(0)
 
 // Serial port communication. {{{
 static inline void avr_send();
@@ -228,12 +231,17 @@ static inline void avr_call1(uint8_t cmd, uint8_t arg) {
 }
 
 static inline void avr_get_reply() {
-	for (int counter = 0; avr_wait_for_reply && counter < 0x10; ++counter) {
+	for (int counter = 0; avr_wait_for_reply && counter < 0x80; ++counter) {
 		//debug("avr wait");
 		pollfds[1].revents = 0;
-		poll(&pollfds[1], 1, 100);
+		poll(&pollfds[1], 1, 0x40);
 		serial(1);
 	}
+	if (avr_wait_for_reply) {
+		debug("no reply!");
+		return;
+	}
+	avr_write_ack("reply");
 }
 
 static inline void avr_get_current_pos(int offset) {
@@ -272,7 +280,7 @@ static inline void hwpacket(int len) {
 			write_stall();
 			return;
 		}
-		avr_write_ack();
+		avr_write_ack("limit/sense");
 		int s = 0, m = 0;
 		for (s = 0; s < num_spaces; ++s) {
 			if (which < spaces[s].num_motors) {
@@ -308,7 +316,7 @@ static inline void hwpacket(int len) {
 	case HWC_PONG:
 	{
 		avr_pong = command[1][1];
-		avr_write_ack();
+		avr_write_ack("pong");
 		return;
 	}
 	case HWC_ADC:
@@ -316,11 +324,11 @@ static inline void hwpacket(int len) {
 		int pin = command[1][1];
 		if (pin < 0 || pin >= NUM_ANALOG_INPUTS) {
 			debug("invalid adc %d received", pin);
-			avr_write_ack();
+			avr_write_ack("invalid adc");
 			return;
 		}
 		avr_adc[pin] = (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
-		avr_write_ack();
+		avr_write_ack("adc");
 		if (avr_adc_id[pin] >= 0 && avr_adc_id[pin] < num_temps)
 			handle_temp(avr_adc_id[pin], avr_adc[pin]);
 		return;
@@ -336,7 +344,7 @@ static inline void hwpacket(int len) {
 	{
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			debug("Done received while fragments per buffer is zero");
-			avr_write_ack();
+			avr_write_ack("invalid done");
 			return;
 		}
 		int cbs = 0;
@@ -348,10 +356,10 @@ static inline void hwpacket(int len) {
 		if (free_fragments > FRAGMENTS_PER_BUFFER) {
 			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], free_fragments - command[1][1]);
 			free_fragments = FRAGMENTS_PER_BUFFER;
-			avr_write_ack();
+			avr_write_ack("invalid done");
 			return;
 		}
-		avr_write_ack();
+		avr_write_ack("done");
 		if (!out_busy)
 			buffer_refill();
 		return;
@@ -359,14 +367,13 @@ static inline void hwpacket(int len) {
 	case HWC_HOMED:
 	{
 		avr_get_current_pos(1);
-		avr_write_ack();
+		avr_write_ack("homed");
 		send_host(CMD_HOMED);
 		return;
 	}
 	case HWC_TIMEOUT:
 	{
-		debug("timeout from firmware");
-		avr_write_ack();
+		avr_write_ack("timeout");
 		return;
 	}
 	default:
@@ -377,10 +384,6 @@ static inline void hwpacket(int len) {
 		return;
 	}
 	}
-}
-
-static inline void avr_write_ack() {
-	write_ack();
 }
 
 static inline bool arch_active() {
@@ -457,7 +460,6 @@ static inline bool GET(Pin_t _pin, bool _default) {
 	avr_wait_for_reply = true;
 	avr_call1(HWC_GETPIN, _pin.pin);
 	avr_get_reply();
-	avr_write_ack();
 	return _pin.inverted() ^ command[1][1];
 }
 // }}}
@@ -601,7 +603,6 @@ static inline void arch_setup_end(char const *run_id) {
 	prepare_packet(avr_buffer, 6);
 	avr_send();
 	avr_get_reply();
-	avr_write_ack();
 	protocol_version = 0;
 	for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
 		protocol_version |= int(uint8_t(command[1][2 + i])) << (i * 8);
@@ -728,7 +729,6 @@ static inline void arch_stop() {
 	prepare_packet(avr_buffer, 1);
 	avr_send();
 	avr_get_reply();
-	avr_write_ack();
 	avr_get_current_pos(2);
 	//debug("aborting at request");
 	abort_move(command[1][1]);

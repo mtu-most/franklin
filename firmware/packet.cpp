@@ -224,9 +224,9 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_START_MOVE");
 #endif
+		write_ack();
 		if (stopping) {
 			//debug("ignoring start move while stopping");
-			write_ack();
 			return;
 		}
 		if (filling > 0)
@@ -237,7 +237,6 @@ void packet()
 		for (uint8_t m = 0; m < active_motors; ++m)
 			buffer[motor[m].buffer][last_fragment].dir = DIR_NONE;
 		//debug("new filling: %d %d", filling, last_fragment);
-		write_ack();
 		return;
 	}
 	case CMD_MOVE:
@@ -250,9 +249,9 @@ void packet()
 			write_stall();
 			return;
 		}
+		write_ack();
 		if (stopping) {
 			//debug("ignoring move while stopping");
-			write_ack();
 			return;
 		}
 		if (filling == 0)
@@ -264,7 +263,6 @@ void packet()
 		for (uint8_t b = 0; b < (fragment_len[last_fragment] + 1) / 2; ++b) {
 			fragment.samples[b] = command[3 + b];
 		}
-		write_ack();
 		return;
 	}
 	case CMD_START:
@@ -272,9 +270,9 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_START");
 #endif
+		write_ack();
 		if (stopping) {
 			//debug("ignoring start while stopping");
-			write_ack();
 			return;
 		}
 		current_fragment_pos = 0;
@@ -283,7 +281,6 @@ void packet()
 			motor[m].dir = fragment.dir;
 		}
 		set_speed(time_per_sample);
-		write_ack();
 		return;
 	}
 	case CMD_STOP:

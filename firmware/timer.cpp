@@ -27,26 +27,6 @@ void do_steps() {
 	steps_prepared = 0;
 }
 
-// When to do the steps.
-static uint16_t const lookup[] = {
-	0x0000,
-	0x0040,
-	0x0204,
-	0x0842,
-	0x0889,
-	0x1249,
-	0x14a5,
-	0x1555,
-	0x5555,
-	0x56b5,
-	0x5b6d,
-	0x5bbb,
-	0x5ef7,
-	0x5fbf,
-	0x5fff,
-	0x7fff
-};
-
 void handle_motors() {
 	// Check sensors.
 	for (uint8_t m = 0; m < active_motors; ++m) {

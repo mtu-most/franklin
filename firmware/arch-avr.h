@@ -74,7 +74,7 @@ EXTERN Pin_t pin[NUM_DIGITAL_PINS];
 
 // Serial communication. {{{
 static inline void debug_add(int i);
-#define SERIAL_BUFFER_SIZE (COMMAND_BUFFER_SIZE + 1)
+#define SERIAL_BUFFER_SIZE (COMMAND_BUFFER_SIZE + 10)
 EXTERN volatile bool serial_overflow;
 EXTERN volatile uint8_t which_serial;
 EXTERN volatile uint16_t serial_buffer_head;

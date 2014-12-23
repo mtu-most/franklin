@@ -371,7 +371,6 @@ void serial(uint8_t which);	// Handle commands from serial.
 void prepare_packet(char *the_packet, int len);
 void send_packet();
 void write_ack();
-void write_ackwait();
 void write_stall();
 void send_host(char cmd, int s = 0, int m = 0, float f = 0, int e = 0, int len = 0);
 
