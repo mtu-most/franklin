@@ -42,8 +42,7 @@ static inline uint16_t fullpacketlen() {
 		return 5 + active_motors;
 	}
 	else if ((command[0] & ~0x10) == CMD_MOVE) {
-		uint16_t bytes = (fragment_len[last_fragment] + 1) / 2;
-		return 3 + bytes;
+		return 3 + fragment_len[last_fragment];
 	}
 	else
 		return minpacketlen();

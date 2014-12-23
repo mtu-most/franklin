@@ -423,8 +423,8 @@ static inline void set_speed(uint16_t count) {
 	}
 	else {
 		// Set TOP.
-		OCR1AH = (count >> 8) & 0xff;
-		OCR1AL = count & 0xff;
+		OCR1AH = (count >> 7) & 0xff;
+		OCR1AL = (count << 1) & 0xff;
 		// Clear counter.
 		TCNT1H = 0;
 		TCNT1L = 0;

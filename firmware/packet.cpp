@@ -260,7 +260,7 @@ void packet()
 			filling -= 1;
 		Fragment &fragment = buffer[command[1]][last_fragment];
 		fragment.dir = Dir(command[2]);
-		for (uint8_t b = 0; b < (fragment_len[last_fragment] + 1) / 2; ++b) {
+		for (uint8_t b = 0; b < fragment_len[last_fragment]; ++b) {
 			fragment.samples[b] = command[3 + b];
 		}
 		return;

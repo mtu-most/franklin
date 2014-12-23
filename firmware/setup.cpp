@@ -52,7 +52,7 @@ void setup()
 	active_motors = 0;
 	steps_prepared = 0;
 	move_phase = 0;
-	full_phase = 16;
+	full_phase = 8;
 	// Set up led state.
 	led_fast = 0;
 	led_last = millis();

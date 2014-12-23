@@ -698,10 +698,9 @@ static inline void arch_send_fragment(int fragment) {
 			avr_buffer[0] = HWC_MOVE;
 			avr_buffer[1] = mi + m;
 			avr_buffer[2] = ((spaces[s].motor[m]->settings[fragment].dir < 0) ^ (spaces[s].motor[m]->dir_pin.inverted()) ? 1 : 0);
-			int bytes = (settings[fragment].fragment_length + 1) / 2;
-			for (int i = 0; i < bytes; ++i)
+			for (int i = 0; i < settings[fragment].fragment_length; ++i)
 				avr_buffer[3 + i] = spaces[s].motor[m]->settings[fragment].data[i];
-			prepare_packet(avr_buffer, 3 + bytes);
+			prepare_packet(avr_buffer, 3 + settings[fragment].fragment_length);
 			avr_send();
 		}
 	}
