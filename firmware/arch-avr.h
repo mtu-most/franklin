@@ -382,7 +382,7 @@ static inline void arch_setup_start() {
 	serial_buffer_head = 0;
 	// Setup timer1 for microsecond counting.
 	TCCR1A = 0;
-	TCCR1B = 0x0a;	// Clock/8, in other words with 16MHz clock, 2MHz counting; 2 counts/us.
+	TCCR1B = 0x09;	// 16MHz clock.
 	TIMSK1 = 0;	// Disable the interrupt while the motors are disabled.
 	TIFR1 = 0xff;
 	// Setup timer0 for millis().
@@ -423,8 +423,8 @@ static inline void set_speed(uint16_t count) {
 	}
 	else {
 		// Set TOP.
-		OCR1AH = (count >> 7) & 0xff;
-		OCR1AL = (count << 1) & 0xff;
+		OCR1AH = (count >> 8) & 0xff;
+		OCR1AL = count & 0xff;
 		// Clear counter.
 		TCNT1H = 0;
 		TCNT1L = 0;

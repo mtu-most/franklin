@@ -29,7 +29,6 @@ uint8_t next_move() {
 		return num_cbs;
 #ifdef DEBUG_MOVE
 	debug("Next move; queue start = %d, end = %d", queue_start, queue_end);
-	debug("queue start.y = %f", F(queue[queue_start].data[1]));
 #endif
 	// Set everything up for running queue[queue_start].
 	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;

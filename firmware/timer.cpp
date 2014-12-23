@@ -6,9 +6,13 @@ void do_steps() {
 		return;
 	// Enable interrupts as soon as possible, so the uart doesn't overrun.
 	steps_prepared = 2;	// Protect against reentry.
+	move_phase += 1;
 	sei();
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (motor[m].dir != DIR_POSITIVE && motor[m].dir != DIR_NEGATIVE)
+			continue;
+		uint8_t steps_target = uint32_t(motor[m].next_steps) * move_phase / full_phase - motor[m].steps_current;
+		if (steps_target == 0)
 			continue;
 		if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
 			if (motor[m].dir == DIR_POSITIVE)
@@ -17,14 +21,22 @@ void do_steps() {
 				RESET(motor[m].dir_pin);
 		}
 		if (motor[m].step_pin < NUM_DIGITAL_PINS) {
-			for (uint8_t i = 0; i < motor[m].next_steps; ++i) {
+			for (uint8_t i = 0; i < steps_target; ++i) {
 				SET(motor[m].step_pin);
 				RESET(motor[m].step_pin);
 			}
 		}
-		motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? motor[m].next_steps : -motor[m].next_steps);
+		motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
+		motor[m].steps_current += steps_target;
 	}
-	steps_prepared = 0;
+	if (move_phase >= full_phase) {
+		move_phase = 0;
+		steps_prepared = 0;
+		for (uint8_t m = 0; m < active_motors; ++m)
+			motor[m].steps_current = 0;
+	}
+	else
+		steps_prepared = 1;
 }
 
 void handle_motors() {
@@ -61,6 +73,9 @@ void handle_motors() {
 				current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 				notified_current_fragment = current_fragment;
 				stopping = true;
+				move_phase = 0;
+				for (uint8_t mc = 0; mc < active_motors; ++mc)
+					motor[mc].steps_current = 0;
 				return;
 			}
 		}
@@ -111,7 +126,7 @@ void handle_motors() {
 				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
 				if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
 					continue;
-				motor[m].next_steps = (fragment.samples[current_fragment_pos >> 1] >> (4 * (current_fragment_pos & 1))) & 0xf;
+				motor[m].next_steps = fragment.samples[current_fragment_pos];
 			}
 			current_fragment_pos += 1;
 		}

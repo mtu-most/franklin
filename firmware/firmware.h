@@ -59,6 +59,7 @@ EXTERN bool timeout;
 EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE > 6 ? REPLY_BUFFER_SIZE : 6];
 EXTERN uint16_t pending_len;
 EXTERN bool stopped, underrun;
+EXTERN uint8_t move_phase, full_phase;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
 EXTERN uint16_t led_last, led_phase, time_per_sample;
@@ -206,6 +207,7 @@ struct Motor
 	volatile uint8_t step_pin;
 	volatile uint8_t dir_pin;
 	volatile uint8_t next_steps;
+	volatile uint8_t steps_current;
 	volatile Dir dir;
 	int32_t sense_pos[2];
 	uint8_t limit_min_pin;

@@ -714,13 +714,11 @@ void apply_tick() {
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
 			int value = (mtr.settings[current_fragment].current_pos - mtr.settings[current_fragment].hwcurrent_pos) * mtr.settings[current_fragment].dir;
-			if (value > 15) {
-				//debug("overflow %d %d", mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos);
-				value = 15;
-			}
-			//else
-				//debug("no overflow %d %d %d", mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos, value);
-			mtr.settings[current_fragment].data[current_fragment_pos >> 1] |= value << (4 * (current_fragment_pos & 0x1));
+			if (value > 8 * mtr.max_steps)
+				value = 8 * mtr.max_steps;
+			if (value > 0xff)
+				value = 0xff;
+			mtr.settings[current_fragment].data[current_fragment_pos] = value;
 			mtr.settings[current_fragment].hwcurrent_pos += mtr.settings[current_fragment].dir * value;
 			//debug("move pos %d %d %d %d %d", m, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos, sp.motor[m]->settings[current_fragment].hwcurrent_pos, sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos);
 		}
@@ -768,8 +766,8 @@ void buffer_refill() {
 		}
 		apply_tick();
 		//debug("refill2 %d %d", current_fragment, spaces[0].motor[0]->settings[current_fragment].current_pos);
-		if ((!moving && current_fragment_pos > 0) || current_fragment_pos >= BYTES_PER_FRAGMENT * 2) {
-			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT * 2);
+		if ((!moving && current_fragment_pos > 0) || current_fragment_pos >= BYTES_PER_FRAGMENT) {
+			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
 			if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
 				arch_start_move();
 			send_fragment();

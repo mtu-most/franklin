@@ -1,7 +1,7 @@
 // vim: set foldmethod=marker :
 #ifndef _ARCH_AVR_H
 // Includes and defines. {{{
-#define DEBUG_AVRCOMM
+//#define DEBUG_AVRCOMM
 
 #define _ARCH_AVR_H
 #include <stdint.h>
