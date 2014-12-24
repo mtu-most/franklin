@@ -31,9 +31,9 @@ void do_steps() {
 	}
 	if (move_phase >= full_phase) {
 		move_phase = 0;
-		steps_prepared = 0;
 		for (uint8_t m = 0; m < active_motors; ++m)
 			motor[m].steps_current = 0;
+		steps_prepared = 0;
 	}
 	else
 		steps_prepared = 1;
@@ -57,27 +57,37 @@ void handle_motors() {
 				sei();
 			}
 		}
+		// Check probe.
+		bool hit = false;
+		if (settings[current_fragment].probing && probe_pin < NUM_DIGITAL_PINS && (GET(probe_pin) ^ bool(pin_flags & 2))) {
+			// Hit probe.
+			hit = true;
+		}
+		else {
 		// Check limit switches.
-		uint8_t limit_pin = (fragment.dir ? motor[m].limit_min_pin : motor[m].limit_max_pin);
-		if (limit_pin < NUM_DIGITAL_PINS) {
-			bool inverted = motor[m].flags & (fragment.dir ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
-			if (GET(limit_pin) ^ inverted) {
-				// Hit endstop.
-				debug("hit limit %d curpos %ld dir %d frag %d;%d;%d;%d", m, F(motor[m].current_pos), fragment.dir, current_fragment, notified_current_fragment, last_fragment, current_fragment_pos);
-				// Notify host.
-				motor[m].flags |= Motor::LIMIT;
-				limit_fragment_pos = current_fragment_pos;
-				current_fragment_pos = 0;
-				set_speed(0);
-				filling = 0;
-				current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
-				notified_current_fragment = current_fragment;
-				stopping = true;
-				move_phase = 0;
-				for (uint8_t mc = 0; mc < active_motors; ++mc)
-					motor[mc].steps_current = 0;
-				return;
+			uint8_t limit_pin = (fragment.dir ? motor[m].limit_min_pin : motor[m].limit_max_pin);
+			if (limit_pin < NUM_DIGITAL_PINS) {
+				bool inverted = motor[m].flags & (fragment.dir ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
+				if (GET(limit_pin) ^ inverted)
+					hit = true;
 			}
+		}
+		if (hit) {
+			// Hit endstop.
+			debug("hit limit %d curpos %ld dir %d frag %d;%d;%d;%d", m, F(motor[m].current_pos), fragment.dir, current_fragment, notified_current_fragment, last_fragment, current_fragment_pos);
+			// Notify host.
+			motor[m].flags |= Motor::LIMIT;
+			limit_fragment_pos = current_fragment_pos;
+			current_fragment_pos = 0;
+			set_speed(0);
+			filling = 0;
+			current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
+			notified_current_fragment = current_fragment;
+			stopping = true;
+			move_phase = 0;
+			for (uint8_t mc = 0; mc < active_motors; ++mc)
+				motor[mc].steps_current = 0;
+			return;
 		}
 	}
 	// Move motors.
@@ -104,8 +114,8 @@ void handle_motors() {
 	else {
 		// Regular move.  (Not homing.)
 		// Move to next buffer.
-		while (!stopped && current_fragment_pos >= fragment_len[current_fragment]) {
-			current_fragment_pos -= fragment_len[current_fragment];
+		while (!stopped && current_fragment_pos >= settings[current_fragment].len) {
+			current_fragment_pos -= settings[current_fragment].len;
 			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 			if (last_fragment == (filling > 0 ? new_current_fragment : current_fragment)) {
 				// Underrun.
@@ -119,7 +129,7 @@ void handle_motors() {
 				}
 			}
 			current_fragment = new_current_fragment;
-			//debug("new fragment: %d", current_fragment);
+			debug("new fragment: %d", current_fragment);
 		}
 		if (!stopped) {
 			for (uint8_t m = 0; m < active_motors; ++m) {

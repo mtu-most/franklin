@@ -23,6 +23,7 @@ static void change0(int qpos) {
 
 // Used from previous segment (if move_prepared == true): tp, vq.
 uint8_t next_move() {
+	probing = false;
 	uint8_t num_cbs = 0;
 	uint8_t a0;
 	if (queue_start == queue_end && !queue_full)
@@ -178,6 +179,7 @@ uint8_t next_move() {
 		cbs_after_current_move += 1;
 	if (queue_end == queue_start)
 		send_host(CMD_CONTINUE, 0);
+	probing = queue[queue_start].probe;
 	queue_start = n;
 	queue_full = false;
 	if (!action) {

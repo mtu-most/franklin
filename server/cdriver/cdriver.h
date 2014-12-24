@@ -56,7 +56,7 @@ enum Command {
 	CMD_RESET,	// 1 byte: 0.
 	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].
 	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
-	CMD_PROBE,	// 2 byte: probe pin, then same as GOTO[CB]. Reply MOVECB.
+	CMD_PROBE,	// same.  Reply (later): LIMIT/MOVECB.
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
 	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [°C].
 	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [°C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
@@ -277,6 +277,7 @@ struct Gpio
 struct MoveCommand
 {
 	bool cb;
+	bool probe;
 	float f[2];
 	float data[10];	// Value if given, NAN otherwise.  Variable size array. TODO
 };
@@ -317,6 +318,7 @@ EXTERN Gpio *gpios;
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];
 EXTERN uint8_t queue_start, queue_end;
+EXTERN bool probing;
 EXTERN bool queue_full;
 EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)

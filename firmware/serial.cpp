@@ -42,7 +42,7 @@ static inline uint16_t fullpacketlen() {
 		return 5 + active_motors;
 	}
 	else if ((command[0] & ~0x10) == CMD_MOVE) {
-		return 3 + fragment_len[last_fragment];
+		return 3 + settings[last_fragment].len;
 	}
 	else
 		return minpacketlen();
@@ -404,7 +404,7 @@ void try_send_next()
 		else
 			pending_packet[0] = CMD_DONE;
 		pending_packet[1] = (current_fragment - notified_current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-		//debug("done %d %d %d", current_fragment, notified_current_fragment, last_fragment);
+		debug("done %d %d %d", current_fragment, notified_current_fragment, last_fragment);
 		notified_current_fragment = current_fragment;
 		prepare_packet(2);
 		send_packet();

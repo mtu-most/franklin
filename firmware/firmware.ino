@@ -67,7 +67,7 @@ static void handle_led() {
 	led_phase %= 50;
 	// Timings read from https://en.wikipedia.org/wiki/File:Wiggers_Diagram.png (phonocardiogram).
 	bool state = (led_phase <= 4 || (led_phase >= 14 && led_phase <= 17));
-	if (state)
+	if (state ^ bool(pin_flags & 1))
 		SET(led_pin);
 	else
 		RESET(led_pin);

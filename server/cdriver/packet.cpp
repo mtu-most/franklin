@@ -53,7 +53,8 @@ void packet()
 		uint8_t num = 2;
 		for (uint8_t t = 0; t < num_spaces; ++t)
 			num += spaces[t].num_axes;
-		uint8_t const offset = (command[0][0] == CMD_PROBE ? 4 : 2) + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
+		queue[queue_end].probe = command[0][1] == CMD_PROBE;
+		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
 		uint8_t t = 0;
 		for (uint8_t ch = 0; ch < num; ++ch)
 		{
@@ -66,7 +67,7 @@ void packet()
 					queue[queue_end].f[ch] = f.f;
 				else
 					queue[queue_end].data[ch - 2] = f.f;
-				//debug("goto (%d) %d %f", queue_end, ch, F(f.f));
+				debug("goto (%d) %d %f", queue_end, ch, F(f.f));
 				initialized = true;
 				++t;
 			}
@@ -75,7 +76,7 @@ void packet()
 					queue[queue_end].f[ch] = NAN;
 				else
 					queue[queue_end].data[ch - 2] = NAN;
-				//debug("goto %d -", ch);
+				debug("goto %d -", ch);
 			}
 		}
 		if (!(command[0][2] & 0x1) || isnan(queue[queue_end].f[0]))

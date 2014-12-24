@@ -63,7 +63,7 @@ EXTERN uint8_t move_phase, full_phase;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
 EXTERN uint16_t led_last, led_phase, time_per_sample;
-EXTERN uint8_t led_pin;
+EXTERN uint8_t led_pin, probe_pin, pin_flags;
 EXTERN uint16_t timeout_time, last_active;
 EXTERN uint8_t enabled_pins;
 
@@ -124,13 +124,14 @@ enum Command {
 	CMD_BEGIN = 0x40,	// 0
 	CMD_PING,	// 1:code
 	CMD_RESET,	// 4:magic	reset the mcu.
-	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin, 2:timeout
+	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin, 1:probe_pin 1:pin_flags 2:timeout
 	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
 	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:sense_pin, 1:flags
 	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:values	(including flags)
 	CMD_HOME,	// 4:us/step, {1:dir}*
 
 	CMD_START_MOVE,	// 1:num_samples, 1:num_moving_motors
+	CMD_START_PROBE,// 1:num_samples, 1:num_moving_motors
 	CMD_MOVE,	// 1:which, 1:dir, *:samples	// dir: 0:positive, 1:negative, 2:audio
 	CMD_START,	// 0 start moving.
 	CMD_STOP,	// 0 stop moving.
@@ -165,7 +166,7 @@ static inline uint16_t minpacketlen() {
 	case CMD_RESET:
 		return 5;
 	case CMD_SETUP:
-		return 9;
+		return 11;
 	case CMD_CONTROL:
 		return 2;
 	case CMD_MSETUP:
@@ -175,6 +176,8 @@ static inline uint16_t minpacketlen() {
 	case CMD_HOME:
 		return 5;
 	case CMD_START_MOVE:
+		return 3;
+	case CMD_START_PROBE:
 		return 3;
 	case CMD_MOVE:
 		return 3;
@@ -256,10 +259,15 @@ struct Fragment {
 	uint8_t samples[BYTES_PER_FRAGMENT];
 };
 
+struct Settings {
+	bool probing;
+	uint8_t len;
+};
+
 typedef Fragment Buffer[FRAGMENTS_PER_BUFFER];
 
 EXTERN Buffer buffer[NUM_BUFFERS];
-EXTERN uint8_t fragment_len[FRAGMENTS_PER_BUFFER];
+EXTERN Settings settings[FRAGMENTS_PER_BUFFER];
 EXTERN uint8_t notified_current_fragment;
 EXTERN uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
 EXTERN uint8_t last_fragment;	// Fragment that is currently being filled, or has last been filled.

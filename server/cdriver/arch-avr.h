@@ -44,12 +44,13 @@ enum HWCommands { // {{{
 	HWC_ASETUP,	// 46
 	HWC_HOME,	// 47
 	HWC_START_MOVE,	// 48
-	HWC_MOVE,	// 49
-	HWC_START,	// 4a
-	HWC_STOP,	// 4b
-	HWC_ABORT,	// 4c
-	HWC_DISCARD,	// 4d
-	HWC_GETPIN,	// 4e
+	HWC_START_PROBE,// 49
+	HWC_MOVE,	// 4a
+	HWC_START,	// 4b
+	HWC_STOP,	// 4c
+	HWC_ABORT,	// 4d
+	HWC_DISCARD,	// 4e
+	HWC_GETPIN,	// 4f
 
 	HWC_READY = 0x60,
 	HWC_PONG,	// 61
@@ -253,13 +254,10 @@ static inline void avr_get_current_pos(int offset) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			//debug("cp %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
-			//debug("cp %d %d %d", ts, tm, avr_pos_offset[tm + mi]);
+			debug("cp %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
 		}
 	}
 }
-
-static inline void arch_stop();
 
 static inline void hwpacket(int len) {
 	// Handle data in command[1].
@@ -294,6 +292,7 @@ static inline void hwpacket(int len) {
 		bool limit = (command[1][0] & ~0x10) == HWC_LIMIT;
 		if (limit) {
 			//debug("limit!");
+			debug("limit: %d", free_fragments);
 			offset = 3;
 			pos = command[1][2];
 		}
@@ -302,7 +301,7 @@ static inline void hwpacket(int len) {
 		avr_get_current_pos(offset);
 		if (limit) {
 			abort_move(pos);
-			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_m, cbs_after_current_move);
+			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_m);
 			cbs_after_current_move = 0;
 			avr_running = false;
 			free_fragments = FRAGMENTS_PER_BUFFER;
@@ -342,6 +341,7 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_DONE:
 	{
+		debug("done: %d %d", command[1][1], free_fragments);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			debug("Done received while fragments per buffer is zero");
 			avr_write_ack("invalid done");
@@ -354,7 +354,7 @@ static inline void hwpacket(int len) {
 			send_host(CMD_MOVECB, cbs);
 		free_fragments += command[1][1];
 		if (free_fragments > FRAGMENTS_PER_BUFFER) {
-			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], free_fragments - command[1][1]);
+			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]));
 			free_fragments = FRAGMENTS_PER_BUFFER;
 			avr_write_ack("invalid done");
 			return;
@@ -540,9 +540,11 @@ static inline void arch_change(bool motors) {
 	for (int i = 0; i < 4; ++i)
 		avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
 	avr_buffer[6] = led_pin.valid() ? led_pin.pin : ~0;
-	avr_buffer[7] = timeout & 0xff;
-	avr_buffer[8] = (timeout >> 8) & 0xff;
-	prepare_packet(avr_buffer, 9);
+	avr_buffer[7] = probe_pin.valid() ? probe_pin.pin : ~0;
+	avr_buffer[8] = (led_pin.inverted() ? 1 : 0) | (probe_pin.inverted() ? 2 : 0);
+	avr_buffer[9] = timeout & 0xff;
+	avr_buffer[10] = (timeout >> 8) & 0xff;
+	prepare_packet(avr_buffer, 11);
 	avr_send();
 	if (motors) {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -683,7 +685,7 @@ static inline void arch_addpos(uint8_t s, uint8_t m, int diff) {
 static inline void arch_send_fragment(int fragment) {
 	if (stopping)
 		return;
-	avr_buffer[0] = HWC_START_MOVE;
+	avr_buffer[0] = probing ? HWC_START_PROBE : HWC_START_MOVE;
 	//debug("send fragment %d %d", settings[fragment].fragment_length, fragment);
 	avr_buffer[1] = settings[fragment].fragment_length;
 	avr_buffer[2] = settings[fragment].num_active_motors;
@@ -694,7 +696,7 @@ static inline void arch_send_fragment(int fragment) {
 		for (uint8_t m = 0; !stopping && m < spaces[s].num_motors; ++m) {
 			if (spaces[s].motor[m]->settings[fragment].dir == 0)
 				continue;
-			//debug("sending %d %d %d", s, m, spaces[s].motor[m]->dir[fragment]);
+			//debug("sending %d %d %d %d", s, m, spaces[s].motor[m]->settings[fragment].dir, settings[fragment].fragment_length);
 			avr_buffer[0] = HWC_MOVE;
 			avr_buffer[1] = mi + m;
 			avr_buffer[2] = ((spaces[s].motor[m]->settings[fragment].dir < 0) ^ (spaces[s].motor[m]->dir_pin.inverted()) ? 1 : 0);

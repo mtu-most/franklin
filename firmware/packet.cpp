@@ -69,8 +69,18 @@ void packet()
 			motor[m].disable();
 		active_motors = command[1];
 		time_per_sample = *reinterpret_cast <int32_t *>(&command[2]);
+		if (led_pin < NUM_DIGITAL_PINS)
+			UNSET(led_pin);
+		if (probe_pin < NUM_DIGITAL_PINS)
+			UNSET(probe_pin);
 		led_pin = command[6];
-		timeout_time = *reinterpret_cast <uint16_t *>(&command[7]);
+		probe_pin = command[7];
+		pin_flags = command[8];
+		if (led_pin < NUM_DIGITAL_PINS)
+			SET_OUTPUT(led_pin);
+		if (probe_pin < NUM_DIGITAL_PINS)
+			SET_INPUT(probe_pin);
+		timeout_time = *reinterpret_cast <uint16_t *>(&command[9]);
 		write_ack();
 		return;
 	}
@@ -220,6 +230,7 @@ void packet()
 		return;
 	}
 	case CMD_START_MOVE:
+	case CMD_START_PROBE:
 	{
 #ifdef DEBUG_CMD
 		debug("CMD_START_MOVE");
@@ -232,10 +243,11 @@ void packet()
 		if (filling > 0)
 			debug("START_MOVE seen while filling (%d)", filling);
 		last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
-		fragment_len[last_fragment] = command[1];
+		settings[last_fragment].len = command[1];
 		filling = command[2];
 		for (uint8_t m = 0; m < active_motors; ++m)
 			buffer[motor[m].buffer][last_fragment].dir = DIR_NONE;
+		settings[last_fragment].probing = command[0] == CMD_START_PROBE;
 		//debug("new filling: %d %d", filling, last_fragment);
 		return;
 	}
@@ -260,7 +272,7 @@ void packet()
 			filling -= 1;
 		Fragment &fragment = buffer[command[1]][last_fragment];
 		fragment.dir = Dir(command[2]);
-		for (uint8_t b = 0; b < fragment_len[last_fragment]; ++b) {
+		for (uint8_t b = 0; b < settings[last_fragment].len; ++b) {
 			fragment.samples[b] = command[3 + b];
 		}
 		return;
@@ -306,6 +318,7 @@ void packet()
 		reply_ready = 2 + 4 * active_motors;
 		filling = 0;
 		current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
+		debug("stop new current %d", current_fragment);
 		current_fragment_pos = 0;
 		move_phase = 0;
 		return;

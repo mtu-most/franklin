@@ -394,7 +394,7 @@ class Printer: # {{{
 			elif cmd == protocol.rcommand['LIMIT']:
 				self.limits[s][m] = f
 				#log('limit; %d waits' % e)
-				self._trigger_movewaits(e)
+				self._trigger_movewaits(self.movewait)
 				continue
 			elif cmd == protocol.rcommand['TIMEOUT']:
 				if s == 0:
@@ -856,7 +856,7 @@ class Printer: # {{{
 				if self.queue_pos >= len(self.queue):
 					break
 			id, axes, f0, f1, cb, probe = self.queue[self.queue_pos]
-			#log('queueing %s' % repr((id, axes, f0, f1, cb)))
+			log('queueing %s' % repr((id, axes, f0, f1, cb, probe)))
 			self.queue_pos += 1
 			# Turn sequences into a dict.
 			if isinstance(axes, (list, tuple)):
@@ -934,7 +934,7 @@ class Printer: # {{{
 			if probe:
 				assert cb
 				self.movewait += 1
-				p = struct.pack('<BH', protocol.command['PROBE'], self.probe_pin)
+				p = chr(protocol.command['PROBE'])
 			elif cb:
 				self.movewait += 1
 				#log('movewait +1 -> %d' % self.movewait)
@@ -1430,7 +1430,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False, probe = False): # {{{
-		#log('goto %s %s %s %d' % (repr(moves), f0, f1, cb))
+		log('goto %s %s %s %d %d' % (repr(moves), f0, f1, cb, probe))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
 		self.queue.append((id, moves, f0, f1, cb, probe))

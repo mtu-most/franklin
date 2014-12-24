@@ -692,11 +692,12 @@ static void set_current_fragment(int fragment) {
 }
 
 void send_fragment() {
-	if (current_fragment_pos == 0)
+	if (current_fragment_pos == 0 || stopping)
 		return;
-	//debug("sending %d", current_fragment);
+	debug("sending %d", current_fragment);
 	settings[current_fragment].fragment_length = current_fragment_pos;
 	free_fragments -= 1;
+	debug("free: %d", free_fragments);
 	arch_send_fragment(current_fragment);
 	if (stopping)
 		return;
@@ -714,10 +715,14 @@ void apply_tick() {
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
 			int value = (mtr.settings[current_fragment].current_pos - mtr.settings[current_fragment].hwcurrent_pos) * mtr.settings[current_fragment].dir;
-			if (value > 8 * mtr.max_steps)
-				value = 8 * mtr.max_steps;
-			if (value > 0xff)
-				value = 0xff;
+			if (probing && value)
+				value = 1;
+			else {
+				if (value > 8 * mtr.max_steps)
+					value = 8 * mtr.max_steps;
+				if (value > 0xff)
+					value = 0xff;
+			}
 			mtr.settings[current_fragment].data[current_fragment_pos] = value;
 			mtr.settings[current_fragment].hwcurrent_pos += mtr.settings[current_fragment].dir * value;
 			//debug("move pos %d %d %d %d %d", m, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos, sp.motor[m]->settings[current_fragment].hwcurrent_pos, sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos);
