@@ -349,6 +349,7 @@ uint8_t next_move() {
 	}
 	//debug("last=%ld", F(long(settings[current_fragment].last_time)));
 	//debug("moving->true");
+	first_fragment = current_fragment;
 	moving = true;
 	settings[current_fragment].start_time = settings[current_fragment].last_time - uint32_t(settings[current_fragment].f0 / fabs(vp) * 1e6);
 	//debug("start=%ld, last-start=%ld", F(long(settings[current_fragment].start_time)), F(long(settings[current_fragment].last_time - settings[current_fragment].start_time)));
@@ -363,21 +364,29 @@ void abort_move(int pos) { // {{{
 	// Copy over all settings from end of previous fragment.
 	int prev_f = (current_fragment + free_fragments - (moving ? 0 : 1)) % FRAGMENTS_PER_BUFFER;
 	int f = (prev_f + 1) % FRAGMENTS_PER_BUFFER;
+	if (pos < 0 && first_fragment != f) {
+		f = prev_f;
+		free_fragments += 1;
+		pos += settings[f].fragment_length;
+		prev_f = (prev_f + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER;
+	}
+	if (pos < 0)
+		pos = 0;
 	copy_fragment_settings(prev_f, f);
 	current_fragment = f;
 	//debug("moving->false");
-	moving = false;
 	move_prepared = false;
 #ifdef DEBUG_MOVE
 	debug("move no longer prepared");
 #endif
-	reset_dirs(f);
 	free_fragments = FRAGMENTS_PER_BUFFER;
+	current_fragment_pos = 0;
 	while (current_fragment_pos < pos)
 		apply_tick();
 	//debug("done restoring position");
 	// Copy settings back to previous fragment.
 	copy_fragment_settings(f, prev_f);
+	moving = false;
 	reset_dirs(f);
 	//debug("curf3 %d", current_fragment);
 	//debug("aborting move");
@@ -392,6 +401,7 @@ void abort_move(int pos) { // {{{
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->settings[current_fragment].last_v = 0;
 			sp.motor[m]->settings[current_fragment].hwcurrent_pos = sp.motor[m]->settings[current_fragment].current_pos;
+			//debug("setting motor %d pos to %d", m, F(sp.motor[m]->settings[current_fragment].current_pos));
 		}
 	}
 	aborting = false;

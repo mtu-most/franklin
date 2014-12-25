@@ -137,7 +137,7 @@ void serial(uint8_t which)
 							stop_pending = false;
 							arch_stop();
 						}
-						else if (free_fragments > 0 && moving && !stopping)
+						else if (free_fragments > 0 && moving && !stopping && arch_running())
 							buffer_refill();
 					}
 					continue;

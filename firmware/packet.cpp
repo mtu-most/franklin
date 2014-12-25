@@ -214,6 +214,7 @@ void packet()
 			}
 			if (fragment.dir == DIR_POSITIVE || fragment.dir == DIR_NEGATIVE) {
 				motor[m].next_steps = 1;
+				motor[m].next_next_steps = 1;
 				motor[m].dir = fragment.dir;
 				homers += 1;
 			}
@@ -282,11 +283,17 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_START");
 #endif
-		write_ack();
 		if (stopping) {
 			//debug("ignoring start while stopping");
+			write_ack();
 			return;
 		}
+		if (!stopped) {
+			debug("Received START while not stopped");
+			write_stall();
+			return;
+		}
+		write_ack();
 		current_fragment_pos = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
@@ -294,6 +301,29 @@ void packet()
 		}
 		set_speed(time_per_sample);
 		return;
+	}
+	case CMD_ABORT:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_ABORT");
+#endif
+		for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
+			switch (CONTROL_RESET(pin[p].state)) {
+			case CTRL_RESET:
+				RESET(p);
+				break;
+			case CTRL_SET:
+				SET(p);
+				break;
+			case CTRL_UNSET:
+				UNSET(p);
+				break;
+			case CTRL_INPUT:
+				SET_INPUT(p);
+				break;
+			}
+		}
+		// Fall through.
 	}
 	case CMD_STOP:
 	{
@@ -318,47 +348,11 @@ void packet()
 		reply_ready = 2 + 4 * active_motors;
 		filling = 0;
 		current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
+		notified_current_fragment = current_fragment;
 		debug("stop new current %d", current_fragment);
 		current_fragment_pos = 0;
 		move_phase = 0;
-		return;
-	}
-	case CMD_ABORT:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_ABORT");
-#endif
-		for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
-			switch (CONTROL_RESET(pin[p].state)) {
-			case CTRL_RESET:
-				RESET(p);
-				break;
-			case CTRL_SET:
-				SET(p);
-				break;
-			case CTRL_UNSET:
-				UNSET(p);
-				break;
-			case CTRL_INPUT:
-				SET_INPUT(p);
-				break;
-			}
-		}
-		set_speed(0);
-		homers = 0;
-		home_step_time = 0;
-		write_ack();
-		reply[0] = CMD_STOPPED;
-		reply[1] = current_fragment_pos;
-		current_fragment_pos = 0;
-		move_phase = 0;
-		cli();
-		for (uint8_t m = 0; m < active_motors; ++m) {
-			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
-			motor[m].steps_current = 0;
-		}
-		sei();
-		reply_ready = 2 + 4 * active_motors;
+		steps_prepared = 0;
 		return;
 	}
 	case CMD_DISCARD:

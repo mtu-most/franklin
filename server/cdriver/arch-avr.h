@@ -254,7 +254,7 @@ static inline void avr_get_current_pos(int offset) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			debug("cp %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos);
+			debug("cp %d %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
 		}
 	}
 }
@@ -291,22 +291,22 @@ static inline void hwpacket(int len) {
 		int offset, pos;
 		bool limit = (command[1][0] & ~0x10) == HWC_LIMIT;
 		if (limit) {
-			//debug("limit!");
-			debug("limit: %d", free_fragments);
+			//debug("limit: %d", free_fragments);
 			offset = 3;
 			pos = command[1][2];
 		}
 		else
 			offset = 2;
-		avr_get_current_pos(offset);
 		if (limit) {
-			abort_move(pos);
+			abort_move(pos - 2);
+			avr_get_current_pos(offset);
 			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_m);
 			cbs_after_current_move = 0;
 			avr_running = false;
 			free_fragments = FRAGMENTS_PER_BUFFER;
 		}
 		else {
+			avr_get_current_pos(offset);
 			spaces[s].motor[m]->sense_state = 1;
 			send_host(CMD_SENSE, s, m, 0, (command[1][0] & ~0x10) == HWC_SENSE1);
 		}
@@ -341,7 +341,7 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_DONE:
 	{
-		debug("done: %d %d", command[1][1], free_fragments);
+		//debug("done: %d %d", command[1][1], free_fragments);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			debug("Done received while fragments per buffer is zero");
 			avr_write_ack("invalid done");
@@ -717,6 +717,10 @@ static inline void arch_start_move() {
 	avr_send();
 }
 
+static inline bool arch_running() {
+	return avr_running;
+}
+
 static inline void arch_stop() {
 	if (out_busy) {
 		stop_pending = true;
@@ -730,9 +734,8 @@ static inline void arch_stop() {
 	prepare_packet(avr_buffer, 1);
 	avr_send();
 	avr_get_reply();
-	avr_get_current_pos(2);
-	//debug("aborting at request");
 	abort_move(command[1][1]);
+	avr_get_current_pos(2);
 }
 
 static inline void arch_home() {

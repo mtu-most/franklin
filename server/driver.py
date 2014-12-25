@@ -2206,13 +2206,12 @@ class Printer: # {{{
 				box[0] = value
 			if box[1] is None or value > box[1]:
 				box[1] = value
-		had_g28 = False
+		last = None
 		for cmd, args, message in code:
 			if tuple(cmd) != ('G', 1):
 				if tuple(cmd) == ('G', 28):
-					if had_g28:
-						return ret
-					had_g28 = True
+					if ret[0][0] is not None:
+						last = ret
 					ret = [[None, None], [None, None], [None, None]]
 				continue
 			if args['x'] != args['X']:
@@ -2221,7 +2220,7 @@ class Printer: # {{{
 				inspect(args['Y'], ret[1])
 			if args['z'] != args['Z']:
 				inspect(args['Z'], ret[2])
-		return ret
+		return last or ret
 	# }}}
 	@delayed
 	def queue_print(self, id, names, ref = (0, 0, 0), angle = 0, probemap = None): # {{{

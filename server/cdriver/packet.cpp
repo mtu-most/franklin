@@ -67,7 +67,7 @@ void packet()
 					queue[queue_end].f[ch] = f.f;
 				else
 					queue[queue_end].data[ch - 2] = f.f;
-				debug("goto (%d) %d %f", queue_end, ch, F(f.f));
+				//debug("goto (%d) %d %f", queue_end, ch, F(f.f));
 				initialized = true;
 				++t;
 			}
@@ -76,7 +76,7 @@ void packet()
 					queue[queue_end].f[ch] = NAN;
 				else
 					queue[queue_end].data[ch - 2] = NAN;
-				debug("goto %d -", ch);
+				//debug("goto %d -", ch);
 			}
 		}
 		if (!(command[0][2] & 0x1) || isnan(queue[queue_end].f[0]))

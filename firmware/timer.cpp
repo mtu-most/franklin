@@ -1,13 +1,14 @@
 #include "firmware.h"
 
 void do_steps() {
+	static bool lock = false;
 	// Only move if the move was prepared.
-	if (steps_prepared != 1)
+	if (lock || !steps_prepared)
 		return;
+	lock = true;
 	// Enable interrupts as soon as possible, so the uart doesn't overrun.
-	steps_prepared = 2;	// Protect against reentry.
-	move_phase += 1;
 	sei();
+	move_phase += 1;
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (motor[m].dir != DIR_POSITIVE && motor[m].dir != DIR_NEGATIVE)
 			continue;
@@ -31,12 +32,13 @@ void do_steps() {
 	}
 	if (move_phase >= full_phase) {
 		move_phase = 0;
-		for (uint8_t m = 0; m < active_motors; ++m)
+		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].steps_current = 0;
-		steps_prepared = 0;
+			motor[m].next_steps = motor[m].next_next_steps;
+		}
+		steps_prepared -= 1;
 	}
-	else
-		steps_prepared = 1;
+	lock = false;
 }
 
 void handle_motors() {
@@ -129,18 +131,18 @@ void handle_motors() {
 				}
 			}
 			current_fragment = new_current_fragment;
-			debug("new fragment: %d", current_fragment);
+			//debug("new fragment: %d", current_fragment);
 		}
 		if (!stopped) {
 			for (uint8_t m = 0; m < active_motors; ++m) {
 				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
 				if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
 					continue;
-				motor[m].next_steps = fragment.samples[current_fragment_pos];
+				motor[m].next_next_steps = fragment.samples[current_fragment_pos];
 			}
 			current_fragment_pos += 1;
 		}
 	}
 	if (!stopped)
-		steps_prepared = 1;
+		steps_prepared += 1;
 }

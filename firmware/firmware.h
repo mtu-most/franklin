@@ -58,7 +58,8 @@ EXTERN uint8_t reply_ready, adcreply_ready;
 EXTERN bool timeout;
 EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE > 6 ? REPLY_BUFFER_SIZE : 6];
 EXTERN uint16_t pending_len;
-EXTERN bool stopped, underrun;
+EXTERN volatile bool stopped;
+EXTERN bool underrun;
 EXTERN uint8_t move_phase, full_phase;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
@@ -209,7 +210,7 @@ struct Motor
 	volatile int32_t current_pos;
 	volatile uint8_t step_pin;
 	volatile uint8_t dir_pin;
-	volatile uint8_t next_steps;
+	volatile uint8_t next_steps, next_next_steps;
 	volatile uint8_t steps_current;
 	volatile Dir dir;
 	int32_t sense_pos[2];
@@ -236,6 +237,7 @@ struct Motor
 		flags = 0;
 		pos = 0;
 		next_steps = 0;
+		next_next_steps = 0;
 		dir = DIR_NONE;
 	}
 	void disable() {
@@ -243,6 +245,7 @@ struct Motor
 		pos = 0;
 		dir = DIR_NONE;
 		next_steps = 0;
+		next_next_steps = 0;
 	}
 };
 

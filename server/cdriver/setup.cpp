@@ -82,5 +82,6 @@ void setup(char const *port, char const *run_id)
 	}
 	free_fragments = FRAGMENTS_PER_BUFFER;
 	// Update current position.
+	first_fragment = current_fragment;
 	arch_stop();
 }

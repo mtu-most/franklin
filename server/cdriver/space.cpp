@@ -116,6 +116,7 @@ static void move_to_current(Space *s) {
 	settings[current_fragment].tp = 0;
 	cbs_after_current_move = 0;
 	current_fragment_pos = 0;
+	first_fragment = current_fragment;
 	moving = true;
 	settings[current_fragment].cbs = 0;
 	settings[current_fragment].hwtime = 0;
@@ -513,8 +514,10 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 
 static void handle_motors(unsigned long long current_time) { // {{{
 	// Check for move.
-	if (!moving)
+	if (!moving) {
+		//debug("handle motors not moving");
 		return;
+	}
 	float factor = 1;
 	float t = (current_time - settings[current_fragment].start_time) / 1e6;
 	//buffered_debug("f%f %f %f %ld %ld", F(t), F(t0), F(tp), F(long(current_time)), F(long(settings[current_fragment].start_time)));
@@ -620,7 +623,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 } // }}}
 
 void reset_dirs(int fragment) {
-	//debug("resetting %d", fragment);
+	debug("resetting %d %d", fragment, current_fragment);
 	settings[fragment].num_active_motors = 0;
 	settings[fragment].cbs = 0;
 	current_fragment_pos = 0;
@@ -628,7 +631,7 @@ void reset_dirs(int fragment) {
 		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
-			memset(mtr.settings[current_fragment].data, 0, BYTES_PER_FRAGMENT);
+			memset(mtr.settings[fragment].data, 0, BYTES_PER_FRAGMENT);
 			if (moving && mtr.settings[fragment].current_pos != mtr.settings[fragment].hwcurrent_pos) {
 				//debug("preactive %d %d %d %d %d", s, m, fragment, mtr.current_pos, mtr.hwcurrent_pos);
 				settings[fragment].num_active_motors += 1;
@@ -662,7 +665,7 @@ void copy_fragment_settings(int src, int dst) {
 		Space &sp = spaces[s];
 		for (int m = 0; m < sp.num_motors; ++m) {
 			//debug("set fragment %d %d %d %d %d %d", s, m, src, dst, sp.motor[m]->settings[src].hwcurrent_pos, sp.motor[m]->settings[src].current_pos);
-			sp.motor[m]->settings[dst].dir = sp.motor[m]->settings[src].dir;
+			// Don't copy dir; either the current value is correct, or it is set to 0.
 			sp.motor[m]->settings[dst].last_v = sp.motor[m]->settings[src].last_v;
 			sp.motor[m]->settings[dst].target_v = sp.motor[m]->settings[src].target_v;
 			sp.motor[m]->settings[dst].target_dist = sp.motor[m]->settings[src].target_dist;
@@ -682,6 +685,7 @@ void copy_fragment_settings(int src, int dst) {
 }
 
 static void set_current_fragment(int fragment) {
+	debug("setcurrent");
 	if (!moving && current_fragment_pos > 0)
 		send_fragment();
 	copy_fragment_settings(current_fragment, fragment);
@@ -694,10 +698,10 @@ static void set_current_fragment(int fragment) {
 void send_fragment() {
 	if (current_fragment_pos == 0 || stopping)
 		return;
-	debug("sending %d", current_fragment);
+	//debug("sending %d", current_fragment);
 	settings[current_fragment].fragment_length = current_fragment_pos;
 	free_fragments -= 1;
-	debug("free: %d", free_fragments);
+	//debug("free: %d", free_fragments);
 	arch_send_fragment(current_fragment);
 	if (stopping)
 		return;
@@ -725,12 +729,14 @@ void apply_tick() {
 			}
 			mtr.settings[current_fragment].data[current_fragment_pos] = value;
 			mtr.settings[current_fragment].hwcurrent_pos += mtr.settings[current_fragment].dir * value;
-			//debug("move pos %d %d %d %d %d", m, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos, sp.motor[m]->settings[current_fragment].hwcurrent_pos, sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos);
+			debug("move pos %d %d %d %d %d %d %d %d", s, m, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos, sp.motor[m]->settings[current_fragment].hwcurrent_pos, sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos, value, mtr.settings[current_fragment].dir);
 		}
 	}
 	current_fragment_pos += 1;
 	settings[current_fragment].hwtime += hwtime_step;
 	handle_motors(settings[current_fragment].hwtime);
+	//if (num_spaces > 0 && spaces[0].num_axes >= 2)
+		//debug("move z %d %d %f %d %d %d", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings[current_fragment].current, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0], spaces[0].motor[0]->settings[current_fragment].dir);
 }
 
 void buffer_refill() {
@@ -748,13 +754,13 @@ void buffer_refill() {
 				if (mtr.settings[current_fragment].current_pos == mtr.settings[current_fragment].hwcurrent_pos)
 					continue;
 				if (mtr.settings[current_fragment].dir == 0) {
-					//debug("active %d %d %d %d", s, m, F(mtr.current_pos), F(mtr.hwcurrent_pos));
+					debug("active %d %d %d %d", s, m, F(mtr.settings[current_fragment].current_pos), F(mtr.settings[current_fragment].hwcurrent_pos));
 					mtr.settings[current_fragment].dir = (mtr.settings[current_fragment].current_pos < mtr.settings[current_fragment].hwcurrent_pos ? -1 : 1);
 					settings[current_fragment].num_active_motors += 1;
 					continue;
 				}
 				if ((mtr.settings[current_fragment].dir < 0 && mtr.settings[current_fragment].current_pos > mtr.settings[current_fragment].hwcurrent_pos) || (mtr.settings[current_fragment].dir > 0 && mtr.settings[current_fragment].current_pos < mtr.settings[current_fragment].hwcurrent_pos)) {
-					//debug("dir change %d %d", s, m);
+					debug("dir change %d %d", s, m);
 					send_fragment();
 					if (free_fragments <= 0 && !stopping) {
 						refilling = false;
@@ -772,7 +778,9 @@ void buffer_refill() {
 		apply_tick();
 		//debug("refill2 %d %d", current_fragment, spaces[0].motor[0]->settings[current_fragment].current_pos);
 		if ((!moving && current_fragment_pos > 0) || current_fragment_pos >= BYTES_PER_FRAGMENT) {
-			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
+			debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
+			if (first_fragment != current_fragment)
+				first_fragment = -1;
 			if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
 				arch_start_move();
 			send_fragment();
@@ -783,8 +791,10 @@ void buffer_refill() {
 	refilling = false;
 	if (stopping)
 		return;
-	if (!moving)
+	if (!moving) {
+		debug("finalize");
 		send_fragment();
+	}
 	//debug("free %d/%d", free_fragments, FRAGMENTS_PER_BUFFER);
 	if (free_fragments < FRAGMENTS_PER_BUFFER)
 		arch_start_move();
