@@ -298,7 +298,7 @@ static inline void hwpacket(int len) {
 		else
 			offset = 2;
 		if (limit) {
-			abort_move(pos - 2);
+			abort_move(pos);
 			avr_get_current_pos(offset);
 			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_m);
 			cbs_after_current_move = 0;
@@ -734,7 +734,7 @@ static inline void arch_stop() {
 	prepare_packet(avr_buffer, 1);
 	avr_send();
 	avr_get_reply();
-	abort_move(command[1][1]);
+	abort_move(command[1][1] - 1);
 	avr_get_current_pos(2);
 }
 

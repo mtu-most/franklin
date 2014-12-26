@@ -359,10 +359,10 @@ uint8_t next_move() {
 
 void abort_move(int pos) { // {{{
 	aborting = true;
-	//debug("abort; cf %d discarding %d fragments, regenerating %d ticks", current_fragment, FRAGMENTS_PER_BUFFER - free_fragments, pos);
+	debug("abort; cf %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments, pos);
 	//debug("try aborting move");
 	// Copy over all settings from end of previous fragment.
-	int prev_f = (current_fragment + free_fragments - (moving ? 0 : 1)) % FRAGMENTS_PER_BUFFER;
+	int prev_f = (current_fragment + free_fragments) % FRAGMENTS_PER_BUFFER;
 	int f = (prev_f + 1) % FRAGMENTS_PER_BUFFER;
 	if (pos < 0 && first_fragment != f) {
 		f = prev_f;

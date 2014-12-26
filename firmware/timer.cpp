@@ -76,7 +76,7 @@ void handle_motors() {
 		}
 		if (hit) {
 			// Hit endstop.
-			debug("hit limit %d curpos %ld dir %d frag %d;%d;%d;%d", m, F(motor[m].current_pos), fragment.dir, current_fragment, notified_current_fragment, last_fragment, current_fragment_pos);
+			debug("hit limit %d curpos %ld dir %d cf %d ncf %d lf %d cfp %d", m, F(motor[m].current_pos), fragment.dir, current_fragment, notified_current_fragment, last_fragment, current_fragment_pos);
 			// Notify host.
 			motor[m].flags |= Motor::LIMIT;
 			limit_fragment_pos = current_fragment_pos;
