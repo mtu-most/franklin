@@ -109,7 +109,6 @@ extern int bbb_devmem;
 extern struct pollfd bbb_pollfd;
 
 static inline void arch_setup_start() {
-	char name[100];
 	// TODO: find out if this thing varies, implement a search if it does.
 	FILE *f = fopen("/sys/devices/bone_capemgr.9/slots", "w");
 	fprintf(f, "cape-bone-iio\n");

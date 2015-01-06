@@ -11,13 +11,6 @@ bool globals_load(int32_t &addr)
 	uint8_t ns = read_8(addr);
 	uint8_t nt = read_8(addr);
 	uint8_t ng = read_8(addr);
-	uint8_t nl = read_8(addr);
-	if (nl != namelen) {
-		ldebug("new name");
-		delete[] name;
-		name = new char[nl];
-		namelen = nl;
-	}
 	// Free the old memory and initialize the new memory.
 	if (ns != num_spaces) {
 		ldebug("new space");
@@ -59,8 +52,6 @@ bool globals_load(int32_t &addr)
 		num_gpios = ng;
 	}
 	ldebug("new done");
-	for (uint8_t n = 0; n < nl; ++n)
-		name[n] = read_8(addr);
 	led_pin.read(read_16(addr));
 	probe_pin.read(read_16(addr));
 	probe_dist = read_float(addr);
@@ -90,9 +81,6 @@ void globals_save(int32_t &addr)
 	write_8(addr, num_spaces);
 	write_8(addr, num_temps);
 	write_8(addr, num_gpios);
-	write_8(addr, namelen);
-	for (uint8_t i = 0; i < namelen; ++i)
-		write_8(addr, name[i]);
 	write_16(addr, led_pin.write());
 	write_16(addr, probe_pin.write());
 	write_float(addr, probe_dist);

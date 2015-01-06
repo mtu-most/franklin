@@ -295,8 +295,6 @@ struct Serial_t {
 #define FULL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
 
 // Globals
-EXTERN char *name;
-EXTERN uint8_t namelen;
 EXTERN uint8_t num_spaces;
 EXTERN uint8_t num_extruders;
 EXTERN uint8_t num_temps, bed_id;

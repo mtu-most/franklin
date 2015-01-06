@@ -1,7 +1,7 @@
 firmware/build-mighty_opt/melzi.hex /usr/share/franklin/firmware
 firmware/build-mega2560/ramps.hex /usr/share/franklin/firmware
 firmware/build-mega/mega.hex /usr/share/franklin/firmware
-firmware/build-atmega328/mini.hex /usr/share/franklin/firmware
+firmware/build-uno/mini.hex /usr/share/franklin/firmware
 server/server.py /usr/share/franklin
 server/protocol.py /usr/share/franklin
 server/driver.py /usr/share/franklin

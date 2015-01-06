@@ -15,7 +15,6 @@ void setup(char const *port, char const *run_id)
 #endif
 	debug("Starting");
 	temp_current = 0;
-	name = NULL;
 	command_end[0] = 0;
 	command_end[1] = 0;
 	motors_busy = false;

@@ -25,6 +25,21 @@ function Text(title, obj, className) {
 	return [span, input];
 }
 
+function Name(type, num) {
+	if (num === null)
+		return '';
+	var ret = Create('input', 'editname');
+	ret.type = 'text';
+	ret.printer = printer;
+	ret.AddEvent('keydown', function(event) {
+		if (event.keyCode == 13) {
+			set_value(this.printer, [[type, num], 'name'], this.value);
+			event.preventDefault();
+		}
+	});
+	return ret;
+}
+
 function Pin(title, obj, analog) {
 	var pinselect = Create('select', 'pinselect');
 	pinselect.id = make_id(printer, obj);
@@ -104,7 +119,7 @@ function Spacetype(num) {
 	span.id = make_id(printer, [['space', num], 'type']);
 	var div = Create('div').AddText('Max Deviation');
 	div.Add(Float([['space', num], 'max_deviation'], 2, 1e-3));
-	return make_tablerow(space_name(num), [[select, button, span], div], ['rowtitle1']);
+	return make_tablerow(space_name(num), [Name('space', num), [select, button, span], div], ['rowtitle1']);
 }
 // }}}
 
@@ -146,13 +161,13 @@ function Delta_space(num) {
 }
 
 function Axis_axis(space, axis) {
-	var e = [['park', 1, 1e-3], ['park_order', 0, 1], ['max_v', 0, 1e-3], ['min', 1, 1e-3], ['max', 1, 1e-3]];
-	for (var i = 0; i < e.length; ++i) {
+	var e = [Name('axis', [space, axis]), ['park', 1, 1e-3], ['park_order', 0, 1], ['max_v', 0, 1e-3], ['min', 1, 1e-3], ['max', 1, 1e-3]];
+	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['axis', [space, axis]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
-	return make_tablerow(axis_name(space, axis), e, ['rowtitle5']);
+	return make_tablerow(axis_name(space, axis), e, ['rowtitle6']);
 }
 
 function Axis(num, dummy, table) {
@@ -161,8 +176,8 @@ function Axis(num, dummy, table) {
 }
 
 function Motor_motor(space, motor) {
-	var e = [['steps_per_m', 3, 1e3], ['max_steps', 0, 1], ['home_pos', 3, 1e-3], ['home_order', 0, 1], ['limit_v', 0, 1e-3], ['limit_a', 1, 1]];
-	for (var i = 0; i < e.length; ++i) {
+	var e = [Name('motor', [space, motor]), ['steps_per_m', 3, 1e3], ['max_steps', 0, 1], ['home_pos', 3, 1e-3], ['home_order', 0, 1], ['limit_v', 0, 1e-3], ['limit_a', 1, 1]];
+	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
@@ -191,8 +206,8 @@ function Pins_space(num, dummy, table) {
 
 // Temp. {{{
 function Temp_setup(num) {
-	var e = [['fan_temp', 0], ['R0', 1, 1e3], ['R1', 1, 1e3], ['Rc', 1, 1e3], ['Tc', 0, 1], ['beta', 0, 1]];
-	for (var i = 0; i < e.length; ++i) {
+	var e = [Name('temp', num), ['fan_temp', 0], ['R0', 1, 1e3], ['R1', 1, 1e3], ['Rc', 1, 1e3], ['Tc', 0, 1], ['beta', 0, 1]];
+	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['temp', num], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
@@ -214,7 +229,7 @@ function Pins_temp(num, dummy, table) {
 	var e = [['Heater', 'heater', false], ['Fan', 'fan', false], ['Thermistor', 'thermistor', true]];
 	for (var i = 0; i < e.length; ++i)
 		e[i] = Pin(e[i][0], [['temp', num], e[i][1] + '_pin'], e[i][2]);
-	return make_pin_title(temp_name(num), e);
+	return make_pin_title(temp_name(printer, num), e);
 }
 // }}}
 
@@ -233,8 +248,8 @@ function Label() {	// {{{
 	ret.AddEvent('click', function() { select_printer(this.port); });
 	ret.port = port;
 	if (printer) {
-		ret.AddText(printer.name);
-		selector = ret.AddElement('select', 'hidden').AddEvent('change', function() {
+		ret.AddElement('span', 'setup').AddText(printer.uuid);
+		var selector = ret.AddElement('select').AddEvent('change', function() {
 			this.printer.call('load', [selector.value], {});
 		});
 		selector.printer = printer;
@@ -307,9 +322,9 @@ function Map() { // {{{
 	// Current position buttons.
 	var t = ret.Add(make_table().AddMultipleTitles([
 		'',
-		'X (mm)',
-		'Y (mm)',
-		'Z (mm)',
+		[add_name('axis', 0, 0), ' (mm)'],
+		[add_name('axis', 0, 1), ' (mm)'],
+		[add_name('axis', 0, 2), ' (mm)'],
 		'',
 		'',
 		''
@@ -317,13 +332,13 @@ function Map() { // {{{
 	var b = Create('button').AddText('Park').AddEvent('click', function() { this.printer.call('park', [], {}); });
 	b.type = 'button';
 	b.printer = printer;
-	t.Add(make_tablerow('Position:', [
+	t.Add(make_tablerow(add_name('space', 0, 0), [
 		Float([['axis', [0, 0]], 'current'], 2, 1e-3, '', function(v) { b.printer.call('goto', [[{0: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
 		Float([['axis', [0, 1]], 'current'], 2, 1e-3, '', function(v) { b.printer.call('goto', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
 		Float([['axis', [0, 2]], 'current'], 2, 1e-3, '', function(v) { b.printer.call('goto', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, update_canvas_and_spans); }),
 		b,
 		'',
-		['Z Offset:', Float([null, 'zoffset'], 2, 1e-3), 'mm']
+		[[add_name('axis', 0, 2), ' Offset:'], Float([null, 'zoffset'], 2, 1e-3), 'mm']
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
 	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
@@ -339,7 +354,8 @@ function Map() { // {{{
 	c.type = 'checkbox';
 	c.id = make_id(printer, [null, 'zlock']);
 	c.checked = true;
-	var l = Create('label').AddText('Lock Z');
+	var l = Create('label');
+	l.Add(['Lock ', add_name('axis', 0, 2)]);
 	l.htmlFor = c.id;
 	t.Add(make_tablerow('Target:', [
 		Float([null, 'targetx'], 2, 1e-3, '', function(v) { b.printer.targetx = v; update_canvas_and_spans(); }),
@@ -390,7 +406,8 @@ function Multipliers() { // {{{
 	ret.AddMultiple('space', function(space, dummy, obj) {
 		if (space == 1)
 			obj.AddMultiple('axis', function(space, i) {
-				var e = Create('div').AddText(axis_name(1, i) + ': ');
+				var e = Create('div');
+				e.Add(axis_name(1, i));
 				e.printer = printer;
 				e.Add(Float([['axis', [1, i]], 'multiplier'], 0, 1e-2));
 				e.AddText(' %');
@@ -420,7 +437,9 @@ function Gpios() { // {{{
 		input.AddEvent('change', function() { set_value(p, [['gpio', index], 'state'], input.checked ? 1 : 0) });
 		input.type = 'checkbox';
 		input.id = make_id(p, [['gpio', i], 'state']);
-		ret.AddElement('label').AddText(gpio_name(i)).htmlFor = input.id;
+		var label = ret.AddElement('label');
+		label.Add(gpio_name(i));
+		label.htmlFor = input.id;
 		return ret;
 	}, false);
 	return ret;
@@ -458,7 +477,6 @@ function Printer() {	// {{{
 	disable.port = port;
 	disable.type = 'button';
 	disable.AddEvent('click', function() { rpc.call('disable', [this.port], {}); });
-	setup.AddElement('div').Add(Text('Name', [null, 'name']));
 	e = setup.AddElement('div').AddText('Timeout:');
 	e.Add(Float([null, 'timeout'], 0, 60));
 	e.AddText(' min');
@@ -475,15 +493,18 @@ function Printer() {	// {{{
 	// Space. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Spaces',
+		'Name',
 		'Type',
 		'Max Deviation (mm)'
 	], [
-		'htitle2',
-		'title2',
-		'title2'
+		'htitle3',
+		'title3',
+		'title3',
+		'title3'
 	], [
 		null,
-		'Printer type',
+		'Space name',
+		'Space type',
 		'Corners are rounded from requested path to this amount'
 	]).AddMultiple('space', Spacetype)]);
 	// }}}
@@ -551,20 +572,23 @@ function Printer() {	// {{{
 	// Axis. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Axes',
+		'Name',
 		'Park pos (mm)',
 		'Park order',
 		'Max v (mm/s)',
 		'Min (mm)',
 		'Max (mm)'
 	], [
-		'htitle5',
-		'title5',
-		'title5',
-		'title5',
-		'title5',
-		'title5'
+		'htitle7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7'
 	], [
 		null,
+		'Name of the axis',
 		'Park position of the nozzle.',
 		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
 		'Maximum speed that the motor is allowed to move.',
@@ -575,6 +599,7 @@ function Printer() {	// {{{
 	// Motor. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Motor',
+		'Name',
 		'Coupling (steps/mm)',
 		'Microsteps',
 		'Switch pos (mm)',
@@ -582,15 +607,17 @@ function Printer() {	// {{{
 		'Limit v (mm/s)',
 		'Limit a (m/s²)'
 	], [
-		'htitle6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6'
+		'htitle7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7'
 	], [
 		null,
+		'Name of the motor',
 		'Number of (micro)steps that the motor needs to do to move the hardware by one mm.',
 		'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
 		'Position of the home switch. (mm)',
@@ -601,7 +628,8 @@ function Printer() {	// {{{
 	// }}} -->
 	// Temp. {{{
 	setup.Add([make_table().AddMultipleTitles([
-		'Temps',
+		'Temp',
+		'Name',
 		'Fan temp (°C)',
 		'R0 (kΩ) or a (1000)',
 		'R1 (kΩ) or b (1000)',
@@ -609,16 +637,18 @@ function Printer() {	// {{{
 		'Tc (°C)',
 		'β (1) or NaN'
 	], [
-		'htitle6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6'
+		'htitle7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7'
 	], [
 		null,
-		'Temerature above which the fan is turned on.',
+		'Name of the temperature control',
+		'Temerature above which the cooling is turned on.',
 		'Resistance on the board in series with the thermistor.  Normally 4.7 or 10.  Or, if β is NaN, the result is ax+b with x the measured ADC value; this value is a/1000.',
 		'Resistance on the board in parallel with the thermistor.  Normally Infinity.  Or, if β is NaN, the result is ax+b with x the measured ADC value; this value is b/1000.',
 		'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.',
@@ -655,7 +685,7 @@ function NoPrinter() { // {{{
 	detect.type = 'button';
 	detect.port = port;
 	detect.AddEvent('click', function() { rpc.call('detect', [this.port], {}); });
-	ret.AddElement('p').AddText('Or you can upload the firmware that fits your hardware.').Add(upload_buttons(port, [['melzi', 'atmega1284p (Melzi, Sanguinololu)'], ['ramps', 'atmega2560 (Ramps)'], ['mega', 'atmega1280'], ['mini', 'atmega328 (Uno)']]));
+	ret.AddElement('p').AddText('Or you can upload the firmware that fits your hardware.').Add(upload_buttons(port, [['melzi', 'atmega1284p with optiboot (Melzi)'], ['sanguinololu', 'atmega1284p (Sanguinololu)'], ['ramps', 'atmega2560 (Ramps)'], ['mega', 'atmega1280'], ['mini', 'atmega328 (Uno)']]));
 	var message = ret.AddElement('div', 'message');
 	message.id = make_id({'port': port}, [null, 'message2']);
 	return ret;

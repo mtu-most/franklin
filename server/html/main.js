@@ -341,6 +341,23 @@ function floatkey(event, element) { // {{{
 		set_value(element.printer, element.obj, element.factor * value);
 }
 // }}}
+
+function add_name(type, index1, index2) { // {{{
+	while (printer.names[type].length <= index1)
+		printer.names[type].push([]);
+	while (printer.names[type][index1].length <= index2)
+		printer.names[type][index1].push([]);
+	var ret = Create('span', 'name');
+	printer.names[type][index1][index2].push(ret);
+	return ret;
+} // }}}
+
+function set_name(printer, type, index1, index2, name) { // {{{
+	for (var i = 0; i < printer.names[type][index1][index2].length; ++i) {
+		printer.names[type][index1][index2][i].ClearAll();
+		printer.names[type][index1][index2][i].AddText(name);
+	}
+} // }}}
 // }}}
 
 // Queue functions.  {{{
@@ -425,6 +442,7 @@ function new_port() { // {{{
 } // }}}
 
 function new_printer() { // {{{
+	printer.names = {space: [], axis: [], motor: [], temp: [], gpio: []};
 	printer.targetangle = 0;
 	printer.targetx = 0;
 	printer.targety = 0;
@@ -572,14 +590,14 @@ function do_queue() { // {{{
 function update_globals() { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
-	if (ports[port][3] != printer.name) {
+	if (ports[port][3] != printer.uuid) {
 		labels_element.removeChild(ports[port][0]);
 		ports[port][0] = Label();
 		labels_element.Add(ports[port][0]);
-		ports[port][3] = printer.name;
+		ports[port][3] = printer.uuid;
 		select_printer();
 	}
-	get_element(printer, [null, 'export']).href = printer.name + '.ini?port=' + encodeURIComponent(port);
+	get_element(printer, [null, 'export']).href = printer.uuid + '.ini?port=' + encodeURIComponent(port);
 	update_float(printer, [null, 'num_spaces']);
 	update_float(printer, [null, 'num_temps']);
 	update_float(printer, [null, 'num_gpios']);
@@ -713,6 +731,7 @@ function update_globals() { // {{{
 function update_space(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
+	set_name(printer, 'space', index, 0, printer.spaces[index].name);
 	var e = get_element(printer, [['space', index], 'type']);
 	e.ClearAll();
 	e.AddText(space_types[printer.spaces[index].type]);
@@ -759,6 +778,7 @@ function update_space(index) { // {{{
 		}
 	}
 	for (var a = 0; a < printer.spaces[index].num_axes; ++a) {
+		set_name(printer, 'axis', index, a, printer.spaces[index].axis[a].name);
 		update_float(printer, [['axis', [index, a]], 'park']);
 		update_float(printer, [['axis', [index, a]], 'park_order']);
 		update_float(printer, [['axis', [index, a]], 'max_v']);
@@ -768,6 +788,7 @@ function update_space(index) { // {{{
 			update_float(printer, [['axis', [index, a]], 'multiplier']);
 	}
 	for (var m = 0; m < printer.spaces[index].num_motors; ++m) {
+		set_name(printer, 'motor', index, m, printer.spaces[index].motor[m].name);
 		update_pin([['motor', [index, m]], 'step_pin']);
 		update_pin([['motor', [index, m]], 'dir_pin']);
 		update_pin([['motor', [index, m]], 'enable_pin']);
@@ -815,6 +836,7 @@ function update_space(index) { // {{{
 function update_temp(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
+	set_name(printer, 'temp', index, 0, printer.temps[index].name);
 	update_pin([['temp', index], 'heater_pin']);
 	update_pin([['temp', index], 'fan_pin']);
 	update_pin([['temp', index], 'thermistor_pin']);
@@ -835,6 +857,7 @@ function update_temp(index) { // {{{
 function update_gpio(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
+	set_name(printer, 'gpio', index, 0, printer.gpios[index].name);
 	update_pin([['gpio', index], 'pin']);
 	if (printer.gpios[index].state == 1)
 		get_element(printer, [['gpio', index], 'state']).checked = true;
@@ -898,19 +921,15 @@ function update_temprange(id) { // {{{
 	return value;
 } // }}}
 
-function update_profiles(printer) { // {{{
-	printer.call('list_profiles', [], {}, function(profiles) {
-		var selector = get_element(printer, [null, 'profiles']);
+function update_profiles(prt) { // {{{
+	prt.call('list_profiles', [], {}, function(profiles) {
+		var selector = get_element(prt, [null, 'profiles']);
 		selector.ClearAll();
 		for (var i = 0; i < profiles.length; ++i) {
 			selector.AddElement('option').AddText(profiles[i]).value = profiles[i];
-			if (printer.profile == profiles[i])
+			if (prt.profile == profiles[i])
 				selector.selectedIndex = i;
 		}
-		if (profiles.length < 2)
-			selector.AddClass('hidden');
-		else
-			selector.RemoveClass('hidden');
 	});
 } // }}}
 // }}}
@@ -945,7 +964,7 @@ function temprange() { // {{{
 	var ret = [node];
 	for (var i = 0; i < printer.num_temps; ++i) {
 		node = Create('option');
-		node.AddText(temp_name(printer, i));
+		node.Add(temp_name(printer, i));
 		node.value = String(i);
 		ret.push(node);
 	}
@@ -1001,46 +1020,45 @@ function Choice(obj, options, classes, containerclasses) { // {{{
 function space_name(index) { // {{{
 	if (index === null)
 		return 'All Spaces';
-	return 'Space ' + String(index);
+	return add_name('space', index, 0);
 } // }}}
 
 function axis_name(index1, index2) { // {{{
 	if (index2 === null)
 		return 'All axes ' + String(index1);
-	return 'Axis ' + String(index1) + ';' + String(index2);
+	return add_name('axis', index1, index2);
 } // }}}
 
 function motor_name(index1, index2) { // {{{
 	if (index2 === null)
 		return 'All motors ' + String(index1);
-	return 'Motor ' + String(index1) + ';' + String(index2);
+	return add_name('motor', index1, index2);
 } // }}}
 
 function delta_name(index1, index2) { // {{{
 	if (index1 === null)
 		return 'All Apexes';
-	return 'Apex ' + String(index1) + ';' + String(index2);
+	return motor_name(index1, index2);
 } // }}}
 
 function temp_name(printer, index) { // {{{
 	if (index === null)
 		return 'All Temps';
-	if (index == printer.bed_id)
-		return 'Bed';
-	if (printer.spaces.length > 1 && index < printer.spaces[1].num_axes)
-		return 'Extruder ' + String(index);
-	return 'Temp ' + String(index);
+	return add_name('temp', index, 0);
 } // }}}
 
 function gpio_name(index) { // {{{
 	if (index === null)
 		return 'All Gpios';
-	return index == 0 ? 'Fan' : 'Gpio ' + String(index);
+	return add_name('gpio', index, 0);
 } // }}}
 
 function make_pin_title(title, content) { // {{{
 	var t = document.createElement('tr');
-	t.AddElement('th').AddText(title);
+	if (typeof title == 'string')
+		t.AddElement('th').AddText(title);
+	else
+		t.AddElement('th').Add(title);
 	return [t].concat(content);
 } // }}}
 
@@ -1103,7 +1121,7 @@ function make_table() { // {{{
 		this.titles = this.AddElement('tr');
 		for (var cell = 0; cell < titles.length; ++cell) {
 			var th = this.titles.AddElement('th', classes[cell]);
-			th.AddText(titles[cell]);
+			th.Add(titles[cell]);
 			if (mouseovers && mouseovers[cell])
 				th.title = mouseovers[cell];
 		}
@@ -1116,7 +1134,7 @@ function make_tablerow(title, cells, classes, id, onlytype, index) { // {{{
 	var ret = document.createElement('tr');
 	if (id)
 		ret.id = make_id(printer, id);
-	ret.AddElement('th', classes[0]).AddText(title);
+	ret.AddElement('th', classes[0]).Add(title);
 	for (var cell = 0; cell < cells.length; ++cell) {
 		var current_cell;
 		if (!classes[1] || classes[1] == 'string')
@@ -1276,7 +1294,6 @@ function redraw_canvas() { // {{{
 			};
 			break;
 		case TYPE_DELTA:
-			var names = ['X', 'Y', 'Z'];
 			var radius = [];
 			var length = [];
 			for (var a = 0; a < 3; ++a) {
@@ -1327,18 +1344,19 @@ function redraw_canvas() { // {{{
 				c.closePath();
 				c.stroke();
 				for (var a = 0; a < 3; ++a) {
-					var w = c.measureText(names[a]).width / 1000;
+					var name = selected_printer.spaces[0].motor[a].name;
+					var w = c.measureText(name).width / 1000;
 					c.beginPath();
 					c.save();
 					c.translate(origin[a][0] + dy[a] * .015 - w / 2, origin[a][1] - dx[a] * .015);
 					c.rotate(selected_printer.spaces[0].delta_angle);
 					c.scale(.001, -.001);
-					c.fillText(names[a], 0, 0);
+					c.fillText(name, 0, 0);
 					c.restore();
 				}
 				c.restore();
 			};
-			var extra = c.measureText(names[0]).width / 1000 + .02;
+			var extra = c.measureText(selected_printer.spaces[0].motor[0].name).width / 1000 + .02;
 			printerwidth = 2 * (maxx + extra);
 			printerheight = 2 * (maxy + extra);
 			break;

@@ -148,6 +148,11 @@ class Connection: # {{{
 			protocol = 'arduino'
 			baudrate = '115200'
 			mcu = 'atmega1284p'
+		if board == 'sanguinololu':
+			board = 'melzi'
+			protocol = 'wiring'
+			baudrate = '115200'
+			mcu = 'atmega1284p'
 		elif board == 'ramps':
 			protocol = 'wiring'
 			baudrate = '115200'

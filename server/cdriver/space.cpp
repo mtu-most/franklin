@@ -344,9 +344,7 @@ void Space::cancel_update() {
 	type = DEFAULT_TYPE;
 	uint8_t n = min(num_axes, num_motors);
 	if (!setup_nums(n, n)) {
-		debug("Failed to free memory; erasing name and removing all motors and axes to make sure it works");
-		delete[] name;
-		namelen = 0;
+		debug("Failed to free memory; removing all motors and axes to make sure it works");
 		if (!setup_nums(0, 0))
 			debug("You're in trouble; this shouldn't be possible");
 	}
