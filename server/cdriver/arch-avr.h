@@ -303,7 +303,7 @@ static inline void hwpacket(int len) {
 			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_m);
 			cbs_after_current_move = 0;
 			avr_running = false;
-			free_fragments = FRAGMENTS_PER_BUFFER;
+			free_fragments = FRAGMENTS_PER_BUFFER - 1;
 		}
 		else {
 			avr_get_current_pos(offset);
@@ -355,7 +355,7 @@ static inline void hwpacket(int len) {
 		free_fragments += command[1][1];
 		if (free_fragments > FRAGMENTS_PER_BUFFER) {
 			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]));
-			free_fragments = FRAGMENTS_PER_BUFFER;
+			free_fragments = FRAGMENTS_PER_BUFFER - 1;
 			avr_write_ack("invalid done");
 			return;
 		}

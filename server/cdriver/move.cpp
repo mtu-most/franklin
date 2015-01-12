@@ -379,7 +379,7 @@ void abort_move(int pos) { // {{{
 #ifdef DEBUG_MOVE
 	debug("move no longer prepared");
 #endif
-	free_fragments = FRAGMENTS_PER_BUFFER;
+	free_fragments = FRAGMENTS_PER_BUFFER - 1;
 	current_fragment_pos = 0;
 	while (current_fragment_pos < pos)
 		apply_tick();

@@ -461,13 +461,25 @@ function Printer() {	// {{{
 	// Save and restore. {{{
 	var e = setup.AddElement('div');
 	e.AddText('Profile');
-	var b = e.AddElement('button').AddText('Save as').AddEvent('click', function() {
+	var b = e.AddElement('button').AddText('Save (as)').AddEvent('click', function() {
 		this.printer.call('save', [this.saveas.value], {});
 	});
 	b.type = 'button';
 	b.printer = printer;
 	b.saveas = e.AddElement('input');
 	b.saveas.type = 'text';
+	e = setup.AddElement('button').AddText('Remove this profile');
+	e.type = 'button';
+	e.printer = printer;
+	e.AddEvent('click', function() {
+		this.printer.call('remove_profile', [this.printer.profile], {});
+	});
+	e = setup.AddElement('button').AddText('Set as default profile');
+	e.type = 'button';
+	e.printer = printer;
+	e.AddEvent('click', function() {
+		this.printer.call('set_default_profile', [this.printer.profile], {});
+	});
 	setup.AddElement('div').Add(File([null, 'import', 'import_settings'], 'Import'));
 	e = setup.AddElement('a', 'title').AddText('Export settings to file');
 	e.id = make_id(printer, [null, 'export']);
@@ -475,8 +487,9 @@ function Printer() {	// {{{
 	// }}}
 	var disable = setup.AddElement('div').AddElement('button').AddText('Disable Printer');
 	disable.port = port;
+	disable.printer = printer;
 	disable.type = 'button';
-	disable.AddEvent('click', function() { rpc.call('disable', [this.port], {}); });
+	disable.AddEvent('click', function() { this.printer.disabling = true; rpc.call('disable', [this.port], {}); });
 	e = setup.AddElement('div').AddText('Timeout:');
 	e.Add(Float([null, 'timeout'], 0, 60));
 	e.AddText(' min');

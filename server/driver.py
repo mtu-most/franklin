@@ -149,8 +149,16 @@ class Printer: # {{{
 		global printer
 		printer = self
 		self.printer = Driver(port, run_id)
+		self.uuid = uuid
 		self.allow_system = allow_system
-		self.profile = 'default'
+		try:
+			filenames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'profile'))
+			with open(filenames[0]) as f:
+				self.profile = f.readline().strip()
+			log('profile is %s' % self.profile)
+		except:
+			log("No default profile; using 'default'.")
+			self.profile = 'default'
 		self.jobqueue = {}
 		self.job_output = ''
 		self.jobs_active = []
@@ -196,7 +204,6 @@ class Printer: # {{{
 		self.movecb = []
 		self.tempcb = []
 		self.alarms = set()
-		self.uuid = uuid
 		self.run_id = run_id
 		self.zoffset = 0.
 		self.multipliers = []
@@ -217,7 +224,7 @@ class Printer: # {{{
 			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False, update = False)
-		self.load()
+		self.load(update = False)
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
@@ -1455,10 +1462,10 @@ class Printer: # {{{
 			self._do_queue()
 		self.wait_for_cb(False)[1](id)
 	# }}}
-	def sleep(self, sleeping = True): # {{{
+	def sleep(self, sleeping = True, update = True): # {{{
 		if sleeping:
 			self.position_valid = False
-			self._globals_update()
+			self._globals_update(update)
 		return self._send_packet(struct.pack('<BB', protocol.command['SLEEP'], sleeping))
 	# }}}
 	def settemp(self, channel, temp, update = True): # {{{
@@ -1505,20 +1512,22 @@ class Printer: # {{{
 		assert cmd == protocol.rcommand['PIN']
 		return bool(s)
 	# }}}
-	def load(self, profile = None): # {{{
-		filenames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'profiles', (profile or self.profile) + os.extsep + 'ini'))
-		if profile and self.profile != profile:
-			self.profile = profile
-			self._globals_update()
+	def load(self, profile = None, update = True): # {{{
+		filenames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'profiles', ((profile and profile.strip()) or self.profile) + os.extsep + 'ini'))
+		if profile and self.profile != profile.strip():
+			log('setting profile to %s' % profile.strip())
+			self.profile = profile.strip()
+			self._globals_update(update = update)
 		for filename in filenames:
 			with open(filename) as f:
-				self.import_settings(f.read())
+				self.import_settings(f.read(), update = update)
 	# }}}
 	def save(self, profile = None): # {{{
-		if profile and self.profile != profile:
-			self.profile = profile
+		if profile and self.profile != profile.strip():
+			log('setting profile to %s' % profile.strip())
+			self.profile = profile.strip()
 			self._globals_update()
-		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'profiles', (profile or self.profile) + os.extsep + 'ini'))
+		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'))
 		with open(filename, 'w') as f:
 			f.write(self.export_settings())
 	# }}}
@@ -1526,16 +1535,21 @@ class Printer: # {{{
 		dirnames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'profiles'))
 		ret = []
 		for d in dirnames:
-			ret += [os.path.splitext(f)[0] for f in os.listdir(d)]
-		ret.sort(key = lambda x: x if x != 'default' else '')
+			ret += [os.path.splitext(f)[0].strip() for f in os.listdir(d)]
+		ret.sort()
 		return ret
 	# }}}
 	def remove_profile(self, profile): # {{{
-		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'profiles', (profile or self.profile) + os.extsep + 'ini'), makedirs = False)
+		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'), makedirs = False)
 		if os.path.exists(filename):
 			os.unlink(filename)
 			return True
 		return False
+	# }}}
+	def set_default_profile(self, profile): # {{{
+		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'profile'), makedirs = True)
+		with open(filename, 'w') as f:
+			f.write(profile.strip() + '\n')
 	# }}}
 	def abort(self): # {{{
 		# TODO: really abort.
@@ -1788,7 +1802,7 @@ class Printer: # {{{
 	# }}}
 	def import_settings(self, settings, filename = None, update = True): # {{{
 		self._broadcast(None, 'blocked', 'importing settings')
-		self.sleep()
+		self.sleep(update = update)
 		section = 'general'
 		index = None
 		obj = None
@@ -2171,10 +2185,8 @@ class Printer: # {{{
 							if axis == 2:
 								z = pos[0][2]
 					if cmd[1] != 81:
-						dist = sum([(pos[0][x] - oldpos[0][x]) ** 2 for x in range(3)]) ** .5
-						if dist == 0:
-							dist = 0	# use 0 instead of esteps, so retraction always happens at maximum speed.
-						elif dist > 0:
+						dist = sum([0] + [(pos[0][x] - oldpos[0][x]) ** 2 for x in range(3) if not math.isnan(pos[0][x] - oldpos[0][x])]) ** .5
+						if dist > 0:
 							#if f0 is None:
 							#	f0 = pos[1][current_extruder]
 							f0 = pos[2]	# Always use new value.

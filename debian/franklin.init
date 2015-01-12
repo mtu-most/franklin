@@ -38,12 +38,13 @@ PRINTER=''
 AUTODETECT=True
 
 # Regular expression of serial ports to ignore.
-BLACKLIST='/dev/(ptmx|console|tty(printk|(S|GS)?\d*))$'
+BLACKLIST='/dev/(input/|ptmx|console|tty(printk|(S|GS)?\d*))$'
+ADD_BLACKLIST='$'
 
 # Allowed system commands.  This must be a regular expressing.  Use '.*' for
 # allowing everything.  Only do this if everyone who can reach the page
 # is trusted!
-ALLOW_SYSTEM='^$'
+ALLOW_SYSTEM='$'
 
 # Required credentials as user:password or just a user (password is ignored).
 LOGIN=''
@@ -79,7 +80,7 @@ NAME=franklin
 DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/franklin
 ARGS="--make-pidfile --pidfile $PIDFILE --chuid franklin3d:franklin3d $ARGS"
-START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --autodetect=$AUTODETECT --port=$PORT --address=$ADDRESS --printer=$PRINTER --audiodir=$AUDIODIR --blacklist=$BLACKLIST --driver=$DRIVER --cdriver=$CDRIVER --allow-system=$ALLOW_SYSTEM --login=$LOGIN --passwordfile=$PASSWORDFILE --done=$DONE --avrdude=$AVRDUDE"
+START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --autodetect=$AUTODETECT --port=$PORT --address=$ADDRESS --printer=$PRINTER --audiodir=$AUDIODIR --blacklist=$BLACKLIST --add-blacklist=$ADD_BLACKLIST --driver=$DRIVER --cdriver=$CDRIVER --allow-system=$ALLOW_SYSTEM --login=$LOGIN --passwordfile=$PASSWORDFILE --done=$DONE --avrdude=$AVRDUDE"
 STOP_ARGS="--oknodo --stop $ARGS"
 
 if test ! -x "$DAEMON"; then

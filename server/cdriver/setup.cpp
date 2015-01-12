@@ -79,7 +79,7 @@ void setup(char const *port, char const *run_id)
 		settings[f].last_current_time = 0;
 		settings[f].cbs = 0;
 	}
-	free_fragments = FRAGMENTS_PER_BUFFER;
+	free_fragments = FRAGMENTS_PER_BUFFER - 1;
 	// Update current position.
 	first_fragment = current_fragment;
 	arch_stop();

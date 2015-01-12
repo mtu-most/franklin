@@ -57,7 +57,7 @@ function init() { // {{{
 	}
 	var reading_temps = false;
 	setInterval(function() {
-		if (reading_temps || !selected_printer)
+		if (reading_temps || !selected_printer || selected_printer.disabling)
 			return;
 		reading_temps = true;
 		var read = function(printer, num) {
@@ -447,13 +447,16 @@ function new_printer() { // {{{
 	printer.targetx = 0;
 	printer.targety = 0;
 	printer.targetz = 0;
+	printer.disabling = false;
 	printer.temptargets = [];
 	multiples[port] = {space: [], axis: [], motor: [], temp: [], gpio: []};
 	ports[port][2] = Printer();
-	ports[port][1] = printers_element.Add(ports[port][2]);
+	printers_element.Add(ports[port][2]);
 	ports[port][0].RemoveClass('setup');
 	ports[port][1].RemoveClass('notconnected');
 	ports[port][1].AddClass('connected');
+	ports[port][2].RemoveClass('notconnected');
+	ports[port][2].AddClass('connected');
 	update_float(printer, [null, 'targetx']);
 	update_float(printer, [null, 'targety']);
 	update_float(printer, [null, 'targetz']);

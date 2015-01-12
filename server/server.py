@@ -28,7 +28,8 @@ config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'address': '',
 		'printer': '',
 		'audiodir': xdgbasedir.cache_filename_write(packagename = 'franklin', filename = 'audio', makedirs = False),
-		'blacklist': '/dev/(ptmx|console|tty(printk|(S|GS)?\\d*))$',
+		'blacklist': '/dev/(input/|ptmx|console|tty(printk|(S|GS)?\\d*))$',
+		'add-blacklist': '$',
 		'autodetect': 'True',
 		'avrdude': '/usr/bin/avrdude',
 		'allow-system': '^$',
@@ -47,7 +48,6 @@ default_printer = (None, None)
 ports = {}
 autodetect = config['autodetect'].lower() == 'true'
 local = config['local'].lower() == 'true'
-blacklist = config['blacklist']
 orphans = {}
 scripts = {}
 # }}}
@@ -126,7 +126,7 @@ class Connection: # {{{
 		if target is not None:
 			#log('broadcasting to target %d' % target)
 			if target not in Connection.connections:
-				log('ignoring targeted broadcast to missing connection %d' % target)
+				log('ignoring targeted broadcast of %s to missing connection %d' % (repr((name, args)), target))
 				return
 			target = Connection.connections[target].socket
 			if target.monitor:
@@ -135,7 +135,7 @@ class Connection: # {{{
 			else:
 				log("not broadcasting to target, because it isn't set to monitor")
 		elif httpd:
-			#log('broadcasting to all')
+			#log('broadcasting to all: %s' % repr((name, args)))
 			for c in httpd.websockets:
 				if c.monitor:
 					#log('broadcasting to one')
@@ -148,7 +148,7 @@ class Connection: # {{{
 			protocol = 'arduino'
 			baudrate = '115200'
 			mcu = 'atmega1284p'
-		if board == 'sanguinololu':
+		elif board == 'sanguinololu':
 			board = 'melzi'
 			protocol = 'wiring'
 			baudrate = '115200'
@@ -179,7 +179,7 @@ class Connection: # {{{
 			try:
 				d = process.stdout.read()
 			except:
-				data[0] += '\nError: ' + traceback.format_exc()
+				data[0] += '\nError writing %s firmware: ' % board + traceback.format_exc()
 				log(repr(data[0]))
 				resumeinfo[0](data[0])
 				return False
@@ -195,13 +195,19 @@ class Connection: # {{{
 		cls._broadcast(None, 'blocked', port, 'uploading')
 		cls._broadcast(None, 'message', port, '')
 		d = (yield websockets.WAIT)
-		process.kill()	# In case it wasn't dead yet.
+		try:
+			process.kill()	# In case it wasn't dead yet.
+		except OSError:
+			pass
 		process.communicate()	# Clean up.
 		cls._broadcast(None, 'blocked', port, None)
 		cls._broadcast(None, 'message', port, '')
 		if autodetect:
 			websockets.call(None, cls.detect, port)()
-		yield (d or 'firmware successfully uploaded')
+		if d:
+			yield ('firmware upload for %s: ' % board + d)
+		else:
+			yield ('firmware for %s successfully uploaded' % board)
 	# }}}
 	@classmethod
 	def find_printer(cls, uuid = None, port = None): # {{{
@@ -234,8 +240,12 @@ class Connection: # {{{
 		if p.name is not None:
 			p.call('die', ('disabled by user',), {}, lambda success, ret: None)
 			cls._broadcast(None, 'del_printer', port)
-		p.process.kill()
+		try:
+			p.process.kill()
+		except OSError:
+			pass
 		p.process.communicate()
+		cls._broadcast(None, 'del_printer', port)
 	# }}}
 	@classmethod
 	def detect(cls, port): # {{{
@@ -263,7 +273,7 @@ class Connection: # {{{
 		if port in ports:
 			log('already existing port %s cannot be added' % port)
 			return
-		if re.match(blacklist, port):
+		if re.match(config['blacklist'], port) or re.match(config['add-blacklist'], port):
 			#log('skipping blacklisted port %s' % port)
 			return
 		ports[port] = None
@@ -295,16 +305,6 @@ class Connection: # {{{
 	@classmethod
 	def get_default_printer(cls): # {{{
 		return default_printer
-	# }}}
-	@classmethod
-	def set_blacklist(cls, newlist): # {{{
-		global blacklist
-		blacklist = newlist
-		cls._broadcast(None, 'blacklist', blacklist)
-	# }}}
-	@classmethod
-	def get_blacklist(cls): # {{{
-		return blacklist
 	# }}}
 	@classmethod
 	def new_script(cls, code): # {{{
@@ -360,7 +360,6 @@ class Connection: # {{{
 		self.socket.monitor = value
 		if self.socket.monitor:
 			self.socket.autodetect.event(autodetect)
-			self.socket.blacklist.event(blacklist)
 			for p in ports:
 				self.socket.new_port.event(p)
 				if ports[p]:
@@ -373,10 +372,10 @@ class Connection: # {{{
 	# }}}
 	def _call (self, name, a, ka): # {{{
 		resumeinfo = [(yield), None]
+		#log('other: %s %s %s' % (name, repr(a), repr(ka)))
 		if not self.printer or self.printer not in ports or not ports[self.printer]:
 			self.printer = self.find_printer()
 			assert self.printer
-		#log('other: %s' % attr)
 		ports[self.printer].call(name, a, ka, lambda success, ret: resumeinfo[0](ret))
 		yield (yield websockets.WAIT)
 	# }}}
@@ -403,7 +402,10 @@ class Port: # {{{
 			self.call('import_settings', [settings], {}, lambda success, ret: None)
 			GLib.source_remove(orphans[old[0]].input_handle)
 			orphans[old[0]].call('die', ('replaced by new connection',), {}, lambda success, ret: None)
-			orphans[old[0]].process.kill()
+			try:
+				orphans[old[0]].process.kill()
+			except OSError:
+				pass
 			orphans[old[0]].process.communicate()
 			del orphans[old[0]]
 		def get_vars(success, vars):
