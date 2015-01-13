@@ -1465,7 +1465,8 @@ class Printer: # {{{
 	def sleep(self, sleeping = True, update = True): # {{{
 		if sleeping:
 			self.position_valid = False
-			self._globals_update(update)
+			if update:
+				self._globals_update()
 		return self._send_packet(struct.pack('<BB', protocol.command['SLEEP'], sleeping))
 	# }}}
 	def settemp(self, channel, temp, update = True): # {{{
@@ -1517,7 +1518,8 @@ class Printer: # {{{
 		if profile and self.profile != profile.strip():
 			log('setting profile to %s' % profile.strip())
 			self.profile = profile.strip()
-			self._globals_update(update = update)
+			if update:
+				self._globals_update()
 		for filename in filenames:
 			with open(filename) as f:
 				self.import_settings(f.read(), update = update)

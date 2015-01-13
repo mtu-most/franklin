@@ -727,7 +727,7 @@ void apply_tick() {
 			}
 			mtr.settings[current_fragment].data[current_fragment_pos] = value;
 			mtr.settings[current_fragment].hwcurrent_pos += mtr.settings[current_fragment].dir * value;
-			debug("move pos %d %d cf %d time %d cp %d hwcp %d diff %d value %d dir %d", s, m, current_fragment, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos, sp.motor[m]->settings[current_fragment].hwcurrent_pos, sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos, value, mtr.settings[current_fragment].dir);
+			//debug("move pos %d %d cf %d time %d cp %d hwcp %d diff %d value %d dir %d", s, m, current_fragment, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos, sp.motor[m]->settings[current_fragment].hwcurrent_pos, sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos, value, mtr.settings[current_fragment].dir);
 		}
 	}
 	current_fragment_pos += 1;

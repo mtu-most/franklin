@@ -254,7 +254,7 @@ static inline void avr_get_current_pos(int offset) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			debug("cp %d %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
+			//debug("cp %d %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
 		}
 	}
 }
