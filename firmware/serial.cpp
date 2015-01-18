@@ -42,7 +42,7 @@ static inline uint16_t fullpacketlen() {
 		return 5 + active_motors;
 	}
 	else if ((command[0] & ~0x10) == CMD_MOVE) {
-		return 3 + settings[last_fragment].len;
+		return 3 + current_len;
 	}
 	else
 		return minpacketlen();

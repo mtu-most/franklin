@@ -189,7 +189,7 @@ void packet()
 			write_stall();
 			return;
 		}
-		if (current_fragment != (last_fragment + 1) % FRAGMENTS_PER_BUFFER) {
+		if (current_fragment != last_fragment) {
 			debug("HOME seen with non-empty buffer");
 			write_stall();
 			return;
@@ -243,8 +243,8 @@ void packet()
 		}
 		if (filling > 0)
 			debug("START_MOVE seen while filling (%d)", filling);
-		last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		settings[last_fragment].len = command[1];
+		current_len = command[1];
 		filling = command[2];
 		for (uint8_t m = 0; m < active_motors; ++m)
 			buffer[motor[m].buffer][last_fragment].dir = DIR_NONE;
@@ -267,14 +267,17 @@ void packet()
 			//debug("ignoring move while stopping");
 			return;
 		}
-		if (filling == 0)
-			debug("MOVE seen while not filling");
-		else
-			filling -= 1;
 		Fragment &fragment = buffer[command[1]][last_fragment];
 		fragment.dir = Dir(command[2]);
 		for (uint8_t b = 0; b < settings[last_fragment].len; ++b) {
 			fragment.samples[b] = command[3 + b];
+		}
+		if (filling == 0)
+			debug("MOVE seen while not filling");
+		else {
+			filling -= 1;
+			if (filling == 0)
+				last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		}
 		return;
 	}
@@ -347,9 +350,9 @@ void packet()
 		sei();
 		reply_ready = 2 + 4 * active_motors;
 		filling = 0;
-		current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
+		current_fragment = last_fragment;
 		notified_current_fragment = current_fragment;
-		debug("stop new current %d", current_fragment);
+		//debug("stop new current %d", current_fragment);
 		current_fragment_pos = 0;
 		move_phase = 0;
 		steps_prepared = 0;
@@ -360,7 +363,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_DISCARD");
 #endif
-		if (command[1] > (last_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER) {
+		if (command[1] >= (last_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER) {
 			debug("discarding more than entire buffer");
 			write_stall();
 			return;

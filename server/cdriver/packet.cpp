@@ -283,6 +283,11 @@ void packet()
 		//debug("cp4 %d %d", spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
 		arch_addpos(which, t, diff);
 		//debug("setpos %d %d %d", which, t, F(spaces[which].motor[t]->settings[current_fragment].current_pos));
+		/*arch_stop();
+		space_types[spaces[which].type].reset_pos(&spaces[which]);
+		for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
+			debug("setpos done source %f", spaces[which].axis[a]->settings[current_fragment].source);
+		*/
 		return;
 	}
 	case CMD_GETPOS:	// Get current position

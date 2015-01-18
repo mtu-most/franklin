@@ -1,9 +1,10 @@
 // vim: set foldmethod=marker :
 #ifndef _ARCH_AVR_H
+#define _ARCH_AVR_H
+
 // Includes and defines. {{{
 //#define DEBUG_AVRCOMM
 
-#define _ARCH_AVR_H
 #include <stdint.h>
 #include <unistd.h>
 #include <termios.h>
@@ -298,7 +299,7 @@ static inline void hwpacket(int len) {
 		else
 			offset = 2;
 		if (limit) {
-			abort_move(pos);
+			abort_move(pos - 1);
 			avr_get_current_pos(offset);
 			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_m);
 			cbs_after_current_move = 0;
@@ -347,19 +348,20 @@ static inline void hwpacket(int len) {
 			avr_write_ack("invalid done");
 			return;
 		}
+		first_fragment = -1;
 		int cbs = 0;
 		for (int i = 0; i < command[1][1]; ++i)
-			cbs += settings[(current_fragment + free_fragments + i + (moving ? 1 : 0)) % FRAGMENTS_PER_BUFFER].cbs;
+			cbs += settings[(current_fragment + free_fragments + i + 1) % FRAGMENTS_PER_BUFFER].cbs;
 		if (cbs)
 			send_host(CMD_MOVECB, cbs);
 		free_fragments += command[1][1];
-		if (free_fragments > FRAGMENTS_PER_BUFFER) {
+		if (free_fragments >= FRAGMENTS_PER_BUFFER) {
 			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]));
 			free_fragments = FRAGMENTS_PER_BUFFER - 1;
 			avr_write_ack("invalid done");
-			return;
 		}
-		avr_write_ack("done");
+		else
+			avr_write_ack("done");
 		if (!out_busy)
 			buffer_refill();
 		return;
@@ -709,7 +711,7 @@ static inline void arch_send_fragment(int fragment) {
 }
 
 static inline void arch_start_move() {
-	if (avr_running)
+	if (avr_running || stopping)
 		return;
 	avr_running = true;
 	avr_buffer[0] = HWC_START;

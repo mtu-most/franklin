@@ -348,8 +348,8 @@ uint8_t next_move() {
 #endif
 	}
 	//debug("last=%ld", F(long(settings[current_fragment].last_time)));
+	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
 	//debug("moving->true");
-	first_fragment = current_fragment;
 	moving = true;
 	settings[current_fragment].start_time = settings[current_fragment].last_time - uint32_t(settings[current_fragment].f0 / fabs(vp) * 1e6);
 	//debug("start=%ld, last-start=%ld", F(long(settings[current_fragment].start_time)), F(long(settings[current_fragment].last_time - settings[current_fragment].start_time)));
@@ -359,19 +359,19 @@ uint8_t next_move() {
 
 void abort_move(int pos) { // {{{
 	aborting = true;
-	debug("abort; cf %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments, pos);
+	//debug("abort; cf %d ff %d first %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, free_fragments, first_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments - 2, pos);
 	//debug("try aborting move");
-	// Copy over all settings from end of previous fragment.
-	int prev_f = (current_fragment + free_fragments) % FRAGMENTS_PER_BUFFER;
+	int prev_f = (current_fragment + free_fragments + 1) % FRAGMENTS_PER_BUFFER;	// +1 because free_fragments starts as FPB-1.
 	int f = (prev_f + 1) % FRAGMENTS_PER_BUFFER;
-	if (pos < 0 && first_fragment != f) {
+	if (moving && pos < 0 && first_fragment != f) {
 		f = prev_f;
 		free_fragments += 1;
 		pos += settings[f].fragment_length;
-		prev_f = (prev_f + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER;
+		prev_f = (f - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	}
 	if (pos < 0)
 		pos = 0;
+	//debug("abort really regenerating %d ticks", pos);
 	copy_fragment_settings(prev_f, f);
 	current_fragment = f;
 	//debug("moving->false");

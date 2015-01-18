@@ -273,9 +273,10 @@ EXTERN Buffer buffer[NUM_BUFFERS];
 EXTERN Settings settings[FRAGMENTS_PER_BUFFER];
 EXTERN uint8_t notified_current_fragment;
 EXTERN uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
-EXTERN uint8_t last_fragment;	// Fragment that is currently being filled, or has last been filled.
+EXTERN uint8_t last_fragment;	// Fragment that is currently being filled.
 EXTERN uint8_t limit_fragment_pos;
 EXTERN uint16_t current_fragment_pos;
+EXTERN uint8_t current_len;	// copy of settings[current_fragment].len, for when current_fragment changes during a fill.
 
 struct Adc {
 	uint8_t linked[2];

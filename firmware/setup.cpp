@@ -20,7 +20,7 @@ void setup()
 	}
 	notified_current_fragment = 0;
 	current_fragment = notified_current_fragment;
-	last_fragment = FRAGMENTS_PER_BUFFER - 1;
+	last_fragment = current_fragment;
 	filling = 0;
 	// Disable all adcs.
 	for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a) {
@@ -46,6 +46,7 @@ void setup()
 	homers = 0;
 	home_step_time = 0;
 	// Set up movement state.
+	current_len = 0;
 	stopped = true;
 	stopping = false;
 	underrun = false;

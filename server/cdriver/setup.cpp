@@ -78,6 +78,15 @@ void setup(char const *port, char const *run_id)
 		settings[f].hwtime = 0;
 		settings[f].last_current_time = 0;
 		settings[f].cbs = 0;
+		settings[f].tp = 0;
+		settings[f].f1 = 1;
+		settings[f].f2 = 0;
+		settings[f].fp = 0;
+		settings[f].fq = 0;
+		settings[f].fmain = 1;
+		settings[f].fragment_length = 0;
+		settings[f].start_time = 0;
+		settings[f].last_time = 0;
 	}
 	free_fragments = FRAGMENTS_PER_BUFFER - 1;
 	// Update current position.

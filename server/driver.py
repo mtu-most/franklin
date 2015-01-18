@@ -859,7 +859,7 @@ class Printer: # {{{
 				if self.queue_pos >= len(self.queue):
 					break
 			id, axes, f0, f1, cb, probe = self.queue[self.queue_pos]
-			log('queueing %s' % repr((id, axes, f0, f1, cb, probe)))
+			#log('queueing %s' % repr((id, axes, f0, f1, cb, probe)))
 			self.queue_pos += 1
 			# Turn sequences into a dict.
 			if isinstance(axes, (list, tuple)):
@@ -962,6 +962,7 @@ class Printer: # {{{
 		# 4: Repeat until all home orders are done.
 		# 5: Set current position; move to center (delta only).
 		#log('home %s %s' % (self.home_phase, repr(self.home_target)))
+		#traceback.print_stack()
 		small_dist = .005
 		if self.home_phase is None:
 			if done is not None:
@@ -1325,6 +1326,7 @@ class Printer: # {{{
 				return None
 			cmd, s, m, f, e, data = self.printer._get_reply()
 			assert cmd == protocol.rcommand['POS']
+			#log('get current pos %d %d: %f' % (self.id, axis, f))
 			return f
 		def export(self):
 			std = [self.name, self.type, self.max_deviation, [[a['name'], a['offset'], a['park'], a['park_order'], a['max_v'], a['min'], a['max']] for a in self.axis], [[m['name'], m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['sense_pin'], m['steps_per_m'], m['max_steps'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for m in self.motor], None if self.id != 1 else self.printer.multipliers]
@@ -1448,7 +1450,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False, probe = False): # {{{
-		log('goto %s %s %s %d %d' % (repr(moves), f0, f1, cb, probe))
+		#log('goto %s %s %s %d %d' % (repr(moves), f0, f1, cb, probe))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
 		self.queue.append((id, moves, f0, f1, cb, probe))

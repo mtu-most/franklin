@@ -76,6 +76,7 @@ void handle_motors() {
 		}
 		if (hit) {
 			// Hit endstop.
+			steps_prepared = 0;
 			debug("hit limit %d curpos %ld dir %d cf %d ncf %d lf %d cfp %d", m, F(motor[m].current_pos), fragment.dir, current_fragment, notified_current_fragment, last_fragment, current_fragment_pos);
 			// Notify host.
 			motor[m].flags |= Motor::LIMIT;
@@ -83,7 +84,7 @@ void handle_motors() {
 			current_fragment_pos = 0;
 			set_speed(0);
 			filling = 0;
-			current_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
+			current_fragment = last_fragment;
 			notified_current_fragment = current_fragment;
 			stopping = true;
 			move_phase = 0;
@@ -119,7 +120,7 @@ void handle_motors() {
 		while (!stopped && current_fragment_pos >= settings[current_fragment].len) {
 			current_fragment_pos -= settings[current_fragment].len;
 			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
-			if (last_fragment == (filling > 0 ? new_current_fragment : current_fragment)) {
+			if (last_fragment == new_current_fragment) {
 				// Underrun.
 				set_speed(0);
 				underrun = true;
