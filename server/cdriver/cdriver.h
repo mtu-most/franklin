@@ -397,7 +397,7 @@ void handle_temp(int id, int temp);
 void reset_dirs(int fragment);
 void buffer_refill();
 void copy_fragment_settings(int src, int dst);
-void apply_tick();
+bool apply_tick();
 void send_fragment();
 
 // globals.cpp

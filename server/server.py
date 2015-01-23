@@ -28,7 +28,7 @@ config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'address': '',
 		'printer': '',
 		'audiodir': xdgbasedir.cache_filename_write(packagename = 'franklin', filename = 'audio', makedirs = False),
-		'blacklist': '/dev/(input/|ptmx|console|tty(printk|(S|GS)?\\d*))$',
+		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\\d*))$',
 		'add-blacklist': '$',
 		'autodetect': 'True',
 		'avrdude': '/usr/bin/avrdude',

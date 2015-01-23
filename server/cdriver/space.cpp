@@ -710,7 +710,8 @@ void send_fragment() {
 		arch_start_move();
 }
 
-void apply_tick() {
+bool apply_tick() {
+	bool ret = false;
 	// All directions are correct, or the fragment is sent and the new fragment is empty (and therefore all directions are correct).
 	for (uint8_t s = 0; (s == 0 || current_fragment_pos > 0) && s < num_spaces; ++s) {
 		Space &sp = spaces[s];
@@ -726,7 +727,10 @@ void apply_tick() {
 					value = 0xff;
 			}
 			mtr.settings[current_fragment].data[current_fragment_pos] = value;
-			mtr.settings[current_fragment].hwcurrent_pos += mtr.settings[current_fragment].dir * value;
+			int diff = mtr.settings[current_fragment].dir * value;
+			mtr.settings[current_fragment].hwcurrent_pos += diff;
+			if (diff)
+				ret = true;
 			//debug("move pos %d %d cf %d time %d cp %d hwcp %d diff %d value %d dir %d", s, m, current_fragment, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos + avr_pos_offset[m], sp.motor[m]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[m], sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos, value, mtr.settings[current_fragment].dir);
 		}
 	}
@@ -735,6 +739,7 @@ void apply_tick() {
 	handle_motors(settings[current_fragment].hwtime);
 	//if (num_spaces > 0 && spaces[0].num_axes >= 2)
 		//debug("move z %d %d %f %d %d %d", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings[current_fragment].current, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0], spaces[0].motor[0]->settings[current_fragment].dir);
+	return ret;
 }
 
 void buffer_refill() {
@@ -775,9 +780,20 @@ void buffer_refill() {
 		}
 		apply_tick();
 		//debug("refill2 %d %d", current_fragment, spaces[0].motor[0]->settings[current_fragment].current_pos);
-		if ((!moving && current_fragment_pos > 0) || current_fragment_pos >= BYTES_PER_FRAGMENT) {
+		if (current_fragment_pos >= BYTES_PER_FRAGMENT) {
 			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
 			send_fragment();
+		}
+		if (!moving && current_fragment_pos > 0) {
+			//debug("fragment finish %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
+			while (apply_tick()) {
+				if (current_fragment_pos >= BYTES_PER_FRAGMENT) {
+					//debug("fragment real finish %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
+					send_fragment();
+				}
+			}
+			if (current_fragment_pos > 0)
+				send_fragment();
 		}
 		// Check for commands from host; in case of many short buffers, this loop may not end in a reasonable time.
 		serial(0);
