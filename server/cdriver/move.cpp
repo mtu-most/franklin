@@ -188,8 +188,6 @@ uint8_t next_move() {
 #endif
 		num_cbs += cbs_after_current_move;
 		cbs_after_current_move = 0;
-		//debug("moving->false");
-		moving = false;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a)
@@ -349,7 +347,7 @@ uint8_t next_move() {
 	}
 	//debug("last=%ld", F(long(settings[current_fragment].last_time)));
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
-	//debug("moving->true");
+	debug("moving->true 1");
 	moving = true;
 	settings[current_fragment].start_time = settings[current_fragment].last_time - uint32_t(settings[current_fragment].f0 / fabs(vp) * 1e6);
 	//debug("start=%ld, last-start=%ld", F(long(settings[current_fragment].start_time)), F(long(settings[current_fragment].last_time - settings[current_fragment].start_time)));
@@ -374,7 +372,6 @@ void abort_move(int pos) { // {{{
 	//debug("abort really regenerating %d ticks", pos);
 	copy_fragment_settings(prev_f, f);
 	current_fragment = f;
-	//debug("moving->false");
 	move_prepared = false;
 #ifdef DEBUG_MOVE
 	debug("move no longer prepared");
@@ -386,6 +383,7 @@ void abort_move(int pos) { // {{{
 	//debug("done restoring position");
 	// Copy settings back to previous fragment.
 	copy_fragment_settings(f, prev_f);
+	debug("moving->false 2");
 	moving = false;
 	reset_dirs(f);
 	//debug("curf3 %d", current_fragment);

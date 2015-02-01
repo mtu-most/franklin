@@ -249,6 +249,8 @@ void packet()
 		for (uint8_t m = 0; m < active_motors; ++m)
 			buffer[motor[m].buffer][last_fragment].dir = DIR_NONE;
 		settings[last_fragment].probing = command[0] == CMD_START_PROBE;
+		if (filling == 0)
+			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		//debug("new filling: %d %d", filling, last_fragment);
 		return;
 	}

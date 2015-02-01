@@ -238,6 +238,7 @@ struct Motor
 		pos = 0;
 		next_steps = 0;
 		next_next_steps = 0;
+		steps_current = 0;
 		dir = DIR_NONE;
 	}
 	void disable() {

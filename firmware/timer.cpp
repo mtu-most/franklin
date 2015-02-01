@@ -3,8 +3,10 @@
 void do_steps() {
 	static bool lock = false;
 	// Only move if the move was prepared.
-	if (lock || !steps_prepared)
+	if (lock || !steps_prepared) {
+		sei();
 		return;
+	}
 	lock = true;
 	// Enable interrupts as soon as possible, so the uart doesn't overrun.
 	sei();
@@ -144,6 +146,12 @@ void handle_motors() {
 			current_fragment_pos += 1;
 		}
 	}
-	if (!stopped)
+	if (!stopped) {
 		steps_prepared += 1;
+		if (steps_prepared == 1) {
+			for (uint8_t m = 0; m < active_motors; ++m) {
+				motor[m].next_steps = motor[m].next_next_steps;
+			}
+		}
+	}
 }

@@ -335,7 +335,9 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_UNDERRUN:
 	{
-		if (moving)
+		if (!moving)
+			debug("unexpected underrun?");
+		else
 			debug("underrun");
 		avr_running = false;
 		// Fall through.

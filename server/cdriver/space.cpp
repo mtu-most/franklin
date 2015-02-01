@@ -117,6 +117,7 @@ static void move_to_current(Space *s) {
 	cbs_after_current_move = 0;
 	current_fragment_pos = 0;
 	first_fragment = current_fragment;
+	debug("moving->true 4");
 	moving = true;
 	settings[current_fragment].cbs = 0;
 	settings[current_fragment].hwtime = 0;
@@ -437,7 +438,6 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 	//debug("steps");
 	if (factor <= 0) {
 		movedebug("end move");
-		moving = false;
 		return;
 	}
 	for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -545,11 +545,10 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		t = (current_time - settings[current_fragment].start_time) / 1e6;
 		if (t / (settings[current_fragment].t0 + settings[current_fragment].tp) >= done_factor) {
 			//buffered_debug("b");
-			moving = false;
 			uint8_t had_cbs = cbs_after_current_move;
 			cbs_after_current_move = 0;
-			had_cbs += next_move();
-			if (moving) {
+			if (queue_start != queue_end || queue_full) {
+				had_cbs += next_move();
 				//buffered_debug("c");
 				//debug("movecb 1");
 				if (!aborting && had_cbs > 0)
@@ -560,7 +559,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			cbs_after_current_move += had_cbs;
 			if (factor == 1) {
 				//buffered_debug("e");
-				moving = false;
+				debug("moving->false 7");
 				buffer_refill();
 				for (uint8_t s = 0; s < num_spaces; ++s) {
 					Space &sp = spaces[s];
@@ -575,7 +574,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				}
 			}
 			else {
-				moving = true;
+				debug("moving->true 8");
 				//if (factor > 0)
 				//	debug("not done %f", F(factor));
 			}
@@ -630,7 +629,7 @@ void reset_dirs(int fragment) {
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
 			memset(mtr.settings[fragment].data, 0, BYTES_PER_FRAGMENT);
-			if (moving && mtr.settings[fragment].current_pos != mtr.settings[fragment].hwcurrent_pos) {
+			if (mtr.settings[fragment].current_pos != mtr.settings[fragment].hwcurrent_pos) {
 				//debug("preactive %d %d %d %d %d", s, m, fragment, mtr.current_pos, mtr.hwcurrent_pos);
 				settings[fragment].num_active_motors += 1;
 				mtr.settings[fragment].dir = mtr.settings[fragment].current_pos < mtr.settings[fragment].hwcurrent_pos ? -1 : 1;
