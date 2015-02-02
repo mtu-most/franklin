@@ -15,6 +15,7 @@ void do_steps() {
 		if (motor[m].dir != DIR_POSITIVE && motor[m].dir != DIR_NEGATIVE)
 			continue;
 		uint8_t steps_target = uint32_t(motor[m].next_steps) * move_phase / full_phase - motor[m].steps_current;
+		//debug("stepping %d %d %d %d %d %d %d", m, steps_target, move_phase, full_phase, motor[m].steps_current, motor[m].next_steps, motor[m].next_next_steps);
 		if (steps_target == 0)
 			continue;
 		if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
@@ -33,6 +34,10 @@ void do_steps() {
 		motor[m].steps_current += steps_target;
 	}
 	if (move_phase >= full_phase) {
+		for (uint8_t m = 0; m < active_motors; ++m) {
+			if (motor[m].steps_current != motor[m].next_steps)
+				debug("Problem: %d != %d", motor[m].steps_current, motor[m].next_steps);
+		}
 		move_phase = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].steps_current = 0;
@@ -124,6 +129,7 @@ void handle_motors() {
 			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 			if (last_fragment == new_current_fragment) {
 				// Underrun.
+				debug("underrun");
 				set_speed(0);
 				underrun = true;
 			}
@@ -148,9 +154,10 @@ void handle_motors() {
 	}
 	if (!stopped) {
 		steps_prepared += 1;
-		if (steps_prepared == 1) {
+		if (homers == 0 && steps_prepared == 1) {
 			for (uint8_t m = 0; m < active_motors; ++m) {
 				motor[m].next_steps = motor[m].next_next_steps;
+				motor[m].next_next_steps = 0;
 			}
 		}
 	}

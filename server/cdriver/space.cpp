@@ -106,7 +106,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 }
 
 static void move_to_current(Space *s) {
-	if (moving || !motors_busy)
+	if (!stopped || !motors_busy)
 		return;
 	settings[current_fragment].f0 = 0;
 	settings[current_fragment].fmain = 1;
@@ -117,8 +117,8 @@ static void move_to_current(Space *s) {
 	cbs_after_current_move = 0;
 	current_fragment_pos = 0;
 	first_fragment = current_fragment;
-	debug("moving->true 4");
 	moving = true;
+	stopped = false;
 	settings[current_fragment].cbs = 0;
 	settings[current_fragment].hwtime = 0;
 	settings[current_fragment].start_time = 0;
@@ -160,7 +160,7 @@ void Space::load_info(int32_t &addr)
 		ok = false;
 	}
 	else {
-		if (moving || !motors_busy)
+		if (!stopped || !motors_busy)
 			ok = false;
 		else {
 			for (uint8_t i = 0; i < num_axes; ++i)
@@ -512,7 +512,7 @@ static void do_steps(float &factor, uint32_t current_time) { // {{{
 
 static void handle_motors(unsigned long long current_time) { // {{{
 	// Check for move.
-	if (!moving) {
+	if (stopped && !moving) {
 		//debug("handle motors not moving");
 		return;
 	}
@@ -559,7 +559,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			cbs_after_current_move += had_cbs;
 			if (factor == 1) {
 				//buffered_debug("e");
-				debug("moving->false 7");
+				stopped = true;
 				buffer_refill();
 				for (uint8_t s = 0; s < num_spaces; ++s) {
 					Space &sp = spaces[s];
@@ -574,7 +574,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				}
 			}
 			else {
-				debug("moving->true 8");
+				stopped = false;
 				//if (factor > 0)
 				//	debug("not done %f", F(factor));
 			}
@@ -629,7 +629,7 @@ void reset_dirs(int fragment) {
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
 			memset(mtr.settings[fragment].data, 0, BYTES_PER_FRAGMENT);
-			if (mtr.settings[fragment].current_pos != mtr.settings[fragment].hwcurrent_pos) {
+			if (!stopped && mtr.settings[fragment].current_pos != mtr.settings[fragment].hwcurrent_pos) {
 				//debug("preactive %d %d %d %d %d", s, m, fragment, mtr.current_pos, mtr.hwcurrent_pos);
 				settings[fragment].num_active_motors += 1;
 				mtr.settings[fragment].dir = mtr.settings[fragment].current_pos < mtr.settings[fragment].hwcurrent_pos ? -1 : 1;
@@ -722,8 +722,14 @@ bool apply_tick() {
 			else {
 				if (value > 8 * mtr.max_steps)
 					value = 8 * mtr.max_steps;
-				if (value > 0xff)
+				if (value > 0xff) {
+					debug("overflow %d", value);
 					value = 0xff;
+				}
+				if (value < 0) {
+					debug("negative value: %d", value);
+					value = 0;
+				}
 			}
 			mtr.settings[current_fragment].data[current_fragment_pos] = value;
 			int diff = mtr.settings[current_fragment].dir * value;
@@ -742,7 +748,7 @@ bool apply_tick() {
 }
 
 void buffer_refill() {
-	if (refilling || stopping)
+	if (!moving || refilling || stopping)
 		return;
 	refilling = true;
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
@@ -783,7 +789,7 @@ void buffer_refill() {
 			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
 			send_fragment();
 		}
-		if (!moving && current_fragment_pos > 0) {
+		if (stopped && current_fragment_pos > 0) {
 			//debug("fragment finish %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
 			while (apply_tick()) {
 				if (current_fragment_pos >= BYTES_PER_FRAGMENT) {
@@ -800,7 +806,7 @@ void buffer_refill() {
 	refilling = false;
 	if (stopping)
 		return;
-	if (!moving) {
+	if (stopped && current_fragment_pos > 0) {
 		//debug("finalize");
 		send_fragment();
 	}

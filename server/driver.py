@@ -633,6 +633,15 @@ class Printer: # {{{
 				if self.flushing is None:
 					#log('not filling; waiting for queue space')
 					return
+				'''
+				# Do only one segment at a time.
+				if not flushed:
+					self.flush()[1](None)
+					self.flushing = True
+					#log('flush set')
+					return
+				flushed = False
+				#'''
 				#log(repr(args))
 				sina, cosa = self.gcode_angle
 				target = cosa * args['X'] - sina * args['Y'] + self.gcode_ref[0], cosa * args['Y'] + sina * args['X'] + self.gcode_ref[1], args['Z'] + self.gcode_ref[2]

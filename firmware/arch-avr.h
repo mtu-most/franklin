@@ -417,13 +417,17 @@ static inline void arch_setup_end() {
 }
 
 static inline void set_speed(uint16_t count) {
+	if (homers == 0) {
+		for (uint8_t m = 0; m < active_motors; ++m) {
+			motor[m].next_steps = 0;
+			motor[m].next_next_steps = 0;
+		}
+	}
 	stopped = (count == 0);
 	if (stopped) {
 		TIMSK1 = 0;
 	}
 	else {
-		for (uint8_t m = 0; m < active_motors; ++m)
-			motor[m].next_steps = 0;
 		// Set TOP.
 		OCR1AH = (count >> 7) & 0xff;
 		OCR1AL = (count << 1) & 0xff;

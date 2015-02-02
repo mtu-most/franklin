@@ -26,8 +26,10 @@ uint8_t next_move() {
 	probing = false;
 	uint8_t num_cbs = 0;
 	uint8_t a0;
-	if (queue_start == queue_end && !queue_full)
+	if (queue_start == queue_end && !queue_full) {
+		stopped = true;
 		return num_cbs;
+	}
 #ifdef DEBUG_MOVE
 	debug("Next move; queue start = %d, end = %d", queue_start, queue_end);
 #endif
@@ -329,7 +331,7 @@ uint8_t next_move() {
 #ifdef DEBUG_MOVE
 	debug("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f s tp=%f s", F(settings[current_fragment].f0), F(settings[current_fragment].fp), F(settings[current_fragment].fq), F(v0), F(vp), F(vq), F(settings[current_fragment].t0), F(settings[current_fragment].tp));
 #endif
-	if (!moving && current_fragment_pos == 0) {
+	if (stopped && current_fragment_pos == 0) {
 #ifdef DEBUG_MOVE
 		debug("starting new move");
 #endif
@@ -347,7 +349,7 @@ uint8_t next_move() {
 	}
 	//debug("last=%ld", F(long(settings[current_fragment].last_time)));
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
-	debug("moving->true 1");
+	stopped = false;
 	moving = true;
 	settings[current_fragment].start_time = settings[current_fragment].last_time - uint32_t(settings[current_fragment].f0 / fabs(vp) * 1e6);
 	//debug("start=%ld, last-start=%ld", F(long(settings[current_fragment].start_time)), F(long(settings[current_fragment].last_time - settings[current_fragment].start_time)));
@@ -361,7 +363,7 @@ void abort_move(int pos) { // {{{
 	//debug("try aborting move");
 	int prev_f = (current_fragment + free_fragments + 1) % FRAGMENTS_PER_BUFFER;	// +1 because free_fragments starts as FPB-1.
 	int f = (prev_f + 1) % FRAGMENTS_PER_BUFFER;
-	if (moving && pos < 0 && first_fragment != f) {
+	if (!stopped && pos < 0 && first_fragment != f) {
 		f = prev_f;
 		free_fragments += 1;
 		pos += settings[f].fragment_length;
@@ -383,8 +385,8 @@ void abort_move(int pos) { // {{{
 	//debug("done restoring position");
 	// Copy settings back to previous fragment.
 	copy_fragment_settings(f, prev_f);
-	debug("moving->false 2");
 	moving = false;
+	stopped = true;
 	reset_dirs(f);
 	//debug("curf3 %d", current_fragment);
 	//debug("aborting move");

@@ -38,9 +38,9 @@ void setup(char const *port, char const *run_id)
 	current_fragment = 0;
 	current_fragment_pos = 0;
 	hwtime_step = 3000;	// TODO: make this dynamic.
-	debug("moving->false 3");
 	moving = false;
 	aborting = false;
+	stopped = true;
 	stopping = 0;
 	stop_pending = false;
 	move_prepared = false;

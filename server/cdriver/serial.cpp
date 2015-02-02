@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-//#define DEBUG_DATA
+#define DEBUG_DATA
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
@@ -137,7 +137,7 @@ void serial(uint8_t which)
 							stop_pending = false;
 							arch_stop();
 						}
-						else if (free_fragments > 0 && moving && !stopping && arch_running())
+						else if (free_fragments > 0 && !stopping && arch_running())
 							buffer_refill();
 					}
 					continue;

@@ -345,6 +345,7 @@ void packet()
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].dir = DIR_NONE;
 			motor[m].next_steps = 0;
+			motor[m].next_next_steps = 0;
 			motor[m].steps_current = 0;
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));

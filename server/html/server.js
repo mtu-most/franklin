@@ -270,13 +270,13 @@ function _setup_updater() {
 				});
 			}
 			if (index == 1) {
-				for (var a = 0; a < values[4].length; ++a)
-					printers[port].spaces[index].axis[a].multiplier = values[4][a];
+				for (var a = 0; a < values[5].length; ++a)
+					printers[port].spaces[index].axis[a].multiplier = values[5][a];
 			}
 			if (printers[port].spaces[index].type == TYPE_EXTRUDER) {
-				printers[port].spaces[index].dx = values[5][0];
-				printers[port].spaces[index].dy = values[5][1];
-				printers[port].spaces[index].dz = values[5][2];
+				printers[port].spaces[index].dx = values[6][0];
+				printers[port].spaces[index].dy = values[6][1];
+				printers[port].spaces[index].dz = values[6][2];
 			}
 			else
 				printers[port].spaces[index].extruder = null;

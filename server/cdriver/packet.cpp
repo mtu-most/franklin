@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-//#define DEBUG_CMD
+#define DEBUG_CMD
 
 static uint8_t get_which()
 {
@@ -99,14 +99,15 @@ void packet()
 		}
 		else
 			serialdev[0]->write(OK);
-		if (!moving) {
+		if (stopped) {
+			debug("starting move");
 			int num_movecbs = next_move();
 			if (num_movecbs > 0)
 				send_host(CMD_MOVECB, num_movecbs);
 			buffer_refill();
 		}
-		//else
-			//debug("waiting with move");
+		else
+			debug("waiting with move");
 		break;
 	}
 	case CMD_SLEEP:	// disable motor current
@@ -117,7 +118,7 @@ void packet()
 		last_active = millis();
 		if (command[0][2]) {
 			//debug("sleeping");
-			if (moving)
+			if (!stopped)
 			{
 				debug("Sleeping while moving");
 				return;
@@ -267,7 +268,7 @@ void packet()
 			}
 			motors_busy = true;
 		}
-		if (moving)
+		if (!stopped)
 		{
 			debug("Setting position while moving");
 			return;

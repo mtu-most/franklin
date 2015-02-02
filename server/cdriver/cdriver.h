@@ -339,7 +339,7 @@ EXTERN uint8_t audio_head, audio_tail, audio_state;
 EXTERN uint32_t audio_start;
 EXTERN int16_t audio_us_per_sample;
 #endif
-EXTERN bool moving, aborting;
+EXTERN bool moving, aborting, stopped;
 EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.
 EXTERN bool stop_pending;
