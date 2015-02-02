@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-#define DEBUG_DATA
+//#define DEBUG_DATA
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
@@ -118,7 +118,7 @@ void serial(uint8_t which)
 				case CMD_DEBUG:
 					if (which == 0) {
 						debug("wtf?");
-						exit(0);
+						abort();
 					}
 					doing_debug = true;
 					START_DEBUG();
@@ -165,6 +165,7 @@ void serial(uint8_t which)
 				if ((command[1][0] & 0xe0) != 0x60) {
 					// These lengths are not allowed; this cannot be a good packet.
 					debug("invalid firmware command code %02x", command[1][0]);
+					abort();
 					serialdev[which]->write(CMD_NACK);
 					continue;
 				}
@@ -259,6 +260,7 @@ void serial(uint8_t which)
 				if ((sum & 0x7) != (t & 0x7))
 				{
 					debug("incorrect extra bit, size = %d t = %d", len, t);
+					abort();
 					serialdev[which]->write(CMD_NACK);
 					return;
 				}
@@ -273,7 +275,7 @@ void serial(uint8_t which)
 					if (check & 1)
 					{
 						debug("incorrect checksum byte %d bit %d", t, bit);
-						exit(0);
+						abort();
 			//fprintf(stderr, "err %d (%d %d):", which, len, t);
 			//for (uint8_t i = 0; i < len + (len + 2) / 3; ++i)
 			//	fprintf(stderr, " %02x", command[which][i]);

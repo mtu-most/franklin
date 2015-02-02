@@ -192,7 +192,7 @@ class Connection: # {{{
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
 		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP, output)
-		cls._broadcast(None, 'blocked', port, 'uploading')
+		cls._broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
 		cls._broadcast(None, 'message', port, '')
 		d = (yield websockets.WAIT)
 		try:

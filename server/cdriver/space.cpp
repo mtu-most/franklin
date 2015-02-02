@@ -105,9 +105,10 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 	return true;
 }
 
-static void move_to_current(Space *s) {
+static void move_to_current() {
 	if (!stopped || !motors_busy)
 		return;
+	debug("move to current");
 	settings[current_fragment].f0 = 0;
 	settings[current_fragment].fmain = 1;
 	settings[current_fragment].fp = 0;
@@ -118,18 +119,20 @@ static void move_to_current(Space *s) {
 	current_fragment_pos = 0;
 	first_fragment = current_fragment;
 	moving = true;
-	stopped = false;
 	settings[current_fragment].cbs = 0;
 	settings[current_fragment].hwtime = 0;
 	settings[current_fragment].start_time = 0;
 	settings[current_fragment].last_time = 0;
 	settings[current_fragment].last_current_time = 0;
-	//debug("move to current");
-	for (uint8_t i = 0; i < min(s->num_axes, s->num_motors); ++i) {
-		s->axis[i]->settings[current_fragment].dist = 0;
-		s->axis[i]->settings[current_fragment].next_dist = 0;
-		s->axis[i]->settings[current_fragment].main_dist = 0;
-		s->motor[i]->settings[current_fragment].last_v = 0;
+	for (uint8_t s = 0; s < num_spaces; ++s) {
+		Space &sp = spaces[s];
+		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			sp.axis[a]->settings[current_fragment].dist = 0;
+			sp.axis[a]->settings[current_fragment].next_dist = 0;
+			sp.axis[a]->settings[current_fragment].main_dist = 0;
+		}
+		for (uint8_t m = 0; m < sp.num_motors; ++m)
+			sp.motor[m]->settings[current_fragment].last_v = 0;
 	}
 #ifdef DEBUG_PATH
 	fprintf(stderr, "\n");
@@ -139,7 +142,7 @@ static void move_to_current(Space *s) {
 
 void Space::load_info(int32_t &addr)
 {
-	loaddebug("loading space");
+	loaddebug("loading space %d", id);
 	uint8_t t = type;
 	if (t >= NUM_SPACE_TYPES)
 		t = DEFAULT_TYPE;
@@ -151,7 +154,7 @@ void Space::load_info(int32_t &addr)
 	float oldpos[num_motors];
 	bool ok;
 	if (t != type) {
-		//debug("setting type to %d", type);
+		loaddebug("setting type to %d", type);
 		space_types[t].free(this);
 		if (!space_types[type].init(this)) {
 			type = DEFAULT_TYPE;
@@ -176,8 +179,10 @@ void Space::load_info(int32_t &addr)
 		space_types[type].xyz2motors(this, newpos, &ok);
 		uint8_t i;
 		for (i = 0; i < num_motors; ++i) {
-			if (oldpos[i] != newpos[i]) {
-				move_to_current(this);
+			if (!isnan(oldpos[i]) && !isnan(newpos[i]) && oldpos[i] != newpos[i]) {
+				loaddebug("moving to current (%f != %f)", oldpos[i], newpos[i]);
+				move_to_current();
+				loaddebug("done moving to current");
 				break;
 			}
 		}
@@ -198,7 +203,7 @@ void Space::load_axis(uint8_t a, int32_t &addr)
 	if (axis[a]->offset != old_offset) {
 		axis[a]->settings[current_fragment].current += axis[a]->offset - old_offset;
 		axis[a]->settings[current_fragment].source += axis[a]->offset - old_offset;
-		move_to_current(this);
+		move_to_current();
 	}
 }
 
@@ -267,7 +272,7 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 		}
 	}
 	if (must_move)
-		move_to_current(this);
+		move_to_current();
 }
 
 void Space::save_info(int32_t &addr)
@@ -559,6 +564,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			cbs_after_current_move += had_cbs;
 			if (factor == 1) {
 				//buffered_debug("e");
+				moving = false;
 				stopped = true;
 				buffer_refill();
 				for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -574,7 +580,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				}
 			}
 			else {
-				stopped = false;
+				moving = true;
 				//if (factor > 0)
 				//	debug("not done %f", F(factor));
 			}
@@ -695,6 +701,10 @@ static void set_current_fragment(int fragment) {
 void send_fragment() {
 	if (current_fragment_pos == 0 || stopping)
 		return;
+	if (settings[current_fragment].num_active_motors == 0) {
+		debug("sending fragment for 0 motors");
+		//abort();
+	}
 	//debug("sending %d", current_fragment);
 	settings[current_fragment].fragment_length = current_fragment_pos;
 	free_fragments -= 1;
@@ -709,8 +719,7 @@ void send_fragment() {
 		arch_start_move();
 }
 
-bool apply_tick() {
-	bool ret = false;
+void apply_tick() {
 	// All directions are correct, or the fragment is sent and the new fragment is empty (and therefore all directions are correct).
 	for (uint8_t s = 0; (s == 0 || current_fragment_pos > 0) && s < num_spaces; ++s) {
 		Space &sp = spaces[s];
@@ -734,8 +743,6 @@ bool apply_tick() {
 			mtr.settings[current_fragment].data[current_fragment_pos] = value;
 			int diff = mtr.settings[current_fragment].dir * value;
 			mtr.settings[current_fragment].hwcurrent_pos += diff;
-			if (diff)
-				ret = true;
 			//debug("move pos %d %d cf %d time %d cp %d hwcp %d diff %d value %d dir %d", s, m, current_fragment, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos + avr_pos_offset[m], sp.motor[m]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[m], sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos, value, mtr.settings[current_fragment].dir);
 		}
 	}
@@ -744,7 +751,6 @@ bool apply_tick() {
 	handle_motors(settings[current_fragment].hwtime);
 	//if (num_spaces > 0 && spaces[0].num_axes >= 2)
 		//debug("move z %d %d %f %d %d %d", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings[current_fragment].current, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0], spaces[0].motor[0]->settings[current_fragment].dir);
-	return ret;
 }
 
 void buffer_refill() {
@@ -791,7 +797,8 @@ void buffer_refill() {
 		}
 		if (stopped && current_fragment_pos > 0) {
 			//debug("fragment finish %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
-			while (apply_tick()) {
+			while (moving) {
+				apply_tick();
 				if (current_fragment_pos >= BYTES_PER_FRAGMENT) {
 					//debug("fragment real finish %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
 					send_fragment();

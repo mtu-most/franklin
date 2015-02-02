@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-#define DEBUG_CMD
+//#define DEBUG_CMD
 
 static uint8_t get_which()
 {
@@ -100,14 +100,14 @@ void packet()
 		else
 			serialdev[0]->write(OK);
 		if (stopped) {
-			debug("starting move");
+			//debug("starting move");
 			int num_movecbs = next_move();
 			if (num_movecbs > 0)
 				send_host(CMD_MOVECB, num_movecbs);
 			buffer_refill();
 		}
-		else
-			debug("waiting with move");
+		//else
+			//debug("waiting with move");
 		break;
 	}
 	case CMD_SLEEP:	// disable motor current
@@ -260,6 +260,11 @@ void packet()
 			debug("Invalid axis for setting position: %d %d", which, t);
 			return;
 		}
+		if (!stopped)
+		{
+			debug("Setting position while moving");
+			return;
+		}
 		if (!motors_busy)
 		{
 			for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -267,11 +272,6 @@ void packet()
 					SET(spaces[s].motor[m]->enable_pin);
 			}
 			motors_busy = true;
-		}
-		if (!stopped)
-		{
-			debug("Setting position while moving");
-			return;
 		}
 		for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
 			spaces[which].axis[a]->settings[current_fragment].source = NAN;

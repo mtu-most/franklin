@@ -357,7 +357,6 @@ void packet()
 		notified_current_fragment = current_fragment;
 		//debug("stop new current %d", current_fragment);
 		current_fragment_pos = 0;
-		move_phase = 0;
 		steps_prepared = 0;
 		return;
 	}

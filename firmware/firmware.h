@@ -219,7 +219,6 @@ struct Motor
 	uint8_t sense_pin;
 	uint8_t buffer;
 	uint8_t flags;
-	uint16_t pos;
 	enum Flags {
 		LIMIT = 1,
 		SENSE0 = 2,
@@ -235,7 +234,6 @@ struct Motor
 		sense_pos[0] = 0xBEEFBEEF;
 		sense_pos[1] = 0xFACEFACE;
 		flags = 0;
-		pos = 0;
 		next_steps = 0;
 		next_next_steps = 0;
 		steps_current = 0;
@@ -243,10 +241,10 @@ struct Motor
 	}
 	void disable() {
 		current_pos = 0;
-		pos = 0;
 		dir = DIR_NONE;
 		next_steps = 0;
 		next_next_steps = 0;
+		steps_current = 0;
 	}
 };
 

@@ -489,7 +489,7 @@ static inline void arch_reset() {
 	}
 	if (avr_pong != 2) {
 		debug("no pong seen; giving up.\n");
-		exit(0);
+		abort();
 	}
 }
 
@@ -887,7 +887,7 @@ void HostSerial::write(char c) {
 			break;
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
 			debug("write to host failed: %d %s", ret, strerror(errno));
-			exit(0);
+			abort();
 		}
 	}
 }
@@ -903,7 +903,7 @@ void HostSerial::refill() {
 	}
 	if (end == 0 && pollfds[0].revents) {
 		debug("EOF detected on standard input; exiting.");
-		exit(0);
+		abort();
 	}
 	pollfds[0].revents = 0;
 }
@@ -913,7 +913,7 @@ int HostSerial::read() {
 		refill();
 	if (start == end) {
 		debug("EOF on standard input; exiting.");
-		exit(0);
+		abort();
 	}
 	int ret = buffer[start++];
 	//debug("Firmware read byte: %x", ret);

@@ -346,7 +346,6 @@ EXTERN bool stop_pending;
 EXTERN float done_factor;
 EXTERN uint8_t requested_temp;
 EXTERN bool refilling;
-EXTERN bool move_prepared;
 EXTERN int current_fragment;
 EXTERN int current_fragment_pos;
 EXTERN int hwtime_step;
@@ -397,7 +396,7 @@ void handle_temp(int id, int temp);
 void reset_dirs(int fragment);
 void buffer_refill();
 void copy_fragment_settings(int src, int dst);
-bool apply_tick();
+void apply_tick();
 void send_fragment();
 
 // globals.cpp

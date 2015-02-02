@@ -21,7 +21,7 @@ static void change0(int qpos) {
 	}
 }
 
-// Used from previous segment (if move_prepared == true): tp, vq.
+// Used from previous segment (if !stopped): tp, vq.
 uint8_t next_move() {
 	probing = false;
 	uint8_t num_cbs = 0;
@@ -59,7 +59,7 @@ uint8_t next_move() {
 
 	settings[current_fragment].f0 = settings[current_fragment].fq;
 	// If no move is prepared, set next_dist from the queue; it will be used as dist below.
-	if (!move_prepared) { // {{{
+	if (stopped) { // {{{
 #ifdef DEBUG_MOVE
 		debug("No move prepared.");
 #endif
@@ -143,7 +143,6 @@ uint8_t next_move() {
 			}
 		}
 		vq = 0;
-		move_prepared = false;
 	}
 	// }}}
 	else { // {{{
@@ -171,7 +170,6 @@ uint8_t next_move() {
 			a0 += sp.num_axes;
 		}
 		vq = queue[n].f[0] * feedrate;
-		move_prepared = true;
 	}
 	// }}}
 	float v0 = queue[queue_start].f[0] * feedrate;
@@ -206,7 +204,6 @@ uint8_t next_move() {
 	// vp: this move's requested ending speed.
 	// vq: next move's requested starting speed.
 	// cbs_after_current_move: number of cbs that should be fired after this segment is complete.
-	// move_prepared: if this segment connects to a following segment.
 	// mtr->dist: total distance of this segment (mm).
 	// mtr->next_dist: total distance of next segment (mm).
 #ifdef DEBUG_MOVE
@@ -374,12 +371,12 @@ void abort_move(int pos) { // {{{
 	//debug("abort really regenerating %d ticks", pos);
 	copy_fragment_settings(prev_f, f);
 	current_fragment = f;
-	move_prepared = false;
 #ifdef DEBUG_MOVE
 	debug("move no longer prepared");
 #endif
 	free_fragments = FRAGMENTS_PER_BUFFER - 1;
 	current_fragment_pos = 0;
+	moving = true;
 	while (current_fragment_pos < pos)
 		apply_tick();
 	//debug("done restoring position");

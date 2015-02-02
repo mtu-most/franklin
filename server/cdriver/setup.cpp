@@ -43,7 +43,6 @@ void setup(char const *port, char const *run_id)
 	stopped = true;
 	stopping = 0;
 	stop_pending = false;
-	move_prepared = false;
 	cbs_after_current_move = 0;
 	which_autosleep = 0;
 	timeout = 0;

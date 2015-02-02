@@ -35,8 +35,11 @@ void do_steps() {
 	}
 	if (move_phase >= full_phase) {
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			if (motor[m].steps_current != motor[m].next_steps)
-				debug("Problem: %d != %d", motor[m].steps_current, motor[m].next_steps);
+			if (motor[m].dir != DIR_POSITIVE && motor[m].dir != DIR_NEGATIVE)
+				continue;
+			if (motor[m].steps_current != motor[m].next_steps) {
+				debug("Problem %d: %d != %d (%d %d)", m, motor[m].steps_current, motor[m].next_steps, move_phase, full_phase);
+			}
 		}
 		move_phase = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
@@ -94,7 +97,6 @@ void handle_motors() {
 			current_fragment = last_fragment;
 			notified_current_fragment = current_fragment;
 			stopping = true;
-			move_phase = 0;
 			for (uint8_t mc = 0; mc < active_motors; ++mc)
 				motor[mc].steps_current = 0;
 			return;
@@ -129,7 +131,7 @@ void handle_motors() {
 			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 			if (last_fragment == new_current_fragment) {
 				// Underrun.
-				debug("underrun");
+				//debug("underrun");
 				set_speed(0);
 				underrun = true;
 			}
@@ -153,12 +155,16 @@ void handle_motors() {
 		}
 	}
 	if (!stopped) {
-		steps_prepared += 1;
-		if (homers == 0 && steps_prepared == 1) {
+		if (steps_prepared == 0) {
+			move_phase = 0;
 			for (uint8_t m = 0; m < active_motors; ++m) {
-				motor[m].next_steps = motor[m].next_next_steps;
-				motor[m].next_next_steps = 0;
+				motor[m].steps_current = 0;
+				if (homers == 0) {
+					motor[m].next_steps = motor[m].next_next_steps;
+					motor[m].next_next_steps = 0;
+				}
 			}
 		}
+		steps_prepared += 1;
 	}
 }

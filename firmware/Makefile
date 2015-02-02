@@ -1,6 +1,7 @@
 MONITOR_PORT = /dev/ttyACM* /dev/ttyUSB*
 RESET_CMD=:
 TARGET ?= melzi
+#TARGET ?= ramps
 
 CPPFLAGS = -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow -fno-strict-aliasing -Wall -Wextra -Werror
 EXTRA_FLAGS = --param=ssp-buffer-size=4
