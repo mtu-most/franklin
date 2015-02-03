@@ -4,12 +4,12 @@ void do_steps() {
 	static bool lock = false;
 	// Only move if the move was prepared.
 	if (lock || !steps_prepared) {
-		sei();
+		arch_sei();
 		return;
 	}
 	lock = true;
 	// Enable interrupts as soon as possible, so the uart doesn't overrun.
-	sei();
+	arch_sei();
 	move_phase += 1;
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (motor[m].dir != DIR_POSITIVE && motor[m].dir != DIR_NEGATIVE)
@@ -63,10 +63,7 @@ void handle_motors() {
 				//debug("sense %d %x", m, motor[m].flags);
 				motor[m].flags ^= Motor::SENSE_STATE;
 				motor[m].flags |= (motor[m].flags & Motor::SENSE_STATE ? Motor::SENSE1 : Motor::SENSE0);
-				cli();
-				for (int mi = 0; mi < active_motors; ++mi)
-					motor[mi].sense_pos[(motor[m].flags & Motor::SENSE_STATE) ? 1 : 0] = motor[mi].current_pos;
-				sei();
+				arch_record_sense(motor[m].flags & Motor::SENSE_STATE);
 			}
 		}
 		// Check probe.

@@ -250,12 +250,16 @@ static inline void avr_get_current_pos(int offset) {
 	int mi = 0;
 	for (int ts = 0; ts < num_spaces; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
-			spaces[ts].motor[tm]->settings[current_fragment].current_pos = -avr_pos_offset[tm + mi];
+			debug("cpb %d %d %x %x %x", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
+			spaces[ts].motor[tm]->settings[current_fragment].current_pos = 0;
 			for (int i = 0; i < 4; ++i) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
+			if (spaces[ts].motor[tm]->dir_pin.inverted())
+				spaces[ts].motor[tm]->settings[current_fragment].current_pos *= -1;
+			spaces[ts].motor[tm]->settings[current_fragment].current_pos -= avr_pos_offset[tm + mi];
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			debug("cp %d %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
+			debug("cpa %d %d %x %x %x", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
 		}
 	}
 }
@@ -340,7 +344,6 @@ static inline void hwpacket(int len) {
 		//else
 			//debug("underrun");
 		avr_running = false;
-		moving = false;
 		// Fall through.
 	}
 	case HWC_DONE:
@@ -683,8 +686,8 @@ static inline void arch_reconnect(char *port) {
 static inline void arch_addpos(uint8_t s, uint8_t m, int diff) {
 	for (uint8_t st = 0; st < s; ++st)
 		m += spaces[st].num_motors;
-	//debug("setpos %d %d", m, pos.i);
 	avr_pos_offset[m] -= diff;
+	debug("setpos %x %x %x", m, diff, avr_pos_offset[m]);
 }
 
 static inline void arch_send_fragment(int fragment) {

@@ -48,16 +48,6 @@ static inline uint16_t fullpacketlen() {
 		return minpacketlen();
 }
 
-static void clear_overflow() {
-	command_end = 0;
-	serial_buffer_head = 0;
-	serial_buffer_tail = 0;
-	serial_overflow = false;
-	debug("serial flushed after overflow");
-	debug_dump();
-	serial_write(CMD_NACK);
-}
-
 // There may be serial data available.
 void serial()
 {
@@ -379,10 +369,7 @@ void try_send_next()
 			pending_packet[0] = CMD_LIMIT;
 			pending_packet[1] = m;
 			pending_packet[2] = limit_fragment_pos;
-			cli();
-			for (uint8_t mi = 0; mi < active_motors; ++mi)
-				*reinterpret_cast <int32_t *>(&pending_packet[3 + 4 * mi]) = motor[mi].current_pos;
-			sei();
+			arch_write_current_pos(3);
 			motor[m].flags &= ~Motor::LIMIT;
 			prepare_packet(3 + 4 * active_motors);
 			send_packet();
@@ -403,6 +390,7 @@ void try_send_next()
 		}
 		else
 			pending_packet[0] = CMD_DONE;
+		debug("done %x", motor[3].current_pos);
 		pending_packet[1] = (current_fragment - notified_current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		//debug("done %d %d %d", current_fragment, notified_current_fragment, last_fragment);
 		notified_current_fragment = current_fragment;
@@ -422,13 +410,10 @@ void try_send_next()
 		send_packet();
 		return;
 	}
-	if (home_step_time > 0 && homers == 0)
+	if (home_step_time > 0 && homers == 0 && steps_prepared == 0)
 	{
 		pending_packet[0] = CMD_HOMED;
-		cli();
-		for (uint8_t m = 0; m < active_motors; ++m)
-			*reinterpret_cast <int32_t *>(&pending_packet[1 + 4 * m]) = motor[m].current_pos;
-		sei();
+		arch_write_current_pos(1);
 		home_step_time = 0;
 		prepare_packet(1 + 4 * active_motors);
 		send_packet();

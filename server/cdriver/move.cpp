@@ -1,7 +1,7 @@
 // vim: set foldmethod=marker :
 #include "cdriver.h"
 
-#define DEBUG_MOVE
+//#define DEBUG_MOVE
 
 // Set up:
 // start_time		utime() at start of move.
@@ -310,7 +310,7 @@ uint8_t next_move() {
 			else
 				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist + sp.axis[a]->settings[current_fragment].next_dist;
 #ifdef DEBUG_MOVE
-			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d hw = %d", s, a, F(sp.axis[a]->settings[current_fragment].dist), F(sp.axis[a]->settings[current_fragment].main_dist), F(sp.axis[a]->settings[current_fragment].next_dist), sp.motor[a]->settings[current_fragment].current_pos, sp.motor[a]->settings[current_fragment].hwcurrent_pos);
+			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d hw = %d current = %f", s, a, F(sp.axis[a]->settings[current_fragment].dist), F(sp.axis[a]->settings[current_fragment].main_dist), F(sp.axis[a]->settings[current_fragment].next_dist), sp.motor[a]->settings[current_fragment].current_pos, sp.motor[a]->settings[current_fragment].hwcurrent_pos, sp.axis[a]->settings[current_fragment].current);
 #endif
 		}
 		bool ok = true;
@@ -328,13 +328,14 @@ uint8_t next_move() {
 #ifdef DEBUG_MOVE
 	debug("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f s tp=%f s", F(settings[current_fragment].f0), F(settings[current_fragment].fp), F(settings[current_fragment].fq), F(v0), F(vp), F(vq), F(settings[current_fragment].t0), F(settings[current_fragment].tp));
 #endif
-	if (stopped && current_fragment_pos == 0) {
+	if (stopped) {
 #ifdef DEBUG_MOVE
 		debug("starting new move");
 #endif
-		// Copy all settings to previous fragment, in case this fragment gets interrupted.
-		copy_fragment_settings(current_fragment, (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
-		current_fragment_pos = 0;
+		if (current_fragment_pos == 0) {
+			// Copy all settings to previous fragment, in case this fragment gets interrupted.
+			copy_fragment_settings(current_fragment, (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
+		}
 		//debug("curf1 %d", current_fragment);
 		// Reset time.
 		settings[current_fragment].hwtime = 0;

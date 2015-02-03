@@ -57,6 +57,9 @@ static inline void debug(char const *fmt, ...);
 #endif
 #define F(x) &(x)
 
+#define arch_cli cli
+#define arch_sei sei
+
 inline void SET_OUTPUT(uint8_t pin_no);
 inline void SET_INPUT(uint8_t pin_no);
 inline void UNSET(uint8_t pin_no);
@@ -74,6 +77,7 @@ EXTERN Pin_t pin[NUM_DIGITAL_PINS];
 
 // Serial communication. {{{
 static inline void debug_add(int i);
+static inline void debug_dump();
 #define SERIAL_BUFFER_SIZE (COMMAND_BUFFER_SIZE + 10)
 EXTERN volatile bool serial_overflow;
 EXTERN volatile uint8_t which_serial;
@@ -94,6 +98,16 @@ static inline void serial_write(uint8_t data) {
 		UDR1 = data;
 	}
 #endif
+}
+
+inline static void clear_overflow() {
+	command_end = 0;
+	serial_buffer_head = 0;
+	serial_buffer_tail = 0;
+	serial_overflow = false;
+	debug("serial flushed after overflow");
+	debug_dump();
+	serial_write(CMD_NACK);
 }
 
 static inline uint16_t serial_available() {
@@ -119,6 +133,20 @@ static inline void serial_flush() {
 	else if (which_serial == 1)
 		while (~UCSR1A & (1 << TXC1)) {}
 #endif
+}
+
+static inline void arch_write_current_pos(uint8_t offset) {
+	cli();
+	for (uint8_t m = 0; m < active_motors; ++m)
+		*reinterpret_cast <int32_t *>(&pending_packet[offset + 4 * m]) = motor[m].current_pos;
+	sei();
+}
+
+static inline void arch_record_sense(bool state) {
+	cli();
+	for (int mi = 0; mi < active_motors; ++mi)
+		motor[mi].sense_pos[state ? 1 : 0] = motor[mi].current_pos;
+	sei();
 }
 
 #ifdef DEFINE_VARIABLES
@@ -426,10 +454,7 @@ static inline void set_speed(uint16_t count) {
 		}
 	}
 	stopped = (count == 0);
-	if (stopped) {
-		TIMSK1 = 0;
-	}
-	else {
+	if (!stopped) {
 		// Set TOP.
 		OCR1AH = (count >> 7) & 0xff;
 		OCR1AL = (count << 1) & 0xff;

@@ -341,7 +341,7 @@ void packet()
 		write_ack();
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment_pos;
-		cli();
+		arch_cli();
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].dir = DIR_NONE;
 			motor[m].next_steps = 0;
@@ -350,7 +350,7 @@ void packet()
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));
 		}
-		sei();
+		arch_sei();
 		reply_ready = 2 + 4 * active_motors;
 		filling = 0;
 		current_fragment = last_fragment;

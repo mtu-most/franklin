@@ -126,7 +126,7 @@ void packet()
 			for (uint8_t t = 0; t < num_spaces; ++t) {
 				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
 					RESET(spaces[t].motor[m]->enable_pin);
-					debug("cp0 1");
+					//debug("cp %d %d zero 1", t, m);
 					spaces[t].motor[m]->settings[current_fragment].current_pos = 0;
 				}
 				for (uint8_t a = 0; a < spaces[t].num_axes; ++a) {
@@ -282,7 +282,7 @@ void packet()
 		int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings[current_fragment].current_pos;
 		spaces[which].motor[t]->settings[current_fragment].current_pos += diff;
 		spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
-		debug("cp4 %d %d", spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
+		//debug("cp %d %d four %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
 		arch_addpos(which, t, diff);
 		//debug("setpos %d %d %d", which, t, F(spaces[which].motor[t]->settings[current_fragment].current_pos));
 		/*arch_stop();
