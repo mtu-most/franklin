@@ -1,7 +1,7 @@
 // vim: set foldmethod=marker :
 #include "cdriver.h"
 
-//#define DEBUG_MOVE
+#define DEBUG_MOVE
 
 // Set up:
 // start_time		utime() at start of move.
@@ -340,6 +340,11 @@ uint8_t next_move() {
 		settings[current_fragment].hwtime = 0;
 		settings[current_fragment].last_time = 0;
 		settings[current_fragment].last_current_time = 0;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = spaces[s];
+			for (uint8_t a = 0; a < sp.num_axes; ++a)
+				sp.axis[a]->settings[current_fragment].source = sp.axis[a]->settings[current_fragment].current;
+		}
 #ifdef DEBUG_PATH
 		fprintf(stderr, "\n");
 #endif

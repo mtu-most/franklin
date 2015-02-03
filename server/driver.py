@@ -953,7 +953,7 @@ class Printer: # {{{
 				p = chr(protocol.command['GOTOCB'])
 			else:
 				p = chr(protocol.command['GOTO'])
-			#log('queueing %s' % repr((axes, f0, f1, cb, self.flushing)))
+			log('queueing %s' % repr((axes, f0, f1, cb, self.flushing)))
 			self._send_packet(p + ''.join([chr(t) for t in targets]) + args, move = True)
 			if id is not None:
 				self._send(id, 'return', None)
