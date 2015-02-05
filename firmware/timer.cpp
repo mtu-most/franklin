@@ -134,7 +134,7 @@ void handle_motors() {
 			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 			if (last_fragment == new_current_fragment) {
 				// Underrun.
-				debug("underrun for %d", last_fragment);
+				//debug("underrun for %d", last_fragment);
 				underrun = true;
 				for (uint8_t m = 0; m < active_motors; ++m)
 					motor[m].next_next_steps = 0;

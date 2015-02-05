@@ -2318,6 +2318,9 @@ class Printer: # {{{
 			return float('nan')
 		return self.spaces[space].get_current_pos(axis)
 	def set_axis_pos(self, space, axis, pos):
+		if space >= len(self.spaces) or axis >= len(self.spaces[space].axis):
+			log('request to set invalid axis position %d %d' % (space, axis))
+			return False
 		return self.spaces[space].set_current_pos(axis, pos)
 	def get_space(self, space):
 		ret = {'name': self.spaces[space].name, 'num_axes': len(self.spaces[space].axis), 'num_motors': len(self.spaces[space].motor), 'type': self.spaces[space].type, 'max_deviation': self.spaces[space].max_deviation}

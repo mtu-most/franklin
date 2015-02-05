@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-#define DEBUG_DATA
+//#define DEBUG_DATA
 //#define DEBUG_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
@@ -138,7 +138,7 @@ void serial(uint8_t which)
 						out_busy = false;
 						if (start_pending) {
 							start_pending = false;
-							arch_start_move();
+							arch_start_move(0);
 						}
 						else if (stop_pending) {
 							stop_pending = false;

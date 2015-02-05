@@ -49,7 +49,7 @@ uint8_t next_move() {
 					sp.axis[aa]->settings[current_fragment].current = sp.axis[aa]->settings[current_fragment].source;
 				break;
 			}
-#ifndef DEBUG_MOVE
+#ifdef DEBUG_MOVE
 			else
 				debug("non-nan: %d %d %f %d", s, a, F(sp.axis[a]->settings[current_fragment].source), sp.motor[a]->settings[current_fragment].current_pos);
 #endif
@@ -298,6 +298,7 @@ uint8_t next_move() {
 	settings[current_fragment].f2 = 1 - settings[current_fragment].fp - settings[current_fragment].f1;
 
 	// Finish. {{{
+	bool anything = false;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		//debug("space %d axes %d motors %d", s, sp.num_axes, sp.num_motors);
@@ -309,13 +310,31 @@ uint8_t next_move() {
 				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist;
 			else
 				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist + sp.axis[a]->settings[current_fragment].next_dist;
-#ifndef DEBUG_MOVE
+#ifdef DEBUG_MOVE
 			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d hw = %d current = %f", s, a, F(sp.axis[a]->settings[current_fragment].dist), F(sp.axis[a]->settings[current_fragment].main_dist), F(sp.axis[a]->settings[current_fragment].next_dist), sp.motor[a]->settings[current_fragment].current_pos, sp.motor[a]->settings[current_fragment].hwcurrent_pos, sp.axis[a]->settings[current_fragment].current);
 #endif
 		}
 		bool ok = true;
 		// Using NULL as target fills endpos.
 		space_types[sp.type].xyz2motors(&sp, NULL, &ok);
+		for (int m = 0; m < sp.num_motors; ++m) {
+			float ep = sp.motor[m]->settings[current_fragment].endpos * sp.motor[m]->steps_per_m;
+			int iep = int(ep + (ep > 0 ? .49 : -.49));
+			if (sp.motor[m]->settings[current_fragment].current_pos != iep)
+				anything = true;
+			//debug("any %d %d %d %d %d", s, m, anything, sp.motor[m]->settings[current_fragment].current_pos, iep);
+		}
+	}
+	if (!anything) {
+		num_cbs += cbs_after_current_move;
+		cbs_after_current_move = 0;
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			Space &sp = spaces[s];
+			for (uint8_t a = 0; a < sp.num_axes; ++a)
+				sp.axis[a]->settings[current_fragment].dist = NAN;
+		}
+		settings[current_fragment].fq = 0;
+		return num_cbs + next_move();
 	}
 	if (!motors_busy) {
 		for (uint8_t s = 0; s < num_spaces; ++s) {

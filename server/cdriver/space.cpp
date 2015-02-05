@@ -515,7 +515,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 			}
 			float target = mtr.settings[current_fragment].current_pos / mtr.steps_per_m + mtr.settings[current_fragment].target_dist * factor;
 			movedebug("ccp3 %d %d stopping %d curpos %d target %f lastv %f spm %f tdist %f factor %f frag %d", s, m, stopping, mtr.settings[current_fragment].current_pos, F(target), F(mtr.settings[current_fragment].last_v), mtr.steps_per_m, mtr.settings[current_fragment].target_dist, factor, current_fragment);
-			if (fabs(mtr.settings[current_fragment].target_dist * factor) > .01)
+			if (fabs(mtr.settings[current_fragment].target_dist * factor) > .01)	// XXX: This shouldn't ever happen on my printer, but shouldn't be a limitation.
 				abort();
 			int new_cp = target * mtr.steps_per_m + (target > 0 ? .49 : -.49);
 			if (mtr.settings[current_fragment].current_pos != new_cp)
@@ -536,10 +536,8 @@ static void handle_motors(unsigned long long current_time) { // {{{
 	}
 	float factor = 1;
 	float t = (current_time - settings[current_fragment].start_time) / 1e6;
-	//buffered_debug("f%f %f %f %ld %ld", F(t), F(t0), F(tp), F(long(current_time)), F(long(settings[current_fragment].start_time)));
 	if (t >= settings[current_fragment].t0 + settings[current_fragment].tp) {	// Finish this move and prepare next.
 		movedebug("finishing %f %f %f %ld %ld", F(t), F(settings[current_fragment].t0), F(settings[current_fragment].tp), F(long(current_time)), F(long(settings[current_fragment].start_time)));
-		//buffered_debug("a");
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -547,11 +545,9 @@ static void handle_motors(unsigned long long current_time) { // {{{
 					//debug("before source %d %f %f", a, F(sp.axis[a]->settings[current_fragment].source), F(sp.axis[a]->settings[current_fragment].dist));
 					sp.axis[a]->settings[current_fragment].source += sp.axis[a]->settings[current_fragment].dist;
 					sp.axis[a]->settings[current_fragment].dist = NAN;
-					// Set this here, so it isn't set if dist was NaN to begin with.
-					// Note that target is not set for future iterations, but it isn't changed.
-					sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source;
 					//debug("after source %d %f %f %d %f", a, F(sp.axis[a]->settings[current_fragment].target), F(sp.axis[a]->settings[current_fragment].dist), F(sp.motor[a]->settings[current_fragment].current_pos), F(factor));
 				}
+				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source;
 			}
 			move_axes(&sp, current_time, factor);
 			//debug("f %f", F(factor));
@@ -562,30 +558,24 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		// Start time may have changed; recalculate t.
 		t = (current_time - settings[current_fragment].start_time) / 1e6;
 		if (t / (settings[current_fragment].t0 + settings[current_fragment].tp) >= done_factor) {
-			//buffered_debug("b");
 			uint8_t had_cbs = cbs_after_current_move;
 			cbs_after_current_move = 0;
 			if (queue_start != queue_end || queue_full) {
 				had_cbs += next_move();
-				//buffered_debug("c");
-				//debug("movecb 1");
 				if (!aborting && had_cbs > 0)
 					settings[current_fragment].cbs += had_cbs;
 				return;
 			}
-			//buffered_debug("d");
 			cbs_after_current_move += had_cbs;
 			if (factor == 1) {
 				stopped = true;
 				if (!did_steps)
 					moving = false;
-				//buffered_debug("e");
 				for (uint8_t s = 0; s < num_spaces; ++s) {
 					Space &sp = spaces[s];
 					for (uint8_t m = 0; m < sp.num_motors; ++m)
 						sp.motor[m]->settings[current_fragment].last_v = 0;
 				}
-				//debug("movecb 1");
 				if (cbs_after_current_move > 0) {
 					if (!aborting)
 						settings[current_fragment].cbs += cbs_after_current_move;
@@ -710,7 +700,7 @@ static void set_current_fragment(int fragment) {
 }
 
 void send_fragment() {
-	if (current_fragment_pos <= 0 || stopping)
+	if (current_fragment_pos <= 0 || stopping || sending_fragment)
 		return;
 	if (settings[current_fragment].num_active_motors == 0) {
 		debug("sending fragment for 0 motors at position %d", current_fragment_pos);
@@ -727,7 +717,7 @@ void send_fragment() {
 	arch_send_fragment(f);
 	sending_fragment = false;
 	if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
-		arch_start_move();
+		arch_start_move(0);
 }
 
 void apply_tick() {
@@ -752,8 +742,6 @@ void apply_tick() {
 					value = 0;
 					abort();
 				}
-				if (value > 0x20)
-					abort();
 			}
 			if (current_fragment_pos >= 0)
 				mtr.settings[current_fragment].data[current_fragment_pos] = value;
@@ -826,11 +814,11 @@ void buffer_refill() {
 		//debug("aborting refill for stopping");
 		return;
 	}
-	if (stopped && current_fragment_pos > 0) {
+	if (!moving && current_fragment_pos > 0) {
 		//debug("finalize");
 		send_fragment();
 	}
 	//debug("free %d/%d", free_fragments, FRAGMENTS_PER_BUFFER);
-	arch_start_move();
+	arch_start_move(0);
 }
 // }}}

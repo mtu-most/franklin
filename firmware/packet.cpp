@@ -305,6 +305,11 @@ void packet()
 			write_stall();
 			return;
 		}
+		if (current_fragment == last_fragment) {
+			debug("Received START while buffer is empty");
+			write_stall();
+			return;
+		}
 		write_ack();
 		current_fragment_pos = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
@@ -343,7 +348,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_STOP");
 #endif
-		debug("sp %d %d %d", steps_prepared, stopped, underrun);
+		//debug("sp %d %d %d", steps_prepared, stopped, underrun);
 		steps_prepared = 0;
 		set_speed(0);
 		homers = 0;
@@ -358,7 +363,7 @@ void packet()
 			motor[m].next_next_steps = 0;
 			motor[m].steps_current = 0;
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
-			debug("cp %d %ld", m, F(motor[m].current_pos));
+			//debug("cp %d %ld", m, F(motor[m].current_pos));
 		}
 		reply_ready = 2 + 4 * active_motors;
 		filling = 0;
