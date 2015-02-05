@@ -1800,7 +1800,6 @@ class Printer: # {{{
 	# }}}
 	def export_settings(self): # {{{
 		message = '[general]\r\n'
-		#message += 'name=' + self.name.replace('\\', '\\\\').replace('\n', '\\n') + '\r\n' # TODO: migrate to part names.
 		for t in ('spaces', 'temps', 'gpios'):
 			message += 'num_%s = %d\r\n' % (t, len(getattr(self, t)))
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'probe_pin')])

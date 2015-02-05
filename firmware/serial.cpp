@@ -383,17 +383,15 @@ void try_send_next()
 		send_packet();
 		return;
 	}
-	if (notified_current_fragment != current_fragment) {
-		if (underrun) {
+	if (notified_current_fragment != current_fragment && (!underrun || stopped)) {
+		if (underrun)
 			pending_packet[0] = CMD_UNDERRUN;
-			underrun = false;
-		}
 		else
 			pending_packet[0] = CMD_DONE;
-		debug("done %x", motor[3].current_pos);
-		pending_packet[1] = (current_fragment - notified_current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		uint8_t num = (current_fragment - notified_current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		pending_packet[1] = num;
 		//debug("done %d %d %d", current_fragment, notified_current_fragment, last_fragment);
-		notified_current_fragment = current_fragment;
+		notified_current_fragment = (notified_current_fragment + num) % FRAGMENTS_PER_BUFFER;
 		prepare_packet(2);
 		send_packet();
 		return;

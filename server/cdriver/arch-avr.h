@@ -156,6 +156,7 @@ EXTERN uint8_t *avr_control_queue;
 EXTERN bool *avr_in_control_queue;
 EXTERN int avr_control_queue_length;
 EXTERN bool avr_connected;
+EXTERN bool avr_homing;
 // }}}
 
 // Time handling.  {{{
@@ -188,6 +189,7 @@ static inline uint32_t millis() {
 
 // Serial port communication. {{{
 static inline void avr_send();
+static inline void arch_start_move();
 
 static inline void try_send_control() {
 	if (out_busy || avr_control_queue_length == 0)
@@ -246,11 +248,12 @@ static inline void avr_get_reply() {
 	avr_write_ack("reply");
 }
 
-static inline void avr_get_current_pos(int offset) {
+static inline void avr_get_current_pos(int offset, bool check) {
 	int mi = 0;
 	for (int ts = 0; ts < num_spaces; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
-			debug("cpb %d %d %x %x %x", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
+			int old = spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos;
+			cpdebug("cpb %d %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
 			spaces[ts].motor[tm]->settings[current_fragment].current_pos = 0;
 			for (int i = 0; i < 4; ++i) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
@@ -259,7 +262,9 @@ static inline void avr_get_current_pos(int offset) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos *= -1;
 			spaces[ts].motor[tm]->settings[current_fragment].current_pos -= avr_pos_offset[tm + mi];
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			debug("cpa %d %d %x %x %x", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
+			cpdebug("cpa %d %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
+			if (check && old != spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos)
+				abort();
 		}
 	}
 }
@@ -303,15 +308,18 @@ static inline void hwpacket(int len) {
 		else
 			offset = 2;
 		if (limit) {
+			avr_homing = false;
 			abort_move(pos - 1);
-			avr_get_current_pos(offset);
+			avr_get_current_pos(offset, false);
+			stopping = 2;
 			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_m);
 			cbs_after_current_move = 0;
 			avr_running = false;
+			//debug("free limit");
 			free_fragments = FRAGMENTS_PER_BUFFER - 1;
 		}
 		else {
-			avr_get_current_pos(offset);
+			avr_get_current_pos(offset, false);
 			spaces[s].motor[m]->sense_state = 1;
 			send_host(CMD_SENSE, s, m, 0, (command[1][0] & ~0x10) == HWC_SENSE1);
 		}
@@ -339,11 +347,17 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_UNDERRUN:
 	{
-		if (!moving)
+		if (!avr_running) {
 			debug("unexpected underrun?");
-		//else
-			//debug("underrun");
+			abort();
+		}
 		avr_running = false;
+		if (moving) {
+			debug("underrun");
+			if (stopped)
+				arch_start_move();
+			// Buffer is too slow with refilling; this will fix itself.
+		}
 		// Fall through.
 	}
 	case HWC_DONE:
@@ -356,15 +370,22 @@ static inline void hwpacket(int len) {
 		}
 		first_fragment = -1;
 		int cbs = 0;
-		for (int i = 0; i < command[1][1]; ++i)
-			cbs += settings[(current_fragment + free_fragments + i + 1) % FRAGMENTS_PER_BUFFER].cbs;
+		for (int i = 0; i < command[1][1]; ++i) {
+			int f = (current_fragment + free_fragments + i + 1) % FRAGMENTS_PER_BUFFER;
+			//debug("fragment %d: cbs=%d free=%d current=%d", f, settings[f].cbs, free_fragments, current_fragment);
+			cbs += settings[f].cbs;
+		}
 		if (cbs)
 			send_host(CMD_MOVECB, cbs);
 		free_fragments += command[1][1];
+		if (free_fragments == FRAGMENTS_PER_BUFFER - 1 && (command[1][0] & ~0x10) == HWC_DONE)
+			abort();
+		//debug("fragments free=%d current=%d", free_fragments, current_fragment);
 		if (free_fragments >= FRAGMENTS_PER_BUFFER) {
-			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]));
+			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]) - 1);
 			free_fragments = FRAGMENTS_PER_BUFFER - 1;
 			avr_write_ack("invalid done");
+			abort();
 		}
 		else
 			avr_write_ack("done");
@@ -374,7 +395,8 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_HOMED:
 	{
-		avr_get_current_pos(1);
+		avr_homing = false;
+		avr_get_current_pos(1, false);
 		avr_write_ack("homed");
 		send_host(CMD_HOMED);
 		return;
@@ -589,6 +611,7 @@ static inline void arch_setup_start(char const *port) {
 	avr_wait_for_reply = false;
 	avr_adc = NULL;
 	avr_running = false;
+	avr_homing = false;
 	NUM_ANALOG_INPUTS = 0;
 	avr_pong = ~0;
 	avr_limiter_space = -1;
@@ -684,10 +707,11 @@ static inline void arch_reconnect(char *port) {
 
 // Running hooks. {{{
 static inline void arch_addpos(uint8_t s, uint8_t m, int diff) {
+	int mi = m;
 	for (uint8_t st = 0; st < s; ++st)
-		m += spaces[st].num_motors;
-	avr_pos_offset[m] -= diff;
-	debug("setpos %x %x %x", m, diff, avr_pos_offset[m]);
+		mi += spaces[st].num_motors;
+	avr_pos_offset[mi] -= diff;
+	debug("setpos %d %d %d %d %d %d %d", s, m, diff, avr_pos_offset[m], spaces[s].motor[m]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[mi], spaces[s].motor[m]->settings[current_fragment].hwcurrent_pos, spaces[s].motor[m]->settings[current_fragment].current_pos);
 }
 
 static inline void arch_send_fragment(int fragment) {
@@ -704,7 +728,7 @@ static inline void arch_send_fragment(int fragment) {
 		for (uint8_t m = 0; !stopping && m < spaces[s].num_motors; ++m) {
 			if (spaces[s].motor[m]->settings[fragment].dir == 0)
 				continue;
-			//debug("sending %d %d %d %d", s, m, spaces[s].motor[m]->settings[fragment].dir, settings[fragment].fragment_length);
+			debug("sending %d %d %d %d %d", s, m, spaces[s].motor[m]->settings[fragment].dir, settings[fragment].fragment_length, spaces[s].motor[m]->settings[fragment].current_pos);
 			avr_buffer[0] = HWC_MOVE;
 			avr_buffer[1] = mi + m;
 			avr_buffer[2] = ((spaces[s].motor[m]->settings[fragment].dir < 0) ^ (spaces[s].motor[m]->dir_pin.inverted()) ? 1 : 0);
@@ -717,7 +741,11 @@ static inline void arch_send_fragment(int fragment) {
 }
 
 static inline void arch_start_move() {
-	if (avr_running || stopping)
+	if (out_busy) {
+		start_pending = true;
+		return;
+	}
+	if (avr_running || stopping || avr_homing || free_fragments >= FRAGMENTS_PER_BUFFER - 1 - (sending_fragment ? 1 : 0))
 		return;
 	avr_running = true;
 	avr_buffer[0] = HWC_START;
@@ -730,6 +758,7 @@ static inline bool arch_running() {
 }
 
 static inline void arch_stop() {
+	avr_homing = false;
 	if (out_busy) {
 		stop_pending = true;
 		return;
@@ -742,11 +771,13 @@ static inline void arch_stop() {
 	prepare_packet(avr_buffer, 1);
 	avr_send();
 	avr_get_reply();
+	bool check = !moving;
 	abort_move(command[1][1] - 1);
-	avr_get_current_pos(2);
+	avr_get_current_pos(2, check);
 }
 
 static inline void arch_home() {
+	avr_homing = true;
 	avr_buffer[0] = HWC_HOME;
 	int speed = 10000;	// μs/step.
 	for (int i = 0; i < 4; ++i)

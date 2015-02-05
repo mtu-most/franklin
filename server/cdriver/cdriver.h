@@ -342,7 +342,8 @@ EXTERN int16_t audio_us_per_sample;
 EXTERN bool moving, aborting, stopped;
 EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.
-EXTERN bool stop_pending;
+EXTERN bool sending_fragment;	// To compute how many fragments are in use from free_fragments.
+EXTERN bool start_pending, stop_pending;
 EXTERN float done_factor;
 EXTERN uint8_t requested_temp;
 EXTERN bool refilling;
@@ -362,6 +363,8 @@ void buffered_debug(char const *fmt, ...);
 #define buffered_debug debug
 #define buffered_debug_flush() do {} while(0)
 #endif
+//#define cpdebug debug
+#define cpdebug(...) do {} while(0)
 
 // packet.cpp
 void packet();	// A command packet has arrived; handle it.
@@ -393,7 +396,7 @@ void write_float(int32_t &address, float data);
 void handle_temp(int id, int temp);
 
 // space.cpp
-void reset_dirs(int fragment);
+void reset_dirs(int fragment, bool allow_new);
 void buffer_refill();
 void copy_fragment_settings(int src, int dst);
 void apply_tick();

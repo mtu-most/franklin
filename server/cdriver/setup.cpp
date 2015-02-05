@@ -36,12 +36,14 @@ void setup(char const *port, char const *run_id)
 	free_fragments = 0;
 	refilling = false;
 	current_fragment = 0;
-	current_fragment_pos = 0;
+	current_fragment_pos = -1;
 	hwtime_step = 3000;	// TODO: make this dynamic.
 	moving = false;
 	aborting = false;
 	stopped = true;
 	stopping = 0;
+	sending_fragment = false;
+	start_pending = false;
 	stop_pending = false;
 	cbs_after_current_move = 0;
 	which_autosleep = 0;

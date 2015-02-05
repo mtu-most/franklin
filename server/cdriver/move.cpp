@@ -49,7 +49,7 @@ uint8_t next_move() {
 					sp.axis[aa]->settings[current_fragment].current = sp.axis[aa]->settings[current_fragment].source;
 				break;
 			}
-#ifdef DEBUG_MOVE
+#ifndef DEBUG_MOVE
 			else
 				debug("non-nan: %d %d %f %d", s, a, F(sp.axis[a]->settings[current_fragment].source), sp.motor[a]->settings[current_fragment].current_pos);
 #endif
@@ -309,7 +309,7 @@ uint8_t next_move() {
 				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist;
 			else
 				sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist + sp.axis[a]->settings[current_fragment].next_dist;
-#ifdef DEBUG_MOVE
+#ifndef DEBUG_MOVE
 			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d hw = %d current = %f", s, a, F(sp.axis[a]->settings[current_fragment].dist), F(sp.axis[a]->settings[current_fragment].main_dist), F(sp.axis[a]->settings[current_fragment].next_dist), sp.motor[a]->settings[current_fragment].current_pos, sp.motor[a]->settings[current_fragment].hwcurrent_pos, sp.axis[a]->settings[current_fragment].current);
 #endif
 		}
@@ -332,7 +332,7 @@ uint8_t next_move() {
 #ifdef DEBUG_MOVE
 		debug("starting new move");
 #endif
-		if (current_fragment_pos == 0) {
+		if (current_fragment_pos <= 0) {
 			// Copy all settings to previous fragment, in case this fragment gets interrupted.
 			copy_fragment_settings(current_fragment, (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
 		}
@@ -369,6 +369,7 @@ void abort_move(int pos) { // {{{
 	if (!stopped && pos < 0 && first_fragment != f) {
 		f = prev_f;
 		free_fragments += 1;
+		//debug("free abort +1 %d", free_fragments);
 		pos += settings[f].fragment_length;
 		prev_f = (f - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	}
@@ -380,8 +381,9 @@ void abort_move(int pos) { // {{{
 #ifdef DEBUG_MOVE
 	debug("move no longer prepared");
 #endif
+	//debug("free abort reset");
 	free_fragments = FRAGMENTS_PER_BUFFER - 1;
-	current_fragment_pos = 0;
+	current_fragment_pos = -1;
 	moving = true;
 	while (current_fragment_pos < pos)
 		apply_tick();
@@ -390,7 +392,7 @@ void abort_move(int pos) { // {{{
 	copy_fragment_settings(f, prev_f);
 	moving = false;
 	stopped = true;
-	reset_dirs(f);
+	reset_dirs(f, false);
 	//debug("curf3 %d", current_fragment);
 	//debug("aborting move");
 	for (uint8_t s = 0; s < num_spaces; ++s) {

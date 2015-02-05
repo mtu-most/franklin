@@ -49,7 +49,7 @@ void setup()
 	current_len = 0;
 	stopped = true;
 	stopping = false;
-	underrun = false;
+	underrun = true;
 	active_motors = 0;
 	steps_prepared = 0;
 	move_phase = 0;

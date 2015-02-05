@@ -195,8 +195,8 @@ ISR(USART1_RX_vect) {
 // Debugging. {{{
 #ifndef NO_DEBUG
 #define AVR_NUM_DEBUG 20
-EXTERN int avr_debug[AVR_NUM_DEBUG];
-EXTERN int avr_debug_ptr;
+EXTERN volatile int avr_debug[AVR_NUM_DEBUG];
+EXTERN volatile int avr_debug_ptr;
 static inline void debug_add(int i) {
 	avr_debug[avr_debug_ptr] = i;
 	avr_debug_ptr = (avr_debug_ptr + 1) % AVR_NUM_DEBUG;
@@ -208,18 +208,24 @@ static inline void debug_dump() {
 		debug("%x", avr_debug[(avr_debug_ptr + i) % AVR_NUM_DEBUG]);
 	debug("dump done");
 }
-static inline void print_num(uint32_t num, int base) {
+static inline void print_num(int32_t num, int base) {
+	uint32_t anum;
+	if (num < 0) {
+		serial_write('-');
+		anum = -num;
+	}
+	else
+		anum = num;
 	int digits = 1;
-	num &= 0x00ffffff;
 	uint32_t power = base;
-	while (num / power > 0) {
+	while (anum / power > 0) {
 		digits += 1;
 		power *= base;
 	}
 	power /= base;
 	for (int d = 0; d < digits; ++d) {
-		uint8_t c = num / power;
-		num -= c * power;
+		uint8_t c = anum / power;
+		anum -= c * power;
 		power /= base;
 		serial_write(c < 10 ? '0' + c : 'a' + c - 10);
 	}
@@ -253,22 +259,22 @@ static inline void debug(char const *fmt, ...) {
 				}
 				case 'd': {
 					if (longvalue) {
-						uint32_t *arg = va_arg(ap, uint32_t *);
+						int32_t *arg = va_arg(ap, int32_t *);
 						print_num(*arg, 10);
 					}
 					else {
-						int arg = va_arg(ap, int);
+						int16_t arg = va_arg(ap, int16_t);
 						print_num(arg, 10);
 					}
 					break;
 				}
 				case 'x': {
 					if (longvalue) {
-						uint32_t *arg = va_arg(ap, uint32_t *);
+						int32_t *arg = va_arg(ap, int32_t *);
 						print_num(*arg, 16);
 					}
 					else {
-						int arg = va_arg(ap, int);
+						int arg = va_arg(ap, int16_t);
 						print_num(arg, 16);
 					}
 					break;
@@ -445,8 +451,6 @@ static inline void arch_setup_end() {
 }
 
 static inline void set_speed(uint16_t count) {
-	debug_add(0xff);
-	debug_add(count);
 	if (homers == 0) {
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].next_steps = 0;
@@ -454,6 +458,7 @@ static inline void set_speed(uint16_t count) {
 		}
 	}
 	stopped = (count == 0);
+	underrun = stopped;
 	if (!stopped) {
 		// Set TOP.
 		OCR1AH = (count >> 7) & 0xff;

@@ -1,6 +1,7 @@
 #include "cdriver.h"
 
 #define DEBUG_DATA
+//#define DEBUG_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
@@ -57,7 +58,9 @@ static void send_to_host() {
 	hostqueue_head = r->next;
 	if (!hostqueue_head)
 		hostqueue_tail = NULL;
-	//debug("sending to host cmd %x", r->cmd);
+#ifdef DEBUG_HOST
+	debug("host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->r.s, r->r.m, r->r.e, r->r.f, r->len);
+#endif
 	serialdev[0]->write(18 + r->len);
 	serialdev[0]->write(r->cmd);
 	for (unsigned i = 0; i < sizeof(Record); ++i)
@@ -133,7 +136,11 @@ void serial(uint8_t which)
 #endif
 						//debug("recv ack");
 						out_busy = false;
-						if (stop_pending) {
+						if (start_pending) {
+							start_pending = false;
+							arch_start_move();
+						}
+						else if (stop_pending) {
 							stop_pending = false;
 							arch_stop();
 						}
@@ -239,6 +246,14 @@ void serial(uint8_t which)
 #ifdef DEBUG_DATA
 		if (which == 1) {
 			fprintf(stderr, "recv:");
+			for (uint8_t i = 0; i < command_end[which]; ++i)
+				fprintf(stderr, " %02x", command[which][i]);
+			fprintf(stderr, "\n");
+		}
+#endif
+#ifdef DEBUG_HOST
+		if (which == 0) {
+			fprintf(stderr, "host recv:");
 			for (uint8_t i = 0; i < command_end[which]; ++i)
 				fprintf(stderr, " %02x", command[which][i]);
 			fprintf(stderr, "\n");

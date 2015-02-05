@@ -87,7 +87,7 @@ int main(void) {
 		// Send serial data, if any.
 		try_send_next();
 		// Motor precompute steps.
-		if (!stopped && steps_prepared < 2) {
+		if (steps_prepared < 2 && !underrun) {
 			last_active = seconds();
 			handle_motors();
 		}

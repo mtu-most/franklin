@@ -216,6 +216,7 @@ void packet()
 				motor[m].next_steps = 1;
 				motor[m].next_next_steps = 1;
 				motor[m].dir = fragment.dir;
+				motor[m].next_dir = fragment.dir;
 				homers += 1;
 			}
 		}
@@ -236,13 +237,17 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_START_MOVE");
 #endif
-		write_ack();
 		if (stopping) {
 			//debug("ignoring start move while stopping");
+			write_ack();
 			return;
 		}
-		if (filling > 0)
+		if (filling > 0) {
 			debug("START_MOVE seen while filling (%d)", filling);
+			write_stall();
+			return;
+		}
+		write_ack();
 		settings[last_fragment].len = command[1];
 		current_len = command[1];
 		filling = command[2];
@@ -264,23 +269,25 @@ void packet()
 			write_stall();
 			return;
 		}
-		write_ack();
 		if (stopping) {
 			//debug("ignoring move while stopping");
+			write_ack();
 			return;
 		}
+		if (filling == 0) {
+			debug("MOVE seen while not filling");
+			write_stall();
+			return;
+		}
+		write_ack();
 		Fragment &fragment = buffer[command[1]][last_fragment];
 		fragment.dir = Dir(command[2]);
-		for (uint8_t b = 0; b < settings[last_fragment].len; ++b) {
+		for (uint8_t b = 0; b < current_len; ++b) {
 			fragment.samples[b] = command[3 + b];
 		}
+		filling -= 1;
 		if (filling == 0)
-			debug("MOVE seen while not filling");
-		else {
-			filling -= 1;
-			if (filling == 0)
-				last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
-		}
+			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		return;
 	}
 	case CMD_START:
@@ -303,6 +310,7 @@ void packet()
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
 			motor[m].dir = fragment.dir;
+			motor[m].next_dir = fragment.dir;
 		}
 		set_speed(time_per_sample);
 		return;
@@ -335,29 +343,29 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_STOP");
 #endif
+		debug("sp %d %d %d", steps_prepared, stopped, underrun);
+		steps_prepared = 0;
 		set_speed(0);
 		homers = 0;
 		home_step_time = 0;
 		write_ack();
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment_pos;
-		arch_cli();
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].dir = DIR_NONE;
+			motor[m].next_dir = DIR_NONE;
 			motor[m].next_steps = 0;
 			motor[m].next_next_steps = 0;
 			motor[m].steps_current = 0;
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
-			//debug("cp %d %ld", m, F(motor[m].current_pos));
+			debug("cp %d %ld", m, F(motor[m].current_pos));
 		}
-		arch_sei();
 		reply_ready = 2 + 4 * active_motors;
 		filling = 0;
 		current_fragment = last_fragment;
 		notified_current_fragment = current_fragment;
 		//debug("stop new current %d", current_fragment);
 		current_fragment_pos = 0;
-		steps_prepared = 0;
 		return;
 	}
 	case CMD_DISCARD:

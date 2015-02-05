@@ -44,8 +44,13 @@ void do_steps() {
 		move_phase = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].steps_current = 0;
-			motor[m].next_steps = motor[m].next_next_steps;
+			if (steps_prepared == 2) {
+				motor[m].next_steps = motor[m].next_next_steps;
+				motor[m].dir = motor[m].next_dir;
+			}
 		}
+		if (steps_prepared == 1 && underrun)
+			set_speed(0);
 		steps_prepared -= 1;
 	}
 	lock = false;
@@ -91,7 +96,7 @@ void handle_motors() {
 			current_fragment_pos = 0;
 			set_speed(0);
 			filling = 0;
-			current_fragment = last_fragment;
+			last_fragment = current_fragment;
 			notified_current_fragment = current_fragment;
 			stopping = true;
 			for (uint8_t mc = 0; mc < active_motors; ++mc)
@@ -115,6 +120,7 @@ void handle_motors() {
 			}
 			// Limit pin no longer triggered.  Stop moving and possibly notify host.
 			motor[m].dir = DIR_NONE;
+			motor[m].next_dir = DIR_NONE;
 			fragment.dir = DIR_NONE;
 			if (!--homers)
 				set_speed(0);
@@ -123,25 +129,25 @@ void handle_motors() {
 	else {
 		// Regular move.  (Not homing.)
 		// Move to next buffer.
-		while (!stopped && current_fragment_pos >= settings[current_fragment].len) {
+		while (!underrun && current_fragment_pos >= settings[current_fragment].len) {
 			current_fragment_pos -= settings[current_fragment].len;
 			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 			if (last_fragment == new_current_fragment) {
 				// Underrun.
-				//debug("underrun");
-				set_speed(0);
+				debug("underrun for %d", last_fragment);
 				underrun = true;
+				for (uint8_t m = 0; m < active_motors; ++m)
+					motor[m].next_next_steps = 0;
 			}
 			else {
 				for (uint8_t m = 0; m < active_motors; ++m) {
 					Fragment &fragment = buffer[motor[m].buffer][new_current_fragment];
-					motor[m].dir = fragment.dir;
+					motor[m].next_dir = fragment.dir;
 				}
 			}
 			current_fragment = new_current_fragment;
-			//debug("new fragment: %d", current_fragment);
 		}
-		if (!stopped) {
+		if (!underrun) {
 			for (uint8_t m = 0; m < active_motors; ++m) {
 				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
 				if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
@@ -151,14 +157,18 @@ void handle_motors() {
 			current_fragment_pos += 1;
 		}
 	}
-	if (!stopped) {
+	if (!underrun) {
 		if (steps_prepared == 0) {
 			move_phase = 0;
 			for (uint8_t m = 0; m < active_motors; ++m) {
 				motor[m].steps_current = 0;
+				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
 				if (homers == 0) {
-					motor[m].next_steps = motor[m].next_next_steps;
-					motor[m].next_next_steps = 0;
+					if (fragment.dir != DIR_NONE && fragment.dir != DIR_AUDIO) {
+						motor[m].next_steps = motor[m].next_next_steps;
+						motor[m].next_next_steps = 0;
+					}
+					motor[m].dir = motor[m].next_dir;
 				}
 			}
 		}
