@@ -160,7 +160,7 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Setting invalid temp %d", which);
-			abort();
+			//abort();
 			return;
 		}
 		temps[which].target[0] = get_float(3);
@@ -201,7 +201,7 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Waiting for invalid temp %d", which);
-			abort();
+			//abort();
 			return;
 		}
 		ReadFloat min, max;
@@ -225,12 +225,12 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Reading invalid temp %d", which);
-			abort();
+			//abort();
 			return;
 		}
 		if (!temps[which].thermistor_pin.valid()) {
 			debug("Reading temp %d with invalid thermistor", which);
-			abort();
+			//abort();
 			send_host(CMD_TEMP);
 			return;
 		}
@@ -246,7 +246,7 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Reading power of invalid temp %d", which);
-			abort();
+			//abort();
 			return;
 		}
 		uint32_t t = utime();

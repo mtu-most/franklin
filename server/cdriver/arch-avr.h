@@ -378,8 +378,10 @@ static inline void hwpacket(int len) {
 		if (cbs)
 			send_host(CMD_MOVECB, cbs);
 		free_fragments += command[1][1];
-		if (free_fragments == FRAGMENTS_PER_BUFFER - 1 && (command[1][0] & ~0x10) == HWC_DONE)
+		if (free_fragments == FRAGMENTS_PER_BUFFER - 1 && (command[1][0] & ~0x10) == HWC_DONE) {
+			debug("Done received, but should be underrun");
 			abort();
+		}
 		//debug("fragments free=%d current=%d", free_fragments, current_fragment);
 		if (free_fragments >= FRAGMENTS_PER_BUFFER) {
 			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]) - 1);
@@ -869,7 +871,7 @@ void AVRSerial::write(char c) {
 			break;
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
 			debug("write to avr failed: %d %s", ret, strerror(errno));
-			abort();
+			//abort();
 		}
 	}
 }

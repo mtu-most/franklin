@@ -515,8 +515,8 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 			}
 			float target = mtr.settings[current_fragment].current_pos / mtr.steps_per_m + mtr.settings[current_fragment].target_dist * factor;
 			movedebug("ccp3 %d %d stopping %d curpos %d target %f lastv %f spm %f tdist %f factor %f frag %d", s, m, stopping, mtr.settings[current_fragment].current_pos, F(target), F(mtr.settings[current_fragment].last_v), mtr.steps_per_m, mtr.settings[current_fragment].target_dist, factor, current_fragment);
-			if (fabs(mtr.settings[current_fragment].target_dist * factor) > .01)	// XXX: This shouldn't ever happen on my printer, but shouldn't be a limitation.
-				abort();
+			//if (fabs(mtr.settings[current_fragment].target_dist * factor) > .01)	// XXX: This shouldn't ever happen on my printer, but shouldn't be a limitation.
+				//abort();
 			int new_cp = target * mtr.steps_per_m + (target > 0 ? .49 : -.49);
 			if (mtr.settings[current_fragment].current_pos != new_cp)
 				have_steps = true;

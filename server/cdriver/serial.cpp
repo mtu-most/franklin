@@ -275,7 +275,7 @@ void serial(uint8_t which)
 				if ((sum & 0x7) != (t & 0x7))
 				{
 					debug("incorrect extra bit, size = %d t = %d", len, t);
-					abort();
+					//abort();
 					serialdev[which]->write(CMD_NACK);
 					return;
 				}
@@ -290,7 +290,7 @@ void serial(uint8_t which)
 					if (check & 1)
 					{
 						debug("incorrect checksum byte %d bit %d", t, bit);
-						abort();
+						//abort();
 			//fprintf(stderr, "err %d (%d %d):", which, len, t);
 			//for (uint8_t i = 0; i < len + (len + 2) / 3; ++i)
 			//	fprintf(stderr, " %02x", command[which][i]);
