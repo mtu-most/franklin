@@ -48,6 +48,7 @@ void packet()
 		if (queue_full)
 		{
 			debug("Host ignores wait request");
+			abort();
 			return;
 		}
 		uint8_t num = 2;
@@ -89,6 +90,7 @@ void packet()
 		if (isnan(F0) || isnan(F1) || F0 < 0 || F1 < 0 || (F0 == 0 && F1 == 0))
 		{
 			debug("Invalid F0 or F1: %f %f", F(F0), F(F1));
+			abort();
 			return;
 		}
 		queue[queue_end].cb = command[0][1] != CMD_GOTO;
@@ -123,6 +125,7 @@ void packet()
 			if (!stopped)
 			{
 				debug("Sleeping while moving");
+				abort();
 				return;
 			}
 			for (uint8_t t = 0; t < num_spaces; ++t) {
@@ -157,6 +160,7 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Setting invalid temp %d", which);
+			abort();
 			return;
 		}
 		temps[which].target[0] = get_float(3);
@@ -197,6 +201,7 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Waiting for invalid temp %d", which);
+			abort();
 			return;
 		}
 		ReadFloat min, max;
@@ -220,10 +225,12 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Reading invalid temp %d", which);
+			abort();
 			return;
 		}
 		if (!temps[which].thermistor_pin.valid()) {
 			debug("Reading temp %d with invalid thermistor", which);
+			abort();
 			send_host(CMD_TEMP);
 			return;
 		}
@@ -239,6 +246,7 @@ void packet()
 		if (which >= num_temps)
 		{
 			debug("Reading power of invalid temp %d", which);
+			abort();
 			return;
 		}
 		uint32_t t = utime();
@@ -261,11 +269,13 @@ void packet()
 		if (which >= num_spaces || t >= spaces[which].num_axes)
 		{
 			debug("Invalid axis for setting position: %d %d", which, t);
+			abort();
 			return;
 		}
 		if (!stopped)
 		{
 			debug("Setting position while moving");
+			abort();
 			return;
 		}
 		if (!motors_busy)
@@ -304,6 +314,7 @@ void packet()
 		if (which >= num_spaces || t >= spaces[which].num_axes)
 		{
 			debug("Getting position of invalid axis %d %d", which, t);
+			abort();
 			return;
 		}
 		if (isnan(spaces[which].axis[t]->settings[current_fragment].source)) {
@@ -342,6 +353,7 @@ void packet()
 		which = get_which();
 		if (which >= num_spaces) {
 			debug("Reading invalid space %d", which);
+			abort();
 			return;
 		}
 		spaces[which].save_info(addr);
@@ -358,6 +370,7 @@ void packet()
 		uint8_t axis = command[0][3];
 		if (which >= num_spaces || axis >= spaces[which].num_axes) {
 			debug("Reading invalid axis %d %d", which, axis);
+			abort();
 			return;
 		}
 		spaces[which].save_axis(axis, addr);
@@ -374,6 +387,7 @@ void packet()
 		uint8_t motor = command[0][3];
 		if (which >= num_spaces || motor >= spaces[which].num_motors) {
 			debug("Reading invalid motor %d %d > %d %d", which, motor, num_spaces, which < num_spaces ? spaces[which].num_motors : -1);
+			abort();
 			return;
 		}
 		spaces[which].save_motor(motor, addr);
@@ -388,6 +402,7 @@ void packet()
 #endif
 		if (which >= num_spaces) {
 			debug("Writing invalid space %d", which);
+			abort();
 			return;
 		}
 		addr = 3;
@@ -403,6 +418,7 @@ void packet()
 #endif
 		if (which >= num_spaces || axis >= spaces[which].num_axes) {
 			debug("Writing invalid axis %d %d", which, axis);
+			abort();
 			return;
 		}
 		addr = 4;
@@ -418,6 +434,7 @@ void packet()
 #endif
 		if (which >= num_spaces || motor >= spaces[which].num_motors) {
 			debug("Writing invalid motor %d %d", which, motor);
+			abort();
 			return;
 		}
 		addr = 4;
@@ -433,6 +450,7 @@ void packet()
 		which = get_which();
 		if (which >= num_temps) {
 			debug("Reading invalid temp %d", which);
+			abort();
 			return;
 		}
 		temps[which].save(addr);
@@ -447,6 +465,7 @@ void packet()
 #endif
 		if (which >= num_temps) {
 			debug("Writing invalid temp %d", which);
+			abort();
 			return;
 		}
 		addr = 3;
@@ -462,6 +481,7 @@ void packet()
 		which = get_which();
 		if (which >= num_gpios) {
 			debug("Reading invalid gpio %d", which);
+			abort();
 			return;
 		}
 		gpios[which].save(addr);
@@ -476,6 +496,7 @@ void packet()
 #endif
 		if (which >= num_gpios) {
 			debug("Writing invalid gpio %d", which);
+			abort();
 			return;
 		}
 		addr = 3;
@@ -515,6 +536,7 @@ void packet()
 		if (which >= num_gpios)
 		{
 			debug("Reading invalid gpio %d", which);
+			abort();
 			return;
 		}
 		send_host(CMD_PIN, GET(gpios[which].pin, false) ? 1 : 0);
@@ -527,6 +549,7 @@ void packet()
 #endif
 		if (arch_connected()) {
 			debug("Unexpected reconnect");
+			abort();
 			return;
 		}
 		arch_reconnect(reinterpret_cast <char *>(&command[0][2]));
@@ -568,6 +591,7 @@ void packet()
 		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
 		{
 			debug("Audio buffer is full");
+			abort();
 			return;
 		}
 		for (uint8_t i = 0; i < AUDIO_FRAGMENT_SIZE; ++i)
@@ -585,6 +609,7 @@ void packet()
 	default:
 	{
 		debug("Invalid command %x %x %x %x", command[0][0], command[0][1], command[0][2], command[0][3]);
+		abort();
 		return;
 	}
 	}

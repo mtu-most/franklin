@@ -438,33 +438,30 @@ class Printer: # {{{
 	# }}}
 	def _send_packet(self, data, move = False, audio = False): # {{{
 		data = chr(len(data) + 1) + data
-		maxtries = 10
-		while maxtries > 0:
-			dprint('(1) writing', data);
-			self._printer_write(data)
-			if not move and not audio:
+		dprint('(1) writing', data);
+		self._printer_write(data)
+		if not move and not audio:
+			return True
+		start_time = time.time()
+		while True:
+			if not self.printer.available():
+				ret = select.select([self.printer], [], [self.printer], 1)
+				if self.printer not in ret[0] and self.printer not in ret[2]:
+					# No response; keep waiting.
+					log('no response yet: %s' % repr(ret))
+					assert time.time() - start_time < 10
+					continue
+			ret = self._printer_input()
+			if ret[0] == 'wait':
+				#log('wait')
+				if audio:
+					self.waitaudio = True
+				else:
+					self.wait = True
 				return True
-			while maxtries > 0:
-				if not self.printer.available():
-					ret = select.select([self.printer], [], [self.printer], 1)
-					if self.printer not in ret[0] and self.printer not in ret[2]:
-						# No response; retry.
-						log('no response')
-						maxtries -= 1
-						break
-				ret = self._printer_input()
-				if ret[0] == 'wait':
-					if audio:
-						self.waitaudio = True
-					else:
-						self.wait = True
-					return True
-				elif ret[0] == 'ok':
-					return True
-				#log('no response yet')
-				maxtries -= 1
-				continue
-		return False
+			elif ret[0] == 'ok':
+				return True
+			#log('no response yet')
 	# }}}
 	def _get_reply(self, cb = False): # {{{
 		while True:
@@ -510,8 +507,7 @@ class Printer: # {{{
 			packet = struct.pack('<BBB', protocol.command['READ_' + cmd], channel, sub)
 		else:
 			packet = struct.pack('<BB', protocol.command['READ_' + cmd], channel)
-		if not self._send_packet(packet):
-			return None
+		self._send_packet(packet)
 		cmd, s, m, f, e, data = self._get_reply()
 		assert cmd == protocol.rcommand['DATA']
 		return data
@@ -552,8 +548,7 @@ class Printer: # {{{
 	# }}}
 	def _write_globals(self, ns, nt, ng, update = True): # {{{
 		data = struct.pack('<BBBHHffBHf', ns if ns is not None else len(self.spaces), nt if nt is not None else len(self.temps), ng if ng is not None else len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.timeout, self.feedrate)
-		if not self._send_packet(struct.pack('<B', protocol.command['WRITE_GLOBALS']) + data):
-			return False
+		self._send_packet(struct.pack('<B', protocol.command['WRITE_GLOBALS']) + data)
 		self._read_globals()
 		if update:
 			self._globals_update()
@@ -1268,11 +1263,7 @@ class Printer: # {{{
 				if self.audioid is not None:
 					self._send(self.audioid, 'return', True)
 				return
-			if not self._send_packet(chr(protocol.command['AUDIO_DATA']) + data, audio = True):
-				self.audiofile = None
-				if self.audioid is not None:
-					self._send(self.audioid, 'return', False)
-				return
+			self._send_packet(chr(protocol.command['AUDIO_DATA']) + data, audio = True)
 	# }}}
 	# Subclasses.  {{{
 	class Space: # {{{
@@ -1327,12 +1318,9 @@ class Printer: # {{{
 			return struct.pack('<HHHHHHfBfffB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_m'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
 		def set_current_pos(self, axis, pos):
 			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
-			if not self.printer._send_packet(struct.pack('<BBBf', protocol.command['SETPOS'], self.id, axis, pos)):
-				return False
-			return True
+			self.printer._send_packet(struct.pack('<BBBf', protocol.command['SETPOS'], self.id, axis, pos))
 		def get_current_pos(self, axis):
-			if not self.printer._send_packet(struct.pack('<BBB', protocol.command['GETPOS'], self.id, axis)):
-				return None
+			self.printer._send_packet(struct.pack('<BBB', protocol.command['GETPOS'], self.id, axis))
 			cmd, s, m, f, e, data = self.printer._get_reply()
 			assert cmd == protocol.rcommand['POS']
 			#log('get current pos %d %d: %f' % (self.id, axis, f))
@@ -1426,7 +1414,7 @@ class Printer: # {{{
 	# Useful commands.  {{{
 	def reset(self): # {{{
 		log('%s resetting and dying.' % self.uuid)
-		return self._send_packet(struct.pack('<BB', protocol.command['RESET'], 0))
+		self._send_packet(struct.pack('<BB', protocol.command['RESET'], 0))
 	# }}}
 	def die(self, reason): # {{{
 		log('%s dying as requested by host (%s).' % (self.uuid, reason))
@@ -1478,14 +1466,14 @@ class Printer: # {{{
 			self.position_valid = False
 			if update:
 				self._globals_update()
-		return self._send_packet(struct.pack('<BB', protocol.command['SLEEP'], sleeping))
+		self._send_packet(struct.pack('<BB', protocol.command['SLEEP'], sleeping))
 	# }}}
 	def settemp(self, channel, temp, update = True): # {{{
 		channel = int(channel)
 		self.temps[channel].value = temp
 		if update:
 			self._temp_update(channel)
-		return self._send_packet(struct.pack('<BBf', protocol.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
+		self._send_packet(struct.pack('<BBf', protocol.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
 	# }}}
 	def waittemp(self, channel, min, max = None): # {{{
 		channel = int(channel)
@@ -1493,15 +1481,14 @@ class Printer: # {{{
 			min = float('nan')
 		if max is None:
 			max = float('nan')
-		return self._send_packet(struct.pack('<BBff', protocol.command['WAITTEMP'], channel, min + C0 if not math.isnan(self.temps[channel].beta) else min, max + C0 if not math.isnan(self.temps[channel].beta) else max))
+		self._send_packet(struct.pack('<BBff', protocol.command['WAITTEMP'], channel, min + C0 if not math.isnan(self.temps[channel].beta) else min, max + C0 if not math.isnan(self.temps[channel].beta) else max))
 	# }}}
 	def readtemp(self, channel): # {{{
 		channel = int(channel)
 		if channel >= len(self.temps):
 			log('Trying to read invalid temp %d' % channel)
 			return float('nan')
-		if not self._send_packet(struct.pack('<BB', protocol.command['READTEMP'], channel)):
-			return None
+		self._send_packet(struct.pack('<BB', protocol.command['READTEMP'], channel))
 		cmd, s, m, f, e, data = self._get_reply()
 		assert cmd == protocol.rcommand['TEMP']
 		return f - (C0 if not math.isnan(self.temps[channel].beta) else 0)
@@ -1511,15 +1498,13 @@ class Printer: # {{{
 		if channel >= len(self.temps):
 			log('Trying to read invalid power %d' % channel)
 			return float('nan')
-		if not self._send_packet(struct.pack('<BB', protocol.command['READPOWER'], channel)):
-			return None
+		self._send_packet(struct.pack('<BB', protocol.command['READPOWER'], channel))
 		cmd, s, m, f, e, data = self._get_reply()
 		assert cmd == protocol.rcommand['POWER']
 		return s, m
 	# }}}
 	def readpin(self, pin): # {{{
-		if not self._send_packet(struct.pack('<BB', protocol.command['READPIN'], pin)):
-			return None
+		self._send_packet(struct.pack('<BB', protocol.command['READPIN'], pin))
 		cmd, s, m, f, e, data = self._get_reply()
 		assert cmd == protocol.rcommand['PIN']
 		return bool(s)
@@ -1571,9 +1556,7 @@ class Printer: # {{{
 	def pause(self, pausing = True, store = True, update = True): # {{{
 		was_paused = self.paused
 		if pausing:
-			if not self._send_packet(struct.pack('<BB', protocol.command['QUEUED'], True)):
-				log('failed to pause printer')
-				return False
+			self._send_packet(struct.pack('<BB', protocol.command['QUEUED'], True))
 			cmd, s, m, f, e, data = self._get_reply()
 			if cmd != protocol.rcommand['QUEUE']:
 				log('invalid reply to queued command')
@@ -1624,8 +1607,7 @@ class Printer: # {{{
 			self._globals_update()
 	# }}}
 	def queued(self): # {{{
-		if not self._send_packet(struct.pack('<BB', protocol.command['QUEUED'], False)):
-			return None
+		self._send_packet(struct.pack('<BB', protocol.command['QUEUED'], False))
 		cmd, s, m, f, e, data = self._get_reply()
 		if cmd != protocol.rcommand['QUEUE']:
 			log('invalid reply to queued command')
@@ -1698,8 +1680,7 @@ class Printer: # {{{
 					channels[(m0 + m) >> 3] |= 1 <<((m0 + m) & 0x7)
 			m0 += len(s.motor)
 		us_per_bit = self.audiofile.read(2)
-		if not self._send_packet(chr(protocol.command['AUDIO_SETUP']) + us_per_bit + ''.join([chr(x) for x in channels])):
-			return False
+		self._send_packet(chr(protocol.command['AUDIO_SETUP']) + us_per_bit + ''.join([chr(x) for x in channels]))
 		self.audio_id = id
 		self._audio_play()
 	# }}}

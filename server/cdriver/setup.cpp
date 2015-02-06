@@ -41,6 +41,7 @@ void setup(char const *port, char const *run_id)
 	moving = false;
 	aborting = false;
 	stopped = true;
+	prepared = false;
 	stopping = 0;
 	sending_fragment = false;
 	start_pending = false;

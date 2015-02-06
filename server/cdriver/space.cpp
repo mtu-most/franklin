@@ -704,7 +704,7 @@ void send_fragment() {
 		return;
 	if (settings[current_fragment].num_active_motors == 0) {
 		debug("sending fragment for 0 motors at position %d", current_fragment_pos);
-		//abort();
+		abort();
 	}
 	//debug("sending %d free %d", current_fragment, free_fragments);
 	settings[current_fragment].fragment_length = current_fragment_pos;
@@ -727,7 +727,7 @@ void apply_tick() {
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
 			int value = (mtr.settings[current_fragment].current_pos - mtr.settings[current_fragment].hwcurrent_pos) * mtr.settings[current_fragment].dir;
-			movedebug("%d %d cp %d hwcp %d cf %d value %d", s, m, mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos, current_fragment, value);
+			//debug("%d %d cp %d hwcp %d cf %d value %d", s, m, mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos, current_fragment, value);
 			if (probing && value)
 				value = 1;
 			else {
