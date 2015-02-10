@@ -1377,12 +1377,13 @@ class Printer: # {{{
 				self.Rc = float('nan')
 			self.Tc = Tc - C0
 			self.fan_temp = fan_temp - C0
+			self.fan_pin ^= 0x200
 		def write(self):
 			try:
 				logRc = math.log(self.Rc)
 			except:
 				logRc = float('nan')
-			return struct.pack('<fffffHHHf', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp + C0)
+			return struct.pack('<fffffHHHf', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0)
 		def export(self):
 			return [self.name, self.R0, self.R1, self.Rc, self.Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp, self.value]
 		def export_settings(self):
@@ -1567,6 +1568,11 @@ class Printer: # {{{
 		if not self.paused:
 			if was_paused:
 				# Go back to pausing position.
+				# First reset all axes that don't have a limit switch.
+				for s, sp in enumerate(self.queue_info[1]):
+					for a, pos in enumerate(sp):
+						if not self.pin_valid(self.spaces[s].axis[a].limit_max_pin) and not self.pin_valid(self.spaces[s].axis[a].limit_max_pin):
+							self.set_axis_pos(s, a, pos)
 				self.goto(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
 				#log('resuming')
