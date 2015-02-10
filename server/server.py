@@ -375,7 +375,9 @@ class Connection: # {{{
 		#log('other: %s %s %s' % (name, repr(a), repr(ka)))
 		if not self.printer or self.printer not in ports or not ports[self.printer]:
 			self.printer = self.find_printer()
-			assert self.printer
+			if not self.printer:
+				log('No printer found')
+				yield ('error', 'No printer found')
 		ports[self.printer].call(name, a, ka, lambda success, ret: resumeinfo[0](ret))
 		yield (yield websockets.WAIT)
 	# }}}
