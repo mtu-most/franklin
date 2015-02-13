@@ -408,7 +408,7 @@ void try_send_next()
 		send_packet();
 		return;
 	}
-	if (home_step_time > 0 && homers == 0 && steps_prepared == 0)
+	if (home_step_time > 0 && homers == 0 && stopped)
 	{
 		pending_packet[0] = CMD_HOMED;
 		arch_write_current_pos(1);

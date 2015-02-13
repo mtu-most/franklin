@@ -1571,7 +1571,8 @@ class Printer: # {{{
 				# First reset all axes that don't have a limit switch.
 				for s, sp in enumerate(self.queue_info[1]):
 					for a, pos in enumerate(sp):
-						if not self.pin_valid(self.spaces[s].axis[a].limit_max_pin) and not self.pin_valid(self.spaces[s].axis[a].limit_max_pin):
+						# Assume motor[a] corresponds to axis[a] if it exists.
+						if len(self.spaces[s].motor) > a and not self.pin_valid(self.spaces[s].motor[a]['limit_max_pin']) and not self.pin_valid(self.spaces[s].motor[a]['limit_min_pin']):
 							self.set_axis_pos(s, a, pos)
 				self.goto(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.

@@ -745,6 +745,11 @@ void apply_tick() {
 			}
 			if (current_fragment_pos >= 0)
 				mtr.settings[current_fragment].data[current_fragment_pos] = value;
+			else if (value != 0) {
+				//debug("Problem found. %d %d", current_fragment_pos, value);
+				current_fragment_pos = 0;
+				mtr.settings[current_fragment].data[current_fragment_pos] = value;
+			}
 			//debug("spam %d %d %d %d %d", s, m, value, mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos);
 			int diff = mtr.settings[current_fragment].dir * value;
 			mtr.settings[current_fragment].hwcurrent_pos += diff;

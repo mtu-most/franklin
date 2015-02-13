@@ -58,8 +58,6 @@ EXTERN uint8_t reply_ready, adcreply_ready;
 EXTERN bool timeout;
 EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE > 6 ? REPLY_BUFFER_SIZE : 6];
 EXTERN uint16_t pending_len;
-EXTERN volatile bool stopped;
-EXTERN volatile bool underrun;
 EXTERN uint8_t move_phase, full_phase;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
@@ -252,8 +250,10 @@ struct Motor
 
 EXTERN Motor motor[NUM_MOTORS];
 EXTERN volatile uint8_t active_motors;
-EXTERN volatile uint8_t steps_prepared;
-EXTERN bool stopping;
+EXTERN volatile uint8_t steps_prepared;	// Number of steps waiting to be sent (0, 1 or 2).
+EXTERN volatile bool stopped;	// True if motors are not moving.
+EXTERN volatile bool underrun;	// True if next fragment was not present.
+EXTERN bool stopping;	// True if LIMIT has been sent to host, but not yet acknowledged.
 EXTERN uint32_t home_step_time;
 EXTERN uint8_t homers;
 

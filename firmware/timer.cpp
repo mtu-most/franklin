@@ -157,21 +157,20 @@ void handle_motors() {
 			current_fragment_pos += 1;
 		}
 	}
-	if (!underrun) {
-		if (steps_prepared == 0) {
-			move_phase = 0;
-			for (uint8_t m = 0; m < active_motors; ++m) {
-				motor[m].steps_current = 0;
-				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
-				if (homers == 0) {
-					if (fragment.dir != DIR_NONE && fragment.dir != DIR_AUDIO) {
-						motor[m].next_steps = motor[m].next_next_steps;
-						motor[m].next_next_steps = 0;
-					}
-					motor[m].dir = motor[m].next_dir;
+	if (steps_prepared == 0) {
+		move_phase = 0;
+		for (uint8_t m = 0; m < active_motors; ++m) {
+			motor[m].steps_current = 0;
+			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+			if (homers == 0) {
+				if (fragment.dir != DIR_NONE && fragment.dir != DIR_AUDIO) {
+					motor[m].next_steps = motor[m].next_next_steps;
+					motor[m].next_next_steps = 0;
 				}
+				motor[m].dir = motor[m].next_dir;
 			}
 		}
-		steps_prepared += 1;
 	}
+	if (!underrun)
+		steps_prepared += 1;
 }
