@@ -327,7 +327,7 @@ static inline void adc_start(uint8_t adcpin) {
 	uint8_t pin_ = adcpin;
 #endif
 
-	ADMUX = pin_ & 0x7;
+	ADMUX = (pin_ & 0x7) | 0x40;
 	// Start the conversion.
 	ADCSRA = AVR_ADCSRA_BASE | (1 << ADSC);
 	adc_last_pin = adcpin;
