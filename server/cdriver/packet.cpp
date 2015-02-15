@@ -301,7 +301,7 @@ void packet()
 		space_types[spaces[which].type].reset_pos(&spaces[which]);
 		for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
 			debug("setpos done source %f", spaces[which].axis[a]->settings[current_fragment].source);
-		*/
+		// */
 		return;
 	}
 	case CMD_GETPOS:	// Get current position

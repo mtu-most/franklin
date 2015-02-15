@@ -392,7 +392,12 @@ void try_send_next()
 		pending_packet[1] = num;
 		//debug("done %d %d %d", current_fragment, notified_current_fragment, last_fragment);
 		notified_current_fragment = (notified_current_fragment + num) % FRAGMENTS_PER_BUFFER;
-		prepare_packet(2);
+		if (underrun) {
+			arch_write_current_pos(2);
+			prepare_packet(2 + 4 * active_motors);
+		}
+		else
+			prepare_packet(2);
 		send_packet();
 		return;
 	}

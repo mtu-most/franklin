@@ -85,6 +85,7 @@ static inline int hwpacketsize(int len, int *available) {
 	case HWC_HOMED:
 		return 1 + 4 * avr_active_motors;
 	case HWC_STOPPED:
+	case HWC_UNDERRUN:
 		return 2 + 4 * avr_active_motors;
 	case HWC_LIMIT:
 		return 3 + 4 * avr_active_motors;
@@ -358,6 +359,8 @@ static inline void hwpacket(int len) {
 				arch_start_move(command[1][1]);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
+		else if (stopped && !sending_fragment && (free_fragments + command[1][1]) % FRAGMENTS_PER_BUFFER == FRAGMENTS_PER_BUFFER - 1)
+			avr_get_current_pos(2, true);
 		// Fall through.
 	}
 	case HWC_DONE:
@@ -778,7 +781,7 @@ static inline void arch_stop() {
 	prepare_packet(avr_buffer, 1);
 	avr_send();
 	avr_get_reply();
-	bool check = false; //!moving;
+	bool check = !moving;
 	abort_move(command[1][1] - 1);
 	avr_get_current_pos(2, check);
 }

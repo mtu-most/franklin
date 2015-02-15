@@ -1,7 +1,7 @@
 // vim: set foldmethod=marker :
 #include "cdriver.h"
 
-//#define DEBUG_MOVE
+#define DEBUG_MOVE
 
 // Set up:
 // start_time		utime() at start of move.
