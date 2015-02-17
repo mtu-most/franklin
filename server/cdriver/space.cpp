@@ -708,14 +708,12 @@ void send_fragment() {
 	}
 	//debug("sending %d free %d", current_fragment, free_fragments);
 	settings[current_fragment].fragment_length = current_fragment_pos;
-	sending_fragment = true;
 	free_fragments -= 1;
 	//debug("free -1 %d", free_fragments);
 	current_fragment_pos = -1;
 	int f = current_fragment;
 	set_current_fragment((current_fragment + 1) % FRAGMENTS_PER_BUFFER);
 	arch_send_fragment(f);
-	sending_fragment = false;
 	if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
 		arch_start_move(0);
 }
@@ -772,7 +770,7 @@ void buffer_refill() {
 	refilling = true;
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
 	//debug("refill start");
-	while (moving && !stopping && free_fragments > 1) {
+	while (moving && !stopping && free_fragments > 1 && !sending_fragment) {
 		//debug("refill %d %d %d", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings[current_fragment].current_pos);
 		// fill fragment until full or dirchange.
 		bool checking = true;

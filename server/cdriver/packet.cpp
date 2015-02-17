@@ -131,8 +131,6 @@ void packet()
 			for (uint8_t t = 0; t < num_spaces; ++t) {
 				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
 					RESET(spaces[t].motor[m]->enable_pin);
-					cpdebug("cp %d %d zero 1", t, m);
-					spaces[t].motor[m]->settings[current_fragment].current_pos = 0;
 				}
 				for (uint8_t a = 0; a < spaces[t].num_axes; ++a) {
 					spaces[t].axis[a]->settings[current_fragment].source = NAN;

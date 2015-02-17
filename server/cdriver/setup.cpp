@@ -43,7 +43,7 @@ void setup(char const *port, char const *run_id)
 	stopped = true;
 	prepared = false;
 	stopping = 0;
-	sending_fragment = false;
+	sending_fragment = 0;
 	start_pending = false;
 	stop_pending = false;
 	cbs_after_current_move = 0;

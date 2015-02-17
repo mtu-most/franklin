@@ -1,7 +1,7 @@
 #include "cdriver.h"
 
 #define DEBUG_DATA
-//#define DEBUG_HOST
+#define DEBUG_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
@@ -136,6 +136,8 @@ void serial(uint8_t which)
 #endif
 						//debug("recv ack");
 						out_busy = false;
+						if (sending_fragment > 0)
+							sending_fragment -= 1;
 						if (start_pending) {
 							start_pending = false;
 							arch_start_move(0);
@@ -144,7 +146,7 @@ void serial(uint8_t which)
 							stop_pending = false;
 							arch_stop();
 						}
-						else if (free_fragments > 0 && !stopping && arch_running())
+						else if (!sending_fragment && free_fragments > 0 && !stopping && arch_running())
 							buffer_refill();
 					}
 					continue;

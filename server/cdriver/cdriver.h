@@ -342,7 +342,7 @@ EXTERN int16_t audio_us_per_sample;
 EXTERN bool moving, aborting, stopped, prepared;
 EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.
-EXTERN bool sending_fragment;	// To compute how many fragments are in use from free_fragments.
+EXTERN int sending_fragment;	// To compute how many fragments are in use from free_fragments.
 EXTERN bool start_pending, stop_pending;
 EXTERN float done_factor;
 EXTERN uint8_t requested_temp;

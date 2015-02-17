@@ -71,7 +71,7 @@ enum HWCommands { // {{{
 
 extern int avr_active_motors;
 static inline int hwpacketsize(int len, int *available) {
-	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 2, 2, 4, 0, 0, 0, 1, -1, -1, -1, -1 };
+	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 3, 0, 4, 0, 0, 0, 1, -1, -1, -1, -1 };
 	switch (command[1][0] & ~0x10) {
 	case HWC_READY:
 		if (len >= 2)
@@ -85,9 +85,9 @@ static inline int hwpacketsize(int len, int *available) {
 	case HWC_HOMED:
 		return 1 + 4 * avr_active_motors;
 	case HWC_STOPPED:
-	case HWC_UNDERRUN:
 		return 2 + 4 * avr_active_motors;
 	case HWC_LIMIT:
+	case HWC_UNDERRUN:
 		return 3 + 4 * avr_active_motors;
 	case HWC_SENSE0:
 	case HWC_SENSE1:
@@ -191,6 +191,7 @@ static inline uint32_t millis() {
 // Serial port communication. {{{
 static inline void avr_send();
 static inline void arch_start_move(int extra);
+static inline void arch_motors_change();
 
 static inline void try_send_control() {
 	if (out_busy || avr_control_queue_length == 0)
@@ -312,6 +313,7 @@ static inline void hwpacket(int len) {
 			avr_homing = false;
 			abort_move(pos - 1);
 			avr_get_current_pos(offset, false);
+			sending_fragment = 0;
 			stopping = 2;
 			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_m);
 			cbs_after_current_move = 0;
@@ -360,18 +362,22 @@ static inline void hwpacket(int len) {
 			// Buffer is too slow with refilling; this will fix itself.
 		}
 		else if (stopped && !sending_fragment && (free_fragments + command[1][1]) % FRAGMENTS_PER_BUFFER == FRAGMENTS_PER_BUFFER - 1)
-			avr_get_current_pos(2, true);
+			avr_get_current_pos(3, true);
 		// Fall through.
 	}
 	case HWC_DONE:
 	{
-		//debug("done: %d %d %d", command[1][1], free_fragments, sending_fragment);
+		debug("done: %d %d %d %d", command[1][1], command[1][2], free_fragments, sending_fragment);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			debug("Done received while fragments per buffer is zero");
 			avr_write_ack("invalid done");
 			return;
 		}
 		first_fragment = -1;
+		if (command[1][1] + command[1][2] != FRAGMENTS_PER_BUFFER - 1 - free_fragments - (sending_fragment ? 1 : 0)) {
+			debug("free fragments out of sync: %d %d %d %d %d", command[1][1] + command[1][2], FRAGMENTS_PER_BUFFER - 1 - free_fragments - (sending_fragment ? 1 : 0), FRAGMENTS_PER_BUFFER, free_fragments, sending_fragment);
+			abort();
+		}
 		int cbs = 0;
 		for (int i = 0; i < command[1][1]; ++i) {
 			int f = (current_fragment + free_fragments + i + 1) % FRAGMENTS_PER_BUFFER;
@@ -413,6 +419,13 @@ static inline void hwpacket(int len) {
 	case HWC_TIMEOUT:
 	{
 		avr_write_ack("timeout");
+		for (int i = 0; i < NUM_DIGITAL_PINS; ++i)
+			avr_pins[i] = 3;
+		for (int i = 0; i < num_gpios; ++i)
+			gpios[i].state = 3;
+		motors_busy = false;
+		// Everything has shut down; reset pins to normal (but inactive).
+		arch_motors_change();
 		return;
 	}
 	default:
@@ -727,9 +740,10 @@ static inline void arch_send_fragment(int fragment) {
 	if (stopping)
 		return;
 	avr_buffer[0] = probing ? HWC_START_PROBE : HWC_START_MOVE;
-	//debug("send fragment %d %d", settings[fragment].fragment_length, fragment);
+	debug("send fragment %d %d %d", settings[fragment].fragment_length, fragment, settings[fragment].num_active_motors);
 	avr_buffer[1] = settings[fragment].fragment_length;
 	avr_buffer[2] = settings[fragment].num_active_motors;
+	sending_fragment = settings[fragment].num_active_motors + 1;
 	prepare_packet(avr_buffer, 3);
 	avr_send();
 	int mi = 0;
