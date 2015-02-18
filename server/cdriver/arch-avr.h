@@ -367,7 +367,7 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_DONE:
 	{
-		//debug("done: %d %d %d %d", command[1][1], command[1][2], free_fragments, sending_fragment);
+		cpdebug("done: %d %d %d %d", command[1][1], command[1][2], free_fragments, sending_fragment);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			debug("Done received while fragments per buffer is zero");
 			avr_write_ack("invalid done");
@@ -381,7 +381,7 @@ static inline void hwpacket(int len) {
 		int cbs = 0;
 		for (int i = 0; i < command[1][1]; ++i) {
 			int f = (current_fragment + free_fragments + i + 1) % FRAGMENTS_PER_BUFFER;
-			//debug("fragment %d: cbs=%d free=%d current=%d", f, settings[f].cbs, free_fragments, current_fragment);
+			cpdebug("fragment %d: cbs=%d free=%d current=%d", f, settings[f].cbs, free_fragments, current_fragment);
 			cbs += settings[f].cbs;
 		}
 		if (cbs)
@@ -391,7 +391,7 @@ static inline void hwpacket(int len) {
 			debug("Done received, but should be underrun");
 			abort();
 		}
-		//debug("fragments free=%d current=%d", free_fragments, current_fragment);
+		cpdebug("fragments free=%d current=%d", free_fragments, current_fragment);
 		if (free_fragments >= FRAGMENTS_PER_BUFFER) {
 			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]) - 1);
 			free_fragments = FRAGMENTS_PER_BUFFER - 1;

@@ -71,17 +71,17 @@ void serial()
 			return;
 		}
 		had_data = true;
-		command[0] = serial_read();
+		uint8_t firstbyte = serial_read();
 #ifdef DEBUG_SERIAL
-		debug("received: %x", command[0]);
+		debug("received: %x", firstbyte);
 #endif
 		// If this is a 1-byte command, handle it.
-		switch (command[0])
+		switch (firstbyte)
 		{
 		case CMD_ACK0:
 		case CMD_ACK1:
 			// Ack: everything was ok; flip the flipflop.
-			if (out_busy && ((!ff_out) ^ (command[0] == CMD_ACK1))) {	// Only if we expected it and it is the right type.
+			if (out_busy && ((!ff_out) ^ (firstbyte == CMD_ACK1))) {	// Only if we expected it and it is the right type.
 				ff_out ^= 0x10;
 #ifdef DEBUG_FF
 				debug("new ff_out: %d", ff_out);
@@ -110,14 +110,15 @@ void serial()
 		default:
 			break;
 		}
-		if ((command[0] & 0xe0) != 0x40) {
+		if ((firstbyte & 0xe0) != 0x40) {
 			// This cannot be a good packet.
-			debug("invalid command %x %d", command[0], serial_buffer_tail);
+			debug("invalid command %x %d", firstbyte, serial_buffer_tail);
 			// Fake a serial overflow.
 			serial_overflow = true;
 			continue;
 		}
 		command_end = 1;
+		command[0] = firstbyte;
 		last_millis = millis();
 	}
 	uint16_t len = serial_available();

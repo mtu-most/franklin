@@ -1,7 +1,7 @@
 #include "cdriver.h"
 
-//#define DEBUG_DATA
-//#define DEBUG_HOST
+#define DEBUG_DATA
+#define DEBUG_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
@@ -59,7 +59,7 @@ static void send_to_host() {
 	if (!hostqueue_head)
 		hostqueue_tail = NULL;
 #ifdef DEBUG_HOST
-	debug("host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->r.s, r->r.m, r->r.e, r->r.f, r->len);
+	debug("**** host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->r.s, r->r.m, r->r.e, r->r.f, r->len);
 #endif
 	serialdev[0]->write(18 + r->len);
 	serialdev[0]->write(r->cmd);
@@ -255,7 +255,7 @@ void serial(uint8_t which)
 #endif
 #ifdef DEBUG_HOST
 		if (which == 0) {
-			fprintf(stderr, "host recv:");
+			fprintf(stderr, "**** host recv:");
 			for (uint8_t i = 0; i < command_end[which]; ++i)
 				fprintf(stderr, " %02x", command[which][i]);
 			fprintf(stderr, "\n");

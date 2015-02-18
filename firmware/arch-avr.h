@@ -386,16 +386,13 @@ static inline void reset() {
 // }}}
 
 // Setup. {{{
-EXTERN uint8_t mcusr;
 EXTERN volatile uint32_t avr_time_h, avr_seconds_h, avr_seconds;
 
 static inline void arch_setup_start() {
 	cli();
-	mcusr = MCUSR;
 	avr_time_h = 0;
 	avr_seconds_h = 0;
 	avr_seconds = 0;
-	MCUSR = 0;
 	watchdog_disable();
 	// Serial ports.
 	UCSR0A = 1 << U2X0;
@@ -447,7 +444,7 @@ static inline void arch_setup_start() {
 }
 
 static inline void arch_setup_end() {
-	debug("Startup.  MCUSR: %x", mcusr);
+	debug("Startup.");
 }
 
 static inline void set_speed(uint16_t count) {
