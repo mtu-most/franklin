@@ -30,8 +30,10 @@ void do_steps() {
 				RESET(motor[m].step_pin);
 			}
 		}
+		arch_cli();
 		motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
 		motor[m].steps_current += steps_target;
+		arch_sei();
 	}
 	if (move_phase >= full_phase) {
 		for (uint8_t m = 0; m < active_motors; ++m) {

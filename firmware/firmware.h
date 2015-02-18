@@ -58,7 +58,7 @@ EXTERN uint8_t reply_ready, adcreply_ready;
 EXTERN bool timeout;
 EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE > 6 ? REPLY_BUFFER_SIZE : 6];
 EXTERN uint16_t pending_len;
-EXTERN uint8_t move_phase, full_phase;
+EXTERN volatile uint8_t move_phase, full_phase;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
 EXTERN uint16_t led_last, led_phase, time_per_sample;

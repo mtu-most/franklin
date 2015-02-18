@@ -562,8 +562,10 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			cbs_after_current_move = 0;
 			if (queue_start != queue_end || queue_full) {
 				had_cbs += next_move();
-				if (!aborting && had_cbs > 0)
+				if (!aborting && had_cbs > 0) {
+					//debug("adding %d cbs to fragment %d", had_cbs, current_fragment);
 					settings[current_fragment].cbs += had_cbs;
+				}
 				return;
 			}
 			cbs_after_current_move += had_cbs;
@@ -577,8 +579,10 @@ static void handle_motors(unsigned long long current_time) { // {{{
 						sp.motor[m]->settings[current_fragment].last_v = 0;
 				}
 				if (cbs_after_current_move > 0) {
-					if (!aborting)
+					if (!aborting) {
+						//debug("adding %d cbs to final fragment %d", cbs_after_current_move, current_fragment);
 						settings[current_fragment].cbs += cbs_after_current_move;
+					}
 					cbs_after_current_move = 0;
 				}
 			}

@@ -367,7 +367,7 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_DONE:
 	{
-		debug("done: %d %d %d %d", command[1][1], command[1][2], free_fragments, sending_fragment);
+		//debug("done: %d %d %d %d", command[1][1], command[1][2], free_fragments, sending_fragment);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			debug("Done received while fragments per buffer is zero");
 			avr_write_ack("invalid done");
@@ -740,7 +740,7 @@ static inline void arch_send_fragment(int fragment) {
 	if (stopping)
 		return;
 	avr_buffer[0] = probing ? HWC_START_PROBE : HWC_START_MOVE;
-	debug("send fragment %d %d %d", settings[fragment].fragment_length, fragment, settings[fragment].num_active_motors);
+	//debug("send fragment %d %d %d", settings[fragment].fragment_length, fragment, settings[fragment].num_active_motors);
 	avr_buffer[1] = settings[fragment].fragment_length;
 	avr_buffer[2] = settings[fragment].num_active_motors;
 	sending_fragment = settings[fragment].num_active_motors + 1;
@@ -787,6 +787,7 @@ static inline void arch_stop() {
 		stop_pending = true;
 		return;
 	}
+	bool check = !avr_running;
 	avr_running = false;
 	avr_buffer[0] = HWC_STOP;
 	if (avr_wait_for_reply)
@@ -795,7 +796,6 @@ static inline void arch_stop() {
 	prepare_packet(avr_buffer, 1);
 	avr_send();
 	avr_get_reply();
-	bool check = !moving;
 	abort_move(command[1][1] - 1);
 	avr_get_current_pos(2, check);
 }

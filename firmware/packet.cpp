@@ -35,8 +35,8 @@ void packet()
 #ifdef DEBUG_CMD
 		//debug("CMD_PING");
 #endif
-		write_ack();
 		ping |= 1 << command[1];
+		write_ack();
 		return;
 	}
 	case CMD_RESET: // reset controller; used before reprogramming flash.
@@ -247,7 +247,6 @@ void packet()
 			write_stall();
 			return;
 		}
-		write_ack();
 		settings[last_fragment].len = command[1];
 		current_len = command[1];
 		filling = command[2];
@@ -257,6 +256,7 @@ void packet()
 		if (filling == 0)
 			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		//debug("new filling: %d %d", filling, last_fragment);
+		write_ack();
 		return;
 	}
 	case CMD_MOVE:
@@ -279,7 +279,6 @@ void packet()
 			write_stall();
 			return;
 		}
-		write_ack();
 		Fragment &fragment = buffer[command[1]][last_fragment];
 		fragment.dir = Dir(command[2]);
 		for (uint8_t b = 0; b < current_len; ++b) {
@@ -288,6 +287,7 @@ void packet()
 		filling -= 1;
 		if (filling == 0)
 			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
+		write_ack();
 		return;
 	}
 	case CMD_START:
@@ -310,7 +310,6 @@ void packet()
 			write_stall();
 			return;
 		}
-		write_ack();
 		current_fragment_pos = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
@@ -318,6 +317,7 @@ void packet()
 			motor[m].next_dir = fragment.dir;
 		}
 		set_speed(time_per_sample);
+		write_ack();
 		return;
 	}
 	case CMD_ABORT:
@@ -353,7 +353,6 @@ void packet()
 		set_speed(0);
 		homers = 0;
 		home_step_time = 0;
-		write_ack();
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_fragment_pos;
 		for (uint8_t m = 0; m < active_motors; ++m) {
@@ -371,6 +370,7 @@ void packet()
 		notified_current_fragment = current_fragment;
 		//debug("stop new current %d", current_fragment);
 		current_fragment_pos = 0;
+		write_ack();
 		return;
 	}
 	case CMD_DISCARD:
@@ -398,10 +398,10 @@ void packet()
 			write_stall();
 			return;
 		}
-		write_ack();
 		reply[0] = CMD_PIN;
 		reply[1] = GET(command[1]);
 		reply_ready = 2;
+		write_ack();
 		return;
 	}
 	default:

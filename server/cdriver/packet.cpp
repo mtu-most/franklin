@@ -104,10 +104,18 @@ void packet()
 		if (stopped) {
 			//debug("starting move");
 			int num_movecbs = next_move();
-			if (!moving && num_movecbs > 0)
-				send_host(CMD_MOVECB, num_movecbs);
-			else
-				cbs_after_current_move += num_movecbs;
+			if (num_movecbs > 0) {
+				if (arch_running()) {
+					if (moving)
+						cbs_after_current_move += num_movecbs;
+					else {
+						//debug("instant-adding %d cbs to fragment %d - 1", num_movecbs, current_fragment);
+						settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += num_movecbs;
+					}
+				}
+				else
+					send_host(CMD_MOVECB, num_movecbs);
+			}
 			buffer_refill();
 		}
 		//else

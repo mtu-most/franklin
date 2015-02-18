@@ -363,8 +363,8 @@ void buffered_debug(char const *fmt, ...);
 #define buffered_debug debug
 #define buffered_debug_flush() do {} while(0)
 #endif
-#define cpdebug debug
-//#define cpdebug(...) do {} while(0)
+//#define cpdebug debug
+#define cpdebug(...) do {} while(0)
 
 // packet.cpp
 void packet();	// A command packet has arrived; handle it.

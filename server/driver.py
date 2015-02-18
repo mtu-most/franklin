@@ -320,8 +320,8 @@ class Printer: # {{{
 	# }}}
 	def _trigger_movewaits(self, num): # {{{
 		#traceback.print_stack()
-		log('trigger %s' % repr(self.movecb))
-		log('movecbs: %d/%d' % (num, self.movewait))
+		#log('trigger %s' % repr(self.movecb))
+		#log('movecbs: %d/%d' % (num, self.movewait))
 		if self.movewait < num:
 			log('More cbs received than requested!')
 			self.movewait = 0
@@ -600,7 +600,7 @@ class Printer: # {{{
 			return
 		flushed = False
 		if self.flushing == 'done':
-			log('done flushing; continuing gcode')
+			#log('done flushing; continuing gcode')
 			self.flushing = False
 			flushed = True
 		#log('len gcode = %d' % len(self.gcode))
@@ -633,7 +633,7 @@ class Printer: # {{{
 				if not flushed:
 					self.flush()[1](None)
 					self.flushing = True
-					log('flush set')
+					#log('flush set')
 					return
 				flushed = False
 				#'''
@@ -1426,16 +1426,16 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def flush(self, id): # {{{
-		log('flush start')
+		#log('flush start')
 		def cb(w):
-			log('flush done')
+			#log('flush done')
 			if id is not  None:
 				self._send(id, 'return', w)
 			call_queue.append((self._do_gcode, []))
 		self.movecb.append((False, cb))
 		if self.flushing is not True:
 			self.goto(cb = True)[1](None)
-		log('end flush preparation')
+		#log('end flush preparation')
 	# }}}
 	@delayed
 	def probe(self, id, area, angle = 0, speed = .003): # {{{
