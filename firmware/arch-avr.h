@@ -420,7 +420,7 @@ static inline void arch_setup_start() {
 	TCCR0A = 0;
 	TCCR0B = 4;	// Clock/256: 62.5 ticks/millisecond.
 	TIFR0 = 1 << TOV0;
-	TIMSK0 = 1 << TOIE0;
+	TIMSK0 |= 1 << TOIE0;
 	// Setup ADC.
 	ADCSRA = AVR_ADCSRA_BASE;
 	// Enable interrupts.
@@ -465,7 +465,7 @@ static inline void set_speed(uint16_t count) {
 		TCNT1L = 0;
 		// Clear and enable interrupt.
 		TIFR1 = 1 << OCF1A;
-		TIMSK1 = 1 << OCIE1A;
+		TIMSK1 |= 1 << OCIE1A;
 	}
 }
 // }}}

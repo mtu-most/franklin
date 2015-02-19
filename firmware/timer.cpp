@@ -42,6 +42,8 @@ void do_steps() {
 			if (motor[m].steps_current != motor[m].next_steps) {
 				debug("Problem %d: %d != %d (%d %d)", m, motor[m].steps_current, motor[m].next_steps, move_phase, full_phase);
 			}
+			if (m == 0)
+				debug_value += motor[0].next_steps;
 		}
 		move_phase = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
@@ -147,6 +149,8 @@ void handle_motors() {
 					motor[m].next_dir = fragment.dir;
 				}
 			}
+			debug_add(debug_value);
+			debug_value = 0;
 			current_fragment = new_current_fragment;
 		}
 		if (!underrun) {

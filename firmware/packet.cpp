@@ -281,9 +281,8 @@ void packet()
 		}
 		Fragment &fragment = buffer[command[1]][last_fragment];
 		fragment.dir = Dir(command[2]);
-		for (uint8_t b = 0; b < current_len; ++b) {
+		for (uint8_t b = 0; b < current_len; ++b)
 			fragment.samples[b] = command[3 + b];
-		}
 		filling -= 1;
 		if (filling == 0)
 			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
