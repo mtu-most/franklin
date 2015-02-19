@@ -628,7 +628,7 @@ class Printer: # {{{
 				if self.flushing is None:
 					#log('not filling; waiting for queue space')
 					return
-				#'''
+				'''
 				# Do only one segment at a time.
 				if not flushed:
 					self.flush()[1](None)
