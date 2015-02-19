@@ -46,7 +46,7 @@ template <typename _A> _A min(_A a, _A b) { return a < b ? a : b; }
 template <typename _A> _A max(_A a, _A b) { return a > b ? a : b; }
 template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 
-EXTERN volatile uint16_t debug_value;
+EXTERN volatile uint16_t debug_value, debug_value1;
 EXTERN uint8_t printerid[ID_SIZE];
 EXTERN uint8_t command[COMMAND_BUFFER_SIZE];
 EXTERN uint16_t command_end;

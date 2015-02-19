@@ -387,7 +387,7 @@ void try_send_next()
 	if (notified_current_fragment != current_fragment && (!underrun || stopped)) {
 		if (underrun) {
 			pending_packet[0] = CMD_UNDERRUN;
-			debug_dump();
+			//debug_dump();
 		}
 		else
 			pending_packet[0] = CMD_DONE;

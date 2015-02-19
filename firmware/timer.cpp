@@ -33,6 +33,8 @@ void do_steps() {
 		arch_cli();
 		motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
 		motor[m].steps_current += steps_target;
+		//if (m == 0)
+		//	debug_value += steps_target;
 		arch_sei();
 	}
 	if (move_phase >= full_phase) {
@@ -42,25 +44,32 @@ void do_steps() {
 			if (motor[m].steps_current != motor[m].next_steps) {
 				debug("Problem %d: %d != %d (%d %d)", m, motor[m].steps_current, motor[m].next_steps, move_phase, full_phase);
 			}
-			if (m == 0)
-				debug_value += motor[0].next_steps;
 		}
 		move_phase = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].steps_current = 0;
 			if (steps_prepared == 2) {
 				motor[m].next_steps = motor[m].next_next_steps;
+				//debug_value1 += debug_value;
+				//debug_value = 0;
 				motor[m].dir = motor[m].next_dir;
 			}
 		}
 		if (steps_prepared == 1 && underrun)
 			set_speed(0);
+		arch_cli();
 		steps_prepared -= 1;
+		arch_sei();
 	}
 	lock = false;
 }
 
 void handle_motors() {
+	/*
+	arch_cli();
+	uint16_t debug_tmp = debug_value1;
+	arch_sei();
+	*/
 	// Check sensors.
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		Fragment &fragment = buffer[motor[m].buffer][current_fragment];
@@ -149,8 +158,12 @@ void handle_motors() {
 					motor[m].next_dir = fragment.dir;
 				}
 			}
-			debug_add(debug_value);
-			debug_value = 0;
+			/*
+			debug_add(debug_tmp);
+			arch_cli();
+			debug_value1 -= debug_tmp;
+			arch_sei();
+			*/
 			current_fragment = new_current_fragment;
 		}
 		if (!underrun) {
@@ -177,6 +190,9 @@ void handle_motors() {
 			}
 		}
 	}
-	if (!underrun)
+	if (!underrun) {
+		arch_cli();
 		steps_prepared += 1;
+		arch_sei();
+	}
 }
