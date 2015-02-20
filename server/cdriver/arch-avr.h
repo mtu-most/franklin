@@ -361,8 +361,8 @@ static inline void hwpacket(int len) {
 				arch_start_move(command[1][1]);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
-		else if (stopped && !sending_fragment && (free_fragments + command[1][1]) % FRAGMENTS_PER_BUFFER == FRAGMENTS_PER_BUFFER - 1)
-			avr_get_current_pos(3, true);
+		//else if (stopped && !sending_fragment && (free_fragments + command[1][1]) % FRAGMENTS_PER_BUFFER == FRAGMENTS_PER_BUFFER - 1)
+		//	avr_get_current_pos(3, true);
 		// Fall through.
 	}
 	case HWC_DONE:
@@ -787,7 +787,7 @@ static inline void arch_stop() {
 		stop_pending = true;
 		return;
 	}
-	bool check = !avr_running;
+	bool check = false; //!avr_running;
 	avr_running = false;
 	avr_buffer[0] = HWC_STOP;
 	if (avr_wait_for_reply)
