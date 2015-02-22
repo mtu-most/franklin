@@ -21,8 +21,8 @@ if getent group dialout >/dev/null ; then
 	adduser --quiet franklin3d dialout
 fi
 
-# Set permissions on directory for audio files
-for dir in `find /var/cache/franklin` ; do
+# Set permissions on directory for audio and log files
+for dir in `find /var/cache/franklin` /var/log/franklin ; do
 	if ! dpkg-statoverride --list $dir >/dev/null; then
 		chown franklin3d:franklin3d $dir
 	fi

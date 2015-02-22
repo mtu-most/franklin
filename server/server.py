@@ -38,7 +38,8 @@ config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'done': '',
 		'local': 'False',
 		'driver': (tuple(xdgbasedir.data_files_read(packagename = 'franklin', filename = 'driver.py')) + ('',))[0],
-		'cdriver': '/usr/lib/franklin/cdriver'
+		'cdriver': '/usr/lib/franklin/cdriver',
+		'log': '/var/log/franklin'
 	})
 # }}}
 
@@ -636,7 +637,7 @@ else:
 	default_printer = (config['printer'], None)
 # }}}
 
-httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = xdgbasedir.data_files_read('html', packagename = 'franklin'), address = config['address'])
+httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = xdgbasedir.data_files_read('html', packagename = 'franklin'), address = config['address'], log = config['log'])
 
 log('running')
 websockets.fgloop()

@@ -16,41 +16,46 @@ CONFIG_FILE=/etc/default/franklin
 # Should the server be started?
 RUN=1
 
+# All the commented values below are the defaults.  If the variables are given a value (even if empty), they will be passed to the server.
+
 # Port to listen for browser requests.
-PORT=8000
+#PORT=8000
 
 # Address to listen on.  Set to 0.0.0.0 to disable IPv6 (needed on Raspberry Pi).
-ADDRESS=
+#ADDRESS=
+
+# Location of log file or directory.  Set to empty string to disable logging.
+#LOG=/var/log/franklin
 
 # Programs to manage the printer.
-DRIVER=/usr/share/franklin/driver.py
-CDRIVER=/usr/lib/franklin/cdriver
+#DRIVER=/usr/share/franklin/driver.py
+#CDRIVER=/usr/lib/franklin/cdriver
 
 # Location where audio files are stored.
-AUDIODIR=/var/cache/franklin/audio
+#AUDIODIR=/var/cache/franklin/audio
 
 # Regular expression of default printer; normally empty.
-PRINTER=''
+#PRINTER=''
 
 # The server keeps a list of serial ports on the system.  If this is set to
 # yes, it tries to connect to a printer on any new port (and at startup, on any
 # port).
-AUTODETECT=True
+#AUTODETECT=True
 
 # Regular expression of serial ports to ignore.
-BLACKLIST='/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\d*))$'
-ADD_BLACKLIST='$'
+#BLACKLIST='/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\d*))$'
+#ADD_BLACKLIST='$'
 
 # Allowed system commands.  This must be a regular expressing.  Use '.*' for
 # allowing everything.  Only do this if everyone who can reach the page
 # is trusted!
-ALLOW_SYSTEM='$'
+#ALLOW_SYSTEM='$'
 
 # Required credentials as user:password or just a user (password is ignored).
-LOGIN=''
+#LOGIN=''
 
 # Shadow-like passwordfile with acceptable credentials.
-PASSWORDFILE=''
+#PASSWORDFILE=''
 
 # Command to run in a shell when a print is done (finished or aborted).
 # May contain the following (including the square brackets), which will be
@@ -59,10 +64,10 @@ PASSWORDFILE=''
 # [[REASON]]	replaced with the reason that printing stopped
 # This could be set to something like
 # 'echo "your print was [[STATE]]: [[REASON]]" | mail -s "print [[STATE]] - [[REASON]]" your@mail.address.example.com'
-DONE=''
+#DONE=''
 
 # Avrdude executable, including path if it isn't in the system path.
-AVRDUDE='avrdude'
+#AVRDUDE='avrdude'
 
 # Arguments to start-stop-daemon.
 ARGS="--quiet"
@@ -80,7 +85,22 @@ NAME=franklin
 DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/franklin
 ARGS="--make-pidfile --pidfile $PIDFILE --chuid franklin3d:franklin3d $ARGS"
-START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --autodetect=$AUTODETECT --port=$PORT --address=$ADDRESS --printer=$PRINTER --audiodir=$AUDIODIR --blacklist=$BLACKLIST --add-blacklist=$ADD_BLACKLIST --driver=$DRIVER --cdriver=$CDRIVER --allow-system=$ALLOW_SYSTEM --login=$LOGIN --passwordfile=$PASSWORDFILE --done=$DONE --avrdude=$AVRDUDE"
+START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS --"
+if [ -v AUTODETECT ] ; then START_ARGS="$START_ARGS --autodetect=$AUTODETECT" ; fi
+if [ -v PORT ] ; then START_ARGS="$START_ARGS --port=$PORT" ; fi
+if [ -v ADDRESS ] ; then START_ARGS="$START_ARGS --address=$ADDRESS" ; fi
+if [ -v LOG ] ; then START_ARGS="$START_ARGS --log=$LOG" ; fi
+if [ -v PRINTER ] ; then START_ARGS="$START_ARGS --printer=$PRINTER" ; fi
+if [ -v AUDIODIR ] ; then START_ARGS="$START_ARGS --audiodir=$AUDIODIR" ; fi
+if [ -v BLACKLIST ] ; then START_ARGS="$START_ARGS --blacklist=$BLACKLIST" ; fi
+if [ -v ADD_BLACKLIST ] ; then START_ARGS="$START_ARGS --add_blacklist=$ADD_BLACKLIST" ; fi
+if [ -v DRIVER ] ; then START_ARGS="$START_ARGS --driver=$DRIVER" ; fi
+if [ -v CDRIVER ] ; then START_ARGS="$START_ARGS --cdriver=$CDRIVER" ; fi
+if [ -v ALLOW_SYSTEM ] ; then START_ARGS="$START_ARGS --allow_system=$ALLOW_SYSTEM" ; fi
+if [ -v LOGIN ] ; then START_ARGS="$START_ARGS --login=$LOGIN" ; fi
+if [ -v PASSWORDFILE ] ; then START_ARGS="$START_ARGS --passwordfile=$PASSWORDFILE" ; fi
+if [ -v DONE ] ; then START_ARGS="$START_ARGS --done=$DONE" ; fi
+if [ -v AVRDUDE ] ; then START_ARGS="$START_ARGS --avrdude=$AVRDUDE" ; fi
 STOP_ARGS="--oknodo --stop $ARGS"
 
 if test ! -x "$DAEMON"; then

@@ -48,20 +48,9 @@ ifeq (${TARGET}, ramps)
 BOARD_TAG = mega2560
 CPPFLAGS += -DNUM_MOTORS=6 -DNUM_BUFFERS=6 -DFRAGMENTS_PER_BUFFER=16 -DBYTES_PER_FRAGMENT=32
 else
-ifeq (${TARGET}, simul)
-BOARD_TAG = simul
-ARDUINO_VAR_PATH = atmega128
-BOARDS_TXT = atmega128/boards.txt
-CPPFLAGS += -DNUM_MOTORS=4 -DNUM_BUFFERS=4 -DFRAGMENTS_PER_BUFFER=4 -DBYTES_PER_FRAGMENT=4 -DTIMSK0=TIMSK -DTIMSK1=TIMSK -DTIFR0=TIFR -DTIFR1=TIFR -DTCCR0A='int _a; (void)&_a; _a' -DTCCR0B=TCCR0
-else
 $(error Invalid TARGET)
 endif
 endif
 endif
 endif
-endif
 include /usr/share/arduino/Arduino.mk
-
-simul:
-	avr-objcopy -Obinary build-simul/simul.elf build-simul/simul.bin
-	simulavr -datmega128 build-simul/simul.bin
