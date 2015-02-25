@@ -352,7 +352,7 @@ static inline void hwpacket(int len) {
 	{
 		if (!avr_running) {
 			debug("unexpected underrun?");
-			abort();
+			//abort();
 		}
 		avr_running = false;
 		if (moving) {

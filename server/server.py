@@ -9,7 +9,7 @@ import math
 import random
 import websockets
 from websockets import log
-import xdgbasedir
+import fhs
 try:
 	from gi.repository import GLib
 except ImportError:
@@ -23,11 +23,11 @@ import traceback
 import fcntl
 import protocol
 
-config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
+config = fhs.init(packagename = 'franklin', config = {
 		'port': 8000,
 		'address': '',
 		'printer': '',
-		'audiodir': xdgbasedir.cache_filename_write(packagename = 'franklin', filename = 'audio', makedirs = False),
+		'audiodir': '',
 		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\\d*))$',
 		'add-blacklist': '$',
 		'autodetect': 'True',
@@ -37,10 +37,12 @@ config = xdgbasedir.config_load(packagename = 'franklin', defaults = {
 		'passwordfile': '',
 		'done': '',
 		'local': 'False',
-		'driver': (tuple(xdgbasedir.data_files_read(packagename = 'franklin', filename = 'driver.py')) + ('',))[0],
-		'cdriver': '/usr/lib/franklin/cdriver',
+		'driver': fhs.read_data('driver.py'),
+		'cdriver': fhs.read_data('cdriver'),
 		'log': '/var/log/franklin'
 	})
+if config['audiodir'] == '':
+	config['audiodir'] = fhs.write_cache(packagename = 'franklin', name = 'audio', dir = True),
 # }}}
 
 # Global variables. {{{
@@ -54,7 +56,7 @@ scripts = {}
 # }}}
 
 # Load scripts. {{{
-for d in xdgbasedir.data_files_read('scripts', packagename = 'franklin'):
+for d in fhs.read_data('scripts', dir = True, multiple = True):
 	for s in os.listdir(d):
 		name, ext = os.path.splitext(s)
 		if ext != os.extsep + 'js' or name in scripts:
@@ -173,7 +175,7 @@ class Connection: # {{{
 			while c(): c.args = (yield websockets.WAIT)
 		cls.disable(port)
 		data = ['']
-		filename = xdgbasedir.data_files_read(os.path.join('firmware', board + '.hex'), packagename = 'franklin')[0]
+		filename = fhs.read_data(os.path.join('firmware', board + '.hex'), opened = False)
 		process = subprocess.Popen([config['avrdude'], '-q', '-q', '-V', '-c', protocol, '-b', baudrate, '-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
 		def output(fd, cond):
 			d = ''
@@ -314,8 +316,9 @@ class Connection: # {{{
 		scripts[name] = [code, None]
 		while '%04d' % nextscriptname in scripts:
 			nextscriptname += 1
-		with open(xdgbasedir.data_filename_write(os.path.join('scripts', name + os.extsep + 'js'), packagename = 'franklin'), 'wb') as f:
-			f.write(code)
+		f = fhs.write_data(os.path.join('scripts', name + os.extsep + 'js'), text = False)
+		f.write(code)
+		f.close()
 		cls._broadcast(None, 'new_script', name, code, None)
 		return []
 	# }}}
@@ -323,7 +326,7 @@ class Connection: # {{{
 	def del_script(cls, name): # {{{
 		del scripts[name]
 		for e in('js', 'dat'):
-			filename = xdgbasedir.data_filename_write(os.path.join('scripts', name + os.extsep + e), packagename = 'franklin')
+			filename = fhs.write_data(os.path.join('scripts', name + os.extsep + e), opened = False)
 			if os.path.exists(filename):
 				os.unlink(filename)
 		cls._broadcast(None, 'del_script', name)
@@ -331,7 +334,7 @@ class Connection: # {{{
 	@classmethod
 	def set_data(cls, name, data): # {{{
 		scripts[name][1] = data
-		filename = xdgbasedir.data_filename_write(os.path.join('scripts', name + os.extsep + 'dat'), packagename = 'franklin')
+		filename = fhs.write_data(os.path.join('scripts', name + os.extsep + 'dat'), opened = False)
 		if data is None:
 			if os.path.exists(filename):
 				os.unlink(filename)
@@ -637,7 +640,7 @@ else:
 	default_printer = (config['printer'], None)
 # }}}
 
-httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = xdgbasedir.data_files_read('html', packagename = 'franklin'), address = config['address'], log = config['log'])
+httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'])
 
 log('running')
 websockets.fgloop()

@@ -15,8 +15,8 @@ TYPE_EXTRUDER = 2
 # }}}
 
 # Imports.  {{{
-import xdgbasedir
-xdgbasedir.packagename('franklin')
+import fhs
+fhs.init('franklin', config = {})
 import websockets
 from websockets import log
 import serial
@@ -152,8 +152,8 @@ class Printer: # {{{
 		self.uuid = uuid
 		self.allow_system = allow_system
 		try:
-			filenames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'profile'))
-			with open(filenames[0]) as f:
+			filename = fhs.read_data(os.path.join(self.uuid, 'profile'))
+			with open(filename) as f:
 				self.profile = f.readline().strip()
 			log('profile is %s' % self.profile)
 		except:
@@ -753,7 +753,7 @@ class Printer: # {{{
 						self.waittemp(self.bed_id, self.btemp)
 						self.gcode.pop(0)
 						self.gcode_waiting += 1
-						self.wait_for_temp(0)[1](None)
+						self.wait_for_temp(self.bed_id)[1](None)
 					if self.gcode_waiting > 0:
 						return
 				elif cmd == ('M', 140):
@@ -768,8 +768,8 @@ class Printer: # {{{
 					if self.bed_id < len(self.temps) and not math.isnan(self.btemp) and self.pin_valid(self.temps[0].thermistor_pin):
 						self.gcode.pop(0)
 						self.waittemp(self.bed_id, self.btemp)
-						self.gcode_waiting = True
-						return self.wait_for_temp(0)[1](None)
+						self.gcode_waiting += 1
+						return self.wait_for_temp(self.bed_id)[1](None)
 				elif cmd == ('SYSTEM', 0):
 					if not re.match(self.allow_system, message):
 						log('Refusing to run forbidden system command: %s' % message)
@@ -1478,6 +1478,8 @@ class Printer: # {{{
 		if update:
 			self._temp_update(channel)
 		self._send_packet(struct.pack('<BBf', protocol.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
+		if self.gcode_waiting > 0 and any(channel == x[0] for x in self.tempcb):
+			self.waittemp(channel, temp)
 	# }}}
 	def waittemp(self, channel, min, max = None): # {{{
 		channel = int(channel)
@@ -1514,9 +1516,9 @@ class Printer: # {{{
 		return bool(s)
 	# }}}
 	def load(self, profile = None, update = True): # {{{
-		filenames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'profiles', ((profile and profile.strip()) or self.profile) + os.extsep + 'ini'))
+		filenames = fhs.read_data(os.path.join(self.uuid, 'profiles', ((profile and profile.strip()) or self.profile) + os.extsep + 'ini'), opened = False, multiple = True)
 		if profile and self.profile != profile.strip():
-			log('setting profile to %s' % profile.strip())
+			#log('setting profile to %s' % profile.strip())
 			self.profile = profile.strip()
 			if update:
 				self._globals_update()
@@ -1529,12 +1531,12 @@ class Printer: # {{{
 			log('setting profile to %s' % profile.strip())
 			self.profile = profile.strip()
 			self._globals_update()
-		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'))
-		with open(filename, 'w') as f:
-			f.write(self.export_settings())
+		f = fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'))
+		f.write(self.export_settings())
+		f.close()
 	# }}}
 	def list_profiles(self): # {{{
-		dirnames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'profiles'))
+		dirnames = fhs.read_data(os.path.join(self.uuid, 'profiles'), dir = True, multiple = True, opened = False)
 		ret = []
 		for d in dirnames:
 			ret += [os.path.splitext(f)[0].strip() for f in os.listdir(d)]
@@ -1542,16 +1544,16 @@ class Printer: # {{{
 		return ret
 	# }}}
 	def remove_profile(self, profile): # {{{
-		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'), makedirs = False)
+		filename = fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'), opened = False)
 		if os.path.exists(filename):
 			os.unlink(filename)
 			return True
 		return False
 	# }}}
 	def set_default_profile(self, profile): # {{{
-		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'profile'), makedirs = True)
-		with open(filename, 'w') as f:
-			f.write(profile.strip() + '\n')
+		f = fhs.write_data(os.path.join(self.uuid, 'profile'))
+		f.write(profile.strip() + '\n')
+		f.close()
 	# }}}
 	def abort(self): # {{{
 		# TODO: really abort.
@@ -1677,9 +1679,8 @@ class Printer: # {{{
 	def audio_play(self, id, name, motors = None): # {{{
 		log('motors: %s' % repr(motors))
 		assert os.path.basename(name) == name
-		filenames = xdgbasedir.data_files_read(os.path.join(self.uuid, 'audio', name))
-		assert len(filenames) == 1
-		self.audiofile = open(filenames[0], 'rb')
+		filename = os.path.join(self.audiodir, name)
+		self.audiofile = open(filename, 'rb')
 		channels = [0] *(((sum([len(s.motor) for s in self.spaces]) - 1) >> 3) + 1)
 		m0 = 0
 		for i, s in enumerate(self.spaces):
@@ -1711,8 +1712,8 @@ class Printer: # {{{
 			for b in range(8):
 				c += ((data[t + b] - minimum) * 2 // scale) << b
 			s += chr(c)
-		filename = xdgbasedir.data_filename_write(os.path.join(self.uuid, 'audio', name))
-		with open(os.path.join(self.audiodir, name), 'wb') as f:
+		filename = os.path.join(self.audiodir, name)
+		with open(filename, 'wb') as f:
 			f.write(struct.pack('<H', 1000000 // wav.getframerate()) + s)
 	# }}}
 	def audio_list(self): # {{{
@@ -1748,6 +1749,7 @@ class Printer: # {{{
 		def cb():
 			if id is not None:
 				self._send(id, 'return', None)
+				return
 			self.gcode_waiting -= 1
 			call_queue.append((self._do_gcode, []))
 		if(which is None and len(self.alarms) > 0) or which in self.alarms:
@@ -2052,6 +2054,10 @@ class Printer: # {{{
 		rel = False
 		erel = None
 		pos = [[float('nan'), float('nan'), float('nan')], [0.], float('inf')]
+		# Expect to start with a park.
+		for a in range(3):
+			if len(self.spaces[0].axis) > a and not math.isnan(self.spaces[0].axis[a]['park']):
+				pos[0][a] = self.spaces[0].axis[a]['park']
 		current_extruder = 0
 		for lineno, origline in enumerate(code.split('\n')):
 			line = origline.strip()

@@ -1,4 +1,4 @@
-#! /bin/sh
+#! /bin/bash
 
 ### BEGIN INIT INFO
 # Provides:		franklin
@@ -28,7 +28,7 @@ RUN=1
 #LOG=/var/log/franklin
 
 # Programs to manage the printer.
-#DRIVER=/usr/share/franklin/driver.py
+#DRIVER=/usr/lib/franklin/driver.py
 #CDRIVER=/usr/lib/franklin/cdriver
 
 # Location where audio files are stored.

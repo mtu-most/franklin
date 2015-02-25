@@ -1,2 +1,2 @@
-SUBSYSTEMS=="tty", ACTION=="add", GROUP="dialout", MODE="0660", RUN+="/usr/share/franklin/control.py"
-SUBSYSTEMS=="tty", ACTION=="remove", RUN+="/usr/share/franklin/control.py"
+SUBSYSTEMS=="tty", ACTION=="add", GROUP="dialout", MODE="0660", RUN+="/usr/lib/franklin/control.py"
+SUBSYSTEMS=="tty", ACTION=="remove", RUN+="/usr/lib/franklin/control.py"
