@@ -85,7 +85,7 @@ NAME=franklin
 DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/franklin
 ARGS="--make-pidfile --pidfile $PIDFILE --chuid franklin3d:franklin3d $ARGS"
-START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS --"
+START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --system"
 if [ -v AUTODETECT ] ; then START_ARGS="$START_ARGS --autodetect=$AUTODETECT" ; fi
 if [ -v PORT ] ; then START_ARGS="$START_ARGS --port=$PORT" ; fi
 if [ -v ADDRESS ] ; then START_ARGS="$START_ARGS --address=$ADDRESS" ; fi

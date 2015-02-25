@@ -16,7 +16,13 @@ TYPE_EXTRUDER = 2
 
 # Imports.  {{{
 import fhs
-fhs.init('franklin', config = {})
+config = fhs.init(packagename = 'franklin', config = {
+	'cdriver': None,
+	'port': None,
+	'uuid': None,
+	'run-id': None,
+	'allow-system': None
+	})
 import websockets
 from websockets import log
 import serial
@@ -70,7 +76,7 @@ class delayed: # {{{
 # Call cdriver running on same machine.
 class Driver: # {{{
 	def __init__(self, port, run_id):
-		self.driver = subprocess.Popen((sys.argv[1], port, run_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		self.driver = subprocess.Popen((config['cdriver'], port, run_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		fcntl.fcntl(self.driver.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 		self.buffer = ''
 	def available(self):
@@ -2471,7 +2477,7 @@ class Printer: # {{{
 # }}}
 
 call_queue = []
-printer = Printer(*sys.argv[2:])
+printer = Printer(config['port'], config['uuid'], config['run-id'], config['allow-system'])
 if printer.printer is None:
 	sys.exit(0)
 
