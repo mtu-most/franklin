@@ -499,7 +499,7 @@ def detect(port): # {{{
 	if port == '-':
 		uuid = '00000000-0000-4000-8000-000000000000'
 		run_id = nextid()
-		process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--uuid', uuid, '--run-id', run_id, '--allow-system', config['allow-system']), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--uuid', uuid, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		ports[port] = Port(port, process, None, uuid, run_id)
 		return False
 	if not os.path.exists(port):
@@ -582,7 +582,7 @@ def detect(port): # {{{
 			run_id = nextid()
 			log('accepting unknown printer on port %s (id %s %s -> %s)' % (port, id[0], repr(id[2][17:21]), repr(run_id)))
 			log('orphans: %s' % repr(orphans.keys()))
-			process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--uuid', id[0], '--run-id', run_id, '--allow-system', config['allow-system']), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+			process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--uuid', id[0], '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, printer, id[0], run_id)
 			return False
 		printer.write(protocol.single['ID'])
