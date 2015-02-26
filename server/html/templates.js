@@ -264,8 +264,6 @@ function Label() {	// {{{
 // Printer parts. {{{
 function Top() { // {{{
 	var ret = Create('div', 'top');
-	// Profile choice. TODO {{{
-	// }}}
 	// Up/remove/down. {{{
 	var e = ret.AddElement('div', 'updown');
 	e.AddElement('button', 'queue1').AddEvent('click', queue_up).AddText('⬆').type = 'button';
@@ -479,6 +477,12 @@ function Printer() {	// {{{
 	e.printer = printer;
 	e.AddEvent('click', function() {
 		this.printer.call('set_default_profile', [this.printer.profile], {});
+	});
+	e = setup.AddElement('button').AddText('Reload this profile');
+	e.type = 'button';
+	e.printer = printer;
+	e.AddEvent('click', function() {
+		this.printer.call('load', [this.printer.profile], {});
 	});
 	setup.AddElement('div').Add(File([null, 'import', 'import_settings'], 'Import'));
 	e = setup.AddElement('a', 'title').AddText('Export settings to file');

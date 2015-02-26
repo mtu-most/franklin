@@ -158,9 +158,9 @@ class Printer: # {{{
 		self.uuid = uuid
 		self.allow_system = allow_system
 		try:
-			filename = fhs.read_data(os.path.join(self.uuid, 'profile'))
-			with open(filename) as f:
-				self.profile = f.readline().strip()
+			pfile = fhs.read_data(os.path.join(self.uuid, 'profile'))
+			self.profile = pfile.readline().strip()
+			pfile.close()
 			log('profile is %s' % self.profile)
 		except:
 			log("No default profile; using 'default'.")
@@ -1528,8 +1528,8 @@ class Printer: # {{{
 			self.profile = profile.strip()
 			if update:
 				self._globals_update()
-		for filename in filenames:
-			with open(filename) as f:
+		if len(filenames) > 0:
+			with open(filenames[0]) as f:
 				self.import_settings(f.read(), update = update)
 	# }}}
 	def save(self, profile = None): # {{{
@@ -1545,7 +1545,10 @@ class Printer: # {{{
 		dirnames = fhs.read_data(os.path.join(self.uuid, 'profiles'), dir = True, multiple = True, opened = False)
 		ret = []
 		for d in dirnames:
-			ret += [os.path.splitext(f)[0].strip() for f in os.listdir(d)]
+			for f in os.listdir(d):
+				name = os.path.splitext(f)[0].strip()
+				if name not in ret:
+					ret.append(name)
 		ret.sort()
 		return ret
 	# }}}
