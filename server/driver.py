@@ -1971,7 +1971,7 @@ class Printer: # {{{
 		return errors
 	# }}}
 	def _import_file(self, filename, name): # {{{
-		return self.import_settings(open(filename).read(), name)
+		return ', '.join(self.import_settings(open(filename).read(), name))
 	# }}}
 	@delayed
 	def gcode_run(self, id, code, ref = (0, 0, 0), angle = 0, probemap = None, abort = True): # {{{
@@ -2045,15 +2045,18 @@ class Printer: # {{{
 		assert name not in self.jobqueue
 		self._broadcast(None, 'blocked', 'parsing g-code')
 		parsed, errors = self.gcode_parse(data)
+		for e in errors:
+			log(e)
+		if len(parsed) == 0:
+			self._broadcast(None, 'blocked', None)
+			return errors
 		self.jobqueue[name] = (parsed, self.gcode_bbox(parsed))
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
 		self._broadcast(None, 'blocked', None)
-		for e in errors:
-			log(e)
 		return errors
 	# }}}
 	def _queue_add_file(self, filename, name): # {{{
-		return self.queue_add(open(filename).read(), name)
+		return ', '.join(self.queue_add(open(filename).read(), name))
 	# }}}
 	def queue_remove(self, name): # {{{
 		assert name in self.jobqueue

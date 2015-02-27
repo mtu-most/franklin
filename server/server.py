@@ -37,12 +37,18 @@ config = fhs.init(packagename = 'franklin', config = {
 		'passwordfile': '',
 		'done': '',
 		'local': 'False',
-		'driver': fhs.read_data('driver.py', opened = False),
-		'cdriver': fhs.read_data('cdriver', opened = False),
+		'driver': '',
+		'cdriver': '',
 		'log': '/var/log/franklin'
 	})
 if config['audiodir'] == '':
-	config['audiodir'] = fhs.write_cache(packagename = 'franklin', name = 'audio', dir = True),
+	config['audiodir'] = fhs.write_cache(name = 'audio', dir = True),
+if config['driver'] == '':
+	config['driver'] = fhs.read_data('driver.py', opened = False)
+if config['cdriver'] == '':
+	config['cdriver'] = fhs.read_data('cdriver', opened = False)
+
+print(repr(config))
 # }}}
 
 # Global variables. {{{
@@ -116,8 +122,9 @@ class Server(websockets.RPChttpd): # {{{
 			return False
 		post = connection.post[1].pop('file')
 		def cb(success, ret):
-			self.reply(connection, 200 if success else 400, repr(ret), 'text/plain;charset=utf8')
+			self.reply(connection, 200 if success else 400, ret.encode('utf8'), 'text/plain;charset=utf8')
 			os.unlink(post[0]);
+			connection.socket.close()
 		if action == 'queue_add':
 			ports[port].call('_queue_add_file', [post[0], post[1]], {}, cb)
 		elif action == 'import':
@@ -125,7 +132,8 @@ class Server(websockets.RPChttpd): # {{{
 		else:
 			os.unlink(post[0]);
 			self.reply(connection, 400)
-		return False
+			return False
+		return True
 # }}}
 
 class Connection: # {{{

@@ -174,7 +174,7 @@ void serial(uint8_t which)
 				if ((command[1][0] & 0xe0) != 0x60) {
 					// These lengths are not allowed; this cannot be a good packet.
 					debug("invalid firmware command code %02x", command[1][0]);
-					abort();
+					//abort();
 					serialdev[which]->write(CMD_NACK);
 					continue;
 				}
