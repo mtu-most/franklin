@@ -105,27 +105,25 @@ class Server(websockets.RPChttpd): # {{{
 			websockets.RPChttpd.page(self, connection)
 	def post(self, connection):
 		# Add to queue (POST).
-		if 'file' not in connection.post or not connection.post['file'][1] or 'port' not in connection.post or 'action' not in connection.post:
+		if 'file' not in connection.post[1] or 'port' not in connection.post[0] or 'action' not in connection.post[0]:
 			self.reply(connection, 400)
 			return False
-		with open(connection.post['action'][2]) as f:
-			action = f.read()
-		with open(connection.post['port'][2]) as f:
-			port = f.read()
+		port = connection.post[0]['port'][0]
+		action = connection.post[0]['action'][0]
 		if port not in ports or not ports[port]:
 			log('port not found: %s' % port)
 			self.reply(connection, 404)
 			return False
-		post = connection.post.pop('file')
+		post = connection.post[1].pop('file')
 		def cb(success, ret):
 			self.reply(connection, 200 if success else 400, repr(ret), 'text/plain;charset=utf8')
-			os.unlink(post[2]);
+			os.unlink(post[0]);
 		if action == 'queue_add':
-			ports[port].call('_queue_add_file', [post[2], post[1]], {}, cb)
+			ports[port].call('_queue_add_file', [post[0], post[1]], {}, cb)
 		elif action == 'import':
-			ports[port].call('_import_file', [post[2], post[1]], {}, cb)
+			ports[port].call('_import_file', [post[0], post[1]], {}, cb)
 		else:
-			os.unlink(post[2]);
+			os.unlink(post[0]);
 			self.reply(connection, 400)
 		return False
 # }}}
