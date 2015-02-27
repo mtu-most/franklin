@@ -265,9 +265,6 @@ function Label() {	// {{{
 // Printer parts. {{{
 function Top() { // {{{
 	var ret = Create('div', 'top');
-	var file = ret.AddElement('input');
-	file.type = 'file';
-	file.name = 'file';
 	// Up/remove/down. {{{
 	var e = ret.AddElement('div', 'updown');
 	e.AddElement('button', 'queue1').AddEvent('click', queue_up).AddText('⬆').type = 'button';
@@ -331,7 +328,7 @@ function Map() { // {{{
 		'',
 		''
 	], ['', '', '', '', '', ''], null), 'maptable');
-	var b = Create('button').AddText('Park').AddEvent('click', function() { this.printer.call('park', [], {}); });
+	var b = Create('button').AddText('Park').AddEvent('click', function() { this.printer.call('park', [], {}, update_canvas_and_spans); });
 	b.type = 'button';
 	b.printer = printer;
 	t.Add(make_tablerow(add_name('space', 0, 0), [
