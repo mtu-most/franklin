@@ -1580,7 +1580,7 @@ function key_move(key, shift, ctrl) { // {{{
 function start_move() { // {{{
 	// Update bbox.
 	var q = get_element(selected_printer, [null, 'queue']);
-	selected_printer.bbox = [[0, 0], [0, 0]];
+	selected_printer.bbox = [[null, null], [null, null]];
 	for (var e = 0; e < q.options.length; ++e) {
 		if (!q.options[e].selected)
 			continue;
@@ -1591,13 +1591,13 @@ function start_move() { // {{{
 				break;
 		if (item >= selected_printer.queue.length)
 			continue;
-		if (selected_printer.queue[item][1][0][0] < selected_printer.bbox[0][0])
+		if (selected_printer.bbox[0][0] == null || selected_printer.queue[item][1][0][0] < selected_printer.bbox[0][0])
 			selected_printer.bbox[0][0] = selected_printer.queue[item][1][0][0];
-		if (selected_printer.queue[item][1][0][1] > selected_printer.bbox[0][1])
+		if (selected_printer.bbox[0][1] == null || selected_printer.queue[item][1][0][1] > selected_printer.bbox[0][1])
 			selected_printer.bbox[0][1] = selected_printer.queue[item][1][0][1];
-		if (selected_printer.queue[item][1][1][0] < selected_printer.bbox[1][0])
+		if (selected_printer.bbox[1][0] == null || selected_printer.queue[item][1][1][0] < selected_printer.bbox[1][0])
 			selected_printer.bbox[1][0] = selected_printer.queue[item][1][1][0];
-		if (selected_printer.queue[item][1][1][1] > selected_printer.bbox[1][1])
+		if (selected_printer.bbox[1][1] == null || selected_printer.queue[item][1][1][1] > selected_printer.bbox[1][1])
 			selected_printer.bbox[1][1] = selected_printer.queue[item][1][1][1];
 	}
 	update_canvas_and_spans();
