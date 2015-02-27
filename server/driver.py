@@ -1970,6 +1970,9 @@ class Printer: # {{{
 		self._broadcast(None, 'blocked', None)
 		return errors
 	# }}}
+	def _import_file(self, filename, name): # {{{
+		return self.import_settings(open(filename).read(), name)
+	# }}}
 	@delayed
 	def gcode_run(self, id, code, ref = (0, 0, 0), angle = 0, probemap = None, abort = True): # {{{
 		self.gcode_ref = ref
@@ -2048,6 +2051,9 @@ class Printer: # {{{
 		for e in errors:
 			log(e)
 		return errors
+	# }}}
+	def _queue_add_file(self, filename, name): # {{{
+		return self.queue_add(open(filename).read(), name)
 	# }}}
 	def queue_remove(self, name): # {{{
 		assert name in self.jobqueue

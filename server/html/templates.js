@@ -94,16 +94,17 @@ function Float(obj, digits, factor, className, set) {
 	return [input, /*button,*/ span];
 }
 
-function File(obj, buttontext, cb) {
+function File(obj, action, buttontext, cb) {
 	var input = Create('input');
 	input.type = 'file';
 	input.id = make_id(printer, obj);
 	var button = Create('button', 'button').AddText(buttontext);
 	button.type = 'button';
 	button.source = obj;
+	button.action = action;
 	button.extra = cb;
 	button.printer = printer;
-	button.AddEvent('click', function() { set_file(this.printer, this.source); if (this.extra !== undefined) this.extra(); });
+	button.AddEvent('click', function() { set_file(this.printer, this.source, this.action); if (this.extra !== undefined) this.extra(); });
 	return [input, button];
 }
 
@@ -264,6 +265,9 @@ function Label() {	// {{{
 // Printer parts. {{{
 function Top() { // {{{
 	var ret = Create('div', 'top');
+	var file = ret.AddElement('input');
+	file.type = 'file';
+	file.name = 'file';
 	// Up/remove/down. {{{
 	var e = ret.AddElement('div', 'updown');
 	e.AddElement('button', 'queue1').AddEvent('click', queue_up).AddText('⬆').type = 'button';
@@ -279,7 +283,7 @@ function Top() { // {{{
 	// }}}
 	// Jobbuttons. {{{
 	e = ret.AddElement('div', 'jobbuttons');
-	e.Add(File([null, 'queue_add', 'queue_add'], 'Add', queue_deselect));
+	e.Add(File([null, 'queue_add', 'queue_add'], 'queue_add', 'Add', queue_deselect));
 	e.AddElement('br');
 	var b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(this.printer); }).AddText('Print selected');
 	b.type = 'button';
@@ -484,7 +488,7 @@ function Printer() {	// {{{
 	e.AddEvent('click', function() {
 		this.printer.call('load', [this.printer.profile], {});
 	});
-	setup.AddElement('div').Add(File([null, 'import', 'import_settings'], 'Import'));
+	setup.AddElement('div').Add(File([null, 'import', 'import_settings'], 'import', 'Import'));
 	e = setup.AddElement('a', 'title').AddText('Export settings to file');
 	e.id = make_id(printer, [null, 'export']);
 	e.title = 'Save settings to disk.';

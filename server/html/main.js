@@ -1173,25 +1173,26 @@ function set_pin(printer, id) { // {{{
 	set_value(printer, id, e.selectedIndex + 0x100 * valid + 0x200 * inverted);
 } // }}}
 
-function set_file(printer, id) { // {{{
+function set_file(printer, id, action) { // {{{
 	var element = get_element(printer, id);
 	if (element.files.length < 1) {
 		alert('please select a file');
 		return;
 	}
-	var reader = new FileReader();
-	reader.name = element.files[0].name;
-	reader.onloadend = function(e) {
-		function errors(err) {
-			if (err.length == 0)
-				return;
-			alert('Errors in lines: ' + err.join(', '));
-		}
-		if (this.readyState != FileReader.DONE)
+	var post = new XMLHttpRequest();
+	var fd = new FormData();
+	fd.append('port', printer.port);
+	fd.append('action', action);
+	fd.append('file', element.files[0]);
+	post.open('POST', String(document.location), true);
+	post.AddEvent('readystatechange', function() {
+		if (this.readyState != this.DONE)
 			return;
-		set_value(printer, id, this.result, errors, this.name);
-	};
-	reader.readAsBinaryString(element.files[0]);
+		if (!this.responseText)
+			return;
+		alert('Errors: ' + this.responseText);
+	});
+	post.send(fd);
 } // }}}
 // }}}
 
