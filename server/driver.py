@@ -2079,13 +2079,20 @@ class Printer: # {{{
 		current_extruder = 0
 		for lineno, origline in enumerate(code.split('\n')):
 			line = origline.strip()
+			log('parsing %s' % line)
+			# Get rid of line numbers and checksums.
 			if line.startswith('N'):
-				r = re.match('N\d+\s*(.*?)\*\d+$')
+				r = re.match(r'N(\d+)\s+(.*?)\*\d+\s*$', line)
 				if not r:
-					# Invalid line; ignore it.
-					errors.append('%d:ignoring invalid gcode: %s' % (lineno, origline))
-					continue
-				line = r.group(1)
+					r = re.match(r'N(\d+)\s+(.*?)\s*$', line)
+					if not r:
+						# Invalid line; ignore it.
+						errors.append('%d:ignoring invalid gcode: %s' % (lineno, origline))
+						continue
+				lineno = int(r.group(1))
+				line = r.group(2)
+			else:
+				lineno += 1
 			comment = ''
 			while '(' in line:
 				b = line.index('(')
@@ -2094,7 +2101,7 @@ class Printer: # {{{
 					errors.append('%d:ignoring line with unterminated comment: %s' % (lineno, origline))
 					continue
 				comment = line[b + 1:e].strip()
-				line = line[:b] + line[e + 1:].strip()
+				line = line[:b] + ' ' + line[e + 1:].strip()
 			if ';' in line:
 				p = line.index(';')
 				comment = line[p + 1:].strip()
@@ -2109,27 +2116,36 @@ class Printer: # {{{
 			if line == '':
 				continue
 			line = line.split()
-			if mode is None or line[0][0] in 'GMT':
-				if len(line[0]) < 2:
-					errors.append('%d:ignoring unparsable line: %s' % (lineno, origline))
-					continue
-				try:
-					cmd = line[0][0], int(line[0][1:])
-				except:
-					errors.append('%d:parse error in line: %s' % (lineno, origline))
-					traceback.print_exc()
-					continue
-				line = line[1:]
-			else:
-				cmd = mode
-			args = {}
-			for a in line:
-				try:
-					args[a[0]] = float(a[1:])
-				except:
-					errors.append('%d:ignoring invalid gcode: %s' % (lineno, origline))
+			while len(line) > 0:
+				if mode is None or line[0][0] in 'GMTDS':
+					if len(line[0]) < 2:
+						errors.append('%d:ignoring unparsable line: %s' % (lineno, origline))
+						break
+					try:
+						cmd = line[0][0], int(line[0][1:])
+					except:
+						errors.append('%d:parse error in line: %s' % (lineno, origline))
+						traceback.print_exc()
+						break
+					line = line[1:]
+				else:
+					cmd = mode
+				args = {}
+				success = True
+				for i, a in enumerate(line):
+					if a[0] in 'GMD':
+						line = line[i:]
+						break
+					try:
+						args[a[0]] = float(a[1:])
+					except:
+						errors.append('%d:ignoring invalid gcode: %s' % (lineno, origline))
+						success = False
+						break
+				else:
+					line = []
+				if not success:
 					break
-			else:
 				if cmd == ('M', 2):
 					# Program end.
 					break
@@ -2180,7 +2196,10 @@ class Printer: # {{{
 						mode = cmd
 					components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None, 'R': None}
 					for c in args:
-						assert c in components and components[c] is None
+						if c not in components:
+							errors.append('%d:invalid component %s' % (lineno, c))
+							continue
+						assert components[c] is None
 						components[c] = args[c]
 					f0 = pos[2]
 					if components['F'] is not None:
