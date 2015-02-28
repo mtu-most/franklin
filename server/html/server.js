@@ -119,6 +119,8 @@ function _setup_updater() {
 				probe_dist: Infinity,
 				probe_safe_dist: Infinity,
 				bed_id: 255,
+				fan_id: 255,
+				spindle_id: 255,
 				timeout: 0,
 				feedrate: 1,
 				zoffset: 0,
@@ -179,10 +181,12 @@ function _setup_updater() {
 			printers[port].probe_dist = values[6];
 			printers[port].probe_safe_dist = values[7];
 			printers[port].bed_id = values[8];
-			printers[port].timeout = values[9];
-			printers[port].feedrate = values[10];
-			printers[port].zoffset = values[11];
-			printers[port].status = values[12];
+			printers[port].fan_id = values[9];
+			printers[port].spindle_id = values[10];
+			printers[port].timeout = values[11];
+			printers[port].feedrate = values[12];
+			printers[port].zoffset = values[13];
+			printers[port].status = values[14];
 			trigger_update(port, 'variables_update');
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
@@ -190,7 +194,6 @@ function _setup_updater() {
 					max_deviation: 0,
 					num_axes: 0,
 					num_motors: 0,
-					delta: null,
 					delta_angle: 0,
 					dx: 0,
 					dy: 0,
@@ -273,13 +276,6 @@ function _setup_updater() {
 				for (var a = 0; a < values[5].length; ++a)
 					printers[port].spaces[index].axis[a].multiplier = values[5][a];
 			}
-			if (printers[port].spaces[index].type == TYPE_EXTRUDER) {
-				printers[port].spaces[index].dx = values[6][0];
-				printers[port].spaces[index].dy = values[6][1];
-				printers[port].spaces[index].dz = values[6][2];
-			}
-			else
-				printers[port].spaces[index].extruder = null;
 			if (printers[port].spaces[index].type == TYPE_DELTA) {
 				for (var i = 0; i < 3; ++i) {
 					printers[port].spaces[index].motor[i].delta_axis_min = values[6][i][0];
@@ -289,8 +285,13 @@ function _setup_updater() {
 				}
 				printers[port].spaces[index].delta_angle = values[6][3];
 			}
-			else
-				printers[port].spaces[index].delta = null;
+			if (printers[port].spaces[index].type == TYPE_EXTRUDER) {
+				for (var i = 0; i < printers[port].spaces[index].axis.length; ++i) {
+					printers[port].spaces[index].axis[i].extruder_dx = values[6][i][0];
+					printers[port].spaces[index].axis[i].extruder_dy = values[6][i][1];
+					printers[port].spaces[index].axis[i].extruder_dz = values[6][i][2];
+				}
+			}
 			trigger_update(port, 'space_update', index);
 		},
 		temp_update: function(port, index, values) {

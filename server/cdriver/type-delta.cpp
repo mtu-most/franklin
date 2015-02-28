@@ -159,7 +159,12 @@ static void free(Space *s) {
 	delete reinterpret_cast <Delta_private *>(s->type_data);
 }
 
-static void change0(Space *s, int qpos) {
+static float change0(Space *s, int axis, float value) {
+	return value;
+}
+
+static float unchange0(Space *s, int axis, float value) {
+	return value;
 }
 
 void Delta_init(int num) {
@@ -171,4 +176,5 @@ void Delta_init(int num) {
 	space_types[num].init = init;
 	space_types[num].free = free;
 	space_types[num].change0 = change0;
+	space_types[num].unchange0 = unchange0;
 }

@@ -198,6 +198,9 @@ class Printer: # {{{
 		self.printer_buffer = ''
 		self.command_buffer = ''
 		self.audiofile = None
+		self.bed_id = 255
+		self.fan_id = 255
+		self.spindle_id = 255
 		# Set up state.
 		self.sending = False
 		self.paused = False
@@ -213,6 +216,7 @@ class Printer: # {{{
 		self.run_id = run_id
 		self.zoffset = 0.
 		self.multipliers = []
+		self.current_extruder = 0
 		# Get the printer state.
 		self.spaces = []
 		self.temps = []
@@ -500,9 +504,9 @@ class Printer: # {{{
 				num_axes = struct.unpack('<B', info[5:6])[0]
 				num_motors = num_axes
 				self.spaces[channel].extruder = []
-				for a in range(len(spaces[0].axis) if channel != 0 else num_axes):
-					self.spaces[channel].extruder[a] = struct.unpack('<f', info[6 + 4 * a:6 + 4 * (a + 1)])
-				num_motors = num_axes
+				for a in range(num_axes):
+					dx, dy, dz = struct.unpack('<fff', info[6 + 12 * a:6 + 12 * (a + 1)])
+					self.spaces[channel].extruder.append({'dx': dx, 'dy': dy, 'dz': dz})
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -523,7 +527,7 @@ class Printer: # {{{
 		if data is None:
 			return False
 		self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins, num_spaces, num_temps, num_gpios = struct.unpack('<BBBBBBBB', data[:8])
-		self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.timeout, self.feedrate = struct.unpack('<HHffBHf', data[8:])
+		self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder = struct.unpack('<HHHfB', data[8:])
 		while len(self.spaces) < num_spaces:
 			self.spaces.append(self.Space(self, len(self.spaces)))
 			if update:
@@ -553,7 +557,7 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _write_globals(self, ns, nt, ng, update = True): # {{{
-		data = struct.pack('<BBBHHffBHf', ns if ns is not None else len(self.spaces), nt if nt is not None else len(self.temps), ng if ng is not None else len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.timeout, self.feedrate)
+		data = struct.pack('<BBBHHHfB', ns if ns is not None else len(self.spaces), nt if nt is not None else len(self.temps), ng if ng is not None else len(self.gpios), self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder)
 		self._send_packet(struct.pack('<B', protocol.command['WRITE_GLOBALS']) + data)
 		self._read_globals()
 		if update:
@@ -561,7 +565,7 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _globals_update(self, target = None): # {{{
-		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.timeout, self.feedrate, self.zoffset, not self.paused and (None if self.gcode is None else True)])
+		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.timeout, self.feedrate, self.zoffset, not self.paused and (None if self.gcode is None else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		self._broadcast(target, 'space_update', which, self.spaces[which].export())
@@ -706,12 +710,12 @@ class Printer: # {{{
 					return
 				elif cmd[0] == 'M' and cmd[1] in (3, 4):
 					# Start spindle; we don't support speed or direction, so M3 and M4 are equal.
-					if len(self.gpios) > 1:
-						self.set_gpio(1, state = 1)
+					if self.spindle_id < len(self.gpios):
+						self.set_gpio(self.spindle_id, state = 1)
 				elif cmd == ('M', 5):
 					# Stop spindle.
-					if len(self.gpios) > 1:
-						self.set_gpio(1, state = 0)
+					if self.spindle_id < len(self.gpios):
+						self.set_gpio(self.spindle_id, state = 0)
 				elif cmd == ('M', 42):
 					g = int(args['P'])
 					if len(self.gpios) > g:
@@ -729,11 +733,11 @@ class Printer: # {{{
 					else:
 						self.settemp(args['E'], args['S'])
 				elif cmd == ('M', 106):	# Fan on
-					if len(self.gpios) > 0:
-						self.set_gpio(0, state = 1)
+					if self.fan_id < len(self.gpios):
+						self.set_gpio(self.fan_id, state = 1)
 				elif cmd == ('M', 107): # Fan off
-					if len(self.gpios) > 0:
-						self.set_gpio(0, state = 0)
+					if self.fan_id < len(self.gpios):
+						self.set_gpio(self.fan_id, state = 0)
 				elif cmd == ('M', 109):
 					e = args['E']
 					if 'S' in args:
@@ -899,6 +903,10 @@ class Printer: # {{{
 							log('ignoring nonexistent axis %d %d' % (i, ij))
 							continue
 						if axis is not None and not math.isnan(axis):
+							if i == 1 and ij != self.current_extruder:
+								log('setting current extruder to %d' % ij)
+								self.current_extruder = ij
+								self._write_globals()
 							# Limit values for axis.
 							if axis > sp.axis[ij]['max'] - sp.axis[ij]['offset']:
 								log('limiting %d %d to %f because it exceeds max' % (i, ij, axis))
@@ -914,6 +922,10 @@ class Printer: # {{{
 							log('ignoring nonexistent axis %d %d' % (i, ij))
 							continue
 						if axis is not None and not math.isnan(axis):
+							if i == 1 and ij != self.current_extruder:
+								log('Setting current extruder to %d' % ij)
+								self.current_extruder = ij
+								self._write_globals(len(self.spaces), len(self.temps), len(self.gpios))
 							# Limit values for axis.
 							if axis > sp.axis[ij]['max'] - sp.axis[ij]['offset']:
 								log('limiting %d %d to %f because it exceeds max' % (i, ij, axis))
@@ -1284,7 +1296,7 @@ class Printer: # {{{
 			self.motor = []
 			self.delta = [{'axis_min': 0., 'axis_max': 0., 'rodlength': 0., 'radius': 0.} for t in range(3)]
 			self.delta_angle = 0
-			self.extruder = [0., 0., 0.]
+			self.extruder = []
 		def read(self, data):
 			axes, motors = data
 			if self.id == 1:
@@ -1298,7 +1310,7 @@ class Printer: # {{{
 				if self.id == 0 and a == 2:
 					self.axis[a]['offset'] -= self.printer.zoffset
 			if len(motors) > len(self.motor):
-				self.motor = [{'name': 'Motor %d' % i} for i in range(len(self.motor), len(motors))]
+				self.motor += [{'name': 'Motor %d' % i} for i in range(len(self.motor), len(motors))]
 			else:
 				self.motor[len(motors):] = []
 			for m in range(len(motors)):
@@ -1314,9 +1326,13 @@ class Printer: # {{{
 					data += struct.pack('<ffff', self.delta[a]['axis_min'], self.delta[a]['axis_max'], self.delta[a]['rodlength'], self.delta[a]['radius'])
 				data += struct.pack('<f', self.delta_angle)
 			elif self.type == TYPE_EXTRUDER:
-				data += struct.pack('<B', num_axes if num_axes is not None else len(self.axis))
-				for a in range(len(self.printer.spaces[0].axis)):
-					data += struct.pack('<f', self.extruder[a])
+				num = num_axes if num_axes is not None else len(self.axis)
+				data += struct.pack('<B', num)
+				for a in range(num):
+					if a < len(self.extruder):
+						data += struct.pack('<fff', self.extruder[a]['dx'], self.extruder[a]['dy'], self.extruder[a]['dz'])
+					else:
+						data += struct.pack('<fff', 0, 0, 0)
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -1341,7 +1357,7 @@ class Printer: # {{{
 			elif self.type == TYPE_DELTA:
 				return std + [[[a['axis_min'], a['axis_max'], a['rodlength'], a['radius']] for a in self.delta] + [self.delta_angle]]
 			elif self.type == TYPE_EXTRUDER:
-				return std + [[e for e in self.extruder]]
+				return std + [[[a['dx'], a['dy'], a['dz']] for a in self.extruder]]
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -1359,8 +1375,9 @@ class Printer: # {{{
 					ret += ''.join(['%s = %f\r\n' % (x, self.delta[i][x]) for x in ('rodlength', 'radius', 'axis_min', 'axis_max')])
 			elif self.type == TYPE_EXTRUDER:
 				ret += 'num_axes = %d\r\n' % len(self.axis)
-				ret += '[extruder %d]\r\n' % self.id
-				ret += ''.join(['%s = %f\r\n' % (e, self.extruder[i]) for a in range(len(self.printer.spaces[0].axis))])
+				for i in range(len(self.extruder)):
+					ret += '[extruder %d %d]\r\n' % (self.id, i)
+					ret += ''.join(['%s = %f\r\n' % (x, self.extruder[i][x]) for x in ('dx', 'dy', 'dz')])
 			for i, a in enumerate(self.axis):
 				ret += '[axis %d %d]\r\n' % (self.id, i)
 				ret += 'name = %s\r\n' % a['name']
@@ -1805,7 +1822,7 @@ class Printer: # {{{
 		for t in ('spaces', 'temps', 'gpios'):
 			message += 'num_%s = %d\r\n' % (t, len(getattr(self, t)))
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'probe_pin')])
-		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_safe_dist', 'bed_id', 'timeout')])
+		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'timeout')])
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings()
 		for i, t in enumerate(self.temps):
@@ -1820,10 +1837,10 @@ class Printer: # {{{
 		section = 'general'
 		index = None
 		obj = None
-		regexp = re.compile('\s*\[(general|(space|temp|gpio|extruder|(axis|motor|delta)\s+(\d+))\s+(\d+))\]\s*$|\s*(\w+)\s*=\s*(.*?)\s*$|\s*(?:#.*)?$')
+		regexp = re.compile('\s*\[(general|(space|temp|gpio|(extruder|axis|motor|delta)\s+(\d+))\s+(\d+))\]\s*$|\s*(\w+)\s*=\s*(.*?)\s*$|\s*(?:#.*)?$')
 		#1: (general|(space|temp|gpio|(axis|motor|delta)\s+(\d+))\s+(\d+))	1 section
-		#2: (space|temp|gpio|extruder|(axis|motor|delta)\s+(\d+))		2 section with index
-		#3: (axis|motor|delta)							3 sectionname with two indices
+		#2: (space|temp|gpio|(extruder|axis|motor|delta)\s+(\d+))		2 section with index
+		#3: (extruder|axis|motor|delta)						3 sectionname with two indices
 		#4: (\d+)								4 index of space
 		#5: (\d+)								5 only or component index
 		#6: (\w+)								6 identifier
@@ -1832,7 +1849,7 @@ class Printer: # {{{
 		globals_changed = False
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set()}
 		keys = {
-				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'timeout'},
+				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'timeout'},
 				'space': {'name', 'type', 'max_deviation', 'num_axes', 'delta_angle'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'},
 				'gpio': {'name', 'pin', 'state'},
@@ -1851,7 +1868,7 @@ class Printer: # {{{
 				if r.group(2) is not None:
 					# At least one index.
 					if r.group(3) is not None:
-						# Two indices.
+						# Two indices: axis, motor, extruder, delta.
 						index = (int(r.group(4)), int(r.group(5)))
 						section = r.group(3)
 						if index[0] >= len(self.spaces) or index[1] >= len(getattr(self.spaces[index[0]], section)):
@@ -1861,24 +1878,17 @@ class Printer: # {{{
 							continue
 						obj = getattr(self.spaces[index[0]], section)[index[1]]
 					else:
-						# One index.
+						# One index: space, temp, gpio.
 						index = int(r.group(5))
 						section = r.group(2)
-						if section == 'extruder':
-							if index >= len(self.spaces):
-								errors.append((l, 'index out of range'))
-								obj = None
-								continue
-							obj = self.spaces[index].extruder
-						else:
-							if index >= len(getattr(self, section + 's')):
-								errors.append((l, 'index out of range'))
-								obj = None
-								continue
-							obj = getattr(self, section + 's')[index]
+						if index >= len(getattr(self, section + 's')):
+							errors.append((l, 'index out of range'))
+							obj = None
+							continue
+						obj = getattr(self, section + 's')[index]
 					changed[section].add(index)
 				else:
-					# No indices.
+					# No indices: general.
 					section = r.group(1)
 					index = None
 					obj = self
@@ -1910,6 +1920,8 @@ class Printer: # {{{
 			elif section == 'delta':
 				#log('setting delta %d %d %s:%s' % (index[0], index[1], key, value))
 				self.set_space(index[0], delta = {index[1]: {key: value}}, update = update)
+			elif section == 'extruder':
+				self.set_space(index[0], extruder = {index[1]: {key: value}}, update = update)
 			else:
 				#log('setting %s %s %s:%s' % (section, repr(index), key, value))
 				getattr(self, 'set_' + section)(index, update = update, **{key: value})
@@ -2154,6 +2166,8 @@ class Printer: # {{{
 					if target >= len(pos[1]):
 						pos[1].extend([0.] * (target - len(pos[1]) + 1))
 					current_extruder = target
+					# Force update of extruder.
+					ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': pos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': pos[1][current_extruder], 'E': pos[1][current_extruder], 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, message))
 					continue
 				elif cmd == ('G', 20):
 					unit = .0254
@@ -2325,7 +2339,7 @@ class Printer: # {{{
 	# Globals. {{{
 	def get_globals(self):
 		ret = {'num_spaces': len(self.spaces), 'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('uuid', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'timeout', 'feedrate', 'zoffset', 'paused'):
+		for key in ('uuid', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'timeout', 'feedrate', 'zoffset', 'paused'):
 			ret[key] = getattr(self, key)
 		return ret
 	def set_globals(self, update = True, **ka):
@@ -2333,7 +2347,7 @@ class Printer: # {{{
 		ns = ka.pop('num_spaces') if 'num_spaces' in ka else None
 		nt = ka.pop('num_temps') if 'num_temps' in ka else None
 		ng = ka.pop('num_gpios') if 'num_gpios' in ka else None
-		for key in ('led_pin', 'probe_pin', 'bed_id'):
+		for key in ('led_pin', 'probe_pin', 'bed_id', 'fan_id', 'spindle_id'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
 		oldzoffset = self.zoffset
@@ -2370,9 +2384,11 @@ class Printer: # {{{
 			delta.append(self.spaces[space].delta_angle)
 			ret['delta'] = delta
 		elif self.spaces[space].type == TYPE_EXTRUDER:
-			ret['extruder'] = {}
-			for i, key in enumerate(('dx', 'dy', 'dz')):	# TODO
-				ret['extruder'][key] = self.spaces[space].extruder[i]
+			ret['extruder'] = []
+			for a in range(len(self.spaces[space].axis)):
+				ret['extruder'].append({})
+				for key in ('dx', 'dy', 'dz'):
+					ret['extruder'][-1][key] = self.spaces[space].extruder[a][key]
 		else:
 			log('invalid type')
 		return ret
@@ -2398,10 +2414,12 @@ class Printer: # {{{
 		if self.spaces[space].type == TYPE_EXTRUDER:
 			if 'extruder' in ka:
 				e = ka.pop('extruder')
-				for i, key in enumerate(('dx', 'dy', 'dz')):
-					if key in e:
-						self.spaces[space].extruder[i] = e.pop(key)
-				assert len(e) == 0
+				for ei, ee in e.items():
+					i = int(ei)
+					for key in ('dx', 'dy', 'dz'):
+						if key in ee:
+							self.spaces[space].extruder[i][key] = ee.pop(key)
+					assert len(ee) == 0
 		if self.spaces[space].type in (TYPE_CARTESIAN, TYPE_EXTRUDER):
 			if 'num_axes' in ka:
 				num_axes = int(ka.pop('num_axes'))
@@ -2413,13 +2431,13 @@ class Printer: # {{{
 			num_motors = 3;
 			if 'delta' in ka:
 				d = ka.pop('delta')
-				for dd, di in d.items():
-					i = int(dd)
+				for di, dd in d.items():
+					i = int(di)
 					assert 0 <= i < 3
 					for key in ('axis_min', 'axis_max', 'rodlength', 'radius'):
-						if key in di:
-							self.spaces[space].delta[i][key] = di.pop(key)
-					assert len(di) == 0
+						if key in dd:
+							self.spaces[space].delta[i][key] = dd.pop(key)
+					assert len(dd) == 0
 			if 'delta_angle' in ka:
 				self.spaces[space].delta_angle = ka.pop('delta_angle')
 		self._send_packet(struct.pack('<BB', protocol.command['WRITE_SPACE_INFO'], space) + self.spaces[space].write_info(num_axes))

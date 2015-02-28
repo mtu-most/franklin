@@ -328,7 +328,13 @@ void packet()
 			for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
 				spaces[which].axis[a]->settings[current_fragment].current = spaces[which].axis[a]->settings[current_fragment].source;
 		}
-		send_host(CMD_POS, which, t, spaces[which].axis[t]->settings[current_fragment].current - spaces[which].axis[t]->offset);
+		float value = spaces[which].axis[t]->settings[current_fragment].current;
+		if (which == 0) {
+			for (int s = 0; s < num_spaces; ++s) {
+				value = space_types[spaces[s].type].unchange0(&spaces[s], t, value);
+			}
+		}
+		send_host(CMD_POS, which, t, value - spaces[which].axis[t]->offset);
 		return;
 	}
 	case CMD_READ_GLOBALS:

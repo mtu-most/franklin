@@ -126,18 +126,23 @@ function Spacetype(num) {
 
 
 // Space. {{{
-function Extruder(num) {
-	var e = ['dx', 'dy', 'dz'];
+function Extruder_axis(space, axis) {
+	var e = ['extruder_dx', 'extruder_dy', 'extruder_dz'];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float([['space', num], e[i]], 1, 1));
+		div.Add(Float([['axis', [space, axis]], e[i]], 1, 1e-3));
 		e[i] = div;
 	}
-	return make_tablerow(space_name(num), e, ['rowtitle3'], undefined, TYPE_EXTRUDER, num);
+	return make_tablerow(axis_name(space, axis), e, ['rowtitle3'], undefined, TYPE_EXTRUDER, space);
+}
+
+function Extruder(num, dummy, table) {
+	table.AddMultiple('axis', Extruder_axis, true, num);
+	return [];
 }
 
 function Cartesian(num) {
-	return make_tablerow(space_name(num), [Float([['space', num], 'num_axes'], 0, 1)], ['rowtitle1'], undefined, TYPE_CARTESIAN, num);
+	return make_tablerow(space_name(num), [Float([['space', num], 'num_axes'], 0, 1)], ['rowtitle1'], undefined, [TYPE_CARTESIAN, TYPE_EXTRUDER], num);
 }
 
 function Delta_motor(space, motor) {
@@ -505,6 +510,8 @@ function Printer() {	// {{{
 	e.Add(Float([null, 'probe_safe_dist'], 0, 1e-3));
 	e.AddText(' mm');
 	e = setup.AddElement('div').AddText('ID of Bed Temp (255 for None):').Add(Float([null, 'bed_id'], 0));
+	e = setup.AddElement('div').AddText('ID of Fan Gpio (255 for None):').Add(Float([null, 'fan_id'], 0));
+	e = setup.AddElement('div').AddText('ID of Spindle Gpio (255 for None):').Add(Float([null, 'spindle_id'], 0));
 	e = setup.AddElement('div').AddText('Spaces:').Add(Float([null, 'num_spaces'], 0));
 	e = setup.AddElement('div').AddText('Temps:').Add(Float([null, 'num_temps'], 0));
 	e = setup.AddElement('div').AddText('Gpios:').Add(Float([null, 'num_gpios'], 0));
@@ -526,27 +533,9 @@ function Printer() {	// {{{
 		'Corners are rounded from requested path to this amount'
 	]).AddMultiple('space', Spacetype)]);
 	// }}}
-	// Extruder. {{{
-	setup.Add([make_table().AddMultipleTitles([
-		'Extruder',
-		'Offset X',
-		'Offset Y',
-		'Offset Z'
-	], [
-		'htitle3',
-		'title3',
-		'title3',
-		'title3'
-	], [
-		null,
-		'Offset in X direction when this extruder is in use.',
-		'Offset in Y direction when this extruder is in use.',
-		'Offset in Z direction when this extruder is in use.'
-	]).AddMultiple('space', Extruder, false, 0)]);
-	// }}}
 	// Cartesian. {{{
 	setup.Add([make_table().AddMultipleTitles([
-		'Cartesian',
+		'Cartesian/Extruder',
 		'Number of axes'
 	], [
 		'htitle1',
@@ -586,6 +575,24 @@ function Printer() {	// {{{
 		null,
 		'Correction angle for the printer. (degrees)'
 	]).AddMultiple('space', Delta_space, false, 1)]);
+	// }}}
+	// Extruder. {{{
+	setup.Add([make_table().AddMultipleTitles([
+		'Extruder',
+		'Offset X',
+		'Offset Y',
+		'Offset Z'
+	], [
+		'htitle3',
+		'title3',
+		'title3',
+		'title3'
+	], [
+		null,
+		'Offset in X direction when this extruder is in use.',
+		'Offset in Y direction when this extruder is in use.',
+		'Offset in Z direction when this extruder is in use.'
+	]).AddMultiple('space', Extruder, false, 0)]);
 	// }}}
 	// Axis. {{{
 	setup.Add([make_table().AddMultipleTitles([

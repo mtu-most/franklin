@@ -125,6 +125,12 @@ void packet()
 			write_stall();
 			return;
 		}
+		uint8_t step = motor[m].step_pin;
+		uint8_t dir = motor[m].dir_pin;
+		uint8_t limit_min = motor[m].limit_min_pin;
+		uint8_t limit_max = motor[m].limit_max_pin;
+		uint8_t sense = motor[m].sense_pin;
+		uint8_t flags = motor[m].flags;
 		motor[m].step_pin = command[2];
 		motor[m].dir_pin = command[3];
 		motor[m].limit_min_pin = command[4];
@@ -133,14 +139,29 @@ void packet()
 		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX | Motor::INVERT_STEP;
 		motor[m].flags &= ~mask;
 		motor[m].flags |= command[7] & mask;
-		if (motor[m].flags & Motor::INVERT_STEP)
-			SET(motor[m].step_pin);
-		else
-			RESET(motor[m].step_pin);
-		RESET(motor[m].dir_pin);
-		SET_INPUT(motor[m].limit_min_pin);
-		SET_INPUT(motor[m].limit_max_pin);
-		SET_INPUT(motor[m].sense_pin);
+		if (step != motor[m].step_pin || (flags & Motor::INVERT_STEP) != (motor[m].flags & Motor::INVERT_STEP)) {
+			UNSET(step);
+			if (motor[m].flags & Motor::INVERT_STEP)
+				SET(motor[m].step_pin);
+			else
+				RESET(motor[m].step_pin);
+		}
+		if (dir != motor[m].dir_pin) {
+			UNSET(dir);
+			RESET(motor[m].dir_pin);
+		}
+		if (limit_min != motor[m].limit_min_pin) {
+			UNSET(limit_min);
+			SET_INPUT(motor[m].limit_min_pin);
+		}
+		if (limit_max != motor[m].limit_max_pin) {
+			UNSET(limit_max);
+			SET_INPUT(motor[m].limit_max_pin);
+		}
+		if (sense != motor[m].sense_pin) {
+			UNSET(sense);
+			SET_INPUT(motor[m].sense_pin);
+		}
 		write_ack();
 		return;
 	}

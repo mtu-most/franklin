@@ -143,11 +143,11 @@ function set_value(printer, id, value, reply, arg) { // {{{
 			else if (typeof id[0][1] != 'number' && id[0][1][1] == null) {
 				// [['axis', [0, null]], 'offset']
 				// [['motor', [0, null]], 'delta_radius']
-				if (id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') {
+				if ((id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') && (id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_')) {
 					for (var n = 0; n < printer.spaces[id[0][1][0]]['num_' + type2plural[id[0][0]]]; ++n)
 						printer.call('set_' + id[0][0], [[id[0][1][0], n]], obj, reply);
 				}
-				else {
+				else if (id[0][0] == 'motor') {
 					obj = {};	// obj was wrong in this case.
 					obj[id[1].substr(6)] = value;
 					var o = {};
@@ -155,19 +155,35 @@ function set_value(printer, id, value, reply, arg) { // {{{
 						o[n] = obj;
 					printer.call('set_space', [id[0][1][0]], {delta: o}, reply);
 				}
+				else {
+					obj = {};	// obj was wrong in this case.
+					obj[id[1].substr(9)] = value;
+					var o = {};
+					for (var n = 0; n < printer.spaces[id[0][1][0]].num_axes; ++n)
+						o[n] = obj;
+					printer.call('set_space', [id[0][1][0]], {extruder: o}, reply);
+				}
 			}
-			else if (id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') {
+			else if ((id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') && (id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_')) {
 				// [['space', 1], 'num_axes']
 				// [['axis', [0, 1]], 'offset']
 				printer.call('set_' + id[0][0], [id[0][1]], obj, reply);
 			}
-			else {
+			else if (id[0][0] == 'motor') {
 				// [['motor', [0, 1]], 'delta_radius']
 				obj = {};	// obj was wrong in this case.
 				obj[id[1].substr(6)] = value;
 				var o = {};
 				o[id[0][1][1]] = obj;
 				printer.call('set_space', [id[0][1][0]], {delta: o}, reply);
+			}
+			else {
+				// [['motor', [0, 1]], 'delta_radius']
+				obj = {};	// obj was wrong in this case.
+				obj[id[1].substr(9)] = value;
+				var o = {};
+				o[id[0][1][1]] = obj;
+				printer.call('set_space', [id[0][1][0]], {extruder: o}, reply);
 			}
 		}
 	}
@@ -609,6 +625,8 @@ function update_globals() { // {{{
 	update_float(printer, [null, 'probe_dist']);
 	update_float(printer, [null, 'probe_safe_dist']);
 	update_float(printer, [null, 'bed_id']);
+	update_float(printer, [null, 'fan_id']);
+	update_float(printer, [null, 'spindle_id']);
 	update_float(printer, [null, 'timeout']);
 	update_float(printer, [null, 'feedrate']);
 	update_float(printer, [null, 'zoffset']);
@@ -814,12 +832,29 @@ function update_space(index) { // {{{
 		}
 		update_float(printer, [['space', index], 'delta_angle']);
 	}
+	if (printer.spaces[index].type == TYPE_EXTRUDER) {
+		for (var d = 0; d < printer.spaces[index].axis.length; ++d) {
+			update_float(printer, [['axis', [index, d]], 'extruder_dx']);
+			update_float(printer, [['axis', [index, d]], 'extruder_dy']);
+			update_float(printer, [['axis', [index, d]], 'extruder_dz']);
+		}
+		update_float(printer, [['space', index], 'delta_angle']);
+	}
 	var showing = [], hiding = [], newhidetypes = [];
+	function hide_check(type, onlytype) {
+		if (typeof onlytype == 'number')
+			return type != onlytype;
+		for (var i = 0; i < onlytype.length; ++i) {
+			if (onlytype[i] == type)
+				return false;
+		}
+		return true;
+	}
 	for (var h = 0; h < hidetypes.length; ++h) {
 		if (hidetypes[h][2].parentNode === null)
 			continue;
 		newhidetypes.push(hidetypes[h]);
-		if (printer.spaces[hidetypes[h][1]].type != hidetypes[h][0]) {
+		if (hide_check(printer.spaces[hidetypes[h][1]].type, hidetypes[h][0])) {
 			hidetypes[h][2].AddClass('hidden');
 			hiding.push(hidetypes[h][2].parentNode);
 		}

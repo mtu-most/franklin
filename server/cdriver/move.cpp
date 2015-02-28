@@ -14,10 +14,12 @@
 // vq			end velocity of connector part. (fraction/s)
 
 static void change0(int qpos) {
-	// Ignore space 0; it shouldn't be able to change itself.
-	for (int s = 1; s < num_spaces; ++s) {
+	if (num_spaces < 1)
+		return;
+	for (int s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
-		space_types[sp.type].change0(&sp, qpos);
+		for (int a = 0; a < spaces[0].num_axes; ++a)
+			queue[qpos].data[a] = space_types[sp.type].change0(&sp, a, queue[qpos].data[a]);
 	}
 }
 
@@ -104,7 +106,7 @@ uint8_t next_move() {
 #endif
 				}
 			}
-			if ((!isnan(queue[queue_start].data[a0 + a]) && isnan(sp.axis[a]->settings[current_fragment].source)) || (n != queue_end && !isnan(queue[n].data[a0 + a]) && isnan(sp.axis[a]->settings[current_fragment].source))) {
+			if ((!isnan(queue[queue_start].data[a0 + a]) || (n != queue_end && !isnan(queue[n].data[a0 + a]))) && isnan(sp.axis[a]->settings[current_fragment].source)) {
 				debug("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue: %f %f %f", F(queue[queue_start].data[a0 + a]), F(queue[n].data[a0 + a]), F(sp.axis[a]->settings[current_fragment].source));
 				// This possibly removes one move too many, but it shouldn't happen anyway.
 				if (queue[queue_start].cb)

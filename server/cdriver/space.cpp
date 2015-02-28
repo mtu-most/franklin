@@ -154,7 +154,6 @@ void Space::load_info(int32_t &addr)
 		debug("request for type %d ignored", type);
 		type = t;
 	}
-	float oldpos[num_motors];
 	bool ok;
 	if (t != type) {
 		loaddebug("setting type to %d", type);
@@ -168,24 +167,13 @@ void Space::load_info(int32_t &addr)
 	else {
 		if (!stopped || !motors_busy)
 			ok = false;
-		else {
+		else
 			ok = true;
-			space_types[type].xyz2motors(this, oldpos, &ok);
-		}
 	}
 	max_deviation = read_float(addr);
 	space_types[type].load(this, t, addr);
-	if (ok) {
-		float newpos[num_motors];
-		space_types[type].xyz2motors(this, newpos, &ok);
-		uint8_t i;
-		for (i = 0; i < num_motors; ++i) {
-			if (!isnan(oldpos[i]) && !isnan(newpos[i]) && oldpos[i] != newpos[i]) {
-				move_to_current();
-				break;
-			}
-		}
-	}
+	if (ok)
+		move_to_current();
 	loaddebug("done loading space");
 }
 

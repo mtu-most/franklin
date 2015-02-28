@@ -1,5 +1,5 @@
-#ifndef _FIRMWARE_H
-#define _FIRMWARE_H
+#ifndef _CDRIVER_H
+#define _CDRIVER_H
 
 #include "configuration.h"
 #include <math.h>
@@ -223,7 +223,8 @@ struct SpaceType
 	bool (*init)(Space *s);
 	void (*free)(Space *s);
 	void (*afree)(Space *s, int a);
-	void (*change0)(Space *s, int qpos);
+	float (*change0)(Space *s, int axis, float value);
+	float (*unchange0)(Space *s, int axis, float value);
 };
 
 struct Space
@@ -260,7 +261,7 @@ EXTERN SpaceType space_types[NUM_SPACE_TYPES];
 	Delta_init(1); \
 	Extruder_init(2); \
 } while(0)
-#endif
+EXTERN int current_extruder;
 
 struct Gpio
 {
@@ -297,12 +298,11 @@ struct Serial_t {
 // Globals
 EXTERN uint8_t num_spaces;
 EXTERN uint8_t num_extruders;
-EXTERN uint8_t num_temps, bed_id;
+EXTERN uint8_t num_temps;
 EXTERN uint8_t num_gpios;
 EXTERN uint32_t protocol_version;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
-EXTERN float probe_dist, probe_safe_dist;
 EXTERN uint16_t timeout;
 //EXTERN float room_T;	//[°C]
 EXTERN float feedrate;		// Multiplication factor for f values, used at start of move.
@@ -422,3 +422,4 @@ void Pin_t::read(uint16_t data) {
 		pin = 0;
 	}
 }
+#endif

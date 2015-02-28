@@ -172,6 +172,7 @@ void handle_motors() {
 				if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
 					continue;
 				motor[m].next_next_steps = fragment.samples[current_fragment_pos];
+				//debug("next next: %d %d", m, motor[m].next_next_steps);
 			}
 			current_fragment_pos += 1;
 		}

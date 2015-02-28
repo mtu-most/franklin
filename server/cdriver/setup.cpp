@@ -18,6 +18,7 @@ void setup(char const *port, char const *run_id)
 	command_end[0] = 0;
 	command_end[1] = 0;
 	motors_busy = false;
+	current_extruder = 0;
 	queue_start = 0;
 	queue_end = 0;
 	queue_full = false;
@@ -27,8 +28,6 @@ void setup(char const *port, char const *run_id)
 	out_busy = false;
 	led_pin.init();
 	probe_pin.init();
-	probe_dist = INFINITY;
-	probe_safe_dist = INFINITY;
 	led_phase = 0;
 	temps_busy = 0;
 	requested_temp = ~0;
