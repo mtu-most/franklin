@@ -83,8 +83,8 @@ enum Control {
 	// Control is 0x0000rrcc, with R=read request, r=reset value, c=current value.
 	CTRL_RESET,
 	CTRL_SET,
-	CTRL_UNSET,
-	CTRL_INPUT
+	CTRL_INPUT,
+	CTRL_UNSET
 };
 #define CONTROL_RESET(x) (((x) >> 2) & 0x3)
 #define CONTROL_CURRENT(x) ((x) & 0x3)

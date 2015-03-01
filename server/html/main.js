@@ -79,7 +79,7 @@ function init() { // {{{
 					c.moveTo(canvas.width - data.length, data[0]);
 					for (var i = 1; i < data.length; ++i)
 						c.lineTo(canvas.width - data.length + i, data[i]);
-					c.strokeStyle = '#f00';
+					c.strokeStyle = ['#f00', '#00f', '#0f0', '#ff0', '#000'][t < 5 ? t : 4];
 					c.lineWidth = 4;
 					c.stroke();
 				}
@@ -369,10 +369,8 @@ function add_name(type, index1, index2) { // {{{
 } // }}}
 
 function set_name(printer, type, index1, index2, name) { // {{{
-	for (var i = 0; i < printer.names[type][index1][index2].length; ++i) {
-		printer.names[type][index1][index2][i].ClearAll();
-		printer.names[type][index1][index2][i].AddText(name);
-	}
+	for (var i = 0; i < printer.names[type][index1][index2].length; ++i)
+		printer.names[type][index1][index2][i].ClearAll().AddText(name);
 } // }}}
 // }}}
 
@@ -465,6 +463,7 @@ function new_printer() { // {{{
 	printer.targetz = 0;
 	printer.disabling = false;
 	printer.temptargets = [];
+	printer.idgroups = {bed: [], fan: [], spindle: []};
 	multiples[port] = {space: [], axis: [], motor: [], temp: [], gpio: []};
 	ports[port][2] = Printer();
 	printers_element.Add(ports[port][2]);
@@ -624,12 +623,18 @@ function update_globals() { // {{{
 	update_pin([null, 'probe_pin']);
 	update_float(printer, [null, 'probe_dist']);
 	update_float(printer, [null, 'probe_safe_dist']);
-	update_float(printer, [null, 'bed_id']);
-	update_float(printer, [null, 'fan_id']);
-	update_float(printer, [null, 'spindle_id']);
 	update_float(printer, [null, 'timeout']);
 	update_float(printer, [null, 'feedrate']);
 	update_float(printer, [null, 'zoffset']);
+	// IDs.
+	ids = ['bed', 'fan', 'spindle'];
+	for (var i = 0; i < ids.length; ++i) {
+		var group = printer.idgroups[ids[i]];
+		for (var e = 0; e < group.length; ++e) {
+			var obj = group[e];
+			obj.checked = obj.obj[0][1] == printer[ids[i] + '_id'];
+		}
+	}
 	var stat = get_value(printer, [null, 'status']);
 	var c = document.getElementById('container');
 	c.RemoveClass('idle printing paused');
@@ -901,6 +906,11 @@ function update_gpio(index) { // {{{
 		get_element(printer, [['gpio', index], 'state']).checked = true;
 	else
 		get_element(printer, [['gpio', index], 'state']).checked = false;
+	if (printer.gpios[index].reset < 2)
+		get_element(printer, [['gpio', index], 'statespan']).RemoveClass('hidden');
+	else
+		get_element(printer, [['gpio', index], 'statespan']).AddClass('hidden');
+	get_element(printer, [['gpio', index], 'reset']).selectedIndex = printer.gpios[index].reset;
 } // }}}
 // }}}
 
@@ -1645,7 +1655,7 @@ function reset_position() { // {{{
 
 var drag = [[NaN, NaN], [NaN, NaN], [NaN, NaN], false];
 
-function xydown(e) {
+function xydown(e) { // {{{
 	var pos = get_pointer_pos_xy(selected_printer, e);
 	drag[0][0] = pos[0];
 	drag[1][0] = pos[1];
@@ -1656,8 +1666,9 @@ function xydown(e) {
 		});
 	});
 }
+// }}}
 
-function xymove(e) {
+function xymove(e) { // {{{
 	if (drag[3])
 		return;
 	if (!(e.buttons & 1)) {
@@ -1673,13 +1684,15 @@ function xymove(e) {
 	drag[3] = true;
 	selected_printer.call('goto', [[[drag[0][1] + dx, drag[1][1] + dy]]], {}, function() { drag[3] = false; update_canvas_and_spans(); });
 }
+// }}}
 
-function zdown(e) {
+function zdown(e) { // {{{
 	drag[2][0] = get_pointer_pos_z(selected_printer, e);
 	selected_printer.call('get_axis_pos', [0, 2], {}, function(z) { drag[2][1] = z; });
 }
+// }}}
 
-function zmove(e) {
+function zmove(e) { // {{{
 	if (drag[3])
 		return;
 	if (!(e.buttons & 1)) {
@@ -1692,5 +1705,5 @@ function zmove(e) {
 	drag[3] = true;
 	selected_printer.call('goto', [[{2: drag[2][1] + dz}]], {}, function() { drag[3] = false; update_canvas_and_spans(); });
 }
-
+// }}}
 // }}}

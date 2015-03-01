@@ -4,6 +4,8 @@ void Gpio::load(uint8_t self, int32_t &addr)
 {
 	pin.read(read_16(addr));
 	state = read_8(addr);
+	reset = (state >> 2) & 0x3;
+	state &= 0x3;
 	// State:  0: off, 1: on, 2: pullup input, 3: disabled
 	switch (state) {
 	case 0:
@@ -21,17 +23,19 @@ void Gpio::load(uint8_t self, int32_t &addr)
 		SET_INPUT_NOPULLUP(pin);
 		break;
 	}
+	arch_pin_set_reset(pin, reset);
 }
 
 void Gpio::save(int32_t &addr)
 {
 	write_16(addr, pin.write());
-	write_8(addr, state);
+	write_8(addr, state | (reset << 2));
 }
 
 void Gpio::init() {
 	pin.init();
-	state = 0;
+	state = 3;
+	reset = 3;
 }
 
 void Gpio::free() {

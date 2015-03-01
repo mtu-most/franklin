@@ -311,3 +311,23 @@ button.abort {
 input[type="text"] {
 	width: 3em;
 }
+
+.temp0 {
+	color: #f00;
+}
+
+.temp1 {
+	color: #00f;
+}
+
+.temp2 {
+	color: #0f0;
+}
+
+.temp3 {
+	color: #ff0;
+}
+
+.temp4 {
+	color: #000;
+}

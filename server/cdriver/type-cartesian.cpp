@@ -150,12 +150,8 @@ static float echange0(Space *s, int axis, float value) {
 }
 
 static float eunchange0(Space *s, int axis, float value) {
-	debug("extruder unchange %d %d %f", s->id, axis, value);
-	if (current_extruder >= s->num_axes || axis >= 3) {
-		debug("no change");
+	if (current_extruder >= s->num_axes || axis >= 3)
 		return value;
-	}
-	debug("%f", value + EADATA(s, current_extruder).offset[axis]);
 	return value - EADATA(s, current_extruder).offset[axis];
 }
 

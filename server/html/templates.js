@@ -122,6 +122,27 @@ function Spacetype(num) {
 	div.Add(Float([['space', num], 'max_deviation'], 2, 1e-3));
 	return make_tablerow(space_name(num), [Name('space', num), [select, button, span], div], ['rowtitle1']);
 }
+
+function Id(obj) {
+	var ret = Create('input');
+	ret.type = 'checkbox';
+	ret.id = make_id(printer, obj);
+	ret.obj = obj;
+	ret.printer = printer;
+	printer.idgroups[ret.obj[1]].push(ret);
+	ret.AddEvent('click', function(e) {
+		e.preventDefault();
+		if (!ret.checked)
+			ret.set_id(255);
+		else
+			ret.set_id(ret.obj[0][1]);
+		return false;
+	});
+	ret.set_id = function(num) {
+		set_value(this.printer, [null, this.obj[1] + '_id'], num);
+	}
+	return ret;
+}
 // }}}
 
 
@@ -212,8 +233,14 @@ function Pins_space(num, dummy, table) {
 
 // Temp. {{{
 function Temp_setup(num) {
-	var e = [Name('temp', num), ['fan_temp', 0], ['R0', 1, 1e3], ['R1', 1, 1e3], ['Rc', 1, 1e3], ['Tc', 0, 1], ['beta', 0, 1]];
-	for (var i = 1; i < e.length; ++i) {
+	var fan = Create('div');
+	fan.Add(Float([['temp', num], 'fan_temp'], 0));
+	return make_tablerow(temp_name(printer, num), [Name('temp', num), fan, Id([['temp', num], 'bed'])], ['rowtitle3']);
+}
+
+function Temp_hardware(num) {
+	var e = [['R0', 1, 1e3], ['R1', 1, 1e3], ['Rc', 1, 1e3], ['Tc', 0, 1], ['beta', 0, 1]];
+	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['temp', num], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
@@ -228,7 +255,10 @@ function Temp(num) {
 	current.id = make_id(printer, [['temp', num], 'temp']);
 	if (num !== null)
 		printer.temptargets.push(current.AddElement('span'));
-	return make_tablerow(temp_name(printer, num), [div, current], ['rowtitle2']);
+	var name = temp_name(printer, num);
+	if (num !== null && num < 5)
+		name.AddClass('temp' + num.toFixed(0));
+	return make_tablerow(name, [div, current], ['rowtitle2']);
 }
 
 function Pins_temp(num, dummy, table) {
@@ -240,6 +270,23 @@ function Pins_temp(num, dummy, table) {
 // }}}
 
 // Gpio. {{{
+function Gpio(num) {
+	var reset = Create('select');
+	reset.id = make_id(printer, [['gpio', num], 'reset']);
+	reset.AddElement('option').AddText('Off').Value = 0;
+	reset.AddElement('option').AddText('On').Value = 1;
+	reset.AddElement('option').AddText('Input').Value = 2;
+	reset.AddElement('option').AddText('Disabled').Value = 3;
+	var p = printer;
+	reset.AddEvent('change', function(e) {
+		var value = reset.options[reset.selectedIndex].Value;
+		set_value(p, [['gpio', num], 'reset'], value);
+		e.preventDefault();
+		return false;
+	});
+	return make_tablerow(gpio_name(num), [Name('gpio', num), reset, num === null ? '' : Id([['gpio', num], 'fan']), num === null ? '' : Id([['gpio', num], 'spindle'])], ['rowtitle5']);
+}
+
 function Pins_gpio(num) {
 	var e = [['Pin', 'pin']];
 	for (var i = 0; i < e.length; ++i)
@@ -436,9 +483,14 @@ function Gpios() { // {{{
 	var p = printer;
 	ret.AddMultiple('gpio', function(i) {
 		var ret = Create('span');
+		ret.id = make_id(printer, [['gpio', i], 'statespan']);
 		var input = ret.AddElement('input');
 		var index = i;
-		input.AddEvent('change', function() { set_value(p, [['gpio', index], 'state'], input.checked ? 1 : 0) });
+		input.AddEvent('click', function(e) {
+			set_value(p, [['gpio', index], 'state'], input.checked ? 1 : 0);
+			e.preventDefault();
+			return false;
+		});
 		input.type = 'checkbox';
 		input.id = make_id(p, [['gpio', i], 'state']);
 		var label = ret.AddElement('label');
@@ -509,9 +561,6 @@ function Printer() {	// {{{
 	e = setup.AddElement('div').AddText('Probe Safe Retract Distance:');
 	e.Add(Float([null, 'probe_safe_dist'], 0, 1e-3));
 	e.AddText(' mm');
-	e = setup.AddElement('div').AddText('ID of Bed Temp (255 for None):').Add(Float([null, 'bed_id'], 0));
-	e = setup.AddElement('div').AddText('ID of Fan Gpio (255 for None):').Add(Float([null, 'fan_id'], 0));
-	e = setup.AddElement('div').AddText('ID of Spindle Gpio (255 for None):').Add(Float([null, 'spindle_id'], 0));
 	e = setup.AddElement('div').AddText('Spaces:').Add(Float([null, 'num_spaces'], 0));
 	e = setup.AddElement('div').AddText('Temps:').Add(Float([null, 'num_temps'], 0));
 	e = setup.AddElement('div').AddText('Gpios:').Add(Float([null, 'num_gpios'], 0));
@@ -653,33 +702,64 @@ function Printer() {	// {{{
 	// }}} -->
 	// Temp. {{{
 	setup.Add([make_table().AddMultipleTitles([
-		'Temp',
+		'Temp settings',
 		'Name',
 		'Fan temp (°C)',
+		'Bed'
+	], [
+		'htitle3',
+		'title3',
+		'title3',
+		'title3'
+	], [
+		null,
+		'Name of the temperature control',
+		'Temerature above which the cooling is turned on.',
+		'Whether this Temp is the bed pin, used by G-code commands.'
+	]).AddMultiple('temp', Temp_setup)]);
+	setup.Add([make_table().AddMultipleTitles([
+		'Temp hardware',
 		'R0 (kΩ) or a (1000)',
 		'R1 (kΩ) or b (1000)',
 		'Rc (kΩ)',
 		'Tc (°C)',
 		'β (1) or NaN'
 	], [
-		'htitle7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7'
+		'htitle5',
+		'title5',
+		'title5',
+		'title5',
+		'title5',
+		'title5'
 	], [
 		null,
-		'Name of the temperature control',
-		'Temerature above which the cooling is turned on.',
 		'Resistance on the board in series with the thermistor.  Normally 4.7 or 10.  Or, if β is NaN, the result is ax+b with x the measured ADC value; this value is a/1000.',
 		'Resistance on the board in parallel with the thermistor.  Normally Infinity.  Or, if β is NaN, the result is ax+b with x the measured ADC value; this value is b/1000.',
 		'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.',
 		'Temperature at which the thermistor has value Rc.  Normally 20.',
 		"Temperature dependence of the thermistor.  Normally around 3800.  It can be found in the thermistor's data sheet.  Or, if β is NaN, the result is ax+b with x the measured ADC value."
-	]).AddMultiple('temp', Temp_setup)]);
+	]).AddMultiple('temp', Temp_hardware)]);
+	// }}}
+	// Gpio. {{{
+	setup.Add([make_table().AddMultipleTitles([
+		'Gpio',
+		'Name',
+		'Reset state',
+		'Fan',
+		'Spindle'
+	], [
+		'htitle4',
+		'title4',
+		'title4',
+		'title4',
+		'title4'
+	], [
+		null,
+		'Name of the Gpio.',
+		'Initial state and reset state of the Gpio.',
+		'Whether this Gpio is the fan pin, used by G-code commands.',
+		'Whether this Gpio is the spindle pin, used by G-code commands.',
+	]).AddMultiple('gpio', Gpio)]);
 	// }}}
 	// Pins. {{{
 	var pins = setup.Add(make_table(Pin('LED', [null, 'led_pin']), Pin('Probe', [null, 'probe_pin'])));

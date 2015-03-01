@@ -28,12 +28,13 @@
 EXTERN uint8_t NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, NUM_BUFFERS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT;
 // }}}
 
-enum Control {
+enum Control { // {{{
 	CTRL_RESET,
 	CTRL_SET,
 	CTRL_UNSET,
 	CTRL_INPUT
 };
+// }}}
 
 enum HWCommands { // {{{
 	HWC_BEGIN = 0x40,
@@ -70,7 +71,7 @@ enum HWCommands { // {{{
 // }}}
 
 extern int avr_active_motors;
-static inline int hwpacketsize(int len, int *available) {
+static inline int hwpacketsize(int len, int *available) { // {{{
 	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 3, 0, 4, 0, 0, 0, 1, -1, -1, -1, -1 };
 	switch (command[1][0] & ~0x10) {
 	case HWC_READY:
@@ -96,6 +97,7 @@ static inline int hwpacketsize(int len, int *available) {
 		return arch_packetsize[command[1][0] & 0xf];
 	}
 }
+// }}}
 
 struct AVRSerial : public Serial_t { // {{{
 	char buffer[256];
@@ -138,6 +140,11 @@ struct HostSerial : public Serial_t { // {{{
 	}
 };
 // }}}
+struct Avr_pin_t { // {{{
+	char state;
+	char reset;
+};
+// }}}
 
 // Declarations of static variables; extern because this is a header file. {{{
 EXTERN HostSerial host_serial;
@@ -149,7 +156,7 @@ EXTERN int avr_limiter_space;
 EXTERN int avr_limiter_motor;
 EXTERN int *avr_adc;
 EXTERN bool avr_running;
-EXTERN char *avr_pins;
+EXTERN Avr_pin_t *avr_pins;
 EXTERN int32_t *avr_pos_offset;
 EXTERN int avr_active_motors;
 EXTERN int *avr_adc_id;
@@ -420,9 +427,9 @@ static inline void hwpacket(int len) {
 	{
 		avr_write_ack("timeout");
 		for (int i = 0; i < NUM_DIGITAL_PINS; ++i)
-			avr_pins[i] = 3;
+			avr_pins[i].state = avr_pins[i].reset;
 		for (int i = 0; i < num_gpios; ++i)
-			gpios[i].state = 3;
+			gpios[i].state = gpios[i].reset;
 		motors_busy = false;
 		// Everything has shut down; reset pins to normal (but inactive).
 		arch_motors_change();
@@ -444,62 +451,69 @@ static inline bool arch_active() {
 // }}}
 
 // Hardware interface {{{
-static inline void avr_setup_pin(int pin, int type) {
+static inline void avr_setup_pin(int pin, int type, int resettype) {
 	if (avr_in_control_queue[pin])
 	{
 		for (int i = 0; i < avr_control_queue_length; ++i) {
 			if (avr_control_queue[i * 2 + 1] != pin)
 				continue;
-			avr_control_queue[i * 2] = type | 0xc;
+			avr_control_queue[i * 2] = type | (resettype << 2);
 			return;
 		}
 	}
-	avr_control_queue[avr_control_queue_length * 2] = type | 0xc;
+	avr_control_queue[avr_control_queue_length * 2] = type | (resettype << 2);
 	avr_control_queue[avr_control_queue_length * 2 + 1] = pin;
 	avr_control_queue_length += 1;
+	avr_in_control_queue[pin] = true;
 	try_send_control();
 }
 
 static inline void SET_INPUT(Pin_t _pin) {
 	if (!_pin.valid())
 		return;
-	if (avr_pins[_pin.pin] == 2)
+	if (avr_pins[_pin.pin].state == 2)
 		return;
-	avr_pins[_pin.pin] = 2;
-	avr_setup_pin(_pin.pin, CTRL_INPUT);
+	avr_pins[_pin.pin].state = 2;
+	avr_setup_pin(_pin.pin, CTRL_INPUT, avr_pins[_pin.pin].reset);
 }
 
 static inline void SET_INPUT_NOPULLUP(Pin_t _pin) {
 	if (!_pin.valid())
 		return;
-	if (avr_pins[_pin.pin] == 3)
+	if (avr_pins[_pin.pin].state == 3)
 		return;
-	avr_pins[_pin.pin] = 3;
-	avr_setup_pin(_pin.pin, CTRL_UNSET);
+	avr_pins[_pin.pin].state = 3;
+	avr_setup_pin(_pin.pin, CTRL_UNSET, avr_pins[_pin.pin].reset);
 }
 
 static inline void RESET(Pin_t _pin) {
 	if (!_pin.valid())
 		return;
-	if (avr_pins[_pin.pin] == 0)
+	if (avr_pins[_pin.pin].state == 0)
 		return;
-	avr_pins[_pin.pin] = 0;
-	avr_setup_pin(_pin.pin, _pin.inverted() ? CTRL_SET : CTRL_RESET);
+	avr_pins[_pin.pin].state = 0;
+	if (_pin.inverted())
+		avr_setup_pin(_pin.pin, CTRL_SET, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset);
+	else
+		avr_setup_pin(_pin.pin, CTRL_RESET, avr_pins[_pin.pin].reset);
 }
 
 static inline void SET(Pin_t _pin) {
 	if (!_pin.valid())
 		return;
-	if (avr_pins[_pin.pin] == 1)
+	if (avr_pins[_pin.pin].state == 1)
 		return;
-	avr_pins[_pin.pin] = 1;
-	avr_setup_pin(_pin.pin, _pin.inverted() ? CTRL_RESET : CTRL_SET);
+	avr_pins[_pin.pin].state = 1;
+	if (_pin.inverted())
+		avr_setup_pin(_pin.pin, CTRL_RESET, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset);
+	else
+		avr_setup_pin(_pin.pin, CTRL_SET, avr_pins[_pin.pin].reset);
 }
 
 static inline void SET_OUTPUT(Pin_t _pin) {
 	if (!_pin.valid())
 		return;
-	if (avr_pins[_pin.pin] < 2)
+	if (avr_pins[_pin.pin].state < 2)
 		return;
 	RESET(_pin);
 }
@@ -513,6 +527,18 @@ static inline bool GET(Pin_t _pin, bool _default) {
 	avr_call1(HWC_GETPIN, _pin.pin);
 	avr_get_reply();
 	return _pin.inverted() ^ command[1][1];
+}
+
+static inline void arch_pin_set_reset(Pin_t _pin, char state) {
+	if (!_pin.valid())
+		return;
+	if (avr_pins[_pin.pin].reset == state)
+		return;
+	avr_pins[_pin.pin].reset = state;
+	if (_pin.inverted())
+		avr_setup_pin(_pin.pin, avr_pins[_pin.pin].state < 2 ? 1 - avr_pins[_pin.pin].state : avr_pins[_pin.pin].state, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset);
+	else
+		avr_setup_pin(_pin.pin, avr_pins[_pin.pin].state, avr_pins[_pin.pin].reset);
 }
 // }}}
 
@@ -671,9 +697,10 @@ static inline void arch_setup_end(char const *run_id) {
 	avr_in_control_queue = new bool[NUM_DIGITAL_PINS];
 	avr_control_queue_length = 0;
 	avr_pong = -1;	// Choke on reset again.
-	avr_pins = new char[NUM_DIGITAL_PINS];
+	avr_pins = new Avr_pin_t[NUM_DIGITAL_PINS];
 	for (int i = 0; i < NUM_DIGITAL_PINS; ++i) {
-		avr_pins[i] = 3;	// INPUT_NOPULLUP.
+		avr_pins[i].reset = 3;	// INPUT_NOPULLUP.
+		avr_pins[i].state = avr_pins[i].reset;
 		avr_in_control_queue[i] = false;
 	}
 	avr_adc = new int[NUM_ANALOG_INPUTS];

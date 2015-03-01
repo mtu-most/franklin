@@ -266,7 +266,7 @@ EXTERN int current_extruder;
 struct Gpio
 {
 	Pin_t pin;
-	uint8_t state;
+	uint8_t state, reset;
 	void setup(uint8_t new_state);
 	void load(uint8_t self, int32_t &addr);
 	void save(int32_t &addr);
@@ -413,11 +413,15 @@ void disconnect();
 #include ARCH_INCLUDE
 
 void Pin_t::read(uint16_t data) {
-	if ((data & 0xff) != pin)
+	int new_pin = data & 0xff;
+	int new_flags = data >> 8;
+	if (new_pin != pin || new_flags != flags) {
 		SET_INPUT_NOPULLUP(*this);
-	pin = data & 0xff;
-	flags = data >> 8;
-	if (flags & ~3 || pin >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS) {
+		arch_pin_set_reset(*this, 3);
+	}
+	pin = new_pin;
+	flags = new_flags;
+	if (flags & ~3 || pin >= NUM_DIGITAL_PINS) {
 		flags = 0;
 		pin = 0;
 	}

@@ -1423,17 +1423,21 @@ class Printer: # {{{
 		def __init__(self, id):
 			self.name = 'Gpio %d' % id
 			self.id = id
+			self.state = 3
+			self.reset = 3
 		def read(self, data):
-			self.pin, self.state, = struct.unpack('<HB', data)
+			self.pin, state, = struct.unpack('<HB', data)
+			self.state = state & 0x3
+			self.reset = (state >> 2) & 0x3
 		def write(self):
-			return struct.pack('<HB', self.pin, self.state)
+			return struct.pack('<HB', self.pin, self.state | (self.reset << 2))
 		def export(self):
-			return [self.name, self.pin, self.state]
+			return [self.name, self.pin, self.state, self.reset]
 		def export_settings(self):
 			ret = '[gpio %d]\r\n' % self.id
 			ret += 'name = %s\r\n' % self.name
 			ret += 'pin = %s\r\n' % write_pin(self.pin)
-			ret += 'state = %d\r\n' % self.state
+			ret += 'reset = %d\r\n' % self.reset
 			return ret
 	# }}}
 	# }}}
@@ -1582,8 +1586,12 @@ class Printer: # {{{
 		f.close()
 	# }}}
 	def abort(self): # {{{
-		# TODO: really abort.
 		self.pause();
+		for t, temp in enumerate(self.temps):
+			self.settemp(t, float('nan'))
+		self.sleep();
+		for g, gpio in enumerate(self.gpios):
+			self.set_gpio(g, state = gpio.reset)
 	# }}}
 	def pause(self, pausing = True, store = True, update = True): # {{{
 		was_paused = self.paused
@@ -1852,7 +1860,7 @@ class Printer: # {{{
 				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'timeout'},
 				'space': {'name', 'type', 'max_deviation', 'num_axes', 'delta_angle'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'},
-				'gpio': {'name', 'pin', 'state'},
+				'gpio': {'name', 'pin', 'state', 'reset'},
 				'axis': {'name', 'offset', 'park', 'park_order', 'max_v', 'min', 'max'},
 				'motor': {'name', 'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_m', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'},
 				'extruder': {'dx', 'dy', 'dz'},
@@ -2091,7 +2099,7 @@ class Printer: # {{{
 		current_extruder = 0
 		for lineno, origline in enumerate(code.split('\n')):
 			line = origline.strip()
-			log('parsing %s' % line)
+			#log('parsing %s' % line)
 			# Get rid of line numbers and checksums.
 			if line.startswith('N'):
 				r = re.match(r'N(\d+)\s+(.*?)\*\d+\s*$', line)
@@ -2494,13 +2502,17 @@ class Printer: # {{{
 	# Gpio {{{
 	def get_gpio(self, gpio):
 		ret = {}
-		for key in ('name', 'pin', 'state'):
+		for key in ('name', 'pin', 'state', 'reset'):
 			ret[key] = getattr(self.gpios[gpio], key)
 		return ret
 	def set_gpio(self, gpio, update = True, **ka):
-		for key in ('name', 'pin', 'state'):
+		for key in ('name', 'pin', 'state', 'reset'):
 			if key in ka:
 				setattr(self.gpios[gpio], key, ka.pop(key))
+		self.gpios[gpio].state = int(self.gpios[gpio].state)
+		self.gpios[gpio].reset = int(self.gpios[gpio].reset)
+		if (self.gpios[gpio].reset >= 2 and self.gpios[gpio].state < 2) or (self.gpios[gpio].reset < 2 and self.gpios[gpio].state >= 2):
+			self.gpios[gpio].state = self.gpios[gpio].reset
 		self._send_packet(struct.pack('<BB', protocol.command['WRITE_GPIO'], gpio) + self.gpios[gpio].write())
 		self.gpios[gpio].read(self._read('GPIO', gpio))
 		if update:

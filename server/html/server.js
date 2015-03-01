@@ -225,7 +225,8 @@ function _setup_updater() {
 			for (var i = printers[port].num_gpios; i < new_num_gpios; ++i) {
 				printers[port].gpios.push({
 					pin: 0,
-					state: 0
+					state: 3,
+					reset: 3
 				});
 			}
 			printers[port].gpios.length = new_num_gpios;
@@ -312,6 +313,7 @@ function _setup_updater() {
 			printers[port].gpios[index].name = values[0];
 			printers[port].gpios[index].pin = values[1];
 			printers[port].gpios[index].state = values[2];
+			printers[port].gpios[index].reset = values[3];
 			trigger_update(port, 'gpio_update', index);
 		}
 	};
