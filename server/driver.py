@@ -803,7 +803,10 @@ class Printer: # {{{
 	# }}}
 	def _print_done(self, complete, reason): # {{{
 		if self.gcode is not None:
-			log('abort: %d %s' % (complete, reason))
+			if complete:
+				log('completed: %s' % reason)
+			else:
+				log('aborted: %s' % reason)
 		self.gcode = None
 		#traceback.print_stack()
 		if self.queue_info is None and self.gcode_id is not None:
@@ -848,6 +851,7 @@ class Printer: # {{{
 			#log('killing prober')
 			self.movecb.remove(self.probe_cb)
 			self.probe_cb(False)
+		self._globals_update()
 	# }}}
 	def _unpause(self): # {{{
 		if self.queue_info is None:
