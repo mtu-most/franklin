@@ -140,7 +140,7 @@ function Id(obj) {
 	});
 	ret.set_id = function(num) {
 		set_value(this.printer, [null, this.obj[1] + '_id'], num);
-	}
+	};
 	return ret;
 }
 // }}}
@@ -758,7 +758,7 @@ function Printer() {	// {{{
 		'Name of the Gpio.',
 		'Initial state and reset state of the Gpio.',
 		'Whether this Gpio is the fan pin, used by G-code commands.',
-		'Whether this Gpio is the spindle pin, used by G-code commands.',
+		'Whether this Gpio is the spindle pin, used by G-code commands.'
 	]).AddMultiple('gpio', Gpio)]);
 	// }}}
 	// Pins. {{{
