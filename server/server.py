@@ -18,6 +18,7 @@ import subprocess
 import crypt
 import time
 import serial
+import serial.tools.list_ports
 import json
 import traceback
 import fcntl
@@ -656,9 +657,13 @@ def print_done(port, completed, reason): # {{{
 # Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
 if local:
 	websockets.call(None, Connection.add_port, '-')()
-elif os.path.exists('/sys/class/tty'):
-	for tty in os.listdir('/sys/class/tty'):
-		websockets.call(None, Connection.add_port, '/dev/' + tty)()
+else:
+	try:
+		for tty in serial.tools.list_ports.comports():
+			websockets.call(None, Connection.add_port, tty[0])()
+	except:
+		traceback.print_exc()
+		log('Not probing serial ports, because an error occurred: %s' % sys.exc_info()[1])
 
 # Set default printer. {{{
 if ' ' in config['printer']:

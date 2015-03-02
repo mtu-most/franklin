@@ -582,6 +582,63 @@ function Printer() {	// {{{
 		'Corners are rounded from requested path to this amount'
 	]).AddMultiple('space', Spacetype)]);
 	// }}}
+	// Axis. {{{
+	setup.Add([make_table().AddMultipleTitles([
+		'Axes',
+		'Name',
+		'Park pos (mm)',
+		'Park order',
+		'Max v (mm/s)',
+		'Min (mm)',
+		'Max (mm)'
+	], [
+		'htitle7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7'
+	], [
+		null,
+		'Name of the axis',
+		'Park position of the nozzle.',
+		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
+		'Maximum speed that the motor is allowed to move.',
+		'Minimum position that the axis is allowed to go to.',
+		'Maximum position that the axis is allowed to go to.'
+	]).AddMultiple('space', Axis, false)]);
+	// }}}
+	// Motor. {{{
+	setup.Add([make_table().AddMultipleTitles([
+		'Motor',
+		'Name',
+		'Coupling (steps/mm)',
+		'Microsteps',
+		'Switch pos (mm)',
+		'Home order',
+		'Limit v (mm/s)',
+		'Limit a (m/s²)'
+	], [
+		'htitle7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7'
+	], [
+		null,
+		'Name of the motor',
+		'Number of (micro)steps that the motor needs to do to move the hardware by one mm.',
+		'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
+		'Position of the home switch. (mm)',
+		'Order when homing.  Equal order homes simultaneously; lower order homes first.',
+		'Maximum speed of the motor. (mm/s)',
+		'Maximum acceleration of the motor. (m/s²)'
+	]).AddMultiple('space', Motor, false)]);
+	// }}} -->
 	// Cartesian. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Cartesian/Extruder',
@@ -643,63 +700,6 @@ function Printer() {	// {{{
 		'Offset in Z direction when this extruder is in use.'
 	]).AddMultiple('space', Extruder, false, 0)]);
 	// }}}
-	// Axis. {{{
-	setup.Add([make_table().AddMultipleTitles([
-		'Axes',
-		'Name',
-		'Park pos (mm)',
-		'Park order',
-		'Max v (mm/s)',
-		'Min (mm)',
-		'Max (mm)'
-	], [
-		'htitle7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7'
-	], [
-		null,
-		'Name of the axis',
-		'Park position of the nozzle.',
-		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
-		'Maximum speed that the motor is allowed to move.',
-		'Minimum position that the axis is allowed to go to.',
-		'Maximum position that the axis is allowed to go to.'
-	]).AddMultiple('space', Axis, false)]);
-	// }}}
-	// Motor. {{{
-	setup.Add([make_table().AddMultipleTitles([
-		'Motor',
-		'Name',
-		'Coupling (steps/mm)',
-		'Microsteps',
-		'Switch pos (mm)',
-		'Home order',
-		'Limit v (mm/s)',
-		'Limit a (m/s²)'
-	], [
-		'htitle7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7'
-	], [
-		null,
-		'Name of the motor',
-		'Number of (micro)steps that the motor needs to do to move the hardware by one mm.',
-		'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
-		'Position of the home switch. (mm)',
-		'Order when homing.  Equal order homes simultaneously; lower order homes first.',
-		'Maximum speed of the motor. (mm/s)',
-		'Maximum acceleration of the motor. (m/s²)'
-	]).AddMultiple('space', Motor, false)]);
-	// }}} -->
 	// Temp. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Temp settings',
