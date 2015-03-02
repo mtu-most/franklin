@@ -18,7 +18,6 @@ import subprocess
 import crypt
 import time
 import serial
-import serial.tools.list_ports
 import json
 import traceback
 import fcntl
@@ -659,8 +658,14 @@ if local:
 	websockets.call(None, Connection.add_port, '-')()
 else:
 	try:
+		import serial.tools.list_ports
 		for tty in serial.tools.list_ports.comports():
 			websockets.call(None, Connection.add_port, tty[0])()
+	except ImportError:
+		# Try Linux sysfs.
+		if os.path.exists('/sys/class/tty'):
+			for tty in os.listdir('/sys/class/tty'):
+				websockets.call(None, Connection.add_port, '/dev/' + tty)()
 	except:
 		traceback.print_exc()
 		log('Not probing serial ports, because an error occurred: %s' % sys.exc_info()[1])
