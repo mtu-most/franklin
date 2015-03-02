@@ -8,7 +8,7 @@ void Temp::load(int32_t &addr, int id)
 	Tc = read_float(addr);
 	beta = read_float(addr);
 	K = exp(logRc - beta / Tc);
-	//debug("K %f R0 %f R1 %f logRc %f Tc %f beta %f", F(K), F(R0), F(R1), F(logRc), F(Tc), F(beta));
+	//debug("K %f R0 %f R1 %f logRc %f Tc %f beta %f", K, R0, R1, logRc, Tc, beta);
 	/*
 	core_C = read_float(addr);
 	shell_C = read_float(addr);
@@ -75,7 +75,7 @@ float Temp::fromadc(int32_t adc) {
 		// beta == NAN is used for calibration: return raw value as K.
 		return adc * R0 + R1;
 	}
-	//debug("K: %f adc: %d beta: %f", F(K), adc, F(beta));
+	//debug("K: %f adc: %d beta: %f", K, adc, beta);
 	return -beta / log(K * ((1 << ADCBITS) / R0 / adc - 1 / R0 - 1 / R1));
 }
 
@@ -88,7 +88,7 @@ int32_t Temp::toadc(float T) {
 		return T - R1 / R0;
 	}
 	float Rs = K * exp(beta * 1. / T);
-	//debug("K %f Rs %f R0 %f logRc %f Tc %f beta %f", F(K), F(Rs), F(R0), F(logRc), F(Tc), F(beta));
+	//debug("K %f Rs %f R0 %f logRc %f Tc %f beta %f", K, Rs, R0, logRc, Tc, beta);
 	return ((1 << ADCBITS) - 1) * Rs / (Rs + R0);
 }
 

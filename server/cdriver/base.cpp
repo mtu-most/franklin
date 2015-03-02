@@ -2,6 +2,8 @@
 
 #include "cdriver.h"
 
+#ifdef SERIAL
+// Only for connections that can fail.
 void reset() { // {{{
 	// This shouldn't happen.  But if it does, die.
 	// First disable all pins.
@@ -33,10 +35,35 @@ void disconnect() { // {{{
 	// Hardware has disconnected.  Notify host and wait for reconnect.
 	arch_disconnect();
 	send_host(CMD_DISCONNECT);
-	while (!arch_connected()) {
+	while (arch_fds() == 0) {
 		poll(&pollfds[0], 1, -1);
 		serial(0);
 	}
+}
+// }}}
+#endif
+
+// Time handling.  {{{
+static void get_current_times(uint32_t *current_time, uint32_t *longtime) {
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	if (current_time)
+		*current_time = tv.tv_sec * 1000000 + tv.tv_usec;
+	if (longtime)
+		*longtime = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+	//fprintf(stderr, "current times: %d %d\n", *current_time, *longtime);
+}
+
+uint32_t utime() {
+	uint32_t ret;
+	get_current_times(&ret, NULL);
+	return ret;
+}
+
+uint32_t millis() {
+	uint32_t ret;
+	get_current_times(NULL, &ret);
+	return ret;
 }
 // }}}
 
@@ -49,7 +76,7 @@ int main(int argc, char **argv) { // {{{
 	while(true) {
 		for (int i = 0; i < 2; ++i)
 			pollfds[i].revents = 0;
-		poll(pollfds, arch_active() ? 2 : 1, -1);
+		poll(pollfds, arch_fds() + 1, -1);
 		for (int i = 0; i < 2; ++i) {
 			if (pollfds[i].revents)
 				serial(i);

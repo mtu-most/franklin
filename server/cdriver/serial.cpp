@@ -76,6 +76,7 @@ static void send_to_host() {
 void serial(uint8_t which)
 {
 	while (serialdev[which]->available()) {
+#ifdef SERIAL
 		if (which == 1) {
 			if (!had_data && command_end[which] > 0 && utime() - last_micros >= 100000)
 			{
@@ -84,6 +85,7 @@ void serial(uint8_t which)
 			}
 			had_data = false;
 		}
+#endif
 		while (command_end[which] == 0)
 		{
 			if (!serialdev[which]->available()) {
@@ -94,6 +96,7 @@ void serial(uint8_t which)
 #ifdef DEBUG_SERIAL
 			debug("received on %d: %x", which, command[which][0]);
 #endif
+#ifdef SERIAL
 			if (which == 1) {
 				had_data = true;
 				if (doing_debug) {
@@ -181,6 +184,7 @@ void serial(uint8_t which)
 				last_micros = utime();
 			}
 			else {
+#endif
 				// Message received.
 				if (command[which][0] == OK) {
 					if (sending_to_host) {
@@ -197,7 +201,9 @@ void serial(uint8_t which)
 						debug("received unexpected OK");
 					continue;
 				}
+#ifdef SERIAL
 			}
+#endif
 			command_end[which] = 1;
 		}
 		int len = serialdev[which]->available();
@@ -206,6 +212,7 @@ void serial(uint8_t which)
 #ifdef DEBUG_SERIAL
 			//debug("no more data available on %d now", which);
 #endif
+#ifdef SERIAL
 			// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
 			if (which == 1 && out_busy && utime() - out_time >= 1000000) {
 #ifdef DEBUG_SERIAL
@@ -213,18 +220,23 @@ void serial(uint8_t which)
 #endif
 				send_packet();
 			}
+#endif
 			return;
 		}
+#ifdef SERIAL
 		if (which == 1)
 			had_data = true;
+#endif
 		if (len + command_end[which] > COMMAND_SIZE)
 			len = COMMAND_SIZE - command_end[which];
 		uint8_t cmd_len;
+#ifdef SERIAL
 		if (which == 1) {
 			cmd_len = hwpacketsize(command_end[which], &len);
 			cmd_len += (cmd_len + 2) / 3;
 		}
 		else
+#endif
 			cmd_len = command[which][0];
 		if (command_end[which] + len > cmd_len)
 			len = cmd_len - command_end[which];
@@ -235,8 +247,10 @@ void serial(uint8_t which)
 			fprintf(stderr, " %02x", command[which][command_end[which] + i]);
 		fprintf(stderr, "\n");
 #endif
+#ifdef SERIAL
 		if (which == 1)
 			last_micros = utime();
+#endif
 		command_end[which] += len;
 		if (command_end[which] < cmd_len)
 		{
@@ -245,6 +259,7 @@ void serial(uint8_t which)
 #endif
 			return;
 		}
+#ifdef SERIAL
 #ifdef DEBUG_DATA
 		if (which == 1) {
 			fprintf(stderr, "recv:");
@@ -252,6 +267,7 @@ void serial(uint8_t which)
 				fprintf(stderr, " %02x", command[which][i]);
 			fprintf(stderr, "\n");
 		}
+#endif
 #endif
 #ifdef DEBUG_HOST
 		if (which == 0) {
@@ -263,6 +279,7 @@ void serial(uint8_t which)
 #endif
 		int end = command_end[which];
 		command_end[which] = 0;
+#ifdef SERIAL
 		// Check packet integrity.
 		if (which == 1) {
 			// Checksum must be good.
@@ -333,10 +350,12 @@ void serial(uint8_t which)
 			hwpacket(cmd_len);
 		}
 		else
+#endif
 			packet();
 	}
 }
 
+#ifdef SERIAL
 // Command sending method:
 // When sending a command:
 // - fill appropriate command buffer
@@ -437,6 +456,7 @@ void write_stall()
 	had_stall = true;
 	serialdev[1]->write(ff_in ? CMD_STALL0 : CMD_STALL1);
 }
+#endif
 
 void send_host(char cmd, int s, int m, float f, int e, int len)
 {

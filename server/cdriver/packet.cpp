@@ -30,6 +30,7 @@ void packet()
 	int32_t addr;
 	switch (command[0][1])
 	{
+#ifdef SERIAL
 	case CMD_RESET: // reset controller; used before reprogramming flash.
 	{
 #ifdef DEBUG_CMD
@@ -37,6 +38,7 @@ void packet()
 #endif
 		reset();
 	}
+#endif
 	case CMD_GOTO:	// goto
 	case CMD_GOTOCB:	// goto with callback
 	case CMD_PROBE:	// probe
@@ -68,7 +70,7 @@ void packet()
 					queue[queue_end].f[ch] = f.f;
 				else
 					queue[queue_end].data[ch - 2] = f.f;
-				//debug("goto (%d) %d %f", queue_end, ch, F(f.f));
+				//debug("goto (%d) %d %f", queue_end, ch, f.f);
 				initialized = true;
 				++t;
 			}
@@ -89,7 +91,7 @@ void packet()
 		float F1 = queue[queue_end].f[1];
 		if (isnan(F0) || isnan(F1) || F0 < 0 || F1 < 0 || (F0 == 0 && F1 == 0))
 		{
-			debug("Invalid F0 or F1: %f %f", F(F0), F(F1));
+			debug("Invalid F0 or F1: %f %f", F0, F1);
 			abort();
 			return;
 		}
@@ -191,7 +193,7 @@ void packet()
 			}
 		}
 		else {
-			//debug("Temp %d set to %f", which, F(target));
+			//debug("Temp %d set to %f", which, target);
 			initialized = true;
 		}
 		arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin[0].valid() ? temps[which].power_pin[0].pin : ~0, temps[which].power_pin[0].inverted(), temps[which].adctarget[0], temps[which].power_pin[1].valid() ? temps[which].power_pin[1].pin : ~0, temps[which].power_pin[1].inverted(), temps[which].adctarget[1]);
@@ -210,14 +212,14 @@ void packet()
 			//abort();
 			return;
 		}
-		ReadFloat min, max;
+		ReadFloat min_temp, max_temp;
 		for (uint8_t i = 0; i < sizeof(float); ++i)
 		{
-			min.b[i] = command[0][3 + i];
-			max.b[i] = command[0][3 + i + sizeof(float)];
+			min_temp.b[i] = command[0][3 + i];
+			max_temp.b[i] = command[0][3 + i + sizeof(float)];
 		}
-		temps[which].min_alarm = min.f;
-		temps[which].max_alarm = max.f;
+		temps[which].min_alarm = min_temp.f;
+		temps[which].max_alarm = max_temp.f;
 		temps[which].adcmin_alarm = temps[which].toadc(temps[which].min_alarm);
 		temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm);
 		return;
@@ -302,7 +304,7 @@ void packet()
 		spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
 		cpdebug("cp %d %d four %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
 		arch_addpos(which, t, diff);
-		//debug("setpos %d %d %d", which, t, F(spaces[which].motor[t]->settings[current_fragment].current_pos));
+		//debug("setpos %d %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos);
 		/*arch_stop();
 		space_types[spaces[which].type].reset_pos(&spaces[which]);
 		for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
@@ -554,12 +556,13 @@ void packet()
 		send_host(CMD_PIN, GET(gpios[which].pin, false) ? 1 : 0);
 		return;
 	}
+#ifdef SERIAL
 	case CMD_RECONNECT:
 	{
 #ifdef DEBUG_CMD
 		debug("CMD_RECONNECT");
 #endif
-		if (arch_connected()) {
+		if (arch_fds() != 0) {
 			debug("Unexpected reconnect");
 			abort();
 			return;
@@ -567,6 +570,7 @@ void packet()
 		arch_reconnect(reinterpret_cast <char *>(&command[0][2]));
 		return;
 	}
+#endif
 #ifdef HAVE_AUDIO
 	case CMD_AUDIO_SETUP:
 	{

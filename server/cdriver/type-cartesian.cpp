@@ -14,7 +14,7 @@ static void reset_pos(Space *s) {
 	// This is mostly useful for extruders.
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
 		s->axis[a]->settings[current_fragment].source = s->motor[a]->settings[current_fragment].current_pos / s->motor[a]->steps_per_m;
-		//debug("set pos for %d to %f", a, F(s->axis[a]->settings[current_fragment].source));
+		//debug("set pos for %d to %f", a, s->axis[a]->settings[current_fragment].source);
 	}
 }
 

@@ -177,11 +177,9 @@ void packet()
 			return;
 		}
 		for (uint8_t i = 0; i < 2; ++i) {
-			if (~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS && (command[2 + i] != adc[a].linked[i] || command[5] & 0x80)) {
-				if (adc[a].value[i] & 0x4000)
-					SET(adc[a].linked[i]);
-				else
-					RESET(adc[a].linked[i]);
+			// If the old one was active, deactivate it.
+			if (~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
+				UNSET(adc[a].linked[i]);
 				if (i == 0 && adc[a].is_on) {
 					adc[a].is_on = false;
 					led_fast -= 1;

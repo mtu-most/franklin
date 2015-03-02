@@ -55,7 +55,7 @@ static void handle_adc() {
 }
 
 static void handle_led() {
-	uint16_t timing = led_fast ? 1000 / 100 : 1000 / 50;
+	uint16_t timing = 1000 / (50 * (led_fast + 1));
 	uint16_t current_time = millis();
 	if (current_time - led_last < timing)
 		return;

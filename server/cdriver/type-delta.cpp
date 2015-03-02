@@ -18,9 +18,9 @@ static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
 	float dx = target[0] - APEX(s, a).x;
 	float dy = target[1] - APEX(s, a).y;
 	float r2 = dx * dx + dy * dy;
-	float amax = min(APEX(s, a).axis_max, APEX(s, a).rodlength);
+	float amax = APEX(s, a).axis_max < APEX(s, a).rodlength ? APEX(s, a).axis_max : APEX(s, a).rodlength;
 	if (r2 > amax * amax) {
-		debug ("not ok 1: %f %f %f %f %f %f %f", F(target[0]), F(target[1]), F(dx), F(dy), F(r2), F(APEX(s, a).rodlength), F(APEX(s, a).axis_max));
+		debug ("not ok 1: %f %f %f %f %f %f %f", target[0], target[1], dx, dy, r2, APEX(s, a).rodlength, APEX(s, a).axis_max);
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
 		float factor(amax / sqrt(r2));
@@ -30,9 +30,9 @@ static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
 	}
 	// Inner product shows if projection is inside or outside the printable region.
 	float projection = -(dx / APEX(s, a).radius * APEX(s, a).x + dy / APEX(s, a).radius * APEX(s, a).y);
-	float amin = max(APEX(s, a).axis_min, -APEX(s, a).rodlength);
+	float amin = APEX(s, a).axis_min > -APEX(s, a).rodlength ? -APEX(s, a).rodlength : APEX(s, a).axis_min;
 	if (projection < amin) {
-		debug ("not ok 2: %f %f %f %f %f", F(projection), F(dx), F(dy), F(APEX(s, a).x), F(APEX(s, a).y));
+		debug ("not ok 2: %f %f %f %f %f", projection, dx, dy, APEX(s, a).x, APEX(s, a).y);
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
 		target[0] -= ((amin - projection) / APEX(s, a).radius - .001) * APEX(s, a).x;
 		target[1] -= ((amin - projection) / APEX(s, a).radius - .001) * APEX(s, a).y;
@@ -50,7 +50,7 @@ static inline float delta_to_axis(Space *s, uint8_t a, bool *ok) {
 	float r2 = dx * dx + dy * dy;
 	float l2 = APEX(s, a).rodlength * APEX(s, a).rodlength;
 	float dest = sqrt(l2 - r2) + dz;
-	//debug("dta dx %f dy %f dz %f z %f, r %f target %f", F(dx), F(dy), F(dz), F(APEX(s, a).z), F(r), F(target));
+	//debug("dta dx %f dy %f dz %f z %f, r %f target %f", dx, dy, dz, APEX(s, a).z, r, target);
 	return dest;
 }
 
@@ -82,7 +82,7 @@ static void reset_pos (Space *s) {
 		s->axis[2]->settings[current_fragment].source = NAN;
 	}
 	else {
-		//debug("resetpos %f", F(APEX(s, a).current_pos));
+		//debug("resetpos %f", APEX(s, a).current_pos);
 		s->axis[0]->settings[current_fragment].source = 0;
 		s->axis[1]->settings[current_fragment].source = 0;
 		s->axis[2]->settings[current_fragment].source = p[0];

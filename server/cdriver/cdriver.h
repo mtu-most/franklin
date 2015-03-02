@@ -18,6 +18,16 @@
 #define EXTERN extern
 #endif
 
+#define debug(...) do { buffered_debug_flush(); fprintf(stderr, "#"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while (0)
+
+static inline int min(int a, int b) {
+	return a < b ? a : b;
+}
+
+static inline int max(int a, int b) {
+	return a > b ? a : b;
+}
+
 struct Pin_t {
 	uint8_t flags;
 	uint8_t pin;
@@ -182,7 +192,7 @@ struct Axis
 	float park;		// Park position; not used by the firmware, but stored for use by the host.
 	uint8_t park_order;
 	float max_v;
-	float min, max;
+	float min_pos, max_pos;
 	void *type_data;
 };
 
@@ -290,6 +300,27 @@ struct Serial_t {
 	virtual void flush() = 0;
 	virtual int available() = 0;
 };
+
+struct HostSerial : public Serial_t {
+	char buffer[256];
+	int start, end;
+	void begin(int baud);
+	void write(char c);
+	void refill();
+	int read();
+	int readBytes (char *target, int len) {
+		for (int i = 0; i < len; ++i)
+			*target++ = read();
+		return len;
+	}
+	void flush() {}
+	int available() {
+		if (start == end)
+			refill();
+		return end - start;
+	}
+};
+EXTERN HostSerial host_serial;
 
 #define COMMAND_SIZE 127
 #define COMMAND_LEN_MASK 0x7f
@@ -409,15 +440,60 @@ void globals_save(int32_t &address);
 // base.cpp
 void reset();
 void disconnect();
+uint32_t utime();
+uint32_t millis();
 
 #include ARCH_INCLUDE
+
+// ===============
+// Arch interface.
+// ===============
+// Defined or variables:
+// NUM_ANALOG_INPUTS
+// NUM_DIGITAL_PINS
+// ADCBITS
+// FRAGMENTS_PER_BUFFER
+// BYTES_PER_FRAGMENT
+static inline void SET_INPUT(Pin_t _pin);
+static inline void SET_INPUT_NOPULLUP(Pin_t _pin);
+static inline void RESET(Pin_t _pin);
+static inline void SET(Pin_t _pin);
+static inline void SET_OUTPUT(Pin_t _pin);
+static inline bool GET(Pin_t _pin, bool _default);
+static inline void arch_setup_start(char const *port);
+static inline void arch_setup_end(char const *run_id);
+static inline void arch_motors_change();
+static inline void arch_addpos(int s, int m, int diff);
+static inline void arch_stop();
+static inline void arch_home();
+static inline bool arch_running();
+//static inline void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0);
+static inline void arch_start_move(int extra);
+static inline void arch_send_fragment(int fragment);
+
+#ifdef SERIAL
+static inline int hwpacketsize(int len, int *available);
+static inline void hwpacket(int len);
+static inline void arch_reconnect(char *port);
+static inline void arch_disconnect();
+static inline int arch_fds();
+// Serial_t derivative Serial;
+//static inline void arch_pin_set_reset(Pin_t pin_, int state);
+static inline void START_DEBUG();
+static inline void DO_DEBUG(char c);
+static inline void END_DEBUG();
+#endif
+
 
 void Pin_t::read(uint16_t data) {
 	int new_pin = data & 0xff;
 	int new_flags = data >> 8;
 	if (new_pin != pin || new_flags != flags) {
 		SET_INPUT_NOPULLUP(*this);
+#ifdef SERIAL
+		// Reset is not recorded on connections that cannot fail.
 		arch_pin_set_reset(*this, 3);
+#endif
 	}
 	pin = new_pin;
 	flags = new_flags;

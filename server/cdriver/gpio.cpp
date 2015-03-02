@@ -23,7 +23,9 @@ void Gpio::load(uint8_t self, int32_t &addr)
 		SET_INPUT_NOPULLUP(pin);
 		break;
 	}
+#ifdef SERIAL
 	arch_pin_set_reset(pin, reset);
+#endif
 }
 
 void Gpio::save(int32_t &addr)

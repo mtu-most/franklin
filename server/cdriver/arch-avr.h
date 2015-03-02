@@ -18,11 +18,9 @@
 #include <math.h>
 #include <sys/mman.h>
 
+// Enable all the parts for a serial connection (which can fail) to the printer.
+#define SERIAL
 #define ADCBITS 10
-#define debug(...) do { buffered_debug_flush(); fprintf(stderr, "#"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while (0)
-#define F(x) (x)
-#define min(a, b) ((a) < (b) ? (a) : (b))
-#define max(a, b) ((a) > (b) ? (a) : (b))
 
 // Not defines, because they can change value.
 EXTERN uint8_t NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, NUM_BUFFERS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT;
@@ -31,8 +29,8 @@ EXTERN uint8_t NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, NUM_BUFFERS, FRA
 enum Control { // {{{
 	CTRL_RESET,
 	CTRL_SET,
-	CTRL_UNSET,
-	CTRL_INPUT
+	CTRL_INPUT,
+	CTRL_UNSET
 };
 // }}}
 
@@ -120,26 +118,6 @@ struct AVRSerial : public Serial_t { // {{{
 	}
 };
 // }}}
-struct HostSerial : public Serial_t { // {{{
-	char buffer[256];
-	int start, end;
-	inline void begin(int baud);
-	inline void write(char c);
-	inline void refill();
-	inline int read();
-	int readBytes (char *target, int len) {
-		for (int i = 0; i < len; ++i)
-			*target++ = read();
-		return len;
-	}
-	void flush() {}
-	int available() {
-		if (start == end)
-			refill();
-		return end - start;
-	}
-};
-// }}}
 struct Avr_pin_t { // {{{
 	char state;
 	char reset;
@@ -147,7 +125,6 @@ struct Avr_pin_t { // {{{
 // }}}
 
 // Declarations of static variables; extern because this is a header file. {{{
-EXTERN HostSerial host_serial;
 EXTERN AVRSerial avr_serial;
 EXTERN bool avr_wait_for_reply;
 EXTERN uint8_t avr_pong;
@@ -165,29 +142,6 @@ EXTERN bool *avr_in_control_queue;
 EXTERN int avr_control_queue_length;
 EXTERN bool avr_connected;
 EXTERN bool avr_homing;
-// }}}
-
-// Time handling.  {{{
-static inline void get_current_times(uint32_t *current_time, uint32_t *longtime) {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	if (current_time)
-		*current_time = tv.tv_sec * 1000000 + tv.tv_usec;
-	if (longtime)
-		*longtime = tv.tv_sec * 1000 + tv.tv_usec / 1000;
-	//fprintf(stderr, "current times: %d %d\n", *current_time, *longtime);
-}
-
-static inline uint32_t utime() {
-	uint32_t ret;
-	get_current_times(&ret, NULL);
-	return ret;
-}
-static inline uint32_t millis() {
-	uint32_t ret;
-	get_current_times(NULL, &ret);
-	return ret;
-}
 // }}}
 
 #define avr_write_ack(reason) do { \
@@ -443,10 +397,6 @@ static inline void hwpacket(int len) {
 		return;
 	}
 	}
-}
-
-static inline bool arch_active() {
-	return true;
 }
 // }}}
 
@@ -729,7 +679,7 @@ static inline void arch_setup_temp(int id, int thermistor_pin, bool active, int 
 		th = 0xffff;
 		tf = 0xffff;
 	}
-	//debug("setup adc %d 0x%x 0x%x", id, heater_adctemp, fan_adctemp);
+	//debug("setup adc %d 0x%x 0x%x -> %x %x", id, heater_adctemp, fan_adctemp, th, tf);
 	avr_buffer[4] = th & 0xff;
 	avr_buffer[5] = (th >> 8) & 0xff;
 	avr_buffer[6] = tf & 0xff;
@@ -743,8 +693,8 @@ static inline void arch_disconnect() {
 	avr_serial.end();
 }
 
-static inline bool arch_connected() {
-	return avr_connected;
+static inline int arch_fds() {
+	return avr_connected ? 1 : 0;
 }
 
 static inline void arch_reconnect(char *port) {
@@ -949,59 +899,6 @@ int AVRSerial::read() {
 #ifdef DEBUG_AVRCOMM
 	debug("r %02x", ret & 0xff);
 #endif
-	return ret;
-}
-// }}}
-
-// Inline HostSerial methods. {{{
-void HostSerial::begin(int baud) {
-	pollfds[0].fd = 0;
-	pollfds[0].events = POLLIN | POLLPRI;
-	pollfds[0].revents = 0;
-	start = 0;
-	end = 0;
-	fcntl(0, F_SETFL, O_NONBLOCK);
-}
-
-void HostSerial::write(char c) {
-	//debug("Firmware write byte: %x", c);
-	while (true) {
-		errno = 0;
-		int ret = ::write(1, &c, 1);
-		if (ret == 1)
-			break;
-		if (errno != EAGAIN && errno != EWOULDBLOCK) {
-			debug("write to host failed: %d %s", ret, strerror(errno));
-			abort();
-		}
-	}
-}
-
-void HostSerial::refill() {
-	start = 0;
-	end = ::read(0, buffer, sizeof(buffer));
-	//debug("refill %d bytes", end);
-	if (end < 0) {
-		if (errno != EAGAIN && errno != EWOULDBLOCK)
-			debug("read returned error: %s", strerror(errno));
-		end = 0;
-	}
-	if (end == 0 && pollfds[0].revents) {
-		debug("EOF detected on standard input; exiting.");
-		abort();
-	}
-	pollfds[0].revents = 0;
-}
-
-int HostSerial::read() {
-	if (start == end)
-		refill();
-	if (start == end) {
-		debug("EOF on standard input; exiting.");
-		abort();
-	}
-	int ret = buffer[start++];
-	//debug("Firmware read byte: %x", ret);
 	return ret;
 }
 // }}}
