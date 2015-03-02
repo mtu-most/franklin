@@ -201,6 +201,8 @@ class Printer: # {{{
 		self.bed_id = 255
 		self.fan_id = 255
 		self.spindle_id = 255
+		self.probe_dist = 1000
+		self.probe_safe_dist = 10
 		# Set up state.
 		self.sending = False
 		self.paused = False

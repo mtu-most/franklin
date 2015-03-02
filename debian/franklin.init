@@ -93,10 +93,10 @@ if [ -v LOG ] ; then START_ARGS="$START_ARGS --log=$LOG" ; fi
 if [ -v PRINTER ] ; then START_ARGS="$START_ARGS --printer=$PRINTER" ; fi
 if [ -v AUDIODIR ] ; then START_ARGS="$START_ARGS --audiodir=$AUDIODIR" ; fi
 if [ -v BLACKLIST ] ; then START_ARGS="$START_ARGS --blacklist=$BLACKLIST" ; fi
-if [ -v ADD_BLACKLIST ] ; then START_ARGS="$START_ARGS --add_blacklist=$ADD_BLACKLIST" ; fi
+if [ -v ADD_BLACKLIST ] ; then START_ARGS="$START_ARGS --add-blacklist=$ADD_BLACKLIST" ; fi
 if [ -v DRIVER ] ; then START_ARGS="$START_ARGS --driver=$DRIVER" ; fi
 if [ -v CDRIVER ] ; then START_ARGS="$START_ARGS --cdriver=$CDRIVER" ; fi
-if [ -v ALLOW_SYSTEM ] ; then START_ARGS="$START_ARGS --allow_system=$ALLOW_SYSTEM" ; fi
+if [ -v ALLOW_SYSTEM ] ; then START_ARGS="$START_ARGS --allow-system=$ALLOW_SYSTEM" ; fi
 if [ -v LOGIN ] ; then START_ARGS="$START_ARGS --login=$LOGIN" ; fi
 if [ -v PASSWORDFILE ] ; then START_ARGS="$START_ARGS --passwordfile=$PASSWORDFILE" ; fi
 if [ -v DONE ] ; then START_ARGS="$START_ARGS --done=$DONE" ; fi
