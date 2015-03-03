@@ -415,7 +415,7 @@ function setup() {
 				return true;
 		}
 		return false;
-	}
+	};
 	proto.AddEvent = function(name, impl) {
 		this.addEventListener(name, impl, false);
 		return this;
