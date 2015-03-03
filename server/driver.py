@@ -559,11 +559,26 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _write_globals(self, ns, nt, ng, update = True): # {{{
-		data = struct.pack('<BBBHHHfB', ns if ns is not None else len(self.spaces), nt if nt is not None else len(self.temps), ng if ng is not None else len(self.gpios), self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder)
+		if ns is None:
+			ns = len(self.spaces)
+		if nt is None:
+			nt = len(self.temps)
+		if ng is None:
+			ng = len(self.gpios)
+		ds = ns - len(self.spaces)
+		dt = nt - len(self.temps)
+		dg = ng - len(self.gpios)
+		data = struct.pack('<BBBHHHfB', ns, nt, ng, self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder)
 		self._send_packet(struct.pack('<B', protocol.command['WRITE_GLOBALS']) + data)
-		self._read_globals()
+		self._read_globals(update = True)
 		if update:
 			self._globals_update()
+			for s in range(ds):
+				self._space_update(ns - ds + s)
+			for t in range(dt):
+				self._temp_update(nt - dt + t)
+			for g in range(dg):
+				self._gpio_update(ng - dg + g)
 		return True
 	# }}}
 	def _globals_update(self, target = None): # {{{

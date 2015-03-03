@@ -190,14 +190,12 @@ function _setup_updater() {
 			trigger_update(port, 'variables_update');
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
+					name: null,
 					type: TYPE_CARTESIAN,
 					max_deviation: 0,
 					num_axes: 0,
 					num_motors: 0,
 					delta_angle: 0,
-					dx: 0,
-					dy: 0,
-					dz: 0,
 					axis: [],
 					motor: []
 				});
@@ -206,6 +204,7 @@ function _setup_updater() {
 			printers[port].num_spaces = new_num_spaces;
 			for (var i = printers[port].num_temps; i < new_num_temps; ++i) {
 				printers[port].temps.push({
+					name: null,
 					heater_pin: 0,
 					fan_pin: 0,
 					thermistor_pin: 0,
@@ -224,6 +223,7 @@ function _setup_updater() {
 			printers[port].num_temps = new_num_temps;
 			for (var i = printers[port].num_gpios; i < new_num_gpios; ++i) {
 				printers[port].gpios.push({
+					name: null,
 					pin: 0,
 					state: 3,
 					reset: 3
@@ -405,6 +405,17 @@ function setup() {
 		this.className = classes.join(' ');
 		return this;
 	};
+	proto.HaveClass = function(className) {
+		if (!className)
+			return true;
+		var classes = this.className.split(' ');
+		for (var i = 0; i < classes.length; ++i) {
+			var pos = classes.indexOf(className);
+			if (pos >= 0)
+				return true;
+		}
+		return false;
+	}
 	proto.AddEvent = function(name, impl) {
 		this.addEventListener(name, impl, false);
 		return this;
