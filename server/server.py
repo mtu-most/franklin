@@ -39,7 +39,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'local': 'False',
 		'driver': '',
 		'cdriver': '',
-		'log': '/var/log/franklin'
+		'log': ''
 	})
 if config['audiodir'] == '':
 	config['audiodir'] = fhs.write_cache(name = 'audio', dir = True),

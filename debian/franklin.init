@@ -24,8 +24,8 @@ RUN=1
 # Address to listen on.  Set to 0.0.0.0 to disable IPv6 (needed on Raspberry Pi).
 #ADDRESS=
 
-# Location of log file or directory.  Set to empty string to disable logging.
-#LOG=/var/log/franklin
+# Location of log file or directory.  Set to /var/log/franklin to enable logging in the default location.
+#LOG=
 
 # Programs to manage the printer.
 #DRIVER=/usr/lib/franklin/driver.py
