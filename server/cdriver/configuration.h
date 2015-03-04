@@ -7,7 +7,7 @@
 //#define NO_DEBUG
 
 // Maximum number of move commands in the queue.
-#define QUEUE_LENGTH 10
+#define QUEUE_LENGTH 200
 
 // Number of buffers to fill before sending START_MOVE.  Lower number makes it
 // start faster, but may cause buffer underruns.

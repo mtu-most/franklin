@@ -965,6 +965,7 @@ class Printer: # {{{
 				f0 = float('inf')
 			if f1 is None:
 				f1 = f0
+			assert f0 >= 0 and f1 >= 0 and (f0 > 0 or f1 > 0)
 			# If feedrates are equal to firmware defaults, don't send them.
 			if f0 != float('inf'):
 				targets[0] |= 1 << 0
