@@ -325,16 +325,16 @@ function Top() { // {{{
 	b.type = 'button';
 	b.printer = printer;
 	e.AddElement('br');
-	b = e.AddElement('button').AddText('Home').AddEvent('click', function() { this.printer.call('home', [], {}, function() { update_canvas_and_spans(this.printer); }); });
+	b = e.AddElement('button').AddText('Home').AddEvent('click', function() { this.printer.call('home', [], {}, function() { update_canvas_and_spans(b.printer); }); });
 	b.type = 'button';
 	b.printer = printer;
-	b = e.AddElement('button').AddText('Pause').AddEvent('click', function() { this.printer.call('pause', [true], {}, function() { update_canvas_and_spans(this.printer); }); });
+	b = e.AddElement('button').AddText('Pause').AddEvent('click', function() { this.printer.call('pause', [true], {}, function() { update_canvas_and_spans(b.printer); }); });
 	b.type = 'button';
 	b.printer = printer;
 	b = e.AddElement('button').AddText('Resume').AddEvent('click', function() { this.printer.call('pause', [false], {}); });
 	b.type = 'button';
 	b.printer = printer;
-	b = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { this.printer.call('sleep', [], {}, function() { update_canvas_and_spans(this.printer); }); });
+	b = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { this.printer.call('sleep', [], {}, function() { update_canvas_and_spans(b.printer); }); });
 	b.type = 'button';
 	b.printer = printer;
 	// }}}
@@ -439,8 +439,9 @@ function Multipliers() { // {{{
 		e.AddText(' %');
 		e.Add(Float([['axis', [space, axis]], 'current'], 1, 1e-3, '', function(v) {
 			var obj = {};
-			obj[axis] = v;
-			e.printer.call('goto', [{space: obj}], {cb: true}, function() {
+			obj[space] = {};
+			obj[space][axis] = v;
+			e.printer.call('goto', [obj], {cb: true}, function() {
 				e.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(e.printer); });
 			});
 		}));
