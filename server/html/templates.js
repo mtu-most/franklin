@@ -167,7 +167,7 @@ function Delta(space, motor) {
 	var e = [['delta_axis_min', 1], ['delta_axis_max', 1], ['delta_rodlength', 3], ['delta_radius', 3]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], 1e-3));
+		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], 1));
 		e[i] = div;
 	}
 	return make_tablerow(motor_name(space, motor), e, ['rowtitle4'], undefined, TYPE_DELTA, space);

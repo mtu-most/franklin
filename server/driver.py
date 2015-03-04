@@ -679,14 +679,14 @@ class Printer: # {{{
 						else:
 							num = int(max(n for n in nums if not math.isnan(n))) + 1
 						if num == 1:
-							#log('debugpart: %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, args['f'], args['F']))
+							#log('debugpart: %.2f %.2f %.2f %.2f' % (target[0], target[1], args['f'], args['F']))
 							z = self._use_probemap(*target)
 							#log('go to one %f %f %f' % (target[0], target[1], z))
 							self.goto([[target[0], target[1], z], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
 						else:
 							for t in range(num):
 								targetpart = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
-								#log('debugpart: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f' % (target[0] * 1e3, target[1] * 1e3, source[0] * 1e3, source[1] * 1e3, targetpart[0] * 1e3, targetpart[1] * 1e3, args['f'], args['F']))
+								#log('debugpart: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f' % (target[0], target[1], source[0], source[1], targetpart[0], targetpart[1], args['f'], args['F']))
 								z = self._use_probemap(targetpart[0], targetpart[1], target[2])
 								#log('go to part %f %f %f' % (targetpart[0], targetpart[1], z))
 								self.goto([[targetpart[0], targetpart[1], z], {args['T']: args['E']}], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
@@ -2112,7 +2112,7 @@ class Printer: # {{{
 		mode = None
 		message = None
 		ret = []
-		unit = .001
+		unit = 1
 		rel = False
 		erel = None
 		pos = [[float('nan'), float('nan'), float('nan')], [0.], float('inf')]
@@ -2202,10 +2202,10 @@ class Printer: # {{{
 					ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': pos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': pos[1][current_extruder], 'E': pos[1][current_extruder], 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, message))
 					continue
 				elif cmd == ('G', 20):
-					unit = .0254
+					unit = 25.4
 					continue
 				elif cmd == ('G', 21):
-					unit = .001
+					unit = 1
 					continue
 				elif cmd == ('G', 90):
 					rel = False
@@ -2249,7 +2249,7 @@ class Printer: # {{{
 						components[c] = args[c]
 					f0 = pos[2]
 					if components['F'] is not None:
-						pos[2] = components['F'] * unit
+						pos[2] = components['F'] * unit / 60
 					oldpos = pos[0][:], pos[1][:]
 					if cmd[1] != 81:
 						if components['E'] is not None:
@@ -2286,7 +2286,7 @@ class Printer: # {{{
 								f0 = float('inf')
 						if math.isnan(dist):
 							dist = 0
-						args = {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist / 60 if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist / 60 if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder}
+						args = {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder}
 						cmd = ('G', 1)
 						ret.append((cmd, args, message))
 					else:
@@ -2298,7 +2298,7 @@ class Printer: # {{{
 						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, None))
 						# goto z; this is always straight down, because the move before and after it are also vertical.
 						if z != r:
-							f0 = pos[2] / abs(z - r) / 60
+							f0 = pos[2] / abs(z - r)
 							ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'e': 0, 'E': 0, 'f': f0, 'F': f0, 'T': current_extruder}, None))
 						# retract; this is always straight up, because the move before and after it are also non-horizontal.
 						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, None))
