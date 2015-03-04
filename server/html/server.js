@@ -121,6 +121,7 @@ function _setup_updater() {
 				bed_id: 255,
 				fan_id: 255,
 				spindle_id: 255,
+				unit_name: 'mm',
 				timeout: 0,
 				feedrate: 1,
 				zoffset: 0,
@@ -183,11 +184,11 @@ function _setup_updater() {
 			printers[port].bed_id = values[8];
 			printers[port].fan_id = values[9];
 			printers[port].spindle_id = values[10];
-			printers[port].timeout = values[11];
-			printers[port].feedrate = values[12];
-			printers[port].zoffset = values[13];
-			printers[port].status = values[14];
-			trigger_update(port, 'variables_update');
+			printers[port].unit_name = values[11];
+			printers[port].timeout = values[12];
+			printers[port].feedrate = values[13];
+			printers[port].zoffset = values[14];
+			printers[port].status = values[15];
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
 					name: null,

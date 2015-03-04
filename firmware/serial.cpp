@@ -52,7 +52,7 @@ static inline uint16_t fullpacketlen() {
 void serial()
 {
 	uint16_t milliseconds = millis();
-	if (!had_data && command_end > 0 && milliseconds - last_millis >= 100)
+	if (!had_data && command_end > 0 && milliseconds - last_millis >= 2000)
 	{
 		// Command not finished; ignore it and wait for next.
 		watchdog_reset();

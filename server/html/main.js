@@ -453,7 +453,7 @@ function new_port() { // {{{
 } // }}}
 
 function new_printer() { // {{{
-	printer.names = {space: [], axis: [], motor: [], temp: [], gpio: []};
+	printer.names = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
 	printer.targetangle = 0;
 	printer.targetx = 0;
 	printer.targety = 0;
@@ -631,6 +631,7 @@ function update_globals() { // {{{
 	update_float(printer, [null, 'timeout']);
 	update_float(printer, [null, 'feedrate']);
 	update_float(printer, [null, 'zoffset']);
+	set_name(printer, 'unit', 0, 0, printer.unit_name);
 	// IDs.
 	ids = ['bed', 'fan', 'spindle'];
 	for (var i = 0; i < ids.length; ++i) {
@@ -1056,6 +1057,12 @@ function Choice(obj, options, classes, containerclasses) { // {{{
 	return ret;
 } // }}}
 
+function UnitTitle(title, post, pre) { // {{{
+	var ret = Create('span').AddText(title + ' (' + (pre ? pre : ''));
+	ret.Add(add_name('unit', 0, 0));
+	return ret.AddText((post ? post : '') + ')');
+} // }}}
+
 function space_name(index) { // {{{
 	if (index === null)
 		return 'All Spaces';
@@ -1359,7 +1366,7 @@ function redraw_canvas() { // {{{
 				c.stroke();
 				for (var a = 0; a < 3; ++a) {
 					var name = selected_printer.spaces[0].motor[a].name;
-					var w = c.measureText(name).width / 1000;
+					var w = c.measureText(name).width;
 					c.beginPath();
 					c.save();
 					c.translate(origin[a][0] + dy[a] * .015 - w / 2, origin[a][1] - dx[a] * .015);
@@ -1370,7 +1377,7 @@ function redraw_canvas() { // {{{
 				}
 				c.restore();
 			};
-			var extra = c.measureText(selected_printer.spaces[0].motor[0].name).width / 1000 + .02;
+			var extra = c.measureText(selected_printer.spaces[0].motor[0].name).width + .02;
 			printerwidth = 2 * (maxx + extra);
 			printerheight = 2 * (maxy + extra);
 			break;
@@ -1517,7 +1524,7 @@ function redraw_canvas() { // {{{
 // }}}
 
 function key_move(printer, key, shift, ctrl) { // {{{
-	var value = Number(document.getElementById('move_amount').value) / 1000;
+	var value = Number(document.getElementById('move_amount').value);
 	if (shift)
 		value /= 10;
 	var spanx = document.getElementById('move_span_0');

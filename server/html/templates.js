@@ -119,7 +119,7 @@ function Spacetype(num) {
 	var span = Create('span');
 	span.id = make_id(printer, [['space', num], 'type']);
 	var div = Create('div').AddText('Max Deviation');
-	div.Add(Float([['space', num], 'max_deviation'], 2, 1e-3));
+	div.Add(Float([['space', num], 'max_deviation'], 2, 1));
 	return make_tablerow(space_name(num), [Name('space', num), [select, button, span], div], ['rowtitle1']);
 }
 
@@ -180,7 +180,7 @@ function Delta_space(num) {
 }
 
 function Axis(space, axis) {
-	var e = [Name('axis', [space, axis]), ['park', 1, 1e-3], ['park_order', 0, 1], ['max_v', 0, 1e-3], ['min', 1, 1e-3], ['max', 1, 1e-3]];
+	var e = [Name('axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['max_v', 0, 1], ['min', 1, 1], ['max', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['axis', [space, axis]], e[i][0]], e[i][1], e[i][2]));
@@ -190,7 +190,7 @@ function Axis(space, axis) {
 }
 
 function Motor(space, motor) {
-	var e = [Name('motor', [space, motor]), ['steps_per_m', 3, 1e3], ['max_steps', 0, 1], ['home_pos', 3, 1e-3], ['home_order', 0, 1], ['limit_v', 0, 1e-3], ['limit_a', 1, 1]];
+	var e = [Name('motor', [space, motor]), ['steps_per_m', 3, 1], ['max_steps', 0, 1], ['home_pos', 3, 1], ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
@@ -348,23 +348,23 @@ function Map() { // {{{
 	// Current position buttons.
 	var t = ret.Add(make_table().AddMultipleTitles([
 		'',
-		[add_name('axis', 0, 0), ' (mm)'],
-		[add_name('axis', 0, 1), ' (mm)'],
-		[add_name('axis', 0, 2), ' (mm)'],
+		[add_name('axis', 0, 0), ' (', add_name('unit', 0, 0), ')'],
+		[add_name('axis', 0, 1), ' (', add_name('unit', 0, 0), ')'],
+		[add_name('axis', 0, 2), ' (', add_name('unit', 0, 0), ')'],
 		'',
 		'',
 		''
 	], ['', '', '', '', '', ''], null), 'maptable');
-	var b = Create('button').AddText('Park').AddEvent('click', function() { this.printer.call('park', [], {}, function() { update_canvas_and_spans(this.printer); }); });
+	var b = Create('button').AddText('Park').AddEvent('click', function() { this.printer.call('park', [], {}, function() { update_canvas_and_spans(b.printer); }); });
 	b.type = 'button';
 	b.printer = printer;
 	t.Add(make_tablerow(add_name('space', 0, 0), [
-		Float([['axis', [0, 0]], 'current'], 2, 1e-3, '', function(v) { b.printer.call('goto', [[{0: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
-		Float([['axis', [0, 1]], 'current'], 2, 1e-3, '', function(v) { b.printer.call('goto', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
-		Float([['axis', [0, 2]], 'current'], 2, 1e-3, '', function(v) { b.printer.call('goto', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
+		Float([['axis', [0, 0]], 'current'], 2, 1, '', function(v) { b.printer.call('goto', [[{0: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
+		Float([['axis', [0, 1]], 'current'], 2, 1, '', function(v) { b.printer.call('goto', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
+		Float([['axis', [0, 2]], 'current'], 2, 1, '', function(v) { b.printer.call('goto', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
 		b,
 		'',
-		[[add_name('axis', 0, 2), ' Offset:'], Float([null, 'zoffset'], 2, 1e-3), 'mm']
+		[[add_name('axis', 0, 2), ' Offset:'], Float([null, 'zoffset'], 2, 1), add_name('unit', 0, 0)]
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
 	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
@@ -437,7 +437,7 @@ function Multipliers() { // {{{
 		e.printer = printer;
 		e.Add(Float([['axis', [space, axis]], 'multiplier'], 0, 1e-2));
 		e.AddText(' %');
-		e.Add(Float([['axis', [space, axis]], 'current'], 1, 1e-3, '', function(v) {
+		e.Add(Float([['axis', [space, axis]], 'current'], 1, 1, '', function(v) {
 			var obj = {};
 			obj[space] = {};
 			obj[space][axis] = v;
@@ -445,7 +445,7 @@ function Multipliers() { // {{{
 				e.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(e.printer); });
 			});
 		}));
-		e.AddText(' mm');
+		e.AddText(' ').Add(add_name('unit', 0, 0));
 		return e;
 	}, true);
 	return ret;
@@ -530,11 +530,11 @@ function Printer() {	// {{{
 	e.Add(Float([null, 'timeout'], 0, 60));
 	e.AddText(' min');
 	e = setup.AddElement('div').AddText('Max Probe Distance:');
-	e.Add(Float([null, 'probe_dist'], 0, 1e-3));
-	e.AddText(' mm');
+	e.Add(Float([null, 'probe_dist'], 0, 1));
+	e.AddText(' ').Add(add_name('unit', 0, 0));
 	e = setup.AddElement('div').AddText('Probe Safe Retract Distance:');
-	e.Add(Float([null, 'probe_safe_dist'], 0, 1e-3));
-	e.AddText(' mm');
+	e.Add(Float([null, 'probe_safe_dist'], 0, 1));
+	e.AddText(' ').Add(add_name('unit', 0, 0));
 	e = setup.AddElement('div').AddText('Spaces:').Add(Float([null, 'num_spaces'], 0));
 	e = setup.AddElement('div').AddText('Temps:').Add(Float([null, 'num_temps'], 0));
 	e = setup.AddElement('div').AddText('Gpios:').Add(Float([null, 'num_gpios'], 0));
@@ -543,7 +543,7 @@ function Printer() {	// {{{
 		'Spaces',
 		'Name',
 		'Type',
-		'Max Deviation (mm)'
+		UnitTitle('Max Deviation')
 	], [
 		'htitle3',
 		'title3',
@@ -560,11 +560,11 @@ function Printer() {	// {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Axes',
 		'Name',
-		'Park pos (mm)',
+		UnitTitle('Park pos'),
 		'Park order',
-		'Max v (mm/s)',
-		'Min (mm)',
-		'Max (mm)'
+		UnitTitle('Max v', '/s'),
+		UnitTitle('Min'),
+		UnitTitle('Max')
 	], [
 		'htitle7',
 		'title7',
@@ -587,12 +587,12 @@ function Printer() {	// {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Motor',
 		'Name',
-		'Coupling (steps/mm)',
+		UnitTitle('Coupling', null, 'steps/'),
 		'Microsteps',
-		'Switch pos (mm)',
+		UnitTitle('Switch pos'),
 		'Home order',
-		'Limit v (mm/s)',
-		'Limit a (m/s²)'
+		UnitTitle('Limit v', '/s'),
+		UnitTitle('Limit a', '/s²')
 	], [
 		'htitle7',
 		'title7',
@@ -605,12 +605,12 @@ function Printer() {	// {{{
 	], [
 		null,
 		'Name of the motor',
-		'Number of (micro)steps that the motor needs to do to move the hardware by one mm.',
+		'Number of (micro)steps that the motor needs to do to move the hardware by one unit.',
 		'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
-		'Position of the home switch. (mm)',
+		'Position of the home switch.',
 		'Order when homing.  Equal order homes simultaneously; lower order homes first.',
-		'Maximum speed of the motor. (mm/s)',
-		'Maximum acceleration of the motor. (m/s²)'
+		'Maximum speed of the motor.',
+		'Maximum acceleration of the motor.'
 	]).AddMultiple('motor', Motor)]);
 	// }}} -->
 	// Cartesian. {{{
@@ -628,10 +628,10 @@ function Printer() {	// {{{
 	// Delta. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Delta',
-		'Min Axis Distance',
-		'Max Axis Distance',
-		'Rod Length',
-		'Radius'
+		UnitTitle('Min Axis Distance'),
+		UnitTitle('Max Axis Distance'),
+		UnitTitle('Rod Length'),
+		UnitTitle('Radius')
 	], [
 		'htitle4',
 		'title4',
@@ -640,10 +640,10 @@ function Printer() {	// {{{
 		'title4'
 	], [
 		null,
-		'Minimum distance of end effector from nozzle.  Usually 0. (mm)',
-		'Maximum distance of end effector from nozzle.  Usually rod length. (mm)',
-		'Length of the tie rods. (mm)',
-		'Length of horizontal projection of the tie rod when the end effector is at (0, 0). (mm)'
+		'Minimum distance of end effector from nozzle.  Usually 0.',
+		'Maximum distance of end effector from nozzle.  Usually rod length.',
+		'Length of the tie rods.',
+		'Length of horizontal projection of the tie rod when the end effector is at (0, 0).'
 	]).AddMultiple('motor', Delta)]);
 	setup.Add([make_table().AddMultipleTitles([
 		'Delta',

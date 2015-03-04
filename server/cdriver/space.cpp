@@ -696,7 +696,7 @@ void send_fragment() {
 		return;
 	if (settings[current_fragment].num_active_motors == 0) {
 		debug("sending fragment for 0 motors at position %d", current_fragment_pos);
-		abort();
+		//abort();
 	}
 	//debug("sending %d free %d", current_fragment, free_fragments);
 	settings[current_fragment].fragment_length = current_fragment_pos;
