@@ -1011,7 +1011,6 @@ class Printer: # {{{
 		# 5: Set current position; move to center (delta only).
 		#log('home %s %s' % (self.home_phase, repr(self.home_target)))
 		#traceback.print_stack()
-		small_dist = .005
 		if self.home_phase is None:
 			if done is not None:
 				# Continuing call received after homing was aborted; ignore.
@@ -1042,7 +1041,7 @@ class Printer: # {{{
 			self.sense[self.home_space].clear()
 			for i, a, m in self.home_motors:
 				if self.pin_valid(m['limit_max_pin']) or (not self.pin_valid(m['limit_min_pin']) and self.pin_valid(m['sense_pin'])):
-					dist = m['home_pos'] - (-1) + .01	#TODO: use better value.
+					dist = m['home_pos'] - (-1) + 10	#TODO: use better value.
 					self.spaces[self.home_space].set_current_pos(i, a['max'] - dist)
 					self.home_target[i] = a['max'] - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
@@ -1075,7 +1074,7 @@ class Printer: # {{{
 			# Move down to find limit or sense switch.
 			for i, a, m in self.home_motors:
 				if (i not in self.limits[self.home_space] and self.pin_valid(m['limit_min_pin'])) or (i not in self.sense[self.home_space] and self.pin_valid(m['sense_pin'])):
-					dist = (1) - m['home_pos'] - .01	# TODO: use better value.
+					dist = (1) - m['home_pos'] - 10	# TODO: use better value.
 					self.spaces[self.home_space].set_current_pos(i, a['min'] + dist)
 					self.home_target[i] = a['min'] - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
@@ -1488,7 +1487,7 @@ class Printer: # {{{
 		#log('end flush preparation')
 	# }}}
 	@delayed
-	def probe(self, id, area, angle = 0, speed = .003): # {{{
+	def probe(self, id, area, angle = 0, speed = 3): # {{{
 		if len(self.spaces) < 1 or len(self.spaces[0].axis) < 3 or not self.probe_safe_dist > 0:
 			if id is not None:
 				self._send(id, 'return', None)
@@ -1684,7 +1683,7 @@ class Printer: # {{{
 		return s
 	# }}}
 	@delayed
-	def home(self, id, spaces = None, speed = .005, cb = None, abort = True): # {{{
+	def home(self, id, spaces = None, speed = 5, cb = None, abort = True): # {{{
 		#log('homing')
 		if self.home_phase is not None and not self.paused:
 			log("ignoring request to home because we're already homing")
@@ -2112,7 +2111,7 @@ class Printer: # {{{
 		mode = None
 		message = None
 		ret = []
-		unit = 1
+		unit = 1.
 		rel = False
 		erel = None
 		pos = [[float('nan'), float('nan'), float('nan')], [0.], float('inf')]
@@ -2205,7 +2204,7 @@ class Printer: # {{{
 					unit = 25.4
 					continue
 				elif cmd == ('G', 21):
-					unit = 1
+					unit = 1.
 					continue
 				elif cmd == ('G', 90):
 					rel = False
@@ -2350,7 +2349,7 @@ class Printer: # {{{
 			self._next_job()
 	# }}}
 	@delayed
-	def queue_probe(self, id, names, ref = (0, 0, 0), angle = 0, speed = .003): # {{{
+	def queue_probe(self, id, names, ref = (0, 0, 0), angle = 0, speed = 3): # {{{
 		bbox = [float('nan'), (float('nan')), float('nan'), float('nan')]
 		for n in names:
 			bb = self.jobqueue[n][1]
