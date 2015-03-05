@@ -42,6 +42,9 @@ RUN=1
 # port).
 #AUTODETECT=True
 
+# System command to run before trying to detect a printer.
+#PREDETECT='stty -F #PORT# raw 115200'
+
 # Regular expression of serial ports to ignore.
 #BLACKLIST='/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\d*))$'
 #ADD_BLACKLIST='$'
@@ -69,9 +72,6 @@ RUN=1
 # Avrdude executable, including path if it isn't in the system path.
 #AVRDUDE='avrdude'
 
-# Arguments to start-stop-daemon.
-ARGS="--quiet"
-
 # File for storing the pid.  You probably don't need to change this.
 PIDFILE=/run/franklin.pid
 
@@ -84,24 +84,25 @@ fi
 NAME=franklin
 DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/franklin
-ARGS="--make-pidfile --pidfile $PIDFILE --chuid franklin3d:franklin3d $ARGS"
-START_ARGS="--background --oknodo --start --startas $DAEMON $ARGS -- --system"
-if [ -v AUTODETECT ] ; then START_ARGS="$START_ARGS --autodetect=$AUTODETECT" ; fi
-if [ -v PORT ] ; then START_ARGS="$START_ARGS --port=$PORT" ; fi
-if [ -v ADDRESS ] ; then START_ARGS="$START_ARGS --address=$ADDRESS" ; fi
-if [ -v LOG ] ; then START_ARGS="$START_ARGS --log=$LOG" ; fi
-if [ -v PRINTER ] ; then START_ARGS="$START_ARGS --printer=$PRINTER" ; fi
-if [ -v AUDIODIR ] ; then START_ARGS="$START_ARGS --audiodir=$AUDIODIR" ; fi
-if [ -v BLACKLIST ] ; then START_ARGS="$START_ARGS --blacklist=$BLACKLIST" ; fi
-if [ -v ADD_BLACKLIST ] ; then START_ARGS="$START_ARGS --add-blacklist=$ADD_BLACKLIST" ; fi
-if [ -v DRIVER ] ; then START_ARGS="$START_ARGS --driver=$DRIVER" ; fi
-if [ -v CDRIVER ] ; then START_ARGS="$START_ARGS --cdriver=$CDRIVER" ; fi
-if [ -v ALLOW_SYSTEM ] ; then START_ARGS="$START_ARGS --allow-system=$ALLOW_SYSTEM" ; fi
-if [ -v LOGIN ] ; then START_ARGS="$START_ARGS --login=$LOGIN" ; fi
-if [ -v PASSWORDFILE ] ; then START_ARGS="$START_ARGS --passwordfile=$PASSWORDFILE" ; fi
-if [ -v DONE ] ; then START_ARGS="$START_ARGS --done=$DONE" ; fi
-if [ -v AVRDUDE ] ; then START_ARGS="$START_ARGS --avrdude=$AVRDUDE" ; fi
-STOP_ARGS="--oknodo --stop $ARGS"
+ARGS=(--quiet --make-pidfile --pidfile "$PIDFILE" --chuid franklin3d:franklin3d)
+START_ARGS=("${ARGS[@]}" --background --oknodo --start --startas "$DAEMON" -- --system)
+if [ -v AUTODETECT ] ; then	START_ARGS+=(--autodetect="$AUTODETECT") ; fi
+if [ -v PREDETECT ] ; then	START_ARGS+=(--predetect="$PREDETECT") ; fi
+if [ -v PORT ] ; then		START_ARGS+=(--port="$PORT") ; fi
+if [ -v ADDRESS ] ; then	START_ARGS+=(--address="$ADDRESS") ; fi
+if [ -v LOG ] ; then		START_ARGS+=(--log="$LOG") ; fi
+if [ -v PRINTER ] ; then	START_ARGS+=(--printer="$PRINTER") ; fi
+if [ -v AUDIODIR ] ; then	START_ARGS+=(--audiodir="$AUDIODIR") ; fi
+if [ -v BLACKLIST ] ; then	START_ARGS+=(--blacklist="$BLACKLIST") ; fi
+if [ -v ADD_BLACKLIST ] ; then	START_ARGS+=(--add-blacklist="$ADD_BLACKLIST") ; fi
+if [ -v DRIVER ] ; then		START_ARGS+=(--driver="$DRIVER") ; fi
+if [ -v CDRIVER ] ; then	START_ARGS+=(--cdriver="$CDRIVER") ; fi
+if [ -v ALLOW_SYSTEM ] ; then	START_ARGS+=(--allow-system="$ALLOW_SYSTEM") ; fi
+if [ -v LOGIN ] ; then		START_ARGS+=(--login="$LOGIN") ; fi
+if [ -v PASSWORDFILE ] ; then	START_ARGS+=(--passwordfile="$PASSWORDFILE") ; fi
+if [ -v DONE ] ; then		START_ARGS+=(--done="$DONE") ; fi
+if [ -v AVRDUDE ] ; then	START_ARGS+=(--avrdude="$AVRDUDE") ; fi
+STOP_ARGS=("${ARGS[@]}" --oknodo --stop)
 
 if test ! -x "$DAEMON"; then
 	echo "$DAEMON does not exist"
@@ -118,7 +119,7 @@ do_start()
 	if [ "$RUN" -eq 0 ]; then
 		return 0
 	fi
-	start-stop-daemon $START_ARGS
+	start-stop-daemon "${START_ARGS[@]}"
 	RETVAL="$?"
 	if [ "$RETVAL" -eq 0 ]; then
 		# It might be that the daemon is not started
@@ -126,7 +127,7 @@ do_start()
 
 		# Wait a little bit to allow the daemon to start
 		sleep 1
-		start-stop-daemon --status $ARGS
+		start-stop-daemon --status "${ARGS[@]}"
 		RETVAL="$?"
 		case "$RETVAL" in
 			0) ;;
@@ -141,9 +142,9 @@ do_start()
 #
 do_stop()
 {
-	start-stop-daemon $STOP_ARGS
+	start-stop-daemon "${STOP_ARGS[@]}"
 	RETVAL="$?"
-	[ "$RETVAL" -eq 0 ] && rm -f $PIDFILE
+	[ "$RETVAL" -eq 0 ] && rm -f "$PIDFILE"
 	return "$RETVAL"
 }
 
