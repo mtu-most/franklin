@@ -33,7 +33,10 @@ function Name(type, num) {
 	ret.printer = printer;
 	ret.AddEvent('keydown', function(event) {
 		if (event.keyCode == 13) {
-			set_value(this.printer, [[type, num], 'name'], this.value);
+			if (typeof num != 'number' && num.length == 0)
+				set_value(this.printer, [null, type + '_name'], this.value);
+			else
+				set_value(this.printer, [[type, num], 'name'], this.value);
 			event.preventDefault();
 		}
 	});
@@ -190,7 +193,7 @@ function Axis(space, axis) {
 }
 
 function Motor(space, motor) {
-	var e = [Name('motor', [space, motor]), ['steps_per_m', 3, 1], ['max_steps', 0, 1], ['home_pos', 3, 1], ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
+	var e = [Name('motor', [space, motor]), ['steps_per_unit', 3, 1], ['max_steps', 0, 1], ['home_pos', 3, 1], ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
@@ -529,6 +532,9 @@ function Printer() {	// {{{
 	e = setup.AddElement('div').AddText('Timeout:');
 	e.Add(Float([null, 'timeout'], 0, 60));
 	e.AddText(' min');
+	e = setup.AddElement('div').AddText('Unit:');
+	e.Add(Name('unit', []));
+	e.Add(add_name('unit', 0, 0));
 	e = setup.AddElement('div').AddText('Max Probe Distance:');
 	e.Add(Float([null, 'probe_dist'], 0, 1));
 	e.AddText(' ').Add(add_name('unit', 0, 0));

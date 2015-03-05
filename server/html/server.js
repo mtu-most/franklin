@@ -266,7 +266,7 @@ function _setup_updater() {
 					limit_min_pin: values[4][m][4],
 					limit_max_pin: values[4][m][5],
 					sense_pin: values[4][m][6],
-					steps_per_m: values[4][m][7],
+					steps_per_unit: values[4][m][7],
 					max_steps: values[4][m][8],
 					home_pos: values[4][m][9],
 					limit_v: values[4][m][10],

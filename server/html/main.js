@@ -797,7 +797,7 @@ function update_space(index) { // {{{
 		update_pin([['motor', [index, m]], 'limit_min_pin']);
 		update_pin([['motor', [index, m]], 'limit_max_pin']);
 		update_pin([['motor', [index, m]], 'sense_pin']);
-		update_float(printer, [['motor', [index, m]], 'steps_per_m']);
+		update_float(printer, [['motor', [index, m]], 'steps_per_unit']);
 		update_float(printer, [['motor', [index, m]], 'max_steps']);
 		update_float(printer, [['motor', [index, m]], 'home_pos']);
 		update_float(printer, [['motor', [index, m]], 'limit_v']);
@@ -1422,8 +1422,8 @@ function redraw_canvas() { // {{{
 		// Draw current location.
 		c.beginPath();
 		c.fillStyle = '#44f';
-		c.moveTo(true_pos[0] + .003, true_pos[1]);
-		c.arc(true_pos[0], true_pos[1], .003, 0, 2 * Math.PI);
+		c.moveTo(true_pos[0] + 3, true_pos[1]);
+		c.arc(true_pos[0], true_pos[1], 3, 0, 2 * Math.PI);
 		c.fill();
 
 		c.save();

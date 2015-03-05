@@ -67,7 +67,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_motors[m]->sense_pin.init();
 			new_motors[m]->sense_state = 0;
 			new_motors[m]->sense_pos = NAN;
-			new_motors[m]->steps_per_m = NAN;
+			new_motors[m]->steps_per_unit = NAN;
 			new_motors[m]->max_steps = 1;
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
@@ -199,14 +199,14 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 	loaddebug("loading motor %d", m);
 	uint16_t enable = motor[m]->enable_pin.write();
 	float old_home_pos = motor[m]->home_pos;
-	float old_steps_per_m = motor[m]->steps_per_m;
+	float old_steps_per_unit = motor[m]->steps_per_unit;
 	motor[m]->step_pin.read(read_16(addr));
 	motor[m]->dir_pin.read(read_16(addr));
 	motor[m]->enable_pin.read(read_16(addr));
 	motor[m]->limit_min_pin.read(read_16(addr));
 	motor[m]->limit_max_pin.read(read_16(addr));
 	motor[m]->sense_pin.read(read_16(addr));
-	motor[m]->steps_per_m = read_float(addr);
+	motor[m]->steps_per_unit = read_float(addr);
 	motor[m]->max_steps = read_8(addr);
 	motor[m]->home_pos = read_float(addr);
 	motor[m]->limit_v = read_float(addr);
@@ -228,10 +228,10 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 	bool must_move = false;
 	if (!isnan(motor[m]->home_pos)) {
 		// Axes with a limit switch.
-		if (old_steps_per_m != motor[m]->steps_per_m) {
-			float diff = motor[m]->settings[current_fragment].current_pos / old_steps_per_m - motor[m]->home_pos;
+		if (old_steps_per_unit != motor[m]->steps_per_unit) {
+			float diff = motor[m]->settings[current_fragment].current_pos / old_steps_per_unit - motor[m]->home_pos;
 			float f = motor[m]->home_pos + diff;
-			int32_t cpdiff = f * motor[m]->steps_per_m + (f > 0 ? .49 : -.49) - motor[m]->settings[current_fragment].current_pos;
+			int32_t cpdiff = f * motor[m]->steps_per_unit + (f > 0 ? .49 : -.49) - motor[m]->settings[current_fragment].current_pos;
 			motor[m]->settings[current_fragment].current_pos += cpdiff;
 			motor[m]->settings[current_fragment].hwcurrent_pos += cpdiff;
 			cpdebug("cp5 %d", motor[m]->settings[current_fragment].current_pos);
@@ -240,7 +240,7 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 		}
 		if (motors_busy && old_home_pos != motor[m]->home_pos && !isnan(old_home_pos)) {
 			float f = motor[m]->home_pos - old_home_pos;
-			int32_t diff = f * motor[m]->steps_per_m + (f > 0 ? .49 : -.49);
+			int32_t diff = f * motor[m]->steps_per_unit + (f > 0 ? .49 : -.49);
 			motor[m]->settings[current_fragment].current_pos += diff;
 			motor[m]->settings[current_fragment].hwcurrent_pos += diff;
 			cpdebug("cp6 %d", motor[m]->settings[current_fragment].current_pos);
@@ -250,11 +250,11 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 	}
 	else {
 		// Axes without a limit switch: extruders.
-		if (motors_busy && old_steps_per_m != motor[m]->steps_per_m) {
+		if (motors_busy && old_steps_per_unit != motor[m]->steps_per_unit) {
 			int32_t cp = motor[m]->settings[current_fragment].current_pos;
-			float pos = cp / old_steps_per_m;
+			float pos = cp / old_steps_per_unit;
 			cpdebug("cpx %d", m);
-			motor[m]->settings[current_fragment].current_pos = pos * motor[m]->steps_per_m;
+			motor[m]->settings[current_fragment].current_pos = pos * motor[m]->steps_per_unit;
 			int diff = motor[m]->settings[current_fragment].current_pos - cp;
 			motor[m]->settings[current_fragment].hwcurrent_pos += diff;
 			arch_addpos(id, m, diff);
@@ -288,7 +288,7 @@ void Space::save_motor(uint8_t m, int32_t &addr) {
 	write_16(addr, motor[m]->limit_min_pin.write());
 	write_16(addr, motor[m]->limit_max_pin.write());
 	write_16(addr, motor[m]->sense_pin.write());
-	write_float(addr, motor[m]->steps_per_m);
+	write_float(addr, motor[m]->steps_per_unit);
 	write_8(addr, motor[m]->max_steps);
 	write_float(addr, motor[m]->home_pos);
 	write_float(addr, motor[m]->limit_v);
@@ -383,7 +383,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	//debug("cd3 %f %f", distance, dt);
 	// Limit a-.
 	// Distance to travel until end of segment or connection.
-	float max_dist = (mtr->settings[current_fragment].endpos - mtr->settings[current_fragment].current_pos / mtr->steps_per_m) * s;
+	float max_dist = (mtr->settings[current_fragment].endpos - mtr->settings[current_fragment].current_pos / mtr->steps_per_unit) * s;
 	// Find distance traveled when slowing down at maximum a.
 	// x = 1/2 at²
 	// t = sqrt(2x/a)
@@ -425,8 +425,8 @@ static void move_axes(Space *s, uint32_t current_time, float &factor) { // {{{
 	}
 	//movedebug("ok %d", ok);
 	for (uint8_t m = 0; m < s->num_motors; ++m) {
-		movedebug("move %d %f %f", m, motors_target[m], s->motor[m]->settings[current_fragment].current_pos / s->motor[m]->steps_per_m);
-		float distance = motors_target[m] - s->motor[m]->settings[current_fragment].current_pos / s->motor[m]->steps_per_m;
+		movedebug("move %d %f %f", m, motors_target[m], s->motor[m]->settings[current_fragment].current_pos / s->motor[m]->steps_per_unit);
+		float distance = motors_target[m] - s->motor[m]->settings[current_fragment].current_pos / s->motor[m]->steps_per_unit;
 		check_distance(s->motor[m], distance, (current_time - settings[current_fragment].last_time) / 1e6, factor);
 	}
 } // }}}
@@ -466,7 +466,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 			Space &sp = spaces[s];
 			for (uint8_t m = 0; m < sp.num_motors; ++m) {
 				Motor &mtr = *sp.motor[m];
-				float num = (mtr.settings[current_fragment].current_pos / mtr.steps_per_m + mtr.settings[current_fragment].target_dist * factor) * mtr.steps_per_m;
+				float num = (mtr.settings[current_fragment].current_pos / mtr.steps_per_unit + mtr.settings[current_fragment].target_dist * factor) * mtr.steps_per_unit;
 				if (mtr.settings[current_fragment].current_pos != int(num + (num > 0 ? .49 : -.49))) {
 					//debug("have steps %d %f %f", mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].target_dist, factor);
 					have_steps = true;
@@ -501,11 +501,11 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 					//mtr.last_v = 0;
 				continue;
 			}
-			float target = mtr.settings[current_fragment].current_pos / mtr.steps_per_m + mtr.settings[current_fragment].target_dist * factor;
-			movedebug("ccp3 %d %d stopping %d curpos %d target %f lastv %f spm %f tdist %f factor %f frag %d", s, m, stopping, mtr.settings[current_fragment].current_pos, target, mtr.settings[current_fragment].last_v, mtr.steps_per_m, mtr.settings[current_fragment].target_dist, factor, current_fragment);
+			float target = mtr.settings[current_fragment].current_pos / mtr.steps_per_unit + mtr.settings[current_fragment].target_dist * factor;
+			movedebug("ccp3 %d %d stopping %d curpos %d target %f lastv %f spm %f tdist %f factor %f frag %d", s, m, stopping, mtr.settings[current_fragment].current_pos, target, mtr.settings[current_fragment].last_v, mtr.steps_per_unit, mtr.settings[current_fragment].target_dist, factor, current_fragment);
 			//if (fabs(mtr.settings[current_fragment].target_dist * factor) > .01)	// XXX: This shouldn't ever happen on my printer, but shouldn't be a limitation.
 				//abort();
-			int new_cp = target * mtr.steps_per_m + (target > 0 ? .49 : -.49);
+			int new_cp = target * mtr.steps_per_unit + (target > 0 ? .49 : -.49);
 			if (mtr.settings[current_fragment].current_pos != new_cp)
 				have_steps = true;
 			mtr.settings[current_fragment].current_pos = new_cp;

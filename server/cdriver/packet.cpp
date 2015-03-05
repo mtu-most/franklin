@@ -299,7 +299,7 @@ void packet()
 			spaces[which].axis[a]->settings[current_fragment].current = NAN;
 		}
 		float f = get_float(4);
-		int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_m + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings[current_fragment].current_pos;
+		int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_unit + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings[current_fragment].current_pos;
 		spaces[which].motor[t]->settings[current_fragment].current_pos += diff;
 		spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
 		cpdebug("cp %d %d four %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos, diff);

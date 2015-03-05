@@ -74,7 +74,7 @@ static void reset_pos (Space *s) {
 	// All axes' current_pos must be valid and equal, in other words, x=y=0.
 	float p[3];
 	for (uint8_t i = 0; i < 3; ++i)
-		p[i] = s->motor[i]->settings[current_fragment].current_pos / s->motor[i]->steps_per_m;
+		p[i] = s->motor[i]->settings[current_fragment].current_pos / s->motor[i]->steps_per_unit;
 	if (p[0] != p[1] || p[0] != p[2]) {
 		//debug("resetpos fails");
 		s->axis[0]->settings[current_fragment].source = NAN;

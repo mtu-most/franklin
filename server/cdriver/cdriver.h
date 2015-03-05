@@ -202,7 +202,7 @@ struct Motor
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	Pin_t enable_pin;
-	float steps_per_m;			// hardware calibration [steps/m].
+	float steps_per_unit;			// hardware calibration [steps/unit].
 	uint8_t max_steps;			// maximum number of steps in one iteration.
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;

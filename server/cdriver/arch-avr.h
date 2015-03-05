@@ -276,7 +276,7 @@ static inline void hwpacket(int len) {
 			avr_get_current_pos(offset, false);
 			sending_fragment = 0;
 			stopping = 2;
-			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_m);
+			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_unit);
 			cbs_after_current_move = 0;
 			avr_running = false;
 			//debug("free limit");

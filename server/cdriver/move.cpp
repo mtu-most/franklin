@@ -323,7 +323,7 @@ uint8_t next_move() {
 		// Using NULL as target fills endpos.
 		space_types[sp.type].xyz2motors(&sp, NULL, &ok);
 		for (int m = 0; m < sp.num_motors; ++m) {
-			float ep = sp.motor[m]->settings[current_fragment].endpos * sp.motor[m]->steps_per_m;
+			float ep = sp.motor[m]->settings[current_fragment].endpos * sp.motor[m]->steps_per_unit;
 			int iep = int(ep + (ep > 0 ? .49 : -.49));
 			if (sp.motor[m]->settings[current_fragment].current_pos != iep) {
 				anything = true;
