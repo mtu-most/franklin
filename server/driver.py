@@ -1022,7 +1022,7 @@ class Printer: # {{{
 			self.sense[self.home_space].clear()
 			for i, a, m in self.home_motors:
 				if self.pin_valid(m['limit_max_pin']) or (not self.pin_valid(m['limit_min_pin']) and self.pin_valid(m['sense_pin'])):
-					dist = m['home_pos'] - (-1) + 10	#TODO: use better value.
+					dist = m['home_pos'] + 1000	#TODO: use better value.
 					self.spaces[self.home_space].set_current_pos(i, a['max'] - dist)
 					self.home_target[i] = a['max'] - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
@@ -1055,7 +1055,7 @@ class Printer: # {{{
 			# Move down to find limit or sense switch.
 			for i, a, m in self.home_motors:
 				if (i not in self.limits[self.home_space] and self.pin_valid(m['limit_min_pin'])) or (i not in self.sense[self.home_space] and self.pin_valid(m['sense_pin'])):
-					dist = (1) - m['home_pos'] - 10	# TODO: use better value.
+					dist = 1000 - m['home_pos']	# TODO: use better value.
 					self.spaces[self.home_space].set_current_pos(i, a['min'] + dist)
 					self.home_target[i] = a['min'] - self.spaces[self.home_space].axis[i]['offset']
 			if len(self.home_target) > 0:
