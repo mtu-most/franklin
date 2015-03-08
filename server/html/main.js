@@ -87,8 +87,9 @@ function init() { // {{{
 				if (num < printer.temps.length) {
 					printer.temps[num].temp = t;
 					var e = get_element(printer, [['temp', num], 'temp']);
-					e.ClearAll();
-					e.AddText(t.toFixed(1));
+					// Only update if printer still exists.
+					if (e)
+						e.ClearAll().AddText(t.toFixed(1));
 				}
 				read(printer, num + 1);
 			});
@@ -372,16 +373,16 @@ function set_name(printer, type, index1, index2, name) { // {{{
 // }}}
 
 // Queue functions.  {{{
-function queue_deselect() { // {{{
-	var e = get_element(selected_printer, [null, 'queue']);
+function queue_deselect(printer) { // {{{
+	var e = get_element(printer, [null, 'queue']);
 	for (var i = 1; i < e.options.length; ++i) {
 		e.options[i].selected = false;
 	}
 }
 // }}}
 
-function queue_up() { // {{{
-	var e = get_element(selected_printer, [null, 'queue']);
+function queue_up(printer) { // {{{
+	var e = get_element(printer, [null, 'queue']);
 	for (var i = 1; i < e.options.length; ++i) {
 		if (e.options[i].selected) {
 			var cur = e.options[i];
@@ -392,8 +393,8 @@ function queue_up() { // {{{
 }
 // }}}
 
-function queue_down() { // {{{
-	var e = get_element(selected_printer, [null, 'queue']);
+function queue_down(printer) { // {{{
+	var e = get_element(printer, [null, 'queue']);
 	for (var i = e.options.length - 2; i >= 0; --i) {
 		if (e.options[i].selected) {
 			var cur = e.options[i];
@@ -404,8 +405,8 @@ function queue_down() { // {{{
 }
 // }}}
 
-function queue_del() { // {{{
-	var e = get_element(selected_printer, [null, 'queue']);
+function queue_del(printer) { // {{{
+	var e = get_element(printer, [null, 'queue']);
 	var rm = [];
 	for (var i = 0; i < e.options.length; ++i) {
 		if (e.options[i].selected)
@@ -417,8 +418,6 @@ function queue_del() { // {{{
 // }}}
 
 function get_queue(printer) { // {{{
-	if (printer === undefined)
-		printer = selected_printer;
 	var toprint = [];
 	var e = get_element(printer, [null, 'queue']);
 	for (var i = 0; i < e.options.length; ++i) {
@@ -434,7 +433,7 @@ function queue_print(printer) { // {{{
 	var sina = Math.sin(angle);
 	var cosa = Math.cos(angle);
 	var action = function(a) {
-		printer.call(a, [get_queue(), [printer.targetx, printer.targety, printer.targetz], angle * 180 / Math.PI], {});
+		printer.call(a, [get_queue(printer), [printer.targetx, printer.targety, printer.targetz], angle * 180 / Math.PI], {});
 	};
 	if (get_element(printer, [null, 'probebox']).checked)
 		action('queue_probe');
@@ -1281,28 +1280,28 @@ function update_canvas_and_spans(printer, space, axis) { // {{{
 	update_float(printer, [null, 'targety']);
 	update_float(printer, [null, 'targetz']);
 	update_float(printer, [null, 'targetangle']);
-	redraw_canvas();
+	redraw_canvas(printer);
 }
 // }}}
 
-function redraw_canvas() { // {{{
-	if (!selected_printer || selected_printer.spaces.length < 1 || selected_printer.spaces[0].axis.length < 1)
+function redraw_canvas(printer) { // {{{
+	if (printer.spaces.length < 1 || printer.spaces[0].axis.length < 1)
 		return;
-	var canvas = document.getElementById(make_id(selected_printer, [null, 'xymap']));
-	if (selected_printer.spaces[0].axis.length >= 2) {
+	var canvas = document.getElementById(make_id(printer, [null, 'xymap']));
+	if (printer.spaces[0].axis.length >= 2) {
 		var c = canvas.getContext('2d');
-		var box = document.getElementById(make_id(selected_printer, [null, 'map']));
+		var box = document.getElementById(make_id(printer, [null, 'map']));
 		var extra_height = box.clientHeight - canvas.clientHeight;
 		var printerwidth;
 		var printerheight;
 		var outline;
-		switch (selected_printer.spaces[0].type) {
+		switch (printer.spaces[0].type) {
 		case TYPE_CARTESIAN:
-			var xaxis = selected_printer.spaces[0].axis[0];
-			var yaxis = selected_printer.spaces[0].axis[1];
+			var xaxis = printer.spaces[0].axis[0];
+			var yaxis = printer.spaces[0].axis[1];
 			printerwidth = 2 * Math.max(xaxis.max, -xaxis.min) + .010;
 			printerheight = 2 * Math.max(yaxis.max, -yaxis.min) + .010;
-			outline = function(c) {
+			outline = function(printer, c) {
 				c.beginPath();
 				// Why does this not work?
 				//c.rect(xaxis.axis_min, yaxis.axis_min, xaxis.axis_max - xaxis.axis_min, yaxis.axis_max - y.axis_min);
@@ -1318,8 +1317,8 @@ function redraw_canvas() { // {{{
 			var radius = [];
 			var length = [];
 			for (var a = 0; a < 3; ++a) {
-				radius.push(selected_printer.spaces[0].motor[a].delta_radius);
-				length.push(selected_printer.spaces[0].motor[a].delta_rodlength);
+				radius.push(printer.spaces[0].motor[a].delta_radius);
+				length.push(printer.spaces[0].motor[a].delta_rodlength);
 			}
 			//var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
 			//var dx = [0, -.8660254037844387, .8660254037844387];
@@ -1351,9 +1350,9 @@ function redraw_canvas() { // {{{
 					angles[A][aa] = Math.atan2(point[1] - origin[A][1], point[0] - origin[A][0]);
 				}
 			}
-			outline = function(c) {
+			outline = function(printer, c) {
 				c.save();
-				c.rotate(selected_printer.spaces[0].delta_angle);
+				c.rotate(printer.spaces[0].delta_angle);
 				c.beginPath();
 				c.moveTo(intersects[0][0][0], intersects[0][0][1]);
 				for (var a = 0; a < 3; ++a) {
@@ -1365,19 +1364,19 @@ function redraw_canvas() { // {{{
 				c.closePath();
 				c.stroke();
 				for (var a = 0; a < 3; ++a) {
-					var name = selected_printer.spaces[0].motor[a].name;
+					var name = printer.spaces[0].motor[a].name;
 					var w = c.measureText(name).width;
 					c.beginPath();
 					c.save();
 					c.translate(origin[a][0] + dy[a] * .015 - w / 2, origin[a][1] - dx[a] * .015);
-					c.rotate(-selected_printer.spaces[0].delta_angle);
+					c.rotate(-printer.spaces[0].delta_angle);
 					c.scale(.001, -.001);
 					c.fillText(name, 0, 0);
 					c.restore();
 				}
 				c.restore();
 			};
-			var extra = c.measureText(selected_printer.spaces[0].motor[0].name).width + .02;
+			var extra = c.measureText(printer.spaces[0].motor[0].name).width + .02;
 			printerwidth = 2 * (maxx + extra);
 			printerheight = 2 * (maxy + extra);
 			break;
@@ -1388,8 +1387,8 @@ function redraw_canvas() { // {{{
 		canvas.width = canvas.clientWidth;
 		canvas.height = canvas.clientWidth;
 
-		var b = selected_printer.bbox;
-		var true_pos = [selected_printer.spaces[0].axis[0].current, selected_printer.spaces[0].axis[1].current];
+		var b = printer.bbox;
+		var true_pos = [printer.spaces[0].axis[0].current, printer.spaces[0].axis[1].current];
 
 		c.save();
 		// Clear canvas.
@@ -1411,11 +1410,11 @@ function redraw_canvas() { // {{{
 		// Draw outline.
 		c.strokeStyle = '#888';
 		c.fillStyle = '#888';
-		outline(c);
+		outline(printer, c);
 		// Draw center.
 		c.beginPath();
-		c.moveTo(.001, 0);
-		c.arc(0, 0, .001, 0, 2 * Math.PI);
+		c.moveTo(1, 0);
+		c.arc(0, 0, 1, 0, 2 * Math.PI);
 		c.fillStyle = '#888';
 		c.fill();
 
@@ -1427,8 +1426,8 @@ function redraw_canvas() { // {{{
 		c.fill();
 
 		c.save();
-		c.translate(selected_printer.targetx, selected_printer.targety);
-		c.rotate(selected_printer.targetangle);
+		c.translate(printer.targetx, printer.targety);
+		c.rotate(printer.targetangle);
 
 		c.beginPath();
 		if (b[0][0] != b[0][1] && b[1][0] != b[1][1]) {
@@ -1437,27 +1436,27 @@ function redraw_canvas() { // {{{
 
 			// Draw tick marks.
 			c.moveTo((b[0][1] + b[0][0]) / 2, b[1][0]);
-			c.lineTo((b[0][1] + b[0][0]) / 2, b[1][0] + .005);
+			c.lineTo((b[0][1] + b[0][0]) / 2, b[1][0] + 5);
 
 			c.moveTo((b[0][1] + b[0][0]) / 2, b[1][1]);
-			c.lineTo((b[0][1] + b[0][0]) / 2, b[1][1] - .005);
+			c.lineTo((b[0][1] + b[0][0]) / 2, b[1][1] - 5);
 
 			c.moveTo(b[0][0], (b[1][1] + b[1][0]) / 2);
-			c.lineTo(b[0][0] + .005, (b[1][1] + b[1][0]) / 2);
+			c.lineTo(b[0][0] + 5, (b[1][1] + b[1][0]) / 2);
 
 			c.moveTo(b[0][1], (b[1][1] + b[1][0]) / 2);
-			c.lineTo(b[0][1] - .005, (b[1][1] + b[1][0]) / 2);
+			c.lineTo(b[0][1] - 5, (b[1][1] + b[1][0]) / 2);
 
 			// Draw central cross.
-			c.moveTo((b[0][1] + b[0][0]) / 2 - .005, (b[1][1] + b[1][0]) / 2);
-			c.lineTo((b[0][1] + b[0][0]) / 2 + .005, (b[1][1] + b[1][0]) / 2);
-			c.moveTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 + .005);
-			c.lineTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 - .005);
+			c.moveTo((b[0][1] + b[0][0]) / 2 - 5, (b[1][1] + b[1][0]) / 2);
+			c.lineTo((b[0][1] + b[0][0]) / 2 + 5, (b[1][1] + b[1][0]) / 2);
+			c.moveTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 + 5);
+			c.lineTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 - 5);
 		}
 
 		// Draw zero.
-		c.moveTo(.003, 0);
-		c.arc(0, 0, .003, 0, 2 * Math.PI);
+		c.moveTo(3, 0);
+		c.arc(0, 0, 3, 0, 2 * Math.PI);
 
 		// Update it on screen.
 		c.strokeStyle = '#000';
@@ -1467,9 +1466,9 @@ function redraw_canvas() { // {{{
 		c.restore();
 	}
 
-	if (selected_printer.spaces[0].axis.length != 2) {
-		var zaxis = selected_printer.spaces[0].axis[selected_printer.spaces[0].axis.length >= 3 ? 2 : 0];
-		var zcanvas = document.getElementById(make_id(selected_printer, [null, 'zmap']));
+	if (printer.spaces[0].axis.length != 2) {
+		var zaxis = printer.spaces[0].axis[printer.spaces[0].axis.length >= 3 ? 2 : 0];
+		var zcanvas = document.getElementById(make_id(printer, [null, 'zmap']));
 		var zc = zcanvas.getContext('2d');
 		zcanvas.style.height = canvas.clientWidth + 'px';
 		var zratio = .15 / .85;
@@ -1512,9 +1511,9 @@ function redraw_canvas() { // {{{
 
 		// Draw target position.
 		zc.beginPath();
-		zc.moveTo(0, selected_printer.targetz);
-		zc.lineTo(-d, selected_printer.targetz - d);
-		zc.lineTo(-d, selected_printer.targetz + d);
+		zc.moveTo(0, printer.targetz);
+		zc.lineTo(-d, printer.targetz - d);
+		zc.lineTo(-d, printer.targetz + d);
 		zc.closePath();
 		zc.strokeStyle = '#000';
 		zc.lineWidth = 1.5 / zfactor;

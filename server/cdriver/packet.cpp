@@ -172,7 +172,7 @@ void packet()
 			return;
 		}
 		temps[which].target[0] = get_float(3);
-		temps[which].adctarget[0] = temps[which].toadc(temps[which].target[0]);
+		temps[which].adctarget[0] = temps[which].toadc(temps[which].target[0], MAXINT);
 		//debug("adc target %d from %d", temps[which]->adctarget, int32_t(temps[which]->target / 1024));
 		if (temps[which].adctarget[0] >= MAXINT) {
 			// main loop doesn't handle it anymore, so it isn't disabled there.
@@ -220,8 +220,8 @@ void packet()
 		}
 		temps[which].min_alarm = min_temp.f;
 		temps[which].max_alarm = max_temp.f;
-		temps[which].adcmin_alarm = temps[which].toadc(temps[which].min_alarm);
-		temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm);
+		temps[which].adcmin_alarm = temps[which].toadc(temps[which].min_alarm, -1);
+		temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm, MAXINT);
 		return;
 	}
 	case CMD_READTEMP:	// read temperature

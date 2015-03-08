@@ -23,7 +23,7 @@ void Temp::load(int32_t &addr, int id)
 	thermistor_pin.read(read_16(addr));
 	target[1] = read_float(addr);
 	for (int i = 0; i < 2; ++i) {
-		adctarget[i] = toadc(target[i]);
+		adctarget[i] = toadc(target[i], MAXINT);
 		SET_OUTPUT(power_pin[i]);
 		if (is_on[i])
 			SET(power_pin[i]);
@@ -79,14 +79,13 @@ float Temp::fromadc(int32_t adc) {
 	return -beta / log(K * ((1 << ADCBITS) / R0 / adc - 1 / R0 - 1 / R1));
 }
 
-int32_t Temp::toadc(float T) {
-	if (isnan(T) || T <= 0)
-		return MAXINT;
+int32_t Temp::toadc(float T, int32_t default_) {
+	if (isnan(T) || T < 0)
+		return default_;
+	if (isnan(beta))
+		return (T - R1) / R0;
 	if (isinf(T) && T > 0)
 		return -1;
-	if (isnan(beta)) {
-		return T - R1 / R0;
-	}
 	float Rs = K * exp(beta * 1. / T);
 	//debug("K %f Rs %f R0 %f logRc %f Tc %f beta %f", K, Rs, R0, logRc, Tc, beta);
 	return ((1 << ADCBITS) - 1) * Rs / (Rs + R0);
@@ -170,10 +169,10 @@ void handle_temp(int id, int temp) { // {{{
 	//debug("temp for %d: %d", id, temp);
 	// If an alarm should be triggered, do so.  Adc values are higher for lower temperatures.
 	//debug("alarms: %d %d %d %d", id, temps[id].adcmin_alarm, temps[id].adcmax_alarm, temp);
-	if ((temps[id].adcmin_alarm < MAXINT && temps[id].adcmin_alarm >= temp) || temps[id].adcmax_alarm <= temp) {
+	if (temps[id].adcmin_alarm >= temp || temps[id].adcmax_alarm <= temp) {
 		temps[id].min_alarm = NAN;
 		temps[id].max_alarm = NAN;
-		temps[id].adcmin_alarm = MAXINT;
+		temps[id].adcmin_alarm = -1;
 		temps[id].adcmax_alarm = MAXINT;
 		send_host(CMD_TEMPCB, id);
 	}

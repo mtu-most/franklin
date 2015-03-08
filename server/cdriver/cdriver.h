@@ -74,8 +74,6 @@ enum Command {
 	CMD_READPOWER,	// 1 byte: which channel.  Reply: POWER. [μs, μs]
 	CMD_SETPOS,	// 1 byte: which channel; 4 bytes: pos.
 	CMD_GETPOS,	// 1 byte: which channel.  Reply: POS. [steps, mm]
-	CMD_LOAD,	// 1 byte: which channel.
-	CMD_SAVE,	// 1 byte: which channel.
 	CMD_READ_GLOBALS,
 	CMD_WRITE_GLOBALS,
 	CMD_READ_SPACE_INFO,	// 1 byte: which channel.  Reply: DATA.
@@ -150,7 +148,7 @@ struct Temp
 	// Functions.
 	int32_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
 	float fromadc(int32_t adc);	// convert ADC to K.
-	int32_t toadc(float T);	// convert K to ADC.
+	int32_t toadc(float T, int32_t default_);	// convert K to ADC.
 	void load(int32_t &addr, int id);
 	void save(int32_t &addr);
 	void init();

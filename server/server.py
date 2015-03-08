@@ -378,16 +378,6 @@ class Connection: # {{{
 	def get_printer(self): # {{{
 		return self.printer.name if self.printer is not None else None
 	# }}}
-	def status(self): # {{{
-		resumeinfo = [(yield), None]
-		assert self.printer is not None
-		c = websockets.call(resumeinfo, self.printer.printer.readtemp_temp, 0)
-		while c(): c.args = (yield websockets.WAIT)
-		t = c.ret()
-		c = websockets.call(resumeinfo, self.printer.printer.readtemp_extruder, 0)
-		while c(): c.args = (yield websockets.WAIT)
-		yield(t, c.ret())
-	# }}}
 	def set_monitor(self, value): # {{{
 		self.socket.monitor = value
 		if self.socket.monitor:

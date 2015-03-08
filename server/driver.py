@@ -42,6 +42,7 @@ import select
 import subprocess
 import traceback
 import protocol
+import mmap
 # }}}
 
 # Enable code trace. {{{
@@ -61,16 +62,14 @@ def dprint(x, data): # {{{
 # }}}
 
 # Decorator for functions which block.
-class delayed: # {{{
-	def __init__(self, f):
-		self.f = f
-	def __call__(self, *a, **ka):
+def delayed(f): # {{{
+	def ret(self, *a, **ka):
 		#log('delayed called with args %s,%s' % (repr(a), repr(ka)))
 		def wrap(id):
-			# HACK: self is lost because the decorator gets the unbound function.  Pass in the only instance that is ever used.
 			#log('wrap called with id %s' % (repr(id)))
-			return self.f(printer, id, *a, **ka)
+			return f(self, id, *a, **ka)
 		return (WAIT, wrap)
+	return ret
 # }}}
 
 # Call cdriver running on same machine.
@@ -151,21 +150,33 @@ class Printer: # {{{
 		sys.stdout.flush()
 	# }}}
 	def __init__(self, port, uuid, run_id, allow_system): # {{{
-		# HACK: this variable needs to have its value before init is done, to make the above HACK in the generator work.
-		global printer
-		printer = self
 		self.printer = Driver(port, run_id)
 		self.uuid = uuid
 		self.allow_system = allow_system
 		try:
-			pfile = fhs.read_data(os.path.join(self.uuid, 'profile'))
-			self.profile = pfile.readline().strip()
-			pfile.close()
+			with fhs.read_data(os.path.join(self.uuid, 'profile')) as pfile:
+				self.profile = pfile.readline().strip()
 			log('profile is %s' % self.profile)
 		except:
 			log("No default profile; using 'default'.")
 			self.profile = 'default'
+		# Fill job queue.
 		self.jobqueue = {}
+		spool = fhs.read_spool(dir = True, opened = False)
+		if spool is not None and os.path.isdir(spool):
+			for filename in os.listdir(spool):
+				name, ext = os.path.splitext(filename)
+				if ext != os.extsep + 'bin':
+					log('skipping %s' % filename)
+					continue
+				try:
+					log('opening %s' % filename)
+					with open(os.path.join(spool, filename), 'rb') as f:
+						f.seek(-6 * 4, os.SEEK_END)
+						self.jobqueue[name] = struct.unpack('<' + 'f' * 6, f.read())
+				except:
+					traceback.print_exc()
+					log('failed to open spool file %s' % os.path.join(spool, filename))
 		self.job_output = ''
 		self.jobs_active = []
 		self.jobs_ref = None
@@ -184,7 +195,7 @@ class Printer: # {{{
 		self.home_spaces = []
 		self.home_cb = [False, self._do_home]
 		self.probe_cb = [False, None]
-		self.gcode = None
+		self.gcode_map = None
 		self.gcode_id = None
 		self.gcode_wait = None
 		self.gcode_parking = False
@@ -583,7 +594,7 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _globals_update(self, target = None): # {{{
-		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, not self.paused and (None if self.gcode is None else True)])
+		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, not self.paused and (None if self.gcode_map is None else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		self._broadcast(target, 'space_update', which, self.spaces[which].export())
@@ -623,7 +634,7 @@ class Printer: # {{{
 		return z + l * (1 - fx) + r * fx
 	# }}}
 	def _do_gcode(self): # {{{
-		if self.gcode is None:
+		if self.gcode_map is None:
 			#log('end of gcode')
 			return
 		flushed = False
@@ -632,27 +643,21 @@ class Printer: # {{{
 			self.flushing = False
 			flushed = True
 		#log('len gcode = %d' % len(self.gcode))
-		while len(self.gcode) > 0:
+		while self.gcode_current_record < self.gcode_num_records:
 			if self.gcode_parking or self.gcode_waiting > 0 or self.confirmer is not None or self.gcode_wait is not None or self.flushing or self.paused:
 				#log('gcode waiting: %s' % repr((self.gcode_parking, self.gcode_waiting, self.confirmer, self.gcode_wait)))
 				# Wait until done.
 				return
 			if not self.position_valid:
-				self.home(cb = lambda: self._do_gcode(), abort = False)[1](None)
+				self.gcode_parking = True
+				self.park(cb = lambda: self._do_gcode(), abort = False)[1](None)
 				return
-			cmd, args, message = self.gcode[0]
-			cmd = tuple(cmd)
+			pos = self.gcode_current_record * (1 + 11 * 4)
+			record = struct.unpack('<Bl' + 'f' * 10, self.gcode_map[pos:pos + 1 + 11 * 4])
+			cmd = record[0]
+			T, x, X, y, Y, z, Z, e, E, f, F = record[1:]
 			#log('Running %s %s' % (cmd, args))
-			if cmd[0] == 'S':
-				# Spindle speed; not supported, but shouldn't error.
-				pass
-			elif cmd == ('G', 94):
-				# Set feed rate mode to units per minute; we don't support anything else, but shouldn't error on this request.
-				pass
-			elif cmd == ('M', 9):
-				# Coolant off.  We don't support coolant, but turning it off is not an error.
-				pass
-			elif cmd == ('G', 1):
+			if cmd == protocol.parsed['GOTO']:
 				if self.flushing is None:
 					#log('not filling; waiting for queue space')
 					return
@@ -667,10 +672,10 @@ class Printer: # {{{
 				#'''
 				#log(repr(args))
 				sina, cosa = self.gcode_angle
-				target = cosa * args['X'] - sina * args['Y'] + self.gcode_ref[0], cosa * args['Y'] + sina * args['X'] + self.gcode_ref[1], args['Z'] + self.gcode_ref[2]
+				target = cosa * X - sina * Y + self.gcode_ref[0], cosa * Y + sina * X + self.gcode_ref[1], Z + self.gcode_ref[2]
 				if self._use_probemap and self.gcode_probemap:
-					if args['x'] is not None:
-						source = cosa * args['x'] - sina * args['y'] + self.gcode_ref[0], cosa * args['y'] + sina * args['x'] + self.gcode_ref[1]
+					if x is not None:
+						source = cosa * x - sina * y + self.gcode_ref[0], cosa * y + sina * x + self.gcode_ref[1]
 						#log('gcode %s' % repr([(target[t], source[t], self.gcode_probemap[0][t + 2], self.gcode_probemap[0][t], self.gcode_probemap[1][t]) for t in range(2)]))
 						nums = [abs(target[t] - source[t]) / (abs(self.gcode_probemap[0][t + 2] - self.gcode_probemap[0][t]) / self.gcode_probemap[1][t]) for t in range(2) if not math.isnan(target[t]) and self.gcode_probemap[0][t] != self.gcode_probemap[0][t + 2]]
 						#log('num %s' % nums)
@@ -679,25 +684,25 @@ class Printer: # {{{
 						else:
 							num = int(max(n for n in nums if not math.isnan(n))) + 1
 						if num == 1:
-							#log('debugpart: %.2f %.2f %.2f %.2f' % (target[0], target[1], args['f'], args['F']))
+							#log('debugpart: %.2f %.2f %.2f %.2f' % (target[0], target[1], f, F))
 							z = self._use_probemap(*target)
 							#log('go to one %f %f %f' % (target[0], target[1], z))
-							self.goto([[target[0], target[1], z], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
+							self.goto([[target[0], target[1], z], {T: E}], f0 = f, f1 = F)[1](None)
 						else:
 							for t in range(num):
 								targetpart = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
-								#log('debugpart: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f' % (target[0], target[1], source[0], source[1], targetpart[0], targetpart[1], args['f'], args['F']))
+								#log('debugpart: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f' % (target[0], target[1], source[0], source[1], targetpart[0], targetpart[1], f, F))
 								z = self._use_probemap(targetpart[0], targetpart[1], target[2])
 								#log('go to part %f %f %f' % (targetpart[0], targetpart[1], z))
-								self.goto([[targetpart[0], targetpart[1], z], {args['T']: args['E']}], f0 = args['f'] * num, f1 = args['F'] * num)[1](None)
+								self.goto([[targetpart[0], targetpart[1], z], {T: E}], f0 = f * num, f1 = F * num)[1](None)
 					else:
-						self.goto([[target[0], target[1], self._use_probemap(*target)], {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
+						self.goto([[target[0], target[1], self._use_probemap(*target)], {T: E}], f0 = f, f1 = F)[1](None)
 				else:
-					self.goto([target, {args['T']: args['E']}], f0 = args['f'], f1 = args['F'])[1](None)
+					self.goto([target, {T: E}], f0 = f, f1 = F)[1](None)
 				if self.wait and self.flushing is False:
 					#log('stop filling; wait for queue space')
 					self.flushing = None
-					self.gcode.pop(0)
+					self.gcode_current_record += 1
 					continue
 			else:
 				if not flushed:
@@ -706,106 +711,63 @@ class Printer: # {{{
 					#log('flush set')
 					return
 				flushed = False
-				if cmd in (('G', 28), ('M', 6)):
-					# Home or tool change; same response: park
-					self.gcode.pop(0)
+				if cmd == protocol.parsed['PARK']:
+					self.gcode_current_record += 1
 					self.gcode_parking = True
 					return self.park(self._do_gcode, abort = False)[1](None)
-				elif cmd == ('G', 4):
-					if 'P' in args:
-						self.gcode.pop(0)
-						self.gcode_wait = time.time() + float(args['P']) / 1000
-						return
-				elif cmd == ('G', 92):
-					# Don't allow g-code to disable motors.
-					#self.sleep()
-					# But do set the position to 0, so things work as expected.
-					self.set_axis_pos(1, args['e'], args['E'])
-				elif cmd == ('M', 0):
-					# Wait.
-					self.gcode.pop(0)
-					self.request_confirmation(message or 'Continue?')[1](False)
+				elif cmd == protocol.parsed['WAIT']:
+					self.gcode_current_record += 1
+					self.gcode_wait = time.time() + x / 1000
 					return
-				elif cmd[0] == 'M' and cmd[1] in (3, 4):
-					# Start spindle; we don't support speed or direction, so M3 and M4 are equal.
-					if self.spindle_id < len(self.gpios):
-						self.set_gpio(self.spindle_id, state = 1)
-				elif cmd == ('M', 5):
-					# Stop spindle.
-					if self.spindle_id < len(self.gpios):
-						self.set_gpio(self.spindle_id, state = 0)
-				elif cmd == ('M', 42):
-					g = int(args['P'])
-					if len(self.gpios) > g:
-						value = args['S']
-						self.set_gpio(int(g), state = int(value))
-				elif cmd == ('M', 84):
-					# Don't allow g-code to disable motors.
-					#self.sleep()
-					# But do set the position to 0, so things work as expected.
-					for e in range(len(self.spaces[1].axis)):
-						self.set_axis_pos(1, e, 0)
-				elif cmd == ('M', 104):
-					if args['E'] >= len(self.temps):
-						log('ignoring M104 for invalid temp %d' % args['E'])
-					else:
-						self.settemp(args['E'], args['S'])
-				elif cmd == ('M', 106):	# Fan on
-					if self.fan_id < len(self.gpios):
-						self.set_gpio(self.fan_id, state = 1)
-				elif cmd == ('M', 107): # Fan off
-					if self.fan_id < len(self.gpios):
-						self.set_gpio(self.fan_id, state = 0)
-				elif cmd == ('M', 109):
-					e = args['E']
-					if 'S' in args:
-						self.settemp(e, args['S'])
-					else:
-						args['S'] = self.temps[e].value
-					if not math.isnan(args['S']) and self.pin_valid(self.temps[e].thermistor_pin):
-						self.clear_alarm()
-						self.waittemp(e, args['S'])
-						self.gcode.pop(0)
-						self.gcode_waiting += 1
-						return self.wait_for_temp(e)[1](None)
-				elif cmd == ('M', 116):
-					e = args['E']
-					etemp = self.temps[e].value
+				elif cmd == protocol.parsed['SETPOS']:
+					self.set_axis_pos(1, e, x)
+				elif cmd == protocol.parsed['CONFIRM']:
+					# Wait.
+					self.gcode_current_record += 1
+					self.request_confirmation(self.gcode_strings[T] if T >= 0 else 'Continue?')[1](False)
+					return
+				elif cmd == protocol.parsed['GPIO']:
+					if T == -1:
+						T = self.fan_id
+					elif T == -2:
+						T = self.spindle_id
+					if 0 <= T < len(self.gpios):
+						self.set_gpio(T, state = x)
+					elif T != 255:
+						log('ignoring GPIO for invalid pin %d' % T)
+				elif cmd == protocol.parsed['SETTEMP']:
+					if T == -1:
+						T = self.bed_id
+					if 0 <= T < len(self.temps):
+						self.settemp(T, x)
+					elif T != 255:
+						log('ignoring SETTEMP for invalid temp %d' % T)
+				elif cmd == protocol.parsed['WAITTEMP']:
+					if T == -1:
+						T = self.bed_id
 					self.clear_alarm()
-					if not math.isnan(etemp) and self.pin_valid(self.temps[e].thermistor_pin):
-						self.waittemp(e, etemp)
-						self.gcode.pop(0)
+					def wait_one(which):
+						if not 0 <= which < len(self.temps) or math.isnan(self.temps[which].value) or not self.pin_valid(self.temps[which].thermistor_pin):
+							return
+						self.waittemp(which, self.temps[which].value)
 						self.gcode_waiting += 1
-						self.wait_for_temp(e)[1](None)
-					if self.bed_id < len(self.temps) and not math.isnan(self.btemp) and self.pin_valid(self.temps[self.bed_id].thermistor_pin):
-						self.waittemp(self.bed_id, self.btemp)
-						self.gcode.pop(0)
-						self.gcode_waiting += 1
-						self.wait_for_temp(self.bed_id)[1](None)
-					if self.gcode_waiting > 0:
-						return
-				elif cmd == ('M', 140):
-					self.btemp = args['S']
-					if self.bed_id < len(self.temps):
-						self.settemp(self.bed_id, self.btemp)
-				elif cmd == ('M', 190):
-					if 'S' in args:
-						self.btemp = args['S']
-						if self.bed_id < len(self.temps):
-							self.settemp(self.bed_id, self.btemp)
-					if self.bed_id < len(self.temps) and not math.isnan(self.btemp) and self.pin_valid(self.temps[0].thermistor_pin):
-						self.gcode.pop(0)
-						self.waittemp(self.bed_id, self.btemp)
-						self.gcode_waiting += 1
-						return self.wait_for_temp(self.bed_id)[1](None)
-				elif cmd == ('SYSTEM', 0):
-					if not re.match(self.allow_system, message):
-						log('Refusing to run forbidden system command: %s' % message)
+					if T == -2:
+						for t in range(len(self.temps)):
+							wait_one(t)
 					else:
-						log('Running system command: %s' % message)
-						os.system(message)
-			if self.gcode is not None and len(self.gcode) > 0:
-				self.gcode.pop(0)
+						wait_one(T)
+					self.gcode_current_record += 1
+					return self.wait_for_temp()[1](None)
+				elif cmd == protocol.parsed['SYSTEM']:
+					assert 0 <= T < len(self.gcode_strings)
+					command = self.gcode_strings[T]
+					if not re.match(self.allow_system, command):
+						log('Refusing to run forbidden system command: %s' % command)
+					else:
+						log('Running system command: %s' % command)
+						os.system(command)
+			if self.gcode_map is not None and self.gcode_current_record < self.gcode_num_records:
+				self.gcode_current_record += 1
 			else:
 				# Printing was aborted; don't call print_done, or we'll abort whatever aborted us.
 				return
@@ -819,13 +781,17 @@ class Printer: # {{{
 				self.set_axis_pos(1, e, 0)
 		self._print_done(True, 'completed')
 	# }}}
+	def _gcode_close(self): # {{{
+		self.gcode_strings = []
+		self.gcode_map.close()
+		os.close(self.gcode_fd)
+		self.gcode_map = None
+		self.gcode_fd = -1
+	# }}}
 	def _print_done(self, complete, reason): # {{{
-		if self.gcode is not None:
-			if complete:
-				log('completed: %s' % reason)
-			else:
-				log('aborted: %s' % reason)
-		self.gcode = None
+		if self.gcode_map is not None:
+			log(reason)
+			self._gcode_close()
 		#traceback.print_stack()
 		if self.queue_info is None and self.gcode_id is not None:
 			log('Print done (%d): %s' % (complete, reason))
@@ -885,6 +851,21 @@ class Printer: # {{{
 		self.paused = False
 		self._globals_update()
 		call_queue.append((self._do_gcode, []))
+	# }}}
+	def _queue_add(self, f, name): # {{{
+		origname = name
+		i = 0
+		while name in self.jobqueue:
+			name = '%s(%d)' % (origname, i)
+			i += 1
+		bbox, errors = self._gcode_parse(f, name)
+		for e in errors:
+			log(e)
+		if bbox is None:
+			return errors
+		self.jobqueue[name] = bbox
+		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
+		return errors
 	# }}}
 	def _do_queue(self): # {{{
 		#log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
@@ -1292,7 +1273,59 @@ class Printer: # {{{
 				self.request_confirmation("Prepare for job '%s'." % self.jobs_active[self.job_current])[1](False)
 			self.gcode_parking = True
 			self.park(cb = cb, abort = False)[1](None)
-		self.gcode_run(self.jobqueue[self.jobs_active[self.job_current]][0][:], self.jobs_ref, self.jobs_angle, self.jobs_probemap, abort = False)[1](None)
+		self.gcode_id = None
+		self._gcode_run(self.jobs_active[self.job_current], self.jobs_ref, self.jobs_angle, self.jobs_probemap, abort = False)
+	# }}}
+	def _gcode_run(self, src, ref = (0, 0, 0), angle = 0, probemap = None, abort = True): # {{{
+		self.gcode_ref = ref
+		angle = math.radians(angle)
+		self.gcode_angle = math.sin(angle), math.cos(angle)
+		self.gcode_probemap = probemap
+		if self.bed_id < len(self.temps):
+			self.btemp = self.temps[self.bed_id].value
+		else:
+			self.btemp = float('nan')
+		if abort:
+			self._unpause()
+			self._print_done(False, 'aborted by starting new print')
+		self.queue_info = None
+		self.gcode_fd = os.open(fhs.read_spool(src + os.extsep + 'bin', opened = False), os.O_RDONLY)
+		self.gcode_map = mmap.mmap(self.gcode_fd, 0, access = mmap.ACCESS_READ)
+		size = self.gcode_map.size()
+		numpos = size - 7 * 4
+		num_strings = struct.unpack('<L', self.gcode_map[numpos:numpos + 4])[0]
+		strlen = [None] * num_strings
+		self.gcode_strings = [None] * num_strings
+		all_strs = 0
+		for i in range(num_strings):
+			pos = numpos - (num_strings - i) * 4
+			strlen[i] = struct.unpack('<L', self.gcode_map[pos:pos + 4])[0]
+			all_strs += strlen[i]
+		pos = numpos - num_strings * 4
+		self.gcode_num_records = pos / (11 * 4 + 1)
+		self.gcode_current_record = 0
+		for i in range(num_strings):
+			self.gcode_strings[i] = self.gcode_map[pos:pos + strlen[i]]
+			pos += strlen[i]
+		# Disable all alarms.
+		for i in range(len(self.temps)):
+			self.waittemp(i, None, None)
+		if self.gcode_num_records <= 0:
+			log('nothing to run')
+			self._gcode_close()
+			if id is not None:
+				self._send(id, 'return', False, 'nothing to run')
+			self.paused = None
+			self._globals_update()
+			return
+		self.paused = False
+		self._globals_update()
+		self.sleep(False)
+		if len(self.spaces) > 1:
+			for e in range(len(self.spaces[1].axis)):
+				self.set_axis_pos(1, e, 0)
+		self._broadcast(None, 'printing', True)
+		call_queue.append((self._do_gcode, []))
 	# }}}
 	def _audio_play(self): # {{{
 		if self.audiofile is None:
@@ -1580,9 +1613,8 @@ class Printer: # {{{
 			log('setting profile to %s' % profile.strip())
 			self.profile = profile.strip()
 			self._globals_update()
-		f = fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'))
-		f.write(self.export_settings())
-		f.close()
+		with fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini')) as f:
+			f.write(self.export_settings())
 	# }}}
 	def list_profiles(self): # {{{
 		dirnames = fhs.read_data(os.path.join(self.uuid, 'profiles'), dir = True, multiple = True, opened = False)
@@ -1603,9 +1635,8 @@ class Printer: # {{{
 		return False
 	# }}}
 	def set_default_profile(self, profile): # {{{
-		f = fhs.write_data(os.path.join(self.uuid, 'profile'))
-		f.write(profile.strip() + '\n')
-		f.close()
+		with fhs.write_data(os.path.join(self.uuid, 'profile')) as f:
+			f.write(profile.strip() + '\n')
 	# }}}
 	def abort(self): # {{{
 		self.pause();
@@ -2014,43 +2045,15 @@ class Printer: # {{{
 		return errors
 	# }}}
 	def _import_file(self, filename, name): # {{{
-		return ', '.join(self.import_settings(open(filename).read(), name))
+		return ', '.join('%s (%s)' % (msg, ln) for ln, msg in self.import_settings(open(filename).read(), name))
 	# }}}
 	@delayed
-	def gcode_run(self, id, code, ref = (0, 0, 0), angle = 0, probemap = None, abort = True): # {{{
-		self.gcode_ref = ref
-		angle = math.radians(angle)
-		self.gcode_angle = math.sin(angle), math.cos(angle)
-		self.gcode_probemap = probemap
-		if self.bed_id < len(self.temps):
-			self.btemp = self.temps[self.bed_id].value
-		else:
-			self.btemp = float('nan')
-		if abort:
-			self._unpause()
-			self._print_done(False, 'aborted by starting new print')
-		self.queue_info = None
-		self.gcode = code
-		self.gcode_id = id
-		# Disable all alarms.
-		for i in range(len(self.temps)):
-			self.waittemp(i, None, None)
-		if len(self.gcode) <= 0:
-			log('nothing to run')
-			self.gcode = None
-			if id is not None:
-				self._send(id, 'return', False, 'nothing to run')
-			self.paused = None
-			self._globals_update()
-			return
-		self.paused = False
-		self._globals_update()
-		self.sleep(False)
-		if len(self.spaces) > 1:
-			for e in range(len(self.spaces[1].axis)):
-				self.set_axis_pos(1, e, 0)
-		self._broadcast(None, 'printing', True)
-		call_queue.append((self._do_gcode, []))
+	def gcode_run(self, id, code, ref = (0, 0, 0), angle = 0, probemap = None): # {{{
+		with fhs.write_temp(text = False) as f:
+			f.write(code)
+			f.seek(0)
+			self.gcode_id = id
+			return self._gcode_run(f.filename, ref, angle, probemap)
 	# }}}
 	@delayed
 	def request_confirmation(self, id, message): # {{{
@@ -2085,255 +2088,336 @@ class Printer: # {{{
 		return True
 	# }}}
 	def queue_add(self, data, name): # {{{
-		assert name not in self.jobqueue
-		self._broadcast(None, 'blocked', 'parsing g-code')
-		parsed, errors = self.gcode_parse(data)
-		for e in errors:
-			log(e)
-		if len(parsed) == 0:
-			self._broadcast(None, 'blocked', None)
-			return errors
-		self.jobqueue[name] = (parsed, self.gcode_bbox(parsed))
-		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
-		self._broadcast(None, 'blocked', None)
-		return errors
+		with fhs.write_temp() as f:
+			f.write(data)
+			f.seek(0)
+			return self._queue_add(f, name)
 	# }}}
 	def _queue_add_file(self, filename, name): # {{{
-		return ', '.join(self.queue_add(open(filename).read(), name))
+		with open(filename) as f:
+			return ', '.join(self._queue_add(f, name))
 	# }}}
 	def queue_remove(self, name): # {{{
 		assert name in self.jobqueue
+		log('removing %s' % name)
+		filename = fhs.write_spool(name + os.extsep + 'bin', opened = False)
+		try:
+			os.unlink(filename)
+		except:
+			log('unable to unlink %s' % filename)
 		del self.jobqueue[name]
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
 	# }}}
-	def gcode_parse(self, code): # {{{
+	def _gcode_parse(self, src, name): # {{{
+		self._broadcast(None, 'blocked', 'parsing g-code')
 		errors = []
 		mode = None
 		message = None
-		ret = []
+		bbox = [None] * 6
+		bbox_last = [None] * 6
+		strings = ['']
 		unit = 1.
 		rel = False
 		erel = None
 		pos = [[float('nan'), float('nan'), float('nan')], [0.], float('inf')]
-		# Expect to start with a park.
-		for a in range(3):
-			if len(self.spaces[0].axis) > a and not math.isnan(self.spaces[0].axis[a]['park']):
-				pos[0][a] = self.spaces[0].axis[a]['park']
-		current_extruder = 0
-		for lineno, origline in enumerate(code.split('\n')):
-			line = origline.strip()
-			#log('parsing %s' % line)
-			# Get rid of line numbers and checksums.
-			if line.startswith('N'):
-				r = re.match(r'N(\d+)\s+(.*?)\*\d+\s*$', line)
-				if not r:
-					r = re.match(r'N(\d+)\s+(.*?)\s*$', line)
+		with fhs.write_spool(os.path.splitext(name)[0] + os.path.extsep + 'bin') as dst:
+			def add_record(type, nums = None):
+				if nums is None:
+					nums = []
+				if isinstance(nums, dict):
+					nums = [nums['T'], nums['x'], nums['X'], nums['y'], nums['Y'], nums['z'], nums['Z'], nums['e'], nums['E'], nums['f'], nums['F']]
+				nums += [0] * (11 - len(nums))
+				log('%d %s' % (type, repr(nums)))
+				dst.write(struct.pack('<Bl' + 'f' * 10, type, *nums))
+				if type == protocol.parsed['PARK']:
+					if bbox[0] is not None:
+						bbox_last = bbox
+					bbox[:] = [None] * 6
+				else:
+					for i in range(3):
+						if nums[2 * i] != nums[2 * i + 1]:
+							value = nums[2 * i + 1]
+							if math.isnan(value):
+								continue
+							if bbox[2 * i] is None or value < bbox[2 * i]:
+								bbox[2 * i] = value
+							if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
+								bbox[2 * i + 1] = value
+			def add_string(string):
+				if string is None:
+					return 0
+				if string not in strings:
+					strings.append(string)
+				return strings.index(string)
+			# Expect to start with a park.
+			for a in range(3):
+				if len(self.spaces[0].axis) > a and not math.isnan(self.spaces[0].axis[a]['park']):
+					pos[0][a] = self.spaces[0].axis[a]['park']
+			current_extruder = 0
+			for lineno, origline in enumerate(src):
+				line = origline.strip()
+				#log('parsing %s' % line)
+				# Get rid of line numbers and checksums.
+				if line.startswith('N'):
+					r = re.match(r'N(\d+)\s+(.*?)\*\d+\s*$', line)
 					if not r:
-						# Invalid line; ignore it.
-						errors.append('%d:ignoring invalid gcode: %s' % (lineno, origline))
-						continue
-				lineno = int(r.group(1))
-				line = r.group(2)
-			else:
-				lineno += 1
-			comment = ''
-			while '(' in line:
-				b = line.index('(')
-				e = line.find(')', b)
-				if e < 0:
-					errors.append('%d:ignoring line with unterminated comment: %s' % (lineno, origline))
-					continue
-				comment = line[b + 1:e].strip()
-				line = line[:b] + ' ' + line[e + 1:].strip()
-			if ';' in line:
-				p = line.index(';')
-				comment = line[p + 1:].strip()
-				line = line[:p].strip()
-			if comment.upper().startswith('MSG,'):
-				message = comment[4:].strip()
-			elif comment.startswith('SYSTEM:'):
-				if not re.match(self.allow_system, comment[7:]):
-					errors.append('Warning: system command %s is forbidden and will not be run' % comment[7:])
-				ret.append((('SYSTEM', 0), {}, comment[7:]))
-				continue
-			if line == '':
-				continue
-			line = line.split()
-			while len(line) > 0:
-				if mode is None or line[0][0] in 'GMTDS':
-					if len(line[0]) < 2:
-						errors.append('%d:ignoring unparsable line: %s' % (lineno, origline))
-						break
-					try:
-						cmd = line[0][0], int(line[0][1:])
-					except:
-						errors.append('%d:parse error in line: %s' % (lineno, origline))
-						traceback.print_exc()
-						break
-					line = line[1:]
-				else:
-					cmd = mode
-				args = {}
-				success = True
-				for i, a in enumerate(line):
-					if a[0] in 'GMD':
-						line = line[i:]
-						break
-					try:
-						args[a[0]] = float(a[1:])
-					except:
-						errors.append('%d:ignoring invalid gcode: %s' % (lineno, origline))
-						success = False
-						break
-				else:
-					line = []
-				if not success:
-					break
-				if cmd == ('M', 2):
-					# Program end.
-					break
-				elif cmd[0] == 'T':
-					target = cmd[1]
-					if target >= len(pos[1]):
-						pos[1].extend([0.] * (target - len(pos[1]) + 1))
-					current_extruder = target
-					# Force update of extruder.
-					ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': pos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': pos[1][current_extruder], 'E': pos[1][current_extruder], 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, message))
-					continue
-				elif cmd == ('G', 20):
-					unit = 25.4
-					continue
-				elif cmd == ('G', 21):
-					unit = 1.
-					continue
-				elif cmd == ('G', 90):
-					rel = False
-					continue
-				elif cmd == ('G', 91):
-					rel = True
-					continue
-				elif cmd == ('M', 82):
-					erel = False
-					continue
-				elif cmd == ('M', 83):
-					erel = True
-					continue
-				elif cmd == ('M', 84):
-					for e in range(len(pos[1])):
-						pos[1][e] = 0.
-				elif cmd == ('G', 92):
-					if 'E' not in args:
-						continue
-					args['E'] *= unit
-					pos[1][current_extruder] = args['E']
-					args['e'] = current_extruder
-				elif cmd[0] == 'M' and cmd[1] in (104, 109, 116):
-					args['E'] = int(args['T']) if 'T' in args else current_extruder
-				if not((cmd[0] == 'G' and cmd[1] in (0, 1, 4, 28, 81, 92, 94)) or (cmd[0] == 'M' and cmd[1] in (0, 3, 4, 5, 6, 9, 42, 84, 104, 106, 107, 109, 116, 140, 190)) or (cmd[0] in ('S', 'T'))):
-					errors.append('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
-				elif cmd == ('G', 28):
-					ret.append((cmd, args, message))
-					for a in range(len(pos[0])):
-						if len(self.spaces[0].axis) > a and not math.isnan(self.spaces[0].axis[a]['park']):
-							pos[0][a] = self.spaces[0].axis[a]['park']
-				elif cmd[0] == 'G' and cmd[1] in (0, 1, 81):
-					if cmd[1] != 0:
-						mode = cmd
-					components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None, 'R': None}
-					for c in args:
-						if c not in components:
-							errors.append('%d:invalid component %s' % (lineno, c))
+						r = re.match(r'N(\d+)\s+(.*?)\s*$', line)
+						if not r:
+							# Invalid line; ignore it.
+							errors.append('%d:ignoring invalid gcode: %s' % (lineno, origline))
 							continue
-						assert components[c] is None
-						components[c] = args[c]
-					f0 = pos[2]
-					if components['F'] is not None:
-						pos[2] = components['F'] * unit / 60
-					oldpos = pos[0][:], pos[1][:]
-					if cmd[1] != 81:
-						if components['E'] is not None:
-							if erel or (erel is None and rel):
-								estep = components['E'] * unit
+					lineno = int(r.group(1))
+					line = r.group(2)
+				else:
+					lineno += 1
+				comment = ''
+				while '(' in line:
+					b = line.index('(')
+					e = line.find(')', b)
+					if e < 0:
+						errors.append('%d:ignoring line with unterminated comment: %s' % (lineno, origline))
+						continue
+					comment = line[b + 1:e].strip()
+					line = line[:b] + ' ' + line[e + 1:].strip()
+				if ';' in line:
+					p = line.index(';')
+					comment = line[p + 1:].strip()
+					line = line[:p].strip()
+				if comment.upper().startswith('MSG,'):
+					message = comment[4:].strip()
+				elif comment.startswith('SYSTEM:'):
+					if not re.match(self.allow_system, comment[7:]):
+						errors.append('Warning: system command %s is forbidden and will not be run' % comment[7:])
+					add_record(protocol.parsed['SYSTEM'], [add_string(comment[7:])])
+					continue
+				if line == '':
+					continue
+				line = line.split()
+				while len(line) > 0:
+					if mode is None or line[0][0] in 'GMTDS':
+						if len(line[0]) < 2:
+							errors.append('%d:ignoring unparsable line: %s' % (lineno, origline))
+							break
+						try:
+							cmd = line[0][0], int(line[0][1:])
+						except:
+							errors.append('%d:parse error in line: %s' % (lineno, origline))
+							traceback.print_exc()
+							break
+						line = line[1:]
+					else:
+						cmd = mode
+					args = {}
+					success = True
+					for i, a in enumerate(line):
+						if a[0] in 'GMD':
+							line = line[i:]
+							break
+						try:
+							args[a[0]] = float(a[1:])
+						except:
+							errors.append('%d:ignoring invalid gcode: %s' % (lineno, origline))
+							success = False
+							break
+					else:
+						line = []
+					if not success:
+						break
+					if cmd == ('M', 2):
+						# Program end.
+						break
+					elif cmd[0] == 'T':
+						target = cmd[1]
+						if target >= len(pos[1]):
+							pos[1].extend([0.] * (target - len(pos[1]) + 1))
+						current_extruder = target
+						# Force update of extruder.
+						add_record(protocol.parsed['GOTO'], {'x': pos[0][0], 'y': pos[0][1], 'z': pos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': pos[1][current_extruder], 'E': pos[1][current_extruder], 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+						continue
+					elif cmd == ('G', 20):
+						unit = 25.4
+						continue
+					elif cmd == ('G', 21):
+						unit = 1.
+						continue
+					elif cmd == ('G', 90):
+						rel = False
+						continue
+					elif cmd == ('G', 91):
+						rel = True
+						continue
+					elif cmd == ('M', 82):
+						erel = False
+						continue
+					elif cmd == ('M', 83):
+						erel = True
+						continue
+					elif cmd == ('M', 84):
+						for e in range(len(pos[1])):
+							pos[1][e] = 0.
+					elif cmd == ('G', 92):
+						if 'E' not in args:
+							continue
+						args['E'] *= unit
+						pos[1][current_extruder] = args['E']
+						args['e'] = current_extruder
+					elif cmd[0] == 'M' and cmd[1] in (104, 109, 116):
+						args['E'] = int(args['T']) if 'T' in args else current_extruder
+					if cmd == ('M', 140):
+						cmd = ('M', 104)
+						args['E'] = -1
+					elif cmd == ('M', 190):
+						cmd = ('M', 109)
+						args['E'] = -1
+					elif cmd == ('M', 6):
+						# Tool change: park.
+						cmd = ('G', 28)
+					if cmd == ('G', 28):
+						add_record(protocol.parsed['PARK'])
+						for a in range(len(pos[0])):
+							if len(self.spaces[0].axis) > a and not math.isnan(self.spaces[0].axis[a]['park']):
+								pos[0][a] = self.spaces[0].axis[a]['park']
+					elif cmd[0] == 'G' and cmd[1] in (0, 1, 81):
+						if cmd[1] != 0:
+							mode = cmd
+						components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None, 'R': None}
+						for c in args:
+							if c not in components:
+								errors.append('%d:invalid component %s' % (lineno, c))
+								continue
+							assert components[c] is None
+							components[c] = args[c]
+						f0 = pos[2]
+						if components['F'] is not None:
+							pos[2] = components['F'] * unit / 60
+						oldpos = pos[0][:], pos[1][:]
+						if cmd[1] != 81:
+							if components['E'] is not None:
+								if erel or (erel is None and rel):
+									estep = components['E'] * unit
+								else:
+									estep = components['E'] * unit - pos[1][current_extruder]
+								pos[1][current_extruder] += estep
 							else:
-								estep = components['E'] * unit - pos[1][current_extruder]
-							pos[1][current_extruder] += estep
+								estep = 0
 						else:
 							estep = 0
+							if components['R'] is not None:
+								if rel:
+									r = pos[0][2] + components['R'] * unit
+								else:
+									r = components['R'] * unit
+						for axis in range(3):
+							value = components[chr(ord('X') + axis)]
+							if value is not None:
+								if rel:
+									pos[0][axis] += value * unit
+								else:
+									pos[0][axis] = value * unit
+								if axis == 2:
+									z = pos[0][2]
+						if cmd[1] != 81:
+							dist = sum([0] + [(pos[0][x] - oldpos[0][x]) ** 2 for x in range(3) if not math.isnan(pos[0][x] - oldpos[0][x])]) ** .5
+							if dist > 0:
+								#if f0 is None:
+								#	f0 = pos[1][current_extruder]
+								f0 = pos[2]	# Always use new value.
+								if f0 == 0:
+									f0 = float('inf')
+							if math.isnan(dist):
+								dist = 0
+							add_record(protocol.parsed['GOTO'], {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
+						else:
+							# Drill cycle.
+							# Only support OLD_Z (G90) retract mode; don't support repeats(L).
+							# goto x,y
+							add_record(protocol.parsed['GOTO'], {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							# goto r
+							add_record(protocol.parsed['GOTO'], {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							# goto z; this is always straight down, because the move before and after it are also vertical.
+							if z != r:
+								f0 = pos[2] / abs(z - r)
+								add_record(protocol.parsed['GOTO'], {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'e': 0, 'E': 0, 'f': f0, 'F': f0, 'T': current_extruder})
+							# retract; this is always straight up, because the move before and after it are also non-horizontal.
+							add_record(protocol.parsed['GOTO'], {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							# empty move; this makes sure the previous move is entirely vertical.
+							add_record(protocol.parsed['GOTO'], {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							# Set up current z position so next G81 will work.
+							pos[0][2] = oldpos[0][2]
+					elif cmd == ('G', 4):
+						add_record(protocol.parsed['WAIT'], [0, float(args['P']) / 1000 if 'P' in args else 0])
+					elif cmd == ('G', 92):
+						add_record(protocol.parsed['SETPOS'], [current_extruder, args['E']])
+					elif cmd == ('G', 94):
+						# Set feedrate to units per minute; this is always used, and it shouldn't raise an error.
+						pass
+					elif cmd == ('M', 0):
+						add_record(protocol.parsed['CONFIRM'], [add_string(message)])
+					elif cmd == ('M', 3):
+						# Spindle on, clockwise.
+						add_record(protocol.parsed['GPIO'], [-2, 1])
+					elif cmd == ('M', 4):
+						# Spindle on, counterclockwise.
+						add_record(protocol.parsed['GPIO'], [-2, 1])
+					elif cmd == ('M', 5):
+						add_record(protocol.parsed['GPIO'], [-2, 0])
+					elif cmd == ('M', 9):
+						# Coolant off: ignore.
+						pass
+					elif cmd == ('M', 42):
+						if 'P' in args and 'S' in args:
+							add_record(protocol.parsed['GPIO'], [args['P'], args.get('S')])
+						else:
+							errors.append('%d:invalid M42 request (needs P and S)' % lineno)
+					elif cmd == ('M', 84):
+						# Don't sleep, but set all extruder positions to 0.
+						for e in range(len(pos[1])):
+							add_record(protocol.parsed['SETPOS'], [e, 0])
+					elif cmd == ('M', 104):
+						if args['E'] >= len(self.temps):
+							errors.append('ignoring M104 for invalid temp %d' % args['E'])
+						elif 'S' not in args:
+							errors.append('ignoring M104 without S')
+						else:
+							add_record(protocol.parsed['SETTEMP'], [args['E'], args['S']])
+					elif cmd == ('M', 106):
+						add_record(protocol.parsed['GPIO'], [-1, 1])
+					elif cmd == ('M', 107):
+						add_record(protocol.parsed['GPIO'], [-1, 0])
+					elif cmd == ('M', 109):
+						if 'S' in args:
+							add_record(protocol.parsed['SETTEMP'], [args['E'], args['S']])
+						add_record(protocol.parsed['WAITTEMP'], [args['E']])
+					elif cmd == ('M', 116):
+						add_record(protocol.parsed['WAITTEMP'], [-2])
+					elif cmd[0] == 'S':
+						# Spindle speed; not supported, but shouldn't error.
+						pass
 					else:
-						estep = 0
-						if components['R'] is not None:
-							if rel:
-								r = pos[0][2] + components['R'] * unit
-							else:
-								r = components['R'] * unit
-					for axis in range(3):
-						value = components[chr(ord('X') + axis)]
-						if value is not None:
-							if rel:
-								pos[0][axis] += value * unit
-							else:
-								pos[0][axis] = value * unit
-							if axis == 2:
-								z = pos[0][2]
-					if cmd[1] != 81:
-						dist = sum([0] + [(pos[0][x] - oldpos[0][x]) ** 2 for x in range(3) if not math.isnan(pos[0][x] - oldpos[0][x])]) ** .5
-						if dist > 0:
-							#if f0 is None:
-							#	f0 = pos[1][current_extruder]
-							f0 = pos[2]	# Always use new value.
-							if f0 == 0:
-								f0 = float('inf')
-						if math.isnan(dist):
-							dist = 0
-						args = {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder}
-						cmd = ('G', 1)
+						errors.append('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
 						ret.append((cmd, args, message))
-					else:
-						# Drill cycle.
-						# Only support OLD_Z (G90) retract mode; don't support repeats(L).
-						# goto x,y
-						ret.append((('G', 1), {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, message))
-						# goto r
-						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, None))
-						# goto z; this is always straight down, because the move before and after it are also vertical.
-						if z != r:
-							f0 = pos[2] / abs(z - r)
-							ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'e': 0, 'E': 0, 'f': f0, 'F': f0, 'T': current_extruder}, None))
-						# retract; this is always straight up, because the move before and after it are also non-horizontal.
-						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, None))
-						# empty move; this makes sure the previous move is entirely vertical.
-						ret.append((('G', 1), {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder}, None))
-						# Set up current z position so next G81 will work.
-						pos[0][2] = oldpos[0][2]
-				else:
-					ret.append((cmd, args, message))
-				message = None
+					message = None
+			stringmap = []
+			size = 0
+			for s in strings:
+				stringmap.append(size)
+				log('writing string %s' % s)
+				dst.write(s)
+				size += len(s)
+			for s in stringmap:
+				log('writing string length %d' % s)
+				dst.write(struct.pack('<L', s))
+			ret = bbox
+			if bbox[0] is None:
+				bbox = bbox_last
+				ret = bbox
+				if bbox[0] is None:
+					bbox = [0] * 6
+					ret = None
+			log('%d strings, bbox %s' % (len(strings), repr(bbox)))
+			dst.write(struct.pack('<L' + 'f' * 6, len(strings), *bbox))
+		self._broadcast(None, 'blocked', None)
 		return ret, errors
-	# }}}
-	def gcode_bbox(self, code): # {{{
-		ret = [[None, None], [None, None], [None, None]]
-		def inspect(value, box):
-			if math.isnan(value):
-				return
-			if box[0] is None or value < box[0]:
-				box[0] = value
-			if box[1] is None or value > box[1]:
-				box[1] = value
-		last = None
-		for cmd, args, message in code:
-			if tuple(cmd) != ('G', 1):
-				if tuple(cmd) == ('G', 28):
-					if ret[0][0] is not None:
-						last = ret
-					ret = [[None, None], [None, None], [None, None]]
-				continue
-			if args['x'] != args['X']:
-				inspect(args['X'], ret[0])
-			if args['y'] != args['Y']:
-				inspect(args['Y'], ret[1])
-			if args['z'] != args['Z']:
-				inspect(args['Z'], ret[2])
-		return last or ret
 	# }}}
 	@delayed
 	def queue_print(self, id, names, ref = (0, 0, 0), angle = 0, probemap = None): # {{{
@@ -2350,17 +2434,17 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def queue_probe(self, id, names, ref = (0, 0, 0), angle = 0, speed = 3): # {{{
-		bbox = [float('nan'), (float('nan')), float('nan'), float('nan')]
+		bbox = [float('nan'), float('nan'), float('nan'), float('nan')]
 		for n in names:
-			bb = self.jobqueue[n][1]
-			if not bbox[0] < bb[0][0]:
-				bbox[0] = bb[0][0]
-			if not bbox[1] < bb[1][0]:
-				bbox[1] = bb[1][0]
-			if not bbox[2] > bb[0][1]:
-				bbox[2] = bb[0][1]
-			if not bbox[3] > bb[1][1]:
-				bbox[3] = bb[1][1]
+			bb = self.jobqueue[n]
+			if not bbox[0] < bb[0]:
+				bbox[0] = bb[0]
+			if not bbox[1] < bb[2]:
+				bbox[1] = bb[2]
+			if not bbox[2] > bb[1]:
+				bbox[2] = bb[1]
+			if not bbox[3] > bb[3]:
+				bbox[3] = bb[3]
 		self.probe((bbox[0] + ref[0], bbox[1] + ref[1], bbox[2] + ref[0], bbox[3] + ref[1]), angle, speed)[1](None)
 		# Pass jobs_probemap to make sure it doesn't get overwritten.
 		self.queue_print(names, ref, angle, self.jobs_probemap)[1](id)
@@ -2553,8 +2637,8 @@ class Printer: # {{{
 			self._temp_update(i, target)
 		for i, g in enumerate(self.gpios):
 			self._gpio_update(i, target)
-		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
-		if self.gcode is not None:
+		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
+		if self.gcode_map is not None:
 			self._broadcast(target, 'printing', True)
 		if self.confirmer is not None:
 			self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)

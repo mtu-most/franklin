@@ -193,13 +193,23 @@ function Axis(space, axis) {
 }
 
 function Motor(space, motor) {
-	var e = [Name('motor', [space, motor]), ['steps_per_unit', 3, 1], ['max_steps', 0, 1], ['home_pos', 3, 1], ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
+	var e = [Name('motor', [space, motor]), ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
-	return make_tablerow(motor_name(space, motor), e, ['rowtitle6']);
+	return make_tablerow(motor_name(space, motor), e, ['rowtitle4']);
+}
+
+function Motor_hardware(space, motor) {
+	var e = [['steps_per_unit', 3, 1], ['max_steps', 0, 1], ['home_pos', 3, 1]];
+	for (var i = 0; i < e.length; ++i) {
+		var div = Create('div');
+		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
+		e[i] = div;
+	}
+	return make_tablerow(motor_name(space, motor), e, ['rowtitle3']);
 }
 
 function Pins_space(space, motor) {
@@ -297,11 +307,12 @@ function Top() { // {{{
 	var ret = Create('div', 'top');
 	// Up/remove/down. {{{
 	var e = ret.AddElement('div', 'updown');
-	e.AddElement('button', 'queue1').AddEvent('click', queue_up).AddText('⬆').type = 'button';
+	var the_printer = printer;
+	e.AddElement('button', 'queue1').AddEvent('click', function() { queue_up(the_printer); }).AddText('⬆').type = 'button';
 	e.AddElement('br');
-	e.AddElement('button', 'queue1').AddEvent('click', queue_del).AddText('×').type = 'button';
+	e.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(the_printer); }).AddText('×').type = 'button';
 	e.AddElement('br');
-	e.AddElement('button', 'queue1').AddEvent('click', queue_down).AddText('⬇').type = 'button';
+	e.AddElement('button', 'queue1').AddEvent('click', function() {queue_down(the_printer); }).AddText('⬇').type = 'button';
 	// }}}
 	// Jobs. {{{
 	e = ret.AddElement('div', 'jobs').AddElement('select');
@@ -310,7 +321,7 @@ function Top() { // {{{
 	// }}}
 	// Jobbuttons. {{{
 	e = ret.AddElement('div', 'jobbuttons');
-	e.Add(File([null, 'queue_add', 'queue_add'], 'queue_add', 'Add', queue_deselect));
+	e.Add(File([null, 'queue_add', 'queue_add'], 'queue_add', 'Add', function() { return queue_deselect(the_printer); }));
 	e.AddElement('br');
 	var b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(this.printer); }).AddText('Print selected');
 	b.type = 'button';
@@ -366,32 +377,22 @@ function Map() { // {{{
 		Float([['axis', [0, 1]], 'current'], 2, 1, '', function(v) { b.printer.call('goto', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
 		Float([['axis', [0, 2]], 'current'], 2, 1, '', function(v) { b.printer.call('goto', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
 		b,
-		'',
 		[[add_name('axis', 0, 2), ' Offset:'], Float([null, 'zoffset'], 2, 1), add_name('unit', 0, 0)]
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
 	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
 		b.printer.targetx = b.printer.spaces[0].axis[0].current;
 		b.printer.targety = b.printer.spaces[0].axis[1].current;
-		if (!get_element(b.printer, [null, 'zlock']).checked)
-			b.printer.targetz = b.printer.spaces[0].axis[2].current;
+		// Don't copy Z.
 		update_canvas_and_spans(b.printer);
 	});
 	b.printer = printer;
 	b.type = 'button';
-	var c = Create('input');
-	c.type = 'checkbox';
-	c.id = make_id(printer, [null, 'zlock']);
-	c.checked = true;
-	var l = Create('label');
-	l.Add(['Lock ', add_name('axis', 0, 2)]);
-	l.htmlFor = c.id;
 	t.Add(make_tablerow('Target:', [
-		Float([null, 'targetx'], 2, 1e-3, '', function(v) { b.printer.targetx = v; update_canvas_and_spans(b.printer); }),
-		Float([null, 'targety'], 2, 1e-3, '', function(v) { b.printer.targety = v; update_canvas_and_spans(b.printer); }),
-		Float([null, 'targetz'], 2, 1e-3, '', function(v) { b.printer.targetz = v; update_canvas_and_spans(b.printer); }),
+		Float([null, 'targetx'], 2, 1, '', function(v) { b.printer.targetx = v; update_canvas_and_spans(b.printer); }),
+		Float([null, 'targety'], 2, 1, '', function(v) { b.printer.targety = v; update_canvas_and_spans(b.printer); }),
+		Float([null, 'targetz'], 2, 1, '', function(v) { b.printer.targetz = v; update_canvas_and_spans(b.printer); }),
 		b,
-		[c, l],
 		['Angle:', Float([null, 'targetangle'], 1, Math.PI / 180, '', function(v) { b.printer.targetangle = v; update_canvas_and_spans(b.printer); }), '°']
 	], ['', '', '', '', '', '']));
 	// Canvas for xy and for z.
@@ -420,7 +421,7 @@ function Temps() { // {{{
 	], [
 		null,
 		'Temperature target.  Set to NaN to disable the heater completely.',
-		'Request actual temperature from sensor.'
+		'Actual temperature from sensor.'
 	]).AddMultiple('temp', Temp));
 	ret.AddElement('canvas', 'tempgraph').id = make_id(printer, [null, 'tempgraph']);
 	return ret;
@@ -562,63 +563,6 @@ function Printer() {	// {{{
 		'Corners are rounded from requested path to this amount'
 	]).AddMultiple('space', Spacetype)]);
 	// }}}
-	// Axis. {{{
-	setup.Add([make_table().AddMultipleTitles([
-		'Axes',
-		'Name',
-		UnitTitle('Park pos'),
-		'Park order',
-		UnitTitle('Max v', '/s'),
-		UnitTitle('Min'),
-		UnitTitle('Max')
-	], [
-		'htitle7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7'
-	], [
-		null,
-		'Name of the axis',
-		'Park position of the nozzle.',
-		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
-		'Maximum speed that the motor is allowed to move.',
-		'Minimum position that the axis is allowed to go to.',
-		'Maximum position that the axis is allowed to go to.'
-	]).AddMultiple('axis', Axis)]);
-	// }}}
-	// Motor. {{{
-	setup.Add([make_table().AddMultipleTitles([
-		'Motor',
-		'Name',
-		UnitTitle('Coupling', null, 'steps/'),
-		'Microsteps',
-		UnitTitle('Switch pos'),
-		'Home order',
-		UnitTitle('Limit v', '/s'),
-		UnitTitle('Limit a', '/s²')
-	], [
-		'htitle7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7',
-		'title7'
-	], [
-		null,
-		'Name of the motor',
-		'Number of (micro)steps that the motor needs to do to move the hardware by one unit.',
-		'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
-		'Position of the home switch.',
-		'Order when homing.  Equal order homes simultaneously; lower order homes first.',
-		'Maximum speed of the motor.',
-		'Maximum acceleration of the motor.'
-	]).AddMultiple('motor', Motor)]);
-	// }}} -->
 	// Cartesian. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Cartesian/Extruder',
@@ -631,6 +575,70 @@ function Printer() {	// {{{
 		'Number of axes'
 	]).AddMultiple('space', Cartesian, false)]);
 	// }}}
+	// Axis. {{{
+	setup.Add([make_table().AddMultipleTitles([
+		'Axes',
+		'Name',
+		UnitTitle('Park pos'),
+		'Park order',
+		UnitTitle('Max v', '/s'),
+		UnitTitle('Min'),
+		UnitTitle('Max')
+	], [
+		'htitle6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6'
+	], [
+		null,
+		'Name of the axis',
+		'Park position of the nozzle.',
+		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
+		'Maximum speed that the motor is allowed to move.',
+		'Minimum position that the axis is allowed to go to.',
+		'Maximum position that the axis is allowed to go to.'
+	]).AddMultiple('axis', Axis)]);
+	// }}}
+	// Motor. {{{
+	setup.Add([make_table().AddMultipleTitles([
+		'Motor Settings',
+		'Name',
+		'Home order',
+		UnitTitle('Limit v', '/s'),
+		UnitTitle('Limit a', '/s²')
+	], [
+		'htitle4',
+		'title4',
+		'title4',
+		'title4',
+		'title4'
+	], [
+		null,
+		'Name of the motor',
+		'Order when homing.  Equal order homes simultaneously; lower order homes first.',
+		'Maximum speed of the motor.',
+		'Maximum acceleration of the motor.'
+	]).AddMultiple('motor', Motor)]);
+	setup.Add([make_table().AddMultipleTitles([
+		'Motor Hardware',
+		UnitTitle('Coupling', null, 'steps/'),
+		'Microsteps',
+		UnitTitle('Switch pos')
+	], [
+		'htitle3',
+		'title3',
+		'title3',
+		'title3'
+	], [
+		null,
+		'Number of (micro)steps that the motor needs to do to move the hardware by one unit.',
+		'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
+		'Position of the home switch.'
+	]).AddMultiple('motor', Motor_hardware)]);
+	// }}} -->
 	// Delta. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Delta',
@@ -682,7 +690,7 @@ function Printer() {	// {{{
 	// }}}
 	// Temp. {{{
 	setup.Add([make_table().AddMultipleTitles([
-		'Temp settings',
+		'Temp Settings',
 		'Name',
 		'Fan temp (°C)',
 		'Bed'
@@ -698,7 +706,7 @@ function Printer() {	// {{{
 		'Whether this Temp is the bed pin, used by G-code commands.'
 	]).AddMultiple('temp', Temp_setup)]);
 	setup.Add([make_table().AddMultipleTitles([
-		'Temp hardware',
+		'Temp Hardware',
 		'R0 (kΩ) or a (1000)',
 		'R1 (kΩ) or b (1000)',
 		'Rc (kΩ)',

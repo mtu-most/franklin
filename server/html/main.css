@@ -276,13 +276,13 @@ button.abort {
 .map {
 	clear: both;
 	float: left;
-	width: 70%;
+	width: 50%;
 }
 
 .multipliers, .gpios, .temp {
 	clear: right;
 	float: right;
-	width: 25%;
+	width: 49%;
 }
 
 .xymap {
@@ -301,6 +301,7 @@ button.abort {
 
 .tempgraph {
 	background: #ddd;
+	width: 100%;
 }
 
 .bottom {
