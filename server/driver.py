@@ -856,15 +856,15 @@ class Printer: # {{{
 		origname = name
 		i = 0
 		while name in self.jobqueue:
-			name = '%s(%d)' % (origname, i)
+			name = '%s-%d' % (origname, i)
 			i += 1
 		bbox, errors = self._gcode_parse(f, name)
 		for e in errors:
 			log(e)
 		if bbox is None:
 			return errors
-		self.jobqueue[name] = bbox
-		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
+		self.jobqueue[os.path.splitext(name)[0]] = bbox
+		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
 		return errors
 	# }}}
 	def _do_queue(self): # {{{
@@ -2099,14 +2099,14 @@ class Printer: # {{{
 	# }}}
 	def queue_remove(self, name): # {{{
 		assert name in self.jobqueue
-		log('removing %s' % name)
+		#log('removing %s' % name)
 		filename = fhs.write_spool(name + os.extsep + 'bin', opened = False)
 		try:
 			os.unlink(filename)
 		except:
 			log('unable to unlink %s' % filename)
 		del self.jobqueue[name]
-		self._broadcast(None, 'queue', [(q, self.jobqueue[q][1]) for q in self.jobqueue])
+		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
 	# }}}
 	def _gcode_parse(self, src, name): # {{{
 		self._broadcast(None, 'blocked', 'parsing g-code')
@@ -2127,16 +2127,15 @@ class Printer: # {{{
 				if isinstance(nums, dict):
 					nums = [nums['T'], nums['x'], nums['X'], nums['y'], nums['Y'], nums['z'], nums['Z'], nums['e'], nums['E'], nums['f'], nums['F']]
 				nums += [0] * (11 - len(nums))
-				log('%d %s' % (type, repr(nums)))
 				dst.write(struct.pack('<Bl' + 'f' * 10, type, *nums))
 				if type == protocol.parsed['PARK']:
 					if bbox[0] is not None:
-						bbox_last = bbox
+						bbox_last[:] = bbox
 					bbox[:] = [None] * 6
-				else:
+				elif type == protocol.parsed['GOTO']:
 					for i in range(3):
-						if nums[2 * i] != nums[2 * i + 1]:
-							value = nums[2 * i + 1]
+						if nums[2 * i + 1] != nums[2 * i + 2]:
+							value = nums[2 * i + 2]
 							if math.isnan(value):
 								continue
 							if bbox[2 * i] is None or value < bbox[2 * i]:
@@ -2395,17 +2394,14 @@ class Printer: # {{{
 						pass
 					else:
 						errors.append('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
-						ret.append((cmd, args, message))
 					message = None
 			stringmap = []
 			size = 0
 			for s in strings:
 				stringmap.append(size)
-				log('writing string %s' % s)
 				dst.write(s)
 				size += len(s)
 			for s in stringmap:
-				log('writing string length %d' % s)
 				dst.write(struct.pack('<L', s))
 			ret = bbox
 			if bbox[0] is None:
@@ -2414,7 +2410,6 @@ class Printer: # {{{
 				if bbox[0] is None:
 					bbox = [0] * 6
 					ret = None
-			log('%d strings, bbox %s' % (len(strings), repr(bbox)))
 			dst.write(struct.pack('<L' + 'f' * 6, len(strings), *bbox))
 		self._broadcast(None, 'blocked', None)
 		return ret, errors

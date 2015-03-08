@@ -1430,28 +1430,28 @@ function redraw_canvas(printer) { // {{{
 		c.rotate(printer.targetangle);
 
 		c.beginPath();
-		if (b[0][0] != b[0][1] && b[1][0] != b[1][1]) {
+		if (b[0] != b[1] && b[2] != b[3]) {
 			// Draw print bounding box.
-			c.rect(b[0][0], b[1][0], b[0][1] - b[0][0], b[1][1] - b[1][0]);
+			c.rect(b[0], b[2], b[1] - b[0], b[3] - b[2]);
 
 			// Draw tick marks.
-			c.moveTo((b[0][1] + b[0][0]) / 2, b[1][0]);
-			c.lineTo((b[0][1] + b[0][0]) / 2, b[1][0] + 5);
+			c.moveTo((b[1] + b[0]) / 2, b[2]);
+			c.lineTo((b[1] + b[0]) / 2, b[2] + 5);
 
-			c.moveTo((b[0][1] + b[0][0]) / 2, b[1][1]);
-			c.lineTo((b[0][1] + b[0][0]) / 2, b[1][1] - 5);
+			c.moveTo((b[1] + b[0]) / 2, b[3]);
+			c.lineTo((b[1] + b[0]) / 2, b[3] - 5);
 
-			c.moveTo(b[0][0], (b[1][1] + b[1][0]) / 2);
-			c.lineTo(b[0][0] + 5, (b[1][1] + b[1][0]) / 2);
+			c.moveTo(b[0], (b[3] + b[2]) / 2);
+			c.lineTo(b[0] + 5, (b[3] + b[2]) / 2);
 
-			c.moveTo(b[0][1], (b[1][1] + b[1][0]) / 2);
-			c.lineTo(b[0][1] - 5, (b[1][1] + b[1][0]) / 2);
+			c.moveTo(b[1], (b[3] + b[2]) / 2);
+			c.lineTo(b[1] - 5, (b[3] + b[2]) / 2);
 
 			// Draw central cross.
-			c.moveTo((b[0][1] + b[0][0]) / 2 - 5, (b[1][1] + b[1][0]) / 2);
-			c.lineTo((b[0][1] + b[0][0]) / 2 + 5, (b[1][1] + b[1][0]) / 2);
-			c.moveTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 + 5);
-			c.lineTo((b[0][1] + b[0][0]) / 2, (b[1][1] + b[1][0]) / 2 - 5);
+			c.moveTo((b[1] + b[0]) / 2 - 5, (b[3] + b[2]) / 2);
+			c.lineTo((b[1] + b[0]) / 2 + 5, (b[3] + b[2]) / 2);
+			c.moveTo((b[1] + b[0]) / 2, (b[3] + b[2]) / 2 + 5);
+			c.lineTo((b[1] + b[0]) / 2, (b[3] + b[2]) / 2 - 5);
 		}
 
 		// Draw zero.
@@ -1596,7 +1596,7 @@ function key_move(printer, key, shift, ctrl) { // {{{
 function start_move(printer) { // {{{
 	// Update bbox.
 	var q = get_element(printer, [null, 'queue']);
-	printer.bbox = [[null, null], [null, null]];
+	printer.bbox = [null, null, null, null];
 	for (var e = 0; e < q.options.length; ++e) {
 		if (!q.options[e].selected)
 			continue;
@@ -1607,14 +1607,14 @@ function start_move(printer) { // {{{
 				break;
 		if (item >= printer.queue.length)
 			continue;
-		if (printer.bbox[0][0] == null || printer.queue[item][1][0][0] < printer.bbox[0][0])
-			printer.bbox[0][0] = printer.queue[item][1][0][0];
-		if (printer.bbox[0][1] == null || printer.queue[item][1][0][1] > printer.bbox[0][1])
-			printer.bbox[0][1] = printer.queue[item][1][0][1];
-		if (printer.bbox[1][0] == null || printer.queue[item][1][1][0] < printer.bbox[1][0])
-			printer.bbox[1][0] = printer.queue[item][1][1][0];
-		if (printer.bbox[1][1] == null || printer.queue[item][1][1][1] > printer.bbox[1][1])
-			printer.bbox[1][1] = printer.queue[item][1][1][1];
+		if (printer.bbox[0] == null || printer.queue[item][1][0] < printer.bbox[0])
+			printer.bbox[0] = printer.queue[item][1][0];
+		if (printer.bbox[1] == null || printer.queue[item][1][1] > printer.bbox[1])
+			printer.bbox[1] = printer.queue[item][1][1];
+		if (printer.bbox[2] == null || printer.queue[item][1][2] < printer.bbox[2])
+			printer.bbox[2] = printer.queue[item][1][2];
+		if (printer.bbox[3] == null || printer.queue[item][1][3] > printer.bbox[3])
+			printer.bbox[3] = printer.queue[item][1][3];
 	}
 	update_canvas_and_spans(printer);
 } // }}}
