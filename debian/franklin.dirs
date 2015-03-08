@@ -1,3 +1,4 @@
 /var/cache/franklin/audio
 /var/log/franklin
 /var/lib/franklin
+/var/spool/franklin

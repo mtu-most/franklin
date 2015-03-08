@@ -4,6 +4,9 @@ if [ "$1" != configure ] ; then
 	exit 0
 fi
 
+# Clean spool directory, because files are likely not valid anymore.
+rm -f /var/spool/franklin/*
+
 # Create server user.
 if ! getent passwd franklin3d >/dev/null; then
 	adduser --disabled-password --quiet --system \
@@ -22,7 +25,7 @@ if getent group dialout >/dev/null ; then
 fi
 
 # Set permissions on directory for audio and log files
-for dir in `find /var/cache/franklin` /var/log/franklin /var/lib/franklin ; do
+for dir in `find /var/cache/franklin` /var/log/franklin /var/lib/franklin /var/spool/franklin ; do
 	if ! dpkg-statoverride --list $dir >/dev/null; then
 		chown franklin3d:franklin3d $dir
 	fi
