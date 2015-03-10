@@ -2443,10 +2443,10 @@ class Printer: # {{{
 			for s in stringmap:
 				dst.write(struct.pack('<L', s))
 			ret = bbox
-			if bbox[0] is None:
+			if any(x is None for x in bbox):
 				bbox = bbox_last
 				ret = bbox
-				if bbox[0] is None:
+				if any(x is None for x in bbox):
 					bbox = [0] * 6
 					ret = None
 			dst.write(struct.pack('<L' + 'f' * 6, len(strings), *bbox))
