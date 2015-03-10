@@ -195,6 +195,7 @@ class Printer: # {{{
 		self.home_spaces = []
 		self.home_cb = [False, self._do_home]
 		self.probe_cb = [False, None]
+		self.gcode_file = False
 		self.gcode_map = None
 		self.gcode_id = None
 		self.gcode_wait = None
@@ -359,8 +360,8 @@ class Printer: # {{{
 				#log('done flushing')
 				self.flushing = 'done'
 				call_queue.append((self._do_gcode, []))
-		else:
-			log('cb seen, but waiting for more')
+		#else:
+		#	log('cb seen, but waiting for more')
 	# }}}
 	def _printer_input(self, reply = False): # {{{
 		while True:
@@ -428,14 +429,16 @@ class Printer: # {{{
 				self._trigger_movewaits(self.movewait)
 				continue
 			elif cmd == protocol.rcommand['TIMEOUT']:
-				if s == 0:
-					self.position_valid = False
-					self._globals_update()
-				if s == 1:
-					for t in range(len(self.temps)):
-						if not math.isnan(self.temps[t].value):
-							self.temps[t].value = float('nan')
-							self._temp_update(t)
+				self.position_valid = False
+				self._globals_update()
+				for i, t in enumerate(self.temps):
+					if not math.isnan(t.value):
+						t.value = float('nan')
+						self._temp_update(i)
+				for i, g in enumerate(self.gpios):
+					if g.state != g.reset:
+						g.state = g.reset
+						self._gpio_update(i)
 				continue
 			elif cmd == protocol.rcommand['SENSE']:
 				if m not in self.sense[s]:
@@ -454,6 +457,23 @@ class Printer: # {{{
 			elif cmd == protocol.rcommand['DISCONNECT']:
 				self._close()
 				# _close returns after reconnect.
+				continue
+			elif cmd == protocol.rcommand['UPDATE_TEMP']:
+				if s < len(self.temps):
+					self.temps[s].value = f - C0
+					self._temp_update(s)
+				else:
+					log('Ignoring updated invalid temp %d' % s)
+				continue
+			elif cmd == protocol.rcommand['UPDATE_PIN']:
+				gpios[s].state = m
+				self._gpio_update(s)
+				continue
+			elif cmd == protocol.rcommand['CONFIRM']:
+				self.request_confirmation(data or 'Continue?')[1](False)
+				continue
+			elif cmd == protocol.rcommand['FILE_DONE']:
+				self._print_done(True, 'completed')
 				continue
 			if reply:
 				return ('packet', (cmd, s, m, f, e, data))
@@ -493,7 +513,7 @@ class Printer: # {{{
 				ret = select.select([self.printer], [], [self.printer], 3)
 				if len(ret[0]) == 0 and len(ret[2]) == 0:
 					log('no reply received')
-					traceback.print_stack()
+					#traceback.print_stack()
 					continue
 			ret = self._printer_input(reply = True)
 			if ret[0] == 'packet' or (cb and ret[0] == 'no data'):
@@ -594,7 +614,7 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _globals_update(self, target = None): # {{{
-		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, not self.paused and (None if self.gcode_map is None else True)])
+		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		self._broadcast(target, 'space_update', which, self.spaces[which].export())
@@ -792,6 +812,7 @@ class Printer: # {{{
 		if self.gcode_map is not None:
 			log(reason)
 			self._gcode_close()
+		self.gcode_file = False
 		#traceback.print_stack()
 		if self.queue_info is None and self.gcode_id is not None:
 			log('Print done (%d): %s' % (complete, reason))
@@ -838,9 +859,11 @@ class Printer: # {{{
 		self._globals_update()
 	# }}}
 	def _unpause(self): # {{{
+		if self.gcode_file:
+			self._send_packet(chr(protocol.command['RESUME']))	# Just in case.
 		if self.queue_info is None:
 			return
-		#log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
+		log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
 		self.queue = self.queue_info[2]
 		self.queue_pos = self.queue_info[0]
 		self.movecb = self.queue_info[3]
@@ -876,6 +899,7 @@ class Printer: # {{{
 			#log('queue not empty %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 			if self.queue_pos >= len(self.queue):
 				self._unpause()
+				log('unpaused, %d %d' % (self.queue_pos, len(self.queue)))
 				if self.queue_pos >= len(self.queue):
 					break
 			id, axes, f0, f1, cb, probe = self.queue[self.queue_pos]
@@ -967,14 +991,11 @@ class Printer: # {{{
 				assert cb
 				self.movewait += 1
 				p = chr(protocol.command['PROBE'])
-			elif cb:
+			else:
 				self.movewait += 1
 				#log('movewait +1 -> %d' % self.movewait)
-				p = chr(protocol.command['GOTOCB'])
-			else:
-				p = chr(protocol.command['GOTO'])
 			#log('queueing %s' % repr((axes, f0, f1, cb, self.flushing)))
-			self._send_packet(p + ''.join([chr(t) for t in targets]) + args, move = True)
+			self._send_packet(chr(protocol.command['GOTO']) + ''.join([chr(t) for t in targets]) + args, move = True)
 			if id is not None:
 				self._send(id, 'return', None)
 			if self.flushing is None:
@@ -1277,6 +1298,9 @@ class Printer: # {{{
 		self._gcode_run(self.jobs_active[self.job_current], self.jobs_ref, self.jobs_angle, self.jobs_probemap, abort = False)
 	# }}}
 	def _gcode_run(self, src, ref = (0, 0, 0), angle = 0, probemap = None, abort = True): # {{{
+		if not self.position_valid:
+			self.park(cb = lambda: self._gcode_run(src, ref, angle, probemap, abort), abort = False)[1](None)
+			return
 		self.gcode_ref = ref
 		angle = math.radians(angle)
 		self.gcode_angle = math.sin(angle), math.cos(angle)
@@ -1289,43 +1313,50 @@ class Printer: # {{{
 			self._unpause()
 			self._print_done(False, 'aborted by starting new print')
 		self.queue_info = None
-		self.gcode_fd = os.open(fhs.read_spool(src + os.extsep + 'bin', opened = False), os.O_RDONLY)
-		self.gcode_map = mmap.mmap(self.gcode_fd, 0, access = mmap.ACCESS_READ)
-		size = self.gcode_map.size()
-		numpos = size - 7 * 4
-		num_strings = struct.unpack('<L', self.gcode_map[numpos:numpos + 4])[0]
-		strlen = [None] * num_strings
-		self.gcode_strings = [None] * num_strings
-		all_strs = 0
-		for i in range(num_strings):
-			pos = numpos - (num_strings - i) * 4
-			strlen[i] = struct.unpack('<L', self.gcode_map[pos:pos + 4])[0]
-			all_strs += strlen[i]
-		pos = numpos - num_strings * 4
-		self.gcode_num_records = pos / (11 * 4 + 1)
-		self.gcode_current_record = 0
-		for i in range(num_strings):
-			self.gcode_strings[i] = self.gcode_map[pos:pos + strlen[i]]
-			pos += strlen[i]
 		# Disable all alarms.
 		for i in range(len(self.temps)):
 			self.waittemp(i, None, None)
-		if self.gcode_num_records <= 0:
-			log('nothing to run')
-			self._gcode_close()
-			if id is not None:
-				self._send(id, 'return', False, 'nothing to run')
-			self.paused = None
-			self._globals_update()
-			return
 		self.paused = False
 		self._globals_update()
 		self.sleep(False)
 		if len(self.spaces) > 1:
 			for e in range(len(self.spaces[1].axis)):
 				self.set_axis_pos(1, e, 0)
-		self._broadcast(None, 'printing', True)
-		call_queue.append((self._do_gcode, []))
+		filename = fhs.read_spool(src + os.extsep + 'bin', opened = False)
+		if probemap is not None:
+			# Cdriver can't handle this; do it from here.
+			self.gcode_fd = os.open(filename, os.O_RDONLY)
+			self.gcode_map = mmap.mmap(self.gcode_fd, 0, access = mmap.ACCESS_READ)
+			size = self.gcode_map.size()
+			numpos = size - 7 * 4
+			num_strings = struct.unpack('<L', self.gcode_map[numpos:numpos + 4])[0]
+			strlen = [None] * num_strings
+			self.gcode_strings = [None] * num_strings
+			all_strs = 0
+			for i in range(num_strings):
+				pos = numpos - (num_strings - i) * 4
+				strlen[i] = struct.unpack('<L', self.gcode_map[pos:pos + 4])[0]
+				all_strs += strlen[i]
+			pos = numpos - num_strings * 4
+			self.gcode_num_records = pos / (11 * 4 + 1)
+			self.gcode_current_record = 0
+			for i in range(num_strings):
+				self.gcode_strings[i] = self.gcode_map[pos:pos + strlen[i]]
+				pos += strlen[i]
+			if self.gcode_num_records <= 0:
+				log('nothing to run')
+				self._gcode_close()
+				if id is not None:
+					self._send(id, 'return', False, 'nothing to run')
+				self.paused = None
+				self._globals_update()
+				return
+			call_queue.append((self._do_gcode, []))
+		else:
+			# Let cdriver do the work.
+			self.gcode_file = True
+			self._globals_update()
+			self._send_packet(struct.pack('<Bfffff', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1]) + filename.encode('utf8'))
 	# }}}
 	def _audio_play(self): # {{{
 		if self.audiofile is None:
@@ -1653,7 +1684,7 @@ class Printer: # {{{
 			cmd, s, m, f, e, data = self._get_reply()
 			if cmd != protocol.rcommand['QUEUE']:
 				log('invalid reply to queued command')
-				return False
+				return
 			self.movewait = 0
 			self.wait = False
 		self.paused = pausing
@@ -1661,21 +1692,24 @@ class Printer: # {{{
 			if was_paused:
 				# Go back to pausing position.
 				# First reset all axes that don't have a limit switch.
-				for s, sp in enumerate(self.queue_info[1]):
+				for i, sp in enumerate(self.queue_info[1]):
 					for a, pos in enumerate(sp):
 						# Assume motor[a] corresponds to axis[a] if it exists.
-						if len(self.spaces[s].motor) > a and not self.pin_valid(self.spaces[s].motor[a]['limit_max_pin']) and not self.pin_valid(self.spaces[s].motor[a]['limit_min_pin']):
-							self.set_axis_pos(s, a, pos)
+						if len(self.spaces[i].motor) > a and not self.pin_valid(self.spaces[i].motor[a]['limit_max_pin']) and not self.pin_valid(self.spaces[i].motor[a]['limit_min_pin']):
+							self.set_axis_pos(i, a, pos)
 				self.goto(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
-				#log('resuming')
+				log('resuming')
 				self.resuming = True
+			else:
+				log('sending resume')
+				self._send_packet(chr(protocol.command['RESUME']))
 			self._do_queue()
 		else:
 			#log('pausing')
 			if not was_paused:
 				#log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, s))
-				if store and self.queue_info is None and len(self.queue) > 0 and self.queue_pos - s >= 0:
+				if store and self.queue_info is None and ((len(self.queue) > 0 and self.queue_pos - s >= 0) or self.gcode_file):
 					if self.home_phase is not None:
 						#log('killing homer')
 						self.home_phase = None
@@ -1688,12 +1722,12 @@ class Printer: # {{{
 						#log('killing prober')
 						self.movecb.remove(self.probe_cb)
 						self.probe_cb(False)
-					#log('pausing gcode %d/%d/%d' % (self.queue_pos, s, len(self.queue)))
+					log('pausing gcode %d/%d/%d' % (self.queue_pos, s, len(self.queue)))
 					if self.flushing is None:
 						self.flushing = False
-					self.queue_info = [self.queue_pos - s, [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing, self.gcode_wait]
+					self.queue_info = [len(self.queue) if self.gcode_file else self.queue_pos - s, [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing, self.gcode_wait]
 				else:
-					#log('stopping')
+					log('stopping')
 					self.paused = False
 					if len(self.movecb) > 0:
 						call_queue.extend([(x[1], [True]) for x in self.movecb])
@@ -2067,8 +2101,9 @@ class Printer: # {{{
 	# }}}
 	def confirm(self, confirm_id, success = True): # {{{
 		if confirm_id != self.confirm_id:
-			# Confirmation was already sent.
-			log('no confirm %s' % repr((confirm_id, self.confirm_id)))
+			# Confirmation was already sent, or the request was from a file; send resume just in case.
+			#log('no confirm %s' % repr((confirm_id, self.confirm_id)))
+			self._send_packet(chr(protocol.command['RESUME']))
 			return False
 		id = self.confirmer
 		self.confirmer = None
@@ -2127,7 +2162,11 @@ class Printer: # {{{
 				if isinstance(nums, dict):
 					nums = [nums['T'], nums['x'], nums['X'], nums['y'], nums['Y'], nums['z'], nums['Z'], nums['e'], nums['E'], nums['f'], nums['F']]
 				nums += [0] * (11 - len(nums))
-				dst.write(struct.pack('<Bl' + 'f' * 10, type, *nums))
+				if type != protocol.parsed['PARK']:
+					dst.write(struct.pack('<Bl' + 'f' * 10, type, *nums))
+				else:
+					# TODO
+					pass
 				if type == protocol.parsed['PARK']:
 					if bbox[0] is not None:
 						bbox_last[:] = bbox
@@ -2378,14 +2417,14 @@ class Printer: # {{{
 						elif 'S' not in args:
 							errors.append('ignoring M104 without S')
 						else:
-							add_record(protocol.parsed['SETTEMP'], [args['E'], args['S']])
+							add_record(protocol.parsed['SETTEMP'], [args['E'], args['S'] + C0])
 					elif cmd == ('M', 106):
 						add_record(protocol.parsed['GPIO'], [-1, 1])
 					elif cmd == ('M', 107):
 						add_record(protocol.parsed['GPIO'], [-1, 0])
 					elif cmd == ('M', 109):
 						if 'S' in args:
-							add_record(protocol.parsed['SETTEMP'], [args['E'], args['S']])
+							add_record(protocol.parsed['SETTEMP'], [args['E'], args['S'] + C0])
 						add_record(protocol.parsed['WAITTEMP'], [args['E']])
 					elif cmd == ('M', 116):
 						add_record(protocol.parsed['WAITTEMP'], [-2])
@@ -2398,7 +2437,7 @@ class Printer: # {{{
 			stringmap = []
 			size = 0
 			for s in strings:
-				stringmap.append(size)
+				stringmap.append(len(s))
 				dst.write(s)
 				size += len(s)
 			for s in stringmap:
@@ -2416,7 +2455,6 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def queue_print(self, id, names, ref = (0, 0, 0), angle = 0, probemap = None): # {{{
-		self._broadcast(None, 'printing', True)
 		self.job_output = ''
 		self.jobs_active = names
 		self.jobs_ref = ref
@@ -2633,8 +2671,6 @@ class Printer: # {{{
 		for i, g in enumerate(self.gpios):
 			self._gpio_update(i, target)
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
-		if self.gcode_map is not None:
-			self._broadcast(target, 'printing', True)
 		if self.confirmer is not None:
 			self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}

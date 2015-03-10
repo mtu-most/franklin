@@ -174,7 +174,7 @@ static inline void avr_send() {
 	send_packet();
 	for (int counter = 0; counter < 0x28 && out_busy; ++counter) {
 		//debug("avr send");
-		poll(&pollfds[1], 1, 100);
+		poll(&pollfds[2], 1, 100);
 		serial(1);
 		//if (out_busy[1])
 		//	debug("avr waiting for ack");
@@ -200,8 +200,8 @@ static inline void avr_call1(uint8_t cmd, uint8_t arg) {
 static inline void avr_get_reply() {
 	for (int counter = 0; avr_wait_for_reply && counter < 0x80; ++counter) {
 		//debug("avr wait");
-		pollfds[1].revents = 0;
-		poll(&pollfds[1], 1, 0x40);
+		pollfds[2].revents = 0;
+		poll(&pollfds[2], 1, 0x40);
 		serial(1);
 	}
 	if (avr_wait_for_reply) {
@@ -363,6 +363,7 @@ static inline void hwpacket(int len) {
 			avr_write_ack("done");
 		if (!out_busy)
 			buffer_refill();
+		run_file_fill_queue();
 		return;
 	}
 	case HWC_HOMED:
@@ -387,6 +388,7 @@ static inline void hwpacket(int len) {
 		motors_busy = false;
 		// Everything has shut down; reset pins to normal (but inactive).
 		arch_motors_change();
+		send_host(CMD_TIMEOUT);
 		return;
 	}
 	default:
@@ -506,8 +508,8 @@ static inline void arch_reset() {
 	avr_call1(HWC_PING, 2);
 	for (int counter = 0; avr_pong != 2 && counter < 100; ++counter) {
 		//debug("avr pongwait %d", avr_pong);
-		pollfds[1].revents = 0;
-		poll(&pollfds[1], 1, 10);
+		pollfds[2].revents = 0;
+		poll(&pollfds[2], 1, 10);
 		serial(1);
 	}
 	if (avr_pong != 2) {
@@ -705,7 +707,7 @@ static inline void arch_reconnect(char *port) {
 // }}}
 
 // Running hooks. {{{
-static inline void arch_addpos(uint8_t s, uint8_t m, int diff) {
+static inline void arch_addpos(int s, int m, int diff) {
 	int mi = m;
 	for (uint8_t st = 0; st < s; ++st)
 		mi += spaces[st].num_motors;
@@ -831,9 +833,9 @@ void AVRSerial::begin(char const *port, int baud) {
 	// Open serial port and prepare pollfd.
 	debug("opening %s", port);
 	fd = open(port, O_RDWR);
-	pollfds[1].fd = fd;
-	pollfds[1].events = POLLIN | POLLPRI;
-	pollfds[1].revents = 0;
+	pollfds[2].fd = fd;
+	pollfds[2].events = POLLIN | POLLPRI;
+	pollfds[2].revents = 0;
 	start = 0;
 	end_ = 0;
 	fcntl(fd, F_SETFL, O_NONBLOCK);
@@ -879,11 +881,11 @@ void AVRSerial::refill() {
 			debug("read returned error: %s", strerror(errno));
 		end_ = 0;
 	}
-	if (end_ == 0 && pollfds[1].revents) {
+	if (end_ == 0 && pollfds[2].revents) {
 		debug("EOF detected on serial port; waiting for reconnect.");
 		disconnect();
 	}
-	pollfds[1].revents = 0;
+	pollfds[2].revents = 0;
 }
 
 int AVRSerial::read() {

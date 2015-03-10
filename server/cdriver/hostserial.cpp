@@ -1,9 +1,9 @@
 #include "cdriver.h"
 
 void HostSerial::begin(int baud) {
-	pollfds[0].fd = 0;
-	pollfds[0].events = POLLIN | POLLPRI;
-	pollfds[0].revents = 0;
+	pollfds[1].fd = 0;
+	pollfds[1].events = POLLIN | POLLPRI;
+	pollfds[1].revents = 0;
 	start = 0;
 	end = 0;
 	fcntl(0, F_SETFL, O_NONBLOCK);
@@ -32,11 +32,11 @@ void HostSerial::refill() {
 			debug("read returned error: %s", strerror(errno));
 		end = 0;
 	}
-	if (end == 0 && pollfds[0].revents) {
+	if (end == 0 && pollfds[1].revents) {
 		debug("EOF detected on standard input; exiting.");
 		abort();
 	}
-	pollfds[0].revents = 0;
+	pollfds[1].revents = 0;
 }
 
 int HostSerial::read() {

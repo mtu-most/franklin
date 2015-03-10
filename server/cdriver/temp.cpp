@@ -170,11 +170,17 @@ void handle_temp(int id, int temp) { // {{{
 	// If an alarm should be triggered, do so.  Adc values are higher for lower temperatures.
 	//debug("alarms: %d %d %d %d", id, temps[id].adcmin_alarm, temps[id].adcmax_alarm, temp);
 	if (temps[id].adcmin_alarm >= temp || temps[id].adcmax_alarm <= temp) {
+		//debug("alarm: %d %d %d %d", id, temps[id].adcmin_alarm, temps[id].adcmax_alarm, temp);
 		temps[id].min_alarm = NAN;
 		temps[id].max_alarm = NAN;
 		temps[id].adcmin_alarm = -1;
 		temps[id].adcmax_alarm = MAXINT;
-		send_host(CMD_TEMPCB, id);
+		if (run_file_wait_temp) {
+			run_file_wait_temp -= 1;
+			run_file_fill_queue();
+		}
+		else
+			send_host(CMD_TEMPCB, id);
 	}
 	/*
 	// TODO: Make this work and decide on units.

@@ -66,8 +66,10 @@ function _setup_updater() {
 			trigger_update(port, 'signal', name, arg);
 		},
 		new_port: function(port) {
-			_ports.push(port);
-			trigger_update(port, 'new_port');
+			if (_ports.indexOf(port) < 0) {
+				_ports.push(port);
+				trigger_update(port, 'new_port');
+			}
 		},
 		del_port: function(port) {
 			trigger_update(port, 'del_port');
@@ -78,9 +80,6 @@ function _setup_updater() {
 		},
 		stall: function(port) {
 			trigger_update(port, 'stall');
-		},
-		printing: function(port, state) {
-			trigger_update(port, 'printing', state);
 		},
 		confirm: function(port, id, message) {
 			trigger_update(port, 'confirm', id, message);
@@ -101,44 +100,46 @@ function _setup_updater() {
 			trigger_update(port, 'serial', serialport, data);
 		},
 		new_printer: function(port, constants) {
-			printers[port] = {
-				port: port,
-				profile: 'default',
-				queue: [],
-				uuid: constants[0],
-				queue_length: constants[1],
-				audio_fragments: constants[2],
-				audio_fragment_size: constants[3],
-				num_digital_pins: constants[4],
-				num_analog_pins: constants[5],
-				num_spaces: 0,
-				num_temps: 0,
-				num_gpios: 0,
-				led_pin: 0,
-				probe_pin: 0,
-				probe_dist: Infinity,
-				probe_safe_dist: Infinity,
-				bed_id: 255,
-				fan_id: 255,
-				spindle_id: 255,
-				unit_name: 'mm',
-				timeout: 0,
-				feedrate: 1,
-				zoffset: 0,
-				message: null,
-				spaces: [],
-				temps: [],
-				gpios: []
-			};
-			printers[port].call = function(name, a, ka, reply) {
-				var p = this.port;
-				if (_active_printer != p) {
-					rpc.call('set_printer', [null, p], {}, function() { _active_printer = p; rpc.call(name, a, ka, reply); });
-				}
-				else
-					rpc.call(name, a, ka, reply);
-			};
-			trigger_update(port, 'new_printer');
+			if (printers[port] === undefined) {
+				printers[port] = {
+					port: port,
+					profile: 'default',
+					queue: [],
+					uuid: constants[0],
+					queue_length: constants[1],
+					audio_fragments: constants[2],
+					audio_fragment_size: constants[3],
+					num_digital_pins: constants[4],
+					num_analog_pins: constants[5],
+					num_spaces: 0,
+					num_temps: 0,
+					num_gpios: 0,
+					led_pin: 0,
+					probe_pin: 0,
+					probe_dist: Infinity,
+					probe_safe_dist: Infinity,
+					bed_id: 255,
+					fan_id: 255,
+					spindle_id: 255,
+					unit_name: 'mm',
+					timeout: 0,
+					feedrate: 1,
+					zoffset: 0,
+					message: null,
+					spaces: [],
+					temps: [],
+					gpios: []
+				};
+				printers[port].call = function(name, a, ka, reply) {
+					var p = this.port;
+					if (_active_printer != p) {
+						rpc.call('set_printer', [null, p], {}, function() { _active_printer = p; rpc.call(name, a, ka, reply); });
+					}
+					else
+						rpc.call(name, a, ka, reply);
+				};
+				trigger_update(port, 'new_printer');
+			}
 		},
 		del_printer: function(port) {
 			if (_active_printer == port)

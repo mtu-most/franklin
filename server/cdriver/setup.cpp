@@ -14,14 +14,14 @@ void setup(char const *port, char const *run_id)
 	debug_buffer_ptr = 0;
 #endif
 	debug("Starting");
+	pollfds[0].fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+	pollfds[0].events = POLLIN | POLLPRI;
+	pollfds[0].revents = 0;
 	temp_current = 0;
 	command_end[0] = 0;
 	command_end[1] = 0;
 	motors_busy = false;
 	current_extruder = 0;
-	queue_start = 0;
-	queue_end = 0;
-	queue_full = false;
 	continue_cb = 0;
 	ping = 0;
 	pending_len = 0;
@@ -88,6 +88,9 @@ void setup(char const *port, char const *run_id)
 		settings[f].fragment_length = 0;
 		settings[f].start_time = 0;
 		settings[f].last_time = 0;
+		settings[f].queue_start = 0;
+		settings[f].queue_end = 0;
+		settings[f].queue_full = false;
 	}
 	free_fragments = FRAGMENTS_PER_BUFFER - 1;
 	// Update current position.

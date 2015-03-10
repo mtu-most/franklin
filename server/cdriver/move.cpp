@@ -28,21 +28,22 @@ uint8_t next_move() {
 	probing = false;
 	uint8_t num_cbs = 0;
 	uint8_t a0;
-	if (queue_start == queue_end && !queue_full) {
+	run_file_fill_queue();
+	if (settings[current_fragment].queue_start == settings[current_fragment].queue_end && !settings[current_fragment].queue_full) {
 		stopped = true;
 		prepared = false;
 		return num_cbs;
 	}
 #ifdef DEBUG_MOVE
-	debug("Next move; queue start = %d, end = %d", queue_start, queue_end);
+	debug("Next move; queue start = %d, end = %d", settings[current_fragment].queue_start, settings[current_fragment].queue_end);
 #endif
-	// Set everything up for running queue[queue_start].
-	uint8_t n = (queue_start + 1) % QUEUE_LENGTH;
+	// Set everything up for running queue[settings[current_fragment].queue_start].
+	uint8_t n = (settings[current_fragment].queue_start + 1) % QUEUE_LENGTH;
 
 	// Make sure printer state is good. {{{
 	// If the source is unknown, determine it from current_pos.
 	//for (uint8_t a = 0; a < num_axes; ++a)
-	//	debug("target %d %f", a, queue[queue_start].data[a]);
+	//	debug("target %d %f", a, queue[settings[current_fragment].queue_start].data[a]);
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -68,19 +69,19 @@ uint8_t next_move() {
 #endif
 		settings[current_fragment].f0 = 0;
 		a0 = 0;
-		change0(queue_start);
+		change0(settings[current_fragment].queue_start);
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
-			space_types[sp.type].check_position(&sp, &queue[queue_start].data[a0]);
+			space_types[sp.type].check_position(&sp, &queue[settings[current_fragment].queue_start].data[a0]);
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (isnan(queue[queue_start].data[a0 + a])) {
+				if (isnan(queue[settings[current_fragment].queue_start].data[a0 + a])) {
 					sp.axis[a]->settings[current_fragment].next_dist = 0;
 					//debug("not using object %d", mtr);
 				}
 				else {
-					sp.axis[a]->settings[current_fragment].next_dist = queue[queue_start].data[a0 + a] - sp.axis[a]->settings[current_fragment].source + sp.axis[a]->offset;
+					sp.axis[a]->settings[current_fragment].next_dist = queue[settings[current_fragment].queue_start].data[a0 + a] - sp.axis[a]->settings[current_fragment].source + sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
-					debug("next dist of %d = %f (%f - %f + %f)", a0 + a, sp.axis[a]->settings[current_fragment].next_dist, queue[queue_start].data[a0 + a], sp.axis[a]->settings[current_fragment].source, sp.axis[a]->offset);
+					debug("next dist of %d = %f (%f - %f + %f)", a0 + a, sp.axis[a]->settings[current_fragment].next_dist, queue[settings[current_fragment].queue_start].data[a0 + a], sp.axis[a]->settings[current_fragment].source, sp.axis[a]->offset);
 #endif
 				}
 			}
@@ -91,30 +92,30 @@ uint8_t next_move() {
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			if (n != queue_end) {
+			if (n != settings[current_fragment].queue_end) {
 				// If only one of them is set, set the other one as well to make the rounded corner work.
-				if (!isnan(queue[queue_start].data[a0 + a]) && isnan(queue[n].data[a0 + a])) {
+				if (!isnan(queue[settings[current_fragment].queue_start].data[a0 + a]) && isnan(queue[n].data[a0 + a])) {
 					queue[n].data[a0 + a] = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].next_dist - sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
 					debug("filling next %d with %f", a0 + a, queue[n].data[a0 + a]);
 #endif
 				}
-				if (isnan(queue[queue_start].data[a]) && !isnan(queue[n].data[a])) {
-					queue[queue_start].data[a0 + a] = sp.axis[a]->settings[current_fragment].source - sp.axis[a]->offset;
+				if (isnan(queue[settings[current_fragment].queue_start].data[a]) && !isnan(queue[n].data[a])) {
+					queue[settings[current_fragment].queue_start].data[a0 + a] = sp.axis[a]->settings[current_fragment].source - sp.axis[a]->offset;
 #ifdef DEBUG_MOVE
-					debug("filling %d with %f", a0 + a, queue[queue_start].data[a0 + a]);
+					debug("filling %d with %f", a0 + a, queue[settings[current_fragment].queue_start].data[a0 + a]);
 #endif
 				}
 			}
-			if ((!isnan(queue[queue_start].data[a0 + a]) || (n != queue_end && !isnan(queue[n].data[a0 + a]))) && isnan(sp.axis[a]->settings[current_fragment].source)) {
-				debug("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue: %f %f %f", queue[queue_start].data[a0 + a], queue[n].data[a0 + a], sp.axis[a]->settings[current_fragment].source);
+			if ((!isnan(queue[settings[current_fragment].queue_start].data[a0 + a]) || (n != settings[current_fragment].queue_end && !isnan(queue[n].data[a0 + a]))) && isnan(sp.axis[a]->settings[current_fragment].source)) {
+				debug("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue: %f %f %f", queue[settings[current_fragment].queue_start].data[a0 + a], queue[n].data[a0 + a], sp.axis[a]->settings[current_fragment].source);
 				// This possibly removes one move too many, but it shouldn't happen anyway.
-				if (queue[queue_start].cb)
+				if (queue[settings[current_fragment].queue_start].cb)
 					++num_cbs;
-				if (queue_end == queue_start)
+				if (settings[current_fragment].queue_end == settings[current_fragment].queue_start)
 					send_host(CMD_CONTINUE, 0);
-				queue_start = n;
-				queue_full = false;
+				settings[current_fragment].queue_start = n;
+				settings[current_fragment].queue_full = false;
 				abort_move(current_fragment_pos);
 				return num_cbs;
 			}
@@ -128,7 +129,7 @@ uint8_t next_move() {
 	debug("Move was prepared");
 #endif
 	float vq;
-	if (n == queue_end) { // {{{
+	if (n == settings[current_fragment].queue_end) { // {{{
 		// There is no next segment; we should stop at the end.
 		prepared = false;
 #ifdef DEBUG_MOVE
@@ -177,16 +178,16 @@ uint8_t next_move() {
 		vq = queue[n].f[0] * feedrate;
 	}
 	// }}}
-	float v0 = queue[queue_start].f[0] * feedrate;
-	float vp = queue[queue_start].f[1] * feedrate;
+	float v0 = queue[settings[current_fragment].queue_start].f[0] * feedrate;
+	float vp = queue[settings[current_fragment].queue_start].f[1] * feedrate;
 	//debug("mv %f %f %f %f", feedrate, v0, vp, vq);
-	if (queue[queue_start].cb)
+	if (queue[settings[current_fragment].queue_start].cb)
 		cbs_after_current_move += 1;
-	if (queue_end == queue_start)
+	if (settings[current_fragment].queue_end == settings[current_fragment].queue_start)
 		send_host(CMD_CONTINUE, 0);
-	probing = queue[queue_start].probe;
-	queue_start = n;
-	queue_full = false;
+	probing = queue[settings[current_fragment].queue_start].probe;
+	settings[current_fragment].queue_start = n;
+	settings[current_fragment].queue_full = false;
 	if (!action) {
 #ifdef DEBUG_MOVE
 		debug("Skipping zero-distance prepared move");

@@ -379,8 +379,7 @@ class Connection: # {{{
 		return self.printer.name if self.printer is not None else None
 	# }}}
 	def set_monitor(self, value): # {{{
-		self.socket.monitor = value
-		if self.socket.monitor:
+		if value:
 			self.socket.autodetect.event(autodetect)
 			for p in ports:
 				self.socket.new_port.event(p)
@@ -388,6 +387,7 @@ class Connection: # {{{
 					ports[p].call('send_printer', [self.id], {}, lambda success, data: None)
 			for s in scripts:
 				Connection._broadcast(self.id, 'new_script', s, scripts[s][0], scripts[s][1])
+		self.socket.monitor = value
 	# }}}
 	def get_monitor(self): # {{{
 		return self.socket.monitor

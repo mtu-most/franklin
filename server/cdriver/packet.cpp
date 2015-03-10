@@ -22,6 +22,80 @@ static int16_t get_int16(uint8_t offset)
 }
 #endif
 
+void settemp(int which, float target) {
+	if (which >= num_temps)
+	{
+		debug("Setting invalid temp %d", which);
+		//abort();
+		return;
+	}
+	temps[which].target[0] = target;
+	temps[which].adctarget[0] = temps[which].toadc(target, MAXINT);
+	//debug("adc target %d from %f", temps[which].adctarget[0], temps[which].target[0]);
+	if (temps[which].adctarget[0] >= MAXINT) {
+		// main loop doesn't handle it anymore, so it isn't disabled there.
+		//debug("Temp %d disabled", which);
+		if (temps[which].is_on[0]) {
+			RESET(temps[which].power_pin[0]);
+			temps[which].is_on[0] = false;
+			--temps_busy;
+		}
+	}
+	else if (temps[which].adctarget[0] < 0) {
+		// main loop doesn't handle it anymore, so it isn't enabled there.
+		//debug("Temp %d enabled", which);
+		if (!temps[which].is_on[0]) {
+			SET(temps[which].power_pin[0]);
+			temps[which].is_on[0] = true;
+			++temps_busy;
+		}
+	}
+	else {
+		//debug("Temp %d set to %f", which, target);
+		initialized = true;
+	}
+	arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin[0].valid() ? temps[which].power_pin[0].pin : ~0, temps[which].power_pin[0].inverted(), temps[which].adctarget[0], temps[which].power_pin[1].valid() ? temps[which].power_pin[1].pin : ~0, temps[which].power_pin[1].inverted(), temps[which].adctarget[1]);
+}
+
+void waittemp(int which, float mintemp, float maxtemp) {
+	if (which >= num_temps)
+	{
+		debug("Waiting for invalid temp %d", which);
+		//abort();
+		return;
+	}
+	temps[which].min_alarm = mintemp;
+	temps[which].max_alarm = maxtemp;
+	temps[which].adcmin_alarm = temps[which].toadc(temps[which].min_alarm, -1);
+	temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm, MAXINT);
+}
+
+void setpos(int which, int t, int f) {
+	if (!motors_busy)
+	{
+		for (uint8_t s = 0; s < num_spaces; ++s) {
+			for (uint8_t m = 0; m < spaces[s].num_motors; ++m)
+				SET(spaces[s].motor[m]->enable_pin);
+		}
+		motors_busy = true;
+	}
+	for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
+		spaces[which].axis[a]->settings[current_fragment].source = NAN;
+		spaces[which].axis[a]->settings[current_fragment].current = NAN;
+	}
+	int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_unit + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings[current_fragment].current_pos;
+	spaces[which].motor[t]->settings[current_fragment].current_pos += diff;
+	spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
+	cpdebug("cp %d %d four %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
+	arch_addpos(which, t, diff);
+	//debug("setpos %d %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos);
+	/*arch_stop();
+	space_types[spaces[which].type].reset_pos(&spaces[which]);
+	for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
+		debug("setpos done source %f", spaces[which].axis[a]->settings[current_fragment].source);
+	// */
+}
+
 void packet()
 {
 	// command[0][0] is the length not including checksum bytes.
@@ -40,14 +114,13 @@ void packet()
 	}
 #endif
 	case CMD_GOTO:	// goto
-	case CMD_GOTOCB:	// goto with callback
 	case CMD_PROBE:	// probe
 	{
 #ifdef DEBUG_CMD
-		debug("CMD_GOTO(CB)/PROBE");
+		debug("CMD_GOTO/PROBE");
 #endif
 		last_active = millis();
-		if (queue_full)
+		if (settings[current_fragment].queue_full)
 		{
 			debug("Host ignores wait request");
 			abort();
@@ -56,7 +129,7 @@ void packet()
 		uint8_t num = 2;
 		for (uint8_t t = 0; t < num_spaces; ++t)
 			num += spaces[t].num_axes;
-		queue[queue_end].probe = command[0][1] == CMD_PROBE;
+		queue[settings[current_fragment].queue_end].probe = command[0][1] == CMD_PROBE;
 		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
 		uint8_t t = 0;
 		for (uint8_t ch = 0; ch < num; ++ch)
@@ -67,38 +140,38 @@ void packet()
 				for (uint8_t i = 0; i < sizeof(float); ++i)
 					f.b[i] = command[0][offset + i + t * sizeof(float)];
 				if (ch < 2)
-					queue[queue_end].f[ch] = f.f;
+					queue[settings[current_fragment].queue_end].f[ch] = f.f;
 				else
-					queue[queue_end].data[ch - 2] = f.f;
-				//debug("goto (%d) %d %f", queue_end, ch, f.f);
+					queue[settings[current_fragment].queue_end].data[ch - 2] = f.f;
+				//debug("goto (%d) %d %f", settings[current_fragment].queue_end, ch, f.f);
 				initialized = true;
 				++t;
 			}
 			else {
 				if (ch < 2)
-					queue[queue_end].f[ch] = NAN;
+					queue[settings[current_fragment].queue_end].f[ch] = NAN;
 				else
-					queue[queue_end].data[ch - 2] = NAN;
+					queue[settings[current_fragment].queue_end].data[ch - 2] = NAN;
 				//debug("goto %d -", ch);
 			}
 		}
-		if (!(command[0][2] & 0x1) || isnan(queue[queue_end].f[0]))
-			queue[queue_end].f[0] = INFINITY;
-		if (!(command[0][2] & 0x2) || isnan(queue[queue_end].f[1]))
-			queue[queue_end].f[1] = queue[queue_end].f[0];
+		if (!(command[0][2] & 0x1) || isnan(queue[settings[current_fragment].queue_end].f[0]))
+			queue[settings[current_fragment].queue_end].f[0] = INFINITY;
+		if (!(command[0][2] & 0x2) || isnan(queue[settings[current_fragment].queue_end].f[1]))
+			queue[settings[current_fragment].queue_end].f[1] = queue[settings[current_fragment].queue_end].f[0];
 		// F0 and F1 must be valid.
-		float F0 = queue[queue_end].f[0];
-		float F1 = queue[queue_end].f[1];
+		float F0 = queue[settings[current_fragment].queue_end].f[0];
+		float F1 = queue[settings[current_fragment].queue_end].f[1];
 		if (isnan(F0) || isnan(F1) || F0 < 0 || F1 < 0 || (F0 == 0 && F1 == 0))
 		{
 			debug("Invalid F0 or F1: %f %f", F0, F1);
 			abort();
 			return;
 		}
-		queue[queue_end].cb = command[0][1] != CMD_GOTO;
-		queue_end = (queue_end + 1) % QUEUE_LENGTH;
-		if (queue_end == queue_start) {
-			queue_full = true;
+		queue[settings[current_fragment].queue_end].cb = true;
+		settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
+		if (settings[current_fragment].queue_end == settings[current_fragment].queue_start) {
+			settings[current_fragment].queue_full = true;
 			serialdev[0]->write(WAIT);
 		}
 		else
@@ -124,7 +197,21 @@ void packet()
 			//debug("waiting with move");
 		break;
 	}
-	case CMD_SLEEP:	// disable motor current
+	case CMD_RUN_FILE: // Run commands from a file.
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_RUN_FILE");
+#endif
+		ReadFloat args[5];
+		for (int i = 0; i < sizeof(float); ++i)
+		{
+			for (int j = 0; j < 5; ++j)
+				args[j].b[i] = command[0][2 + i + j * sizeof(float)];
+		}
+		run_file(command[0][0] - 22, reinterpret_cast<char const *>(&command[0][22]), args[0].f, args[1].f, args[2].f, args[3].f, args[4].f);
+		break;
+	}
+	case CMD_SLEEP:	// Enable or disable motor current
 	{
 #ifdef DEBUG_CMD
 		debug("CMD_SLEEP");
@@ -165,38 +252,8 @@ void packet()
 #endif
 		last_active = millis();
 		which = get_which();
-		if (which >= num_temps)
-		{
-			debug("Setting invalid temp %d", which);
-			//abort();
-			return;
-		}
-		temps[which].target[0] = get_float(3);
-		temps[which].adctarget[0] = temps[which].toadc(temps[which].target[0], MAXINT);
-		//debug("adc target %d from %d", temps[which]->adctarget, int32_t(temps[which]->target / 1024));
-		if (temps[which].adctarget[0] >= MAXINT) {
-			// main loop doesn't handle it anymore, so it isn't disabled there.
-			//debug("Temp %d disabled", which);
-			if (temps[which].is_on[0]) {
-				RESET(temps[which].power_pin[0]);
-				temps[which].is_on[0] = false;
-				--temps_busy;
-			}
-		}
-		else if (temps[which].adctarget[0] < 0) {
-			// main loop doesn't handle it anymore, so it isn't enabled there.
-			//debug("Temp %d enabled", which);
-			if (!temps[which].is_on[0]) {
-				SET(temps[which].power_pin[0]);
-				temps[which].is_on[0] = true;
-				++temps_busy;
-			}
-		}
-		else {
-			//debug("Temp %d set to %f", which, target);
-			initialized = true;
-		}
-		arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin[0].valid() ? temps[which].power_pin[0].pin : ~0, temps[which].power_pin[0].inverted(), temps[which].adctarget[0], temps[which].power_pin[1].valid() ? temps[which].power_pin[1].pin : ~0, temps[which].power_pin[1].inverted(), temps[which].adctarget[1]);
+		float target = get_float(3);
+		settemp(which, target);
 		return;
 	}
 	case CMD_WAITTEMP:	// wait for a temperature sensor to reach a target range
@@ -206,22 +263,13 @@ void packet()
 #endif
 		initialized = true;
 		which = get_which();
-		if (which >= num_temps)
-		{
-			debug("Waiting for invalid temp %d", which);
-			//abort();
-			return;
-		}
 		ReadFloat min_temp, max_temp;
 		for (uint8_t i = 0; i < sizeof(float); ++i)
 		{
 			min_temp.b[i] = command[0][3 + i];
 			max_temp.b[i] = command[0][3 + i + sizeof(float)];
 		}
-		temps[which].min_alarm = min_temp.f;
-		temps[which].max_alarm = max_temp.f;
-		temps[which].adcmin_alarm = temps[which].toadc(temps[which].min_alarm, -1);
-		temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm, MAXINT);
+		waittemp(which, min_temp.f, max_temp.f);
 		return;
 	}
 	case CMD_READTEMP:	// read temperature
@@ -286,30 +334,8 @@ void packet()
 			abort();
 			return;
 		}
-		if (!motors_busy)
-		{
-			for (uint8_t s = 0; s < num_spaces; ++s) {
-				for (uint8_t m = 0; m < spaces[s].num_motors; ++m)
-					SET(spaces[s].motor[m]->enable_pin);
-			}
-			motors_busy = true;
-		}
-		for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
-			spaces[which].axis[a]->settings[current_fragment].source = NAN;
-			spaces[which].axis[a]->settings[current_fragment].current = NAN;
-		}
 		float f = get_float(4);
-		int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_unit + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings[current_fragment].current_pos;
-		spaces[which].motor[t]->settings[current_fragment].current_pos += diff;
-		spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
-		cpdebug("cp %d %d four %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
-		arch_addpos(which, t, diff);
-		//debug("setpos %d %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos);
-		/*arch_stop();
-		space_types[spaces[which].type].reset_pos(&spaces[which]);
-		for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
-			debug("setpos done source %f", spaces[which].axis[a]->settings[current_fragment].source);
-		// */
+		setpos(which, t, f);
 		return;
 	}
 	case CMD_GETPOS:	// Get current position
@@ -523,14 +549,19 @@ void packet()
 		debug("CMD_QUEUED");
 #endif
 		last_active = millis();
+		send_host(CMD_QUEUE, settings[current_fragment].queue_full ? QUEUE_LENGTH : (settings[current_fragment].queue_end - settings[current_fragment].queue_start + QUEUE_LENGTH) % QUEUE_LENGTH);
 		if (command[0][2]) {
-			queue_start = 0;
-			queue_end = 0;
-			queue_full = false;
+			if (run_file_map) {
+				run_file_wait += 1;
+				arch_stop();
+				return;
+			}
 			cbs_after_current_move = 0;
 			arch_stop();
+			settings[current_fragment].queue_start = 0;
+			settings[current_fragment].queue_end = 0;
+			settings[current_fragment].queue_full = false;
 		}
-		send_host(CMD_QUEUE, queue_full ? QUEUE_LENGTH : (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH);
 		return;
 	}
 	case CMD_HOME:
@@ -622,6 +653,16 @@ void packet()
 		return;
 	}
 #endif
+	case CMD_RESUME:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_RESUME");
+#endif
+		if (run_file_wait)
+			run_file_wait -= 1;
+		run_file_fill_queue();
+		return;
+	}
 	default:
 	{
 		debug("Invalid command %x %x %x %x", command[0][0], command[0][1], command[0][2], command[0][3]);

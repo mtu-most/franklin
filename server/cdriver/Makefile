@@ -14,6 +14,7 @@ SOURCES = \
 	hostserial.cpp \
 	move.cpp \
 	packet.cpp \
+	run.cpp \
 	serial.cpp \
 	setup.cpp \
 	space.cpp \

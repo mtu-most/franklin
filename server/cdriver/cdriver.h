@@ -6,6 +6,8 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <poll.h>
+#include <sys/types.h>
+#include <sys/timerfd.h>
 
 #define PROTOCOL_VERSION ((uint32_t)0)	// Required version response in BEGIN.
 #define ID_SIZE 24
@@ -64,8 +66,8 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values. {
 enum Command {
 	// from host
 	CMD_RESET,	// 1 byte: 0.
-	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].
-	CMD_GOTOCB,	// same.  Reply (later): MOVECB.
+	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
+	CMD_RUN_FILE,	// n byte: filename.
 	CMD_PROBE,	// same.  Reply (later): LIMIT/MOVECB.
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
 	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [°C].
@@ -92,9 +94,10 @@ enum Command {
 	CMD_RECONNECT,	// 1 byte: name length, n bytes: port name
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_sample.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
+	CMD_RESUME,
 	// to host
 		// responses to host requests; only one active at a time.
-	CMD_TEMP,	// 4 byte: requested channel's temperature. [°C]
+	CMD_TEMP = 0x40,	// 4 byte: requested channel's temperature. [°C]
 	CMD_POWER,	// 4 byte: requested channel's power time; 4 bytes: current time. [μs, μs]
 	CMD_POS,	// 4 byte: pos [steps]; 4 byte: current [mm].
 	CMD_DATA,	// n byte: requested data.
@@ -106,9 +109,14 @@ enum Command {
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
 	CMD_CONTINUE,	// 1 byte: is_audio.  Bool flag if it needs to be sent.
 	CMD_LIMIT,	// 1 byte: which channel.
-	CMD_AUTOSLEEP,	// 1 byte: what: 1: motor; 2: temp; 3: both.
+	CMD_TIMEOUT,	// 0
 	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
-	CMD_DISCONNECT	// 0
+	CMD_DISCONNECT,	// 0
+		// Updates from RUN_FILE.
+	CMD_UPDATE_TEMP,
+	CMD_UPDATE_PIN,
+	CMD_CONFIRM,
+	CMD_FILE_DONE,
 };
 
 // All temperatures are stored in Kelvin, but communicated in °C.
@@ -164,6 +172,9 @@ struct History
 	int num_active_motors;
 	uint32_t hwtime, start_time, last_time, last_current_time;
 	int cbs;
+	int queue_start, queue_end;
+	bool queue_full;
+	int run_file_current;
 };
 
 struct Motor_History
@@ -344,9 +355,7 @@ EXTERN Temp *temps;
 EXTERN Gpio *gpios;
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];
-EXTERN uint8_t queue_start, queue_end;
 EXTERN bool probing;
-EXTERN bool queue_full;
 EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
@@ -380,7 +389,7 @@ EXTERN int current_fragment;
 EXTERN int current_fragment_pos;
 EXTERN int hwtime_step;
 EXTERN int free_fragments;
-EXTERN struct pollfd pollfds[2];
+EXTERN struct pollfd pollfds[3];
 
 #if DEBUG_BUFFER_LENGTH > 0
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
@@ -397,6 +406,9 @@ void buffered_debug(char const *fmt, ...);
 
 // packet.cpp
 void packet();	// A command packet has arrived; handle it.
+void settemp(int which, float target);
+void waittemp(int which, float mintemp, float maxtemp);
+void setpos(int which, int t, int f);
 
 // serial.cpp
 void serial(uint8_t which);	// Handle commands from serial.
@@ -409,6 +421,30 @@ void send_host(char cmd, int s = 0, int m = 0, float f = 0, int e = 0, int len =
 // move.cpp
 uint8_t next_move();
 void abort_move(int pos);
+
+// run.cpp
+struct Run_Record {
+	uint8_t type;
+	int32_t tool;
+	float x, X, y, Y, z, Z, e, E, f, F;
+} __attribute__((__packed__));
+void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa);
+void abort_run_file();
+void run_file_fill_queue();
+EXTERN char run_file_name[256];
+EXTERN off_t run_file_size;
+EXTERN Run_Record *run_file_map;
+EXTERN int run_file_num_strings;
+EXTERN off_t run_file_first_string;
+EXTERN int run_file_num_records;
+EXTERN int run_file_wait_temp;
+EXTERN int run_file_wait;
+EXTERN struct itimerspec run_file_timer;
+EXTERN float run_file_refx;
+EXTERN float run_file_refy;
+EXTERN float run_file_refz;
+EXTERN float run_file_sina;
+EXTERN float run_file_cosa;
 
 // setup.cpp
 void setup(char const *port, char const *run_id);

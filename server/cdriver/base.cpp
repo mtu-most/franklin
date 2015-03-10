@@ -36,7 +36,7 @@ void disconnect() { // {{{
 	arch_disconnect();
 	send_host(CMD_DISCONNECT);
 	while (arch_fds() == 0) {
-		poll(&pollfds[0], 1, -1);
+		poll(&pollfds[1], 1, -1);
 		serial(0);
 	}
 }
@@ -73,12 +73,24 @@ int main(int argc, char **argv) { // {{{
 		exit(1);
 	}
 	setup(argv[1], argv[2]);
+	struct itimerspec zero;
+	zero.it_interval.tv_sec = 0;
+	zero.it_interval.tv_nsec = 0;
+	zero.it_value.tv_sec = 0;
+	zero.it_value.tv_nsec = 0;
 	while(true) {
-		for (int i = 0; i < 2; ++i)
+		int arch = arch_fds();
+		for (int i = 0; i < 2 + arch; ++i)
 			pollfds[i].revents = 0;
-		poll(pollfds, arch_fds() + 1, -1);
+		poll(pollfds, arch + 2, -1);
+		if (pollfds[0].revents) {
+			timerfd_settime(pollfds[0].fd, 0, &zero, NULL);
+			if (run_file_wait)
+				run_file_wait -= 1;
+			run_file_fill_queue();
+		}
 		for (int i = 0; i < 2; ++i) {
-			if (pollfds[i].revents)
+			if (pollfds[1 + i].revents)
 				serial(i);
 		}
 	}

@@ -59,23 +59,23 @@ bool globals_load(int32_t &addr)
 	if (isnan(feedrate) || isinf(feedrate) || feedrate <= 0)
 		feedrate = 1;
 	int ce = read_8(addr);
-	if (current_extruder != ce && num_spaces > 0 && queue_start == queue_end && !queue_full) {
-		queue[queue_end].probe = false;
-		queue[queue_end].cb = false;
-		queue[queue_end].f[0] = INFINITY;
-		queue[queue_end].f[1] = INFINITY;
+	if (current_extruder != ce && num_spaces > 0 && settings[current_fragment].queue_start == settings[current_fragment].queue_end && !settings[current_fragment].queue_full) {
+		queue[settings[current_fragment].queue_end].probe = false;
+		queue[settings[current_fragment].queue_end].cb = false;
+		queue[settings[current_fragment].queue_end].f[0] = INFINITY;
+		queue[settings[current_fragment].queue_end].f[1] = INFINITY;
 		for (int i = 0; num_spaces > 0 && i < spaces[0].num_axes; ++i) {
-			queue[queue_end].data[i] = spaces[0].axis[i]->settings[current_fragment].current;
+			queue[settings[current_fragment].queue_end].data[i] = spaces[0].axis[i]->settings[current_fragment].current;
 			for (int s = 0; s < num_spaces; ++s)
-				queue[queue_end].data[i] = space_types[spaces[s].type].unchange0(&spaces[s], i, queue[queue_end].data[i]);
+				queue[settings[current_fragment].queue_end].data[i] = space_types[spaces[s].type].unchange0(&spaces[s], i, queue[settings[current_fragment].queue_end].data[i]);
 		}
 		for (int i = spaces[0].num_axes; i < QUEUE_LENGTH; ++i) {
-			queue[queue_end].data[i] = NAN;
+			queue[settings[current_fragment].queue_end].data[i] = NAN;
 		}
-		queue_end = (queue_end + 1) % QUEUE_LENGTH;
+		settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
 		// This shouldn't happen and causes communication problems, but if you have a 1-item buffer it is correct.
-		if (queue_end == queue_start)
-			queue_full = true;
+		if (settings[current_fragment].queue_end == settings[current_fragment].queue_start)
+			settings[current_fragment].queue_full = true;
 		current_extruder = ce;
 		next_move();
 		buffer_refill();

@@ -548,7 +548,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		if (t / (settings[current_fragment].t0 + settings[current_fragment].tp) >= done_factor) {
 			uint8_t had_cbs = cbs_after_current_move;
 			cbs_after_current_move = 0;
-			if (queue_start != queue_end || queue_full) {
+			if (settings[current_fragment].queue_start != settings[current_fragment].queue_end || settings[current_fragment].queue_full) {
 				had_cbs += next_move();
 				if (!aborting && had_cbs > 0) {
 					//debug("adding %d cbs to fragment %d", had_cbs, current_fragment);
@@ -656,6 +656,10 @@ void copy_fragment_settings(int src, int dst) {
 	settings[dst].start_time = settings[src].start_time;
 	settings[dst].last_time = settings[src].last_time;
 	settings[dst].last_current_time = settings[src].last_current_time;
+	settings[dst].queue_start = settings[src].queue_start;
+	settings[dst].queue_end = settings[src].queue_end;
+	settings[dst].queue_full = settings[src].queue_full;
+	settings[dst].run_file_current = settings[src].run_file_current;
 	for (int s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (int m = 0; m < sp.num_motors; ++m) {

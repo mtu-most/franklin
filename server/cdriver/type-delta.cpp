@@ -30,7 +30,7 @@ static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
 	}
 	// Inner product shows if projection is inside or outside the printable region.
 	float projection = -(dx / APEX(s, a).radius * APEX(s, a).x + dy / APEX(s, a).radius * APEX(s, a).y);
-	float amin = APEX(s, a).axis_min > -APEX(s, a).rodlength ? -APEX(s, a).rodlength : APEX(s, a).axis_min;
+	float amin = APEX(s, a).axis_min < -APEX(s, a).rodlength ? -APEX(s, a).rodlength : APEX(s, a).axis_min;
 	if (projection < amin) {
 		debug ("not ok 2: %f %f %f %f %f", projection, dx, dy, APEX(s, a).x, APEX(s, a).y);
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
@@ -39,7 +39,7 @@ static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
 		// Assume this was a small correction; that way, things will work even if numerical errors cause this to be called for the real move.
 		return false;
 	}
-	//debug("ok");
+	//debug("ok %d %d %f", s->id, a, projection);
 	return true;
 }	// }}}
 
