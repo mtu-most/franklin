@@ -2166,7 +2166,7 @@ class Printer: # {{{
 				if type != protocol.parsed['PARK']:
 					dst.write(struct.pack('<Bl' + 'f' * 10, type, *nums))
 				else:
-					# TODO
+					# TODO: add park moves.
 					pass
 				if type == protocol.parsed['PARK']:
 					if bbox[0] is not None:
