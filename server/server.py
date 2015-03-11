@@ -48,8 +48,6 @@ if config['driver'] == '':
 	config['driver'] = fhs.read_data('driver.py', opened = False)
 if config['cdriver'] == '':
 	config['cdriver'] = fhs.read_data('cdriver', opened = False)
-
-print(repr(config))
 # }}}
 
 # Global variables. {{{

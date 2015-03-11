@@ -775,7 +775,7 @@ static inline void arch_stop() {
 	prepare_packet(avr_buffer, 1);
 	avr_send();
 	avr_get_reply();
-	abort_move(command[1][1] - 1);
+	abort_move(command[1][1] - 2);
 	avr_get_current_pos(2, check);
 }
 

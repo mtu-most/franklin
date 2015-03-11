@@ -562,6 +562,33 @@ inline void RESET(uint8_t pin_no) {
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
 }
 
+inline void PULSE(uint8_t pin_no, int8_t num, bool invert) {
+	if (pin_no >= NUM_DIGITAL_PINS)
+		return;
+	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
+	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
+	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) |= bit;
+	volatile uint8_t *target = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port));
+	uint8_t current, s, r;
+	current = *target;
+	if (invert) {
+		r = current | bit;
+		s = current & ~bit;
+	}
+	else {
+		s = current | bit;
+		r = current & ~bit;
+	}
+	for (uint8_t i = 0; i < num; ++i) {
+		*target = s;
+		*target = r;
+	}
+	if (invert)
+		pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_SET);
+	else
+		pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
+}
+
 inline bool GET(uint8_t pin_no) {
 	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
 	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);

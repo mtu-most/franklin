@@ -994,8 +994,9 @@ class Printer: # {{{
 			else:
 				self.movewait += 1
 				#log('movewait +1 -> %d' % self.movewait)
+				p = chr(protocol.command['GOTO'])
 			#log('queueing %s' % repr((axes, f0, f1, cb, self.flushing)))
-			self._send_packet(chr(protocol.command['GOTO']) + ''.join([chr(t) for t in targets]) + args, move = True)
+			self._send_packet(p + ''.join([chr(t) for t in targets]) + args, move = True)
 			if id is not None:
 				self._send(id, 'return', None)
 			if self.flushing is None:
@@ -1721,7 +1722,7 @@ class Printer: # {{{
 					if self.probe_cb in self.movecb:
 						#log('killing prober')
 						self.movecb.remove(self.probe_cb)
-						self.probe_cb(False)
+						self.probe_cb[1](False)
 					log('pausing gcode %d/%d/%d' % (self.queue_pos, s, len(self.queue)))
 					if self.flushing is None:
 						self.flushing = False

@@ -391,7 +391,7 @@ void abort_move(int pos) { // {{{
 	aborting = true;
 	//debug("abort; cf %d ff %d first %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, free_fragments, first_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments - 2, pos);
 	//debug("try aborting move");
-	int prev_f = (current_fragment + free_fragments + 1) % FRAGMENTS_PER_BUFFER;	// +1 because free_fragments starts as FPB-1.
+	int prev_f = (current_fragment + free_fragments + 1 - 1) % FRAGMENTS_PER_BUFFER;	// +1 because free_fragments starts as FPB-1.
 	int f = (prev_f + 1) % FRAGMENTS_PER_BUFFER;
 	if (!stopped && pos < 0 && first_fragment != f) {
 		f = prev_f;

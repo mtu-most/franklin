@@ -2,7 +2,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 
-#if 1
+#if 0
 #define rundebug debug
 #else
 #define rundebug(...) do {} while(0)

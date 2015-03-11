@@ -24,12 +24,8 @@ void do_steps() {
 			else
 				RESET(motor[m].dir_pin);
 		}
-		if (motor[m].step_pin < NUM_DIGITAL_PINS) {
-			for (uint8_t i = 0; i < steps_target; ++i) {
-				SET(motor[m].step_pin);
-				RESET(motor[m].step_pin);
-			}
-		}
+		if (motor[m].step_pin < NUM_DIGITAL_PINS)
+			PULSE(motor[m].step_pin, steps_target, motor[m].flags & Motor::INVERT_STEP);
 		arch_cli();
 		motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
 		motor[m].steps_current += steps_target;
