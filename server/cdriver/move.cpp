@@ -391,20 +391,19 @@ void abort_move(int pos) { // {{{
 	aborting = true;
 	//debug("abort; cf %d ff %d first %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, free_fragments, first_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments - 2, pos);
 	//debug("try aborting move");
-	int prev_f = (current_fragment + free_fragments + 1 - 1) % FRAGMENTS_PER_BUFFER;	// +1 because free_fragments starts as FPB-1.
-	int f = (prev_f + 1) % FRAGMENTS_PER_BUFFER;
-	if (!stopped && pos < 0 && first_fragment != f) {
-		f = prev_f;
+	int prev_f = (running_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;	// +1 because free_fragments starts as FPB-1.
+	if (!stopped && pos < 0 && first_fragment != running_fragment) {
+		running_fragment = prev_f;
 		free_fragments += 1;
 		//debug("free abort +1 %d", free_fragments);
-		pos += settings[f].fragment_length;
-		prev_f = (f - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		pos += settings[running_fragment].fragment_length;
+		prev_f = (running_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	}
 	if (pos < 0)
 		pos = 0;
 	//debug("abort really regenerating %d ticks", pos);
-	copy_fragment_settings(prev_f, f);
-	current_fragment = f;
+	copy_fragment_settings(prev_f, running_fragment);
+	current_fragment = running_fragment;
 #ifdef DEBUG_MOVE
 	debug("move no longer prepared");
 #endif
@@ -416,11 +415,12 @@ void abort_move(int pos) { // {{{
 		apply_tick();
 	//debug("done restoring position");
 	// Copy settings back to previous fragment.
-	copy_fragment_settings(f, prev_f);
+	copy_fragment_settings(running_fragment, prev_f);
 	moving = false;
 	stopped = true;
 	prepared = false;
-	reset_dirs(f, false);
+	running_fragment = (running_fragment + 1) % FRAGMENTS_PER_BUFFER;
+	set_current_fragment(running_fragment, false);
 	//debug("curf3 %d", current_fragment);
 	//debug("aborting move");
 	for (uint8_t s = 0; s < num_spaces; ++s) {

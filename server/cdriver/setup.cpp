@@ -34,7 +34,8 @@ void setup(char const *port, char const *run_id)
 	last_active = millis();
 	free_fragments = 0;
 	refilling = false;
-	current_fragment = 0;
+	running_fragment = 0;
+	current_fragment = running_fragment;
 	current_fragment_pos = -1;
 	hwtime_step = 4000;	// TODO: make this dynamic.
 	moving = false;

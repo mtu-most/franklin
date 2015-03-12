@@ -109,7 +109,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 static void move_to_current() {
 	if (!stopped || moving || !motors_busy)
 		return;
-	//debug("move to current");
+	debug("move to current");
 	settings[current_fragment].f0 = 0;
 	settings[current_fragment].fmain = 1;
 	settings[current_fragment].fp = 0;
@@ -651,7 +651,6 @@ void copy_fragment_settings(int src, int dst) {
 	settings[dst].fmain = settings[src].fmain;
 	settings[dst].fragment_length = settings[src].fragment_length;
 	settings[dst].num_active_motors = settings[src].num_active_motors;
-	settings[dst].cbs = settings[src].cbs;
 	settings[dst].hwtime = settings[src].hwtime;
 	settings[dst].start_time = settings[src].start_time;
 	settings[dst].last_time = settings[src].last_time;
@@ -684,15 +683,15 @@ void copy_fragment_settings(int src, int dst) {
 	}
 }
 
-static void set_current_fragment(int fragment) {
-	movedebug("setcurrent %d %d %d", fragment, moving, current_fragment_pos);
+void set_current_fragment(int fragment, bool allow_new_dirs) {
+	//movedebug("setcurrent %d %d %d", fragment, moving, current_fragment_pos);
 	if (!moving && current_fragment_pos > 0)
 		send_fragment();
 	copy_fragment_settings(current_fragment, fragment);
 	settings[fragment].fragment_length = 0;
 	current_fragment = fragment;
 	//debug("curf4 %d", current_fragment);
-	reset_dirs(current_fragment, true);
+	reset_dirs(current_fragment, allow_new_dirs);
 }
 
 void send_fragment() {
@@ -702,13 +701,13 @@ void send_fragment() {
 		debug("sending fragment for 0 motors at position %d", current_fragment_pos);
 		//abort();
 	}
-	//debug("sending %d free %d", current_fragment, free_fragments);
+	//debug("sending %d free %d prevcbs %d", current_fragment, free_fragments, settings[(current_fragment - 1) % FRAGMENTS_PER_BUFFER].cbs);
 	settings[current_fragment].fragment_length = current_fragment_pos;
 	free_fragments -= 1;
 	//debug("free -1 %d", free_fragments);
 	current_fragment_pos = -1;
 	int f = current_fragment;
-	set_current_fragment((current_fragment + 1) % FRAGMENTS_PER_BUFFER);
+	set_current_fragment((current_fragment + 1) % FRAGMENTS_PER_BUFFER, true);
 	arch_send_fragment(f);
 	if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
 		arch_start_move(0);

@@ -265,15 +265,10 @@ static inline void hwpacket(int len) {
 		bool limit = (command[1][0] & ~0x10) == HWC_LIMIT;
 		if (limit) {
 			//debug("limit: %d", free_fragments);
-			offset = 3;
 			pos = command[1][2];
-		}
-		else
-			offset = 2;
-		if (limit) {
 			avr_homing = false;
 			abort_move(pos - 1);
-			avr_get_current_pos(offset, false);
+			avr_get_current_pos(3, false);
 			sending_fragment = 0;
 			stopping = 2;
 			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_unit);
@@ -283,7 +278,7 @@ static inline void hwpacket(int len) {
 			free_fragments = FRAGMENTS_PER_BUFFER - 1;
 		}
 		else {
-			avr_get_current_pos(offset, false);
+			avr_get_current_pos(2, false);
 			spaces[s].motor[m]->sense_state = 1;
 			send_host(CMD_SENSE, s, m, 0, (command[1][0] & ~0x10) == HWC_SENSE1);
 		}
@@ -341,13 +336,14 @@ static inline void hwpacket(int len) {
 		}
 		int cbs = 0;
 		for (int i = 0; i < command[1][1]; ++i) {
-			int f = (current_fragment + free_fragments + i + 1) % FRAGMENTS_PER_BUFFER;
-			cpdebug("fragment %d: cbs=%d free=%d current=%d", f, settings[f].cbs, free_fragments, current_fragment);
+			int f = (running_fragment + i) % FRAGMENTS_PER_BUFFER;
+			//debug("fragment %d: cbs=%d free=%d current=%d", f, settings[f].cbs, free_fragments, current_fragment);
 			cbs += settings[f].cbs;
 		}
 		if (cbs)
 			send_host(CMD_MOVECB, cbs);
 		free_fragments += command[1][1];
+		running_fragment = (running_fragment + command[1][1]) % FRAGMENTS_PER_BUFFER;
 		if (free_fragments == FRAGMENTS_PER_BUFFER - 1 && (command[1][0] & ~0x10) == HWC_DONE) {
 			debug("Done received, but should be underrun");
 			abort();

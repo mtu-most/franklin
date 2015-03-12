@@ -181,8 +181,10 @@ void packet()
 			int num_movecbs = next_move();
 			if (num_movecbs > 0) {
 				if (arch_running()) {
-					if (moving)
+					if (moving) {
+						//debug("adding %d cbs after current move", num_movecbs);
 						cbs_after_current_move += num_movecbs;
+					}
 					else {
 						//debug("instant-adding %d cbs to fragment %d - 1", num_movecbs, current_fragment);
 						settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += num_movecbs;
@@ -191,6 +193,7 @@ void packet()
 				else
 					send_host(CMD_MOVECB, num_movecbs);
 			}
+			//debug("no movecbs to add (prev %d)", settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs);
 			buffer_refill();
 		}
 		//else
