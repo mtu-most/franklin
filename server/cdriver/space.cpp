@@ -84,7 +84,6 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 				new_motors[m]->settings[f].data = new char[BYTES_PER_FRAGMENT];
 				memset(new_motors[m]->settings[f].data, 0, BYTES_PER_FRAGMENT);
 				new_motors[m]->settings[f].last_v = 0;
-				cpdebug(id, m, "cp0 2 %d", 0);
 				new_motors[m]->settings[f].current_pos = 0;
 				new_motors[m]->settings[f].hwcurrent_pos = 0;
 				new_motors[m]->settings[f].last_v = NAN;
@@ -109,7 +108,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 static void move_to_current() {
 	if (!stopped || moving || !motors_busy)
 		return;
-	debug("move to current");
+	//debug("move to current");
 	settings[current_fragment].f0 = 0;
 	settings[current_fragment].fmain = 1;
 	settings[current_fragment].fp = 0;
@@ -117,7 +116,7 @@ static void move_to_current() {
 	settings[current_fragment].t0 = 0;
 	settings[current_fragment].tp = 0;
 	cbs_after_current_move = 0;
-	current_fragment_pos = -1;
+	current_fragment_pos = 0;	// Don't set to -1, because that would copy previous fragment's settings.
 	first_fragment = current_fragment;
 	moving = true;
 	settings[current_fragment].cbs = 0;
@@ -128,6 +127,7 @@ static void move_to_current() {
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			cpdebug(s, a, "using current %f", sp.axis[a]->settings[current_fragment].current);
 			sp.axis[a]->settings[current_fragment].source = sp.axis[a]->settings[current_fragment].current;
 			sp.axis[a]->settings[current_fragment].target = sp.axis[a]->settings[current_fragment].current;
 			sp.axis[a]->settings[current_fragment].dist = 0;
@@ -160,6 +160,9 @@ void Space::load_info(int32_t &addr)
 		space_types[t].free(this);
 		if (!space_types[type].init(this)) {
 			type = DEFAULT_TYPE;
+			space_types[type].reset_pos(this);
+			for (uint8_t a = 0; a < num_axes; ++a)
+				axis[a]->settings[current_fragment].current = axis[a]->settings[current_fragment].source;
 			return;	// The rest of the package is not meant for DEFAULT_TYPE, so ignore it.
 		}
 		ok = false;
@@ -172,6 +175,11 @@ void Space::load_info(int32_t &addr)
 	}
 	max_deviation = read_float(addr);
 	space_types[type].load(this, t, addr);
+	if (t != type) {
+		space_types[type].reset_pos(this);
+		for (uint8_t a = 0; a < num_axes; ++a)
+			axis[a]->settings[current_fragment].current = axis[a]->settings[current_fragment].source;
+	}
 	if (ok)
 		move_to_current();
 	loaddebug("done loading space");
@@ -234,7 +242,7 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 			int32_t cpdiff = f * motor[m]->steps_per_unit + (f > 0 ? .49 : -.49) - motor[m]->settings[current_fragment].current_pos;
 			motor[m]->settings[current_fragment].current_pos += cpdiff;
 			motor[m]->settings[current_fragment].hwcurrent_pos += cpdiff;
-			cpdebug(id, m, "cp5 %d", motor[m]->settings[current_fragment].current_pos);
+			cpdebug(id, m, "load motor new steps add %d", cpdiff);
 			arch_addpos(id, m, cpdiff);
 			must_move = true;
 		}
@@ -243,7 +251,7 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 			int32_t diff = f * motor[m]->steps_per_unit + (f > 0 ? .49 : -.49);
 			motor[m]->settings[current_fragment].current_pos += diff;
 			motor[m]->settings[current_fragment].hwcurrent_pos += diff;
-			cpdebug(id, m, "cp6 %d", motor[m]->settings[current_fragment].current_pos);
+			cpdebug(id, m, "load motor new home add %d", diff);
 			arch_addpos(id, m, diff);
 			must_move = true;
 		}
@@ -253,7 +261,7 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 		if (motors_busy && old_steps_per_unit != motor[m]->steps_per_unit) {
 			int32_t cp = motor[m]->settings[current_fragment].current_pos;
 			float pos = cp / old_steps_per_unit;
-			cpdebug(id, m, "cpx %d", 0);
+			cpdebug(id, m, "load motor new steps no home");
 			motor[m]->settings[current_fragment].current_pos = pos * motor[m]->steps_per_unit;
 			int diff = motor[m]->settings[current_fragment].current_pos - cp;
 			motor[m]->settings[current_fragment].hwcurrent_pos += diff;
@@ -509,7 +517,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 			if (mtr.settings[current_fragment].current_pos != new_cp)
 				have_steps = true;
 			mtr.settings[current_fragment].current_pos = new_cp;
-			cpdebug(s, m, "cp three %d %f", mtr.settings[current_fragment].current_pos, target);
+			//cpdebug(s, m, "cp three %f", target);
 			mtr.settings[current_fragment].last_v = mtr.settings[current_fragment].target_v * factor;
 		}
 	}
@@ -662,12 +670,10 @@ void copy_fragment_settings(int src, int dst) {
 	for (int s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (int m = 0; m < sp.num_motors; ++m) {
-			//debug("set fragment %d %d %d %d %d %d", s, m, src, dst, sp.motor[m]->settings[src].hwcurrent_pos, sp.motor[m]->settings[src].current_pos);
 			// Don't copy dir; either the current value is correct, or it is set to 0.
 			sp.motor[m]->settings[dst].last_v = sp.motor[m]->settings[src].last_v;
 			sp.motor[m]->settings[dst].target_v = sp.motor[m]->settings[src].target_v;
 			sp.motor[m]->settings[dst].target_dist = sp.motor[m]->settings[src].target_dist;
-			cpdebug(s, m, "cp copy target %d %d %d", src, dst, sp.motor[m]->settings[src].current_pos);
 			sp.motor[m]->settings[dst].current_pos = sp.motor[m]->settings[src].current_pos;
 			sp.motor[m]->settings[dst].hwcurrent_pos = sp.motor[m]->settings[src].hwcurrent_pos;
 			sp.motor[m]->settings[dst].endpos = sp.motor[m]->settings[src].endpos;
@@ -678,6 +684,7 @@ void copy_fragment_settings(int src, int dst) {
 			sp.axis[a]->settings[dst].main_dist = sp.axis[a]->settings[src].main_dist;
 			sp.axis[a]->settings[dst].target = sp.axis[a]->settings[src].target;
 			sp.axis[a]->settings[dst].source = sp.axis[a]->settings[src].source;
+			cpdebug(s, a, "cp copy target %d %d", src, dst);
 			sp.axis[a]->settings[dst].current = sp.axis[a]->settings[src].current;
 		}
 	}
@@ -736,11 +743,9 @@ void apply_tick() {
 					abort();
 				}
 			}
-			if (current_fragment_pos >= 0)
-				mtr.settings[current_fragment].data[current_fragment_pos] = value;
-			else if (value != 0) {
-				//debug("Problem found. %d %d", current_fragment_pos, value);
-				current_fragment_pos = 0;
+			if (value != 0) {
+				if (current_fragment_pos < 0)
+					current_fragment_pos = 0;
 				mtr.settings[current_fragment].data[current_fragment_pos] = value;
 			}
 			//debug("spam %d %d %d %d %d", s, m, value, mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos);

@@ -82,7 +82,7 @@ static void reset_pos (Space *s) {
 		s->axis[2]->settings[current_fragment].source = NAN;
 	}
 	else {
-		//debug("resetpos %f", APEX(s, a).current_pos);
+		//debug("resetpos %f", p[0]);
 		s->axis[0]->settings[current_fragment].source = 0;
 		s->axis[1]->settings[current_fragment].source = 0;
 		s->axis[2]->settings[current_fragment].source = p[0];

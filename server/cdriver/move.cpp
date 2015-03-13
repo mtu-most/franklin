@@ -411,6 +411,7 @@ void abort_move(int pos) { // {{{
 	free_fragments = FRAGMENTS_PER_BUFFER - 1;
 	current_fragment_pos = -1;
 	moving = true;
+	//debug("restoring position for fragment %d to position %d", current_fragment, pos);
 	while (current_fragment_pos < pos)
 		apply_tick();
 	//debug("done restoring position");

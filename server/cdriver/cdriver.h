@@ -401,8 +401,8 @@ void buffered_debug(char const *fmt, ...);
 #define buffered_debug debug
 #define buffered_debug_flush() do {} while(0)
 #endif
-//#define cpdebug(s, m, fmt, ...) debug("CP %d %d" # fmt, s, m, ##__VA_ARGS__)
-#define cpdebug(...) do {} while(0)
+//#define cpdebug(s, m, fmt, ...) do { if (s == 0 && m == 0) debug("CP %d %d %d %d %f " fmt, s, m, current_fragment, spaces[s].motor[m]->settings[current_fragment].current_pos, spaces[s].axis[m]->settings[current_fragment].current, ##__VA_ARGS__); } while (0)
+#define cpdebug(...) do {} while (0)
 
 // packet.cpp
 void packet();	// A command packet has arrived; handle it.
