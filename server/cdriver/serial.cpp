@@ -129,10 +129,14 @@ void serial(uint8_t which)
 					doing_debug = true;
 					START_DEBUG();
 					continue;
+				case CMD_STALL0:
+				case CMD_STALL1:
+					debug("received stall!");
+					// Fall through.
 				case CMD_ACK0:
 				case CMD_ACK1:
-					// Ack: everything was ok; flip the flipflop.
-					if (out_busy && ((!ff_out) ^ (command[which][0] == CMD_ACK1))) {	// Only if we expected it and it is the right type.
+					// Ack: flip the flipflop.
+					if (out_busy && ((!ff_out) ^ (command[which][0] == CMD_ACK1 || command[which][0] == CMD_STALL1))) {	// Only if we expected it and it is the right type.
 						ff_out ^= 0x10;
 #ifdef DEBUG_FF
 						debug("new ff_out: %d", ff_out[which]);

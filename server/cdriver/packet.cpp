@@ -86,7 +86,7 @@ void setpos(int which, int t, int f) {
 	int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_unit + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings[current_fragment].current_pos;
 	spaces[which].motor[t]->settings[current_fragment].current_pos += diff;
 	spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
-	cpdebug("cp %d %d four %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
+	cpdebug(which, t, "cp four %d %d", spaces[which].motor[t]->settings[current_fragment].current_pos, diff);
 	arch_addpos(which, t, diff);
 	//debug("setpos %d %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos);
 	/*arch_stop();

@@ -216,7 +216,7 @@ static inline void avr_get_current_pos(int offset, bool check) {
 	for (int ts = 0; ts < num_spaces; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
 			int old = spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos;
-			cpdebug("cpb %d %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
+			cpdebug(ts, tm, "cpb %d %d %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
 			spaces[ts].motor[tm]->settings[current_fragment].current_pos = 0;
 			for (int i = 0; i < 4; ++i) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
@@ -225,7 +225,7 @@ static inline void avr_get_current_pos(int offset, bool check) {
 				spaces[ts].motor[tm]->settings[current_fragment].current_pos *= -1;
 			spaces[ts].motor[tm]->settings[current_fragment].current_pos -= avr_pos_offset[tm + mi];
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			cpdebug("cpa %d %d %d %d %d", ts, tm, avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
+			cpdebug(ts, tm, "cpa %d %d %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
 			if (check && old != spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos)
 				abort();
 		}
@@ -260,10 +260,9 @@ static inline void hwpacket(int len) {
 			}
 			which -= spaces[s].num_motors;
 		}
-		//debug("cp1 %d", spaces[s].motor[m]->current_pos);
+		cpdebug(s, m, "cp1 %d", spaces[s].motor[m]->settings[current_fragment].current_pos);
 		int offset, pos;
-		bool limit = (command[1][0] & ~0x10) == HWC_LIMIT;
-		if (limit) {
+		if ((command[1][0] & ~0x10) == HWC_LIMIT) {
 			//debug("limit: %d", free_fragments);
 			pos = command[1][2];
 			avr_homing = false;
@@ -323,7 +322,7 @@ static inline void hwpacket(int len) {
 	}
 	case HWC_DONE:
 	{
-		cpdebug("done: %d %d %d %d", command[1][1], command[1][2], free_fragments, sending_fragment);
+		//debug("done: %d %d %d %d", command[1][1], command[1][2], free_fragments, sending_fragment);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			debug("Done received while fragments per buffer is zero");
 			avr_write_ack("invalid done");
@@ -348,7 +347,7 @@ static inline void hwpacket(int len) {
 			debug("Done received, but should be underrun");
 			abort();
 		}
-		cpdebug("fragments free=%d current=%d", free_fragments, current_fragment);
+		//debug("fragments free=%d current=%d", free_fragments, current_fragment);
 		if (free_fragments >= FRAGMENTS_PER_BUFFER) {
 			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]) - 1);
 			free_fragments = FRAGMENTS_PER_BUFFER - 1;

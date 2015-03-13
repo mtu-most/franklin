@@ -401,7 +401,7 @@ void buffered_debug(char const *fmt, ...);
 #define buffered_debug debug
 #define buffered_debug_flush() do {} while(0)
 #endif
-//#define cpdebug debug
+//#define cpdebug(s, m, fmt, ...) debug("CP %d %d" # fmt, s, m, ##__VA_ARGS__)
 #define cpdebug(...) do {} while(0)
 
 // packet.cpp

@@ -1700,10 +1700,10 @@ class Printer: # {{{
 							self.set_axis_pos(i, a, pos)
 				self.goto(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
-				log('resuming')
+				#log('resuming')
 				self.resuming = True
 			else:
-				log('sending resume')
+				#log('sending resume')
 				self._send_packet(chr(protocol.command['RESUME']))
 			self._do_queue()
 		else:
@@ -1723,12 +1723,12 @@ class Printer: # {{{
 						#log('killing prober')
 						self.movecb.remove(self.probe_cb)
 						self.probe_cb[1](False)
-					log('pausing gcode %d/%d/%d' % (self.queue_pos, s, len(self.queue)))
+					#log('pausing gcode %d/%d/%d' % (self.queue_pos, s, len(self.queue)))
 					if self.flushing is None:
 						self.flushing = False
 					self.queue_info = [len(self.queue) if self.gcode_file else self.queue_pos - s, [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing, self.gcode_wait]
 				else:
-					log('stopping')
+					#log('stopping')
 					self.paused = False
 					if len(self.movecb) > 0:
 						call_queue.extend([(x[1], [True]) for x in self.movecb])

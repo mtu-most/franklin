@@ -200,10 +200,12 @@ void run_file_fill_queue() {
 				setpos(1, r.tool, r.x);
 				break;
 			case RUN_WAIT:
-				run_file_timer.it_value.tv_sec = r.x;
-				run_file_timer.it_value.tv_nsec = (r.x - run_file_timer.it_value.tv_sec) * 1e9;
-				run_file_wait += 1;
-				timerfd_settime(pollfds[0].fd, 0, &run_file_timer, NULL);
+				if (r.x > 0) {
+					run_file_timer.it_value.tv_sec = r.x;
+					run_file_timer.it_value.tv_nsec = (r.x - run_file_timer.it_value.tv_sec) * 1e9;
+					run_file_wait += 1;
+					timerfd_settime(pollfds[0].fd, 0, &run_file_timer, NULL);
+				}
 				break;
 			case RUN_CONFIRM:
 			{

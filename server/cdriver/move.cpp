@@ -420,9 +420,9 @@ void abort_move(int pos) { // {{{
 	stopped = true;
 	prepared = false;
 	running_fragment = (running_fragment + 1) % FRAGMENTS_PER_BUFFER;
+	current_fragment_pos = -1;
 	set_current_fragment(running_fragment, false);
 	//debug("curf3 %d", current_fragment);
-	//debug("aborting move");
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -437,5 +437,6 @@ void abort_move(int pos) { // {{{
 			//debug("setting motor %d pos to %d", m, sp.motor[m]->settings[current_fragment].current_pos);
 		}
 	}
+	//debug("aborted move");
 	aborting = false;
 } // }}}
