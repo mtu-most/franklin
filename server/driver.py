@@ -1014,6 +1014,7 @@ class Printer: # {{{
 		# 5: Set current position; move to center (delta only).
 		#log('home %s %s' % (self.home_phase, repr(self.home_target)))
 		#traceback.print_stack()
+		home_v = 50
 		if self.home_phase is None:
 			if done is not None:
 				# Continuing call received after homing was aborted; ignore.
@@ -1052,7 +1053,7 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("N t %s" % (self.home_target))
-				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
+				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 1:
@@ -1070,7 +1071,9 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("0 t %s" % (self.home_target))
-				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
+				k = self.home_target.keys()[0]
+				dist = abs(self.home_target[k] - self.spaces[self.home_space].get_current_pos(k))
+				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True)[1](None)
 				return
 			#log('done 1')
 			self.home_phase = 2

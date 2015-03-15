@@ -369,6 +369,11 @@ static inline void hwpacket(int len) {
 		moving = false;
 		avr_homing = false;
 		avr_get_current_pos(1, false);
+		int i = 0;
+		for (int s = 0; s < num_spaces; ++s)
+			for (int m = 0; m < spaces[s].num_motors; ++m, ++i)
+				fprintf(stderr, "\t%8d", spaces[s].motor[m]->settings[current_fragment].current_pos + avr_pos_offset[i]);
+		fprintf(stderr, "\n");
 		avr_write_ack("homed");
 		send_host(CMD_HOMED);
 		return;
