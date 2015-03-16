@@ -267,14 +267,24 @@ static inline void hwpacket(int len) {
 			pos = command[1][2];
 			avr_homing = false;
 			abort_move(pos - 2);
+			//int i = 0;
+			//for (int is = 0; is < num_spaces; ++is)
+			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
+			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings[current_fragment].current_pos + avr_pos_offset[i]);
+			//fprintf(stderr, "\n");
 			avr_get_current_pos(3, false);
+			//i = 0;
+			//for (int is = 0; is < num_spaces; ++is)
+			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
+			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings[current_fragment].current_pos + avr_pos_offset[i]);
+			//fprintf(stderr, "\n");
 			sending_fragment = 0;
 			stopping = 2;
 			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_unit);
 			cbs_after_current_move = 0;
 			avr_running = false;
 			//debug("free limit");
-			free_fragments = FRAGMENTS_PER_BUFFER - 1;
+			free_fragments = FRAGMENTS_PER_BUFFER - 2;
 		}
 		else {
 			avr_get_current_pos(2, false);
@@ -316,7 +326,7 @@ static inline void hwpacket(int len) {
 				arch_start_move(command[1][1]);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
-		//else if (stopped && !sending_fragment && (free_fragments + command[1][1]) % FRAGMENTS_PER_BUFFER == FRAGMENTS_PER_BUFFER - 1)
+		//else if (stopped && !sending_fragment && (free_fragments + command[1][1]) % FRAGMENTS_PER_BUFFER == FRAGMENTS_PER_BUFFER - 2)
 		//	avr_get_current_pos(3, true);
 		// Fall through.
 	}
@@ -329,8 +339,8 @@ static inline void hwpacket(int len) {
 			return;
 		}
 		first_fragment = -1;
-		if (command[1][1] + command[1][2] != FRAGMENTS_PER_BUFFER - 1 - free_fragments - (sending_fragment ? 1 : 0)) {
-			debug("free fragments out of sync: %d %d %d %d %d", command[1][1] + command[1][2], FRAGMENTS_PER_BUFFER - 1 - free_fragments - (sending_fragment ? 1 : 0), FRAGMENTS_PER_BUFFER, free_fragments, sending_fragment);
+		if (command[1][1] + command[1][2] != FRAGMENTS_PER_BUFFER - 2 - free_fragments - (sending_fragment ? 1 : 0)) {
+			debug("free fragments out of sync: %d %d %d %d %d", command[1][1] + command[1][2], FRAGMENTS_PER_BUFFER - 2 - free_fragments - (sending_fragment ? 1 : 0), FRAGMENTS_PER_BUFFER, free_fragments, sending_fragment);
 			abort();
 		}
 		int cbs = 0;
@@ -343,14 +353,14 @@ static inline void hwpacket(int len) {
 			send_host(CMD_MOVECB, cbs);
 		free_fragments += command[1][1];
 		running_fragment = (running_fragment + command[1][1]) % FRAGMENTS_PER_BUFFER;
-		if (free_fragments == FRAGMENTS_PER_BUFFER - 1 && (command[1][0] & ~0x10) == HWC_DONE) {
+		if (free_fragments == FRAGMENTS_PER_BUFFER - 2 && (command[1][0] & ~0x10) == HWC_DONE) {
 			debug("Done received, but should be underrun");
 			abort();
 		}
 		//debug("fragments free=%d current=%d", free_fragments, current_fragment);
 		if (free_fragments >= FRAGMENTS_PER_BUFFER) {
-			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]) - 1);
-			free_fragments = FRAGMENTS_PER_BUFFER - 1;
+			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]) - 2);
+			free_fragments = FRAGMENTS_PER_BUFFER - 2;
 			avr_write_ack("invalid done");
 			abort();
 		}
@@ -369,11 +379,11 @@ static inline void hwpacket(int len) {
 		moving = false;
 		avr_homing = false;
 		avr_get_current_pos(1, false);
-		int i = 0;
-		for (int s = 0; s < num_spaces; ++s)
-			for (int m = 0; m < spaces[s].num_motors; ++m, ++i)
-				fprintf(stderr, "\t%8d", spaces[s].motor[m]->settings[current_fragment].current_pos + avr_pos_offset[i]);
-		fprintf(stderr, "\n");
+		//int i = 0;
+		//for (int s = 0; s < num_spaces; ++s)
+		//	for (int m = 0; m < spaces[s].num_motors; ++m, ++i)
+		//		fprintf(stderr, "\t%8d", spaces[s].motor[m]->settings[current_fragment].current_pos + avr_pos_offset[i]);
+		//fprintf(stderr, "\n");
 		avr_write_ack("homed");
 		send_host(CMD_HOMED);
 		return;
@@ -747,7 +757,7 @@ static inline void arch_start_move(int extra) {
 		start_pending = true;
 		return;
 	}
-	if (avr_running || stopping || avr_homing || free_fragments >= FRAGMENTS_PER_BUFFER - 1 - (sending_fragment ? 1 : 0) - extra)
+	if (avr_running || stopping || avr_homing || free_fragments >= FRAGMENTS_PER_BUFFER - 2 - (sending_fragment ? 1 : 0) - extra)
 		return;
 	//debug("start move %d %d %d", free_fragments, sending_fragment, extra);
 	avr_running = true;

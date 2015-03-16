@@ -1088,7 +1088,7 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("1 t %s" % (self.home_target))
-				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
+				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 2:
@@ -1106,7 +1106,9 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("2 t %s" % (self.home_target))
-				self.goto({self.home_space: self.home_target}, cb = True)[1](None)
+				k = self.home_target.keys()[0]
+				dist = abs(self.home_target[k] - self.spaces[self.home_space].get_current_pos(k))
+				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True)[1](None)
 				return
 			if len(self.home_target) > 0:
 				log('Warning: not all limits were found during homing')
@@ -1221,7 +1223,7 @@ class Printer: # {{{
 		log('Internal error: invalid home phase')
 	# }}}
 	def _do_probe(self, id, x, y, z, angle, speed, phase = 0, good = True): # {{{
-		log('probe %d' % phase)
+		#log('probe %d' % phase)
 		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
 		if not good:
 			# This means the probe has been aborted.

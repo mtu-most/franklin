@@ -389,9 +389,10 @@ uint8_t next_move() {
 
 void abort_move(int pos) { // {{{
 	aborting = true;
-	//debug("abort; cf %d ff %d first %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, free_fragments, first_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments - 2, pos);
+	//debug("abort; cf %d ff %d first %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, free_fragments, first_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments - 3, pos);
 	//debug("try aborting move");
-	int prev_f = (running_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;	// +1 because free_fragments starts as FPB-1.
+	int prev_f = (running_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+	//debug("prev = %d", prev_f);
 	if (!stopped && pos < 0 && first_fragment != running_fragment) {
 		running_fragment = prev_f;
 		free_fragments += 1;
@@ -408,8 +409,8 @@ void abort_move(int pos) { // {{{
 	debug("move no longer prepared");
 #endif
 	//debug("free abort reset");
-	free_fragments = FRAGMENTS_PER_BUFFER - 1;
-	current_fragment_pos = -1;
+	free_fragments = FRAGMENTS_PER_BUFFER - 2;
+	current_fragment_pos = 0;
 	moving = true;
 	//debug("restoring position for fragment %d to position %d", current_fragment, pos);
 	while (current_fragment_pos < pos)
@@ -421,7 +422,7 @@ void abort_move(int pos) { // {{{
 	stopped = true;
 	prepared = false;
 	running_fragment = (running_fragment + 1) % FRAGMENTS_PER_BUFFER;
-	current_fragment_pos = -1;
+	current_fragment_pos = 0;
 	set_current_fragment(running_fragment, false);
 	//debug("curf3 %d", current_fragment);
 	for (uint8_t s = 0; s < num_spaces; ++s) {

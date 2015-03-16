@@ -1,6 +1,6 @@
 #include "firmware.h"
 
-void do_steps() {
+do_steps() {
 	static bool lock = false;
 	// Only move if the move was prepared.
 	if (lock || !steps_prepared) {
@@ -123,7 +123,7 @@ void handle_motors() {
 			// Get twe "wrong" limit pin for the given direction.
 			uint8_t limit_pin = (fragment.dir ? motor[m].limit_max_pin : motor[m].limit_min_pin);
 			bool inverted = motor[m].flags & (fragment.dir ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
-			if (GET(limit_pin) ^ inverted) {
+			if (limit_pin >= NUM_DIGITAL_PINS || GET(limit_pin) ^ inverted) {
 				// Limit pin still triggered; continue moving.
 				continue;
 			}

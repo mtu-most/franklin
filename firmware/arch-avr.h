@@ -60,6 +60,13 @@ static inline void debug(char const *fmt, ...);
 #define arch_cli cli
 #define arch_sei sei
 
+#define TIME_PER_ISR 200
+#define ARCH_PIN_DATA \
+	volatile uint8_t *avr_mode; \
+	volatile uint8_t *avr_output; \
+	volatile uint8_t *avr_input; \
+	uint8_t avr_bitmask;
+
 inline void SET_OUTPUT(uint8_t pin_no);
 inline void SET_INPUT(uint8_t pin_no);
 inline void UNSET(uint8_t pin_no);
@@ -193,7 +200,10 @@ ISR(USART1_RX_vect) {
 // }}}
 
 // Debugging. {{{
-#ifndef NO_DEBUG
+#ifdef NO_DEBUG
+static inline void debug_add(int i) { (void)&i; }
+static inline void debug_dump() {}
+#else
 #define AVR_NUM_DEBUG 20
 EXTERN volatile int avr_debug[AVR_NUM_DEBUG];
 EXTERN volatile int avr_debug_ptr;
@@ -390,6 +400,13 @@ EXTERN volatile uint32_t avr_time_h, avr_seconds_h, avr_seconds;
 
 static inline void arch_setup_start() {
 	cli();
+	for (uint8_t pin_no = 0; pin_no < NUM_DIGITAL_PINS; ++pin_no) {
+		uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
+		pin[pin_no].avr_mode = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port));
+		pin[pin_no].avr_output = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port));
+		pin[pin_no].avr_input = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_input_PGM + port));
+		pin[pin_no].avr_bitmask = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
+	}
 	avr_time_h = 0;
 	avr_seconds_h = 0;
 	avr_seconds = 0;
@@ -457,9 +474,12 @@ static inline void set_speed(uint16_t count) {
 		}
 	}
 	if (!stopped) {
+		uint32_t c = count;
+		c *= 16;
+		c /= full_phase;
 		// Set TOP.
-		OCR1AH = (count >> 7) & 0xff;
-		OCR1AL = (count << 1) & 0xff;
+		OCR1AH = (c >> 8) & 0xff;
+		OCR1AL = c & 0xff;
 		// Clear counter.
 		TCNT1H = 0;
 		TCNT1L = 0;
@@ -487,6 +507,8 @@ static inline uint16_t seconds() {
 	return avr_seconds;
 }
 
+#define do_steps() ISR(TIMER1_COMPA_vect)
+
 #ifdef DEFINE_VARIABLES
 ISR(TIMER0_OVF_vect) {
 	uint32_t top = uint32_t(125) << 16;
@@ -498,90 +520,60 @@ ISR(TIMER0_OVF_vect) {
 		avr_seconds += 1;
 	}
 }
-
-ISR(TIMER1_COMPA_vect) {
-	do_steps();
-}
 #endif
 // }}}
 
 // Pin control. {{{
 inline void SET_OUTPUT(uint8_t pin_no) {
-	if (pin_no >= NUM_DIGITAL_PINS)
-		return;
 	if ((pin[pin_no].state & 0x3) == CTRL_SET || (pin[pin_no].state & 0x3) == CTRL_RESET)
 		return;
-	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
-	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port)) &= ~bit;
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) |= bit;
+	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
+	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
 }
 
 inline void SET_INPUT(uint8_t pin_no) {
-	if (pin_no >= NUM_DIGITAL_PINS)
-		return;
-	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
-	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) &= ~bit;
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port)) |= bit;
+	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
+	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_INPUT);
 }
 
 inline void UNSET(uint8_t pin_no) {
-	if (pin_no >= NUM_DIGITAL_PINS)
-		return;
-	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
-	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) &= ~bit;
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port)) &= ~bit;
+	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
+	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_UNSET);
 }
 
 inline void SET(uint8_t pin_no) {
-	if (pin_no >= NUM_DIGITAL_PINS)
-		return;
 	if ((pin[pin_no].state & 0x3) == CTRL_SET)
 		return;
-	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
-	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port)) |= bit;
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) |= bit;
+	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
+	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_SET);
 }
 
 inline void RESET(uint8_t pin_no) {
-	if (pin_no >= NUM_DIGITAL_PINS)
+	if ((pin[pin_no].state & 0x3) == CTRL_RESET)
 		return;
-	if ((pin[pin_no].state & 0x3) != CTRL_SET)
-		return;
-	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
-	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port)) &= ~bit;
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) |= bit;
+	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
+	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
 }
 
 inline void PULSE(uint8_t pin_no, int8_t num, bool invert) {
-	if (pin_no >= NUM_DIGITAL_PINS)
-		return;
-	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
-	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
-	*reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port)) |= bit;
-	volatile uint8_t *target = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port));
 	uint8_t current, s, r;
-	current = *target;
+	current = *pin[pin_no].avr_output;
 	if (invert) {
-		r = current | bit;
-		s = current & ~bit;
+		r = current | pin[pin_no].avr_bitmask;
+		s = current & ~pin[pin_no].avr_bitmask;
 	}
 	else {
-		s = current | bit;
-		r = current & ~bit;
+		s = current | pin[pin_no].avr_bitmask;
+		r = current & ~pin[pin_no].avr_bitmask;
 	}
 	for (uint8_t i = 0; i < num; ++i) {
-		*target = s;
-		*target = r;
+		*pin[pin_no].avr_output = s;
+		*pin[pin_no].avr_output = r;
 	}
 	if (invert)
 		pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_SET);
@@ -590,9 +582,7 @@ inline void PULSE(uint8_t pin_no, int8_t num, bool invert) {
 }
 
 inline bool GET(uint8_t pin_no) {
-	uint8_t bit = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
-	uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
-	return *reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_input_PGM + port)) & bit;
+	return *pin[pin_no].avr_input & pin[pin_no].avr_bitmask;
 }
 // }}}
 

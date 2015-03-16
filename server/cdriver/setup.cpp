@@ -36,7 +36,7 @@ void setup(char const *port, char const *run_id)
 	refilling = false;
 	running_fragment = 0;
 	current_fragment = running_fragment;
-	current_fragment_pos = -1;
+	current_fragment_pos = 0;
 	hwtime_step = 4000;	// TODO: make this dynamic.
 	moving = false;
 	aborting = false;
@@ -93,7 +93,7 @@ void setup(char const *port, char const *run_id)
 		settings[f].queue_end = 0;
 		settings[f].queue_full = false;
 	}
-	free_fragments = FRAGMENTS_PER_BUFFER - 1;
+	free_fragments = FRAGMENTS_PER_BUFFER - 2;
 	// Update current position.
 	first_fragment = current_fragment;
 	arch_stop();

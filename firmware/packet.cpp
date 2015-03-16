@@ -81,6 +81,10 @@ void packet()
 		if (probe_pin < NUM_DIGITAL_PINS)
 			SET_INPUT(probe_pin);
 		timeout_time = *reinterpret_cast <uint16_t *>(&command[9]);
+		if (time_per_sample < TIME_PER_ISR)
+			full_phase = 1;
+		else
+			full_phase = time_per_sample / TIME_PER_ISR;
 		write_ack();
 		return;
 	}
@@ -140,27 +144,38 @@ void packet()
 		motor[m].flags &= ~mask;
 		motor[m].flags |= command[7] & mask;
 		if (step != motor[m].step_pin || (flags & Motor::INVERT_STEP) != (motor[m].flags & Motor::INVERT_STEP)) {
-			UNSET(step);
-			if (motor[m].flags & Motor::INVERT_STEP)
-				SET(motor[m].step_pin);
-			else
-				RESET(motor[m].step_pin);
+			if (step < NUM_DIGITAL_PINS)
+				UNSET(step);
+			if (motor[m].step_pin < NUM_DIGITAL_PINS) {
+				if (motor[m].flags & Motor::INVERT_STEP)
+					SET(motor[m].step_pin);
+				else
+					RESET(motor[m].step_pin);
+			}
 		}
 		if (dir != motor[m].dir_pin) {
-			UNSET(dir);
-			RESET(motor[m].dir_pin);
+			if (dir < NUM_DIGITAL_PINS)
+				UNSET(dir);
+			if (motor[m].dir_pin < NUM_DIGITAL_PINS)
+				RESET(motor[m].dir_pin);
 		}
 		if (limit_min != motor[m].limit_min_pin) {
-			UNSET(limit_min);
-			SET_INPUT(motor[m].limit_min_pin);
+			if (limit_min < NUM_DIGITAL_PINS)
+				UNSET(limit_min);
+			if (motor[m].limit_min_pin < NUM_DIGITAL_PINS)
+				SET_INPUT(motor[m].limit_min_pin);
 		}
 		if (limit_max != motor[m].limit_max_pin) {
-			UNSET(limit_max);
-			SET_INPUT(motor[m].limit_max_pin);
+			if (limit_max < NUM_DIGITAL_PINS)
+				UNSET(limit_max);
+			if (motor[m].limit_max_pin < NUM_DIGITAL_PINS)
+				SET_INPUT(motor[m].limit_max_pin);
 		}
 		if (sense != motor[m].sense_pin) {
-			UNSET(sense);
-			SET_INPUT(motor[m].sense_pin);
+			if (sense < NUM_DIGITAL_PINS)
+				UNSET(sense);
+			if (motor[m].sense_pin < NUM_DIGITAL_PINS)
+				SET_INPUT(motor[m].sense_pin);
 		}
 		write_ack();
 		return;
