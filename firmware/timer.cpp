@@ -1,66 +1,14 @@
 #include "firmware.h"
 
-do_steps() {
-	static bool lock = false;
-	// Only move if the move was prepared.
-	if (lock || !steps_prepared) {
-		arch_sei();
+void handle_motors() {
+	if (steps_prepared >= 2)
+		return;
+	if (underrun) {
+		if (steps_prepared == 0)
+			set_speed(0);
 		return;
 	}
-	lock = true;
-	// Enable interrupts as soon as possible, so the uart doesn't overrun.
-	arch_sei();
-	move_phase += 1;
-	for (uint8_t m = 0; m < active_motors; ++m) {
-		if (motor[m].dir != DIR_POSITIVE && motor[m].dir != DIR_NEGATIVE)
-			continue;
-		uint8_t steps_target = uint32_t(motor[m].next_steps) * move_phase / full_phase - motor[m].steps_current;
-		//debug("stepping %d %d %d %d %d %d %d", m, steps_target, move_phase, full_phase, motor[m].steps_current, motor[m].next_steps, motor[m].next_next_steps);
-		if (steps_target == 0)
-			continue;
-		if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
-			if (motor[m].dir == DIR_POSITIVE)
-				SET(motor[m].dir_pin);
-			else
-				RESET(motor[m].dir_pin);
-		}
-		if (motor[m].step_pin < NUM_DIGITAL_PINS)
-			PULSE(motor[m].step_pin, steps_target, motor[m].flags & Motor::INVERT_STEP);
-		arch_cli();
-		motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
-		motor[m].steps_current += steps_target;
-		//if (m == 0)
-		//	debug_value += steps_target;
-		arch_sei();
-	}
-	if (move_phase >= full_phase) {
-		for (uint8_t m = 0; m < active_motors; ++m) {
-			if (motor[m].dir != DIR_POSITIVE && motor[m].dir != DIR_NEGATIVE)
-				continue;
-			if (motor[m].steps_current != motor[m].next_steps) {
-				debug("Problem %d: %d != %d (%d %d)", m, motor[m].steps_current, motor[m].next_steps, move_phase, full_phase);
-			}
-		}
-		move_phase = 0;
-		for (uint8_t m = 0; m < active_motors; ++m) {
-			motor[m].steps_current = 0;
-			if (steps_prepared == 2) {
-				motor[m].next_steps = motor[m].next_next_steps;
-				//debug_value1 += debug_value;
-				//debug_value = 0;
-				motor[m].dir = motor[m].next_dir;
-			}
-		}
-		if (steps_prepared == 1 && underrun)
-			set_speed(0);
-		arch_cli();
-		steps_prepared -= 1;
-		arch_sei();
-	}
-	lock = false;
-}
-
-void handle_motors() {
+	last_active = seconds();
 	/*
 	arch_cli();
 	uint16_t debug_tmp = debug_value1;
@@ -68,7 +16,7 @@ void handle_motors() {
 	*/
 	// Check sensors.
 	for (uint8_t m = 0; m < active_motors; ++m) {
-		Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+		Fragment &fragment = motor[m].buffer[current_fragment];
 		if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
 			continue;
 		// Check sense pins.
@@ -117,7 +65,7 @@ void handle_motors() {
 	if (homers > 0) {
 		// Homing.
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+			Fragment &fragment = motor[m].buffer[current_fragment];
 			if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
 				continue;
 			// Get twe "wrong" limit pin for the given direction.
@@ -140,7 +88,7 @@ void handle_motors() {
 		// Move to next buffer.
 		while (!underrun && current_fragment_pos >= settings[current_fragment].len) {
 			current_fragment_pos -= settings[current_fragment].len;
-			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
+			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_MOTOR;
 			if (last_fragment == new_current_fragment) {
 				// Underrun.
 				//debug("underrun for %d", last_fragment);
@@ -150,25 +98,18 @@ void handle_motors() {
 			}
 			else {
 				for (uint8_t m = 0; m < active_motors; ++m) {
-					Fragment &fragment = buffer[motor[m].buffer][new_current_fragment];
+					Fragment &fragment = motor[m].buffer[new_current_fragment];
 					motor[m].next_dir = fragment.dir;
 				}
 			}
-			/*
-			debug_add(debug_tmp);
-			arch_cli();
-			debug_value1 -= debug_tmp;
-			arch_sei();
-			*/
 			current_fragment = new_current_fragment;
 		}
 		if (!underrun) {
 			for (uint8_t m = 0; m < active_motors; ++m) {
-				Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+				Fragment &fragment = motor[m].buffer[current_fragment];
 				if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
 					continue;
 				motor[m].next_next_steps = fragment.samples[current_fragment_pos];
-				//debug("next next: %d %d", m, motor[m].next_next_steps);
 			}
 			current_fragment_pos += 1;
 		}
@@ -177,7 +118,7 @@ void handle_motors() {
 		move_phase = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].steps_current = 0;
-			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+			Fragment &fragment = motor[m].buffer[current_fragment];
 			if (homers == 0) {
 				if (fragment.dir != DIR_NONE && fragment.dir != DIR_AUDIO) {
 					motor[m].next_steps = motor[m].next_next_steps;

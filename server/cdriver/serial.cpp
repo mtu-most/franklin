@@ -139,7 +139,7 @@ void serial(uint8_t which)
 					if (out_busy && ((!ff_out) ^ (command[which][0] == CMD_ACK1 || command[which][0] == CMD_STALL1))) {	// Only if we expected it and it is the right type.
 						ff_out ^= 0x10;
 #ifdef DEBUG_FF
-						debug("new ff_out: %d", ff_out[which]);
+						debug("new ff_out: %d", ff_out);
 #endif
 						//debug("recv ack");
 						out_busy = false;
@@ -153,7 +153,7 @@ void serial(uint8_t which)
 							stop_pending = false;
 							arch_stop();
 						}
-						else if (!sending_fragment && free_fragments > 0 && !stopping && arch_running())
+						else if (!sending_fragment && !stopping && arch_running())
 							buffer_refill();
 					}
 					continue;
@@ -408,8 +408,10 @@ void prepare_packet(char *the_packet, int size)
 		for (uint8_t bit = 0; bit < 5; ++bit)
 		{
 			uint8_t check = 0;
-			for (uint8_t p = 0; p < 3; ++p)
+			for (uint8_t p = 0; p < 3; ++p) {
+				//debug("c %d %d %x %x %x", t, p, the_packet[3 * t + p], MASK[bit][p], the_packet[3 * t + p] & MASK[bit][p]);
 				check ^= the_packet[3 * t + p] & MASK[bit][p];
+			}
 			check ^= sum & MASK[bit][3];
 			check ^= check >> 4;
 			check ^= check >> 2;

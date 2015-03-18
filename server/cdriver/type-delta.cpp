@@ -167,6 +167,14 @@ static float unchange0(Space *s, int axis, float value) {
 	return value;
 }
 
+static float probe_speed(Space *s) {
+	float max_spu = 0;
+	for (int i = 0; i < s->num_motors; ++i)
+		if (max_spu < s->motor[i]->steps_per_unit)
+			max_spu = s->motor[i]->steps_per_unit;
+	return 1e6 / hwtime_step / max_spu;
+}
+
 void Delta_init(int num) {
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].reset_pos = reset_pos;
@@ -177,4 +185,5 @@ void Delta_init(int num) {
 	space_types[num].free = free;
 	space_types[num].change0 = change0;
 	space_types[num].unchange0 = unchange0;
+	space_types[num].probe_speed = probe_speed;
 }

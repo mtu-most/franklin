@@ -80,17 +80,17 @@ int main(void) {
 		// LED
 		if (led_pin < NUM_DIGITAL_PINS)
 			handle_led();	// heart beat.
+		handle_motors();
 		// ADC
 		handle_adc();
+		handle_motors();
 		// Serial
 		serial();
+		handle_motors();
 		// Send serial data, if any.
 		try_send_next();
 		// Motor precompute steps.
-		if (steps_prepared < 2 && !underrun) {
-			last_active = seconds();
-			handle_motors();
-		}
+		handle_motors();
 		uint16_t dt = (seconds() - last_active + 0x10000) & 0xffff;
 		if (enabled_pins > 0 && timeout_time > 0 && timeout_time <= dt) {
 			// Disable LED.

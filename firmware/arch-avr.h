@@ -60,7 +60,7 @@ static inline void debug(char const *fmt, ...);
 #define arch_cli cli
 #define arch_sei sei
 
-#define TIME_PER_ISR 200
+#define TIME_PER_ISR 30
 #define ARCH_PIN_DATA \
 	volatile uint8_t *avr_mode; \
 	volatile uint8_t *avr_output; \
@@ -74,6 +74,10 @@ inline void SET(uint8_t pin_no);
 inline void RESET(uint8_t pin_no);
 inline bool GET(uint8_t pin_no);
 
+#define ARCH_MOTOR \
+	volatile uint8_t step_port, step_bitmask, step_invert; \
+        volatile uint8_t dir_port, dir_bitmask;
+
 // Everything before this line is used at the start of firmware.h; everything after it at the end.
 #else
 EXTERN Pin_t pin[NUM_DIGITAL_PINS];
@@ -85,7 +89,7 @@ EXTERN Pin_t pin[NUM_DIGITAL_PINS];
 // Serial communication. {{{
 static inline void debug_add(int i);
 static inline void debug_dump();
-#define SERIAL_BUFFER_SIZE (COMMAND_BUFFER_SIZE + 10)
+#define SERIAL_BUFFER_SIZE (2 * COMMAND_BUFFER_SIZE + 10)
 EXTERN volatile bool serial_overflow;
 EXTERN volatile uint8_t which_serial;
 EXTERN volatile uint16_t serial_buffer_head;
@@ -464,6 +468,22 @@ static inline void arch_setup_end() {
 	debug("Startup.");
 }
 
+static inline void arch_msetup(uint8_t m) {
+	if (motor[m].step_pin < NUM_DIGITAL_PINS) {
+		motor[m].step_port = int(pin[motor[m].step_pin].avr_output) & 0xff;
+		motor[m].step_bitmask = pin[motor[m].step_pin].avr_bitmask;
+		motor[m].step_invert = (motor[m].flags & Motor::INVERT_STEP) ? 1 : 0;
+	}
+	else
+		motor[m].step_bitmask = 0;
+	if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
+		motor[m].dir_port = int(pin[motor[m].dir_pin].avr_output) & 0xff;
+		motor[m].dir_bitmask = pin[motor[m].dir_pin].avr_bitmask;
+	}
+	else
+		motor[m].dir_bitmask = 0;
+}
+
 static inline void set_speed(uint16_t count) {
 	stopped = (count == 0);
 	underrun = stopped;
@@ -507,8 +527,6 @@ static inline uint16_t seconds() {
 	return avr_seconds;
 }
 
-#define do_steps() ISR(TIMER1_COMPA_vect)
-
 #ifdef DEFINE_VARIABLES
 ISR(TIMER0_OVF_vect) {
 	uint32_t top = uint32_t(125) << 16;
@@ -519,6 +537,255 @@ ISR(TIMER0_OVF_vect) {
 		avr_seconds_h %= top;	// Wrap at the right number.
 		avr_seconds += 1;
 	}
+}
+
+EXTERN volatile bool lock = false;
+
+#define offsetof(type, field) (int(reinterpret_cast<volatile char *>(&reinterpret_cast<type *>(0)->field)))
+ISR(TIMER1_COMPA_vect, ISR_NAKED) {
+	asm volatile(
+		"\tpush 0\n"
+		"\tpush 1\n"
+		"\tpush 16\n"
+		"\tpush 17\n"
+		"\tpush 18\n"
+		"\tpush 19\n"
+		"\tpush 20\n"
+		"\tpush 26\n"
+		"\tpush 27\n"
+		"\tpush 28\n"
+		"\tpush 29\n"
+		"\tpush 30\n"
+		"\tpush 31\n"
+		"\tin 16, %[sreg]\n"
+		"\tpush 16\n"
+	//// Only move if the move was prepared.
+	//if (lock || !steps_prepared) {
+		//arch_sei();
+		//return;
+	//}
+		"\tlds 16, lock\n"
+		"\ttst 16\n"
+		"\tbreq isr_no_end\n"
+		"\trjmp isr_end_nolock\n"
+	"isr_no_end:\n"
+		"\tclr 27\n"
+		"\tlds 16, steps_prepared\n"
+		"\ttst 16\n"
+		"\tbrne isr_no_end2\n"
+		"\trjmp isr_end\n"
+	"isr_no_end2:\n"
+	//lock = true;
+		"\tsts lock, 16\n"
+	//move_phase += 1;
+		"\tlds 16, move_phase\n"
+		"\tinc 16\n"
+		"\tsts move_phase, 16\n"
+	//for (uint8_t m = 0; m < active_motors; ++m) {
+		"\tlds 16, active_motors\n"
+		"\ttst 16\n"
+		"\tbrne isr_no_end3\n"
+		"\trjmp isr_end\n"
+	"isr_no_end3:\n"
+		"\tlds 17, move_phase\n"
+	//// Enable interrupts, so the uart doesn't overrun.
+	//arch_sei();
+		"\tsei\n"
+		::
+			[sreg] "I" (0x3f)
+		);
+
+	asm volatile(
+		"\tmovw 30, 28\n"
+	"isr_action_loop:\n"
+		//if (motor[m].dir != DIR_POSITIVE && motor[m].dir != DIR_NEGATIVE)
+			//continue;
+		//if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
+		"\tldd 20, y + %[dir]\n"
+		"\tldd 26, y + %[dir_port]\n"
+		"\tldd 18, y + %[dir_bitmask]\n"
+			//if (motor[m].dir == DIR_POSITIVE)
+				//SET(motor[m].dir_pin);
+		"\tld 19, x\n"			// 19=current port value
+		"\tcpi 20, 1\n"			// if dir == 1
+		"\tbrcc isr_no_positive\n"
+		"\tor 19, 18\n"			// 19|=bitmask
+		"\trjmp isr_dir_done\n"
+	"isr_no_positive:\n"			// else
+		"\tbreq isr_no_continue\n"	// TODO: audio.
+		"\trjmp isr_action_continue\n"
+	"isr_no_continue:\n"
+			//else
+				//RESET(motor[m].dir_pin);
+		//}
+		"\tcom 18\n"
+		"\tand 19, 18\n"
+	"isr_dir_done:\n"
+		"\tst x, 19\n"
+		//uint8_t steps_target = uint32_t(motor[m].next_steps) * move_phase / full_phase - motor[m].steps_current;
+		"\tldd 18, y + %[next_steps]\n"
+		"\tmul 18, 17\n"
+		"\tlds 18, full_phase_bits\n"
+		"\ttst 18\n"
+		"\trjmp isr_shift_first\n"
+	"isr_shift:\n"
+		"\tlsr 1\n"
+		"\tror 0\n"
+		"\tdec 18\n"
+	"isr_shift_first:\n"
+		"\tbrne isr_shift\n"
+		"\tldd 18, y + %[steps_current]\n"
+		"\tstd y + %[steps_current], 0\n" //motor[m].steps_current += steps_target;
+		"\tsub 0, 18\n"
+		//if (steps_target == 0)
+			//continue;
+		"\tbreq isr_action_continue\n"
+		//motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
+		"\tldd 18, y + %[current_pos]\n"
+		"\tcpi 20, 1\n"
+		"\tbrne isr_no_positive_add\n"
+		"\tadd 18, 0\n"
+		"\tstd y + %[current_pos], 18\n"
+		"\tbrcc isr_add_end\n"
+		"\tldd 18, y + %[current_pos] + 1\n"
+		"\tinc 18\n"
+		"\tstd y + %[current_pos] + 1, 18\n"
+		"\tbrne isr_add_end\n"
+		"\tldd 18, y + %[current_pos] + 2\n"
+		"\tinc 18\n"
+		"\tstd y + %[current_pos] + 2, 18\n"
+		"\tbrne isr_add_end\n"
+		"\tldd 18, y + %[current_pos] + 3\n"
+		"\tinc 18\n"
+		"\tstd y + %[current_pos] + 3, 18\n"
+		"\trjmp isr_add_end\n"
+	"isr_no_positive_add:\n"
+		"\tsub 18, 0\n"
+		"\tstd y + %[current_pos], 18\n"
+		"\tbrcc isr_add_end\n"
+		"\tldd 18, y + %[current_pos] + 1\n"
+		"\tsubi 18, 1\n"
+		"\tstd y + %[current_pos] + 1, 18\n"
+		"\tbrcc isr_add_end\n"
+		"\tldd 18, y + %[current_pos] + 2\n"
+		"\tsubi 18, 1\n"
+		"\tstd y + %[current_pos] + 2, 18\n"
+		"\tbrcc isr_add_end\n"
+		"\tldd 18, y + %[current_pos] + 3\n"
+		"\tsubi 18, 1\n"
+		"\tstd y + %[current_pos] + 3, 18\n"
+	"isr_add_end:\n"
+		//if (motor[m].step_pin < NUM_DIGITAL_PINS)
+			//PULSE(motor[m].step_pin, steps_target, motor[m].flags & Motor::INVERT_STEP);
+		"\tldd 26, y + %[step_port]\n"
+		"\tldd 18, y + %[step_bitmask]\n"
+		"\tld 19, x\n"
+		"\tmov 20, 19\n"
+		"\tor 19, 18\n"
+		"\tcom 18\n"
+		"\tand 20, 18\n"
+		"\tldd 18, y + %[step_invert]\n"
+		"\ttst 18\n"
+		"\tbreq isr_pulse_start\n"
+		// Swap contents of 19 and 20.
+		"\teor 19, 20\n"
+		"\teor 20, 19\n"
+		"\teor 19, 20\n"
+	"isr_pulse_start:\n"
+		"\ttst 0\n"
+	"isr_pulse_loop:\n"
+		"\tbreq isr_pulse_end\n"
+		"\tst x, 19\n"
+		"\tldi 18, 10\n"
+	"isr_wait0:\n"
+		"\tdec 18\n"
+		"\tbrne isr_wait0\n"
+		"\tst x, 20\n"
+		"\tldi 18, 10\n"
+	"isr_wait1:\n"
+		"\tdec 18\n"
+		"\tbrne isr_wait1\n"
+		"\tdec 0\n"
+		"\trjmp isr_pulse_loop\n"
+	"isr_pulse_end:\n"
+	"isr_action_continue:\n"
+		"\tldi 18, %[motorsize_l]\n"
+		"\tadd 28, 18\n"
+		"\tldi 18, %[motorsize_h]\n"
+		"\tadc 28, 18\n"
+		"\tdec 16\n"
+		"\tbreq isr_no_loop\n"
+		"\trjmp isr_action_loop\n"
+	"isr_no_loop:\n"
+	//}
+	//if (move_phase >= full_phase) {
+		"\tlds 18, full_phase\n"
+		"\tcp 17, 18\n"
+		"\tbrcs isr_end\n"
+		//move_phase = 0;
+		"\tsts move_phase, 27\n"
+		//for (uint8_t m = 0; m < active_motors; ++m) {
+		"\tcli\n"
+		"\tlds 16, active_motors\n"
+	"isr_next_loop:\n"
+			//motor[m].steps_current = 0;
+		"\tstd z + %[steps_current], 27\n"
+			//motor[m].next_steps = motor[m].next_next_steps;
+		"\tldd 17, z + %[next_next_steps]\n"
+		"\tstd z + %[next_steps], 17\n"
+			//motor[m].dir = motor[m].next_dir;
+		"\tldd 17, z + %[next_dir]\n"
+		"\tstd z + %[dir], 17\n"
+		//}
+	"isr_next_continue:\n"
+		"\tldi 18, %[motorsize_l]\n"
+		"\tadd 28, 18\n"
+		"\tldi 18, %[motorsize_h]\n"
+		"\tadc 28, 18\n"
+		"\tdec 16\n"
+		"\tbrne isr_next_loop\n"
+		//steps_prepared -= 1;
+		"\tlds 16, steps_prepared\n"
+		"\tdec 16\n"
+		"\tsts steps_prepared, 16\n"
+	"isr_end:\n"
+		//lock = false;
+		"\tsts lock, 27\n"
+	"isr_end_nolock:\n"
+		"\tpop 16\n"
+		"\tout %[sreg], 16\n"
+		"\tpop 31\n"
+		"\tpop 30\n"
+		"\tpop 29\n"
+		"\tpop 28\n"
+		"\tpop 27\n"
+		"\tpop 26\n"
+		"\tpop 20\n"
+		"\tpop 19\n"
+		"\tpop 18\n"
+		"\tpop 17\n"
+		"\tpop 16\n"
+		"\tpop 1\n"
+		"\tpop 0\n"
+		"\treti\n"
+		::
+			[num_pins] "M" (NUM_DIGITAL_PINS),
+			[sreg] "I" (0x3f),
+			[current_pos] "I" (offsetof(Motor, current_pos)),
+			[step_port] "I" (offsetof(Motor, step_port)),
+			[step_bitmask] "I" (offsetof(Motor, step_bitmask)),
+			[step_invert] "I" (offsetof(Motor, step_invert)),
+			[dir_port] "I" (offsetof(Motor, dir_port)),
+			[dir_bitmask] "I" (offsetof(Motor, dir_bitmask)),
+			[next_steps] "I" (offsetof(Motor, next_steps)),
+			[next_next_steps] "I" (offsetof(Motor, next_next_steps)),
+			[steps_current] "I" (offsetof(Motor, steps_current)),
+			[dir] "I" (offsetof(Motor, dir)),
+			[next_dir] "I" (offsetof(Motor, next_dir)),
+			[motorsize_l] "M" (sizeof(Motor) & 0xff),
+			[motorsize_h] "M" (sizeof(Motor) >> 8),
+			[motor] "y" (&motor)
+		);
 }
 #endif
 // }}}

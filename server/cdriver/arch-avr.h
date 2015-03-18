@@ -284,7 +284,6 @@ static inline void hwpacket(int len) {
 			cbs_after_current_move = 0;
 			avr_running = false;
 			//debug("free limit");
-			free_fragments = FRAGMENTS_PER_BUFFER - 2;
 		}
 		else {
 			avr_get_current_pos(2, false);
@@ -326,46 +325,43 @@ static inline void hwpacket(int len) {
 				arch_start_move(command[1][1]);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
-		//else if (stopped && !sending_fragment && (free_fragments + command[1][1]) % FRAGMENTS_PER_BUFFER == FRAGMENTS_PER_BUFFER - 2)
+		//else if (stopped && !sending_fragment && (running_fragment - current_fragment + FRAGMENTS_PER_BUFFER + command[1][1]) % FRAGMENTS_PER_BUFFER == FRAGMENTS_PER_BUFFER - 2)
 		//	avr_get_current_pos(3, true);
 		// Fall through.
 	}
 	case HWC_DONE:
 	{
-		//debug("done: %d %d %d %d", command[1][1], command[1][2], free_fragments, sending_fragment);
+		//debug("done: %d %d %d", command[1][1], command[1][2], sending_fragment);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			debug("Done received while fragments per buffer is zero");
 			avr_write_ack("invalid done");
 			return;
 		}
 		first_fragment = -1;
-		if (command[1][1] + command[1][2] != FRAGMENTS_PER_BUFFER - 2 - free_fragments - (sending_fragment ? 1 : 0)) {
-			debug("free fragments out of sync: %d %d %d %d %d", command[1][1] + command[1][2], FRAGMENTS_PER_BUFFER - 2 - free_fragments - (sending_fragment ? 1 : 0), FRAGMENTS_PER_BUFFER, free_fragments, sending_fragment);
+		/*if (command[1][1] + command[1][2] != FRAGMENTS_PER_BUFFER - (running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER) {
+			debug("free fragments out of sync: %d %d %d %d", command[1][1] + command[1][2], FRAGMENTS_PER_BUFFER - (running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER, FRAGMENTS_PER_BUFFER, sending_fragment);
 			abort();
-		}
+		}*/
 		int cbs = 0;
 		for (int i = 0; i < command[1][1]; ++i) {
 			int f = (running_fragment + i) % FRAGMENTS_PER_BUFFER;
-			//debug("fragment %d: cbs=%d free=%d current=%d", f, settings[f].cbs, free_fragments, current_fragment);
+			//debug("fragment %d: cbs=%d current=%d", f, settings[f].cbs, current_fragment);
 			cbs += settings[f].cbs;
 		}
 		if (cbs)
 			send_host(CMD_MOVECB, cbs);
-		free_fragments += command[1][1];
-		running_fragment = (running_fragment + command[1][1]) % FRAGMENTS_PER_BUFFER;
-		if (free_fragments == FRAGMENTS_PER_BUFFER - 2 && (command[1][0] & ~0x10) == HWC_DONE) {
-			debug("Done received, but should be underrun");
-			abort();
-		}
-		//debug("fragments free=%d current=%d", free_fragments, current_fragment);
-		if (free_fragments >= FRAGMENTS_PER_BUFFER) {
-			debug("Done count %d higher than busy fragments %d; clipping", command[1][1], FRAGMENTS_PER_BUFFER - (free_fragments - command[1][1]) - 2);
-			free_fragments = FRAGMENTS_PER_BUFFER - 2;
+		if ((running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER < command[1][1]) {
+			debug("Done count %d higher than busy fragments; clipping", command[1][1]);
 			avr_write_ack("invalid done");
 			abort();
 		}
 		else
 			avr_write_ack("done");
+		running_fragment = (running_fragment + command[1][1]) % FRAGMENTS_PER_BUFFER;
+		if (current_fragment == running_fragment && (command[1][0] & ~0x10) == HWC_DONE) {
+			debug("Done received, but should be underrun");
+			abort();
+		}
 		if (!out_busy)
 			buffer_refill();
 		run_file_fill_queue();
@@ -757,9 +753,9 @@ static inline void arch_start_move(int extra) {
 		start_pending = true;
 		return;
 	}
-	if (avr_running || stopping || avr_homing || free_fragments >= FRAGMENTS_PER_BUFFER - 2 - (sending_fragment ? 1 : 0) - extra)
+	if (avr_running || stopping || avr_homing || (running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= extra + 2)
 		return;
-	//debug("start move %d %d %d", free_fragments, sending_fragment, extra);
+	//debug("start move %d %d", sending_fragment, extra);
 	avr_running = true;
 	avr_buffer[0] = HWC_START;
 	prepare_packet(avr_buffer, 1);

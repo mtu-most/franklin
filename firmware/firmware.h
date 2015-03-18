@@ -12,11 +12,8 @@
 #ifndef NUM_MOTORS
 #error "NUM_MOTORS must be defined in the Makefile"
 #endif
-#ifndef NUM_BUFFERS
-#error "NUM_BUFFERS must be defined in the Makefile"
-#endif
-#ifndef FRAGMENTS_PER_BUFFER
-#error "FRAGMENTS_PER_BUFFER must be defined in the Makefile"
+#ifndef FRAGMENTS_PER_MOTOR
+#error "FRAGMENTS_PER_MOTOR must be defined in the Makefile"
 #endif
 #ifndef BYTES_PER_FRAGMENT
 #error "BYTES_PER_FRAGMENT must be defined in the Makefile"
@@ -59,7 +56,7 @@ EXTERN uint8_t reply_ready, adcreply_ready;
 EXTERN bool timeout;
 EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE > 6 ? REPLY_BUFFER_SIZE : 6];
 EXTERN uint16_t pending_len;
-EXTERN volatile uint16_t move_phase, full_phase;
+EXTERN volatile uint16_t move_phase, full_phase, full_phase_bits;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
 EXTERN uint16_t led_last, led_phase, time_per_sample;
@@ -137,12 +134,12 @@ enum Command {
 	CMD_START,	// 0 start moving.
 	CMD_STOP,	// 0 stop moving.
 	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.
-	CMD_DISCARD,	// 1:num_buffers
+	CMD_DISCARD,	// 1:num_fragments
 	CMD_GETPIN,	// 1:pin
 
 	// to host
 		// responses to host requests; only one active at a time.
-	CMD_READY = 0x60,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:num_buffers, 1:fragments/buffer, 1:bytes/fragment
+	CMD_READY = 0x60,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:fragments/motor, 1:bytes/fragment
 	CMD_PONG,	// 1:code
 	CMD_HOMED,	// {4:motor_pos}*
 	CMD_PIN,	// 1:state
@@ -205,11 +202,17 @@ enum Dir {
 	DIR_NONE
 };
 
+struct Fragment {
+	Dir dir;
+	uint16_t num_samples;
+	uint8_t samples[BYTES_PER_FRAGMENT];
+};
+
 struct Motor
 {
 	volatile int32_t current_pos;
-	volatile uint8_t step_pin;
-	volatile uint8_t dir_pin;
+	uint8_t step_pin;
+	uint8_t dir_pin;
 	volatile uint8_t next_steps, next_next_steps;
 	volatile uint8_t steps_current;
 	volatile Dir dir, next_dir;
@@ -217,8 +220,9 @@ struct Motor
 	uint8_t limit_min_pin;
 	uint8_t limit_max_pin;
 	uint8_t sense_pin;
-	uint8_t buffer;
 	uint8_t flags;
+	ARCH_MOTOR
+	volatile Fragment buffer[FRAGMENTS_PER_MOTOR];
 	enum Flags {
 		LIMIT = 1,
 		SENSE0 = 2,
@@ -228,8 +232,7 @@ struct Motor
 		INVERT_STEP = 32,
 		SENSE_STATE = 64
 	};
-	void init(uint8_t b) {
-		buffer = b;
+	void init() {
 		current_pos = 0;
 		sense_pos[0] = 0xBEEFBEEF;
 		sense_pos[1] = 0xFACEFACE;
@@ -238,6 +241,8 @@ struct Motor
 		next_next_steps = 0;
 		steps_current = 0;
 		dir = DIR_NONE;
+		step_bitmask = 0;
+		dir_bitmask = 0;
 		next_dir = DIR_NONE;
 	}
 	void disable() {
@@ -259,21 +264,12 @@ EXTERN bool stopping;	// True if LIMIT has been sent to host, but not yet acknow
 EXTERN uint32_t home_step_time;
 EXTERN uint8_t homers;
 
-struct Fragment {
-	Dir dir;
-	uint16_t num_samples;
-	uint8_t samples[BYTES_PER_FRAGMENT];
-};
-
 struct Settings {
 	bool probing;
 	uint8_t len;
 };
 
-typedef Fragment Buffer[FRAGMENTS_PER_BUFFER];
-
-EXTERN Buffer buffer[NUM_BUFFERS];
-EXTERN Settings settings[FRAGMENTS_PER_BUFFER];
+EXTERN Settings settings[FRAGMENTS_PER_MOTOR];
 EXTERN uint8_t notified_current_fragment;
 EXTERN uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
 EXTERN uint8_t last_fragment;	// Fragment that is currently being filled.

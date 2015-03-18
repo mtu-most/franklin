@@ -32,7 +32,6 @@ void setup(char const *port, char const *run_id)
 	temps_busy = 0;
 	requested_temp = ~0;
 	last_active = millis();
-	free_fragments = 0;
 	refilling = false;
 	running_fragment = 0;
 	current_fragment = running_fragment;
@@ -93,7 +92,6 @@ void setup(char const *port, char const *run_id)
 		settings[f].queue_end = 0;
 		settings[f].queue_full = false;
 	}
-	free_fragments = FRAGMENTS_PER_BUFFER - 2;
 	// Update current position.
 	first_fragment = current_fragment;
 	arch_stop();

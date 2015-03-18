@@ -220,10 +220,11 @@ uint8_t next_move() {
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
+			float max_mm = probing ? space_types[sp.type].probe_speed(&sp) : sp.axis[a]->max_v;
 			if (!isnan(sp.axis[a]->max_v)) {
 				float max;
 				if (sp.axis[a]->settings[current_fragment].dist != 0) {
-					max = sp.axis[a]->max_v / fabs(sp.axis[a]->settings[current_fragment].dist);
+					max = max_mm / fabs(sp.axis[a]->settings[current_fragment].dist);
 					if (v0 > max) {
 						v0 = max;
 						//debug("limited v0 to %f for max v %f dist %f so %f", v0, sp.axis[a].max_v, sp.axis[a].dist, max);
@@ -232,7 +233,7 @@ uint8_t next_move() {
 						vp = max;
 				}
 				if (sp.axis[a]->settings[current_fragment].next_dist != 0) {
-					max = sp.axis[a]->max_v / fabs(sp.axis[a]->settings[current_fragment].next_dist);
+					max = max_mm / fabs(sp.axis[a]->settings[current_fragment].next_dist);
 					if (vq > max)
 						vq = max;
 				}
@@ -389,14 +390,12 @@ uint8_t next_move() {
 
 void abort_move(int pos) { // {{{
 	aborting = true;
-	//debug("abort; cf %d ff %d first %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, free_fragments, first_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments - 3, pos);
+	//debug("abort; cf %d rf %d first %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, running_fragment, first_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments - 3, pos);
 	//debug("try aborting move");
 	int prev_f = (running_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	//debug("prev = %d", prev_f);
 	if (!stopped && pos < 0 && first_fragment != running_fragment) {
 		running_fragment = prev_f;
-		free_fragments += 1;
-		//debug("free abort +1 %d", free_fragments);
 		pos += settings[running_fragment].fragment_length;
 		prev_f = (running_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	}
@@ -409,7 +408,6 @@ void abort_move(int pos) { // {{{
 	debug("move no longer prepared");
 #endif
 	//debug("free abort reset");
-	free_fragments = FRAGMENTS_PER_BUFFER - 2;
 	current_fragment_pos = 0;
 	moving = true;
 	//debug("restoring position for fragment %d to position %d", current_fragment, pos);

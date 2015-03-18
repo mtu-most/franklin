@@ -510,7 +510,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 				continue;
 			}
 			float target = mtr.settings[current_fragment].current_pos / mtr.steps_per_unit + mtr.settings[current_fragment].target_dist * factor;
-			movedebug("ccp3 %d %d stopping %d curpos %d target %f lastv %f spm %f tdist %f factor %f frag %d", s, m, stopping, mtr.settings[current_fragment].current_pos, target, mtr.settings[current_fragment].last_v, mtr.steps_per_unit, mtr.settings[current_fragment].target_dist, factor, current_fragment);
+			cpdebug(s, m, "ccp3 stopping %d target %f lastv %f spm %f tdist %f factor %f frag %d", stopping, target, mtr.settings[current_fragment].last_v, mtr.steps_per_unit, mtr.settings[current_fragment].target_dist, factor, current_fragment);
 			//if (fabs(mtr.settings[current_fragment].target_dist * factor) > .01)	// XXX: This shouldn't ever happen on my printer, but shouldn't be a limitation.
 				//abort();
 			int new_cp = target * mtr.steps_per_unit + (target > 0 ? .49 : -.49);
@@ -708,15 +708,13 @@ void send_fragment() {
 		debug("sending fragment for 0 motors at position %d", current_fragment_pos);
 		//abort();
 	}
-	//debug("sending %d free %d prevcbs %d", current_fragment, free_fragments, settings[(current_fragment - 1) % FRAGMENTS_PER_BUFFER].cbs);
+	//debug("sending %d prevcbs %d", current_fragment, settings[(current_fragment - 1) % FRAGMENTS_PER_BUFFER].cbs);
 	settings[current_fragment].fragment_length = current_fragment_pos;
-	free_fragments -= 1;
-	//debug("free -1 %d", free_fragments);
 	current_fragment_pos = -1;
 	int f = current_fragment;
 	set_current_fragment((current_fragment + 1) % FRAGMENTS_PER_BUFFER, true);
 	arch_send_fragment(f);
-	if (free_fragments <= max(0, FRAGMENTS_PER_BUFFER - MIN_BUFFER_FILL) && !stopping)
+	if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping)
 		arch_start_move(0);
 }
 
@@ -769,8 +767,8 @@ void buffer_refill() {
 	}
 	refilling = true;
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
-	//debug("refill start");
-	while (moving && !stopping && free_fragments > 1 && !sending_fragment) {
+	//debug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
+	while (moving && !stopping && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 3 && !sending_fragment) {
 		//debug("refill %d %d %d", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings[current_fragment].current_pos);
 		// fill fragment until full or dirchange.
 		bool checking = true;
@@ -789,7 +787,7 @@ void buffer_refill() {
 				if ((mtr.settings[current_fragment].dir < 0 && mtr.settings[current_fragment].current_pos > mtr.settings[current_fragment].hwcurrent_pos) || (mtr.settings[current_fragment].dir > 0 && mtr.settings[current_fragment].current_pos < mtr.settings[current_fragment].hwcurrent_pos)) {
 					//debug("dir change %d %d", s, m);
 					send_fragment();
-					if (free_fragments <= 1 || stopping) {
+					if ((running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= 3 || stopping) {
 						refilling = false;
 						return;
 					}
@@ -821,7 +819,6 @@ void buffer_refill() {
 		//debug("finalize");
 		send_fragment();
 	}
-	//debug("free %d/%d", free_fragments, FRAGMENTS_PER_BUFFER);
 	arch_start_move(0);
 }
 // }}}

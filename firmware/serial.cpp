@@ -1,8 +1,10 @@
 #include "firmware.h"
+// vim: set foldmethod=marker :
 
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
+// Protocol explanation.  {{{
 // Commands which can be sent:
 // Packet: n*4 bytes, of which n*3 bytes are data.
 // Ack: 1 byte.
@@ -16,7 +18,9 @@
 // Codes (low nybble is data): 80 (e1 d2) b3 b4 (d5 e6) 87 (f8) 99 aa (cb cc) ad 9e (ff)
 // Codes which have duplicates in printer id codes are not used.
 // These are defined in firmware.h.
+// }}}
 
+// Static variables. {{{
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
 static bool had_stall = true;
@@ -30,8 +34,9 @@ static const uint8_t MASK[5][4] = {
 	{0x95, 0x6c, 0xd5, 0x43},
 	{0x4b, 0xdc, 0xe2, 0x83}
 };
+// }}}
 
-static inline uint16_t fullpacketlen() {
+static inline uint16_t fullpacketlen() { // {{{
 	if ((command[0] & ~0x10) == CMD_BEGIN) {
 		return command[1];
 	}
@@ -47,10 +52,10 @@ static inline uint16_t fullpacketlen() {
 	else
 		return minpacketlen();
 }
+// }}}
 
 // There may be serial data available.
-void serial()
-{
+void serial() { // {{{
 	uint16_t milliseconds = millis();
 	if (!had_data && command_end > 0 && milliseconds - last_millis >= 2000)
 	{
@@ -185,6 +190,7 @@ void serial()
 	}
 	command_end = 0;
 	watchdog_reset();
+	handle_motors();
 	// Check packet integrity.
 	// Checksum must be good.
 	for (uint16_t t = 0; t < (fulllen + 2) / 3; ++t)
@@ -215,7 +221,7 @@ void serial()
 			check ^= check >> 1;
 			if (check & 1)
 			{
-				debug("incorrect checksum %d %d %d %x %x %d %d %x", fulllen, t, bit, command[0], command[fulllen - 1], command[fulllen + t], serial_buffer_tail, sum);
+				debug("incorrect checksum %d %d %x %x %x %x mask %x %x %x %x", t, bit, command[3 * t], command[3 * t + 1], command[3 * t + 2], command[fulllen + t], MASK[bit][0], MASK[bit][1], MASK[bit][2], MASK[bit][3]);
 				debug_dump();
 				// Fake a serial overflow.
 				command_end = 1;
@@ -256,20 +262,12 @@ void serial()
 #endif
 	// Clear flag for easier parsing.
 	command[0] &= ~0x10;
+	handle_motors();
 	packet();
 }
+// }}}
 
-// Command sending method:
-// When sending a command:
-// - fill appropriate command buffer
-// - set flag to signal data is ready
-//
-// When ACK is received:
-//
-// When NACK is received:
-// - call send_packet to resend the last packet
-
-// Set checksum bytes.
+// Set checksum bytes. {{{
 static void prepare_packet(uint16_t len)
 {
 #ifdef DEBUG_SERIAL
@@ -319,8 +317,9 @@ static void prepare_packet(uint16_t len)
 	}
 	pending_len = len + (len + 2) / 3;
 }
+// }}}
 
-// Send packet to host.
+// Send packet to host. {{{
 void send_packet()
 {
 #ifdef DEBUG_SERIAL
@@ -331,23 +330,22 @@ void send_packet()
 		serial_write(pending_packet[t]);
 	out_time = millis();
 }
+// }}}
 
-// Call send_packet if we can.
-void try_send_next()
-{
+// Call send_packet if we can. {{{
+void try_send_next() {
 #ifdef DEBUG_SERIAL
-	//debug("try send");
+	debug("try send");
 #endif
-	if (out_busy)
-	{
+	if (out_busy) { // {{{
 #ifdef DEBUG_SERIAL
-		//debug("still busy");
+		debug("still busy");
 #endif
 		// Still busy sending other packet.
 		return;
-	}
+	} // }}}
 	for (uint8_t m = 0; m < active_motors; ++m) {
-		if (motor[m].flags & (Motor::SENSE0 | Motor::SENSE1)) {
+		if (motor[m].flags & (Motor::SENSE0 | Motor::SENSE1)) { // {{{
 #ifdef DEBUG_SERIAL
 			debug("sense %d", m);
 #endif
@@ -360,10 +358,10 @@ void try_send_next()
 			prepare_packet(2 + 4 * active_motors);
 			send_packet();
 			return;
-		}
+		} // }}}
 	}
 	for (uint8_t m = 0; m < active_motors; ++m) {
-		if (motor[m].flags & Motor::LIMIT) {
+		if (motor[m].flags & Motor::LIMIT) { // {{{
 #ifdef DEBUG_SERIAL
 			debug("limit %d", m);
 #endif
@@ -375,27 +373,29 @@ void try_send_next()
 			prepare_packet(3 + 4 * active_motors);
 			send_packet();
 			return;
-		}
+		} // }}}
 	}
-	if (timeout) {
+	if (timeout) { // {{{
 		pending_packet[0] = CMD_TIMEOUT;
 		timeout = false;
 		prepare_packet(1);
 		send_packet();
 		return;
-	}
-	if (notified_current_fragment != current_fragment && (!underrun || stopped)) {
+	} // }}}
+	if (notified_current_fragment != current_fragment && (!underrun || stopped)) { // {{{
 		if (underrun) {
 			pending_packet[0] = CMD_UNDERRUN;
 			//debug_dump();
 		}
 		else
 			pending_packet[0] = CMD_DONE;
-		uint8_t num = (current_fragment - notified_current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		arch_cli();
+		uint8_t num = (current_fragment - notified_current_fragment + FRAGMENTS_PER_MOTOR) % FRAGMENTS_PER_MOTOR;
+		//debug("done %ld %d %d %d", &motor[0].current_pos, current_fragment, notified_current_fragment, last_fragment);
+		arch_sei();
 		pending_packet[1] = num;
-		//debug("done %d %d %d", current_fragment, notified_current_fragment, last_fragment);
-		notified_current_fragment = (notified_current_fragment + num) % FRAGMENTS_PER_BUFFER;
-		pending_packet[2] = (last_fragment - notified_current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		notified_current_fragment = (notified_current_fragment + num) % FRAGMENTS_PER_MOTOR;
+		pending_packet[2] = (last_fragment - notified_current_fragment + FRAGMENTS_PER_MOTOR) % FRAGMENTS_PER_MOTOR;
 		if (underrun) {
 			arch_write_current_pos(3);
 			prepare_packet(3 + 4 * active_motors);
@@ -404,9 +404,8 @@ void try_send_next()
 			prepare_packet(3);
 		send_packet();
 		return;
-	}
-	if (reply_ready)
-	{
+	} // }}}
+	if (reply_ready) { // {{{
 #ifdef DEBUG_SERIAL
 		debug("reply %x %d", reply[1], reply[0]);
 #endif
@@ -416,18 +415,16 @@ void try_send_next()
 		reply_ready = 0;
 		send_packet();
 		return;
-	}
-	if (home_step_time > 0 && homers == 0 && stopped)
-	{
+	} // }}}
+	if (home_step_time > 0 && homers == 0 && stopped) { // {{{
 		pending_packet[0] = CMD_HOMED;
 		arch_write_current_pos(1);
 		home_step_time = 0;
 		prepare_packet(1 + 4 * active_motors);
 		send_packet();
 		return;
-	}
-	if (ping != 0)
-	{
+	} // }}}
+	if (ping != 0) { // {{{
 #ifdef DEBUG_SERIAL
 		debug("pong %d", ping);
 #endif
@@ -443,9 +440,9 @@ void try_send_next()
 				return;
 			}
 		}
-	}
-	if (adcreply_ready) // This is pretty much always true, so make it the least important (nothing below this will ever be sent).
-	{
+	} // }}}
+	// This is pretty much always true, so make it the least important (nothing below this will ever be sent).
+	if (adcreply_ready) { // {{{
 #ifdef DEBUG_SERIAL
 		debug("adcreply %x %d", adcreply[1], adcreply[0]);
 #endif
@@ -455,9 +452,11 @@ void try_send_next()
 		adcreply_ready = 0;
 		send_packet();
 		return;
-	}
+	} // }}}
 }
+// }}}
 
+// Respond with proper ff. {{{
 void write_ack()
 {
 	//debug("acking");
@@ -471,3 +470,4 @@ void write_stall()
 	had_stall = true;
 	serial_write(ff_in ? CMD_STALL0 : CMD_STALL1);
 }
+// }}}

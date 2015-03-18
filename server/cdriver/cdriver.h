@@ -244,6 +244,7 @@ struct SpaceType
 	void (*afree)(Space *s, int a);
 	float (*change0)(Space *s, int axis, float value);
 	float (*unchange0)(Space *s, int axis, float value);
+	float (*probe_speed)(Space *s);
 };
 
 struct Space
@@ -388,7 +389,6 @@ EXTERN bool refilling;
 EXTERN int current_fragment, running_fragment;
 EXTERN int current_fragment_pos;
 EXTERN int hwtime_step;
-EXTERN int free_fragments;
 EXTERN struct pollfd pollfds[3];
 
 #if DEBUG_BUFFER_LENGTH > 0

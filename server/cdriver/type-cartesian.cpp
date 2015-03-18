@@ -51,6 +51,14 @@ static float unchange0(Space *s, int axis, float value) {
 	return value;
 }
 
+static float probe_speed(Space *s) {
+	float max_spu = 0;
+	for (int i = 0; i < s->num_motors; ++i)
+		if (max_spu < s->motor[i]->steps_per_unit)
+			max_spu = s->motor[i]->steps_per_unit;
+	return 1e6 / hwtime_step / max_spu;
+}
+
 void Cartesian_init(int num) {
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].reset_pos = reset_pos;
@@ -62,6 +70,7 @@ void Cartesian_init(int num) {
 	space_types[num].afree = afree;
 	space_types[num].change0 = change0;
 	space_types[num].unchange0 = unchange0;
+	space_types[num].probe_speed = probe_speed;
 }
 
 struct ExtruderData {
@@ -166,4 +175,5 @@ void Extruder_init(int num) {
 	space_types[num].afree = eafree;
 	space_types[num].change0 = echange0;
 	space_types[num].unchange0 = eunchange0;
+	space_types[num].probe_speed = probe_speed;
 }

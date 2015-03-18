@@ -25,7 +25,7 @@ void packet()
 		reply[7] = NUM_ANALOG_INPUTS;
 		reply[8] = NUM_MOTORS;
 		reply[9] = NUM_BUFFERS;
-		reply[10] = FRAGMENTS_PER_BUFFER;
+		reply[10] = FRAGMENTS_PER_MOTOR;
 		reply[11] = BYTES_PER_FRAGMENT;
 		reply_ready = 12;
 		return;
@@ -81,10 +81,11 @@ void packet()
 		if (probe_pin < NUM_DIGITAL_PINS)
 			SET_INPUT(probe_pin);
 		timeout_time = *reinterpret_cast <uint16_t *>(&command[9]);
-		if (time_per_sample < TIME_PER_ISR)
-			full_phase = 1;
-		else
-			full_phase = time_per_sample / TIME_PER_ISR;
+		full_phase_bits = 0;
+		while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << full_phase_bits)
+			full_phase_bits += 1;
+		full_phase_bits -= 1;
+		full_phase = 1 << full_phase_bits;
 		write_ack();
 		return;
 	}
@@ -143,6 +144,7 @@ void packet()
 		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX | Motor::INVERT_STEP;
 		motor[m].flags &= ~mask;
 		motor[m].flags |= command[7] & mask;
+		arch_msetup(m);
 		if (step != motor[m].step_pin || (flags & Motor::INVERT_STEP) != (motor[m].flags & Motor::INVERT_STEP)) {
 			if (step < NUM_DIGITAL_PINS)
 				UNSET(step);
@@ -229,7 +231,7 @@ void packet()
 			return;
 		}
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+			Fragment &fragment = motor[m].buffer[current_fragment];
 			switch (command[5 + m]) {
 			case 0:
 				fragment.dir = DIR_POSITIVE;
@@ -285,10 +287,10 @@ void packet()
 		current_len = command[1];
 		filling = command[2];
 		for (uint8_t m = 0; m < active_motors; ++m)
-			buffer[motor[m].buffer][last_fragment].dir = DIR_NONE;
+			motor[m].buffer[last_fragment].dir = DIR_NONE;
 		settings[last_fragment].probing = command[0] == CMD_START_PROBE;
 		if (filling == 0)
-			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
+			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_MOTOR;
 		//debug("new filling: %d %d", filling, last_fragment);
 		write_ack();
 		return;
@@ -313,13 +315,13 @@ void packet()
 			write_stall();
 			return;
 		}
-		Fragment &fragment = buffer[command[1]][last_fragment];
+		Fragment &fragment = motor[command[1]].buffer[last_fragment];
 		fragment.dir = Dir(command[2]);
 		for (uint8_t b = 0; b < current_len; ++b)
 			fragment.samples[b] = command[3 + b];
 		filling -= 1;
 		if (filling == 0)
-			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_BUFFER;
+			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_MOTOR;
 		write_ack();
 		return;
 	}
@@ -345,7 +347,7 @@ void packet()
 		}
 		current_fragment_pos = 0;
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			Fragment &fragment = buffer[motor[m].buffer][current_fragment];
+			Fragment &fragment = motor[m].buffer[current_fragment];
 			motor[m].dir = fragment.dir;
 			motor[m].next_dir = fragment.dir;
 		}
@@ -411,12 +413,12 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_DISCARD");
 #endif
-		if (command[1] >= (last_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER) {
+		if (command[1] >= (last_fragment - current_fragment + FRAGMENTS_PER_MOTOR) % FRAGMENTS_PER_MOTOR) {
 			debug("discarding more than entire buffer");
 			write_stall();
 			return;
 		}
-		last_fragment = (last_fragment - command[1] + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		last_fragment = (last_fragment - command[1] + FRAGMENTS_PER_MOTOR) % FRAGMENTS_PER_MOTOR;
 		filling = 0;
 		write_ack();
 		return;
