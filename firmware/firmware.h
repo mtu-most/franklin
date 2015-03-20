@@ -45,7 +45,7 @@ template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 
 EXTERN volatile uint16_t debug_value, debug_value1;
 EXTERN uint8_t printerid[ID_SIZE];
-EXTERN uint8_t command[COMMAND_BUFFER_SIZE];
+EXTERN int8_t command[COMMAND_BUFFER_SIZE];
 EXTERN uint16_t command_end;
 EXTERN bool had_data;
 EXTERN uint8_t reply[REPLY_BUFFER_SIZE], adcreply[6];
@@ -202,64 +202,47 @@ enum Dir {
 	DIR_NONE
 };
 
-struct Fragment {
-	Dir dir;
-	uint16_t num_samples;
-	uint8_t samples[BYTES_PER_FRAGMENT];
-};
-
 struct Motor
 {
 	volatile int32_t current_pos;
 	uint8_t step_pin;
 	uint8_t dir_pin;
-	volatile uint8_t next_steps, next_next_steps;
 	volatile uint8_t steps_current;
-	volatile Dir dir, next_dir;
 	int32_t sense_pos[2];
 	uint8_t limit_min_pin;
 	uint8_t limit_max_pin;
 	uint8_t sense_pin;
-	uint8_t flags;
+	volatile uint8_t flags;
 	ARCH_MOTOR
-	volatile Fragment buffer[FRAGMENTS_PER_MOTOR];
 	enum Flags {
-		LIMIT = 1,
-		SENSE0 = 2,
-		SENSE1 = 4,
-		INVERT_LIMIT_MIN = 8,
-		INVERT_LIMIT_MAX = 16,
-		INVERT_STEP = 32,
-		SENSE_STATE = 64
+		LIMIT			= 0x01,
+		SENSE0			= 0x02,
+		SENSE1			= 0x04,
+		INVERT_LIMIT_MIN	= 0x08,
+		INVERT_LIMIT_MAX	= 0x10,
+		INVERT_STEP		= 0x20,
+		SENSE_STATE		= 0x40,
+		ACTIVE_BIT = 7,
+		ACTIVE			= 1 << ACTIVE_BIT
 	};
 	void init() {
 		current_pos = 0;
 		sense_pos[0] = 0xBEEFBEEF;
 		sense_pos[1] = 0xFACEFACE;
 		flags = 0;
-		next_steps = 0;
-		next_next_steps = 0;
 		steps_current = 0;
-		dir = DIR_NONE;
 		step_bitmask = 0;
 		dir_bitmask = 0;
-		next_dir = DIR_NONE;
 	}
 	void disable() {
 		current_pos = 0;
-		dir = DIR_NONE;
-		next_dir = DIR_NONE;
-		next_steps = 0;
-		next_next_steps = 0;
 		steps_current = 0;
 	}
 };
 
+EXTERN volatile int8_t buffer[FRAGMENTS_PER_MOTOR][NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN Motor motor[NUM_MOTORS];
 EXTERN volatile uint8_t active_motors;
-EXTERN volatile uint8_t steps_prepared;	// Number of steps waiting to be sent (0, 1 or 2).
-EXTERN volatile bool stopped;	// True if motors are not moving.
-EXTERN volatile bool underrun;	// True if next fragment was not present.
 EXTERN bool stopping;	// True if LIMIT has been sent to host, but not yet acknowledged.
 EXTERN uint32_t home_step_time;
 EXTERN uint8_t homers;
@@ -271,11 +254,14 @@ struct Settings {
 
 EXTERN Settings settings[FRAGMENTS_PER_MOTOR];
 EXTERN uint8_t notified_current_fragment;
-EXTERN uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
-EXTERN uint8_t last_fragment;	// Fragment that is currently being filled.
+EXTERN volatile uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
+EXTERN volatile uint8_t current_sample;		// The sample in the current fragment that is active.
+EXTERN volatile uint8_t current_len;		// Copy of settings[current_fragment].len, for easy access from asm.
+EXTERN volatile uint8_t step_state;		// 0: Waiting for limit switch check; 1: Waiting for step; 2: free running.
+EXTERN volatile int8_t (*current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
+EXTERN volatile uint8_t last_fragment;	// Fragment that is currently being filled.
 EXTERN uint8_t limit_fragment_pos;
-EXTERN uint16_t current_fragment_pos;
-EXTERN uint8_t current_len;	// copy of settings[current_fragment].len, for when current_fragment changes during a fill.
+EXTERN uint8_t last_len;	// copy of settings[last_fragment].len, for when current_fragment changes during a fill.
 
 struct Adc {
 	uint8_t linked[2];

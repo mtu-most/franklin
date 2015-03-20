@@ -220,7 +220,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_HOME");
 #endif
-		if (!stopped || stopping) {
+		if (current_len > 0 || stopping) {
 			debug("HOME seen while moving");
 			write_stall();
 			return;
@@ -231,33 +231,32 @@ void packet()
 			return;
 		}
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			Fragment &fragment = motor[m].buffer[current_fragment];
-			switch (command[5 + m]) {
-			case 0:
-				fragment.dir = DIR_POSITIVE;
-				break;
-			case 1:
-				fragment.dir = DIR_NEGATIVE;
-				break;
-			case 3:
-				fragment.dir = DIR_NONE;
-				break;
-			default:
+			if (command[5 + m] == 1 || int8_t(command[5 + m]) == -1) {
+				// Fill both sample 0 and 1, because the interrupt handler may change current_sample at any time.
+				buffer[current_fragment][m][0] = command[5 + m];
+				buffer[current_fragment][m][1] = command[5 + m];
+				homers += 1;
+				motor[m].flags |= Motor::ACTIVE;
+			}
+			else if (command[5 + m] == 0) {
+				buffer[current_fragment][m][0] = 0x80;
+				motor[m].flags &= ~Motor::ACTIVE;
+			}
+			else {
 				debug("invalid dir in HOME: %d", command[5 + m]);
 				homers = 0;
 				write_stall();
 				return;
 			}
-			if (fragment.dir == DIR_POSITIVE || fragment.dir == DIR_NEGATIVE) {
-				motor[m].next_steps = 1;
-				motor[m].next_next_steps = 1;
-				motor[m].dir = fragment.dir;
-				motor[m].next_dir = fragment.dir;
-				homers += 1;
-			}
 		}
 		home_step_time = *reinterpret_cast <uint32_t *>(&command[1]);
 		if (homers > 0) {
+			// current_sample is always 0 while homing; set len to 2, so it doesn't go to the next fragment.
+			settings[last_fragment].len = 2;
+			current_len = settings[current_fragment].len;
+			settings[last_fragment].probing = false;
+			step_state = 0;
+			current_sample = 0;
 			set_speed(home_step_time);
 			write_ack();
 		}
@@ -284,10 +283,10 @@ void packet()
 			return;
 		}
 		settings[last_fragment].len = command[1];
-		current_len = command[1];
+		last_len = command[1];
 		filling = command[2];
 		for (uint8_t m = 0; m < active_motors; ++m)
-			motor[m].buffer[last_fragment].dir = DIR_NONE;
+			buffer[last_fragment][m][0] = 0x80;	// Sentinel indicating no data is available for this motor.
 		settings[last_fragment].probing = command[0] == CMD_START_PROBE;
 		if (filling == 0)
 			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_MOTOR;
@@ -315,10 +314,8 @@ void packet()
 			write_stall();
 			return;
 		}
-		Fragment &fragment = motor[command[1]].buffer[last_fragment];
-		fragment.dir = Dir(command[2]);
-		for (uint8_t b = 0; b < current_len; ++b)
-			fragment.samples[b] = command[3 + b];
+		for (uint8_t b = 0; b < last_len; ++b)
+			buffer[last_fragment][command[1]][b] = static_cast<int8_t>(command[2 + b]);
 		filling -= 1;
 		if (filling == 0)
 			last_fragment = (last_fragment + 1) % FRAGMENTS_PER_MOTOR;
@@ -335,7 +332,7 @@ void packet()
 			write_ack();
 			return;
 		}
-		if (!stopped) {
+		if (current_len > 0) {
 			debug("Received START while not stopped");
 			write_stall();
 			return;
@@ -345,12 +342,16 @@ void packet()
 			write_stall();
 			return;
 		}
-		current_fragment_pos = 0;
+		step_state = 0;
+		current_buffer = &buffer[current_fragment];
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			Fragment &fragment = motor[m].buffer[current_fragment];
-			motor[m].dir = fragment.dir;
-			motor[m].next_dir = fragment.dir;
+			if (buffer[current_fragment][m][0] != int8_t(0x80))
+				motor[m].flags |= Motor::ACTIVE;
+			else
+				motor[m].flags &= ~Motor::ACTIVE;
 		}
+		current_sample = 0;
+		current_len = settings[current_fragment].len;
 		set_speed(time_per_sample);
 		write_ack();
 		return;
@@ -383,18 +384,13 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_STOP");
 #endif
-		//debug("sp %d %d %d", steps_prepared, stopped, underrun);
-		steps_prepared = 0;
 		set_speed(0);
 		homers = 0;
 		home_step_time = 0;
 		reply[0] = CMD_STOPPED;
-		reply[1] = current_fragment_pos;
+		reply[1] = current_sample;
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			motor[m].dir = DIR_NONE;
-			motor[m].next_dir = DIR_NONE;
-			motor[m].next_steps = 0;
-			motor[m].next_next_steps = 0;
+			motor[m].flags &= ~Motor::ACTIVE;
 			motor[m].steps_current = 0;
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));
@@ -404,7 +400,7 @@ void packet()
 		current_fragment = last_fragment;
 		notified_current_fragment = current_fragment;
 		//debug("stop new current %d", current_fragment);
-		current_fragment_pos = 0;
+		current_sample = 0;
 		write_ack();
 		return;
 	}

@@ -1,24 +1,16 @@
 #include "firmware.h"
 
 void handle_motors() {
-	if (steps_prepared >= 2)
-		return;
-	if (underrun) {
-		if (steps_prepared == 0)
-			set_speed(0);
+	if (current_len == 0) {
+		set_speed(0);
 		return;
 	}
 	last_active = seconds();
-	/*
-	arch_cli();
-	uint16_t debug_tmp = debug_value1;
-	arch_sei();
-	*/
 	// Check sensors.
 	for (uint8_t m = 0; m < active_motors; ++m) {
-		Fragment &fragment = motor[m].buffer[current_fragment];
-		if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
+		if (!(motor[m].flags & Motor::ACTIVE))
 			continue;
+		//debug("check %d", m);
 		// Check sense pins.
 		if (motor[m].sense_pin < NUM_DIGITAL_PINS) {
 			if (GET(motor[m].sense_pin) ^ bool(motor[m].flags & Motor::SENSE_STATE)) {
@@ -36,21 +28,23 @@ void handle_motors() {
 		}
 		else {
 		// Check limit switches.
-			uint8_t limit_pin = (fragment.dir ? motor[m].limit_min_pin : motor[m].limit_max_pin);
+			uint8_t limit_pin = buffer[current_fragment][m][current_sample] < 0 ? motor[m].limit_min_pin : motor[m].limit_max_pin;
 			if (limit_pin < NUM_DIGITAL_PINS) {
-				bool inverted = motor[m].flags & (fragment.dir ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
-				if (GET(limit_pin) ^ inverted)
+				bool inverted = motor[m].flags & (buffer[current_fragment][m][current_sample] < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
+				if (GET(limit_pin) ^ inverted) {
+					debug("hit %d %d", step_state, buffer[current_fragment][m][current_sample]);
 					hit = true;
+				}
 			}
 		}
 		if (hit) {
 			// Hit endstop.
-			steps_prepared = 0;
-			//debug("hit limit %d curpos %ld dir %d cf %d ncf %d lf %d cfp %d", m, F(motor[m].current_pos), fragment.dir, current_fragment, notified_current_fragment, last_fragment, current_fragment_pos);
+			current_len = 0;
+			debug("hit limit %d curpos %ld cf %d ncf %d lf %d cfp %d", m, F(motor[m].current_pos), current_fragment, notified_current_fragment, last_fragment, current_sample);
 			// Notify host.
 			motor[m].flags |= Motor::LIMIT;
-			limit_fragment_pos = current_fragment_pos;
-			current_fragment_pos = 0;
+			limit_fragment_pos = current_sample;
+			current_sample = 0;
 			set_speed(0);
 			filling = 0;
 			last_fragment = current_fragment;
@@ -61,76 +55,27 @@ void handle_motors() {
 			return;
 		}
 	}
-	// Move motors.
 	if (homers > 0) {
 		// Homing.
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			Fragment &fragment = motor[m].buffer[current_fragment];
-			if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
+			if (!(motor[m].flags & Motor::ACTIVE))
 				continue;
 			// Get twe "wrong" limit pin for the given direction.
-			uint8_t limit_pin = (fragment.dir ? motor[m].limit_max_pin : motor[m].limit_min_pin);
-			bool inverted = motor[m].flags & (fragment.dir ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
+			uint8_t limit_pin = (buffer[current_fragment][m][current_sample] < 0 ? motor[m].limit_max_pin : motor[m].limit_min_pin);
+			bool inverted = motor[m].flags & (buffer[current_fragment][m][current_sample] < 0 ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
 			if (limit_pin >= NUM_DIGITAL_PINS || GET(limit_pin) ^ inverted) {
 				// Limit pin still triggered; continue moving.
 				continue;
 			}
 			// Limit pin no longer triggered.  Stop moving and possibly notify host.
-			motor[m].dir = DIR_NONE;
-			motor[m].next_dir = DIR_NONE;
-			fragment.dir = DIR_NONE;
+			motor[m].flags &= ~Motor::ACTIVE;
 			if (!--homers)
 				set_speed(0);
 		}
 	}
-	else {
-		// Regular move.  (Not homing.)
-		// Move to next buffer.
-		while (!underrun && current_fragment_pos >= settings[current_fragment].len) {
-			current_fragment_pos -= settings[current_fragment].len;
-			uint8_t new_current_fragment = (current_fragment + 1) % FRAGMENTS_PER_MOTOR;
-			if (last_fragment == new_current_fragment) {
-				// Underrun.
-				//debug("underrun for %d", last_fragment);
-				underrun = true;
-				for (uint8_t m = 0; m < active_motors; ++m)
-					motor[m].next_next_steps = 0;
-			}
-			else {
-				for (uint8_t m = 0; m < active_motors; ++m) {
-					Fragment &fragment = motor[m].buffer[new_current_fragment];
-					motor[m].next_dir = fragment.dir;
-				}
-			}
-			current_fragment = new_current_fragment;
-		}
-		if (!underrun) {
-			for (uint8_t m = 0; m < active_motors; ++m) {
-				Fragment &fragment = motor[m].buffer[current_fragment];
-				if (fragment.dir == DIR_NONE || fragment.dir == DIR_AUDIO)
-					continue;
-				motor[m].next_next_steps = fragment.samples[current_fragment_pos];
-			}
-			current_fragment_pos += 1;
-		}
-	}
-	if (steps_prepared == 0) {
-		move_phase = 0;
-		for (uint8_t m = 0; m < active_motors; ++m) {
-			motor[m].steps_current = 0;
-			Fragment &fragment = motor[m].buffer[current_fragment];
-			if (homers == 0) {
-				if (fragment.dir != DIR_NONE && fragment.dir != DIR_AUDIO) {
-					motor[m].next_steps = motor[m].next_next_steps;
-					motor[m].next_next_steps = 0;
-				}
-				motor[m].dir = motor[m].next_dir;
-			}
-		}
-	}
-	if (!underrun) {
-		arch_cli();
-		steps_prepared += 1;
-		arch_sei();
+	if (step_state == 0) {
+		if (homers > 0)
+			current_sample = 0;	// Use only the first sample for homing.
+		step_state = homers > 0 || settings[current_fragment].probing ? 1 : 2;
 	}
 }

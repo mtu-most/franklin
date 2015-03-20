@@ -80,7 +80,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 #endif
 			new_motors[m]->settings = new Motor_History[FRAGMENTS_PER_BUFFER];
 			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
-				new_motors[m]->settings[f].dir = 0;
+				new_motors[m]->settings[f].active = false;
 				new_motors[m]->settings[f].data = new char[BYTES_PER_FRAGMENT];
 				memset(new_motors[m]->settings[f].data, 0, BYTES_PER_FRAGMENT);
 				new_motors[m]->settings[f].last_v = 0;
@@ -636,13 +636,13 @@ void reset_dirs(int fragment, bool allow_new) {
 			if (allow_new && mtr.settings[fragment].current_pos != mtr.settings[fragment].hwcurrent_pos) {
 				//debug("preactive %d %d %d %d %d", s, m, fragment, mtr.current_pos, mtr.hwcurrent_pos);
 				settings[fragment].num_active_motors += 1;
-				mtr.settings[fragment].dir = mtr.settings[fragment].current_pos < mtr.settings[fragment].hwcurrent_pos ? -1 : 1;
+				mtr.settings[fragment].active = true;
 				//debug("restoring cfp");
 				current_fragment_pos = 0;
 			}
 			else {
 				//debug("inactive %d %d %d", s, m, fragment);
-				mtr.settings[fragment].dir = 0;
+				mtr.settings[fragment].active = false;
 			}
 		}
 	}
@@ -670,7 +670,7 @@ void copy_fragment_settings(int src, int dst) {
 	for (int s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (int m = 0; m < sp.num_motors; ++m) {
-			// Don't copy dir; either the current value is correct, or it is set to 0.
+			// Don't copy active; either the current value is correct, or it is set to false.
 			sp.motor[m]->settings[dst].last_v = sp.motor[m]->settings[src].last_v;
 			sp.motor[m]->settings[dst].target_v = sp.motor[m]->settings[src].target_v;
 			sp.motor[m]->settings[dst].target_dist = sp.motor[m]->settings[src].target_dist;
@@ -724,32 +724,30 @@ void apply_tick() {
 		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
-			int value = (mtr.settings[current_fragment].current_pos - mtr.settings[current_fragment].hwcurrent_pos) * mtr.settings[current_fragment].dir;
+			int value = mtr.settings[current_fragment].current_pos - mtr.settings[current_fragment].hwcurrent_pos;
 			//debug("%d %d cp %d hwcp %d cf %d value %d", s, m, mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos, current_fragment, value);
 			if (probing && value)
-				value = 1;
+				value = value < 0 ? -1 : 1;
 			else {
-				if (value > 8 * mtr.max_steps)
-					value = 8 * mtr.max_steps;
-				if (value > 0xff) {
+				if (abs(value) > 8 * mtr.max_steps)	// TODO: fix 8.
+					value = (value < 0 ? -1 : 1) * 8 * mtr.max_steps;
+				if (abs(value) > 0x7f) {
 					debug("overflow %d", value);
-					value = 0xff;
-				}
-				if (value < 0) {
-					debug("negative value: %d", value);
-					value = 0;
-					abort();
+					value = value < 0 ? -0x7f : 0x7f;
 				}
 			}
 			if (value != 0) {
+				if (!mtr.settings[current_fragment].active) {
+					mtr.settings[current_fragment].active = true;
+					settings[current_fragment].num_active_motors += 1;
+				}
 				if (current_fragment_pos < 0)
 					current_fragment_pos = 0;
 				mtr.settings[current_fragment].data[current_fragment_pos] = value;
 			}
 			//debug("spam %d %d %d %d %d", s, m, value, mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos);
-			int diff = mtr.settings[current_fragment].dir * value;
-			mtr.settings[current_fragment].hwcurrent_pos += diff;
-			//debug("move pos %d %d cf %d time %d cp %d hwcp %d diff %d value %d dir %d", s, m, current_fragment, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos + avr_pos_offset[m], sp.motor[m]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[m], sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos, value, mtr.settings[current_fragment].dir);
+			mtr.settings[current_fragment].hwcurrent_pos += value;
+			//debug("move pos %d %d cf %d time %d cp %d hwcp %d diff %d value %d", s, m, current_fragment, settings[current_fragment].hwtime, sp.motor[m]->settings[current_fragment].current_pos + avr_pos_offset[m], sp.motor[m]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[m], sp.motor[m]->settings[current_fragment].current_pos - sp.motor[m]->settings[current_fragment].hwcurrent_pos, value);
 		}
 	}
 	//debug("=============");
@@ -757,7 +755,7 @@ void apply_tick() {
 	settings[current_fragment].hwtime += hwtime_step;
 	handle_motors(settings[current_fragment].hwtime);
 	//if (num_spaces > 0 && spaces[0].num_axes >= 2)
-		//debug("move z %d %d %f %d %d %d", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings[current_fragment].current, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0], spaces[0].motor[0]->settings[current_fragment].dir);
+		//debug("move z %d %d %f %d %d", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings[current_fragment].current, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0]);
 }
 
 void buffer_refill() {
@@ -770,37 +768,7 @@ void buffer_refill() {
 	//debug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	while (moving && !stopping && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 3 && !sending_fragment) {
 		//debug("refill %d %d %d", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings[current_fragment].current_pos);
-		// fill fragment until full or dirchange.
-		bool checking = true;
-		for (uint8_t s = 0; checking && s < num_spaces && !stopping; ++s) {
-			Space &sp = spaces[s];
-			for (uint8_t m = 0; m < sp.num_motors && !stopping; ++m) {
-				Motor &mtr = *sp.motor[m];
-				if (mtr.settings[current_fragment].current_pos == mtr.settings[current_fragment].hwcurrent_pos)
-					continue;
-				if (mtr.settings[current_fragment].dir == 0) {
-					//debug("active %d %d %d %d", s, m, mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos);
-					mtr.settings[current_fragment].dir = (mtr.settings[current_fragment].current_pos < mtr.settings[current_fragment].hwcurrent_pos ? -1 : 1);
-					settings[current_fragment].num_active_motors += 1;
-					continue;
-				}
-				if ((mtr.settings[current_fragment].dir < 0 && mtr.settings[current_fragment].current_pos > mtr.settings[current_fragment].hwcurrent_pos) || (mtr.settings[current_fragment].dir > 0 && mtr.settings[current_fragment].current_pos < mtr.settings[current_fragment].hwcurrent_pos)) {
-					//debug("dir change %d %d", s, m);
-					send_fragment();
-					if ((running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= 3 || stopping) {
-						refilling = false;
-						return;
-					}
-					checking = false;
-					break;
-				}
-				//debug("no change %d %d %d %d", s, m, mtr.dir[current_fragment], current_fragment);
-			}
-		}
-		if (stopping) {
-			refilling = false;
-			return;
-		}
+		// fill fragment until full.
 		apply_tick();
 		//debug("refill2 %d %d", current_fragment, spaces[0].motor[0]->settings[current_fragment].current_pos);
 		if (current_fragment_pos >= BYTES_PER_FRAGMENT) {

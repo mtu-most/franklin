@@ -123,7 +123,6 @@ static inline void arch_setup_end() {
 }
 
 static inline void set_speed(uint16_t count) {
-	stopped = (count == 0);
 	if (homers == 0) {
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].next_steps = 0;

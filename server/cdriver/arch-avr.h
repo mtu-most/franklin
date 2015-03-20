@@ -734,15 +734,14 @@ static inline void arch_send_fragment(int fragment) {
 	int mi = 0;
 	for (int s = 0; !stopping && s < num_spaces; mi += spaces[s++].num_motors) {
 		for (uint8_t m = 0; !stopping && m < spaces[s].num_motors; ++m) {
-			if (spaces[s].motor[m]->settings[fragment].dir == 0)
+			if (!spaces[s].motor[m]->settings[fragment].active)
 				continue;
 			cpdebug(s, m, "sending %d %d %d", fragment, spaces[s].motor[m]->settings[fragment].dir, settings[fragment].fragment_length);
 			avr_buffer[0] = HWC_MOVE;
 			avr_buffer[1] = mi + m;
-			avr_buffer[2] = ((spaces[s].motor[m]->settings[fragment].dir < 0) ^ (spaces[s].motor[m]->dir_pin.inverted()) ? 1 : 0);
 			for (int i = 0; i < settings[fragment].fragment_length; ++i)
-				avr_buffer[3 + i] = spaces[s].motor[m]->settings[fragment].data[i];
-			prepare_packet(avr_buffer, 3 + settings[fragment].fragment_length);
+				avr_buffer[2 + i] = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->settings[fragment].data[i];
+			prepare_packet(avr_buffer, 2 + settings[fragment].fragment_length);
 			avr_send();
 		}
 	}
@@ -799,17 +798,10 @@ static inline void arch_home() {
 	for (int s = 0; s < num_spaces; mi += spaces[s++].num_motors) {
 		Space &sp = spaces[s];
 		for (int m = 0; m < sp.num_motors; ++m) {
-			switch (command[0][2 + mi + m]) {
-			case 0:
-				avr_buffer[5 + mi + m] = sp.motor[m]->dir_pin.inverted() ? 1 : 0;
-				break;
-			case 1:
-				avr_buffer[5 + mi + m] = sp.motor[m]->dir_pin.inverted() ? 0 : 1;
-				break;
-			case 3:
-				avr_buffer[5 + mi + m] = 3;
-				break;
-			default:
+			if (abs(int8_t(command[0][2 + mi + m])) <= 1) {
+				avr_buffer[5 + mi + m] = (sp.motor[m]->dir_pin.inverted() ? -1 : 1) * command[0][2 + mi + m];
+			}
+			else {
 				debug("invalid code in home: %d", command[0][2 + m]);
 				return;
 			}

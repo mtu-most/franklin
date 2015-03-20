@@ -47,7 +47,7 @@ static inline uint16_t fullpacketlen() { // {{{
 		return 5 + active_motors;
 	}
 	else if ((command[0] & ~0x10) == CMD_MOVE) {
-		return 3 + current_len;
+		return 2 + last_len;
 	}
 	else
 		return minpacketlen();
@@ -382,8 +382,8 @@ void try_send_next() {
 		send_packet();
 		return;
 	} // }}}
-	if (notified_current_fragment != current_fragment && (!underrun || stopped)) { // {{{
-		if (underrun) {
+	if (notified_current_fragment != current_fragment) { // {{{
+		if (current_len == 0) {
 			pending_packet[0] = CMD_UNDERRUN;
 			//debug_dump();
 		}
@@ -396,7 +396,7 @@ void try_send_next() {
 		pending_packet[1] = num;
 		notified_current_fragment = (notified_current_fragment + num) % FRAGMENTS_PER_MOTOR;
 		pending_packet[2] = (last_fragment - notified_current_fragment + FRAGMENTS_PER_MOTOR) % FRAGMENTS_PER_MOTOR;
-		if (underrun) {
+		if (pending_packet[0] == CMD_UNDERRUN) {
 			arch_write_current_pos(3);
 			prepare_packet(3 + 4 * active_motors);
 		}
@@ -416,7 +416,7 @@ void try_send_next() {
 		send_packet();
 		return;
 	} // }}}
-	if (home_step_time > 0 && homers == 0 && stopped) { // {{{
+	if (home_step_time > 0 && homers == 0 && current_len == 0) { // {{{
 		pending_packet[0] = CMD_HOMED;
 		arch_write_current_pos(1);
 		home_step_time = 0;

@@ -104,5 +104,6 @@ int main(void) {
 			debug("timeout %d %d %d", seconds(), dt, last_active);
 			timeout = true;
 		}
+		//debug("!%x", debug_value);
 	}
 }

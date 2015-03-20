@@ -3,7 +3,7 @@
 
 void setup()
 {
-	debug_value = 100;
+	debug_value = 0x1337;
 	arch_setup_start();
 	enabled_pins = NUM_DIGITAL_PINS;
 	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
@@ -12,11 +12,8 @@ void setup()
 		UNSET(p);
 	}
 	// Initialize motors.
-	for (uint8_t m = 0; m < NUM_MOTORS; ++m) {
+	for (uint8_t m = 0; m < NUM_MOTORS; ++m)
 		motor[m].init();
-		for (uint8_t f = 0; f < FRAGMENTS_PER_MOTOR; ++f)
-			motor[m].buffer[f].num_samples = 0;
-	}
 	notified_current_fragment = 0;
 	current_fragment = notified_current_fragment;
 	last_fragment = current_fragment;
@@ -45,12 +42,11 @@ void setup()
 	homers = 0;
 	home_step_time = 0;
 	// Set up movement state.
-	current_len = 0;
-	stopped = true;
+	last_len = 0;
 	stopping = false;
-	underrun = true;
+	step_state = 0;
+	current_len = 0;
 	active_motors = 0;
-	steps_prepared = 0;
 	move_phase = 0;
 	full_phase = 1;
 	// Set up led state.

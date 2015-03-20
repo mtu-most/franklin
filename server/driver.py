@@ -1078,6 +1078,7 @@ class Printer: # {{{
 			#log('done 1')
 			self.home_phase = 2
 			# Move down to find limit or sense switch.
+			self.home_target = {}
 			for i, a, m in self.home_motors:
 				if (i not in self.limits[self.home_space] and self.pin_valid(m['limit_min_pin'])) or (i not in self.sense[self.home_space] and self.pin_valid(m['sense_pin'])):
 					dist = 1000 - m['home_pos']	# TODO: use better value.
@@ -1123,19 +1124,19 @@ class Printer: # {{{
 			num = 0
 			for s, spc in enumerate(self.spaces):
 				if s != self.home_space:
-					data += '\x03' * len(spc.motor)
+					data += '\x00' * len(spc.motor)
 				else:
 					for m in spc.motor:
 						if m['home_order'] != self.home_order:
-							data += '\x03'
+							data += '\x00'
 						elif self.pin_valid(m['limit_max_pin']) or (not self.pin_valid(m['limit_min_pin']) and self.pin_valid(m['sense_pin'])):
-							data += '\x01'
+							data += '\xff'
 							num += 1
 						elif self.pin_valid(m['limit_min_pin']):
-							data += '\x00'
+							data += '\x01'
 							num += 1
 						else:
-							data += '\x03'
+							data += '\x00'
 			self.home_phase = 4
 			if num > 0:
 				dprint('homing', data)

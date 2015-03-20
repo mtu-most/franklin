@@ -179,7 +179,7 @@ struct History
 
 struct Motor_History
 {
-	int dir;
+	bool active;
 	char *data;
 	float last_v;		// v during last iteration, for using limit_a [m/s].
 	float target_v, target_dist;	// Internal values for moving.
