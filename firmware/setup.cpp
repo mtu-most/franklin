@@ -44,7 +44,7 @@ void setup()
 	// Set up movement state.
 	last_len = 0;
 	stopping = false;
-	step_state = 0;
+	step_state = 1;
 	current_len = 0;
 	active_motors = 0;
 	move_phase = 0;

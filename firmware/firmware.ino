@@ -104,6 +104,6 @@ int main(void) {
 			debug("timeout %d %d %d", seconds(), dt, last_active);
 			timeout = true;
 		}
-		//debug("!%x", debug_value);
+		//debug("!%x. %x,", debug_value, int(pin[0x30].avr_output));
 	}
 }

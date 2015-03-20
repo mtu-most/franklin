@@ -257,8 +257,8 @@ EXTERN uint8_t notified_current_fragment;
 EXTERN volatile uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
 EXTERN volatile uint8_t current_sample;		// The sample in the current fragment that is active.
 EXTERN volatile uint8_t current_len;		// Copy of settings[current_fragment].len, for easy access from asm.
-EXTERN volatile uint8_t step_state;		// 0: Waiting for limit switch check; 1: Waiting for step; 2: free running.
-EXTERN volatile int8_t (*current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
+EXTERN volatile uint8_t step_state;		// 0: disabled; 1: Waiting for limit switch check; 2: Waiting for step; 3: free running.
+EXTERN volatile int8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN volatile uint8_t last_fragment;	// Fragment that is currently being filled.
 EXTERN uint8_t limit_fragment_pos;
 EXTERN uint8_t last_len;	// copy of settings[last_fragment].len, for when current_fragment changes during a fill.

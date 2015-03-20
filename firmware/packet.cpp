@@ -220,7 +220,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_HOME");
 #endif
-		if (current_len > 0 || stopping) {
+		if (step_state != 1 || stopping) {
 			debug("HOME seen while moving");
 			write_stall();
 			return;
@@ -249,14 +249,15 @@ void packet()
 				return;
 			}
 		}
-		home_step_time = *reinterpret_cast <uint32_t *>(&command[1]);
 		if (homers > 0) {
+			home_step_time = *reinterpret_cast <uint32_t *>(&command[1]);
 			// current_sample is always 0 while homing; set len to 2, so it doesn't go to the next fragment.
-			settings[last_fragment].len = 2;
+			settings[current_fragment].len = 2;
 			current_len = settings[current_fragment].len;
-			settings[last_fragment].probing = false;
-			step_state = 0;
+			settings[current_fragment].probing = false;
+			current_buffer = &buffer[current_fragment];
 			current_sample = 0;
+			step_state = 0;
 			set_speed(home_step_time);
 			write_ack();
 		}
@@ -332,7 +333,7 @@ void packet()
 			write_ack();
 			return;
 		}
-		if (current_len > 0) {
+		if (step_state != 1) {
 			debug("Received START while not stopped");
 			write_stall();
 			return;
@@ -342,7 +343,6 @@ void packet()
 			write_stall();
 			return;
 		}
-		step_state = 0;
 		current_buffer = &buffer[current_fragment];
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			if (buffer[current_fragment][m][0] != int8_t(0x80))
@@ -352,6 +352,7 @@ void packet()
 		}
 		current_sample = 0;
 		current_len = settings[current_fragment].len;
+		step_state = 0;
 		set_speed(time_per_sample);
 		write_ack();
 		return;

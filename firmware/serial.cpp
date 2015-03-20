@@ -1,7 +1,11 @@
 #include "firmware.h"
 // vim: set foldmethod=marker :
 
-//#define DEBUG_SERIAL
+#if 0
+#define sdebug debug
+#else
+#define sdebug(...) do {} while (0)
+#endif
 //#define DEBUG_FF
 
 // Protocol explanation.  {{{
@@ -77,9 +81,7 @@ void serial() { // {{{
 		}
 		had_data = true;
 		uint8_t firstbyte = serial_read();
-#ifdef DEBUG_SERIAL
-		debug("received: %x", firstbyte);
-#endif
+		sdebug("received: %x", firstbyte);
 		// If this is a 1-byte command, handle it.
 		switch (firstbyte)
 		{
@@ -129,15 +131,11 @@ void serial() { // {{{
 	uint16_t len = serial_available();
 	if (len == 0)
 	{
-#ifdef DEBUG_SERIAL
-		debug("no more data available now");
-#endif
+		sdebug("no more data available now");
 		watchdog_reset();
 		// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
 		if (out_busy && millis() - out_time >= 1000) {
-#ifdef DEBUG_SERIAL
-			debug("resending packet");
-#endif
+			sdebug("resending packet");
 			send_packet();
 		}
 		return;
@@ -152,14 +150,10 @@ void serial() { // {{{
 			command[command_end + n] = serial_read();
 		command_end += num;
 		len -= num;
-#ifdef DEBUG_SERIAL
-		debug("preread %d", num);
-#endif
+		sdebug("preread %d", num);
 		if (command_end < cmd_len) {
 			watchdog_reset();
-#ifdef DEBUG_SERIAL
-			debug("minimum length %d not available", cmd_len);
-#endif
+			sdebug("minimum length %d not available", cmd_len);
 			return;
 		}
 	}
@@ -168,23 +162,17 @@ void serial() { // {{{
 	cmd_len = fulllen + (fulllen + 2) / 3;
 	if (command_end + len > cmd_len) {
 		len = cmd_len - command_end;
-#ifdef DEBUG_SERIAL
-		debug("new len %d = %d - %d", len, cmd_len, command_end);
-#endif
+		sdebug("new len %d = %d - %d", len, cmd_len, command_end);
 	}
 	if (len > 0) {
 		for (uint16_t n = 0; n < len; ++n)
 			command[command_end++] = serial_read();
 	}
-#ifdef DEBUG_SERIAL
-	debug("check %d %x %x", fulllen, command[0], command[fulllen - 1], command[fulllen]);
-#endif
+	sdebug("check %d %x %x", fulllen, command[0], command[fulllen - 1], command[fulllen]);
 	last_millis = millis();
 	if (command_end < cmd_len)
 	{
-#ifdef DEBUG_SERIAL
-		debug("not done yet; %d of %d received.", command_end, cmd_len);
-#endif
+		sdebug("not done yet; %d of %d received.", command_end, cmd_len);
 		watchdog_reset();
 		return;
 	}
@@ -231,17 +219,13 @@ void serial() { // {{{
 		}
 	}
 	// Packet is good.
-#ifdef DEBUG_SERIAL
-	debug("good");
-#endif
+	sdebug("good");
 	// Flip-flop must have good state.
 	if ((command[0] & 0x10) != ff_in)
 	{
 		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
 		// Resend the ack (or stall), but don't do anything (the action has already been taken).
-#ifdef DEBUG_SERIAL
-		debug("duplicate");
-#endif
+		sdebug("duplicate");
 #ifdef DEBUG_FF
 		debug("old ff_in: %d", ff_in);
 #endif
@@ -270,9 +254,7 @@ void serial() { // {{{
 // Set checksum bytes. {{{
 static void prepare_packet(uint16_t len)
 {
-#ifdef DEBUG_SERIAL
-	debug("prepare");
-#endif
+	sdebug("prepare");
 	if (len >= MAX_COMMAND_LEN)
 	{
 		debug("packet is too large: %d > %d", len, MAX_COMMAND_LEN);
@@ -322,9 +304,7 @@ static void prepare_packet(uint16_t len)
 // Send packet to host. {{{
 void send_packet()
 {
-#ifdef DEBUG_SERIAL
-	debug("send");
-#endif
+	sdebug("send");
 	out_busy = true;
 	for (uint16_t t = 0; t < pending_len; ++t)
 		serial_write(pending_packet[t]);
@@ -334,21 +314,15 @@ void send_packet()
 
 // Call send_packet if we can. {{{
 void try_send_next() {
-#ifdef DEBUG_SERIAL
-	debug("try send");
-#endif
+	sdebug("try send");
 	if (out_busy) { // {{{
-#ifdef DEBUG_SERIAL
-		debug("still busy");
-#endif
+		sdebug("still busy");
 		// Still busy sending other packet.
 		return;
 	} // }}}
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (motor[m].flags & (Motor::SENSE0 | Motor::SENSE1)) { // {{{
-#ifdef DEBUG_SERIAL
-			debug("sense %d", m);
-#endif
+			sdebug("sense %d", m);
 			uint8_t type = (motor[m].flags & Motor::SENSE1 ? 1 : 0);
 			pending_packet[0] = (type ? CMD_SENSE1 : CMD_SENSE0);
 			pending_packet[1] = m;
@@ -362,9 +336,7 @@ void try_send_next() {
 	}
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (motor[m].flags & Motor::LIMIT) { // {{{
-#ifdef DEBUG_SERIAL
-			debug("limit %d", m);
-#endif
+			sdebug("limit %d", m);
 			pending_packet[0] = CMD_LIMIT;
 			pending_packet[1] = m;
 			pending_packet[2] = limit_fragment_pos;
@@ -383,7 +355,7 @@ void try_send_next() {
 		return;
 	} // }}}
 	if (notified_current_fragment != current_fragment) { // {{{
-		if (current_len == 0) {
+		if (step_state == 1) {
 			pending_packet[0] = CMD_UNDERRUN;
 			//debug_dump();
 		}
@@ -406,9 +378,7 @@ void try_send_next() {
 		return;
 	} // }}}
 	if (reply_ready) { // {{{
-#ifdef DEBUG_SERIAL
-		debug("reply %x %d", reply[1], reply[0]);
-#endif
+		sdebug("reply %x %d", reply[1], reply[0]);
 		for (uint8_t i = 0; i < reply_ready; ++i)
 			pending_packet[i] = reply[i];
 		prepare_packet(reply_ready);
@@ -416,7 +386,7 @@ void try_send_next() {
 		send_packet();
 		return;
 	} // }}}
-	if (home_step_time > 0 && homers == 0 && current_len == 0) { // {{{
+	if (home_step_time > 0 && homers == 0 && step_state == 1) { // {{{
 		pending_packet[0] = CMD_HOMED;
 		arch_write_current_pos(1);
 		home_step_time = 0;
@@ -425,9 +395,7 @@ void try_send_next() {
 		return;
 	} // }}}
 	if (ping != 0) { // {{{
-#ifdef DEBUG_SERIAL
-		debug("pong %d", ping);
-#endif
+		sdebug("pong %d", ping);
 		for (uint8_t b = 0; b < 8; ++b)
 		{
 			if (ping & (1 << b))
@@ -443,9 +411,7 @@ void try_send_next() {
 	} // }}}
 	// This is pretty much always true, so make it the least important (nothing below this will ever be sent).
 	if (adcreply_ready) { // {{{
-#ifdef DEBUG_SERIAL
-		debug("adcreply %x %d", adcreply[1], adcreply[0]);
-#endif
+		sdebug("adcreply %x %d", adcreply[1], adcreply[0]);
 		for (uint8_t i = 0; i < adcreply_ready; ++i)
 			pending_packet[i] = adcreply[i];
 		prepare_packet(adcreply_ready);
@@ -453,6 +419,7 @@ void try_send_next() {
 		send_packet();
 		return;
 	} // }}}
+	sdebug("Nothing to send %d %d %x", current_fragment, notified_current_fragment, debug_value);
 }
 // }}}
 

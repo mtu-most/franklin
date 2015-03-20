@@ -3,6 +3,8 @@
 #ifndef _ARCH_AVR_H
 #define _ARCH_AVR_H
 
+#define TIME_PER_ISR 20
+
 // Define things that pins_arduino.h needs from Arduino.h (which shouldn't be included).
 #define ARDUINO_MAIN
 #define NOT_A_PIN 0
@@ -60,7 +62,6 @@ static inline void debug(char const *fmt, ...);
 #define arch_cli cli
 #define arch_sei sei
 
-#define TIME_PER_ISR 40
 #define ARCH_PIN_DATA \
 	volatile uint8_t *avr_mode; \
 	volatile uint8_t *avr_output; \
@@ -75,8 +76,8 @@ inline void RESET(uint8_t pin_no);
 inline bool GET(uint8_t pin_no);
 
 #define ARCH_MOTOR \
-	volatile uint8_t step_port, step_bitmask, step_invert; \
-        volatile uint8_t dir_port, dir_bitmask;
+	volatile uint16_t step_port, dir_port; \
+	volatile uint8_t step_bitmask, dir_bitmask, step_invert;
 
 // Everything before this line is used at the start of firmware.h; everything after it at the end.
 #else
@@ -401,9 +402,11 @@ static inline void reset() {
 
 // Setup. {{{
 EXTERN volatile uint32_t avr_time_h, avr_seconds_h, avr_seconds;
+EXTERN volatile bool lock;
 
 static inline void arch_setup_start() {
 	cli();
+	lock = false;
 	for (uint8_t pin_no = 0; pin_no < NUM_DIGITAL_PINS; ++pin_no) {
 		uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
 		pin[pin_no].avr_mode = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port));
@@ -470,14 +473,14 @@ static inline void arch_setup_end() {
 
 static inline void arch_msetup(uint8_t m) {
 	if (motor[m].step_pin < NUM_DIGITAL_PINS) {
-		motor[m].step_port = int(pin[motor[m].step_pin].avr_output) & 0xff;
+		motor[m].step_port = int(pin[motor[m].step_pin].avr_output);
 		motor[m].step_bitmask = pin[motor[m].step_pin].avr_bitmask;
 		motor[m].step_invert = (motor[m].flags & Motor::INVERT_STEP) ? 1 : 0;
 	}
 	else
 		motor[m].step_bitmask = 0;
 	if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
-		motor[m].dir_port = int(pin[motor[m].dir_pin].avr_output) & 0xff;
+		motor[m].dir_port = int(pin[motor[m].dir_pin].avr_output);
 		motor[m].dir_bitmask = pin[motor[m].dir_pin].avr_bitmask;
 	}
 	else
@@ -486,7 +489,7 @@ static inline void arch_msetup(uint8_t m) {
 
 static inline void set_speed(uint16_t count) {
 	if (count == 0)
-		current_len = 0;
+		step_state = 1;
 	else {
 		uint32_t c = count;
 		c *= 16;
@@ -504,74 +507,30 @@ static inline void set_speed(uint16_t count) {
 }
 // }}}
 
-// Timekeeping. {{{
-static inline uint16_t millis() {
-	cli();
-	uint8_t l = TCNT0;
-	uint32_t h = avr_time_h;
-	if (TIFR0 & (1 << TOV0)) {
-		l = TCNT0;
-		h += 0x100;
-	}
-	sei();
-	return ((h | l) << 1) / 125;
-}
-
-static inline uint16_t seconds() {
-	return avr_seconds;
-}
-
 #ifdef DEFINE_VARIABLES
-ISR(TIMER0_OVF_vect) {
-	uint32_t top = uint32_t(125) << 16;
-	avr_time_h += 0x100;
-	avr_time_h %= top;	// Wrap at the right number.
-	if (((avr_time_h - avr_seconds_h + top) % top) >= 62500) {
-		avr_seconds_h += 62500;
-		avr_seconds_h %= top;	// Wrap at the right number.
-		avr_seconds += 1;
-	}
-}
-
-EXTERN volatile bool lock = false;
-
-#define offsetof(type, field) (int(reinterpret_cast<volatile char *>(&reinterpret_cast<type *>(0)->field)))
-ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
-	// This code is broken into parts, because gcc doesn't allow passing low and high bytes of a pointer as constants.
+#define offsetof(type, field) __builtin_offsetof(type, field) //(int(reinterpret_cast<volatile char *>(&reinterpret_cast<type *>(0)->field)))
+ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	asm volatile(
 		"\t"	"push 16"			"\n"
-		"\t"	"in 16, %[sreg]"		"\n"
+		"\t"	"in 16, __SREG__"		"\n"
 		"\t"	"push 16"			"\n"
-		// If lock or !current_len or step_state == 0: return
+		// If lock or step_state < 2: return (increment lock to queue another isr).
 		"\t"	"lds 16, lock"			"\n"
-		"\t"	"tst 16"			"\n"
-		"\t"	"breq 1f"			"\n"
-		"\t"	"rjmp isr_end_nolock"		"\n"
-		"1:\t"	"lds 16, current_len"		"\n"
-		"\t"	"tst 16"			"\n"
-		"\t"	"brne 1f"			"\n"
-		"\t"	"rjmp isr_end_nolock"		"\n"
-		"1:\t"	"lds 16, step_state"		"\n"
-		"\t"	"tst 16"			"\n"
-		"\t"	"brne 1f"			"\n"
-		"\t"	"rjmp isr_end_nolock"		"\n"
-		// for (uint8_t m = 0; m < active_motors; ++m) {
-		"1:\t"	"lds 16, active_motors"		"\n"
-		"\t"	"tst 16"			"\n"
-		"\t"	"brne 1f"			"\n"
-		"\t"	"rjmp isr_end_nolock"			"\n"
-		"1:\t"					"\n"
-		//lock = true;
+		"\t"	"inc 16"			"\n"
 		"\t"	"sts lock, 16"			"\n"
+		"\t"	"cpi 16, 1"			"\n"
+		"\t"	"breq isr_restart"		"\n"
+		"\t"	"rjmp isr_end_nolock"		"\n"
+		"isr_restart:"				"\n"
+		"\t"	"lds 16, step_state"		"\n"
+		"\t"	"cpi 16, 2"			"\n"
+		"\t"	"brcc 1f"			"\n"
+		"\t"	"rjmp isr_end_lockonly"		"\n"
 		// Enable interrupts, so the uart doesn't overrun.
-		"\t"	"sei"				"\n"
-		// move_phase += 1;
-		"1:\t"	"push 17"			"\n"
-		"\t"	"lds 17, move_phase"		"\n"
-		"\t"	"inc 17"			"\n"
-		"\t"	"sts move_phase, 17"		"\n"
+		"1:\t"	"sei"				"\n"
 		"\t"	"push 0"			"\n"
 		"\t"	"push 1"			"\n"
+		"\t"	"push 17"			"\n"
 		"\t"	"push 18"			"\n"
 		"\t"	"push 19"			"\n"
 		"\t"	"push 20"			"\n"
@@ -581,6 +540,14 @@ ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
 		"\t"	"push 29"			"\n"
 		"\t"	"push 30"			"\n"
 		"\t"	"push 31"			"\n"
+		"\t"	"lds 16, active_motors"		"\n"
+		// move_phase += 1;
+		"\t"	"lds 17, move_phase"		"\n"
+		"\t"	"inc 17"			"\n"
+		"\t"	"sts move_phase, 17"		"\n"
+		"\t"	"sts debug_value + 1, 17"	"\n"
+		"\t"	"lds 17, move_phase"		"\n"
+		"\t"	"sts debug_value, 17"	"\n"
 		// Clear x.h
 		"\t"	"clr 27"			"\n"
 	// Register usage:
@@ -590,7 +557,7 @@ ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
 	// 19: sample value (abs).
 	// 0: steps target.
 	// 1, 20: general purpose.
-	// x: pin pointer for varying pins.
+	// x: pin pointer for varying pins.	x.h is 0 a lot (but not always).
 	// y: motor pointer.
 	// z: buffer pointer (pointing at current_sample).
 		"\t"	"ldi 28, lo8(motor)"		"\n"
@@ -610,6 +577,7 @@ ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
 		"\t"	"mov 19, 18"			"\n"
 		// positive ? set dir : reset dir
 		"\t"	"ldd 26, y + %[dir_port]"	"\n"
+		"\t"	"ldd 27, y + %[dir_port] + 1"	"\n"	// r27 can be non-zero from here.
 		"\t"	"ldd 20, y + %[dir_bitmask]"	"\n"
 		"\t"	"ld 1, x"			"\n"	// 1 is current port value.
 		"\t"	"tst 18"			"\n"	// Test sample sign.
@@ -634,6 +602,7 @@ ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
 		"\t"	"sub 0, 19"			"\n"
 		// If no steps: continue.
 		"\t"	"brne 1f"			"\n"
+		"\t"	"clr 27"			"\n"	// We jump into the zone where r27 is expected to be 0.
 		"\t"	"rjmp isr_action_continue"	"\n"
 		"1:\t"					"\n"
 		//motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
@@ -672,6 +641,7 @@ ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
 		"2:\t"						"\n"
 		// Set up step set and reset values.
 		"\t"	"ldd 26, y + %[step_port]"	"\n"
+		"\t"	"ldd 27, y + %[step_port] + 1"	"\n"
 		"\t"	"ldd 18, y + %[step_bitmask]"	"\n"
 		"\t"	"ld 19, x"			"\n"
 		"\t"	"mov 20, 19"			"\n"
@@ -701,7 +671,8 @@ ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
 		"\t"	"brne 1b"			"\n"	// 2m-1	3m
 		"\t"	"dec 0"				"\n"	// 1	3m+1
 		"\t"	"rjmp 2b"			"\n"	// 2	3m+3
-		"3:\t"					"\n"
+		"3:\t"	"clr 27"			"\n"	// r27 is 0 again.
+		//*/
 		// Increment Y and Z, dec counter 16 and loop.
 		"isr_action_continue:"			"\n"
 		"\t"	"adiw 28, %[motor_size]"	"\n"
@@ -719,9 +690,10 @@ ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
 		// Next sample.
 		// move_phase = 0;
 		"\t"	"sts move_phase, 27"		"\n"
-		// If step_state == 1: step_state = 0.
+		"\t"	"sts debug_value, 27"	"\n"
+		// If step_state == 2(single): step_state = 0(wait for sensor).
 		"\t"	"lds 16, step_state"		"\n"
-		"\t"	"cpi 16, 1"			"\n"
+		"\t"	"cpi 16, 2"			"\n"
 		"\t"	"brne 1f"			"\n"
 		"\t"	"sts step_state, 27"		"\n"
 		"1:\t"					"\n"
@@ -794,10 +766,9 @@ ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
 		"\t"	"sts current_len, 17"		"\n"
 		"\t"	"rjmp isr_end"			"\n"
 		// Underrun.
-		"3:\t"	"sts current_len, 27"		"\n"
+		"3:\t"	"ldi 16, 1"			"\n"
+		"\t"	"sts step_state, 16"		"\n"
 	"isr_end:"	"\n"
-		//lock = false;
-		"\t"	"sts lock, 27"			"\n"
 		"\t"	"pop 31"			"\n"
 		"\t"	"pop 30"			"\n"
 		"\t"	"pop 29"			"\n"
@@ -807,16 +778,22 @@ ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
 		"\t"	"pop 20"			"\n"
 		"\t"	"pop 19"			"\n"
 		"\t"	"pop 18"			"\n"
+		"\t"	"pop 17"			"\n"
 		"\t"	"pop 1"				"\n"
 		"\t"	"pop 0"				"\n"
-		"\t"	"pop 17"			"\n"
+		"\t"	"cli"				"\n"
+	"isr_end_lockonly:"				"\n"
+		"\t"	"lds 16, lock"			"\n"
+		"\t"	"dec 16"			"\n"
+		"\t"	"sts lock, 16"			"\n"
+		"\t"	"breq isr_end_nolock"		"\n"
+		"\t"	"rjmp isr_restart"		"\n"
 	"isr_end_nolock:"				"\n"
 		"\t"	"pop 16"			"\n"
-		"\t"	"out %[sreg], 16"		"\n"
+		"\t"	"out __SREG__, 16"		"\n"
 		"\t"	"pop 16"			"\n"
-		//"\t"	"reti"				"\n"
+		"\t"	"reti"				"\n"
 		::
-			[sreg] "I" (0x3f),
 			[current_pos] "I" (offsetof(Motor, current_pos)),
 			[step_port] "I" (offsetof(Motor, step_port)),
 			[step_bitmask] "I" (offsetof(Motor, step_bitmask)),
@@ -835,7 +812,36 @@ ISR(TIMER1_COMPA_vect/*, ISR_NAKED*/) {
 			[len] "I" (offsetof(Settings, len))
 		);
 }
+// }}}
+
+// Timekeeping. {{{
+ISR(TIMER0_OVF_vect) {
+	uint32_t top = uint32_t(125) << 16;
+	avr_time_h += 0x100;
+	avr_time_h %= top;	// Wrap at the right number.
+	if (((avr_time_h - avr_seconds_h + top) % top) >= 62500) {
+		avr_seconds_h += 62500;
+		avr_seconds_h %= top;	// Wrap at the right number.
+		avr_seconds += 1;
+	}
+}
 #endif
+
+static inline uint16_t millis() {
+	cli();
+	uint8_t l = TCNT0;
+	uint32_t h = avr_time_h;
+	if (TIFR0 & (1 << TOV0)) {
+		l = TCNT0;
+		h += 0x100;
+	}
+	sei();
+	return ((h | l) << 1) / 125;
+}
+
+static inline uint16_t seconds() {
+	return avr_seconds;
+}
 // }}}
 
 // Pin control. {{{
@@ -845,18 +851,21 @@ inline void SET_OUTPUT(uint8_t pin_no) {
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
+	debug("output pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void SET_INPUT(uint8_t pin_no) {
 	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_INPUT);
+	debug("input pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void UNSET(uint8_t pin_no) {
 	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_UNSET);
+	debug("unset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void SET(uint8_t pin_no) {
@@ -865,6 +874,7 @@ inline void SET(uint8_t pin_no) {
 	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_SET);
+	debug("set pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void RESET(uint8_t pin_no) {
@@ -873,27 +883,7 @@ inline void RESET(uint8_t pin_no) {
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
-}
-
-inline void PULSE(uint8_t pin_no, uint8_t num, bool invert) {
-	uint8_t current, s, r;
-	current = *pin[pin_no].avr_output;
-	if (invert) {
-		r = current | pin[pin_no].avr_bitmask;
-		s = current & ~pin[pin_no].avr_bitmask;
-	}
-	else {
-		s = current | pin[pin_no].avr_bitmask;
-		r = current & ~pin[pin_no].avr_bitmask;
-	}
-	for (uint8_t i = 0; i < num; ++i) {
-		*pin[pin_no].avr_output = s;
-		*pin[pin_no].avr_output = r;
-	}
-	if (invert)
-		pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_SET);
-	else
-		pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
+	debug("reset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline bool GET(uint8_t pin_no) {

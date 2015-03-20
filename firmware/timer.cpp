@@ -1,7 +1,7 @@
 #include "firmware.h"
 
 void handle_motors() {
-	if (current_len == 0) {
+	if (step_state == 1) {
 		set_speed(0);
 		return;
 	}
@@ -39,7 +39,7 @@ void handle_motors() {
 		}
 		if (hit) {
 			// Hit endstop.
-			current_len = 0;
+			step_state = 1;
 			debug("hit limit %d curpos %ld cf %d ncf %d lf %d cfp %d", m, F(motor[m].current_pos), current_fragment, notified_current_fragment, last_fragment, current_sample);
 			// Notify host.
 			motor[m].flags |= Motor::LIMIT;
@@ -76,6 +76,6 @@ void handle_motors() {
 	if (step_state == 0) {
 		if (homers > 0)
 			current_sample = 0;	// Use only the first sample for homing.
-		step_state = homers > 0 || settings[current_fragment].probing ? 1 : 2;
+		step_state = homers > 0 || settings[current_fragment].probing ? 2 : 3;
 	}
 }
