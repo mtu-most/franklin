@@ -5,6 +5,12 @@
 
 #define TIME_PER_ISR 20
 
+#if 0
+#define pindebug debug
+#else
+#define pindebug(...) do {} while (0)
+#endif
+
 // Define things that pins_arduino.h needs from Arduino.h (which shouldn't be included).
 #define ARDUINO_MAIN
 #define NOT_A_PIN 0
@@ -846,21 +852,21 @@ inline void SET_OUTPUT(uint8_t pin_no) {
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
-	//debug("output pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
+	pindebug("output pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void SET_INPUT(uint8_t pin_no) {
 	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_INPUT);
-	//debug("input pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
+	pindebug("input pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void UNSET(uint8_t pin_no) {
 	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_UNSET);
-	//debug("unset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
+	pindebug("unset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void SET(uint8_t pin_no) {
@@ -869,7 +875,7 @@ inline void SET(uint8_t pin_no) {
 	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_SET);
-	//debug("set pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
+	pindebug("set pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void RESET(uint8_t pin_no) {
@@ -878,7 +884,7 @@ inline void RESET(uint8_t pin_no) {
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
-	//debug("reset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
+	pindebug("reset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline bool GET(uint8_t pin_no) {

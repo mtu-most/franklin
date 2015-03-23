@@ -269,6 +269,8 @@ function Gpio(num) {
 	reset.AddEvent('change', function(e) {
 		var value = reset.options[reset.selectedIndex].Value;
 		set_value(p, [['gpio', num], 'reset'], value);
+		if (value >= 2)
+			set_value(p, [['gpio', num], 'state'], value);
 		e.preventDefault();
 		return false;
 	});
