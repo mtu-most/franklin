@@ -141,7 +141,7 @@ def write_pin(pin):
 class Printer: # {{{
 	# Internal stuff.  {{{
 	def _read_data(self, data): # {{{
-		cmd, s, m, e, f = struct.unpack('<BLLLf', data[:17])
+		cmd, s, m, e, f = struct.unpack('=BLLLf', data[:17])
 		return cmd, s, m, f, e, data[17:]
 	# }}}
 	def _send(self, *data): # {{{
@@ -173,7 +173,7 @@ class Printer: # {{{
 					log('opening %s' % filename)
 					with open(os.path.join(spool, filename), 'rb') as f:
 						f.seek(-6 * 4, os.SEEK_END)
-						self.jobqueue[name] = struct.unpack('<' + 'f' * 6, f.read())
+						self.jobqueue[name] = struct.unpack('=' + 'f' * 6, f.read())
 				except:
 					traceback.print_exc()
 					log('failed to open spool file %s' % os.path.join(spool, filename))
@@ -523,34 +523,34 @@ class Printer: # {{{
 	def _read(self, cmd, channel, sub = None): # {{{
 		if cmd == 'SPACE':
 			info = self._read('SPACE_INFO', channel)
-			self.spaces[channel].type, self.spaces[channel].max_deviation = struct.unpack('<Bf', info[:5])
+			self.spaces[channel].type, self.spaces[channel].max_deviation = struct.unpack('=Bf', info[:5])
 			if self.spaces[channel].type == TYPE_CARTESIAN:
-				num_axes = struct.unpack('<B', info[5:])[0]
+				num_axes = struct.unpack('=B', info[5:])[0]
 				num_motors = num_axes
 			elif self.spaces[channel].type == TYPE_DELTA:
 				self.spaces[channel].delta = [{}, {}, {}]
 				for a in range(3):
-					self.spaces[channel].delta[a]['axis_min'], self.spaces[channel].delta[a]['axis_max'], self.spaces[channel].delta[a]['rodlength'], self.spaces[channel].delta[a]['radius'] = struct.unpack('<ffff', info[5 + 16 * a:5 + 16 * (a + 1)])
-				self.spaces[channel].delta_angle = struct.unpack('<f', info[5 + 16 * 3:])[0]
+					self.spaces[channel].delta[a]['axis_min'], self.spaces[channel].delta[a]['axis_max'], self.spaces[channel].delta[a]['rodlength'], self.spaces[channel].delta[a]['radius'] = struct.unpack('=ffff', info[5 + 16 * a:5 + 16 * (a + 1)])
+				self.spaces[channel].delta_angle = struct.unpack('=f', info[5 + 16 * 3:])[0]
 				num_axes = 3
 				num_motors = 3
 			elif self.spaces[channel].type == TYPE_EXTRUDER:
-				num_axes = struct.unpack('<B', info[5:6])[0]
+				num_axes = struct.unpack('=B', info[5:6])[0]
 				num_motors = num_axes
 				self.spaces[channel].extruder = []
 				for a in range(num_axes):
-					dx, dy, dz = struct.unpack('<fff', info[6 + 12 * a:6 + 12 * (a + 1)])
+					dx, dy, dz = struct.unpack('=fff', info[6 + 12 * a:6 + 12 * (a + 1)])
 					self.spaces[channel].extruder.append({'dx': dx, 'dy': dy, 'dz': dz})
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
 			return ([self._read('SPACE_AXIS', channel, axis) for axis in range(num_axes)], [self._read('SPACE_MOTOR', channel, motor) for motor in range(num_motors)])
 		if cmd == 'GLOBALS':
-			packet = struct.pack('<B', protocol.command['READ_' + cmd])
+			packet = struct.pack('=B', protocol.command['READ_' + cmd])
 		elif sub is not None and cmd.startswith('SPACE'):
-			packet = struct.pack('<BBB', protocol.command['READ_' + cmd], channel, sub)
+			packet = struct.pack('=BBB', protocol.command['READ_' + cmd], channel, sub)
 		else:
-			packet = struct.pack('<BB', protocol.command['READ_' + cmd], channel)
+			packet = struct.pack('=BB', protocol.command['READ_' + cmd], channel)
 		self._send_packet(packet)
 		cmd, s, m, f, e, data = self._get_reply()
 		assert cmd == protocol.rcommand['DATA']
@@ -560,8 +560,8 @@ class Printer: # {{{
 		data = self._read('GLOBALS', None)
 		if data is None:
 			return False
-		self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins, num_spaces, num_temps, num_gpios = struct.unpack('<BBBBBBBB', data[:8])
-		self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder = struct.unpack('<HHHfB', data[8:])
+		self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins, num_spaces, num_temps, num_gpios = struct.unpack('=BBBBBBBB', data[:8])
+		self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder = struct.unpack('=HHHfB', data[8:])
 		while len(self.spaces) < num_spaces:
 			self.spaces.append(self.Space(self, len(self.spaces)))
 			if update:
@@ -600,8 +600,8 @@ class Printer: # {{{
 		ds = ns - len(self.spaces)
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
-		data = struct.pack('<BBBHHHfB', ns, nt, ng, self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder)
-		self._send_packet(struct.pack('<B', protocol.command['WRITE_GLOBALS']) + data)
+		data = struct.pack('=BBBHHHfB', ns, nt, ng, self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder)
+		self._send_packet(struct.pack('=B', protocol.command['WRITE_GLOBALS']) + data)
 		self._read_globals(update = True)
 		if update:
 			self._globals_update()
@@ -673,7 +673,7 @@ class Printer: # {{{
 				self.park(cb = lambda: self._do_gcode(), abort = False)[1](None)
 				return
 			pos = self.gcode_current_record * (1 + 11 * 4)
-			record = struct.unpack('<Bl' + 'f' * 10, self.gcode_map[pos:pos + 1 + 11 * 4])
+			record = struct.unpack('=Bl' + 'f' * 10, self.gcode_map[pos:pos + 1 + 11 * 4])
 			cmd = record[0]
 			T, x, X, y, Y, z, Z, e, E, f, F = record[1:]
 			#log('Running %s %s' % (cmd, args))
@@ -974,10 +974,10 @@ class Printer: # {{{
 			# If feedrates are equal to firmware defaults, don't send them.
 			if f0 != float('inf'):
 				targets[0] |= 1 << 0
-				args += struct.pack('<f', f0)
+				args += struct.pack('=f', f0)
 			if f1 != f0:
 				targets[0] |= 1 << 1
-				args += struct.pack('<f', f1)
+				args += struct.pack('=f', f1)
 			a = list(axes.keys())
 			a.sort()
 			#log('f0: %f f1: %f' %(f0, f1))
@@ -985,7 +985,7 @@ class Printer: # {{{
 				if math.isnan(axes[axis]):
 					continue
 				targets[(axis + 2) >> 3] |= 1 << ((axis + 2) & 0x7)
-				args += struct.pack('<f', axes[axis])
+				args += struct.pack('=f', axes[axis])
 				#log('axis %d: %f' %(axis, axes[axis]))
 			if probe:
 				assert cb
@@ -1336,13 +1336,13 @@ class Printer: # {{{
 			self.gcode_map = mmap.mmap(self.gcode_fd, 0, access = mmap.ACCESS_READ)
 			size = self.gcode_map.size()
 			numpos = size - 7 * 4
-			num_strings = struct.unpack('<L', self.gcode_map[numpos:numpos + 4])[0]
+			num_strings = struct.unpack('=L', self.gcode_map[numpos:numpos + 4])[0]
 			strlen = [None] * num_strings
 			self.gcode_strings = [None] * num_strings
 			all_strs = 0
 			for i in range(num_strings):
 				pos = numpos - (num_strings - i) * 4
-				strlen[i] = struct.unpack('<L', self.gcode_map[pos:pos + 4])[0]
+				strlen[i] = struct.unpack('=L', self.gcode_map[pos:pos + 4])[0]
 				all_strs += strlen[i]
 			pos = numpos - num_strings * 4
 			self.gcode_num_records = pos / (11 * 4 + 1)
@@ -1363,7 +1363,7 @@ class Printer: # {{{
 			# Let cdriver do the work.
 			self.gcode_file = True
 			self._globals_update()
-			self._send_packet(struct.pack('<Bfffff', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1]) + filename.encode('utf8'))
+			self._send_packet(struct.pack('=Bfffff', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1]) + filename.encode('utf8'))
 	# }}}
 	def _audio_play(self): # {{{
 		if self.audiofile is None:
@@ -1399,7 +1399,7 @@ class Printer: # {{{
 			else:
 				self.axis[len(axes):] = []
 			for a in range(len(axes)):
-				self.axis[a]['offset'], self.axis[a]['park'], self.axis[a]['park_order'], self.axis[a]['max_v'], self.axis[a]['min'], self.axis[a]['max'] = struct.unpack('<ffBfff', axes[a])
+				self.axis[a]['offset'], self.axis[a]['park'], self.axis[a]['park_order'], self.axis[a]['max_v'], self.axis[a]['min'], self.axis[a]['max'] = struct.unpack('=ffBfff', axes[a])
 				if self.id == 0 and a == 2:
 					self.axis[a]['offset'] -= self.printer.zoffset
 			if len(motors) > len(self.motor):
@@ -1407,38 +1407,38 @@ class Printer: # {{{
 			else:
 				self.motor[len(motors):] = []
 			for m in range(len(motors)):
-				self.motor[m]['step_pin'], self.motor[m]['dir_pin'], self.motor[m]['enable_pin'], self.motor[m]['limit_min_pin'], self.motor[m]['limit_max_pin'], self.motor[m]['sense_pin'], self.motor[m]['steps_per_unit'], self.motor[m]['max_steps'], self.motor[m]['home_pos'], self.motor[m]['limit_v'], self.motor[m]['limit_a'], self.motor[m]['home_order'] = struct.unpack('<HHHHHHfBfffB', motors[m])
+				self.motor[m]['step_pin'], self.motor[m]['dir_pin'], self.motor[m]['enable_pin'], self.motor[m]['limit_min_pin'], self.motor[m]['limit_max_pin'], self.motor[m]['sense_pin'], self.motor[m]['steps_per_unit'], self.motor[m]['max_steps'], self.motor[m]['home_pos'], self.motor[m]['limit_v'], self.motor[m]['limit_a'], self.motor[m]['home_order'] = struct.unpack('=HHHHHHfBfffB', motors[m])
 				if self.id == 1 and m < len(self.printer.multipliers):
 					self.motor[m]['steps_per_unit'] /= self.printer.multipliers[m]
 		def write_info(self, num_axes = None):
-			data = struct.pack('<Bf', self.type, self.max_deviation)
+			data = struct.pack('=Bf', self.type, self.max_deviation)
 			if self.type == TYPE_CARTESIAN:
-				data += struct.pack('<B', num_axes if num_axes is not None else len(self.axis))
+				data += struct.pack('=B', num_axes if num_axes is not None else len(self.axis))
 			elif self.type == TYPE_DELTA:
 				for a in range(3):
-					data += struct.pack('<ffff', self.delta[a]['axis_min'], self.delta[a]['axis_max'], self.delta[a]['rodlength'], self.delta[a]['radius'])
-				data += struct.pack('<f', self.delta_angle)
+					data += struct.pack('=ffff', self.delta[a]['axis_min'], self.delta[a]['axis_max'], self.delta[a]['rodlength'], self.delta[a]['radius'])
+				data += struct.pack('=f', self.delta_angle)
 			elif self.type == TYPE_EXTRUDER:
 				num = num_axes if num_axes is not None else len(self.axis)
-				data += struct.pack('<B', num)
+				data += struct.pack('=B', num)
 				for a in range(num):
 					if a < len(self.extruder):
-						data += struct.pack('<fff', self.extruder[a]['dx'], self.extruder[a]['dy'], self.extruder[a]['dz'])
+						data += struct.pack('=fff', self.extruder[a]['dx'], self.extruder[a]['dy'], self.extruder[a]['dz'])
 					else:
-						data += struct.pack('<fff', 0, 0, 0)
+						data += struct.pack('=fff', 0, 0, 0)
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
 			return data
 		def write_axis(self, axis):
-			return struct.pack('<ffBfff', self.axis[axis]['offset'] + (self.printer.zoffset if self.id == 0 and axis == 2 else 0), self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['max_v'], self.axis[axis]['min'], self.axis[axis]['max'])
+			return struct.pack('=ffBfff', self.axis[axis]['offset'] + (self.printer.zoffset if self.id == 0 and axis == 2 else 0), self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['max_v'], self.axis[axis]['min'], self.axis[axis]['max'])
 		def write_motor(self, motor):
-			return struct.pack('<HHHHHHfBfffB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
+			return struct.pack('=HHHHHHfBfffB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
 		def set_current_pos(self, axis, pos):
 			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
-			self.printer._send_packet(struct.pack('<BBBf', protocol.command['SETPOS'], self.id, axis, pos))
+			self.printer._send_packet(struct.pack('=BBBf', protocol.command['SETPOS'], self.id, axis, pos))
 		def get_current_pos(self, axis):
-			self.printer._send_packet(struct.pack('<BBB', protocol.command['GETPOS'], self.id, axis))
+			self.printer._send_packet(struct.pack('=BBB', protocol.command['GETPOS'], self.id, axis))
 			cmd, s, m, f, e, data = self.printer._get_reply()
 			assert cmd == protocol.rcommand['POS']
 			#log('get current pos %d %d: %f' % (self.id, axis, f))
@@ -1489,7 +1489,7 @@ class Printer: # {{{
 			self.id = id
 			self.value = float('nan')
 		def read(self, data):
-			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp = struct.unpack('<fffffHHHf', data)
+			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp = struct.unpack('=fffffHHHf', data)
 			try:
 				self.Rc = math.exp(logRc)
 			except:
@@ -1502,7 +1502,7 @@ class Printer: # {{{
 				logRc = math.log(self.Rc)
 			except:
 				logRc = float('nan')
-			return struct.pack('<fffffHHHf', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0)
+			return struct.pack('=fffffHHHf', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0)
 		def export(self):
 			return [self.name, self.R0, self.R1, self.Rc, self.Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp, self.value]
 		def export_settings(self):
@@ -1519,11 +1519,11 @@ class Printer: # {{{
 			self.state = 3
 			self.reset = 3
 		def read(self, data):
-			self.pin, state, = struct.unpack('<HB', data)
+			self.pin, state, = struct.unpack('=HB', data)
 			self.state = state & 0x3
 			self.reset = (state >> 2) & 0x3
 		def write(self):
-			return struct.pack('<HB', self.pin, self.state | (self.reset << 2))
+			return struct.pack('=HB', self.pin, self.state | (self.reset << 2))
 		def export(self):
 			return [self.name, self.pin, self.state, self.reset]
 		def export_settings(self):
@@ -1538,7 +1538,7 @@ class Printer: # {{{
 	# Useful commands.  {{{
 	def reset(self): # {{{
 		log('%s resetting and dying.' % self.uuid)
-		self._send_packet(struct.pack('<BB', protocol.command['RESET'], 0))
+		self._send_packet(struct.pack('=BL', protocol.command['RESET'], 0xdeadbeef))
 	# }}}
 	def die(self, reason): # {{{
 		log('%s dying as requested by host (%s).' % (self.uuid, reason))
@@ -1590,14 +1590,14 @@ class Printer: # {{{
 			self.position_valid = False
 			if update:
 				self._globals_update()
-		self._send_packet(struct.pack('<BB', protocol.command['SLEEP'], sleeping))
+		self._send_packet(struct.pack('=BB', protocol.command['SLEEP'], sleeping))
 	# }}}
 	def settemp(self, channel, temp, update = True): # {{{
 		channel = int(channel)
 		self.temps[channel].value = temp
 		if update:
 			self._temp_update(channel)
-		self._send_packet(struct.pack('<BBf', protocol.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
+		self._send_packet(struct.pack('=BBf', protocol.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
 		if self.gcode_waiting > 0 and any(channel == x[0] for x in self.tempcb):
 			self.waittemp(channel, temp)
 	# }}}
@@ -1607,14 +1607,14 @@ class Printer: # {{{
 			min = float('nan')
 		if max is None:
 			max = float('nan')
-		self._send_packet(struct.pack('<BBff', protocol.command['WAITTEMP'], channel, min + C0 if not math.isnan(self.temps[channel].beta) else min, max + C0 if not math.isnan(self.temps[channel].beta) else max))
+		self._send_packet(struct.pack('=BBff', protocol.command['WAITTEMP'], channel, min + C0 if not math.isnan(self.temps[channel].beta) else min, max + C0 if not math.isnan(self.temps[channel].beta) else max))
 	# }}}
 	def readtemp(self, channel): # {{{
 		channel = int(channel)
 		if channel >= len(self.temps):
 			log('Trying to read invalid temp %d' % channel)
 			return float('nan')
-		self._send_packet(struct.pack('<BB', protocol.command['READTEMP'], channel))
+		self._send_packet(struct.pack('=BB', protocol.command['READTEMP'], channel))
 		cmd, s, m, f, e, data = self._get_reply()
 		assert cmd == protocol.rcommand['TEMP']
 		return f - (C0 if not math.isnan(self.temps[channel].beta) else 0)
@@ -1624,13 +1624,13 @@ class Printer: # {{{
 		if channel >= len(self.temps):
 			log('Trying to read invalid power %d' % channel)
 			return float('nan')
-		self._send_packet(struct.pack('<BB', protocol.command['READPOWER'], channel))
+		self._send_packet(struct.pack('=BB', protocol.command['READPOWER'], channel))
 		cmd, s, m, f, e, data = self._get_reply()
 		assert cmd == protocol.rcommand['POWER']
 		return s, m
 	# }}}
 	def readpin(self, pin): # {{{
-		self._send_packet(struct.pack('<BB', protocol.command['READPIN'], pin))
+		self._send_packet(struct.pack('=BB', protocol.command['READPIN'], pin))
 		cmd, s, m, f, e, data = self._get_reply()
 		assert cmd == protocol.rcommand['PIN']
 		return bool(s)
@@ -1687,7 +1687,7 @@ class Printer: # {{{
 	def pause(self, pausing = True, store = True, update = True): # {{{
 		was_paused = self.paused
 		if pausing:
-			self._send_packet(struct.pack('<BB', protocol.command['QUEUED'], True))
+			self._send_packet(struct.pack('=BB', protocol.command['QUEUED'], True))
 			cmd, s, m, f, e, data = self._get_reply()
 			if cmd != protocol.rcommand['QUEUE']:
 				log('invalid reply to queued command')
@@ -1747,7 +1747,7 @@ class Printer: # {{{
 			self._globals_update()
 	# }}}
 	def queued(self): # {{{
-		self._send_packet(struct.pack('<BB', protocol.command['QUEUED'], False))
+		self._send_packet(struct.pack('=BB', protocol.command['QUEUED'], False))
 		cmd, s, m, f, e, data = self._get_reply()
 		if cmd != protocol.rcommand['QUEUE']:
 			log('invalid reply to queued command')
@@ -1842,7 +1842,7 @@ class Printer: # {{{
 			s += chr(c)
 		filename = os.path.join(self.audiodir, name)
 		with open(filename, 'wb') as f:
-			f.write(struct.pack('<H', 1000000 // wav.getframerate()) + s)
+			f.write(struct.pack('=H', 1000000 // wav.getframerate()) + s)
 	# }}}
 	def audio_list(self): # {{{
 		ret = []
@@ -1851,7 +1851,7 @@ class Printer: # {{{
 		for x in os.listdir(self.audiodir):
 			try:
 				with open(os.path.join(self.audiodir, x), 'rb') as f:
-					us_per_bit = struct.unpack('<H', f.read(2))[0]
+					us_per_bit = struct.unpack('=H', f.read(2))[0]
 					bits = (os.fstat(f.fileno()).st_size - 2) * 8
 					t = bits * us_per_bit * 1e-6
 					ret.append((x, t))
@@ -2170,7 +2170,7 @@ class Printer: # {{{
 					nums = [nums['T'], nums['x'], nums['X'], nums['y'], nums['Y'], nums['z'], nums['Z'], nums['e'], nums['E'], nums['f'], nums['F']]
 				nums += [0] * (11 - len(nums))
 				if type != protocol.parsed['PARK']:
-					dst.write(struct.pack('<Bl' + 'f' * 10, type, *nums))
+					dst.write(struct.pack('=Bl' + 'f' * 10, type, *nums))
 				else:
 					# TODO: add park moves.
 					pass
@@ -2448,7 +2448,7 @@ class Printer: # {{{
 				dst.write(s)
 				size += len(s)
 			for s in stringmap:
-				dst.write(struct.pack('<L', s))
+				dst.write(struct.pack('=L', s))
 			ret = bbox
 			if any(x is None for x in bbox):
 				bbox = bbox_last
@@ -2456,7 +2456,7 @@ class Printer: # {{{
 				if any(x is None for x in bbox):
 					bbox = [0] * 6
 					ret = None
-			dst.write(struct.pack('<L' + 'f' * 6, len(strings), *bbox))
+			dst.write(struct.pack('=L' + 'f' * 6, len(strings), *bbox))
 		self._broadcast(None, 'blocked', None)
 		return ret, errors
 	# }}}
@@ -2597,7 +2597,7 @@ class Printer: # {{{
 					assert len(dd) == 0
 			if 'delta_angle' in ka:
 				self.spaces[space].delta_angle = ka.pop('delta_angle')
-		self._send_packet(struct.pack('<BB', protocol.command['WRITE_SPACE_INFO'], space) + self.spaces[space].write_info(num_axes))
+		self._send_packet(struct.pack('=BB', protocol.command['WRITE_SPACE_INFO'], space) + self.spaces[space].write_info(num_axes))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
 			if update:
@@ -2612,7 +2612,7 @@ class Printer: # {{{
 			assert(ka['multiplier'] > 0)
 			self.multipliers[axis] = ka.pop('multiplier')
 			self.set_motor((space, axis), readback, update)
-		self._send_packet(struct.pack('<BBB', protocol.command['WRITE_SPACE_AXIS'], space, axis) + self.spaces[space].write_axis(axis))
+		self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_AXIS'], space, axis) + self.spaces[space].write_axis(axis))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
 			if update:
@@ -2622,7 +2622,7 @@ class Printer: # {{{
 		for key in ('name', 'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_unit', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
 			if key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
-		self._send_packet(struct.pack('<BBB', protocol.command['WRITE_SPACE_MOTOR'], space, motor) + self.spaces[space].write_motor(motor))
+		self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_MOTOR'], space, motor) + self.spaces[space].write_motor(motor))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
 			if update:
@@ -2640,7 +2640,7 @@ class Printer: # {{{
 		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'):
 			if key in ka:
 				setattr(self.temps[temp], key, ka.pop(key))
-		self._send_packet(struct.pack('<BB', protocol.command['WRITE_TEMP'], temp) + self.temps[temp].write())
+		self._send_packet(struct.pack('=BB', protocol.command['WRITE_TEMP'], temp) + self.temps[temp].write())
 		self.temps[temp].read(self._read('TEMP', temp))
 		if update:
 			self._temp_update(temp)
@@ -2662,7 +2662,7 @@ class Printer: # {{{
 		self.gpios[gpio].reset = int(self.gpios[gpio].reset)
 		if (self.gpios[gpio].reset >= 2 and self.gpios[gpio].state < 2) or (self.gpios[gpio].reset < 2 and self.gpios[gpio].state >= 2):
 			self.gpios[gpio].state = self.gpios[gpio].reset
-		self._send_packet(struct.pack('<BB', protocol.command['WRITE_GPIO'], gpio) + self.gpios[gpio].write())
+		self._send_packet(struct.pack('=BB', protocol.command['WRITE_GPIO'], gpio) + self.gpios[gpio].write())
 		self.gpios[gpio].read(self._read('GPIO', gpio))
 		if update:
 			self._gpio_update(gpio)

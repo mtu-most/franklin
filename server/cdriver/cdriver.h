@@ -249,13 +249,13 @@ struct SpaceType
 
 struct Space
 {
-	uint8_t type;
-	uint8_t id;
 	void *type_data;
-	float max_deviation;
-	uint8_t num_axes, num_motors;
 	Motor **motor;
 	Axis **axis;
+	float max_deviation;
+	uint8_t type;
+	uint8_t id;
+	uint8_t num_axes, num_motors;
 	void load_info(int32_t &addr);
 	void load_axis(uint8_t a, int32_t &addr);
 	void load_motor(uint8_t m, int32_t &addr);

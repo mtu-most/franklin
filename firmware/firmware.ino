@@ -91,7 +91,7 @@ int main(void) {
 		try_send_next();
 		// Motor precompute steps.
 		handle_motors();
-		uint16_t dt = (seconds() - last_active + 0x10000) & 0xffff;
+		uint16_t dt = seconds() - last_active;
 		if (enabled_pins > 0 && timeout_time > 0 && timeout_time <= dt) {
 			// Disable LED.
 			led_pin = ~0;
@@ -104,6 +104,6 @@ int main(void) {
 			debug("timeout %d %d %d", seconds(), dt, last_active);
 			timeout = true;
 		}
-		//debug("!%x. %x,", debug_value, int(pin[0x30].avr_output));
+		//debug("!%x %x %x %x %x.", int(current_buffer), current_fragment, last_fragment, current_sample, current_len);
 	}
 }

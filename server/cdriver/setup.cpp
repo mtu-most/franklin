@@ -4,7 +4,7 @@
 void setup(char const *port, char const *run_id)
 {
 	serialdev[0] = &host_serial;
-	host_serial.begin(115200);
+	host_serial.begin(1000000);
 	serialdev[1] = NULL;
 	arch_setup_start(port);
 	setup_spacetypes();

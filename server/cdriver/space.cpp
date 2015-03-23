@@ -527,7 +527,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 static void handle_motors(unsigned long long current_time) { // {{{
 	// Check for move.
 	if (stopped && !moving) {
-		debug("handle motors not moving");
+		//debug("handle motors not moving");
 		return;
 	}
 	float factor = 1;

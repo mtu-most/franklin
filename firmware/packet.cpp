@@ -19,15 +19,14 @@ void packet()
 		// Because this is a new connection: reset active_motors.
 		active_motors = 0;
 		reply[0] = CMD_READY;
-		reply[1] = 12;
+		reply[1] = 11;
 		*reinterpret_cast <uint32_t *>(&reply[2]) = 0;
 		reply[6] = NUM_DIGITAL_PINS;
 		reply[7] = NUM_ANALOG_INPUTS;
 		reply[8] = NUM_MOTORS;
-		reply[9] = NUM_BUFFERS;
-		reply[10] = FRAGMENTS_PER_MOTOR;
-		reply[11] = BYTES_PER_FRAGMENT;
-		reply_ready = 12;
+		reply[9] = FRAGMENTS_PER_MOTOR;
+		reply[10] = BYTES_PER_FRAGMENT;
+		reply_ready = 11;
 		return;
 	}
 	case CMD_PING:
@@ -300,7 +299,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_MOVE");
 #endif
-		if (command[1] >= NUM_BUFFERS) {
+		if (command[1] >= NUM_MOTORS) {
 			debug("invalid buffer %d to fill", command[1]);
 			write_stall();
 			return;
@@ -410,6 +409,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_DISCARD");
 #endif
+		// TODO: work well with interrupts.
 		if (command[1] >= (last_fragment - current_fragment + FRAGMENTS_PER_MOTOR) % FRAGMENTS_PER_MOTOR) {
 			debug("discarding more than entire buffer");
 			write_stall();

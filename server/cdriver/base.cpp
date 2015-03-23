@@ -28,7 +28,7 @@ void reset() { // {{{
 	}
 	for (uint8_t g = 0; g < num_gpios; ++g)
 		gpios[g].pin.read(0);
-	abort();
+	exit(0);
 } // }}}
 
 void disconnect() { // {{{

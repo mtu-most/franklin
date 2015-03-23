@@ -4,7 +4,10 @@ else
 ARCH_HEADER = arch-avr.h
 endif
 
-CPPFLAGS = -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow
+PROFILE = #-pg
+
+CPPFLAGS ?= -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow $(PROFILE)
+LDFLAGS ?= $(PROFILE)
 
 SOURCES = \
 	base.cpp \
@@ -30,13 +33,17 @@ HEADERS = \
 
 CPPFLAGS += -DARCH_INCLUDE=\"${ARCH_HEADER}\"
 
-OBJECTS = $(patsubst %.cpp,%.o,$(SOURCES))
+OBJECTS = $(addprefix build/,$(patsubst %.cpp,%.o,$(SOURCES)))
 
 cdriver: $(OBJECTS) Makefile
 	g++ $(LDFLAGS) $(OBJECTS) -o $@
 
-%.o: %.cpp $(HEADERS) Makefile
+build/stamp:
+	mkdir -p build
+	touch $@
+
+build/%.o: %.cpp $(HEADERS) build/stamp Makefile
 	g++ $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(OBJECTS) cdriver
+	rm -rf $(OBJECTS) build cdriver

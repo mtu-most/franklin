@@ -354,7 +354,8 @@ void try_send_next() {
 		send_packet();
 		return;
 	} // }}}
-	if (notified_current_fragment != current_fragment) { // {{{
+	uint8_t cf = current_fragment;
+	if (notified_current_fragment != cf) { // {{{
 		if (step_state == 1) {
 			pending_packet[0] = CMD_UNDERRUN;
 			//debug_dump();
@@ -362,8 +363,8 @@ void try_send_next() {
 		else
 			pending_packet[0] = CMD_DONE;
 		arch_cli();
-		uint8_t num = (current_fragment - notified_current_fragment + FRAGMENTS_PER_MOTOR) % FRAGMENTS_PER_MOTOR;
-		//debug("done %ld %d %d %d", &motor[0].current_pos, current_fragment, notified_current_fragment, last_fragment);
+		uint8_t num = (cf - notified_current_fragment + FRAGMENTS_PER_MOTOR) % FRAGMENTS_PER_MOTOR;
+		//debug("done %ld %d %d %d", &motor[0].current_pos, cf, notified_current_fragment, last_fragment);
 		arch_sei();
 		pending_packet[1] = num;
 		notified_current_fragment = (notified_current_fragment + num) % FRAGMENTS_PER_MOTOR;
@@ -419,7 +420,7 @@ void try_send_next() {
 		send_packet();
 		return;
 	} // }}}
-	sdebug("Nothing to send %d %d %x", current_fragment, notified_current_fragment, debug_value);
+	sdebug("Nothing to send %d %d %x", cf, notified_current_fragment, debug_value);
 }
 // }}}
 

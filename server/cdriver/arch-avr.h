@@ -23,7 +23,7 @@
 #define ADCBITS 10
 
 // Not defines, because they can change value.
-EXTERN uint8_t NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, NUM_BUFFERS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT;
+EXTERN uint8_t NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT;
 // }}}
 
 enum Control { // {{{
@@ -66,6 +66,13 @@ enum HWCommands { // {{{
 	HWC_SENSE1,	// 6a
 	HWC_TIMEOUT,	// 6b
 };
+// }}}
+
+// Function declarations. {{{
+static inline void avr_send();
+static inline void arch_start_move(int extra);
+static inline void arch_motors_change();
+static inline void RESET(Pin_t _pin);
 // }}}
 
 extern int avr_active_motors;
@@ -150,10 +157,6 @@ EXTERN bool avr_homing;
 } while(0)
 
 // Serial port communication. {{{
-static inline void avr_send();
-static inline void arch_start_move(int extra);
-static inline void arch_motors_change();
-
 static inline void try_send_control() {
 	if (out_busy || avr_control_queue_length == 0)
 		return;
@@ -394,6 +397,15 @@ static inline void hwpacket(int len) {
 		motors_busy = false;
 		// Everything has shut down; reset pins to normal (but inactive).
 		arch_motors_change();
+		for (int s = 0; s < num_spaces; ++s) {
+			for (int m = 0; m < spaces[s].num_motors; ++m) {
+				RESET(spaces[s].motor[m]->step_pin);
+				RESET(spaces[s].motor[m]->dir_pin);
+				RESET(spaces[s].motor[m]->enable_pin);
+			}
+		}
+		for (int t = 0; t < num_temps; ++t)
+			settemp(t, NAN);
 		send_host(CMD_TIMEOUT);
 		return;
 	}
@@ -648,9 +660,8 @@ static inline void arch_setup_end(char const *run_id) {
 	NUM_DIGITAL_PINS = command[1][6];
 	NUM_ANALOG_INPUTS = command[1][7];
 	NUM_MOTORS = command[1][8];
-	NUM_BUFFERS = command[1][9];
-	FRAGMENTS_PER_BUFFER = command[1][10];
-	BYTES_PER_FRAGMENT = command[1][11];
+	FRAGMENTS_PER_BUFFER = command[1][9];
+	BYTES_PER_FRAGMENT = command[1][10];
 	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * 2];
 	avr_in_control_queue = new bool[NUM_DIGITAL_PINS];
 	avr_control_queue_length = 0;

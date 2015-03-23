@@ -1,9 +1,4 @@
 *.pyc
 firmware/build-*
-firmware/*.o
-firmware/firmware
-calibrate/*.ini
-server/html/expressions.js
-server/firmware
-server/cdriver/*.o
 server/cdriver/cdriver
+server/cdriver/build

@@ -177,7 +177,9 @@ static inline void handle_serial_input(uint8_t which, uint8_t data, uint8_t stat
 	}
 	if (serial_overflow)
 		return;
-	uint16_t next = (serial_buffer_head + 1) % SERIAL_BUFFER_SIZE;
+	uint16_t next = serial_buffer_head + 1;
+	if (next >= SERIAL_BUFFER_SIZE)
+		next = 0;
 	if (status != 0 || next == serial_buffer_tail) {
 		debug_add(0xb00);
 		debug_add(status);
@@ -545,9 +547,6 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"lds 17, move_phase"		"\n"
 		"\t"	"inc 17"			"\n"
 		"\t"	"sts move_phase, 17"		"\n"
-		"\t"	"sts debug_value + 1, 17"	"\n"
-		"\t"	"lds 17, move_phase"		"\n"
-		"\t"	"sts debug_value, 17"	"\n"
 		// Clear x.h
 		"\t"	"clr 27"			"\n"
 	// Register usage:
@@ -675,10 +674,10 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		//*/
 		// Increment Y and Z, dec counter 16 and loop.
 		"isr_action_continue:"			"\n"
-		"\t"	"adiw 28, %[motor_size]"	"\n"
-		"\t"	"adiw 30, %[fragment_size]"	"\n"
 		"\t"	"dec 16"			"\n"
 		"\t"	"breq 1f"			"\n"
+		"\t"	"adiw 28, %[motor_size]"	"\n"
+		"\t"	"adiw 30, %[fragment_size]"	"\n"
 		"\t"	"rjmp isr_action_loop"		"\n"
 		"1:\t"					"\n"
 		// Check if this sample is completed (move_phase >= full_phase).
@@ -690,7 +689,6 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		// Next sample.
 		// move_phase = 0;
 		"\t"	"sts move_phase, 27"		"\n"
-		"\t"	"sts debug_value, 27"	"\n"
 		// If step_state == 2(single): step_state = 0(wait for sensor).
 		"\t"	"lds 16, step_state"		"\n"
 		"\t"	"cpi 16, 2"			"\n"
@@ -723,18 +721,14 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"clr 16"			"\n"
 		"\t"	"ldi 30, lo8(buffer)"		"\n"
 		"\t"	"ldi 31, hi8(buffer)"		"\n"
-		"\t"	"sts current_buffer, 30"	"\n"
-		"\t"	"sts current_buffer + 1, 31"	"\n"
 		"\t"	"rjmp 2f"			"\n"
 		"1:\t"	"lds 30, current_buffer"	"\n"
 		"\t"	"lds 31, current_buffer + 1"	"\n"
-		"\t"	"ldi 28, %[buffer_size] & 0xff"	"\n"
-		"\t"	"ldi 29, %[buffer_size] >> 8"	"\n"
-		"\t"	"add 30, 28"			"\n"
-		"\t"	"adc 31, 29"			"\n"
-		"\t"	"sts current_buffer, 30"	"\n"
+		"\t"	"subi 30, -%[buffer_size] & 0xff"	"\n"
+		"\t"	"sbci 31, (-%[buffer_size] >> 8) & 0xff"	"\n"
+		"2:\t"	"sts current_buffer, 30"	"\n"
 		"\t"	"sts current_buffer + 1, 31"	"\n"
-		"2:\t"	"sts current_fragment, 16"	"\n"
+		"\t"	"sts current_fragment, 16"	"\n"
 		// Check for underrun.
 		"\t"	"lds 17, last_fragment"		"\n"
 		"\t"	"cp 16, 17"			"\n"
@@ -758,12 +752,13 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		// Set current length.
 		"\t"	"ldi 28, lo8(settings)"		"\n"
 		"\t"	"ldi 29, hi8(settings)"		"\n"
-		"\t"	"mov 17, 16"			"\n"
+		"\t"	"tst 16"			"\n"
+		"\t"	"breq 2f"			"\n"
 		"1:\t"	"adiw 28, %[settings_size]"	"\n"
-		"\t"	"dec 17"			"\n"
+		"\t"	"dec 16"			"\n"
 		"\t"	"brne 1b"			"\n"
-		"\t"	"ldd 17, y + %[len]"		"\n"
-		"\t"	"sts current_len, 17"		"\n"
+		"2:\t"	"ldd 16, y + %[len]"		"\n"
+		"\t"	"sts current_len, 16"		"\n"
 		"\t"	"rjmp isr_end"			"\n"
 		// Underrun.
 		"3:\t"	"ldi 16, 1"			"\n"
@@ -851,21 +846,21 @@ inline void SET_OUTPUT(uint8_t pin_no) {
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
-	debug("output pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
+	//debug("output pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void SET_INPUT(uint8_t pin_no) {
 	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_INPUT);
-	debug("input pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
+	//debug("input pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void UNSET(uint8_t pin_no) {
 	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_UNSET);
-	debug("unset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
+	//debug("unset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void SET(uint8_t pin_no) {
@@ -874,7 +869,7 @@ inline void SET(uint8_t pin_no) {
 	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_SET);
-	debug("set pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
+	//debug("set pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline void RESET(uint8_t pin_no) {
@@ -883,7 +878,7 @@ inline void RESET(uint8_t pin_no) {
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
-	debug("reset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
+	//debug("reset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 
 inline bool GET(uint8_t pin_no) {

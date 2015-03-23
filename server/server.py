@@ -668,7 +668,7 @@ else:
 	default_printer = (config['printer'], None)
 # }}}
 
-httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'])
+httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = False)
 
 log('running')
 websockets.fgloop()
