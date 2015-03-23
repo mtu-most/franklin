@@ -40,7 +40,8 @@ config = fhs.init(packagename = 'franklin', config = {
 		'local': 'False',
 		'driver': '',
 		'cdriver': '',
-		'log': ''
+		'log': '',
+		'tls': 'True'
 	})
 if config['audiodir'] == '':
 	config['audiodir'] = fhs.write_cache(name = 'audio', dir = True),
@@ -56,6 +57,7 @@ default_printer = (None, None)
 ports = {}
 autodetect = config['autodetect'].lower() == 'true'
 local = config['local'].lower() == 'true'
+tls = config['tls'].lower() == 'true'
 orphans = {}
 scripts = {}
 # }}}
@@ -668,7 +670,7 @@ else:
 	default_printer = (config['printer'], None)
 # }}}
 
-httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = False)
+httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = tls)
 
 log('running')
 websockets.fgloop()

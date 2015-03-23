@@ -24,6 +24,9 @@ RUN=1
 # Address to listen on.  Set to 0.0.0.0 to disable IPv6 (needed on Raspberry Pi).
 #ADDRESS=
 
+# Use SSL connections.
+#TLS=True
+
 # Location of log file or directory.  Set to /var/log/franklin to enable logging in the default location.
 #LOG=
 
@@ -90,6 +93,7 @@ if [ -v AUTODETECT ] ; then	START_ARGS+=(--autodetect="$AUTODETECT") ; fi
 if [ -v PREDETECT ] ; then	START_ARGS+=(--predetect="$PREDETECT") ; fi
 if [ -v PORT ] ; then		START_ARGS+=(--port="$PORT") ; fi
 if [ -v ADDRESS ] ; then	START_ARGS+=(--address="$ADDRESS") ; fi
+if [ -v TLS ] ; then		START_ARGS+=(--tls="$TLS") ; fi
 if [ -v LOG ] ; then		START_ARGS+=(--log="$LOG") ; fi
 if [ -v PRINTER ] ; then	START_ARGS+=(--printer="$PRINTER") ; fi
 if [ -v AUDIODIR ] ; then	START_ARGS+=(--audiodir="$AUDIODIR") ; fi
