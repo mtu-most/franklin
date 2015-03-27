@@ -186,6 +186,7 @@ class Printer: # {{{
 		self.job_id = None
 		self.confirm_id = 0
 		self.confirm_message = None
+		self.confirm_axes = None
 		self.confirmer = None
 		self.position_valid = False
 		self.probing = False
@@ -466,7 +467,7 @@ class Printer: # {{{
 					log('Ignoring updated invalid temp %d' % s)
 				continue
 			elif cmd == protocol.rcommand['UPDATE_PIN']:
-				gpios[s].state = m
+				self.gpios[s].state = m
 				self._gpio_update(s)
 				continue
 			elif cmd == protocol.rcommand['CONFIRM']:
@@ -1181,10 +1182,10 @@ class Printer: # {{{
 					# Correct for possible extra steps that were done because pausing happened later than hitting the sensor (only on cartesian; delta was done above).
 					if self.home_orig_type == TYPE_DELTA:
 						if not math.isnan(self.home_delta_target):
-							self.spaces[self.home_space].set_current_pos(i, self.home_delta_target + self.sense[self.home_space][i][-1][1] - self.spaces[self.home_space].get_current_pos(i))
+							self.spaces[self.home_space].set_current_pos(i, self.home_delta_target + self.sense[self.home_space][i][-1][1] - self.spaces[self.home_space].get_current_pos(i) + self.spaces[self.home_space].axis[i]['offset'])
 					else:
 						if not math.isnan(m['home_pos']):
-							self.spaces[self.home_space].set_current_pos(i, m['home_pos'] + self.sense[self.home_space][i][-1][1] - self.spaces[self.home_space].get_current_pos(i))
+							self.spaces[self.home_space].set_current_pos(i, m['home_pos'] + self.sense[self.home_space][i][-1][1] - self.spaces[self.home_space].get_current_pos(i) + self.spaces[self.home_space].axis[i]['offset'])
 			n = [m['home_order'] for m in self.spaces[self.home_space].motor if m['home_order'] > self.home_order]
 			if len(n) > 0:
 				self.home_phase = 0
@@ -1365,6 +1366,12 @@ class Printer: # {{{
 			self._globals_update()
 			self._send_packet(struct.pack('=Bfffff', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1]) + filename.encode('utf8'))
 	# }}}
+	def _reset_extruders(self, axes):
+		for i, sp in enumerate(axes):
+			for a, pos in enumerate(sp):
+				# Assume motor[a] corresponds to axis[a] if it exists.
+				if len(self.spaces[i].motor) > a and not self.pin_valid(self.spaces[i].motor[a]['limit_max_pin']) and not self.pin_valid(self.spaces[i].motor[a]['limit_min_pin']):
+					self.set_axis_pos(i, a, pos)
 	def _audio_play(self): # {{{
 		if self.audiofile is None:
 			if self.audioid is not None:
@@ -1400,8 +1407,6 @@ class Printer: # {{{
 				self.axis[len(axes):] = []
 			for a in range(len(axes)):
 				self.axis[a]['offset'], self.axis[a]['park'], self.axis[a]['park_order'], self.axis[a]['max_v'], self.axis[a]['min'], self.axis[a]['max'] = struct.unpack('=ffBfff', axes[a])
-				if self.id == 0 and a == 2:
-					self.axis[a]['offset'] -= self.printer.zoffset
 			if len(motors) > len(self.motor):
 				self.motor += [{'name': 'Motor %d' % i} for i in range(len(self.motor), len(motors))]
 			else:
@@ -1431,7 +1436,7 @@ class Printer: # {{{
 				raise AssertionError('invalid space type')
 			return data
 		def write_axis(self, axis):
-			return struct.pack('=ffBfff', self.axis[axis]['offset'] + (self.printer.zoffset if self.id == 0 and axis == 2 else 0), self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['max_v'], self.axis[axis]['min'], self.axis[axis]['max'])
+			return struct.pack('=ffBfff', self.axis[axis]['offset'], self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['max_v'], self.axis[axis]['min'], self.axis[axis]['max'])
 		def write_motor(self, motor):
 			return struct.pack('=HHHHHHfBfffB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
 		def set_current_pos(self, axis, pos):
@@ -1571,7 +1576,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False, probe = False): # {{{
-		#log('goto %s %s %s %d %d' % (repr(moves), f0, f1, cb, probe))
+		log('goto %s %s %s %d %d' % (repr(moves), f0, f1, cb, probe))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
 		self.queue.append((id, moves, f0, f1, cb, probe))
@@ -1699,11 +1704,7 @@ class Printer: # {{{
 			if was_paused:
 				# Go back to pausing position.
 				# First reset all axes that don't have a limit switch.
-				for i, sp in enumerate(self.queue_info[1]):
-					for a, pos in enumerate(sp):
-						# Assume motor[a] corresponds to axis[a] if it exists.
-						if len(self.spaces[i].motor) > a and not self.pin_valid(self.spaces[i].motor[a]['limit_max_pin']) and not self.pin_valid(self.spaces[i].motor[a]['limit_min_pin']):
-							self.set_axis_pos(i, a, pos)
+				self._reset_extruders(self.queue_info[1])
 				self.goto(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
 				#log('resuming')
@@ -2103,6 +2104,7 @@ class Printer: # {{{
 			self._send(self.confirmer, 'return', False)
 		self.confirmer = id
 		self.confirm_id += 1
+		self.confirm_axes = [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces]
 		self.confirm_message = message
 		self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
@@ -2119,6 +2121,7 @@ class Printer: # {{{
 		if id not in (False, None):
 			self._send(id, 'return', success)
 		else:
+			self._reset_extruders(self.confirm_axes)
 			if self.probing:
 				call_queue.append((self.probe_cb[1], [success]))
 			else:
@@ -2127,6 +2130,7 @@ class Printer: # {{{
 					self._print_done(False, 'aborted by failed confirmation')
 				else:
 					call_queue.append((self._do_gcode, []))
+		self.confirm_axes = None
 		return True
 	# }}}
 	def queue_add(self, data, name): # {{{
@@ -2136,6 +2140,7 @@ class Printer: # {{{
 			return self._queue_add(f, name)
 	# }}}
 	def _queue_add_file(self, filename, name): # {{{
+		log('post queue add')
 		with open(filename) as f:
 			return ', '.join(self._queue_add(f, name))
 	# }}}
@@ -2151,6 +2156,7 @@ class Printer: # {{{
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
 	# }}}
 	def _gcode_parse(self, src, name): # {{{
+		assert len(self.spaces) > 0
 		self._broadcast(None, 'blocked', 'parsing g-code')
 		errors = []
 		mode = None
@@ -2171,23 +2177,35 @@ class Printer: # {{{
 				nums += [0] * (11 - len(nums))
 				if type != protocol.parsed['PARK']:
 					dst.write(struct.pack('=Bl' + 'f' * 10, type, *nums))
+					if type == protocol.parsed['GOTO']:
+						for i in range(3):
+							if nums[2 * i + 1] != nums[2 * i + 2]:
+								value = nums[2 * i + 2]
+								if math.isnan(value):
+									continue
+								if bbox[2 * i] is None or value < bbox[2 * i]:
+									bbox[2 * i] = value
+								if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
+									bbox[2 * i + 1] = value
 				else:
-					# TODO: add park moves.
-					pass
-				if type == protocol.parsed['PARK']:
+					order = None
+					while True:
+						topark = [a['park_order'] for a in self.spaces[0].axis[:3] if not math.isnan(a['park']) and (order is None or a['park_order'] > order)]
+						if len(topark) > 0:
+							order = min(topark)
+						else:
+							break
+						if order is None:
+							break
+						for i in range(3):
+							if len(self.spaces[0].axis) > i and self.spaces[0].axis[i]['park_order'] == order:
+								nums[2 + 2 * i] = self.spaces[0].axis[i]['park'] - self.spaces[0].axis[i]['offset']	# TODO: offset is not acceptable here.
+						dst.write(struct.pack('=Bl' + 'f' * 10, protocol.parsed['GOTO'], *nums))
+						for i in range(3):
+							nums[1 + i * 2] = nums[2 + i * 2]
 					if bbox[0] is not None:
 						bbox_last[:] = bbox
 					bbox[:] = [None] * 6
-				elif type == protocol.parsed['GOTO']:
-					for i in range(3):
-						if nums[2 * i + 1] != nums[2 * i + 2]:
-							value = nums[2 * i + 2]
-							if math.isnan(value):
-								continue
-							if bbox[2 * i] is None or value < bbox[2 * i]:
-								bbox[2 * i] = value
-							if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
-								bbox[2 * i + 1] = value
 			def add_string(string):
 				if string is None:
 					return 0
@@ -2318,7 +2336,18 @@ class Printer: # {{{
 						# Tool change: park.
 						cmd = ('G', 28)
 					if cmd == ('G', 28):
-						add_record(protocol.parsed['PARK'])
+						nums = [current_extruder]
+						for i in range(3):
+							if len(self.spaces) > 0 and len(self.spaces[0].axis) > i:
+								nums += [pos[0][i], pos[0][i]]
+							else:
+								nums += [0, 0]
+						if len(self.spaces) > 1 and len(self.spaces[1].axis) > current_extruder:
+							nums += [pos[1][current_extruder], pos[1][current_extruder]]
+						else:
+							nums += [0, 0]
+						nums += [float('inf'), float('inf')]
+						add_record(protocol.parsed['PARK'], nums)
 						for a in range(len(pos[0])):
 							if len(self.spaces[0].axis) > a and not math.isnan(self.spaces[0].axis[a]['park']):
 								pos[0][a] = self.spaces[0].axis[a]['park']
@@ -2513,7 +2542,7 @@ class Printer: # {{{
 				setattr(self, key, float(ka.pop(key)))
 		self._write_globals(ns, nt, ng, update = update)
 		if self.zoffset != oldzoffset and len(self.spaces) > 0 and len(self.spaces[0].axis) > 2:
-			self.set_axis((0, 2))
+			self.set_axis((0, 2), offset = self.spaces[0].axis[2]['offset'] - oldzoffset + self.zoffset)
 		assert len(ka) == 0
 	# }}}
 	# Space {{{

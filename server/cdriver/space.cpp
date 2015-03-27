@@ -108,7 +108,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 static void move_to_current() {
 	if (!stopped || moving || !motors_busy)
 		return;
-	//debug("move to current");
+	debug("move to current");
 	settings[current_fragment].f0 = 0;
 	settings[current_fragment].fmain = 1;
 	settings[current_fragment].fp = 0;
@@ -197,7 +197,8 @@ void Space::load_axis(uint8_t a, int32_t &addr)
 	axis[a]->max_pos = read_float(addr);
 	if (axis[a]->offset != old_offset) {
 		axis[a]->settings[current_fragment].current += axis[a]->offset - old_offset;
-		axis[a]->settings[current_fragment].source += axis[a]->offset - old_offset;
+		if (!moving)
+			axis[a]->settings[current_fragment].source += axis[a]->offset - old_offset;
 		move_to_current();
 	}
 }
@@ -567,8 +568,10 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			cbs_after_current_move += had_cbs;
 			if (factor == 1) {
 				stopped = true;
-				if (!did_steps)
+				if (!did_steps) {
+					debug("done move");
 					moving = false;
+				}
 				for (uint8_t s = 0; s < num_spaces; ++s) {
 					Space &sp = spaces[s];
 					for (uint8_t m = 0; m < sp.num_motors; ++m)

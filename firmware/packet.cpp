@@ -80,9 +80,11 @@ void packet()
 		if (probe_pin < NUM_DIGITAL_PINS)
 			SET_INPUT(probe_pin);
 		timeout_time = *reinterpret_cast <uint16_t *>(&command[9]);
+		arch_cli();
 		full_phase_bits = 0;
 		while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << full_phase_bits)
 			full_phase_bits += 1;
+		arch_sei();
 		full_phase_bits -= 1;
 		full_phase = 1 << full_phase_bits;
 		write_ack();

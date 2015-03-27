@@ -218,6 +218,7 @@ function Pins_space(space, motor) {
 		e[i] = Pin(e[i][0], [['motor', [space, motor]], e[i][1] + '_pin']);
 	return make_pin_title(motor_name(space, motor), e, ['rowtitle6']);
 }
+// }}}
 
 // Temp. {{{
 function Temp_setup(num) {
@@ -317,7 +318,9 @@ function Top() { // {{{
 	e.AddElement('button', 'queue1').AddEvent('click', function() {queue_down(the_printer); }).AddText('⬇').type = 'button';
 	// }}}
 	// Jobs. {{{
-	e = ret.AddElement('div', 'jobs').AddElement('select');
+	var p = printer;
+	e = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(p); });
+	e.printer = printer;
 	e.multiple = true;
 	e.id = make_id(printer, [null, 'queue']);
 	// }}}

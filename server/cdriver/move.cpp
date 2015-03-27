@@ -413,7 +413,7 @@ void abort_move(int pos) { // {{{
 	//debug("restoring position for fragment %d to position %d", current_fragment, pos);
 	while (current_fragment_pos < pos)
 		apply_tick();
-	//debug("done restoring position");
+	debug("done restoring position");
 	// Copy settings back to previous fragment.
 	copy_fragment_settings(running_fragment, prev_f);
 	moving = false;
