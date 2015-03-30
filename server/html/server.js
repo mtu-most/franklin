@@ -239,8 +239,9 @@ function _setup_updater() {
 			printers[port].spaces[index].name = values[0];
 			printers[port].spaces[index].type = values[1];
 			printers[port].spaces[index].max_deviation = values[2];
-			printers[port].spaces[index].num_axes = values[3].length;
-			printers[port].spaces[index].num_motors = values[4].length;
+			printers[port].spaces[index].max_v = values[3];
+			printers[port].spaces[index].num_axes = values[4].length;
+			printers[port].spaces[index].num_motors = values[5].length;
 			var current = [];
 			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a)
 				current.push(a < printers[port].spaces[index].axis.length ? printers[port].spaces[index].axis[a].current : NaN);
@@ -249,50 +250,49 @@ function _setup_updater() {
 			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a) {
 				printers[port].spaces[index].axis.push({
 					current: current[a],
-					name: values[3][a][0],
-					offset: values[3][a][1],
-					park: values[3][a][2],
-					park_order: values[3][a][3],
-					max_v: values[3][a][4],
-					min: values[3][a][5],
-					max: values[3][a][6]
+					name: values[4][a][0],
+					offset: values[4][a][1],
+					park: values[4][a][2],
+					park_order: values[4][a][3],
+					min: values[4][a][4],
+					max: values[4][a][5]
 				});
 			}
 			for (var m = 0; m < printers[port].spaces[index].num_motors; ++m) {
 				printers[port].spaces[index].motor.push({
-					name: values[4][m][0],
-					step_pin: values[4][m][1],
-					dir_pin: values[4][m][2],
-					enable_pin: values[4][m][3],
-					limit_min_pin: values[4][m][4],
-					limit_max_pin: values[4][m][5],
-					sense_pin: values[4][m][6],
-					steps_per_unit: values[4][m][7],
-					max_steps: values[4][m][8],
-					home_pos: values[4][m][9],
-					limit_v: values[4][m][10],
-					limit_a: values[4][m][11],
-					home_order: values[4][m][12]
+					name: values[5][m][0],
+					step_pin: values[5][m][1],
+					dir_pin: values[5][m][2],
+					enable_pin: values[5][m][3],
+					limit_min_pin: values[5][m][4],
+					limit_max_pin: values[5][m][5],
+					sense_pin: values[5][m][6],
+					steps_per_unit: values[5][m][7],
+					max_steps: values[5][m][8],
+					home_pos: values[5][m][9],
+					limit_v: values[5][m][10],
+					limit_a: values[5][m][11],
+					home_order: values[5][m][12]
 				});
 			}
 			if (index == 1) {
-				for (var a = 0; a < values[5].length; ++a)
-					printers[port].spaces[index].axis[a].multiplier = values[5][a];
+				for (var a = 0; a < values[6].length; ++a)
+					printers[port].spaces[index].axis[a].multiplier = values[6][a];
 			}
 			if (printers[port].spaces[index].type == TYPE_DELTA) {
 				for (var i = 0; i < 3; ++i) {
-					printers[port].spaces[index].motor[i].delta_axis_min = values[6][i][0];
-					printers[port].spaces[index].motor[i].delta_axis_max = values[6][i][1];
-					printers[port].spaces[index].motor[i].delta_rodlength = values[6][i][2];
-					printers[port].spaces[index].motor[i].delta_radius = values[6][i][3];
+					printers[port].spaces[index].motor[i].delta_axis_min = values[7][i][0];
+					printers[port].spaces[index].motor[i].delta_axis_max = values[7][i][1];
+					printers[port].spaces[index].motor[i].delta_rodlength = values[7][i][2];
+					printers[port].spaces[index].motor[i].delta_radius = values[7][i][3];
 				}
-				printers[port].spaces[index].delta_angle = values[6][3];
+				printers[port].spaces[index].delta_angle = values[7][3];
 			}
 			if (printers[port].spaces[index].type == TYPE_EXTRUDER) {
 				for (var i = 0; i < printers[port].spaces[index].axis.length; ++i) {
-					printers[port].spaces[index].axis[i].extruder_dx = values[6][i][0];
-					printers[port].spaces[index].axis[i].extruder_dy = values[6][i][1];
-					printers[port].spaces[index].axis[i].extruder_dz = values[6][i][2];
+					printers[port].spaces[index].axis[i].extruder_dx = values[7][i][0];
+					printers[port].spaces[index].axis[i].extruder_dy = values[7][i][1];
+					printers[port].spaces[index].axis[i].extruder_dz = values[7][i][2];
 				}
 			}
 			trigger_update(port, 'space_update', index);
@@ -429,36 +429,5 @@ function setup() {
 function _setup_connection() {
 	trigger_update('', 'connect', true);
 	rpc.call('set_monitor', [true], {}, null);
-}
-// }}}
-
-// {{{ Temperature updates.
-function _do_update_temps(queue, pos) {
-	if (!rpc)
-		return;
-	if (!pos)
-		pos = 0;
-	while (pos < queue.length && !queue[pos][0] ())
-		++pos;
-	if (pos >= queue.length) {
-		if (_update_handle != null)
-			clearTimeout(_update_handle);
-		_update_handle = setTimeout(_update_temps, 5000);
-	}
-	else
-		rpc.call(queue[pos][1], queue[pos][2], queue[pos][3], function(t) { queue[pos][4] (t); _do_update_temps(queue, pos + 1); });
-}
-
-function _update_temps() {
-	_update_handle = null;
-	if (!rpc)
-		return;
-	var p = global.ports_list[global.selected];
-	if (p && p[1]) {
-		if (_active_printer != p[1])
-			rpc.call('set_printer', [null, global.selected], {}, function() { _active_printer = p[1]; _do_update_temps(p[1].monitor_queue); });
-		else
-			_do_update_temps(p[1].monitor_queue);
-	}
 }
 // }}}

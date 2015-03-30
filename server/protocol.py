@@ -44,6 +44,7 @@ command = {
 	'AUDIO_SETUP': 0x1b,
 	'AUDIO_DATA': 0x1c,
 	'RESUME': 0x1d,
+	'GETTIME': 0x1e,
 	}
 
 rcommand = {
@@ -54,17 +55,18 @@ rcommand = {
 	'PIN': 0x44,
 	'QUEUE': 0x45,
 	'HOMED': 0x46,
-	'MOVECB': 0x47,
-	'TEMPCB': 0x48,
-	'CONTINUE': 0x49,
-	'LIMIT': 0x4a,
-	'TIMEOUT': 0x4b,
-	'SENSE': 0x4c,
-	'DISCONNECT': 0x4d,
-	'UPDATE_TEMP': 0x4e,
-	'UPDATE_PIN': 0x4f,
-	'CONFIRM': 0x50,
-	'FILE_DONE': 0x51,
+	'TIME': 0x47,
+	'MOVECB': 0x48,
+	'TEMPCB': 0x49,
+	'CONTINUE': 0x4a,
+	'LIMIT': 0x4b,
+	'TIMEOUT': 0x4c,
+	'SENSE': 0x4d,
+	'DISCONNECT': 0x4e,
+	'UPDATE_TEMP': 0x4f,
+	'UPDATE_PIN': 0x50,
+	'CONFIRM': 0x51,
+	'FILE_DONE': 0x52,
 	}
 
 parsed = {

@@ -30,7 +30,6 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_axes[a]->offset = 0;
 			new_axes[a]->park = NAN;
 			new_axes[a]->park_order = 0;
-			new_axes[a]->max_v = INFINITY;
 			new_axes[a]->min_pos = -INFINITY;
 			new_axes[a]->max_pos = INFINITY;
 			new_axes[a]->type_data = NULL;
@@ -174,6 +173,7 @@ void Space::load_info(int32_t &addr)
 			ok = true;
 	}
 	max_deviation = read_float(addr);
+	max_v = read_float(addr);
 	space_types[type].load(this, t, addr);
 	if (t != type) {
 		space_types[type].reset_pos(this);
@@ -192,7 +192,6 @@ void Space::load_axis(uint8_t a, int32_t &addr)
 	axis[a]->offset = read_float(addr);
 	axis[a]->park = read_float(addr);
 	axis[a]->park_order = read_8(addr);
-	axis[a]->max_v = read_float(addr);
 	axis[a]->min_pos = read_float(addr);
 	axis[a]->max_pos = read_float(addr);
 	if (axis[a]->offset != old_offset) {
@@ -278,6 +277,7 @@ void Space::save_info(int32_t &addr)
 	//debug("saving info %d %f %d %d", type, max_deviation, num_axes, num_motors);
 	write_8(addr, type);
 	write_float(addr, max_deviation);
+	write_float(addr, max_v);
 	space_types[type].save(this, addr);
 }
 
@@ -285,7 +285,6 @@ void Space::save_axis(uint8_t a, int32_t &addr) {
 	write_float(addr, axis[a]->offset);
 	write_float(addr, axis[a]->park);
 	write_8(addr, axis[a]->park_order);
-	write_float(addr, axis[a]->max_v);
 	write_float(addr, axis[a]->min_pos);
 	write_float(addr, axis[a]->max_pos);
 }
@@ -569,7 +568,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			if (factor == 1) {
 				stopped = true;
 				if (!did_steps) {
-					debug("done move");
+					//debug("done move");
 					moving = false;
 				}
 				for (uint8_t s = 0; s < num_spaces; ++s) {

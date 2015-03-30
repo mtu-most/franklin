@@ -95,6 +95,7 @@ enum Command {
 	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_sample.
 	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	CMD_RESUME,
+	CMD_GETTIME,
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_TEMP = 0x40,	// 4 byte: requested channel's temperature. [°C]
@@ -104,6 +105,7 @@ enum Command {
 	CMD_PIN,	// 1 byte: 0 or 1: pin state.
 	CMD_QUEUE,	// 1 byte: current number of records in queue.
 	CMD_HOMED,	// 0
+	CMD_TIME,
 		// asynchronous events.
 	CMD_MOVECB,	// 1 byte: number of movecb events.
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
@@ -200,7 +202,6 @@ struct Axis
 	float offset;		// Position where axis claims to be when it is at 0.
 	float park;		// Park position; not used by the firmware, but stored for use by the host.
 	uint8_t park_order;
-	float max_v;
 	float min_pos, max_pos;
 	void *type_data;
 };
@@ -253,6 +254,7 @@ struct Space
 	Motor **motor;
 	Axis **axis;
 	float max_deviation;
+	float max_v;
 	uint8_t type;
 	uint8_t id;
 	uint8_t num_axes, num_motors;
@@ -301,6 +303,7 @@ struct MoveCommand
 	bool probe;
 	float f[2];
 	float data[10];	// Value if given, NAN otherwise.  Variable size array. TODO
+	float time, dist;
 };
 
 struct Serial_t {
@@ -427,6 +430,7 @@ struct Run_Record {
 	uint8_t type;
 	int32_t tool;
 	float x, X, y, Y, z, Z, e, E, f, F;
+	float time, dist;
 } __attribute__((__packed__));
 void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa);
 void abort_run_file();
@@ -445,6 +449,7 @@ EXTERN float run_file_refy;
 EXTERN float run_file_refz;
 EXTERN float run_file_sina;
 EXTERN float run_file_cosa;
+EXTERN float run_time, run_dist;
 
 // setup.cpp
 void setup(char const *port, char const *run_id);

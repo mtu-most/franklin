@@ -130,7 +130,7 @@ enum Command {
 
 	CMD_START_MOVE,	// 1:num_samples, 1:num_moving_motors
 	CMD_START_PROBE,// 1:num_samples, 1:num_moving_motors
-	CMD_MOVE,	// 1:which, 1:dir, *:samples	// dir: 0:positive, 1:negative, 2:audio
+	CMD_MOVE,	// 1:which, *:samples
 	CMD_START,	// 0 start moving.
 	CMD_STOP,	// 0 stop moving.
 	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.

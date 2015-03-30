@@ -28,6 +28,8 @@ void run_file(int name_len, char const *name, float refx, float refy, float refz
 	abort_run_file();
 	strncpy(run_file_name, name, name_len);
 	run_file_name[name_len] = '\0';
+	run_time = 0;
+	run_dist = 0;
 	settings[current_fragment].run_file_current = 0;
 	int fd = open(run_file_name, O_RDONLY);
 	if (fd < 0) {
@@ -43,9 +45,9 @@ void run_file(int name_len, char const *name, float refx, float refy, float refz
 	run_file_size = stat.st_size;
 	run_file_map = reinterpret_cast<Run_Record *>(mmap(NULL, run_file_size, PROT_READ, MAP_SHARED, fd, 0));
 	close(fd);
-	run_file_num_strings = read_num(run_file_size - 4 * 6 - 4);
+	run_file_num_strings = read_num(run_file_size - 4 * 8 - 4);
 	strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
-	off_t pos = run_file_size - 4 * (6 + 1 + run_file_num_strings);
+	off_t pos = run_file_size - 4 * (8 + 1 + run_file_num_strings);
 	off_t current = 0;
 	for (int i = 0; i < run_file_num_strings; ++i) {
 		strings[i].start = current;
@@ -131,6 +133,8 @@ void run_file_fill_queue() {
 						}
 					}
 				}
+				queue[settings[current_fragment].queue_end].time = r.time;
+				queue[settings[current_fragment].queue_end].dist = r.dist;
 				queue[settings[current_fragment].queue_end].cb = false;
 				settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
 				if (stopped) {

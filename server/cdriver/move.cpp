@@ -186,6 +186,8 @@ uint8_t next_move() {
 	if (settings[current_fragment].queue_end == settings[current_fragment].queue_start)
 		send_host(CMD_CONTINUE, 0);
 	probing = queue[settings[current_fragment].queue_start].probe;
+	run_time = queue[settings[current_fragment].queue_start].time;
+	run_dist = queue[settings[current_fragment].queue_start].dist;
 	settings[current_fragment].queue_start = n;
 	settings[current_fragment].queue_full = false;
 	if (!action) {
@@ -219,26 +221,25 @@ uint8_t next_move() {
 	// Limit v0, vp, vq. {{{
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
+		if (isnan(sp.max_v) || isinf(sp.max_v) || sp.max_v <= 0)
+			continue;
+		// max_mm is the maximum speed in mm/s.
+		float max_mm = probing ? space_types[sp.type].probe_speed(&sp) : sp.max_v;
+		float dist = 0, distn = 0;
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			float max_mm = probing ? space_types[sp.type].probe_speed(&sp) : sp.axis[a]->max_v;
-			if (!isnan(sp.axis[a]->max_v)) {
-				float max;
-				if (sp.axis[a]->settings[current_fragment].dist != 0) {
-					max = max_mm / fabs(sp.axis[a]->settings[current_fragment].dist);
-					if (v0 > max) {
-						v0 = max;
-						//debug("limited v0 to %f for max v %f dist %f so %f", v0, sp.axis[a].max_v, sp.axis[a].dist, max);
-					}
-					if (vp > max)
-						vp = max;
-				}
-				if (sp.axis[a]->settings[current_fragment].next_dist != 0) {
-					max = max_mm / fabs(sp.axis[a]->settings[current_fragment].next_dist);
-					if (vq > max)
-						vq = max;
-				}
-			}
+			dist += sp.axis[a]->settings[current_fragment].dist * sp.axis[a]->settings[current_fragment].dist;
+			distn += sp.axis[a]->settings[current_fragment].next_dist * sp.axis[a]->settings[current_fragment].next_dist;
 		}
+		dist = sqrt(dist);
+		distn = sqrt(distn);
+		float max = max_mm / dist;
+		if (v0 > max)
+			v0 = max;
+		if (vp > max)
+			vp = max;
+		max = max_mm / distn;
+		if (vq > max)
+			vq = max;
 	}
 #ifdef DEBUG_MOVE
 	debug("After limiting, v0 = %f /s, vp = %f /s and vq = %f /s", v0, vp, vq);
@@ -413,7 +414,7 @@ void abort_move(int pos) { // {{{
 	//debug("restoring position for fragment %d to position %d", current_fragment, pos);
 	while (current_fragment_pos < pos)
 		apply_tick();
-	debug("done restoring position");
+	//debug("done restoring position");
 	// Copy settings back to previous fragment.
 	copy_fragment_settings(running_fragment, prev_f);
 	moving = false;

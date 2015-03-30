@@ -677,6 +677,14 @@ void packet()
 		run_file_fill_queue();
 		return;
 	}
+	case CMD_GETTIME:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_GETTIME");
+#endif
+		send_host(CMD_TIME, 0, 0, (run_time + (num_spaces > 0 ? run_dist / spaces[0].max_v : 0)) / feedrate);
+		return;
+	}
 	default:
 	{
 		debug("Invalid command %x %x %x %x", command[0][0], command[0][1], command[0][2], command[0][3]);

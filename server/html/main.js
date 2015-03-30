@@ -81,6 +81,8 @@ function init() { // {{{
 					c.stroke();
 				}
 				c.restore();
+				// Update everything else.
+				update_canvas_and_spans(printer);
 				return;
 			}
 			printer.call('readtemp', [num], {}, function(t) {
@@ -261,27 +263,6 @@ function upload_buttons(port, buttons) { // {{{
 		button.AddText(buttons[b][1]);
 	}
 	return [ret];
-}
-// }}}
-
-function update_temps(printer, t) { // {{{
-	if (t === null) {
-		for (var i = 0; i < printer.temptargets.length; ++i) {
-			var f = function(i) {
-				printer.call('readtemp', [i], {}, function(value) {
-					printer.temptargets[i].ClearAll();
-					printer.temptargets[i].AddText(value.toFixed(1));
-				});
-			};
-			f(i);
-		}
-	}
-	else {
-		printer.call('readtemp', [t], {}, function(value) {
-			printer.temptargets[t].ClearAll();
-			printer.temptargets[t].AddText(value.toFixed(1));
-		});
-	}
 }
 // }}}
 
@@ -746,6 +727,7 @@ function update_space(index) { // {{{
 	e.ClearAll();
 	e.AddText(space_types[printer.spaces[index].type]);
 	update_float(printer, [['space', index], 'max_deviation']);
+	update_float(printer, [['space', index], 'max_v']);
 	update_float(printer, [['space', index], 'num_axes']);
 	var m = printer.multiples;
 	for (var t = 0; t < m.axis.length; ++t) {
@@ -782,7 +764,6 @@ function update_space(index) { // {{{
 		set_name(printer, 'axis', index, a, printer.spaces[index].axis[a].name);
 		update_float(printer, [['axis', [index, a]], 'park']);
 		update_float(printer, [['axis', [index, a]], 'park_order']);
-		update_float(printer, [['axis', [index, a]], 'max_v']);
 		update_float(printer, [['axis', [index, a]], 'min']);
 		update_float(printer, [['axis', [index, a]], 'max']);
 		if (index == 1)
@@ -1257,30 +1238,63 @@ function set_reference(printer, x, y, ctrl) { // {{{
 }
 // }}}
 
-function update_canvas_and_spans(printer, space, axis) { // {{{
+function fill(s) {
+	s = s.toFixed(0);
+	while (s.length < 2)
+		s = '0' + s;
+	return s;
+}
+
+function display_time(t) {
+	if (isNaN(t))
+		return '-';
+	var s = t;
+	var m = Math.floor(s / 60);
+	var h = Math.floor(m / 60);
+	var d = Math.floor(h / 24);
+	s -= m * 60;
+	m -= h * 60;
+	h -= d * 24;
+	if (d != 0)
+		return d.toFixed(0) + 'd ' + fill(h) + ':' + fill(m) + ':' + fill(s);
+	if (h != 0)
+		return h.toFixed(0) + ':' + fill(m) + ':' + fill(s);
+	if (m != 0)
+		return m.toFixed(0) + ':' + fill(s);
+	return s.toFixed(0) + 's';
+}
+
+function update_canvas_and_spans(p, space, axis) { // {{{
 	// When called as a cb, space may not be undefined.
 	if (axis === undefined) {
 		space = 0;
 		axis = 0;
 	}
-	while (space < printer.spaces.length && (axis >= printer.spaces[space].axis.length || space == 0 && axis >= 3)) {
+	while (space < p.spaces.length && (axis >= p.spaces[space].axis.length || space == 0 && axis >= 3)) {
 		space += 1;
 		axis = 0;
 	}
-	if (space < printer.spaces.length && space < 2) {
-		printer.call('get_axis_pos', [space, axis], {}, function(x) {
+	if (space < p.spaces.length && space < 2) {
+		p.call('get_axis_pos', [space, axis], {}, function(x) {
 			//dbg('update ' + space + ',' + axis + ':' + x);
-			printer.spaces[space].axis[axis].current = x;
-			update_float(printer, [['axis', [space, axis]], 'current']);
-			update_canvas_and_spans(printer, space, axis + 1);
+			p.spaces[space].axis[axis].current = x;
+			update_float(p, [['axis', [space, axis]], 'current']);
+			update_canvas_and_spans(p, space, axis + 1);
 		});
 		return;
 	}
-	update_float(printer, [null, 'targetx']);
-	update_float(printer, [null, 'targety']);
-	update_float(printer, [null, 'targetz']);
-	update_float(printer, [null, 'targetangle']);
-	redraw_canvas(printer);
+	p.call('get_print_state', [], {}, function(state) {
+		var e = get_element(p, [null, 'printstate']).ClearAll();
+		if (isNaN(state[1]))
+			e.AddText('State: ' + state[0]);
+		else
+			e.AddText('State: ' + state[0] + ' - Time: ' + display_time(state[1]) + '/' + display_time(state[2]) + ' - Remaining: ' + display_time(state[2] - state[1]));
+		update_float(p, [null, 'targetx']);
+		update_float(p, [null, 'targety']);
+		update_float(p, [null, 'targetz']);
+		update_float(p, [null, 'targetangle']);
+		redraw_canvas(p);
+	});
 }
 // }}}
 

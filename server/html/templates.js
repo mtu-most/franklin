@@ -121,9 +121,7 @@ function Spacetype(num) {
 	button.AddEvent('click', function() { set_value(this.printer, [['space', this.index], 'type'], this.obj.selectedIndex); });
 	var span = Create('span');
 	span.id = make_id(printer, [['space', num], 'type']);
-	var div = Create('div').AddText('Max Deviation');
-	div.Add(Float([['space', num], 'max_deviation'], 2, 1));
-	return make_tablerow(space_name(num), [Name('space', num), [select, button, span], div], ['rowtitle1']);
+	return make_tablerow(space_name(num), [Name('space', num), [select, button, span], Float([['space', num], 'max_deviation'], 2, 1), Float([['space', num], 'max_v'], 2, 1)], ['rowtitle1']);
 }
 
 function Id(obj) {
@@ -183,7 +181,7 @@ function Delta_space(num) {
 }
 
 function Axis(space, axis) {
-	var e = [Name('axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['max_v', 0, 1], ['min', 1, 1], ['max', 1, 1]];
+	var e = [Name('axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['min', 1, 1], ['max', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['axis', [space, axis]], e[i][0]], e[i][1], e[i][2]));
@@ -494,6 +492,7 @@ function Printer() {	// {{{
 	blocker.id = make_id(printer, [null, 'block1']);
 	// }}}
 	ret.AddElement('div', 'message hidden').id = make_id(printer, [null, 'message1']);
+	ret.AddElement('div', 'message').id = make_id(printer, [null, 'printstate']);
 	ret.AddElement('div', 'message hidden').id = make_id(printer, [null, 'confirm']);
 	// Setup. {{{
 	var setup = ret.AddElement('div', 'setup');
@@ -555,12 +554,14 @@ function Printer() {	// {{{
 		'Spaces',
 		'Name',
 		'Type',
-		UnitTitle('Max Deviation')
+		UnitTitle('Max Deviation'),
+		UnitTitle('Max v', '/s')
 	], [
-		'htitle3',
-		'title3',
-		'title3',
-		'title3'
+		'htitle5',
+		'title5',
+		'title5',
+		'title5',
+		'title5'
 	], [
 		null,
 		'Space name',
@@ -586,17 +587,15 @@ function Printer() {	// {{{
 		'Name',
 		UnitTitle('Park pos'),
 		'Park order',
-		UnitTitle('Max v', '/s'),
 		UnitTitle('Min'),
 		UnitTitle('Max')
 	], [
-		'htitle6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6'
+		'htitle5',
+		'title5',
+		'title5',
+		'title5',
+		'title5',
+		'title5'
 	], [
 		null,
 		'Name of the axis',
@@ -647,8 +646,8 @@ function Printer() {	// {{{
 	// Delta. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Delta',
-		UnitTitle('Min Axis Distance'),
-		UnitTitle('Max Axis Distance'),
+		UnitTitle('Min Distance'),
+		UnitTitle('Max Distance'),
 		UnitTitle('Rod Length'),
 		UnitTitle('Radius')
 	], [
