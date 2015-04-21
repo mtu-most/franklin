@@ -27,7 +27,6 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_axes[a] = axis[a];
 		for (uint8_t a = old_na; a < na; ++a) {
 			new_axes[a] = new Axis;
-			new_axes[a]->offset = 0;
 			new_axes[a]->park = NAN;
 			new_axes[a]->park_order = 0;
 			new_axes[a]->min_pos = -INFINITY;
@@ -177,6 +176,7 @@ void Space::load_info(int32_t &addr)
 	space_types[type].load(this, t, addr);
 	if (t != type) {
 		space_types[type].reset_pos(this);
+		loaddebug("resetting current for load space %d", id);
 		for (uint8_t a = 0; a < num_axes; ++a)
 			axis[a]->settings[current_fragment].current = axis[a]->settings[current_fragment].source;
 	}
@@ -188,18 +188,10 @@ void Space::load_info(int32_t &addr)
 void Space::load_axis(uint8_t a, int32_t &addr)
 {
 	loaddebug("loading axis %d", a);
-	float old_offset = axis[a]->offset;
-	axis[a]->offset = read_float(addr);
 	axis[a]->park = read_float(addr);
 	axis[a]->park_order = read_8(addr);
 	axis[a]->min_pos = read_float(addr);
 	axis[a]->max_pos = read_float(addr);
-	if (axis[a]->offset != old_offset) {
-		axis[a]->settings[current_fragment].current += axis[a]->offset - old_offset;
-		if (!moving)
-			axis[a]->settings[current_fragment].source += axis[a]->offset - old_offset;
-		move_to_current();
-	}
 }
 
 void Space::load_motor(uint8_t m, int32_t &addr)
@@ -282,7 +274,6 @@ void Space::save_info(int32_t &addr)
 }
 
 void Space::save_axis(uint8_t a, int32_t &addr) {
-	write_float(addr, axis[a]->offset);
 	write_float(addr, axis[a]->park);
 	write_8(addr, axis[a]->park_order);
 	write_float(addr, axis[a]->min_pos);
@@ -308,6 +299,7 @@ void Space::init(uint8_t space_id) {
 	type = DEFAULT_TYPE;
 	id = space_id;
 	max_deviation = 0;
+	max_v = INFINITY;
 	type_data = NULL;
 	num_axes = 0;
 	num_motors = 0;
@@ -530,6 +522,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		//debug("handle motors not moving");
 		return;
 	}
+	movedebug("handling %d %d", stopped, moving);
 	float factor = 1;
 	float t = (current_time - settings[current_fragment].start_time) / 1e6;
 	if (t >= settings[current_fragment].t0 + settings[current_fragment].tp) {	// Finish this move and prepare next.
@@ -721,7 +714,6 @@ void send_fragment() {
 }
 
 void apply_tick() {
-	// All directions are correct, or the fragment is sent and the new fragment is empty (and therefore all directions are correct).
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {

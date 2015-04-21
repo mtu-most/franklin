@@ -136,7 +136,8 @@ void serial() { // {{{
 		// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
 		if (out_busy && millis() - out_time >= 1000) {
 			sdebug("resending packet");
-			send_packet();
+			// Don't resend, because it stops the beaglebone from booting; we still resend on NACK.
+			//send_packet();
 		}
 		return;
 	}
@@ -312,8 +313,7 @@ void send_packet()
 }
 // }}}
 
-// Call send_packet if we can. {{{
-void try_send_next() {
+void try_send_next() { // Call send_packet if we can. {{{
 	sdebug("try send");
 	if (out_busy) { // {{{
 		sdebug("still busy");
@@ -362,10 +362,10 @@ void try_send_next() {
 		}
 		else
 			pending_packet[0] = CMD_DONE;
-		arch_cli();
+		cli();
 		uint8_t num = (cf - notified_current_fragment + FRAGMENTS_PER_MOTOR) % FRAGMENTS_PER_MOTOR;
 		//debug("done %ld %d %d %d", &motor[0].current_pos, cf, notified_current_fragment, last_fragment);
-		arch_sei();
+		sei();
 		pending_packet[1] = num;
 		notified_current_fragment = (notified_current_fragment + num) % FRAGMENTS_PER_MOTOR;
 		pending_packet[2] = (last_fragment - notified_current_fragment + FRAGMENTS_PER_MOTOR) % FRAGMENTS_PER_MOTOR;

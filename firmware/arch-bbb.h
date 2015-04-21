@@ -11,8 +11,8 @@
 #define ADCBITS 12
 #define SERIAL_BUFFER_SIZE 10
 
-#define arch_cli() do {} while(0)
-#define arch_sei() do {} while(0)
+#define cli() do {} while(0)
+#define sei() do {} while(0)
 
 #ifndef NO_DEBUG
 static inline void debug(char const *fmt, ...);

@@ -251,11 +251,10 @@ function _setup_updater() {
 				printers[port].spaces[index].axis.push({
 					current: current[a],
 					name: values[4][a][0],
-					offset: values[4][a][1],
-					park: values[4][a][2],
-					park_order: values[4][a][3],
-					min: values[4][a][4],
-					max: values[4][a][5]
+					park: values[4][a][1],
+					park_order: values[4][a][2],
+					min: values[4][a][3],
+					max: values[4][a][4]
 				});
 			}
 			for (var m = 0; m < printers[port].spaces[index].num_motors; ++m) {

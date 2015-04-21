@@ -1,7 +1,7 @@
 // vim: set foldmethod=marker :
 #include "cdriver.h"
 
-//#define DEBUG_MOVE
+#define DEBUG_MOVE
 
 // Set up:
 // start_time		utime() at start of move.
@@ -48,6 +48,7 @@ uint8_t next_move() {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			if (isnan(sp.axis[a]->settings[current_fragment].source)) {
+				debug("resetting pos for move");
 				space_types[sp.type].reset_pos(&sp);
 				for (uint8_t aa = 0; aa < sp.num_axes; ++aa)
 					sp.axis[aa]->settings[current_fragment].current = sp.axis[aa]->settings[current_fragment].source;
@@ -79,9 +80,9 @@ uint8_t next_move() {
 					//debug("not using object %d", mtr);
 				}
 				else {
-					sp.axis[a]->settings[current_fragment].next_dist = queue[settings[current_fragment].queue_start].data[a0 + a] - sp.axis[a]->settings[current_fragment].source + sp.axis[a]->offset;
+					sp.axis[a]->settings[current_fragment].next_dist = queue[settings[current_fragment].queue_start].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - sp.axis[a]->settings[current_fragment].source;
 #ifdef DEBUG_MOVE
-					debug("next dist of %d = %f (%f - %f + %f)", a0 + a, sp.axis[a]->settings[current_fragment].next_dist, queue[settings[current_fragment].queue_start].data[a0 + a], sp.axis[a]->settings[current_fragment].source, sp.axis[a]->offset);
+					debug("next dist of %d = %f (%f - %f)", a0 + a, sp.axis[a]->settings[current_fragment].next_dist, queue[settings[current_fragment].queue_start].data[a0 + a], sp.axis[a]->settings[current_fragment].source);
 #endif
 				}
 			}
@@ -95,13 +96,13 @@ uint8_t next_move() {
 			if (n != settings[current_fragment].queue_end) {
 				// If only one of them is set, set the other one as well to make the rounded corner work.
 				if (!isnan(queue[settings[current_fragment].queue_start].data[a0 + a]) && isnan(queue[n].data[a0 + a])) {
-					queue[n].data[a0 + a] = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].next_dist - sp.axis[a]->offset;
+					queue[n].data[a0 + a] = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].next_dist;
 #ifdef DEBUG_MOVE
 					debug("filling next %d with %f", a0 + a, queue[n].data[a0 + a]);
 #endif
 				}
 				if (isnan(queue[settings[current_fragment].queue_start].data[a]) && !isnan(queue[n].data[a])) {
-					queue[settings[current_fragment].queue_start].data[a0 + a] = sp.axis[a]->settings[current_fragment].source - sp.axis[a]->offset;
+					queue[settings[current_fragment].queue_start].data[a0 + a] = sp.axis[a]->settings[current_fragment].source;
 #ifdef DEBUG_MOVE
 					debug("filling %d with %f", a0 + a, queue[settings[current_fragment].queue_start].data[a0 + a]);
 #endif
@@ -166,11 +167,11 @@ uint8_t next_move() {
 				if (isnan(queue[n].data[a0 + a]))
 					sp.axis[a]->settings[current_fragment].next_dist = 0;
 				else
-					sp.axis[a]->settings[current_fragment].next_dist = queue[n].data[a0 + a] + sp.axis[a]->offset - (sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist);
+					sp.axis[a]->settings[current_fragment].next_dist = queue[n].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].dist);
 				if (sp.axis[a]->settings[current_fragment].next_dist != 0 || sp.axis[a]->settings[current_fragment].dist != 0)
 					action = true;
 #ifdef DEBUG_MOVE
-				debug("Connecting distance for motor %d is %f, to %f = %f + %f - (%f + %f)", a, sp.axis[a]->settings[current_fragment].dist, sp.axis[a]->settings[current_fragment].next_dist, queue[n].data[a0 + a], sp.axis[a]->offset, sp.axis[a]->settings[current_fragment].source, sp.axis[a]->settings[current_fragment].dist);
+				debug("Connecting distance for motor %d is %f, to %f = %f - (%f + %f)", a, sp.axis[a]->settings[current_fragment].dist, sp.axis[a]->settings[current_fragment].next_dist, queue[n].data[a0 + a], sp.axis[a]->settings[current_fragment].source, sp.axis[a]->settings[current_fragment].dist);
 #endif
 			}
 			a0 += sp.num_axes;

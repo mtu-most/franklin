@@ -7,10 +7,10 @@ void handle_motors() {
 	}
 	last_active = seconds();
 	// Check sensors.
-	arch_cli();
+	cli();
 	uint8_t cf = current_fragment;
 	uint8_t cs = current_sample;
-	arch_sei();
+	sei();
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (!(motor[m].flags & Motor::ACTIVE))
 			continue;
@@ -29,6 +29,7 @@ void handle_motors() {
 		if (settings[cf].probing && probe_pin < NUM_DIGITAL_PINS && (GET(probe_pin) ^ bool(pin_flags & 2))) {
 			// Hit probe.
 			hit = true;
+			cs -= 1;	// Because the interrupt handler increments current_sample before waiting for probe check.
 		}
 		else {
 		// Check limit switches.
@@ -42,7 +43,7 @@ void handle_motors() {
 			}
 		}
 		if (hit) {
-			// Hit endstop.
+			// Hit endstop or probe; disable timer interrupt.
 			step_state = 1;
 			//debug("hit limit %d curpos %ld cf %d ncf %d lf %d cfp %d", m, F(motor[m].current_pos), cf, notified_current_fragment, last_fragment, cs);
 			// Notify host.

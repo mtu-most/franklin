@@ -101,7 +101,7 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) {
 	}
 	EDATA(s).num_axes = s->num_axes;
 	bool move = false;
-	if (settings[current_fragment].queue_start == settings[current_fragment].queue_end && !settings[current_fragment].queue_full) {
+	if (motors_busy && stopped && settings[current_fragment].queue_start == settings[current_fragment].queue_end && !settings[current_fragment].queue_full) {
 		move = true;
 		queue[settings[current_fragment].queue_end].probe = false;
 		queue[settings[current_fragment].queue_end].cb = false;
@@ -115,6 +115,7 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) {
 		for (int i = spaces[0].num_axes; i < QUEUE_LENGTH; ++i) {
 			queue[settings[current_fragment].queue_end].data[i] = NAN;
 		}
+		cpdebug(0, 0, "eload end");
 		settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
 		// This shouldn't happen and causes communication problems, but if you have a 1-item buffer it is correct.
 		if (settings[current_fragment].queue_end == settings[current_fragment].queue_start)

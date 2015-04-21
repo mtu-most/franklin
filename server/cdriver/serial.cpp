@@ -114,7 +114,8 @@ void serial(uint8_t which)
 					if (!need_id) {
 						// Firmware has reset.
 						//arch_reset();
-						debug("firmware sent id");
+						if (avr_pong == -1)
+							debug("firmware sent id");
 					}
 					continue;
 				}
@@ -265,7 +266,7 @@ void serial(uint8_t which)
 		}
 #ifdef SERIAL
 #ifdef DEBUG_DATA
-		if (which == 1) {
+		if (which == 1 && command[1][1] != 7) {
 			fprintf(stderr, "recv:");
 			for (uint8_t i = 0; i < command_end[which]; ++i)
 				fprintf(stderr, " %02x", command[which][i]);

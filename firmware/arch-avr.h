@@ -65,9 +65,6 @@ static inline void debug(char const *fmt, ...);
 #endif
 #define F(x) &(x)
 
-#define arch_cli cli
-#define arch_sei sei
-
 #define ARCH_PIN_DATA \
 	volatile uint8_t *avr_mode; \
 	volatile uint8_t *avr_output; \

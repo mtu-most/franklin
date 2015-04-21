@@ -17,7 +17,6 @@ void setup(char const *port, char const *run_id)
 	pollfds[0].fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 	pollfds[0].events = POLLIN | POLLPRI;
 	pollfds[0].revents = 0;
-	temp_current = 0;
 	command_end[0] = 0;
 	command_end[1] = 0;
 	motors_busy = false;
@@ -38,6 +37,8 @@ void setup(char const *port, char const *run_id)
 	current_fragment_pos = 0;
 	hwtime_step = 5000;	// TODO: make this dynamic.
 	moving = false;
+	feedrate = 1;
+	zoffset = 0;
 	aborting = false;
 	stopped = true;
 	prepared = false;
@@ -48,6 +49,7 @@ void setup(char const *port, char const *run_id)
 	cbs_after_current_move = 0;
 	which_autosleep = 0;
 	timeout = 0;
+	run_file_map = NULL;
 #ifdef HAVE_AUDIO
 	audio_head = 0;
 	audio_tail = 0;

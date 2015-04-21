@@ -199,7 +199,6 @@ struct Axis_History
 struct Axis
 {
 	Axis_History *settings;
-	float offset;		// Position where axis claims to be when it is at 0.
 	float park;		// Park position; not used by the firmware, but stored for use by the host.
 	uint8_t park_order;
 	float min_pos, max_pos;
@@ -350,6 +349,7 @@ EXTERN Pin_t led_pin, probe_pin;
 EXTERN uint16_t timeout;
 //EXTERN float room_T;	//[°C]
 EXTERN float feedrate;		// Multiplication factor for f values, used at start of move.
+EXTERN float zoffset;	// Offset for axis 2 of space 0.
 // Other variables.
 EXTERN Serial_t *serialdev[2];
 EXTERN unsigned char command[2][FULL_COMMAND_SIZE];
@@ -373,7 +373,6 @@ EXTERN int pending_len;
 EXTERN char datastore[FULL_COMMAND_SIZE];
 EXTERN uint32_t last_active;
 EXTERN int16_t led_phase;
-EXTERN uint8_t temp_current;
 EXTERN History *settings;
 #ifdef HAVE_AUDIO
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
@@ -404,7 +403,10 @@ void buffered_debug(char const *fmt, ...);
 #define buffered_debug debug
 #define buffered_debug_flush() do {} while(0)
 #endif
-//#define cpdebug(s, m, fmt, ...) do { if (s == 0 && m == 0) debug("CP %d %d %d %d %f " fmt, s, m, current_fragment, spaces[s].motor[m]->settings[current_fragment].current_pos, spaces[s].axis[m]->settings[current_fragment].current, ##__VA_ARGS__); } while (0)
+
+// Force cpdebug if requested, to enable only specific lines without adding all the cp things in manually.
+#define fcpdebug(s, m, fmt, ...) do { if (s == 0 && m == 0) debug("CP curfragment %d curpos %d current %f " fmt, current_fragment, spaces[s].motor[m]->settings[current_fragment].current_pos, spaces[s].axis[m]->settings[current_fragment].current, ##__VA_ARGS__); } while (0)
+//#define cpdebug fcpdebug
 #define cpdebug(...) do {} while (0)
 
 // packet.cpp

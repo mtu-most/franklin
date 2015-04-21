@@ -136,6 +136,7 @@ void run_file_fill_queue() {
 				queue[settings[current_fragment].queue_end].time = r.time;
 				queue[settings[current_fragment].queue_end].dist = r.dist;
 				queue[settings[current_fragment].queue_end].cb = false;
+				debug("run goto");
 				settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
 				if (stopped) {
 					next_move();

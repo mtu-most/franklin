@@ -16,8 +16,10 @@ void packet()
 		watchdog_enable();
 		write_ack();
 		*reinterpret_cast <uint32_t *>(&printerid[16]) = *reinterpret_cast <uint32_t *>(&command[2]);
-		// Because this is a new connection: reset active_motors.
+		// Because this is a new connection: reset active_motors and all ADC pins.
 		active_motors = 0;
+		for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
+			adc[a].disable();
 		reply[0] = CMD_READY;
 		reply[1] = 11;
 		*reinterpret_cast <uint32_t *>(&reply[2]) = 0;
@@ -80,11 +82,11 @@ void packet()
 		if (probe_pin < NUM_DIGITAL_PINS)
 			SET_INPUT(probe_pin);
 		timeout_time = *reinterpret_cast <uint16_t *>(&command[9]);
-		arch_cli();
+		cli();
 		full_phase_bits = 0;
 		while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << full_phase_bits)
 			full_phase_bits += 1;
-		arch_sei();
+		sei();
 		full_phase_bits -= 1;
 		full_phase = 1 << full_phase_bits;
 		write_ack();
