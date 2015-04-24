@@ -413,7 +413,7 @@ void buffered_debug(char const *fmt, ...);
 void packet();	// A command packet has arrived; handle it.
 void settemp(int which, float target);
 void waittemp(int which, float mintemp, float maxtemp);
-void setpos(int which, int t, int f);
+void setpos(int which, int t, float f);
 
 // serial.cpp
 void serial(uint8_t which);	// Handle commands from serial.

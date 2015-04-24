@@ -70,7 +70,7 @@ void waittemp(int which, float mintemp, float maxtemp) {
 	temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm, MAXINT);
 }
 
-void setpos(int which, int t, int f) {
+void setpos(int which, int t, float f) {
 	if (!motors_busy)
 	{
 		for (uint8_t s = 0; s < num_spaces; ++s) {
