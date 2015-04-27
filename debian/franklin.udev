@@ -1,2 +1,5 @@
-SUBSYSTEMS=="tty", ACTION=="add", GROUP="dialout", MODE="0660", RUN+="/usr/lib/franklin/control.py"
+SUBSYSTEMS=="tty", ACTION=="add", KERNEL=="ttyUSB[0-9]*", GROUP="dialout", MODE="0660", RUN+="/usr/lib/franklin/control.py"
+SUBSYSTEMS=="tty", ACTION=="add", KERNEL=="ttyACM[0-9]*", GROUP="dialout", MODE="0660", RUN+="/usr/lib/franklin/control.py"
+SUBSYSTEMS=="tty", ACTION=="add", KERNEL=="ttyAMA[0-9]*", GROUP="dialout", MODE="0660", RUN+="/usr/lib/franklin/control.py"
+SUBSYSTEMS=="tty", ACTION=="add", KERNEL=="ttyO[0-9]*", GROUP="dialout", MODE="0660", RUN+="/usr/lib/franklin/control.py"
 SUBSYSTEMS=="tty", ACTION=="remove", RUN+="/usr/lib/franklin/control.py"

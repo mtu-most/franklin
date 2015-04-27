@@ -101,7 +101,8 @@ void run_file_fill_queue() {
 			{
 				char const *cmd = strndupa(&reinterpret_cast<char const *>(run_file_map)[run_file_first_string + strings[r.tool].start], strings[r.tool].len);
 				debug("Running system command: %ld %d %s", strings[r.tool].start, strings[r.tool].len, cmd);
-				system(cmd);
+				int ret = system(cmd);
+				debug("Done running system command, return = %d", ret);
 				break;
 			}
 			case RUN_GOTO:
