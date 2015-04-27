@@ -96,7 +96,7 @@ void setpos(int which, int t, float f) {
 	}
 	cpdebug(which, t, "setpos %d", diff);
 	arch_addpos(which, t, diff);
-	debug("setpos %d %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos);
+	//debug("setpos %d %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos);
 	//arch_stop();
 	space_types[spaces[which].type].reset_pos(&spaces[which]);
 	for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
@@ -181,7 +181,6 @@ void packet()
 			return;
 		}
 		queue[settings[current_fragment].queue_end].cb = true;
-		debug("goto");
 		settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
 		if (settings[current_fragment].queue_end == settings[current_fragment].queue_start) {
 			settings[current_fragment].queue_full = true;
@@ -368,7 +367,7 @@ void packet()
 			return;
 		}
 		if (isnan(spaces[which].axis[t]->settings[current_fragment].source)) {
-			debug("resetting space %d for getpos; %f", which, spaces[0].axis[0]->settings[current_fragment].current);
+			//debug("resetting space %d for getpos; %f", which, spaces[0].axis[0]->settings[current_fragment].current);
 			space_types[spaces[which].type].reset_pos(&spaces[which]);
 			for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
 				spaces[which].axis[a]->settings[current_fragment].current = spaces[which].axis[a]->settings[current_fragment].source;
