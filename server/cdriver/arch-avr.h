@@ -265,9 +265,9 @@ static inline void hwpacket(int len) {
 		}
 		cpdebug(s, m, "limit/sense");
 		if ((command[1][0] & ~0x10) == HWC_LIMIT) {
-			debug("limit");
+			//debug("limit %d", command[1][2]);
 			avr_homing = false;
-			abort_move(command[1][2]);
+			abort_move(int8_t(command[1][2]));
 			//int i = 0;
 			//for (int is = 0; is < num_spaces; ++is)
 			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)

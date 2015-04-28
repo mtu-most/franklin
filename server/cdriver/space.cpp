@@ -106,7 +106,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 static void move_to_current() {
 	if (!stopped || moving || !motors_busy)
 		return;
-	debug("move to current");
+	//debug("move to current");
 	settings[current_fragment].f0 = 0;
 	settings[current_fragment].fmain = 1;
 	settings[current_fragment].fp = 0;

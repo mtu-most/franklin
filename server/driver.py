@@ -2073,7 +2073,8 @@ class Printer: # {{{
 			self.set_globals()
 		for section in changed:
 			if section == 'extruder':
-				changed['space'].add(index)
+				for index in changed[section]:
+					changed['space'].add(index)
 				continue
 			for index in changed[section]:
 				if not isinstance(index, tuple):
