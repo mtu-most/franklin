@@ -182,7 +182,7 @@ class Connection: # {{{
 			# No need for a baudrate here, so abuse this to send a config file.
 			baudrate = ('-c', config['avrdudeconfig'])
 			mcu = 'atmega1284p'
-		if board == 'melzi':
+		elif board == 'melzi':
 			protocol = 'arduino'
 			baudrate = ('-b', '115200')
 			mcu = 'atmega1284p'
@@ -211,7 +211,7 @@ class Connection: # {{{
 		cls.disable(port)
 		data = ['']
 		filename = fhs.read_data(os.path.join('firmware', board + '.hex'), opened = False)
-		process = subprocess.Popen(*(([config['avrdude'], '-q', '-q', '-V', '-c', protocol) + baudrate + ('-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)))
+		process = subprocess.Popen((config['avrdude'], '-q', '-q', '-V', '-c', protocol) + baudrate + ('-p', mcu, '-P', port, '-U', 'flash:w:' + filename), stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
 		def output(fd, cond):
 			d = ''
 			try:
