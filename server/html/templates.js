@@ -785,7 +785,7 @@ function NoPrinter() { // {{{
 	detect.type = 'button';
 	detect.port = port;
 	detect.AddEvent('click', function() { rpc.call('detect', [this.port], {}); });
-	ret.AddElement('p').AddText('Or you can upload the firmware that fits your hardware.').Add(upload_buttons(port, [['melzi', 'atmega1284p with optiboot (Melzi)'], ['sanguinololu', 'atmega1284p (Sanguinololu)'], ['ramps', 'atmega2560 (Ramps)'], ['mega', 'atmega1280'], ['mini', 'atmega328 (Uno)']]));
+	ret.AddElement('p').AddText('Or you can upload the firmware that fits your hardware.').Add(upload_buttons(port, [[['bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone)'], 'melzi', 'atmega1284p with optiboot (Melzi)'], ['sanguinololu', 'atmega1284p (Sanguinololu)'], ['ramps', 'atmega2560 (Ramps)'], ['mega', 'atmega1280'], ['mini', 'atmega328 (Uno)']]));
 	var message = ret.AddElement('div', 'message');
 	message.id = make_id({'port': port}, [null, 'message2']);
 	return ret;

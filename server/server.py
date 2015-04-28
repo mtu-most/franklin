@@ -41,7 +41,8 @@ config = fhs.init(packagename = 'franklin', config = {
 		'driver': '',
 		'cdriver': '',
 		'log': '',
-		'tls': 'True'
+		'tls': 'True',
+		'avrdudeconfig': '/usr/lib/franklin/avrdude.conf'
 	})
 if config['audiodir'] == '':
 	config['audiodir'] = fhs.write_cache(name = 'audio', dir = True),
@@ -175,26 +176,32 @@ class Connection: # {{{
 	@classmethod
 	def upload(cls, port, board): # {{{
 		resumeinfo = [(yield), None]
+		if board == 'bbbmelzi':
+			board = 'melzi'
+			protocol = 'bbbmelzi'
+			# No need for a baudrate here, so abuse this to send a config file.
+			baudrate = ('-c', config['avrdudeconfig'])
+			mcu = 'atmega1284p'
 		if board == 'melzi':
 			protocol = 'arduino'
-			baudrate = '115200'
+			baudrate = ('-b', '115200')
 			mcu = 'atmega1284p'
 		elif board == 'sanguinololu':
 			board = 'melzi'
 			protocol = 'wiring'
-			baudrate = '115200'
+			baudrate = ('-b', '115200')
 			mcu = 'atmega1284p'
 		elif board == 'ramps':
 			protocol = 'wiring'
-			baudrate = '115200'
+			baudrate = ('-b', '115200')
 			mcu = 'atmega2560'
 		elif board == 'mega':
 			protocol = 'arduino'
-			baudrate = '57600'
+			baudrate = ('-b', '57600')
 			mcu = 'atmega1280'
 		elif board == 'mini':
 			protocol = 'wiring'
-			baudrate = '115200'
+			baudrate = ('-b', '115200')
 			mcu = 'atmega328'
 		else:
 			raise ValueError('board type not supported')
@@ -204,7 +211,7 @@ class Connection: # {{{
 		cls.disable(port)
 		data = ['']
 		filename = fhs.read_data(os.path.join('firmware', board + '.hex'), opened = False)
-		process = subprocess.Popen([config['avrdude'], '-q', '-q', '-V', '-c', protocol, '-b', baudrate, '-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
+		process = subprocess.Popen(*(([config['avrdude'], '-q', '-q', '-V', '-c', protocol) + baudrate + ('-p', mcu, '-P', port, '-U', 'flash:w:' + filename], stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)))
 		def output(fd, cond):
 			d = ''
 			try:
