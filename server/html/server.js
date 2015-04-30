@@ -122,6 +122,9 @@ function _setup_updater() {
 					fan_id: 255,
 					spindle_id: 255,
 					unit_name: 'mm',
+					park_after_print: true,
+					sleep_after_print: true,
+					cool_after_print: true,
 					timeout: 0,
 					feedrate: 1,
 					zoffset: 0,
@@ -189,7 +192,10 @@ function _setup_updater() {
 			printers[port].timeout = values[12];
 			printers[port].feedrate = values[13];
 			printers[port].zoffset = values[14];
-			printers[port].status = values[15];
+			printers[port].park_after_print = values[15];
+			printers[port].sleep_after_print = values[16];
+			printers[port].cool_after_print = values[17];
+			printers[port].status = values[18];
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
 					name: null,

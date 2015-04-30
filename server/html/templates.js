@@ -1,16 +1,16 @@
 // vim: set foldmethod=marker :
 
 // Primitives. {{{
-function Button(title, action, className) {
+function Button(title, action, className) { // {{{
 	var ret = Create('button', 'wide title');
 	ret.AddClass(className);
 	ret.AddText(title);
 	ret.AddEvent('click', function() { this.printer.call(action, [], {}) });
 	ret.type = 'button';
 	return ret;
-}
+} // }}}
 
-function Text(title, obj, className) {
+function Text(title, obj, className) { // {{{
 	var span = Create('span', 'blocktitle').AddClass(className);
 	span.AddText(title);
 	var input = Create('input', 'text').AddClass(className);
@@ -23,9 +23,9 @@ function Text(title, obj, className) {
 		}
 	});
 	return [span, input];
-}
+} // }}}
 
-function Name(type, num) {
+function Name(type, num) { // {{{
 	if (num === null || (typeof num != 'number' && num[1] === null))
 		return '';
 	var ret = Create('input', 'editname');
@@ -41,9 +41,9 @@ function Name(type, num) {
 		}
 	});
 	return ret;
-}
+} // }}}
 
-function Pin(title, obj, analog) {
+function Pin(title, obj, analog) { // {{{
 	var pinselect = Create('select', 'pinselect');
 	pinselect.id = make_id(printer, obj);
 	pinselect.obj = obj;
@@ -72,9 +72,9 @@ function Pin(title, obj, analog) {
 	button.printer = printer;
 	button.AddEvent('click', function() { set_pin(this.printer, obj); });
 	return make_tablerow(title, [[pinselect], [validinput, validlabel], inverts, [button]], ['pintitle', ['pinvalue', 'pinvalue', 'pinvalue', 'pinvalue']]);
-}
+} // }}}
 
-function Float(obj, digits, factor, className, set) {
+function Float(obj, digits, factor, className, set) { // {{{
 	var input = Create('input', className);
 	//var button = Create('button', className).AddText('Set');
 	var span = Create('span', className);
@@ -95,9 +95,9 @@ function Float(obj, digits, factor, className, set) {
 	input.AddEvent('keydown', function(event) { floatkey(event, this); });
 	//button.AddEvent('click', function() { floatkey({keyCode: 13, preventDefault: function() {}}, this.source); });
 	return [input, /*button,*/ span];
-}
+} // }}}
 
-function File(obj, action, buttontext, cb) {
+function File(obj, action, buttontext, cb) { // {{{
 	var input = Create('input');
 	input.type = 'file';
 	input.id = make_id(printer, obj);
@@ -109,9 +109,9 @@ function File(obj, action, buttontext, cb) {
 	button.printer = printer;
 	button.AddEvent('click', function() { set_file(this.printer, this.source, this.action); if (this.extra !== undefined) this.extra(); });
 	return [input, button];
-}
+} // }}}
 
-function Spacetype(num) {
+function Spacetype(num) { // {{{
 	var select = create_space_type_select();
 	var button = Create('button').AddText('Set');
 	button.type = 'button';
@@ -122,9 +122,23 @@ function Spacetype(num) {
 	var span = Create('span');
 	span.id = make_id(printer, [['space', num], 'type']);
 	return make_tablerow(space_name(num), [Name('space', num), [select, button, span], Float([['space', num], 'max_deviation'], 2, 1), Float([['space', num], 'max_v'], 2, 1)], ['rowtitle1']);
-}
+} // }}}
 
-function Id(obj) {
+function Checkbox(obj) { // {{{
+	var ret = Create('input');
+	ret.type = 'checkbox';
+	ret.id = make_id(printer, obj);
+	ret.obj = obj;
+	ret.printer = printer;
+	ret.AddEvent('click', function(e) {
+		e.preventDefault();
+		set_value(ret.printer, ret.obj, ret.checked);
+		return false;
+	});
+	return ret;
+} // }}}
+
+function Id(obj) { // {{{
 	if (obj[0][1] === null)
 		return '';
 	var ret = Create('input');
@@ -145,7 +159,7 @@ function Id(obj) {
 		set_value(this.printer, [null, this.obj[1] + '_id'], num);
 	};
 	return ret;
-}
+} // }}}
 // }}}
 
 
@@ -540,6 +554,12 @@ function Printer() {	// {{{
 	e = setup.AddElement('div').AddText('Unit:');
 	e.Add(Name('unit', []));
 	e.Add(add_name('unit', 0, 0));
+	e = setup.AddElement('div').AddText('Park after Print:');
+	e.Add(Checkbox([null, 'park_after_print']));
+	e = setup.AddElement('div').AddText('Sleep after Print:');
+	e.Add(Checkbox([null, 'sleep_after_print']));
+	e = setup.AddElement('div').AddText('Cool after Print:');
+	e.Add(Checkbox([null, 'cool_after_print']));
 	e = setup.AddElement('div').AddText('Max Probe Distance:');
 	e.Add(Float([null, 'probe_dist'], 0, 1));
 	e.AddText(' ').Add(add_name('unit', 0, 0));

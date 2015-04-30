@@ -611,6 +611,9 @@ function update_globals() { // {{{
 	update_float(printer, [null, 'timeout']);
 	update_float(printer, [null, 'feedrate']);
 	update_float(printer, [null, 'zoffset']);
+	update_checkbox(printer, [null, 'park_after_print']);
+	update_checkbox(printer, [null, 'sleep_after_print']);
+	update_checkbox(printer, [null, 'cool_after_print']);
 	set_name(printer, 'unit', 0, 0, printer.unit_name);
 	// IDs.
 	ids = ['bed', 'fan', 'spindle'];
@@ -925,6 +928,11 @@ function update_float(printer, id) { // {{{
 	var e = get_element(printer, id);
 	e.ClearAll();
 	e.AddText((get_value(printer, id) / e.factor).toFixed(e.digits));
+} // }}}
+
+function update_checkbox(printer, id) { // {{{
+	var e = get_element(printer, id);
+	e.checked = get_value(printer, id);
 } // }}}
 
 function update_floats(id) { // {{{

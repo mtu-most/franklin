@@ -218,6 +218,9 @@ class Printer: # {{{
 		self.probe_dist = 1000
 		self.probe_safe_dist = 10
 		self.unit_name = 'mm'
+		self.park_after_print = True
+		self.sleep_after_print = True
+		self.cool_after_print = True
 		# Set up state.
 		self.probe_time_dist = [float('nan'), float('nan')]
 		self.sending = False
@@ -618,7 +621,7 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _globals_update(self, target = None): # {{{
-		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
+		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, self.park_after_print, self.sleep_after_print, self.cool_after_print, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		self._broadcast(target, 'space_update', which, self.spaces[which].export())
@@ -832,6 +835,7 @@ class Printer: # {{{
 						self._send(self.job_id, 'return', (True, reason))
 					self.job_id = None
 					self.jobs_active = []
+					self._finish_done()
 				else:
 					#log('job part done; moving on')
 					self._next_job()
@@ -862,6 +866,18 @@ class Printer: # {{{
 			self.probe_cb(False)
 		self._globals_update()
 	# }}}
+	def _finish_done(self):
+		if self.cool_after_print:
+			for t in range(len(self.temps)):
+				self.settemp(t, float('nan'))
+		def maybe_sleep():
+			if self.sleep_after_print:
+				self.sleep()
+		if self.park_after_print:
+			self.park(cb = maybe_sleep)[1](None)
+		else:
+			maybe_sleep()
+
 	def _unpause(self): # {{{
 		if self.gcode_file:
 			self._send_packet(chr(protocol.command['RESUME']))	# Just in case.
@@ -1932,7 +1948,8 @@ class Printer: # {{{
 			message += 'num_%s = %d\r\n' % (t, len(getattr(self, t)))
 		message += 'unit_name=%s\r\n' % self.unit_name
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'probe_pin')])
-		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'timeout')])
+		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print')])
+		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_safe_dist', 'timeout')])
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings()
 		for i, t in enumerate(self.temps):
@@ -1959,7 +1976,7 @@ class Printer: # {{{
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set()}
 		keys = {
-				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout'},
+				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'park_after_print', 'sleep_after_print', 'cool_after_print'},
 				'space': {'name', 'type', 'max_deviation', 'max_v', 'num_axes', 'delta_angle'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'},
 				'gpio': {'name', 'pin', 'state', 'reset'},
@@ -2557,7 +2574,7 @@ class Printer: # {{{
 	# Globals. {{{
 	def get_globals(self):
 		ret = {'num_spaces': len(self.spaces), 'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('uuid', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'zoffset', 'paused'):
+		for key in ('uuid', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'zoffset', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
 			ret[key] = getattr(self, key)
 		return ret
 	def set_globals(self, update = True, **ka):
@@ -2567,7 +2584,7 @@ class Printer: # {{{
 		ng = ka.pop('num_gpios') if 'num_gpios' in ka else None
 		if 'unit_name' in ka:
 			self.unit_name = ka.pop('unit_name')
-		for key in ('led_pin', 'probe_pin', 'bed_id', 'fan_id', 'spindle_id'):
+		for key in ('led_pin', 'probe_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
 		for key in ('probe_dist', 'probe_safe_dist', 'timeout', 'feedrate', 'zoffset'):
