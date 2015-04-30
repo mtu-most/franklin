@@ -282,7 +282,10 @@ class Connection: # {{{
 			p.process.kill()
 		except OSError:
 			pass
-		p.process.communicate()
+		try:
+			p.process.communicate()
+		except:
+			pass
 		cls._broadcast(None, 'del_printer', port)
 	# }}}
 	@classmethod

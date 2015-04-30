@@ -229,8 +229,8 @@ static inline void avr_get_current_pos(int offset, bool check) {
 			spaces[ts].motor[tm]->settings[current_fragment].current_pos -= avr_pos_offset[tm + mi];
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
 			cpdebug(ts, tm, "cpa offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
-			//if (check && old != spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos)
-			//	abort();
+			if (check && old != spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos)
+				abort();
 		}
 	}
 }
@@ -288,7 +288,7 @@ static inline void hwpacket(int len) {
 		}
 		else {
 			// Sense
-			avr_get_current_pos(2, false);
+			avr_get_current_pos(2, false);	// TODO: this must not mess up actual current pos.
 			spaces[s].motor[m]->sense_state = 1;
 			send_host(CMD_SENSE, s, m, 0, (command[1][0] & ~0x10) == HWC_SENSE1);
 		}
@@ -328,8 +328,12 @@ static inline void hwpacket(int len) {
 				arch_start_move(command[1][1]);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
-		else
-			avr_get_current_pos(3, stopped && !sending_fragment);
+		else {
+			// Only overwrite current position if the new value is correct.
+			if (stopped && !sending_fragment && command[1][1] == 0) {
+				avr_get_current_pos(3, true);
+			}
+		}
 		// Fall through.
 	}
 	case HWC_DONE:
