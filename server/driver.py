@@ -255,7 +255,10 @@ class Printer: # {{{
 			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False, update = False)
-		self.load(update = False)
+		try:
+			self.load(update = False)
+		except:
+			log('Failed to import initial settings')
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
