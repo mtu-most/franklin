@@ -148,6 +148,8 @@ class Connection: # {{{
 		self.id = Connection.nextid
 		Connection.nextid += 1
 		Connection.connections[self.id] = self
+		# Done with setup; activate connection.
+		self.socket()
 	# }}}
 	@classmethod
 	def disconnect(cls, socket, data): # {{{
