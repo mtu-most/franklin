@@ -958,12 +958,12 @@ class Printer: # {{{
 								self.current_extruder = ij
 								self._write_globals()
 							# Limit values for axis.
-							if axis > sp.axis[ij]['max'] - (0 if sp != 0 or ij != 2 else self.zoffset):
+							if axis > sp.axis[ij]['max'] - (0 if i != 0 or ij != 2 else self.zoffset):
 								log('limiting %d %d to %f because it exceeds max' % (i, ij, axis))
-								axis = sp.axis[ij]['max'] - (0 if sp != 0 or ij != 2 else self.zoffset)
-							if axis < sp.axis[ij]['min'] - (0 if sp != 0 or ij != 2 else self.zoffset):
+								axis = sp.axis[ij]['max'] - (0 if i != 0 or ij != 2 else self.zoffset)
+							if axis < sp.axis[ij]['min'] - (0 if i != 0 or ij != 2 else self.zoffset):
 								log('limiting %d %d to %f because it exceeds min' % (i, ij, axis))
-								axis = sp.axis[ij]['min'] - (0 if sp != 0 or ij != 2 else self.zoffset)
+								axis = sp.axis[ij]['min'] - (0 if i != 0 or ij != 2 else self.zoffset)
 							a[a0 + ij] = axis
 				else:
 					for j, axis in tuple(axes[i].items()):
@@ -977,12 +977,12 @@ class Printer: # {{{
 								self.current_extruder = ij
 								self._write_globals(len(self.spaces), len(self.temps), len(self.gpios))
 							# Limit values for axis.
-							if axis > sp.axis[ij]['max'] - (0 if sp != 0 or ij != 2 else self.zoffset):
+							if axis > sp.axis[ij]['max'] - (0 if i != 0 or ij != 2 else self.zoffset):
 								log('limiting %d %d to %f because it exceeds max' % (i, ij, axis))
-								axis = sp.axis[ij]['max'] - (0 if sp != 0 or ij != 2 else self.zoffset)
-							if axis < sp.axis[ij]['min'] - (0 if sp != 0 or ij != 2 else self.zoffset):
+								axis = sp.axis[ij]['max'] - (0 if i != 0 or ij != 2 else self.zoffset)
+							if axis < sp.axis[ij]['min'] - (0 if i != 0 or ij != 2 else self.zoffset):
 								log('limiting %d %d to %f because it exceeds min' % (i, ij, axis))
-								axis = sp.axis[ij]['min'] - (0 if sp != 0 or ij != 2 else self.zoffset)
+								axis = sp.axis[ij]['min'] - (0 if i != 0 or ij != 2 else self.zoffset)
 							a[a0 + ij] = axis
 				a0 += len(sp.axis)
 			targets = [0] * (((2 + a0 - 1) >> 3) + 1)
@@ -2524,7 +2524,7 @@ class Printer: # {{{
 					ret = None
 			dst.write(struct.pack('=L' + 'f' * 8, len(strings), *(bbox + time_dist)))
 		self._broadcast(None, 'blocked', None)
-		return ret + time_dist, errors
+		return ret and ret + time_dist, errors
 	# }}}
 	@delayed
 	def queue_print(self, id, names, ref = (0, 0, 0), angle = 0, probemap = None): # {{{

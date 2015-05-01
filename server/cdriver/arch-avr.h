@@ -799,7 +799,7 @@ static inline void arch_stop() {
 	avr_send();
 	avr_get_reply();
 	abort_move(command[1][1]);
-	avr_get_current_pos(2, true);
+	avr_get_current_pos(2, false);
 	current_fragment_pos = 0;
 }
 

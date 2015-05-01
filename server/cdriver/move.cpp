@@ -96,7 +96,7 @@ uint8_t next_move() {
 			if (n != settings[current_fragment].queue_end) {
 				// If only one of them is set, set the other one as well to make the rounded corner work.
 				if (!isnan(queue[settings[current_fragment].queue_start].data[a0 + a]) && isnan(queue[n].data[a0 + a])) {
-					queue[n].data[a0 + a] = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].next_dist;
+					queue[n].data[a0 + a] = sp.axis[a]->settings[current_fragment].source + sp.axis[a]->settings[current_fragment].next_dist - (s == 0 && a == 2 ? zoffset : 0);
 #ifdef DEBUG_MOVE
 					debug("filling next %d with %f", a0 + a, queue[n].data[a0 + a]);
 #endif

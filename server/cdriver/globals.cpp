@@ -66,7 +66,7 @@ bool globals_load(int32_t &addr)
 		queue[settings[current_fragment].queue_end].f[0] = INFINITY;
 		queue[settings[current_fragment].queue_end].f[1] = INFINITY;
 		for (int i = 0; num_spaces > 0 && i < spaces[0].num_axes; ++i) {
-			queue[settings[current_fragment].queue_end].data[i] = spaces[0].axis[i]->settings[current_fragment].current - (i == 2 ? zoffset : 0);
+			queue[settings[current_fragment].queue_end].data[i] = spaces[0].axis[i]->settings[current_fragment].current - (i == 2 ? zo : 0);
 			for (int s = 0; s < num_spaces; ++s)
 				queue[settings[current_fragment].queue_end].data[i] = space_types[spaces[s].type].unchange0(&spaces[s], i, queue[settings[current_fragment].queue_end].data[i]);
 		}
