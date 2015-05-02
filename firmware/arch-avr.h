@@ -93,12 +93,10 @@ EXTERN Pin_t pin[NUM_DIGITAL_PINS];
 // Serial communication. {{{
 static inline void debug_add(int i);
 static inline void debug_dump();
-#define SERIAL_BUFFER_SIZE (2 * COMMAND_BUFFER_SIZE + 10)
-EXTERN volatile bool serial_overflow;
+#define SERIAL_MASK ((1 << SERIAL_SIZE_BITS) - 1)
+#ifndef NO_SERIAL1
 EXTERN volatile uint8_t which_serial;
-EXTERN volatile uint16_t serial_buffer_head;
-EXTERN volatile uint16_t serial_buffer_tail;
-EXTERN volatile uint8_t serial_buffer[SERIAL_BUFFER_SIZE];
+#endif
 
 static inline void serial_write(uint8_t data) {
 #ifndef NO_SERIAL1
@@ -115,34 +113,10 @@ static inline void serial_write(uint8_t data) {
 #endif
 }
 
-inline static void clear_overflow() {
-	command_end = 0;
-	serial_buffer_head = 0;
-	serial_buffer_tail = 0;
-	serial_overflow = false;
-	debug("serial flushed after overflow");
-	debug_dump();
-	serial_write(CMD_NACK);
-}
-
-static inline uint16_t serial_available() {
-	cli();
-	uint16_t ret = (SERIAL_BUFFER_SIZE + serial_buffer_head - serial_buffer_tail) % SERIAL_BUFFER_SIZE;
-	sei();
-	return ret;
-}
-
-static inline uint8_t serial_read() {
-	cli();
-	uint8_t ret = serial_buffer[serial_buffer_tail];
-	//debug("%x", ret);
-	serial_buffer_tail = (serial_buffer_tail + 1) % SERIAL_BUFFER_SIZE;
-	sei();
-	return ret;
-}
-
 static inline void serial_flush() {
+#ifndef NO_SERIAL1
 	if (which_serial == 0)
+#endif
 		while (~UCSR0A & (1 << TXC0)) {}
 #ifndef NO_SERIAL1
 	else if (which_serial == 1)
@@ -165,24 +139,26 @@ static inline void arch_record_sense(bool state) {
 }
 
 #ifdef DEFINE_VARIABLES
-static inline void handle_serial_input(uint8_t which, uint8_t data, uint8_t status) {
+static inline void handle_serial_input(
+#ifndef NO_SERIAL1
+		uint8_t which,
+#endif
+		uint8_t data, uint8_t status) {
+#ifndef NO_SERIAL1
 	if (which_serial != which) {
 		if (status != 0 || data != CMD_ID)
 			return;
 		which_serial = which;
-#ifndef NO_SERIAL1
 		// Disable other port so the pins can be used.
 		if (which == 0)
 			UCSR1B = 0;
 		else
 			UCSR0B = 0;
-#endif
 	}
+#endif
 	if (serial_overflow)
 		return;
-	uint16_t next = serial_buffer_head + 1;
-	if (next >= SERIAL_BUFFER_SIZE)
-		next = 0;
+	uint16_t next = (serial_buffer_head + 1) & SERIAL_MASK;
 	if (status != 0 || next == serial_buffer_tail) {
 		debug_add(0xb00);
 		debug_add(status);
@@ -197,7 +173,11 @@ static inline void handle_serial_input(uint8_t which, uint8_t data, uint8_t stat
 
 ISR(USART0_RX_vect) {
 	uint8_t status = UCSR0A;
-	handle_serial_input(0, UDR0, status & ((1 << FE0) | (1 << DOR0)));
+	handle_serial_input(
+#ifndef NO_SERIAL1
+			0,
+#endif
+			UDR0, status & ((1 << FE0) | (1 << DOR0)));
 }
 
 #ifndef NO_SERIAL1
@@ -214,18 +194,18 @@ ISR(USART1_RX_vect) {
 static inline void debug_add(int i) { (void)&i; }
 static inline void debug_dump() {}
 #else
-#define AVR_NUM_DEBUG 20
-EXTERN volatile int avr_debug[AVR_NUM_DEBUG];
+#define AVR_DEBUG_BITS 5
+EXTERN volatile int avr_debug[1 << AVR_DEBUG_BITS];
 EXTERN volatile int avr_debug_ptr;
 static inline void debug_add(int i) {
 	avr_debug[avr_debug_ptr] = i;
-	avr_debug_ptr = (avr_debug_ptr + 1) % AVR_NUM_DEBUG;
+	avr_debug_ptr = (avr_debug_ptr + 1) & ((1 << AVR_DEBUG_BITS) - 1);
 }
 
 static inline void debug_dump() {
 	debug("Debug dump (most recent last):");
-	for (int i = 0; i < AVR_NUM_DEBUG; ++i)
-		debug("%x", avr_debug[(avr_debug_ptr + i) % AVR_NUM_DEBUG]);
+	for (int i = 0; i < 1 << AVR_DEBUG_BITS; ++i)
+		debug("%x", avr_debug[(avr_debug_ptr + i) & ((1 << AVR_DEBUG_BITS) - 1)]);
 	debug("dump done");
 }
 static inline void print_num(int32_t num, int base) {
@@ -803,7 +783,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 			[activebit] "I" (Motor::ACTIVE_BIT),
 			[active] "M" (Motor::ACTIVE),
 			[fragment_size] "I" (BYTES_PER_FRAGMENT),
-			[num_fragments] "M" (FRAGMENTS_PER_MOTOR),
+			[num_fragments] "M" (1 << FRAGMENTS_PER_MOTOR_BITS),
 			[buffer_size] "" (BYTES_PER_FRAGMENT * NUM_MOTORS),
 			[motor_size] "" (sizeof(Motor)),
 			[settings_size] "I" (sizeof(Settings)),
@@ -816,10 +796,15 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 ISR(TIMER0_OVF_vect) {
 	uint32_t top = uint32_t(125) << 16;
 	avr_time_h += 0x100;
-	avr_time_h %= top;	// Wrap at the right number.
-	if (((avr_time_h - avr_seconds_h + top) % top) >= 62500) {
+	while (avr_time_h > top)
+		avr_time_h -= top;
+	uint32_t t = avr_time_h - avr_seconds_h + top;
+	while (t >= top)
+		t -= top;
+	if (t >= 62500) {
 		avr_seconds_h += 62500;
-		avr_seconds_h %= top;	// Wrap at the right number.
+		while (avr_seconds_h >= top)
+			avr_seconds_h -= top;
 		avr_seconds += 1;
 	}
 }
@@ -888,122 +873,5 @@ inline bool GET(uint8_t pin_no) {
 	return *pin[pin_no].avr_input & pin[pin_no].avr_bitmask;
 }
 // }}}
-
-/* Memory handling (disabled) {{{
-EXTERN char storage[DYNAMIC_MEM_SIZE];
-EXTERN uint16_t mem_used;
-struct Memrecord {
-	uint16_t size;
-	void **target;
-	inline Memrecord *next() { return reinterpret_cast <Memrecord *>(&(reinterpret_cast <char *>(this))[sizeof(Memrecord) + size]); }
-};
-
-//#define DEBUG_ALLOC
-
-#ifdef DEBUG_ALLOC
-#define mem_alloc(s, t, d) do { debug("mem alloc " #d " at %x size %x used %x", unsigned(&storage) + mem_used, s, mem_used); _mem_alloc((s), reinterpret_cast <void **>(t)); } while (false)
-#else
-#define mem_alloc(s, t, d) _mem_alloc((s), reinterpret_cast <void **>(t))
-#endif
-static inline void _mem_alloc(uint32_t size, void **target) {
-	if (size + sizeof(Memrecord) > sizeof(storage) - mem_used) {
-		debug("Out of memory");
-		*target = NULL;
-		return;
-	}
-	Memrecord *record = reinterpret_cast <Memrecord *>(&storage[mem_used]);
-	record->size = size;
-	record->target = target;
-	*record->target = &record[1];
-	mem_used += sizeof(Memrecord) + size;
-}
-
-#define mem_retarget(t1, t2) _mem_retarget(reinterpret_cast <void **>(t1), reinterpret_cast <void **>(t2))
-static inline void _mem_retarget(void **target, void **newtarget) {
-	if (*target == NULL) {
-#ifdef DEBUG_ALLOC
-		debug("mem retarget NULL used %x", mem_used);
-#endif
-		*newtarget = NULL;
-		return;
-	}
-	Memrecord *record = &reinterpret_cast <Memrecord *>(*target)[-1];
-#ifdef DEBUG_ALLOC
-	debug("mem retarget size %x used %x value %x record %x", record->size, mem_used, unsigned(*target), unsigned(record));
-#endif
-	*newtarget = *target;
-	*target = NULL;
-	record->target = newtarget;
-}
-
-static inline void _mem_dump() {
-	uint16_t start = unsigned(&storage);
-	debug("Memory dump.  Total size: %x, used %x, storage at %x", DYNAMIC_MEM_SIZE, mem_used, start);
-	uint16_t addr = 0;
-	while (addr < mem_used) {
-		Memrecord *record = reinterpret_cast <Memrecord *>(&storage[addr]);
-		if (unsigned(*record->target) - 4 == start + addr)
-			debug("  Record at %x+%x=%x, size %x, pointer at %x", addr, start, start + addr, record->size, unsigned(record->target));
-		else
-			debug("  Record at %x+%x=%x, size %x, pointer at %x, pointing at %x+4", addr, start, start + addr, record->size, unsigned(record->target), unsigned(*record->target) - 4);
-		addr += sizeof(Memrecord) + record->size;
-	}
-}
-
-#define mem_free(t) _mem_free(reinterpret_cast <void **>(t))
-static inline void _mem_free(void **target) {
-	if (*target == NULL) {
-#ifdef DEBUG_ALLOC
-		debug("mem free NULL");
-#endif
-		return;
-	}
-	Memrecord *record = &reinterpret_cast <Memrecord *>(*target)[-1];
-	*target = NULL;
-	uint16_t oldsize = record->size;
-	uint16_t start = reinterpret_cast <char *>(record) - storage + sizeof(Memrecord) + record->size;
-#ifdef DEBUG_ALLOC
-	debug("mem free size %x at %x, next %x, used %x", record->size, unsigned(record), start, mem_used);
-	_mem_dump();
-#endif
-	Memrecord *current = reinterpret_cast <Memrecord *>(&storage[start]);
-	while (start < mem_used) {
-#ifdef DEBUG_ALLOC
-		debug("moving %x for free from start %x", current->size, start);
-#endif
-		Memrecord *next = current->next();
-		char *src = reinterpret_cast <char *>(current);
-		char *dst = reinterpret_cast <char *>(record);
-		uint16_t sz = current->size + sizeof(Memrecord);
-		for (uint16_t i = 0; i < sz; ++i)
-			dst[i] = src[i];
-		*record->target = &record[1];
-		// record is new location of moved part.
-		// current is old location.
-		// next is location of next part.
-		for (Memrecord *m = reinterpret_cast <Memrecord *>(storage); unsigned(m) <= unsigned(record); m = m->next()) {
-			//debug("check1 %x %x %x", unsigned(m->target), unsigned(current), unsigned(current) + record->size);
-			if (unsigned(m->target) >= unsigned(current) && unsigned(m->target) < unsigned(current) + sizeof(Memrecord) + record->size) {
-				//debug("hit!");
-				m->target = reinterpret_cast <void **>(&reinterpret_cast <char *>(m->target)[-oldsize - sizeof(Memrecord)]);
-			}
-		}
-		for (Memrecord *m = reinterpret_cast <Memrecord *>(next); unsigned(m) < unsigned(&storage[mem_used]); m = m->next()) {
-			//debug("check2 %x %x %x", unsigned(m->target), unsigned(current), unsigned(current) + record->size);
-			if (unsigned(m->target) >= unsigned(current) && unsigned(m->target) < unsigned(current) + sizeof(Memrecord) + record->size) {
-				//debug("hit!");
-				m->target = reinterpret_cast <void **>(&reinterpret_cast <char *>(m->target)[-oldsize - sizeof(Memrecord)]);
-			}
-		}
-		record = reinterpret_cast <Memrecord *>(&reinterpret_cast <char *>(record)[sz]);
-		current = next;
-		start += sz;
-	}
-	mem_used -= sizeof(Memrecord) + oldsize;
-#ifdef DEBUG_ALLOC
-	_mem_dump();
-#endif
-}
-// }}}*/
 #endif
 #endif

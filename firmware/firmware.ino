@@ -2,7 +2,9 @@
 #include "firmware.h"
 static uint8_t next_adc(uint8_t old) {
 	for (uint8_t a = 1; a <= NUM_ANALOG_INPUTS; ++a) {
-		uint8_t n = (old + a) % NUM_ANALOG_INPUTS;
+		uint8_t n = old + a;
+		while (n >= NUM_ANALOG_INPUTS)
+			n -= NUM_ANALOG_INPUTS;
 		if (adc[n].value[0] & 0x8000)
 			// Invalid pin.
 			continue;
@@ -62,9 +64,10 @@ static void handle_led() {
 	while (current_time - led_last >= timing) {
 		led_last += timing;
 		led_phase += 1;
+		while (led_phase >= 50)
+			led_phase -= 50;
 	}
 	//debug("t %ld", F(next_led_time));
-	led_phase %= 50;
 	// Timings read from https://en.wikipedia.org/wiki/File:Wiggers_Diagram.png (phonocardiogram).
 	bool state = (led_phase <= 4 || (led_phase >= 14 && led_phase <= 17));
 	if (state ^ bool(pin_flags & 1))

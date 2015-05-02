@@ -12,11 +12,14 @@
 #ifndef NUM_MOTORS
 #error "NUM_MOTORS must be defined in the Makefile"
 #endif
-#ifndef FRAGMENTS_PER_MOTOR
-#error "FRAGMENTS_PER_MOTOR must be defined in the Makefile"
+#ifndef FRAGMENTS_PER_MOTOR_BITS
+#error "FRAGMENTS_PER_MOTOR_BITS must be defined in the Makefile"
 #endif
 #ifndef BYTES_PER_FRAGMENT
 #error "BYTES_PER_FRAGMENT must be defined in the Makefile"
+#endif
+#ifndef SERIAL_SIZE_BITS
+#error "SERIAL_SIZE_BITS must be defined in the Makefile"
 #endif
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
@@ -34,10 +37,8 @@
 #define MAX_REPLY_LEN (2 + 4 * NUM_MOTORS)
 #define REPLY_BUFFER_SIZE (MAX_REPLY_LEN + (MAX_REPLY_LEN + 2) / 3)
 
-//#define MAX_COMMAND_LEN1 (5 + NUM_MOTORS)
-//#define MAX_COMMAND_LEN2 (3 + BYTES_PER_FRAGMENT)
-#define MAX_COMMAND_LEN 256 // (MAX_COMMAND_LEN1 > MAX_COMMAND_LEN2 ? MAX_COMMAND_LEN1 : MAX_COMMAND_LEN2) FIXME
-#define COMMAND_BUFFER_SIZE (MAX_COMMAND_LEN + (MAX_COMMAND_LEN + 2) / 3)
+#define SERIAL_MASK ((1 << SERIAL_SIZE_BITS) - 1)
+#define FRAGMENTS_PER_MOTOR_MASK ((1 << FRAGMENTS_PER_MOTOR_BITS) - 1)
 
 template <typename _A> _A min(_A a, _A b) { return a < b ? a : b; }
 template <typename _A> _A max(_A a, _A b) { return a > b ? a : b; }
@@ -45,7 +46,6 @@ template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 
 EXTERN volatile uint16_t debug_value, debug_value1;
 EXTERN uint8_t printerid[ID_SIZE];
-EXTERN int8_t command[COMMAND_BUFFER_SIZE];
 EXTERN uint16_t command_end;
 EXTERN bool had_data;
 EXTERN uint8_t reply[REPLY_BUFFER_SIZE], adcreply[6];
@@ -63,6 +63,11 @@ EXTERN uint16_t led_last, led_phase, time_per_sample;
 EXTERN uint8_t led_pin, probe_pin, pin_flags;
 EXTERN uint16_t timeout_time, last_active;
 EXTERN uint8_t enabled_pins;
+
+EXTERN volatile bool serial_overflow;
+EXTERN volatile uint16_t serial_buffer_head;
+EXTERN volatile uint16_t serial_buffer_tail;
+EXTERN volatile uint8_t serial_buffer[1 << SERIAL_SIZE_BITS];
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
 // These bytes (except RESET) are sent in reply to a received packet only.
@@ -155,8 +160,12 @@ enum Command {
 	CMD_TIMEOUT	// 0
 };
 
+static inline volatile uint8_t &command(uint16_t pos) {
+	return serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK];
+}
+
 static inline uint16_t minpacketlen() {
-	switch (command[0] & ~0x10) {
+	switch (command(0) & ~0x10) {
 	case CMD_BEGIN:
 		return 2;
 	case CMD_PING:
@@ -190,7 +199,7 @@ static inline uint16_t minpacketlen() {
 	case CMD_GETPIN:
 		return 2;
 	default:
-		debug("invalid command passed to minpacketlen: %x", command[0]);
+		debug("invalid command passed to minpacketlen: %x", command(0));
 		return 1;
 	};
 }
@@ -240,7 +249,7 @@ struct Motor
 	}
 };
 
-EXTERN volatile int8_t buffer[FRAGMENTS_PER_MOTOR][NUM_MOTORS][BYTES_PER_FRAGMENT];
+EXTERN volatile int8_t buffer[1 << FRAGMENTS_PER_MOTOR_BITS][NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN Motor motor[NUM_MOTORS];
 EXTERN volatile uint8_t active_motors;
 EXTERN bool stopping;	// True if LIMIT has been sent to host, but not yet acknowledged.
@@ -252,7 +261,7 @@ struct Settings {
 	uint8_t len;
 };
 
-EXTERN Settings settings[FRAGMENTS_PER_MOTOR];
+EXTERN Settings settings[1 << FRAGMENTS_PER_MOTOR_BITS];
 EXTERN uint8_t notified_current_fragment;
 EXTERN volatile uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
 EXTERN volatile uint8_t current_sample;		// The sample in the current fragment that is active.
