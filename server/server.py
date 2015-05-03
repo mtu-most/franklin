@@ -667,14 +667,15 @@ if local:
 	websockets.call(None, Connection.add_port, '-')()
 else:
 	try:
-		import serial.tools.list_ports
-		for tty in serial.tools.list_ports.comports():
-			websockets.call(None, Connection.add_port, tty[0])()
-	except: # ImportError:
+		# Try Linux sysfs.
+		for tty in os.listdir('/sys/class/tty'):
+			websockets.call(None, Connection.add_port, '/dev/' + tty)()
+	except:
+		# Try more generic approach.  Don't use this by default, because it doesn't detect all port on GNU/Linux.
 		try:
-			# Try Linux sysfs.
-			for tty in os.listdir('/sys/class/tty'):
-				websockets.call(None, Connection.add_port, '/dev/' + tty)()
+			import serial.tools.list_ports
+			for tty in serial.tools.list_ports.comports():
+				websockets.call(None, Connection.add_port, tty[0])()
 		except:
 			traceback.print_exc()
 			log('Not probing serial ports, because an error occurred: %s' % sys.exc_info()[1])
