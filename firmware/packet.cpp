@@ -286,8 +286,8 @@ void packet()
 			write_stall();
 			return;
 		}
-		if (command[1] > BYTES_PER_FRAGMENT) {
-			debug("Fragment size too large (%d > %d)", command[1], BYTES_PER_FRAGMENT);
+		if (command(1) > BYTES_PER_FRAGMENT) {
+			debug("Fragment size too large (%d > %d)", command(1), BYTES_PER_FRAGMENT);
 			write_stall();
 			return;
 		}

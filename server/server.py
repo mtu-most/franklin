@@ -178,12 +178,14 @@ class Connection: # {{{
 	@classmethod
 	def upload(cls, port, board): # {{{
 		resumeinfo = [(yield), None]
+		sudo = ()
 		if board == 'bbbmelzi':
 			board = 'melzi'
 			protocol = 'bbbmelzi'
 			# No need for a baudrate here, so abuse this to send a config file.
-			baudrate = ('-c', config['avrdudeconfig'])
+			baudrate = ('-C', '+' + config['avrdudeconfig'])
 			mcu = 'atmega1284p'
+			sudo = ('sudo',)
 		elif board == 'melzi':
 			protocol = 'arduino'
 			baudrate = ('-b', '115200')
@@ -213,7 +215,9 @@ class Connection: # {{{
 		cls.disable(port)
 		data = ['']
 		filename = fhs.read_data(os.path.join('firmware', board + '.hex'), opened = False)
-		process = subprocess.Popen((config['avrdude'], '-q', '-q', '-V', '-c', protocol) + baudrate + ('-p', mcu, '-P', port, '-U', 'flash:w:' + filename), stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
+		command = sudo + (config['avrdude'], '-q', '-q', '-V', '-c', protocol) + baudrate + ('-p', mcu, '-P', port, '-U', 'flash:w:' + filename)
+		log('Flashing firmware: ' + ' '.join(command))
+		process = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
 		def output(fd, cond):
 			d = ''
 			try:
