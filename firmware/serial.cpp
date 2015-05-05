@@ -215,6 +215,7 @@ void serial() { // {{{
 			// Fake a serial overflow.
 			command_end = 1;
 			serial_overflow = true;
+			inc_tail(cmd_len);
 			return;
 		}
 		for (uint8_t bit = 0; bit < 5; ++bit)
@@ -235,6 +236,7 @@ void serial() { // {{{
 				// Fake a serial overflow.
 				command_end = 1;
 				serial_overflow = true;
+				inc_tail(cmd_len);
 				return;
 			}
 		}
@@ -258,6 +260,7 @@ void serial() { // {{{
 			debug("repeating ack");
 			serial_write(ff_in ? CMD_ACK0 : CMD_ACK1);
 		}
+		inc_tail(cmd_len);
 		return;
 	}
 	// Right: update flip-flop and send ack.

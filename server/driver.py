@@ -461,7 +461,7 @@ class Printer: # {{{
 						s += 1
 				continue
 			elif cmd == protocol.rcommand['HOMED']:
-				self._do_home(True)
+				call_queue.append((self._do_home, [True]))
 				continue
 			elif cmd == protocol.rcommand['DISCONNECT']:
 				self._close()
