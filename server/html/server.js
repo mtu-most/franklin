@@ -18,6 +18,7 @@ var blacklist;
 var audio_list;
 var scripts;
 var data;
+var role;
 
 var TYPE_CARTESIAN = 0;
 var TYPE_DELTA = 1;
@@ -34,7 +35,7 @@ function dbg(msg) {
 
 // {{{ Events from server.
 function trigger_update(called_port, name) {
-	//dbg(called_port + ':' + name); // + ',' + arguments[2]);
+	//dbg(called_port + ':' + name + ',' + printers[called_port] + ',' + arguments[2]);
 	if (!(name in _updates)) {
 		/*var r = '';
 		for (var i in _updates)
@@ -57,6 +58,7 @@ function trigger_update(called_port, name) {
 	}
 	printer = old_printer;
 	port = old_port;
+	//dbg('done ' + name);
 }
 
 function _setup_updater() {
@@ -321,6 +323,7 @@ function _setup_updater() {
 			printers[port].gpios[index].pin = values[1];
 			printers[port].gpios[index].state = values[2];
 			printers[port].gpios[index].reset = values[3];
+			printers[port].gpios[index].value = values[4];
 			trigger_update(port, 'gpio_update', index);
 		}
 	};
@@ -432,7 +435,11 @@ function setup() {
 }
 
 function _setup_connection() {
-	trigger_update('', 'connect', true);
-	rpc.call('set_monitor', [true], {}, null);
+	rpc.call('get_role', [], {}, function(r) {
+		role = r;
+		document.getElementById('container').AddClass(role);
+		trigger_update('', 'connect', true);
+		rpc.call('set_monitor', [true], {}, null);
+	});
 }
 // }}}

@@ -281,7 +281,7 @@ void serial() { // {{{
 static void prepare_packet(uint16_t len)
 {
 	sdebug("prepare");
-	if (len >= (MAX_REPLY_LEN > 6 ? MAX_REPLY_LEN : 6))
+	if (len > MAX_REPLY_LEN)
 	{
 		debug("packet is too large: %d > %d", len, MAX_REPLY_LEN);
 		return;
@@ -371,6 +371,19 @@ void try_send_next() { // Call send_packet if we can. {{{
 			send_packet();
 			return;
 		} // }}}
+	}
+	if (pin_events > 0) {
+		for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
+			if (!pin[p].event())
+				continue;
+			pending_packet[0] = CMD_PINCHANGE;
+			pending_packet[1] = p;
+			pending_packet[2] = pin[p].state & CTRL_VALUE ? 1 : 0;
+			pin[p].clear_event();
+			prepare_packet(3);
+			send_packet();
+			return;
+		}
 	}
 	if (timeout) { // {{{
 		pending_packet[0] = CMD_TIMEOUT;

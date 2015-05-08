@@ -11,6 +11,7 @@ void setup()
 		pin[p].state = CTRL_UNSET << 2 | CTRL_RESET;
 		UNSET(p);
 	}
+	pin_events = 0;
 	// Initialize motors.
 	for (uint8_t m = 0; m < NUM_MOTORS; ++m)
 		motor[m].init();

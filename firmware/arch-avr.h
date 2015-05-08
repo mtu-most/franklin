@@ -434,22 +434,17 @@ static inline void arch_setup_start() {
 	ADCSRA = AVR_ADCSRA_BASE;
 	// Enable interrupts.
 	sei();
-	// Initialize printer id from EEPROM.
+	// Initialize uuid from EEPROM.
 	for (uint8_t i = 0; i < 16; ++i)
-		printerid[i] = EEPROM.read(i);
-	// Make it a UUID (version 4).
-	printerid[7] &= 0x0f;
-	printerid[7] |= 0x40;
-	printerid[9] &= 0x3f;
-	printerid[9] |= 0x80;
-	// printerid[16:20] will be filled by CMD_BEGIN.  Initialize it to 0.
-	for (uint8_t i = 0; i < 4; ++i)
-		printerid[16 + i] = 0;
-	// Fill magic.
-	printerid[20] = 0xe1;
-	printerid[21] = 0xd5;
-	printerid[22] = 0xe6;
-	printerid[23] = 0xcb;
+		uuid[i] = EEPROM.read(i);
+	//// Make it a UUID (version 4).
+	//printerid[7] &= 0x0f;
+	//printerid[7] |= 0x40;
+	//printerid[9] &= 0x3f;
+	//printerid[9] |= 0x80;
+	// printerid will be filled by CMD_BEGIN.  Initialize it to 0.
+	for (uint8_t i = 0; i < ID_SIZE; ++i)
+		printerid[i] = 0;
 }
 
 static inline void arch_setup_end() {
@@ -496,6 +491,7 @@ static inline void set_speed(uint16_t count) {
 #define offsetof(type, field) __builtin_offsetof(type, field) //(int(reinterpret_cast<volatile char *>(&reinterpret_cast<type *>(0)->field)))
 ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	asm volatile(
+		// Naked ISR, so all registers must be saved.
 		"\t"	"push 16"			"\n"
 		"\t"	"in 16, __SREG__"		"\n"
 		"\t"	"push 16"			"\n"
@@ -840,7 +836,7 @@ inline void SET_OUTPUT(uint8_t pin_no) {
 inline void SET_INPUT(uint8_t pin_no) {
 	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
-	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_INPUT);
+	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_INPUT | CTRL_NOTIFY);
 	pindebug("input pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
 }
 

@@ -111,6 +111,8 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) {
 			queue[settings[current_fragment].queue_end].data[i] = spaces[0].axis[i]->settings[current_fragment].current;
 			for (int ss = 0; ss < num_spaces; ++ss)
 				queue[settings[current_fragment].queue_end].data[i] = space_types[spaces[ss].type].unchange0(&spaces[ss], i, queue[settings[current_fragment].queue_end].data[i]);
+			if (i == 2)
+				queue[settings[current_fragment].queue_end].data[i] -= zoffset;
 		}
 		for (int i = spaces[0].num_axes; i < QUEUE_LENGTH; ++i) {
 			queue[settings[current_fragment].queue_end].data[i] = NAN;

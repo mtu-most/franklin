@@ -57,11 +57,10 @@ RUN=1
 # is trusted!
 #ALLOW_SYSTEM='$'
 
-# Required credentials as user:password or just a user (password is ignored).
-#LOGIN=''
-
-# Shadow-like passwordfile with acceptable credentials.
-#PASSWORDFILE=''
+# Required credentials for different roles.
+#USER=''
+#EXPERT=''
+#ADMIN=''
 
 # Command to run in a shell when a print is done (finished or aborted).
 # May contain the following (including the square brackets), which will be
@@ -102,8 +101,9 @@ if [ -v ADD_BLACKLIST ] ; then	START_ARGS+=(--add-blacklist="$ADD_BLACKLIST") ; 
 if [ -v DRIVER ] ; then		START_ARGS+=(--driver="$DRIVER") ; fi
 if [ -v CDRIVER ] ; then	START_ARGS+=(--cdriver="$CDRIVER") ; fi
 if [ -v ALLOW_SYSTEM ] ; then	START_ARGS+=(--allow-system="$ALLOW_SYSTEM") ; fi
-if [ -v LOGIN ] ; then		START_ARGS+=(--login="$LOGIN") ; fi
-if [ -v PASSWORDFILE ] ; then	START_ARGS+=(--passwordfile="$PASSWORDFILE") ; fi
+if [ -v USER ] ; then		START_ARGS+=(--user="$USER") ; fi
+if [ -v EXPERT ] ; then		START_ARGS+=(--expert="$EXPERT") ; fi
+if [ -v ADMIN ] ; then		START_ARGS+=(--admin="$ADMIN") ; fi
 if [ -v DONE ] ; then		START_ARGS+=(--done="$DONE") ; fi
 if [ -v AVRDUDE ] ; then	START_ARGS+=(--avrdude="$AVRDUDE") ; fi
 STOP_ARGS=("${ARGS[@]}" --oknodo --stop)

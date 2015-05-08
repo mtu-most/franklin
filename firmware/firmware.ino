@@ -76,6 +76,25 @@ static void handle_led() {
 		RESET(led_pin);
 }
 
+static void handle_inputs() {
+	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
+		if (!(pin[p].state & CTRL_NOTIFY))
+			continue;
+		bool new_state = GET(p);
+		if (new_state == pin[p].value())
+			continue;
+		//debug("read pin %d, old %d new %d", p, new_state, pin[p].value());
+		if (new_state)
+			pin[p].state |= CTRL_VALUE;
+		else
+			pin[p].state &= ~CTRL_VALUE;
+		if (!pin[p].event()) {
+			pin[p].state |= CTRL_EVENT;
+			pin_events += 1;
+		}
+	}
+}
+
 int main(void) {
 	setup();
 	while (true) {
@@ -92,8 +111,11 @@ int main(void) {
 		handle_motors();
 		// Send serial data, if any.
 		try_send_next();
-		// Motor precompute steps.
 		handle_motors();
+		// Update pin states.
+		handle_inputs();
+		handle_motors();
+		// Timeout.
 		uint16_t dt = seconds() - last_active;
 		if (enabled_pins > 0 && timeout_time > 0 && timeout_time <= dt) {
 			// Disable LED.

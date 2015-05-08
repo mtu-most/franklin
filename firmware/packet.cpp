@@ -15,20 +15,25 @@ void packet()
 		// A server is running; start the watchdog.
 		watchdog_enable();
 		write_ack();
-		*reinterpret_cast <uint32_t *>(&printerid[16]) = *reinterpret_cast <volatile uint32_t *>(&command(2));
+		for (uint8_t i = 0; i < ID_SIZE / 3; ++i) {
+			for (uint8_t k = 0; k < 3; ++k)
+				printerid[k * (ID_SIZE / 3) + i] = command(2 + i);
+		}
 		// Because this is a new connection: reset active_motors and all ADC pins.
 		active_motors = 0;
 		for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
 			adc[a].disable();
 		reply[0] = CMD_READY;
-		reply[1] = 11;
-		*reinterpret_cast <uint32_t *>(&reply[2]) = 0;
+		reply[1] = 27;
+		*reinterpret_cast <uint32_t *>(&reply[2]) = PROTOCOL_VERSION;
 		reply[6] = NUM_DIGITAL_PINS;
 		reply[7] = NUM_ANALOG_INPUTS;
 		reply[8] = NUM_MOTORS;
 		reply[9] = 1 << FRAGMENTS_PER_MOTOR_BITS;
 		reply[10] = BYTES_PER_FRAGMENT;
-		reply_ready = 11;
+		for (uint8_t i = 0; i < 16; ++i)
+			reply[11 + i] = uuid[i];
+		reply_ready = 27;
 		return;
 	}
 	case CMD_PING:
@@ -304,6 +309,7 @@ void packet()
 		return;
 	}
 	case CMD_MOVE:
+	case CMD_AUDIO:
 	{
 #ifdef DEBUG_CMD
 		debug("CMD_MOVE");
@@ -323,6 +329,12 @@ void packet()
 			write_stall();
 			return;
 		}
+		if (buffer[last_fragment][command(1)][0] != int8_t(0x80)) {
+			debug("duplicate buffer %d to fill", command(1));
+			write_stall();
+			return;
+		}
+		motor[command(1)].audio = command(0) == CMD_AUDIO;
 		for (uint8_t b = 0; b < last_len; ++b)
 			buffer[last_fragment][command(1)][b] = static_cast<int8_t>(command(2 + b));
 		filling -= 1;

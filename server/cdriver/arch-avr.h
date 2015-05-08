@@ -30,7 +30,8 @@ enum Control { // {{{
 	CTRL_RESET,
 	CTRL_SET,
 	CTRL_INPUT,
-	CTRL_UNSET
+	CTRL_UNSET,
+	CTRL_NOTIFY = 0x40
 };
 // }}}
 
@@ -65,6 +66,7 @@ enum HWCommands { // {{{
 	HWC_SENSE0,	// 69
 	HWC_SENSE1,	// 6a
 	HWC_TIMEOUT,	// 6b
+	HWC_PINCHANGE	// 6c
 };
 // }}}
 
@@ -77,7 +79,7 @@ static inline void RESET(Pin_t _pin);
 
 extern int avr_active_motors;
 static inline int hwpacketsize(int len, int *available) { // {{{
-	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 3, 0, 4, 0, 0, 0, 1, -1, -1, -1, -1 };
+	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 3, 0, 4, 0, 0, 0, 1, 3, -1, -1, -1 };
 	switch (command[1][0] & ~0x10) {
 	case HWC_READY:
 		if (len >= 2)
@@ -413,6 +415,15 @@ static inline void hwpacket(int len) {
 		send_host(CMD_TIMEOUT);
 		return;
 	}
+	case HWC_PINCHANGE:
+	{
+		avr_write_ack("pinchange");
+		for (int i = 0; i < num_gpios; ++i) {
+			if (gpios[i].pin.pin == command[1][1])
+				send_host(CMD_PINCHANGE, i, gpios[i].pin.inverted() ? !command[1][2] : command[1][2]);
+		}
+		return;
+	}
 	default:
 	{
 		if (!avr_wait_for_reply)
@@ -425,17 +436,17 @@ static inline void hwpacket(int len) {
 // }}}
 
 // Hardware interface {{{
-static inline void avr_setup_pin(int pin, int type, int resettype) {
+static inline void avr_setup_pin(int pin, int type, int resettype, int extra) {
 	if (avr_in_control_queue[pin])
 	{
 		for (int i = 0; i < avr_control_queue_length; ++i) {
 			if (avr_control_queue[i * 2 + 1] != pin)
 				continue;
-			avr_control_queue[i * 2] = type | (resettype << 2);
+			avr_control_queue[i * 2] = type | (resettype << 2) | extra;
 			return;
 		}
 	}
-	avr_control_queue[avr_control_queue_length * 2] = type | (resettype << 2);
+	avr_control_queue[avr_control_queue_length * 2] = type | (resettype << 2) | extra;
 	avr_control_queue[avr_control_queue_length * 2 + 1] = pin;
 	avr_control_queue_length += 1;
 	avr_in_control_queue[pin] = true;
@@ -448,7 +459,7 @@ static inline void SET_INPUT(Pin_t _pin) {
 	if (avr_pins[_pin.pin].state == 2)
 		return;
 	avr_pins[_pin.pin].state = 2;
-	avr_setup_pin(_pin.pin, CTRL_INPUT, avr_pins[_pin.pin].reset);
+	avr_setup_pin(_pin.pin, CTRL_INPUT, avr_pins[_pin.pin].reset, CTRL_NOTIFY);
 }
 
 static inline void SET_INPUT_NOPULLUP(Pin_t _pin) {
@@ -457,7 +468,7 @@ static inline void SET_INPUT_NOPULLUP(Pin_t _pin) {
 	if (avr_pins[_pin.pin].state == 3)
 		return;
 	avr_pins[_pin.pin].state = 3;
-	avr_setup_pin(_pin.pin, CTRL_UNSET, avr_pins[_pin.pin].reset);
+	avr_setup_pin(_pin.pin, CTRL_UNSET, avr_pins[_pin.pin].reset, CTRL_NOTIFY);
 }
 
 static inline void RESET(Pin_t _pin) {
@@ -467,9 +478,9 @@ static inline void RESET(Pin_t _pin) {
 		return;
 	avr_pins[_pin.pin].state = 0;
 	if (_pin.inverted())
-		avr_setup_pin(_pin.pin, CTRL_SET, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset);
+		avr_setup_pin(_pin.pin, CTRL_SET, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset, 0);
 	else
-		avr_setup_pin(_pin.pin, CTRL_RESET, avr_pins[_pin.pin].reset);
+		avr_setup_pin(_pin.pin, CTRL_RESET, avr_pins[_pin.pin].reset, 0);
 }
 
 static inline void SET(Pin_t _pin) {
@@ -479,9 +490,9 @@ static inline void SET(Pin_t _pin) {
 		return;
 	avr_pins[_pin.pin].state = 1;
 	if (_pin.inverted())
-		avr_setup_pin(_pin.pin, CTRL_RESET, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset);
+		avr_setup_pin(_pin.pin, CTRL_RESET, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset, 0);
 	else
-		avr_setup_pin(_pin.pin, CTRL_SET, avr_pins[_pin.pin].reset);
+		avr_setup_pin(_pin.pin, CTRL_SET, avr_pins[_pin.pin].reset, 0);
 }
 
 static inline void SET_OUTPUT(Pin_t _pin) {
@@ -509,10 +520,16 @@ static inline void arch_pin_set_reset(Pin_t _pin, char state) {
 	if (avr_pins[_pin.pin].reset == state)
 		return;
 	avr_pins[_pin.pin].reset = state;
-	if (_pin.inverted())
-		avr_setup_pin(_pin.pin, avr_pins[_pin.pin].state < 2 ? 1 - avr_pins[_pin.pin].state : avr_pins[_pin.pin].state, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset);
-	else
-		avr_setup_pin(_pin.pin, avr_pins[_pin.pin].state, avr_pins[_pin.pin].reset);
+	int s, r;
+	if (_pin.inverted()) {
+		s = avr_pins[_pin.pin].state < 2 ? 1 - avr_pins[_pin.pin].state : avr_pins[_pin.pin].state;
+		r = avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset;
+	}
+	else {
+		s = avr_pins[_pin.pin].state;
+		r = avr_pins[_pin.pin].reset;
+	}
+	avr_setup_pin(_pin.pin, s, r, state < 2 ? 0 : CTRL_NOTIFY);
 }
 // }}}
 
@@ -649,13 +666,13 @@ static inline void arch_setup_start(char const *port) {
 static inline void arch_setup_end(char const *run_id) {
 	// Get constants.
 	avr_buffer[0] = HWC_BEGIN;
-	avr_buffer[1] = 6;
-	for (int i = 0; i < 4; ++i)
+	avr_buffer[1] = 10;
+	for (int i = 0; i < 8; ++i)
 		avr_buffer[2 + i] = run_id[i];
 	if (avr_wait_for_reply)
 		debug("avr_wait_for_reply already set in begin");
 	avr_wait_for_reply = true;
-	prepare_packet(avr_buffer, 6);
+	prepare_packet(avr_buffer, 10);
 	avr_send();
 	avr_get_reply();
 	protocol_version = 0;
@@ -666,6 +683,9 @@ static inline void arch_setup_end(char const *run_id) {
 	NUM_MOTORS = command[1][8];
 	FRAGMENTS_PER_BUFFER = command[1][9];
 	BYTES_PER_FRAGMENT = command[1][10];
+	//id[0][:8] + '-' + id[0][8:12] + '-' + id[0][12:16] + '-' + id[0][16:20] + '-' + id[0][20:32]
+	for (int i = 0; i < 16; ++i)
+		uuid[i] = command[1][11 + i];
 	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * 2];
 	avr_in_control_queue = new bool[NUM_DIGITAL_PINS];
 	avr_control_queue_length = 0;
@@ -884,7 +904,7 @@ void AVRSerial::write(char c) {
 			break;
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
 			debug("write to avr failed: %d %s", ret, strerror(errno));
-			//abort();
+			disconnect();
 		}
 	}
 }

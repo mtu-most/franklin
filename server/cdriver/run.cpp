@@ -26,6 +26,8 @@ static String *strings;
 void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa) {
 	//debug("run file %f %f %f %f %f", refx, refy, refz, sina, cosa);
 	abort_run_file();
+	if (name_len == 0)
+		return;
 	strncpy(run_file_name, name, name_len);
 	run_file_name[name_len] = '\0';
 	run_time = 0;
@@ -115,12 +117,14 @@ void run_file_fill_queue() {
 					float z = r.Z + run_file_refz;
 					//debug("goto %f %f %f", x, y, z);
 					int num0 = spaces[0].num_axes;
-					if (num0 > 0)
+					if (num0 > 0) {
 						queue[settings[current_fragment].queue_end].data[0] = x;
-					if (num0 > 1)
-						queue[settings[current_fragment].queue_end].data[1] = y;
-					if (num0 > 2)
-						queue[settings[current_fragment].queue_end].data[2] = z;
+						if (num0 > 1) {
+							queue[settings[current_fragment].queue_end].data[1] = y;
+							if (num0 > 2)
+								queue[settings[current_fragment].queue_end].data[2] = z;
+						}
+					}
 					for (int i = 3; i < num0; ++i)
 						queue[settings[current_fragment].queue_end].data[i] = NAN;
 					if (num_spaces > 1) {
@@ -138,12 +142,11 @@ void run_file_fill_queue() {
 				queue[settings[current_fragment].queue_end].dist = r.dist;
 				queue[settings[current_fragment].queue_end].cb = false;
 				settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
-				if (stopped) {
+				if (stopped)
 					next_move();
-					buffer_refill();
-				}
 				else
 					rundebug("no");
+				buffer_refill();
 				break;
 			case RUN_GPIO:
 				//if (r.tool == -1)

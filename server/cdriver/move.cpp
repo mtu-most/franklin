@@ -82,7 +82,7 @@ uint8_t next_move() {
 				else {
 					sp.axis[a]->settings[current_fragment].next_dist = queue[settings[current_fragment].queue_start].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - sp.axis[a]->settings[current_fragment].source;
 #ifdef DEBUG_MOVE
-					debug("next dist of %d = %f (%f - %f)", a0 + a, sp.axis[a]->settings[current_fragment].next_dist, queue[settings[current_fragment].queue_start].data[a0 + a], sp.axis[a]->settings[current_fragment].source);
+					debug("next dist of %d = %f (%f - %f)", a0 + a, sp.axis[a]->settings[current_fragment].next_dist, queue[settings[current_fragment].queue_start].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0), sp.axis[a]->settings[current_fragment].source);
 #endif
 				}
 			}

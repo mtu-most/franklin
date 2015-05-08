@@ -44,14 +44,24 @@ function init() { // {{{
 	register_update('space_update', update_space);
 	register_update('temp_update', update_temp);
 	register_update('gpio_update', update_gpio);
+	var setupbox = document.getElementById('setupbox');
 	if (document.location.search.length > 0 && document.location.search[0] == '?') {
 		var things = document.location.search.split('&');
 		for (var t = 0; t < things.length; ++t) {
 			var items = things[t].substring(1).split('=');
-			if (items[0] == 'setup' && items[1] != '0')
-				document.getElementById('container').RemoveClass('nosetup');
+			if (items[0] == 'setup') {
+				if (items[1] != '0')
+					setupbox.checked = true;
+				else
+					setupbox.checked = false;
+			}
 		}
 	}
+	var container = document.getElementById('container');
+	if (setupbox.checked)
+		container.RemoveClass('nosetup');
+	else
+		container.AddClass('nosetup');
 	var reading_temps = false;
 	setInterval(function() {
 		if (reading_temps || !selected_printer || selected_printer.disabling)
@@ -251,10 +261,24 @@ function select_printer(port) { // {{{
 	}
 } // }}}
 
-function upload_buttons(port, buttons) { // {{{
-	var ret = document.createElement('ul');
+function upload_buttons(port, ul, buttons) { // {{{
 	for (var b = 0; b < buttons.length; ++b) {
-		var button = ret.AddElement('li').AddElement('button');
+		var li = ul.AddElement('li');
+		// Add UUID button.
+		var button = li.AddElement('button');
+		button.type = 'button';
+		if (buttons[b][2]) {
+			button.target = buttons[b][0];
+			button.onclick = function() {
+				rpc.call('new_uuid', [port, this.target], {}, function(ret) { if (ret) alert('Problem setting new UUID: ' + ret);});
+			};
+		}
+		else {
+			button.disabled = true;
+		}
+		button.AddText('Set new UUID');
+		// And the upload button.
+		button = li.AddElement('button');
 		button.type = 'button';
 		button.target = buttons[b][0];
 		button.onclick = function() {
@@ -262,7 +286,6 @@ function upload_buttons(port, buttons) { // {{{
 		};
 		button.AddText(buttons[b][1]);
 	}
-	return [ret];
 }
 // }}}
 
@@ -351,6 +374,15 @@ function set_name(printer, type, index1, index2, name) { // {{{
 	for (var i = 0; i < printer.names[type][index1][index2].length; ++i)
 		printer.names[type][index1][index2][i].ClearAll().AddText(name);
 } // }}}
+
+function toggle_setup() { // {{{
+	var e = document.getElementById('setupbox');
+	var c = document.getElementById('container');
+	if (e.checked)
+		c.RemoveClass('nosetup');
+	else
+		c.AddClass('nosetup');
+} // }}}
 // }}}
 
 // Queue functions.  {{{
@@ -426,10 +458,15 @@ function queue_print(printer) { // {{{
 
 // Non-update events. {{{
 function new_port() { // {{{
-	ports[port] = [Label(), NoPrinter(), null, null];
-	ports[port][0].AddClass('setup');
-	labels_element.Add(ports[port][0]);
-	printers_element.Add(ports[port][1]);
+	var p = port;
+	var nop = NoPrinter();
+	ports[p] = [Label(), nop, null, null];
+	ports[p][0].AddClass('setup');
+	labels_element.Add(ports[p][0]);
+	printers_element.Add(ports[p][1]);
+	rpc.call('upload_options', [p], {}, function(options) {
+		upload_buttons(p, nop.options, options);
+	});
 } // }}}
 
 function new_printer() { // {{{
@@ -858,14 +895,11 @@ function update_gpio(index) { // {{{
 		return;
 	set_name(printer, 'gpio', index, 0, printer.gpios[index].name);
 	update_pin([['gpio', index], 'pin']);
-	if (printer.gpios[index].state == 1)
-		get_element(printer, [['gpio', index], 'state']).checked = true;
-	else
-		get_element(printer, [['gpio', index], 'state']).checked = false;
 	if (printer.gpios[index].reset < 2)
-		get_element(printer, [['gpio', index], 'statespan']).RemoveClass('hidden');
+		get_element(printer, [['gpio', index], 'statespan']).RemoveClass('input');
 	else
-		get_element(printer, [['gpio', index], 'statespan']).AddClass('hidden');
+		get_element(printer, [['gpio', index], 'statespan']).AddClass('input');
+	get_element(printer, [['gpio', index], 'state']).checked = printer.gpios[index].value;
 	get_element(printer, [['gpio', index], 'reset']).selectedIndex = printer.gpios[index].reset;
 } // }}}
 // }}}
@@ -1013,7 +1047,8 @@ function Choice(obj, options, classes, containerclasses) { // {{{
 	var id = make_id(printer, obj);
 	choices[id] = [obj, []];
 	for (var i = 0; i < options.length; ++i) {
-		var e = Create('input');
+		var l = Create('label');
+		var e = l.AddElement('input');
 		e.type = 'radio';
 		if (classes) {
 			if (typeof classes == 'string')
@@ -1031,16 +1066,14 @@ function Choice(obj, options, classes, containerclasses) { // {{{
 		e.addEventListener('click', function() {
 		       	set_value(this.printer, choices[this.name][0], Number(this.value));
 		}, false);
-		var l = Create('label');
 		if (classes) {
 			if (typeof classes == 'string')
 				l.AddClass(classes);
 			else
 				l.AddClass(classes[i]);
 		}
-		l.htmlFor = e.id;
 		l.AddText(options[i]);
-		ret.push(e, l);
+		ret.push(l);
 	}
 	return ret;
 } // }}}
@@ -1167,7 +1200,7 @@ function make_tablerow(title, cells, classes, id, onlytype, index) { // {{{
 } // }}}
 // }}}
 
-// Set helpers(to server). {{{
+// Set helpers (to server). {{{
 function set_pin(printer, id) { // {{{
 	var e = get_element(printer, id);
 	var valid = get_element(printer, id, 'valid').checked;

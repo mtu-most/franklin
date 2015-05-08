@@ -78,7 +78,7 @@ int main(int argc, char **argv) { // {{{
 	zero.it_interval.tv_nsec = 0;
 	zero.it_value.tv_sec = 0;
 	zero.it_value.tv_nsec = 0;
-	while(true) {
+	while (true) {
 		int arch = arch_fds();
 		for (int i = 0; i < 2 + arch; ++i)
 			pollfds[i].revents = 0;

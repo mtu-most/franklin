@@ -4,7 +4,7 @@
 #include <stdarg.h>
 #include ARCH_INCLUDE
 
-#define ID_SIZE 24	// Number of bytes in printerid; it's a UUID of 16 bytes, plus 4 bytes run_id and 4 magic bytes.
+#define ID_SIZE 24	// Number of bytes in printerid; 8 bytes, repeated 3 times.
 #define PROTOCOL_VERSION 0
 
 #define ADC_INTERVAL 1000	// Delay 1 ms between ADC measurements.
@@ -34,7 +34,8 @@
 #define DEFINE_VARIABLES
 #endif
 
-#define MAX_REPLY_LEN (2 + 4 * NUM_MOTORS)
+// BEGIN reply is 27 bytes, which is the longest command that doesn't depend on NUM_MOTORS.
+#define MAX_REPLY_LEN ((2 + 4 * NUM_MOTORS) > 27 ? (2 + 4 * NUM_MOTORS) : 27)
 #define REPLY_BUFFER_SIZE (MAX_REPLY_LEN + (MAX_REPLY_LEN + 2) / 3)
 
 #define SERIAL_MASK ((1 << SERIAL_SIZE_BITS) - 1)
@@ -46,6 +47,7 @@ template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 
 EXTERN volatile uint16_t debug_value, debug_value1;
 EXTERN uint8_t printerid[ID_SIZE];
+EXTERN uint8_t uuid[16];
 EXTERN uint16_t command_end;
 EXTERN bool had_data;
 EXTERN uint8_t reply[REPLY_BUFFER_SIZE], adcreply[6];
@@ -70,7 +72,6 @@ EXTERN volatile uint16_t serial_buffer_tail;
 EXTERN volatile uint8_t serial_buffer[1 << SERIAL_SIZE_BITS];
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
-// These bytes (except RESET) are sent in reply to a received packet only.
 	CMD_NACK = 0x80,	// Incorrect packet; please resend.
 	CMD_ACK0 = 0xb3,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
 	CMD_STALL0 = 0x87,	// Packet properly received, but not accepted; don't resend packet unmodified.
@@ -86,14 +87,33 @@ enum Control {
 	CTRL_RESET,
 	CTRL_SET,
 	CTRL_INPUT,
-	CTRL_UNSET
+	CTRL_UNSET,
+	CTRL_VALUE = 0x10,
+	CTRL_EVENT = 0x20,
+	CTRL_NOTIFY = 0x40
 };
-#define CONTROL_RESET(x) (((x) >> 2) & 0x3)
 #define CONTROL_CURRENT(x) ((x) & 0x3)
+#define CONTROL_RESET(x) (((x) >> 2) & 0x3)
+#define CONTROL_VALUE(x) (bool((x) & CTRL_VALUE))
+#define CONTROL_EVENT(x) (bool((x) & CTRL_EVENT))
+EXTERN uint8_t pin_events;
 
 struct Pin_t {
 	uint8_t state;
+	bool value() {
+		return CONTROL_VALUE(state);
+	}
+	bool event() {
+		return CONTROL_EVENT(state);
+	}
+	void clear_event() {
+		if (event()) {
+			pin_events -= 1;
+			state &= ~CTRL_EVENT;
+		}
+	}
 	void disable(uint8_t pin) {
+		clear_event();
 		if (CONTROL_RESET(state) == CONTROL_CURRENT(state))
 			return;
 		switch (CONTROL_RESET(state)) {
@@ -114,9 +134,14 @@ struct Pin_t {
 	void set_state(uint8_t new_state) {
 		if (CONTROL_RESET(state) != CONTROL_CURRENT(state))
 			enabled_pins -= 1;
+		clear_event();
 		state = new_state;
 		if (CONTROL_RESET(state) != CONTROL_CURRENT(state))
 			enabled_pins += 1;
+		if (state & CTRL_NOTIFY) {
+			state |= CTRL_EVENT;
+			pin_events += 1;
+		}
 	}
 	ARCH_PIN_DATA
 };
@@ -157,7 +182,11 @@ enum Command {
 	CMD_LIMIT,	// 1:which, 1:pos, {4:motor_pos}*
 	CMD_SENSE0,	// 1:which, {4:motor_pos}*
 	CMD_SENSE1,	// 1:which, {4:motor_pos}*
-	CMD_TIMEOUT	// 0
+	CMD_TIMEOUT,	// 0
+	CMD_PINCHANGE,	// 1:which, 1: state
+
+	// from host, but not "normal".
+	CMD_AUDIO = 0xc0
 };
 
 static inline volatile uint8_t &command(uint16_t pos) {
@@ -204,13 +233,6 @@ static inline uint16_t minpacketlen() {
 	};
 }
 
-enum Dir {
-	DIR_POSITIVE,
-	DIR_NEGATIVE,
-	DIR_AUDIO,
-	DIR_NONE
-};
-
 struct Motor
 {
 	volatile int32_t current_pos;
@@ -222,6 +244,7 @@ struct Motor
 	uint8_t limit_max_pin;
 	uint8_t sense_pin;
 	volatile uint8_t flags;
+	volatile bool audio;
 	ARCH_MOTOR
 	enum Flags {
 		LIMIT			= 0x01,
@@ -242,10 +265,12 @@ struct Motor
 		steps_current = 0;
 		step_bitmask = 0;
 		dir_bitmask = 0;
+		audio = false;
 	}
 	void disable() {
 		current_pos = 0;
 		steps_current = 0;
+		audio = false;
 	}
 };
 

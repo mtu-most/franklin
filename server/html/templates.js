@@ -50,19 +50,19 @@ function Pin(title, obj, analog) { // {{{
 	pinselect.printer = printer;
 	pinselect.Add(pinrange(analog));
 	pinselect.analog = analog;
-	var validinput = Create('input');
+	var validlabel = Create('label');
+	var validinput = validlabel.AddElement('input');
+	validlabel.AddText('Valid');
 	validinput.type = 'checkbox';
 	validinput.id = make_id(printer, obj, 'valid');
-	var validlabel = Create('label').AddText('Valid');
-	validlabel.htmlFor = validinput.id;
 	var inverts;
 	if (!analog) {
-		var invertedinput = Create('input');
+		var invertedlabel = Create('label');
+		var invertedinput = invertedlabel.AddElement('input');
+		invertedlabel.AddText('Inverted');
 		invertedinput.type = 'checkbox';
 		invertedinput.id = make_id(printer, obj, 'inverted');
-		var invertedlabel = Create('label').AddText('Inverted');
-		invertedlabel.htmlFor = invertedinput.id;
-		inverts = [invertedinput, invertedlabel];
+		inverts = [invertedlabel];
 	}
 	else
 		inverts = [];
@@ -71,7 +71,7 @@ function Pin(title, obj, analog) { // {{{
 	button.AddText('Set');
 	button.printer = printer;
 	button.AddEvent('click', function() { set_pin(this.printer, obj); });
-	return make_tablerow(title, [[pinselect], [validinput, validlabel], inverts, [button]], ['pintitle', ['pinvalue', 'pinvalue', 'pinvalue', 'pinvalue']]);
+	return make_tablerow(title, [[pinselect], [validlabel], inverts, [button]], ['pintitle', ['pinvalue', 'pinvalue', 'pinvalue', 'pinvalue']]);
 } // }}}
 
 function Float(obj, digits, factor, className, set) { // {{{
@@ -343,11 +343,12 @@ function Top() { // {{{
 	var b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(this.printer); }).AddText('Print selected');
 	b.type = 'button';
 	b.printer = printer;
-	b = e.AddElement('input', 'jobbutton');
+	var l = e.AddElement('label');
+	b = l.AddElement('input', 'jobbutton');
+	l.AddText('Probe');
 	var id = make_id(printer, [null, 'probebox']);
 	b.id = id;
 	b.type = 'checkbox';
-	b = e.AddElement('label').AddText('Probe');
 	b.htmlFor = id;
 	// }}}
 	// Stop buttons. {{{
@@ -479,7 +480,9 @@ function Gpios() { // {{{
 	ret.AddMultiple('gpio', function(i) {
 		var ret = Create('span');
 		ret.id = make_id(printer, [['gpio', i], 'statespan']);
-		var input = ret.AddElement('input');
+		var label = ret.AddElement('label');
+		var input = label.AddElement('input');
+		label.Add(gpio_name(i));
 		var index = i;
 		input.AddEvent('click', function(e) {
 			set_value(p, [['gpio', index], 'state'], input.checked ? 1 : 0);
@@ -488,9 +491,6 @@ function Gpios() { // {{{
 		});
 		input.type = 'checkbox';
 		input.id = make_id(p, [['gpio', i], 'state']);
-		var label = ret.AddElement('label');
-		label.Add(gpio_name(i));
-		label.htmlFor = input.id;
 		return ret;
 	}, false);
 	return ret;
@@ -509,9 +509,9 @@ function Printer() {	// {{{
 	ret.AddElement('div', 'message').id = make_id(printer, [null, 'printstate']);
 	ret.AddElement('div', 'message hidden').id = make_id(printer, [null, 'confirm']);
 	// Setup. {{{
-	var setup = ret.AddElement('div', 'setup');
+	var setup = ret.AddElement('div', 'setup expert');
 	// Save and restore. {{{
-	var e = setup.AddElement('div');
+	var e = setup.AddElement('div', 'admin');
 	e.AddText('Profile');
 	var b = e.AddElement('button').AddText('Save (as)').AddEvent('click', function() {
 		this.printer.call('save', [this.saveas.value], {});
@@ -520,13 +520,13 @@ function Printer() {	// {{{
 	b.printer = printer;
 	b.saveas = e.AddElement('input');
 	b.saveas.type = 'text';
-	e = setup.AddElement('button').AddText('Remove this profile');
+	e = setup.AddElement('button', 'admin').AddText('Remove this profile');
 	e.type = 'button';
 	e.printer = printer;
 	e.AddEvent('click', function() {
 		this.printer.call('remove_profile', [this.printer.profile], {});
 	});
-	e = setup.AddElement('button').AddText('Set as default profile');
+	e = setup.AddElement('button', 'admin').AddText('Set as default profile');
 	e.type = 'button';
 	e.printer = printer;
 	e.AddEvent('click', function() {
@@ -795,7 +795,7 @@ function Printer() {	// {{{
 }
 // }}}
 
-function NoPrinter() { // {{{
+function NoPrinter(options) { // {{{
 	var ret = Create('div', 'noprinter notconnected setup hidden');
 	ret.id = make_id({'port': port}, [null, 'nocontainer']);
 	var blocker = ret.AddElement('div', 'hidden blocker');
@@ -805,7 +805,7 @@ function NoPrinter() { // {{{
 	detect.type = 'button';
 	detect.port = port;
 	detect.AddEvent('click', function() { rpc.call('detect', [this.port], {}); });
-	ret.AddElement('p').AddText('Or you can upload the firmware that fits your hardware.').Add(upload_buttons(port, [['bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone)'], ['melzi', 'atmega1284p with optiboot (Melzi)'], ['sanguinololu', 'atmega1284p (Sanguinololu)'], ['ramps', 'atmega2560 (Ramps)'], ['mega', 'atmega1280'], ['mini', 'atmega328 (Uno)']]));
+	ret.options = ret.AddElement('p', 'admin').AddText('Or you can upload the firmware that fits your hardware.').AddElement('ul');
 	var message = ret.AddElement('div', 'message');
 	message.id = make_id({'port': port}, [null, 'message2']);
 	return ret;

@@ -94,9 +94,8 @@ void setpos(int which, int t, float f) {
 		for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
 			spaces[which].axis[a]->settings[current_fragment].current = spaces[which].axis[a]->settings[current_fragment].source;
 	}
-	cpdebug(which, t, "setpos %d", diff);
 	arch_addpos(which, t, diff);
-	//debug("setpos %d %d %d", which, t, spaces[which].motor[t]->settings[current_fragment].current_pos);
+	cpdebug(which, t, "setpos diff %d to %d", diff, spaces[which].motor[t]->settings[current_fragment].current_pos);
 	//arch_stop();
 	space_types[spaces[which].type].reset_pos(&spaces[which]);
 	for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
@@ -123,6 +122,15 @@ void packet()
 		debug("CMD_RESET");
 #endif
 		reset();
+	}
+	case CMD_GET_UUID: // get uuid as received from firmware.
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_GET_UUID");
+#endif
+		memcpy(datastore, uuid, 16);
+		send_host(CMD_UUID, 0, 0, 0, 0, 16);
+		break;
 	}
 #endif
 	case CMD_GOTO:	// goto
@@ -377,6 +385,8 @@ void packet()
 			for (int s = 0; s < num_spaces; ++s) {
 				value = space_types[spaces[s].type].unchange0(&spaces[s], t, value);
 			}
+			if (t == 2)
+				value -= zoffset;
 		}
 		send_host(CMD_POS, which, t, value);
 		return;

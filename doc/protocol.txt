@@ -1,40 +1,96 @@
-Commands from host to firmware:
+Serial protocol, based on USB, but with more states to allow queueing commands
+without waiting for ack.
 
-- goto f0,f1,x,y,z,e* (with optional callback) (fxyz is always abs, e always rel)
-- home x+/y+/z (with optional callback)
-- motor-sleep x+/y+/z+/e*
-- run-extruder
-- temperature b/e* (with optional callback)
-- get all settings
-- change all settings
-- pause (unbuffered)
+Both ways:
+DATAn: Multi-byte packet, includes 2-bit serial number.
 
-00: goto axes, f0?, f1?, x?, y?, z?, extruders?
-01: goto axes, f0?, f1?, x?, y?, z?, extruders? with callback
-02: home 01xyz, f0?, f1?
-03: home 01xyz, f0?, f1? with callback
-04: disable motor current
-05: run extruder num, f
-06: stop extruder num
-07: set temperature axis, value
-08: unset temperature axis
-09: read-current-temperature axis
-0a: save all settings
-0b: reload all settings
-0c: get-settings axis
-0d: change-settings axis
+NACKn: Packet was not not properly received; next expected packet is n.
+ACKn: Packet n was properly received and handled.
+STALLn: Packet n was properly received but there were errors in it.
 
-fc: request response arg=version
-fd: pause everything (no-op if already paused)
-fe: continue (no-op if not paused)
-ff: abort everything (possible after or without pause).
+STALLACK: Stall was received; communication is resumed.
+
+Firmware to host:
+DEBUG: Debug message follows without checksum protection.
+STARTUP: Firmware started.
 
 
-Responses from firmware to host:
-read temperature response.
-get all settings response.
-startup (fc) response: ok or wrong-version.
+Normal operation:
 
-Asynchronous events from firmware to host:
-done goto
-done home
+DATA0
+	ACK0
+DATA1
+DATA2
+	ACK1
+DATA3
+	ACK2
+	ACK3
+
+
+Failed or broken data reception:
+
+DATA0
+	ACK0
+(DATA1)
+DATA2
+	NACK1
+DATA3
+	NACK1
+DATA1
+DATA2
+DATA3
+	ACK1
+	ACK2
+	ACK3
+
+
+Failed or broken ack reception:
+
+DATA0
+	ACK0
+DATA1
+DATA2
+	(ACK1)
+DATA3
+	ACK2
+DATA1
+DATA2
+DATA3
+	ACK1	(No action)
+	ACK2	(No action)
+	ACK3
+
+
+Invalid request:
+
+DATA0
+	ACK0
+DATA1
+DATA2
+	STALL1
+DATA3
+	STALL1
+STALLACK
+DATA2
+	STALL1
+STALLACK
+DATA2
+	ACK2
+	ACK2	(No action)
+DATA3
+DATA0
+	ACK3
+	ACK0
+
+
+
+Sender response diagram:
+
+current n, sent m
+	ACKn		m > 0 ? >n+1,m-1 : -
+	ACKx		-
+	NACKn...n-m	> DATAn-m,..., -
+	NACKx		-
+	STALLn		> STALLACK, >n+1,0
+	STALLx		-
+	> DATAn		>n,m+1

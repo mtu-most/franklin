@@ -66,6 +66,7 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values. {
 enum Command {
 	// from host
 	CMD_RESET,	// 1 byte: 0.
+	CMD_GET_UUID,	// 0
 	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
 	CMD_RUN_FILE,	// n byte: filename.
 	CMD_PROBE,	// same.  Reply (later): LIMIT/MOVECB.
@@ -98,7 +99,8 @@ enum Command {
 	CMD_GETTIME,
 	// to host
 		// responses to host requests; only one active at a time.
-	CMD_TEMP = 0x40,	// 4 byte: requested channel's temperature. [°C]
+	CMD_UUID = 0x40,	// 16 byte uuid.
+	CMD_TEMP,	// 4 byte: requested channel's temperature. [°C]
 	CMD_POWER,	// 4 byte: requested channel's power time; 4 bytes: current time. [μs, μs]
 	CMD_POS,	// 4 byte: pos [steps]; 4 byte: current [mm].
 	CMD_DATA,	// n byte: requested data.
@@ -114,6 +116,7 @@ enum Command {
 	CMD_TIMEOUT,	// 0
 	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
 	CMD_DISCONNECT,	// 0
+	CMD_PINCHANGE,	// 1 byte: pin, 1 byte: current value.
 		// Updates from RUN_FILE.
 	CMD_UPDATE_TEMP,
 	CMD_UPDATE_PIN,
@@ -339,6 +342,7 @@ EXTERN HostSerial host_serial;
 #define FULL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
 
 // Globals
+EXTERN unsigned char uuid[16];
 EXTERN uint8_t num_spaces;
 EXTERN uint8_t num_extruders;
 EXTERN uint8_t num_temps;

@@ -11,7 +11,14 @@
 		<link rel='stylesheet' href='main.css'/>
 	</head>
 	<body onload='init()' id='container' class='nosetup'>
-		<div id='labels'></div>
+		<div id='labels'>
+			<div class='expert' id='setupbutton'>
+				<label>
+					<input type='checkbox' id='setupbox' onchange='toggle_setup()'/>
+					Show setup
+				</label>
+			</div>
+		</div>
 		<div id='printers'></div>
 		<div id='debug'></div>
 		<div id='scripts'></div>

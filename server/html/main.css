@@ -6,6 +6,10 @@
 .connected.noprinter,
 .nodelta .delta,
 
+.user .expert,
+.user .admin,
+.expert .admin,
+
 .nomover .movediv
 {
 	display: none;
@@ -331,4 +335,12 @@ input[type="text"] {
 
 .temp4 {
 	color: #000;
+}
+
+.input {
+	color: #666;
+}
+
+#setupbutton {
+	float: right;
 }

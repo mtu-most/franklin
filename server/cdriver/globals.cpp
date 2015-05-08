@@ -73,7 +73,6 @@ bool globals_load(int32_t &addr)
 		for (int i = spaces[0].num_axes; i < QUEUE_LENGTH; ++i) {
 			queue[settings[current_fragment].queue_end].data[i] = NAN;
 		}
-		debug("new load globals");
 		settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
 		// This shouldn't happen and causes communication problems, but if you have a 1-item buffer it is correct.
 		if (settings[current_fragment].queue_end == settings[current_fragment].queue_start)

@@ -19,7 +19,6 @@ import fhs
 config = fhs.init(packagename = 'franklin', config = {
 	'cdriver': None,
 	'port': None,
-	'uuid': None,
 	'run-id': None,
 	'allow-system': None
 	})
@@ -149,34 +148,10 @@ class Printer: # {{{
 		sys.stdout.write(json.dumps(data) + '\n')
 		sys.stdout.flush()
 	# }}}
-	def __init__(self, port, uuid, run_id, allow_system): # {{{
+	def __init__(self, port, run_id, allow_system): # {{{
+		self.initialized = False
 		self.printer = Driver(port, run_id)
-		self.uuid = uuid
 		self.allow_system = allow_system
-		try:
-			with fhs.read_data(os.path.join(self.uuid, 'profile')) as pfile:
-				self.profile = pfile.readline().strip()
-			log('profile is %s' % self.profile)
-		except:
-			log("No default profile; using 'default'.")
-			self.profile = 'default'
-		# Fill job queue.
-		self.jobqueue = {}
-		spool = fhs.read_spool(dir = True, opened = False)
-		if spool is not None and os.path.isdir(spool):
-			for filename in os.listdir(spool):
-				name, ext = os.path.splitext(filename)
-				if ext != os.extsep + 'bin':
-					log('skipping %s' % filename)
-					continue
-				try:
-					log('opening %s' % filename)
-					with open(os.path.join(spool, filename), 'rb') as f:
-						f.seek(-8 * 4, os.SEEK_END)
-						self.jobqueue[name] = struct.unpack('=' + 'f' * 8, f.read())
-				except:
-					traceback.print_exc()
-					log('failed to open spool file %s' % os.path.join(spool, filename))
 		self.job_output = ''
 		self.jobs_active = []
 		self.jobs_ref = None
@@ -255,13 +230,49 @@ class Printer: # {{{
 			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False, update = False)
+		self._send_packet(struct.pack('=B', protocol.command['GET_UUID']))
+		cmd, s, m, f, e, uuid = self._get_reply()
+		uuid = map(ord, uuid)
+		uuid[7] &= 0x0f
+		uuid[7] |= 0x40
+		uuid[9] &= 0x3f
+		uuid[9] |= 0x80
+		uuid = ''.join(map(lambda x: '%02x' % x, uuid))
+		self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
+		assert cmd == protocol.rcommand['UUID']
+		try:
+			with fhs.read_data(os.path.join(self.uuid, 'profile')) as pfile:
+				self.profile = pfile.readline().strip()
+			log('profile is %s' % self.profile)
+		except:
+			log("No default profile; using 'default'.")
+			self.profile = 'default'
+		# Fill job queue.
+		self.jobqueue = {}
+		spool = fhs.read_spool(dir = True, opened = False)
+		if spool is not None and os.path.isdir(spool):
+			for filename in os.listdir(spool):
+				name, ext = os.path.splitext(filename)
+				if ext != os.extsep + 'bin':
+					log('skipping %s' % filename)
+					continue
+				try:
+					log('opening %s' % filename)
+					with open(os.path.join(spool, filename), 'rb') as f:
+						f.seek(-8 * 4, os.SEEK_END)
+						self.jobqueue[name] = struct.unpack('=' + 'f' * 8, f.read())
+				except:
+					traceback.print_exc()
+					log('failed to open spool file %s' % os.path.join(spool, filename))
 		try:
 			self.load(update = False)
 		except:
 			log('Failed to import initial settings')
+			traceback.print_exc()
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
+		self.initialized = True
 	# }}}
 	# Constants.  {{{
 	# Single-byte commands.
@@ -283,8 +294,8 @@ class Printer: # {{{
 				self.command_buffer = self.command_buffer[pos + 1:]
 				id, func, a, ka = json.loads(ln)
 				if func == 'reconnect':
-					log('reconnect %s' % a[0])
-					self._send_packet(chr(protocol.command['RECONNECT']) + a[0] + '\x00')
+					log('reconnect %s' % a[1])
+					self._send_packet(chr(protocol.command['RECONNECT']) + a[1] + '\x00')
 					self.command_buffer = waiting_commands + self.command_buffer
 					self._send(id, 'return', None)
 					return
@@ -328,9 +339,15 @@ class Printer: # {{{
 		while '\n' in self.command_buffer:
 			pos = self.command_buffer.index('\n')
 			id, func, a, ka = json.loads(self.command_buffer[:pos])
-			#log('command: %s' % repr((id, func, a, ka)))
 			self.command_buffer = self.command_buffer[pos + 1:]
 			try:
+				#log('command: %s(%s %s)' % (func, a, ka))
+				assert not any(func.startswith(x + '_') for x in ('admin', 'expert', 'user'))
+				role = a.pop(0) + '_'
+				if hasattr(self, role + func):
+					func = role + func
+				elif role == 'admin_' and hasattr(self, 'expert_' + func):
+					func = 'expert_' + func
 				ret = getattr(self, func)(*a, **ka)
 				if isinstance(ret, tuple) and len(ret) == 2 and ret[0] is WAIT:
 					# The function blocks; it will send its own reply later.
@@ -439,15 +456,19 @@ class Printer: # {{{
 				continue
 			elif cmd == protocol.rcommand['TIMEOUT']:
 				self.position_valid = False
-				self._globals_update()
+				call_queue.append((self._globals_update, ()))
 				for i, t in enumerate(self.temps):
 					if not math.isnan(t.value):
 						t.value = float('nan')
-						self._temp_update(i)
+						call_queue.append((self._temp_update, i))
 				for i, g in enumerate(self.gpios):
 					if g.state != g.reset:
 						g.state = g.reset
-						self._gpio_update(i)
+						call_queue.append((self._gpio_update, i))
+				continue
+			elif cmd == protocol.rcommand['PINCHANGE']:
+				self.gpios[s].value = m
+				call_queue.append((self._gpio_update, s))
 				continue
 			elif cmd == protocol.rcommand['SENSE']:
 				if m not in self.sense[s]:
@@ -479,10 +500,10 @@ class Printer: # {{{
 				self._gpio_update(s)
 				continue
 			elif cmd == protocol.rcommand['CONFIRM']:
-				self.request_confirmation(data or 'Continue?')[1](False)
+				call_queue.append((self.request_confirmation(data.decode('utf-8', 'replace') or 'Continue?')[1], (False,)))
 				continue
 			elif cmd == protocol.rcommand['FILE_DONE']:
-				self._print_done(True, 'completed')
+				call_queue.append((self._print_done, (True, 'completed')))
 				continue
 			if reply:
 				return ('packet', (cmd, s, m, f, e, data))
@@ -624,15 +645,23 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _globals_update(self, target = None): # {{{
+		if not self.initialized:
+			return
 		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, self.park_after_print, self.sleep_after_print, self.cool_after_print, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
+		if not self.initialized:
+			return
 		self._broadcast(target, 'space_update', which, self.spaces[which].export())
 	# }}}
 	def _temp_update(self, which, target = None): # {{{
+		if not self.initialized:
+			return
 		self._broadcast(target, 'temp_update', which, self.temps[which].export())
 	# }}}
 	def _gpio_update(self, which, target = None): # {{{
+		if not self.initialized:
+			return
 		self._broadcast(target, 'gpio_update', which, self.gpios[which].export())
 	# }}}
 	def _use_probemap(self, x, y, z): # {{{
@@ -762,7 +791,7 @@ class Printer: # {{{
 					elif T == -2:
 						T = self.spindle_id
 					if 0 <= T < len(self.gpios):
-						self.set_gpio(T, state = x)
+						self.expert_set_gpio(T, state = x)
 					elif T != 255:
 						log('ignoring GPIO for invalid pin %d' % T)
 				elif cmd == protocol.parsed['SETTEMP']:
@@ -819,6 +848,7 @@ class Printer: # {{{
 		self.gcode_fd = -1
 	# }}}
 	def _print_done(self, complete, reason): # {{{
+		self._send_packet(struct.pack('=Bfffff', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0))
 		if self.gcode_map is not None:
 			log(reason)
 			self._gcode_close()
@@ -858,7 +888,7 @@ class Printer: # {{{
 		if self.home_phase is not None:
 			#log('killing homer')
 			self.home_phase = None
-			self.set_space(self.home_space, type = self.home_orig_type)
+			self.expert_set_space(self.home_space, type = self.home_orig_type)
 			if self.home_cb in self.movecb:
 				self.movecb.remove(self.home_cb)
 				if self.home_id is not None:
@@ -869,7 +899,7 @@ class Printer: # {{{
 			self.probe_cb(False)
 		self._globals_update()
 	# }}}
-	def _finish_done(self):
+	def _finish_done(self): # {{{
 		if self.cool_after_print:
 			for t in range(len(self.temps)):
 				self.settemp(t, float('nan'))
@@ -880,7 +910,7 @@ class Printer: # {{{
 			self.park(cb = maybe_sleep)[1](None)
 		else:
 			maybe_sleep()
-
+	# }}}
 	def _unpause(self): # {{{
 		if self.gcode_file:
 			self._send_packet(chr(protocol.command['RESUME']))	# Just in case.
@@ -1060,7 +1090,7 @@ class Printer: # {{{
 		if self.home_phase == 0:
 			# Move up to find limit or sense switch.
 			self.home_orig_type = self.spaces[self.home_space].type
-			self.set_space(self.home_space, type = TYPE_CARTESIAN)
+			self.expert_set_space(self.home_space, type = TYPE_CARTESIAN)
 			self.home_phase = 1
 			self.home_motors = [(i, self.spaces[self.home_space].axis[i], m) for i, m in enumerate(self.spaces[self.home_space].motor) if m['home_order'] == self.home_order]
 			self.home_target = {}
@@ -1216,7 +1246,7 @@ class Printer: # {{{
 			self.home_phase = 6
 			# Fall through
 		if self.home_phase == 6:
-			self.set_space(self.home_space, type = self.home_orig_type)
+			self.expert_set_space(self.home_space, type = self.home_orig_type)
 			target = {}
 			for i, a in enumerate(self.spaces[self.home_space].axis):
 				current = self.spaces[self.home_space].get_current_pos(i)
@@ -1315,6 +1345,10 @@ class Printer: # {{{
 			self.goto([{2: z}], cb = True)[1](None)
 	# }}}
 	def _next_job(self): # {{{
+		# Set all extruders to 0.
+		if len(self.spaces) >= 2:
+			for i, e in enumerate(self.spaces[1].axis):
+				self.set_axis_pos(1, i, 0)
 		self.job_current += 1
 		if self.job_current >= len(self.jobs_active):
 			self._print_done(True, 'Queue finished')
@@ -1467,6 +1501,7 @@ class Printer: # {{{
 			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
 			self.printer._send_packet(struct.pack('=BBBf', protocol.command['SETPOS'], self.id, axis, pos))
 		def get_current_pos(self, axis):
+			#log('getting current pos %d %d' % (self.id, axis))
 			self.printer._send_packet(struct.pack('=BBB', protocol.command['GETPOS'], self.id, axis))
 			cmd, s, m, f, e, data = self.printer._get_reply()
 			assert cmd == protocol.rcommand['POS']
@@ -1548,6 +1583,7 @@ class Printer: # {{{
 			self.id = id
 			self.state = 3
 			self.reset = 3
+			self.value = False
 		def read(self, data):
 			self.pin, state, = struct.unpack('=HB', data)
 			self.state = state & 0x3
@@ -1555,7 +1591,7 @@ class Printer: # {{{
 		def write(self):
 			return struct.pack('=HB', self.pin, self.state | (self.reset << 2))
 		def export(self):
-			return [self.name, self.pin, self.state, self.reset]
+			return [self.name, self.pin, self.state, self.reset, self.value]
 		def export_settings(self):
 			ret = '[gpio %d]\r\n' % self.id
 			ret += 'name = %s\r\n' % self.name
@@ -1566,11 +1602,11 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	# Useful commands.  {{{
-	def reset(self): # {{{
+	def expert_reset(self): # {{{
 		log('%s resetting and dying.' % self.uuid)
 		self._send_packet(struct.pack('=BL', protocol.command['RESET'], 0xdeadbeef))
 	# }}}
-	def die(self, reason): # {{{
+	def expert_die(self, reason): # {{{
 		log('%s dying as requested by host (%s).' % (self.uuid, reason))
 		return (WAIT, WAIT)
 	# }}}
@@ -1674,9 +1710,9 @@ class Printer: # {{{
 				self._globals_update()
 		if len(filenames) > 0:
 			with open(filenames[0]) as f:
-				self.import_settings(f.read(), update = update)
+				self.expert_import_settings(f.read(), update = update)
 	# }}}
-	def save(self, profile = None): # {{{
+	def admin_save(self, profile = None): # {{{
 		if profile and self.profile != profile.strip():
 			log('setting profile to %s' % profile.strip())
 			self.profile = profile.strip()
@@ -1695,24 +1731,24 @@ class Printer: # {{{
 		ret.sort()
 		return ret
 	# }}}
-	def remove_profile(self, profile): # {{{
+	def admin_remove_profile(self, profile): # {{{
 		filename = fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'), opened = False)
 		if os.path.exists(filename):
 			os.unlink(filename)
 			return True
 		return False
 	# }}}
-	def set_default_profile(self, profile): # {{{
+	def admin_set_default_profile(self, profile): # {{{
 		with fhs.write_data(os.path.join(self.uuid, 'profile')) as f:
 			f.write(profile.strip() + '\n')
 	# }}}
 	def abort(self): # {{{
-		self.pause();
 		for t, temp in enumerate(self.temps):
 			self.settemp(t, float('nan'))
 		self.sleep();
 		for g, gpio in enumerate(self.gpios):
 			self.set_gpio(g, state = gpio.reset)
+		self._print_done(False, 'aborted by user')
 	# }}}
 	def pause(self, pausing = True, store = True, update = True): # {{{
 		was_paused = self.paused
@@ -1734,9 +1770,8 @@ class Printer: # {{{
 				# TODO: adjust extrusion of current segment to shorter path length.
 				#log('resuming')
 				self.resuming = True
-			else:
-				#log('sending resume')
-				self._send_packet(chr(protocol.command['RESUME']))
+			#log('sending resume')
+			self._send_packet(chr(protocol.command['RESUME']))
 			self._do_queue()
 		else:
 			#log('pausing')
@@ -1746,7 +1781,7 @@ class Printer: # {{{
 					if self.home_phase is not None:
 						#log('killing homer')
 						self.home_phase = None
-						self.set_space(self.home_space, type = self.home_orig_type)
+						self.expert_set_space(self.home_space, type = self.home_orig_type)
 						if self.home_cb in self.movecb:
 							self.movecb.remove(self.home_cb)
 							if self.home_id is not None:
@@ -1961,7 +1996,7 @@ class Printer: # {{{
 			message += g.export_settings()
 		return message
 	# }}}
-	def import_settings(self, settings, filename = None, update = True): # {{{
+	def expert_import_settings(self, settings, filename = None, update = True): # {{{
 		self._broadcast(None, 'blocked', 'importing settings')
 		self.sleep(update = update)
 		section = 'general'
@@ -2050,12 +2085,12 @@ class Printer: # {{{
 			'''# Ignore performance: always update instantly.
 			if index is None:
 				#log('setting globals %s:%s' % (key, value))
-				self.set_globals(update = update, **{key: value})
+				self.expert_set_globals(update = update, **{key: value})
 			elif section == 'delta':
 				#log('setting delta %d %d %s:%s' % (index[0], index[1], key, value))
-				self.set_space(index[0], delta = {index[1]: {key: value}}, update = update)
+				self.expert_set_space(index[0], delta = {index[1]: {key: value}}, update = update)
 			elif section == 'extruder':
-				self.set_space(index[0], extruder = {index[1]: {key: value}}, update = update)
+				self.expert_set_space(index[0], extruder = {index[1]: {key: value}}, update = update)
 			else:
 				#log('setting %s %s %s:%s' % (section, repr(index), key, value))
 				getattr(self, 'set_' + section)(index, update = update, **{key: value})
@@ -2064,19 +2099,19 @@ class Printer: # {{{
 			if key.startswith('num') or key == 'type':
 				#log('setting now for %s:%s=%s' % (section, key, value))
 				if index is None:
-					self.set_globals(**{key: value})
+					self.expert_set_globals(**{key: value})
 				else:
 					if section == 'space':
 						for i in changed['motor']:
 							if i[0] == index:
-								self.set_motor(i, readback = False)
+								self.expert_set_motor(i, readback = False)
 						for i in changed['axis']:
 							if i[0] == index:
-								self.set_axis(i, readback = False)
+								self.expert_set_axis(i, readback = False)
 						for i in changed['delta']:
 							if i[0] == index:
-								self.set_axis(i, readback = False)
-					getattr(self, 'set_' + section)(index, **{key: value})
+								self.expert_set_axis(i, readback = False)
+					getattr(self, 'expert_set_' + section)(index, **{key: value})
 			else:
 				if isinstance(index, tuple):
 					#log('setting later %s' % repr((section, key, value)))
@@ -2087,10 +2122,10 @@ class Printer: # {{{
 						obj[ord[key[1]] - ord['x']] = value
 					else:
 						setattr(obj, key, value)
-		# Update values in the printer by calling the set_* functions with no new settings.
+		# Update values in the printer by calling the expert_set_* functions with no new settings.
 		if globals_changed:
 			#log('setting globals')
-			self.set_globals()
+			self.expert_set_globals()
 		for section in changed:
 			if section == 'extruder':
 				for index in changed[section]:
@@ -2101,7 +2136,7 @@ class Printer: # {{{
 					continue
 				if section != 'delta':
 					#log('setting non-delta %s' % repr(section))
-					getattr(self, 'set_' + section)(index, readback = False)
+					getattr(self, 'expert_set_' + section)(index, readback = False)
 				changed['space'].add(index[0])
 		for section in changed:
 			if section == 'extruder':
@@ -2110,13 +2145,13 @@ class Printer: # {{{
 				if isinstance(index, tuple):
 					continue
 				#log('setting %s' % repr((section, index)))
-				getattr(self, 'set_' + section)(index)
+				getattr(self, 'expert_set_' + section)(index)
 				#'''
 		self._broadcast(None, 'blocked', None)
 		return errors
 	# }}}
-	def _import_file(self, filename, name): # {{{
-		return ', '.join('%s (%s)' % (msg, ln) for ln, msg in self.import_settings(open(filename).read(), name))
+	def expert_import_file(self, filename, name): # {{{
+		return ', '.join('%s (%s)' % (msg, ln) for ln, msg in self.expert_import_settings(open(filename).read(), name))
 	# }}}
 	@delayed
 	def gcode_run(self, id, code, ref = (0, 0, 0), angle = 0, probemap = None): # {{{
@@ -2139,9 +2174,8 @@ class Printer: # {{{
 	# }}}
 	def confirm(self, confirm_id, success = True): # {{{
 		if confirm_id != self.confirm_id:
-			# Confirmation was already sent, or the request was from a file; send resume just in case.
+			# Confirmation was already sent.
 			#log('no confirm %s' % repr((confirm_id, self.confirm_id)))
-			self._send_packet(chr(protocol.command['RESUME']))
 			return False
 		id = self.confirmer
 		self.confirmer = None
@@ -2155,10 +2189,10 @@ class Printer: # {{{
 				call_queue.append((self.probe_cb[1], [success]))
 			else:
 				if not success:
-					self._unpause()
 					self._print_done(False, 'aborted by failed confirmation')
 				else:
 					call_queue.append((self._do_gcode, []))
+					self._send_packet(chr(protocol.command['RESUME']))
 		self.confirm_axes = None
 		return True
 	# }}}
@@ -2168,7 +2202,7 @@ class Printer: # {{{
 			f.seek(0)
 			return self._queue_add(f, name)
 	# }}}
-	def _queue_add_file(self, filename, name): # {{{
+	def queue_add_file(self, filename, name): # {{{
 		log('post queue add')
 		with open(filename) as f:
 			return ', '.join(self._queue_add(f, name))
@@ -2220,8 +2254,10 @@ class Printer: # {{{
 								if math.isnan(value):
 									continue
 								if bbox[2 * i] is None or value < bbox[2 * i]:
+									#log('new min bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i] is None else bbox[2 * i] / 25.4)))
 									bbox[2 * i] = value
 								if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
+									#log('new max bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i + 1] is None else bbox[2 * i + 1] / 25.4)))
 									bbox[2 * i + 1] = value
 					dst.write(struct.pack('=Bl' + 'f' * 12, type, *add_timedist(type == protocol.parsed['GOTO'], nums)))
 				else:
@@ -2242,7 +2278,8 @@ class Printer: # {{{
 							nums[1 + i * 2] = nums[2 + i * 2]
 					if bbox[0] is not None:
 						bbox_last[:] = bbox
-					bbox[:] = [None] * 6
+					#log('reset bbox park')
+					#bbox[:] = [None] * 6
 			def add_string(string):
 				if string is None:
 					return 0
@@ -2580,7 +2617,7 @@ class Printer: # {{{
 		for key in ('uuid', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'zoffset', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
 			ret[key] = getattr(self, key)
 		return ret
-	def set_globals(self, update = True, **ka):
+	def expert_set_globals(self, update = True, **ka):
 		#log('setting variables with %s' % repr(ka))
 		ns = ka.pop('num_spaces') if 'num_spaces' in ka else None
 		nt = ka.pop('num_temps') if 'num_temps' in ka else None
@@ -2595,6 +2632,13 @@ class Printer: # {{{
 				setattr(self, key, float(ka.pop(key)))
 		self._write_globals(ns, nt, ng, update = update)
 		assert len(ka) == 0
+	def set_globals(self, update = True, **ka):
+		real_ka = {}
+		for key in ('feedrate', 'zoffset'):
+			if key in ka:
+				real_ka[key] = ka.pop(key)
+		assert len(ka) == 0
+		return self.expert_set_globals(update = update, **real_ka)
 	# }}}
 	# Space {{{
 	def get_axis_pos(self, space, axis):
@@ -2641,7 +2685,7 @@ class Printer: # {{{
 		for key in ('name', 'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_unit', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
 			ret[key] = self.spaces[space].motor[motor][key]
 		return ret
-	def set_space(self, space, readback = True, update = True, **ka):
+	def expert_set_space(self, space, readback = True, update = True, **ka):
 		if 'name' in ka:
 			self.spaces[space].name = ka.pop('name')
 		if 'type' in ka:
@@ -2686,21 +2730,21 @@ class Printer: # {{{
 				self._space_update(space)
 		if len(ka) != 0:
 			log('invalid input ignored: %s' % repr(ka))
-	def set_axis(self, (space, axis), readback = True, update = True, **ka):
+	def expert_set_axis(self, (space, axis), readback = True, update = True, **ka):
 		for key in ('name', 'park', 'park_order', 'min', 'max'):
 			if key in ka:
 				self.spaces[space].axis[axis][key] = ka.pop(key)
 		if space == 1 and 'multiplier' in ka and axis < len(self.spaces[space].motor):
 			assert(ka['multiplier'] > 0)
 			self.multipliers[axis] = ka.pop('multiplier')
-			self.set_motor((space, axis), readback, update)
+			self.expert_set_motor((space, axis), readback, update)
 		self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_AXIS'], space, axis) + self.spaces[space].write_axis(axis))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
 			if update:
 				self._space_update(space)
 		assert len(ka) == 0
-	def set_motor(self, (space, motor), readback = True, update = True, **ka):
+	def expert_set_motor(self, (space, motor), readback = True, update = True, **ka):
 		for key in ('name', 'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_unit', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
 			if key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
@@ -2717,7 +2761,7 @@ class Printer: # {{{
 		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'):
 			ret[key] = getattr(self.temps[temp], key)
 		return ret
-	def set_temp(self, temp, update = True, **ka):
+	def expert_set_temp(self, temp, update = True, **ka):
 		ret = {}
 		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'):
 			if key in ka:
@@ -2733,10 +2777,10 @@ class Printer: # {{{
 	# Gpio {{{
 	def get_gpio(self, gpio):
 		ret = {}
-		for key in ('name', 'pin', 'state', 'reset'):
+		for key in ('name', 'pin', 'state', 'reset', 'value'):
 			ret[key] = getattr(self.gpios[gpio], key)
 		return ret
-	def set_gpio(self, gpio, update = True, **ka):
+	def expert_set_gpio(self, gpio, update = True, **ka):
 		for key in ('name', 'pin', 'state', 'reset'):
 			if key in ka:
 				setattr(self.gpios[gpio], key, ka.pop(key))
@@ -2749,6 +2793,12 @@ class Printer: # {{{
 		if update:
 			self._gpio_update(gpio)
 		assert len(ka) == 0
+	def set_gpio(self, gpio, update = True, **ka):
+		real_ka = {}
+		if 'state' in ka:
+			real_ka['state'] = ka.pop('state')
+		assert len(ka) == 0
+		return self.expert_set_gpio(gpio, update = update, **real_ka)
 	# }}}
 	def send_printer(self, target): # {{{
 		self._broadcast(target, 'new_printer', [self.uuid, self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins])
@@ -2767,7 +2817,7 @@ class Printer: # {{{
 # }}}
 
 call_queue = []
-printer = Printer(config['port'], config['uuid'], config['run-id'], config['allow-system'])
+printer = Printer(config['port'], config['run-id'], config['allow-system'])
 if printer.printer is None:
 	sys.exit(0)
 

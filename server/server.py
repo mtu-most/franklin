@@ -34,8 +34,9 @@ config = fhs.init(packagename = 'franklin', config = {
 		'predetect': 'stty -F #PORT# raw 115200',
 		'avrdude': '/usr/bin/avrdude',
 		'allow-system': '^$',
-		'login': '',
-		'passwordfile': '',
+		'admin': '',
+		'expert': '',
+		'user': '',
 		'done': '',
 		'local': 'False',
 		'driver': '',
@@ -78,25 +79,25 @@ while '%04d' % nextscriptname in scripts:
 
 class Server(websockets.RPChttpd): # {{{
 	def auth_message(self, connection, is_websocket):
-		return 'Please identify yourself' if config['passwordfile'] or config['login'] else None
+		path = connection.address.path
+		for extra in ('/', '/websocket'):
+			if path.endswith(extra):
+				path = path[:-len(extra)]
+		if path.endswith('/admin'):
+			connection.data['role'] = 'admin'
+			connection.data['pwd'] = config['admin'] or config['expert'] or config['user']
+		elif path.endswith('/expert'):
+			connection.data['role'] = 'expert'
+			connection.data['pwd'] = config['expert'] or config['user']
+		else:
+			connection.data['role'] = 'user'
+			connection.data['pwd'] = config['user']
+		return 'Please identify yourself for %s access' % connection.data['role'] if connection.data['pwd'] else None
 	def authenticate(self, connection):
-		if config['login']:
-			if ':' in config['login']:
-				user, password = config['login'].split(':', 1)
-				if user == connection.data['user'] and password == connection.data['password']:
-					return True
-			else:
-				if connection.data['user'] == config['login']:
-					return True
-		if config['passwordfile']:
-			with open(config['passwordfile']) as f:
-				for l in f:
-					if ':' not in l:
-						continue
-					user, password = l.split(':')[:2]
-					if user == connection.data['user'] and(password[1:] == connection.data['password'] if password.startswith(':') else password == crypt.crypt(connection.data['password'], password)):
-						return True
-		return False
+		if ':' in connection.data['pwd']:
+			return [connection.data['user'], connection.data['password']] == connection.data['pwd'].split(':', 1)
+		else:
+			return connection.data['password'] == connection.data['pwd']
 	def page(self, connection):
 		if 'port' in connection.query:
 			# Export request.
@@ -107,8 +108,10 @@ class Server(websockets.RPChttpd): # {{{
 				def export_reply(success, message):
 					self.reply(connection, 200, message, 'text/plain;charset=utf8')
 					connection.socket.close()
-				ports[port].call('export_settings', (), {}, export_reply)
+				ports[port].call('export_settings', (connection.data['role'],), {}, export_reply)
 				return True
+		elif any(connection.address.path.endswith('/' + x) for x in ('admin', 'expert', 'user')):
+			websockets.RPChttpd.page(self, connection, path = connection.address.path[:connection.address.path.rfind('/') + 1])
 		else:
 			websockets.RPChttpd.page(self, connection)
 	def post(self, connection):
@@ -128,9 +131,9 @@ class Server(websockets.RPChttpd): # {{{
 			os.unlink(post[0]);
 			connection.socket.close()
 		if action == 'queue_add':
-			ports[port].call('_queue_add_file', [post[0], post[1]], {}, cb)
+			ports[port].call('queue_add_file', [connection.data['role'], post[0], post[1]], {}, cb)
 		elif action == 'import':
-			ports[port].call('_import_file', [post[0], post[1]], {}, cb)
+			ports[port].call('import_file', [connection.data['role'], post[0], post[1]], {}, cb)
 		else:
 			os.unlink(post[0]);
 			self.reply(connection, 400)
@@ -176,84 +179,6 @@ class Connection: # {{{
 					getattr(c, name).event(*args)
 	# }}}
 	@classmethod
-	def upload(cls, port, board): # {{{
-		resumeinfo = [(yield), None]
-		sudo = ()
-		if board == 'bbbmelzi':
-			board = 'melzi'
-			protocol = 'bbbmelzi'
-			# No need for a baudrate here, so abuse this to send a config file.
-			baudrate = ('-C', '+' + config['avrdudeconfig'])
-			mcu = 'atmega1284p'
-			sudo = ('sudo',)
-		elif board == 'melzi':
-			protocol = 'arduino'
-			baudrate = ('-b', '115200')
-			mcu = 'atmega1284p'
-		elif board == 'sanguinololu':
-			board = 'melzi'
-			protocol = 'wiring'
-			baudrate = ('-b', '115200')
-			mcu = 'atmega1284p'
-		elif board == 'ramps':
-			protocol = 'wiring'
-			baudrate = ('-b', '115200')
-			mcu = 'atmega2560'
-		elif board == 'mega':
-			protocol = 'arduino'
-			baudrate = ('-b', '57600')
-			mcu = 'atmega1280'
-		elif board == 'mini':
-			protocol = 'wiring'
-			baudrate = ('-b', '115200')
-			mcu = 'atmega328'
-		else:
-			raise ValueError('board type not supported')
-		if ports[port] not in (False, None):
-			c = websockets.call(resumeinfo, ports[port].printer.reset, [], {})
-			while c(): c.args = (yield websockets.WAIT)
-		cls.disable(port)
-		data = ['']
-		filename = fhs.read_data(os.path.join('firmware', board + '.hex'), opened = False)
-		command = sudo + (config['avrdude'], '-q', '-q', '-V', '-c', protocol) + baudrate + ('-p', mcu, '-P', port, '-U', 'flash:w:' + filename)
-		log('Flashing firmware: ' + ' '.join(command))
-		process = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
-		def output(fd, cond):
-			d = ''
-			try:
-				d = process.stdout.read()
-			except:
-				data[0] += '\nError writing %s firmware: ' % board + traceback.format_exc()
-				log(repr(data[0]))
-				resumeinfo[0](data[0])
-				return False
-			if d != '':
-				cls._broadcast(None, 'message', port, '\n'.join(data[0].split('\n')[-4:]))
-				data[0] += d
-				return True
-			resumeinfo[0](data[0])
-			return False
-		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
-		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
-		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP, output)
-		cls._broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
-		cls._broadcast(None, 'message', port, '')
-		d = (yield websockets.WAIT)
-		try:
-			process.kill()	# In case it wasn't dead yet.
-		except OSError:
-			pass
-		process.communicate()	# Clean up.
-		cls._broadcast(None, 'blocked', port, None)
-		cls._broadcast(None, 'message', port, '')
-		if autodetect:
-			websockets.call(None, cls.detect, port)()
-		if d:
-			yield ('firmware upload for %s: ' % board + d)
-		else:
-			yield ('firmware for %s successfully uploaded' % board)
-	# }}}
-	@classmethod
 	def find_printer(cls, uuid = None, port = None): # {{{
 		for p in ports:
 			if not ports[p]:
@@ -271,28 +196,6 @@ class Connection: # {{{
 	@classmethod
 	def get_autodetect(cls): # {{{
 		return autodetect
-	# }}}
-	@classmethod
-	def disable(cls, port): # {{{
-		if port not in ports or not ports[port]:
-			#log('port is not enabled')
-			return
-		GLib.source_remove(ports[port].input_handle)
-		# Forget the printer.  First tell the printer to die
-		p = ports[port]
-		ports[port] = None
-		if p.name is not None:
-			p.call('die', ('disabled by user',), {}, lambda success, ret: None)
-			cls._broadcast(None, 'del_printer', port)
-		try:
-			p.process.kill()
-		except OSError:
-			pass
-		try:
-			p.process.communicate()
-		except:
-			pass
-		cls._broadcast(None, 'del_printer', port)
 	# }}}
 	@classmethod
 	def detect(cls, port): # {{{
@@ -342,7 +245,7 @@ class Connection: # {{{
 	# }}}
 	@classmethod
 	def get_ports(cls): # {{{
-		return [(p, ports[p].name if ports[p] else None) for p in ports]
+		return ports
 	# }}}
 	@classmethod
 	def set_default_printer(cls, name = None, port = None): # {{{
@@ -388,6 +291,167 @@ class Connection: # {{{
 		cls._broadcast(None, 'new_data', name, data)
 	# }}}
 
+	def disable(self, port): # {{{
+		if port not in ports or not ports[port]:
+			#log('port is not enabled')
+			return
+		GLib.source_remove(ports[port].input_handle)
+		# Forget the printer.  First tell the printer to die
+		p = ports[port]
+		ports[port] = None
+		if p is not None:
+			p.call('die', (self.socket.data['role'], 'disabled by user',), {}, lambda success, ret: None)
+		try:
+			p.process.kill()
+		except OSError:
+			pass
+		try:
+			p.process.communicate()
+		except:
+			pass
+		if p not in (None, False):
+			self._broadcast(None, 'del_printer', port)
+	# }}}
+	def upload_options(self, port): # {{{
+		if port == '/dev/ttyO0':
+			return ('bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone)', True)
+		else:
+			return (('melzi', 'atmega1284p with optiboot (Melzi)', False), ('sanguinololu', 'atmega1284p (Sanguinololu)', True), ('ramps', 'atmega2560 (Ramps)', True), ('mega', 'atmega1280', True), ('mini', 'atmega328 (Uno)', True))
+	# }}}
+	def _get_info(self, board): # {{{
+		sudo = ()
+		if board == 'bbbmelzi':
+			board = 'melzi'
+			protocol = 'bbbmelzi'
+			# No need for a baudrate here, so abuse this to send a config file.
+			baudrate = ('-C', '+' + config['avrdudeconfig'])
+			mcu = 'atmega1284p'
+			sudo = ('sudo',)
+		elif board == 'melzi':
+			protocol = 'arduino'
+			baudrate = ('-b', '115200')
+			mcu = 'atmega1284p'
+		elif board == 'sanguinololu':
+			board = 'melzi'
+			protocol = 'wiring'
+			baudrate = ('-b', '115200')
+			mcu = 'atmega1284p'
+		elif board == 'ramps':
+			protocol = 'wiring'
+			baudrate = ('-b', '115200')
+			mcu = 'atmega2560'
+		elif board == 'mega':
+			protocol = 'arduino'
+			baudrate = ('-b', '57600')
+			mcu = 'atmega1280'
+		elif board == 'mini':
+			protocol = 'wiring'
+			baudrate = ('-b', '115200')
+			mcu = 'atmega328'
+		else:
+			raise ValueError('board type not supported')
+		return sudo, board, protocol, baudrate, mcu
+	# }}}
+	def new_uuid(self, port, board): # {{{
+		assert self.socket.data['role'] == 'admin'
+		assert board != 'melzi'
+		resumeinfo = [(yield), None]
+		if ports[port] not in (False, None):
+			c = websockets.call(resumeinfo, ports[port].printer.reset, self.socket.data['role'])
+			while c(): c.args = (yield websockets.WAIT)
+		self.disable(port)
+		sudo, brd, protocol, baudrate, mcu = self._get_info(board)
+		uuid = [random.randrange(256) for i in range(16)]
+		uuid[7] &= 0x0f
+		uuid[7] |= 0x40 
+		uuid[9] &= 0x3f
+		uuid[9] |= 0x80
+		data = ['']
+		uuid = ','.join('%d' % x for x in uuid)
+		command = sudo + (config['avrdude'], '-q', '-q', '-c', protocol) + baudrate + ('-p', mcu, '-P', port, '-n', '-U', 'eeprom:w:' + uuid + ':m')
+		log('Flashing UUID: ' + ' '.join(command))
+		process = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
+		def output(fd, cond):
+			d = ''
+			try:
+				d = process.stdout.read()
+			except:
+				data[0] += '\nError writing %s UUID: ' % board + traceback.format_exc()
+				log(repr(data[0]))
+				resumeinfo[0](data[0])
+				return False
+			if d != '':
+				self._broadcast(None, 'message', port, '\n'.join(data[0].split('\n')[-4:]))
+				data[0] += d
+				return True
+			resumeinfo[0](data[0])
+			return False
+		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
+		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
+		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP, output)
+		self._broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
+		self._broadcast(None, 'message', port, '')
+		d = (yield websockets.WAIT)
+		try:
+			process.kill()	# In case it wasn't dead yet.
+		except OSError:
+			pass
+		process.communicate()	# Clean up.
+		self._broadcast(None, 'blocked', port, None)
+		self._broadcast(None, 'message', port, '')
+		if d:
+			yield ('Setting UUID for %s: ' % board + d)
+		else:
+			yield ('New UUID for %s set' % board)
+	# }}}
+	def upload(self, port, board): # {{{
+		assert self.socket.data['role'] == 'admin'
+		resumeinfo = [(yield), None]
+		sudo, brd, protocol, baudrate, mcu = self._get_info(board)
+		if ports[port] not in (False, None):
+			c = websockets.call(resumeinfo, ports[port].printer.reset, self.socket.data['role'])
+			while c(): c.args = (yield websockets.WAIT)
+		self.disable(port)
+		data = ['']
+		filename = fhs.read_data(os.path.join('firmware', brd + '.hex'), opened = False)
+		command = sudo + (config['avrdude'], '-q', '-q', '-c', protocol) + baudrate + ('-p', mcu, '-P', port, '-U', 'flash:w:' + filename + ':i')
+		log('Flashing firmware: ' + ' '.join(command))
+		process = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
+		def output(fd, cond):
+			d = ''
+			try:
+				d = process.stdout.read()
+			except:
+				data[0] += '\nError writing %s firmware: ' % board + traceback.format_exc()
+				log(repr(data[0]))
+				resumeinfo[0](data[0])
+				return False
+			if d != '':
+				self._broadcast(None, 'message', port, '\n'.join(data[0].split('\n')[-4:]))
+				data[0] += d
+				return True
+			resumeinfo[0](data[0])
+			return False
+		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
+		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
+		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP, output)
+		self._broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
+		self._broadcast(None, 'message', port, '')
+		d = (yield websockets.WAIT)
+		try:
+			process.kill()	# In case it wasn't dead yet.
+		except OSError:
+			pass
+		process.communicate()	# Clean up.
+		self._broadcast(None, 'blocked', port, None)
+		self._broadcast(None, 'message', port, '')
+		if autodetect:
+			websockets.call(None, self.detect, port)()
+		if d:
+			yield ('firmware upload for %s: ' % board + d)
+		else:
+			yield ('firmware for %s successfully uploaded' % board)
+	# }}}
 	def set_printer(self, printer = None, port = None): # {{{
 		self.printer = self.find_printer(printer, port)
 	# }}}
@@ -400,13 +464,16 @@ class Connection: # {{{
 			for p in ports:
 				self.socket.new_port.event(p)
 				if ports[p]:
-					ports[p].call('send_printer', [self.id], {}, lambda success, data: None)
+					ports[p].call('send_printer', [self.socket.data['role'], self.id], {}, lambda success, data: None)
 			for s in scripts:
 				Connection._broadcast(self.id, 'new_script', s, scripts[s][0], scripts[s][1])
 		self.socket.monitor = value
 	# }}}
 	def get_monitor(self): # {{{
 		return self.socket.monitor
+	# }}}
+	def get_role(self): # {{{
+		return self.socket.data['role']
 	# }}}
 	def _call (self, name, a, ka): # {{{
 		resumeinfo = [(yield), None]
@@ -416,7 +483,7 @@ class Connection: # {{{
 			if not self.printer:
 				log('No printer found')
 				yield ('error', 'No printer found')
-		ports[self.printer].call(name, a, ka, lambda success, ret: resumeinfo[0](ret))
+		ports[self.printer].call(name, (self.socket.data['role'],) + tuple(a), ka, lambda success, ret: resumeinfo[0](ret))
 		yield (yield websockets.WAIT)
 	# }}}
 	def __getattr__ (self, attr): # {{{
@@ -425,10 +492,9 @@ class Connection: # {{{
 # }}}
 
 class Port: # {{{
-	def __init__(self, port, process, detectport, uuid, run_id): # {{{
+	def __init__(self, port, process, detectport, run_id): # {{{
 		self.name = None
 		self.port = port
-		self.uuid = uuid
 		self.run_id = run_id
 		self.process = process
 		self.waiters = ({}, {}, {})
@@ -439,28 +505,28 @@ class Port: # {{{
 			if not success:
 				log('failed to get settings')
 				return
-			self.call('import_settings', [settings], {}, lambda success, ret: None)
-			GLib.source_remove(orphans[old[0]].input_handle)
-			orphans[old[0]].call('die', ('replaced by new connection',), {}, lambda success, ret: None)
+			self.call('import_settings', ['admin', settings], {}, lambda success, ret: None)
+			GLib.source_remove(orphans[self.run_id].input_handle)
+			orphans[self.run_id].call('die', ('admin', 'replaced by new connection',), {}, lambda success, ret: None)
 			try:
-				orphans[old[0]].process.kill()
+				orphans[self.run_id].process.kill()
+				orphans[self.run_id].process.communicate()
 			except OSError:
 				pass
-			orphans[old[0]].process.communicate()
-			del orphans[old[0]]
+			del orphans[self.run_id]
 		def get_vars(success, vars):
 			if not success:
 				log('failed to get vars')
 				return
 			# The child has opened the port now; close our handle.
 			if detectport is not None:
-				log('got vars; closing server port')
+				log('Driver started; closing server port')
 				detectport.close()
+			self.uuid = vars['uuid']
 			# Copy settings from orphan with the same run_id, then kill the orphan.
-			old[:] = [x for x in orphans if x[0] == self.uuid]
-			if len(old) > 0:
-				orphans[old[0]].call('export_settings', (), {}, get_settings)
-		self.call('send_printer', [None], {}, lambda success, data: success and self.call('get_globals', (), {}, get_vars))
+			if self.run_id in orphans and orphans[self.run_id].uuid == self.uuid:
+				orphans[self.run_id].call('admin', 'export_settings', (), {}, get_settings)
+		self.call('send_printer', ['admin', None], {}, lambda success, data: success and self.call('get_globals', ('admin',), {}, get_vars))
 	# }}}
 	def call(self, name, args, kargs, cb): # {{{
 		data = json.dumps([self.next_mid, name, args, kargs]) + '\n'
@@ -507,7 +573,7 @@ class Port: # {{{
 				# This for loop always runs 0 or 1 times, never more.
 				log('killing duplicate orphan')
 				del orphans[x]
-			orphans[(self.uuid, self.run_id)] = self
+			orphans[self.run_id] = self
 			Connection._broadcast(None, 'del_printer', port)
 			if autodetect:
 				websockets.call(None, Connection.detect, self.port)()
@@ -531,10 +597,9 @@ class Port: # {{{
 
 def detect(port): # {{{
 	if port == '-':
-		uuid = '00000000-0000-4000-8000-000000000000'
 		run_id = nextid()
-		process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--uuid', uuid, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-		ports[port] = Port(port, process, None, uuid, run_id)
+		process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		ports[port] = Port(port, process, None, run_id)
 		return False
 	if not os.path.exists(port):
 		log("not detecting on %s, because file doesn't exist." % port)
@@ -548,84 +613,81 @@ def detect(port): # {{{
 		log('failed to open serial port.')
 		traceback.print_exc();
 		return False
-	# flush buffer.
-	#while printer.read() != '':
-	#	pass
 	# We need to get the printer id first.  If the printer is booting, this can take a while.
-	id = [None, None, None]
+	id = [None, None, None, None]	# data, retries, timeouts, had data
 	# Wait to make sure the command is interpreted as a new packet.
 	def part2():
 		id[0] = ''
-		id[1] = 10
-		id[2] = ''
+		id[1] = 0
+		id[2] = 0
+		id[3] = False
 		# How many times to try before accepting an invalid id.
-		# This is required, because the ID is not protected with a checksum.
+		# This is required, because the ID is not protected with a checksum. TODO: protect it.
 		def timeout():
-			# Timeout.  Give up.
-			GLib.source_remove(watcher)
-			printer.close()
-			log('Timeout waiting for printer on port %s; giving up.' % port)
-			ports[port] = None
-			return False
+			id[2] += 1
+			if id[2] >= 30:
+				# Timeout.  Give up.
+				GLib.source_remove(watcher)
+				printer.close()
+				log('Timeout waiting for printer on port %s; giving up.' % port)
+				ports[port] = None
+				return False
+			if not id[3]:
+				printer.write(protocol.single['ID'])
+			else:
+				id[3] = False
+			return True
 		def boot_printer_input(fd, cond):
-			hexids = ['%02x' % ord(protocol.single[code]) for code in ('ID', 'STARTUP')]
-			while len(id[2]) < 25:
-				data = printer.read(25 - len(id[2]))
-				id[2] += data
-				id[0] += ''.join(['%02x' % ord(x) for x in data])
-				log('incomplete id: ' + id[0])
-				if len(id[2]) < 25:
-					printer.write(protocol.single['ID'])
+			id[3] = True
+			ids = [protocol.single[code] for code in ('ID', 'STARTUP')]
+			# CMD:1 (ID:8)*3
+			while len(id[0]) < 25:
+				data = printer.read(25 - len(id[0]))
+				id[0] += data
+				#log('incomplete id: ' + id[0])
+				if len(id[0]) < 25:
 					return True
-				if not id[2][0] not in hexids or not id[0].endswith(protocol.ID_MAGIC) or (not all(x in str_id_map for x in id[2][17:21]) and id[2][17:21] != '\x00' * 4):
-					log('skip non-id: %s %s' % (id[0], id[2]))
-					if hexids[0] in id[0]:
-						id[0] = id[0][id[0].index(hexids[0]):]
-						id[2] = id[2][-len(id[0]) // 2:]
-						log('keeping some: %s' % id[0])
-					elif hexids[1] in id[0]:
-						id[0] = id[0][id[0].index(hexids[1]):]
-						id[2] = id[2][-len(id[0]) // 2:]
-						log('keeping some: %s' % id[0])
+				if id[0][0] not in ids or not id[0][1:9] == id[0][9:17] == id[0][17:]:
+					log('skip non-id: %s (%s)' % (''.join('%02x' % ord(x) for x in id[0]), repr(id[0])))
+					id[1] += 1
+					if id[1] >= 10:
+						log('Giving up; accepting invalid id as unknown printer.')
+						id[0] = ids[0] + '\x00' * 24
 					else:
-						id[0] = ''
-						id[2] = ''
-						log('discarding all')
-			#if not all([x in str_id_map for x in id[0][1:]]) and not all([ord(x) == 0 for x in id[0][1:]]):
-			#	log('received invalid id: %s' % id[0]) #' '.join(['%02x' % ord(x) for x in id[0][1:]]))
-			#	if id[1] > 0:
-			#		id[1] -= 1
-			#		id[0] = id[0][2 * 25:]
-			#		printer.write(protocol.single['ID'])
-			#		return True
-			#	else:
-			#		log('accepting it anyway')
+						for start in ids:
+							if start in id[0][1:]:
+								id[0] = id[0][id[0].index(start):]
+								log('Keeping some: %s' % id[0])
+								break
+						else:
+							id[0] = ''
+							log('Discarding all')
+						return True
 			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset.
 			GLib.source_remove(timeout_handle)
 			# This printer was running and tried to send an id.  Check the id.
-			id[0] = id[0][len(hexids[0]):]
-			id[0] = id[0][:8] + '-' + id[0][8:12] + '-' + id[0][12:16] + '-' + id[0][16:20] + '-' + id[0][20:32]
-			if (id[0], id[2][17:21]) in orphans:
+			id[0] = id[0][1:9]
+			if id[0] in orphans:
 				log('accepting orphan %s on %s' % (id[0], port))
-				ports[port] = orphans.pop((id[0], id[2][17:21]))
+				ports[port] = orphans.pop(id[0])
 				ports[port].port = port
 				def close_port(success, data):
-					log('printer sent; closing server port')
+					log('reconnect complete; closing server port')
 					printer.close()
 				log('reconnecting %s' % port)
-				ports[port].call('reconnect', [port], {}, lambda success, ret: ports[port].call('send_printer', [None], {}, close_port) if success else close_port)
+				ports[port].call('reconnect', ['admin', port], {}, lambda success, ret: ports[port].call('send_printer', ['admin', None], {}, close_port) if success else close_port)
 				return False
 			run_id = nextid()
-			log('accepting unknown printer on port %s (id %s %s -> %s)' % (port, id[0], repr(id[2][17:21]), repr(run_id)))
+			log('accepting unknown printer on port %s (id %s)' % (port, ''.join('%02x' % ord(x) for x in run_id)))
 			log('orphans: %s' % repr(orphans.keys()))
-			process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--uuid', id[0], '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-			ports[port] = Port(port, process, printer, id[0], run_id)
+			process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+			ports[port] = Port(port, process, printer, run_id)
 			return False
 		printer.write(protocol.single['ID'])
-		timeout_handle = GLib.timeout_add(15000, timeout)
+		timeout_handle = GLib.timeout_add(500, timeout)
 		watcher = GLib.io_add_watch(printer.fileno(), GLib.IO_IN, boot_printer_input)
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
-	# This is only a problem for ramps; don't wait for ports that cannot be ramps.
+	# This is only a problem for RAMPS; don't wait for ports that cannot be RAMPS.
 	if 'ACM' in port:
 		GLib.timeout_add(1500, part2)
 	else:
@@ -634,12 +696,12 @@ def detect(port): # {{{
 
 def nextid(): # {{{
 	global last_id
-	# 0x6789 is an arbitrary number with bits set in every nybble, that is
+	# 0x23456789 is an arbitrary number with bits set in every nybble, that is
 	# odd(so it doesn't visit the same number twice until it did all of
 	# them, because it loops at 2**32, which is not divisible by anything
 	# except 2).
-	last_id = (last_id + 0x6789) & 0xffff
-	return ''.join([chr(id_map[(last_id >> (4 * c)) & 0xf]) for c in range(4)])
+	last_id = (last_id + 0x23456789) & 0xffffffff
+	return ''.join([chr(id_map[(last_id >> (4 * c)) & 0xf]) for c in range(8)])
 last_id = random.randrange(1 << 32)
 # Parity table is [0x8b, 0x2d, 0x1e]; half of these codes overlap with codes from the single command map; those single commands are not used.
 id_map = [0x40, 0xe1, 0xd2, 0x73, 0x74, 0xd5, 0xe6, 0x47, 0xf8, 0x59, 0x6a, 0xcb, 0xcc, 0x6d, 0x5e, 0xff]
