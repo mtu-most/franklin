@@ -6,9 +6,9 @@
 .connected.noprinter,
 .nodelta .delta,
 
-.user .expert,
-.user .admin,
-.expert .admin,
+.role_user .expert,
+.role_user .admin,
+.role_expert .admin,
 
 .nomover .movediv
 {

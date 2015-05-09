@@ -2,3 +2,4 @@
 firmware/build-*
 server/cdriver/cdriver
 server/cdriver/build
+server/cdriver/*.o

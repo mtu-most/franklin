@@ -192,6 +192,7 @@ class Printer: # {{{
 		self.spindle_id = 255
 		self.probe_dist = 1000
 		self.probe_safe_dist = 10
+		self.num_probes = 7
 		self.unit_name = 'mm'
 		self.park_after_print = True
 		self.sleep_after_print = True
@@ -272,7 +273,6 @@ class Printer: # {{{
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
-		self.initialized = True
 	# }}}
 	# Constants.  {{{
 	# Single-byte commands.
@@ -460,15 +460,15 @@ class Printer: # {{{
 				for i, t in enumerate(self.temps):
 					if not math.isnan(t.value):
 						t.value = float('nan')
-						call_queue.append((self._temp_update, i))
+						call_queue.append((self._temp_update, (i,)))
 				for i, g in enumerate(self.gpios):
 					if g.state != g.reset:
 						g.state = g.reset
-						call_queue.append((self._gpio_update, i))
+						call_queue.append((self._gpio_update, (i,)))
 				continue
 			elif cmd == protocol.rcommand['PINCHANGE']:
 				self.gpios[s].value = m
-				call_queue.append((self._gpio_update, s))
+				call_queue.append((self._gpio_update, (s,)))
 				continue
 			elif cmd == protocol.rcommand['SENSE']:
 				if m not in self.sense[s]:
@@ -1327,18 +1327,26 @@ class Printer: # {{{
 		else:
 			# Record result
 			z = self.spaces[0].get_current_pos(2)
-			p[2][y][x] = z + self.zoffset
+			p[2][y][x].append(z + self.zoffset)
+			if len(p[2][y][x]) >= self.num_probes:
+				p[2][y][x].sort()
+				log('before average: %s' % p[2][y][x])
+				trash = self.num_probes // 3
+				if trash == 0:
+					p[2][y][x] = sum(p[2][y][x]) / len(p[2][y][x])
+				else:
+					p[2][y][x] = sum(p[2][y][x][trash:-trash]) / (len(p[2][y][x]) - 2 * trash)
+				if y & 1:
+					x -= 1
+					if x < 0:
+						x = 0
+						y += 1
+				else:
+					x += 1
+					if x > p[1][0]:
+						x = p[1][0]
+						y += 1
 			z += self.probe_safe_dist
-			if y & 1:
-				x -= 1
-				if x < 0:
-					x = 0
-					y += 1
-			else:
-				x += 1
-				if x > p[1][0]:
-					x = p[1][0]
-					y += 1
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 0, good)
 			self.movecb.append(self.probe_cb)
 			# Retract
@@ -1630,7 +1638,7 @@ class Printer: # {{{
 				self._send(id, 'return', None)
 			return
 		density = [int(abs(area[t + 2] - area[t]) / self.probe_dist) + 1 for t in range(2)]
-		self.jobs_probemap = [area, density, [[None for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
+		self.jobs_probemap = [area, density, [[[] for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
 		self.gcode_angle = math.sin(angle), math.cos(angle)
 		#log(repr(self.jobs_probemap))
 		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
@@ -2812,6 +2820,7 @@ class Printer: # {{{
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
 		if self.confirmer is not None:
 			self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
+		self.initialized = True
 	# }}}
 	# }}}
 # }}}
@@ -2824,6 +2833,7 @@ if printer.printer is None:
 while True: # {{{
 	while len(call_queue) > 0:
 		f, a = call_queue.pop(0)
+		#log('calling %s' % repr((f, a)))
 		f(*a)
 	while printer.printer.available():
 		printer._printer_input()

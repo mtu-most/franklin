@@ -239,13 +239,35 @@ class Connection: # {{{
 			return
 		if ports[port]:
 			# Close serial port, in case it still exists.
-			cls.disable(port)
+			cls._disable('admin', port)
 		del ports[port]
 		cls._broadcast(None, 'del_port', port)
 	# }}}
 	@classmethod
 	def get_ports(cls): # {{{
 		return ports
+	# }}}
+	@classmethod
+	def _disable(cls, role, port): # {{{
+		if port not in ports or not ports[port]:
+			#log('port is not enabled')
+			return
+		GLib.source_remove(ports[port].input_handle)
+		# Forget the printer.  First tell the printer to die
+		p = ports[port]
+		ports[port] = None
+		if p is not None:
+			p.call('die', (role, 'disabled by user',), {}, lambda success, ret: None)
+		try:
+			p.process.kill()
+		except OSError:
+			pass
+		try:
+			p.process.communicate()
+		except:
+			pass
+		if p not in (None, False):
+			cls._broadcast(None, 'del_printer', port)
 	# }}}
 	@classmethod
 	def set_default_printer(cls, name = None, port = None): # {{{
@@ -292,29 +314,11 @@ class Connection: # {{{
 	# }}}
 
 	def disable(self, port): # {{{
-		if port not in ports or not ports[port]:
-			#log('port is not enabled')
-			return
-		GLib.source_remove(ports[port].input_handle)
-		# Forget the printer.  First tell the printer to die
-		p = ports[port]
-		ports[port] = None
-		if p is not None:
-			p.call('die', (self.socket.data['role'], 'disabled by user',), {}, lambda success, ret: None)
-		try:
-			p.process.kill()
-		except OSError:
-			pass
-		try:
-			p.process.communicate()
-		except:
-			pass
-		if p not in (None, False):
-			self._broadcast(None, 'del_printer', port)
+		return Connection._disable(self.socket.data['role'], port)
 	# }}}
 	def upload_options(self, port): # {{{
 		if port == '/dev/ttyO0':
-			return ('bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone)', True)
+			return (('bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone)', True),)
 		else:
 			return (('melzi', 'atmega1284p with optiboot (Melzi)', False), ('sanguinololu', 'atmega1284p (Sanguinololu)', True), ('ramps', 'atmega2560 (Ramps)', True), ('mega', 'atmega1280', True), ('mini', 'atmega328 (Uno)', True))
 	# }}}
@@ -537,7 +541,7 @@ class Port: # {{{
 			log('killing printer handle because of IOError')
 			traceback.print_exc()
 			cb(False, None)
-			Connection.disable(self.port)
+			Connection._disable('admin', self.port)
 			return
 		self.waiters[0][self.next_mid] = cb
 		self.next_mid += 1
@@ -558,7 +562,7 @@ class Port: # {{{
 			for t in range(3):
 				for w in self.waiters[t]:
 					self.waiters[t][w](False, 'Printer died')
-			Connection.disable(self.port)
+			Connection._disable('admin', self.port)
 			return False
 		data = json.loads(line)
 		#log('printer input:' + repr(data))

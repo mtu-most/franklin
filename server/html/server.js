@@ -437,7 +437,7 @@ function setup() {
 function _setup_connection() {
 	rpc.call('get_role', [], {}, function(r) {
 		role = r;
-		document.getElementById('container').AddClass(role);
+		document.getElementById('container').AddClass('role_' + role);
 		trigger_update('', 'connect', true);
 		rpc.call('set_monitor', [true], {}, null);
 	});
