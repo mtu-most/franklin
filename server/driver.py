@@ -450,7 +450,8 @@ class Printer: # {{{
 					self._audio_play()
 				continue
 			elif cmd == protocol.rcommand['LIMIT']:
-				self.limits[s][m] = f
+				if s < len(self.spaces) and m < len(self.spaces[s].motor):
+					self.limits[s][m] = f
 				#log('limit; %d waits' % e)
 				self._trigger_movewaits(self.movewait)
 				continue

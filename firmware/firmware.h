@@ -277,7 +277,7 @@ struct Motor
 EXTERN volatile int8_t buffer[1 << FRAGMENTS_PER_MOTOR_BITS][NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN Motor motor[NUM_MOTORS];
 EXTERN volatile uint8_t active_motors;
-EXTERN bool stopping;	// True if LIMIT has been sent to host, but not yet acknowledged.
+EXTERN int stopping;	// number of switch which has been hit, or active_motors for a probe hit and -1 for none.
 EXTERN uint32_t home_step_time;
 EXTERN uint8_t homers;
 

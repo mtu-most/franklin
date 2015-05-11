@@ -151,6 +151,7 @@ EXTERN bool *avr_in_control_queue;
 EXTERN int avr_control_queue_length;
 EXTERN bool avr_connected;
 EXTERN bool avr_homing;
+EXTERN bool avr_filling;
 // }}}
 
 #define avr_write_ack(reason) do { \
@@ -231,6 +232,7 @@ static inline void avr_get_current_pos(int offset, bool check) {
 			spaces[ts].motor[tm]->settings[current_fragment].current_pos -= avr_pos_offset[tm + mi];
 			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
 			cpdebug(ts, tm, "cpa offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
+			fcpdebug(ts, tm, "getpos diff %d", spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos - old);
 			if (check && old != spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos)
 				abort();
 		}
@@ -257,15 +259,24 @@ static inline void hwpacket(int len) {
 			return;
 		}
 		avr_write_ack("limit/sense");
-		int s = 0, m = 0;
-		for (s = 0; s < num_spaces; ++s) {
-			if (which < spaces[s].num_motors) {
-				m = which;
-				break;
-			}
-			which -= spaces[s].num_motors;
+		float pos;
+		int s, m;
+		if (which >= avr_active_motors) {
+			s = -1;
+			m = -1;
+			pos = NAN;
 		}
-		cpdebug(s, m, "limit/sense");
+		else {
+			for (s = 0; s < num_spaces; ++s) {
+				if (which < spaces[s].num_motors) {
+					m = which;
+					break;
+				}
+				which -= spaces[s].num_motors;
+			}
+			cpdebug(s, m, "limit/sense");
+			pos = spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_unit;
+		}
 		if ((command[1][0] & ~0x10) == HWC_LIMIT) {
 			//debug("limit %d", command[1][2]);
 			avr_homing = false;
@@ -283,7 +294,7 @@ static inline void hwpacket(int len) {
 			//fprintf(stderr, "\n");
 			sending_fragment = 0;
 			stopping = 2;
-			send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_unit);
+			send_host(CMD_LIMIT, s, m, pos);
 			cbs_after_current_move = 0;
 			avr_running = false;
 			//debug("free limit");
@@ -651,6 +662,7 @@ static inline void arch_setup_start(char const *port) {
 	avr_adc = NULL;
 	avr_running = true;	// Force arch_stop from setup to do something.
 	avr_homing = false;
+	avr_filling = false;
 	NUM_ANALOG_INPUTS = 0;
 	avr_pong = -2;
 	avr_limiter_space = -1;
@@ -767,6 +779,7 @@ static inline void arch_send_fragment(int fragment) {
 	prepare_packet(avr_buffer, 3);
 	avr_send();
 	int mi = 0;
+	avr_filling = true;
 	for (int s = 0; !stopping && s < num_spaces; mi += spaces[s++].num_motors) {
 		for (uint8_t m = 0; !stopping && m < spaces[s].num_motors; ++m) {
 			if (!spaces[s].motor[m]->settings[fragment].active)
@@ -780,6 +793,7 @@ static inline void arch_send_fragment(int fragment) {
 			avr_send();
 		}
 	}
+	avr_filling = false;
 }
 
 static inline void arch_start_move(int extra) {
@@ -787,7 +801,7 @@ static inline void arch_start_move(int extra) {
 		start_pending = true;
 		return;
 	}
-	if (avr_running || stopping || avr_homing || (running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= extra + 2)
+	if (avr_running || avr_filling || stopping || avr_homing || (running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= extra + 2)
 		return;
 	//debug("start move %d %d", sending_fragment, extra);
 	avr_running = true;

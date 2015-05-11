@@ -3,7 +3,7 @@
 %:
 	dh $@ --with python2
 
-export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector,-relro
+export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector
 
 override_dh_auto_build:
 	dh_auto_build

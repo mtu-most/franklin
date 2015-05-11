@@ -1,6 +1,8 @@
 #include "firmware.h"
 
-//#define DEBUG_CMD
+//#define cmddebug debug
+//#define cmddebug(...) do {} while (0)
+#define cmddebug(...) do { debug_add(command(0)); } while (0)
 
 void packet()
 {
@@ -9,9 +11,7 @@ void packet()
 	{
 	case CMD_BEGIN:	// begin: request response
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_BEGIN");
-#endif
+		cmddebug("CMD_BEGIN");
 		// A server is running; start the watchdog.
 		watchdog_enable();
 		write_ack();
@@ -38,18 +38,14 @@ void packet()
 	}
 	case CMD_PING:
 	{
-#ifdef DEBUG_CMD
-		//debug("CMD_PING");
-#endif
+		//cmddebug("CMD_PING");
 		ping |= 1 << command(1);
 		write_ack();
 		return;
 	}
 	case CMD_RESET: // reset controller; used before reprogramming flash.
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_RESET");
-#endif
+		cmddebug("CMD_RESET");
 		uint32_t magic = *reinterpret_cast <volatile int32_t *>(&command(1));
 		if (magic != RESET_MAGIC) {
 			debug("invalid reset magic %lx", F(magic));
@@ -62,9 +58,7 @@ void packet()
 	}
 	case CMD_SETUP:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_SETUP");
-#endif
+		cmddebug("CMD_SETUP");
 		if (command(1) > NUM_MOTORS) {
 			debug("num motors %d > available %d", command(1), NUM_MOTORS);
 			write_stall();
@@ -99,9 +93,7 @@ void packet()
 	}
 	case CMD_CONTROL:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_CONTROL");
-#endif
+		cmddebug("CMD_CONTROL");
 		uint8_t num = command(1);
 		for (uint8_t i = 0; i < num; ++i) {
 			if (command(2 + i + 1) >= NUM_DIGITAL_PINS) {
@@ -129,9 +121,7 @@ void packet()
 	}
 	case CMD_MSETUP:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_MSETUP");
-#endif
+		cmddebug("CMD_MSETUP");
 		uint8_t m = command(1);
 		if (m >= active_motors) {
 			debug("MSETUP called for invalid motor %d", m);
@@ -192,9 +182,7 @@ void packet()
 	}
 	case CMD_ASETUP:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_ASETUP");
-#endif
+		cmddebug("CMD_ASETUP");
 		uint8_t a = command(1);
 		if (a >= NUM_ANALOG_INPUTS) {
 			debug("ASETUP called for invalid adc %d", a);
@@ -225,10 +213,8 @@ void packet()
 	}
 	case CMD_HOME:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_HOME");
-#endif
-		if (step_state != 1 || stopping) {
+		cmddebug("CMD_HOME");
+		if (step_state != 1 || stopping >= 0) {
 			debug("HOME seen while moving");
 			write_stall();
 			return;
@@ -278,11 +264,10 @@ void packet()
 	case CMD_START_MOVE:
 	case CMD_START_PROBE:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_START_MOVE");
-#endif
-		if (stopping) {
+		cmddebug("CMD_START_MOVE");
+		if (stopping >= 0) {
 			//debug("ignoring start move while stopping");
+			debug_add(1);
 			write_ack();
 			return;
 		}
@@ -311,16 +296,15 @@ void packet()
 	case CMD_MOVE:
 	case CMD_AUDIO:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_MOVE");
-#endif
+		cmddebug("CMD_MOVE");
 		if (command(1) >= NUM_MOTORS) {
 			debug("invalid buffer %d to fill", command(1));
 			write_stall();
 			return;
 		}
-		if (stopping) {
+		if (stopping >= 0) {
 			//debug("ignoring move while stopping");
+			debug_add(0);
 			write_ack();
 			return;
 		}
@@ -345,10 +329,8 @@ void packet()
 	}
 	case CMD_START:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_START");
-#endif
-		if (stopping) {
+		cmddebug("CMD_START");
+		if (stopping >= 0) {
 			//debug("ignoring start while stopping");
 			write_ack();
 			return;
@@ -365,8 +347,10 @@ void packet()
 		}
 		current_buffer = &buffer[current_fragment];
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			if (buffer[current_fragment][m][0] != int8_t(0x80))
+			if (buffer[current_fragment][m][0] != int8_t(0x80)) {
 				motor[m].flags |= Motor::ACTIVE;
+				motor[m].steps_current = 0;
+			}
 			else
 				motor[m].flags &= ~Motor::ACTIVE;
 		}
@@ -379,9 +363,7 @@ void packet()
 	}
 	case CMD_ABORT:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_ABORT");
-#endif
+		cmddebug("CMD_ABORT");
 		for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
 			switch (CONTROL_RESET(pin[p].state)) {
 			case CTRL_RESET:
@@ -402,9 +384,12 @@ void packet()
 	}
 	case CMD_STOP:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_STOP");
-#endif
+		cmddebug("CMD_STOP");
+		if (filling > 0) {
+			debug("STOP seen while filling");
+			write_stall();
+			return;
+		}
 		set_speed(0);
 		homers = 0;
 		home_step_time = 0;
@@ -417,7 +402,6 @@ void packet()
 			//debug("cp %d %ld", m, F(motor[m].current_pos));
 		}
 		reply_ready = 2 + 4 * active_motors;
-		filling = 0;
 		current_fragment = last_fragment;
 		notified_current_fragment = current_fragment;
 		//debug("stop new current %d", current_fragment);
@@ -427,25 +411,25 @@ void packet()
 	}
 	case CMD_DISCARD:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_DISCARD");
-#endif
+		cmddebug("CMD_DISCARD");
 		// TODO: work well with interrupts.
+		if (filling > 0) {
+			debug("DISCARD seen while filling");
+			write_stall();
+			return;
+		}
 		if (command(1) >= ((last_fragment - current_fragment) & FRAGMENTS_PER_MOTOR_MASK)) {
 			debug("discarding more than entire buffer");
 			write_stall();
 			return;
 		}
 		last_fragment = (last_fragment - command(1)) & FRAGMENTS_PER_MOTOR_MASK;
-		filling = 0;
 		write_ack();
 		return;
 	}
 	case CMD_GETPIN:
 	{
-#ifdef DEBUG_CMD
-		debug("CMD_GETPIN");
-#endif
+		cmddebug("CMD_GETPIN");
 		if (command(1) >= NUM_DIGITAL_PINS) {
 			debug("invalid pin %02x for GETPIN", uint8_t(command(1)));
 			write_stall();

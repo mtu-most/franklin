@@ -121,7 +121,17 @@ void serial() { // {{{
 #endif
 				out_busy = false;
 				if ((pending_packet[0] & ~0x10) == CMD_LIMIT) {
-					stopping = false;
+					current_fragment = (current_fragment + 1) & FRAGMENTS_PER_MOTOR_MASK;
+					last_fragment = current_fragment;
+					notified_current_fragment = current_fragment;
+					filling = 0;
+					stopping = -1;
+					for (uint8_t m = 0; m < active_motors; ++m) {
+						if (motor[m].flags & Motor::LIMIT) {
+							stopping = m;
+							break;
+						}
+					}
 				}
 			}
 			inc_tail(1);
@@ -359,20 +369,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			return;
 		} // }}}
 	}
-	for (uint8_t m = 0; m < active_motors; ++m) {
-		if (motor[m].flags & Motor::LIMIT) { // {{{
-			sdebug("limit %d", m);
-			pending_packet[0] = CMD_LIMIT;
-			pending_packet[1] = m;
-			pending_packet[2] = limit_fragment_pos;
-			arch_write_current_pos(3);
-			motor[m].flags &= ~Motor::LIMIT;
-			prepare_packet(3 + 4 * active_motors);
-			send_packet();
-			return;
-		} // }}}
-	}
-	if (pin_events > 0) {
+	if (pin_events > 0) { // {{{
 		for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
 			if (!pin[p].event())
 				continue;
@@ -384,7 +381,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			send_packet();
 			return;
 		}
-	}
+	} // }}}
 	if (timeout) { // {{{
 		pending_packet[0] = CMD_TIMEOUT;
 		timeout = false;
@@ -394,12 +391,21 @@ void try_send_next() { // Call send_packet if we can. {{{
 	} // }}}
 	uint8_t cf = current_fragment;
 	if (notified_current_fragment != cf) { // {{{
-		if (step_state == 1) {
+		if (step_state == 1 && stopping < 0) {
 			pending_packet[0] = CMD_UNDERRUN;
+			debug_add(0x101);
+			debug_add(cf);
+			debug_add(last_fragment);
+			debug_add(notified_current_fragment);
 			//debug_dump();
 		}
-		else
+		else {
 			pending_packet[0] = CMD_DONE;
+			debug_add(0x102);
+			debug_add(cf);
+			debug_add(last_fragment);
+			debug_add(notified_current_fragment);
+		}
 		cli();
 		uint8_t num = (cf - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
 		//debug("done %ld %d %d %d", &motor[0].current_pos, cf, notified_current_fragment, last_fragment);
@@ -414,6 +420,20 @@ void try_send_next() { // Call send_packet if we can. {{{
 		else
 			prepare_packet(3);
 		send_packet();
+		return;
+	} // }}}
+	if (stopping >= 0) { // {{{
+		sdebug("limit %d", m);
+		pending_packet[0] = CMD_LIMIT;
+		pending_packet[1] = stopping;
+		pending_packet[2] = limit_fragment_pos;
+		arch_write_current_pos(3);
+		if (stopping < active_motors)
+			motor[stopping].flags &= ~Motor::LIMIT;
+		prepare_packet(3 + 4 * active_motors);
+		send_packet();
+		debug_add(0x100);
+		//debug_dump();
 		return;
 	} // }}}
 	if (reply_ready) { // {{{

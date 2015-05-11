@@ -44,7 +44,7 @@ void setup()
 	home_step_time = 0;
 	// Set up movement state.
 	last_len = 0;
-	stopping = false;
+	stopping = -1;
 	step_state = 1;
 	current_len = 0;
 	active_motors = 0;

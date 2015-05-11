@@ -495,7 +495,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"push 16"			"\n"
 		"\t"	"in 16, __SREG__"		"\n"
 		"\t"	"push 16"			"\n"
-		// If lock or step_state < 2: return (increment lock to queue another isr).
+		// If lock or step_state < 2: return (increment lock to queue another ISR if locked).
 		"\t"	"lds 16, lock"			"\n"
 		"\t"	"inc 16"			"\n"
 		"\t"	"sts lock, 16"			"\n"

@@ -392,17 +392,10 @@ uint8_t next_move() {
 
 void abort_move(int pos) { // {{{
 	aborting = true;
+	debug("abort pos %d", pos);
 	//debug("abort; cf %d rf %d first %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, running_fragment, first_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments - 3, pos);
 	//debug("try aborting move");
 	int prev_f = (running_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-	//debug("prev = %d", prev_f);
-	if (!stopped && pos < 0 && first_fragment != running_fragment) {
-		running_fragment = prev_f;
-		pos += settings[running_fragment].fragment_length;
-		prev_f = (running_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-	}
-	if (pos < 0)
-		pos = 0;
 	//debug("abort really regenerating %d ticks", pos);
 	copy_fragment_settings(prev_f, running_fragment);
 	current_fragment = running_fragment;
@@ -411,10 +404,16 @@ void abort_move(int pos) { // {{{
 #endif
 	//debug("free abort reset");
 	current_fragment_pos = 0;
+	//if (num_spaces > 0 && spaces[0].num_axes > 0)
+	//	fcpdebug(0, 0, "starting hwpos %x", spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0]);
 	moving = true;
 	//debug("restoring position for fragment %d to position %d", current_fragment, pos);
-	while (current_fragment_pos < pos)
+	while (current_fragment_pos < pos) {
+		//debug("tick");
 		apply_tick();
+	}
+	if (num_spaces > 0 && spaces[0].num_axes > 0)
+		fcpdebug(0, 0, "ending hwpos %x", spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0]);
 	//debug("done restoring position");
 	// Copy settings back to previous fragment.
 	copy_fragment_settings(running_fragment, prev_f);
@@ -424,6 +423,8 @@ void abort_move(int pos) { // {{{
 	running_fragment = (running_fragment + 1) % FRAGMENTS_PER_BUFFER;
 	current_fragment_pos = 0;
 	set_current_fragment(running_fragment, false);
+	if (num_spaces > 0 && spaces[0].num_axes > 0)
+		fcpdebug(0, 0, "final hwpos %x", spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0]);
 	//debug("curf3 %d", current_fragment);
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
@@ -435,7 +436,7 @@ void abort_move(int pos) { // {{{
 		}
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->settings[current_fragment].last_v = 0;
-			sp.motor[m]->settings[current_fragment].hwcurrent_pos = sp.motor[m]->settings[current_fragment].current_pos;
+			sp.motor[m]->settings[current_fragment].current_pos = sp.motor[m]->settings[current_fragment].hwcurrent_pos;
 			//debug("setting motor %d pos to %d", m, sp.motor[m]->settings[current_fragment].current_pos);
 		}
 	}
