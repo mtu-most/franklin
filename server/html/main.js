@@ -1683,53 +1683,79 @@ var drag = [[NaN, NaN], [NaN, NaN], [NaN, NaN], false];
 
 function xydown(printer, e) { // {{{
 	var pos = get_pointer_pos_xy(printer, e);
-	drag[0][0] = pos[0];
-	drag[1][0] = pos[1];
-	printer.call('get_axis_pos', [0, 0], {}, function(x) {
-		printer.call('get_axis_pos', [0, 1], {}, function(y) {
-			drag[0][1] = x;
-			drag[1][1] = y;
+		drag[0][0] = pos[0];
+		drag[1][0] = pos[1];
+	if (e.which == 0) {
+		printer.call('get_axis_pos', [0, 0], {}, function(x) {
+			printer.call('get_axis_pos', [0, 1], {}, function(y) {
+				drag[0][1] = x;
+				drag[1][1] = y;
+			});
 		});
-	});
+	}
+	else {
+		drag[0][1] = printer.targetx;
+		drag[1][1] = printer.targety;
+	}
+	return false;
 }
 // }}}
 
 function xymove(printer, e) { // {{{
 	if (drag[3])
-		return;
-	if (!(e.buttons & 1)) {
+		return false;
+	if (!(e.buttons & 5)) {
 		drag[0][1] = NaN;
 		drag[1][1] = NaN;
-		return;
+		return false;
 	}
 	var pos = get_pointer_pos_xy(printer, e);
 	var dx = pos[0] - drag[0][0];
 	var dy = pos[1] - drag[1][0];
 	if (isNaN(drag[0][1]) || isNaN(drag[1][1]))
-		return;
-	drag[3] = true;
-	printer.call('goto', [[[drag[0][1] + dx, drag[1][1] + dy]]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
+		return false;
+	if (e.buttons & 1) {
+		drag[3] = true;
+		printer.call('goto', [[[drag[0][1] + dx, drag[1][1] + dy]]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
+	}
+	else if (e.buttons & 4) {
+		printer.targetx = drag[0][1] + dx;
+		printer.targety = drag[1][1] + dy;
+		redraw_canvas(printer);
+	}
+	return false;
 }
 // }}}
 
 function zdown(printer, e) { // {{{
 	drag[2][0] = get_pointer_pos_z(printer, e);
-	printer.call('get_axis_pos', [0, 2], {}, function(z) { drag[2][1] = z; });
+	if (e.which == 0)
+		printer.call('get_axis_pos', [0, 2], {}, function(z) { drag[2][1] = z; });
+	else
+		drag[2][1] = printer.targetz;
+	return false;
 }
 // }}}
 
 function zmove(printer, e) { // {{{
 	if (drag[3])
-		return;
-	if (!(e.buttons & 1)) {
+		return false;
+	if (!(e.buttons & 5)) {
 		drag[2][1] = NaN;
-		return;
+		return false;
 	}
 	var dz = get_pointer_pos_z(printer, e) - drag[2][0];
 	if (isNaN(drag[2][1]))
-		return;
-	drag[3] = true;
-	printer.call('goto', [[{2: drag[2][1] + dz}]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
+		return false;
+	if (e.buttons & 1) {
+		drag[3] = true;
+		printer.call('goto', [[{2: drag[2][1] + dz}]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
+	}
+	else if (e.buttons & 4) {
+		printer.targetz = drag[2][1] + dz;
+		redraw_canvas(printer);
+	}
+	return false;
 }
 // }}}
 // }}}

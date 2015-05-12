@@ -12,9 +12,6 @@ void setup()
 		UNSET(p);
 	}
 	pin_events = 0;
-	// Initialize motors.
-	for (uint8_t m = 0; m < NUM_MOTORS; ++m)
-		motor[m].init();
 	notified_current_fragment = 0;
 	current_fragment = notified_current_fragment;
 	last_fragment = current_fragment;

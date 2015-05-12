@@ -1754,6 +1754,7 @@ class Printer: # {{{
 	def abort(self): # {{{
 		for t, temp in enumerate(self.temps):
 			self.settemp(t, float('nan'))
+		self.pause(store = False)
 		self.sleep();
 		for g, gpio in enumerate(self.gpios):
 			self.set_gpio(g, state = gpio.reset)

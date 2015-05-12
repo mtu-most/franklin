@@ -266,11 +266,26 @@ struct Motor
 		step_bitmask = 0;
 		dir_bitmask = 0;
 		audio = false;
+		step_pin = ~0;
+		dir_pin = ~0;
+		limit_min_pin = ~0;
+		limit_max_pin = ~0;
+		sense_pin = ~0;
 	}
 	void disable() {
 		current_pos = 0;
 		steps_current = 0;
 		audio = false;
+		if (step_pin < NUM_DIGITAL_PINS)
+			UNSET(step_pin);
+		if (dir_pin < NUM_DIGITAL_PINS)
+			UNSET(dir_pin);
+		if (limit_min_pin < NUM_DIGITAL_PINS)
+			UNSET(limit_min_pin);
+		if (limit_max_pin < NUM_DIGITAL_PINS)
+			UNSET(limit_max_pin);
+		if (sense_pin < NUM_DIGITAL_PINS)
+			UNSET(sense_pin);
 	}
 };
 

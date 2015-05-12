@@ -498,6 +498,7 @@ class Connection: # {{{
 class Port: # {{{
 	def __init__(self, port, process, detectport, run_id): # {{{
 		self.name = None
+		self.uuid = None
 		self.port = port
 		self.run_id = run_id
 		self.process = process

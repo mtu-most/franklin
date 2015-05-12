@@ -358,19 +358,23 @@ uint8_t next_move() {
 #ifdef DEBUG_MOVE
 	debug("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f s tp=%f s", settings[current_fragment].f0, settings[current_fragment].fp, settings[current_fragment].fq, v0, vp, vq, settings[current_fragment].t0, settings[current_fragment].tp);
 #endif
+	// Reset time.
+	settings[current_fragment].hwtime = 0;
+	settings[current_fragment].last_time = 0;
+	settings[current_fragment].last_current_time = 0;
+	settings[current_fragment].start_time = settings[current_fragment].last_time - uint32_t(settings[current_fragment].f0 / fabs(vp) * 1e6);
 	if (stopped) {
 #ifdef DEBUG_MOVE
 		debug("starting new move");
 #endif
 		if (current_fragment_pos <= 0) {
 			// Copy all settings to previous fragment, in case this fragment gets interrupted.
-			copy_fragment_settings(current_fragment, (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
+			int prev = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+			//if (num_spaces > 0 && spaces[0].num_axes > 0)
+			//	fcpdebug(0, 0, "copy %x %x", spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0], spaces[0].motor[0]->settings[current_fragment].current_pos + avr_pos_offset[0]);
+			copy_fragment_settings(current_fragment, prev);
 		}
 		//debug("curf1 %d", current_fragment);
-		// Reset time.
-		settings[current_fragment].hwtime = 0;
-		settings[current_fragment].last_time = 0;
-		settings[current_fragment].last_current_time = 0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a)
@@ -384,7 +388,6 @@ uint8_t next_move() {
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
 	stopped = false;
 	moving = true;
-	settings[current_fragment].start_time = settings[current_fragment].last_time - uint32_t(settings[current_fragment].f0 / fabs(vp) * 1e6);
 	//debug("start=%ld, last-start=%ld", long(settings[current_fragment].start_time), long(settings[current_fragment].last_time - settings[current_fragment].start_time));
 	// }}}
 	return num_cbs;
@@ -392,11 +395,11 @@ uint8_t next_move() {
 
 void abort_move(int pos) { // {{{
 	aborting = true;
-	debug("abort pos %d", pos);
+	//debug("abort pos %d", pos);
 	//debug("abort; cf %d rf %d first %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, running_fragment, first_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments - 3, pos);
 	//debug("try aborting move");
 	int prev_f = (running_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-	//debug("abort really regenerating %d ticks", pos);
+	//debug("abort copying from %d", prev_f);
 	copy_fragment_settings(prev_f, running_fragment);
 	current_fragment = running_fragment;
 #ifdef DEBUG_MOVE
@@ -409,11 +412,13 @@ void abort_move(int pos) { // {{{
 	moving = true;
 	//debug("restoring position for fragment %d to position %d", current_fragment, pos);
 	while (current_fragment_pos < pos) {
-		//debug("tick");
+		//debug("tick %d %d %d", current_fragment_pos, settings[current_fragment].hwtime, current_fragment);
 		apply_tick();
+		//if (num_spaces > 0 && spaces[0].num_axes > 0)
+		//	fcpdebug(0, 0, "current hwpos %x time %d", spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0], settings[current_fragment].hwtime);
 	}
-	if (num_spaces > 0 && spaces[0].num_axes > 0)
-		fcpdebug(0, 0, "ending hwpos %x", spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0]);
+	//if (num_spaces > 0 && spaces[0].num_axes > 0)
+	//	fcpdebug(0, 0, "ending hwpos %x", spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0]);
 	//debug("done restoring position");
 	// Copy settings back to previous fragment.
 	copy_fragment_settings(running_fragment, prev_f);
@@ -423,8 +428,8 @@ void abort_move(int pos) { // {{{
 	running_fragment = (running_fragment + 1) % FRAGMENTS_PER_BUFFER;
 	current_fragment_pos = 0;
 	set_current_fragment(running_fragment, false);
-	if (num_spaces > 0 && spaces[0].num_axes > 0)
-		fcpdebug(0, 0, "final hwpos %x", spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0]);
+	//if (num_spaces > 0 && spaces[0].num_axes > 0)
+	//	fcpdebug(0, 0, "final hwpos %x", spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0]);
 	//debug("curf3 %d", current_fragment);
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];

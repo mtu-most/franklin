@@ -23,6 +23,10 @@ void packet()
 		active_motors = 0;
 		for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
 			adc[a].disable();
+		filling = 0;
+		set_speed(0);
+		homers = 0;
+		home_step_time = 0;
 		reply[0] = CMD_READY;
 		reply[1] = 27;
 		*reinterpret_cast <uint32_t *>(&reply[2]) = PROTOCOL_VERSION;
@@ -64,9 +68,11 @@ void packet()
 			write_stall();
 			return;
 		}
-		// Reset newly activated motors.
+		// Reset newly (de)activated motors.
 		for (uint8_t m = active_motors; m < command(1); ++m)
 			motor[m].disable();
+		for (uint8_t m = command(1); m < active_motors; ++m)
+			motor[m].init();
 		active_motors = command(1);
 		time_per_sample = *reinterpret_cast <volatile int32_t *>(&command(2));
 		if (led_pin < NUM_DIGITAL_PINS)

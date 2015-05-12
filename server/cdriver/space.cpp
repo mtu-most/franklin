@@ -114,7 +114,7 @@ static void move_to_current() {
 	settings[current_fragment].t0 = 0;
 	settings[current_fragment].tp = 0;
 	cbs_after_current_move = 0;
-	current_fragment_pos = 0;	// Don't set to -1, because that would copy previous fragment's settings.
+	current_fragment_pos = 0;
 	first_fragment = current_fragment;
 	moving = true;
 	settings[current_fragment].cbs = 0;
@@ -519,14 +519,14 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 static void handle_motors(unsigned long long current_time) { // {{{
 	// Check for move.
 	if (stopped && !moving) {
-		//debug("handle motors not moving");
+		movedebug("handle motors not moving");
 		return;
 	}
 	movedebug("handling %d %d", stopped, moving);
 	float factor = 1;
 	float t = (current_time - settings[current_fragment].start_time) / 1e6;
 	if (t >= settings[current_fragment].t0 + settings[current_fragment].tp) {	// Finish this move and prepare next.
-		movedebug("finishing %f %f %f %ld %ld", t, settings[current_fragment].t0, settings[current_fragment].tp, long(current_time), long(settings[current_fragment].start_time));
+		//debug("finishing %f %f %f %ld %ld", t, settings[current_fragment].t0, settings[current_fragment].tp, long(current_time), long(settings[current_fragment].start_time));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -583,7 +583,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 	if (t < settings[current_fragment].t0) {	// Main part.
 		float t_fraction = t / settings[current_fragment].t0;
 		float current_f = (settings[current_fragment].f1 * (2 - t_fraction) + settings[current_fragment].f2 * t_fraction) * t_fraction;
-		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", t, settings[current_fragment].t0, settings[current_fragment].tp, t_fraction, settings[current_fragment].f1, settings[current_fragment].f2, current_f);
+		//debug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", t, settings[current_fragment].t0, settings[current_fragment].tp, t_fraction, settings[current_fragment].f1, settings[current_fragment].f2, current_f);
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -598,7 +598,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		}
 	}
 	else {	// Connector part.
-		movedebug("connector %f %f %f", t, settings[current_fragment].t0, settings[current_fragment].tp);
+		//debug("connector %f %f %f", t, settings[current_fragment].t0, settings[current_fragment].tp);
 		float tc = t - settings[current_fragment].t0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
@@ -622,7 +622,7 @@ void reset_dirs(int fragment, bool allow_new) {
 	//debug("resetting %d %d", fragment, current_fragment);
 	settings[fragment].num_active_motors = 0;
 	settings[fragment].cbs = 0;
-	current_fragment_pos = -1;
+	current_fragment_pos = 0;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
@@ -632,8 +632,6 @@ void reset_dirs(int fragment, bool allow_new) {
 				//debug("preactive %d %d %d %d %d", s, m, fragment, mtr.current_pos, mtr.hwcurrent_pos);
 				settings[fragment].num_active_motors += 1;
 				mtr.settings[fragment].active = true;
-				//debug("restoring cfp");
-				current_fragment_pos = 0;
 			}
 			else {
 				//debug("inactive %d %d %d", s, m, fragment);
@@ -655,6 +653,7 @@ void copy_fragment_settings(int src, int dst) {
 	settings[dst].fragment_length = settings[src].fragment_length;
 	settings[dst].num_active_motors = settings[src].num_active_motors;
 	settings[dst].hwtime = settings[src].hwtime;
+	//debug("copy %d time %d", dst, settings[dst].hwtime);
 	settings[dst].start_time = settings[src].start_time;
 	settings[dst].last_time = settings[src].last_time;
 	settings[dst].last_current_time = settings[src].last_current_time;
@@ -705,7 +704,7 @@ void send_fragment() {
 	}
 	//debug("sending %d prevcbs %d", current_fragment, settings[(current_fragment - 1) % FRAGMENTS_PER_BUFFER].cbs);
 	settings[current_fragment].fragment_length = current_fragment_pos;
-	current_fragment_pos = -1;
+	current_fragment_pos = 0;
 	int f = current_fragment;
 	set_current_fragment((current_fragment + 1) % FRAGMENTS_PER_BUFFER, true);
 	arch_send_fragment(f);
@@ -714,12 +713,13 @@ void send_fragment() {
 }
 
 void apply_tick() {
+	handle_motors(settings[current_fragment].hwtime);
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
 			int value = mtr.settings[current_fragment].current_pos - mtr.settings[current_fragment].hwcurrent_pos;
-			//debug("%d %d cp %d hwcp %d cf %d value %d", s, m, mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos, current_fragment, value);
+			cpdebug(s, m, "cp %d hwcp %d cf %d value %d", mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos, current_fragment, value);
 			if (probing && value)
 				value = value < 0 ? -1 : 1;
 			else {
@@ -735,8 +735,6 @@ void apply_tick() {
 					mtr.settings[current_fragment].active = true;
 					settings[current_fragment].num_active_motors += 1;
 				}
-				if (current_fragment_pos < 0)
-					current_fragment_pos = 0;
 				mtr.settings[current_fragment].data[current_fragment_pos] = value;
 			}
 			//debug("spam %d %d %d %d %d", s, m, value, mtr.settings[current_fragment].current_pos, mtr.settings[current_fragment].hwcurrent_pos);
@@ -747,7 +745,6 @@ void apply_tick() {
 	//debug("=============");
 	current_fragment_pos += 1;
 	settings[current_fragment].hwtime += hwtime_step;
-	handle_motors(settings[current_fragment].hwtime);
 	//if (num_spaces > 0 && spaces[0].num_axes >= 2)
 		//debug("move z %d %d %f %d %d", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings[current_fragment].current, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos, spaces[0].motor[0]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[0]);
 }

@@ -7,14 +7,15 @@ void handle_motors() {
 	}
 	last_active = seconds();
 	cli();
+	uint8_t state = step_state;
 	uint8_t cf = current_fragment;
 	uint8_t cs = current_sample;
 	sei();
 	// Check probe.
 	bool probed;
 	if (settings[cf].probing && probe_pin < NUM_DIGITAL_PINS) {
-		if (step_state == 0) {
-			debug("checking probe %d %d", cf, cs);
+		if (state == 0) {
+			//debug("checking probe %d %d", cf, cs);
 			if (GET(probe_pin) ^ bool(pin_flags & 2))
 				stopping = active_motors;
 			probed = true;
@@ -45,7 +46,7 @@ void handle_motors() {
 				if (limit_pin < NUM_DIGITAL_PINS) {
 					bool inverted = motor[m].flags & (buffer[cf][m][cs] < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
 					if (GET(limit_pin) ^ inverted) {
-						//debug("hit %d %d", step_state, buffer[cf][m][cs]);
+						//debug("hit %d %d", state, buffer[cf][m][cs]);
 						stopping = m;
 						motor[m].flags |= Motor::LIMIT;
 						break;
@@ -65,7 +66,7 @@ void handle_motors() {
 	}
 	if (homers > 0) {
 		// Homing.
-		if (step_state == 0) {
+		if (state == 0) {
 			probed = true;
 			for (uint8_t m = 0; m < active_motors; ++m) {
 				if (!(motor[m].flags & Motor::ACTIVE))
@@ -79,14 +80,16 @@ void handle_motors() {
 				}
 				// Limit pin no longer triggered.  Stop moving and possibly notify host.
 				motor[m].flags &= ~Motor::ACTIVE;
-				if (!--homers)
+				if (!--homers) {
 					set_speed(0);
+					return;
+				}
 			}
 		}
 		else
 			probed = false;
 	}
-	if (step_state == 0 && probed) {
+	if (state == 0 && probed) {
 		if (homers > 0)
 			current_sample = 0;	// Use only the first sample for homing.
 		step_state = homers > 0 || settings[cf].probing ? 2 : 3;
