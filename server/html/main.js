@@ -1685,7 +1685,7 @@ function xydown(printer, e) { // {{{
 	var pos = get_pointer_pos_xy(printer, e);
 		drag[0][0] = pos[0];
 		drag[1][0] = pos[1];
-	if (e.which == 0) {
+	if (e.button == 0) {
 		printer.call('get_axis_pos', [0, 0], {}, function(x) {
 			printer.call('get_axis_pos', [0, 1], {}, function(y) {
 				drag[0][1] = x;
@@ -1729,7 +1729,7 @@ function xymove(printer, e) { // {{{
 
 function zdown(printer, e) { // {{{
 	drag[2][0] = get_pointer_pos_z(printer, e);
-	if (e.which == 0)
+	if (e.button == 0)
 		printer.call('get_axis_pos', [0, 2], {}, function(z) { drag[2][1] = z; });
 	else
 		drag[2][1] = printer.targetz;
