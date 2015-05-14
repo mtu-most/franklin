@@ -949,7 +949,7 @@ class Printer: # {{{
 		call_queue.append((self._do_gcode, []))
 	# }}}
 	def _queue_add(self, f, name): # {{{
-		name = name.split()[1]
+		name = os.path.split(name)[1]
 		origname = name
 		i = 0
 		while name == '' or name in self.jobqueue:
@@ -965,7 +965,7 @@ class Printer: # {{{
 		return errors
 	# }}}
 	def _audio_add(self, f, name): # {{{
-		name = name.split()[1]
+		name = os.path.split(name)[1]
 		origname = name
 		i = 0
 		while name == '' or name in self.audioqueue:
@@ -1645,7 +1645,7 @@ class Printer: # {{{
 		def write(self):
 			return struct.pack('=HB', self.pin, self.state | (self.reset << 2))
 		def export(self):
-			return [self.name, self.pin, self.state, self.reset, self.value]
+			return [self.name, self.pin, self.state, self.reset, self.value if self.state >= 2 else self.state == 1]
 		def export_settings(self):
 			ret = '[gpio %d]\r\n' % self.id
 			ret += 'name = %s\r\n' % self.name

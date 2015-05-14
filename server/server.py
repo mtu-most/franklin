@@ -150,6 +150,7 @@ class Connection: # {{{
 	connections = {}
 	nextid = 0
 	def __init__(self, socket): # {{{
+		socket.initialized = False
 		socket.monitor = False
 		self.socket = socket
 		self.printer = self.find_printer(*default_printer)
@@ -179,7 +180,7 @@ class Connection: # {{{
 		elif httpd:
 			#log('broadcasting to all: %s' % repr((name, args)))
 			for c in httpd.websockets:
-				if c.monitor:
+				if c.monitor and c.initialized:
 					#log('broadcasting to one')
 					getattr(c, name).event(*args)
 	# }}}
@@ -469,6 +470,7 @@ class Connection: # {{{
 	# }}}
 	def set_monitor(self, value): # {{{
 		if value:
+			self.socket.initialized = False
 			self.socket.autodetect.event(autodetect)
 			for p in ports:
 				self.socket.new_port.event(p)
@@ -476,6 +478,7 @@ class Connection: # {{{
 					ports[p].call('send_printer', [self.socket.data['role'], self.id], {}, lambda success, data: None)
 			for s in scripts:
 				Connection._broadcast(self.id, 'new_script', s, scripts[s][0], scripts[s][1])
+			self.socket.initialized = True
 		self.socket.monitor = value
 	# }}}
 	def get_monitor(self): # {{{
@@ -492,7 +495,12 @@ class Connection: # {{{
 			if not self.printer:
 				log('No printer found')
 				yield ('error', 'No printer found')
-		ports[self.printer].call(name, (self.socket.data['role'],) + tuple(a), ka, lambda success, ret: resumeinfo[0](ret))
+		def reply(success, ret):
+			if success:
+				resumeinfo[0](ret)
+			else:
+				raise ValueError(ret)
+		ports[self.printer].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
 		yield (yield websockets.WAIT)
 	# }}}
 	def __getattr__ (self, attr): # {{{
