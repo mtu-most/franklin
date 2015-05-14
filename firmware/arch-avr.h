@@ -80,7 +80,7 @@ inline bool GET(uint8_t pin_no);
 
 #define ARCH_MOTOR \
 	volatile uint16_t step_port, dir_port; \
-	volatile uint8_t step_bitmask, dir_bitmask, step_invert;
+	volatile uint8_t step_bitmask, dir_bitmask;
 
 // Everything before this line is used at the start of firmware.h; everything after it at the end.
 #else
@@ -455,7 +455,6 @@ static inline void arch_msetup(uint8_t m) {
 	if (motor[m].step_pin < NUM_DIGITAL_PINS) {
 		motor[m].step_port = int(pin[motor[m].step_pin].avr_output);
 		motor[m].step_bitmask = pin[motor[m].step_pin].avr_bitmask;
-		motor[m].step_invert = (motor[m].flags & Motor::INVERT_STEP) ? 1 : 0;
 	}
 	else
 		motor[m].step_bitmask = 0;
@@ -502,13 +501,13 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"cpi 16, 1"			"\n"
 		"\t"	"breq isr_restart"		"\n"
 		"\t"	"rjmp isr_end_nolock"		"\n"
-		"isr_restart:"				"\n"
+	"isr_restart:"					"\n"
 		"\t"	"lds 16, step_state"		"\n"
 		"\t"	"cpi 16, 2"			"\n"
 		"\t"	"brcc 1f"			"\n"
 		"\t"	"rjmp isr_end_lockonly"		"\n"
 		// Enable interrupts, so the uart doesn't overrun.
-		"1:\t"	"sei"				"\n"
+	"1:\t"		"sei"				"\n"
 		"\t"	"push 0"			"\n"
 		"\t"	"push 1"			"\n"
 		"\t"	"push 17"			"\n"
@@ -547,8 +546,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"adc 31, 27"			"\n"
 	"isr_action_loop:"				"\n"
 		// If not active: continue
-		"\t"	"ldd 18, y + %[flags]"		"\n"
-		"\t"	"sbrs 18, %[activebit]"		"\n"
+		"\t"	"ldd 20, y + %[flags]"		"\n"
+		"\t"	"sbrs 20, %[activebit]"		"\n"
 		"\t"	"rjmp isr_action_continue"	"\n"
 		// Load value.
 		"\t"	"ld 18, z"			"\n"
@@ -556,33 +555,40 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		// positive ? set dir : reset dir
 		"\t"	"ldd 26, y + %[dir_port]"	"\n"
 		"\t"	"ldd 27, y + %[dir_port] + 1"	"\n"	// r27 can be non-zero from here.
-		"\t"	"ldd 20, y + %[dir_bitmask]"	"\n"
+		"\t"	"ldd 0, y + %[dir_bitmask]"	"\n"
 		"\t"	"ld 1, x"			"\n"	// 1 is current port value.
+		"\t"	"sbrc 20, %[audiobit]"		"\n"
+		"\t"	"rjmp isr_audio"		"\n"
 		"\t"	"tst 18"			"\n"	// Test sample sign.
 		"\t"	"brmi 1f"			"\n"
-		"\t"	"or 1, 20"			"\n"
+		"\t"	"or 1, 0"			"\n"
 		"\t"	"rjmp 2f"			"\n"
-		"1:\t"	"com 20"			"\n"
-		"\t"	"and 1, 20"			"\n"
+	"1:\t"		"com 0"				"\n"
+		"\t"	"and 1, 0"			"\n"
 		"\t"	"neg 19"			"\n"
-		"2:\t"	"st x, 1"			"\n"
-		// steps target = b.sample * move_phase / full_phase - m.steps_current;
-		"\t"	"mul 19, 17"			"\n"
-		"\t"	"lds 19, full_phase_bits"	"\n"
-		"\t"	"tst 19"			"\n"
-		"\t"	"rjmp 2f"			"\n"
-		"1:\t"	"lsr 1"				"\n"
-		"\t"	"ror 0"				"\n"
-		"\t"	"dec 19"			"\n"
-		"2:\t"	"brne 1b"			"\n"
-		"\t"	"ldd 19, y + %[steps_current]"	"\n"
-		"\t"	"std y + %[steps_current], 0"	"\n" //motor[m].steps_current += steps_target;
-		"\t"	"sub 0, 19"			"\n"
-		// If no steps: continue.
-		"\t"	"brne 1f"			"\n"
-		"\t"	"clr 27"			"\n"	// We jump into the zone where r27 is expected to be 0.
-		"\t"	"rjmp isr_action_continue"	"\n"
-		"1:\t"					"\n"
+	"2:\t"		"st x, 1"			"\n"
+
+#define compute_steps(CONTINUE) \
+		/* steps target = b.sample * move_phase / full_phase - m.steps_current; */ \
+		"\t"	"mul 19, 17"			"\n" \
+		"\t"	"lds 19, full_phase_bits"	"\n" \
+		"\t"	"tst 19"			"\n" \
+		"\t"	"rjmp 2f"			"\n" \
+	"1:\t"		"lsr 1"				"\n" \
+		"\t"	"ror 0"				"\n" \
+		"\t"	"dec 19"			"\n" \
+	"2:\t"		"brne 1b"			"\n" \
+		"\t"	"ldd 19, y + %[steps_current]"	"\n" \
+		"\t"	"std y + %[steps_current], 0"	"\n" /* motor[m].steps_current += steps_target; */ \
+		"\t"	"sub 0, 19"			"\n" \
+		/* If no steps: continue. */ \
+		"\t"	"brne 1f"			"\n" \
+		"\t"	"clr 27"			"\n"	/* We jump into the zone where r27 is expected to be 0. */ \
+		"\t"	CONTINUE			"\n" \
+	"1:\t"						"\n"
+
+		compute_steps("rjmp isr_action_continue")
+
 		//motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
 		"\t"	"ldd 19, y + %[current_pos]"		"\n"
 		"\t"	"tst 18"				"\n"
@@ -602,7 +608,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"inc 19"				"\n"
 		"\t"	"std y + %[current_pos] + 3, 19"	"\n"
 		"\t"	"rjmp 2f"				"\n"
-		"1:\t"	"sub 19, 0"				"\n"
+	"1:\t"		"sub 19, 0"				"\n"
 		"\t"	"std y + %[current_pos], 19"		"\n"
 		"\t"	"brcc 2f"				"\n"
 		"\t"	"ldd 19, y + %[current_pos] + 1"	"\n"
@@ -616,55 +622,59 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"ldd 19, y + %[current_pos] + 3"	"\n"
 		"\t"	"subi 19, 1"				"\n"
 		"\t"	"std y + %[current_pos] + 3, 19"	"\n"
-		"2:\t"						"\n"
-		// Set up step set and reset values.
-		"\t"	"ldd 26, y + %[step_port]"	"\n"
-		"\t"	"ldd 27, y + %[step_port] + 1"	"\n"
-		"\t"	"ldd 18, y + %[step_bitmask]"	"\n"
-		"\t"	"ld 19, x"			"\n"
-		"\t"	"mov 20, 19"			"\n"
-		"\t"	"or 19, 18"			"\n"
-		"\t"	"com 18"			"\n"
-		"\t"	"and 20, 18"			"\n"
-		"\t"	"ldd 18, y + %[step_invert]"	"\n"
-		"\t"	"tst 18"			"\n"
-		"\t"	"breq 1f"			"\n"
-		// Swap contents of 19 and 20.
-		"\t"	"eor 19, 20"			"\n"
-		"\t"	"eor 20, 19"			"\n"
-		"\t"	"eor 19, 20"			"\n"
+	"2:\t"							"\n"
+
+#define setup_step_masks \
+		/* Set up step set and reset values. */ \
+		"\t"	"ldd 26, y + %[step_port]"	"\n" \
+		"\t"	"ldd 27, y + %[step_port] + 1"	"\n" \
+		"\t"	"ldd 18, y + %[step_bitmask]"	"\n" \
+		"\t"	"ld 19, x"			"\n" \
+		"\t"	"mov 1, 19"			"\n" \
+		"\t"	"or 19, 18"			"\n" \
+		"\t"	"com 18"			"\n" \
+		"\t"	"and 1, 18"			"\n" \
+		"\t"	"sbrs 20, %[step_invert_bit]"	"\n" \
+		"\t"	"breq 1f"			"\n" \
+		/* Swap contents of 19 and 1. */ \
+		"\t"	"eor 19, 1"			"\n" \
+		"\t"	"eor 1, 19"			"\n" \
+		"\t"	"eor 19, 1"			"\n"
+
+		setup_step_masks
+
 		// Send pulses.  Delay 1 μs is required according to a4988 datasheet.  At 16MHz, that's 16 clock cycles.
-		"1:\t"	"tst 0"				"\n"
-		"2:\t"	"breq 3f"			"\n"	// 1	3m+4
+	"1:\t"		"tst 0"				"\n"
+	"2:\t"		"breq 3f"			"\n"	// 1	3m+4
 		"\t"	"nop"				"\n"	// 1	3m+5
 		"\t"	"st x, 19"			"\n"	// 2	3m+7=16 => m=3
 		"\t"	"ldi 18, 4"			"\n"	// 1	1
 		"\t"	"nop"				"\n"	// 1	2
 		"\t"	"nop"				"\n"	// 1	3
-		"1:\t"	"dec 18"			"\n"	// n	n+3
+	"1:\t"		"dec 18"			"\n"	// n	n+3
 		"\t"	"brne 1b"			"\n"	// 2n-1	3n+2
-		"\t"	"st x, 20"			"\n"	// 2	3n+4=16 => n=4
+		"\t"	"st x, 1"			"\n"	// 2	3n+4=16 => n=4
 		"\t"	"ldi 18, 3"			"\n"	// 1	1
-		"1:\t"	"dec 18"			"\n"	// m	m+1
+	"1:\t"		"dec 18"			"\n"	// m	m+1
 		"\t"	"brne 1b"			"\n"	// 2m-1	3m
 		"\t"	"dec 0"				"\n"	// 1	3m+1
 		"\t"	"rjmp 2b"			"\n"	// 2	3m+3
-		"3:\t"	"clr 27"			"\n"	// r27 is 0 again.
+	"3:\t"		"clr 27"			"\n"	// r27 is 0 again.
 		//*/
 		// Increment Y and Z, dec counter 16 and loop.
-		"isr_action_continue:"			"\n"
+	"isr_action_continue:"				"\n"
 		"\t"	"dec 16"			"\n"
 		"\t"	"breq 1f"			"\n"
 		"\t"	"adiw 28, %[motor_size]"	"\n"
 		"\t"	"adiw 30, %[fragment_size]"	"\n"
 		"\t"	"rjmp isr_action_loop"		"\n"
-		"1:\t"					"\n"
+	"1:\t"						"\n"
 		// Check if this sample is completed (move_phase >= full_phase).
 		"\t"	"lds 16, full_phase"		"\n"
 		"\t"	"cp 17, 16"			"\n"
 		"\t"	"brcc 1f"			"\n"
 		"\t"	"rjmp isr_end"			"\n"
-		"1:\t"					"\n"
+	"1:\t"						"\n"
 		// Next sample.
 		// move_phase = 0;
 		"\t"	"sts move_phase, 27"		"\n"
@@ -673,12 +683,12 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"cpi 16, 2"			"\n"
 		"\t"	"brne 1f"			"\n"
 		"\t"	"sts step_state, 27"		"\n"
-		"1:\t"					"\n"
+	"1:\t"						"\n"
 		// for all motors: steps_current = 0.
 		"\t"	"lds 17, active_motors"		"\n"
 		"\t"	"ldi 28, lo8(motor)"		"\n"
 		"\t"	"ldi 29, hi8(motor)"		"\n"
-		"1:\t"	"std y + %[steps_current], 27"	"\n"
+	"1:\t"		"std y + %[steps_current], 27"	"\n"
 		"\t"	"adiw 28, %[motor_size]"	"\n"
 		"\t"	"dec 17"			"\n"
 		"\t"	"brne 1b"			"\n"
@@ -690,7 +700,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"brcc 1f"			"\n"
 		"\t"	"sts current_sample, 16"	"\n"
 		"\t"	"rjmp isr_end"			"\n"
-		"1:\t"					"\n"
+	"1:\t"						"\n"
 		// Go to next fragment.
 		"\t"	"sts current_sample, 27"	"\n"
 		"\t"	"lds 16, current_fragment"	"\n"
@@ -701,11 +711,11 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"ldi 30, lo8(buffer)"		"\n"
 		"\t"	"ldi 31, hi8(buffer)"		"\n"
 		"\t"	"rjmp 2f"			"\n"
-		"1:\t"	"lds 30, current_buffer"	"\n"
+	"1:\t"		"lds 30, current_buffer"	"\n"
 		"\t"	"lds 31, current_buffer + 1"	"\n"
 		"\t"	"subi 30, -%[buffer_size] & 0xff"	"\n"
 		"\t"	"sbci 31, (-%[buffer_size] >> 8) & 0xff"	"\n"
-		"2:\t"	"sts current_buffer, 30"	"\n"
+	"2:\t"		"sts current_buffer, 30"	"\n"
 		"\t"	"sts current_buffer + 1, 31"	"\n"
 		"\t"	"sts current_fragment, 16"	"\n"
 		// Check for underrun.
@@ -717,13 +727,13 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"lds 17, active_motors"		"\n"
 		"\t"	"ldi 28, lo8(motor)"		"\n"
 		"\t"	"ldi 29, hi8(motor)"		"\n"
-		"2:\t"	"ldd 18, y + %[flags]"		"\n"
+	"2:\t"		"ldd 18, y + %[flags]"		"\n"
 		"\t"	"andi 18, ~%[active]"		"\n"
 		"\t"	"ld 19, z"			"\n"
 		"\t"	"cpi 19, 0x80"			"\n"
 		"\t"	"breq 1f"			"\n"
 		"\t"	"ori 18, %[active]"		"\n"
-		"1:\t"	"std y + %[flags], 18"		"\n"
+	"1:\t"		"std y + %[flags], 18"		"\n"
 		"\t"	"adiw 28, %[motor_size]"	"\n"
 		"\t"	"adiw 30, %[fragment_size]"	"\n"
 		"\t"	"dec 17"			"\n"
@@ -733,14 +743,14 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"ldi 29, hi8(settings)"		"\n"
 		"\t"	"tst 16"			"\n"
 		"\t"	"breq 2f"			"\n"
-		"1:\t"	"adiw 28, %[settings_size]"	"\n"
+	"1:\t"		"adiw 28, %[settings_size]"	"\n"
 		"\t"	"dec 16"			"\n"
 		"\t"	"brne 1b"			"\n"
-		"2:\t"	"ldd 16, y + %[len]"		"\n"
+	"2:\t"		"ldd 16, y + %[len]"		"\n"
 		"\t"	"sts current_len, 16"		"\n"
 		"\t"	"rjmp isr_end"			"\n"
 		// Underrun.
-		"3:\t"	"ldi 16, 1"			"\n"
+	"3:\t"		"ldi 16, 1"			"\n"
 		"\t"	"sts step_state, 16"		"\n"
 	"isr_end:"	"\n"
 		"\t"	"pop 31"			"\n"
@@ -767,17 +777,91 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"out __SREG__, 16"		"\n"
 		"\t"	"pop 16"			"\n"
 		"\t"	"reti"				"\n"
+	// Audio handling.  Registers at entry:
+		// 19: Sample value.
+		// 20: Flags.
+		// 0: Dir bitmask.
+		// 1: Dir port current value.
+		// 18, x: General purpose.
+		// y: Motor.
+	"isr_audio:"					"\n"
+		"\t"	"push 16"			"\n"
+		"\t"	"push 17"			"\n"
+		"\t"	"push 30"			"\n"
+		"\t"	"push 31"			"\n"
+		// Prepare dir bitmasks (to stack).
+		"\t"	"movw 30, 26"			"\n"
+		"\t"	"mov 16, 1"			"\n"
+		"\t"	"or 16, 0"			"\n"
+		"\t"	"com 0"				"\n"
+		"\t"	"and 1, 0"			"\n"
+		"\t"	"mov 17, 1"			"\n"
+
+		// Compute steps for this iteration.
+		compute_steps("rjmp isr_audio_continue")	// Changes: 1, 19; result: 0
+
+		// Prepare step bitmasks.
+		setup_step_masks // Changes: 18.  Results: 1 (reset), 19 (set), x (port).
+
+		// Do steps.
+		// 0: counter.
+		// 1: reset step.
+		// 19: set step.
+		// 17: reset dir.
+		// 16: set dir.
+		// 20: flags.
+		// x: step.
+		// z: dir.
+		// 18: general purpose.
+		"\t"	"tst 0"				"\n"
+		"\t"	"rjmp isr_audio_end_loop"	"\n"
+	"isr_audio_loop:"				"\n"
+		// Set dir.
+		"\t"	"mov 18, 16"			"\n"	// 1		3m+4
+		"\t"	"sbrc 20, %[audiostatebit]"	"\n"	// 1/2		3m+5/6
+		"\t"	"mov 18, 17"			"\n"	// 1/0		3m+6
+		"\t"	"st z, 18"			"\n"	// 2		3m+8
+		"\t"	"ldi 18, (1 << %[audiostatebit])"	"\n"	// 1	3m+9
+		"\t"	"eor 20, 18"			"\n"	// 1		3m+10
+		"\t"	"nop"				"\n"	// 1		3m+11
+		
+		// Step.
+		"\t"	"st x, 19"			"\n"	// 2		3m+13=16 => m=1
+		// Wait.
+		"\t"	"ldi 18, 4"			"\n"	// 1		1
+	"1:\t"		"dec 18"			"\n"	// n		n+1
+		"\t"	"brne 1b"			"\n"	// 2n-1		3n
+		"\t"	"nop"				"\n"	// 1		3m+1
+		"\t"	"nop"				"\n"	// 1		3m+2
+		"\t"	"st x, 1"			"\n"	// 2		3n+4=16	=> n=4
+		// Wait.
+		"\t"	"ldi 18, 1"			"\n"	// 1		1
+	"1:\t"		"dec 18"			"\n"	// m		m+1
+		"\t"	"brne 1b"			"\n"	// 2m-1		3m
+		"\t"	"dec 0"				"\n"	// 1		3m+1
+	"isr_audio_end_loop:"				"\n"
+		"\t"	"breq isr_audio_loop"		"\n"	// 2		3m+3
+		"\t"	"std y + %[flags], 20"		"\n"
+	"isr_audio_continue:"				"\n"
+		"\t"	"pop 31"			"\n"
+		"\t"	"pop 30"			"\n"
+		"\t"	"pop 17"			"\n"
+		"\t"	"pop 16"			"\n"
+		"\t"	"clr 27"			"\n"
+		"\t"	"rjmp isr_action_continue"	"\n"
 		::
 			[current_pos] "I" (offsetof(Motor, current_pos)),
 			[step_port] "I" (offsetof(Motor, step_port)),
 			[step_bitmask] "I" (offsetof(Motor, step_bitmask)),
-			[step_invert] "I" (offsetof(Motor, step_invert)),
+			[step_invert_bit] "M" (Motor::INVERT_STEP_BIT),
 			[dir_port] "I" (offsetof(Motor, dir_port)),
 			[dir_bitmask] "I" (offsetof(Motor, dir_bitmask)),
 			[steps_current] "I" (offsetof(Motor, steps_current)),
-			[flags] "I" (offsetof(Motor, flags)),
+			[flags] "I" (offsetof(Motor, intflags)),
 			[activebit] "I" (Motor::ACTIVE_BIT),
 			[active] "M" (Motor::ACTIVE),
+			[audiobit] "I" (Motor::AUDIO_BIT),
+			[audiostatebit] "I" (Motor::AUDIO_STATE_BIT),
 			[fragment_size] "I" (BYTES_PER_FRAGMENT),
 			[num_fragments] "M" (1 << FRAGMENTS_PER_MOTOR_BITS),
 			[buffer_size] "" (BYTES_PER_FRAGMENT * NUM_MOTORS),

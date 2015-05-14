@@ -28,7 +28,7 @@ void handle_motors() {
 	if (stopping < 0) {
 		// Check sensors.
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			if (!(motor[m].flags & Motor::ACTIVE))
+			if (!(motor[m].intflags & Motor::ACTIVE))
 				continue;
 			//debug("check %d", m);
 			// Check sense pins.
@@ -69,7 +69,7 @@ void handle_motors() {
 		if (state == 0) {
 			probed = true;
 			for (uint8_t m = 0; m < active_motors; ++m) {
-				if (!(motor[m].flags & Motor::ACTIVE))
+				if (!(motor[m].intflags & Motor::ACTIVE))
 					continue;
 				// Get twe "wrong" limit pin for the given direction.
 				uint8_t limit_pin = (buffer[cf][m][cs] < 0 ? motor[m].limit_max_pin : motor[m].limit_min_pin);
@@ -79,7 +79,7 @@ void handle_motors() {
 					continue;
 				}
 				// Limit pin no longer triggered.  Stop moving and possibly notify host.
-				motor[m].flags &= ~Motor::ACTIVE;
+				motor[m].intflags &= ~Motor::ACTIVE;
 				if (!--homers) {
 					set_speed(0);
 					return;

@@ -192,7 +192,7 @@ class Printer: # {{{
 		self.spindle_id = 255
 		self.probe_dist = 1000
 		self.probe_safe_dist = 10
-		self.num_probes = 7
+		self.num_probes = 1
 		self.unit_name = 'mm'
 		self.park_after_print = True
 		self.sleep_after_print = True
@@ -286,8 +286,15 @@ class Printer: # {{{
 		self._send(None, 'disconnect')
 		waiting_commands = ''
 		while True:
-			select.select([sys.stdin], [], [sys.stdin])
-			self.command_buffer += sys.stdin.read()
+			s = select.select([sys.stdin], [], [sys.stdin])
+			if len(s[2]) > 0:
+				log('Error on standard input; exiting.')
+				sys.exit(0)
+			data = sys.stdin.read()
+			if data == '':
+				log('EOF on standard input; exiting.')
+				sys.exit(0)
+			self.command_buffer += data
 			while '\n' in self.command_buffer:
 				pos = self.command_buffer.index('\n')
 				ln = self.command_buffer[:pos]

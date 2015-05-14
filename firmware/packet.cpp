@@ -145,15 +145,18 @@ void packet()
 		motor[m].limit_min_pin = command(4);
 		motor[m].limit_max_pin = command(5);
 		motor[m].sense_pin = command(6);
-		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX | Motor::INVERT_STEP;
+		uint8_t const intmask = Motor::INVERT_STEP;
+		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX;
+		motor[m].intflags &= ~intmask;
+		motor[m].intflags |= command(7) & intmask;
 		motor[m].flags &= ~mask;
 		motor[m].flags |= command(7) & mask;
 		arch_msetup(m);
-		if (step != motor[m].step_pin || (flags & Motor::INVERT_STEP) != (motor[m].flags & Motor::INVERT_STEP)) {
+		if (step != motor[m].step_pin || (flags & Motor::INVERT_STEP) != (motor[m].intflags & Motor::INVERT_STEP)) {
 			if (step < NUM_DIGITAL_PINS)
 				UNSET(step);
 			if (motor[m].step_pin < NUM_DIGITAL_PINS) {
-				if (motor[m].flags & Motor::INVERT_STEP)
+				if (motor[m].intflags & Motor::INVERT_STEP)
 					SET(motor[m].step_pin);
 				else
 					RESET(motor[m].step_pin);
@@ -236,11 +239,11 @@ void packet()
 				buffer[current_fragment][m][0] = command(5 + m);
 				buffer[current_fragment][m][1] = command(5 + m);
 				homers += 1;
-				motor[m].flags |= Motor::ACTIVE;
+				motor[m].intflags |= Motor::ACTIVE;
 			}
 			else if (command(5 + m) == 0) {
 				buffer[current_fragment][m][0] = 0x80;
-				motor[m].flags &= ~Motor::ACTIVE;
+				motor[m].intflags &= ~Motor::ACTIVE;
 			}
 			else {
 				debug("invalid dir in HOME: %d", command(5 + m));
@@ -324,7 +327,10 @@ void packet()
 			write_stall();
 			return;
 		}
-		motor[command(1)].audio = command(0) == CMD_AUDIO;
+		if (command(0) == CMD_AUDIO)
+			motor[command(1)].intflags |= Motor::AUDIO;
+		else
+			motor[command(1)].intflags &= ~Motor::AUDIO;
 		for (uint8_t b = 0; b < last_len; ++b)
 			buffer[last_fragment][command(1)][b] = static_cast<int8_t>(command(2 + b));
 		filling -= 1;
@@ -354,11 +360,11 @@ void packet()
 		current_buffer = &buffer[current_fragment];
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			if (buffer[current_fragment][m][0] != int8_t(0x80)) {
-				motor[m].flags |= Motor::ACTIVE;
+				motor[m].intflags |= Motor::ACTIVE;
 				motor[m].steps_current = 0;
 			}
 			else
-				motor[m].flags &= ~Motor::ACTIVE;
+				motor[m].intflags &= ~Motor::ACTIVE;
 		}
 		current_sample = 0;
 		current_len = settings[current_fragment].len;
@@ -402,7 +408,7 @@ void packet()
 		reply[0] = CMD_STOPPED;
 		reply[1] = current_sample;
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			motor[m].flags &= ~Motor::ACTIVE;
+			motor[m].intflags &= ~Motor::ACTIVE;
 			motor[m].steps_current = 0;
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));

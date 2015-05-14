@@ -120,6 +120,10 @@ int main(void) {
 		if (enabled_pins > 0 && timeout_time > 0 && timeout_time <= dt) {
 			// Disable LED.
 			led_pin = ~0;
+			// Disable motors.
+			for (uint8_t m = 0; m < active_motors; ++m)
+				motor[m].disable();
+			active_motors = 0;
 			// Disable adcs.
 			for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
 				adc[a].disable();

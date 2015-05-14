@@ -243,29 +243,35 @@ struct Motor
 	uint8_t limit_min_pin;
 	uint8_t limit_max_pin;
 	uint8_t sense_pin;
-	volatile uint8_t flags;
-	volatile bool audio;
+	volatile uint8_t intflags;	// Flags that are used by the interrupt handler.
+	uint8_t flags;	// Flags that are not used by the interrupt handler.
 	ARCH_MOTOR
+	enum IntFlags {
+		ACTIVE_BIT = 0,
+		ACTIVE			= 1 << ACTIVE_BIT,
+		AUDIO_BIT = 1,
+		AUDIO			= 1 << AUDIO_BIT,
+		AUDIO_STATE_BIT = 2,
+		INVERT_STEP_BIT = 6,
+		INVERT_STEP		= 1 << INVERT_STEP_BIT
+	};
 	enum Flags {
 		LIMIT			= 0x01,
-		SENSE0			= 0x02,
-		SENSE1			= 0x04,
-		INVERT_LIMIT_MIN	= 0x08,
-		INVERT_LIMIT_MAX	= 0x10,
-		INVERT_STEP		= 0x20,
-		SENSE_STATE		= 0x40,
-		ACTIVE_BIT = 7,
-		ACTIVE			= 1 << ACTIVE_BIT
+		INVERT_LIMIT_MIN	= 0x02,
+		INVERT_LIMIT_MAX	= 0x04,
+		SENSE0			= 0x08,
+		SENSE1			= 0x10,
+		SENSE_STATE		= 0x20
 	};
 	void init() {
 		current_pos = 0;
 		sense_pos[0] = 0xBEEFBEEF;
 		sense_pos[1] = 0xFACEFACE;
+		intflags = 0;
 		flags = 0;
 		steps_current = 0;
 		step_bitmask = 0;
 		dir_bitmask = 0;
-		audio = false;
 		step_pin = ~0;
 		dir_pin = ~0;
 		limit_min_pin = ~0;
@@ -275,7 +281,8 @@ struct Motor
 	void disable() {
 		current_pos = 0;
 		steps_current = 0;
-		audio = false;
+		intflags = 0;
+		flags = 0;
 		if (step_pin < NUM_DIGITAL_PINS)
 			UNSET(step_pin);
 		if (dir_pin < NUM_DIGITAL_PINS)
