@@ -1,11 +1,8 @@
 #include "firmware.h"
 // vim: set foldmethod=marker :
 
-#if 0
-#define sdebug debug
-#else
+//#define sdebug debug
 #define sdebug(...) do {} while (0)
-#endif
 //#define DEBUG_FF
 
 // Protocol explanation.  {{{
@@ -87,6 +84,7 @@ static inline void inc_tail(uint16_t amount) { // {{{
 // There may be serial data available.
 void serial() { // {{{
 	uint16_t milliseconds = millis();
+	sdebug("command end %d", command_end);
 	if (milliseconds - last_millis >= 2000) {
 		if (serial_overflow)
 			clear_overflow();
@@ -193,7 +191,7 @@ void serial() { // {{{
 		}
 	}
 	uint16_t fulllen = fullpacketlen();
-	//debug("len %d %d", cmd_len, fulllen);
+	sdebug("len %d %d", cmd_len, fulllen);
 	cmd_len = fulllen + (fulllen + 2) / 3;
 	if (command_end + len > cmd_len) {
 		len = cmd_len - command_end;
@@ -423,7 +421,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		return;
 	} // }}}
 	if (stopping >= 0) { // {{{
-		sdebug("limit %d", m);
+		sdebug("limit %d", stopping);
 		pending_packet[0] = CMD_LIMIT;
 		pending_packet[1] = stopping;
 		pending_packet[2] = limit_fragment_pos;

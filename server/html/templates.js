@@ -339,6 +339,7 @@ function Top() { // {{{
 	// Jobbuttons. {{{
 	e = ret.AddElement('div', 'jobbuttons');
 	e.Add(File([null, 'queue_add', 'queue_add'], 'queue_add', 'Add', function() { return queue_deselect(the_printer); }));
+	e.Add(File([null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', function() { return queue_deselect(the_printer); }), 'benjamin');
 	e.AddElement('br');
 	var b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(this.printer); }).AddText('Print selected');
 	b.type = 'button';

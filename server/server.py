@@ -83,7 +83,10 @@ class Server(websockets.RPChttpd): # {{{
 		for extra in ('/', '/websocket'):
 			if path.endswith(extra):
 				path = path[:-len(extra)]
-		if path.endswith('/admin'):
+		if path.endswith('/benjamin'):
+			connection.data['role'] = 'benjamin'
+			connection.data['pwd'] = config['admin'] or config['expert'] or config['user']
+		elif path.endswith('/admin'):
 			connection.data['role'] = 'admin'
 			connection.data['pwd'] = config['admin'] or config['expert'] or config['user']
 		elif path.endswith('/expert'):
@@ -110,7 +113,7 @@ class Server(websockets.RPChttpd): # {{{
 					connection.socket.close()
 				ports[port].call('export_settings', (connection.data['role'],), {}, export_reply)
 				return True
-		elif any(connection.address.path.endswith('/' + x) for x in ('admin', 'expert', 'user')):
+		elif any(connection.address.path.endswith('/' + x) for x in ('benjamin', 'admin', 'expert', 'user')):
 			websockets.RPChttpd.page(self, connection, path = connection.address.path[:connection.address.path.rfind('/') + 1])
 		else:
 			websockets.RPChttpd.page(self, connection)
@@ -132,6 +135,8 @@ class Server(websockets.RPChttpd): # {{{
 			connection.socket.close()
 		if action == 'queue_add':
 			ports[port].call('queue_add_file', [connection.data['role'], post[0], post[1]], {}, cb)
+		elif action == 'audio_add':
+			ports[port].call('audio_add_file', [connection.data['role'], post[0], post[1]], {}, cb)
 		elif action == 'import':
 			ports[port].call('import_file', [connection.data['role'], post[0], post[1]], {}, cb)
 		else:

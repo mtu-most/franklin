@@ -1,8 +1,8 @@
 #include "firmware.h"
 
 //#define cmddebug debug
-//#define cmddebug(...) do {} while (0)
-#define cmddebug(...) do { debug_add(command(0)); } while (0)
+#define cmddebug(...) do {} while (0)
+//#define cmddebug(...) do { debug_add(command(0)); } while (0)
 
 void packet()
 {

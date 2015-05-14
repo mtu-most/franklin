@@ -231,7 +231,7 @@ void packet()
 			for (int j = 0; j < 5; ++j)
 				args[j].b[i] = command[0][2 + i + j * sizeof(float)];
 		}
-		run_file(command[0][0] - 22, reinterpret_cast<char const *>(&command[0][22]), args[0].f, args[1].f, args[2].f, args[3].f, args[4].f);
+		run_file(command[0][0] - 23, reinterpret_cast<char const *>(&command[0][23]), args[0].f, args[1].f, args[2].f, args[3].f, args[4].f, command[0][22]);
 		break;
 	}
 	case CMD_SLEEP:	// Enable or disable motor current

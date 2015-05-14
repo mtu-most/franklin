@@ -438,7 +438,7 @@ struct Run_Record {
 	float x, X, y, Y, z, Z, e, E, f, F;
 	float time, dist;
 } __attribute__((__packed__));
-void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa);
+void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa, bool audio);
 void abort_run_file();
 void run_file_fill_queue();
 EXTERN char run_file_name[256];
@@ -455,6 +455,7 @@ EXTERN float run_file_refy;
 EXTERN float run_file_refz;
 EXTERN float run_file_sina;
 EXTERN float run_file_cosa;
+EXTERN bool run_file_audio;
 EXTERN float run_time, run_dist;
 
 // setup.cpp

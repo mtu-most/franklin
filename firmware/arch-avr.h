@@ -146,8 +146,10 @@ static inline void handle_serial_input(
 		uint8_t data, uint8_t status) {
 #ifndef NO_SERIAL1
 	if (which_serial != which) {
-		if (status != 0 || data != CMD_ID)
+		if (status != 0 || data != CMD_ID) {
+			//debug("no %x %x", status, data);
 			return;
+		}
 		which_serial = which;
 		// Disable other port so the pins can be used.
 		if (which == 0)

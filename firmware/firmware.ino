@@ -133,6 +133,6 @@ int main(void) {
 			debug("timeout %d %d %d", seconds(), dt, last_active);
 			timeout = true;
 		}
-		//debug("!%x %x %x %x %x.", int(current_buffer), current_fragment, last_fragment, current_sample, current_len);
+		//debug("!%x.", which_serial);
 	}
 }

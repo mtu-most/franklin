@@ -23,7 +23,7 @@ struct String {
 
 static String *strings;
 
-void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa) {
+void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa, bool audio) {
 	//debug("run file %f %f %f %f %f", refx, refy, refz, sina, cosa);
 	abort_run_file();
 	if (name_len == 0)
@@ -47,17 +47,21 @@ void run_file(int name_len, char const *name, float refx, float refy, float refz
 	run_file_size = stat.st_size;
 	run_file_map = reinterpret_cast<Run_Record *>(mmap(NULL, run_file_size, PROT_READ, MAP_SHARED, fd, 0));
 	close(fd);
-	run_file_num_strings = read_num(run_file_size - 4 * 8 - 4);
-	strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
-	off_t pos = run_file_size - 4 * (8 + 1 + run_file_num_strings);
-	off_t current = 0;
-	for (int i = 0; i < run_file_num_strings; ++i) {
-		strings[i].start = current;
-		strings[i].len = read_num(pos + 4 * i);
-		current += strings[i].len;
+	if (!audio) {
+		run_file_num_strings = read_num(run_file_size - 4 * 8 - 4);
+		strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
+		off_t pos = run_file_size - 4 * (8 + 1 + run_file_num_strings);
+		off_t current = 0;
+		for (int i = 0; i < run_file_num_strings; ++i) {
+			strings[i].start = current;
+			strings[i].len = read_num(pos + 4 * i);
+			current += strings[i].len;
+		}
+		run_file_first_string = pos - current;
+		run_file_num_records = run_file_first_string / sizeof(Run_Record);
 	}
-	run_file_first_string = pos - current;
-	run_file_num_records = run_file_first_string / sizeof(Run_Record);
+	else
+		run_file_num_records = run_file_size;
 	run_file_wait_temp = 0;
 	run_file_wait = 0;
 	run_file_timer.it_interval.tv_sec = 0;
@@ -67,6 +71,7 @@ void run_file(int name_len, char const *name, float refx, float refy, float refz
 	run_file_refz = refz;
 	run_file_sina = sina;
 	run_file_cosa = cosa;
+	run_file_audio = audio;
 	run_file_fill_queue();
 }
 
@@ -95,6 +100,12 @@ void run_file_fill_queue() {
 		return;
 	lock = true;
 	rundebug("run queue, wait = %d tempwait = %d q = %d %d", run_file_wait, run_file_wait_temp, settings[current_fragment].queue_end, settings[current_fragment].queue_start);
+	if (run_file_audio) {
+		while (run_file_map && settings[current_fragment].run_file_current < run_file_num_records && !run_file_wait) {
+			settings[current_fragment].run_file_current = arch_send_audio(reinterpret_cast <uint8_t *>(run_file_map), settings[current_fragment].run_file_current, run_file_num_records);
+		}
+		return;
+	}
 	while (run_file_map && (settings[current_fragment].queue_end - settings[current_fragment].queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2 && (run_file_map[settings[current_fragment].run_file_current].type == RUN_GOTO || !arch_running()) && !settings[current_fragment].queue_full && settings[current_fragment].run_file_current < run_file_num_records && !run_file_wait_temp && !run_file_wait) {
 		Run_Record &r = run_file_map[settings[current_fragment].run_file_current];
 		rundebug("running %d: %d %d", settings[current_fragment].run_file_current, r.type, r.tool);

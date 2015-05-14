@@ -66,7 +66,9 @@ enum HWCommands { // {{{
 	HWC_SENSE0,	// 69
 	HWC_SENSE1,	// 6a
 	HWC_TIMEOUT,	// 6b
-	HWC_PINCHANGE	// 6c
+	HWC_PINCHANGE,	// 6c
+
+	HWC_AUDIO = 0xc0
 };
 // }}}
 
@@ -553,8 +555,12 @@ static inline void arch_reset() {
 	}
 	avr_serial.write(CMD_ACK0);
 	avr_serial.write(CMD_ACK1);
+	// Just in case the controller was reset: reclaim port before every ping by requesting ID.
+	avr_serial.write(CMD_ID);
 	avr_call1(HWC_PING, 0);
+	avr_serial.write(CMD_ID);
 	avr_call1(HWC_PING, 1);
+	avr_serial.write(CMD_ID);
 	avr_call1(HWC_PING, 2);
 	for (int counter = 0; avr_pong != 2 && counter < 100; ++counter) {
 		//debug("avr pongwait %d", avr_pong);
@@ -569,13 +575,13 @@ static inline void arch_reset() {
 }
 
 enum MotorFlags {
-	LIMIT = 1,
-	SENSE0 = 2,
-	SENSE1 = 4,
-	INVERT_LIMIT_MIN = 8,
-	INVERT_LIMIT_MAX = 16,
-	INVERT_STEP = 32,
-	SENSE_STATE = 64
+	LIMIT			= 0x01,
+	INVERT_LIMIT_MIN	= 0x02,
+	INVERT_LIMIT_MAX	= 0x04,
+	SENSE0			= 0x08,
+	SENSE1			= 0x10,
+	SENSE_STATE		= 0x20,
+	INVERT_STEP		= 0x40
 };
 
 static inline void arch_motor_change(uint8_t s, uint8_t sm) {
@@ -858,6 +864,30 @@ static inline void arch_home() {
 	}
 	prepare_packet(avr_buffer, 5 + avr_active_motors);
 	avr_send();
+}
+
+static inline off_t arch_send_audio(uint8_t *map, off_t pos, off_t max) {
+	int len = max - pos >= BYTES_PER_FRAGMENT ? BYTES_PER_FRAGMENT : max - pos;
+	if (len <= 0)
+		return max;
+	avr_buffer[0] = HWC_START_MOVE;
+	//debug("send fragment %d %d %d", settings[fragment].fragment_length, fragment, settings[fragment].num_active_motors);
+	avr_buffer[1] = len;
+	avr_buffer[2] = 1;
+	sending_fragment = 2;
+	prepare_packet(avr_buffer, 3);
+	avr_send();
+	avr_filling = true;
+	while (!stopping) {
+		avr_buffer[0] = HWC_AUDIO;
+		avr_buffer[1] = 0;
+		for (int i = 0; i < len; ++i)
+			avr_buffer[2 + i] = map[pos + i];
+		prepare_packet(avr_buffer, 2 + len);
+		avr_send();
+	}
+	avr_filling = false;
+	return pos + len;
 }
 // }}}
 

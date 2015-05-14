@@ -8,7 +8,10 @@
 
 .role_user .expert,
 .role_user .admin,
+.role_user .benjamin,
 .role_expert .admin,
+.role_expert .benjamin,
+.role_admin .benjamin,
 
 .nomover .movediv
 {

@@ -177,6 +177,7 @@ class Printer: # {{{
 		self.gcode_wait = None
 		self.gcode_parking = False
 		self.gcode_waiting = 0
+		self.audio_id = None
 		self.queue = []
 		self.queue_pos = 0
 		self.queue_info = None
@@ -186,7 +187,6 @@ class Printer: # {{{
 		self.debug_buffer = None
 		self.printer_buffer = ''
 		self.command_buffer = ''
-		self.audiofile = None
 		self.bed_id = 255
 		self.fan_id = 255
 		self.spindle_id = 255
@@ -204,8 +204,6 @@ class Printer: # {{{
 		self.limits = []
 		self.sense = []
 		self.wait = False
-		self.waitaudio = False
-		self.audioid = None
 		self.movewait = 0
 		self.movecb = []
 		self.tempcb = []
@@ -250,21 +248,37 @@ class Printer: # {{{
 			self.profile = 'default'
 		# Fill job queue.
 		self.jobqueue = {}
+		self.audioqueue = {}
 		spool = fhs.read_spool(dir = True, opened = False)
-		if spool is not None and os.path.isdir(spool):
-			for filename in os.listdir(spool):
-				name, ext = os.path.splitext(filename)
-				if ext != os.extsep + 'bin':
-					log('skipping %s' % filename)
-					continue
-				try:
-					log('opening %s' % filename)
-					with open(os.path.join(spool, filename), 'rb') as f:
-						f.seek(-8 * 4, os.SEEK_END)
-						self.jobqueue[name] = struct.unpack('=' + 'f' * 8, f.read())
-				except:
-					traceback.print_exc()
-					log('failed to open spool file %s' % os.path.join(spool, filename))
+		if spool is not None:
+			gcode = os.path.join(spool, 'gcode')
+			audio = os.path.join(spool, 'audio')
+			if os.path.isdir(gcode):
+				for filename in os.listdir(gcode):
+					name, ext = os.path.splitext(filename)
+					if ext != os.extsep + 'bin':
+						log('skipping %s' % filename)
+						continue
+					try:
+						log('opening %s' % filename)
+						with open(os.path.join(gcode, filename), 'rb') as f:
+							f.seek(-8 * 4, os.SEEK_END)
+							self.jobqueue[name] = struct.unpack('=' + 'f' * 8, f.read())
+					except:
+						traceback.print_exc()
+						log('failed to open gcode file %s' % os.path.join(gcode, filename))
+			if os.path.isdir(audio):
+				for filename in os.listdir(audio):
+					name, ext = os.path.splitext(filename)
+					if ext != os.extsep + 'bin':
+						log('skipping %s' % filename)
+						continue
+					try:
+						log('opening audio %s' % filename)
+						self.audioqueue[name] = os.stat(os.path.join(audio, filename)).st_size
+					except:
+						traceback.print_exc()
+						log('failed to stat audio file %s' % os.path.join(audio, filename))
 		try:
 			self.load(update = False)
 		except:
@@ -349,11 +363,13 @@ class Printer: # {{{
 			self.command_buffer = self.command_buffer[pos + 1:]
 			try:
 				#log('command: %s(%s %s)' % (func, a, ka))
-				assert not any(func.startswith(x + '_') for x in ('admin', 'expert', 'user'))
+				assert not any(func.startswith(x + '_') for x in ('benjamin', 'admin', 'expert', 'user'))
 				role = a.pop(0) + '_'
 				if hasattr(self, role + func):
 					func = role + func
-				elif role == 'admin_' and hasattr(self, 'expert_' + func):
+				elif role == 'benjamin_' and hasattr(self, 'admin_' + func):
+					func = 'admin_' + func
+				elif role in ('benjamin_', 'admin_') and hasattr(self, 'expert_' + func):
 					func = 'expert_' + func
 				ret = getattr(self, func)(*a, **ka)
 				if isinstance(ret, tuple) and len(ret) == 2 and ret[0] is WAIT:
@@ -443,18 +459,13 @@ class Printer: # {{{
 				call_queue.append((self._do_gcode, []))
 				continue
 			elif cmd == protocol.rcommand['CONTINUE']:
-				if s == 0:
-					# Move continue.
-					self.wait = False
-					#log('resuming queue %d' % len(self.queue))
-					call_queue.append((self._do_queue, []))
-					if self.flushing is None:
-						self.flushing = False
-						call_queue.append((self._do_gcode, []))
-				else:
-					# Audio continue.
-					self.waitaudio = False
-					self._audio_play()
+				# Move continue.
+				self.wait = False
+				#log('resuming queue %d' % len(self.queue))
+				call_queue.append((self._do_queue, []))
+				if self.flushing is None:
+					self.flushing = False
+					call_queue.append((self._do_gcode, []))
 				continue
 			elif cmd == protocol.rcommand['LIMIT']:
 				if s < len(self.spaces) and m < len(self.spaces[s].motor):
@@ -518,11 +529,11 @@ class Printer: # {{{
 			log('unexpected packet %02x' % cmd)
 			raise AssertionError('Received unexpected reply packet')
 	# }}}
-	def _send_packet(self, data, move = False, audio = False): # {{{
+	def _send_packet(self, data, move = False): # {{{
 		data = chr(len(data) + 1) + data
 		dprint('(1) writing', data);
 		self._printer_write(data)
-		if not move and not audio:
+		if not move:
 			return True
 		start_time = time.time()
 		while True:
@@ -536,10 +547,7 @@ class Printer: # {{{
 			ret = self._printer_input()
 			if ret[0] == 'wait':
 				#log('wait')
-				if audio:
-					self.waitaudio = True
-				else:
-					self.wait = True
+				self.wait = True
 				return True
 			elif ret[0] == 'ok':
 				return True
@@ -856,7 +864,7 @@ class Printer: # {{{
 		self.gcode_fd = -1
 	# }}}
 	def _print_done(self, complete, reason): # {{{
-		self._send_packet(struct.pack('=Bfffff', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0))
+		self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 0))
 		if self.gcode_map is not None:
 			log(reason)
 			self._gcode_close()
@@ -867,6 +875,10 @@ class Printer: # {{{
 			self._send(self.gcode_id, 'return', (complete, reason))
 		self.gcode_id = None
 		self.gcode_wait = None
+		if self.audio_id is not None:
+			log('Audio done (%d): %s' % (complete, reason))
+			self._send(self.audio_id, 'return', (complete, reason))
+		self.audio_id = None
 		#log('job %s' % repr(self.jobs_active))
 		if self.queue_info is None and len(self.jobs_active) > 0:
 			if complete:
@@ -937,9 +949,10 @@ class Printer: # {{{
 		call_queue.append((self._do_gcode, []))
 	# }}}
 	def _queue_add(self, f, name): # {{{
+		name = name.split()[1]
 		origname = name
 		i = 0
-		while name in self.jobqueue:
+		while name == '' or name in self.jobqueue:
 			name = '%s-%d' % (origname, i)
 			i += 1
 		bbox, errors = self._gcode_parse(f, name)
@@ -950,6 +963,45 @@ class Printer: # {{{
 		self.jobqueue[os.path.splitext(name)[0]] = bbox
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
 		return errors
+	# }}}
+	def _audio_add(self, f, name): # {{{
+		name = name.split()[1]
+		origname = name
+		i = 0
+		while name == '' or name in self.audioqueue:
+			name = '%s-%d' % (origname, i)
+			i += 1
+		try:
+			wav = wave.open(f)
+		except:
+			return 'Unable to open audio file'
+		if wav.getnchannels() != 1:
+			return 'Only mono wav files are supported'
+		data = [ord(x) for x in wav.readframes(wav.getnframes())]
+		# Data is 16 bit signed ints per channel, but it is read as bytes.  First convert it to 16 bit numbers.
+		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2], data[1::2])]
+		# Determine minimum and scale.
+		minimum = float(min(data))
+		maximum = float(max(data))
+		scale = maximum - minimum
+		samples_per_frame = wav.getframerate() / 200.
+		with fhs.write_spool(os.path.join('audio', name + os.path.extsep + 'bin')) as dst:
+			count = 0
+			time = 0
+			state = False
+			todo = samples_per_frame
+			for t, sample in enumerate(data):
+				s = (sample - minimum) > scale
+				if s != state:
+					state = s
+					count += 1
+				todo -= 1
+				if todo <= 0:
+					todo = samples_per_frame
+					f.write(chr(count))
+					count = 0
+		self.audioqueue[os.path.splitext(name)[0]] = wav.getnframes()
+		return ''
 	# }}}
 	def _do_queue(self): # {{{
 		#log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
@@ -1402,7 +1454,7 @@ class Printer: # {{{
 		if len(self.spaces) > 1:
 			for e in range(len(self.spaces[1].axis)):
 				self.set_axis_pos(1, e, 0)
-		filename = fhs.read_spool(src + os.extsep + 'bin', opened = False)
+		filename = fhs.read_spool(os.path.join('gcode', src + os.extsep + 'bin'), opened = False)
 		self.total_time = self.jobqueue[src][-2:]
 		if probemap is not None:
 			# Cdriver can't handle this; do it from here.
@@ -1437,7 +1489,7 @@ class Printer: # {{{
 			# Let cdriver do the work.
 			self.gcode_file = True
 			self._globals_update()
-			self._send_packet(struct.pack('=Bfffff', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1]) + filename.encode('utf8'))
+			self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0) + filename.encode('utf8'))
 	# }}}
 	def _reset_extruders(self, axes): # {{{
 		for i, sp in enumerate(axes):
@@ -1445,20 +1497,6 @@ class Printer: # {{{
 				# Assume motor[a] corresponds to axis[a] if it exists.
 				if len(self.spaces[i].motor) > a and not self.pin_valid(self.spaces[i].motor[a]['limit_max_pin']) and not self.pin_valid(self.spaces[i].motor[a]['limit_min_pin']):
 					self.set_axis_pos(i, a, pos)
-	# }}}
-	def _audio_play(self): # {{{
-		if self.audiofile is None:
-			if self.audioid is not None:
-				self._send(self.audioid, 'return', True)
-			return
-		while not self.waitaudio:
-			data = self.audiofile.read(self.audio_fragment_size)
-			if len(data) < self.audio_fragment_size:
-				self.audiofile = None
-				if self.audioid is not None:
-					self._send(self.audioid, 'return', True)
-				return
-			self._send_packet(chr(protocol.command['AUDIO_DATA']) + data, audio = True)
 	# }}}
 	# Subclasses.  {{{
 	class Space: # {{{
@@ -1882,60 +1920,16 @@ class Printer: # {{{
 		self.goto([[a['park'] - (0 if si != 0 or ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(s.axis)] for si, s in enumerate(self.spaces)], cb = True)[1](None)
 	# }}}
 	@delayed
-	def audio_play(self, id, name, motors = None): # {{{
-		log('motors: %s' % repr(motors))
-		assert os.path.basename(name) == name
-		filename = os.path.join(self.audiodir, name)
-		self.audiofile = open(filename, 'rb')
-		channels = [0] *(((sum([len(s.motor) for s in self.spaces]) - 1) >> 3) + 1)
-		m0 = 0
-		for i, s in enumerate(self.spaces):
-			for m in range(len(s.motor)):
-				log('checking %s' % repr([i, m]))
-				if motors is None or [i, m] in motors:
-					log('yes')
-					channels[(m0 + m) >> 3] |= 1 <<((m0 + m) & 0x7)
-			m0 += len(s.motor)
-		us_per_bit = self.audiofile.read(2)
-		self._send_packet(chr(protocol.command['AUDIO_SETUP']) + us_per_bit + ''.join([chr(x) for x in channels]))
+	def benjamin_audio_play(self, id, name, motors = None): # {{{
 		self.audio_id = id
-		self._audio_play()
+		self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 1) + filename.encode('utf8'))
 	# }}}
-	def audio_load(self, name, data): # {{{
-		assert os.path.basename(name) == name
-		wav = wave.open(io.BytesIO(base64.b64decode(data)))
-		assert wav.getnchannels() == 1
-		data = [ord(x) for x in wav.readframes(wav.getnframes())]
-		# Data is 16 bit signed ints per channel, but it is read as bytes.  First convert it to 16 bit numbers.
-		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2], data[1::2])]
-		# Determine minimum and scale.
-		minimum = min(data)
-		maximum = max(data)
-		scale = maximum - minimum + 1;
-		s = ''
-		for t in range(0, len(data) - 7, 8):
-			c = 0
-			for b in range(8):
-				c += ((data[t + b] - minimum) * 2 // scale) << b
-			s += chr(c)
-		filename = os.path.join(self.audiodir, name)
-		with open(filename, 'wb') as f:
-			f.write(struct.pack('=H', 1000000 // wav.getframerate()) + s)
+	def benjaminaudio_add_file(self, filename, name): # {{{
+		with open(filename) as f:
+			self._audio_add(f, name)
 	# }}}
 	def audio_list(self): # {{{
-		ret = []
-		if not os.path.exists(self.audiodir):
-			return ret
-		for x in os.listdir(self.audiodir):
-			try:
-				with open(os.path.join(self.audiodir, x), 'rb') as f:
-					us_per_bit = struct.unpack('=H', f.read(2))[0]
-					bits = (os.fstat(f.fileno()).st_size - 2) * 8
-					t = bits * us_per_bit * 1e-6
-					ret.append((x, t))
-			except:
-				pass
-		return ret
+		return self.audioqueue
 	# }}}
 	@delayed
 	def wait_for_cb(self, id, sense = False): # {{{
@@ -2224,16 +2218,20 @@ class Printer: # {{{
 		with open(filename) as f:
 			return ', '.join(self._queue_add(f, name))
 	# }}}
-	def queue_remove(self, name): # {{{
+	def queue_remove(self, name, audio = False): # {{{
 		assert name in self.jobqueue
 		#log('removing %s' % name)
-		filename = fhs.write_spool(name + os.extsep + 'bin', opened = False)
+		if audio:
+			filename = fhs.read_spool(os.path.join('audio', name + os.extsep + 'bin'), opened = False)
+			del self.audioqueue[name]
+		else:
+			filename = fhs.read_spool(os.path.join('gcode', name + os.extsep + 'bin'), opened = False)
+			del self.jobqueue[name]
+			self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
 		try:
 			os.unlink(filename)
 		except:
 			log('unable to unlink %s' % filename)
-		del self.jobqueue[name]
-		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
 	# }}}
 	def _gcode_parse(self, src, name): # {{{
 		assert len(self.spaces) > 0
@@ -2256,7 +2254,7 @@ class Printer: # {{{
 				else:
 					time_dist[0] += 2 / (nums[-2] + nums[-1])
 			return nums + time_dist
-		with fhs.write_spool(os.path.splitext(name)[0] + os.path.extsep + 'bin') as dst:
+		with fhs.write_spool(os.path.join('gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin')) as dst:
 			def add_record(type, nums = None):
 				if nums is None:
 					nums = []
