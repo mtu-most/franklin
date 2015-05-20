@@ -154,6 +154,10 @@ void serial(uint8_t which)
 							stop_pending = false;
 							arch_stop();
 						}
+						else if (discard_pending) {
+							discard_pending = false;
+							arch_discard();
+						}
 						else if (!sending_fragment && !stopping && arch_running())
 							buffer_refill();
 					}

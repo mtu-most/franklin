@@ -35,6 +35,7 @@ void setup(char const *port, char const *run_id)
 	running_fragment = 0;
 	current_fragment = running_fragment;
 	current_fragment_pos = 0;
+	num_active_motors = 0;
 	hwtime_step = 5000;	// TODO: make this dynamic.
 	moving = false;
 	feedrate = 1;
@@ -46,6 +47,7 @@ void setup(char const *port, char const *run_id)
 	sending_fragment = 0;
 	start_pending = false;
 	stop_pending = false;
+	discard_pending = false;
 	cbs_after_current_move = 0;
 	which_autosleep = 0;
 	timeout = 0;
@@ -72,27 +74,25 @@ void setup(char const *port, char const *run_id)
 		exit(1);
 	}
 	// Now set things up that need information from the firmware.
-	settings = new History[FRAGMENTS_PER_BUFFER];
+	history = new History[FRAGMENTS_PER_BUFFER];
 	for (int i = 0; i < 2; ++i) {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-		settings[f].t0 = 0;
-		settings[f].f0 = 0;
-		settings[f].num_active_motors = 0;
-		settings[f].hwtime = 0;
-		settings[f].last_current_time = 0;
-		settings[f].cbs = 0;
-		settings[f].tp = 0;
-		settings[f].f1 = 1;
-		settings[f].f2 = 0;
-		settings[f].fp = 0;
-		settings[f].fq = 0;
-		settings[f].fmain = 1;
-		settings[f].fragment_length = 0;
-		settings[f].start_time = 0;
-		settings[f].last_time = 0;
-		settings[f].queue_start = 0;
-		settings[f].queue_end = 0;
-		settings[f].queue_full = false;
+		history[f].t0 = 0;
+		history[f].f0 = 0;
+		history[f].hwtime = 0;
+		history[f].last_current_time = 0;
+		history[f].cbs = 0;
+		history[f].tp = 0;
+		history[f].f1 = 1;
+		history[f].f2 = 0;
+		history[f].fp = 0;
+		history[f].fq = 0;
+		history[f].fmain = 1;
+		history[f].start_time = 0;
+		history[f].last_time = 0;
+		history[f].queue_start = 0;
+		history[f].queue_end = 0;
+		history[f].queue_full = false;
 	}
 	// Update current position.
 	first_fragment = current_fragment;

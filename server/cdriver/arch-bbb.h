@@ -159,7 +159,7 @@ static inline void arch_addpos(int s, int m, int diff) {
 }
 
 static inline void arch_stop() {
-	// Stop moving, update current_pos and hwcurrent_pos.
+	// Stop moving, update current_pos.
 }
 
 static inline void arch_home() {

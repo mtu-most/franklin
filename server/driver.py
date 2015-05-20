@@ -249,7 +249,7 @@ class Printer: # {{{
 		# Fill job queue.
 		self.jobqueue = {}
 		self.audioqueue = {}
-		spool = fhs.read_spool(dir = True, opened = False)
+		spool = fhs.read_spool(self.uuid, dir = True, opened = False)
 		if spool is not None:
 			gcode = os.path.join(spool, 'gcode')
 			audio = os.path.join(spool, 'audio')
@@ -985,7 +985,7 @@ class Printer: # {{{
 		maximum = float(max(data))
 		scale = maximum - minimum
 		samples_per_frame = wav.getframerate() / 200.
-		with fhs.write_spool(os.path.join('audio', name + os.path.extsep + 'bin')) as dst:
+		with fhs.write_spool(os.path.join(self.uuid, 'audio', name + os.path.extsep + 'bin')) as dst:
 			count = 0
 			time = 0
 			state = False
@@ -1454,7 +1454,7 @@ class Printer: # {{{
 		if len(self.spaces) > 1:
 			for e in range(len(self.spaces[1].axis)):
 				self.set_axis_pos(1, e, 0)
-		filename = fhs.read_spool(os.path.join('gcode', src + os.extsep + 'bin'), opened = False)
+		filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', src + os.extsep + 'bin'), opened = False)
 		self.total_time = self.jobqueue[src][-2:]
 		if probemap is not None:
 			# Cdriver can't handle this; do it from here.
@@ -2222,10 +2222,10 @@ class Printer: # {{{
 		assert name in self.jobqueue
 		#log('removing %s' % name)
 		if audio:
-			filename = fhs.read_spool(os.path.join('audio', name + os.extsep + 'bin'), opened = False)
+			filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
 			del self.audioqueue[name]
 		else:
-			filename = fhs.read_spool(os.path.join('gcode', name + os.extsep + 'bin'), opened = False)
+			filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', name + os.extsep + 'bin'), opened = False)
 			del self.jobqueue[name]
 			self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
 		try:
@@ -2254,7 +2254,7 @@ class Printer: # {{{
 				else:
 					time_dist[0] += 2 / (nums[-2] + nums[-1])
 			return nums + time_dist
-		with fhs.write_spool(os.path.join('gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin')) as dst:
+		with fhs.write_spool(os.path.join(self.uuid, 'gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin')) as dst:
 			def add_record(type, nums = None):
 				if nums is None:
 					nums = []

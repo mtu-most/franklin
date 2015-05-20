@@ -5,18 +5,13 @@ if [ "$1" != configure ] ; then
 fi
 
 # Clean spool directory, because files are likely not valid anymore.
-rm -f /var/spool/franklin/*
+rm -rf /var/spool/franklin/*
 
 # Create server user.
 if ! getent passwd franklin3d >/dev/null; then
 	adduser --disabled-password --quiet --system \
 		--home /var/cache/franklin --no-create-home \
 		--gecos "3-D printer server" --group franklin3d
-fi
-
-# Add user to the ssl-cert group to use the snakeoil SSL certificate.
-if getent group ssl-cert >/dev/null ; then
-	adduser --quiet franklin3d ssl-cert
 fi
 
 # Add user to the dialout group to use the serial ports.

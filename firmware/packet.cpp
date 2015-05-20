@@ -70,30 +70,37 @@ void packet()
 		}
 		// Reset newly (de)activated motors.
 		for (uint8_t m = active_motors; m < command(1); ++m)
-			motor[m].disable();
-		for (uint8_t m = command(1); m < active_motors; ++m)
 			motor[m].init();
+		for (uint8_t m = command(1); m < active_motors; ++m)
+			motor[m].disable();
 		active_motors = command(1);
 		time_per_sample = *reinterpret_cast <volatile int32_t *>(&command(2));
-		if (led_pin < NUM_DIGITAL_PINS)
-			UNSET(led_pin);
-		if (probe_pin < NUM_DIGITAL_PINS)
-			UNSET(probe_pin);
+		uint8_t p = led_pin;
 		led_pin = command(6);
+		if (p != led_pin) {
+			if (p < NUM_DIGITAL_PINS)
+				UNSET(p);
+			if (led_pin < NUM_DIGITAL_PINS)
+				SET_OUTPUT(led_pin);
+		}
+		p = probe_pin;
 		probe_pin = command(7);
+		if (p != probe_pin) {
+			if (p < NUM_DIGITAL_PINS)
+				UNSET(p);
+			if (probe_pin < NUM_DIGITAL_PINS)
+				SET_INPUT(probe_pin);
+		}
 		pin_flags = command(8);
-		if (led_pin < NUM_DIGITAL_PINS)
-			SET_OUTPUT(led_pin);
-		if (probe_pin < NUM_DIGITAL_PINS)
-			SET_INPUT(probe_pin);
 		timeout_time = *reinterpret_cast <volatile uint16_t *>(&command(9));
+		uint8_t fpb = 0;
+		while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << fpb)
+			fpb += 1;
+		fpb -= 1;
 		cli();
-		full_phase_bits = 0;
-		while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << full_phase_bits)
-			full_phase_bits += 1;
-		sei();
-		full_phase_bits -= 1;
+		full_phase_bits = fpb;
 		full_phase = 1 << full_phase_bits;
+		sei();
 		write_ack();
 		return;
 	}
@@ -147,12 +154,15 @@ void packet()
 		motor[m].sense_pin = command(6);
 		uint8_t const intmask = Motor::INVERT_STEP;
 		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX;
+		cli();
 		motor[m].intflags &= ~intmask;
 		motor[m].intflags |= command(7) & intmask;
 		motor[m].flags &= ~mask;
 		motor[m].flags |= command(7) & mask;
 		arch_msetup(m);
+		sei();
 		if (step != motor[m].step_pin || (flags & Motor::INVERT_STEP) != (motor[m].intflags & Motor::INVERT_STEP)) {
+			//debug("new step for %d", m);
 			if (step < NUM_DIGITAL_PINS)
 				UNSET(step);
 			if (motor[m].step_pin < NUM_DIGITAL_PINS) {
@@ -163,24 +173,28 @@ void packet()
 			}
 		}
 		if (dir != motor[m].dir_pin) {
+			//debug("new dir for %d", m);
 			if (dir < NUM_DIGITAL_PINS)
 				UNSET(dir);
 			if (motor[m].dir_pin < NUM_DIGITAL_PINS)
 				RESET(motor[m].dir_pin);
 		}
 		if (limit_min != motor[m].limit_min_pin) {
+			//debug("new limit_min for %d", m);
 			if (limit_min < NUM_DIGITAL_PINS)
 				UNSET(limit_min);
 			if (motor[m].limit_min_pin < NUM_DIGITAL_PINS)
 				SET_INPUT(motor[m].limit_min_pin);
 		}
 		if (limit_max != motor[m].limit_max_pin) {
+			//debug("new limit_max for %d", m);
 			if (limit_max < NUM_DIGITAL_PINS)
 				UNSET(limit_max);
 			if (motor[m].limit_max_pin < NUM_DIGITAL_PINS)
 				SET_INPUT(motor[m].limit_max_pin);
 		}
 		if (sense != motor[m].sense_pin) {
+			//debug("new sense for %d", m);
 			if (sense < NUM_DIGITAL_PINS)
 				UNSET(sense);
 			if (motor[m].sense_pin < NUM_DIGITAL_PINS)
@@ -435,7 +449,9 @@ void packet()
 			write_stall();
 			return;
 		}
+		cli();
 		last_fragment = (last_fragment - command(1)) & FRAGMENTS_PER_MOTOR_MASK;
+		sei();
 		write_ack();
 		return;
 	}

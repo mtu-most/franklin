@@ -80,30 +80,27 @@ void setpos(int which, int t, float f) {
 		motors_busy = true;
 	}
 	for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
-		spaces[which].axis[a]->settings[current_fragment].source = NAN;
-		spaces[which].axis[a]->settings[current_fragment].current = NAN;
+		spaces[which].axis[a]->settings.source = NAN;
+		spaces[which].axis[a]->settings.current = NAN;
 	}
 	//debug("setting pos for %d %d", which, t);
-	int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_unit + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings[current_fragment].current_pos;
-	spaces[which].motor[t]->settings[current_fragment].current_pos += diff;
-	spaces[which].motor[t]->settings[current_fragment].hwcurrent_pos += diff;
-	spaces[which].motor[t]->settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].current_pos += diff;
-	spaces[which].motor[t]->settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].hwcurrent_pos += diff;
-	if (isnan(spaces[which].axis[t]->settings[current_fragment].current)) {
+	int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_unit + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings.current_pos;
+	spaces[which].motor[t]->settings.current_pos += diff;
+	for (int fragment = 0; fragment < FRAGMENTS_PER_BUFFER; ++fragment)
+		spaces[which].motor[t]->history[fragment].current_pos += diff;
+	if (isnan(spaces[which].axis[t]->settings.current)) {
 		space_types[spaces[which].type].reset_pos(&spaces[which]);
 		for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
-			spaces[which].axis[a]->settings[current_fragment].current = spaces[which].axis[a]->settings[current_fragment].source;
+			spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
 	}
 	arch_addpos(which, t, diff);
-	cpdebug(which, t, "setpos diff %d to %d", diff, spaces[which].motor[t]->settings[current_fragment].current_pos);
+	cpdebug(which, t, "setpos diff %d to %d", diff, spaces[which].motor[t]->settings.current_pos);
 	//arch_stop();
 	space_types[spaces[which].type].reset_pos(&spaces[which]);
-	for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
-		spaces[which].axis[a]->settings[current_fragment].current = spaces[which].axis[a]->settings[current_fragment].source;
-		spaces[which].axis[a]->settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].current = spaces[which].axis[a]->settings[current_fragment].current;
-	}
+	for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
+		spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
 	/*for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
-		debug("setpos done source %f", spaces[which].axis[a]->settings[current_fragment].source);
+		debug("setpos done source %f", spaces[which].axis[a]->settings.source);
 	// */
 }
 
@@ -140,7 +137,7 @@ void packet()
 		debug("CMD_GOTO/PROBE");
 #endif
 		last_active = millis();
-		if (settings[current_fragment].queue_full)
+		if (settings.queue_full)
 		{
 			debug("Host ignores wait request");
 			abort();
@@ -149,7 +146,7 @@ void packet()
 		uint8_t num = 2;
 		for (uint8_t t = 0; t < num_spaces; ++t)
 			num += spaces[t].num_axes;
-		queue[settings[current_fragment].queue_end].probe = command[0][1] == CMD_PROBE;
+		queue[settings.queue_end].probe = command[0][1] == CMD_PROBE;
 		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
 		uint8_t t = 0;
 		for (uint8_t ch = 0; ch < num; ++ch)
@@ -160,38 +157,38 @@ void packet()
 				for (uint8_t i = 0; i < sizeof(float); ++i)
 					f.b[i] = command[0][offset + i + t * sizeof(float)];
 				if (ch < 2)
-					queue[settings[current_fragment].queue_end].f[ch] = f.f;
+					queue[settings.queue_end].f[ch] = f.f;
 				else
-					queue[settings[current_fragment].queue_end].data[ch - 2] = f.f;
-				//debug("goto (%d) %d %f", settings[current_fragment].queue_end, ch, f.f);
+					queue[settings.queue_end].data[ch - 2] = f.f;
+				//debug("goto (%d) %d %f", settings.queue_end, ch, f.f);
 				initialized = true;
 				++t;
 			}
 			else {
 				if (ch < 2)
-					queue[settings[current_fragment].queue_end].f[ch] = NAN;
+					queue[settings.queue_end].f[ch] = NAN;
 				else
-					queue[settings[current_fragment].queue_end].data[ch - 2] = NAN;
+					queue[settings.queue_end].data[ch - 2] = NAN;
 				//debug("goto %d -", ch);
 			}
 		}
-		if (!(command[0][2] & 0x1) || isnan(queue[settings[current_fragment].queue_end].f[0]))
-			queue[settings[current_fragment].queue_end].f[0] = INFINITY;
-		if (!(command[0][2] & 0x2) || isnan(queue[settings[current_fragment].queue_end].f[1]))
-			queue[settings[current_fragment].queue_end].f[1] = queue[settings[current_fragment].queue_end].f[0];
+		if (!(command[0][2] & 0x1) || isnan(queue[settings.queue_end].f[0]))
+			queue[settings.queue_end].f[0] = INFINITY;
+		if (!(command[0][2] & 0x2) || isnan(queue[settings.queue_end].f[1]))
+			queue[settings.queue_end].f[1] = queue[settings.queue_end].f[0];
 		// F0 and F1 must be valid.
-		float F0 = queue[settings[current_fragment].queue_end].f[0];
-		float F1 = queue[settings[current_fragment].queue_end].f[1];
+		float F0 = queue[settings.queue_end].f[0];
+		float F1 = queue[settings.queue_end].f[1];
 		if (isnan(F0) || isnan(F1) || F0 < 0 || F1 < 0 || (F0 == 0 && F1 == 0))
 		{
 			debug("Invalid F0 or F1: %f %f", F0, F1);
 			abort();
 			return;
 		}
-		queue[settings[current_fragment].queue_end].cb = true;
-		settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
-		if (settings[current_fragment].queue_end == settings[current_fragment].queue_start) {
-			settings[current_fragment].queue_full = true;
+		queue[settings.queue_end].cb = true;
+		settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
+		if (settings.queue_end == settings.queue_start) {
+			settings.queue_full = true;
 			serialdev[0]->write(WAIT);
 		}
 		else
@@ -207,7 +204,7 @@ void packet()
 					}
 					else {
 						//debug("instant-adding %d cbs to fragment %d - 1", num_movecbs, current_fragment);
-						settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += num_movecbs;
+						history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += num_movecbs;
 					}
 				}
 				else
@@ -253,8 +250,8 @@ void packet()
 					RESET(spaces[t].motor[m]->enable_pin);
 				}
 				for (uint8_t a = 0; a < spaces[t].num_axes; ++a) {
-					spaces[t].axis[a]->settings[current_fragment].source = NAN;
-					spaces[t].axis[a]->settings[current_fragment].current = NAN;
+					spaces[t].axis[a]->settings.source = NAN;
+					spaces[t].axis[a]->settings.current = NAN;
 				}
 			}
 			motors_busy = false;
@@ -374,13 +371,13 @@ void packet()
 			abort();
 			return;
 		}
-		if (isnan(spaces[which].axis[t]->settings[current_fragment].source)) {
-			//debug("resetting space %d for getpos; %f", which, spaces[0].axis[0]->settings[current_fragment].current);
+		if (isnan(spaces[which].axis[t]->settings.source)) {
+			//debug("resetting space %d for getpos; %f", which, spaces[0].axis[0]->settings.current);
 			space_types[spaces[which].type].reset_pos(&spaces[which]);
 			for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
-				spaces[which].axis[a]->settings[current_fragment].current = spaces[which].axis[a]->settings[current_fragment].source;
+				spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
 		}
-		float value = spaces[which].axis[t]->settings[current_fragment].current;
+		float value = spaces[which].axis[t]->settings.current;
 		if (which == 0) {
 			for (int s = 0; s < num_spaces; ++s) {
 				value = space_types[spaces[s].type].unchange0(&spaces[s], t, value);
@@ -408,6 +405,7 @@ void packet()
 #endif
 		addr = 2;
 		globals_load(addr);
+		arch_discard();
 		return;
 	}
 	case CMD_READ_SPACE_INFO:
@@ -473,6 +471,7 @@ void packet()
 		}
 		addr = 3;
 		spaces[which].load_info(addr);
+		arch_discard();
 		return;
 	}
 	case CMD_WRITE_SPACE_AXIS:
@@ -489,6 +488,7 @@ void packet()
 		}
 		addr = 4;
 		spaces[which].load_axis(axis, addr);
+		arch_discard();
 		return;
 	}
 	case CMD_WRITE_SPACE_MOTOR:
@@ -505,6 +505,7 @@ void packet()
 		}
 		addr = 4;
 		spaces[which].load_motor(motor, addr);
+		arch_discard();
 		return;
 	}
 	case CMD_READ_TEMP:
@@ -575,16 +576,16 @@ void packet()
 		debug("CMD_QUEUED");
 #endif
 		last_active = millis();
-		send_host(CMD_QUEUE, settings[current_fragment].queue_full ? QUEUE_LENGTH : (settings[current_fragment].queue_end - settings[current_fragment].queue_start + QUEUE_LENGTH) % QUEUE_LENGTH);
+		send_host(CMD_QUEUE, settings.queue_full ? QUEUE_LENGTH : (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH);
 		if (command[0][2]) {
 			if (run_file_map)
 				run_file_wait += 1;
 			else
 				cbs_after_current_move = 0;
 			arch_stop();
-			settings[current_fragment].queue_start = 0;
-			settings[current_fragment].queue_end = 0;
-			settings[current_fragment].queue_full = false;
+			settings.queue_start = 0;
+			settings.queue_end = 0;
+			settings.queue_full = false;
 		}
 		return;
 	}

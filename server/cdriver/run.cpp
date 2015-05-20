@@ -32,7 +32,7 @@ void run_file(int name_len, char const *name, float refx, float refy, float refz
 	run_file_name[name_len] = '\0';
 	run_time = 0;
 	run_dist = 0;
-	settings[current_fragment].run_file_current = 0;
+	settings.run_file_current = 0;
 	int fd = open(run_file_name, O_RDONLY);
 	if (fd < 0) {
 		debug("Failed to open run file %s: %s", run_file_name, strerror(errno));
@@ -99,16 +99,16 @@ void run_file_fill_queue() {
 	if (lock)
 		return;
 	lock = true;
-	rundebug("run queue, wait = %d tempwait = %d q = %d %d", run_file_wait, run_file_wait_temp, settings[current_fragment].queue_end, settings[current_fragment].queue_start);
+	rundebug("run queue, wait = %d tempwait = %d q = %d %d", run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start);
 	if (run_file_audio) {
-		while (run_file_map && settings[current_fragment].run_file_current < run_file_num_records && !run_file_wait) {
-			settings[current_fragment].run_file_current = arch_send_audio(reinterpret_cast <uint8_t *>(run_file_map), settings[current_fragment].run_file_current, run_file_num_records);
+		while (run_file_map && settings.run_file_current < run_file_num_records && !run_file_wait) {
+			settings.run_file_current = arch_send_audio(reinterpret_cast <uint8_t *>(run_file_map), settings.run_file_current, run_file_num_records);
 		}
 		return;
 	}
-	while (run_file_map && (settings[current_fragment].queue_end - settings[current_fragment].queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2 && (run_file_map[settings[current_fragment].run_file_current].type == RUN_GOTO || !arch_running()) && !settings[current_fragment].queue_full && settings[current_fragment].run_file_current < run_file_num_records && !run_file_wait_temp && !run_file_wait) {
-		Run_Record &r = run_file_map[settings[current_fragment].run_file_current];
-		rundebug("running %d: %d %d", settings[current_fragment].run_file_current, r.type, r.tool);
+	while (run_file_map && (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2 && (run_file_map[settings.run_file_current].type == RUN_GOTO || !arch_running()) && !settings.queue_full && settings.run_file_current < run_file_num_records && !run_file_wait_temp && !run_file_wait) {
+		Run_Record &r = run_file_map[settings.run_file_current];
+		rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
 		switch (r.type) {
 			case RUN_SYSTEM:
 			{
@@ -119,9 +119,9 @@ void run_file_fill_queue() {
 				break;
 			}
 			case RUN_GOTO:
-				queue[settings[current_fragment].queue_end].probe = false;
-				queue[settings[current_fragment].queue_end].f[0] = r.f;
-				queue[settings[current_fragment].queue_end].f[1] = r.F;
+				queue[settings.queue_end].probe = false;
+				queue[settings.queue_end].f[0] = r.f;
+				queue[settings.queue_end].f[1] = r.F;
 				if (num_spaces > 0) {
 					float x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
 					float y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
@@ -129,30 +129,30 @@ void run_file_fill_queue() {
 					//debug("goto %f %f %f", x, y, z);
 					int num0 = spaces[0].num_axes;
 					if (num0 > 0) {
-						queue[settings[current_fragment].queue_end].data[0] = x;
+						queue[settings.queue_end].data[0] = x;
 						if (num0 > 1) {
-							queue[settings[current_fragment].queue_end].data[1] = y;
+							queue[settings.queue_end].data[1] = y;
 							if (num0 > 2)
-								queue[settings[current_fragment].queue_end].data[2] = z;
+								queue[settings.queue_end].data[2] = z;
 						}
 					}
 					for (int i = 3; i < num0; ++i)
-						queue[settings[current_fragment].queue_end].data[i] = NAN;
+						queue[settings.queue_end].data[i] = NAN;
 					if (num_spaces > 1) {
 						for (int i = 0; i < spaces[1].num_axes; ++i)
-							queue[settings[current_fragment].queue_end].data[num0 + i] = (i == r.tool ? r.E : NAN);
+							queue[settings.queue_end].data[num0 + i] = (i == r.tool ? r.E : NAN);
 						num0 += spaces[1].num_axes;
 						for (int s = 2; s < num_spaces; ++s) {
 							for (int i = 0; i < spaces[s].num_axes; ++i)
-								queue[settings[current_fragment].queue_end].data[num0] = NAN;
+								queue[settings.queue_end].data[num0] = NAN;
 							num0 += spaces[s].num_axes;
 						}
 					}
 				}
-				queue[settings[current_fragment].queue_end].time = r.time;
-				queue[settings[current_fragment].queue_end].dist = r.dist;
-				queue[settings[current_fragment].queue_end].cb = false;
-				settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
+				queue[settings.queue_end].time = r.time;
+				queue[settings.queue_end].dist = r.dist;
+				queue[settings.queue_end].cb = false;
+				settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
 				if (stopped)
 					next_move();
 				else
@@ -238,10 +238,10 @@ void run_file_fill_queue() {
 				debug("Invalid record type %d in %s", r.type, run_file_name);
 				break;
 		}
-		settings[current_fragment].run_file_current += 1;
+		settings.run_file_current += 1;
 	}
 	rundebug("run queue done");
-	if (run_file_map && !arch_running() && settings[current_fragment].run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait) {
+	if (run_file_map && !arch_running() && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait) {
 		// Done.
 		debug("done running file");
 		send_host(CMD_FILE_DONE);

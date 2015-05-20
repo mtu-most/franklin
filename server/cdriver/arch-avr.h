@@ -223,19 +223,18 @@ static inline void avr_get_current_pos(int offset, bool check) {
 	int mi = 0;
 	for (int ts = 0; ts < num_spaces; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
-			int old = spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos;
-			cpdebug(ts, tm, "cpb offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
-			spaces[ts].motor[tm]->settings[current_fragment].current_pos = 0;
+			int old = spaces[ts].motor[tm]->settings.current_pos;
+			cpdebug(ts, tm, "cpb offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
+			spaces[ts].motor[tm]->settings.current_pos = 0;
 			for (int i = 0; i < 4; ++i) {
-				spaces[ts].motor[tm]->settings[current_fragment].current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
+				spaces[ts].motor[tm]->settings.current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
 			if (spaces[ts].motor[tm]->dir_pin.inverted())
-				spaces[ts].motor[tm]->settings[current_fragment].current_pos *= -1;
-			spaces[ts].motor[tm]->settings[current_fragment].current_pos -= avr_pos_offset[tm + mi];
-			spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos = spaces[ts].motor[tm]->settings[current_fragment].current_pos;
-			cpdebug(ts, tm, "cpa offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos, spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[tm + mi]);
-			cpdebug(ts, tm, "getpos diff %d", spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos - old);
-			if (check && old != spaces[ts].motor[tm]->settings[current_fragment].hwcurrent_pos)
+				spaces[ts].motor[tm]->settings.current_pos *= -1;
+			spaces[ts].motor[tm]->settings.current_pos -= avr_pos_offset[tm + mi];
+			cpdebug(ts, tm, "cpa offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
+			fcpdebug(ts, tm, "getpos diff %d", spaces[ts].motor[tm]->settings.current_pos - old);
+			if (check && old != spaces[ts].motor[tm]->settings.current_pos)
 				abort();
 		}
 	}
@@ -277,7 +276,7 @@ static inline void hwpacket(int len) {
 				which -= spaces[s].num_motors;
 			}
 			cpdebug(s, m, "limit/sense");
-			pos = spaces[s].motor[m]->settings[current_fragment].current_pos / spaces[s].motor[m]->steps_per_unit;
+			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
 		if ((command[1][0] & ~0x10) == HWC_LIMIT) {
 			//debug("limit %d", command[1][2]);
@@ -286,13 +285,13 @@ static inline void hwpacket(int len) {
 			//int i = 0;
 			//for (int is = 0; is < num_spaces; ++is)
 			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
-			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings[current_fragment].current_pos + avr_pos_offset[i]);
+			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
 			//fprintf(stderr, "\n");
 			avr_get_current_pos(3, false);
 			//i = 0;
 			//for (int is = 0; is < num_spaces; ++is)
 			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
-			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings[current_fragment].current_pos + avr_pos_offset[i]);
+			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
 			//fprintf(stderr, "\n");
 			sending_fragment = 0;
 			stopping = 2;
@@ -345,7 +344,8 @@ static inline void hwpacket(int len) {
 		}
 		else {
 			// Only overwrite current position if the new value is correct.
-			if (stopped && !sending_fragment && command[1][1] == 0) {
+			//debug("underrun ok stopped=%d sending=%d pending=%d", stopped, sending_fragment, command[1][2]);
+			if (stopped && !sending_fragment && command[1][2] == 0) {
 				avr_get_current_pos(3, true);
 			}
 		}
@@ -367,8 +367,8 @@ static inline void hwpacket(int len) {
 		int cbs = 0;
 		for (int i = 0; i < command[1][1]; ++i) {
 			int f = (running_fragment + i) % FRAGMENTS_PER_BUFFER;
-			//debug("fragment %d: cbs=%d current=%d", f, settings[f].cbs, current_fragment);
-			cbs += settings[f].cbs;
+			//debug("fragment %d: cbs=%d current=%d", f, history[f].cbs, current_fragment);
+			cbs += history[f].cbs;
 		}
 		if (cbs)
 			send_host(CMD_MOVECB, cbs);
@@ -380,6 +380,7 @@ static inline void hwpacket(int len) {
 		else
 			avr_write_ack("done");
 		running_fragment = (running_fragment + command[1][1]) % FRAGMENTS_PER_BUFFER;
+		//debug("running -> %x", running_fragment);
 		if (current_fragment == running_fragment && (command[1][0] & ~0x10) == HWC_DONE) {
 			debug("Done received, but should be underrun");
 			abort();
@@ -400,7 +401,7 @@ static inline void hwpacket(int len) {
 		//int i = 0;
 		//for (int s = 0; s < num_spaces; ++s)
 		//	for (int m = 0; m < spaces[s].num_motors; ++m, ++i)
-		//		fprintf(stderr, "\t%8d", spaces[s].motor[m]->settings[current_fragment].current_pos + avr_pos_offset[i]);
+		//		fprintf(stderr, "\t%8d", spaces[s].motor[m]->settings.current_pos + avr_pos_offset[i]);
 		//fprintf(stderr, "\n");
 		avr_write_ack("homed");
 		send_host(CMD_HOMED);
@@ -421,8 +422,11 @@ static inline void hwpacket(int len) {
 				RESET(spaces[s].motor[m]->step_pin);
 				RESET(spaces[s].motor[m]->dir_pin);
 				RESET(spaces[s].motor[m]->enable_pin);
+				spaces[s].motor[m]->settings.current_pos = 0;
 			}
 		}
+		for (int m = 0; m < avr_active_motors; ++m)
+			avr_pos_offset[m] = 0;
 		for (int t = 0; t < num_temps; ++t)
 			settemp(t, NAN);
 		send_host(CMD_TIMEOUT);
@@ -528,6 +532,7 @@ static inline bool GET(Pin_t _pin, bool _default) {
 }
 
 static inline void arch_pin_set_reset(Pin_t _pin, char state) {
+	debug("set reset %d %d", _pin.pin, state);
 	if (!_pin.valid())
 		return;
 	if (avr_pins[_pin.pin].reset == state)
@@ -542,7 +547,7 @@ static inline void arch_pin_set_reset(Pin_t _pin, char state) {
 		s = avr_pins[_pin.pin].state;
 		r = avr_pins[_pin.pin].reset;
 	}
-	avr_setup_pin(_pin.pin, s, r, state < 2 ? 0 : CTRL_NOTIFY);
+	avr_setup_pin(_pin.pin, s, r, state != 2 ? 0 : CTRL_NOTIFY);
 }
 // }}}
 
@@ -771,35 +776,37 @@ static inline void arch_addpos(int s, int m, int diff) {
 	for (uint8_t st = 0; st < s; ++st)
 		mi += spaces[st].num_motors;
 	avr_pos_offset[mi] -= diff;
-	cpdebug(s, m, "arch addpos %d %d %d %d", diff, avr_pos_offset[m], spaces[s].motor[m]->settings[current_fragment].hwcurrent_pos + avr_pos_offset[mi], spaces[s].motor[m]->settings[current_fragment].hwcurrent_pos);
+	cpdebug(s, m, "arch addpos %d %d %d %d", diff, avr_pos_offset[m], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
 }
 
-static inline void arch_send_fragment(int fragment) {
-	if (stopping)
-		return;
+static inline bool arch_send_fragment() {
+	if (stopping || discard_pending)
+		return false;
 	avr_buffer[0] = probing ? HWC_START_PROBE : HWC_START_MOVE;
-	//debug("send fragment %d %d %d", settings[fragment].fragment_length, fragment, settings[fragment].num_active_motors);
-	avr_buffer[1] = settings[fragment].fragment_length;
-	avr_buffer[2] = settings[fragment].num_active_motors;
-	sending_fragment = settings[fragment].num_active_motors + 1;
+	//debug("send fragment %d %d %d", current_fragment_pos, fragment, settings.num_active_motors);
+	avr_buffer[1] = current_fragment_pos;
+	avr_buffer[2] = num_active_motors;
+	sending_fragment = num_active_motors + 1;
 	prepare_packet(avr_buffer, 3);
 	avr_send();
 	int mi = 0;
 	avr_filling = true;
-	for (int s = 0; !stopping && s < num_spaces; mi += spaces[s++].num_motors) {
-		for (uint8_t m = 0; !stopping && m < spaces[s].num_motors; ++m) {
-			if (!spaces[s].motor[m]->settings[fragment].active)
+	for (int s = 0; !stopping && !discard_pending && s < num_spaces; mi += spaces[s++].num_motors) {
+		for (uint8_t m = 0; !stopping && !discard_pending && m < spaces[s].num_motors; ++m) {
+			if (!spaces[s].motor[m]->active)
 				continue;
-			cpdebug(s, m, "sending %d %d", fragment, settings[fragment].fragment_length);
+			cpdebug(s, m, "sending %d %d", fragment, current_fragment_pos);
+			//debug("sending %d %d %d %x", s, m, current_fragment, current_fragment_pos);
 			avr_buffer[0] = HWC_MOVE;
 			avr_buffer[1] = mi + m;
-			for (int i = 0; i < settings[fragment].fragment_length; ++i)
-				avr_buffer[2 + i] = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->settings[fragment].data[i];
-			prepare_packet(avr_buffer, 2 + settings[fragment].fragment_length);
+			for (int i = 0; i < current_fragment_pos; ++i)
+				avr_buffer[2 + i] = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->data[i];
+			prepare_packet(avr_buffer, 2 + current_fragment_pos);
 			avr_send();
 		}
 	}
 	avr_filling = false;
+	return !stopping && !discard_pending;
 }
 
 static inline void arch_start_move(int extra) {
@@ -871,7 +878,6 @@ static inline off_t arch_send_audio(uint8_t *map, off_t pos, off_t max) {
 	if (len <= 0)
 		return max;
 	avr_buffer[0] = HWC_START_MOVE;
-	//debug("send fragment %d %d %d", settings[fragment].fragment_length, fragment, settings[fragment].num_active_motors);
 	avr_buffer[1] = len;
 	avr_buffer[2] = 1;
 	sending_fragment = 2;
@@ -888,6 +894,26 @@ static inline off_t arch_send_audio(uint8_t *map, off_t pos, off_t max) {
 	}
 	avr_filling = false;
 	return pos + len;
+}
+
+static inline void arch_discard() {
+	// Discard much of the buffer, so the upcoming change will be used almost immediately.
+	if (!avr_running || stopping || avr_homing)
+		return;
+	if (avr_filling) {
+		discard_pending = true;
+		return;
+	}
+	int fragments = (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+	if (fragments <= 3)
+		return;
+	current_fragment = (current_fragment - (fragments - 3) + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+	//debug("current discard -> %x", current_fragment);
+	restore_settings();
+	avr_buffer[0] = HWC_DISCARD;
+	avr_buffer[1] = fragments - 3;
+	prepare_packet(avr_buffer, 2);
+	avr_send();
 }
 // }}}
 

@@ -173,8 +173,6 @@ struct History
 {
 	float t0, tp;
 	float f0, f1, f2, fp, fq, fmain;
-	int fragment_length;
-	int num_active_motors;
 	uint32_t hwtime, start_time, last_time, last_current_time;
 	int cbs;
 	int queue_start, queue_end;
@@ -184,11 +182,9 @@ struct History
 
 struct Motor_History
 {
-	bool active;
-	char *data;
 	float last_v;		// v during last iteration, for using limit_a [m/s].
 	float target_v, target_dist;	// Internal values for moving.
-	int32_t current_pos, hwcurrent_pos;	// Current position of motor (in steps), and what the hardware currently thinks.
+	int32_t current_pos;	// Current position of motor (in steps), and what the hardware currently thinks.
 	float endpos;
 };
 
@@ -201,7 +197,8 @@ struct Axis_History
 
 struct Axis
 {
-	Axis_History *settings;
+	Axis_History *history;
+	Axis_History settings;
 	float park;		// Park position; not used by the firmware, but stored for use by the host.
 	uint8_t park_order;
 	float min_pos, max_pos;
@@ -210,7 +207,8 @@ struct Axis
 
 struct Motor
 {
-	Motor_History *settings;
+	Motor_History *history;
+	Motor_History settings;
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	Pin_t enable_pin;
@@ -222,6 +220,8 @@ struct Motor
 	Pin_t sense_pin;
 	uint8_t sense_state;
 	float sense_pos;
+	bool active;
+	char *data;
 	float limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
 #ifdef HAVE_AUDIO
@@ -377,7 +377,8 @@ EXTERN int pending_len;
 EXTERN char datastore[FULL_COMMAND_SIZE];
 EXTERN uint32_t last_active;
 EXTERN int16_t led_phase;
-EXTERN History *settings;
+EXTERN History *history;
+EXTERN History settings;
 #ifdef HAVE_AUDIO
 EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
 EXTERN uint8_t audio_head, audio_tail, audio_state;
@@ -388,12 +389,13 @@ EXTERN bool moving, aborting, stopped, prepared;
 EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.
 EXTERN int sending_fragment;	// To compute how many fragments are in use from free_fragments.
-EXTERN bool start_pending, stop_pending;
+EXTERN bool start_pending, stop_pending, discard_pending;
 EXTERN float done_factor;
 EXTERN uint8_t requested_temp;
 EXTERN bool refilling;
 EXTERN int current_fragment, running_fragment;
 EXTERN int current_fragment_pos;
+EXTERN int num_active_motors;
 EXTERN int hwtime_step;
 EXTERN struct pollfd pollfds[3];
 
@@ -409,7 +411,7 @@ void buffered_debug(char const *fmt, ...);
 #endif
 
 // Force cpdebug if requested, to enable only specific lines without adding all the cp things in manually.
-#define fcpdebug(s, m, fmt, ...) do { if (s == 0 && m == 0) debug("CP curfragment %d curpos %d current %f " fmt, current_fragment, spaces[s].motor[m]->settings[current_fragment].current_pos, spaces[s].axis[m]->settings[current_fragment].current, ##__VA_ARGS__); } while (0)
+#define fcpdebug(s, m, fmt, ...) do { if (s == 0 && m == 0) debug("CP curfragment %d curpos %d current %f " fmt, current_fragment, spaces[s].motor[m]->settings.current_pos, spaces[s].axis[m]->settings.current, ##__VA_ARGS__); } while (0)
 //#define cpdebug fcpdebug
 #define cpdebug(...) do {} while (0)
 
@@ -473,11 +475,10 @@ void write_float(int32_t &address, float data);
 void handle_temp(int id, int temp);
 
 // space.cpp
-void reset_dirs(int fragment, bool allow_new);
 void buffer_refill();
-void copy_fragment_settings(int src, int dst);
+void store_settings();
+void restore_settings();
 void apply_tick();
-void set_current_fragment(int fragment, bool allow_new_dirs);
 void send_fragment();
 
 // globals.cpp
@@ -516,7 +517,7 @@ static inline void arch_home();
 static inline bool arch_running();
 //static inline void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0);
 static inline void arch_start_move(int extra);
-static inline void arch_send_fragment(int fragment);
+static inline bool arch_send_fragment();
 
 #ifdef SERIAL
 static inline int hwpacketsize(int len, int *available);
@@ -535,7 +536,7 @@ static inline void END_DEBUG();
 void Pin_t::read(uint16_t data) {
 	int new_pin = data & 0xff;
 	int new_flags = data >> 8;
-	if (new_pin != pin || new_flags != flags) {
+	if (valid() && (new_pin != pin || new_flags != flags)) {
 		SET_INPUT_NOPULLUP(*this);
 #ifdef SERIAL
 		// Reset is not recorded on connections that cannot fail.

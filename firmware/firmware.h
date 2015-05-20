@@ -329,10 +329,7 @@ struct Adc {
 		for (uint8_t i = 0; i < 2; ++i) {
 			if (linked[i] >= NUM_DIGITAL_PINS)
 				continue;
-			if (value[i] & 0x4000)
-				SET(linked[i]);
-			else
-				RESET(linked[i]);
+			UNSET(linked[i]);
 			linked[i] = ~0;
 		}
 	}

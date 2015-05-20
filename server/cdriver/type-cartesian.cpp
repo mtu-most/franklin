@@ -3,9 +3,9 @@
 static void xyz2motors(Space *s, float *motors, bool *ok) {
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
 		if (motors)
-			motors[a] = s->axis[a]->settings[current_fragment].target;
+			motors[a] = s->axis[a]->settings.target;
 		else
-			s->motor[a]->settings[current_fragment].endpos = s->axis[a]->settings[current_fragment].target;
+			s->motor[a]->settings.endpos = s->axis[a]->settings.target;
 	}
 }
 
@@ -13,8 +13,8 @@ static void reset_pos(Space *s) {
 	// If positions are unknown, pretend that they are 0.
 	// This is mostly useful for extruders.
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
-		s->axis[a]->settings[current_fragment].source = s->motor[a]->settings[current_fragment].current_pos / s->motor[a]->steps_per_unit;
-		//debug("set pos for %d to %f", a, s->axis[a]->settings[current_fragment].source);
+		s->axis[a]->settings.source = s->motor[a]->settings.current_pos / s->motor[a]->steps_per_unit;
+		//debug("set pos for %d to %f", a, s->axis[a]->settings.source);
 	}
 }
 
@@ -101,27 +101,27 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) {
 	}
 	EDATA(s).num_axes = s->num_axes;
 	bool move = false;
-	if (motors_busy && stopped && settings[current_fragment].queue_start == settings[current_fragment].queue_end && !settings[current_fragment].queue_full) {
+	if (motors_busy && stopped && settings.queue_start == settings.queue_end && !settings.queue_full) {
 		move = true;
-		queue[settings[current_fragment].queue_end].probe = false;
-		queue[settings[current_fragment].queue_end].cb = false;
-		queue[settings[current_fragment].queue_end].f[0] = INFINITY;
-		queue[settings[current_fragment].queue_end].f[1] = INFINITY;
+		queue[settings.queue_end].probe = false;
+		queue[settings.queue_end].cb = false;
+		queue[settings.queue_end].f[0] = INFINITY;
+		queue[settings.queue_end].f[1] = INFINITY;
 		for (int i = 0; num_spaces > 0 && i < spaces[0].num_axes; ++i) {
-			queue[settings[current_fragment].queue_end].data[i] = spaces[0].axis[i]->settings[current_fragment].current;
+			queue[settings.queue_end].data[i] = spaces[0].axis[i]->settings.current;
 			for (int ss = 0; ss < num_spaces; ++ss)
-				queue[settings[current_fragment].queue_end].data[i] = space_types[spaces[ss].type].unchange0(&spaces[ss], i, queue[settings[current_fragment].queue_end].data[i]);
+				queue[settings.queue_end].data[i] = space_types[spaces[ss].type].unchange0(&spaces[ss], i, queue[settings.queue_end].data[i]);
 			if (i == 2)
-				queue[settings[current_fragment].queue_end].data[i] -= zoffset;
+				queue[settings.queue_end].data[i] -= zoffset;
 		}
 		for (int i = spaces[0].num_axes; i < QUEUE_LENGTH; ++i) {
-			queue[settings[current_fragment].queue_end].data[i] = NAN;
+			queue[settings.queue_end].data[i] = NAN;
 		}
 		cpdebug(0, 0, "eload end");
-		settings[current_fragment].queue_end = (settings[current_fragment].queue_end + 1) % QUEUE_LENGTH;
+		settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
 		// This shouldn't happen and causes communication problems, but if you have a 1-item buffer it is correct.
-		if (settings[current_fragment].queue_end == settings[current_fragment].queue_start)
-			settings[current_fragment].queue_full = true;
+		if (settings.queue_end == settings.queue_start)
+			settings.queue_full = true;
 	}
 	for (int a = 0; a < s->num_axes; ++a) {
 		for (int o = 0; o < 3; ++o)

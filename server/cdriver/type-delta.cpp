@@ -44,9 +44,9 @@ static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
 }	// }}}
 
 static inline float delta_to_axis(Space *s, uint8_t a, bool *ok) {
-	float dx = s->axis[0]->settings[current_fragment].target - APEX(s, a).x;
-	float dy = s->axis[1]->settings[current_fragment].target - APEX(s, a).y;
-	float dz = s->axis[2]->settings[current_fragment].target - APEX(s, a).z;
+	float dx = s->axis[0]->settings.target - APEX(s, a).x;
+	float dy = s->axis[1]->settings.target - APEX(s, a).y;
+	float dz = s->axis[2]->settings.target - APEX(s, a).z;
 	float r2 = dx * dx + dy * dy;
 	float l2 = APEX(s, a).rodlength * APEX(s, a).rodlength;
 	float dest = sqrt(l2 - r2) + dz;
@@ -55,18 +55,18 @@ static inline float delta_to_axis(Space *s, uint8_t a, bool *ok) {
 }
 
 static void xyz2motors(Space *s, float *motors, bool *ok) {
-	if (isnan(s->axis[0]->settings[current_fragment].target) || isnan(s->axis[1]->settings[current_fragment].target) || isnan(s->axis[2]->settings[current_fragment].target)) {
+	if (isnan(s->axis[0]->settings.target) || isnan(s->axis[1]->settings.target) || isnan(s->axis[2]->settings.target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 3; ++aa) {
-			if (isnan(s->axis[aa]->settings[current_fragment].target))
-				s->axis[aa]->settings[current_fragment].target = s->axis[aa]->settings[current_fragment].current;
+			if (isnan(s->axis[aa]->settings.target))
+				s->axis[aa]->settings.target = s->axis[aa]->settings.current;
 		}
 	}
 	for (uint8_t a = 0; a < 3; ++a) {
 		if (motors)
 			motors[a] = delta_to_axis(s, a, ok);
 		else
-			s->motor[a]->settings[current_fragment].endpos = delta_to_axis(s, a, ok);
+			s->motor[a]->settings.endpos = delta_to_axis(s, a, ok);
 	}
 }
 
@@ -74,18 +74,18 @@ static void reset_pos (Space *s) {
 	// All axes' current_pos must be valid and equal, in other words, x=y=0.
 	float p[3];
 	for (uint8_t i = 0; i < 3; ++i)
-		p[i] = s->motor[i]->settings[current_fragment].current_pos / s->motor[i]->steps_per_unit;
+		p[i] = s->motor[i]->settings.current_pos / s->motor[i]->steps_per_unit;
 	if (p[0] != p[1] || p[0] != p[2]) {
 		//debug("resetpos fails");
-		s->axis[0]->settings[current_fragment].source = NAN;
-		s->axis[1]->settings[current_fragment].source = NAN;
-		s->axis[2]->settings[current_fragment].source = NAN;
+		s->axis[0]->settings.source = NAN;
+		s->axis[1]->settings.source = NAN;
+		s->axis[2]->settings.source = NAN;
 	}
 	else {
 		//debug("resetpos %f", p[0]);
-		s->axis[0]->settings[current_fragment].source = 0;
-		s->axis[1]->settings[current_fragment].source = 0;
-		s->axis[2]->settings[current_fragment].source = p[0];
+		s->axis[0]->settings.source = 0;
+		s->axis[1]->settings.source = 0;
+		s->axis[2]->settings.source = p[0];
 	}
 }
 

@@ -5,6 +5,7 @@ import os
 import sys
 
 port = 8000
+tls = True
 
 with open('/etc/default/franklin') as f:
 	for l in f.readlines():
@@ -15,9 +16,11 @@ with open('/etc/default/franklin') as f:
 		if key == 'PORT':
 			# Leave it as a string because it need not be numerical.
 			port = value.strip()
+		if key == 'TLS':
+			tls = value.lower().strip() == 'true'
 
 try:
-	p = websockets.RPC(port)
+	p = websockets.RPC(port, tls = tls)
 	action = os.getenv('ACTION')
 	dev = os.getenv('DEVNAME')
 	if action == 'add':

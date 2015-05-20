@@ -5,11 +5,8 @@
 
 #define TIME_PER_ISR 20
 
-#if 0
-#define pindebug debug
-#else
+//#define pindebug debug
 #define pindebug(...) do {} while (0)
-#endif
 
 // Define things that pins_arduino.h needs from Arduino.h (which shouldn't be included).
 #define ARDUINO_MAIN
@@ -534,8 +531,9 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	// 17: move_phase.
 	// 18: sample value (signed).
 	// 19: sample value (abs).
+	// 20: flags.
 	// 0: steps target.
-	// 1, 20: general purpose.
+	// 1, general purpose.
 	// x: pin pointer for varying pins.	x.h is 0 a lot (but not always).
 	// y: motor pointer.
 	// z: buffer pointer (pointing at current_sample).
