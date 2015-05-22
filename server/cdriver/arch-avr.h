@@ -18,6 +18,8 @@
 #include <math.h>
 #include <sys/mman.h>
 
+#define RESET_MAGIC 0xDEADBEEF
+
 // Enable all the parts for a serial connection (which can fail) to the printer.
 #define SERIAL
 #define ADCBITS 10
@@ -532,7 +534,6 @@ static inline bool GET(Pin_t _pin, bool _default) {
 }
 
 static inline void arch_pin_set_reset(Pin_t _pin, char state) {
-	debug("set reset %d %d", _pin.pin, state);
 	if (!_pin.valid())
 		return;
 	if (avr_pins[_pin.pin].reset == state)
@@ -684,6 +685,14 @@ static inline void arch_setup_start(char const *port) {
 	avr_serial.begin(port, 115200);
 	serialdev[1] = &avr_serial;
 	arch_reset();
+}
+
+static inline void arch_force_reset() {
+	avr_buffer[0] = HWC_RESET;
+	for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
+		avr_buffer[1 + i] = RESET_MAGIC >> (i * 8);
+	prepare_packet(avr_buffer, 5);
+	avr_send();
 }
 
 static inline void arch_setup_end(char const *run_id) {
@@ -904,14 +913,14 @@ static inline void arch_discard() {
 		discard_pending = true;
 		return;
 	}
-	int fragments = (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-	if (fragments <= 3)
+	int fragments = current_fragment - running_fragment;
+	if (fragments <= 2)
 		return;
-	current_fragment = (current_fragment - (fragments - 3) + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+	current_fragment = (current_fragment - (fragments - 2) + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	//debug("current discard -> %x", current_fragment);
 	restore_settings();
 	avr_buffer[0] = HWC_DISCARD;
-	avr_buffer[1] = fragments - 3;
+	avr_buffer[1] = fragments - 2;
 	prepare_packet(avr_buffer, 2);
 	avr_send();
 }

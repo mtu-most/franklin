@@ -321,12 +321,11 @@ class Printer: # {{{
 					self._send(id, 'return', None)
 					return
 				elif func in ('export_settings', 'die'):
-					ret = getattr(self, func)(*a, **ka)
+					ret = getattr(self, ('expert_' if func == 'die' else '') + func)(*a, **ka)
+					self._send(id, 'return', ret)
 					if ret == (WAIT, WAIT):
 						# Special case: request to die.
 						sys.exit(0)
-					else:
-						self._send(id, 'return', ret)
 				else:
 					waiting_commands += ln + '\n'
 	# }}}
@@ -356,7 +355,7 @@ class Printer: # {{{
 			log('End of file detected on command input; exiting.')
 			sys.exit(0)
 		self.command_buffer += data
-		die = False
+		die = None
 		while '\n' in self.command_buffer:
 			pos = self.command_buffer.index('\n')
 			id, func, a, ka = json.loads(self.command_buffer[:pos])
@@ -376,7 +375,7 @@ class Printer: # {{{
 					# The function blocks; it will send its own reply later.
 					if ret[1] is WAIT:
 						# Special case: request to die.
-						die = True
+						die = id
 					else:
 						ret[1](id)
 						continue
@@ -387,9 +386,11 @@ class Printer: # {{{
 				traceback.print_exc()
 				self._send(id, 'error', repr(sys.exc_info()))
 				continue
-			if not die:
+			if ret != (WAIT, WAIT):
+				#log('returning %s' % repr(ret))
 				self._send(id, 'return', ret)
-		if die:
+		if die is not None:
+			self._send(die, 'return', None)
 			sys.exit(0)
 	# }}}
 	def _trigger_movewaits(self, num): # {{{
@@ -1700,7 +1701,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def gotocb(self, id, moves = (), f0 = None, f1 = None): # {{{
-		self.queue.append((None, moves, f0, f1, True))
+		self.queue.append((None, moves, f0, f1, True, False))
 		if not self.wait:
 			self._do_queue()
 		self.wait_for_cb(False)[1](id)
@@ -2816,6 +2817,7 @@ class Printer: # {{{
 		return self.expert_set_gpio(gpio, update = update, **real_ka)
 	# }}}
 	def send_printer(self, target): # {{{
+		self.initialized = True
 		self._broadcast(target, 'new_printer', [self.uuid, self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins])
 		self._globals_update(target)
 		for i, s in enumerate(self.spaces):
@@ -2827,7 +2829,6 @@ class Printer: # {{{
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
 		if self.confirmer is not None:
 			self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
-		self.initialized = True
 	# }}}
 	# }}}
 # }}}

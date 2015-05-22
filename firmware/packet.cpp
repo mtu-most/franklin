@@ -348,8 +348,10 @@ void packet()
 		for (uint8_t b = 0; b < last_len; ++b)
 			buffer[last_fragment][command(1)][b] = static_cast<int8_t>(command(2 + b));
 		filling -= 1;
-		if (filling == 0)
+		if (filling == 0) {
+			//debug("filled %d; current %d notified %d", last_fragment, current_fragment, notified_current_fragment);
 			last_fragment = (last_fragment + 1) & FRAGMENTS_PER_MOTOR_MASK;
+		}
 		write_ack();
 		return;
 	}
@@ -371,6 +373,7 @@ void packet()
 			write_stall();
 			return;
 		}
+		//debug("starting.  last %d; current %d notified %d", last_fragment, current_fragment, notified_current_fragment);
 		current_buffer = &buffer[current_fragment];
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			if (buffer[current_fragment][m][0] != int8_t(0x80)) {

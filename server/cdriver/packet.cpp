@@ -404,8 +404,8 @@ void packet()
 		debug("CMD_WRITE_GLOBALS");
 #endif
 		addr = 2;
-		globals_load(addr);
 		arch_discard();
+		globals_load(addr);
 		return;
 	}
 	case CMD_READ_SPACE_INFO:
@@ -469,9 +469,9 @@ void packet()
 			abort();
 			return;
 		}
+		arch_discard();
 		addr = 3;
 		spaces[which].load_info(addr);
-		arch_discard();
 		return;
 	}
 	case CMD_WRITE_SPACE_AXIS:
@@ -486,9 +486,9 @@ void packet()
 			abort();
 			return;
 		}
+		arch_discard();
 		addr = 4;
 		spaces[which].load_axis(axis, addr);
-		arch_discard();
 		return;
 	}
 	case CMD_WRITE_SPACE_MOTOR:
@@ -503,9 +503,9 @@ void packet()
 			abort();
 			return;
 		}
+		arch_discard();
 		addr = 4;
 		spaces[which].load_motor(motor, addr);
-		arch_discard();
 		return;
 	}
 	case CMD_READ_TEMP:

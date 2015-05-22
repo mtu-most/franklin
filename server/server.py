@@ -258,20 +258,21 @@ class Connection: # {{{
 		if port not in ports or not ports[port]:
 			#log('port is not enabled')
 			return
-		GLib.source_remove(ports[port].input_handle)
 		# Forget the printer.  First tell the printer to die
 		p = ports[port]
 		ports[port] = None
 		if p is not None:
-			p.call('die', (role, 'disabled by user',), {}, lambda success, ret: None)
-		try:
-			p.process.kill()
-		except OSError:
-			pass
-		try:
-			p.process.communicate()
-		except:
-			pass
+			def done(success, ret):
+				GLib.source_remove(p.input_handle)
+				try:
+					p.process.kill()
+				except OSError:
+					pass
+				try:
+					p.process.communicate()
+				except:
+					pass
+			p.call('die', (role, 'disabled by user',), {}, done)
 		if p not in (None, False):
 			cls._broadcast(None, 'del_printer', port)
 	# }}}
@@ -499,7 +500,9 @@ class Connection: # {{{
 			if success:
 				resumeinfo[0](ret)
 			else:
-				raise ValueError(ret)
+				log('printer errors')
+				resumeinfo[0](None)
+				#Connection._disable('admin', self.printer)
 		ports[self.printer].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
 		yield (yield websockets.WAIT)
 	# }}}
@@ -551,9 +554,9 @@ class Port: # {{{
 		#log('calling %s on %d' % (repr(data), self.process.stdin.fileno()))
 		try:
 			self.process.stdin.write(data)
-		except IOError:
+		except:
 			log('killing printer handle because of IOError')
-			traceback.print_exc()
+			#traceback.print_exc()
 			cb(False, None)
 			Connection._disable('admin', self.port)
 			return

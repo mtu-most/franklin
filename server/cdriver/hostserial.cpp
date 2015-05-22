@@ -34,7 +34,7 @@ void HostSerial::refill() {
 	}
 	if (end == 0 && pollfds[1].revents) {
 		debug("EOF detected on standard input; exiting.");
-		abort();
+		exit(0);
 	}
 	pollfds[1].revents = 0;
 }
@@ -44,7 +44,7 @@ int HostSerial::read() {
 		refill();
 	if (start == end) {
 		debug("EOF on standard input; exiting.");
-		abort();
+		exit(0);
 	}
 	int ret = buffer[start++];
 	//debug("Firmware read byte: %x", ret);
