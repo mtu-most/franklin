@@ -93,7 +93,8 @@ void serial() { // {{{
 			// Command not finished; ignore it and wait for next.
 			watchdog_reset();
 			debug("fail %d %x %ld %ld", command_end, command(0), F(last_millis), F(milliseconds));
-			command_end = 0;
+			clear_overflow();
+			return;
 		}
 	}
 	had_data = false;

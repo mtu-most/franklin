@@ -75,17 +75,25 @@ static void send_to_host() {
 // There may be serial data available.
 void serial(uint8_t which)
 {
-	while (serialdev[which]->available()) {
+	while (true) {
 #ifdef SERIAL
 		if (which == 1) {
-			if (!had_data && command_end[which] > 0 && utime() - last_micros >= 100000)
+			if (!had_data && utime() - last_micros >= 100000)
 			{
-				// Command not finished; ignore it and wait for next.
-				command_end[which] = 0;
+				if (command_end[which] > 0) {
+					// Command not finished; ignore it and wait for next.
+					command_end[which] = 0;
+				}
+				else {
+					debug("Too much silence; request packet to be sure");
+					serialdev[which]->write(CMD_NACK);
+				}
 			}
 			had_data = false;
 		}
 #endif
+		if (!serialdev[which]->available())
+			break;
 		while (command_end[which] == 0)
 		{
 			if (!serialdev[which]->available()) {
@@ -270,7 +278,7 @@ void serial(uint8_t which)
 		}
 #ifdef SERIAL
 #ifdef DEBUG_DATA
-		if (which == 1 && command[1][1] != 7) {
+		if (which == 1 && (command[1][0] & 0xf) != 7) {
 			fprintf(stderr, "recv:");
 			for (uint8_t i = 0; i < command_end[which]; ++i)
 				fprintf(stderr, " %02x", command[which][i]);

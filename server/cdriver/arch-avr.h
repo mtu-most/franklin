@@ -374,8 +374,8 @@ static inline void hwpacket(int len) {
 		}
 		if (cbs)
 			send_host(CMD_MOVECB, cbs);
-		if ((running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER < command[1][1]) {
-			debug("Done count %d higher than busy fragments; clipping", command[1][1]);
+		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER < command[1][1] + command[1][2]) {
+			debug("Done count %d+%d higher than busy fragments %d; clipping", command[1][1], command[1][2], (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
 			avr_write_ack("invalid done");
 			abort();
 		}

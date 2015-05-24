@@ -777,6 +777,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"out __SREG__, 16"		"\n"
 		"\t"	"pop 16"			"\n"
 		"\t"	"reti"				"\n"
+		//"\t"	"rjmp isr_end_nonaked"		"\n"
 	// Audio handling.  Registers at entry:
 		// 19: Sample value.
 		// 20: Flags.
@@ -849,6 +850,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"pop 16"			"\n"
 		"\t"	"clr 27"			"\n"
 		"\t"	"rjmp isr_action_continue"	"\n"
+	"isr_end_nonaked:"				"\n"
 		::
 			[current_pos] "I" (offsetof(Motor, current_pos)),
 			[step_port] "I" (offsetof(Motor, step_port)),
