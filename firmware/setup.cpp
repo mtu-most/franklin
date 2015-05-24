@@ -52,6 +52,7 @@ void setup()
 	led_last = millis();
 	led_phase = 0;
 	led_pin = ~0;
+	probe_pin = ~0;
 	// Do arch-specific things.  This fills printerid.
 	arch_setup_end();
 	// Inform host of reset.
