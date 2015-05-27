@@ -32,6 +32,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'add-blacklist': '$',
 		'autodetect': 'True',
 		'predetect': 'stty -F #PORT# raw 115200',
+		'atexit': '',
 		'avrdude': '/usr/bin/avrdude',
 		'allow-system': '^$',
 		'admin': '',
@@ -320,6 +321,13 @@ class Connection: # {{{
 		cls._broadcast(None, 'new_data', name, data)
 	# }}}
 
+	def exit(self):
+		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
+		for p in ports.keys():
+			Connection.remove_port(p)
+		if config['atexit']:
+			subprocess.call(config['atexit'], shell = True)
+		GLib.idle_add(lambda: sys.exit(0))
 	def disable(self, port): # {{{
 		return Connection._disable(self.socket.data['role'], port)
 	# }}}
@@ -364,7 +372,7 @@ class Connection: # {{{
 		return sudo, board, protocol, baudrate, mcu
 	# }}}
 	def new_uuid(self, port, board): # {{{
-		assert self.socket.data['role'] == 'admin'
+		assert self.socket.data['role'] in ('benjamin', 'admin')
 		assert board != 'melzi'
 		resumeinfo = [(yield), None]
 		if ports[port] not in (False, None):
@@ -416,7 +424,7 @@ class Connection: # {{{
 			yield ('New UUID for %s set' % board)
 	# }}}
 	def upload(self, port, board): # {{{
-		assert self.socket.data['role'] == 'admin'
+		assert self.socket.data['role'] in ('benjamin', 'admin')
 		resumeinfo = [(yield), None]
 		sudo, brd, protocol, baudrate, mcu = self._get_info(board)
 		if ports[port] not in (False, None):
