@@ -48,6 +48,9 @@ RUN=1
 # System command to run before trying to detect a printer.
 #PREDETECT='stty -F #PORT# raw 115200'
 
+# System command to run before exiting.
+#ATEXIT=''
+
 # Regular expression of serial ports to ignore.
 #BLACKLIST='/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\d*))$'
 #ADD_BLACKLIST='$'
@@ -90,6 +93,7 @@ ARGS=(--quiet --make-pidfile --pidfile "$PIDFILE" --chuid franklin3d:franklin3d)
 START_ARGS=("${ARGS[@]}" --background --oknodo --start --startas "$DAEMON" -- --system)
 if [ -v AUTODETECT ] ; then	START_ARGS+=(--autodetect="$AUTODETECT") ; fi
 if [ -v PREDETECT ] ; then	START_ARGS+=(--predetect="$PREDETECT") ; fi
+if [ -v ATEXIT ] ; then		START_ARGS+=(--atexit="$ATEXIT") ; fi
 if [ -v PORT ] ; then		START_ARGS+=(--port="$PORT") ; fi
 if [ -v ADDRESS ] ; then	START_ARGS+=(--address="$ADDRESS") ; fi
 if [ -v TLS ] ; then		START_ARGS+=(--tls="$TLS") ; fi
