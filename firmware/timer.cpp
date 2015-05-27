@@ -2,7 +2,7 @@
 
 void handle_motors() {
 	if (step_state == 1) {
-		set_speed(0);
+		arch_set_speed(0);
 		return;
 	}
 	last_active = seconds();
@@ -37,7 +37,11 @@ void handle_motors() {
 					//debug("sense %d %x", m, motor[m].flags);
 					motor[m].flags ^= Motor::SENSE_STATE;
 					motor[m].flags |= (motor[m].flags & Motor::SENSE_STATE ? Motor::SENSE1 : Motor::SENSE0);
-					arch_record_sense(motor[m].flags & Motor::SENSE_STATE);
+					uint8_t sense_state = motor[m].flags & Motor::SENSE_STATE ? 1 : 0;
+					cli();
+					for (int mi = 0; mi < active_motors; ++mi)
+						motor[mi].sense_pos[sense_state] = motor[mi].current_pos;
+					sei();
 				}
 			}
 			// Check limit switches.
@@ -61,7 +65,7 @@ void handle_motors() {
 		//debug("hit limit %d curpos %ld cf %d ncf %d lf %d cfp %d", m, F(motor[m].current_pos), cf, notified_current_fragment, last_fragment, cs);
 		// Notify host.
 		limit_fragment_pos = cs;
-		set_speed(0);
+		arch_set_speed(0);
 		return;
 	}
 	if (homers > 0) {
@@ -81,7 +85,7 @@ void handle_motors() {
 				// Limit pin no longer triggered.  Stop moving and possibly notify host.
 				motor[m].intflags &= ~Motor::ACTIVE;
 				if (!--homers) {
-					set_speed(0);
+					arch_set_speed(0);
 					return;
 				}
 			}

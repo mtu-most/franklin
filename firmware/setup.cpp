@@ -56,7 +56,7 @@ void setup()
 	// Do arch-specific things.  This fills printerid.
 	arch_setup_end();
 	// Inform host of reset.
-	serial_write(CMD_STARTUP);
+	arch_serial_write(CMD_STARTUP);
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
-		serial_write(printerid[i]);
+		arch_serial_write(printerid[i]);
 }

@@ -49,7 +49,6 @@ uint8_t next_move() {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			if (isnan(sp.axis[a]->settings.source)) {
-				debug("resetting pos for move");
 				space_types[sp.type].reset_pos(&sp);
 				for (uint8_t aa = 0; aa < sp.num_axes; ++aa)
 					sp.axis[aa]->settings.current = sp.axis[aa]->settings.source;
@@ -321,7 +320,7 @@ uint8_t next_move() {
 			else
 				sp.axis[a]->settings.target = sp.axis[a]->settings.source + sp.axis[a]->settings.dist + sp.axis[a]->settings.next_dist; // * settings.fq;
 #ifdef DEBUG_MOVE
-			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d hw = %d current = %f", s, a, sp.axis[a]->settings.dist, sp.axis[a]->settings.main_dist, sp.axis[a]->settings.next_dist, sp.motor[a]->settings.current_pos, sp.motor[a]->settings.current_pos, sp.axis[a]->settings.current);
+			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d current = %f", s, a, sp.axis[a]->settings.dist, sp.axis[a]->settings.main_dist, sp.axis[a]->settings.next_dist, sp.motor[a]->settings.current_pos, sp.axis[a]->settings.current);
 #endif
 		}
 		bool ok = true;

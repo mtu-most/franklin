@@ -5,9 +5,24 @@ TARGET ?= melzi
 
 CPPFLAGS = -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow -fno-strict-aliasing -Wall -Wextra -Werror
 EXTRA_FLAGS = --param=ssp-buffer-size=4
+
+ifeq (${TARGET}, sim)
+SOURCES = arch-avr.h arch-sim.h firmware.h firmware.ino packet.cpp serial.cpp setup.cpp timer.cpp
+CPPFLAGS += -DARCH_INCLUDE=\"arch-sim.h\" -DBBB
+CPPFLAGS += -DNUM_MOTORS=5 -DFRAGMENTS_PER_MOTOR_BITS=3 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=9
+build-sim/sim.elf: $(patsubst %.cpp,build-sim/%.o,$(filter %.cpp,$(SOURCES) firmware.cpp))
+	g++ $(CPPFLAGS) $(LDFLAGS) $^ -o $@ $(LIBS)
+build-sim/%.o: %.cpp $(filter %.h,$(SOURCES)) Makefile build-sim/stamp
+	g++ $(CPPFLAGS) -c $< -o $@
+build-sim/%.o: %.ino $(filter %.h,$(SOURCES)) Makefile build-sim/stamp
+	g++ $(CPPFLAGS) -xc++ -c $< -o $@
+build-sim/stamp:
+	mkdir -p build-sim
+	touch $@
+else
+
 OPTIMIZATION_LEVEL = 1
 CPPFLAGS += -DARCH_INCLUDE=\"arch-avr.h\"
-
 ARDUINO_LIBS = EEPROM
 
 # To avoid loading HardwareSerial.cpp, disable the core.
@@ -54,3 +69,4 @@ endif
 endif
 endif
 include /usr/share/arduino/Arduino.mk
+endif

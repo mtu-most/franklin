@@ -371,6 +371,10 @@ void packet()
 			abort();
 			return;
 		}
+		if (!motors_busy) {
+			send_host(CMD_POS, which, t, NAN);
+			return;
+		}
 		if (isnan(spaces[which].axis[t]->settings.source)) {
 			//debug("resetting space %d for getpos; %f", which, spaces[0].axis[0]->settings.current);
 			space_types[spaces[which].type].reset_pos(&spaces[which]);

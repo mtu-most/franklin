@@ -22,8 +22,8 @@
 #error "SERIAL_SIZE_BITS must be defined in the Makefile"
 #endif
 
-#define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
-#define MAXINT ((1 << ADCBITS) + 1)
+#define MAXLONG (int32_t(uint32_t(~0) >> 1))
+#define MAXINT (int(unsigned(~0) >> 1))
 
 #define RESET_MAGIC 0xDEADBEEF
 
@@ -41,9 +41,22 @@
 #define SERIAL_MASK ((1 << SERIAL_SIZE_BITS) - 1)
 #define FRAGMENTS_PER_MOTOR_MASK ((1 << FRAGMENTS_PER_MOTOR_BITS) - 1)
 
-template <typename _A> _A min(_A a, _A b) { return a < b ? a : b; }
-template <typename _A> _A max(_A a, _A b) { return a > b ? a : b; }
+#ifndef NO_DEBUG
+static inline void debug(char const *fmt, ...);
+static inline void debug_add(int i);
+static inline void debug_dump();
+#else
+static inline void debug(char const *fmt, ...) { (void)&fmt; }
+static inline void debug_add(int i) { (void)&i; }
+static inline void debug_dump() {}
+#endif
+
+static inline void arch_msetup(uint8_t m);
+
+template <typename _A, typename _B> _A min(_A a, _B b) { return a < b ? a : b; }
+template <typename _A, typename _B> _A max(_A a, _B b) { return a > b ? a : b; }
 template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
+#define fabs abs
 
 EXTERN volatile uint16_t debug_value, debug_value1;
 EXTERN uint8_t printerid[ID_SIZE];
@@ -53,7 +66,6 @@ EXTERN bool had_data;
 EXTERN uint8_t reply[REPLY_BUFFER_SIZE], adcreply[6];
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool out_busy;
-EXTERN uint16_t out_time;
 EXTERN uint8_t reply_ready, adcreply_ready;
 EXTERN bool timeout;
 EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE > 6 ? REPLY_BUFFER_SIZE : 6];
@@ -97,6 +109,13 @@ enum Control {
 #define CONTROL_VALUE(x) (bool((x) & CTRL_VALUE))
 #define CONTROL_EVENT(x) (bool((x) & CTRL_EVENT))
 EXTERN uint8_t pin_events;
+
+inline void SET_OUTPUT(uint8_t pin_no);
+inline void SET_INPUT(uint8_t pin_no);
+inline void UNSET(uint8_t pin_no);
+inline void SET(uint8_t pin_no);
+inline void RESET(uint8_t pin_no);
+inline bool GET(uint8_t pin_no);
 
 struct Pin_t {
 	uint8_t state;
@@ -145,7 +164,7 @@ struct Pin_t {
 	}
 	ARCH_PIN_DATA
 };
-extern Pin_t pin[NUM_DIGITAL_PINS];
+EXTERN Pin_t pin[NUM_DIGITAL_PINS];
 
 enum Command {
 	// from host
@@ -190,6 +209,7 @@ enum Command {
 };
 
 static inline volatile uint8_t &command(uint16_t pos) {
+	//debug("cmd %x = %x (%x + %x & %x)", (serial_buffer_tail + pos) & SERIAL_MASK, serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK], serial_buffer_tail, pos, SERIAL_MASK);
 	return serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK];
 }
 
@@ -263,26 +283,25 @@ struct Motor
 		SENSE1			= 0x10,
 		SENSE_STATE		= 0x20
 	};
-	void init() {
+	void init(uint8_t m) {
 		current_pos = 0;
 		sense_pos[0] = 0xBEEFBEEF;
 		sense_pos[1] = 0xFACEFACE;
 		intflags = 0;
 		flags = 0;
 		steps_current = 0;
-		step_bitmask = 0;
-		dir_bitmask = 0;
 		step_pin = ~0;
 		dir_pin = ~0;
 		limit_min_pin = ~0;
 		limit_max_pin = ~0;
 		sense_pin = ~0;
+		arch_msetup(m);
 	}
-	void disable() {
-		current_pos = 0;
-		steps_current = 0;
+	void disable(uint8_t m) {
 		intflags = 0;
 		flags = 0;
+		current_pos = 0;
+		steps_current = 0;
 		if (step_pin < NUM_DIGITAL_PINS)
 			UNSET(step_pin);
 		if (dir_pin < NUM_DIGITAL_PINS)
@@ -293,6 +312,12 @@ struct Motor
 			UNSET(limit_max_pin);
 		if (sense_pin < NUM_DIGITAL_PINS)
 			UNSET(sense_pin);
+		step_pin = ~0;
+		dir_pin = ~0;
+		limit_min_pin = ~0;
+		limit_max_pin = ~0;
+		sense_pin = ~0;
+		arch_msetup(m);
 	}
 };
 
@@ -364,6 +389,13 @@ void setup();
 
 // firmware.ino
 void loop();	// Do stuff which needs doing: moving motors and adjusting heaters.
+
+static inline void write_current_pos(uint8_t offset) {
+	cli();
+	for (uint8_t m = 0; m < active_motors; ++m)
+		*reinterpret_cast <int32_t *>(&pending_packet[offset + 4 * m]) = motor[m].current_pos;
+	sei();
+}
 
 #include ARCH_INCLUDE
 

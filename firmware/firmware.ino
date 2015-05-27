@@ -118,11 +118,12 @@ int main(void) {
 		// Timeout.
 		uint16_t dt = seconds() - last_active;
 		if (enabled_pins > 0 && timeout_time > 0 && timeout_time <= dt) {
-			// Disable LED.
+			// Disable LED and probe.
 			led_pin = ~0;
+			probe_pin = ~0;
 			// Disable motors.
 			for (uint8_t m = 0; m < active_motors; ++m)
-				motor[m].disable();
+				motor[m].disable(m);
 			active_motors = 0;
 			// Disable adcs.
 			for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
@@ -133,6 +134,8 @@ int main(void) {
 			debug("timeout %d %d %d", seconds(), dt, last_active);
 			timeout = true;
 		}
+		arch_tick();
+		//debug("!%x %x %x %x.", enabled_pins, timeout_time, dt, last_active);
 		//debug("!%x.", debug_value);
 	}
 }

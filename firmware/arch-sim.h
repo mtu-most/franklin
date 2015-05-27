@@ -60,7 +60,7 @@ inline static void arch_serial_flush() {
 
 // ADC. {{{
 // Fake heater on pin 0, adc 0.
-EXTERN int bbb_temp;
+EXTERN int sim_temp;
 static inline void adc_start(uint8_t adcpin) {
 	(void)&adcpin;
 }
@@ -74,10 +74,10 @@ static inline int16_t adc_get(uint8_t pin_) {
 	if (pin_ != 0)
 		return 0;
 	if (CONTROL_CURRENT(pin[0].state) == CTRL_RESET)
-		bbb_temp = min(bbb_temp + 1, (1 << 10) - 1);
+		sim_temp = min(sim_temp + 1, (1 << 10) - 1);
 	else
-		bbb_temp = max(bbb_temp - 1, 0);
-	return bbb_temp;
+		sim_temp = max(sim_temp - 1, 0);
+	return sim_temp;
 }
 // }}}
 
@@ -101,10 +101,10 @@ static inline void arch_setup_start() {
 	fcntl(0, F_SETFL, O_NONBLOCK);
 }
 
-EXTERN struct pollfd bbb_pollfd;
+EXTERN struct pollfd sim_pollfd;
 static inline void arch_setup_end() {
-	bbb_pollfd.fd = 0;
-	bbb_pollfd.events = POLLIN | POLLPRI;
+	sim_pollfd.fd = 0;
+	sim_pollfd.events = POLLIN | POLLPRI;
 }
 
 static inline void arch_msetup(uint8_t m) {
@@ -195,15 +195,15 @@ static inline void arch_tick() {
 // }}}
 
 // Timekeeping. {{{
-EXTERN long long bbb_t;
+EXTERN long long sim_t;
 static inline uint16_t millis() {
-	bbb_t += 1;
-	return bbb_t;
+	sim_t += 1;
+	return sim_t;
 }
 
 static inline uint16_t seconds() {
-	bbb_t += 1;
-	return bbb_t / 1000;
+	sim_t += 1;
+	return sim_t / 1000;
 }
 // }}}
 

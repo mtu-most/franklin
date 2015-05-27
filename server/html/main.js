@@ -243,6 +243,8 @@ function select_printer(port) { // {{{
 	else
 		selected_port = port;
 	selected_printer = printers[port];
+	if (selected_printer === undefined)
+		return;
 	for (var p in ports) {
 		if (typeof ports[p] != 'object')
 			continue;
@@ -258,6 +260,12 @@ function select_printer(port) { // {{{
 			if (ports[p][2])
 				ports[p][2].AddClass('hidden');
 		}
+	}
+	if (selected_printer !== null) {
+		update_state(selected_printer.state);
+	}
+	else {
+		update_state(null);
 	}
 } // }}}
 
@@ -661,15 +669,7 @@ function update_globals() { // {{{
 			obj.checked = obj.obj[0][1] == printer[ids[i] + '_id'];
 		}
 	}
-	var stat = get_value(printer, [null, 'status']);
-	var c = document.getElementById('container');
-	c.RemoveClass('idle printing paused');
-	if (stat === null)
-		c.AddClass('idle');
-	else if (stat)
-		c.AddClass('printing');
-	else
-		c.AddClass('paused');
+	update_state(get_value(printer, [null, 'status']));
 	var m = printer.multiples;
 	// Remove table rows.
 	for (var t = 0; t < m.axis.length; ++t) {
@@ -993,6 +993,30 @@ function update_profiles(prt) { // {{{
 				selector.selectedIndex = i;
 		}
 	});
+} // }}}
+
+function update_state(state) { // {{{
+	var c = document.getElementById('container');
+	var pre;
+	c.RemoveClass('idle printing paused');
+	if (state === null) {
+		c.AddClass('idle');
+		pre = '';
+	}
+	else if (state) {
+		c.AddClass('printing');
+		pre = '# ';
+	}
+	else {
+		c.AddClass('paused');
+		pre = '+ ';
+	}
+	var doctitle;
+	if (selected_printer !== null && selected_printer !== undefined)
+		doctitle = selected_printer.profile;
+	else
+		doctitle = '[' + port + ']';
+	document.title = pre + doctitle + ' - Franklin';
 } // }}}
 // }}}
 

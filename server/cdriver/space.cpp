@@ -558,7 +558,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 	float factor = 1;
 	float t = (current_time - settings.start_time) / 1e6;
 	if (t >= settings.t0 + settings.tp) {	// Finish this move and prepare next.
-		//debug("finishing %f %f %f %ld %ld", t, settings.t0, settings.tp, long(current_time), long(settings.start_time));
+		movedebug("finishing %f %f %f %ld %ld", t, settings.t0, settings.tp, long(current_time), long(settings.start_time));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -617,7 +617,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 	if (t < settings.t0) {	// Main part.
 		float t_fraction = t / settings.t0;
 		float current_f = (settings.f1 * (2 - t_fraction) + settings.f2 * t_fraction) * t_fraction;
-		//debug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", t, settings.t0, settings.tp, t_fraction, settings.f1, settings.f2, current_f);
+		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", t, settings.t0, settings.tp, t_fraction, settings.f1, settings.f2, current_f);
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -632,7 +632,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		}
 	}
 	else {	// Connector part.
-		//debug("connector %f %f %f", t, settings.t0, settings.tp);
+		movedebug("connector %f %f %f", t, settings.t0, settings.tp);
 		float tc = t - settings.t0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];

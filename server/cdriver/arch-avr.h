@@ -17,6 +17,8 @@
 #include <errno.h>
 #include <math.h>
 #include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 #define RESET_MAGIC 0xDEADBEEF
 
@@ -182,7 +184,7 @@ static inline void try_send_control() {
 static inline void avr_send() {
 	//debug("avr_send");
 	send_packet();
-	for (int counter = 0; counter < 0x28 && out_busy; ++counter) {
+	for (int counter = 0; out_busy; ++counter) {
 		//debug("avr send");
 		poll(&pollfds[2], 1, 100);
 		serial(1);
@@ -192,10 +194,6 @@ static inline void avr_send() {
 			debug("resending packet");
 			send_packet();
 		}
-	}
-	if (out_busy) {
-		debug("avr_send failed, packet start: %02x %02x %02x", avr_buffer[0], avr_buffer[1], avr_buffer[2]);
-		out_busy = false;
 	}
 	try_send_control();
 }
@@ -427,7 +425,7 @@ static inline void hwpacket(int len) {
 				spaces[s].motor[m]->settings.current_pos = 0;
 			}
 		}
-		for (int m = 0; m < avr_active_motors; ++m)
+		for (int m = 0; m < NUM_MOTORS; ++m)
 			avr_pos_offset[m] = 0;
 		for (int t = 0; t < num_temps; ++t)
 			settemp(t, NAN);
@@ -568,10 +566,10 @@ static inline void arch_reset() {
 	avr_call1(HWC_PING, 1);
 	avr_serial.write(CMD_ID);
 	avr_call1(HWC_PING, 2);
-	for (int counter = 0; avr_pong != 2 && counter < 100; ++counter) {
+	for (int counter = 0; avr_pong != 2 && counter < 1000; ++counter) {
 		//debug("avr pongwait %d", avr_pong);
 		pollfds[2].revents = 0;
-		poll(&pollfds[2], 1, 10);
+		poll(&pollfds[2], 1, 1);
 		serial(1);
 	}
 	if (avr_pong != 2) {
@@ -836,7 +834,7 @@ static inline bool arch_running() {
 	return avr_running;
 }
 
-static inline void arch_stop() {
+static inline void arch_stop(bool fake) {
 	avr_homing = false;
 	if (out_busy) {
 		stop_pending = true;
@@ -854,7 +852,8 @@ static inline void arch_stop() {
 	prepare_packet(avr_buffer, 1);
 	avr_send();
 	avr_get_reply();
-	abort_move(command[1][1]);
+	if (!fake)
+		abort_move(command[1][1]);
 	avr_get_current_pos(2, false);
 	current_fragment_pos = 0;
 }
@@ -948,28 +947,32 @@ static inline void END_DEBUG() {
 void AVRSerial::begin(char const *port, int baud) {
 	// Open serial port and prepare pollfd.
 	debug("opening %s", port);
-	fd = open(port, O_RDWR);
+	if (port[0] == '!') {
+		int pipes[2];
+		socketpair(AF_LOCAL, SOCK_STREAM, 0, pipes);
+		pid_t pid = fork();
+		if (!pid) {
+			// Child.
+			close(pipes[0]);
+			dup2(pipes[1], 0);
+			dup2(pipes[1], 1);
+			close(pipes[1]);
+			execlp(&port[1], &port[1], NULL);
+			abort();
+		}
+		// Parent.
+		close(pipes[1]);
+		fd = pipes[0];
+	}
+	else {
+		fd = open(port, O_RDWR);
+	}
 	pollfds[2].fd = fd;
 	pollfds[2].events = POLLIN | POLLPRI;
 	pollfds[2].revents = 0;
 	start = 0;
 	end_ = 0;
 	fcntl(fd, F_SETFL, O_NONBLOCK);
-#if 0
-	// Set baud rate and control.
-	tcflush(fd, TCIOFLUSH);
-	struct termios opts;
-	tcgetattr(fd, &opts);
-	opts.c_iflag = IGNBRK;
-	opts.c_oflag = 0;
-	opts.c_cflag = CS8 | CREAD | CLOCAL;
-	opts.c_lflag = 0;
-	opts.c_cc[VMIN] = 1;
-	opts.c_cc[VTIME] = 0;
-	cfsetispeed(&opts, B115200);
-	cfsetospeed(&opts, B115200);
-	tcsetattr(fd, TCSANOW, &opts);
-#endif
 }
 
 void AVRSerial::write(char c) {
@@ -991,6 +994,7 @@ void AVRSerial::write(char c) {
 void AVRSerial::refill() {
 	start = 0;
 	end_ = ::read(fd, buffer, sizeof(buffer));
+	//debug("%s", strerror(errno));
 	//debug("refill %d bytes", end_);
 	if (end_ < 0) {
 		if (errno != EAGAIN && errno != EWOULDBLOCK)

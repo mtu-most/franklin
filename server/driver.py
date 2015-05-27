@@ -1187,8 +1187,10 @@ class Printer: # {{{
 				#log("0 t %s" % (self.home_target))
 				k = self.home_target.keys()[0]
 				dist = abs(self.home_target[k] - self.spaces[self.home_space].get_current_pos(k))
-				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True)[1](None)
-				return
+				if dist > 0:
+					self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True)[1](None)
+					return
+				# Fall through.
 			#log('done 1')
 			self.home_phase = 2
 			# Move down to find limit or sense switch.

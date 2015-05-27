@@ -13,7 +13,7 @@ void packet()
 	{
 		cmddebug("CMD_BEGIN");
 		// A server is running; start the watchdog.
-		watchdog_enable();
+		arch_watchdog_enable();
 		write_ack();
 		for (uint8_t i = 0; i < ID_SIZE / 3; ++i) {
 			for (uint8_t k = 0; k < 3; ++k)
@@ -24,7 +24,7 @@ void packet()
 		for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
 			adc[a].disable();
 		filling = 0;
-		set_speed(0);
+		arch_set_speed(0);
 		homers = 0;
 		home_step_time = 0;
 		reply[0] = CMD_READY;
@@ -52,13 +52,13 @@ void packet()
 		cmddebug("CMD_RESET");
 		uint32_t magic = *reinterpret_cast <volatile int32_t *>(&command(1));
 		if (magic != RESET_MAGIC) {
-			debug("invalid reset magic %lx", F(magic));
+			debug("invalid reset magic %" L "x", F(magic));
 			write_stall();
 			return;
 		}
 		write_ack();
-		serial_flush();
-		reset();
+		arch_serial_flush();
+		arch_reset();
 	}
 	case CMD_SETUP:
 	{
@@ -70,9 +70,9 @@ void packet()
 		}
 		// Reset newly (de)activated motors.
 		for (uint8_t m = active_motors; m < command(1); ++m)
-			motor[m].init();
+			motor[m].init(m);
 		for (uint8_t m = command(1); m < active_motors; ++m)
-			motor[m].disable();
+			motor[m].disable(m);
 		active_motors = command(1);
 		time_per_sample = *reinterpret_cast <volatile int32_t *>(&command(2));
 		uint8_t p = led_pin;
@@ -254,6 +254,7 @@ void packet()
 				buffer[current_fragment][m][1] = command(5 + m);
 				homers += 1;
 				motor[m].intflags |= Motor::ACTIVE;
+				motor[m].steps_current = 0;
 			}
 			else if (command(5 + m) == 0) {
 				buffer[current_fragment][m][0] = 0x80;
@@ -275,7 +276,7 @@ void packet()
 			current_buffer = &buffer[current_fragment];
 			current_sample = 0;
 			step_state = 0;
-			set_speed(home_step_time);
+			arch_set_speed(home_step_time);
 			write_ack();
 		}
 		else {
@@ -320,8 +321,9 @@ void packet()
 	case CMD_AUDIO:
 	{
 		cmddebug("CMD_MOVE");
-		if (command(1) >= NUM_MOTORS) {
-			debug("invalid buffer %d to fill", command(1));
+		uint8_t m = command(1);
+		if (m >= NUM_MOTORS) {
+			debug("invalid buffer %d to fill", m);
 			write_stall();
 			return;
 		}
@@ -336,17 +338,17 @@ void packet()
 			write_stall();
 			return;
 		}
-		if (buffer[last_fragment][command(1)][0] != int8_t(0x80)) {
-			debug("duplicate buffer %d to fill", command(1));
+		if (buffer[last_fragment][m][0] != int8_t(0x80)) {
+			debug("duplicate buffer %d to fill", m);
 			write_stall();
 			return;
 		}
 		if (command(0) == CMD_AUDIO)
-			motor[command(1)].intflags |= Motor::AUDIO;
+			motor[m].intflags |= Motor::AUDIO;
 		else
-			motor[command(1)].intflags &= ~Motor::AUDIO;
+			motor[m].intflags &= ~Motor::AUDIO;
 		for (uint8_t b = 0; b < last_len; ++b)
-			buffer[last_fragment][command(1)][b] = static_cast<int8_t>(command(2 + b));
+			buffer[last_fragment][m][b] = static_cast<int8_t>(command(2 + b));
 		filling -= 1;
 		if (filling == 0) {
 			//debug("filled %d; current %d notified %d", last_fragment, current_fragment, notified_current_fragment);
@@ -386,7 +388,7 @@ void packet()
 		current_sample = 0;
 		current_len = settings[current_fragment].len;
 		step_state = 0;
-		set_speed(time_per_sample);
+		arch_set_speed(time_per_sample);
 		write_ack();
 		return;
 	}
@@ -419,7 +421,7 @@ void packet()
 			write_stall();
 			return;
 		}
-		set_speed(0);
+		arch_set_speed(0);
 		homers = 0;
 		home_step_time = 0;
 		reply[0] = CMD_STOPPED;

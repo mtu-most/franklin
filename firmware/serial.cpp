@@ -62,7 +62,7 @@ static void clear_overflow() { // {{{
 	serial_overflow = false;
 	debug("serial flushed after overflow");
 	debug_dump();
-	serial_write(CMD_NACK);
+	arch_serial_write(CMD_NACK);
 }
 // }}}
 
@@ -91,7 +91,7 @@ void serial() { // {{{
 		if (!had_data && command_end > 0)
 		{
 			// Command not finished; ignore it and wait for next.
-			watchdog_reset();
+			arch_watchdog_reset();
 			debug("fail %d %x %ld %ld", command_end, command(0), F(last_millis), F(milliseconds));
 			clear_overflow();
 			return;
@@ -101,7 +101,7 @@ void serial() { // {{{
 	while (command_end == 0)
 	{
 		if (!serial_available()) {
-			watchdog_reset();
+			arch_watchdog_reset();
 			return;
 		}
 		had_data = true;
@@ -147,9 +147,9 @@ void serial() { // {{{
 			// connects to the printer.  This may be a reconnect,
 			// and can happen at any time.
 			// Response is to send the printer id, and temporarily disable all temperature readings.
-			serial_write(CMD_ID);
+			arch_serial_write(CMD_ID);
 			for (uint8_t i = 0; i < ID_SIZE; ++i)
-				serial_write(printerid[i]);
+				arch_serial_write(printerid[i]);
 			inc_tail(1);
 			continue;
 		default:
@@ -169,13 +169,7 @@ void serial() { // {{{
 	if (len == 0)
 	{
 		sdebug("no more data available now");
-		watchdog_reset();
-		// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
-		//if (out_busy && millis() - out_time >= 1000) {
-		//	sdebug("resending packet");
-		//	// Don't resend, because it stops the beaglebone from booting; we still resend on NACK.
-		//	//send_packet();
-		//}
+		arch_watchdog_reset();
 		return;
 	}
 	had_data = true;
@@ -186,7 +180,7 @@ void serial() { // {{{
 		len -= num;
 		sdebug("preread %d", num);
 		if (command_end < cmd_len) {
-			watchdog_reset();
+			arch_watchdog_reset();
 			sdebug("minimum length %d not available", cmd_len);
 			return;
 		}
@@ -205,11 +199,11 @@ void serial() { // {{{
 	if (command_end < cmd_len)
 	{
 		sdebug("not done yet; %d of %d received.", command_end, cmd_len);
-		watchdog_reset();
+		arch_watchdog_reset();
 		return;
 	}
 	command_end = 0;
-	watchdog_reset();
+	arch_watchdog_reset();
 	// This may take long, so check limit switches.
 	handle_motors();
 	// Check packet integrity.
@@ -263,11 +257,11 @@ void serial() { // {{{
 #endif
 		if (had_stall) {
 			debug("repeating stall");
-			serial_write(ff_in ? CMD_STALL0 : CMD_STALL1);
+			arch_serial_write(ff_in ? CMD_STALL0 : CMD_STALL1);
 		}
 		else {
 			debug("repeating ack");
-			serial_write(ff_in ? CMD_ACK0 : CMD_ACK1);
+			arch_serial_write(ff_in ? CMD_ACK0 : CMD_ACK1);
 		}
 		inc_tail(cmd_len);
 		return;
@@ -342,8 +336,7 @@ void send_packet()
 	sdebug("send");
 	out_busy = true;
 	for (uint16_t t = 0; t < pending_len; ++t)
-		serial_write(pending_packet[t]);
-	out_time = millis();
+		arch_serial_write(pending_packet[t]);
 }
 // }}}
 
@@ -413,7 +406,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		notified_current_fragment = (notified_current_fragment + num) & FRAGMENTS_PER_MOTOR_MASK;
 		pending_packet[2] = (last_fragment - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
 		if (pending_packet[0] == CMD_UNDERRUN) {
-			arch_write_current_pos(3);
+			write_current_pos(3);
 			prepare_packet(3 + 4 * active_motors);
 		}
 		else
@@ -426,7 +419,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		pending_packet[0] = CMD_LIMIT;
 		pending_packet[1] = stopping;
 		pending_packet[2] = limit_fragment_pos;
-		arch_write_current_pos(3);
+		write_current_pos(3);
 		if (stopping < active_motors)
 			motor[stopping].flags &= ~Motor::LIMIT;
 		prepare_packet(3 + 4 * active_motors);
@@ -446,7 +439,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 	} // }}}
 	if (home_step_time > 0 && homers == 0 && step_state == 1) { // {{{
 		pending_packet[0] = CMD_HOMED;
-		arch_write_current_pos(1);
+		write_current_pos(1);
 		home_step_time = 0;
 		prepare_packet(1 + 4 * active_motors);
 		send_packet();
@@ -486,13 +479,13 @@ void write_ack()
 {
 	//debug("acking");
 	had_stall = false;
-	serial_write(ff_in ? CMD_ACK0 : CMD_ACK1);
+	arch_serial_write(ff_in ? CMD_ACK0 : CMD_ACK1);
 }
 
 void write_stall()
 {
 	//debug("stalling");
 	had_stall = true;
-	serial_write(ff_in ? CMD_STALL0 : CMD_STALL1);
+	arch_serial_write(ff_in ? CMD_STALL0 : CMD_STALL1);
 }
 // }}}

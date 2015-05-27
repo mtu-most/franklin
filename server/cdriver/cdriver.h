@@ -512,7 +512,7 @@ static inline void arch_setup_start(char const *port);
 static inline void arch_setup_end(char const *run_id);
 static inline void arch_motors_change();
 static inline void arch_addpos(int s, int m, int diff);
-static inline void arch_stop();
+static inline void arch_stop(bool fake = false);
 static inline void arch_home();
 static inline bool arch_running();
 //static inline void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0);

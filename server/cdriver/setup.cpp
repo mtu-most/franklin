@@ -96,5 +96,5 @@ void setup(char const *port, char const *run_id)
 	}
 	// Update current position.
 	first_fragment = current_fragment;
-	arch_stop();
+	arch_stop(true);
 }
