@@ -517,7 +517,7 @@ class Printer: # {{{
 				continue
 			elif cmd == protocol.rcommand['UPDATE_PIN']:
 				self.gpios[s].state = m
-				self._gpio_update(s)
+				call_queue.append((self._gpio_update, (s,)))
 				continue
 			elif cmd == protocol.rcommand['CONFIRM']:
 				call_queue.append((self.request_confirmation(data.decode('utf-8', 'replace') or 'Continue?')[1], (False,)))
@@ -669,15 +669,24 @@ class Printer: # {{{
 	def _space_update(self, which, target = None): # {{{
 		if not self.initialized:
 			return
+		if which >= len(self.spaces):
+			# This can happen if this function is scheduled before changing the number of spaces.
+			return
 		self._broadcast(target, 'space_update', which, self.spaces[which].export())
 	# }}}
 	def _temp_update(self, which, target = None): # {{{
 		if not self.initialized:
 			return
+		if which >= len(self.temps):
+			# This can happen if this function is scheduled before changing the number of temps.
+			return
 		self._broadcast(target, 'temp_update', which, self.temps[which].export())
 	# }}}
 	def _gpio_update(self, which, target = None): # {{{
 		if not self.initialized:
+			return
+		if which >= len(self.gpios):
+			# This can happen if this function is scheduled before changing the number of gpios.
 			return
 		self._broadcast(target, 'gpio_update', which, self.gpios[which].export())
 	# }}}

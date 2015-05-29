@@ -398,6 +398,7 @@ EXTERN int current_fragment_pos;
 EXTERN int num_active_motors;
 EXTERN int hwtime_step;
 EXTERN struct pollfd pollfds[3];
+EXTERN bool wait_for_reply;
 
 #if DEBUG_BUFFER_LENGTH > 0
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];

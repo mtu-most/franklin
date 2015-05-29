@@ -35,8 +35,10 @@ void packet()
 		reply[8] = NUM_MOTORS;
 		reply[9] = 1 << FRAGMENTS_PER_MOTOR_BITS;
 		reply[10] = BYTES_PER_FRAGMENT;
-		for (uint8_t i = 0; i < 16; ++i)
+		for (uint8_t i = 0; i < 16; ++i) {
+			BUFFER_CHECK(reply, 11 + i);
 			reply[11 + i] = uuid[i];
+		}
 		reply_ready = 27;
 		return;
 	}
@@ -273,6 +275,7 @@ void packet()
 			settings[current_fragment].len = 2;
 			current_len = settings[current_fragment].len;
 			settings[current_fragment].probing = false;
+			BUFFER_CHECK(buffer, current_fragment);
 			current_buffer = &buffer[current_fragment];
 			current_sample = 0;
 			step_state = 0;
@@ -376,6 +379,7 @@ void packet()
 			return;
 		}
 		//debug("starting.  last %d; current %d notified %d", last_fragment, current_fragment, notified_current_fragment);
+		BUFFER_CHECK(buffer, current_fragment);
 		current_buffer = &buffer[current_fragment];
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			if (buffer[current_fragment][m][0] != int8_t(0x80)) {
@@ -429,6 +433,7 @@ void packet()
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].intflags &= ~Motor::ACTIVE;
 			motor[m].steps_current = 0;
+			BUFFER_CHECK(reply, 2 + 4 * m);
 			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));
 		}

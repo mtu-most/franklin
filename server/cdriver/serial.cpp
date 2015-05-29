@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-//#define DEBUG_DATA
+#define DEBUG_DATA
 //#define DEBUG_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
@@ -78,15 +78,23 @@ void serial(uint8_t which)
 	while (true) {
 #ifdef SERIAL
 		if (which == 1) {
-			if (!had_data && utime() - last_micros >= 100000)
+			uint32_t utm = utime();
+			if (uint32_t(utm - last_micros) >= 500000)
 			{
 				if (command_end[which] > 0) {
-					// Command not finished; ignore it and wait for next.
-					command_end[which] = 0;
+					if (!had_data) {
+						// Command not finished; ignore it and wait for next.
+						debug("Ignoring unfinished command");
+						command_end[which] = 0;
+						last_micros = utm;
+					}
+					else
+						debug("Silence, but handle data first");
 				}
 				else {
 					debug("Too much silence; request packet to be sure");
 					serialdev[which]->write(CMD_NACK);
+					last_micros = utm;
 				}
 			}
 			had_data = false;
@@ -189,6 +197,8 @@ void serial(uint8_t which)
 					need_id = ID_SIZE;
 					continue;
 				default:
+					if (!wait_for_reply)
+						last_micros = utime();
 					break;
 				}
 				if ((command[1][0] & 0xe0) != 0x60) {
@@ -198,7 +208,6 @@ void serial(uint8_t which)
 					serialdev[which]->write(CMD_NACK);
 					continue;
 				}
-				last_micros = utime();
 			}
 			else {
 #endif
@@ -243,6 +252,8 @@ void serial(uint8_t which)
 #ifdef SERIAL
 		if (which == 1)
 			had_data = true;
+			if (!wait_for_reply)
+				last_micros = utime();
 #endif
 		if (len + command_end[which] > COMMAND_SIZE)
 			len = COMMAND_SIZE - command_end[which];
@@ -266,7 +277,8 @@ void serial(uint8_t which)
 #endif
 #ifdef SERIAL
 		if (which == 1)
-			last_micros = utime();
+			if (!wait_for_reply)
+				last_micros = utime();
 #endif
 		command_end[which] += len;
 		if (command_end[which] < cmd_len)

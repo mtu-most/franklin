@@ -770,7 +770,7 @@ void buffer_refill() {
 	refilling = true;
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
 	//debug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
-	while (moving && !stopping && !discard_pending && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 3 && !sending_fragment) {
+	while (moving && !stopping && !discard_pending && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 4 && !sending_fragment) {
 		//debug("refill %d %d %d", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings.current_pos);
 		// fill fragment until full.
 		apply_tick();

@@ -136,6 +136,7 @@ int main(void) {
 		}
 		arch_tick();
 		//debug("!%x %x %x %x.", enabled_pins, timeout_time, dt, last_active);
-		//debug("!%x.", debug_value);
+		if (debug_value != 0x1337)
+			debug("!%x.", debug_value);
 	}
 }

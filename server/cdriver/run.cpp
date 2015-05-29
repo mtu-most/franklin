@@ -35,12 +35,12 @@ void run_file(int name_len, char const *name, float refx, float refy, float refz
 	settings.run_file_current = 0;
 	int fd = open(run_file_name, O_RDONLY);
 	if (fd < 0) {
-		debug("Failed to open run file %s: %s", run_file_name, strerror(errno));
+		debug("Failed to open run file '%s': %s", run_file_name, strerror(errno));
 		return;
 	}
 	struct stat stat;
 	if (fstat(fd, &stat) < 0) {
-		debug("Failed to stat run file %s: %s", run_file_name, strerror(errno));
+		debug("Failed to stat run file '%s': %s", run_file_name, strerror(errno));
 		close(fd);
 		return;
 	}

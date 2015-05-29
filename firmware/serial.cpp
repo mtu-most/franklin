@@ -1,8 +1,10 @@
 #include "firmware.h"
 // vim: set foldmethod=marker :
 
-//#define sdebug debug
+//#define sdebug(fmt, ...) debug("buf %x %x %x " fmt, serial_buffer_head, serial_buffer_tail, command_end, ##__VA_ARGS__)
 #define sdebug(...) do {} while (0)
+//#define sdebug2 debug
+#define sdebug2(...) do {} while (0)
 //#define DEBUG_FF
 
 // Protocol explanation.  {{{
@@ -37,7 +39,7 @@ static const uint8_t MASK[5][4] = {
 };
 // }}}
 
-static inline uint16_t fullpacketlen() { // {{{
+static inline int16_t fullpacketlen() { // {{{
 	if ((command(0) & ~0x10) == CMD_BEGIN) {
 		return command(1);
 	}
@@ -47,7 +49,7 @@ static inline uint16_t fullpacketlen() { // {{{
 	else if ((command(0) & ~0x10) == CMD_HOME) {
 		return 5 + active_motors;
 	}
-	else if ((command(0) & ~0x10) == CMD_MOVE) {
+	else if ((command(0) & ~0x10) == CMD_MOVE || (command(0) & ~0x10) == CMD_AUDIO) {
 		return 2 + last_len;
 	}
 	else
@@ -56,36 +58,37 @@ static inline uint16_t fullpacketlen() { // {{{
 // }}}
 
 static void clear_overflow() { // {{{
+	BUFFER_CHECK(serial_buffer, serial_buffer_tail);
+	debug("serial flushed after overflow (%x)", serial_buffer[serial_buffer_tail]);
 	command_end = 0;
 	serial_buffer_head = 0;
 	serial_buffer_tail = 0;
 	serial_overflow = false;
-	debug("serial flushed after overflow");
 	debug_dump();
 	arch_serial_write(CMD_NACK);
 }
 // }}}
 
-static uint16_t serial_available() { // {{{
-	if (serial_overflow)
-		return 0;
+static int16_t serial_available() { // {{{
 	cli();
-	uint16_t ret = (serial_buffer_head - serial_buffer_tail) & SERIAL_MASK;
+	int16_t ret = (serial_buffer_head - serial_buffer_tail) & SERIAL_MASK;
 	sei();
 	return ret;
 }
 // }}}
 
-static inline void inc_tail(uint16_t amount) { // {{{
+static inline void inc_tail(int16_t amount) { // {{{
 	serial_buffer_tail = (serial_buffer_tail + amount) & SERIAL_MASK;
+	if (serial_overflow && serial_buffer_head == serial_buffer_tail)
+		clear_overflow();
 }
 // }}}
 
 // There may be serial data available.
 void serial() { // {{{
 	uint16_t milliseconds = millis();
-	sdebug("command end %d", command_end);
-	if (milliseconds - last_millis >= 2000) {
+	sdebug2("command end %d", command_end);
+	if (milliseconds - last_millis >= 100) {
 		if (serial_overflow)
 			clear_overflow();
 		if (!had_data && command_end > 0)
@@ -105,8 +108,9 @@ void serial() { // {{{
 			return;
 		}
 		had_data = true;
+		BUFFER_CHECK(serial_buffer, serial_buffer_tail);
 		uint8_t firstbyte = serial_buffer[serial_buffer_tail];
-		sdebug("received: %x", firstbyte);
+		sdebug2("received: %x", firstbyte);
 		// If this is a 1-byte command, handle it.
 		switch (firstbyte)
 		{
@@ -138,8 +142,12 @@ void serial() { // {{{
 		case CMD_NACK:
 			// Nack: the host didn't properly receive the packet: resend.
 			// Unless the last packet was already received; in that case ignore the NACK.
-			if (out_busy)
+			if (out_busy) {
+				debug("resend at request %x", pending_packet[0] & 0xff);
 				send_packet();
+			}
+			else
+				debug("no resend at request");
 			inc_tail(1);
 			continue;
 		case CMD_ID:
@@ -158,66 +166,69 @@ void serial() { // {{{
 		if ((firstbyte & 0xe0) != 0x40) {
 			// This cannot be a good packet.
 			debug("invalid command %x %d", firstbyte, serial_buffer_tail);
-			// Fake a serial overflow.
-			serial_overflow = true;
+			inc_tail(1);
 			continue;
 		}
 		command_end = 1;
 		last_millis = millis();
 	}
-	uint16_t len = serial_available() - command_end;
+	int16_t sa = serial_available();
+	int16_t len = sa - command_end;
+	sdebug("get len %d %d", sa, len);
 	if (len == 0)
 	{
-		sdebug("no more data available now");
+		sdebug2("no more data available now");
+		if  (serial_overflow)
+			clear_overflow();
 		arch_watchdog_reset();
 		return;
 	}
 	had_data = true;
-	uint16_t cmd_len = minpacketlen();
+	int16_t cmd_len = minpacketlen();
 	if (command_end < cmd_len) {
-		uint16_t num = min(cmd_len - command_end, len);
+		int16_t num = min(cmd_len - command_end, len);
 		command_end += num;
 		len -= num;
-		sdebug("preread %d", num);
+		sdebug("preread %d %d", num, len);
 		if (command_end < cmd_len) {
 			arch_watchdog_reset();
-			sdebug("minimum length %d not available", cmd_len);
+			sdebug("minimum length %d not available (%d)", cmd_len, command_end);
+			if  (serial_overflow)
+				clear_overflow();
 			return;
 		}
 	}
-	uint16_t fulllen = fullpacketlen();
-	sdebug("len %d %d", cmd_len, fulllen);
+	int16_t fulllen = fullpacketlen();
 	cmd_len = fulllen + (fulllen + 2) / 3;
+	sdebug("len %d %d %d", len, cmd_len, fulllen);
 	if (command_end + len > cmd_len) {
 		len = cmd_len - command_end;
 		sdebug("new len %d = %d - %d", len, cmd_len, command_end);
 	}
 	if (len > 0)
 		command_end += len;
-	//sdebug("check %d %x %x", fulllen, command(0), command(fulllen - 1), command(fulllen));
+	//sdebug2("check %d %x %x", fulllen, command(0), command(fulllen - 1), command(fulllen));
 	last_millis = millis();
 	if (command_end < cmd_len)
 	{
 		sdebug("not done yet; %d of %d received.", command_end, cmd_len);
+		if  (serial_overflow)
+			clear_overflow();
 		arch_watchdog_reset();
 		return;
 	}
+	sdebug("packet %x", command(0) & 0xff);
 	command_end = 0;
 	arch_watchdog_reset();
-	// This may take long, so check limit switches.
-	handle_motors();
 	// Check packet integrity.
 	// Checksum must be good.
-	for (uint16_t t = 0; t < (fulllen + 2) / 3; ++t)
+	for (int16_t t = 0; t < (fulllen + 2) / 3; ++t)
 	{
 		uint8_t sum = command(fulllen + t);
 		if ((sum & 0x7) != (t & 0x7))
 		{
 			debug("incorrect extra bit %d %d %x %x %x %d", fulllen, t, command(0), sum, command(fulllen - 1), serial_buffer_tail);
 			debug_dump();
-			// Fake a serial overflow.
-			command_end = 1;
-			serial_overflow = true;
 			inc_tail(cmd_len);
 			return;
 		}
@@ -225,7 +236,7 @@ void serial() { // {{{
 		{
 			uint8_t check = sum & MASK[bit][3];
 			for (uint8_t p = 0; p < 3; ++p) {
-				uint16_t pos = 3 * t + p;
+				int16_t pos = 3 * t + p;
 				if ((fulllen != 1 || (pos != 1 && pos != 2)) && ((fulllen != 2 && (fulllen != 4 || t != 1)) || pos != fulllen + t))
 					check ^= command(3 * t + p) & MASK[bit][p];
 			}
@@ -236,16 +247,13 @@ void serial() { // {{{
 			{
 				debug("incorrect checksum %d %d %x %x %x %x mask %x %x %x %x", t, bit, command(3 * t), command(3 * t + 1), command(3 * t + 2), command(fulllen + t), MASK[bit][0], MASK[bit][1], MASK[bit][2], MASK[bit][3]);
 				debug_dump();
-				// Fake a serial overflow.
-				command_end = 1;
-				serial_overflow = true;
 				inc_tail(cmd_len);
 				return;
 			}
 		}
 	}
 	// Packet is good.
-	sdebug("good");
+	sdebug2("good");
 	// Flip-flop must have good state.
 	if ((command(0) & 0x10) != ff_in)
 	{
@@ -272,18 +280,17 @@ void serial() { // {{{
 	debug("new ff_in: %d", ff_in);
 #endif
 	// Clear flag for easier parsing.
+	BUFFER_CHECK(serial_buffer, serial_buffer_tail);
 	serial_buffer[serial_buffer_tail] &= ~0x10;
-	// This may take long, so check limit switches.
-	handle_motors();
 	packet();
 	inc_tail(cmd_len);
 }
 // }}}
 
 // Set checksum bytes. {{{
-static void prepare_packet(uint16_t len)
+static void prepare_packet(int16_t len)
 {
-	sdebug("prepare");
+	sdebug2("prepare");
 	if (len > MAX_REPLY_LEN)
 	{
 		debug("packet is too large: %d > %d", len, MAX_REPLY_LEN);
@@ -309,14 +316,16 @@ static void prepare_packet(uint16_t len)
 		pending_packet[2] = 0;
 	else if (len == 4)
 		pending_packet[5] = 0;
-	for (uint16_t t = 0; t < (len + 2) / 3; ++t)
+	for (int16_t t = 0; t < (len + 2) / 3; ++t)
 	{
 		uint8_t sum = t & 7;
 		for (uint8_t bit = 0; bit < 5; ++bit)
 		{
 			uint8_t check = 0;
-			for (uint8_t p = 0; p < 3; ++p)
+			for (uint8_t p = 0; p < 3; ++p) {
+				BUFFER_CHECK(pending_packet, 3 * t + p);
 				check ^= pending_packet[3 * t + p] & MASK[bit][p];
+			}
 			check ^= sum & MASK[bit][3];
 			check ^= check >> 4;
 			check ^= check >> 2;
@@ -324,6 +333,7 @@ static void prepare_packet(uint16_t len)
 			if (check & 1)
 				sum ^= 1 << (bit + 3);
 		}
+		BUFFER_CHECK(pending_packet, len + t);
 		pending_packet[len + t] = sum;
 	}
 	pending_len = len + (len + 2) / 3;
@@ -333,28 +343,33 @@ static void prepare_packet(uint16_t len)
 // Send packet to host. {{{
 void send_packet()
 {
-	sdebug("send");
+	sdebug2("send");
 	out_busy = true;
-	for (uint16_t t = 0; t < pending_len; ++t)
+	for (int16_t t = 0; t < pending_len; ++t) {
+		BUFFER_CHECK(pending_packet, t);
 		arch_serial_write(pending_packet[t]);
+	}
 }
 // }}}
 
 void try_send_next() { // Call send_packet if we can. {{{
-	sdebug("try send");
+	sdebug2("try send");
 	if (out_busy) { // {{{
-		sdebug("still busy");
+		//debug("still busy %x", pending_packet[0] & 0xff);
 		// Still busy sending other packet.
 		return;
 	} // }}}
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (motor[m].flags & (Motor::SENSE0 | Motor::SENSE1)) { // {{{
-			sdebug("sense %d", m);
+			sdebug2("sense %d", m);
 			uint8_t type = (motor[m].flags & Motor::SENSE1 ? 1 : 0);
 			pending_packet[0] = (type ? CMD_SENSE1 : CMD_SENSE0);
 			pending_packet[1] = m;
-			for (uint8_t mi = 0; mi < active_motors; ++mi)
+			for (uint8_t mi = 0; mi < active_motors; ++mi) {
+				BUFFER_CHECK(pending_packet, 2 + 4 * mi);
+				BUFFER_CHECK(motor, mi);
 				*reinterpret_cast <int32_t *>(&pending_packet[2 + 4 * mi]) = motor[mi].sense_pos[type];
+			}
 			motor[m].flags &= ~(type ? Motor::SENSE1 : Motor::SENSE0);
 			prepare_packet(2 + 4 * active_motors);
 			send_packet();
@@ -400,8 +415,8 @@ void try_send_next() { // Call send_packet if we can. {{{
 		}
 		cli();
 		uint8_t num = (cf - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
-		//debug("done %ld %d %d %d", &motor[0].current_pos, cf, notified_current_fragment, last_fragment);
 		sei();
+		sdebug2("done %ld %d %d %d", &motor[0].current_pos, cf, notified_current_fragment, last_fragment);
 		pending_packet[1] = num;
 		notified_current_fragment = (notified_current_fragment + num) & FRAGMENTS_PER_MOTOR_MASK;
 		pending_packet[2] = (last_fragment - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
@@ -415,7 +430,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		return;
 	} // }}}
 	if (stopping >= 0) { // {{{
-		sdebug("limit %d", stopping);
+		sdebug2("limit %d", stopping);
 		pending_packet[0] = CMD_LIMIT;
 		pending_packet[1] = stopping;
 		pending_packet[2] = limit_fragment_pos;
@@ -429,9 +444,12 @@ void try_send_next() { // Call send_packet if we can. {{{
 		return;
 	} // }}}
 	if (reply_ready) { // {{{
-		sdebug("reply %x %d", reply[1], reply[0]);
-		for (uint8_t i = 0; i < reply_ready; ++i)
+		sdebug2("reply %x %d", reply[1], reply[0]);
+		for (uint8_t i = 0; i < reply_ready; ++i) {
+			BUFFER_CHECK(reply, i);
+			BUFFER_CHECK(pending_packet, i);
 			pending_packet[i] = reply[i];
+		}
 		prepare_packet(reply_ready);
 		reply_ready = 0;
 		send_packet();
@@ -446,7 +464,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		return;
 	} // }}}
 	if (ping != 0) { // {{{
-		sdebug("pong %d", ping);
+		sdebug2("pong %d", ping);
 		for (uint8_t b = 0; b < 8; ++b)
 		{
 			if (ping & (1 << b))
@@ -462,15 +480,18 @@ void try_send_next() { // Call send_packet if we can. {{{
 	} // }}}
 	// This is pretty much always true, so make it the least important (nothing below this will ever be sent).
 	if (adcreply_ready) { // {{{
-		sdebug("adcreply %x %d", adcreply[1], adcreply[0]);
-		for (uint8_t i = 0; i < adcreply_ready; ++i)
+		sdebug2("adcreply %x %d", adcreply[1], adcreply[0]);
+		for (uint8_t i = 0; i < adcreply_ready; ++i) {
+			BUFFER_CHECK(pending_packet, i);
+			BUFFER_CHECK(adcreply, i);
 			pending_packet[i] = adcreply[i];
+		}
 		prepare_packet(adcreply_ready);
 		adcreply_ready = 0;
 		send_packet();
 		return;
 	} // }}}
-	sdebug("Nothing to send %d %d %x", cf, notified_current_fragment, debug_value);
+	sdebug2("Nothing to send %d %d %x", cf, notified_current_fragment, debug_value);
 }
 // }}}
 

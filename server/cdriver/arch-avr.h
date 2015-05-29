@@ -141,7 +141,6 @@ struct Avr_pin_t { // {{{
 
 // Declarations of static variables; extern because this is a header file. {{{
 EXTERN AVRSerial avr_serial;
-EXTERN bool avr_wait_for_reply;
 EXTERN uint8_t avr_pong;
 EXTERN char avr_buffer[256];
 EXTERN int avr_limiter_space;
@@ -186,14 +185,8 @@ static inline void avr_send() {
 	send_packet();
 	for (int counter = 0; out_busy; ++counter) {
 		//debug("avr send");
-		poll(&pollfds[2], 1, 100);
+		poll(&pollfds[2], 1, -1);
 		serial(1);
-		//if (out_busy[1])
-		//	debug("avr waiting for ack");
-		if (out_busy && (counter & 0xf) == 0xf) {
-			debug("resending packet");
-			send_packet();
-		}
 	}
 	try_send_control();
 }
@@ -206,15 +199,11 @@ static inline void avr_call1(uint8_t cmd, uint8_t arg) {
 }
 
 static inline void avr_get_reply() {
-	for (int counter = 0; avr_wait_for_reply && counter < 0x80; ++counter) {
+	for (int counter = 0; wait_for_reply && counter < 0x80; ++counter) {
 		//debug("avr wait");
 		pollfds[2].revents = 0;
 		poll(&pollfds[2], 1, 0x40);
 		serial(1);
-	}
-	if (avr_wait_for_reply) {
-		debug("no reply!");
-		return;
 	}
 	avr_write_ack("reply");
 }
@@ -233,9 +222,10 @@ static inline void avr_get_current_pos(int offset, bool check) {
 				spaces[ts].motor[tm]->settings.current_pos *= -1;
 			spaces[ts].motor[tm]->settings.current_pos -= avr_pos_offset[tm + mi];
 			cpdebug(ts, tm, "cpa offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
-			fcpdebug(ts, tm, "getpos diff %d", spaces[ts].motor[tm]->settings.current_pos - old);
+			fcpdebug(ts, tm, "getpos offset %d diff %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos - old);
 			if (check && old != spaces[ts].motor[tm]->settings.current_pos)
-				abort();
+				//abort();
+				debug("WARNING: out of sync!");
 		}
 	}
 }
@@ -279,7 +269,7 @@ static inline void hwpacket(int len) {
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
 		if ((command[1][0] & ~0x10) == HWC_LIMIT) {
-			//debug("limit %d", command[1][2]);
+			debug("limit %d", command[1][2]);
 			avr_homing = false;
 			abort_move(int8_t(command[1][2]));
 			//int i = 0;
@@ -360,10 +350,6 @@ static inline void hwpacket(int len) {
 			return;
 		}
 		first_fragment = -1;
-		/*if (command[1][1] + command[1][2] != FRAGMENTS_PER_BUFFER - (running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER) {
-			debug("free fragments out of sync: %d %d %d %d", command[1][1] + command[1][2], FRAGMENTS_PER_BUFFER - (running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER, FRAGMENTS_PER_BUFFER, sending_fragment);
-			abort();
-		}*/
 		int cbs = 0;
 		for (int i = 0; i < command[1][1]; ++i) {
 			int f = (running_fragment + i) % FRAGMENTS_PER_BUFFER;
@@ -443,9 +429,10 @@ static inline void hwpacket(int len) {
 	}
 	default:
 	{
-		if (!avr_wait_for_reply)
+		if (!wait_for_reply)
 			debug("received unexpected reply!");
-		avr_wait_for_reply = false;
+		else
+			wait_for_reply = false;
 		return;
 	}
 	}
@@ -523,9 +510,9 @@ static inline void SET_OUTPUT(Pin_t _pin) {
 static inline bool GET(Pin_t _pin, bool _default) {
 	if (!_pin.valid())
 		return _default;
-	if (avr_wait_for_reply)
-		debug("cdriver problem: avr_wait_for_reply already set!");
-	avr_wait_for_reply = true;
+	if (wait_for_reply)
+		debug("cdriver problem: wait_for_reply already set!");
+	wait_for_reply = true;
 	avr_call1(HWC_GETPIN, _pin.pin);
 	avr_get_reply();
 	return _pin.inverted() ^ command[1][1];
@@ -668,7 +655,6 @@ static inline void arch_globals_change() {
 
 static inline void arch_setup_start(char const *port) {
 	// Set up arch variables.
-	avr_wait_for_reply = false;
 	avr_adc = NULL;
 	avr_running = true;	// Force arch_stop from setup to do something.
 	avr_homing = false;
@@ -699,9 +685,9 @@ static inline void arch_setup_end(char const *run_id) {
 	avr_buffer[1] = 10;
 	for (int i = 0; i < 8; ++i)
 		avr_buffer[2 + i] = run_id[i];
-	if (avr_wait_for_reply)
-		debug("avr_wait_for_reply already set in begin");
-	avr_wait_for_reply = true;
+	if (wait_for_reply)
+		debug("wait_for_reply already set in begin");
+	wait_for_reply = true;
 	prepare_packet(avr_buffer, 10);
 	avr_send();
 	avr_get_reply();
@@ -846,9 +832,9 @@ static inline void arch_stop(bool fake) {
 	}
 	avr_running = false;
 	avr_buffer[0] = HWC_STOP;
-	if (avr_wait_for_reply)
-		debug("avr_wait_for_reply already set in stop");
-	avr_wait_for_reply = true;
+	if (wait_for_reply)
+		debug("wait_for_reply already set in stop");
+	wait_for_reply = true;
 	prepare_packet(avr_buffer, 1);
 	avr_send();
 	avr_get_reply();

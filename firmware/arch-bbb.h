@@ -133,6 +133,7 @@ static inline void arch_tick() {
 			serial_overflow = true;
 			break;
 		}
+		BUFFER_CHECK(serial_buffer, serial_buffer_head);
 		serial_buffer[serial_buffer_head] = c;
 		serial_buffer_head = n;
 	}

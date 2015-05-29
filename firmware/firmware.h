@@ -1,6 +1,8 @@
 #ifndef _FIRMWARE_H
 #define _FIRMWARE_H
 
+#define FAST_ISR
+
 #include <stdarg.h>
 #include ARCH_INCLUDE
 
@@ -34,8 +36,14 @@
 #define DEFINE_VARIABLES
 #endif
 
+#define BUFFER_CHECK(buffer, index) do { \
+	int _i = (index); \
+	if (_i < 0 || _i >= int(sizeof(buffer) / sizeof((buffer)[0]))) \
+		debug("Failed buffer access for " #buffer "[" #index "]"); \
+} while (0)
+
 // BEGIN reply is 27 bytes, which is the longest command that doesn't depend on NUM_MOTORS.
-#define MAX_REPLY_LEN ((2 + 4 * NUM_MOTORS) > 27 ? (2 + 4 * NUM_MOTORS) : 27)
+#define MAX_REPLY_LEN ((3 + 4 * NUM_MOTORS) > 27 ? (3 + 4 * NUM_MOTORS) : 27)
 #define REPLY_BUFFER_SIZE (MAX_REPLY_LEN + (MAX_REPLY_LEN + 2) / 3)
 
 #define SERIAL_MASK ((1 << SERIAL_SIZE_BITS) - 1)
@@ -61,15 +69,15 @@ template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 EXTERN volatile uint16_t debug_value, debug_value1;
 EXTERN uint8_t printerid[ID_SIZE];
 EXTERN uint8_t uuid[16];
-EXTERN uint16_t command_end;
+EXTERN int16_t command_end;
 EXTERN bool had_data;
-EXTERN uint8_t reply[REPLY_BUFFER_SIZE], adcreply[6];
+EXTERN uint8_t reply[MAX_REPLY_LEN], adcreply[6];
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool out_busy;
 EXTERN uint8_t reply_ready, adcreply_ready;
 EXTERN bool timeout;
-EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE > 6 ? REPLY_BUFFER_SIZE : 6];
-EXTERN uint16_t pending_len;
+EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE];
+EXTERN int16_t pending_len;
 EXTERN volatile uint16_t move_phase, full_phase, full_phase_bits;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
@@ -79,8 +87,8 @@ EXTERN uint16_t timeout_time, last_active;
 EXTERN uint8_t enabled_pins;
 
 EXTERN volatile bool serial_overflow;
-EXTERN volatile uint16_t serial_buffer_head;
-EXTERN volatile uint16_t serial_buffer_tail;
+EXTERN volatile int16_t serial_buffer_head;
+EXTERN volatile int16_t serial_buffer_tail;
 EXTERN volatile uint8_t serial_buffer[1 << SERIAL_SIZE_BITS];
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
@@ -208,12 +216,13 @@ enum Command {
 	CMD_AUDIO = 0xc0
 };
 
-static inline volatile uint8_t &command(uint16_t pos) {
+static inline volatile uint8_t &command(int16_t pos) {
 	//debug("cmd %x = %x (%x + %x & %x)", (serial_buffer_tail + pos) & SERIAL_MASK, serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK], serial_buffer_tail, pos, SERIAL_MASK);
+	BUFFER_CHECK(serial_buffer, (serial_buffer_tail + pos) & SERIAL_MASK);
 	return serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK];
 }
 
-static inline uint16_t minpacketlen() {
+static inline int16_t minpacketlen() {
 	switch (command(0) & ~0x10) {
 	case CMD_BEGIN:
 		return 2;
@@ -236,6 +245,8 @@ static inline uint16_t minpacketlen() {
 	case CMD_START_PROBE:
 		return 3;
 	case CMD_MOVE:
+		return 3;
+	case CMD_AUDIO:
 		return 3;
 	case CMD_START:
 		return 1;
@@ -392,10 +403,80 @@ void loop();	// Do stuff which needs doing: moving motors and adjusting heaters.
 
 static inline void write_current_pos(uint8_t offset) {
 	cli();
-	for (uint8_t m = 0; m < active_motors; ++m)
+	for (uint8_t m = 0; m < active_motors; ++m) {
+		BUFFER_CHECK(pending_packet, offset + 4 * m);
+		BUFFER_CHECK(motor, m);
 		*reinterpret_cast <int32_t *>(&pending_packet[offset + 4 * m]) = motor[m].current_pos;
+	}
 	sei();
 }
+
+#ifndef FAST_ISR
+static inline void SLOW_ISR() {
+	if (step_state < 2)
+		return;
+	move_phase += 1;
+	for (uint8_t m = 0; m < active_motors; ++m) {
+		if (~motor[m].intflags & Motor::ACTIVE)
+			continue;
+		int8_t sample = (*current_buffer)[m][current_sample];
+		if (sample == 0)
+			continue;
+		int8_t target = abs(sample) * move_phase / full_phase - motor[m].steps_current;
+		//debug("sample %d %d %d %d %d %d %d", m, sample, abs(sample), move_phase, full_phase, target, motor[m].steps_current);
+		if (target == 0)
+			continue;
+		// Set dir.
+		if (sample < 0) {
+			RESET(motor[m].dir_pin);
+			//debug("reset dir %d", m);
+		}
+		else {
+			SET(motor[m].dir_pin);
+			//debug("set dir %d", m);
+		}
+		motor[m].steps_current += target;
+		motor[m].current_pos += sample > 0 ? target : -target;
+		for (uint8_t i = 0; i < target; ++i) {
+			SET(motor[m].step_pin);
+			RESET(motor[m].step_pin);
+			//debug("pulse %d", m);
+		}
+	}
+	//debug("iteration frag %d sample %d = %d current %d pos %d", current_fragment, current_sample, (*current_buffer)[0][current_sample], motor[0].steps_current, motor[0].current_pos);
+	if (move_phase >= full_phase) {
+		move_phase = 0;
+		if (step_state == 2)
+			step_state = 0;
+		for (uint8_t m = 0; m < active_motors; ++m)
+			motor[m].steps_current = 0;
+		current_sample += 1;
+		if (current_sample >= current_len) {
+			current_sample = 0;
+			current_fragment = (current_fragment + 1) & ((1 << FRAGMENTS_PER_MOTOR_BITS) - 1);
+			BUFFER_CHECK(buffer, current_fragment);
+			current_buffer = &buffer[current_fragment];
+			if (current_fragment != last_fragment) {
+				for (uint8_t m = 0; m < active_motors; ++m) {
+					//debug("active %d %d", m, (*current_buffer)[m][0]);
+					BUFFER_CHECK(motor, m);
+					if ((*current_buffer)[m][0] != int8_t(0x80))
+						motor[m].intflags |= Motor::ACTIVE;
+					else
+						motor[m].intflags &= ~Motor::ACTIVE;
+				}
+				BUFFER_CHECK(settings, current_fragment);
+				current_len = settings[current_fragment].len;
+			}
+			else {
+				// Underrun.
+				step_state = 1;
+				//debug("underrun");
+			}
+		}
+	}
+}
+#endif
 
 #include ARCH_INCLUDE
 

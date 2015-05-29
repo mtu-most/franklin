@@ -52,6 +52,7 @@ void setup(char const *port, char const *run_id)
 	which_autosleep = 0;
 	timeout = 0;
 	run_file_map = NULL;
+	wait_for_reply = false;
 #ifdef HAVE_AUDIO
 	audio_head = 0;
 	audio_tail = 0;
