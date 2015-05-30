@@ -72,6 +72,16 @@
 	volatile uint8_t step_bitmask, dir_bitmask;
 // }}}
 
+static inline void arch_disable_isr() { // {{{
+	TIMSK1 = 0;
+} // }}}
+
+static inline void arch_enable_isr() { // {{{
+	TIMSK1 = 1 << OCIE1A;
+} // }}}
+
+static inline void arch_set_speed(uint16_t count);
+
 // Everything before this line is used at the start of firmware.h; everything after it at the end.
 #else
 
@@ -444,8 +454,10 @@ static inline void arch_msetup(uint8_t m) { // {{{
 } // }}}
 
 static inline void arch_set_speed(uint16_t count) { // {{{
-	if (count == 0)
+	if (count == 0) {
+		TIMSK1 = 0;
 		step_state = 1;
+	}
 	else {
 		uint32_t c = count;
 		c *= 16;
@@ -458,7 +470,7 @@ static inline void arch_set_speed(uint16_t count) { // {{{
 		TCNT1L = 0;
 		// Clear and enable interrupt.
 		TIFR1 = 1 << OCF1A;
-		TIMSK1 |= 1 << OCIE1A;
+		TIMSK1 = 1 << OCIE1A;
 	}
 } // }}}
 // }}}
@@ -750,9 +762,13 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"pop 17"			"\n"
 		"\t"	"pop 1"				"\n"
 		"\t"	"pop 0"				"\n"
+		"\t"	"lds 16, step_state"		"\n"
+		"\t"	"cpi 16, 1"			"\n"
+		"\t"	"breq 1f"			"\n"
 		"\t"	"ldi 27, %[timskval]"		"\n"
 		"\t"	"cli"				"\n"
 		"\t"	"sts %[timsk], 27"		"\n"
+	"1:"						"\n"
 		"\t"	"pop 27"			"\n"
 	"isr_end16:"					"\n"
 		"\t"	"pop 16"			"\n"

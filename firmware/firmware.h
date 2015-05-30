@@ -1,7 +1,7 @@
 #ifndef _FIRMWARE_H
 #define _FIRMWARE_H
 
-#define FAST_ISR
+//#define FAST_ISR
 
 #include <stdarg.h>
 #include ARCH_INCLUDE
@@ -159,6 +159,8 @@ struct Pin_t {
 		}
 	}
 	void set_state(uint8_t new_state) {
+		//uint8_t old_enabled_pins = enabled_pins;
+		//uint8_t old_state = state;
 		if (CONTROL_RESET(state) != CONTROL_CURRENT(state))
 			enabled_pins -= 1;
 		clear_event();
@@ -169,6 +171,7 @@ struct Pin_t {
 			state |= CTRL_EVENT;
 			pin_events += 1;
 		}
+		//debug("new enabled: %d %d %d", old_enabled_pins, enabled_pins, old_state, new_state);
 	}
 	ARCH_PIN_DATA
 };
@@ -411,10 +414,12 @@ static inline void write_current_pos(uint8_t offset) {
 	sei();
 }
 
-#ifndef FAST_ISR
 static inline void SLOW_ISR() {
+#ifndef FAST_ISR
 	if (step_state < 2)
 		return;
+	arch_disable_isr();
+	sei();
 	move_phase += 1;
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (~motor[m].intflags & Motor::ACTIVE)
@@ -470,13 +475,16 @@ static inline void SLOW_ISR() {
 			}
 			else {
 				// Underrun.
-				step_state = 1;
+				arch_set_speed(0);
 				//debug("underrun");
 			}
 		}
 	}
-}
+	cli();
+	if (step_state != 1)
+		arch_enable_isr();
 #endif
+}
 
 #include ARCH_INCLUDE
 

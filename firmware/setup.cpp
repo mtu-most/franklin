@@ -42,7 +42,7 @@ void setup()
 	// Set up movement state.
 	last_len = 0;
 	stopping = -1;
-	step_state = 1;
+	arch_set_speed(0);
 	current_len = 0;
 	active_motors = 0;
 	move_phase = 0;

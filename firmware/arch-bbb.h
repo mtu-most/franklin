@@ -138,60 +138,7 @@ static inline void arch_tick() {
 		serial_buffer_head = n;
 	}
 	// Do moves.
-	if (step_state < 2)
-		return;
-	move_phase += 1;
-	for (int m = 0; m < active_motors; ++m) {
-		if (~motor[m].intflags & Motor::ACTIVE)
-			continue;
-		int sample = (*current_buffer)[m][current_sample];
-		if (sample == 0)
-			continue;
-		// Set dir.
-		if (sample < 0)
-			RESET(motor[m].dir_pin);
-		else
-			SET(motor[m].dir_pin);
-		int target = abs(sample) * move_phase / full_phase - motor[m].steps_current;
-		//debug("sample %d %d %d %d %d %d %d", m, sample, abs(sample), move_phase, full_phase, target, motor[m].steps_current);
-		if (target == 0)
-			continue;
-		motor[m].steps_current += target;
-		motor[m].current_pos += sample > 0 ? target : -target;
-		for (int i = 0; i < target; ++i) {
-			SET(motor[m].step_pin);
-			RESET(motor[m].step_pin);
-		}
-	}
-	//debug("iteration frag %d sample %d = %d current %d pos %d", current_fragment, current_sample, (*current_buffer)[0][current_sample], motor[0].steps_current, motor[0].current_pos);
-	if (move_phase >= full_phase) {
-		move_phase = 0;
-		if (step_state == 2)
-			step_state = 0;
-		for (int m = 0; m < active_motors; ++m)
-			motor[m].steps_current = 0;
-		current_sample += 1;
-		if (current_sample >= current_len) {
-			current_sample = 0;
-			current_fragment = (current_fragment + 1) & ((1 << FRAGMENTS_PER_MOTOR_BITS) - 1);
-			current_buffer = &buffer[current_fragment];
-			if (current_fragment != last_fragment) {
-				for (int m = 0; m < active_motors; ++m) {
-					//debug("active %d %d", m, (*current_buffer)[m][0]);
-					if ((*current_buffer)[m][0] != int8_t(0x80))
-						motor[m].intflags |= Motor::ACTIVE;
-					else
-						motor[m].intflags &= ~Motor::ACTIVE;
-				}
-				current_len = settings[current_fragment].len;
-			}
-			else {
-				// Underrun.
-				//debug("underrun");
-				step_state = 1;
-			}
-		}
-	}
+	SLOW_ISR();
 }
 // }}}
 

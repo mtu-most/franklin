@@ -243,8 +243,6 @@ function select_printer(port) { // {{{
 	else
 		selected_port = port;
 	selected_printer = printers[port];
-	if (selected_printer === undefined)
-		return;
 	for (var p in ports) {
 		if (typeof ports[p] != 'object')
 			continue;
@@ -261,7 +259,7 @@ function select_printer(port) { // {{{
 				ports[p][2].AddClass('hidden');
 		}
 	}
-	if (selected_printer !== null) {
+	if (selected_printer !== null && selected_printer !== undefined) {
 		update_state(selected_printer.state);
 	}
 	else {

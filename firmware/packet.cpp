@@ -115,7 +115,9 @@ void packet()
 				debug("invalid pin in control: %d", command(2 + i + 1));
 				continue;
 			}
-			pin[command(2 + i + 1)].set_state((pin[command(2 + i + 1)].state & ~0xc) | (command(2 + i) & 0xc));
+			uint8_t value = command(2 + i);
+			uint8_t p = command(2 + i + 1);
+			pin[p].set_state((pin[p].state & ~0xc) | (value & 0xc));
 			switch (CONTROL_CURRENT(command(2 + i))) {
 			case CTRL_RESET:
 				RESET(command(2 + i + 1));

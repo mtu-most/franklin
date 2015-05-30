@@ -1,10 +1,8 @@
 #include "firmware.h"
 
 void handle_motors() {
-	if (step_state == 1) {
-		arch_set_speed(0);
+	if (step_state == 1)
 		return;
-	}
 	last_active = seconds();
 	cli();
 	uint8_t state = step_state;
