@@ -404,7 +404,7 @@ void abort_move(int pos) { // {{{
 	//	fcpdebug(0, 0, "starting hwpos %x", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 	moving = true;
 	//debug("restoring position for fragment %d to position %d", current_fragment, pos);
-	while (current_fragment_pos < pos) {
+	while (moving && current_fragment_pos < pos) {
 		//debug("tick %d %d %d", current_fragment_pos, settings.hwtime, current_fragment);
 		apply_tick();
 		//if (num_spaces > 0 && spaces[0].num_axes > 0)

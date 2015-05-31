@@ -1176,7 +1176,7 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("N t %s" % (self.home_target))
-				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True)[1](None)
+				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 1:
@@ -1197,7 +1197,7 @@ class Printer: # {{{
 				k = self.home_target.keys()[0]
 				dist = abs(self.home_target[k] - self.spaces[self.home_space].get_current_pos(k))
 				if dist > 0:
-					self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True)[1](None)
+					self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
 					return
 				# Fall through.
 			#log('done 1')
@@ -1214,7 +1214,7 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("1 t %s" % (self.home_target))
-				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True)[1](None)
+				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 2:
@@ -1234,7 +1234,7 @@ class Printer: # {{{
 				#log("2 t %s" % (self.home_target))
 				k = self.home_target.keys()[0]
 				dist = abs(self.home_target[k] - self.spaces[self.home_space].get_current_pos(k))
-				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True)[1](None)
+				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
 				return
 			if len(self.home_target) > 0:
 				log('Warning: not all limits were found during homing')
@@ -1289,7 +1289,7 @@ class Printer: # {{{
 					self.home_cb[0] = False
 					if self.home_cb not in self.movecb:
 						self.movecb.append(self.home_cb)
-					self.goto({self.home_space: target}, cb = True)[1](None)
+					self.goto({self.home_space: target}, cb = True, force = True)[1](None)
 					return
 			# Fall through.
 		if self.home_phase == 5:
@@ -1332,7 +1332,7 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log('target: %s' % repr(target))
-				self.goto({self.home_space: target}, cb = True)[1](None)
+				self.goto({self.home_space: target}, cb = True, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 7:
@@ -1702,10 +1702,13 @@ class Printer: # {{{
 		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
 	# }}}
 	@delayed
-	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False, probe = False): # {{{
+	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False, probe = False, force = False): # {{{
 		#log('goto %s %s %s %d %d' % (repr(moves), f0, f1, cb, probe))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
+		if not force and self.home_phase is not None and not self.paused:
+			log('ignoring goto during home')
+			return
 		self.queue.append((id, moves, f0, f1, cb, probe))
 		if not self.wait:
 			self._do_queue()
