@@ -369,7 +369,7 @@ static inline void hwpacket(int len) {
 		//debug("running -> %x", running_fragment);
 		if (current_fragment == running_fragment && (command[1][0] & ~0x10) == HWC_DONE) {
 			debug("Done received, but should be underrun");
-			abort();
+			//abort();
 		}
 		if (!out_busy)
 			buffer_refill();
@@ -890,24 +890,27 @@ static inline off_t arch_send_audio(uint8_t *map, off_t pos, off_t max) {
 	return pos + len;
 }
 
+static inline void arch_do_discard() {
+	avr_buffer[0] = HWC_DISCARD;
+	avr_buffer[1] = discard_pending;
+	discard_pending = 0;
+	prepare_packet(avr_buffer, 2);
+	avr_send();
+}
+
 static inline void arch_discard() {
 	// Discard much of the buffer, so the upcoming change will be used almost immediately.
 	if (!avr_running || stopping || avr_homing)
 		return;
-	if (avr_filling) {
-		discard_pending = true;
-		return;
-	}
-	int fragments = current_fragment - running_fragment;
+	int fragments = (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	if (fragments <= 2)
 		return;
-	current_fragment = (current_fragment - (fragments - 2) + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+	discard_pending = fragments - 2;
+	current_fragment = (current_fragment - discard_pending + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	//debug("current discard -> %x", current_fragment);
 	restore_settings();
-	avr_buffer[0] = HWC_DISCARD;
-	avr_buffer[1] = fragments - 2;
-	prepare_packet(avr_buffer, 2);
-	avr_send();
+	if (!avr_filling)
+		arch_do_discard();
 }
 // }}}
 

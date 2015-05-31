@@ -389,7 +389,8 @@ EXTERN bool moving, aborting, stopped, prepared;
 EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.
 EXTERN int sending_fragment;	// To compute how many fragments are in use from free_fragments.
-EXTERN bool start_pending, stop_pending, discard_pending;
+EXTERN bool start_pending, stop_pending, discarding;
+EXTERN int discard_pending;
 EXTERN float done_factor;
 EXTERN uint8_t requested_temp;
 EXTERN bool refilling;

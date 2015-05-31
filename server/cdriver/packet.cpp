@@ -407,9 +407,12 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_WRITE_GLOBALS");
 #endif
-		addr = 2;
+		discarding = true;
 		arch_discard();
+		addr = 2;
 		globals_load(addr);
+		discarding = false;
+		buffer_refill();
 		return;
 	}
 	case CMD_READ_SPACE_INFO:
@@ -473,9 +476,12 @@ void packet()
 			abort();
 			return;
 		}
+		discarding = true;
 		arch_discard();
 		addr = 3;
 		spaces[which].load_info(addr);
+		discarding = false;
+		buffer_refill();
 		return;
 	}
 	case CMD_WRITE_SPACE_AXIS:
@@ -490,9 +496,12 @@ void packet()
 			abort();
 			return;
 		}
+		discarding = true;
 		arch_discard();
 		addr = 4;
 		spaces[which].load_axis(axis, addr);
+		discarding = false;
+		buffer_refill();
 		return;
 	}
 	case CMD_WRITE_SPACE_MOTOR:
@@ -507,9 +516,12 @@ void packet()
 			abort();
 			return;
 		}
+		discarding = true;
 		arch_discard();
 		addr = 4;
 		spaces[which].load_motor(motor, addr);
+		discarding = false;
+		buffer_refill();
 		return;
 	}
 	case CMD_READ_TEMP:
