@@ -299,7 +299,7 @@ function Pins_gpio(num) {
 // }}}
 
 
-function Label() {	// {{{
+function Label(printer) {	// {{{
 	var ret = Create('div', 'tab');
 	ret.AddEvent('click', function() { select_printer(this.port); });
 	ret.port = port;

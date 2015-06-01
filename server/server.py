@@ -333,9 +333,9 @@ class Connection: # {{{
 	# }}}
 	def upload_options(self, port): # {{{
 		if port == '/dev/ttyO0':
-			return (('bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone)', True),)
+			return (('bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone)'),)
 		else:
-			return (('melzi', 'atmega1284p with optiboot (Melzi)', False), ('sanguinololu', 'atmega1284p (Sanguinololu)', True), ('ramps', 'atmega2560 (Ramps)', True), ('mega', 'atmega1280', True), ('mini', 'atmega328 (Uno)', True))
+			return (('melzi', 'atmega1284p with optiboot (Melzi)'), ('sanguinololu', 'atmega1284p (Sanguinololu)'), ('ramps', 'atmega2560 (Ramps)'), ('mega', 'atmega1280'), ('mini', 'atmega328 (Uno)'))
 	# }}}
 	def _get_info(self, board): # {{{
 		sudo = ()

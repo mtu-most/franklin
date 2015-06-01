@@ -270,20 +270,7 @@ function select_printer(port) { // {{{
 function upload_buttons(port, ul, buttons) { // {{{
 	for (var b = 0; b < buttons.length; ++b) {
 		var li = ul.AddElement('li');
-		// Add UUID button.
-		var button = li.AddElement('button');
-		button.type = 'button';
-		if (buttons[b][2]) {
-			button.target = buttons[b][0];
-			button.onclick = function() {
-				rpc.call('new_uuid', [port, this.target], {}, function(ret) { if (ret) alert('Problem setting new UUID: ' + ret);});
-			};
-		}
-		else {
-			button.disabled = true;
-		}
-		button.AddText('Set new UUID');
-		// And the upload button.
+		// Add the upload button.
 		button = li.AddElement('button');
 		button.type = 'button';
 		button.target = buttons[b][0];
@@ -471,7 +458,7 @@ function queue_print(printer) { // {{{
 function new_port() { // {{{
 	var p = port;
 	var nop = NoPrinter();
-	ports[p] = [Label(), nop, null, null];
+	ports[p] = [Label(null), nop, null, null];
 	ports[p][0].AddClass('setup');
 	labels_element.Add(ports[p][0]);
 	printers_element.Add(ports[p][1]);
@@ -558,6 +545,9 @@ function del_printer() { // {{{
 	printers_element.removeChild(ports[port][2]);
 	ports[port][2] = null;
 	ports[port][3] = null;
+	labels_element.removeChild(ports[port][0]);
+	ports[port][0] = Label(null);
+	labels_element.Add(ports[port][0]);
 	if (selected_port == port)
 		selected_printer = null;
 } // }}}
@@ -643,7 +633,7 @@ function update_globals() { // {{{
 		return;
 	if (ports[port][3] != printer.uuid) {
 		labels_element.removeChild(ports[port][0]);
-		ports[port][0] = Label();
+		ports[port][0] = Label(printer);
 		labels_element.Add(ports[port][0]);
 		ports[port][3] = printer.uuid;
 		select_printer();
