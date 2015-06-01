@@ -371,65 +371,11 @@ class Connection: # {{{
 			raise ValueError('board type not supported')
 		return sudo, board, protocol, baudrate, mcu
 	# }}}
-	def new_uuid(self, port, board): # {{{
-		assert self.socket.data['role'] in ('benjamin', 'admin')
-		assert board != 'melzi'
-		resumeinfo = [(yield), None]
-		if ports[port] not in (False, None):
-			c = websockets.call(resumeinfo, ports[port].printer.reset, self.socket.data['role'])
-			while c(): c.args = (yield websockets.WAIT)
-		self.disable(port)
-		sudo, brd, protocol, baudrate, mcu = self._get_info(board)
-		uuid = [random.randrange(256) for i in range(16)]
-		uuid[7] &= 0x0f
-		uuid[7] |= 0x40 
-		uuid[9] &= 0x3f
-		uuid[9] |= 0x80
-		data = ['']
-		uuid = ','.join('%d' % x for x in uuid)
-		command = sudo + (config['avrdude'], '-q', '-q', '-c', protocol) + baudrate + ('-p', mcu, '-P', port, '-n', '-U', 'eeprom:w:' + uuid + ':m')
-		log('Flashing UUID: ' + ' '.join(command))
-		process = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
-		def output(fd, cond):
-			d = ''
-			try:
-				d = process.stdout.read()
-			except:
-				data[0] += '\nError writing %s UUID: ' % board + traceback.format_exc()
-				log(repr(data[0]))
-				resumeinfo[0](data[0])
-				return False
-			if d != '':
-				self._broadcast(None, 'message', port, '\n'.join(data[0].split('\n')[-4:]))
-				data[0] += d
-				return True
-			resumeinfo[0](data[0])
-			return False
-		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
-		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
-		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP, output)
-		self._broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
-		self._broadcast(None, 'message', port, '')
-		d = (yield websockets.WAIT)
-		try:
-			process.kill()	# In case it wasn't dead yet.
-		except OSError:
-			pass
-		process.communicate()	# Clean up.
-		self._broadcast(None, 'blocked', port, None)
-		self._broadcast(None, 'message', port, '')
-		if d:
-			yield ('Setting UUID for %s: ' % board + d)
-		else:
-			yield ('New UUID for %s set' % board)
-	# }}}
 	def upload(self, port, board): # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin')
+		assert ports[port] is None
 		resumeinfo = [(yield), None]
 		sudo, brd, protocol, baudrate, mcu = self._get_info(board)
-		if ports[port] not in (False, None):
-			c = websockets.call(resumeinfo, ports[port].printer.reset, self.socket.data['role'])
-			while c(): c.args = (yield websockets.WAIT)
 		self.disable(port)
 		data = ['']
 		filename = fhs.read_data(os.path.join('firmware', brd + '.hex'), opened = False)
@@ -643,56 +589,51 @@ def detect(port): # {{{
 		traceback.print_exc();
 		return False
 	# We need to get the printer id first.  If the printer is booting, this can take a while.
-	id = [None, None, None, None]	# data, retries, timeouts, had data
+	id = [None, None, None, None]	# data, timeouts, had data
 	# Wait to make sure the command is interpreted as a new packet.
 	def part2():
 		id[0] = ''
 		id[1] = 0
-		id[2] = 0
-		id[3] = False
-		# How many times to try before accepting an invalid id.
-		# This is required, because the ID is not protected with a checksum. TODO: protect it.
+		id[2] = False
 		def timeout():
-			id[2] += 1
-			if id[2] >= 30:
+			id[1] += 1
+			if id[1] >= 30:
 				# Timeout.  Give up.
 				GLib.source_remove(watcher)
 				printer.close()
 				log('Timeout waiting for printer on port %s; giving up.' % port)
 				ports[port] = None
 				return False
-			if not id[3]:
+			if not id[2]:
 				printer.write(protocol.single['ID'])
 			else:
-				id[3] = False
+				id[2] = False
 			return True
 		def boot_printer_input(fd, cond):
-			id[3] = True
+			id[2] = True
 			ids = [protocol.single[code] for code in ('ID', 'STARTUP')]
-			# CMD:1 (ID:8)*3
-			while len(id[0]) < 25:
-				data = printer.read(25 - len(id[0]))
+			# CMD:1 ID:8 Checksum:3
+			while len(id[0]) < 12:
+				data = printer.read(12 - len(id[0]))
 				id[0] += data
 				#log('incomplete id: ' + id[0])
-				if len(id[0]) < 25:
+				if len(id[0]) < 12:
 					return True
-				if id[0][0] not in ids or not id[0][1:9] == id[0][9:17] == id[0][17:]:
+				if id[0][0] not in ids or not protocol.check(map(ord, id[0])):
 					log('skip non-id: %s (%s)' % (''.join('%02x' % ord(x) for x in id[0]), repr(id[0])))
-					id[1] += 1
-					if id[1] >= 10:
-						log('Giving up; accepting invalid id as unknown printer.')
-						id[0] = ids[0] + '\x00' * 24
+					f = len(id[0])
+					for start in ids:
+						if start in id[0][1:]:
+							p = id[0].index(start)
+							if p < f:
+								f = p
+							log('Keeping some')
+							break
 					else:
-						for start in ids:
-							if start in id[0][1:]:
-								id[0] = id[0][id[0].index(start):]
-								log('Keeping some: %s' % id[0])
-								break
-						else:
-							id[0] = ''
-							log('Discarding all')
-						return True
-			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset.
+						id[0] = ''
+					id[0] = id[0][f:]
+					return True
+			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset. (I don't think this even works, but it doesn't hurt.)
 			GLib.source_remove(timeout_handle)
 			# This printer was running and tried to send an id.  Check the id.
 			id[0] = id[0][1:9]

@@ -10,7 +10,8 @@
 #include <sys/timerfd.h>
 
 #define PROTOCOL_VERSION ((uint32_t)0)	// Required version response in BEGIN.
-#define ID_SIZE 24
+#define ID_SIZE 8
+#define UUID_SIZE 16
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
 #define MAXINT MAXLONG
@@ -65,8 +66,8 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values. {
 
 enum Command {
 	// from host
-	CMD_RESET,	// 1 byte: 0.
-	CMD_GET_UUID,	// 0
+	CMD_SET_UUID,	// 22 bytes: uuid.
+	CMD_GET_UUID,	// 0.  Reply: UUID.
 	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
 	CMD_RUN_FILE,	// n byte: filename.
 	CMD_PROBE,	// same.  Reply (later): LIMIT/MOVECB.
@@ -342,7 +343,7 @@ EXTERN HostSerial host_serial;
 #define FULL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
 
 // Globals
-EXTERN unsigned char uuid[16];
+EXTERN unsigned char uuid[UUID_SIZE];
 EXTERN uint8_t num_spaces;
 EXTERN uint8_t num_extruders;
 EXTERN uint8_t num_temps;
@@ -488,7 +489,6 @@ bool globals_load(int32_t &address);
 void globals_save(int32_t &address);
 
 // base.cpp
-void reset();
 void disconnect();
 uint32_t utime();
 uint32_t millis();

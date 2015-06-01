@@ -15,10 +15,8 @@ void packet()
 		// A server is running; start the watchdog.
 		arch_watchdog_enable();
 		write_ack();
-		for (uint8_t i = 0; i < ID_SIZE / 3; ++i) {
-			for (uint8_t k = 0; k < 3; ++k)
-				printerid[k * (ID_SIZE / 3) + i] = command(2 + i);
-		}
+		for (uint8_t i = 0; i < ID_SIZE / 3; ++i)
+			printerid[1 + i] = command(2 + i);
 		// Because this is a new connection: reset active_motors and all ADC pins.
 		active_motors = 0;
 		for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
@@ -35,11 +33,11 @@ void packet()
 		reply[8] = NUM_MOTORS;
 		reply[9] = 1 << FRAGMENTS_PER_MOTOR_BITS;
 		reply[10] = BYTES_PER_FRAGMENT;
-		for (uint8_t i = 0; i < 16; ++i) {
+		for (uint8_t i = 0; i < UUID_SIZE; ++i) {
 			BUFFER_CHECK(reply, 11 + i);
 			reply[11 + i] = uuid[i];
 		}
-		reply_ready = 27;
+		reply_ready = 11 + UUID_SIZE;
 		return;
 	}
 	case CMD_PING:
@@ -49,18 +47,14 @@ void packet()
 		write_ack();
 		return;
 	}
-	case CMD_RESET: // reset controller; used before reprogramming flash.
+	case CMD_SET_UUID: // reset controller; used before reprogramming flash.
 	{
-		cmddebug("CMD_RESET");
-		uint32_t magic = *reinterpret_cast <volatile int32_t *>(&command(1));
-		if (magic != RESET_MAGIC) {
-			debug("invalid reset magic %" L "x", F(magic));
-			write_stall();
-			return;
+		cmddebug("CMD_SET_UUID");
+		for (uint8_t i = 0; i < UUID_SIZE; ++i) {
+			uuid[i] = command(1 + i);
+			EEPROM.write(i, uuid[i]);
 		}
 		write_ack();
-		arch_serial_flush();
-		arch_reset();
 	}
 	case CMD_SETUP:
 	{

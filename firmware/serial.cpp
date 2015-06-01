@@ -84,7 +84,7 @@ static inline void inc_tail(int16_t amount) { // {{{
 }
 // }}}
 
-// There may be serial data available.
+// Check if there is serial data available.  This is not running from an interrupt, because it must 
 void serial() { // {{{
 	uint16_t milliseconds = millis();
 	sdebug2("command end %d", command_end);
@@ -155,9 +155,7 @@ void serial() { // {{{
 			// connects to the printer.  This may be a reconnect,
 			// and can happen at any time.
 			// Response is to send the printer id, and temporarily disable all temperature readings.
-			arch_serial_write(CMD_ID);
-			for (uint8_t i = 0; i < ID_SIZE; ++i)
-				arch_serial_write(printerid[i]);
+			send_id(CMD_ID);
 			inc_tail(1);
 			continue;
 		default:
@@ -288,20 +286,22 @@ void serial() { // {{{
 // }}}
 
 // Set checksum bytes. {{{
-static void prepare_packet(int16_t len)
+static int16_t prepare_packet(int16_t len, uint8_t *packet = pending_packet)
 {
 	sdebug2("prepare");
 	if (len > MAX_REPLY_LEN)
 	{
 		debug("packet is too large: %d > %d", len, MAX_REPLY_LEN);
-		return;
+		return 0;
 	}
-	// Set flipflop bit.
-	pending_packet[0] &= ~0x10;
-	pending_packet[0] ^= ff_out;
+	if (packet == pending_packet) {
+		// Set flipflop bit.
+		packet[0] &= ~0x10;
+		packet[0] ^= ff_out;
 #ifdef DEBUG_FF
-	debug("use ff_out: %d", ff_out);
+		debug("use ff_out: %d", ff_out);
 #endif
+	}
 	// Compute the checksums.  This doesn't work for size in (1, 2, 4), so
 	// the protocol requires an initial 0 at positions 1, 2 and 5 to make
 	// the checksum of those packets work.  For size % 3 != 0, the first
@@ -309,13 +309,13 @@ static void prepare_packet(int16_t len)
 	// they must have been filled in at that point.  (This is also the
 	// reason (1, 2, 4) need special handling.)
 	if (len == 1) {
-		pending_packet[1] = 0;
-		pending_packet[2] = 0;
+		packet[1] = 0;
+		packet[2] = 0;
 	}
 	else if (len == 2)
-		pending_packet[2] = 0;
+		packet[2] = 0;
 	else if (len == 4)
-		pending_packet[5] = 0;
+		packet[5] = 0;
 	for (int16_t t = 0; t < (len + 2) / 3; ++t)
 	{
 		uint8_t sum = t & 7;
@@ -323,8 +323,7 @@ static void prepare_packet(int16_t len)
 		{
 			uint8_t check = 0;
 			for (uint8_t p = 0; p < 3; ++p) {
-				BUFFER_CHECK(pending_packet, 3 * t + p);
-				check ^= pending_packet[3 * t + p] & MASK[bit][p];
+				check ^= packet[3 * t + p] & MASK[bit][p];
 			}
 			check ^= sum & MASK[bit][3];
 			check ^= check >> 4;
@@ -333,10 +332,9 @@ static void prepare_packet(int16_t len)
 			if (check & 1)
 				sum ^= 1 << (bit + 3);
 		}
-		BUFFER_CHECK(pending_packet, len + t);
-		pending_packet[len + t] = sum;
+		packet[len + t] = sum;
 	}
-	pending_len = len + (len + 2) / 3;
+	return len + (len + 2) / 3;
 }
 // }}}
 
@@ -351,6 +349,13 @@ void send_packet()
 	}
 }
 // }}}
+
+void send_id(uint8_t cmd) { // {{{
+	printerid[0] = cmd;
+	int16_t len = prepare_packet(ID_SIZE + 1, printerid);
+	for (uint8_t i = 0; i < len; ++i)
+		arch_serial_write(printerid[i]);
+} // }}}
 
 void try_send_next() { // Call send_packet if we can. {{{
 	sdebug2("try send");
@@ -371,7 +376,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 				*reinterpret_cast <int32_t *>(&pending_packet[2 + 4 * mi]) = motor[mi].sense_pos[type];
 			}
 			motor[m].flags &= ~(type ? Motor::SENSE1 : Motor::SENSE0);
-			prepare_packet(2 + 4 * active_motors);
+			pending_len = prepare_packet(2 + 4 * active_motors);
 			send_packet();
 			return;
 		} // }}}
@@ -384,7 +389,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			pending_packet[1] = p;
 			pending_packet[2] = pin[p].state & CTRL_VALUE ? 1 : 0;
 			pin[p].clear_event();
-			prepare_packet(3);
+			pending_len = prepare_packet(3);
 			send_packet();
 			return;
 		}
@@ -392,7 +397,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 	if (timeout) { // {{{
 		pending_packet[0] = CMD_TIMEOUT;
 		timeout = false;
-		prepare_packet(1);
+		pending_len = prepare_packet(1);
 		send_packet();
 		return;
 	} // }}}
@@ -422,10 +427,10 @@ void try_send_next() { // Call send_packet if we can. {{{
 		pending_packet[2] = (last_fragment - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
 		if (pending_packet[0] == CMD_UNDERRUN) {
 			write_current_pos(3);
-			prepare_packet(3 + 4 * active_motors);
+			pending_len = prepare_packet(3 + 4 * active_motors);
 		}
 		else
-			prepare_packet(3);
+			pending_len = prepare_packet(3);
 		send_packet();
 		return;
 	} // }}}
@@ -437,7 +442,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		write_current_pos(3);
 		if (stopping < active_motors)
 			motor[stopping].flags &= ~Motor::LIMIT;
-		prepare_packet(3 + 4 * active_motors);
+		pending_len = prepare_packet(3 + 4 * active_motors);
 		send_packet();
 		debug_add(0x100);
 		//debug_dump();
@@ -450,7 +455,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			BUFFER_CHECK(pending_packet, i);
 			pending_packet[i] = reply[i];
 		}
-		prepare_packet(reply_ready);
+		pending_len = prepare_packet(reply_ready);
 		reply_ready = 0;
 		send_packet();
 		return;
@@ -459,7 +464,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		pending_packet[0] = CMD_HOMED;
 		write_current_pos(1);
 		home_step_time = 0;
-		prepare_packet(1 + 4 * active_motors);
+		pending_len = prepare_packet(1 + 4 * active_motors);
 		send_packet();
 		return;
 	} // }}}
@@ -472,7 +477,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 				pending_packet[0] = CMD_PONG;
 				pending_packet[1] = b;
 				ping &= ~(1 << b);
-				prepare_packet(2);
+				pending_len = prepare_packet(2);
 				send_packet();
 				return;
 			}
@@ -486,7 +491,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			BUFFER_CHECK(adcreply, i);
 			pending_packet[i] = adcreply[i];
 		}
-		prepare_packet(adcreply_ready);
+		pending_len = prepare_packet(adcreply_ready);
 		adcreply_ready = 0;
 		send_packet();
 		return;

@@ -113,12 +113,17 @@ void packet()
 	switch (command[0][1])
 	{
 #ifdef SERIAL
-	case CMD_RESET: // reset controller; used before reprogramming flash.
+	case CMD_SET_UUID: // Program a new uuid into the flash.
 	{
 #ifdef DEBUG_CMD
-		debug("CMD_RESET");
+		debug("CMD_SET_UUID");
 #endif
-		reset();
+		for (int i = 0; i < UUID_SIZE; ++i) {
+			uuid[i] = command[0][2 + i];
+			debug("uuid %d: %x", i, uuid[i]);
+		}
+		arch_set_uuid();
+		break;
 	}
 	case CMD_GET_UUID: // get uuid as received from firmware.
 	{

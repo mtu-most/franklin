@@ -53,10 +53,8 @@ void setup()
 	led_phase = 0;
 	led_pin = ~0;
 	probe_pin = ~0;
-	// Do arch-specific things.  This fills printerid.
+	// Do arch-specific things.  This fills printerid and uuid.
 	arch_setup_end();
 	// Inform host of reset.
-	arch_serial_write(CMD_STARTUP);
-	for (uint8_t i = 0; i < ID_SIZE; ++i)
-		arch_serial_write(printerid[i]);
+	send_id(CMD_STARTUP);
 }

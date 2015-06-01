@@ -42,6 +42,7 @@ import subprocess
 import traceback
 import protocol
 import mmap
+import random
 # }}}
 
 # Enable code trace. {{{
@@ -232,11 +233,17 @@ class Printer: # {{{
 		self._send_packet(struct.pack('=B', protocol.command['GET_UUID']))
 		cmd, s, m, f, e, uuid = self._get_reply()
 		uuid = map(ord, uuid)
-		uuid[7] &= 0x0f
-		uuid[7] |= 0x40
-		uuid[9] &= 0x3f
-		uuid[9] |= 0x80
-		uuid = ''.join(map(lambda x: '%02x' % x, uuid))
+		if (uuid[7] & 0xf0) != 0x40 or (uuid[9] & 0xc0) != 0x80:
+			# Broken uuid; create a new one and set it.
+			log(repr(uuid))
+			uuid = [random.randrange(256) for i in range(16)]
+			uuid[7] &= 0x0f
+			uuid[7] |= 0x40
+			uuid[9] &= 0x3f
+			uuid[9] |= 0x80
+			log('new uuid: ' + repr(uuid))
+			self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + ''.join(map(chr, uuid)))
+		uuid = ''.join(map(lambda x: '%02x' % x, uuid[:16]))
 		self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
 		assert cmd == protocol.rcommand['UUID']
 		try:
@@ -1668,10 +1675,6 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	# Useful commands.  {{{
-	def expert_reset(self): # {{{
-		log('%s resetting and dying.' % self.uuid)
-		self._send_packet(struct.pack('=BL', protocol.command['RESET'], 0xdeadbeef))
-	# }}}
 	def expert_die(self, reason): # {{{
 		log('%s dying as requested by host (%s).' % (self.uuid, reason))
 		return (WAIT, WAIT)

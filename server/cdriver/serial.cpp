@@ -39,7 +39,6 @@ static bool had_data = false;
 static bool had_stall = false;
 static bool doing_debug = false;
 static uint8_t need_id = 0;
-static char the_id[ID_SIZE];
 static char out_buffer[16];
 static uint8_t ff_in = 0;
 static uint8_t ff_out = 0;
@@ -125,7 +124,6 @@ void serial(uint8_t which)
 					continue;
 				}
 				if (need_id) {
-					the_id[ID_SIZE - need_id] = command[which][0];
 					need_id -= 1;
 					if (!need_id) {
 						// Firmware has reset.
@@ -193,7 +191,7 @@ void serial(uint8_t which)
 						debug("ID request from host");
 						continue;
 					}
-					need_id = ID_SIZE;
+					need_id = ID_SIZE + (1 + ID_SIZE + 2) / 3;
 					continue;
 				default:
 					if (!wait_for_reply)

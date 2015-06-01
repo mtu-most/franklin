@@ -20,8 +20,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#define RESET_MAGIC 0xDEADBEEF
-
 // Enable all the parts for a serial connection (which can fail) to the printer.
 #define SERIAL
 #define ADCBITS 10
@@ -42,7 +40,7 @@ enum Control { // {{{
 enum HWCommands { // {{{
 	HWC_BEGIN = 0x40,
 	HWC_PING,	// 41
-	HWC_RESET,	// 42
+	HWC_SET_UUID,	// 42
 	HWC_SETUP,	// 43
 	HWC_CONTROL,	// 44
 	HWC_MSETUP,	// 45
@@ -671,11 +669,11 @@ static inline void arch_setup_start(char const *port) {
 	arch_reset();
 }
 
-static inline void arch_force_reset() {
-	avr_buffer[0] = HWC_RESET;
-	for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
-		avr_buffer[1 + i] = RESET_MAGIC >> (i * 8);
-	prepare_packet(avr_buffer, 5);
+static inline void arch_set_uuid() {
+	avr_buffer[0] = HWC_SET_UUID;
+	for (uint8_t i = 0; i < UUID_SIZE; ++i)
+		avr_buffer[1 + i] = uuid[i];
+	prepare_packet(avr_buffer, 1 + UUID_SIZE);
 	avr_send();
 }
 
@@ -700,7 +698,7 @@ static inline void arch_setup_end(char const *run_id) {
 	FRAGMENTS_PER_BUFFER = command[1][9];
 	BYTES_PER_FRAGMENT = command[1][10];
 	//id[0][:8] + '-' + id[0][8:12] + '-' + id[0][12:16] + '-' + id[0][16:20] + '-' + id[0][20:32]
-	for (int i = 0; i < 16; ++i)
+	for (int i = 0; i < UUID_SIZE; ++i)
 		uuid[i] = command[1][11 + i];
 	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * 2];
 	avr_in_control_queue = new bool[NUM_DIGITAL_PINS];

@@ -415,13 +415,8 @@ static inline void arch_setup_start() { // {{{
 	// Enable interrupts.
 	sei();
 	// Initialize uuid from EEPROM.
-	for (uint8_t i = 0; i < 16; ++i)
+	for (uint8_t i = 0; i < UUID_SIZE; ++i)
 		uuid[i] = EEPROM.read(i);
-	//// Make it a UUID (version 4).
-	//printerid[7] &= 0x0f;
-	//printerid[7] |= 0x40;
-	//printerid[9] &= 0x3f;
-	//printerid[9] |= 0x80;
 	// printerid will be filled by CMD_BEGIN.  Initialize it to 0.
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
 		printerid[i] = 0;

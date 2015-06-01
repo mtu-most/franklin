@@ -1,5 +1,7 @@
 # Module for the communication protocol.
 
+from websockets import log
+
 single = {
 	'NACK': '\x80',
 	'ACK0': '\xb3',
@@ -12,7 +14,7 @@ single = {
 	}
 
 command = {
-	'RESET': 0x00,
+	'SET_UUID': 0x00,
 	'GET_UUID': 0x01,
 	'GOTO': 0x02,
 	'RUN_FILE': 0x03,
@@ -81,3 +83,50 @@ parsed = {
 	'WAIT': 6,
 	'CONFIRM': 7,
 }
+
+mask = [[0xc0, 0xc3, 0xff, 0x09],
+	[0x38, 0x3a, 0x7e, 0x13],
+	[0x26, 0xb5, 0xb9, 0x23],
+	[0x95, 0x6c, 0xd5, 0x43],
+	[0x4b, 0xdc, 0xe2, 0x83]]
+
+def build(packet):
+	l = len(packet)
+	num = l // 3
+	packet += [0] * (num + 1)
+	for t in range(num):
+		s = t & 7
+		for bit in range(5):
+			check = 0
+			for p in range(3):
+				check ^= packet[3 * t + p] & mask[bit][p]
+			check ^= s & mask[bit][3]
+			check ^= check >> 4
+			check ^= check >> 2
+			check ^= check >> 1
+			packet[l + t]
+			if check & 1:
+				packet[num + t] ^= 1 << (bit + 3)
+	return ''.join(map(chr, packet))
+
+def check(packet):
+	num = (len(packet) + 3) // 4
+	l = len(packet) - num
+	for t in range(num):
+		s = packet[l + t]
+		if s & 7 != t:
+			log('bad index %x %x %x' % (s, l, t))
+			return False
+		for bit in range(5):
+			check = 0
+			for p in range(3):
+				check ^= (packet[3 * t + p] if 3 * t + p < l + t else 0) & mask[bit][p]
+			check ^= s & mask[bit][3]
+			check ^= check >> 4
+			check ^= check >> 2
+			check ^= check >> 1
+			if check & 1 != 0:
+				log('bad checksum')
+				return False
+	log('good')
+	return True

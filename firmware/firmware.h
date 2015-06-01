@@ -6,7 +6,8 @@
 #include <stdarg.h>
 #include ARCH_INCLUDE
 
-#define ID_SIZE 24	// Number of bytes in printerid; 8 bytes, repeated 3 times.
+#define ID_SIZE 8	// Number of bytes in printerid; 8.
+#define UUID_SIZE 16	// Number of bytes in uuid; 16.
 #define PROTOCOL_VERSION 0
 
 #define ADC_INTERVAL 1000	// Delay 1 ms between ADC measurements.
@@ -27,8 +28,6 @@
 #define MAXLONG (int32_t(uint32_t(~0) >> 1))
 #define MAXINT (int(unsigned(~0) >> 1))
 
-#define RESET_MAGIC 0xDEADBEEF
-
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
 #define EXTERN extern
@@ -42,8 +41,8 @@
 		debug("Failed buffer access for " #buffer "[" #index "]"); \
 } while (0)
 
-// BEGIN reply is 27 bytes, which is the longest command that doesn't depend on NUM_MOTORS.
-#define MAX_REPLY_LEN ((3 + 4 * NUM_MOTORS) > 27 ? (3 + 4 * NUM_MOTORS) : 27)
+// BEGIN reply is the longest command that doesn't depend on NUM_MOTORS.
+#define MAX_REPLY_LEN ((3 + 4 * NUM_MOTORS) > 11 + UUID_SIZE ? (3 + 4 * NUM_MOTORS) : 11 + UUID_SIZE)
 #define REPLY_BUFFER_SIZE (MAX_REPLY_LEN + (MAX_REPLY_LEN + 2) / 3)
 
 #define SERIAL_MASK ((1 << SERIAL_SIZE_BITS) - 1)
@@ -67,8 +66,8 @@ template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 #define fabs abs
 
 EXTERN volatile uint16_t debug_value, debug_value1;
-EXTERN uint8_t printerid[ID_SIZE];
-EXTERN uint8_t uuid[16];
+EXTERN uint8_t printerid[1 + ID_SIZE + (1 + ID_SIZE + 2) / 3];
+EXTERN uint8_t uuid[UUID_SIZE];
 EXTERN int16_t command_end;
 EXTERN bool had_data;
 EXTERN uint8_t reply[MAX_REPLY_LEN], adcreply[6];
@@ -181,7 +180,7 @@ enum Command {
 	// from host
 	CMD_BEGIN = 0x40,	// 0
 	CMD_PING,	// 1:code
-	CMD_RESET,	// 4:magic	reset the mcu.
+	CMD_SET_UUID,	// 16: UUID
 	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin, 1:probe_pin 1:pin_flags 2:timeout
 	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
 	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:sense_pin, 1:flags
@@ -231,8 +230,8 @@ static inline int16_t minpacketlen() {
 		return 2;
 	case CMD_PING:
 		return 2;
-	case CMD_RESET:
-		return 5;
+	case CMD_SET_UUID:
+		return 1 + UUID_SIZE;
 	case CMD_SETUP:
 		return 11;
 	case CMD_CONTROL:
@@ -397,6 +396,7 @@ void send_packet();
 void try_send_next();
 void write_ack();
 void write_stall();
+void send_id(uint8_t cmd);
 
 // setup.cpp
 void setup();
