@@ -41,6 +41,7 @@ static void handle_adc() {
 				}
 			}
 			else {
+				//debug("adc set %d %d %d", n, value, adc[adc_current].value[n]);
 				SET(adc[adc_current].linked[n]);
 				if (n == 0 && !adc[adc_current].is_on) {
 					led_fast += 1;
@@ -136,7 +137,9 @@ int main(void) {
 		}
 		arch_tick();
 		//debug("!%x %x %x %x.", enabled_pins, timeout_time, dt, last_active);
-		if (debug_value != 0x1337)
+		if (debug_value != debug_value1) {
+			debug_value1 = debug_value;
 			debug("!%x.", debug_value);
+		}
 	}
 }

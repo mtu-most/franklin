@@ -1,7 +1,7 @@
 #ifndef _FIRMWARE_H
 #define _FIRMWARE_H
 
-//#define FAST_ISR
+#define FAST_ISR
 
 #include <stdarg.h>
 #include ARCH_INCLUDE
@@ -218,10 +218,11 @@ enum Command {
 	CMD_AUDIO = 0xc0
 };
 
-static inline volatile uint8_t &command(int16_t pos) {
+static inline uint8_t command(int16_t pos) {
 	//debug("cmd %x = %x (%x + %x & %x)", (serial_buffer_tail + pos) & SERIAL_MASK, serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK], serial_buffer_tail, pos, SERIAL_MASK);
-	BUFFER_CHECK(serial_buffer, (serial_buffer_tail + pos) & SERIAL_MASK);
-	return serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK];
+	uint16_t p = (serial_buffer_tail + pos) & SERIAL_MASK;
+	BUFFER_CHECK(serial_buffer, p);
+	return serial_buffer[p];
 }
 
 static inline int16_t minpacketlen() {

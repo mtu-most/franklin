@@ -220,7 +220,7 @@ static inline void avr_get_current_pos(int offset, bool check) {
 				spaces[ts].motor[tm]->settings.current_pos *= -1;
 			spaces[ts].motor[tm]->settings.current_pos -= avr_pos_offset[tm + mi];
 			cpdebug(ts, tm, "cpa offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
-			fcpdebug(ts, tm, "getpos offset %d diff %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos - old);
+			cpdebug(ts, tm, "getpos offset %d diff %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos - old);
 			if (check && old != spaces[ts].motor[tm]->settings.current_pos)
 				//abort();
 				debug("WARNING: out of sync!");

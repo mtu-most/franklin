@@ -4,6 +4,17 @@
 #define cmddebug(...) do {} while (0)
 //#define cmddebug(...) do { debug_add(command(0)); } while (0)
 
+static uint16_t read_16(int pos) {
+	return command(pos) | (command(pos + 1) << 8);
+}
+
+static uint32_t read_32(int pos) {
+	uint32_t ret = 0;
+	for (uint8_t b = 0; b < 4; ++b)
+		ret |= command(pos + b) << (8 * b);
+	return ret;
+}
+
 void packet()
 {
 	last_active = seconds();
@@ -70,7 +81,7 @@ void packet()
 		for (uint8_t m = command(1); m < active_motors; ++m)
 			motor[m].disable(m);
 		active_motors = command(1);
-		time_per_sample = *reinterpret_cast <volatile int32_t *>(&command(2));
+		time_per_sample = read_32(2);
 		uint8_t p = led_pin;
 		led_pin = command(6);
 		if (p != led_pin) {
@@ -88,7 +99,7 @@ void packet()
 				SET_INPUT(probe_pin);
 		}
 		pin_flags = command(8);
-		timeout_time = *reinterpret_cast <volatile uint16_t *>(&command(9));
+		timeout_time = read_16(9);
 		uint8_t fpb = 0;
 		while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << fpb)
 			fpb += 1;
@@ -220,7 +231,7 @@ void packet()
 				}
 			}
 			adc[a].linked[i] = command(2 + i);
-			adc[a].value[i] = *reinterpret_cast <volatile uint16_t *>(&command(4 + 2 * i));
+			adc[a].value[i] = read_16(4 + 2 * i);
 			//debug("adc %d link %d pin %d value %x", a, i, adc[a].linked[i], adc[a].value[i]);
 		}
 		if (adc_phase == INACTIVE && ~adc[a].value[0] & 0x8000) {
@@ -266,7 +277,7 @@ void packet()
 			}
 		}
 		if (homers > 0) {
-			home_step_time = *reinterpret_cast <volatile uint32_t *>(&command(1));
+			home_step_time = read_32(1);
 			// current_sample is always 0 while homing; set len to 2, so it doesn't go to the next fragment.
 			settings[current_fragment].len = 2;
 			current_len = settings[current_fragment].len;

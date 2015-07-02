@@ -78,9 +78,11 @@ static int16_t serial_available() { // {{{
 // }}}
 
 static inline void inc_tail(int16_t amount) { // {{{
+	cli();
 	serial_buffer_tail = (serial_buffer_tail + amount) & SERIAL_MASK;
 	if (serial_overflow && serial_buffer_head == serial_buffer_tail)
 		clear_overflow();
+	sei();
 }
 // }}}
 
@@ -496,7 +498,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		send_packet();
 		return;
 	} // }}}
-	sdebug2("Nothing to send %d %d %x", cf, notified_current_fragment, debug_value);
+	sdebug2("Nothing to send %d %d", cf, notified_current_fragment);
 }
 // }}}
 
