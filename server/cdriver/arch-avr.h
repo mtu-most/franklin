@@ -69,8 +69,6 @@ enum HWCommands { // {{{
 	HWC_SENSE1,	// 6a
 	HWC_TIMEOUT,	// 6b
 	HWC_PINCHANGE,	// 6c
-
-	HWC_AUDIO = 0xc0
 };
 // }}}
 
@@ -866,24 +864,23 @@ static inline void arch_home() {
 }
 
 static inline off_t arch_send_audio(uint8_t *map, off_t pos, off_t max) {
-	int len = max - pos >= BYTES_PER_FRAGMENT ? BYTES_PER_FRAGMENT : max - pos;
+	int len = max - pos >= BYTES_PER_FRAGMENT  - 1 ? BYTES_PER_FRAGMENT - 1 : max - pos;
 	if (len <= 0)
 		return max;
 	avr_buffer[0] = HWC_START_MOVE;
-	avr_buffer[1] = len;
+	avr_buffer[1] = len + 1;
 	avr_buffer[2] = 1;
 	sending_fragment = 2;
 	prepare_packet(avr_buffer, 3);
 	avr_send();
 	avr_filling = true;
-	while (!stopping) {
-		avr_buffer[0] = HWC_AUDIO;
-		avr_buffer[1] = 0;
-		for (int i = 0; i < len; ++i)
-			avr_buffer[2 + i] = map[pos + i];
-		prepare_packet(avr_buffer, 2 + len);
-		avr_send();
-	}
+	avr_buffer[0] = HWC_MOVE;
+	avr_buffer[1] = 0;
+	avr_buffer[2] = 0x80;
+	for (int i = 0; i < len; ++i)
+		avr_buffer[3 + i] = map[pos + i];
+	prepare_packet(avr_buffer, 3 + len);
+	avr_send();
 	avr_filling = false;
 	return pos + len;
 }

@@ -101,9 +101,19 @@ void run_file_fill_queue() {
 	lock = true;
 	rundebug("run queue, wait = %d tempwait = %d q = %d %d", run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start);
 	if (run_file_audio) {
-		while (run_file_map && settings.run_file_current < run_file_num_records && !run_file_wait) {
+		while (true) {
+			if (!run_file_map || settings.run_file_current >= run_file_num_records)
+				break;
+			int16_t next = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
+			if (next == running_fragment)
+				break;
 			settings.run_file_current = arch_send_audio(reinterpret_cast <uint8_t *>(run_file_map), settings.run_file_current, run_file_num_records);
+			current_fragment = next;
+			store_settings();
+			if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping)
+				arch_start_move(0);
 		}
+		lock = false;
 		return;
 	}
 	while (run_file_map && (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2 && (run_file_map[settings.run_file_current].type == RUN_GOTO || !arch_running()) && !settings.queue_full && settings.run_file_current < run_file_num_records && !run_file_wait_temp && !run_file_wait) {

@@ -997,25 +997,25 @@ class Printer: # {{{
 		data = [ord(x) for x in wav.readframes(wav.getnframes())]
 		# Data is 16 bit signed ints per channel, but it is read as bytes.  First convert it to 16 bit numbers.
 		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2], data[1::2])]
-		# Determine minimum and scale.
+		# Determine average.
 		minimum = float(min(data))
 		maximum = float(max(data))
-		scale = maximum - minimum
-		samples_per_frame = wav.getframerate() / 200.
+		average = (minimum + maximum) / 2
+		#log('stats: %f %f %f' % (minimum, maximum, average))
+		samples_per_frame = wav.getframerate() / 400.	# TODO: because 5 ms/step, but that may become dynamic.
 		with fhs.write_spool(os.path.join(self.uuid, 'audio', name + os.path.extsep + 'bin')) as dst:
 			count = 0
-			time = 0
 			state = False
 			todo = samples_per_frame
 			for t, sample in enumerate(data):
-				s = (sample - minimum) > scale
+				s = sample > average
 				if s != state:
 					state = s
 					count += 1
 				todo -= 1
 				if todo <= 0:
 					todo = samples_per_frame
-					f.write(chr(count))
+					dst.write(chr(count))
 					count = 0
 		self.audioqueue[os.path.splitext(name)[0]] = wav.getnframes()
 		return ''
@@ -1940,10 +1940,12 @@ class Printer: # {{{
 	@delayed
 	def benjamin_audio_play(self, id, name, motors = None): # {{{
 		self.audio_id = id
+		self.sleep(False)
+		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
 		self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 1) + filename.encode('utf8'))
 	# }}}
-	def benjaminaudio_add_file(self, filename, name): # {{{
-		with open(filename) as f:
+	def benjamin_audio_add_file(self, filename, name): # {{{
+		with open(filename, 'rb') as f:
 			self._audio_add(f, name)
 	# }}}
 	def audio_list(self): # {{{

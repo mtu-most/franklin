@@ -315,6 +315,12 @@ void packet()
 			write_stall();
 			return;
 		}
+		uint8_t next = (last_fragment + 1) & FRAGMENTS_PER_MOTOR_MASK;
+		if (next == current_fragment) {
+			debug("New buffer sent with full buffer.");
+			write_stall();
+			return;
+		}
 		settings[last_fragment].len = command(1);
 		last_len = command(1);
 		filling = command(2);
@@ -328,7 +334,6 @@ void packet()
 		return;
 	}
 	case CMD_MOVE:
-	case CMD_AUDIO:
 	{
 		cmddebug("CMD_MOVE");
 		uint8_t m = command(1);
@@ -353,12 +358,19 @@ void packet()
 			write_stall();
 			return;
 		}
-		if (command(0) == CMD_AUDIO)
+		uint16_t first, last;
+		if (command(2) == 0x80) {
 			motor[m].intflags |= Motor::AUDIO;
-		else
+			first = 3;
+			last = last_len - 1;
+		}
+		else {
 			motor[m].intflags &= ~Motor::AUDIO;
-		for (uint8_t b = 0; b < last_len; ++b)
-			buffer[last_fragment][m][b] = static_cast<int8_t>(command(2 + b));
+			first = 2;
+			last = last_len;
+		}
+		for (uint8_t b = 0; b < last; ++b)
+			buffer[last_fragment][m][b] = static_cast<int8_t>(command(first + b));
 		filling -= 1;
 		if (filling == 0) {
 			//debug("filled %d; current %d notified %d", last_fragment, current_fragment, notified_current_fragment);

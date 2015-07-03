@@ -131,7 +131,7 @@ class Server(websockets.RPChttpd): # {{{
 			return False
 		post = connection.post[1].pop('file')
 		def cb(success, ret):
-			self.reply(connection, 200 if success else 400, ret.encode('utf8'), 'text/plain;charset=utf8')
+			self.reply(connection, 200 if success else 400, '' if ret is None else ret.encode('utf8'), 'text/plain;charset=utf8')
 			os.unlink(post[0]);
 			connection.socket.close()
 		if action == 'queue_add':

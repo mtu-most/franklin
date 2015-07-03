@@ -841,7 +841,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"brne 1b"			"\n"	// 2m-1		3m
 		"\t"	"dec 0"				"\n"	// 1		3m+1
 	"isr_audio_end_loop:"				"\n"
-		"\t"	"breq isr_audio_loop"		"\n"	// 2		3m+3
+		"\t"	"brne isr_audio_loop"		"\n"	// 2		3m+3
 		"\t"	"std y + %[flags], 20"		"\n"
 	"isr_audio_continue:"				"\n"
 		"\t"	"pop 31"			"\n"

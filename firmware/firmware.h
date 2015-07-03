@@ -213,9 +213,6 @@ enum Command {
 	CMD_SENSE1,	// 1:which, {4:motor_pos}*
 	CMD_TIMEOUT,	// 0
 	CMD_PINCHANGE,	// 1:which, 1: state
-
-	// from host, but not "normal".
-	CMD_AUDIO = 0xc0
 };
 
 static inline uint8_t command(int16_t pos) {
@@ -248,8 +245,6 @@ static inline int16_t minpacketlen() {
 	case CMD_START_PROBE:
 		return 3;
 	case CMD_MOVE:
-		return 3;
-	case CMD_AUDIO:
 		return 3;
 	case CMD_START:
 		return 1;

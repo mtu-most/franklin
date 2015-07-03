@@ -49,7 +49,7 @@ static inline int16_t fullpacketlen() { // {{{
 	else if ((command(0) & ~0x10) == CMD_HOME) {
 		return 5 + active_motors;
 	}
-	else if ((command(0) & ~0x10) == CMD_MOVE || (command(0) & ~0x10) == CMD_AUDIO) {
+	else if ((command(0) & ~0x10) == CMD_MOVE) {
 		return 2 + last_len;
 	}
 	else
