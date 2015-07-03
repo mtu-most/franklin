@@ -491,6 +491,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"clr 27"			"\n"
 		"\t"	"sts %[timsk], 27"		"\n"
 		"\t"	"sei"				"\n"
+		// Save all registers that are used.
 		"\t"	"push 0"			"\n"
 		"\t"	"push 1"			"\n"
 		"\t"	"push 17"			"\n"
@@ -503,11 +504,19 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"push 29"			"\n"
 		"\t"	"push 30"			"\n"
 		"\t"	"push 31"			"\n"
-		"\t"	"lds 16, active_motors"		"\n"
 		// move_phase += 1;
 		"\t"	"lds 17, move_phase"		"\n"
 		"\t"	"inc 17"			"\n"
 		"\t"	"sts move_phase, 17"		"\n"
+		// 16 is motor countdown; y is motor pointer.
+		"\t"	"lds 16, active_motors"		"\n"
+		"\t"	"ldi 28, lo8(motor)"		"\n"
+		"\t"	"ldi 29, hi8(motor)"		"\n"
+		// If active_motors is 0 and move is requested; trigger underrun immediately.
+		"\t"	"tst 16"			"\n"
+		"\t"	"brne 1f"			"\n"
+		"\t"	"rjmp isr_underrun"		"\n"
+	"1:\t"						"\n"
 
 	// Register usage:
 	// 16: motor countdown.
@@ -520,8 +529,6 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	// x: pin pointer for varying pins.	x.h is 0 a lot (but not always).
 	// y: motor pointer.
 	// z: buffer pointer (pointing at current_sample).
-		"\t"	"ldi 28, lo8(motor)"		"\n"
-		"\t"	"ldi 29, hi8(motor)"		"\n"
 		"\t"	"lds 30, current_buffer"	"\n"
 		"\t"	"lds 31, current_buffer + 1"	"\n"
 		"\t"	"lds 18, current_sample"	"\n"
@@ -577,6 +584,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		compute_steps("rjmp isr_action_continue")
 		// }}}
 
+		// Set direction.
 		"\t"	"st x, 21"			"\n"
 
 		//motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
@@ -625,7 +633,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"com 18"			"\n" \
 		"\t"	"and 1, 18"			"\n" \
 		"\t"	"sbrs 20, %[step_invert_bit]"	"\n" \
-		"\t"	"breq 1f"			"\n" \
+		"\t"	"rjmp 1f"			"\n" \
 		/* Swap contents of 19 and 1. */ \
 		"\t"	"eor 19, 1"			"\n" \
 		"\t"	"eor 1, 19"			"\n" \
@@ -634,7 +642,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 
 		setup_step_masks
 
-		// Send pulses.  Delay 1 μs is required according to a4988 datasheet.  At 16MHz, that's 16 clock cycles.
+		// Send pulses.  Delay of 1 μs is required according to a4988 datasheet.  At 16MHz, that's 16 clock cycles.
 		"\t"	"tst 0"				"\n"
 	"2:\t"		"breq 3f"			"\n"	// 1	3m+4
 		"\t"	"nop"				"\n"	// 1	3m+5
@@ -713,7 +721,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		// Check for underrun.
 		"\t"	"lds 17, last_fragment"		"\n"
 		"\t"	"cp 16, 17"			"\n"
-		"\t"	"breq 3f"			"\n"
+		"\t"	"breq isr_underrun"		"\n"
 		// There is a next fragment; set it up.
 		// Activation of all motors.
 		"\t"	"lds 17, active_motors"		"\n"
@@ -742,7 +750,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"sts current_len, 16"		"\n"
 		"\t"	"rjmp isr_end"			"\n"
 		// Underrun.
-	"3:\t"		"ldi 16, 1"			"\n"
+	"isr_underrun:\t"				"\n"
+		"\t"	"ldi 16, 1"			"\n"
 		"\t"	"sts step_state, 16"		"\n"
 	"isr_end:"					"\n"
 		"\t"	"pop 31"			"\n"
@@ -757,11 +766,11 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"pop 17"			"\n"
 		"\t"	"pop 1"				"\n"
 		"\t"	"pop 0"				"\n"
+		"\t"	"cli"				"\n"
 		"\t"	"lds 16, step_state"		"\n"
 		"\t"	"cpi 16, 1"			"\n"
 		"\t"	"breq 1f"			"\n"
 		"\t"	"ldi 27, %[timskval]"		"\n"
-		"\t"	"cli"				"\n"
 		"\t"	"sts %[timsk], 27"		"\n"
 	"1:"						"\n"
 		"\t"	"pop 27"			"\n"
@@ -782,7 +791,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"push 16"			"\n"
 		"\t"	"push 30"			"\n"
 		"\t"	"push 31"			"\n"
-		// Prepare dir bitmasks (to stack).
+		// Prepare dir bitmasks.
 		"\t"	"movw 30, 26"			"\n"
 		"\t"	"mov 16, 21"			"\n"
 		"\t"	"or 16, 0"			"\n"

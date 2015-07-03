@@ -1,7 +1,7 @@
 #ifndef _FIRMWARE_H
 #define _FIRMWARE_H
 
-//#define FAST_ISR
+#define FAST_ISR
 
 #include <stdarg.h>
 #include ARCH_INCLUDE
