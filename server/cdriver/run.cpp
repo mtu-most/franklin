@@ -23,7 +23,7 @@ struct String {
 
 static String *strings;
 
-void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa, bool audio) {
+void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa, int audio) {
 	//debug("run file %f %f %f %f %f", refx, refy, refz, sina, cosa);
 	abort_run_file();
 	if (name_len == 0)
@@ -47,7 +47,7 @@ void run_file(int name_len, char const *name, float refx, float refy, float refz
 	run_file_size = stat.st_size;
 	run_file_map = reinterpret_cast<Run_Record *>(mmap(NULL, run_file_size, PROT_READ, MAP_SHARED, fd, 0));
 	close(fd);
-	if (!audio) {
+	if (audio < 0) {
 		run_file_num_strings = read_num(run_file_size - 4 * 8 - 4);
 		strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
 		off_t pos = run_file_size - 4 * (8 + 1 + run_file_num_strings);
@@ -76,11 +76,13 @@ void run_file(int name_len, char const *name, float refx, float refy, float refz
 }
 
 void abort_run_file() {
+	run_file_finishing = false;
 	if (!run_file_map)
 		return;
 	munmap(run_file_map, run_file_size);
 	run_file_map = NULL;
 	free(strings);
+	strings = NULL;
 }
 
 enum {
@@ -100,14 +102,19 @@ void run_file_fill_queue() {
 		return;
 	lock = true;
 	rundebug("run queue, wait = %d tempwait = %d q = %d %d", run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start);
-	if (run_file_audio) {
+	if (run_file_audio >= 0) {
 		while (true) {
-			if (!run_file_map || settings.run_file_current >= run_file_num_records)
+			if (!run_file_map || run_file_wait || run_file_finishing)
 				break;
+			if (settings.run_file_current >= run_file_num_records) {
+				run_file_finishing = true;
+				debug("done running audio");
+				break;
+			}
 			int16_t next = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 			if (next == running_fragment)
 				break;
-			settings.run_file_current = arch_send_audio(reinterpret_cast <uint8_t *>(run_file_map), settings.run_file_current, run_file_num_records);
+			settings.run_file_current = arch_send_audio(reinterpret_cast <uint8_t *>(run_file_map), settings.run_file_current, run_file_num_records, run_file_audio);
 			current_fragment = next;
 			store_settings();
 			if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping)
@@ -116,7 +123,7 @@ void run_file_fill_queue() {
 		lock = false;
 		return;
 	}
-	while (run_file_map && (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2 && (run_file_map[settings.run_file_current].type == RUN_GOTO || !arch_running()) && !settings.queue_full && settings.run_file_current < run_file_num_records && !run_file_wait_temp && !run_file_wait) {
+	while (run_file_map && (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2 && (run_file_map[settings.run_file_current].type == RUN_GOTO || !arch_running()) && !settings.queue_full && settings.run_file_current < run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
 		Run_Record &r = run_file_map[settings.run_file_current];
 		rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
 		switch (r.type) {
@@ -254,8 +261,7 @@ void run_file_fill_queue() {
 	if (run_file_map && !arch_running() && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait) {
 		// Done.
 		debug("done running file");
-		send_host(CMD_FILE_DONE);
-		abort_run_file();
+		run_file_finishing = true;
 	}
 	lock = false;
 	return;

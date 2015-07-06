@@ -881,7 +881,7 @@ class Printer: # {{{
 		self.gcode_fd = -1
 	# }}}
 	def _print_done(self, complete, reason): # {{{
-		self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 0))
+		self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 0xff))
 		if self.gcode_map is not None:
 			log(reason)
 			self._gcode_close()
@@ -982,7 +982,7 @@ class Printer: # {{{
 		return errors
 	# }}}
 	def _audio_add(self, f, name): # {{{
-		name = os.path.split(name)[1]
+		name = os.path.splitext(os.path.split(name)[1])[0]
 		origname = name
 		i = 0
 		while name == '' or name in self.audioqueue:
@@ -997,26 +997,17 @@ class Printer: # {{{
 		data = [ord(x) for x in wav.readframes(wav.getnframes())]
 		# Data is 16 bit signed ints per channel, but it is read as bytes.  First convert it to 16 bit numbers.
 		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2], data[1::2])]
-		# Determine average.
-		minimum = float(min(data))
-		maximum = float(max(data))
-		average = (minimum + maximum) / 2
-		#log('stats: %f %f %f' % (minimum, maximum, average))
-		samples_per_frame = wav.getframerate() / 400.	# TODO: because 5 ms/step, but that may become dynamic.
+		bit = 0
+		byte = 0
 		with fhs.write_spool(os.path.join(self.uuid, 'audio', name + os.path.extsep + 'bin')) as dst:
-			count = 0
-			state = False
-			todo = samples_per_frame
 			for t, sample in enumerate(data):
-				s = sample > average
-				if s != state:
-					state = s
-					count += 1
-				todo -= 1
-				if todo <= 0:
-					todo = samples_per_frame
-					dst.write(chr(count))
-					count = 0
+				if sample > 0:
+					byte |= 1 << bit
+				bit += 1
+				if bit >= 8:
+					dst.write(chr(byte))
+					byte = 0
+					bit = 0
 		self.audioqueue[os.path.splitext(name)[0]] = wav.getnframes()
 		return ''
 	# }}}
@@ -1508,7 +1499,7 @@ class Printer: # {{{
 			# Let cdriver do the work.
 			self.gcode_file = True
 			self._globals_update()
-			self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0) + filename.encode('utf8'))
+			self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0xff) + filename.encode('utf8'))
 	# }}}
 	def _reset_extruders(self, axes): # {{{
 		for i, sp in enumerate(axes):
@@ -1938,11 +1929,11 @@ class Printer: # {{{
 		self.goto([[a['park'] - (0 if si != 0 or ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(s.axis)] for si, s in enumerate(self.spaces)], cb = True)[1](None)
 	# }}}
 	@delayed
-	def benjamin_audio_play(self, id, name, motors = None): # {{{
+	def benjamin_audio_play(self, id, name, motor = 0): # {{{
 		self.audio_id = id
 		self.sleep(False)
 		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
-		self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 1) + filename.encode('utf8'))
+		self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, motor) + filename.encode('utf8'))
 	# }}}
 	def benjamin_audio_add_file(self, filename, name): # {{{
 		with open(filename, 'rb') as f:

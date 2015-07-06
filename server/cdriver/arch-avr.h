@@ -26,6 +26,7 @@
 
 // Not defines, because they can change value.
 EXTERN uint8_t NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT;
+EXTERN int avr_audio;
 // }}}
 
 enum Control { // {{{
@@ -82,6 +83,7 @@ static inline void RESET(Pin_t _pin);
 extern int avr_active_motors;
 static inline int hwpacketsize(int len, int *available) { // {{{
 	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 3, 0, 4, 0, 0, 0, 1, 3, -1, -1, -1 };
+	int num_motors = avr_audio >= 0 ? NUM_MOTORS : avr_active_motors;
 	switch (command[1][0] & ~0x10) {
 	case HWC_READY:
 		if (len >= 2)
@@ -93,15 +95,15 @@ static inline int hwpacketsize(int len, int *available) { // {{{
 		*available -= 1;
 		return command[1][1];
 	case HWC_HOMED:
-		return 1 + 4 * avr_active_motors;
+		return 1 + 4 * num_motors;
 	case HWC_STOPPED:
-		return 2 + 4 * avr_active_motors;
+		return 2 + 4 * num_motors;
 	case HWC_LIMIT:
 	case HWC_UNDERRUN:
-		return 3 + 4 * avr_active_motors;
+		return 3 + 4 * num_motors;
 	case HWC_SENSE0:
 	case HWC_SENSE1:
-		return 2 + 4 * avr_active_motors;
+		return 2 + 4 * num_motors;
 	default:
 		return arch_packetsize[command[1][0] & 0xf];
 	}
@@ -333,6 +335,10 @@ static inline void hwpacket(int len) {
 			//debug("underrun ok stopped=%d sending=%d pending=%d", stopped, sending_fragment, command[1][2]);
 			if (stopped && !sending_fragment && command[1][2] == 0) {
 				avr_get_current_pos(3, true);
+				if (run_file_finishing) {
+					send_host(CMD_FILE_DONE);
+					abort_run_file();
+				}
 			}
 		}
 		// Fall through.
@@ -609,15 +615,24 @@ static inline void arch_change(bool motors) {
 		}
 	}
 	avr_buffer[0] = HWC_SETUP;
-	avr_buffer[1] = avr_active_motors;
-	for (int i = 0; i < 4; ++i)
-		avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
+	if (avr_audio >= 0) {
+		avr_buffer[1] = NUM_MOTORS;
+		for (int i = 0; i < 4; ++i)
+			avr_buffer[2 + i] = (audio_hwtime_step >> (8 * i)) & 0xff;
+		avr_buffer[11] = avr_audio;
+	}
+	else {
+		avr_buffer[1] = avr_active_motors;
+		for (int i = 0; i < 4; ++i)
+			avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
+		avr_buffer[11] = 0;
+	}
 	avr_buffer[6] = led_pin.valid() ? led_pin.pin : ~0;
 	avr_buffer[7] = probe_pin.valid() ? probe_pin.pin : ~0;
 	avr_buffer[8] = (led_pin.inverted() ? 1 : 0) | (probe_pin.inverted() ? 2 : 0);
 	avr_buffer[9] = timeout & 0xff;
 	avr_buffer[10] = (timeout >> 8) & 0xff;
-	prepare_packet(avr_buffer, 11);
+	prepare_packet(avr_buffer, 12);
 	avr_send();
 	if (motors) {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -660,6 +675,7 @@ static inline void arch_setup_start(char const *port) {
 	avr_limiter_space = -1;
 	avr_limiter_motor = 0;
 	avr_active_motors = 0;
+	avr_audio = -1;
 	// Set up serial port.
 	avr_connected = true;
 	avr_serial.begin(port, 115200);
@@ -768,9 +784,38 @@ static inline void arch_addpos(int s, int m, int diff) {
 	cpdebug(s, m, "arch addpos %d %d %d %d", diff, avr_pos_offset[m], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
 }
 
+static inline void arch_stop(bool fake) {
+	avr_homing = false;
+	if (out_busy) {
+		stop_pending = true;
+		return;
+	}
+	if (!avr_running) {
+		current_fragment_pos = 0;
+		return;
+	}
+	avr_running = false;
+	avr_buffer[0] = HWC_STOP;
+	if (wait_for_reply)
+		debug("wait_for_reply already set in stop");
+	wait_for_reply = true;
+	prepare_packet(avr_buffer, 1);
+	avr_send();
+	avr_get_reply();
+	if (!fake)
+		abort_move(command[1][1]);
+	avr_get_current_pos(2, false);
+	current_fragment_pos = 0;
+}
+
 static inline bool arch_send_fragment() {
 	if (stopping || discard_pending)
 		return false;
+	if (avr_audio >= 0) {
+		arch_stop(false);
+		avr_audio = -1;
+		arch_globals_change();
+	}
 	avr_buffer[0] = probing ? HWC_START_PROBE : HWC_START_MOVE;
 	//debug("send fragment %d %d %d", current_fragment_pos, fragment, settings.num_active_motors);
 	avr_buffer[1] = current_fragment_pos;
@@ -816,30 +861,6 @@ static inline bool arch_running() {
 	return avr_running;
 }
 
-static inline void arch_stop(bool fake) {
-	avr_homing = false;
-	if (out_busy) {
-		stop_pending = true;
-		return;
-	}
-	if (!avr_running) {
-		current_fragment_pos = 0;
-		return;
-	}
-	avr_running = false;
-	avr_buffer[0] = HWC_STOP;
-	if (wait_for_reply)
-		debug("wait_for_reply already set in stop");
-	wait_for_reply = true;
-	prepare_packet(avr_buffer, 1);
-	avr_send();
-	avr_get_reply();
-	if (!fake)
-		abort_move(command[1][1]);
-	avr_get_current_pos(2, false);
-	current_fragment_pos = 0;
-}
-
 static inline void arch_home() {
 	avr_homing = true;
 	avr_buffer[0] = HWC_HOME;
@@ -863,26 +884,32 @@ static inline void arch_home() {
 	avr_send();
 }
 
-static inline off_t arch_send_audio(uint8_t *map, off_t pos, off_t max) {
-	int len = max - pos >= BYTES_PER_FRAGMENT  - 1 ? BYTES_PER_FRAGMENT - 1 : max - pos;
+static inline off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) {
+	if (avr_audio != motor) {
+		arch_stop(false);
+		avr_audio = motor;
+		arch_globals_change();
+	}
+	int len = max - pos >= NUM_MOTORS * BYTES_PER_FRAGMENT ? BYTES_PER_FRAGMENT : (max - pos) / NUM_MOTORS;
 	if (len <= 0)
 		return max;
 	avr_buffer[0] = HWC_START_MOVE;
-	avr_buffer[1] = len + 1;
-	avr_buffer[2] = 1;
-	sending_fragment = 2;
+	avr_buffer[1] = len;
+	avr_buffer[2] = NUM_MOTORS;
+	sending_fragment = NUM_MOTORS + 1;
 	prepare_packet(avr_buffer, 3);
 	avr_send();
 	avr_filling = true;
-	avr_buffer[0] = HWC_MOVE;
-	avr_buffer[1] = 0;
-	avr_buffer[2] = 0x80;
-	for (int i = 0; i < len; ++i)
-		avr_buffer[3 + i] = map[pos + i];
-	prepare_packet(avr_buffer, 3 + len);
-	avr_send();
+	for (int m = 0; m < NUM_MOTORS; ++m) {
+		avr_buffer[0] = HWC_MOVE;
+		avr_buffer[1] = m;
+		for (int i = 0; i < len; ++i)
+			avr_buffer[2 + i] = map[pos + m * len + i];
+		prepare_packet(avr_buffer, 2 + len);
+		avr_send();
+	}
 	avr_filling = false;
-	return pos + len;
+	return pos + NUM_MOTORS * len;
 }
 
 static inline void arch_do_discard() {

@@ -77,13 +77,14 @@ EXTERN uint8_t reply_ready, adcreply_ready;
 EXTERN bool timeout;
 EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE];
 EXTERN int16_t pending_len;
-EXTERN volatile uint16_t move_phase, full_phase, full_phase_bits;
+EXTERN volatile uint8_t move_phase, full_phase, full_phase_bits;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
 EXTERN uint16_t led_last, led_phase, time_per_sample;
 EXTERN uint8_t led_pin, probe_pin, pin_flags;
 EXTERN uint16_t timeout_time, last_active;
 EXTERN uint8_t enabled_pins;
+EXTERN uint8_t audio;	// Bit 0: state; bit 1: enable.
 
 EXTERN volatile bool serial_overflow;
 EXTERN volatile int16_t serial_buffer_head;
@@ -231,7 +232,7 @@ static inline int16_t minpacketlen() {
 	case CMD_SET_UUID:
 		return 1 + UUID_SIZE;
 	case CMD_SETUP:
-		return 11;
+		return 12;
 	case CMD_CONTROL:
 		return 2;
 	case CMD_MSETUP:
@@ -278,8 +279,8 @@ struct Motor
 	enum IntFlags {
 		ACTIVE_BIT = 0,
 		ACTIVE			= 1 << ACTIVE_BIT,
-		AUDIO_BIT = 1,
-		AUDIO			= 1 << AUDIO_BIT,
+		//AUDIO_BIT = 1,
+		//AUDIO			= 1 << AUDIO_BIT,
 		AUDIO_STATE_BIT = 2,
 		INVERT_STEP_BIT = 6,
 		INVERT_STEP		= 1 << INVERT_STEP_BIT
@@ -332,14 +333,18 @@ struct Motor
 
 EXTERN volatile int8_t buffer[1 << FRAGMENTS_PER_MOTOR_BITS][NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN Motor motor[NUM_MOTORS];
+EXTERN Motor *audio_motor;
 EXTERN volatile uint8_t active_motors;
 EXTERN int stopping;	// number of switch which has been hit, or active_motors for a probe hit and -1 for none.
 EXTERN uint32_t home_step_time;
 EXTERN uint8_t homers;
 
 struct Settings {
-	bool probing;
+	uint8_t flags;
 	uint8_t len;
+	enum {
+		PROBING = 1
+	};
 };
 
 EXTERN Settings settings[1 << FRAGMENTS_PER_MOTOR_BITS];
@@ -349,6 +354,7 @@ EXTERN volatile uint8_t current_sample;		// The sample in the current fragment t
 EXTERN volatile uint8_t current_len;		// Copy of settings[current_fragment].len, for easy access from asm.
 EXTERN volatile uint8_t step_state;		// 0: disabled; 1: Waiting for limit switch check; 2: Waiting for step; 3: free running.
 EXTERN volatile int8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
+EXTERN volatile uint8_t audio_bit;	// Bitmask for current audio playback.
 EXTERN volatile uint8_t last_fragment;	// Fragment that is currently being filled.
 EXTERN uint8_t limit_fragment_pos;
 EXTERN uint8_t last_len;	// copy of settings[last_fragment].len, for when current_fragment changes during a fill.

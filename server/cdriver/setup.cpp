@@ -37,6 +37,7 @@ void setup(char const *port, char const *run_id)
 	current_fragment_pos = 0;
 	num_active_motors = 0;
 	hwtime_step = 5000;	// TODO: make this dynamic.
+	audio_hwtime_step = 1000000 / 22050; // timer ticks/bit.
 	moving = false;
 	feedrate = 1;
 	zoffset = 0;
@@ -53,6 +54,7 @@ void setup(char const *port, char const *run_id)
 	which_autosleep = 0;
 	timeout = 0;
 	run_file_map = NULL;
+	run_file_finishing = false;
 	wait_for_reply = false;
 #ifdef HAVE_AUDIO
 	audio_head = 0;

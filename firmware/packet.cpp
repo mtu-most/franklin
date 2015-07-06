@@ -100,14 +100,24 @@ void packet()
 		}
 		pin_flags = command(8);
 		timeout_time = read_16(9);
-		uint8_t fpb = 0;
-		while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << fpb)
-			fpb += 1;
-		fpb -= 1;
-		cli();
-		full_phase_bits = fpb;
-		full_phase = 1 << full_phase_bits;
-		sei();
+		if (command(11) < active_motors) {
+			audio = 2;
+			move_phase = 0;
+			full_phase = 1;
+			audio_motor = &motor[command(11)];
+		}
+		else {
+			uint8_t fpb = 0;
+			while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << fpb)
+				fpb += 1;
+			fpb -= 1;
+			cli();
+			audio = 0;
+			audio_motor = 0;
+			full_phase_bits = fpb;
+			full_phase = 1 << full_phase_bits;
+			sei();
+		}
 		write_ack();
 		return;
 	}
@@ -281,7 +291,7 @@ void packet()
 			// current_sample is always 0 while homing; set len to 2, so it doesn't go to the next fragment.
 			settings[current_fragment].len = 2;
 			current_len = settings[current_fragment].len;
-			settings[current_fragment].probing = false;
+			settings[current_fragment].flags &= ~Settings::PROBING;
 			BUFFER_CHECK(buffer, current_fragment);
 			current_buffer = &buffer[current_fragment];
 			current_sample = 0;
@@ -326,7 +336,10 @@ void packet()
 		filling = command(2);
 		for (uint8_t m = 0; m < active_motors; ++m)
 			buffer[last_fragment][m][0] = 0x80;	// Sentinel indicating no data is available for this motor.
-		settings[last_fragment].probing = command(0) == CMD_START_PROBE;
+		if (command(0) == CMD_START_MOVE)
+			settings[last_fragment].flags |= Settings::PROBING;
+		else
+			settings[last_fragment].flags &= ~Settings::PROBING;
 		if (filling == 0)
 			last_fragment = (last_fragment + 1) & FRAGMENTS_PER_MOTOR_MASK;
 		//debug("new filling: %d %d", filling, last_fragment);
@@ -358,19 +371,8 @@ void packet()
 			write_stall();
 			return;
 		}
-		uint16_t first, last;
-		if (command(2) == 0x80) {
-			motor[m].intflags |= Motor::AUDIO;
-			first = 3;
-			last = last_len - 1;
-		}
-		else {
-			motor[m].intflags &= ~Motor::AUDIO;
-			first = 2;
-			last = last_len;
-		}
-		for (uint8_t b = 0; b < last; ++b)
-			buffer[last_fragment][m][b] = static_cast<int8_t>(command(first + b));
+		for (uint8_t b = 0; b < last_len; ++b)
+			buffer[last_fragment][m][b] = static_cast<int8_t>(command(2 + b));
 		filling -= 1;
 		if (filling == 0) {
 			//debug("filled %d; current %d notified %d", last_fragment, current_fragment, notified_current_fragment);

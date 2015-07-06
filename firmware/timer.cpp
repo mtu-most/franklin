@@ -11,7 +11,7 @@ void handle_motors() {
 	sei();
 	// Check probe.
 	bool probed;
-	if (settings[cf].probing && probe_pin < NUM_DIGITAL_PINS) {
+	if (settings[cf].flags & Settings::PROBING && probe_pin < NUM_DIGITAL_PINS) {
 		if (state == 0) {
 			//debug("checking probe %d %d", cf, cs);
 			if (GET(probe_pin) ^ bool(pin_flags & 2))
@@ -94,6 +94,6 @@ void handle_motors() {
 	if (state == 0 && probed) {
 		if (homers > 0)
 			current_sample = 0;	// Use only the first sample for homing.
-		step_state = homers > 0 || settings[cf].probing ? 2 : 3;
+		step_state = homers > 0 || (settings[cf].flags & Settings::PROBING) ? 2 : 3;
 	}
 }
