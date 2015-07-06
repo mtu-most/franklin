@@ -625,7 +625,7 @@ static inline void arch_change(bool motors) {
 		avr_buffer[1] = avr_active_motors;
 		for (int i = 0; i < 4; ++i)
 			avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
-		avr_buffer[11] = 0;
+		avr_buffer[11] = 0xff;
 	}
 	avr_buffer[6] = led_pin.valid() ? led_pin.pin : ~0;
 	avr_buffer[7] = probe_pin.valid() ? probe_pin.pin : ~0;
