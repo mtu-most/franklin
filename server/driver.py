@@ -211,6 +211,7 @@ class Printer: # {{{
 		self.alarms = set()
 		self.run_id = run_id
 		self.zoffset = 0.
+		self.store_adc = False
 		self.multipliers = []
 		self.current_extruder = 0
 		# Get the printer state.
@@ -616,7 +617,7 @@ class Printer: # {{{
 		if data is None:
 			return False
 		self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins, num_spaces, num_temps, num_gpios = struct.unpack('=BBBBBBBB', data[:8])
-		self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset = struct.unpack('=HHHfBf', data[8:])
+		self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset, self.store_adc = struct.unpack('=HHHfBf?', data[8:])
 		while len(self.spaces) < num_spaces:
 			self.spaces.append(self.Space(self, len(self.spaces)))
 			if update:
@@ -655,7 +656,7 @@ class Printer: # {{{
 		ds = ns - len(self.spaces)
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
-		data = struct.pack('=BBBHHHfBf', ns, nt, ng, self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset)
+		data = struct.pack('=BBBHHHfBf?', ns, nt, ng, self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset, self.store_adc)
 		self._send_packet(struct.pack('=B', protocol.command['WRITE_GLOBALS']) + data)
 		self._read_globals(update = True)
 		if update:
@@ -671,7 +672,7 @@ class Printer: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, self.park_after_print, self.sleep_after_print, self.cool_after_print, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
+		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, self.store_adc, self.park_after_print, self.sleep_after_print, self.cool_after_print, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		if not self.initialized:
@@ -2640,7 +2641,7 @@ class Printer: # {{{
 	# Globals. {{{
 	def get_globals(self):
 		ret = {'num_spaces': len(self.spaces), 'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('uuid', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'zoffset', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
+		for key in ('uuid', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'zoffset', 'store_adc', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
 			ret[key] = getattr(self, key)
 		return ret
 	def expert_set_globals(self, update = True, **ka):
@@ -2648,6 +2649,8 @@ class Printer: # {{{
 		ns = ka.pop('num_spaces') if 'num_spaces' in ka else None
 		nt = ka.pop('num_temps') if 'num_temps' in ka else None
 		ng = ka.pop('num_gpios') if 'num_gpios' in ka else None
+		if 'store_adc' in ka:
+			self.store_adc = bool(ka.pop('store_adc'))
 		if 'unit_name' in ka:
 			self.unit_name = ka.pop('unit_name')
 		for key in ('led_pin', 'probe_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print'):

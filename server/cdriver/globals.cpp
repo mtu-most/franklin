@@ -86,6 +86,14 @@ bool globals_load(int32_t &addr)
 		current_extruder = ce;
 		zoffset = zo;
 	}
+	bool store = read_8(addr);
+	if (store && !store_adc) {
+		store_adc = fopen("/tmp/franklin-adc-dump", "a");
+	}
+	else if (!store && store_adc) {
+		fclose(store_adc);
+		store_adc = NULL;
+	}
 	ldebug("all done");
 	arch_motors_change();
 	return true;
@@ -112,4 +120,5 @@ void globals_save(int32_t &addr)
 	write_float(addr, feedrate);
 	write_8(addr, current_extruder);
 	write_float(addr, zoffset);
+	write_8(addr, store_adc != NULL);
 }

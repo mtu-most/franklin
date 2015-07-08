@@ -471,6 +471,9 @@ function Multipliers() { // {{{
 		e.AddText(' ').Add(add_name('unit', 0, 0));
 		return e;
 	}, true);
+	e = ret.AddElement('div', 'admin');
+	e.AddElement('Label').AddText('Store adc readings').Add(Checkbox([null, 'store_adc']));
+	e.AddElement('a').AddText('Get stored readings').href = 'adc';
 	return ret;
 }
 // }}}

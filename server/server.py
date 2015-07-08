@@ -114,6 +114,14 @@ class Server(websockets.RPChttpd): # {{{
 					connection.socket.close()
 				ports[port].call('export_settings', (connection.data['role'],), {}, export_reply)
 				return True
+		elif connection.address.path.endswith('/adc'):
+			filename = '/tmp/franklin-adc-dump'
+			if os.path.exists(filename):
+				message = open(filename).read()
+				os.unlink(filename)
+			else:
+				message = ''
+			self.reply(connection, 200, message, 'text/plain;charset=utf8')
 		elif any(connection.address.path.endswith('/' + x) for x in ('benjamin', 'admin', 'expert', 'user')):
 			websockets.RPChttpd.page(self, connection, path = connection.address.path[:connection.address.path.rfind('/') + 1])
 		else:

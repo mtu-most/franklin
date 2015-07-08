@@ -130,6 +130,7 @@ function _setup_updater() {
 					timeout: 0,
 					feedrate: 1,
 					zoffset: 0,
+					store_adc: false,
 					message: null,
 					spaces: [],
 					temps: [],
@@ -194,10 +195,11 @@ function _setup_updater() {
 			printers[port].timeout = values[12];
 			printers[port].feedrate = values[13];
 			printers[port].zoffset = values[14];
-			printers[port].park_after_print = values[15];
-			printers[port].sleep_after_print = values[16];
-			printers[port].cool_after_print = values[17];
-			printers[port].status = values[18];
+			printers[port].store_adc = values[15];
+			printers[port].park_after_print = values[16];
+			printers[port].sleep_after_print = values[17];
+			printers[port].cool_after_print = values[18];
+			printers[port].status = values[19];
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
 					name: null,

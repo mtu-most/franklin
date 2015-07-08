@@ -160,6 +160,8 @@ void Temp::copy(Temp &dst) {
 }
 
 void handle_temp(int id, int temp) { // {{{
+	if (store_adc)
+		fprintf(store_adc, "%d %d %f %d\n", millis(), id, temps[id].fromadc(temp), temp);
 	if (requested_temp == id) {
 		//debug("replying temp");
 		float result = temps[requested_temp].fromadc(temp);

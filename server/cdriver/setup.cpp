@@ -29,6 +29,7 @@ void setup(char const *port, char const *run_id)
 	probe_pin.init();
 	led_phase = 0;
 	temps_busy = 0;
+	store_adc = NULL;
 	requested_temp = ~0;
 	last_active = millis();
 	refilling = false;

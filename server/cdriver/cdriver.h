@@ -2,6 +2,7 @@
 #define _CDRIVER_H
 
 #include "configuration.h"
+#include <stdio.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -362,6 +363,7 @@ EXTERN uint8_t command_end[2];
 EXTERN Space *spaces;
 EXTERN Temp *temps;
 EXTERN Gpio *gpios;
+EXTERN FILE *store_adc;
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];
 EXTERN bool probing;

@@ -649,6 +649,7 @@ function update_globals() { // {{{
 	update_float(printer, [null, 'timeout']);
 	update_float(printer, [null, 'feedrate']);
 	update_float(printer, [null, 'zoffset']);
+	update_checkbox(printer, [null, 'store_adc']);
 	update_checkbox(printer, [null, 'park_after_print']);
 	update_checkbox(printer, [null, 'sleep_after_print']);
 	update_checkbox(printer, [null, 'cool_after_print']);
