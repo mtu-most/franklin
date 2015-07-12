@@ -141,8 +141,8 @@ def write_pin(pin):
 class Printer: # {{{
 	# Internal stuff.  {{{
 	def _read_data(self, data): # {{{
-		cmd, s, m, e, f = struct.unpack('=BLLLf', data[:17])
-		return cmd, s, m, f, e, data[17:]
+		cmd, s, m, e, f = struct.unpack('=BLLLd', data[:21])
+		return cmd, s, m, f, e, data[21:]
 	# }}}
 	def _send(self, *data): # {{{
 		#sys.stderr.write(repr(data) + '\n')
@@ -157,7 +157,7 @@ class Printer: # {{{
 		self.jobs_active = []
 		self.jobs_ref = None
 		self.jobs_angle = 0
-		self.jobs_probemap = None
+		self.probemap = None
 		self.job_current = 0
 		self.job_id = None
 		self.confirm_id = 0
@@ -270,8 +270,8 @@ class Printer: # {{{
 					try:
 						log('opening %s' % filename)
 						with open(os.path.join(gcode, filename), 'rb') as f:
-							f.seek(-8 * 4, os.SEEK_END)
-							self.jobqueue[name] = struct.unpack('=' + 'f' * 8, f.read())
+							f.seek(-8 * 8, os.SEEK_END)
+							self.jobqueue[name] = struct.unpack('=' + 'd' * 8, f.read())
 					except:
 						traceback.print_exc()
 						log('failed to open gcode file %s' % os.path.join(gcode, filename))
@@ -578,16 +578,16 @@ class Printer: # {{{
 	def _read(self, cmd, channel, sub = None): # {{{
 		if cmd == 'SPACE':
 			info = self._read('SPACE_INFO', channel)
-			self.spaces[channel].type, self.spaces[channel].max_deviation, self.spaces[channel].max_v = struct.unpack('=Bff', info[:9])
-			info = info[9:]
+			self.spaces[channel].type, self.spaces[channel].max_deviation, self.spaces[channel].max_v = struct.unpack('=Bdd', info[:17])
+			info = info[17:]
 			if self.spaces[channel].type == TYPE_CARTESIAN:
 				num_axes = struct.unpack('=B', info)[0]
 				num_motors = num_axes
 			elif self.spaces[channel].type == TYPE_DELTA:
 				self.spaces[channel].delta = [{}, {}, {}]
 				for a in range(3):
-					self.spaces[channel].delta[a]['axis_min'], self.spaces[channel].delta[a]['axis_max'], self.spaces[channel].delta[a]['rodlength'], self.spaces[channel].delta[a]['radius'] = struct.unpack('=ffff', info[16 * a:16 * (a + 1)])
-				self.spaces[channel].delta_angle = struct.unpack('=f', info[16 * 3:])[0]
+					self.spaces[channel].delta[a]['axis_min'], self.spaces[channel].delta[a]['axis_max'], self.spaces[channel].delta[a]['rodlength'], self.spaces[channel].delta[a]['radius'] = struct.unpack('=dddd', info[32 * a:32 * (a + 1)])
+				self.spaces[channel].delta_angle = struct.unpack('=d', info[32 * 3:])[0]
 				num_axes = 3
 				num_motors = 3
 			elif self.spaces[channel].type == TYPE_EXTRUDER:
@@ -595,7 +595,7 @@ class Printer: # {{{
 				num_motors = num_axes
 				self.spaces[channel].extruder = []
 				for a in range(num_axes):
-					dx, dy, dz = struct.unpack('=fff', info[1 + 12 * a:1 + 12 * (a + 1)])
+					dx, dy, dz = struct.unpack('=ddd', info[1 + 24 * a:1 + 24 * (a + 1)])
 					self.spaces[channel].extruder.append({'dx': dx, 'dy': dy, 'dz': dz})
 			else:
 				log('invalid type')
@@ -617,7 +617,7 @@ class Printer: # {{{
 		if data is None:
 			return False
 		self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins, num_spaces, num_temps, num_gpios = struct.unpack('=BBBBBBBB', data[:8])
-		self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset, self.store_adc = struct.unpack('=HHHfBf?', data[8:])
+		self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset, self.store_adc = struct.unpack('=HHHdBd?', data[8:])
 		while len(self.spaces) < num_spaces:
 			self.spaces.append(self.Space(self, len(self.spaces)))
 			if update:
@@ -656,7 +656,7 @@ class Printer: # {{{
 		ds = ns - len(self.spaces)
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
-		data = struct.pack('=BBBHHHfBf?', ns, nt, ng, self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset, self.store_adc)
+		data = struct.pack('=BBBHHHdBd?', ns, nt, ng, self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset, self.store_adc)
 		self._send_packet(struct.pack('=B', protocol.command['WRITE_GLOBALS']) + data)
 		self._read_globals(update = True)
 		if update:
@@ -699,11 +699,11 @@ class Printer: # {{{
 		self._broadcast(target, 'gpio_update', which, self.gpios[which].export())
 	# }}}
 	def _use_probemap(self, x, y, z): # {{{
-		'''Return corrected z according to self.gcode_probemap.'''
+		'''Return corrected z according to self.probemap.'''
 		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
-		if self.gcode_probemap is None or any(math.isnan(t) for t in (x, y, z)):
+		if self.probemap is None or any(math.isnan(t) for t in (x, y, z)):
 			return z
-		p = self.gcode_probemap
+		p = self.probemap
 		x -= p[0][0]
 		y -= p[0][1]
 		x /= (p[0][2] - p[0][0]) / p[1][0]
@@ -745,8 +745,8 @@ class Printer: # {{{
 				self.gcode_parking = True
 				self.park(cb = lambda: self._do_gcode(), abort = False)[1](None)
 				return
-			pos = self.gcode_current_record * (1 + 13 * 4)
-			record = struct.unpack('=Bl' + 'f' * 12, self.gcode_map[pos:pos + 1 + 13 * 4])
+			pos = self.gcode_current_record * (1 + 4 + 12 * 8)
+			record = struct.unpack('=Bl' + 'd' * 12, self.gcode_map[pos:pos + 1 + 4 + 12 * 8])
 			cmd = record[0]
 			T, x, X, y, Y, z, Z, e, E, f, F, self.probe_time_dist[0], self.probe_time_dist[1] = record[1:]
 			#log('Running %s %s' % (cmd, args))
@@ -766,11 +766,11 @@ class Printer: # {{{
 				#log(repr(args))
 				sina, cosa = self.gcode_angle
 				target = cosa * X - sina * Y + self.gcode_ref[0], cosa * Y + sina * X + self.gcode_ref[1], Z + self.gcode_ref[2]
-				if self._use_probemap and self.gcode_probemap:
+				if self._use_probemap and self.probemap:
 					if x is not None:
 						source = cosa * x - sina * y + self.gcode_ref[0], cosa * y + sina * x + self.gcode_ref[1]
-						#log('gcode %s' % repr([(target[t], source[t], self.gcode_probemap[0][t + 2], self.gcode_probemap[0][t], self.gcode_probemap[1][t]) for t in range(2)]))
-						nums = [abs(target[t] - source[t]) / (abs(self.gcode_probemap[0][t + 2] - self.gcode_probemap[0][t]) / self.gcode_probemap[1][t]) for t in range(2) if not math.isnan(target[t]) and self.gcode_probemap[0][t] != self.gcode_probemap[0][t + 2]]
+						#log('gcode %s' % repr([(target[t], source[t], self.probemap[0][t + 2], self.probemap[0][t], self.probemap[1][t]) for t in range(2)]))
+						nums = [abs(target[t] - source[t]) / (abs(self.probemap[0][t + 2] - self.probemap[0][t]) / self.probemap[1][t]) for t in range(2) if not math.isnan(target[t]) and self.probemap[0][t] != self.probemap[0][t + 2]]
 						#log('num %s' % nums)
 						if len(nums) == 0 or all(math.isnan(num) for num in nums):
 							num = 1
@@ -882,7 +882,7 @@ class Printer: # {{{
 		self.gcode_fd = -1
 	# }}}
 	def _print_done(self, complete, reason): # {{{
-		self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 0xff))
+		self._send_packet(struct.pack('=BdddddBB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 0xff, 0))
 		if self.gcode_map is not None:
 			log(reason)
 			self._gcode_close()
@@ -1096,10 +1096,10 @@ class Printer: # {{{
 			# If feedrates are equal to firmware defaults, don't send them.
 			if f0 != float('inf'):
 				targets[0] |= 1 << 0
-				args += struct.pack('=f', f0)
+				args += struct.pack('=d', f0)
 			if f1 != f0:
 				targets[0] |= 1 << 1
-				args += struct.pack('=f', f1)
+				args += struct.pack('=d', f1)
 			a = list(axes.keys())
 			a.sort()
 			#log('f0: %f f1: %f' %(f0, f1))
@@ -1107,7 +1107,7 @@ class Printer: # {{{
 				if math.isnan(axes[axis]):
 					continue
 				targets[(axis + 2) >> 3] |= 1 << ((axis + 2) & 0x7)
-				args += struct.pack('=f', axes[axis])
+				args += struct.pack('=d', axes[axis])
 				#log('axis %d: %f' %(axis, axes[axis]))
 			if probe:
 				assert cb
@@ -1360,18 +1360,18 @@ class Printer: # {{{
 		if not self.position_valid:
 			self.home(cb = lambda: self._do_probe(id, x, y, z, angle, speed, phase, good), abort = False)[1](None)
 			return
-		p = self.jobs_probemap
+		p = self.probemap
 		if phase == 0:
 			if y > p[1][1]:
 				# Done.
 				self.probing = False
 				if id is not None:
-					self._send(id, 'return', self.jobs_probemap)
+					self._send(id, 'return', self.probemap)
 				else:
 					for y, c in enumerate(p[2]):
 						for x, o in enumerate(c):
 							log('map %f %f %f' % (p[0][0] + (p[0][2] - p[0][0]) * x / p[1][0], p[0][1] + (p[0][3] - p[0][1]) * y / p[1][1], o))
-					#log('result: %s' % repr(self.jobs_probemap))
+					#log('result: %s' % repr(self.probemap))
 					if len(self.jobs_active) == 1:
 						def cb():
 							self.request_confirmation("Probing done; prepare for job.")[1](False)
@@ -1438,16 +1438,15 @@ class Printer: # {{{
 			self.gcode_parking = True
 			self.park(cb = cb, abort = False)[1](None)
 		self.gcode_id = None
-		self._gcode_run(self.jobs_active[self.job_current], self.jobs_ref, self.jobs_angle, self.jobs_probemap, abort = False)
+		self._gcode_run(self.jobs_active[self.job_current], self.jobs_ref, self.jobs_angle, abort = False)
 	# }}}
-	def _gcode_run(self, src, ref = (0, 0, 0), angle = 0, probemap = None, abort = True): # {{{
+	def _gcode_run(self, src, ref = (0, 0, 0), angle = 0, abort = True): # {{{
 		if not self.position_valid:
-			self.park(cb = lambda: self._gcode_run(src, ref, angle, probemap, abort), abort = False)[1](None)
+			self.park(cb = lambda: self._gcode_run(src, ref, angle, abort), abort = False)[1](None)
 			return
 		self.gcode_ref = ref
 		angle = math.radians(angle)
 		self.gcode_angle = math.sin(angle), math.cos(angle)
-		self.gcode_probemap = probemap
 		if self.bed_id < len(self.temps):
 			self.btemp = self.temps[self.bed_id].value
 		else:
@@ -1465,9 +1464,10 @@ class Printer: # {{{
 		if len(self.spaces) > 1:
 			for e in range(len(self.spaces[1].axis)):
 				self.set_axis_pos(1, e, 0)
-		filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', src + os.extsep + 'bin'), opened = False)
+		filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', src + os.extsep + 'bin'), text = False, opened = False)
 		self.total_time = self.jobqueue[src][-2:]
-		if probemap is not None:
+		if self.probemap is not None:
+			'''
 			# Cdriver can't handle this; do it from here.
 			self.gcode_fd = os.open(filename, os.O_RDONLY)
 			self.gcode_map = mmap.mmap(self.gcode_fd, 0, access = mmap.ACCESS_READ)
@@ -1496,11 +1496,23 @@ class Printer: # {{{
 				self._globals_update()
 				return
 			call_queue.append((self._do_gcode, []))
+			'''
+			self.gcode_file = True
+			self._globals_update()
+			encoded_filename = filename.encode('utf8')
+			with fhs.write_spool(os.path.join(self.uuid, 'probe', src + os.extsep + 'bin'), text = False) as probemap_file:
+				encoded_probemap_filename = probemap_file.filename.encode('utf8')
+				# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
+				probemap_file.write(struct.pack('@ddddLL', *(self.probemap[0] + self.probemap[1])))
+				for y in range(self.probemap[1][1]):
+					for x in range(self.probemap[1][0]):
+						probemap_file.write(struct.pack('@d', self.probemap[2][y][x]))
+			self._send_packet(struct.pack('=BdddddBB', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0xff, len(encoded_probemap_filename)) + encoded_filename + encoded_probemap_filename)
 		else:
 			# Let cdriver do the work.
 			self.gcode_file = True
 			self._globals_update()
-			self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0xff) + filename.encode('utf8'))
+			self._send_packet(struct.pack('=BdddddBB', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0xff, 0) + filename.encode('utf8'))
 	# }}}
 	def _reset_extruders(self, axes): # {{{
 		for i, sp in enumerate(axes):
@@ -1529,42 +1541,42 @@ class Printer: # {{{
 			else:
 				self.axis[len(axes):] = []
 			for a in range(len(axes)):
-				self.axis[a]['park'], self.axis[a]['park_order'], self.axis[a]['min'], self.axis[a]['max'] = struct.unpack('=fBff', axes[a])
+				self.axis[a]['park'], self.axis[a]['park_order'], self.axis[a]['min'], self.axis[a]['max'] = struct.unpack('=dBdd', axes[a])
 			if len(motors) > len(self.motor):
 				self.motor += [{'name': 'Motor %d' % i} for i in range(len(self.motor), len(motors))]
 			else:
 				self.motor[len(motors):] = []
 			for m in range(len(motors)):
-				self.motor[m]['step_pin'], self.motor[m]['dir_pin'], self.motor[m]['enable_pin'], self.motor[m]['limit_min_pin'], self.motor[m]['limit_max_pin'], self.motor[m]['sense_pin'], self.motor[m]['steps_per_unit'], self.motor[m]['max_steps'], self.motor[m]['home_pos'], self.motor[m]['limit_v'], self.motor[m]['limit_a'], self.motor[m]['home_order'] = struct.unpack('=HHHHHHfBfffB', motors[m])
+				self.motor[m]['step_pin'], self.motor[m]['dir_pin'], self.motor[m]['enable_pin'], self.motor[m]['limit_min_pin'], self.motor[m]['limit_max_pin'], self.motor[m]['sense_pin'], self.motor[m]['steps_per_unit'], self.motor[m]['max_steps'], self.motor[m]['home_pos'], self.motor[m]['limit_v'], self.motor[m]['limit_a'], self.motor[m]['home_order'] = struct.unpack('=HHHHHHdBdddB', motors[m])
 				if self.id == 1 and m < len(self.printer.multipliers):
 					self.motor[m]['steps_per_unit'] /= self.printer.multipliers[m]
 		def write_info(self, num_axes = None):
-			data = struct.pack('=Bff', self.type, self.max_deviation, self.max_v)
+			data = struct.pack('=Bdd', self.type, self.max_deviation, self.max_v)
 			if self.type == TYPE_CARTESIAN:
 				data += struct.pack('=B', num_axes if num_axes is not None else len(self.axis))
 			elif self.type == TYPE_DELTA:
 				for a in range(3):
-					data += struct.pack('=ffff', self.delta[a]['axis_min'], self.delta[a]['axis_max'], self.delta[a]['rodlength'], self.delta[a]['radius'])
-				data += struct.pack('=f', self.delta_angle)
+					data += struct.pack('=dddd', self.delta[a]['axis_min'], self.delta[a]['axis_max'], self.delta[a]['rodlength'], self.delta[a]['radius'])
+				data += struct.pack('=d', self.delta_angle)
 			elif self.type == TYPE_EXTRUDER:
 				num = num_axes if num_axes is not None else len(self.axis)
 				data += struct.pack('=B', num)
 				for a in range(num):
 					if a < len(self.extruder):
-						data += struct.pack('=fff', self.extruder[a]['dx'], self.extruder[a]['dy'], self.extruder[a]['dz'])
+						data += struct.pack('=ddd', self.extruder[a]['dx'], self.extruder[a]['dy'], self.extruder[a]['dz'])
 					else:
-						data += struct.pack('=fff', 0, 0, 0)
+						data += struct.pack('=ddd', 0, 0, 0)
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
 			return data
 		def write_axis(self, axis):
-			return struct.pack('=fBff', self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['min'], self.axis[axis]['max'])
+			return struct.pack('=dBdd', self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['min'], self.axis[axis]['max'])
 		def write_motor(self, motor):
-			return struct.pack('=HHHHHHfBfffB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
+			return struct.pack('=HHHHHHdBdddB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
 		def set_current_pos(self, axis, pos):
 			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
-			self.printer._send_packet(struct.pack('=BBBf', protocol.command['SETPOS'], self.id, axis, pos))
+			self.printer._send_packet(struct.pack('=BBBd', protocol.command['SETPOS'], self.id, axis, pos))
 		def get_current_pos(self, axis):
 			#log('getting current pos %d %d' % (self.id, axis))
 			self.printer._send_packet(struct.pack('=BBB', protocol.command['GETPOS'], self.id, axis))
@@ -1619,7 +1631,7 @@ class Printer: # {{{
 			self.id = id
 			self.value = float('nan')
 		def read(self, data):
-			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp = struct.unpack('=fffffHHHf', data)
+			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp = struct.unpack('=dddddHHHd', data)
 			try:
 				self.Rc = math.exp(logRc)
 			except:
@@ -1632,7 +1644,7 @@ class Printer: # {{{
 				logRc = math.log(self.Rc)
 			except:
 				logRc = float('nan')
-			return struct.pack('=fffffHHHf', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0)
+			return struct.pack('=dddddHHHd', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0)
 		def export(self):
 			return [self.name, self.R0, self.R1, self.Rc, self.Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp, self.value]
 		def export_settings(self):
@@ -1691,9 +1703,9 @@ class Printer: # {{{
 				self._send(id, 'return', None)
 			return
 		density = [int(abs(area[t + 2] - area[t]) / self.probe_dist) + 1 for t in range(2)]
-		self.jobs_probemap = [area, density, [[[] for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
+		self.probemap = [area, density, [[[] for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
 		self.gcode_angle = math.sin(angle), math.cos(angle)
-		#log(repr(self.jobs_probemap))
+		#log(repr(self.probemap))
 		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
 	# }}}
 	@delayed
@@ -1727,7 +1739,7 @@ class Printer: # {{{
 		self.temps[channel].value = temp
 		if update:
 			self._temp_update(channel)
-		self._send_packet(struct.pack('=BBf', protocol.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
+		self._send_packet(struct.pack('=BBd', protocol.command['SETTEMP'], channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp))
 		if self.gcode_waiting > 0 and any(channel == x[0] for x in self.tempcb):
 			self.waittemp(channel, temp)
 	# }}}
@@ -1737,7 +1749,7 @@ class Printer: # {{{
 			min = float('nan')
 		if max is None:
 			max = float('nan')
-		self._send_packet(struct.pack('=BBff', protocol.command['WAITTEMP'], channel, min + C0 if not math.isnan(self.temps[channel].beta) else min, max + C0 if not math.isnan(self.temps[channel].beta) else max))
+		self._send_packet(struct.pack('=BBdd', protocol.command['WAITTEMP'], channel, min + C0 if not math.isnan(self.temps[channel].beta) else min, max + C0 if not math.isnan(self.temps[channel].beta) else max))
 	# }}}
 	def readtemp(self, channel): # {{{
 		channel = int(channel)
@@ -1934,7 +1946,7 @@ class Printer: # {{{
 		self.audio_id = id
 		self.sleep(False)
 		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
-		self._send_packet(struct.pack('=BfffffB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, motor) + filename.encode('utf8'))
+		self._send_packet(struct.pack('=BdddddBB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, motor, 0) + filename.encode('utf8'))
 	# }}}
 	def benjamin_audio_add_file(self, filename, name): # {{{
 		with open(filename, 'rb') as f:
@@ -2178,11 +2190,12 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def gcode_run(self, id, code, ref = (0, 0, 0), angle = 0, probemap = None): # {{{
+		self.probemap = probemap
 		with fhs.write_temp(text = False) as f:
 			f.write(code)
 			f.seek(0)
 			self.gcode_id = id
-			return self._gcode_run(f.filename, ref, angle, probemap)
+			return self._gcode_run(f.filename, ref, angle)
 	# }}}
 	@delayed
 	def request_confirmation(self, id, message): # {{{
@@ -2286,7 +2299,7 @@ class Printer: # {{{
 								if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
 									#log('new max bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i + 1] is None else bbox[2 * i + 1] / 25.4)))
 									bbox[2 * i + 1] = value
-					dst.write(struct.pack('=Bl' + 'f' * 12, type, *add_timedist(type == protocol.parsed['GOTO'], nums)))
+					dst.write(struct.pack('=Bl' + 'd' * 12, type, *add_timedist(type == protocol.parsed['GOTO'], nums)))
 				else:
 					order = None
 					while True:
@@ -2300,7 +2313,7 @@ class Printer: # {{{
 						for i in range(3):
 							if len(self.spaces[0].axis) > i and self.spaces[0].axis[i]['park_order'] == order:
 								nums[2 + 2 * i] = self.spaces[0].axis[i]['park']
-						dst.write(struct.pack('=Bl' + 'f' * 12, protocol.parsed['GOTO'], *add_timedist(True, nums)))
+						dst.write(struct.pack('=Bl' + 'd' * 12, protocol.parsed['GOTO'], *add_timedist(True, nums)))
 						for i in range(3):
 							nums[1 + i * 2] = nums[2 + i * 2]
 					if bbox[0] is not None:
@@ -2586,7 +2599,7 @@ class Printer: # {{{
 				if any(x is None for x in bbox):
 					bbox = [0] * 6
 					ret = None
-			dst.write(struct.pack('=L' + 'f' * 8, len(strings), *(bbox + time_dist)))
+			dst.write(struct.pack('=L' + 'd' * 8, len(strings), *(bbox + time_dist)))
 		self._broadcast(None, 'blocked', None)
 		return ret and ret + time_dist, errors
 	# }}}
@@ -2596,7 +2609,7 @@ class Printer: # {{{
 		self.jobs_active = names
 		self.jobs_ref = ref
 		self.jobs_angle = angle
-		self.jobs_probemap = probemap
+		self.probemap = probemap
 		self.job_current = -1	# next_job will make it start at 0.
 		self.job_id = id
 		if not self.probing:
@@ -2616,8 +2629,8 @@ class Printer: # {{{
 			if not bbox[3] > bb[3]:
 				bbox[3] = bb[3]
 		self.probe((bbox[0] + ref[0], bbox[1] + ref[1], bbox[2] + ref[0], bbox[3] + ref[1]), angle, speed)[1](None)
-		# Pass jobs_probemap to make sure it doesn't get overwritten.
-		self.queue_print(names, ref, angle, self.jobs_probemap)[1](id)
+		# Pass probemap to make sure it doesn't get overwritten.
+		self.queue_print(names, ref, angle, self.probemap)[1](id)
 	# }}}
 	def get_print_state(self): # {{{
 		if self.paused:

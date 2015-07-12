@@ -7,10 +7,10 @@ static uint8_t get_which()
 	return command[0][2] & 0x3f;
 }
 
-static float get_float(uint8_t offset)
+static double get_float(uint8_t offset)
 {
 	ReadFloat ret;
-	for (uint8_t t = 0; t < sizeof(float); ++t)
+	for (uint8_t t = 0; t < sizeof(double); ++t)
 		ret.b[t] = command[0][offset + t];
 	return ret.f;
 }
@@ -22,7 +22,7 @@ static int16_t get_int16(uint8_t offset)
 }
 #endif
 
-void settemp(int which, float target) {
+void settemp(int which, double target) {
 	if (which >= num_temps)
 	{
 		debug("Setting invalid temp %d", which);
@@ -57,7 +57,7 @@ void settemp(int which, float target) {
 	arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin[0].valid() ? temps[which].power_pin[0].pin : ~0, temps[which].power_pin[0].inverted(), temps[which].adctarget[0], temps[which].power_pin[1].valid() ? temps[which].power_pin[1].pin : ~0, temps[which].power_pin[1].inverted(), temps[which].adctarget[1]);
 }
 
-void waittemp(int which, float mintemp, float maxtemp) {
+void waittemp(int which, double mintemp, double maxtemp) {
 	if (which >= num_temps)
 	{
 		debug("Waiting for invalid temp %d", which);
@@ -70,7 +70,7 @@ void waittemp(int which, float mintemp, float maxtemp) {
 	temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm, MAXINT);
 }
 
-void setpos(int which, int t, float f) {
+void setpos(int which, int t, double f) {
 	if (!motors_busy)
 	{
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -159,8 +159,8 @@ void packet()
 			if (command[0][2 + (ch >> 3)] & (1 << (ch & 0x7)))
 			{
 				ReadFloat f;
-				for (uint8_t i = 0; i < sizeof(float); ++i)
-					f.b[i] = command[0][offset + i + t * sizeof(float)];
+				for (uint8_t i = 0; i < sizeof(double); ++i)
+					f.b[i] = command[0][offset + i + t * sizeof(double)];
 				if (ch < 2)
 					queue[settings.queue_end].f[ch] = f.f;
 				else
@@ -182,8 +182,8 @@ void packet()
 		if (!(command[0][2] & 0x2) || isnan(queue[settings.queue_end].f[1]))
 			queue[settings.queue_end].f[1] = queue[settings.queue_end].f[0];
 		// F0 and F1 must be valid.
-		float F0 = queue[settings.queue_end].f[0];
-		float F1 = queue[settings.queue_end].f[1];
+		double F0 = queue[settings.queue_end].f[0];
+		double F1 = queue[settings.queue_end].f[1];
 		if (isnan(F0) || isnan(F1) || F0 < 0 || F1 < 0 || (F0 == 0 && F1 == 0))
 		{
 			debug("Invalid F0 or F1: %f %f", F0, F1);
@@ -228,12 +228,12 @@ void packet()
 		debug("CMD_RUN_FILE");
 #endif
 		ReadFloat args[5];
-		for (int i = 0; i < sizeof(float); ++i)
+		for (int i = 0; i < sizeof(double); ++i)
 		{
 			for (int j = 0; j < 5; ++j)
-				args[j].b[i] = command[0][2 + i + j * sizeof(float)];
+				args[j].b[i] = command[0][2 + i + j * sizeof(double)];
 		}
-		run_file(command[0][0] - 23, reinterpret_cast<char const *>(&command[0][23]), args[0].f, args[1].f, args[2].f, args[3].f, args[4].f, uint8_t(command[0][22]) == 0xff ? -1 : command[0][22]);
+		run_file(command[0][0] - 44 - command[0][43], reinterpret_cast<char const *>(&command[0][44]), command[0][43], reinterpret_cast<char const *>(&command[0][44 + command[0][43]]), args[0].f, args[1].f, args[2].f, args[3].f, args[4].f, uint8_t(command[0][42]) == 0xff ? -1 : command[0][42]);
 		break;
 	}
 	case CMD_SLEEP:	// Enable or disable motor current
@@ -277,7 +277,7 @@ void packet()
 #endif
 		last_active = millis();
 		which = get_which();
-		float target = get_float(3);
+		double target = get_float(3);
 		settemp(which, target);
 		return;
 	}
@@ -289,10 +289,10 @@ void packet()
 		initialized = true;
 		which = get_which();
 		ReadFloat min_temp, max_temp;
-		for (uint8_t i = 0; i < sizeof(float); ++i)
+		for (uint8_t i = 0; i < sizeof(double); ++i)
 		{
 			min_temp.b[i] = command[0][3 + i];
-			max_temp.b[i] = command[0][3 + i + sizeof(float)];
+			max_temp.b[i] = command[0][3 + i + sizeof(double)];
 		}
 		waittemp(which, min_temp.f, max_temp.f);
 		return;
@@ -359,7 +359,7 @@ void packet()
 			abort();
 			return;
 		}
-		float f = get_float(4);
+		double f = get_float(4);
 		setpos(which, t, f);
 		return;
 	}
@@ -386,7 +386,7 @@ void packet()
 			for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
 				spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
 		}
-		float value = spaces[which].axis[t]->settings.current;
+		double value = spaces[which].axis[t]->settings.current;
 		if (which == 0) {
 			for (int s = 0; s < num_spaces; ++s) {
 				value = space_types[spaces[s].type].unchange0(&spaces[s], t, value);

@@ -19,16 +19,13 @@
 // Codes which have duplicates in printer id codes are not used.
 // These are defined in cdriver.h.
 
-struct Record {
-	int32_t s, m, e;
-	float f;
-};
 
 struct Queuerecord {
-	Record r;
 	Queuerecord *next;
 	int len;
 	char cmd;
+	int32_t s, m, e;
+	double f;
 };
 
 static bool sending_to_host = false;
@@ -60,10 +57,16 @@ static void send_to_host() {
 #ifdef DEBUG_HOST
 	debug("**** host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->r.s, r->r.m, r->r.e, r->r.f, r->len);
 #endif
-	serialdev[0]->write(18 + r->len);
+	serialdev[0]->write(22 + r->len);
 	serialdev[0]->write(r->cmd);
-	for (unsigned i = 0; i < sizeof(Record); ++i)
-		serialdev[0]->write(reinterpret_cast <char *>(&r->r)[i]);
+	for (unsigned i = 0; i < sizeof(int32_t); ++i)
+		serialdev[0]->write(reinterpret_cast <char *>(&r->s)[i]);
+	for (unsigned i = 0; i < sizeof(int32_t); ++i)
+		serialdev[0]->write(reinterpret_cast <char *>(&r->m)[i]);
+	for (unsigned i = 0; i < sizeof(int32_t); ++i)
+		serialdev[0]->write(reinterpret_cast <char *>(&r->e)[i]);
+	for (unsigned i = 0; i < sizeof(double); ++i)
+		serialdev[0]->write(reinterpret_cast <char *>(&r->f)[i]);
 	for (unsigned i = 0; i < r->len; ++i)
 		serialdev[0]->write(reinterpret_cast <char *>(r)[sizeof(Queuerecord) + i]);
 	if (r->cmd == CMD_LIMIT)
@@ -247,14 +250,22 @@ void serial(uint8_t which)
 			return;
 		}
 #ifdef SERIAL
-		if (which == 1)
+		if (which == 1) {
 			had_data = true;
 			if (!wait_for_reply)
 				last_micros = utime();
+			if (len + command_end[which] > COMMAND_SIZE) {
+				debug("clip size! %d %d %d", len, command_end[which], COMMAND_SIZE);
+				len = COMMAND_SIZE - command_end[which];
+			}
+		}
+		else
 #endif
-		if (len + command_end[which] > COMMAND_SIZE)
-			len = COMMAND_SIZE - command_end[which];
-		uint8_t cmd_len;
+			if (len + command_end[which] > FULL_COMMAND_SIZE) {
+				debug("clip size! %d %d %d", len, command_end[which], FULL_COMMAND_SIZE);
+				len = FULL_COMMAND_SIZE - command_end[which];
+			}
+		int cmd_len;
 #ifdef SERIAL
 		if (which == 1) {
 			cmd_len = hwpacketsize(command_end[which], &len);
@@ -262,7 +273,7 @@ void serial(uint8_t which)
 		}
 		else
 #endif
-			cmd_len = command[which][0];
+			cmd_len = command[which][0] & 0xff;
 		if (command_end[which] + len > cmd_len)
 			len = cmd_len - command_end[which];
 		serialdev[which]->readBytes(reinterpret_cast <char *> (&command[which][command_end[which]]), len);
@@ -486,7 +497,7 @@ void write_stall()
 }
 #endif
 
-void send_host(char cmd, int s, int m, float f, int e, int len)
+void send_host(char cmd, int s, int m, double f, int e, int len)
 {
 	//debug("queueing for host cmd %x", cmd);
 	// Use malloc, not mem_alloc, because there are multiple pointers to the same memory and mem_alloc cannot handle that.
@@ -496,10 +507,10 @@ void send_host(char cmd, int s, int m, float f, int e, int len)
 	else
 		hostqueue_head = record;
 	hostqueue_tail = record;
-	record->r.s = s;
-	record->r.m = m;
-	record->r.f = f;
-	record->r.e = e;
+	record->s = s;
+	record->m = m;
+	record->f = f;
+	record->e = e;
 	record->cmd = cmd;
 	record->len = len;
 	record->next = NULL;

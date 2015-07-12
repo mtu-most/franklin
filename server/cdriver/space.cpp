@@ -208,8 +208,8 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 {
 	loaddebug("loading motor %d", m);
 	uint16_t enable = motor[m]->enable_pin.write();
-	float old_home_pos = motor[m]->home_pos;
-	float old_steps_per_unit = motor[m]->steps_per_unit;
+	double old_home_pos = motor[m]->home_pos;
+	double old_steps_per_unit = motor[m]->steps_per_unit;
 	motor[m]->step_pin.read(read_16(addr));
 	motor[m]->dir_pin.read(read_16(addr));
 	motor[m]->enable_pin.read(read_16(addr));
@@ -239,8 +239,8 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 	if (!isnan(motor[m]->home_pos)) {
 		// Axes with a limit switch.
 		if (old_steps_per_unit != motor[m]->steps_per_unit) {
-			float diff = motor[m]->settings.current_pos / old_steps_per_unit - motor[m]->home_pos;
-			float f = motor[m]->home_pos + diff;
+			double diff = motor[m]->settings.current_pos / old_steps_per_unit - motor[m]->home_pos;
+			double f = motor[m]->home_pos + diff;
 			int32_t cpdiff = f * motor[m]->steps_per_unit + (f > 0 ? .49 : -.49) - motor[m]->settings.current_pos;
 			motor[m]->settings.current_pos += cpdiff;
 			cpdebug(id, m, "load motor new steps add %d", cpdiff);
@@ -248,7 +248,7 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 			must_move = true;
 		}
 		if (motors_busy && old_home_pos != motor[m]->home_pos && !isnan(old_home_pos)) {
-			float f = motor[m]->home_pos - old_home_pos;
+			double f = motor[m]->home_pos - old_home_pos;
 			int32_t diff = f * motor[m]->steps_per_unit + (f > 0 ? .49 : -.49);
 			motor[m]->settings.current_pos += diff;
 			cpdebug(id, m, "load motor new home add %d", diff);
@@ -260,7 +260,7 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 		// Axes without a limit switch: extruders.
 		if (motors_busy && old_steps_per_unit != motor[m]->steps_per_unit) {
 			int32_t cp = motor[m]->settings.current_pos;
-			float pos = cp / old_steps_per_unit;
+			double pos = cp / old_steps_per_unit;
 			cpdebug(id, m, "load motor new steps no home");
 			motor[m]->settings.current_pos = pos * motor[m]->steps_per_unit;
 			int diff = motor[m]->settings.current_pos - cp;
@@ -353,7 +353,7 @@ void Space::cancel_update() {
 }
 
 // Space things. {{{
-static void check_distance(Motor *mtr, float distance, float dt, float &factor) { // {{{
+static void check_distance(Motor *mtr, double distance, double dt, double &factor) { // {{{
 	if (dt == 0) {
 		factor = 0;
 		return;
@@ -366,7 +366,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	//debug("cd %f %f", distance, dt);
 	mtr->settings.target_dist = distance;
 	mtr->settings.target_v = distance / dt;
-	float v = fabs(mtr->settings.target_v);
+	double v = fabs(mtr->settings.target_v);
 	int8_t s = (mtr->settings.target_v < 0 ? -1 : 1);
 	// When turning around, ignore limits (they shouldn't have been violated anyway).
 	if (mtr->settings.last_v * s < 0) {
@@ -381,7 +381,7 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	}
 	//debug("cd2 %f %f", distance, dt);
 	// Limit a+.
-	float limit_dv = mtr->limit_a * dt;
+	double limit_dv = mtr->limit_a * dt;
 	if (v - mtr->settings.last_v * s > limit_dv) {
 		movedebug("a+ %f %f %f %d", mtr->settings.target_v, limit_dv, mtr->settings.last_v, s);
 		distance = (limit_dv * s + mtr->settings.last_v) * dt;
@@ -390,14 +390,14 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	//debug("cd3 %f %f", distance, dt);
 	// Limit a-.
 	// Distance to travel until end of segment or connection.
-	float max_dist = (mtr->settings.endpos - mtr->settings.current_pos / mtr->steps_per_unit) * s;
+	double max_dist = (mtr->settings.endpos - mtr->settings.current_pos / mtr->steps_per_unit) * s;
 	// Find distance traveled when slowing down at maximum a.
 	// x = 1/2 at²
 	// t = sqrt(2x/a)
 	// v = at
 	// v² = 2a²x/a = 2ax
 	// x = v²/2a
-	float limit_dist = v * v / 2 / mtr->limit_a;
+	double limit_dist = v * v / 2 / mtr->limit_a;
 	//debug("max %f limit %f v %f a %f", max_dist, limit_dist, v, mtr->limit_a);
 	/*if (max_dist > 0 && limit_dist > max_dist) {
 		movedebug("a- %f %f %f %d %d %f", mtr->settings.endpos, mtr->limit_a, max_dist, mtr->settings.current_pos, s, dt);
@@ -423,13 +423,13 @@ static void check_distance(Motor *mtr, float distance, float dt, float &factor) 
 	}
 	//debug("move pos %d %d cf %d time %d cp %d hwcp %d diff %d value %d", s, m, current_fragment, settings.hwtime, sp.motor[m]->settings.current_pos + avr_pos_offset[m], sp.motor[m]->settings.current_pos + avr_pos_offset[m], sp.motor[m]->settings.current_pos - sp.motor[m]->settings.current_pos, value);
 	//debug("=============");
-	float f = distance / mtr->settings.target_dist;
+	double f = distance / mtr->settings.target_dist;
 	movedebug("checked %f %f", mtr->settings.target_dist, distance);
 	if (f < factor)
 		factor = f;
 } // }}}
 
-static void move_axes(Space *s, uint32_t current_time, float &factor) { // {{{
+static void move_axes(Space *s, uint32_t current_time, double &factor) { // {{{
 #ifdef DEBUG_PATH
 	fprintf(stderr, "%d\t%d", current_time, s->id);
 	for (int a = 0; a < s->num_axes; ++a) {
@@ -440,7 +440,7 @@ static void move_axes(Space *s, uint32_t current_time, float &factor) { // {{{
 	}
 	fprintf(stderr, "\n");
 #endif
-	float motors_target[s->num_motors];
+	double motors_target[s->num_motors];
 	bool ok = true;
 	space_types[s->type].xyz2motors(s, motors_target, &ok);
 	// Try again if it didn't work; it should have moved target to a better location.
@@ -451,12 +451,12 @@ static void move_axes(Space *s, uint32_t current_time, float &factor) { // {{{
 	//movedebug("ok %d", ok);
 	for (uint8_t m = 0; m < s->num_motors; ++m) {
 		movedebug("move %d %f %f", m, motors_target[m], s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit);
-		float distance = motors_target[m] - s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit;
+		double distance = motors_target[m] - s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit;
 		check_distance(s->motor[m], distance, (current_time - settings.last_time) / 1e6, factor);
 	}
 } // }}}
 
-static bool do_steps(float &factor, uint32_t current_time) { // {{{
+static bool do_steps(double &factor, uint32_t current_time) { // {{{
 	//debug("steps");
 	if (factor <= 0) {
 		movedebug("end move");
@@ -471,7 +471,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 	}
 	if (factor < 1) {
 		// Recalculate steps; ignore resulting factor.
-		float dummy_factor = 1;
+		double dummy_factor = 1;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -491,7 +491,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 			Space &sp = spaces[s];
 			for (uint8_t m = 0; m < sp.num_motors; ++m) {
 				Motor &mtr = *sp.motor[m];
-				float num = (mtr.settings.current_pos / mtr.steps_per_unit + mtr.settings.target_dist * factor) * mtr.steps_per_unit;
+				double num = (mtr.settings.current_pos / mtr.steps_per_unit + mtr.settings.target_dist * factor) * mtr.steps_per_unit;
 				if (mtr.settings.current_pos != int(num + (num > 0 ? .49 : -.49))) {
 					//debug("have steps %d %f %f", mtr.settings.current_pos, mtr.settings.target_dist, factor);
 					have_steps = true;
@@ -526,7 +526,7 @@ static bool do_steps(float &factor, uint32_t current_time) { // {{{
 					//mtr.last_v = 0;
 				continue;
 			}
-			float target = mtr.settings.current_pos / mtr.steps_per_unit + mtr.settings.target_dist * factor;
+			double target = mtr.settings.current_pos / mtr.steps_per_unit + mtr.settings.target_dist * factor;
 			cpdebug(s, m, "ccp3 stopping %d target %f lastv %f spm %f tdist %f factor %f frag %d", stopping, target, mtr.settings.last_v, mtr.steps_per_unit, mtr.settings.target_dist, factor, current_fragment);
 			//if (fabs(mtr.settings.target_dist * factor) > .01)	// XXX: This shouldn't ever happen on my printer, but shouldn't be a limitation.
 				//abort();
@@ -555,8 +555,8 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		return;
 	}
 	movedebug("handling %d %d", stopped, moving);
-	float factor = 1;
-	float t = (current_time - settings.start_time) / 1e6;
+	double factor = 1;
+	double t = (current_time - settings.start_time) / 1e6;
 	if (t >= settings.t0 + settings.tp) {	// Finish this move and prepare next.
 		movedebug("finishing %f %f %f %ld %ld", t, settings.t0, settings.tp, long(current_time), long(settings.start_time));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
@@ -615,8 +615,8 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		return;
 	}
 	if (t < settings.t0) {	// Main part.
-		float t_fraction = t / settings.t0;
-		float current_f = (settings.f1 * (2 - t_fraction) + settings.f2 * t_fraction) * t_fraction;
+		double t_fraction = t / settings.t0;
+		double current_f = (settings.f1 * (2 - t_fraction) + settings.f2 * t_fraction) * t_fraction;
 		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", t, settings.t0, settings.tp, t_fraction, settings.f1, settings.f2, current_f);
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
@@ -633,7 +633,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 	}
 	else {	// Connector part.
 		movedebug("connector %f %f %f", t, settings.t0, settings.tp);
-		float tc = t - settings.t0;
+		double tc = t - settings.t0;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -641,9 +641,9 @@ static void handle_motors(unsigned long long current_time) { // {{{
 					sp.axis[a]->settings.target = NAN;
 					continue;
 				}
-				float t_fraction = tc / settings.tp;
-				float current_f2 = settings.fp * (2 - t_fraction) * t_fraction;
-				float current_f3 = settings.fq * t_fraction * t_fraction;
+				double t_fraction = tc / settings.tp;
+				double current_f2 = settings.fp * (2 - t_fraction) * t_fraction;
+				double current_f3 = settings.fq * t_fraction * t_fraction;
 				sp.axis[a]->settings.target = sp.axis[a]->settings.source + sp.axis[a]->settings.main_dist + sp.axis[a]->settings.dist * current_f2 + sp.axis[a]->settings.next_dist * current_f3;
 			}
 			move_axes(&sp, current_time, factor);

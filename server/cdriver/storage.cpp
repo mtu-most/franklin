@@ -23,18 +23,18 @@ void write_16(int32_t &address, int16_t data)
 	write_8(address, (data >> 8) & 0xff);
 }
 
-float read_float(int32_t &address)
+double read_float(int32_t &address)
 {
 	ReadFloat ret;
-	for (uint8_t t = 0; t < sizeof(float); ++t)
+	for (uint8_t t = 0; t < sizeof(double); ++t)
 		ret.b[t] = read_8(address);
 	return ret.f;
 }
 
-void write_float(int32_t &address, float data)
+void write_float(int32_t &address, double data)
 {
 	ReadFloat d;
 	d.f = data;
-	for (uint8_t t = 0; t < sizeof(float); ++t)
+	for (uint8_t t = 0; t < sizeof(double); ++t)
 		write_8(address, d.b[t]);
 }

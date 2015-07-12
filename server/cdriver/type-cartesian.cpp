@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-static void xyz2motors(Space *s, float *motors, bool *ok) {
+static void xyz2motors(Space *s, double *motors, bool *ok) {
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
 		if (motors)
 			motors[a] = s->axis[a]->settings.target;
@@ -18,7 +18,7 @@ static void reset_pos(Space *s) {
 	}
 }
 
-static void check_position(Space *s, float *data) {
+static void check_position(Space *s, double *data) {
 }
 
 static void load(Space *s, uint8_t old_type, int32_t &addr) {
@@ -43,16 +43,16 @@ static void free(Space *s) {
 static void afree(Space *s, int a) {
 }
 
-static float change0(Space *s, int axis, float value) {
+static double change0(Space *s, int axis, double value) {
 	return value;
 }
 
-static float unchange0(Space *s, int axis, float value) {
+static double unchange0(Space *s, int axis, double value) {
 	return value;
 }
 
-static float probe_speed(Space *s) {
-	float max_spu = 0;
+static double probe_speed(Space *s) {
+	double max_spu = 0;
 	for (int i = 0; i < s->num_motors; ++i)
 		if (max_spu < s->motor[i]->steps_per_unit)
 			max_spu = s->motor[i]->steps_per_unit;
@@ -78,7 +78,7 @@ struct ExtruderData {
 };
 
 struct ExtruderAxisData {
-	float offset[3];
+	double offset[3];
 };
 
 #define EDATA(s) (*reinterpret_cast <ExtruderData *>(s->type_data))
@@ -155,13 +155,13 @@ static void eafree(Space *s, int a) {
 	delete reinterpret_cast <ExtruderAxisData *>(s->axis[a]->type_data);
 }
 
-static float echange0(Space *s, int axis, float value) {
+static double echange0(Space *s, int axis, double value) {
 	if (current_extruder >= s->num_axes || axis >= 3)
 		return value;
 	return value + EADATA(s, current_extruder).offset[axis];
 }
 
-static float eunchange0(Space *s, int axis, float value) {
+static double eunchange0(Space *s, int axis, double value) {
 	if (current_extruder >= s->num_axes || axis >= 3)
 		return value;
 	return value - EADATA(s, current_extruder).offset[axis];

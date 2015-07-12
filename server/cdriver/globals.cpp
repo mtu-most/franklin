@@ -59,7 +59,7 @@ bool globals_load(int32_t &addr)
 	if (isnan(feedrate) || isinf(feedrate) || feedrate <= 0)
 		feedrate = 1;
 	int ce = read_8(addr);
-	float zo = read_float(addr);
+	double zo = read_float(addr);
 	if (motors_busy && (current_extruder != ce || zoffset != zo) && num_spaces > 0 && settings.queue_start == settings.queue_end && !settings.queue_full) {
 		queue[settings.queue_end].probe = false;
 		queue[settings.queue_end].cb = false;

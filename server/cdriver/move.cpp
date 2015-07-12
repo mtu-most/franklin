@@ -129,7 +129,7 @@ uint8_t next_move() {
 #ifdef DEBUG_MOVE
 	debug("Move was prepared");
 #endif
-	float vq;
+	double vq;
 	if (n == settings.queue_end) { // {{{
 		// There is no next segment; we should stop at the end.
 		prepared = false;
@@ -179,8 +179,8 @@ uint8_t next_move() {
 		vq = queue[n].f[0] * feedrate;
 	}
 	// }}}
-	float v0 = queue[settings.queue_start].f[0] * feedrate;
-	float vp = queue[settings.queue_start].f[1] * feedrate;
+	double v0 = queue[settings.queue_start].f[0] * feedrate;
+	double vp = queue[settings.queue_start].f[1] * feedrate;
 	//debug("mv %f %f %f %f", feedrate, v0, vp, vq);
 	if (queue[settings.queue_start].cb)
 		cbs_after_current_move += 1;
@@ -225,15 +225,15 @@ uint8_t next_move() {
 		if (isnan(sp.max_v) || isinf(sp.max_v) || sp.max_v <= 0)
 			continue;
 		// max_mm is the maximum speed in mm/s.
-		float max_mm = probing ? space_types[sp.type].probe_speed(&sp) : sp.max_v;
-		float dist = 0, distn = 0;
+		double max_mm = probing ? space_types[sp.type].probe_speed(&sp) : sp.max_v;
+		double dist = 0, distn = 0;
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			dist += sp.axis[a]->settings.dist * sp.axis[a]->settings.dist;
 			distn += sp.axis[a]->settings.next_dist * sp.axis[a]->settings.next_dist;
 		}
 		dist = sqrt(dist);
 		distn = sqrt(distn);
-		float max = max_mm / dist;
+		double max = max_mm / dist;
 		if (v0 > max)
 			v0 = max;
 		if (vp > max)
@@ -253,7 +253,7 @@ uint8_t next_move() {
 #endif
 
 	// Use maximum deviation to find fraction where to start rounded corner.
-	float factor = vq / vp;
+	double factor = vq / vp;
 	done_factor = NAN;
 	if (vq == 0) {
 		settings.fp = 0;
@@ -269,26 +269,26 @@ uint8_t next_move() {
 				settings.fp = 0;
 				break;
 			}
-			float norma2 = 0, normb2 = 0, diff2 = 0;
+			double norma2 = 0, normb2 = 0, diff2 = 0;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				float nd = sp.axis[a]->settings.next_dist * factor;
+				double nd = sp.axis[a]->settings.next_dist * factor;
 				norma2 += sp.axis[a]->settings.dist * sp.axis[a]->settings.dist;
 				normb2 += nd * nd;
-				float d = sp.axis[a]->settings.dist - sp.axis[a]->settings.next_dist;
+				double d = sp.axis[a]->settings.dist - sp.axis[a]->settings.next_dist;
 				diff2 += d * d;
 			}
 			// Calculate distances and ignore spaces which don't have two segments.
-			float normb(sqrt(normb2));
+			double normb(sqrt(normb2));
 			if (normb <= 0)
 				continue;
-			float norma(sqrt(norma2));
+			double norma(sqrt(norma2));
 			if (norma <= 0)
 				continue;
-			float done = 1 - sp.max_deviation / norma;
+			double done = 1 - sp.max_deviation / norma;
 			// Set it also if done_factor is NaN.
 			if (!(done <= done_factor))
 				done_factor = done;
-			float new_fp = sp.max_deviation / sqrt(normb / (norma + normb) * diff2);
+			double new_fp = sp.max_deviation / sqrt(normb / (norma + normb) * diff2);
 #ifdef DEBUG_MOVE
 			debug("Space %d fp %f dev %f", s, settings.fp, sp.max_deviation);
 #endif
@@ -327,7 +327,7 @@ uint8_t next_move() {
 		// Using NULL as target fills endpos.
 		space_types[sp.type].xyz2motors(&sp, NULL, &ok);
 		for (int m = 0; m < sp.num_motors; ++m) {
-			float ep = sp.motor[m]->settings.endpos * sp.motor[m]->steps_per_unit;
+			double ep = sp.motor[m]->settings.endpos * sp.motor[m]->steps_per_unit;
 			int iep = int(ep + (ep > 0 ? .49 : -.49));
 			if (sp.motor[m]->settings.current_pos != iep) {
 				anything = true;

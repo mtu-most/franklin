@@ -43,10 +43,10 @@ struct Pin_t {
 };
 
 union ReadFloat {
-	float f;
+	double f;
 	int32_t i;
 	uint32_t ui;
-	uint8_t b[sizeof(float)];
+	uint8_t b[sizeof(double)];
 };
 
 enum SingleByteHostCommands {
@@ -130,40 +130,40 @@ enum Command {
 struct Temp
 {
 	// See temp.c from definition of calibration constants.
-	float R0, R1, logRc, beta, Tc;	// calibration values of thermistor.  [Ω, Ω, logΩ, K, K]
+	double R0, R1, logRc, beta, Tc;	// calibration values of thermistor.  [Ω, Ω, logΩ, K, K]
 	/*
 	// Temperature balance calibration.
-	float power;			// added power while heater is on.  [W]
-	float core_C;			// heat capacity of the core.  [J/K]
-	float shell_C;		// heat capacity of the shell.  [J/K]
-	float transfer;		// heat transfer between core and shell.  [W/K]
-	float radiation;		// radiated power = radiation * (shell_T ** 4 - room_T ** 4) [W/K**4]
-	float convection;		// convected power = convection * (shell_T - room_T) [W/K]
+	double power;			// added power while heater is on.  [W]
+	double core_C;			// heat capacity of the core.  [J/K]
+	double shell_C;		// heat capacity of the shell.  [J/K]
+	double transfer;		// heat transfer between core and shell.  [W/K]
+	double radiation;		// radiated power = radiation * (shell_T ** 4 - room_T ** 4) [W/K**4]
+	double convection;		// convected power = convection * (shell_T - room_T) [W/K]
 	*/
 	// Pins.
 	Pin_t power_pin[2];
 	Pin_t thermistor_pin;
 	// Volatile variables.
-	float target[2];			// target temperature; NAN to disable. [K]
+	double target[2];			// target temperature; NAN to disable. [K]
 	int32_t adctarget[2];		// target temperature in adc counts; -1 for disabled. [adccounts]
 	int32_t adclast;		// last measured temperature. [adccounts]
 	/*
-	float core_T, shell_T;	// current temperatures. [K]
+	double core_T, shell_T;	// current temperatures. [K]
 	*/
 	uint8_t following_gpios;	// linked list of gpios monitoring this temp.
-	float min_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
-	float max_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
+	double min_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
+	double max_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
 	int32_t adcmin_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
 	int32_t adcmax_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
 	// Internal variables.
 	uint32_t last_temp_time;	// last value of micros when this heater was handled.
 	uint32_t time_on;		// Time that the heater has been on since last reading.  [μs]
 	bool is_on[2];			// If the heater is currently on.
-	float K;			// Thermistor constant; kept in memory for performance.
+	double K;			// Thermistor constant; kept in memory for performance.
 	// Functions.
 	int32_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
-	float fromadc(int32_t adc);	// convert ADC to K.
-	int32_t toadc(float T, int32_t default_);	// convert K to ADC.
+	double fromadc(int32_t adc);	// convert ADC to K.
+	int32_t toadc(double T, int32_t default_);	// convert K to ADC.
 	void load(int32_t &addr, int id);
 	void save(int32_t &addr);
 	void init();
@@ -173,8 +173,8 @@ struct Temp
 
 struct History
 {
-	float t0, tp;
-	float f0, f1, f2, fp, fq, fmain;
+	double t0, tp;
+	double f0, f1, f2, fp, fq, fmain;
 	uint32_t hwtime, start_time, last_time, last_current_time;
 	int cbs;
 	int queue_start, queue_end;
@@ -184,26 +184,26 @@ struct History
 
 struct Motor_History
 {
-	float last_v;		// v during last iteration, for using limit_a [m/s].
-	float target_v, target_dist;	// Internal values for moving.
+	double last_v;		// v during last iteration, for using limit_a [m/s].
+	double target_v, target_dist;	// Internal values for moving.
 	int32_t current_pos;	// Current position of motor (in steps), and what the hardware currently thinks.
-	float endpos;
+	double endpos;
 };
 
 struct Axis_History
 {
-	float dist, next_dist, main_dist;
-	float source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
-	float target;
+	double dist, next_dist, main_dist;
+	double source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
+	double target;
 };
 
 struct Axis
 {
 	Axis_History *history;
 	Axis_History settings;
-	float park;		// Park position; not used by the firmware, but stored for use by the host.
+	double park;		// Park position; not used by the firmware, but stored for use by the host.
 	uint8_t park_order;
-	float min_pos, max_pos;
+	double min_pos, max_pos;
 	void *type_data;
 };
 
@@ -214,17 +214,17 @@ struct Motor
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	Pin_t enable_pin;
-	float steps_per_unit;			// hardware calibration [steps/unit].
+	double steps_per_unit;			// hardware calibration [steps/unit].
 	uint8_t max_steps;			// maximum number of steps in one iteration.
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;
-	float home_pos;	// Position of motor (in μm) when the home switch is triggered.
+	double home_pos;	// Position of motor (in μm) when the home switch is triggered.
 	Pin_t sense_pin;
 	uint8_t sense_state;
-	float sense_pos;
+	double sense_pos;
 	bool active;
 	char *data;
-	float limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
+	double limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
 #ifdef HAVE_AUDIO
 	uint8_t audio_flags;
@@ -239,17 +239,17 @@ struct Space;
 
 struct SpaceType
 {
-	void (*xyz2motors)(Space *s, float *motors, bool *ok);
+	void (*xyz2motors)(Space *s, double *motors, bool *ok);
 	void (*reset_pos)(Space *s);
-	void (*check_position)(Space *s, float *data);
+	void (*check_position)(Space *s, double *data);
 	void (*load)(Space *s, uint8_t old_type, int32_t &addr);
 	void (*save)(Space *s, int32_t &addr);
 	bool (*init)(Space *s);
 	void (*free)(Space *s);
 	void (*afree)(Space *s, int a);
-	float (*change0)(Space *s, int axis, float value);
-	float (*unchange0)(Space *s, int axis, float value);
-	float (*probe_speed)(Space *s);
+	double (*change0)(Space *s, int axis, double value);
+	double (*unchange0)(Space *s, int axis, double value);
+	double (*probe_speed)(Space *s);
 };
 
 struct Space
@@ -257,8 +257,8 @@ struct Space
 	void *type_data;
 	Motor **motor;
 	Axis **axis;
-	float max_deviation;
-	float max_v;
+	double max_deviation;
+	double max_v;
 	uint8_t type;
 	uint8_t id;
 	uint8_t num_axes, num_motors;
@@ -305,9 +305,9 @@ struct MoveCommand
 {
 	bool cb;
 	bool probe;
-	float f[2];
-	float data[10];	// Value if given, NAN otherwise.  Variable size array. TODO
-	float time, dist;
+	double f[2];
+	double data[10];	// Value if given, NAN otherwise.  Variable size array. TODO
+	double time, dist;
 };
 
 struct Serial_t {
@@ -341,7 +341,7 @@ EXTERN HostSerial host_serial;
 
 #define COMMAND_SIZE 127
 #define COMMAND_LEN_MASK 0x7f
-#define FULL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
+#define FULL_COMMAND_SIZE 256 //(COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
 
 // Globals
 EXTERN unsigned char uuid[UUID_SIZE];
@@ -353,13 +353,13 @@ EXTERN uint32_t protocol_version;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
 EXTERN uint16_t timeout;
-//EXTERN float room_T;	//[°C]
-EXTERN float feedrate;		// Multiplication factor for f values, used at start of move.
-EXTERN float zoffset;	// Offset for axis 2 of space 0.
+//EXTERN double room_T;	//[°C]
+EXTERN double feedrate;		// Multiplication factor for f values, used at start of move.
+EXTERN double zoffset;	// Offset for axis 2 of space 0.
 // Other variables.
 EXTERN Serial_t *serialdev[2];
 EXTERN unsigned char command[2][FULL_COMMAND_SIZE];
-EXTERN uint8_t command_end[2];
+EXTERN int command_end[2];
 EXTERN Space *spaces;
 EXTERN Temp *temps;
 EXTERN Gpio *gpios;
@@ -394,7 +394,7 @@ EXTERN int stopping;		// From limit.
 EXTERN int sending_fragment;	// To compute how many fragments are in use from free_fragments.
 EXTERN bool start_pending, stop_pending, discarding;
 EXTERN int discard_pending;
-EXTERN float done_factor;
+EXTERN double done_factor;
 EXTERN uint8_t requested_temp;
 EXTERN bool refilling;
 EXTERN int current_fragment, running_fragment;
@@ -422,9 +422,9 @@ void buffered_debug(char const *fmt, ...);
 
 // packet.cpp
 void packet();	// A command packet has arrived; handle it.
-void settemp(int which, float target);
-void waittemp(int which, float mintemp, float maxtemp);
-void setpos(int which, int t, float f);
+void settemp(int which, double target);
+void waittemp(int which, double mintemp, double maxtemp);
+void setpos(int which, int t, double f);
 
 // serial.cpp
 void serial(uint8_t which);	// Handle commands from serial.
@@ -432,7 +432,7 @@ void prepare_packet(char *the_packet, int len);
 void send_packet();
 void write_ack();
 void write_stall();
-void send_host(char cmd, int s = 0, int m = 0, float f = 0, int e = 0, int len = 0);
+void send_host(char cmd, int s = 0, int m = 0, double f = 0, int e = 0, int len = 0);
 
 // move.cpp
 uint8_t next_move();
@@ -442,12 +442,20 @@ void abort_move(int pos);
 struct Run_Record {
 	uint8_t type;
 	int32_t tool;
-	float x, X, y, Y, z, Z, e, E, f, F;
-	float time, dist;
+	double x, X, y, Y, z, Z, e, E, f, F;
+	double time, dist;
 } __attribute__((__packed__));
-void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa, int audio);
+struct ProbeFile {
+	double p0[2], p1[2];
+	uint32_t nx, ny;
+	double sample[0];
+} __attribute__((__packed__));
+void run_file(int name_len, char const *name, int probe_name_len, char const *probe_name, double refx, double refy, double refz, double sina, double cosa, int audio);
 void abort_run_file();
 void run_file_fill_queue();
+EXTERN char probe_file_name[256];
+EXTERN off_t probe_file_size;
+EXTERN ProbeFile *probe_file_map;
 EXTERN char run_file_name[256];
 EXTERN off_t run_file_size;
 EXTERN Run_Record *run_file_map;
@@ -457,14 +465,14 @@ EXTERN int run_file_num_records;
 EXTERN int run_file_wait_temp;
 EXTERN int run_file_wait;
 EXTERN struct itimerspec run_file_timer;
-EXTERN float run_file_refx;
-EXTERN float run_file_refy;
-EXTERN float run_file_refz;
-EXTERN float run_file_sina;
-EXTERN float run_file_cosa;
+EXTERN double run_file_refx;
+EXTERN double run_file_refy;
+EXTERN double run_file_refz;
+EXTERN double run_file_sina;
+EXTERN double run_file_cosa;
 EXTERN bool run_file_finishing;
 EXTERN int run_file_audio;
-EXTERN float run_time, run_dist;
+EXTERN double run_time, run_dist;
 
 // setup.cpp
 void setup(char const *port, char const *run_id);
@@ -474,8 +482,8 @@ uint8_t read_8(int32_t &address);
 void write_8(int32_t &address, uint8_t data);
 int16_t read_16(int32_t &address);
 void write_16(int32_t &address, int16_t data);
-float read_float(int32_t &address);
-void write_float(int32_t &address, float data);
+double read_float(int32_t &address);
+void write_float(int32_t &address, double data);
 
 // temp.cpp
 void handle_temp(int id, int temp);

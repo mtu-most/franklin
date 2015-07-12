@@ -248,7 +248,7 @@ static inline void hwpacket(int len) {
 			return;
 		}
 		avr_write_ack("limit/sense");
-		float pos;
+		double pos;
 		int s, m;
 		if (which >= avr_active_motors) {
 			s = -1;

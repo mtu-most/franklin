@@ -23,38 +23,82 @@ struct String {
 
 static String *strings;
 
-void run_file(int name_len, char const *name, float refx, float refy, float refz, float sina, float cosa, int audio) {
+void run_file(int name_len, char const *name, int probe_name_len, char const *probename, double refx, double refy, double refz, double sina, double cosa, int audio) {
 	//debug("run file %f %f %f %f %f", refx, refy, refz, sina, cosa);
 	abort_run_file();
 	if (name_len == 0)
 		return;
 	strncpy(run_file_name, name, name_len);
 	run_file_name[name_len] = '\0';
+	strncpy(probe_file_name, probename, probe_name_len);
+	probe_file_name[probe_name_len] = '\0';
 	run_time = 0;
 	run_dist = 0;
 	settings.run_file_current = 0;
+	int probe_fd;
+	if (probe_name_len > 0) {
+		probe_fd = open(probe_file_name, O_RDONLY);
+		if (probe_fd < 0) {
+			debug("Failed to open probe file '%s': %s", probe_file_name, strerror(errno));
+			return;
+		}
+		struct stat stat;
+		if (fstat(probe_fd, &stat) < 0) {
+			debug("Failed to stat probe file '%s': %s", probe_file_name, strerror(errno));
+			close(probe_fd);
+			return;
+		}
+		probe_file_size = stat.st_size;
+		if (probe_file_size < sizeof(ProbeFile)) {
+			debug("Probe file too short");
+			close(probe_fd);
+			return;
+		}
+	}
 	int fd = open(run_file_name, O_RDONLY);
 	if (fd < 0) {
 		debug("Failed to open run file '%s': %s", run_file_name, strerror(errno));
+		if (probe_name_len > 0)
+			close(probe_fd);
 		return;
 	}
 	struct stat stat;
 	if (fstat(fd, &stat) < 0) {
 		debug("Failed to stat run file '%s': %s", run_file_name, strerror(errno));
 		close(fd);
+		if (probe_name_len > 0)
+			close(probe_fd);
 		return;
 	}
 	run_file_size = stat.st_size;
 	run_file_map = reinterpret_cast<Run_Record *>(mmap(NULL, run_file_size, PROT_READ, MAP_SHARED, fd, 0));
 	close(fd);
+	if (probe_name_len > 0) {
+		probe_file_map = reinterpret_cast<ProbeFile *>(mmap(NULL, probe_file_size, PROT_READ, MAP_SHARED, probe_fd, 0));
+		close(probe_fd);
+		if ((probe_file_map->nx * probe_file_map->ny) * sizeof(double) + sizeof(ProbeFile) != probe_file_size) {
+			debug("Invalid probe file size");
+			munmap(probe_file_map, probe_file_size);
+			munmap(run_file_map, run_file_size);
+			return;
+		}
+	}
+	else
+		probe_file_map = NULL;
 	if (audio < 0) {
-		run_file_num_strings = read_num(run_file_size - 4 * 8 - 4);
+		// File format:
+		// records
+		// strings
+		// int32_t stringlengths[]
+		// int32_t numstrings
+		// double bbox[8]
+		run_file_num_strings = read_num(run_file_size - sizeof(double) * 8 - sizeof(int32_t));
 		strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
-		off_t pos = run_file_size - 4 * (8 + 1 + run_file_num_strings);
+		off_t pos = run_file_size - sizeof(double) * 8 - sizeof(int32_t) - sizeof(int32_t) * run_file_num_strings;
 		off_t current = 0;
 		for (int i = 0; i < run_file_num_strings; ++i) {
 			strings[i].start = current;
-			strings[i].len = read_num(pos + 4 * i);
+			strings[i].len = read_num(pos + sizeof(int32_t) * i);
 			current += strings[i].len;
 		}
 		run_file_first_string = pos - current;
@@ -81,6 +125,10 @@ void abort_run_file() {
 		return;
 	munmap(run_file_map, run_file_size);
 	run_file_map = NULL;
+	if (probe_file_map) {
+		munmap(probe_file_map, probe_file_size);
+		probe_file_map = NULL;
+	}
 	free(strings);
 	strings = NULL;
 }
@@ -95,6 +143,10 @@ enum {
 	RUN_WAIT,
 	RUN_CONFIRM,
 };
+
+static double handle_probe(double x, double y, double z) {
+	return z;
+}
 
 void run_file_fill_queue() {
 	static bool lock = false;
@@ -123,7 +175,14 @@ void run_file_fill_queue() {
 		lock = false;
 		return;
 	}
-	while (run_file_map && (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2 && (run_file_map[settings.run_file_current].type == RUN_GOTO || !arch_running()) && !settings.queue_full && settings.run_file_current < run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
+	while (run_file_map	// There is a file to run.
+		       	&& (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2	// There is space in the queue.
+			&& !settings.queue_full	// Really, there is space in the queue.
+			&& (run_file_map[settings.run_file_current].type == RUN_GOTO || !arch_running())	// The command is GOTO (buffered), or the buffer is empty.
+			&& settings.run_file_current < run_file_num_records	// There are records to send.
+			&& !run_file_wait_temp	// We are not waiting for a temp alarm.
+			&& !run_file_wait	// We are not waiting for something else (pause or confirm).
+			&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
 		Run_Record &r = run_file_map[settings.run_file_current];
 		rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
 		switch (r.type) {
@@ -140,9 +199,9 @@ void run_file_fill_queue() {
 				queue[settings.queue_end].f[0] = r.f;
 				queue[settings.queue_end].f[1] = r.F;
 				if (num_spaces > 0) {
-					float x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
-					float y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
-					float z = r.Z + run_file_refz;
+					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
+					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
+					double z = r.Z + run_file_refz;
 					//debug("goto %f %f %f", x, y, z);
 					int num0 = spaces[0].num_axes;
 					if (num0 > 0) {
@@ -150,7 +209,7 @@ void run_file_fill_queue() {
 						if (num0 > 1) {
 							queue[settings.queue_end].data[1] = y;
 							if (num0 > 2)
-								queue[settings.queue_end].data[2] = z;
+								queue[settings.queue_end].data[2] = handle_probe(x, y, z);
 						}
 					}
 					for (int i = 3; i < num0; ++i)
@@ -258,7 +317,7 @@ void run_file_fill_queue() {
 		settings.run_file_current += 1;
 	}
 	rundebug("run queue done");
-	if (run_file_map && !arch_running() && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait) {
+	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
 		// Done.
 		debug("done running file");
 		run_file_finishing = true;

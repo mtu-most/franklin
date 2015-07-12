@@ -56,7 +56,7 @@ void Temp::save(int32_t &addr)
 	write_float(addr, target[1]);
 }
 
-float Temp::fromadc(int32_t adc) {
+double Temp::fromadc(int32_t adc) {
 	if (adc <= 0)
 		return INFINITY;
 	if (adc >= MAXINT)
@@ -79,14 +79,14 @@ float Temp::fromadc(int32_t adc) {
 	return -beta / log(K * ((1 << ADCBITS) / R0 / adc - 1 / R0 - 1 / R1));
 }
 
-int32_t Temp::toadc(float T, int32_t default_) {
+int32_t Temp::toadc(double T, int32_t default_) {
 	if (isnan(T) || T < 0)
 		return default_;
 	if (isnan(beta))
 		return (T - R1) / R0;
 	if (isinf(T) && T > 0)
 		return -1;
-	float Rs = K * exp(beta * 1. / T);
+	double Rs = K * exp(beta * 1. / T);
 	//debug("K %f Rs %f R0 %f logRc %f Tc %f beta %f", K, Rs, R0, logRc, Tc, beta);
 	return ((1 << ADCBITS) - 1) * Rs / (Rs + R0);
 }
@@ -164,7 +164,7 @@ void handle_temp(int id, int temp) { // {{{
 		fprintf(store_adc, "%d %d %f %d\n", millis(), id, temps[id].fromadc(temp), temp);
 	if (requested_temp == id) {
 		//debug("replying temp");
-		float result = temps[requested_temp].fromadc(temp);
+		double result = temps[requested_temp].fromadc(temp);
 		requested_temp = ~0;
 		send_host(CMD_TEMP, 0, 0, result);
 	}
@@ -194,7 +194,7 @@ void handle_temp(int id, int temp) { // {{{
 	// Heater and core/shell transfer.
 	if (temps[id].is_on)
 		temps[id].core_T += temps[id].power / temps[id].core_C * dt;
-	float Q = temps[id].transfer * (temps[id].core_T - temps[id].shell_T) * dt;
+	double Q = temps[id].transfer * (temps[id].core_T - temps[id].shell_T) * dt;
 	temps[id].core_T -= Q / temps[id].core_C;
 	temps[id].shell_T += Q / temps[id].shell_C;
 	if (temps[id].is_on)
@@ -202,8 +202,8 @@ void handle_temp(int id, int temp) { // {{{
 	// Set shell to measured value.
 	temps[id].shell_T = temp;
 	// Add energy if required.
-	float E = temps[id].core_T * temps[id].core_C + temps[id].shell_T * temps[id].shell_C;
-	float T = E / (temps[id].core_C + temps[id].shell_C);
+	double E = temps[id].core_T * temps[id].core_C + temps[id].shell_T * temps[id].shell_C;
+	double T = E / (temps[id].core_C + temps[id].shell_C);
 	// Set the pin to correct value.
 	if (T < temps[id].target) {
 		if (!temps[id].is_on) {

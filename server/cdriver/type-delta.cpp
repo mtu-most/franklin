@@ -1,36 +1,36 @@
 #include "cdriver.h"
 
 struct Apex {
-	float axis_min, axis_max;	// Limits for the movement of this axis.
-	float rodlength, radius;	// Length of the tie rod and the horizontal distance between the vertical position and the zero position.
-	float x, y, z;		// Position of tower on the base plane, and the carriage height at zero position.
+	double axis_min, axis_max;	// Limits for the movement of this axis.
+	double rodlength, radius;	// Length of the tie rod and the horizontal distance between the vertical position and the zero position.
+	double x, y, z;		// Position of tower on the base plane, and the carriage height at zero position.
 };
 
 struct Delta_private {
 	Apex apex[3];
-	float angle;			// Adjust the front of the printer.
+	double angle;			// Adjust the front of the printer.
 };
 
 #define PRIVATE(s) (*reinterpret_cast <Delta_private *>(s->type_data))
 #define APEX(s, a) (PRIVATE(s).apex[a])
 
-static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
-	float dx = target[0] - APEX(s, a).x;
-	float dy = target[1] - APEX(s, a).y;
-	float r2 = dx * dx + dy * dy;
-	float amax = APEX(s, a).axis_max < APEX(s, a).rodlength ? APEX(s, a).axis_max : APEX(s, a).rodlength;
+static bool check_delta(Space *s, uint8_t a, double *target) {	// {{{
+	double dx = target[0] - APEX(s, a).x;
+	double dy = target[1] - APEX(s, a).y;
+	double r2 = dx * dx + dy * dy;
+	double amax = APEX(s, a).axis_max < APEX(s, a).rodlength ? APEX(s, a).axis_max : APEX(s, a).rodlength;
 	if (r2 > amax * amax) {
 		debug ("not ok 1: %f %f %f %f %f %f %f", target[0], target[1], dx, dy, r2, APEX(s, a).rodlength, APEX(s, a).axis_max);
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
-		float factor(amax / sqrt(r2));
+		double factor(amax / sqrt(r2));
 		target[0] = APEX(s, a).x + (target[0] - APEX(s, a).x) * factor;
 		target[1] = APEX(s, a).y + (target[1] - APEX(s, a).y) * factor;
 		return false;
 	}
 	// Inner product shows if projection is inside or outside the printable region.
-	float projection = -(dx / APEX(s, a).radius * APEX(s, a).x + dy / APEX(s, a).radius * APEX(s, a).y);
-	float amin = APEX(s, a).axis_min < -APEX(s, a).rodlength ? -APEX(s, a).rodlength : APEX(s, a).axis_min;
+	double projection = -(dx / APEX(s, a).radius * APEX(s, a).x + dy / APEX(s, a).radius * APEX(s, a).y);
+	double amin = APEX(s, a).axis_min < -APEX(s, a).rodlength ? -APEX(s, a).rodlength : APEX(s, a).axis_min;
 	if (projection < amin) {
 		debug ("not ok 2: %f %f %f %f %f", projection, dx, dy, APEX(s, a).x, APEX(s, a).y);
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
@@ -43,18 +43,18 @@ static bool check_delta(Space *s, uint8_t a, float *target) {	// {{{
 	return true;
 }	// }}}
 
-static inline float delta_to_axis(Space *s, uint8_t a, bool *ok) {
-	float dx = s->axis[0]->settings.target - APEX(s, a).x;
-	float dy = s->axis[1]->settings.target - APEX(s, a).y;
-	float dz = s->axis[2]->settings.target - APEX(s, a).z;
-	float r2 = dx * dx + dy * dy;
-	float l2 = APEX(s, a).rodlength * APEX(s, a).rodlength;
-	float dest = sqrt(l2 - r2) + dz;
+static inline double delta_to_axis(Space *s, uint8_t a, bool *ok) {
+	double dx = s->axis[0]->settings.target - APEX(s, a).x;
+	double dy = s->axis[1]->settings.target - APEX(s, a).y;
+	double dz = s->axis[2]->settings.target - APEX(s, a).z;
+	double r2 = dx * dx + dy * dy;
+	double l2 = APEX(s, a).rodlength * APEX(s, a).rodlength;
+	double dest = sqrt(l2 - r2) + dz;
 	//debug("dta dx %f dy %f dz %f z %f, r %f target %f", dx, dy, dz, APEX(s, a).z, r, target);
 	return dest;
 }
 
-static void xyz2motors(Space *s, float *motors, bool *ok) {
+static void xyz2motors(Space *s, double *motors, bool *ok) {
 	if (isnan(s->axis[0]->settings.target) || isnan(s->axis[1]->settings.target) || isnan(s->axis[2]->settings.target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 3; ++aa) {
@@ -72,7 +72,7 @@ static void xyz2motors(Space *s, float *motors, bool *ok) {
 
 static void reset_pos (Space *s) {
 	// All axes' current_pos must be valid and equal, in other words, x=y=0.
-	float p[3];
+	double p[3];
 	for (uint8_t i = 0; i < 3; ++i)
 		p[i] = s->motor[i]->settings.current_pos / s->motor[i]->steps_per_unit;
 	if (p[0] != p[1] || p[0] != p[2]) {
@@ -89,7 +89,7 @@ static void reset_pos (Space *s) {
 	}
 }
 
-static void check_position(Space *s, float *data) {
+static void check_position(Space *s, double *data) {
 	if (isnan(data[0]) || isnan(data[1])) {
 		// Cannot check; assume it's ok.
 		return;
@@ -124,7 +124,7 @@ static void load(Space *s, uint8_t old_type, int32_t &addr) {
 #define cos330 0.8660254037844386	// .5*sqrt(3)
 #define sin90 1
 	// Coordinates of axes (at angles 210, 330, 90; each with its own radius).
-	float x[3], y[3];
+	double x[3], y[3];
 	x[0] = APEX(s, 0).radius * cos210;
 	y[0] = APEX(s, 0).radius * sin210;
 	x[1] = APEX(s, 1).radius * cos330;
@@ -159,16 +159,16 @@ static void free(Space *s) {
 	delete reinterpret_cast <Delta_private *>(s->type_data);
 }
 
-static float change0(Space *s, int axis, float value) {
+static double change0(Space *s, int axis, double value) {
 	return value;
 }
 
-static float unchange0(Space *s, int axis, float value) {
+static double unchange0(Space *s, int axis, double value) {
 	return value;
 }
 
-static float probe_speed(Space *s) {
-	float max_spu = 0;
+static double probe_speed(Space *s) {
+	double max_spu = 0;
 	for (int i = 0; i < s->num_motors; ++i)
 		if (max_spu < s->motor[i]->steps_per_unit)
 			max_spu = s->motor[i]->steps_per_unit;
