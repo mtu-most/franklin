@@ -145,7 +145,32 @@ enum {
 };
 
 static double handle_probe(double x, double y, double z) {
-	return z;
+	ProbeFile *&p = probe_file_map;
+	if (!p || isnan(x) || isnan(y) || isnan(z))
+		return z;
+	x -= p->x;
+	y -= p->y;
+	x /= p->w / p->nx;
+	y /= p->h / p->ny;
+	if (x < 0)
+		x = 0;
+	int ix(x);
+	if (x >= p->nx) {
+		x = p->nx;
+		ix = int(x) - 1;
+	}
+	if (y < 0)
+		y = 0;
+	int iy(y);
+	if (y >= p->ny) {
+		y = p->ny;
+		iy = int(y) - 1;
+	}
+	double fx = x - ix;
+	double fy = y - iy;
+	double l = p->sample[iy * p->nx + ix] * (1 - fy) + p->sample[(iy + 1) * p->nx + ix] * fy;
+	double r = p->sample[iy * p->nx + (ix + 1)] * (1 - fy) + p->sample[(iy + 1) * p->nx + (ix + 1)] * fy;
+	return z + l * (1 - fx) + r * fx;
 }
 
 void run_file_fill_queue() {
@@ -320,7 +345,12 @@ void run_file_fill_queue() {
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
 		// Done.
 		debug("done running file");
-		run_file_finishing = true;
+		if (stopped && !sending_fragment && !arch_running()) {
+			send_host(CMD_FILE_DONE);
+			abort_run_file();
+		}
+		else
+			run_file_finishing = true;
 	}
 	lock = false;
 	return;

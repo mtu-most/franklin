@@ -332,7 +332,7 @@ static inline void hwpacket(int len) {
 		}
 		else {
 			// Only overwrite current position if the new value is correct.
-			//debug("underrun ok stopped=%d sending=%d pending=%d", stopped, sending_fragment, command[1][2]);
+			//debug("underrun ok stopped=%d sending=%d pending=%d finishing=%d", stopped, sending_fragment, command[1][2], run_file_finishing);
 			if (stopped && !sending_fragment && command[1][2] == 0) {
 				avr_get_current_pos(3, true);
 				if (run_file_finishing) {

@@ -127,6 +127,7 @@ function _setup_updater() {
 					park_after_print: true,
 					sleep_after_print: true,
 					cool_after_print: true,
+					status: 'Starting',
 					timeout: 0,
 					feedrate: 1,
 					zoffset: 0,
@@ -181,9 +182,9 @@ function _setup_updater() {
 		},
 		globals_update: function(port, values) {
 			printers[port].profile = values[0];
-			new_num_spaces = values[1];
-			new_num_temps = values[2];
-			new_num_gpios = values[3];
+			var new_num_spaces = values[1];
+			var new_num_temps = values[2];
+			var new_num_gpios = values[3];
 			printers[port].led_pin = values[4];
 			printers[port].probe_pin = values[5];
 			printers[port].probe_dist = values[6];

@@ -77,15 +77,24 @@ function init() { // {{{
 				c.clearRect(0, 0, canvas.width, canvas.width);
 				c.translate(0, canvas.height);
 				c.scale(1, -canvas.height / 250);
+				var time = new Date();
+				printer.temphistory.push(time);
+				var cutoff = time - 2 * 60 * 1000;
+				while (printer.temphistory[0] < cutoff) {
+					printer.temphistory.shift();
+					for (var t = 0; t < printer.temps.length; ++t)
+						printer.temps[t].history.shift();
+				}
+				var x = function(t) {
+					return (t - cutoff) / (2 * 60 * 1000) * canvas.width;
+				};
 				for (var t = 0; t < printer.temps.length; ++t) {
 					printer.temps[t].history.push(printer.temps[t].temp);
-					if (printer.temps[t].history.length > canvas.width)
-						printer.temps[t].history.splice(0, printer.temps[t].history.length - canvas.width);
 					var data = printer.temps[t].history;
 					c.beginPath();
-					c.moveTo(canvas.width - data.length, data[0]);
+					c.moveTo(x(printer.temphistory[0]), data[0]);
 					for (var i = 1; i < data.length; ++i)
-						c.lineTo(canvas.width - data.length + i, data[i]);
+						c.lineTo(x(printer.temphistory[i]), data[i]);
 					c.strokeStyle = ['#f00', '#00f', '#0f0', '#ff0', '#000'][t < 5 ? t : 4];
 					c.lineWidth = 4;
 					c.stroke();
@@ -260,7 +269,7 @@ function select_printer(port) { // {{{
 		}
 	}
 	if (selected_printer !== null && selected_printer !== undefined) {
-		update_state(selected_printer.state);
+		update_state(get_value(printer, [null, 'status']));
 	}
 	else {
 		update_state(null);
@@ -271,7 +280,7 @@ function upload_buttons(port, ul, buttons) { // {{{
 	for (var b = 0; b < buttons.length; ++b) {
 		var li = ul.AddElement('li');
 		// Add the upload button.
-		button = li.AddElement('button');
+		var button = li.AddElement('button');
 		button.type = 'button';
 		button.target = buttons[b][0];
 		button.onclick = function() {
@@ -469,6 +478,7 @@ function new_port() { // {{{
 
 function new_printer() { // {{{
 	printer.names = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
+	printer.temphistory = [];
 	printer.targetangle = 0;
 	printer.targetx = 0;
 	printer.targety = 0;
@@ -655,7 +665,7 @@ function update_globals() { // {{{
 	update_checkbox(printer, [null, 'cool_after_print']);
 	set_name(printer, 'unit', 0, 0, printer.unit_name);
 	// IDs.
-	ids = ['bed', 'fan', 'spindle'];
+	var ids = ['bed', 'fan', 'spindle'];
 	for (var i = 0; i < ids.length; ++i) {
 		var group = printer.idgroups[ids[i]];
 		for (var e = 0; e < group.length; ++e) {
@@ -1180,7 +1190,11 @@ function make_table() { // {{{
 	t.AddMultipleTitles = function(titles, classes, mouseovers) {
 		this.titles = this.AddElement('tr');
 		for (var cell = 0; cell < titles.length; ++cell) {
-			var th = this.titles.AddElement('th', classes[cell]);
+			var th;
+			if (classes[cell])
+				th = this.titles.AddElement('th', classes[cell]);
+			else
+				th = this.titles.AddElement('th');
 			th.Add(titles[cell]);
 			if (mouseovers && mouseovers[cell])
 				th.title = mouseovers[cell];
@@ -1197,7 +1211,9 @@ function make_tablerow(title, cells, classes, id, onlytype, index) { // {{{
 	ret.AddElement('th', classes[0]).Add(title);
 	for (var cell = 0; cell < cells.length; ++cell) {
 		var current_cell;
-		if (!classes[1] || classes[1] == 'string')
+		if (!classes[1])
+			current_cell = ret.AddElement('td');
+		else if (classes[1] == 'string')
 			current_cell = ret.AddElement('td', classes[1]);
 		else
 			current_cell = ret.AddElement('td', classes[1][cell]);

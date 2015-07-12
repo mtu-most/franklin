@@ -700,14 +700,14 @@ class Printer: # {{{
 	# }}}
 	def _use_probemap(self, x, y, z): # {{{
 		'''Return corrected z according to self.probemap.'''
-		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
+		# Map = [[x, y, w, h], [nx, ny], [[...], [...], ...]]
 		if self.probemap is None or any(math.isnan(t) for t in (x, y, z)):
 			return z
 		p = self.probemap
 		x -= p[0][0]
 		y -= p[0][1]
-		x /= (p[0][2] - p[0][0]) / p[1][0]
-		y /= (p[0][3] - p[0][1]) / p[1][1]
+		x /= p[0][2] / p[1][0]
+		y /= p[0][3] / p[1][1]
 		if x < 0:
 			x = 0
 		ix = int(x)
@@ -770,7 +770,7 @@ class Printer: # {{{
 					if x is not None:
 						source = cosa * x - sina * y + self.gcode_ref[0], cosa * y + sina * x + self.gcode_ref[1]
 						#log('gcode %s' % repr([(target[t], source[t], self.probemap[0][t + 2], self.probemap[0][t], self.probemap[1][t]) for t in range(2)]))
-						nums = [abs(target[t] - source[t]) / (abs(self.probemap[0][t + 2] - self.probemap[0][t]) / self.probemap[1][t]) for t in range(2) if not math.isnan(target[t]) and self.probemap[0][t] != self.probemap[0][t + 2]]
+						nums = [abs(target[t] - source[t]) / (self.probemap[0][t + 2] / self.probemap[1][t]) for t in range(2) if not math.isnan(target[t]) and self.probemap[0][t + 2] != 0]
 						#log('num %s' % nums)
 						if len(nums) == 0 or all(math.isnan(num) for num in nums):
 							num = 1
@@ -1370,7 +1370,7 @@ class Printer: # {{{
 				else:
 					for y, c in enumerate(p[2]):
 						for x, o in enumerate(c):
-							log('map %f %f %f' % (p[0][0] + (p[0][2] - p[0][0]) * x / p[1][0], p[0][1] + (p[0][3] - p[0][1]) * y / p[1][1], o))
+							log('map %f %f %f' % (p[0][0] + p[0][2] * x / p[1][0], p[0][1] + p[0][3] * y / p[1][1], o))
 					#log('result: %s' % repr(self.probemap))
 					if len(self.jobs_active) == 1:
 						def cb():
@@ -1383,8 +1383,8 @@ class Printer: # {{{
 			# Goto x,y
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 1, good)
 			self.movecb.append(self.probe_cb)
-			px = p[0][0] + (p[0][2] - p[0][0]) * x / p[1][0]
-			py = p[0][1] + (p[0][3] - p[0][1]) * y / p[1][1]
+			px = p[0][0] + p[0][2] * x / p[1][0]
+			py = p[0][1] + p[0][3] * y / p[1][1]
 			self.goto([[px * self.gcode_angle[1] - py * self.gcode_angle[0], py * self.gcode_angle[1] + px * self.gcode_angle[0]]], cb = True)[1](None)
 		elif phase == 1:
 			# Probe
@@ -1502,7 +1502,7 @@ class Printer: # {{{
 			encoded_filename = filename.encode('utf8')
 			with fhs.write_spool(os.path.join(self.uuid, 'probe', src + os.extsep + 'bin'), text = False) as probemap_file:
 				encoded_probemap_filename = probemap_file.filename.encode('utf8')
-				# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
+				# Map = [[x, y, w, h], [nx, ny], [[...], [...], ...]]
 				probemap_file.write(struct.pack('@ddddLL', *(self.probemap[0] + self.probemap[1])))
 				for y in range(self.probemap[1][1]):
 					for x in range(self.probemap[1][0]):
@@ -2628,7 +2628,7 @@ class Printer: # {{{
 				bbox[2] = bb[1]
 			if not bbox[3] > bb[3]:
 				bbox[3] = bb[3]
-		self.probe((bbox[0] + ref[0], bbox[1] + ref[1], bbox[2] + ref[0], bbox[3] + ref[1]), angle, speed)[1](None)
+		self.probe((bbox[0] + ref[0], bbox[1] + ref[1], bbox[2] - bbox[0], bbox[3] - bbox[1]), angle, speed)[1](None)
 		# Pass probemap to make sure it doesn't get overwritten.
 		self.queue_print(names, ref, angle, self.probemap)[1](id)
 	# }}}

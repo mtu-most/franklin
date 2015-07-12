@@ -446,7 +446,7 @@ struct Run_Record {
 	double time, dist;
 } __attribute__((__packed__));
 struct ProbeFile {
-	double p0[2], p1[2];
+	double x, y, w, h;
 	uint32_t nx, ny;
 	double sample[0];
 } __attribute__((__packed__));

@@ -26,7 +26,7 @@ function Text(title, obj, className) { // {{{
 } // }}}
 
 function Name(type, num) { // {{{
-	if (num === null || (typeof num != 'number' && num[1] === null))
+	if (num === null || (typeof num != 'number' && num.length >= 2 && num[1] === null))
 		return '';
 	var ret = Create('input', 'editname');
 	ret.type = 'text';
@@ -415,7 +415,7 @@ function Map() { // {{{
 		['Angle:', Float([null, 'targetangle'], 1, Math.PI / 180, '', function(v) { b.printer.targetangle = v; update_canvas_and_spans(b.printer); }), '°']
 	], ['', '', '', '', '', '']));
 	// Canvas for xy and for z.
-	c = ret.AddElement('canvas', 'xymap');
+	var c = ret.AddElement('canvas', 'xymap');
 	c.AddEvent('mousemove', function(e) { return xymove(b.printer, e); }).AddEvent('mousedown', function(e) { return xydown(b.printer, e); });
 	c.id = make_id(printer, [null, 'xymap']);
 	c.printer = printer;
