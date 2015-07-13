@@ -35,7 +35,7 @@ static inline int max(int a, int b) {
 struct Pin_t {
 	uint8_t flags;
 	uint8_t pin;
-	uint8_t duty;
+	int duty;
 	bool valid() { return flags & 1; }
 	bool inverted() { return flags & 2; }
 	uint16_t write() { return flags << 8 | pin; }
@@ -448,7 +448,7 @@ struct Run_Record {
 } __attribute__((__packed__));
 struct ProbeFile {
 	double x, y, w, h;
-	uint32_t nx, ny;
+	unsigned long nx, ny;
 	double sample[0];
 } __attribute__((__packed__));
 void run_file(int name_len, char const *name, int probe_name_len, char const *probe_name, double refx, double refy, double refz, double sina, double cosa, int audio);

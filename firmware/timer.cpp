@@ -13,7 +13,6 @@ void handle_motors() {
 	bool probed;
 	if (settings[cf].flags & Settings::PROBING && probe_pin < NUM_DIGITAL_PINS) {
 		if (state == 0) {
-			//debug("checking probe %d %d", cf, cs);
 			if (GET(probe_pin) ^ bool(pin_flags & 2))
 				stopping = active_motors;
 			probed = true;

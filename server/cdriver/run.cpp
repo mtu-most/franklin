@@ -76,8 +76,8 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	if (probe_name_len > 0) {
 		probe_file_map = reinterpret_cast<ProbeFile *>(mmap(NULL, probe_file_size, PROT_READ, MAP_SHARED, probe_fd, 0));
 		close(probe_fd);
-		if ((probe_file_map->nx * probe_file_map->ny) * sizeof(double) + sizeof(ProbeFile) != probe_file_size) {
-			debug("Invalid probe file size");
+		if (((probe_file_map->nx + 1) * (probe_file_map->ny + 1)) * sizeof(double) + sizeof(ProbeFile) != probe_file_size) {
+			debug("Invalid probe file size %ld != %ld", probe_file_size, ((probe_file_map->nx + 1) * (probe_file_map->ny + 1)) * sizeof(double) + sizeof(ProbeFile));
 			munmap(probe_file_map, probe_file_size);
 			munmap(run_file_map, run_file_size);
 			return;
@@ -148,28 +148,41 @@ static double handle_probe(double x, double y, double z) {
 	ProbeFile *&p = probe_file_map;
 	if (!p || isnan(x) || isnan(y) || isnan(z))
 		return z;
-	x -= p->x;
-	y -= p->y;
-	x /= p->w / p->nx;
-	y /= p->h / p->ny;
-	if (x < 0)
+	int ix, iy;
+	if (p->w == 0 || p->nx == 0) {
 		x = 0;
-	int ix(x);
-	if (x >= p->nx) {
-		x = p->nx;
-		ix = int(x) - 1;
+		ix = 0;
 	}
-	if (y < 0)
+	else {
+		x -= p->x;
+		x /= p->w / p->nx;
+		if (x < 0)
+			x = 0;
+		ix = int(x);
+		if (x >= p->nx) {
+			x = p->nx;
+			ix = int(x) - 1;
+		}
+	}
+	if (p->h == 0 || p->ny == 0) {
 		y = 0;
-	int iy(y);
-	if (y >= p->ny) {
-		y = p->ny;
-		iy = int(y) - 1;
+		iy = 0;
+	}
+	else {
+		y -= p->y;
+		y /= p->h / p->ny;
+		if (y < 0)
+			y = 0;
+		iy = int(y);
+		if (y >= p->ny) {
+			y = p->ny;
+			iy = int(y) - 1;
+		}
 	}
 	double fx = x - ix;
 	double fy = y - iy;
-	double l = p->sample[iy * p->nx + ix] * (1 - fy) + p->sample[(iy + 1) * p->nx + ix] * fy;
-	double r = p->sample[iy * p->nx + (ix + 1)] * (1 - fy) + p->sample[(iy + 1) * p->nx + (ix + 1)] * fy;
+	double l = p->sample[iy * (p->nx + 1) + ix] * (1 - fy) + p->sample[(iy + 1) * (p->nx + 1) + ix] * fy;
+	double r = p->sample[iy * (p->nx + 1) + (ix + 1)] * (1 - fy) + p->sample[(iy + 1) * (p->nx + 1) + (ix + 1)] * fy;
 	return z + l * (1 - fx) + r * fx;
 }
 

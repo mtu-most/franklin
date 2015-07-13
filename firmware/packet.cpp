@@ -336,9 +336,9 @@ void packet()
 		for (uint8_t m = 0; m < active_motors; ++m)
 			buffer[last_fragment][m][0] = 0x80;	// Sentinel indicating no data is available for this motor.
 		if (command(0) == CMD_START_MOVE)
-			settings[last_fragment].flags |= Settings::PROBING;
-		else
 			settings[last_fragment].flags &= ~Settings::PROBING;
+		else
+			settings[last_fragment].flags |= Settings::PROBING;
 		if (filling == 0)
 			last_fragment = (last_fragment + 1) & FRAGMENTS_PER_MOTOR_MASK;
 		//debug("new filling: %d %d", filling, last_fragment);

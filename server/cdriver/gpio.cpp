@@ -26,14 +26,16 @@ void Gpio::load(uint8_t self, int32_t &addr)
 #ifdef SERIAL
 	arch_pin_set_reset(pin, reset);
 #endif
-	arch_set_duty(pin, read_float(addr));
+	double duty = read_float(addr);
+	if (pin.valid())
+		arch_set_duty(pin, duty);
 }
 
 void Gpio::save(int32_t &addr)
 {
 	write_16(addr, pin.write());
 	write_8(addr, state | (reset << 2));
-	write_float(addr, arch_get_duty(pin));
+	write_float(addr, pin.valid() ? arch_get_duty(pin) : 1);
 }
 
 void Gpio::init() {

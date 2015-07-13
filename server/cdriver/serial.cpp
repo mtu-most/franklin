@@ -55,7 +55,7 @@ static void send_to_host() {
 	if (!hostqueue_head)
 		hostqueue_tail = NULL;
 #ifdef DEBUG_HOST
-	debug("**** host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->r.s, r->r.m, r->r.e, r->r.f, r->len);
+	debug("**** host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->s, r->m, r->e, r->f, r->len);
 #endif
 	serialdev[0]->write(22 + r->len);
 	serialdev[0]->write(r->cmd);

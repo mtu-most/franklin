@@ -934,7 +934,7 @@ class Printer: # {{{
 		if self.probe_cb in self.movecb:
 			#log('killing prober')
 			self.movecb.remove(self.probe_cb)
-			self.probe_cb(False)
+			self.probe_cb[1](False)
 		self._globals_update()
 	# }}}
 	def _finish_done(self): # {{{
@@ -1501,11 +1501,11 @@ class Printer: # {{{
 			self._globals_update()
 			encoded_filename = filename.encode('utf8')
 			with fhs.write_spool(os.path.join(self.uuid, 'probe', src + os.extsep + 'bin'), text = False) as probemap_file:
-				encoded_probemap_filename = probemap_file.filename.encode('utf8')
+				encoded_probemap_filename = probemap_file.name.encode('utf8')
 				# Map = [[x, y, w, h], [nx, ny], [[...], [...], ...]]
-				probemap_file.write(struct.pack('@ddddLL', *(self.probemap[0] + self.probemap[1])))
-				for y in range(self.probemap[1][1]):
-					for x in range(self.probemap[1][0]):
+				probemap_file.write(struct.pack('@ddddLL', *(tuple(self.probemap[0]) + tuple(self.probemap[1]))))
+				for y in range(self.probemap[1][1] + 1):
+					for x in range(self.probemap[1][0] + 1):
 						probemap_file.write(struct.pack('@d', self.probemap[2][y][x]))
 			self._send_packet(struct.pack('=BdddddBB', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0xff, len(encoded_probemap_filename)) + encoded_filename + encoded_probemap_filename)
 		else:
@@ -1704,7 +1704,7 @@ class Printer: # {{{
 			if id is not None:
 				self._send(id, 'return', None)
 			return
-		density = [int(abs(area[t + 2] - area[t]) / self.probe_dist) + 1 for t in range(2)]
+		density = [int(area[t + 2] / self.probe_dist) + 1 for t in range(2)]
 		self.probemap = [area, density, [[[] for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
 		self.gcode_angle = math.sin(angle), math.cos(angle)
 		#log(repr(self.probemap))
@@ -2630,6 +2630,7 @@ class Printer: # {{{
 				bbox[2] = bb[1]
 			if not bbox[3] > bb[3]:
 				bbox[3] = bb[3]
+		log(repr(bb))
 		self.probe((bbox[0] + ref[0], bbox[1] + ref[1], bbox[2] - bbox[0], bbox[3] - bbox[1]), angle, speed)[1](None)
 		# Pass probemap to make sure it doesn't get overwritten.
 		self.queue_print(names, ref, angle, self.probemap)[1](id)
