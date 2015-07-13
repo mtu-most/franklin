@@ -124,29 +124,28 @@ void packet()
 	case CMD_CONTROL:
 	{
 		cmddebug("CMD_CONTROL");
-		uint8_t num = command(1);
-		for (uint8_t i = 0; i < num; ++i) {
-			if (command(2 + i + 1) >= NUM_DIGITAL_PINS) {
-				debug("invalid pin in control: %d", command(2 + i + 1));
-				continue;
-			}
-			uint8_t value = command(2 + i);
-			uint8_t p = command(2 + i + 1);
-			pin[p].set_state((pin[p].state & ~0xc) | (value & 0xc));
-			switch (CONTROL_CURRENT(command(2 + i))) {
-			case CTRL_RESET:
-				RESET(command(2 + i + 1));
-				break;
-			case CTRL_SET:
-				SET(command(2 + i + 1));
-				break;
-			case CTRL_UNSET:
-				UNSET(command(2 + i + 1));
-				break;
-			case CTRL_INPUT:
-				SET_INPUT(command(2 + i + 1));
-				break;
-			}
+		uint8_t p = command(1);
+		if (p >= NUM_DIGITAL_PINS) {
+			debug("invalid pin in control: %d", p);
+			write_stall();
+			return;
+		}
+		uint8_t value = command(2);
+		pin[p].duty = command(3);
+		pin[p].set_state((pin[p].state & ~0xc) | (value & 0xc));
+		switch (CONTROL_CURRENT(value)) {
+		case CTRL_RESET:
+			RESET(p);
+			break;
+		case CTRL_SET:
+			SET(p);
+			break;
+		case CTRL_UNSET:
+			UNSET(p);
+			break;
+		case CTRL_INPUT:
+			SET_INPUT(p);
+			break;
 		}
 		write_ack();
 		return;

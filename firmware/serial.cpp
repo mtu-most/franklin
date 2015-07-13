@@ -43,9 +43,6 @@ static inline int16_t fullpacketlen() { // {{{
 	if ((command(0) & ~0x10) == CMD_BEGIN) {
 		return command(1);
 	}
-	else if ((command(0) & ~0x10) == CMD_CONTROL) {
-		return 2 + command(1) * 2;
-	}
 	else if ((command(0) & ~0x10) == CMD_HOME) {
 		return 5 + active_motors;
 	}

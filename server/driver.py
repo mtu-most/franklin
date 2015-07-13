@@ -1631,7 +1631,7 @@ class Printer: # {{{
 			self.id = id
 			self.value = float('nan')
 		def read(self, data):
-			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp = struct.unpack('=dddddHHHd', data)
+			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp, self.fan_duty = struct.unpack('=dddddHHHdd', data)
 			try:
 				self.Rc = math.exp(logRc)
 			except:
@@ -1644,14 +1644,14 @@ class Printer: # {{{
 				logRc = math.log(self.Rc)
 			except:
 				logRc = float('nan')
-			return struct.pack('=dddddHHHd', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0)
+			return struct.pack('=dddddHHHdd', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0, self.fan_duty)
 		def export(self):
-			return [self.name, self.R0, self.R1, self.Rc, self.Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp, self.value]
+			return [self.name, self.R0, self.R1, self.Rc, self.Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp, self.fan_duty, self.value]
 		def export_settings(self):
 			ret = '[temp %d]\r\n' % self.id
 			ret += 'name = %s\r\n' % self.name
 			ret += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('heater_pin', 'fan_pin', 'thermistor_pin')])
-			ret += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('fan_temp', 'R0', 'R1', 'Rc', 'Tc', 'beta')])
+			ret += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('fan_temp', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'fan_duty')])
 			return ret
 	# }}}
 	class Gpio: # {{{
@@ -1661,19 +1661,21 @@ class Printer: # {{{
 			self.state = 3
 			self.reset = 3
 			self.value = False
+			self.duty = 1.
 		def read(self, data):
-			self.pin, state, = struct.unpack('=HB', data)
+			self.pin, state, self.duty = struct.unpack('=HBd', data)
 			self.state = state & 0x3
 			self.reset = (state >> 2) & 0x3
 		def write(self):
-			return struct.pack('=HB', self.pin, self.state | (self.reset << 2))
+			return struct.pack('=HBd', self.pin, self.state | (self.reset << 2), self.duty)
 		def export(self):
-			return [self.name, self.pin, self.state, self.reset, self.value if self.state >= 2 else self.state == 1]
+			return [self.name, self.pin, self.state, self.reset, self.duty, self.value if self.state >= 2 else self.state == 1]
 		def export_settings(self):
 			ret = '[gpio %d]\r\n' % self.id
 			ret += 'name = %s\r\n' % self.name
 			ret += 'pin = %s\r\n' % write_pin(self.pin)
 			ret += 'reset = %d\r\n' % self.reset
+			ret += 'duty = %d\r\n' % self.duty
 			return ret
 	# }}}
 	# }}}
@@ -2800,12 +2802,12 @@ class Printer: # {{{
 	# Temp {{{
 	def get_temp(self, temp):
 		ret = {}
-		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'):
+		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty'):
 			ret[key] = getattr(self.temps[temp], key)
 		return ret
 	def expert_set_temp(self, temp, update = True, **ka):
 		ret = {}
-		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'):
+		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty'):
 			if key in ka:
 				setattr(self.temps[temp], key, ka.pop(key))
 		self._send_packet(struct.pack('=BB', protocol.command['WRITE_TEMP'], temp) + self.temps[temp].write())
@@ -2819,11 +2821,11 @@ class Printer: # {{{
 	# Gpio {{{
 	def get_gpio(self, gpio):
 		ret = {}
-		for key in ('name', 'pin', 'state', 'reset', 'value'):
+		for key in ('name', 'pin', 'state', 'reset', 'duty', 'value'):
 			ret[key] = getattr(self.gpios[gpio], key)
 		return ret
 	def expert_set_gpio(self, gpio, update = True, **ka):
-		for key in ('name', 'pin', 'state', 'reset'):
+		for key in ('name', 'pin', 'state', 'reset', 'duty'):
 			if key in ka:
 				setattr(self.gpios[gpio], key, ka.pop(key))
 		self.gpios[gpio].state = int(self.gpios[gpio].state)

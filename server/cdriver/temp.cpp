@@ -22,6 +22,7 @@ void Temp::load(int32_t &addr, int id)
 	bool old_valid = thermistor_pin.valid();
 	thermistor_pin.read(read_16(addr));
 	target[1] = read_float(addr);
+	arch_set_duty(power_pin[1], read_float(addr));
 	for (int i = 0; i < 2; ++i) {
 		adctarget[i] = toadc(target[i], MAXINT);
 		SET_OUTPUT(power_pin[i]);
@@ -54,6 +55,7 @@ void Temp::save(int32_t &addr)
 	write_16(addr, power_pin[1].write());
 	write_16(addr, thermistor_pin.write());
 	write_float(addr, target[1]);
+	write_float(addr, arch_get_duty(power_pin[1]));
 }
 
 double Temp::fromadc(int32_t adc) {

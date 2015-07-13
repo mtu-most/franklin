@@ -134,6 +134,7 @@ struct AVRSerial : public Serial_t { // {{{
 struct Avr_pin_t { // {{{
 	char state;
 	char reset;
+	int duty;
 };
 // }}}
 
@@ -166,15 +167,13 @@ EXTERN bool avr_filling;
 static inline void try_send_control() {
 	if (out_busy || avr_control_queue_length == 0)
 		return;
+	avr_control_queue_length -= 1;
 	avr_buffer[0] = HWC_CONTROL;
-	avr_buffer[1] = avr_control_queue_length;
-	for (int i = 0; i < avr_control_queue_length; ++i) {
-		avr_buffer[2 + i * 2] = avr_control_queue[i * 2];
-		avr_buffer[3 + i * 2] = avr_control_queue[i * 2 + 1];
-		avr_in_control_queue[avr_control_queue[i * 2 + 1]] = false;
-	}
-	prepare_packet(avr_buffer, 2 + avr_control_queue_length * 2);
-	avr_control_queue_length = 0;
+	avr_buffer[1] = avr_control_queue[avr_control_queue_length * 3];
+	avr_buffer[2] = avr_control_queue[avr_control_queue_length * 3 + 1];
+	avr_buffer[3] = avr_control_queue[avr_control_queue_length * 3 + 2];
+	avr_in_control_queue[avr_control_queue[avr_control_queue_length * 3]] = false;
+	prepare_packet(avr_buffer, 4);
 	avr_send();
 }
 
@@ -446,14 +445,16 @@ static inline void avr_setup_pin(int pin, int type, int resettype, int extra) {
 	if (avr_in_control_queue[pin])
 	{
 		for (int i = 0; i < avr_control_queue_length; ++i) {
-			if (avr_control_queue[i * 2 + 1] != pin)
+			if (avr_control_queue[i * 3] != pin)
 				continue;
-			avr_control_queue[i * 2] = type | (resettype << 2) | extra;
+			avr_control_queue[i * 3 + 1] = type | (resettype << 2) | extra;
+			avr_control_queue[i * 3 + 2] = avr_pins[pin].duty;
 			return;
 		}
 	}
-	avr_control_queue[avr_control_queue_length * 2] = type | (resettype << 2) | extra;
-	avr_control_queue[avr_control_queue_length * 2 + 1] = pin;
+	avr_control_queue[avr_control_queue_length * 3] = pin;
+	avr_control_queue[avr_control_queue_length * 3 + 1] = type | (resettype << 2) | extra;
+	avr_control_queue[avr_control_queue_length * 3 + 2] = avr_pins[pin].duty;
 	avr_control_queue_length += 1;
 	avr_in_control_queue[pin] = true;
 	try_send_control();
@@ -520,12 +521,7 @@ static inline bool GET(Pin_t _pin, bool _default) {
 	return _pin.inverted() ^ command[1][1];
 }
 
-static inline void arch_pin_set_reset(Pin_t _pin, char state) {
-	if (!_pin.valid())
-		return;
-	if (avr_pins[_pin.pin].reset == state)
-		return;
-	avr_pins[_pin.pin].reset = state;
+static inline void avr_send_pin(Pin_t _pin) {
 	int s, r;
 	if (_pin.inverted()) {
 		s = avr_pins[_pin.pin].state < 2 ? 1 - avr_pins[_pin.pin].state : avr_pins[_pin.pin].state;
@@ -535,7 +531,39 @@ static inline void arch_pin_set_reset(Pin_t _pin, char state) {
 		s = avr_pins[_pin.pin].state;
 		r = avr_pins[_pin.pin].reset;
 	}
-	avr_setup_pin(_pin.pin, s, r, state != 2 ? 0 : CTRL_NOTIFY);
+	avr_setup_pin(_pin.pin, s, r, avr_pins[_pin.pin].reset != 2 ? 0 : CTRL_NOTIFY);
+}
+
+static inline void arch_pin_set_reset(Pin_t _pin, char state) {
+	if (!_pin.valid())
+		return;
+	if (avr_pins[_pin.pin].reset == state)
+		return;
+	avr_pins[_pin.pin].reset = state;
+	avr_send_pin(_pin);
+}
+
+static inline double arch_get_duty(Pin_t _pin) {
+	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
+		debug("invalid pin for arch_get_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
+		return 1;
+	}
+	return (avr_pins[_pin.pin].duty + 1) / 256.;
+}
+
+static inline double arch_set_duty(Pin_t _pin, double duty) {
+	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
+		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
+		return 1;
+	}
+	avr_pins[_pin.pin].duty = int(duty * 256 + .5) - 1;
+	if (avr_pins[_pin.pin].duty < 0)
+		avr_pins[_pin.pin].duty = 0;
+	if (avr_pins[_pin.pin].duty > 255) {
+		debug("invalid duty value %d; clipping to 255.", avr_pins[_pin.pin].duty);
+		avr_pins[_pin.pin].duty = 255;
+	}
+	avr_send_pin(_pin);
 }
 // }}}
 
@@ -714,7 +742,7 @@ static inline void arch_setup_end(char const *run_id) {
 	//id[0][:8] + '-' + id[0][8:12] + '-' + id[0][12:16] + '-' + id[0][16:20] + '-' + id[0][20:32]
 	for (int i = 0; i < UUID_SIZE; ++i)
 		uuid[i] = command[1][11 + i];
-	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * 2];
+	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * 3];
 	avr_in_control_queue = new bool[NUM_DIGITAL_PINS];
 	avr_control_queue_length = 0;
 	avr_pong = -1;	// Choke on reset again.
@@ -722,6 +750,7 @@ static inline void arch_setup_end(char const *run_id) {
 	for (int i = 0; i < NUM_DIGITAL_PINS; ++i) {
 		avr_pins[i].reset = 3;	// INPUT_NOPULLUP.
 		avr_pins[i].state = avr_pins[i].reset;
+		avr_pins[i].duty = 255;
 		avr_in_control_queue[i] = false;
 	}
 	avr_adc = new int[NUM_ANALOG_INPUTS];

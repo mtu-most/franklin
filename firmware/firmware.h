@@ -127,6 +127,7 @@ inline bool GET(uint8_t pin_no);
 
 struct Pin_t {
 	uint8_t state;
+	uint8_t duty;
 	bool value() {
 		return CONTROL_VALUE(state);
 	}
@@ -234,7 +235,7 @@ static inline int16_t minpacketlen() {
 	case CMD_SETUP:
 		return 12;
 	case CMD_CONTROL:
-		return 2;
+		return 4;
 	case CMD_MSETUP:
 		return 8;
 	case CMD_ASETUP:

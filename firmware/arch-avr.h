@@ -65,7 +65,9 @@
 	volatile uint8_t *avr_mode; \
 	volatile uint8_t *avr_output; \
 	volatile uint8_t *avr_input; \
-	uint8_t avr_bitmask;
+	uint8_t avr_bitmask; \
+	bool avr_on; \
+	int16_t avr_target;
 
 #define ARCH_MOTOR \
 	volatile uint16_t step_port, dir_port; \
@@ -378,6 +380,8 @@ static inline void arch_setup_start() { // {{{
 		pin[pin_no].avr_output = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port));
 		pin[pin_no].avr_input = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_input_PGM + port));
 		pin[pin_no].avr_bitmask = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
+		pin[pin_no].avr_on = false;
+		pin[pin_no].avr_target = 0;
 	}
 	avr_time_h = 0;
 	avr_seconds_h = 0;
@@ -473,7 +477,6 @@ static inline void arch_set_speed(uint16_t count) { // {{{
 #ifdef DEFINE_VARIABLES
 #define offsetof(type, field) __builtin_offsetof(type, field)
 #ifdef FAST_ISR
-EXTERN volatile int8_t regsave[14];
 ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	asm volatile (
 		// Naked ISR, so all registers must be saved.
@@ -1001,6 +1004,8 @@ inline void UNSET(uint8_t pin_no) { // {{{
 inline void SET(uint8_t pin_no) { // {{{
 	if ((pin[pin_no].state & 0x3) == CTRL_SET)
 		return;
+	pin[pin_no].avr_on = true;
+	pin[pin_no].avr_target = 0;
 	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_SET);
@@ -1018,6 +1023,30 @@ inline void RESET(uint8_t pin_no) { // {{{
 
 inline bool GET(uint8_t pin_no) { // {{{
 	return *pin[pin_no].avr_input & pin[pin_no].avr_bitmask;
+} // }}}
+
+EXTERN uint8_t avr_outputs_last;
+inline void arch_outputs() { // {{{
+	uint8_t now = TCNT0;
+	uint16_t interval = now - avr_outputs_last;
+	if (interval == 0)
+		return;
+	avr_outputs_last = now;
+	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
+		if ((pin[p].state & 0x3) != CTRL_SET)
+			continue;
+		if (pin[p].avr_on)
+			pin[p].avr_target -= interval;
+		pin[p].avr_target += (interval * (int32_t(pin[p].duty) + 1)) >> 8;
+		if (pin[p].avr_target < 0) {
+			*pin[p].avr_output &= ~pin[p].avr_bitmask;
+			pin[p].avr_on = false;
+		}
+		else {
+			*pin[p].avr_output |= pin[p].avr_bitmask;
+			pin[p].avr_on = true;
+		}
+	}
 } // }}}
 // }}}
 #endif

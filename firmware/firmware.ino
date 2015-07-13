@@ -116,6 +116,9 @@ int main(void) {
 		// Update pin states.
 		handle_inputs();
 		handle_motors();
+		// Handle PWM of outputs.
+		arch_outputs();
+		handle_motors();
 		// Timeout.
 		uint16_t dt = seconds() - last_active;
 		if (enabled_pins > 0 && step_state == 1 && timeout_time > 0 && timeout_time <= dt) {

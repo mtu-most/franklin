@@ -549,6 +549,8 @@ function del_script(name) { // {{{
 } // }}}
 
 function del_printer() { // {{{
+	if (ports[port] === undefined)
+		return;
 	ports[port][1].RemoveClass('connected');
 	ports[port][1].AddClass('notconnected');
 	ports[port][0].AddClass('setup');
@@ -880,6 +882,7 @@ function update_temp(index) { // {{{
 	update_pin([['temp', index], 'heater_pin']);
 	update_pin([['temp', index], 'fan_pin']);
 	update_pin([['temp', index], 'thermistor_pin']);
+	update_float(printer, [['temp', index], 'fan_duty']);
 	update_float(printer, [['temp', index], 'fan_temp']);
 	update_float(printer, [['temp', index], 'R0']);
 	update_float(printer, [['temp', index], 'R1']);
@@ -905,6 +908,7 @@ function update_gpio(index) { // {{{
 		get_element(printer, [['gpio', index], 'statespan']).AddClass('input');
 	get_element(printer, [['gpio', index], 'state']).checked = printer.gpios[index].value;
 	get_element(printer, [['gpio', index], 'reset']).selectedIndex = printer.gpios[index].reset;
+	update_float(printer, [['gpio', index], 'duty']);
 } // }}}
 // }}}
 

@@ -259,7 +259,7 @@ function Temp(num) {
 	var name = temp_name(printer, num);
 	if (num !== null && num < 5)
 		name.AddClass('temp' + num.toFixed(0));
-	return make_tablerow(name, [div, current], ['rowtitle2']);
+	return make_tablerow(name, [div, current, Float([['temp', num], 'fan_duty'], 0, 1e-2)], ['rowtitle2']);
 }
 
 function Pins_temp(num, dummy, table) {
@@ -287,7 +287,7 @@ function Gpio(num) {
 		e.preventDefault();
 		return false;
 	});
-	return make_tablerow(gpio_name(num), [Name('gpio', num), reset, Id([['gpio', num], 'fan']), Id([['gpio', num], 'spindle'])], ['rowtitle5']);
+	return make_tablerow(gpio_name(num), [Name('gpio', num), reset, Float([['gpio', num], 'duty'], 0, 1e-2), Id([['gpio', num], 'fan']), Id([['gpio', num], 'spindle'])], ['rowtitle5']);
 }
 
 function Pins_gpio(num) {
@@ -432,15 +432,18 @@ function Temps() { // {{{
 	ret.Add(make_table().AddMultipleTitles([
 		'Temp control',
 		'Target (°C)',
-		'Current (°C)'
+		'Current (°C)',
+		'Duty Cycle (%)'
 	], [
-		'htitle4',
-		'title4',
-		'title4'
+		'htitle6',
+		'title6',
+		'title6',
+		'title6'
 	], [
 		null,
 		'Temperature target.  Set to NaN to disable the heater completely.',
-		'Actual temperature from sensor.'
+		'Actual temperature from sensor.',
+		'Fraction of time that fan is enabled when on.'
 	]).AddMultiple('temp', Temp));
 	ret.AddElement('canvas', 'tempgraph').id = make_id(printer, [null, 'tempgraph']);
 	return ret;
@@ -760,19 +763,22 @@ function Printer() {	// {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Gpio',
 		'Name',
-		'Reset state',
+		'Reset State',
+		'Duty Cycle (%)',
 		'Fan',
 		'Spindle'
 	], [
-		'htitle4',
-		'title4',
-		'title4',
-		'title4',
-		'title4'
+		'htitle5',
+		'title5',
+		'title5',
+		'title5',
+		'title5',
+		'title5'
 	], [
 		null,
 		'Name of the Gpio.',
 		'Initial state and reset state of the Gpio.',
+		'Fraction of the time that the pin is enabled when on.',
 		'Whether this Gpio is the fan pin, used by G-code commands.',
 		'Whether this Gpio is the spindle pin, used by G-code commands.'
 	]).AddMultiple('gpio', Gpio)]);

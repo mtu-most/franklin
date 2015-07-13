@@ -318,7 +318,8 @@ function _setup_updater() {
 			printers[port].temps[index].fan_pin = values[7];
 			printers[port].temps[index].thermistor_pin = values[8];
 			printers[port].temps[index].fan_temp = values[9];
-			printers[port].temps[index].value = values[10];
+			printers[port].temps[index].fan_duty = values[10];
+			printers[port].temps[index].value = values[11];
 			trigger_update(port, 'temp_update', index);
 		},
 		gpio_update: function(port, index, values) {
@@ -326,7 +327,8 @@ function _setup_updater() {
 			printers[port].gpios[index].pin = values[1];
 			printers[port].gpios[index].state = values[2];
 			printers[port].gpios[index].reset = values[3];
-			printers[port].gpios[index].value = values[4];
+			printers[port].gpios[index].duty = values[4];
+			printers[port].gpios[index].value = values[5];
 			trigger_update(port, 'gpio_update', index);
 		}
 	};
