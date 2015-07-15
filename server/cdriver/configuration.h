@@ -11,7 +11,7 @@
 
 // Number of buffers to fill before sending START_MOVE.  Lower number makes it
 // start faster, but may cause buffer underruns.
-#define MIN_BUFFER_FILL 7
+#define MIN_BUFFER_FILL 1
 
 // Watchdog.  If enabled, the device will automatically reset when it doesn't
 // work properly.  However, it may also trigger when too much time is spent

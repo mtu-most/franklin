@@ -576,6 +576,10 @@ function Printer() {	// {{{
 	e = setup.AddElement('div').AddText('Spaces:').Add(Float([null, 'num_spaces'], 0));
 	e = setup.AddElement('div').AddText('Temps:').Add(Float([null, 'num_temps'], 0));
 	e = setup.AddElement('div').AddText('Gpios:').Add(Float([null, 'num_gpios'], 0));
+	e = setup.AddElement('div').AddText('Temp Scale Minimum:');
+	e.Add(Float([null, 'temp_scale_min'], 0, 1));
+	e = setup.AddElement('div').AddText('Temp Scale Maximum:');
+	e.Add(Float([null, 'temp_scale_max'], 0, 1));
 	// Space. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Spaces',

@@ -59,10 +59,14 @@ void Temp::save(int32_t &addr)
 }
 
 double Temp::fromadc(int32_t adc) {
-	if (adc <= 0)
-		return INFINITY;
 	if (adc >= MAXINT)
 		return NAN;
+	if (isnan(beta)) {
+		// beta == NAN is used for calibration: return raw value as K.
+		return adc * R0 + R1;
+	}
+	if (adc <= 0)
+		return INFINITY;
 	//debug("adc: %d", adc);
 	// Symbols: A[ms]: adc value, R[01s]: resistor value, V[m01s]: voltage
 	// with m: maximum value, 0: series resistor, 1: parallel resistor, s: sensed value (thermistor)
@@ -73,10 +77,6 @@ double Temp::fromadc(int32_t adc) {
 	// Compute T from R (:= Rs).
 	// R = K * exp(beta / T)
 	// T = beta/log(R/K)=-beta/log(K*Am/R0/As-K/R0-K/R1)
-	if (isnan(beta)) {
-		// beta == NAN is used for calibration: return raw value as K.
-		return adc * R0 + R1;
-	}
 	//debug("K: %f adc: %d beta: %f", K, adc, beta);
 	return -beta / log(K * ((1 << ADCBITS) / R0 / adc - 1 / R0 - 1 / R1));
 }

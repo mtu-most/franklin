@@ -132,6 +132,8 @@ function _setup_updater() {
 					feedrate: 1,
 					zoffset: 0,
 					store_adc: false,
+					temp_scale_min: 0,
+					temp_scale_max: 0,
 					message: null,
 					spaces: [],
 					temps: [],
@@ -200,7 +202,9 @@ function _setup_updater() {
 			printers[port].park_after_print = values[16];
 			printers[port].sleep_after_print = values[17];
 			printers[port].cool_after_print = values[18];
-			printers[port].status = values[19];
+			printers[port].temp_scale_min = values[19];
+			printers[port].temp_scale_max = values[20];
+			printers[port].status = values[21];
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
 					name: null,

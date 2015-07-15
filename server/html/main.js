@@ -76,7 +76,8 @@ function init() { // {{{
 				c.save();
 				c.clearRect(0, 0, canvas.width, canvas.width);
 				c.translate(0, canvas.height);
-				c.scale(1, -canvas.height / 250);
+				c.scale(1, -canvas.height / (printer.temp_scale_max - printer.temp_scale_min));
+				c.translate(0, -printer.temp_scale_min);
 				var time = new Date();
 				printer.temphistory.push(time);
 				var cutoff = time - 2 * 60 * 1000;
@@ -665,6 +666,8 @@ function update_globals() { // {{{
 	update_checkbox(printer, [null, 'park_after_print']);
 	update_checkbox(printer, [null, 'sleep_after_print']);
 	update_checkbox(printer, [null, 'cool_after_print']);
+	update_float(printer, [null, 'temp_scale_min']);
+	update_float(printer, [null, 'temp_scale_max']);
 	set_name(printer, 'unit', 0, 0, printer.unit_name);
 	// IDs.
 	var ids = ['bed', 'fan', 'spindle'];
@@ -1317,14 +1320,15 @@ function set_reference(printer, x, y, ctrl) { // {{{
 }
 // }}}
 
-function fill(s) {
+function fill(s) { // {{{
 	s = s.toFixed(0);
 	while (s.length < 2)
 		s = '0' + s;
 	return s;
 }
+// }}}
 
-function display_time(t) {
+function display_time(t) { // {{{
 	if (isNaN(t))
 		return '-';
 	var s = t;
@@ -1342,6 +1346,7 @@ function display_time(t) {
 		return m.toFixed(0) + ':' + fill(s);
 	return s.toFixed(0) + 's';
 }
+// }}}
 
 function update_canvas_and_spans(p, space, axis) { // {{{
 	// When called as a cb, space may not be undefined.
@@ -1504,6 +1509,15 @@ function redraw_canvas(printer) { // {{{
 		c.strokeStyle = '#888';
 		c.fillStyle = '#888';
 		outline(printer, c);
+		// Draw limits.
+		c.beginPath();
+		var a = printer.spaces[0].axis;
+		c.moveTo(a[0].min, a[1].min);
+		c.lineTo(a[0].max, a[1].min);
+		c.lineTo(a[0].max, a[1].max);
+		c.lineTo(a[0].min, a[1].max);
+		c.closePath();
+		c.stroke();
 		// Draw center.
 		c.beginPath();
 		c.moveTo(1, 0);
