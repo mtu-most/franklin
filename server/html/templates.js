@@ -433,7 +433,7 @@ function Temps() { // {{{
 		'Temp control',
 		'Target (°C)',
 		'Current (°C)',
-		'Duty Cycle (%)'
+		'Fan Power (%)'
 	], [
 		'htitle6',
 		'title6',
@@ -764,7 +764,7 @@ function Printer() {	// {{{
 		'Gpio',
 		'Name',
 		'Reset State',
-		'Duty Cycle (%)',
+		'Power (%)',
 		'Fan',
 		'Spindle'
 	], [

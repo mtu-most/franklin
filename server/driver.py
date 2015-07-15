@@ -2818,6 +2818,12 @@ class Printer: # {{{
 		if len(ka) != 0:
 			log('problem: %s' % repr(ka))
 		assert len(ka) == 0
+	def set_temp(self, temp, update = True, **ka):
+		real_ka = {}
+		if 'fan_duty' in ka:
+			real_ka['fan_duty'] = ka.pop('fan_duty')
+		assert len(ka) == 0
+		return self.expert_set_temp(temp, update = update, **real_ka)
 	# }}}
 	# Gpio {{{
 	def get_gpio(self, gpio):
