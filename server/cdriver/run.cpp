@@ -80,6 +80,8 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 			debug("Invalid probe file size %ld != %ld", probe_file_size, ((probe_file_map->nx + 1) * (probe_file_map->ny + 1)) * sizeof(double) + sizeof(ProbeFile));
 			munmap(probe_file_map, probe_file_size);
 			munmap(run_file_map, run_file_size);
+			probe_file_map = NULL;
+			run_file_map = NULL;
 			return;
 		}
 	}

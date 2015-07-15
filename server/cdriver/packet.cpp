@@ -23,7 +23,7 @@ static int16_t get_int16(uint8_t offset)
 #endif
 
 void settemp(int which, double target) {
-	if (which >= num_temps)
+	if (which < 0 || which >= num_temps)
 	{
 		debug("Setting invalid temp %d", which);
 		//abort();
