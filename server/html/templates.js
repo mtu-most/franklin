@@ -742,10 +742,10 @@ function Printer() {	// {{{
 	]).AddMultiple('temp', Temp_setup)]);
 	setup.Add([make_table().AddMultipleTitles([
 		'Temp Hardware',
-		'R0 (kΩ) or a (1000)',
-		'R1 (kΩ) or b (1000)',
-		'Rc (kΩ)',
-		'Tc (°C)',
+		'R0 (kΩ) or a',
+		'R1 (kΩ) or b',
+		'Rc (kΩ) or scale (%)',
+		'Tc (°C) or offset',
 		'β (1) or NaN'
 	], [
 		'htitle5',
@@ -756,11 +756,11 @@ function Printer() {	// {{{
 		'title5'
 	], [
 		null,
-		'Resistance on the board in series with the thermistor.  Normally 4.7 or 10.  Or, if β is NaN, the result is ax+b with x the measured ADC value; this value is a/1000.',
-		'Resistance on the board in parallel with the thermistor.  Normally Infinity.  Or, if β is NaN, the result is ax+b with x the measured ADC value; this value is b/1000.',
-		'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.',
-		'Temperature at which the thermistor has value Rc.  Normally 20.',
-		"Temperature dependence of the thermistor.  Normally around 3800.  It can be found in the thermistor's data sheet.  Or, if β is NaN, the result is ax+b with x the measured ADC value."
+		'Resistance on the board in series with the thermistor.  Normally 4.7 or 10.  Or, if β is NaN, the value of this sensor is ax+b with x the measured ADC value; this value is a.',
+		'Resistance on the board in parallel with the thermistor.  Normally Infinity.  Or, if β is NaN, the value of this sensor is ax+b with x the measured ADC value; this value is b.',
+		'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.  Or, if β is NaN, the scale for plotting the value on the temperature graph.',
+		'Temperature at which the thermistor has value Rc.  Normally 20.  Or, if β is NaN, the offset for plotting the value on the temperature graph.',
+		"Temperature dependence of the thermistor.  Normally around 3800.  It can be found in the thermistor's data sheet.  Or, if NaN, the value of this sensor is ax+b with x the measured ADC value."
 	]).AddMultiple('temp', Temp_hardware)]);
 	// }}}
 	// Gpio. {{{

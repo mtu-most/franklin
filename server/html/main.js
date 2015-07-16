@@ -92,7 +92,7 @@ function init() { // {{{
 				step = Math.pow(10, Math.trunc(Math.log10(printer.temp_scale_max - printer.temp_scale_min)));
 				for (var y = step * Math.trunc(printer.temp_scale_min / step); y < printer.temp_scale_max; y += step) {
 					c.moveTo(0, y);
-					c.lineTo(canvas.width, y);
+					c.lineTo(canvas.width / scale, y);
 				}
 				c.save();
 				c.lineWidth = 1 / scale;
@@ -133,14 +133,23 @@ function init() { // {{{
 				};
 				for (var t = 0; t < printer.temps.length; ++t) {
 					var value = printer.temps[t].temp;
-					if (isNaN(printer.temps[t].beta))
-						value *= printer.temps[t].Rc / 100000;
 					printer.temps[t].history.push([value, printer.temps[t].value]);
 					var data = printer.temps[t].history;
 					c.beginPath();
-					c.moveTo(x(printer.temphistory[0]), y(data[0][0]));
-					for (var i = 1; i < data.length; ++i)
-						c.lineTo(x(printer.temphistory[i]), y(data[i][0]));
+					value = data[0][0];
+					if (isNaN(printer.temps[t].beta)) {
+						value *= printer.temps[t].Rc / 100000;
+						value += printer.temps[t].Tc;
+					}
+					c.moveTo(x(printer.temphistory[0]), y(value));
+					for (var i = 1; i < data.length; ++i) {
+						value = data[i][0];
+						if (isNaN(printer.temps[t].beta)) {
+							value *= printer.temps[t].Rc / 100000;
+							value += printer.temps[t].Tc;
+						}
+						c.lineTo(x(printer.temphistory[i]), y(value));
+					}
 					c.strokeStyle = ['#f00', '#00f', '#0f0', '#ff0', '#000'][t < 5 ? t : 4];
 					c.lineWidth = 1 / scale;
 					c.stroke();

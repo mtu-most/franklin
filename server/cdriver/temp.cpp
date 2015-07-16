@@ -63,7 +63,7 @@ double Temp::fromadc(int32_t adc) {
 		return NAN;
 	if (isnan(beta)) {
 		// beta == NAN is used for calibration: return raw value as K.
-		return adc * R0 + R1;
+		return adc * (R0 / 1000.) + (R1 / 1000.);
 	}
 	if (adc <= 0)
 		return INFINITY;
@@ -82,10 +82,12 @@ double Temp::fromadc(int32_t adc) {
 }
 
 int32_t Temp::toadc(double T, int32_t default_) {
-	if (isnan(T) || T < 0)
+	if (isnan(T))
 		return default_;
 	if (isnan(beta))
-		return (T - R1) / R0;
+		return (T - (R1 / 1000.)) / (R0 / 1000.);
+	if (T < 0)
+		return default_;
 	if (isinf(T) && T > 0)
 		return -1;
 	double Rs = K * exp(beta * 1. / T);
