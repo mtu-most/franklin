@@ -89,17 +89,19 @@ function init() { // {{{
 					c.moveTo(x, printer.temp_scale_min);
 					c.lineTo(x, printer.temp_scale_max);
 				}
-				step = Math.pow(10, Math.trunc(Math.log10(printer.temp_scale_max - printer.temp_scale_min)));
-				for (var y = step * Math.trunc(printer.temp_scale_min / step); y < printer.temp_scale_max; y += step) {
+				step = Math.pow(10, Math.floor(Math.log(printer.temp_scale_max - printer.temp_scale_min) / Math.log(10)));
+				for (var y = step * Math.floor(printer.temp_scale_min / step); y < printer.temp_scale_max; y += step) {
 					c.moveTo(0, y);
 					c.lineTo(canvas.width / scale, y);
 				}
 				c.save();
 				c.lineWidth = 1 / scale;
 				var makedash = function(array) {
-					for (var i = 0; i < array.length; ++i)
-						array[i] /= scale;
-					c.setLineDash(array);
+					if (c.setLineDash !== undefined) {
+						for (var i = 0; i < array.length; ++i)
+							array[i] /= scale;
+						c.setLineDash(array);
+					}
 				};
 				makedash([1, 4]);
 				c.strokeStyle = '#444';
@@ -108,7 +110,7 @@ function init() { // {{{
 				// Draw grid scale.
 				c.save();
 				c.scale(1 / scale, -1 / scale);
-				for (var y = step * Math.trunc(printer.temp_scale_min / step); y < printer.temp_scale_max; y += step) {
+				for (var y = step * Math.floor(printer.temp_scale_min / step); y < printer.temp_scale_max; y += step) {
 					c.moveTo(0, y);
 					var text = y.toFixed(0);
 					c.fillText(text, (step / 50) * scale, -(y + step / 50) * scale);
