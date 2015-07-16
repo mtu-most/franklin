@@ -73,11 +73,46 @@ function init() { // {{{
 				// Update temperature graph.
 				var canvas = get_element(printer, [null, 'tempgraph']);
 				var c = canvas.getContext('2d');
+				canvas.height = canvas.clientHeight;
+				canvas.width = canvas.clientWidth;
+				var scale = canvas.height / (printer.temp_scale_max - printer.temp_scale_min);
+				c.clearRect(0, 0, canvas.width, canvas.height);
 				c.save();
-				c.clearRect(0, 0, canvas.width, canvas.width);
 				c.translate(0, canvas.height);
-				c.scale(1, -canvas.height / (printer.temp_scale_max - printer.temp_scale_min));
+				c.scale(scale, -scale);
 				c.translate(0, -printer.temp_scale_min);
+				// Draw grid.
+				c.beginPath();
+				var step = 15;
+				for (var t = step; t < 120; t += step) {
+					var x = (t / (2 * 60) * canvas.width) / scale;
+					c.moveTo(x, printer.temp_scale_min);
+					c.lineTo(x, printer.temp_scale_max);
+				}
+				step = Math.pow(10, Math.trunc(Math.log10(printer.temp_scale_max - printer.temp_scale_min)));
+				for (var y = step * Math.trunc(printer.temp_scale_min / step); y < printer.temp_scale_max; y += step) {
+					c.moveTo(0, y);
+					c.lineTo(canvas.width, y);
+				}
+				c.save();
+				c.lineWidth = 1 / scale;
+				var makedash = function(array) {
+					for (var i = 0; i < array.length; ++i)
+						array[i] /= scale;
+					c.setLineDash(array);
+				};
+				makedash([1, 4]);
+				c.strokeStyle = '#444';
+				c.stroke();
+				c.restore();
+				c.save();
+				c.scale(1 / scale, -1 / scale);
+				for (var y = step * Math.trunc(printer.temp_scale_min / step); y < printer.temp_scale_max; y += step) {
+					c.moveTo(0, y);
+					var text = y.toFixed(0);
+					c.fillText(text, (step / 50) * scale, -(y + step / 50) * scale);
+				}
+				c.restore();
 				var time = new Date();
 				printer.temphistory.push(time);
 				var cutoff = time - 2 * 60 * 1000;
@@ -87,18 +122,35 @@ function init() { // {{{
 						printer.temps[t].history.shift();
 				}
 				var x = function(t) {
-					return (t - cutoff) / (2 * 60 * 1000) * canvas.width;
+					return ((t - cutoff) / (2 * 60 * 1000) * canvas.width) / scale;
+				};
+				var y = function(d) {
+					if (isNaN(d))
+						return printer.temp_scale_min - 2 / scale;
+					if (!isFinite(d))
+						return printer.temp_scale_max + 2 / scale;
+					return d;
 				};
 				for (var t = 0; t < printer.temps.length; ++t) {
-					printer.temps[t].history.push(printer.temps[t].temp);
+					var value = printer.temps[t].temp;
+					if (isNaN(printer.temps[t].beta))
+						value *= printer.temps[t].Rc / 100000;
+					printer.temps[t].history.push([value, printer.temps[t].value]);
 					var data = printer.temps[t].history;
 					c.beginPath();
-					c.moveTo(x(printer.temphistory[0]), data[0]);
+					c.moveTo(x(printer.temphistory[0]), y(data[0][0]));
 					for (var i = 1; i < data.length; ++i)
-						c.lineTo(x(printer.temphistory[i]), data[i]);
+						c.lineTo(x(printer.temphistory[i]), y(data[i][0]));
 					c.strokeStyle = ['#f00', '#00f', '#0f0', '#ff0', '#000'][t < 5 ? t : 4];
-					c.lineWidth = 4;
+					c.lineWidth = 1 / scale;
 					c.stroke();
+					c.moveTo(x(printer.temphistory[0]), y(data[0][1]));
+					for (var i = 1; i < data.length; ++i)
+						c.lineTo(x(printer.temphistory[i]), y(data[i][1]));
+					c.save();
+					makedash([4, 2]);
+					c.stroke();
+					c.restore();
 				}
 				c.restore();
 				// Update everything else.
@@ -1392,13 +1444,14 @@ function redraw_canvas(printer) { // {{{
 		var extra_height = box.clientHeight - canvas.clientHeight;
 		var printerwidth;
 		var printerheight;
-		var outline;
+		var outline, center;
 		switch (printer.spaces[0].type) {
 		case TYPE_CARTESIAN:
 			var xaxis = printer.spaces[0].axis[0];
 			var yaxis = printer.spaces[0].axis[1];
-			printerwidth = 2 * Math.max(xaxis.max, -xaxis.min) + .010;
-			printerheight = 2 * Math.max(yaxis.max, -yaxis.min) + .010;
+			printerwidth = xaxis.max - xaxis.min + .010;
+			printerheight = yaxis.max - yaxis.min + .010;
+			center = [(xaxis.min + xaxis.max) / 2, (yaxis.min + yaxis.max) / 2];
 			outline = function(printer, c) {
 				c.beginPath();
 				// Why does this not work?
@@ -1422,6 +1475,7 @@ function redraw_canvas(printer) { // {{{
 			//var dx = [0, -.8660254037844387, .8660254037844387];
 			//var dy = [1, -.5, -.5];
 			var origin = [[radius[0] * -.8660254037844387, radius[0] * -.5], [radius[1] * .8660254037844387, radius[1] * -.5], [0, radius[2]]];
+			center = [0, 0];
 			var dx = [.5, .5, -1];
 			var dy = [-.8660254037844387, .8660254037844387, 0];
 			var intersects = [];
@@ -1495,6 +1549,7 @@ function redraw_canvas(printer) { // {{{
 		c.translate(canvas.width / 2, canvas.width / 2);
 		c.scale(canvas.width / factor, -canvas.width / factor);
 		c.lineWidth = 1.5 * factor / canvas.width;
+		c.translate(-center[0], -center[1]);
 
 		get_pointer_pos_xy = function(printer, e) {
 			var rect = canvas.getBoundingClientRect();

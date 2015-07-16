@@ -1138,7 +1138,7 @@ class Printer: # {{{
 		# 5: Set current position; move to center (delta only).
 		#log('home %s %s' % (self.home_phase, repr(self.home_target)))
 		#traceback.print_stack()
-		home_v = 50
+		home_v = 50 / self.feedrate
 		if self.home_phase is None:
 			if done is not None:
 				# Continuing call received after homing was aborted; ignore.
