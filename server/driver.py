@@ -2053,10 +2053,10 @@ class Printer: # {{{
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set()}
 		keys = {
-				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'park_after_print', 'sleep_after_print', 'cool_after_print'},
+				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print'},
 				'space': {'name', 'type', 'max_deviation', 'max_v', 'num_axes', 'delta_angle'},
-				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp'},
-				'gpio': {'name', 'pin', 'state', 'reset'},
+				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty'},
+				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
 				'axis': {'name', 'park', 'park_order', 'min', 'max'},
 				'motor': {'name', 'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_unit', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'},
 				'extruder': {'dx', 'dy', 'dz'},
