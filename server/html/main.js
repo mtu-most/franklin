@@ -105,6 +105,7 @@ function init() { // {{{
 				c.strokeStyle = '#444';
 				c.stroke();
 				c.restore();
+				// Draw grid scale.
 				c.save();
 				c.scale(1 / scale, -1 / scale);
 				for (var y = step * Math.trunc(printer.temp_scale_min / step); y < printer.temp_scale_max; y += step) {
@@ -113,6 +114,7 @@ function init() { // {{{
 					c.fillText(text, (step / 50) * scale, -(y + step / 50) * scale);
 				}
 				c.restore();
+				// Draw data.
 				var time = new Date();
 				printer.temphistory.push(time);
 				var cutoff = time - 2 * 60 * 1000;
@@ -132,6 +134,7 @@ function init() { // {{{
 					return d;
 				};
 				for (var t = 0; t < printer.temps.length; ++t) {
+					// Draw measured data.
 					var value = printer.temps[t].temp;
 					printer.temps[t].history.push([value, printer.temps[t].value]);
 					var data = printer.temps[t].history;
@@ -153,12 +156,33 @@ function init() { // {{{
 					c.strokeStyle = ['#f00', '#00f', '#0f0', '#ff0', '#000'][t < 5 ? t : 4];
 					c.lineWidth = 1 / scale;
 					c.stroke();
+					// Draw temp targets.
 					c.moveTo(x(printer.temphistory[0]), y(data[0][1]));
 					for (var i = 1; i < data.length; ++i)
 						c.lineTo(x(printer.temphistory[i]), y(data[i][1]));
 					c.save();
 					makedash([4, 2]);
 					c.stroke();
+					c.restore();
+					// Draw values of temp targets.
+					var old = null;
+					c.fillStyle = c.strokeStyle;
+					c.save();
+					c.scale(1 / scale, -1 / scale);
+					for (var i = 1; i < data.length; ++i) {
+						if (data[i][1] != old && (!isNaN(data[i][1]) || !isNaN(old))) {
+							old = data[i][1];
+							var pos;
+							if (isNaN(data[i][1]) || data[i][1] < printer.temp_scale_min)
+								pos = printer.temp_scale_min;
+							else if (data[i][1] / scale >= printer.temp_scale_max / scale - 12)
+								pos = (printer.temp_scale_max / scale - 5) * scale;
+							else
+								pos = data[i][1];
+							var text = data[i][1].toFixed(0);
+							c.fillText(text, (x(printer.temphistory[i])) * scale, -(y(pos) + step / 50) * scale);
+						}
+					}
 					c.restore();
 				}
 				c.restore();
@@ -1462,15 +1486,7 @@ function redraw_canvas(printer) { // {{{
 			printerheight = yaxis.max - yaxis.min + .010;
 			center = [(xaxis.min + xaxis.max) / 2, (yaxis.min + yaxis.max) / 2];
 			outline = function(printer, c) {
-				c.beginPath();
-				// Why does this not work?
-				//c.rect(xaxis.axis_min, yaxis.axis_min, xaxis.axis_max - xaxis.axis_min, yaxis.axis_max - y.axis_min);
-				c.moveTo(xaxis.min, yaxis.min);
-				c.lineTo(xaxis.min, yaxis.max);
-				c.lineTo(xaxis.max, yaxis.max);
-				c.lineTo(xaxis.max, yaxis.min);
-				c.lineTo(xaxis.min, yaxis.min);
-				c.stroke();
+				// Rectangle is always drawn; nothing else to do here.
 			};
 			break;
 		case TYPE_DELTA:
@@ -1489,7 +1505,7 @@ function redraw_canvas(printer) { // {{{
 			var dy = [-.8660254037844387, .8660254037844387, 0];
 			var intersects = [];
 			var intersect = function(x0, y0, r, x1, y1, dx1, dy1, positive) {
-				// Find intersection of circle(x-x0)^2+(y-y0)^2==r^2 and line l=(x1,y1)+t(dx1,dy1); use positive of negative solution for t.
+				// Find intersection of circle(x-x0)^2+(y-y0)^2==r^2 and line l=(x1,y1)+t(dx1,dy1); use positive or negative solution for t.
 				// Return coordinate.
 				var s = positive ? 1 : -1;
 				var k = (dx1 * (x1 - x0) + dy1 * (y1 - y0)) / (dx1 * dx1 + dy1 * dy1);
@@ -1529,9 +1545,9 @@ function redraw_canvas(printer) { // {{{
 					var w = c.measureText(name).width;
 					c.beginPath();
 					c.save();
-					c.translate(origin[a][0] + dy[a] * .015 - w / 2, origin[a][1] - dx[a] * .015);
+					c.translate(origin[a][0] + dy[a] * 10 - w / 2, origin[a][1] - dx[a] * 10);
 					c.rotate(-printer.spaces[0].delta_angle);
-					c.scale(.001, -.001);
+					c.scale(1, -1);
 					c.fillText(name, 0, 0);
 					c.restore();
 				}
