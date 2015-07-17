@@ -66,6 +66,7 @@ void packet()
 			EEPROM.write(i, uuid[i]);
 		}
 		write_ack();
+		return;
 	}
 	case CMD_SETUP:
 	{
