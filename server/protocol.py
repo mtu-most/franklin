@@ -3,14 +3,22 @@
 from websockets import log
 
 single = {
-	'NACK': '\x80',
-	'ACK0': '\xb3',
-	'STALL0': '\x87',
-	'STALL1': '\x9e',
-	'ID': '\xaa',
-	'ACK1': '\xad',
-	'DEBUG': '\xb4',
-	'STARTUP': '\x99',
+	'NACK0': '\xf0',       # Incorrect packet; please resend.
+	'NACK1': '\x91',       # Incorrect packet; please resend.
+	'NACK2': '\xa2',       # Incorrect packet; please resend.
+	'NACK3': '\xc3',       # Incorrect packet; please resend.
+	'ACK0': '\xc4',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	'ACK1': '\xa5',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	'ACK2': '\x96',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	'ACK3': '\xf7',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	'STALL0': '\x88',      # Packet properly received, but not accepted; don't resend packet unmodified.
+	'STALL1': '\xe9',      # Packet properly received, but not accepted; don't resend packet unmodified.
+	'STALL2': '\xda',      # Packet properly received, but not accepted; don't resend packet unmodified.
+	'STALL3': '\xbb',      # Packet properly received, but not accepted; don't resend packet unmodified.
+	'ID': '\xbc',          # Request/reply printer ID code.
+	'DEBUG': '\xdd',       # Debug message; a nul-terminated message follows (no checksum; no resend).
+	'STARTUP': '\xee',     # Starting up.
+	'STALLACK': '\x8f'     # Clear stall.
 	}
 
 command = {

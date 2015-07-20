@@ -106,8 +106,10 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 		run_file_first_string = pos - current;
 		run_file_num_records = run_file_first_string / sizeof(Run_Record);
 	}
-	else
-		run_file_num_records = run_file_size;
+	else {
+		audio_hwtime_step = 1000000. / *reinterpret_cast <double *>(run_file_map);
+		run_file_num_records = run_file_size - sizeof(double);
+	}
 	run_file_wait_temp = 0;
 	run_file_wait = 0;
 	run_file_timer.it_interval.tv_sec = 0;
@@ -206,7 +208,7 @@ void run_file_fill_queue() {
 			int16_t next = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 			if (next == running_fragment)
 				break;
-			settings.run_file_current = arch_send_audio(reinterpret_cast <uint8_t *>(run_file_map), settings.run_file_current, run_file_num_records, run_file_audio);
+			settings.run_file_current = arch_send_audio(&reinterpret_cast <uint8_t *>(run_file_map)[sizeof(double)], settings.run_file_current, run_file_num_records, run_file_audio);
 			current_fragment = next;
 			store_settings();
 			if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping)

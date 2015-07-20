@@ -5,7 +5,7 @@
 
 // Defines and includes.  {{{
 #ifdef FAST_ISR
-#define TIME_PER_ISR 20
+#define TIME_PER_ISR 38
 #else
 #define TIME_PER_ISR 500
 #endif
@@ -91,85 +91,191 @@ static inline void arch_set_speed(uint16_t count);
 // Defined by arduino: NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS
 
 // Serial communication. {{{
-#ifndef NO_SERIAL1
-EXTERN volatile uint8_t avr_which_serial;
+#ifdef UDR3
+#define NUM_SERIAL_PORTS 4
+#else
+#ifdef UDR2
+#define NUM_SERIAL_PORTS 3
+#else
+#ifdef UDR1
+#define NUM_SERIAL_PORTS 2
+#else
+#define NUM_SERIAL_PORTS 1
+#endif
+#endif
+#endif
+EXTERN volatile int8_t avr_last_serial;
+EXTERN int8_t avr_which_serial;
+extern volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6];
+#ifdef DEFINE_VARIABLES
+volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6] = {
+#ifdef UDR3
+	{&UDR0, &UCSR0A, &UCSR0B, &UCSR0C, &UBRR0H, &UBRR0L},
+	{&UDR1, &UCSR1A, &UCSR1B, &UCSR1C, &UBRR1H, &UBRR1L},
+	{&UDR2, &UCSR2A, &UCSR2B, &UCSR2C, &UBRR2H, &UBRR2L},
+	{&UDR3, &UCSR3A, &UCSR3B, &UCSR3C, &UBRR3H, &UBRR3L}
+#else
+#ifdef UDR2
+	{&UDR0, &UCSR0A, &UCSR0B, &UCSR0C, &UBRR0H, &UBRR0L},
+	{&UDR1, &UCSR1A, &UCSR1B, &UCSR1C, &UBRR1H, &UBRR1L},
+	{&UDR2, &UCSR2A, &UCSR2B, &UCSR2C, &UBRR2H, &UBRR2L}
+#else
+#ifdef UDR1
+	{&UDR0, &UCSR0A, &UCSR0B, &UCSR0C, &UBRR0H, &UBRR0L},
+	{&UDR1, &UCSR1A, &UCSR1B, &UCSR1C, &UBRR1H, &UBRR1L}
+#else
+	{&UDR, &UCSRA, &UCSRB, &UCSRC, &UBRRH, &UBRRL}
+#endif
+#endif
+#endif
+};
 #endif
 
 static inline void arch_serial_write(uint8_t data) { // {{{
-#ifndef NO_SERIAL1
-	if (avr_which_serial != 1) {
-#endif
-		while (~UCSR0A & (1 << UDRE0)) {}
-		UDR0 = data;
-#ifndef NO_SERIAL1
-	}
-	else {
-		while (~UCSR1A & (1 << UDRE1)) {}
-		UDR1 = data;
-	}
-#endif
+	if (avr_which_serial < 0)
+		return;
+	while (~*avr_serial_ports[avr_which_serial][1] & (1 << UDRE0)) {}
+	*avr_serial_ports[avr_which_serial][0] = data;
 } // }}}
 
 static inline void arch_serial_flush() { // {{{
-#ifndef NO_SERIAL1
-	if (avr_which_serial == 0)
-#endif
-		while (~UCSR0A & (1 << TXC0)) {}
-#ifndef NO_SERIAL1
-	else if (avr_which_serial == 1)
-		while (~UCSR1A & (1 << TXC1)) {}
-#endif
+	while (~*avr_serial_ports[avr_which_serial][1] & (1 << TXC0)) {}
 } // }}}
 
-#ifdef DEFINE_VARIABLES
-static inline void avr_handle_serial_input( // {{{
-#ifndef NO_SERIAL1
-		uint8_t which,
-#endif
-		uint8_t data, uint8_t status) {
-#ifndef NO_SERIAL1
-	if (avr_which_serial != which) {
-		if (status != 0 || (data != CMD_ID && data != CMD_NACK)) {
-			//debug("no %x %x", status, data);
-			return;
-		}
-		avr_which_serial = which;
-		// Disable other port so the pins can be used.
-		if (which == 0)
-			UCSR1B = 0;
+static inline void arch_claim_serial() { // {{{
+	if (avr_which_serial == avr_last_serial)
+		return;
+	avr_which_serial = avr_last_serial;
+	for (uint8_t i = 0; i < NUM_SERIAL_PORTS; ++i) {
+		if (i == avr_which_serial)
+			*avr_serial_ports[i][2] = (1 << RXCIE0) | (1 << RXEN0) | (1 << TXEN0);
 		else
-			UCSR0B = 0;
+			*avr_serial_ports[i][2] = 0;
 	}
-#endif
-	if (serial_overflow)
-		return;
-	int16_t next = (serial_buffer_head + 1) & SERIAL_MASK;
-	if (status != 0 || next == serial_buffer_tail) {
-		debug_add(0xb00);
-		debug_add(status);
-		debug_add(serial_buffer_head);
-		debug_add(serial_buffer_tail);
-		serial_overflow = true;
-		return;
-	}
-	BUFFER_CHECK(serial_buffer, serial_buffer_head);
-	serial_buffer[serial_buffer_head] = data;
-	serial_buffer_head = next;
+} // }}}
+#ifdef DEFINE_VARIABLES
+// Serial input ISR. {{{
+#define avr_serial_input(which) \
+		"\t"	"push 31"			"\n"	\
+		"\t"	"in 31, __SREG__"		"\n"	\
+		"\t"	"push 31"			"\n"	\
+		"\t"	"push 30"			"\n"	\
+		"\t"	"push 29"			"\n"	\
+		"\t"	"push 28"			"\n"	\
+		"\t"	"push 27"			"\n"	\
+		"\t"	"push 26"			"\n"	\
+		"\t"	"lds 31, %[ucsra]"		"\n"	\
+		"\t"	"andi 31, %[statusmask]"	"\n"	\
+		"\t"	"lds 30, %[udr]"		"\n"	\
+		"\t"	"lds 27, serial_overflow"	"\n"	\
+		"\t"	"tst 27"			"\n"	\
+		"\t"	"brne 7f"			"\n"	\
+		"\t"	"tst 31"			"\n"	\
+		"\t"	"brne 5f"			"\n"	\
+		"\t"	"ldi 31, " #which		"\n"	\
+		"\t"	"sts avr_last_serial, 31"	"\n"	\
+		"\t"	"lds 28, serial_buffer_head"	"\n"	\
+		"\t"	"lds 29, serial_buffer_head + 1"	"\n"	\
+		"\t"	"movw 26, 28"			"\n"	\
+		"\t"	"adiw 28, 1"			"\n"	\
+		"\t"	"andi 29, %[serialmask]"	"\n"	\
+		"\t"	"lds 31, serial_buffer_tail"	"\n"	\
+		"\t"	"cp 31, 28"			"\n"	\
+		"\t"	"brne 6f"			"\n"	\
+		"\t"	"lds 31, serial_buffer_tail + 1"	"\n"	\
+		"\t"	"cp 31, 29"			"\n"	\
+		"\t"	"brne 6f"			"\n"	\
+	"5:\t"		/* Overflow. */			"\n"	\
+		"\t"	"ldi 29, 1"			"\n"	\
+		"\t"	"sts serial_overflow, 29"	"\n"	\
+		"\t"	"rjmp 7f"			"\n"	\
+	"6:\t"		/* Store byte. */		"\n"	\
+		"\t"	"sts serial_buffer_head, 28"	"\n"	\
+		"\t"	"sts serial_buffer_head + 1, 29"	"\n"	\
+		"\t"	"ldi 28, lo8(serial_buffer)"	"\n"	\
+		"\t"	"ldi 29, hi8(serial_buffer)"	"\n"	\
+		"\t"	"add 26, 28"			"\n"	\
+		"\t"	"adc 27, 29"			"\n"	\
+		"\t"	"st x, 30"			"\n"	\
+	"7:\t"		/* Finish. */			"\n"	\
+		"\t"	"pop 26"			"\n"	\
+		"\t"	"pop 27"			"\n"	\
+		"\t"	"pop 28"			"\n"	\
+		"\t"	"pop 29"			"\n"	\
+		"\t"	"pop 30"			"\n"	\
+		"\t"	"pop 31"			"\n"	\
+		"\t"	"out __SREG__, 31"		"\n"	\
+		"\t"	"pop 31"			"\n"	\
+		"\t"	"reti"				"\n"
+// }}}
+
+ISR(USART0_RX_vect, ISR_NAKED) { // {{{
+	asm(
+		avr_serial_input(0)
+		::
+			[ucsra] "M" (_SFR_MEM_ADDR(UCSR0A)),
+			[udr] "M" (_SFR_MEM_ADDR(UDR0)),
+			[statusmask] "M" ((1 << FE0) | (1 << DOR0)),
+			[serialmask] "M" (SERIAL_MASK >> 8),
+			[id] "M" (CMD_ID),
+			[nack0] "M" (CMD_NACK0),
+			[nack1] "M" (CMD_NACK1),
+			[nack2] "M" (CMD_NACK2),
+			[nack3] "M" (CMD_NACK3)
+	);
 } // }}}
 
-ISR(USART0_RX_vect) { // {{{
-	uint8_t status = UCSR0A;
-	avr_handle_serial_input(
-#ifndef NO_SERIAL1
-			0,
-#endif
-			UDR0, status & ((1 << FE0) | (1 << DOR0)));
+#ifdef UDR1
+ISR(USART1_RX_vect, ISR_NAKED) { // {{{
+	asm(
+		avr_serial_input(1)
+		::
+			[ucsra] "M" (_SFR_MEM_ADDR(UCSR1A)),
+			[udr] "M" (_SFR_MEM_ADDR(UDR1)),
+			[statusmask] "M" ((1 << FE1) | (1 << DOR1)),
+			[serialmask] "M" (SERIAL_MASK >> 8),
+			[id] "M" (CMD_ID),
+			[nack0] "M" (CMD_NACK0),
+			[nack1] "M" (CMD_NACK1),
+			[nack2] "M" (CMD_NACK2),
+			[nack3] "M" (CMD_NACK3)
+	);
 } // }}}
+#endif
 
-#ifndef NO_SERIAL1
-ISR(USART1_RX_vect) { // {{{
-	uint8_t status = UCSR1A;
-	avr_handle_serial_input(1, UDR1, status & ((1 << FE1) | (1 << DOR1)));
+#ifdef UDR2
+ISR(USART2_RX_vect, ISR_NAKED) { // {{{
+	asm(
+		avr_serial_input(2)
+		::
+			[ucsra] "M" (_SFR_MEM_ADDR(UCSR2A)),
+			[udr] "M" (_SFR_MEM_ADDR(UDR2)),
+			[statusmask] "M" ((1 << FE2) | (1 << DOR2)),
+			[serialmask] "M" (SERIAL_MASK >> 8),
+			[id] "M" (CMD_ID),
+			[nack0] "M" (CMD_NACK0),
+			[nack1] "M" (CMD_NACK1),
+			[nack2] "M" (CMD_NACK2),
+			[nack3] "M" (CMD_NACK3)
+	);
+} // }}}
+#endif
+
+#ifdef UDR3
+ISR(USART3_RX_vect, ISR_NAKED) { // {{{
+	asm(
+		avr_serial_input(3)
+		::
+			[ucsra] "M" (_SFR_MEM_ADDR(UCSR3A)),
+			[udr] "M" (_SFR_MEM_ADDR(UDR3)),
+			[statusmask] "M" ((1 << FE3) | (1 << DOR3)),
+			[serialmask] "M" (SERIAL_MASK >> 8),
+			[id] "M" (CMD_ID),
+			[nack0] "M" (CMD_NACK0),
+			[nack1] "M" (CMD_NACK1),
+			[nack2] "M" (CMD_NACK2),
+			[nack3] "M" (CMD_NACK3)
+	);
 } // }}}
 #endif
 #endif
@@ -388,19 +494,15 @@ static inline void arch_setup_start() { // {{{
 	avr_seconds = 0;
 	arch_watchdog_disable();
 	// Serial ports.
-	UCSR0A = 1 << U2X0;
-	UCSR0B = (1 << RXCIE0) | (1 << RXEN0) | (1 << TXEN0);
-	UCSR0C = 6;
-	UBRR0H = 0;
-	UBRR0L = 16;
-#ifndef NO_SERIAL1
-	UCSR1A = 1 << U2X1;
-	UCSR1B = (1 << RXCIE1) | (1 << RXEN1) | (1 << TXEN1);
-	UCSR1C = 6;
-	UBRR1H = 0;
-	UBRR1L = 16;
+	for (uint8_t i = 0; i < NUM_SERIAL_PORTS; ++i) {
+		*avr_serial_ports[i][1] = 1 << U2X0;
+		*avr_serial_ports[i][2] = (1 << RXCIE0) | (1 << RXEN0) | (1 << TXEN0);
+		*avr_serial_ports[i][3] = 6;
+		*avr_serial_ports[i][4] = 0;
+		*avr_serial_ports[i][5] = 1;
+	}
+	avr_last_serial = -1;
 	avr_which_serial = -1;
-#endif
 	serial_overflow = false;
 	serial_buffer_tail = 0;
 	serial_buffer_head = 0;

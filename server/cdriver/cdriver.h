@@ -20,6 +20,8 @@
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
 #define EXTERN extern
+#else
+#define DEFINE_VARIABLES
 #endif
 
 #define debug(...) do { buffered_debug_flush(); fprintf(stderr, "#"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while (0)
@@ -56,15 +58,27 @@ enum SingleByteHostCommands {
 };
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values. {{{
-	CMD_NACK = 0x80,	// Incorrect packet; please resend.
-	CMD_ACK0 = 0xb3,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_STALL0 = 0x87,	// Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_STALL1 = 0x9e,	// Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_ID = 0xaa,		// Request/reply printer ID code.
-	CMD_ACK1 = 0xad,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_DEBUG = 0xb4,	// Debug message; a nul-terminated message follows (no checksum; no resend).
-	CMD_STARTUP = 0x99
+	CMD_NACK0 = 0xf0,       // Incorrect packet; please resend.
+	CMD_NACK1 = 0x91,       // Incorrect packet; please resend.
+	CMD_NACK2 = 0xa2,       // Incorrect packet; please resend.
+	CMD_NACK3 = 0xc3,       // Incorrect packet; please resend.
+	CMD_ACK0 = 0xc4,        // Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACK1 = 0xa5,        // Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACK2 = 0x96,        // Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACK3 = 0xf7,        // Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_STALL0 = 0x88,      // Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_STALL1 = 0xe9,      // Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_STALL2 = 0xda,      // Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_STALL3 = 0xbb,      // Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_ID = 0xbc,          // Request/reply printer ID code.
+	CMD_DEBUG = 0xdd,       // Debug message; a nul-terminated message follows (no checksum; no resend).
+	CMD_STARTUP = 0xee,     // Starting up.
+	CMD_STALLACK = 0x8f     // Clear stall.
 }; // }}}
+
+extern const SingleByteCommands cmd_ack[4];
+extern const SingleByteCommands cmd_nack[4];
+extern const SingleByteCommands cmd_stall[4];
 
 enum Command {
 	// from host
@@ -374,12 +388,13 @@ EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
 EXTERN int cbs_after_current_move;
 EXTERN bool motors_busy;
-EXTERN bool out_busy;
+EXTERN int out_busy;
 EXTERN uint32_t out_time;
-EXTERN char pending_packet[FULL_COMMAND_SIZE];
-EXTERN int pending_len;
+EXTERN char pending_packet[4][FULL_COMMAND_SIZE];
+EXTERN int pending_len[4];
 EXTERN char datastore[FULL_COMMAND_SIZE];
 EXTERN uint32_t last_active;
+EXTERN uint32_t last_micros;
 EXTERN int16_t led_phase;
 EXTERN History *history;
 EXTERN History settings;
@@ -403,7 +418,8 @@ EXTERN int current_fragment_pos;
 EXTERN int num_active_motors;
 EXTERN int hwtime_step, audio_hwtime_step;
 EXTERN struct pollfd pollfds[3];
-EXTERN bool wait_for_reply;
+EXTERN void (*wait_for_reply[4])();
+EXTERN int expected_replies;
 
 #if DEBUG_BUFFER_LENGTH > 0
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
@@ -429,10 +445,10 @@ void setpos(int which, int t, double f);
 
 // serial.cpp
 void serial(uint8_t which);	// Handle commands from serial.
-void prepare_packet(char *the_packet, int len);
+bool prepare_packet(char *the_packet, int len);
 void send_packet();
 void write_ack();
-void write_stall();
+void write_nack();
 void send_host(char cmd, int s = 0, int m = 0, double f = 0, int e = 0, int len = 0);
 
 // move.cpp
@@ -477,6 +493,8 @@ EXTERN double run_time, run_dist;
 
 // setup.cpp
 void setup(char const *port, char const *run_id);
+void setup_end();
+EXTERN bool running;
 
 // storage.cpp
 uint8_t read_8(int32_t &address);
@@ -516,34 +534,34 @@ uint32_t millis();
 // ADCBITS
 // FRAGMENTS_PER_BUFFER
 // BYTES_PER_FRAGMENT
-static inline void SET_INPUT(Pin_t _pin);
-static inline void SET_INPUT_NOPULLUP(Pin_t _pin);
-static inline void RESET(Pin_t _pin);
-static inline void SET(Pin_t _pin);
-static inline void SET_OUTPUT(Pin_t _pin);
-static inline bool GET(Pin_t _pin, bool _default);
-static inline void arch_setup_start(char const *port);
-static inline void arch_setup_end(char const *run_id);
-static inline void arch_motors_change();
-static inline void arch_addpos(int s, int m, int diff);
-static inline void arch_stop(bool fake = false);
-static inline void arch_home();
-static inline bool arch_running();
-//static inline void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0);
-static inline void arch_start_move(int extra);
-static inline bool arch_send_fragment();
+void SET_INPUT(Pin_t _pin);
+void SET_INPUT_NOPULLUP(Pin_t _pin);
+void RESET(Pin_t _pin);
+void SET(Pin_t _pin);
+void SET_OUTPUT(Pin_t _pin);
+bool GET(Pin_t _pin, bool _default, void(*cb)(bool));
+void arch_setup_start(char const *port);
+void arch_setup_end(char const *run_id);
+void arch_motors_change();
+void arch_addpos(int s, int m, int diff);
+void arch_stop(bool fake = false);
+void arch_home();
+bool arch_running();
+//void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0);
+void arch_start_move(int extra);
+bool arch_send_fragment();
 
 #ifdef SERIAL
-static inline int hwpacketsize(int len, int *available);
-static inline void hwpacket(int len);
-static inline void arch_reconnect(char *port);
-static inline void arch_disconnect();
-static inline int arch_fds();
+int hwpacketsize(int len, int *available);
+bool hwpacket(int len);
+void arch_reconnect(char *port);
+void arch_disconnect();
+int arch_fds();
 // Serial_t derivative Serial;
-//static inline void arch_pin_set_reset(Pin_t pin_, int state);
-static inline void START_DEBUG();
-static inline void DO_DEBUG(char c);
-static inline void END_DEBUG();
+//void arch_pin_set_reset(Pin_t pin_, int state);
+void START_DEBUG();
+void DO_DEBUG(char c);
+void END_DEBUG();
 #endif
 
 

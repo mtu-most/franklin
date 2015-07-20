@@ -565,6 +565,7 @@ class Printer: # {{{
 			#log('no response yet')
 	# }}}
 	def _get_reply(self, cb = False): # {{{
+		#traceback.print_stack()
 		while True:
 			if not self.printer.available():
 				ret = select.select([self.printer], [], [self.printer], 3)
@@ -995,14 +996,16 @@ class Printer: # {{{
 			wav = wave.open(f)
 		except:
 			return 'Unable to open audio file'
-		if wav.getnchannels() != 1:
-			return 'Only mono wav files are supported'
+		rate = wav.getframerate()
+		channels = wav.getnchannels()
+		self._broadcast(None, 'blocked', 'parsing audio')
 		data = [ord(x) for x in wav.readframes(wav.getnframes())]
 		# Data is 16 bit signed ints per channel, but it is read as bytes.  First convert it to 16 bit numbers.
-		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2], data[1::2])]
+		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2 * channels], data[1::2 * channels])]
 		bit = 0
 		byte = 0
 		with fhs.write_spool(os.path.join(self.uuid, 'audio', name + os.path.extsep + 'bin')) as dst:
+			dst.write(struct.pack('@d', rate))
 			for t, sample in enumerate(data):
 				if sample > 0:
 					byte |= 1 << bit
@@ -1012,6 +1015,7 @@ class Printer: # {{{
 					byte = 0
 					bit = 0
 		self.audioqueue[os.path.splitext(name)[0]] = wav.getnframes()
+		self._broadcast(None, 'blocked', '')
 		return ''
 	# }}}
 	def _do_queue(self): # {{{

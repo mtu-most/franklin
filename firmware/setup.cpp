@@ -32,7 +32,9 @@ void setup()
 	command_end = 0;
 	had_data = false;
 	ping = 0;
-	out_busy = false;
+	out_busy = 0;
+	ff_in = 0;
+	ff_out = 0;
 	reply_ready = 0;
 	adcreply_ready = 0;
 	timeout = false;

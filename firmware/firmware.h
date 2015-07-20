@@ -72,11 +72,13 @@ EXTERN int16_t command_end;
 EXTERN bool had_data;
 EXTERN uint8_t reply[MAX_REPLY_LEN], adcreply[6];
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
-EXTERN bool out_busy;
+EXTERN uint8_t out_busy;
 EXTERN uint8_t reply_ready, adcreply_ready;
 EXTERN bool timeout;
-EXTERN uint8_t pending_packet[REPLY_BUFFER_SIZE];
-EXTERN int16_t pending_len;
+EXTERN uint8_t ff_in;
+EXTERN uint8_t ff_out;
+EXTERN uint8_t pending_packet[4][REPLY_BUFFER_SIZE];
+EXTERN int16_t pending_len[4];
 EXTERN volatile uint8_t move_phase, full_phase, full_phase_bits;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
@@ -92,14 +94,22 @@ EXTERN volatile int16_t serial_buffer_tail;
 EXTERN volatile uint8_t serial_buffer[1 << SERIAL_SIZE_BITS];
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
-	CMD_NACK = 0x80,	// Incorrect packet; please resend.
-	CMD_ACK0 = 0xb3,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_STALL0 = 0x87,	// Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_STALL1 = 0x9e,	// Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_ID = 0xaa,		// Request/reply printer ID code.
-	CMD_ACK1 = 0xad,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_DEBUG = 0xb4,	// Debug message; a nul-terminated message follows (no checksum; no resend).
-	CMD_STARTUP = 0x99	// Starting up.
+	CMD_NACK0 = 0xf0,	// Incorrect packet; please resend.
+	CMD_NACK1 = 0x91,	// Incorrect packet; please resend.
+	CMD_NACK2 = 0xa2,	// Incorrect packet; please resend.
+	CMD_NACK3 = 0xc3,	// Incorrect packet; please resend.
+	CMD_ACK0 = 0xc4,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACK1 = 0xa5,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACK2 = 0x96,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACK3 = 0xf7,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_STALL0 = 0x88,	// Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_STALL1 = 0xe9,	// Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_STALL2 = 0xda,	// Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_STALL3 = 0xbb,	// Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_ID = 0xbc,		// Request/reply printer ID code.
+	CMD_DEBUG = 0xdd,	// Debug message; a nul-terminated message follows (no checksum; no resend).
+	CMD_STARTUP = 0xee,	// Starting up.
+	CMD_STALLACK = 0x8f	// Clear stall.
 };
 
 enum Control {
@@ -180,7 +190,7 @@ EXTERN Pin_t pin[NUM_DIGITAL_PINS];
 
 enum Command {
 	// from host
-	CMD_BEGIN = 0x40,	// 0
+	CMD_BEGIN = 0x00,	// 0
 	CMD_PING,	// 1:code
 	CMD_SET_UUID,	// 16: UUID
 	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin, 1:probe_pin 1:pin_flags 2:timeout
@@ -200,7 +210,7 @@ enum Command {
 
 	// to host
 		// responses to host requests; only one active at a time.
-	CMD_READY = 0x60,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:fragments/motor, 1:bytes/fragment
+	CMD_READY = 0x10,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:fragments/motor, 1:bytes/fragment
 	CMD_PONG,	// 1:code
 	CMD_HOMED,	// {4:motor_pos}*
 	CMD_PIN,	// 1:state
@@ -225,7 +235,7 @@ static inline uint8_t command(int16_t pos) {
 }
 
 static inline int16_t minpacketlen() {
-	switch (command(0) & ~0x10) {
+	switch (command(0) & 0x1f) {
 	case CMD_BEGIN:
 		return 2;
 	case CMD_PING:
@@ -410,9 +420,9 @@ void loop();	// Do stuff which needs doing: moving motors and adjusting heaters.
 static inline void write_current_pos(uint8_t offset) {
 	cli();
 	for (uint8_t m = 0; m < active_motors; ++m) {
-		BUFFER_CHECK(pending_packet, offset + 4 * m);
+		BUFFER_CHECK(pending_packet[ff_out], offset + 4 * m);
 		BUFFER_CHECK(motor, m);
-		*reinterpret_cast <int32_t *>(&pending_packet[offset + 4 * m]) = motor[m].current_pos;
+		*reinterpret_cast <int32_t *>(&pending_packet[ff_out][offset + 4 * m]) = motor[m].current_pos;
 	}
 	sei();
 }

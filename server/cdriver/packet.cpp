@@ -104,6 +104,10 @@ void setpos(int which, int t, double f) {
 	// */
 }
 
+static void get_cb(bool value) {
+	send_host(CMD_PIN, value ? 1 : 0);
+}
+
 void packet()
 {
 	// command[0][0] is the length not including checksum bytes.
@@ -630,7 +634,7 @@ void packet()
 			abort();
 			return;
 		}
-		send_host(CMD_PIN, GET(gpios[which].pin, false) ? 1 : 0);
+		GET(gpios[which].pin, false, get_cb);
 		return;
 	}
 #ifdef SERIAL

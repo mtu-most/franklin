@@ -13,19 +13,16 @@
 // Ack: 1 byte.
 // Nack: 1 byte.
 
-// The first byte of a packet is the length: 0lllllll
-// The second byte of a packet is the flipflop and the command (fccccccc)
-// All other commands have bit 7 set, so they cannot be mistaken for a packet.
-// They have 4 bit data and 3 bit parity: 1pppdddd
+// The first byte of a packet is the serial and the command (0ssdcccc (serial, direction, command)); 
+// All 1-byte commands have bit 7 set, so they cannot be mistaken for a packet.
+// They have 4 bit data and 3 bit parity: 1pppdddd.
+// parity is odd to avoid near-conflicts with commands.
 // static const uint8_t MASK1[3] = {0x4b, 0x2d, 0x1e}
-// Codes (low nybble is data): 80 (e1 d2) b3 b4 (d5 e6) 87 (f8) 99 aa (cb cc) ad 9e (ff)
-// Codes which have duplicates in printer id codes are not used.
+// Codes (low nybble is data): f0 91 a2 c3 c4 a5 96 f7 88 e9 da bb bc dd ee (8f)
 // These are defined in firmware.h.
 // }}}
 
 // Static variables. {{{
-static uint8_t ff_in = 0;
-static uint8_t ff_out = 0;
 static bool had_stall = true;
 static uint16_t last_millis;
 
@@ -37,16 +34,20 @@ static const uint8_t MASK[5][4] = {
 	{0x95, 0x6c, 0xd5, 0x43},
 	{0x4b, 0xdc, 0xe2, 0x83}
 };
+
+static const uint8_t cmd_ack[4] = { CMD_ACK0, CMD_ACK1, CMD_ACK2, CMD_ACK3 };
+static const uint8_t cmd_nack[4] = { CMD_NACK0, CMD_NACK1, CMD_NACK2, CMD_NACK3 };
+static const uint8_t cmd_stall[4] = { CMD_STALL0, CMD_STALL1, CMD_STALL2, CMD_STALL3 };
 // }}}
 
 static inline int16_t fullpacketlen() { // {{{
-	if ((command(0) & ~0x10) == CMD_BEGIN) {
+	if ((command(0) & 0x1f) == CMD_BEGIN) {
 		return command(1);
 	}
-	else if ((command(0) & ~0x10) == CMD_HOME) {
+	else if ((command(0) & 0x1f) == CMD_HOME) {
 		return 5 + active_motors;
 	}
-	else if ((command(0) & ~0x10) == CMD_MOVE) {
+	else if ((command(0) & 0x1f) == CMD_MOVE) {
 		return 2 + last_len;
 	}
 	else
@@ -62,7 +63,7 @@ static void clear_overflow() { // {{{
 	serial_buffer_tail = 0;
 	serial_overflow = false;
 	debug_dump();
-	arch_serial_write(CMD_NACK);
+	arch_serial_write(cmd_nack[ff_in]);
 }
 // }}}
 
@@ -86,7 +87,7 @@ static inline void inc_tail(int16_t amount) { // {{{
 // Check if there is serial data available.  This is not running from an interrupt, because it must 
 void serial() { // {{{
 	uint16_t milliseconds = millis();
-	sdebug2("command end %d", command_end);
+	sdebug("command end %d", command_end);
 	if (milliseconds - last_millis >= 100) {
 		if (serial_overflow)
 			clear_overflow();
@@ -111,18 +112,22 @@ void serial() { // {{{
 		uint8_t firstbyte = serial_buffer[serial_buffer_tail];
 		sdebug2("received: %x", firstbyte);
 		// If this is a 1-byte command, handle it.
+		uint8_t which = 0;
 		switch (firstbyte)
 		{
-		case CMD_ACK0:
+		case CMD_ACK3:
+			which += 1;
+		case CMD_ACK2:
+			which += 1;
 		case CMD_ACK1:
+			which += 1;
+		case CMD_ACK0:
+		{
 			// Ack: everything was ok; flip the flipflop.
-			if (out_busy && ((!ff_out) ^ (firstbyte == CMD_ACK1))) {	// Only if we expected it and it is the right type.
-				ff_out ^= 0x10;
-#ifdef DEBUG_FF
-				debug("new ff_out: %d", ff_out);
-#endif
-				out_busy = false;
-				if ((pending_packet[0] & ~0x10) == CMD_LIMIT) {
+			//debug("a%d out %d busy %d", which, ff_out, out_busy);
+			if (out_busy > 0 && ((ff_out - out_busy) & 3) == which) {	// Only if we expected it and it is the right type.
+				out_busy -= 1;
+				if ((pending_packet[(ff_out - (out_busy + 1)) & 3][0] & 0x1f) == CMD_LIMIT) {
 					current_fragment = (current_fragment + 1) & FRAGMENTS_PER_MOTOR_MASK;
 					last_fragment = current_fragment;
 					notified_current_fragment = current_fragment;
@@ -138,29 +143,51 @@ void serial() { // {{{
 			}
 			inc_tail(1);
 			continue;
-		case CMD_NACK:
+		}
+		case CMD_NACK3:
+			which += 1;
+		case CMD_NACK2:
+			which += 1;
+		case CMD_NACK1:
+			which += 1;
+		case CMD_NACK0:
+		{
+			arch_claim_serial();
 			// Nack: the host didn't properly receive the packet: resend.
+			//debug("n%d out %d busy %d", which, ff_out, out_busy);
 			// Unless the last packet was already received; in that case ignore the NACK.
-			if (out_busy) {
-				debug("resend at request %x", pending_packet[0] & 0xff);
-				send_packet();
+			uint8_t amount = (ff_out - which) & 3;
+			if (amount <= out_busy) {
+				//debug("resend at request %x", pending_packet[ff_out][0] & 0xff);
+				ff_out = (ff_out - amount) & 3;
+				out_busy -= amount;
+				while (amount--) {
+					ff_out = (ff_out + 1) & 3;
+					send_packet();
+				}
 			}
-			else
-				debug("no resend at request");
+			//else
+				//debug("no resend at request");
 			inc_tail(1);
 			continue;
+		}
 		case CMD_ID:
 			// Request printer id.  This is called when the host
 			// connects to the printer.  This may be a reconnect,
 			// and can happen at any time.
 			// Response is to send the printer id, and temporarily disable all temperature readings.
+			arch_claim_serial();
 			send_id(CMD_ID);
+			inc_tail(1);
+			continue;
+		case CMD_STALLACK:
+			had_stall = false;
 			inc_tail(1);
 			continue;
 		default:
 			break;
 		}
-		if ((firstbyte & 0xe0) != 0x40) {
+		if ((firstbyte & 0x90) != 0x00) {
 			// This cannot be a good packet.
 			debug("invalid command %x %d", firstbyte, serial_buffer_tail);
 			inc_tail(1);
@@ -251,56 +278,59 @@ void serial() { // {{{
 	}
 	// Packet is good.
 	sdebug2("good");
-	// Flip-flop must have good state.
-	if ((command(0) & 0x10) != ff_in)
-	{
-		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
-		// Resend the ack (or stall), but don't do anything (the action has already been taken).
-		sdebug("duplicate");
-#ifdef DEBUG_FF
-		debug("old ff_in: %d", ff_in);
-#endif
-		if (had_stall) {
-			debug("repeating stall");
-			arch_serial_write(ff_in ? CMD_STALL0 : CMD_STALL1);
-		}
-		else {
-			debug("repeating ack");
-			arch_serial_write(ff_in ? CMD_ACK0 : CMD_ACK1);
-		}
+	if (had_stall) {
+		debug("repeating stall");
+		arch_serial_write(cmd_stall[ff_in]);
 		inc_tail(cmd_len);
 		return;
 	}
-	// Right: update flip-flop and send ack.
-	ff_in ^= 0x10;
+	// Flip-flop must have good state.
+	uint8_t which = (command(0) >> 5) & 3;
+	if (which != ff_in)
+	{
+		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
+		// Resend the ack, but don't do anything (the action has already been taken).
+		debug("duplicate %d %d", ff_in, which);
+#ifdef DEBUG_FF
+		debug("old ff_in: %d", ff_in);
+#endif
+		arch_serial_write(cmd_ack[which]);
+		inc_tail(cmd_len);
+		return;
+	}
 #ifdef DEBUG_FF
 	debug("new ff_in: %d", ff_in);
 #endif
 	// Clear flag for easier parsing.
 	BUFFER_CHECK(serial_buffer, serial_buffer_tail);
-	serial_buffer[serial_buffer_tail] &= ~0x10;
+	serial_buffer[serial_buffer_tail] &= 0x1f;
+	//debug(">%x", command(0));
 	packet();
 	inc_tail(cmd_len);
 }
 // }}}
 
 // Set checksum bytes. {{{
-static int16_t prepare_packet(int16_t len, uint8_t *packet = pending_packet)
+static int16_t prepare_packet(int16_t len, uint8_t *packet = 0)
 {
-	sdebug2("prepare");
 	if (len > MAX_REPLY_LEN)
 	{
 		debug("packet is too large: %d > %d", len, MAX_REPLY_LEN);
 		return 0;
 	}
-	if (packet == pending_packet) {
-		// Set flipflop bit.
-		packet[0] &= ~0x10;
-		packet[0] ^= ff_out;
+	int16_t *packetlen;
+	if (!packet) {
+		packet = pending_packet[ff_out];
+		packetlen = &pending_len[ff_out];
+		packet[0] |= ff_out << 5;
+		ff_out = (ff_out + 1) & 3;
 #ifdef DEBUG_FF
 		debug("use ff_out: %d", ff_out);
 #endif
 	}
+	else
+		packetlen = 0;
+	//debug("p%x", packet[0]);
 	// Compute the checksums.  This doesn't work for size in (1, 2, 4), so
 	// the protocol requires an initial 0 at positions 1, 2 and 5 to make
 	// the checksum of those packets work.  For size % 3 != 0, the first
@@ -333,6 +363,8 @@ static int16_t prepare_packet(int16_t len, uint8_t *packet = pending_packet)
 		}
 		packet[len + t] = sum;
 	}
+	if (packetlen)
+		*packetlen = len + (len + 2) / 3;
 	return len + (len + 2) / 3;
 }
 // }}}
@@ -341,15 +373,17 @@ static int16_t prepare_packet(int16_t len, uint8_t *packet = pending_packet)
 void send_packet()
 {
 	sdebug2("send");
-	out_busy = true;
-	for (int16_t t = 0; t < pending_len; ++t) {
-		BUFFER_CHECK(pending_packet, t);
-		arch_serial_write(pending_packet[t]);
+	out_busy += 1;
+	uint8_t which = (ff_out - 1) & 3;
+	for (int16_t t = 0; t < pending_len[which]; ++t) {
+		BUFFER_CHECK(pending_packet[which], t);
+		arch_serial_write(pending_packet[which][t]);
 	}
 }
 // }}}
 
 void send_id(uint8_t cmd) { // {{{
+	debug("sending id");
 	printerid[0] = cmd;
 	int16_t len = prepare_packet(ID_SIZE + 1, printerid);
 	for (uint8_t i = 0; i < len; ++i)
@@ -357,8 +391,8 @@ void send_id(uint8_t cmd) { // {{{
 } // }}}
 
 void try_send_next() { // Call send_packet if we can. {{{
-	sdebug2("try send");
-	if (out_busy) { // {{{
+	sdebug("try send");
+	if (out_busy >= 3) { // {{{
 		//debug("still busy %x", pending_packet[0] & 0xff);
 		// Still busy sending other packet.
 		return;
@@ -367,15 +401,15 @@ void try_send_next() { // Call send_packet if we can. {{{
 		if (motor[m].flags & (Motor::SENSE0 | Motor::SENSE1)) { // {{{
 			sdebug2("sense %d", m);
 			uint8_t type = (motor[m].flags & Motor::SENSE1 ? 1 : 0);
-			pending_packet[0] = (type ? CMD_SENSE1 : CMD_SENSE0);
-			pending_packet[1] = m;
+			pending_packet[ff_out][0] = (type ? CMD_SENSE1 : CMD_SENSE0);
+			pending_packet[ff_out][1] = m;
 			for (uint8_t mi = 0; mi < active_motors; ++mi) {
-				BUFFER_CHECK(pending_packet, 2 + 4 * mi);
+				BUFFER_CHECK(pending_packet[ff_out], 2 + 4 * mi);
 				BUFFER_CHECK(motor, mi);
-				*reinterpret_cast <int32_t *>(&pending_packet[2 + 4 * mi]) = motor[mi].sense_pos[type];
+				*reinterpret_cast <int32_t *>(&pending_packet[ff_out][2 + 4 * mi]) = motor[mi].sense_pos[type];
 			}
 			motor[m].flags &= ~(type ? Motor::SENSE1 : Motor::SENSE0);
-			pending_len = prepare_packet(2 + 4 * active_motors);
+			prepare_packet(2 + 4 * active_motors);
 			send_packet();
 			return;
 		} // }}}
@@ -384,26 +418,26 @@ void try_send_next() { // Call send_packet if we can. {{{
 		for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
 			if (!pin[p].event())
 				continue;
-			pending_packet[0] = CMD_PINCHANGE;
-			pending_packet[1] = p;
-			pending_packet[2] = pin[p].state & CTRL_VALUE ? 1 : 0;
+			pending_packet[ff_out][0] = CMD_PINCHANGE;
+			pending_packet[ff_out][1] = p;
+			pending_packet[ff_out][2] = pin[p].state & CTRL_VALUE ? 1 : 0;
 			pin[p].clear_event();
-			pending_len = prepare_packet(3);
+			prepare_packet(3);
 			send_packet();
 			return;
 		}
 	} // }}}
 	if (timeout) { // {{{
-		pending_packet[0] = CMD_TIMEOUT;
+		pending_packet[ff_out][0] = CMD_TIMEOUT;
 		timeout = false;
-		pending_len = prepare_packet(1);
+		prepare_packet(1);
 		send_packet();
 		return;
 	} // }}}
 	uint8_t cf = current_fragment;
 	if (notified_current_fragment != cf) { // {{{
 		if (step_state == 1 && stopping < 0) {
-			pending_packet[0] = CMD_UNDERRUN;
+			pending_packet[ff_out][0] = CMD_UNDERRUN;
 			debug_add(0x101);
 			debug_add(cf);
 			debug_add(last_fragment);
@@ -411,7 +445,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			//debug_dump();
 		}
 		else {
-			pending_packet[0] = CMD_DONE;
+			pending_packet[ff_out][0] = CMD_DONE;
 			debug_add(0x102);
 			debug_add(cf);
 			debug_add(last_fragment);
@@ -421,27 +455,27 @@ void try_send_next() { // Call send_packet if we can. {{{
 		uint8_t num = (cf - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
 		sei();
 		sdebug2("done %ld %d %d %d", &motor[0].current_pos, cf, notified_current_fragment, last_fragment);
-		pending_packet[1] = num;
+		pending_packet[ff_out][1] = num;
 		notified_current_fragment = (notified_current_fragment + num) & FRAGMENTS_PER_MOTOR_MASK;
-		pending_packet[2] = (last_fragment - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
-		if (pending_packet[0] == CMD_UNDERRUN) {
+		pending_packet[ff_out][2] = (last_fragment - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
+		if (pending_packet[ff_out][0] == CMD_UNDERRUN) {
 			write_current_pos(3);
-			pending_len = prepare_packet(3 + 4 * active_motors);
+			prepare_packet(3 + 4 * active_motors);
 		}
 		else
-			pending_len = prepare_packet(3);
+			prepare_packet(3);
 		send_packet();
 		return;
 	} // }}}
-	if (stopping >= 0) { // {{{
+	if (stopping >= 0 && stopping < active_motors && motor[stopping].flags & Motor::LIMIT) { // {{{
 		sdebug2("limit %d", stopping);
-		pending_packet[0] = CMD_LIMIT;
-		pending_packet[1] = stopping;
-		pending_packet[2] = limit_fragment_pos;
+		pending_packet[ff_out][0] = CMD_LIMIT;
+		pending_packet[ff_out][1] = stopping;
+		pending_packet[ff_out][2] = limit_fragment_pos;
 		write_current_pos(3);
 		if (stopping < active_motors)
 			motor[stopping].flags &= ~Motor::LIMIT;
-		pending_len = prepare_packet(3 + 4 * active_motors);
+		prepare_packet(3 + 4 * active_motors);
 		send_packet();
 		debug_add(0x100);
 		//debug_dump();
@@ -451,32 +485,32 @@ void try_send_next() { // Call send_packet if we can. {{{
 		sdebug2("reply %x %d", reply[1], reply[0]);
 		for (uint8_t i = 0; i < reply_ready; ++i) {
 			BUFFER_CHECK(reply, i);
-			BUFFER_CHECK(pending_packet, i);
-			pending_packet[i] = reply[i];
+			BUFFER_CHECK(pending_packet[ff_out], i);
+			pending_packet[ff_out][i] = reply[i];
 		}
-		pending_len = prepare_packet(reply_ready);
+		prepare_packet(reply_ready);
 		reply_ready = 0;
 		send_packet();
 		return;
 	} // }}}
 	if (home_step_time > 0 && homers == 0 && step_state == 1) { // {{{
-		pending_packet[0] = CMD_HOMED;
+		pending_packet[ff_out][0] = CMD_HOMED;
 		write_current_pos(1);
 		home_step_time = 0;
-		pending_len = prepare_packet(1 + 4 * active_motors);
+		prepare_packet(1 + 4 * active_motors);
 		send_packet();
 		return;
 	} // }}}
 	if (ping != 0) { // {{{
-		sdebug2("pong %d", ping);
+		//debug("P%x", ping);
 		for (uint8_t b = 0; b < 8; ++b)
 		{
 			if (ping & (1 << b))
 			{
-				pending_packet[0] = CMD_PONG;
-				pending_packet[1] = b;
+				pending_packet[ff_out][0] = CMD_PONG;
+				pending_packet[ff_out][1] = b;
 				ping &= ~(1 << b);
-				pending_len = prepare_packet(2);
+				prepare_packet(2);
 				send_packet();
 				return;
 			}
@@ -484,18 +518,18 @@ void try_send_next() { // Call send_packet if we can. {{{
 	} // }}}
 	// This is pretty much always true, so make it the least important (nothing below this will ever be sent).
 	if (adcreply_ready) { // {{{
-		sdebug2("adcreply %x %d", adcreply[1], adcreply[0]);
+		//debug("adcreply %x %d", adcreply[1], adcreply[0]);
 		for (uint8_t i = 0; i < adcreply_ready; ++i) {
-			BUFFER_CHECK(pending_packet, i);
+			BUFFER_CHECK(pending_packet[ff_out], i);
 			BUFFER_CHECK(adcreply, i);
-			pending_packet[i] = adcreply[i];
+			pending_packet[ff_out][i] = adcreply[i];
 		}
-		pending_len = prepare_packet(adcreply_ready);
+		prepare_packet(adcreply_ready);
 		adcreply_ready = 0;
 		send_packet();
 		return;
 	} // }}}
-	sdebug2("Nothing to send %d %d", cf, notified_current_fragment);
+	sdebug("Nothing to send %d %d", cf, notified_current_fragment);
 }
 // }}}
 
@@ -504,13 +538,14 @@ void write_ack()
 {
 	//debug("acking");
 	had_stall = false;
-	arch_serial_write(ff_in ? CMD_ACK0 : CMD_ACK1);
+	arch_serial_write(cmd_ack[ff_in]);
+	ff_in = (ff_in + 1) & 3;
 }
 
 void write_stall()
 {
 	//debug("stalling");
 	had_stall = true;
-	arch_serial_write(ff_in ? CMD_STALL0 : CMD_STALL1);
+	arch_serial_write(cmd_stall[ff_in]);
 }
 // }}}

@@ -3,6 +3,9 @@
 
 void setup(char const *port, char const *run_id)
 {
+	running = false;
+	last_active = millis();
+	last_micros = utime();
 	serialdev[0] = &host_serial;
 	host_serial.begin(1000000);
 	serialdev[1] = NULL;
@@ -23,22 +26,22 @@ void setup(char const *port, char const *run_id)
 	current_extruder = 0;
 	continue_cb = 0;
 	ping = 0;
-	pending_len = 0;
-	out_busy = false;
+	for (int i = 0; i < 4; ++i)
+		pending_len[i] = 0;
+	out_busy = 0;
 	led_pin.init();
 	probe_pin.init();
 	led_phase = 0;
 	temps_busy = 0;
 	store_adc = NULL;
 	requested_temp = ~0;
-	last_active = millis();
 	refilling = false;
 	running_fragment = 0;
 	current_fragment = running_fragment;
 	current_fragment_pos = 0;
 	num_active_motors = 0;
-	hwtime_step = 5000;	// TODO: make this dynamic.
-	audio_hwtime_step = 1000000 / 22050; // timer ticks/bit.
+	hwtime_step = 608;
+	audio_hwtime_step = 1;	// This is set by audio file.
 	moving = false;
 	feedrate = 1;
 	zoffset = 0;
@@ -56,7 +59,9 @@ void setup(char const *port, char const *run_id)
 	timeout = 0;
 	run_file_map = NULL;
 	run_file_finishing = false;
-	wait_for_reply = false;
+	expected_replies = 0;
+	for (int i = 0; i < 4; ++i)
+		wait_for_reply[i] = NULL;
 #ifdef HAVE_AUDIO
 	audio_head = 0;
 	audio_tail = 0;
@@ -70,12 +75,15 @@ void setup(char const *port, char const *run_id)
 	num_gpios = 0;
 	gpios = NULL;
 	arch_setup_end(run_id);
+}
+
+void setup_end() {
 	if (protocol_version < PROTOCOL_VERSION) {
-		debug("Printer has older Franklin version than host; please flash newer firmware.");
+		debug("Printer has older Franklin version %d than host which has %d; please flash newer firmware.", protocol_version, PROTOCOL_VERSION);
 		exit(1);
 	}
 	else if (protocol_version > PROTOCOL_VERSION) {
-		debug("Printer has newer Franklin version than host; please upgrade your host software.");
+		debug("Printer has newer Franklin version %d than host which has %d; please upgrade your host software.", protocol_version, PROTOCOL_VERSION);
 		exit(1);
 	}
 	// Now set things up that need information from the firmware.
@@ -102,4 +110,5 @@ void setup(char const *port, char const *run_id)
 	// Update current position.
 	first_fragment = current_fragment;
 	arch_stop(true);
+	running = true;
 }

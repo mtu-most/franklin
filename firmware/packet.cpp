@@ -25,8 +25,7 @@ void packet()
 		cmddebug("CMD_BEGIN");
 		// A server is running; start the watchdog.
 		arch_watchdog_enable();
-		write_ack();
-		for (uint8_t i = 0; i < ID_SIZE / 3; ++i)
+		for (uint8_t i = 0; i < ID_SIZE; ++i)
 			printerid[1 + i] = command(2 + i);
 		// Because this is a new connection: reset active_motors and all ADC pins.
 		active_motors = 0;
@@ -49,6 +48,7 @@ void packet()
 			reply[11 + i] = uuid[i];
 		}
 		reply_ready = 11 + UUID_SIZE;
+		write_ack();
 		return;
 	}
 	case CMD_PING:
