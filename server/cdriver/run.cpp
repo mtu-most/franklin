@@ -283,7 +283,8 @@ void run_file_fill_queue() {
 				//else if (r.tool == -2)
 				//	r.tool = spindle_id;
 				if (r.tool < 0 || r.tool >= num_gpios) {
-					debug("cannot set invalid gpio %d", r.tool);
+					if (r.tool != -1)
+						debug("cannot set invalid gpio %d", r.tool);
 					break;
 				}
 				if (r.x) {
@@ -316,7 +317,8 @@ void run_file_fill_queue() {
 					break;
 				}
 				if (r.tool < 0 || r.tool >= num_temps) {
-					debug("cannot wait for invalid temp %d", r.tool);
+					if (r.tool != -1)
+						debug("cannot wait for invalid temp %d", r.tool);
 					break;
 				}
 				else

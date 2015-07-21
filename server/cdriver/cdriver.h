@@ -354,9 +354,8 @@ struct HostSerial : public Serial_t {
 };
 EXTERN HostSerial host_serial;
 
-#define COMMAND_SIZE 127
-#define COMMAND_LEN_MASK 0x7f
-#define FULL_COMMAND_SIZE 256 //(COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
+#define COMMAND_SIZE 256
+#define FULL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
 
 // Globals
 EXTERN unsigned char uuid[UUID_SIZE];

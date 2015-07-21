@@ -5,7 +5,7 @@
 
 // Defines and includes.  {{{
 #ifdef FAST_ISR
-#define TIME_PER_ISR 38
+#define TIME_PER_ISR 75
 #else
 #define TIME_PER_ISR 500
 #endif
@@ -124,7 +124,7 @@ volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6] = {
 	{&UDR0, &UCSR0A, &UCSR0B, &UCSR0C, &UBRR0H, &UBRR0L},
 	{&UDR1, &UCSR1A, &UCSR1B, &UCSR1C, &UBRR1H, &UBRR1L}
 #else
-	{&UDR, &UCSRA, &UCSRB, &UCSRC, &UBRRH, &UBRRL}
+	{&UDR0, &UCSR0A, &UCSR0B, &UCSR0C, &UBRR0H, &UBRR0L}
 #endif
 #endif
 #endif
@@ -213,8 +213,8 @@ ISR(USART0_RX_vect, ISR_NAKED) { // {{{
 	asm(
 		avr_serial_input(0)
 		::
-			[ucsra] "M" (_SFR_MEM_ADDR(UCSR0A)),
-			[udr] "M" (_SFR_MEM_ADDR(UDR0)),
+			[ucsra] "" (_SFR_MEM_ADDR(UCSR0A)),
+			[udr] "" (_SFR_MEM_ADDR(UDR0)),
 			[statusmask] "M" ((1 << FE0) | (1 << DOR0)),
 			[serialmask] "M" (SERIAL_MASK >> 8),
 			[id] "M" (CMD_ID),
@@ -230,8 +230,8 @@ ISR(USART1_RX_vect, ISR_NAKED) { // {{{
 	asm(
 		avr_serial_input(1)
 		::
-			[ucsra] "M" (_SFR_MEM_ADDR(UCSR1A)),
-			[udr] "M" (_SFR_MEM_ADDR(UDR1)),
+			[ucsra] "" (_SFR_MEM_ADDR(UCSR1A)),
+			[udr] "" (_SFR_MEM_ADDR(UDR1)),
 			[statusmask] "M" ((1 << FE1) | (1 << DOR1)),
 			[serialmask] "M" (SERIAL_MASK >> 8),
 			[id] "M" (CMD_ID),
@@ -248,8 +248,8 @@ ISR(USART2_RX_vect, ISR_NAKED) { // {{{
 	asm(
 		avr_serial_input(2)
 		::
-			[ucsra] "M" (_SFR_MEM_ADDR(UCSR2A)),
-			[udr] "M" (_SFR_MEM_ADDR(UDR2)),
+			[ucsra] "" (_SFR_MEM_ADDR(UCSR2A)),
+			[udr] "" (_SFR_MEM_ADDR(UDR2)),
 			[statusmask] "M" ((1 << FE2) | (1 << DOR2)),
 			[serialmask] "M" (SERIAL_MASK >> 8),
 			[id] "M" (CMD_ID),
@@ -266,8 +266,8 @@ ISR(USART3_RX_vect, ISR_NAKED) { // {{{
 	asm(
 		avr_serial_input(3)
 		::
-			[ucsra] "M" (_SFR_MEM_ADDR(UCSR3A)),
-			[udr] "M" (_SFR_MEM_ADDR(UDR3)),
+			[ucsra] "" (_SFR_MEM_ADDR(UCSR3A)),
+			[udr] "" (_SFR_MEM_ADDR(UDR3)),
 			[statusmask] "M" ((1 << FE3) | (1 << DOR3)),
 			[serialmask] "M" (SERIAL_MASK >> 8),
 			[id] "M" (CMD_ID),

@@ -40,7 +40,7 @@ void setup(char const *port, char const *run_id)
 	current_fragment = running_fragment;
 	current_fragment_pos = 0;
 	num_active_motors = 0;
-	hwtime_step = 608;
+	hwtime_step = 600;
 	audio_hwtime_step = 1;	// This is set by audio file.
 	moving = false;
 	feedrate = 1;
