@@ -76,7 +76,7 @@ static int16_t serial_available() { // {{{
 
 static inline void inc_tail(int16_t amount) { // {{{
 	cli();
-	serial_buffer_tail = (volatile uint8_t *)((int16_t(serial_buffer_tail) + amount) & SERIAL_MASK);
+	serial_buffer_tail = (volatile uint8_t *)(((uint16_t(serial_buffer_tail) + amount) & SERIAL_MASK) | uint16_t(serial_buffer));
 	if (serial_overflow && serial_buffer_head == serial_buffer_tail)
 		clear_overflow();
 	sei();

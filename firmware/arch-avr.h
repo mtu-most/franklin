@@ -160,69 +160,6 @@ static inline void arch_claim_serial() { // {{{
 #ifdef DEFINE_VARIABLES
 // Serial input ISR. {{{
 /* 16 MHz, 1Mbit: 16 cycles/bit; 160 cycles/byte. */
-#if 0
-#define avr_serial_input(which, status, data) \
-	asm( \
-               "\t"    "push 31"                       "\n"    \
-               "\t"    "in 31, __SREG__"               "\n"    \
-               "\t"    "push 31"                       "\n"    \
-               "\t"    "push 30"                       "\n"    \
-               "\t"    "push 29"                       "\n"    \
-               "\t"    "push 28"                       "\n"    \
-               "\t"    "push 27"                       "\n"    \
-               "\t"    "push 26"                       "\n"    \
-               "\t"    "lds 31, %[ucsra]"              "\n"    \
-               "\t"    "andi 31, %[statusmask]"        "\n"    \
-               "\t"    "lds 30, %[udr]"                "\n"    \
-               "\t"    "lds 27, serial_overflow"       "\n"    \
-               "\t"    "tst 27"                        "\n"    \
-               "\t"    "brne 7f"                       "\n"    \
-               "\t"    "tst 31"                        "\n"    \
-               "\t"    "brne 5f"                       "\n"    \
-               "\t"    "ldi 31, %[port]"               "\n"    \
-               "\t"    "sts avr_last_serial, 31"       "\n"    \
-               "\t"    "lds 28, serial_buffer_head"    "\n"    \
-               "\t"    "lds 29, serial_buffer_head + 1"        "\n"    \
-               "\t"    "movw 26, 28"                   "\n"    \
-               "\t"    "adiw 28, 1"                    "\n"    \
-               "\t"    "andi 29, %[serialmask]"        "\n"    \
-               "\t"    "lds 31, serial_buffer_tail"    "\n"    \
-               "\t"    "cp 31, 28"                     "\n"    \
-               "\t"    "brne 6f"                       "\n"    \
-               "\t"    "lds 31, serial_buffer_tail + 1"        "\n"    \
-               "\t"    "cp 31, 29"                     "\n"    \
-               "\t"    "brne 6f"                       "\n"    \
-       "5:\t"          /* Overflow. */                 "\n"    \
-               "\t"    "ldi 29, 1"                     "\n"    \
-               "\t"    "sts serial_overflow, 29"       "\n"    \
-               "\t"    "rjmp 7f"                       "\n"    \
-       "6:\t"          /* Store byte. */               "\n"    \
-               "\t"    "sts serial_buffer_head, 28"    "\n"    \
-               "\t"    "sts serial_buffer_head + 1, 29"        "\n"    \
-               "\t"    "ldi 28, lo8(serial_buffer)"    "\n"    \
-               "\t"    "ldi 29, hi8(serial_buffer)"    "\n"    \
-               "\t"    "add 26, 28"                    "\n"    \
-               "\t"    "adc 27, 29"                    "\n"    \
-               "\t"    "st x, 30"                      "\n"    \
-       "7:\t"          /* Finish. */                   "\n"    \
-               "\t"    "pop 26"                        "\n"    \
-               "\t"    "pop 27"                        "\n"    \
-               "\t"    "pop 28"                        "\n"    \
-               "\t"    "pop 29"                        "\n"    \
-               "\t"    "pop 30"                        "\n"    \
-               "\t"    "pop 31"                        "\n"    \
-               "\t"    "out __SREG__, 31"              "\n"    \
-               "\t"    "pop 31"                        "\n"    \
-               "\t"    "reti"                          "\n" \
-		:: \
-			[ucsra] "" (_SFR_MEM_ADDR(status)), \
-			[udr] "" (_SFR_MEM_ADDR(data)), \
-			[statusmask] "M" ((1 << FE0) | (1 << DOR0)), \
-			[serialmask] "M" (SERIAL_MASK >> 8), \
-			[port] "M" (which) \
-	)
-
-#else
 #define avr_serial_input(which, status, data) \
 	asm( \
 									/* 7	 7 (for vectoring the interrupt). */ \
@@ -257,6 +194,7 @@ static inline void arch_claim_serial() { // {{{
 	"1:\t"		/* Carry in in lo8(head). */		"\n" \
 		"\t"	"inc 31"				"\n" \
 		"\t"	"andi 31, %[serialmask]"		"\n" \
+		"\t"	"ori 31, hi8(serial_buffer)"		"\n" \
 		"\t"	"lds 29, serial_buffer_tail"		"\n" \
 		"\t"	"cp 30, 29"				"\n" \
 		"\t"	"breq 3f"				"\n" \
@@ -284,7 +222,6 @@ static inline void arch_claim_serial() { // {{{
 			[port] "M" (which) \
 	)
 // }}}
-#endif
 
 ISR(USART0_RX_vect, ISR_NAKED) { // {{{
 	avr_serial_input(0, UCSR0A, UDR0);

@@ -230,7 +230,7 @@ enum Command {
 
 static inline uint8_t command(int16_t pos) {
 	//debug("cmd %x = %x (%x + %x & %x)", (serial_buffer_tail + pos) & SERIAL_MASK, serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK], serial_buffer_tail, pos, SERIAL_MASK);
-	return *(volatile uint8_t *)((int16_t(serial_buffer_tail) + pos) & SERIAL_MASK);
+	return *(volatile uint8_t *)(((uint16_t(serial_buffer_tail) + pos) & SERIAL_MASK) | uint16_t(serial_buffer));
 }
 
 static inline int16_t minpacketlen() {
