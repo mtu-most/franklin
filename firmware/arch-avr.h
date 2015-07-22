@@ -91,6 +91,7 @@ static inline void arch_set_speed(uint16_t count);
 // Defined by arduino: NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS
 
 // Serial communication. {{{
+// Variables. {{{
 #ifdef UDR3
 #define NUM_SERIAL_PORTS 4
 #else
@@ -130,6 +131,7 @@ volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6] = {
 #endif
 };
 #endif
+// }}}
 
 static inline void arch_serial_write(uint8_t data) { // {{{
 	if (avr_which_serial < 0)
@@ -139,6 +141,8 @@ static inline void arch_serial_write(uint8_t data) { // {{{
 } // }}}
 
 static inline void arch_serial_flush() { // {{{
+	if (avr_which_serial < 0)
+		return;
 	while (~*avr_serial_ports[avr_which_serial][1] & (1 << TXC0)) {}
 } // }}}
 
@@ -155,127 +159,152 @@ static inline void arch_claim_serial() { // {{{
 } // }}}
 #ifdef DEFINE_VARIABLES
 // Serial input ISR. {{{
-#define avr_serial_input(which) \
-		"\t"	"push 31"			"\n"	\
-		"\t"	"in 31, __SREG__"		"\n"	\
-		"\t"	"push 31"			"\n"	\
-		"\t"	"push 30"			"\n"	\
-		"\t"	"push 29"			"\n"	\
-		"\t"	"push 28"			"\n"	\
-		"\t"	"push 27"			"\n"	\
-		"\t"	"push 26"			"\n"	\
-		"\t"	"lds 31, %[ucsra]"		"\n"	\
-		"\t"	"andi 31, %[statusmask]"	"\n"	\
-		"\t"	"lds 30, %[udr]"		"\n"	\
-		"\t"	"lds 27, serial_overflow"	"\n"	\
-		"\t"	"tst 27"			"\n"	\
-		"\t"	"brne 7f"			"\n"	\
-		"\t"	"tst 31"			"\n"	\
-		"\t"	"brne 5f"			"\n"	\
-		"\t"	"ldi 31, " #which		"\n"	\
-		"\t"	"sts avr_last_serial, 31"	"\n"	\
-		"\t"	"lds 28, serial_buffer_head"	"\n"	\
-		"\t"	"lds 29, serial_buffer_head + 1"	"\n"	\
-		"\t"	"movw 26, 28"			"\n"	\
-		"\t"	"adiw 28, 1"			"\n"	\
-		"\t"	"andi 29, %[serialmask]"	"\n"	\
-		"\t"	"lds 31, serial_buffer_tail"	"\n"	\
-		"\t"	"cp 31, 28"			"\n"	\
-		"\t"	"brne 6f"			"\n"	\
-		"\t"	"lds 31, serial_buffer_tail + 1"	"\n"	\
-		"\t"	"cp 31, 29"			"\n"	\
-		"\t"	"brne 6f"			"\n"	\
-	"5:\t"		/* Overflow. */			"\n"	\
-		"\t"	"ldi 29, 1"			"\n"	\
-		"\t"	"sts serial_overflow, 29"	"\n"	\
-		"\t"	"rjmp 7f"			"\n"	\
-	"6:\t"		/* Store byte. */		"\n"	\
-		"\t"	"sts serial_buffer_head, 28"	"\n"	\
-		"\t"	"sts serial_buffer_head + 1, 29"	"\n"	\
-		"\t"	"ldi 28, lo8(serial_buffer)"	"\n"	\
-		"\t"	"ldi 29, hi8(serial_buffer)"	"\n"	\
-		"\t"	"add 26, 28"			"\n"	\
-		"\t"	"adc 27, 29"			"\n"	\
-		"\t"	"st x, 30"			"\n"	\
-	"7:\t"		/* Finish. */			"\n"	\
-		"\t"	"pop 26"			"\n"	\
-		"\t"	"pop 27"			"\n"	\
-		"\t"	"pop 28"			"\n"	\
-		"\t"	"pop 29"			"\n"	\
-		"\t"	"pop 30"			"\n"	\
-		"\t"	"pop 31"			"\n"	\
-		"\t"	"out __SREG__, 31"		"\n"	\
-		"\t"	"pop 31"			"\n"	\
-		"\t"	"reti"				"\n"
+/* 16 MHz, 1Mbit: 16 cycles/bit; 160 cycles/byte. */
+#if 0
+#define avr_serial_input(which, status, data) \
+	asm( \
+               "\t"    "push 31"                       "\n"    \
+               "\t"    "in 31, __SREG__"               "\n"    \
+               "\t"    "push 31"                       "\n"    \
+               "\t"    "push 30"                       "\n"    \
+               "\t"    "push 29"                       "\n"    \
+               "\t"    "push 28"                       "\n"    \
+               "\t"    "push 27"                       "\n"    \
+               "\t"    "push 26"                       "\n"    \
+               "\t"    "lds 31, %[ucsra]"              "\n"    \
+               "\t"    "andi 31, %[statusmask]"        "\n"    \
+               "\t"    "lds 30, %[udr]"                "\n"    \
+               "\t"    "lds 27, serial_overflow"       "\n"    \
+               "\t"    "tst 27"                        "\n"    \
+               "\t"    "brne 7f"                       "\n"    \
+               "\t"    "tst 31"                        "\n"    \
+               "\t"    "brne 5f"                       "\n"    \
+               "\t"    "ldi 31, %[port]"               "\n"    \
+               "\t"    "sts avr_last_serial, 31"       "\n"    \
+               "\t"    "lds 28, serial_buffer_head"    "\n"    \
+               "\t"    "lds 29, serial_buffer_head + 1"        "\n"    \
+               "\t"    "movw 26, 28"                   "\n"    \
+               "\t"    "adiw 28, 1"                    "\n"    \
+               "\t"    "andi 29, %[serialmask]"        "\n"    \
+               "\t"    "lds 31, serial_buffer_tail"    "\n"    \
+               "\t"    "cp 31, 28"                     "\n"    \
+               "\t"    "brne 6f"                       "\n"    \
+               "\t"    "lds 31, serial_buffer_tail + 1"        "\n"    \
+               "\t"    "cp 31, 29"                     "\n"    \
+               "\t"    "brne 6f"                       "\n"    \
+       "5:\t"          /* Overflow. */                 "\n"    \
+               "\t"    "ldi 29, 1"                     "\n"    \
+               "\t"    "sts serial_overflow, 29"       "\n"    \
+               "\t"    "rjmp 7f"                       "\n"    \
+       "6:\t"          /* Store byte. */               "\n"    \
+               "\t"    "sts serial_buffer_head, 28"    "\n"    \
+               "\t"    "sts serial_buffer_head + 1, 29"        "\n"    \
+               "\t"    "ldi 28, lo8(serial_buffer)"    "\n"    \
+               "\t"    "ldi 29, hi8(serial_buffer)"    "\n"    \
+               "\t"    "add 26, 28"                    "\n"    \
+               "\t"    "adc 27, 29"                    "\n"    \
+               "\t"    "st x, 30"                      "\n"    \
+       "7:\t"          /* Finish. */                   "\n"    \
+               "\t"    "pop 26"                        "\n"    \
+               "\t"    "pop 27"                        "\n"    \
+               "\t"    "pop 28"                        "\n"    \
+               "\t"    "pop 29"                        "\n"    \
+               "\t"    "pop 30"                        "\n"    \
+               "\t"    "pop 31"                        "\n"    \
+               "\t"    "out __SREG__, 31"              "\n"    \
+               "\t"    "pop 31"                        "\n"    \
+               "\t"    "reti"                          "\n" \
+		:: \
+			[ucsra] "" (_SFR_MEM_ADDR(status)), \
+			[udr] "" (_SFR_MEM_ADDR(data)), \
+			[statusmask] "M" ((1 << FE0) | (1 << DOR0)), \
+			[serialmask] "M" (SERIAL_MASK >> 8), \
+			[port] "M" (which) \
+	)
+
+#else
+#define avr_serial_input(which, status, data) \
+	asm( \
+									/* 7	 7 (for vectoring the interrupt). */ \
+		"\t"	"push 31"				"\n"	/* 2	 9 */ \
+		"\t"	"in 31, __SREG__"			"\n"	/* 1	10 */ \
+		"\t"	"push 31"				"\n"	/* 2	12 */ \
+		"\t"	"push 30"				"\n"	/* 2	14 */ \
+		"\t"	"push 29"				"\n"	/* 2	16 */ \
+		"\t"	"lds 29, %[udr]"			"\n"	/* 2	18 */ \
+		"\t"	"lds 30, %[ucsra]"			"\n"	/* 2	20 */ \
+		"\t"	"andi 30, %[statusmask]"		"\n"	/* 1	21 */ \
+		"\t"	"brne 5f"				"\n"	/* 1	22 */ \
+		"\t"	"ldi 30, " #which			"\n"	/* 1	23 */ \
+		"\t"	"sts avr_last_serial, 30"		"\n"	/* 2	25 */ \
+		"\t"	"lds 30, serial_buffer_head"		"\n"	/* 2	27 */ \
+		"\t"	"lds 31, serial_buffer_head + 1"	"\n"	/* 2	29 */ \
+		"\t"	"st z, 29"				"\n"	/* 2	31 */ \
+		"\t"	"inc 30"				"\n"	/* 1	32 */ \
+		"\t"	"breq 1f"				"\n"	/* 1	33 */ \
+		"\t"	"lds 29, serial_buffer_tail"		"\n"	/* 2	35 */ \
+		"\t"	"cp 30, 29"				"\n"	/* 1	36 */ \
+		"\t"	"breq 2f"				"\n"	/* 1	37 */ \
+	"6:\t"		/* No overflow. */			"\n"	/*   */ \
+		"\t"	"sts serial_buffer_head, 30"		"\n"	/* 2	39 */ \
+	"7:\t"		/* Finish. */				"\n"	/*   */ \
+		"\t"	"pop 29"				"\n"	/* 2	41 */ \
+		"\t"	"pop 30"				"\n"	/* 2	43 */ \
+		"\t"	"pop 31"				"\n"	/* 2	45 */ \
+		"\t"	"out __SREG__, 31"			"\n"	/* 1	46 */ \
+		"\t"	"pop 31"				"\n"	/* 2	48 */ \
+		"\t"	"reti"					"\n"	/* 4	52 */ \
+	"1:\t"		/* Carry in in lo8(head). */		"\n" \
+		"\t"	"inc 31"				"\n" \
+		"\t"	"andi 31, %[serialmask]"		"\n" \
+		"\t"	"lds 29, serial_buffer_tail"		"\n" \
+		"\t"	"cp 30, 29"				"\n" \
+		"\t"	"breq 3f"				"\n" \
+	"4:\t"		/* No overflow. */			"\n" \
+		"\t"	"sts serial_buffer_head + 1, 31"	"\n" \
+		"\t"	"rjmp 6b"				"\n" \
+	"3:\t"		/* lo8(head) == lo8(tail). */		"\n" \
+		"\t"	"lds 29, serial_buffer_tail + 1"	"\n" \
+		"\t"	"cp 31, 29"				"\n" \
+		"\t"	"brne 4b"				"\n" \
+	"5:\t"		/* Overflow. */				"\n" \
+		"\t"	"ldi 29, 1"				"\n" \
+		"\t"	"sts serial_overflow, 29"		"\n" \
+		"\t"	"rjmp 7b"				"\n" \
+	"2:\t"		/* lo8(head) == lo8(tail). */		"\n" \
+		"\t"	"lds 29, serial_buffer_tail + 1"	"\n" \
+		"\t"	"cp 31, 29"				"\n" \
+		"\t"	"brne 6b"				"\n" \
+		"\t"	"rjmp 5b"				"\n" \
+		:: \
+			[ucsra] "" (_SFR_MEM_ADDR(status)), \
+			[udr] "" (_SFR_MEM_ADDR(data)), \
+			[statusmask] "M" ((1 << FE0) | (1 << DOR0)), \
+			[serialmask] "M" (SERIAL_MASK >> 8), \
+			[port] "M" (which) \
+	)
 // }}}
+#endif
 
 ISR(USART0_RX_vect, ISR_NAKED) { // {{{
-	asm(
-		avr_serial_input(0)
-		::
-			[ucsra] "" (_SFR_MEM_ADDR(UCSR0A)),
-			[udr] "" (_SFR_MEM_ADDR(UDR0)),
-			[statusmask] "M" ((1 << FE0) | (1 << DOR0)),
-			[serialmask] "M" (SERIAL_MASK >> 8),
-			[id] "M" (CMD_ID),
-			[nack0] "M" (CMD_NACK0),
-			[nack1] "M" (CMD_NACK1),
-			[nack2] "M" (CMD_NACK2),
-			[nack3] "M" (CMD_NACK3)
-	);
+	avr_serial_input(0, UCSR0A, UDR0);
 } // }}}
 
 #ifdef UDR1
 ISR(USART1_RX_vect, ISR_NAKED) { // {{{
-	asm(
-		avr_serial_input(1)
-		::
-			[ucsra] "" (_SFR_MEM_ADDR(UCSR1A)),
-			[udr] "" (_SFR_MEM_ADDR(UDR1)),
-			[statusmask] "M" ((1 << FE1) | (1 << DOR1)),
-			[serialmask] "M" (SERIAL_MASK >> 8),
-			[id] "M" (CMD_ID),
-			[nack0] "M" (CMD_NACK0),
-			[nack1] "M" (CMD_NACK1),
-			[nack2] "M" (CMD_NACK2),
-			[nack3] "M" (CMD_NACK3)
-	);
+	avr_serial_input(1, UCSR1A, UDR1);
 } // }}}
 #endif
 
 #ifdef UDR2
 ISR(USART2_RX_vect, ISR_NAKED) { // {{{
-	asm(
-		avr_serial_input(2)
-		::
-			[ucsra] "" (_SFR_MEM_ADDR(UCSR2A)),
-			[udr] "" (_SFR_MEM_ADDR(UDR2)),
-			[statusmask] "M" ((1 << FE2) | (1 << DOR2)),
-			[serialmask] "M" (SERIAL_MASK >> 8),
-			[id] "M" (CMD_ID),
-			[nack0] "M" (CMD_NACK0),
-			[nack1] "M" (CMD_NACK1),
-			[nack2] "M" (CMD_NACK2),
-			[nack3] "M" (CMD_NACK3)
-	);
+	avr_serial_input(2, UCSR2A, UDR2);
 } // }}}
 #endif
 
 #ifdef UDR3
 ISR(USART3_RX_vect, ISR_NAKED) { // {{{
-	asm(
-		avr_serial_input(3)
-		::
-			[ucsra] "" (_SFR_MEM_ADDR(UCSR3A)),
-			[udr] "" (_SFR_MEM_ADDR(UDR3)),
-			[statusmask] "M" ((1 << FE3) | (1 << DOR3)),
-			[serialmask] "M" (SERIAL_MASK >> 8),
-			[id] "M" (CMD_ID),
-			[nack0] "M" (CMD_NACK0),
-			[nack1] "M" (CMD_NACK1),
-			[nack2] "M" (CMD_NACK2),
-			[nack3] "M" (CMD_NACK3)
-	);
+	avr_serial_input(3, UCSR3A, UDR3);
 } // }}}
 #endif
 #endif
@@ -494,18 +523,15 @@ static inline void arch_setup_start() { // {{{
 	avr_seconds = 0;
 	arch_watchdog_disable();
 	// Serial ports.
+	avr_last_serial = -1;
+	avr_which_serial = -1;
 	for (uint8_t i = 0; i < NUM_SERIAL_PORTS; ++i) {
 		*avr_serial_ports[i][1] = 1 << U2X0;
-		*avr_serial_ports[i][2] = (1 << RXCIE0) | (1 << RXEN0) | (1 << TXEN0);
+		*avr_serial_ports[i][2] = (1 << RXCIE0) | (1 << RXEN0);
 		*avr_serial_ports[i][3] = 6;
 		*avr_serial_ports[i][4] = 0;
 		*avr_serial_ports[i][5] = 1;
 	}
-	avr_last_serial = -1;
-	avr_which_serial = -1;
-	serial_overflow = false;
-	serial_buffer_tail = 0;
-	serial_buffer_head = 0;
 	// Setup timer1 for microsecond counting.
 	TCCR1A = 0;
 	TCCR1B = 0x09;	// 16MHz clock.

@@ -3,7 +3,7 @@
 #define _ARCH_AVR_H
 
 // Includes and defines. {{{
-//#define DEBUG_AVRCOMM
+#define DEBUG_AVRCOMM
 
 #include <stdint.h>
 #include <unistd.h>

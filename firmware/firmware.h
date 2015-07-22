@@ -45,7 +45,8 @@
 #define MAX_REPLY_LEN ((3 + 4 * NUM_MOTORS) > 11 + UUID_SIZE ? (3 + 4 * NUM_MOTORS) : 11 + UUID_SIZE)
 #define REPLY_BUFFER_SIZE (MAX_REPLY_LEN + (MAX_REPLY_LEN + 2) / 3)
 
-#define SERIAL_MASK ((1 << SERIAL_SIZE_BITS) - 1)
+#define SERIAL_BUFFER_SIZE (1 << SERIAL_SIZE_BITS)
+#define SERIAL_MASK (SERIAL_BUFFER_SIZE - 1)
 #define FRAGMENTS_PER_MOTOR_MASK ((1 << FRAGMENTS_PER_MOTOR_BITS) - 1)
 
 #ifndef NO_DEBUG
@@ -89,9 +90,9 @@ EXTERN uint8_t enabled_pins;
 EXTERN uint8_t audio;	// Bit 0: state; bit 1: enable.
 
 EXTERN volatile bool serial_overflow;
-EXTERN volatile int16_t serial_buffer_head;
-EXTERN volatile int16_t serial_buffer_tail;
-EXTERN volatile uint8_t serial_buffer[1 << SERIAL_SIZE_BITS];
+EXTERN volatile uint8_t *serial_buffer_head;
+EXTERN volatile uint8_t *serial_buffer_tail;
+EXTERN volatile uint8_t serial_buffer[SERIAL_BUFFER_SIZE] __attribute__ ((aligned (SERIAL_BUFFER_SIZE)));
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
 	CMD_NACK0 = 0xf0,	// Incorrect packet; please resend.
@@ -229,9 +230,7 @@ enum Command {
 
 static inline uint8_t command(int16_t pos) {
 	//debug("cmd %x = %x (%x + %x & %x)", (serial_buffer_tail + pos) & SERIAL_MASK, serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK], serial_buffer_tail, pos, SERIAL_MASK);
-	uint16_t p = (serial_buffer_tail + pos) & SERIAL_MASK;
-	BUFFER_CHECK(serial_buffer, p);
-	return serial_buffer[p];
+	return *(volatile uint8_t *)((int16_t(serial_buffer_tail) + pos) & SERIAL_MASK);
 }
 
 static inline int16_t minpacketlen() {

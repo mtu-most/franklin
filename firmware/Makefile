@@ -53,7 +53,7 @@ ifeq (${TARGET}, melzi)
 BOARD_TAG = mighty_opt
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
 BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
-CPPFLAGS += -DNUM_MOTORS=6 -DFRAGMENTS_PER_MOTOR_BITS=5 -DBYTES_PER_FRAGMENT=32 -DSERIAL_SIZE_BITS=12 -DWATCHDOG
+CPPFLAGS += -DNUM_MOTORS=6 -DFRAGMENTS_PER_MOTOR_BITS=5 -DBYTES_PER_FRAGMENT=32 -DSERIAL_SIZE_BITS=11 -DWATCHDOG
 else
 ifeq (${TARGET}, mega)
 BOARD_TAG = mega

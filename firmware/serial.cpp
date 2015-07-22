@@ -56,11 +56,10 @@ static inline int16_t fullpacketlen() { // {{{
 // }}}
 
 static void clear_overflow() { // {{{
-	BUFFER_CHECK(serial_buffer, serial_buffer_tail);
-	debug("serial flushed after overflow (%x)", serial_buffer[serial_buffer_tail]);
+	debug("serial flushed after overflow");
 	command_end = 0;
-	serial_buffer_head = 0;
-	serial_buffer_tail = 0;
+	serial_buffer_head = serial_buffer;
+	serial_buffer_tail = serial_buffer;
 	serial_overflow = false;
 	debug_dump();
 	arch_serial_write(cmd_nack[ff_in]);
@@ -77,7 +76,7 @@ static int16_t serial_available() { // {{{
 
 static inline void inc_tail(int16_t amount) { // {{{
 	cli();
-	serial_buffer_tail = (serial_buffer_tail + amount) & SERIAL_MASK;
+	serial_buffer_tail = (volatile uint8_t *)((int16_t(serial_buffer_tail) + amount) & SERIAL_MASK);
 	if (serial_overflow && serial_buffer_head == serial_buffer_tail)
 		clear_overflow();
 	sei();
@@ -108,8 +107,7 @@ void serial() { // {{{
 			return;
 		}
 		had_data = true;
-		BUFFER_CHECK(serial_buffer, serial_buffer_tail);
-		uint8_t firstbyte = serial_buffer[serial_buffer_tail];
+		uint8_t firstbyte = *serial_buffer_tail;
 		sdebug2("received: %x", firstbyte);
 		// If this is a 1-byte command, handle it.
 		uint8_t which = 0;
@@ -189,7 +187,7 @@ void serial() { // {{{
 		}
 		if ((firstbyte & 0x90) != 0x00) {
 			// This cannot be a good packet.
-			debug("invalid command %x %d", firstbyte, serial_buffer_tail);
+			debug("invalid command %x", firstbyte);
 			inc_tail(1);
 			continue;
 		}
@@ -251,7 +249,7 @@ void serial() { // {{{
 		uint8_t sum = command(fulllen + t);
 		if ((sum & 0x7) != (t & 0x7))
 		{
-			debug("incorrect extra bit %d %d %x %x %x %d", fulllen, t, command(0), sum, command(fulllen - 1), serial_buffer_tail);
+			debug("incorrect extra bit %d %d %x %x %x", fulllen, t, command(0), sum, command(fulllen - 1));
 			debug_dump();
 			inc_tail(cmd_len);
 			return;
@@ -269,7 +267,7 @@ void serial() { // {{{
 			check ^= check >> 1;
 			if (check & 1)
 			{
-				debug("incorrect checksum %d %d %x %x %x %x mask %x %x %x %x", t, bit, command(3 * t), command(3 * t + 1), command(3 * t + 2), command(fulllen + t), MASK[bit][0], MASK[bit][1], MASK[bit][2], MASK[bit][3]);
+				debug("incorrect checksum %d %d %x %x %x %x %d", t, bit, command(3 * t), command(3 * t + 1), command(3 * t + 2), command(fulllen + t), fulllen);
 				debug_dump();
 				inc_tail(cmd_len);
 				return;
@@ -302,8 +300,7 @@ void serial() { // {{{
 	debug("new ff_in: %d", ff_in);
 #endif
 	// Clear flag for easier parsing.
-	BUFFER_CHECK(serial_buffer, serial_buffer_tail);
-	serial_buffer[serial_buffer_tail] &= 0x1f;
+	*serial_buffer_tail &= 0x1f;
 	//debug(">%x", command(0));
 	packet();
 	inc_tail(cmd_len);

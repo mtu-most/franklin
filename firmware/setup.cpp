@@ -3,6 +3,9 @@
 
 void setup()
 {
+	serial_buffer_head = serial_buffer;
+	serial_buffer_tail = serial_buffer;
+	serial_overflow = false;
 	debug_value = 0x1337;
 	arch_setup_start();
 	enabled_pins = NUM_DIGITAL_PINS;
