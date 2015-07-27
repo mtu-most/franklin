@@ -102,13 +102,6 @@ bool globals_load(int32_t &addr)
 void globals_save(int32_t &addr)
 {
 	write_8(addr, QUEUE_LENGTH);
-#ifdef HAVE_AUDIO
-	write_8(addr, AUDIO_FRAGMENTS);
-	write_8(addr, AUDIO_FRAGMENT_SIZE);
-#else
-	write_8(addr, 0);
-	write_8(addr, 0);
-#endif
 	write_8(addr, NUM_DIGITAL_PINS);
 	write_8(addr, NUM_ANALOG_INPUTS);
 	write_8(addr, num_spaces);

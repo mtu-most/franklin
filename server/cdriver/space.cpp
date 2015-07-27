@@ -81,9 +81,6 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) { // {{{
 			new_motors[m]->home_order = 0;
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
-#ifdef HAVE_AUDIO
-			new_motors[m]->audio_flags = 0;
-#endif
 			new_motors[m]->active = false;
 			new_motors[m]->history = new Motor_History[FRAGMENTS_PER_BUFFER];
 			new_motors[m]->data = new char[BYTES_PER_FRAGMENT];
@@ -781,6 +778,11 @@ void send_fragment() { // {{{
 	if (current_fragment_pos <= 0 || stopping || sending_fragment)
 		return;
 	if (num_active_motors == 0) {
+		if (current_fragment_pos < 2) {
+			// TODO: find out why this is attempted and avoid it.
+			//debug("not sending short fragment for 0 motors");
+			return;
+		}
 		debug("sending fragment for 0 motors at position %d", current_fragment_pos);
 		//abort();
 	}

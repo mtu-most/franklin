@@ -31,7 +31,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\\d*))$',
 		'add-blacklist': '$',
 		'autodetect': 'True',
-		'predetect': 'stty -F #PORT# raw 1000000',
+		'predetect': 'stty -F #PORT# raw 115200',
 		'atexit': '',
 		'avrdude': '/usr/bin/avrdude',
 		'allow-system': '^$',
@@ -591,7 +591,7 @@ def detect(port): # {{{
 	if config['predetect']:
 		subprocess.call(config['predetect'].replace('#PORT#', port), shell = True)
 	try:
-		printer = serial.Serial(port, baudrate = 1000000, timeout = 0)
+		printer = serial.Serial(port, baudrate = 115200, timeout = 0)
 	except serial.SerialException:
 		log('failed to open serial port.')
 		traceback.print_exc();

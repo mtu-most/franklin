@@ -7,7 +7,7 @@ void setup(char const *port, char const *run_id)
 	last_active = millis();
 	last_micros = utime();
 	serialdev[0] = &host_serial;
-	host_serial.begin(1000000);
+	host_serial.begin(115200);
 	serialdev[1] = NULL;
 	arch_setup_start(port);
 	setup_spacetypes();
@@ -40,7 +40,7 @@ void setup(char const *port, char const *run_id)
 	current_fragment = running_fragment;
 	current_fragment_pos = 0;
 	num_active_motors = 0;
-	hwtime_step = 600;
+	hwtime_step = 4000;
 	audio_hwtime_step = 1;	// This is set by audio file.
 	moving = false;
 	feedrate = 1;
@@ -62,12 +62,6 @@ void setup(char const *port, char const *run_id)
 	expected_replies = 0;
 	for (int i = 0; i < 4; ++i)
 		wait_for_reply[i] = NULL;
-#ifdef HAVE_AUDIO
-	audio_head = 0;
-	audio_tail = 0;
-	audio_state = 0;
-	audio_us_per_sample = 125; // 1000000 / 8000;
-#endif
 	num_spaces = 0;
 	spaces = NULL;
 	num_temps = 0;

@@ -15,13 +15,6 @@ static double get_float(uint8_t offset)
 	return ret.f;
 }
 
-#if defined(HAVE_AUDIO)
-static int16_t get_int16(uint8_t offset)
-{
-	return ((uint16_t)command[0][offset] & 0xff) | (uint16_t)command[0][offset + 1] << 8;
-}
-#endif
-
 void settemp(int which, double target) {
 	if (which < 0 || which >= num_temps)
 	{
@@ -649,57 +642,6 @@ void packet()
 			return;
 		}
 		arch_reconnect(reinterpret_cast <char *>(&command[0][2]));
-		return;
-	}
-#endif
-#ifdef HAVE_AUDIO
-	case CMD_AUDIO_SETUP:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_AUDIO_SETUP");
-#endif
-		last_active = millis();
-		audio_us_per_sample = get_int16(2);
-		uint8_t m0 = 0;
-		for (uint8_t t = 0; t < num_spaces; ++t) {
-			for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
-				if (command[0][4 + ((m0 + m) >> 3)] & (1 << ((m0 + m) & 0x7))) {
-					spaces[t].motor[m]->audio_flags |= Motor::PLAYING;
-					SET(spaces[t].motor[m]->enable_pin);
-					motors_busy = true;
-				}
-				else
-					spaces[t].motor[m]->audio_flags &= ~Motor::PLAYING;
-			}
-			m0 += spaces[t].num_motors;
-		}
-		// Abort any currently playing sample.
-		audio_head = 0;
-		audio_tail = 0;
-		return;
-	}
-	case CMD_AUDIO_DATA:
-	{
-#ifdef DEBUG_CMD
-		debug("CMD_AUDIO_DATA");
-#endif
-		initialized = true;
-		last_active = millis();
-		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
-		{
-			debug("Audio buffer is full");
-			abort();
-			return;
-		}
-		for (uint8_t i = 0; i < AUDIO_FRAGMENT_SIZE; ++i)
-			audio_buffer[audio_tail][i] = command[0][2 + i];
-		if (audio_tail == audio_head)
-			audio_start = utime();
-		audio_tail = (audio_tail + 1) % AUDIO_FRAGMENTS;
-		if ((audio_tail + 1) % AUDIO_FRAGMENTS == audio_head)
-			serialdev[0]->write(WAIT);
-		else
-			serialdev[0]->write(OK);
 		return;
 	}
 #endif

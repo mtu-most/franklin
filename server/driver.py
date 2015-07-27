@@ -619,8 +619,8 @@ class Printer: # {{{
 		data = self._read('GLOBALS', None)
 		if data is None:
 			return False
-		self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins, num_spaces, num_temps, num_gpios = struct.unpack('=BBBBBBBB', data[:8])
-		self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset, self.store_adc = struct.unpack('=HHHdBd?', data[8:])
+		self.queue_length, self.num_digital_pins, self.num_analog_pins, num_spaces, num_temps, num_gpios = struct.unpack('=BBBBBB', data[:6])
+		self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset, self.store_adc = struct.unpack('=HHHdBd?', data[6:])
 		while len(self.spaces) < num_spaces:
 			self.spaces.append(self.Space(self, len(self.spaces)))
 			if update:
@@ -2663,7 +2663,7 @@ class Printer: # {{{
 	# Globals. {{{
 	def get_globals(self):
 		ret = {'num_spaces': len(self.spaces), 'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('uuid', 'queue_length', 'audio_fragments', 'audio_fragment_size', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
+		for key in ('uuid', 'queue_length', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
 			ret[key] = getattr(self, key)
 		return ret
 	def expert_set_globals(self, update = True, **ka):
@@ -2859,7 +2859,7 @@ class Printer: # {{{
 	# }}}
 	def send_printer(self, target): # {{{
 		self.initialized = True
-		self._broadcast(target, 'new_printer', [self.uuid, self.queue_length, self.audio_fragments, self.audio_fragment_size, self.num_digital_pins, self.num_analog_pins])
+		self._broadcast(target, 'new_printer', [self.uuid, self.queue_length, self.num_digital_pins, self.num_analog_pins])
 		self._globals_update(target)
 		for i, s in enumerate(self.spaces):
 			self._space_update(i, target)

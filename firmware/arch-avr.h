@@ -463,11 +463,11 @@ static inline void arch_setup_start() { // {{{
 	avr_last_serial = -1;
 	avr_which_serial = -1;
 	for (uint8_t i = 0; i < NUM_SERIAL_PORTS; ++i) {
-		*avr_serial_ports[i][1] = 1 << U2X0;
-		*avr_serial_ports[i][2] = (1 << RXCIE0) | (1 << RXEN0);
-		*avr_serial_ports[i][3] = 6;
-		*avr_serial_ports[i][4] = 0;
-		*avr_serial_ports[i][5] = 1;
+		*avr_serial_ports[i][1] = 1 << U2X0;	// ucsra
+		*avr_serial_ports[i][2] = (1 << RXCIE0) | (1 << RXEN0);	// ucsrb
+		*avr_serial_ports[i][3] = 6;	// ucsrc
+		*avr_serial_ports[i][4] = 0;	// ubrrh
+		*avr_serial_ports[i][5] = 16;	// ubrrl 1:1M; 16:115k2
 	}
 	// Setup timer1 for microsecond counting.
 	TCCR1A = 0;
@@ -518,7 +518,6 @@ static inline void arch_msetup(uint8_t m) { // {{{
 } // }}}
 
 static inline void arch_set_speed(uint16_t count) { // {{{
-	debug("set speed %d", count);
 	if (count == 0) {
 		TIMSK1 = 0;
 		step_state = 1;

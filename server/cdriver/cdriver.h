@@ -245,13 +245,6 @@ struct Motor {
 	char *data;
 	double limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
-#ifdef HAVE_AUDIO
-	uint8_t audio_flags;
-	enum Flags {
-		PLAYING = 1,
-		STATE = 2
-	};
-#endif
 };
 
 struct Space;
@@ -402,12 +395,6 @@ EXTERN uint32_t last_micros;
 EXTERN int16_t led_phase;
 EXTERN History *history;
 EXTERN History settings;
-#ifdef HAVE_AUDIO
-EXTERN uint8_t audio_buffer[AUDIO_FRAGMENTS][AUDIO_FRAGMENT_SIZE];
-EXTERN uint8_t audio_head, audio_tail, audio_state;
-EXTERN uint32_t audio_start;
-EXTERN int16_t audio_us_per_sample;
-#endif
 EXTERN bool moving, aborting, stopped, prepared;
 EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.

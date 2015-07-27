@@ -757,7 +757,7 @@ void arch_setup_start(char const *port) {
 	avr_audio = -1;
 	// Set up serial port.
 	avr_connected = true;
-	avr_serial.begin(port, 1000000);
+	avr_serial.begin(port, 115200);
 	serialdev[1] = &avr_serial;
 	arch_reset();
 }
