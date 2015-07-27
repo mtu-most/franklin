@@ -385,7 +385,7 @@ void packet()
 	{
 		cmddebug("CMD_START");
 		if (stopping >= 0) {
-			//debug("ignoring start while stopping");
+			debug("ignoring start while stopping");
 			write_ack();
 			return;
 		}
@@ -399,7 +399,7 @@ void packet()
 			write_stall();
 			return;
 		}
-		//debug("starting.  last %d; current %d notified %d", last_fragment, current_fragment, notified_current_fragment);
+		debug("starting.  last %d; current %d notified %d", last_fragment, current_fragment, notified_current_fragment);
 		BUFFER_CHECK(buffer, current_fragment);
 		current_buffer = &buffer[current_fragment];
 		for (uint8_t m = 0; m < active_motors; ++m) {

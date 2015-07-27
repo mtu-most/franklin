@@ -1,3 +1,4 @@
+// vim: foldmethod=marker :
 #include "cdriver.h"
 
 #if 0
@@ -12,7 +13,8 @@
 #define movedebug(...) do {} while (0)
 #endif
 
-bool Space::setup_nums(uint8_t na, uint8_t nm) {
+// Setup. {{{
+bool Space::setup_nums(uint8_t na, uint8_t nm) { // {{{
 	if (na == num_axes && nm == num_motors)
 		return true;
 	loaddebug("new space %d %d %d %d", na, nm, num_axes, num_motors);
@@ -33,15 +35,15 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 			new_axes[a]->max_pos = INFINITY;
 			new_axes[a]->type_data = NULL;
 			new_axes[a]->history = new Axis_History[FRAGMENTS_PER_BUFFER];
-			new_axes[a]->settings.dist = NAN;
-			new_axes[a]->settings.next_dist = NAN;
+			new_axes[a]->settings.dist[0] = NAN;
+			new_axes[a]->settings.dist[1] = NAN;
 			new_axes[a]->settings.main_dist = NAN;
 			new_axes[a]->settings.target = NAN;
 			new_axes[a]->settings.source = NAN;
 			new_axes[a]->settings.current = NAN;
 			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
-				new_axes[a]->history[f].dist = NAN;
-				new_axes[a]->history[f].next_dist = NAN;
+				new_axes[a]->history[f].dist[0] = NAN;
+				new_axes[a]->history[f].dist[1] = NAN;
 				new_axes[a]->history[f].main_dist = NAN;
 				new_axes[a]->history[f].target = NAN;
 				new_axes[a]->history[f].source = NAN;
@@ -111,9 +113,9 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) {
 		arch_motors_change();
 	}
 	return true;
-}
+} // }}}
 
-static void move_to_current() {
+static void move_to_current() { // {{{
 	if (!stopped || moving || !motors_busy)
 		return;
 	//debug("move to current");
@@ -138,8 +140,8 @@ static void move_to_current() {
 			cpdebug(s, a, "using current %f", sp.axis[a]->settings.current);
 			sp.axis[a]->settings.source = sp.axis[a]->settings.current;
 			sp.axis[a]->settings.target = sp.axis[a]->settings.current;
-			sp.axis[a]->settings.dist = 0;
-			sp.axis[a]->settings.next_dist = 0;
+			sp.axis[a]->settings.dist[0] = 0;
+			sp.axis[a]->settings.dist[1] = 0;
 			sp.axis[a]->settings.main_dist = 0;
 		}
 		for (uint8_t m = 0; m < sp.num_motors; ++m)
@@ -149,10 +151,9 @@ static void move_to_current() {
 	fprintf(stderr, "\n");
 #endif
 	buffer_refill();
-}
+} // }}}
 
-void Space::load_info(int32_t &addr)
-{
+void Space::load_info(int32_t &addr) { // {{{
 	loaddebug("loading space %d", id);
 	uint8_t t = type;
 	if (t >= NUM_SPACE_TYPES)
@@ -193,19 +194,17 @@ void Space::load_info(int32_t &addr)
 	if (ok)
 		move_to_current();
 	loaddebug("done loading space");
-}
+} // }}}
 
-void Space::load_axis(uint8_t a, int32_t &addr)
-{
+void Space::load_axis(uint8_t a, int32_t &addr) { // {{{
 	loaddebug("loading axis %d", a);
 	axis[a]->park = read_float(addr);
 	axis[a]->park_order = read_8(addr);
 	axis[a]->min_pos = read_float(addr);
 	axis[a]->max_pos = read_float(addr);
-}
+} // }}}
 
-void Space::load_motor(uint8_t m, int32_t &addr)
-{
+void Space::load_motor(uint8_t m, int32_t &addr) { // {{{
 	loaddebug("loading motor %d", m);
 	uint16_t enable = motor[m]->enable_pin.write();
 	double old_home_pos = motor[m]->home_pos;
@@ -269,25 +268,24 @@ void Space::load_motor(uint8_t m, int32_t &addr)
 	}
 	if (must_move)
 		move_to_current();
-}
+} // }}}
 
-void Space::save_info(int32_t &addr)
-{
+void Space::save_info(int32_t &addr) { // {{{
 	//debug("saving info %d %f %d %d", type, max_deviation, num_axes, num_motors);
 	write_8(addr, type);
 	write_float(addr, max_deviation);
 	write_float(addr, max_v);
 	space_types[type].save(this, addr);
-}
+} // }}}
 
-void Space::save_axis(uint8_t a, int32_t &addr) {
+void Space::save_axis(uint8_t a, int32_t &addr) { // {{{
 	write_float(addr, axis[a]->park);
 	write_8(addr, axis[a]->park_order);
 	write_float(addr, axis[a]->min_pos);
 	write_float(addr, axis[a]->max_pos);
-}
+} // }}}
 
-void Space::save_motor(uint8_t m, int32_t &addr) {
+void Space::save_motor(uint8_t m, int32_t &addr) { // {{{
 	write_16(addr, motor[m]->step_pin.write());
 	write_16(addr, motor[m]->dir_pin.write());
 	write_16(addr, motor[m]->enable_pin.write());
@@ -300,9 +298,9 @@ void Space::save_motor(uint8_t m, int32_t &addr) {
 	write_float(addr, motor[m]->limit_v);
 	write_float(addr, motor[m]->limit_a);
 	write_8(addr, motor[m]->home_order);
-}
+} // }}}
 
-void Space::init(uint8_t space_id) {
+void Space::init(uint8_t space_id) { // {{{
 	type = DEFAULT_TYPE;
 	id = space_id;
 	max_deviation = 0;
@@ -312,9 +310,10 @@ void Space::init(uint8_t space_id) {
 	num_motors = 0;
 	motor = NULL;
 	axis = NULL;
-}
+	history = new Space_History[FRAGMENTS_PER_BUFFER];
+} // }}}
 
-void Space::free() {
+void Space::free() { // {{{
 	space_types[type].free(this);
 	for (uint8_t a = 0; a < num_axes; ++a)
 		delete axis[a];
@@ -329,9 +328,10 @@ void Space::free() {
 		delete motor[m];
 	}
 	delete[] motor;
-}
+	delete history;
+} // }}}
 
-void Space::copy(Space &dst) {
+void Space::copy(Space &dst) { // {{{
 	//debug("copy space");
 	dst.type = type;
 	dst.type_data = type_data;
@@ -339,9 +339,24 @@ void Space::copy(Space &dst) {
 	dst.num_motors = num_motors;
 	dst.axis = axis;
 	dst.motor = motor;
-}
+	for (int next = 0; next < 2; ++next) {
+		dst.settings.arc[next] = settings.arc[next];
+		for (int i = 0; i < 2; ++i) {
+			dst.settings.radius[next][i] = settings.radius[next][i];
+		}
+		for (int i = 0; i < 3; ++i) {
+			dst.settings.offset[next][i] = settings.offset[next][i];
+			dst.settings.e1[next][i] = settings.e1[next][i];
+			dst.settings.e2[next][i] = settings.e2[next][i];
+			dst.settings.normal[next][i] = settings.normal[next][i];
+		}
+		dst.settings.angle[next] = settings.angle[next];
+		dst.settings.helix[next] = settings.helix[next];
+	}
+	dst.history = history;
+} // }}}
 
-void Space::cancel_update() {
+void Space::cancel_update() { // {{{
 	// setup_nums failed; restore system to a usable state.
 	type = DEFAULT_TYPE;
 	uint8_t n = min(num_axes, num_motors);
@@ -350,9 +365,10 @@ void Space::cancel_update() {
 		if (!setup_nums(0, 0))
 			debug("You're in trouble; this shouldn't be possible");
 	}
-}
+} // }}}
+// }}}
 
-// Space things. {{{
+// Movement handling. {{{
 static void check_distance(Motor *mtr, double distance, double dt, double &factor) { // {{{
 	if (dt == 0) {
 		factor = 0;
@@ -548,6 +564,27 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 	return have_steps;
 } // }}}
 
+void make_target(Space &sp, double f, bool next) { // {{{
+	int a = 0;
+	if (sp.settings.arc[next]) {
+		// Convert time-fraction into angle-fraction.
+		f = (2 * sp.settings.radius[next][0] * f) / (sp.settings.radius[next][0] + sp.settings.radius[next][1] - (sp.settings.radius[next][1] - sp.settings.radius[next][0]) * f);
+		double angle = sp.settings.angle[next] * f;
+		double radius = sp.settings.radius[next][0] + (sp.settings.radius[next][1] - sp.settings.radius[next][0]) * f;
+		double helix = sp.settings.helix[next] * f;
+		double cosa = cos(angle);
+		double sina = sin(angle);
+		for (int i = 0; i < min(3, sp.num_axes); ++i)
+			sp.axis[i]->settings.target += cosa * sp.settings.e1[next][i] + sina * sp.settings.e2[next][i] - sp.settings.offset[next][i] + helix * sp.settings.normal[next][i];
+		a = 3;
+		// Fall through.
+	}
+	for (; a < sp.num_axes; ++a) {
+		sp.axis[a]->settings.target += sp.axis[a]->settings.dist[next] * f;
+		movedebug("do %d %d %f %f", sp.id, a, sp.axis[a]->settings.dist, sp.axis[a]->settings.target);
+	}
+} // }}}
+
 static void handle_motors(unsigned long long current_time) { // {{{
 	// Check for move.
 	if (stopped && !moving) {
@@ -557,16 +594,16 @@ static void handle_motors(unsigned long long current_time) { // {{{
 	movedebug("handling %d %d", stopped, moving);
 	double factor = 1;
 	double t = (current_time - settings.start_time) / 1e6;
-	if (t >= settings.t0 + settings.tp) {	// Finish this move and prepare next.
+	if (t >= settings.t0 + settings.tp) {	// Finish this move and prepare next. {{{
 		movedebug("finishing %f %f %f %ld %ld", t, settings.t0, settings.tp, long(current_time), long(settings.start_time));
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (!isnan(sp.axis[a]->settings.dist)) {
-					//debug("before source %d %f %f", a, sp.axis[a]->settings.source, sp.axis[a]->settings.dist);
-					sp.axis[a]->settings.source += sp.axis[a]->settings.dist;
-					sp.axis[a]->settings.dist = NAN;
-					//debug("after source %d %f %f %d %f", a, sp.axis[a]->settings.target, sp.axis[a]->settings.dist, sp.motor[a]->settings.current_pos, factor);
+				if (!isnan(sp.axis[a]->settings.dist[0])) {
+					//debug("before source %d %f %f", a, sp.axis[a]->settings.source, sp.axis[a]->settings.dist[0]);
+					sp.axis[a]->settings.source += sp.axis[a]->settings.dist[0];
+					sp.axis[a]->settings.dist[0] = NAN;
+					//debug("after source %d %f %f %d %f", a, sp.axis[a]->settings.target, sp.axis[a]->settings.dist[0], sp.motor[a]->settings.current_pos, factor);
 				}
 				sp.axis[a]->settings.target = sp.axis[a]->settings.source;
 			}
@@ -613,46 +650,48 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			}
 		}
 		return;
-	}
-	if (t < settings.t0) {	// Main part.
+	} // }}}
+	if (t < settings.t0) {	// Main part. {{{
 		double t_fraction = t / settings.t0;
 		double current_f = (settings.f1 * (2 - t_fraction) + settings.f2 * t_fraction) * t_fraction;
 		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", t, settings.t0, settings.tp, t_fraction, settings.f1, settings.f2, current_f);
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (int s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (isnan(sp.axis[a]->settings.dist) || sp.axis[a]->settings.dist == 0) {
+				if (isnan(sp.axis[a]->settings.dist[0]) || sp.axis[a]->settings.dist[0] == 0) {
 					sp.axis[a]->settings.target = NAN;
 					continue;
 				}
-				sp.axis[a]->settings.target = sp.axis[a]->settings.source + sp.axis[a]->settings.dist * current_f;
-				movedebug("do %d %d %f %f", s, a, sp.axis[a]->settings.dist, sp.axis[a]->settings.target);
+				sp.axis[a]->settings.target = sp.axis[a]->settings.source;
 			}
+			make_target(sp, current_f, false);
 			move_axes(&sp, current_time, factor);
 		}
-	}
-	else {	// Connector part.
+	} // }}}
+	else {	// Connector part. {{{
 		movedebug("connector %f %f %f", t, settings.t0, settings.tp);
 		double tc = t - settings.t0;
+		double t_fraction = tc / settings.tp;
+		double current_f2 = settings.fp * (2 - t_fraction) * t_fraction;
+		double current_f3 = settings.fq * t_fraction * t_fraction;
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if ((isnan(sp.axis[a]->settings.dist) || sp.axis[a]->settings.dist == 0) && (isnan(sp.axis[a]->settings.next_dist) || sp.axis[a]->settings.next_dist == 0)) {
+				if ((isnan(sp.axis[a]->settings.dist[0]) || sp.axis[a]->settings.dist[0] == 0) && (isnan(sp.axis[a]->settings.dist[1]) || sp.axis[a]->settings.dist[1] == 0)) {
 					sp.axis[a]->settings.target = NAN;
 					continue;
 				}
-				double t_fraction = tc / settings.tp;
-				double current_f2 = settings.fp * (2 - t_fraction) * t_fraction;
-				double current_f3 = settings.fq * t_fraction * t_fraction;
-				sp.axis[a]->settings.target = sp.axis[a]->settings.source + sp.axis[a]->settings.main_dist + sp.axis[a]->settings.dist * current_f2 + sp.axis[a]->settings.next_dist * current_f3;
+				sp.axis[a]->settings.target = sp.axis[a]->settings.source;
 			}
+			make_target(sp, (1 - settings.fp) + current_f2, false);
+			make_target(sp, current_f3, true);
 			move_axes(&sp, current_time, factor);
 		}
-	}
+	} // }}}
 	do_steps(factor, current_time);
 } // }}}
 
-void store_settings() {
+void store_settings() { // {{{
 	current_fragment_pos = 0;
 	num_active_motors = 0;
 	history[current_fragment].t0 = settings.t0;
@@ -685,17 +724,17 @@ void store_settings() {
 			//fcpdebug(s, m, "store");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
-			sp.axis[a]->history[current_fragment].dist = sp.axis[a]->settings.dist;
-			sp.axis[a]->history[current_fragment].next_dist = sp.axis[a]->settings.next_dist;
+			sp.axis[a]->history[current_fragment].dist[0] = sp.axis[a]->settings.dist[0];
+			sp.axis[a]->history[current_fragment].dist[1] = sp.axis[a]->settings.dist[1];
 			sp.axis[a]->history[current_fragment].main_dist = sp.axis[a]->settings.main_dist;
 			sp.axis[a]->history[current_fragment].target = sp.axis[a]->settings.target;
 			sp.axis[a]->history[current_fragment].source = sp.axis[a]->settings.source;
 			sp.axis[a]->history[current_fragment].current = sp.axis[a]->settings.current;
 		}
 	}
-}
+} // }}}
 
-void restore_settings() {
+void restore_settings() { // {{{
 	current_fragment_pos = 0;
 	num_active_motors = 0;
 	settings.t0 = history[current_fragment].t0;
@@ -728,17 +767,17 @@ void restore_settings() {
 			//fcpdebug(s, m, "restore");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
-			sp.axis[a]->settings.dist = sp.axis[a]->history[current_fragment].dist;
-			sp.axis[a]->settings.next_dist = sp.axis[a]->history[current_fragment].next_dist;
+			sp.axis[a]->settings.dist[0] = sp.axis[a]->history[current_fragment].dist[0];
+			sp.axis[a]->settings.dist[1] = sp.axis[a]->history[current_fragment].dist[1];
 			sp.axis[a]->settings.main_dist = sp.axis[a]->history[current_fragment].main_dist;
 			sp.axis[a]->settings.target = sp.axis[a]->history[current_fragment].target;
 			sp.axis[a]->settings.source = sp.axis[a]->history[current_fragment].source;
 			sp.axis[a]->settings.current = sp.axis[a]->history[current_fragment].current;
 		}
 	}
-}
+} // }}}
 
-void send_fragment() {
+void send_fragment() { // {{{
 	if (current_fragment_pos <= 0 || stopping || sending_fragment)
 		return;
 	if (num_active_motors == 0) {
@@ -753,16 +792,16 @@ void send_fragment() {
 		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping)
 			arch_start_move(0);
 	}
-}
+} // }}}
 
-void apply_tick() {
+void apply_tick() { // {{{
 	settings.hwtime += hwtime_step;
 	handle_motors(settings.hwtime);
 	//if (num_spaces > 0 && spaces[0].num_axes >= 2)
 		//debug("move z %d %d %f %d %d", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings.current, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
-}
+} // }}}
 
-void buffer_refill() {
+void buffer_refill() { // {{{
 	if (!moving || refilling || stopping || discard_pending || discarding) {
 		//debug("refill block %d %d %d", moving, refilling, stopping);
 		return;
@@ -793,5 +832,5 @@ void buffer_refill() {
 	}
 	refilling = false;
 	arch_start_move(0);
-}
+} // }}}
 // }}}

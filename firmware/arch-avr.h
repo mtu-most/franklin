@@ -518,6 +518,7 @@ static inline void arch_msetup(uint8_t m) { // {{{
 } // }}}
 
 static inline void arch_set_speed(uint16_t count) { // {{{
+	debug("set speed %d", count);
 	if (count == 0) {
 		TIMSK1 = 0;
 		step_state = 1;

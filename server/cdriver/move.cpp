@@ -7,13 +7,13 @@
 // start_time		utime() at start of move.
 // t0			time to do main part.
 // tp			time to do connection.
-// mtr->dist		total distance of this segment (mm).
-// mtr->next_dist		total distance of next segment (mm).
-// mtr->main_dist		distance of main part (mm).
+// mtr->dist[0]		total distance of this segment (mm).
+// mtr->dist[1]		total distance of next segment (mm).
+// mtr->main_dist	distance of main part (mm).
 // v0, vp		start and end velocity for main part. (fraction/s)
 // vq			end velocity of connector part. (fraction/s)
 
-static void change0(int qpos) {
+static void change0(int qpos) { // {{{
 	if (num_spaces < 1)
 		return;
 	for (int s = 0; s < num_spaces; ++s) {
@@ -21,10 +21,116 @@ static void change0(int qpos) {
 		for (int a = 0; a < spaces[0].num_axes; ++a)
 			queue[qpos].data[a] = space_types[sp.type].change0(&sp, a, queue[qpos].data[a]);
 	}
-}
+} // }}}
+
+static void set_from_queue(int s, int qpos, int a0) { // {{{
+	Space &sp = spaces[s];
+	int a = 0;
+	if (s == 0 && queue[qpos].arc) {
+		sp.settings.arc[1] = true;
+		double src = 0, normal = 0, dst = 0;
+		double target[3];
+		double center[3];
+		double source[3];
+		double sn = 0, cn = 0, tn = 0;
+		for (int i = 0; i < 3; ++i) {
+			sp.settings.normal[1][i] = queue[qpos].normal[i];
+			normal += sp.settings.normal[1][i] * sp.settings.normal[1][i];
+		}
+		normal = sqrt(normal);
+		for (int i = 0; i < 3; ++i) {
+			sp.settings.normal[1][i] /= normal;
+			center[i] = queue[qpos].center[i];
+			source[i] = i < sp.num_axes ? sp.axis[i]->settings.source : 0;
+			target[i] = queue[qpos].data[a0 + i];
+			sn += source[i] * sp.settings.normal[1][i];
+			cn += center[i] * sp.settings.normal[1][i];
+			tn += target[i] * sp.settings.normal[1][i];
+		}
+		sp.settings.helix[1] = tn - sn;
+		for (int i = 0; i < 3; ++i) {
+			center[i] -= sp.settings.normal[1][i] * (cn - sn);
+			target[i] -= sp.settings.normal[1][i] * sp.settings.helix[1];
+			sp.settings.offset[1][i] = source[i] - center[i];
+			src += sp.settings.offset[1][i] * sp.settings.offset[1][i];
+			dst += (target[i] - center[i]) * (target[i] - center[i]);
+		}
+		src = sqrt(src);
+		dst = sqrt(dst);
+		for (int i = 0; i < 3; ++i) {
+			target[i] -= sp.settings.helix[1] * sp.settings.normal[1][i];
+			sp.settings.e1[1][i] = sp.settings.offset[1][i] / src;
+			sp.settings.normal[1][i] /= normal;
+		}
+		double cosa = 0, sina = 0;
+		for (int i = 0; i < 3; ++i) {
+			int c1 = (i + 1) % 3;
+			int c2 = (i + 2) % 3;
+			sp.settings.e2[1][i] = sp.settings.normal[1][c1] * sp.settings.e1[1][c2] - sp.settings.normal[1][c2] * sp.settings.e1[1][c1];
+			cosa += sp.settings.e1[1][i] * (target[i] - center[i]);
+			sina += sp.settings.e2[1][i] * (target[i] - center[i]);
+		}
+		sp.settings.angle[1] = atan2(sina, cosa);
+		if (sp.settings.angle[1] < 0)
+			sp.settings.angle[1] += M_2_PI;
+		sp.settings.radius[1][0] = src;
+		sp.settings.radius[1][1] = dst;
+		for (int i = 0; i < 3; ++i) {
+			if (i < sp.num_axes)
+				sp.axis[i]->settings.dist[1] = (src + dst) / 2 * sp.settings.angle[1];
+		}
+		a = 3;
+		// Fall through.
+	}
+	else {
+		sp.settings.arc[1] = false;
+		sp.settings.angle[1] = NAN;
+		sp.settings.helix[1] = NAN;
+		for (int i = 0; i < 2; ++i) {
+			sp.settings.radius[1][i] = NAN;
+		}
+		for (int i = 0; i < 3; ++i) {
+			sp.settings.offset[1][i] = NAN;
+			sp.settings.e1[1][i] = NAN;
+			sp.settings.e2[1][i] = NAN;
+			sp.settings.normal[1][i] = NAN;
+		}
+	}
+	for (; a < sp.num_axes; ++a) {
+		if (isnan(queue[qpos].data[a0 + a])) {
+			sp.axis[a]->settings.dist[1] = 0;
+		}
+		else {
+			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - sp.axis[a]->settings.source;
+		}
+	}
+} // }}}
+
+static void copy_next(int s) { // {{{
+	Space &sp = spaces[s];
+	sp.settings.arc[0] = sp.settings.arc[1];
+	sp.settings.angle[0] = sp.settings.angle[1];
+	sp.settings.helix[0] = sp.settings.helix[1];
+	for (int i = 0; i < 2; ++i) {
+		sp.settings.radius[0][i] = sp.settings.radius[1][i];
+	}
+	for (int i = 0; i < 3; ++i) {
+		sp.settings.offset[0][i] = sp.settings.offset[1][i];
+		sp.settings.e1[0][i] = sp.settings.e1[1][i];
+		sp.settings.e2[0][i] = sp.settings.e2[1][i];
+		sp.settings.normal[0][i] = sp.settings.normal[1][i];
+	}
+	for (uint8_t a = 0; a < sp.num_axes; ++a) {
+		sp.axis[a]->settings.dist[0] = sp.axis[a]->settings.dist[1];
+		sp.axis[a]->settings.dist[1] = 0;
+#ifdef DEBUG_MOVE
+		debug("Last segment distance for motor %d is %f", a, sp.axis[a]->settings.dist[0]);
+#endif
+	}
+} // }}}
 
 // Used from previous segment (if prepared): tp, vq.
-uint8_t next_move() {
+uint8_t next_move() { // {{{
 	probing = false;
 	uint8_t num_cbs = 0;
 	uint8_t a0;
@@ -63,8 +169,8 @@ uint8_t next_move() {
 	// }}}
 
 	settings.f0 = settings.fq;
-	// If no move is prepared, set next_dist from the queue; it will be used as dist below.
-	if (!prepared) { // {{{
+	// If no move is prepared, set dist[1] from the queue; it will be used as dist[0] below. {{{
+	if (!prepared) {
 #ifdef DEBUG_MOVE
 		debug("No move prepared.");
 #endif
@@ -74,21 +180,12 @@ uint8_t next_move() {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[settings.queue_start].data[a0]);
-			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (isnan(queue[settings.queue_start].data[a0 + a])) {
-					sp.axis[a]->settings.next_dist = 0;
-					//debug("not using object %d", mtr);
-				}
-				else {
-					sp.axis[a]->settings.next_dist = queue[settings.queue_start].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - sp.axis[a]->settings.source;
-#ifdef DEBUG_MOVE
-					debug("next dist of %d = %f (%f - %f)", a0 + a, sp.axis[a]->settings.next_dist, queue[settings.queue_start].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0), sp.axis[a]->settings.source);
-#endif
-				}
-			}
+			set_from_queue(s, settings.queue_start, a0);
 			a0 += sp.num_axes;
 		}
 	}
+	// }}}
+	// Fill unspecified coordinates with previous values. {{{
 	a0 = 0;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
@@ -96,7 +193,7 @@ uint8_t next_move() {
 			if (n != settings.queue_end) {
 				// If only one of them is set, set the other one as well to make the rounded corner work.
 				if (!isnan(queue[settings.queue_start].data[a0 + a]) && isnan(queue[n].data[a0 + a])) {
-					queue[n].data[a0 + a] = sp.axis[a]->settings.source + sp.axis[a]->settings.next_dist - (s == 0 && a == 2 ? zoffset : 0);
+					queue[n].data[a0 + a] = sp.axis[a]->settings.source + sp.axis[a]->settings.dist[1] - (s == 0 && a == 2 ? zoffset : 0);
 #ifdef DEBUG_MOVE
 					debug("filling next %d with %f", a0 + a, queue[n].data[a0 + a]);
 #endif
@@ -124,35 +221,26 @@ uint8_t next_move() {
 		a0 += sp.num_axes;
 	}
 	// }}}
-	// We are prepared and can start the segment. {{{
+	// We are prepared and can start the segment.
 	bool action = false;
-#ifdef DEBUG_MOVE
-	debug("Move was prepared");
-#endif
 	double vq;
-	if (n == settings.queue_end) { // {{{
-		// There is no next segment; we should stop at the end.
+	if (n == settings.queue_end) { // There is no next segment; we should stop at the end. {{{
 		prepared = false;
 #ifdef DEBUG_MOVE
 		debug("Building final segment.");
 #endif
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
+			copy_next(s);
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				sp.axis[a]->settings.dist = sp.axis[a]->settings.next_dist;
-				if (sp.axis[a]->settings.dist != 0)
+				if (sp.axis[a]->settings.dist[0] != 0)
 					action = true;
-				sp.axis[a]->settings.next_dist = 0;
-#ifdef DEBUG_MOVE
-				debug("Last segment distance for motor %d is %f", a, sp.axis[a]->settings.dist);
-#endif
 			}
 		}
 		vq = 0;
 	}
 	// }}}
-	else { // {{{
-		// There is a next segment; we should connect to it.
+	else { // There is a next segment; we should connect to it. {{{
 		prepared = true;
 #ifdef DEBUG_MOVE
 		debug("Building a connecting segment.");
@@ -162,36 +250,32 @@ uint8_t next_move() {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[n].data[a0]);
+			copy_next(s);
+			set_from_queue(s, n, a0);
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				sp.axis[a]->settings.dist = sp.axis[a]->settings.next_dist;
-				if (isnan(queue[n].data[a0 + a]))
-					sp.axis[a]->settings.next_dist = 0;
-				else
-					sp.axis[a]->settings.next_dist = queue[n].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (sp.axis[a]->settings.source + sp.axis[a]->settings.dist);
-				if (sp.axis[a]->settings.next_dist != 0 || sp.axis[a]->settings.dist != 0)
+				if (sp.axis[a]->settings.dist[1] != 0 || sp.axis[a]->settings.dist[0] != 0)
 					action = true;
-#ifdef DEBUG_MOVE
-				debug("Connecting distance for motor %d is %f, to %f = %f - (%f + %f)", a, sp.axis[a]->settings.dist, sp.axis[a]->settings.next_dist, queue[n].data[a0 + a], sp.axis[a]->settings.source, sp.axis[a]->settings.dist);
-#endif
 			}
 			a0 += sp.num_axes;
 		}
 		vq = queue[n].f[0] * feedrate;
 	}
 	// }}}
+
 	double v0 = queue[settings.queue_start].f[0] * feedrate;
 	double vp = queue[settings.queue_start].f[1] * feedrate;
-	//debug("mv %f %f %f %f", feedrate, v0, vp, vq);
+	probing = queue[settings.queue_start].probe;
+	run_time = queue[settings.queue_start].time;
+	run_dist = queue[settings.queue_start].dist;
+
 	if (queue[settings.queue_start].cb)
 		cbs_after_current_move += 1;
 	if (settings.queue_end == settings.queue_start)
 		send_host(CMD_CONTINUE, 0);
-	probing = queue[settings.queue_start].probe;
-	run_time = queue[settings.queue_start].time;
-	run_dist = queue[settings.queue_start].dist;
-	settings.queue_start = n;
 	settings.queue_full = false;
-	if (!action) {
+	settings.queue_start = n;
+
+	if (!action) {	// Skip zero-distance move. {{{
 #ifdef DEBUG_MOVE
 		debug("Skipping zero-distance prepared move");
 #endif
@@ -200,12 +284,11 @@ uint8_t next_move() {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a)
-				sp.axis[a]->settings.dist = NAN;
+				sp.axis[a]->settings.dist[0] = NAN;
 		}
 		settings.fq = 0;
 		return num_cbs + next_move();
-	}
-	// }}}
+	} // }}}
 
 	// Currently set up:
 	// f0: fraction of move already done by connection.
@@ -213,8 +296,8 @@ uint8_t next_move() {
 	// vp: this move's requested ending speed.
 	// vq: next move's requested starting speed.
 	// cbs_after_current_move: number of cbs that should be fired after this segment is complete.
-	// mtr->dist: total distance of this segment (mm).
-	// mtr->next_dist: total distance of next segment (mm).
+	// mtr->dist[0]: total distance of this segment (mm).
+	// mtr->dist[1]: total distance of next segment (mm).
 #ifdef DEBUG_MOVE
 	debug("Set up: v0 = %f /s, vp = %f /s, vq = %f /s", v0, vp, vq);
 #endif
@@ -228,8 +311,8 @@ uint8_t next_move() {
 		double max_mm = probing ? space_types[sp.type].probe_speed(&sp) : sp.max_v;
 		double dist = 0, distn = 0;
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			dist += sp.axis[a]->settings.dist * sp.axis[a]->settings.dist;
-			distn += sp.axis[a]->settings.next_dist * sp.axis[a]->settings.next_dist;
+			dist += sp.axis[a]->settings.dist[0] * sp.axis[a]->settings.dist[0];
+			distn += sp.axis[a]->settings.dist[1] * sp.axis[a]->settings.dist[1];
 		}
 		dist = sqrt(dist);
 		distn = sqrt(distn);
@@ -246,13 +329,13 @@ uint8_t next_move() {
 	debug("After limiting, v0 = %f /s, vp = %f /s and vq = %f /s", v0, vp, vq);
 #endif
 	// }}}
-	// Already set up: f0, v0, vp, vq, mtr->dist, mtr->next_dist.
+	// Already set up: f0, v0, vp, vq, mtr->dist[0], mtr->dist[1].
 	// To do: start_time, t0, tp, fmain, fp, fq, mtr->main_dist
 #ifdef DEBUG_MOVE
 	debug("Preparation did f0 = %f", settings.f0);
 #endif
 
-	// Use maximum deviation to find fraction where to start rounded corner.
+	// Use maximum deviation to find fraction where to start rounded corner. {{{
 	double factor = vq / vp;
 	done_factor = NAN;
 	if (vq == 0) {
@@ -271,10 +354,10 @@ uint8_t next_move() {
 			}
 			double norma2 = 0, normb2 = 0, diff2 = 0;
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				double nd = sp.axis[a]->settings.next_dist * factor;
-				norma2 += sp.axis[a]->settings.dist * sp.axis[a]->settings.dist;
+				double nd = sp.axis[a]->settings.dist[1] * factor;
+				norma2 += sp.axis[a]->settings.dist[0] * sp.axis[a]->settings.dist[0];
 				normb2 += nd * nd;
-				double d = sp.axis[a]->settings.dist - sp.axis[a]->settings.next_dist;
+				double d = sp.axis[a]->settings.dist[0] - sp.axis[a]->settings.dist[1];
 				diff2 += d * d;
 			}
 			// Calculate distances and ignore spaces which don't have two segments.
@@ -299,28 +382,26 @@ uint8_t next_move() {
 	}
 	if (isnan(done_factor))
 		done_factor = 1;
-	// Set up t0, tp.
+	// }}}
+
 	settings.t0 = (1 - settings.fp) / (fabs(v0 + vp) / 2);
 	settings.tp = settings.fp / (fabs(vp) / 2);
-	// Set up f1, f2.
 	settings.f1 = .5 * fabs(v0) * settings.t0;
 	settings.f2 = 1 - settings.fp - settings.f1;
 
-	// Finish. {{{
+	// Set up endpos and quit if no motors do any steps. {{{
 	bool anything = false;
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
-		//debug("space %d axes %d motors %d", s, sp.num_axes, sp.num_motors);
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			//debug("axis %d", a);
-			sp.axis[a]->settings.main_dist = sp.axis[a]->settings.dist * (1 - settings.fp);
+			sp.axis[a]->settings.main_dist = sp.axis[a]->settings.dist[0] * (1 - settings.fp);
 			// Fill target for filling endpos below.
-			if ((sp.axis[a]->settings.dist > 0 && sp.axis[a]->settings.next_dist < 0) || (sp.axis[a]->settings.dist < 0 && sp.axis[a]->settings.next_dist > 0))
-				sp.axis[a]->settings.target = sp.axis[a]->settings.source + sp.axis[a]->settings.dist;
+			if ((sp.axis[a]->settings.dist[0] > 0 && sp.axis[a]->settings.dist[1] < 0) || (sp.axis[a]->settings.dist[0] < 0 && sp.axis[a]->settings.dist[1] > 0))
+				sp.axis[a]->settings.target = sp.axis[a]->settings.source + sp.axis[a]->settings.dist[0];
 			else
-				sp.axis[a]->settings.target = sp.axis[a]->settings.source + sp.axis[a]->settings.dist + sp.axis[a]->settings.next_dist; // * settings.fq;
+				sp.axis[a]->settings.target = sp.axis[a]->settings.source + sp.axis[a]->settings.dist[0] + sp.axis[a]->settings.dist[1] * settings.fq;
 #ifdef DEBUG_MOVE
-			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d current = %f", s, a, sp.axis[a]->settings.dist, sp.axis[a]->settings.main_dist, sp.axis[a]->settings.next_dist, sp.motor[a]->settings.current_pos, sp.axis[a]->settings.current);
+			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %d current = %f", s, a, sp.axis[a]->settings.dist[0], sp.axis[a]->settings.main_dist, sp.axis[a]->settings.dist[1], sp.motor[a]->settings.current_pos, sp.axis[a]->settings.current);
 #endif
 		}
 		bool ok = true;
@@ -342,11 +423,14 @@ uint8_t next_move() {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a)
-				sp.axis[a]->settings.dist = NAN;
+				sp.axis[a]->settings.dist[0] = NAN;
 		}
 		settings.fq = 0;
 		return num_cbs + next_move();
 	}
+	// }}}
+
+	// Enable motors if they weren't. {{{
 	if (!motors_busy) {
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
@@ -354,20 +438,21 @@ uint8_t next_move() {
 				SET(sp.motor[m]->enable_pin);
 		}
 		motors_busy = true;
-	}
+	} // }}}
 #ifdef DEBUG_MOVE
 	debug("Segment has been set up: f0=%f fp=%f fq=%f v0=%f /s vp=%f /s vq=%f /s t0=%f s tp=%f s", settings.f0, settings.fp, settings.fq, v0, vp, vq, settings.t0, settings.tp);
 #endif
-	// Reset time.
+	// Reset time. {{{
 	settings.hwtime = 0;
 	settings.last_time = 0;
 	settings.last_current_time = 0;
 	settings.start_time = settings.last_time - uint32_t(settings.f0 / fabs(vp) * 1e6);
-	if (stopped) {
+	// }}}
+
+	if (stopped) {	// Set up source if this is a new move. {{{
 #ifdef DEBUG_MOVE
 		debug("starting new move");
 #endif
-		//debug("curf1 %d", current_fragment);
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a)
@@ -376,15 +461,13 @@ uint8_t next_move() {
 #ifdef DEBUG_PATH
 		fprintf(stderr, "\n");
 #endif
-	}
-	//debug("last=%ld", long(settings.last_time));
+	} // }}}
+
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
 	stopped = false;
 	moving = true;
-	//debug("start=%ld, last-start=%ld", long(settings.start_time), long(settings.last_time - settings.start_time));
-	// }}}
 	return num_cbs;
-}
+} // }}}
 
 void abort_move(int pos) { // {{{
 	aborting = true;
@@ -427,8 +510,8 @@ void abort_move(int pos) { // {{{
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			//debug("setting axis %d source to %f", a, sp.axis[a]->settings.current);
 			sp.axis[a]->settings.source = sp.axis[a]->settings.current;
-			sp.axis[a]->settings.dist = NAN;
-			sp.axis[a]->settings.next_dist = NAN;
+			sp.axis[a]->settings.dist[0] = NAN;
+			sp.axis[a]->settings.dist[1] = NAN;
 		}
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->settings.last_v = 0;

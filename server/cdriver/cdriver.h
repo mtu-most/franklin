@@ -142,8 +142,7 @@ enum Command {
 };
 
 // All temperatures are stored in Kelvin, but communicated in °C.
-struct Temp
-{
+struct Temp {
 	// See temp.c from definition of calibration constants.
 	double R0, R1, logRc, beta, Tc;	// calibration values of thermistor.  [Ω, Ω, logΩ, K, K]
 	/*
@@ -186,8 +185,7 @@ struct Temp
 	void copy(Temp &dst);
 };
 
-struct History
-{
+struct History {
 	double t0, tp;
 	double f0, f1, f2, fp, fq, fmain;
 	uint32_t hwtime, start_time, last_time, last_current_time;
@@ -197,23 +195,30 @@ struct History
 	int run_file_current;
 };
 
-struct Motor_History
-{
+struct Space_History {
+	bool arc[2];
+	double angle[2], helix[2];
+	double offset[2][3];
+	double radius[2][2];
+	double e1[2][3];
+	double e2[2][3];
+	double normal[2][3];
+};
+
+struct Motor_History {
 	double last_v;		// v during last iteration, for using limit_a [m/s].
 	double target_v, target_dist;	// Internal values for moving.
 	int32_t current_pos;	// Current position of motor (in steps), and what the hardware currently thinks.
 	double endpos;
 };
 
-struct Axis_History
-{
-	double dist, next_dist, main_dist;
+struct Axis_History {
+	double dist[2], main_dist;
 	double source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
 	double target;
 };
 
-struct Axis
-{
+struct Axis {
 	Axis_History *history;
 	Axis_History settings;
 	double park;		// Park position; not used by the firmware, but stored for use by the host.
@@ -222,8 +227,7 @@ struct Axis
 	void *type_data;
 };
 
-struct Motor
-{
+struct Motor {
 	Motor_History *history;
 	Motor_History settings;
 	Pin_t step_pin;
@@ -252,8 +256,7 @@ struct Motor
 
 struct Space;
 
-struct SpaceType
-{
+struct SpaceType {
 	void (*xyz2motors)(Space *s, double *motors, bool *ok);
 	void (*reset_pos)(Space *s);
 	void (*check_position)(Space *s, double *data);
@@ -267,8 +270,9 @@ struct SpaceType
 	double (*probe_speed)(Space *s);
 };
 
-struct Space
-{
+struct Space {
+	Space_History *history;
+	Space_History settings;
 	void *type_data;
 	Motor **motor;
 	Axis **axis;
@@ -304,8 +308,7 @@ EXTERN SpaceType space_types[NUM_SPACE_TYPES];
 } while(0)
 EXTERN int current_extruder;
 
-struct Gpio
-{
+struct Gpio {
 	Pin_t pin;
 	uint8_t state, reset;
 	void setup(uint8_t new_state);
@@ -316,13 +319,15 @@ struct Gpio
 	void copy(Gpio &dst);
 };
 
-struct MoveCommand
-{
+struct MoveCommand {
 	bool cb;
 	bool probe;
 	double f[2];
 	double data[10];	// Value if given, NAN otherwise.  Variable size array. TODO
 	double time, dist;
+	bool arc;
+	double center[3];
+	double normal[3];
 };
 
 struct Serial_t {
