@@ -894,7 +894,7 @@ void avr_stop2() {
 }
 
 bool arch_send_fragment() {
-	if (stopping || discard_pending)
+	if (stopping || discard_pending || stop_pending)
 		return false;
 	if (avr_audio >= 0) {
 		arch_stop(false);
@@ -905,6 +905,8 @@ bool arch_send_fragment() {
 		poll(&pollfds[2], 1, -1);
 		serial(1);
 	}
+	if (stop_pending || discard_pending)
+		return false;
 	avr_buffer[0] = probing ? HWC_START_PROBE : HWC_START_MOVE;
 	//debug("send fragment %d %d %d", current_fragment_pos, fragment, settings.num_active_motors);
 	avr_buffer[1] = current_fragment_pos;
@@ -924,6 +926,8 @@ bool arch_send_fragment() {
 					poll(&pollfds[2], 1, -1);
 					serial(1);
 				}
+				if (stop_pending || discard_pending)
+					break;
 				avr_buffer[0] = HWC_MOVE;
 				avr_buffer[1] = mi + m;
 				for (int i = 0; i < current_fragment_pos; ++i)
@@ -936,7 +940,7 @@ bool arch_send_fragment() {
 		}
 	}
 	avr_filling = false;
-	return !stopping && !discard_pending;
+	return !stopping && !discard_pending && !stop_pending;
 }
 
 void arch_start_move(int extra) {

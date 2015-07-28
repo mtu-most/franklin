@@ -23,8 +23,10 @@ static void change0(int qpos) { // {{{
 	}
 } // }}}
 
-static void set_from_queue(int s, int qpos, int a0) { // {{{
+static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 	Space &sp = spaces[s];
+	for (int a = 0; a < sp.num_axes; ++a)
+		sp.axis[a]->settings.endpos[1] = queue[qpos].data[a0 + a];
 	int a = 0;
 	if (s == 0 && queue[qpos].arc) {
 		sp.settings.arc[1] = true;
@@ -101,7 +103,7 @@ static void set_from_queue(int s, int qpos, int a0) { // {{{
 			sp.axis[a]->settings.dist[1] = 0;
 		}
 		else {
-			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - sp.axis[a]->settings.source;
+			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
 		}
 	}
 } // }}}
@@ -121,6 +123,7 @@ static void copy_next(int s) { // {{{
 		sp.settings.normal[0][i] = sp.settings.normal[1][i];
 	}
 	for (uint8_t a = 0; a < sp.num_axes; ++a) {
+		sp.axis[a]->settings.endpos[0] = sp.axis[a]->settings.endpos[1];
 		sp.axis[a]->settings.dist[0] = sp.axis[a]->settings.dist[1];
 		sp.axis[a]->settings.dist[1] = 0;
 #ifdef DEBUG_MOVE
@@ -180,7 +183,11 @@ uint8_t next_move() { // {{{
 		for (uint8_t s = 0; s < num_spaces; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[settings.queue_start].data[a0]);
-			set_from_queue(s, settings.queue_start, a0);
+			for (int a = 0; a < sp.num_axes; ++a) {
+				sp.axis[a]->settings.dist[0] = 0;
+				sp.axis[a]->settings.endpos[0] = sp.axis[a]->settings.source;
+			}
+			set_from_queue(s, settings.queue_start, a0, false);
 			a0 += sp.num_axes;
 		}
 	}
@@ -251,7 +258,7 @@ uint8_t next_move() { // {{{
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[n].data[a0]);
 			copy_next(s);
-			set_from_queue(s, n, a0);
+			set_from_queue(s, n, a0, true);
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if (sp.axis[a]->settings.dist[1] != 0 || sp.axis[a]->settings.dist[0] != 0)
 					action = true;

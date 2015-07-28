@@ -241,7 +241,7 @@ void packet()
 		last_active = millis();
 		if (command[0][2]) {
 			//debug("sleeping");
-			if (!stopped && !stop_pending)
+			if (avr_running && !stop_pending)
 			{
 				debug("Sleeping while moving");
 				abort();

@@ -216,6 +216,7 @@ struct Axis_History {
 	double dist[2], main_dist;
 	double source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
 	double target;
+	double endpos[2];
 };
 
 struct Axis {

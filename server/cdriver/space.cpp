@@ -710,6 +710,19 @@ void store_settings() { // {{{
 	history[current_fragment].run_file_current = settings.run_file_current;
 	for (int s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
+		for (int i = 0; i < 2; ++i) {
+			sp.history[current_fragment].arc[i] = sp.settings.arc[i];
+			sp.history[current_fragment].angle[i] = sp.settings.angle[i];
+			sp.history[current_fragment].helix[i] = sp.settings.helix[i];
+			for (int t = 0; t < 2; ++t)
+				sp.history[current_fragment].radius[i][t] = sp.settings.radius[i][t];
+			for (int t = 0; t < 3; ++t) {
+				sp.history[current_fragment].offset[i][t] = sp.settings.offset[i][t];
+				sp.history[current_fragment].e1[i][t] = sp.settings.e1[i][t];
+				sp.history[current_fragment].e2[i][t] = sp.settings.e2[i][t];
+				sp.history[current_fragment].normal[i][t] = sp.settings.normal[i][t];
+			}
+		}
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->active = false;
 			memset(sp.motor[m]->data, 0, BYTES_PER_FRAGMENT);
@@ -727,6 +740,8 @@ void store_settings() { // {{{
 			sp.axis[a]->history[current_fragment].target = sp.axis[a]->settings.target;
 			sp.axis[a]->history[current_fragment].source = sp.axis[a]->settings.source;
 			sp.axis[a]->history[current_fragment].current = sp.axis[a]->settings.current;
+			sp.axis[a]->history[current_fragment].endpos[0] = sp.axis[a]->settings.endpos[0];
+			sp.axis[a]->history[current_fragment].endpos[1] = sp.axis[a]->settings.endpos[1];
 		}
 	}
 } // }}}
@@ -753,6 +768,19 @@ void restore_settings() { // {{{
 	settings.run_file_current = history[current_fragment].run_file_current;
 	for (int s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
+		for (int i = 0; i < 2; ++i) {
+			sp.settings.arc[i] = sp.history[current_fragment].arc[i];
+			sp.settings.angle[i] = sp.history[current_fragment].angle[i];
+			sp.settings.helix[i] = sp.history[current_fragment].helix[i];
+			for (int t = 0; t < 2; ++t)
+				sp.settings.radius[i][t] = sp.history[current_fragment].radius[i][t];
+			for (int t = 0; t < 3; ++t) {
+				sp.settings.offset[i][t] = sp.history[current_fragment].offset[i][t];
+				sp.settings.e1[i][t] = sp.history[current_fragment].e1[i][t];
+				sp.settings.e2[i][t] = sp.history[current_fragment].e2[i][t];
+				sp.settings.normal[i][t] = sp.history[current_fragment].normal[i][t];
+			}
+		}
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->active = false;
 			memset(sp.motor[m]->data, 0, BYTES_PER_FRAGMENT);
@@ -770,6 +798,8 @@ void restore_settings() { // {{{
 			sp.axis[a]->settings.target = sp.axis[a]->history[current_fragment].target;
 			sp.axis[a]->settings.source = sp.axis[a]->history[current_fragment].source;
 			sp.axis[a]->settings.current = sp.axis[a]->history[current_fragment].current;
+			sp.axis[a]->settings.endpos[0] = sp.axis[a]->history[current_fragment].endpos[0];
+			sp.axis[a]->settings.endpos[1] = sp.axis[a]->history[current_fragment].endpos[1];
 		}
 	}
 } // }}}
