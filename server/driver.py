@@ -1942,9 +1942,15 @@ class Printer: # {{{
 		if next_order is None:
 			self.gcode_parking = False
 			if cb:
-				call_queue.append((cb, []))
-			if id is not None:
-				self._send(id, 'return', None)
+				def wrap_cb(self):
+					call_queue.append((cb, []))
+					if id is not None:
+						self._send(id, 'return', None)
+				self.movecb.append((False, wrap_cb))
+				self.goto(cb = True)[1](None)
+			else:
+				if id is not None:
+					self._send(id, 'return', None)
 			return
 		self.movecb.append((False, lambda done: self.park(cb, False, next_order + 1, not done)[1](id)))
 		self.goto([[a['park'] - (0 if si != 0 or ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(s.axis)] for si, s in enumerate(self.spaces)], cb = True)[1](None)
