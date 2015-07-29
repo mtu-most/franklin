@@ -55,6 +55,9 @@ bool globals_load(int32_t &addr)
 	led_pin.read(read_16(addr));
 	probe_pin.read(read_16(addr));
 	timeout = read_16(addr);
+	bed_id = read_16(addr);
+	fan_id = read_16(addr);
+	spindle_id = read_16(addr);
 	feedrate = read_float(addr);
 	if (isnan(feedrate) || isinf(feedrate) || feedrate <= 0)
 		feedrate = 1;
@@ -110,6 +113,9 @@ void globals_save(int32_t &addr)
 	write_16(addr, led_pin.write());
 	write_16(addr, probe_pin.write());
 	write_16(addr, timeout);
+	write_16(addr, bed_id);
+	write_16(addr, fan_id);
+	write_16(addr, spindle_id);
 	write_float(addr, feedrate);
 	write_8(addr, current_extruder);
 	write_float(addr, zoffset);

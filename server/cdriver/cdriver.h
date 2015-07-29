@@ -366,6 +366,7 @@ EXTERN uint32_t protocol_version;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, probe_pin;
 EXTERN uint16_t timeout;
+EXTERN int bed_id, fan_id, spindle_id;
 //EXTERN double room_T;	//[°C]
 EXTERN double feedrate;		// Multiplication factor for f values, used at start of move.
 EXTERN double zoffset;	// Offset for axis 2 of space 0.

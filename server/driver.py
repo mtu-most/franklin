@@ -616,7 +616,7 @@ class Printer: # {{{
 		if data is None:
 			return False
 		self.queue_length, self.num_digital_pins, self.num_analog_pins, num_spaces, num_temps, num_gpios = struct.unpack('=BBBBBB', data[:6])
-		self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset, self.store_adc = struct.unpack('=HHHdBd?', data[6:])
+		self.led_pin, self.probe_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.current_extruder, self.zoffset, self.store_adc = struct.unpack('=HHHhhhdBd?', data[6:])
 		while len(self.spaces) < num_spaces:
 			self.spaces.append(self.Space(self, len(self.spaces)))
 			if update:
@@ -655,7 +655,7 @@ class Printer: # {{{
 		ds = ns - len(self.spaces)
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
-		data = struct.pack('=BBBHHHdBd?', ns, nt, ng, self.led_pin, self.probe_pin, self.timeout, self.feedrate, self.current_extruder, self.zoffset, self.store_adc)
+		data = struct.pack('=BBBHHHhhhdBd?', ns, nt, ng, self.led_pin, self.probe_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.current_extruder, self.zoffset, self.store_adc)
 		self._send_packet(struct.pack('=B', protocol.command['WRITE_GLOBALS']) + data)
 		self._read_globals(update = True)
 		if update:

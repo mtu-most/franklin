@@ -57,6 +57,9 @@ void setup(char const *port, char const *run_id)
 	cbs_after_current_move = 0;
 	which_autosleep = 0;
 	timeout = 0;
+	bed_id = 255;
+	fan_id = 255;
+	spindle_id = 255;
 	run_file_map = NULL;
 	run_file_finishing = false;
 	expected_replies = 0;
