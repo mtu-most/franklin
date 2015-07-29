@@ -58,6 +58,7 @@ int main(int argc, char **argv) { // {{{
 		poll(running ? pollfds : &pollfds[2], arch + (running ? 2 : 0), 500);
 		if (pollfds[0].revents) {
 			timerfd_settime(pollfds[0].fd, 0, &zero, NULL);
+			debug("gcode wait done; stop waiting (was %d)", run_file_wait);
 			if (run_file_wait)
 				run_file_wait -= 1;
 			run_file_fill_queue();

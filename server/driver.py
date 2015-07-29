@@ -175,7 +175,6 @@ class Printer: # {{{
 		self.gcode_file = False
 		self.gcode_map = None
 		self.gcode_id = None
-		self.gcode_wait = None
 		self.gcode_parking = False
 		self.gcode_waiting = 0
 		self.audio_id = None
@@ -419,7 +418,6 @@ class Printer: # {{{
 			if self.flushing and self.queue_pos >= len(self.queue):
 				#log('done flushing')
 				self.flushing = 'done'
-				call_queue.append((self._do_gcode, []))
 		#else:
 		#	log('cb seen, but waiting for more')
 	# }}}
@@ -467,7 +465,6 @@ class Printer: # {{{
 						call_queue.append((self.tempcb.pop(t)[1], []))
 					else:
 						t += 1
-				call_queue.append((self._do_gcode, []))
 				continue
 			elif cmd == protocol.rcommand['CONTINUE']:
 				# Move continue.
@@ -476,7 +473,6 @@ class Printer: # {{{
 				call_queue.append((self._do_queue, []))
 				if self.flushing is None:
 					self.flushing = False
-					call_queue.append((self._do_gcode, []))
 				continue
 			elif cmd == protocol.rcommand['LIMIT']:
 				if s < len(self.spaces) and m < len(self.spaces[s].motor):
@@ -729,154 +725,6 @@ class Printer: # {{{
 		r = p[2][iy][ix + 1] * (1 - fy) + p[2][iy + 1][ix + 1] * fy
 		return z + l * (1 - fx) + r * fx
 	# }}}
-	def _do_gcode(self): # {{{
-		if self.gcode_map is None:
-			#log('end of gcode')
-			return
-		flushed = False
-		if self.flushing == 'done':
-			#log('done flushing; continuing gcode')
-			self.flushing = False
-			flushed = True
-		#log('len gcode = %d' % len(self.gcode))
-		while self.gcode_current_record < self.gcode_num_records:
-			if self.gcode_parking or self.gcode_waiting > 0 or self.confirmer is not None or self.gcode_wait is not None or self.flushing or self.paused:
-				#log('gcode waiting: %s' % repr((self.gcode_parking, self.gcode_waiting, self.confirmer, self.gcode_wait)))
-				# Wait until done.
-				return
-			if not self.position_valid:
-				self.gcode_parking = True
-				self.park(cb = lambda: self._do_gcode(), abort = False)[1](None)
-				return
-			pos = self.gcode_current_record * (1 + 4 + 12 * 8)
-			record = struct.unpack('=Bl' + 'd' * 12, self.gcode_map[pos:pos + 1 + 4 + 12 * 8])
-			cmd = record[0]
-			T, x, X, y, Y, z, Z, e, E, f, F, self.probe_time_dist[0], self.probe_time_dist[1] = record[1:]
-			#log('Running %s %s' % (cmd, args))
-			if cmd == protocol.parsed['GOTO']:
-				if self.flushing is None:
-					#log('not filling; waiting for queue space')
-					return
-				'''
-				# Do only one segment at a time.
-				if not flushed:
-					self.flush()[1](None)
-					self.flushing = True
-					#log('flush set')
-					return
-				flushed = False
-				#'''
-				#log(repr(args))
-				sina, cosa = self.gcode_angle
-				target = cosa * X - sina * Y + self.gcode_ref[0], cosa * Y + sina * X + self.gcode_ref[1], Z + self.gcode_ref[2]
-				if self._use_probemap and self.probemap:
-					if x is not None:
-						source = cosa * x - sina * y + self.gcode_ref[0], cosa * y + sina * x + self.gcode_ref[1]
-						#log('gcode %s' % repr([(target[t], source[t], self.probemap[0][t + 2], self.probemap[0][t], self.probemap[1][t]) for t in range(2)]))
-						nums = [abs(target[t] - source[t]) / (self.probemap[0][t + 2] / self.probemap[1][t]) for t in range(2) if not math.isnan(target[t]) and self.probemap[0][t + 2] != 0]
-						#log('num %s' % nums)
-						if len(nums) == 0 or all(math.isnan(num) for num in nums):
-							num = 1
-						else:
-							num = int(max(n for n in nums if not math.isnan(n))) + 1
-						if num == 1:
-							#log('debugpart: %.2f %.2f %.2f %.2f' % (target[0], target[1], f, F))
-							z = self._use_probemap(*target)
-							#log('go to one %f %f %f' % (target[0], target[1], z))
-							self.goto([[target[0], target[1], z], {T: E}], f0 = f, f1 = F)[1](None)
-						else:
-							for t in range(num):
-								targetpart = [source[tt] + (target[tt] - source[tt]) * (t + 1.) / num for tt in range(2)]
-								#log('debugpart: %.2f %.2f %.2f %.2f %.2f %.2f %.2f %.2f' % (target[0], target[1], source[0], source[1], targetpart[0], targetpart[1], f, F))
-								z = self._use_probemap(targetpart[0], targetpart[1], target[2])
-								#log('go to part %f %f %f' % (targetpart[0], targetpart[1], z))
-								self.goto([[targetpart[0], targetpart[1], z], {T: E}], f0 = f * num, f1 = F * num)[1](None)
-					else:
-						self.goto([[target[0], target[1], self._use_probemap(*target)], {T: E}], f0 = f, f1 = F)[1](None)
-				else:
-					self.goto([target, {T: E}], f0 = f, f1 = F)[1](None)
-				if self.wait and self.flushing is False:
-					#log('stop filling; wait for queue space')
-					self.flushing = None
-					self.gcode_current_record += 1
-					continue
-			else:
-				if not flushed:
-					self.flush()[1](None)
-					self.flushing = True
-					#log('flush set')
-					return
-				flushed = False
-				if cmd == protocol.parsed['PARK']:
-					self.gcode_current_record += 1
-					self.gcode_parking = True
-					return self.park(self._do_gcode, abort = False)[1](None)
-				elif cmd == protocol.parsed['WAIT']:
-					self.gcode_current_record += 1
-					self.gcode_wait = time.time() + x / 1000
-					return
-				elif cmd == protocol.parsed['SETPOS']:
-					self.set_axis_pos(1, e, x)
-				elif cmd == protocol.parsed['CONFIRM']:
-					# Wait.
-					self.gcode_current_record += 1
-					self.request_confirmation(self.gcode_strings[T] if T >= 0 else 'Continue?')[1](False)
-					return
-				elif cmd == protocol.parsed['GPIO']:
-					if T == -1:
-						T = self.fan_id
-					elif T == -2:
-						T = self.spindle_id
-					if 0 <= T < len(self.gpios):
-						self.expert_set_gpio(T, state = x)
-					elif T != 255:
-						log('ignoring GPIO for invalid pin %d' % T)
-				elif cmd == protocol.parsed['SETTEMP']:
-					if T == -1:
-						T = self.bed_id
-					if 0 <= T < len(self.temps):
-						self.settemp(T, x)
-					elif T != 255:
-						log('ignoring SETTEMP for invalid temp %d' % T)
-				elif cmd == protocol.parsed['WAITTEMP']:
-					if T == -1:
-						T = self.bed_id
-					self.clear_alarm()
-					def wait_one(which):
-						if not 0 <= which < len(self.temps) or math.isnan(self.temps[which].value) or not self.pin_valid(self.temps[which].thermistor_pin):
-							return
-						self.waittemp(which, self.temps[which].value)
-						self.gcode_waiting += 1
-					if T == -2:
-						for t in range(len(self.temps)):
-							wait_one(t)
-					else:
-						wait_one(T)
-					self.gcode_current_record += 1
-					return self.wait_for_temp()[1](None)
-				elif cmd == protocol.parsed['SYSTEM']:
-					assert 0 <= T < len(self.gcode_strings)
-					command = self.gcode_strings[T]
-					if not re.match(self.allow_system, command):
-						log('Refusing to run forbidden system command: %s' % command)
-					else:
-						log('Running system command: %s' % command)
-						os.system(command)
-			if self.gcode_map is not None and self.gcode_current_record < self.gcode_num_records:
-				self.gcode_current_record += 1
-			else:
-				# Printing was aborted; don't call print_done, or we'll abort whatever aborted us.
-				return
-		if not flushed:
-			self.flush()[1](None)
-			self.flushing = True
-			#log('flush set')
-			return
-		if len(self.spaces) > 1:
-			for e in range(len(self.spaces[1].axis)):
-				self.set_axis_pos(1, e, 0)
-		self._print_done(True, 'completed')
-	# }}}
 	def _gcode_close(self): # {{{
 		self.gcode_strings = []
 		self.gcode_map.close()
@@ -885,7 +733,7 @@ class Printer: # {{{
 		self.gcode_fd = -1
 	# }}}
 	def _print_done(self, complete, reason): # {{{
-		self._send_packet(struct.pack('=BdddddBB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 0xff, 0))
+		self._send_packet(struct.pack('=BBdddddBB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 0, 0xff, 0))
 		if self.gcode_map is not None:
 			log(reason)
 			self._gcode_close()
@@ -895,7 +743,6 @@ class Printer: # {{{
 			log('Print done (%d): %s' % (complete, reason))
 			self._send(self.gcode_id, 'return', (complete, reason))
 		self.gcode_id = None
-		self.gcode_wait = None
 		if self.audio_id is not None:
 			log('Audio done (%d): %s' % (complete, reason))
 			self._send(self.audio_id, 'return', (complete, reason))
@@ -962,12 +809,10 @@ class Printer: # {{{
 		self.queue_pos = self.queue_info[0]
 		self.movecb = self.queue_info[3]
 		self.flushing = self.queue_info[4]
-		self.gcode_wait = self.queue_info[5]
 		self.resuming = False
 		self.queue_info = None
 		self.paused = False
 		self._globals_update()
-		call_queue.append((self._do_gcode, []))
 	# }}}
 	def _queue_add(self, f, name): # {{{
 		name = os.path.split(name)[1]
@@ -1129,7 +974,6 @@ class Printer: # {{{
 				self._send(id, 'return', None)
 			if self.flushing is None:
 				self.flushing = False
-				call_queue.append((self._do_gcode, []))
 		#log('queue done %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 	# }}}
 	def _do_home(self, done = None): # {{{
@@ -1440,15 +1284,18 @@ class Printer: # {{{
 			return
 		if len(self.jobs_active) > 1:
 			def cb():
+				log('requesting confirmation for new job')
 				self.request_confirmation("Prepare for job '%s'." % self.jobs_active[self.job_current])[1](False)
+				self._gcode_run(self.jobs_active[self.job_current], self.jobs_ref, self.jobs_angle, abort = False)
 			self.gcode_parking = True
+			log('parking for new job')
 			self.park(cb = cb, abort = False)[1](None)
 		self.gcode_id = None
-		self._gcode_run(self.jobs_active[self.job_current], self.jobs_ref, self.jobs_angle, abort = False)
 	# }}}
 	def _gcode_run(self, src, ref = (0, 0, 0), angle = 0, abort = True): # {{{
 		if not self.position_valid:
-			self.park(cb = lambda: self._gcode_run(src, ref, angle, abort), abort = False)[1](None)
+			if not self.gcode_parking:
+				self.park(cb = lambda: self._gcode_run(src, ref, angle, abort), abort = False)[1](None)
 			return
 		self.gcode_ref = ref
 		angle = math.radians(angle)
@@ -1473,36 +1320,6 @@ class Printer: # {{{
 		filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', src + os.extsep + 'bin'), text = False, opened = False)
 		self.total_time = self.jobqueue[src][-2:]
 		if self.probemap is not None:
-			'''
-			# Cdriver can't handle this; do it from here.
-			self.gcode_fd = os.open(filename, os.O_RDONLY)
-			self.gcode_map = mmap.mmap(self.gcode_fd, 0, access = mmap.ACCESS_READ)
-			size = self.gcode_map.size()
-			numpos = size - 9 * 4
-			num_strings = struct.unpack('=L', self.gcode_map[numpos:numpos + 4])[0]
-			strlen = [None] * num_strings
-			self.gcode_strings = [None] * num_strings
-			all_strs = 0
-			for i in range(num_strings):
-				pos = numpos - (num_strings - i) * 4
-				strlen[i] = struct.unpack('=L', self.gcode_map[pos:pos + 4])[0]
-				all_strs += strlen[i]
-			pos = numpos - num_strings * 4
-			self.gcode_num_records = pos / (13 * 4 + 1)
-			self.gcode_current_record = 0
-			for i in range(num_strings):
-				self.gcode_strings[i] = self.gcode_map[pos:pos + strlen[i]]
-				pos += strlen[i]
-			if self.gcode_num_records <= 0:
-				log('nothing to run')
-				self._gcode_close()
-				if id is not None:
-					self._send(id, 'return', False, 'nothing to run')
-				self.paused = None
-				self._globals_update()
-				return
-			call_queue.append((self._do_gcode, []))
-			'''
 			self.gcode_file = True
 			self._globals_update()
 			encoded_filename = filename.encode('utf8')
@@ -1513,12 +1330,12 @@ class Printer: # {{{
 				for y in range(self.probemap[1][1] + 1):
 					for x in range(self.probemap[1][0] + 1):
 						probemap_file.write(struct.pack('@d', self.probemap[2][y][x]))
-			self._send_packet(struct.pack('=BdddddBB', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0xff, len(encoded_probemap_filename)) + encoded_filename + encoded_probemap_filename)
+			self._send_packet(struct.pack('=BBdddddBB', protocol.command['RUN_FILE'], 1 if self.confirmer is None else 0, ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0xff, len(encoded_probemap_filename)) + encoded_filename + encoded_probemap_filename)
 		else:
 			# Let cdriver do the work.
 			self.gcode_file = True
 			self._globals_update()
-			self._send_packet(struct.pack('=BdddddBB', protocol.command['RUN_FILE'], ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0xff, 0) + filename.encode('utf8'))
+			self._send_packet(struct.pack('=BBdddddBB', protocol.command['RUN_FILE'], 1 if self.confirmer is None else 0, ref[0], ref[1], ref[2], self.gcode_angle[0], self.gcode_angle[1], 0xff, 0) + filename.encode('utf8'))
 	# }}}
 	def _reset_extruders(self, axes): # {{{
 		for i, sp in enumerate(axes):
@@ -1698,7 +1515,6 @@ class Printer: # {{{
 			#log('flush done')
 			if id is not  None:
 				self._send(id, 'return', w)
-			call_queue.append((self._do_gcode, []))
 		self.movecb.append((False, cb))
 		if self.flushing is not True:
 			self.goto(cb = True)[1](None)
@@ -1878,7 +1694,7 @@ class Printer: # {{{
 					#log('pausing gcode %d/%d/%d' % (self.queue_pos, s, len(self.queue)))
 					if self.flushing is None:
 						self.flushing = False
-					self.queue_info = [len(self.queue) if self.gcode_file else self.queue_pos - s, [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing, self.gcode_wait]
+					self.queue_info = [len(self.queue) if self.gcode_file else self.queue_pos - s, [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing]
 				else:
 					#log('stopping')
 					self.paused = False
@@ -1887,7 +1703,6 @@ class Printer: # {{{
 				self.queue = []
 				self.movecb = []
 				self.flushing = False
-				self.gcode_wait = None
 				self.queue_pos = 0
 		if update:
 			self._globals_update()
@@ -1960,7 +1775,7 @@ class Printer: # {{{
 		self.audio_id = id
 		self.sleep(False)
 		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
-		self._send_packet(struct.pack('=BdddddBB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, motor, 0) + filename.encode('utf8'))
+		self._send_packet(struct.pack('=BBdddddBB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 0, motor, 0) + filename.encode('utf8'))
 	# }}}
 	def benjamin_audio_add_file(self, filename, name): # {{{
 		with open(filename, 'rb') as f:
@@ -1989,7 +1804,6 @@ class Printer: # {{{
 				self._send(id, 'return', None)
 				return
 			self.gcode_waiting -= 1
-			call_queue.append((self._do_gcode, []))
 		if(which is None and len(self.alarms) > 0) or which in self.alarms:
 			cb()
 		else:
@@ -2241,7 +2055,6 @@ class Printer: # {{{
 				if not success:
 					self._print_done(False, 'aborted by failed confirmation')
 				else:
-					call_queue.append((self._do_gcode, []))
 					self._send_packet(chr(protocol.command['RESUME']))
 		self.confirm_axes = None
 		return True
@@ -2301,6 +2114,7 @@ class Printer: # {{{
 					nums = [nums['T'], nums['x'], nums['X'], nums['y'], nums['Y'], nums['z'], nums['Z'], nums['e'], nums['E'], nums['f'], nums['F']]
 				nums += [0] * (11 - len(nums))
 				if type != protocol.parsed['PARK']:
+					# FIXME: This means changes to park position are not used until the code is re-uploaded.
 					if type == protocol.parsed['GOTO']:
 						for i in range(3):
 							if nums[2 * i + 1] != nums[2 * i + 2]:
@@ -2456,10 +2270,10 @@ class Printer: # {{{
 						args['E'] = int(args['T']) if 'T' in args else current_extruder
 					if cmd == ('M', 140):
 						cmd = ('M', 104)
-						args['E'] = -1
+						args['E'] = -2
 					elif cmd == ('M', 190):
 						cmd = ('M', 109)
-						args['E'] = -1
+						args['E'] = -2
 					elif cmd == ('M', 6):
 						# Tool change: park.
 						cmd = ('G', 28)
@@ -2557,12 +2371,12 @@ class Printer: # {{{
 						add_record(protocol.parsed['CONFIRM'], [add_string(message)])
 					elif cmd == ('M', 3):
 						# Spindle on, clockwise.
-						add_record(protocol.parsed['GPIO'], [-2, 1])
+						add_record(protocol.parsed['GPIO'], [-3, 1])
 					elif cmd == ('M', 4):
 						# Spindle on, counterclockwise.
-						add_record(protocol.parsed['GPIO'], [-2, 1])
+						add_record(protocol.parsed['GPIO'], [-3, 1])
 					elif cmd == ('M', 5):
-						add_record(protocol.parsed['GPIO'], [-2, 0])
+						add_record(protocol.parsed['GPIO'], [-3, 0])
 					elif cmd == ('M', 9):
 						# Coolant off: ignore.
 						pass
@@ -2583,9 +2397,9 @@ class Printer: # {{{
 						else:
 							add_record(protocol.parsed['SETTEMP'], [args['E'], args['S'] + C0])
 					elif cmd == ('M', 106):
-						add_record(protocol.parsed['GPIO'], [-1, 1])
+						add_record(protocol.parsed['GPIO'], [-2, 1])
 					elif cmd == ('M', 107):
-						add_record(protocol.parsed['GPIO'], [-1, 0])
+						add_record(protocol.parsed['GPIO'], [-2, 0])
 					elif cmd == ('M', 109):
 						if 'S' in args:
 							add_record(protocol.parsed['SETTEMP'], [args['E'], args['S'] + C0])
@@ -2896,15 +2710,8 @@ while True: # {{{
 		continue	# Handle this first.
 	fds = [sys.stdin, printer.printer]
 	#log('waiting; movewait = %d' % printer.movewait)
-	now = time.time()
-	found = select.select(fds, [], fds, printer.gcode_wait and max(0, printer.gcode_wait - now))
+	found = select.select(fds, [], fds, None)
 	#log(repr(found))
-	if len(found[0]) == 0:
-		#log('timeout')
-		# Timeout.
-		printer.gcode_wait = None
-		printer._do_gcode()
-		continue
 	if sys.stdin in found[0] or sys.stdin in found[2]:
 		#log('command')
 		printer._command_input()

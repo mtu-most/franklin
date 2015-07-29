@@ -459,7 +459,7 @@ struct ProbeFile {
 	unsigned long nx, ny;
 	double sample[0];
 } __attribute__((__packed__));
-void run_file(int name_len, char const *name, int probe_name_len, char const *probe_name, double refx, double refy, double refz, double sina, double cosa, int audio);
+void run_file(int name_len, char const *name, int probe_name_len, char const *probe_name, bool start, double refx, double refy, double refz, double sina, double cosa, int audio);
 void abort_run_file();
 void run_file_fill_queue();
 EXTERN char probe_file_name[256];

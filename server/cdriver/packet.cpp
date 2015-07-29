@@ -228,9 +228,9 @@ void packet()
 		for (int i = 0; i < sizeof(double); ++i)
 		{
 			for (int j = 0; j < 5; ++j)
-				args[j].b[i] = command[0][2 + i + j * sizeof(double)];
+				args[j].b[i] = command[0][3 + i + j * sizeof(double)];
 		}
-		run_file(command[0][0] - 44 - command[0][43], reinterpret_cast<char const *>(&command[0][44]), command[0][43], reinterpret_cast<char const *>(&command[0][44 + command[0][43]]), args[0].f, args[1].f, args[2].f, args[3].f, args[4].f, uint8_t(command[0][42]) == 0xff ? -1 : command[0][42]);
+		run_file(command[0][0] - 45 - command[0][44], reinterpret_cast<char const *>(&command[0][45]), command[0][44], reinterpret_cast<char const *>(&command[0][45 + command[0][44]]), command[0][2], args[0].f, args[1].f, args[2].f, args[3].f, args[4].f, uint8_t(command[0][43]) == 0xff ? -1 : command[0][43]);
 		break;
 	}
 	case CMD_SLEEP:	// Enable or disable motor current

@@ -23,8 +23,8 @@ struct String {
 
 static String *strings;
 
-void run_file(int name_len, char const *name, int probe_name_len, char const *probename, double refx, double refy, double refz, double sina, double cosa, int audio) {
-	//debug("run file %f %f %f %f %f", refx, refy, refz, sina, cosa);
+void run_file(int name_len, char const *name, int probe_name_len, char const *probename, bool start, double refx, double refy, double refz, double sina, double cosa, int audio) {
+	//debug("run file %d %f %f %f %f %f", start, refx, refy, refz, sina, cosa);
 	abort_run_file();
 	if (name_len == 0)
 		return;
@@ -111,7 +111,7 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 		run_file_num_records = run_file_size - sizeof(double);
 	}
 	run_file_wait_temp = 0;
-	run_file_wait = 0;
+	run_file_wait = start ? 0 : 1;
 	run_file_timer.it_interval.tv_sec = 0;
 	run_file_timer.it_interval.tv_nsec = 0;
 	run_file_refx = refx;
@@ -278,10 +278,10 @@ void run_file_fill_queue() {
 				buffer_refill();
 				break;
 			case RUN_GPIO:
-				//if (r.tool == -1)
-				//	r.tool = fan_id;
-				//else if (r.tool == -2)
-				//	r.tool = spindle_id;
+				if (r.tool == -2)
+					r.tool = fan_id;
+				else if (r.tool == -3)
+					r.tool = spindle_id;
 				if (r.tool < 0 || r.tool >= num_gpios) {
 					if (r.tool != -1)
 						debug("cannot set invalid gpio %d", r.tool);
@@ -298,16 +298,16 @@ void run_file_fill_queue() {
 				send_host(CMD_UPDATE_PIN, r.tool, gpios[r.tool].state);
 				break;
 			case RUN_SETTEMP:
-				//if (r.tool == -1)
-				//	r.tool = bed_id;
+				if (r.tool == -1)
+					r.tool = bed_id;
 				rundebug("settemp %d %f", r.tool, r.x);
 				settemp(r.tool, r.x);
 				send_host(CMD_UPDATE_TEMP, r.tool, 0, r.x);
 				break;
 			case RUN_WAITTEMP:
-				//if (r.tool == -1)
-				//	r.tool = bed_id;
-				if (r.tool == -2) {
+				if (r.tool == -2)
+					r.tool = bed_id;
+				if (r.tool == -3) {
 					for (int i = 0; i < num_temps; ++i) {
 						if (temps[i].min_alarm >= 0 || temps[i].max_alarm < MAXINT) {
 							run_file_wait_temp += 1;
