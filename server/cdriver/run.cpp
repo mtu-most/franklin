@@ -278,36 +278,44 @@ void run_file_fill_queue() {
 				buffer_refill();
 				break;
 			case RUN_GPIO:
-				if (r.tool == -2)
-					r.tool = fan_id;
-				else if (r.tool == -3)
-					r.tool = spindle_id;
-				if (r.tool < 0 || r.tool >= num_gpios) {
-					if (r.tool != -1)
-						debug("cannot set invalid gpio %d", r.tool);
+			{
+				int tool = r.tool;
+				if (tool == -2)
+					tool = fan_id;
+				else if (tool == -3)
+					tool = spindle_id;
+				if (tool < 0 || tool >= num_gpios) {
+					if (tool != -1)
+						debug("cannot set invalid gpio %d", tool);
 					break;
 				}
 				if (r.x) {
-					gpios[r.tool].state = 1;
-					SET(gpios[r.tool].pin);
+					gpios[tool].state = 1;
+					SET(gpios[tool].pin);
 				}
 				else {
-					gpios[r.tool].state = 0;
-					RESET(gpios[r.tool].pin);
+					gpios[tool].state = 0;
+					RESET(gpios[tool].pin);
 				}
-				send_host(CMD_UPDATE_PIN, r.tool, gpios[r.tool].state);
+				send_host(CMD_UPDATE_PIN, tool, gpios[tool].state);
 				break;
+			}
 			case RUN_SETTEMP:
-				if (r.tool == -1)
-					r.tool = bed_id;
-				rundebug("settemp %d %f", r.tool, r.x);
-				settemp(r.tool, r.x);
-				send_host(CMD_UPDATE_TEMP, r.tool, 0, r.x);
+			{
+				int tool = r.tool;
+				if (tool == -1)
+					tool = bed_id;
+				rundebug("settemp %d %f", tool, r.x);
+				settemp(tool, r.x);
+				send_host(CMD_UPDATE_TEMP, tool, 0, r.x);
 				break;
+			}
 			case RUN_WAITTEMP:
-				if (r.tool == -2)
-					r.tool = bed_id;
-				if (r.tool == -3) {
+			{
+				int tool = r.tool;
+				if (tool == -2)
+					tool = bed_id;
+				if (tool == -3) {
 					for (int i = 0; i < num_temps; ++i) {
 						if (temps[i].min_alarm >= 0 || temps[i].max_alarm < MAXINT) {
 							run_file_wait_temp += 1;
@@ -316,21 +324,22 @@ void run_file_fill_queue() {
 					}
 					break;
 				}
-				if (r.tool < 0 || r.tool >= num_temps) {
-					if (r.tool != -1)
-						debug("cannot wait for invalid temp %d", r.tool);
+				if (tool < 0 || tool >= num_temps) {
+					if (tool != -1)
+						debug("cannot wait for invalid temp %d", tool);
 					break;
 				}
 				else
-					rundebug("waittemp %d", r.tool);
-				if (temps[r.tool].adctarget[0] >= 0 && temps[r.tool].adctarget[0] < MAXINT) {
+					rundebug("waittemp %d", tool);
+				if (temps[tool].adctarget[0] >= 0 && temps[tool].adctarget[0] < MAXINT) {
 					rundebug("waiting");
 					run_file_wait_temp += 1;
-					waittemp(r.tool, temps[r.tool].target[0], temps[r.tool].max_alarm);
+					waittemp(tool, temps[tool].target[0], temps[tool].max_alarm);
 				}
 				else
 					rundebug("not waiting");
 				break;
+			}
 			case RUN_SETPOS:
 				if (num_spaces < 2 || r.tool >= spaces[1].num_axes) {
 					debug("Not setting position of invalid extruder %d", r.tool);

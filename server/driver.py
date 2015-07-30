@@ -1290,6 +1290,8 @@ class Printer: # {{{
 			self.gcode_parking = True
 			log('parking for new job')
 			self.park(cb = cb, abort = False)[1](None)
+		else:
+			self._gcode_run(self.jobs_active[self.job_current], self.jobs_ref, self.jobs_angle, abort = False)
 		self.gcode_id = None
 	# }}}
 	def _gcode_run(self, src, ref = (0, 0, 0), angle = 0, abort = True): # {{{

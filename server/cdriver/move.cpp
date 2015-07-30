@@ -26,9 +26,10 @@ static void change0(int qpos) { // {{{
 static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 	Space &sp = spaces[s];
 	for (int a = 0; a < sp.num_axes; ++a)
-		sp.axis[a]->settings.endpos[1] = queue[qpos].data[a0 + a];
+		sp.axis[a]->settings.endpos[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0);
 	int a = 0;
 	if (s == 0 && queue[qpos].arc) {
+		debug("arc");
 		sp.settings.arc[1] = true;
 		double src = 0, normal = 0, dst = 0;
 		double target[3];
@@ -42,9 +43,9 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 		normal = sqrt(normal);
 		for (int i = 0; i < 3; ++i) {
 			sp.settings.normal[1][i] /= normal;
-			center[i] = queue[qpos].center[i];
+			center[i] = queue[qpos].center[i] + (s == 0 && a == 2 ? zoffset : 0);
 			source[i] = i < sp.num_axes ? sp.axis[i]->settings.source : 0;
-			target[i] = queue[qpos].data[a0 + i];
+			target[i] = queue[qpos].data[a0 + i] + (s == 0 && a == 2 ? zoffset : 0);
 			sn += source[i] * sp.settings.normal[1][i];
 			cn += center[i] * sp.settings.normal[1][i];
 			tn += target[i] * sp.settings.normal[1][i];
@@ -104,6 +105,9 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 		}
 		else {
 			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
+#ifdef DEBUG_MOVE
+			debug("setting dist %d %d %f %d %f %f %f", s, a, queue[qpos].data[a0 + a], next, sp.axis[a]->settings.endpos[0], sp.axis[a]->settings.source, sp.axis[a]->settings.dist[1]);
+#endif
 		}
 	}
 } // }}}
