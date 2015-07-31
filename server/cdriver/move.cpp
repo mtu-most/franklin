@@ -400,8 +400,7 @@ uint8_t next_move() { // {{{
 	settings.f1 = .5 * fabs(v0) * settings.t0;
 	settings.f2 = 1 - settings.fp - settings.f1;
 
-	// Set up endpos and quit if no motors do any steps. {{{
-	bool anything = false;
+	// Set up endpos. {{{
 	for (uint8_t s = 0; s < num_spaces; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -418,26 +417,6 @@ uint8_t next_move() { // {{{
 		bool ok = true;
 		// Using NULL as target fills endpos.
 		space_types[sp.type].xyz2motors(&sp, NULL, &ok);
-		for (int m = 0; m < sp.num_motors; ++m) {
-			double ep = sp.motor[m]->settings.endpos * sp.motor[m]->steps_per_unit;
-			int iep = int(ep + (ep > 0 ? .49 : -.49));
-			if (sp.motor[m]->settings.current_pos != iep) {
-				anything = true;
-				break;
-			}
-			//debug("any %d %d %d %d %d", s, m, anything, sp.motor[m]->settings.current_pos, iep);
-		}
-	}
-	if (!anything) {
-		num_cbs += cbs_after_current_move;
-		cbs_after_current_move = 0;
-		for (uint8_t s = 0; s < num_spaces; ++s) {
-			Space &sp = spaces[s];
-			for (uint8_t a = 0; a < sp.num_axes; ++a)
-				sp.axis[a]->settings.dist[0] = NAN;
-		}
-		settings.fq = 0;
-		return num_cbs + next_move();
 	}
 	// }}}
 

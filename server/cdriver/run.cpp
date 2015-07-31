@@ -139,13 +139,14 @@ void abort_run_file() {
 
 enum {
 	RUN_SYSTEM,
-	RUN_GOTO,
+	RUN_LINE,
 	RUN_GPIO,
 	RUN_SETTEMP,
 	RUN_WAITTEMP,
 	RUN_SETPOS,
 	RUN_WAIT,
 	RUN_CONFIRM,
+	RUN_PARK,
 };
 
 static double handle_probe(double x, double y, double z) {
@@ -220,7 +221,7 @@ void run_file_fill_queue() {
 	while (run_file_map	// There is a file to run.
 		       	&& (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2	// There is space in the queue.
 			&& !settings.queue_full	// Really, there is space in the queue.
-			&& (run_file_map[settings.run_file_current].type == RUN_GOTO || !arch_running())	// The command is GOTO (buffered), or the buffer is empty.
+			&& (run_file_map[settings.run_file_current].type == RUN_LINE || !arch_running())	// The command is LINE (buffered), or the buffer is empty.
 			&& settings.run_file_current < run_file_num_records	// There are records to send.
 			&& !run_file_wait_temp	// We are not waiting for a temp alarm.
 			&& !run_file_wait	// We are not waiting for something else (pause or confirm).
@@ -236,7 +237,7 @@ void run_file_fill_queue() {
 				debug("Done running system command, return = %d", ret);
 				break;
 			}
-			case RUN_GOTO:
+			case RUN_LINE:
 				queue[settings.queue_end].probe = false;
 				queue[settings.queue_end].f[0] = r.f;
 				queue[settings.queue_end].f[1] = r.F;
@@ -244,7 +245,7 @@ void run_file_fill_queue() {
 					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
 					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
 					double z = r.Z + run_file_refz;
-					//debug("goto %f %f %f", x, y, z);
+					debug("goto %f %f %f", x, y, z);
 					int num0 = spaces[0].num_axes;
 					if (num0 > 0) {
 						queue[settings.queue_end].data[0] = x;
@@ -363,6 +364,10 @@ void run_file_fill_queue() {
 				send_host(CMD_CONFIRM, 0, 0, 0, 0, len);
 				break;
 			}
+			case RUN_PARK:
+				run_file_wait += 1;
+				send_host(CMD_PARKWAIT);
+				break;
 			default:
 				debug("Invalid record type %d in %s", r.type, run_file_name);
 				break;

@@ -309,6 +309,7 @@ void packet()
 	case CMD_START_PROBE:
 	{
 		cmddebug("CMD_START_MOVE");
+		last_len = command(1);	// Do this even when ignoring the command.
 		if (stopping >= 0) {
 			//debug("ignoring start move while stopping");
 			debug_add(1);
@@ -332,7 +333,6 @@ void packet()
 			return;
 		}
 		settings[last_fragment].len = command(1);
-		last_len = command(1);
 		filling = command(2);
 		for (uint8_t m = 0; m < active_motors; ++m)
 			buffer[last_fragment][m][0] = 0x80;	// Sentinel indicating no data is available for this motor.

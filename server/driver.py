@@ -166,6 +166,7 @@ class Printer: # {{{
 		self.confirmer = None
 		self.position_valid = False
 		self.probing = False
+		self.parking = False
 		self.home_phase = None
 		self.home_target = None
 		self.home_space = None
@@ -175,7 +176,6 @@ class Printer: # {{{
 		self.gcode_file = False
 		self.gcode_map = None
 		self.gcode_id = None
-		self.gcode_parking = False
 		self.gcode_waiting = 0
 		self.audio_id = None
 		self.queue = []
@@ -528,6 +528,11 @@ class Printer: # {{{
 			elif cmd == protocol.rcommand['CONFIRM']:
 				call_queue.append((self.request_confirmation(data.decode('utf-8', 'replace') or 'Continue?')[1], (False,)))
 				continue
+			elif cmd == protocol.rcommand['PARKWAIT']:
+				def cb():
+					self._send_packet(chr(protocol.command['RESUME']))
+				call_queue.append((self.park(cb = cb, abort = False)[1], (None,)))
+				continue
 			elif cmd == protocol.rcommand['FILE_DONE']:
 				call_queue.append((self._print_done, (True, 'completed')))
 				continue
@@ -742,7 +747,7 @@ class Printer: # {{{
 		if self.queue_info is None and self.gcode_id is not None:
 			log('Print done (%d): %s' % (complete, reason))
 			self._send(self.gcode_id, 'return', (complete, reason))
-		self.gcode_id = None
+			self.gcode_id = None
 		if self.audio_id is not None:
 			log('Audio done (%d): %s' % (complete, reason))
 			self._send(self.audio_id, 'return', (complete, reason))
@@ -1282,22 +1287,18 @@ class Printer: # {{{
 		if self.job_current >= len(self.jobs_active):
 			self._print_done(True, 'Queue finished')
 			return
-		if len(self.jobs_active) > 1:
-			def cb():
-				log('requesting confirmation for new job')
+		def cb():
+			if len(self.jobs_active) > 1:
 				self.request_confirmation("Prepare for job '%s'." % self.jobs_active[self.job_current])[1](False)
-				self._gcode_run(self.jobs_active[self.job_current], self.jobs_ref, self.jobs_angle, abort = False)
-			self.gcode_parking = True
-			log('parking for new job')
+			self._gcode_run(self.jobs_active[self.job_current], self.jobs_ref, self.jobs_angle, abort = False)
+		if not self.position_valid or len(self.jobs_active) > 1:
 			self.park(cb = cb, abort = False)[1](None)
 		else:
-			self._gcode_run(self.jobs_active[self.job_current], self.jobs_ref, self.jobs_angle, abort = False)
+			cb()
 		self.gcode_id = None
 	# }}}
 	def _gcode_run(self, src, ref = (0, 0, 0), angle = 0, abort = True): # {{{
-		if not self.position_valid:
-			if not self.gcode_parking:
-				self.park(cb = lambda: self._gcode_run(src, ref, angle, abort), abort = False)[1](None)
+		if self.parking:
 			return
 		self.gcode_ref = ref
 		angle = math.radians(angle)
@@ -1747,6 +1748,7 @@ class Printer: # {{{
 		#log('parking')
 		if abort:
 			self._print_done(False, 'aborted by parking')
+		self.parking = True
 		if not self.position_valid:
 			#log('homing')
 			self.home(cb = lambda: self.park(cb, abort = False)[1](id), abort = False)[1](None)
@@ -1757,7 +1759,7 @@ class Printer: # {{{
 			if len(topark) > 0 and (next_order is None or min(topark) > next_order):
 				next_order = min(topark)
 		if next_order is None:
-			self.gcode_parking = False
+			self.parking = False
 			if cb:
 				def wrap_cb(self):
 					call_queue.append((cb, []))
@@ -2115,41 +2117,19 @@ class Printer: # {{{
 				if isinstance(nums, dict):
 					nums = [nums['T'], nums['x'], nums['X'], nums['y'], nums['Y'], nums['z'], nums['Z'], nums['e'], nums['E'], nums['f'], nums['F']]
 				nums += [0] * (11 - len(nums))
-				if type != protocol.parsed['PARK']:
-					# FIXME: This means changes to park position are not used until the code is re-uploaded.
-					if type == protocol.parsed['GOTO']:
-						for i in range(3):
-							if nums[2 * i + 1] != nums[2 * i + 2]:
-								value = nums[2 * i + 2]
-								if math.isnan(value):
-									continue
-								if bbox[2 * i] is None or value < bbox[2 * i]:
-									#log('new min bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i] is None else bbox[2 * i] / 25.4)))
-									bbox[2 * i] = value
-								if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
-									#log('new max bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i + 1] is None else bbox[2 * i + 1] / 25.4)))
-									bbox[2 * i + 1] = value
-					dst.write(struct.pack('=Bl' + 'd' * 12, type, *add_timedist(type == protocol.parsed['GOTO'], nums)))
-				else:
-					order = None
-					while True:
-						topark = [a['park_order'] for a in self.spaces[0].axis[:3] if not math.isnan(a['park']) and (order is None or a['park_order'] > order)]
-						if len(topark) > 0:
-							order = min(topark)
-						else:
-							break
-						if order is None:
-							break
-						for i in range(3):
-							if len(self.spaces[0].axis) > i and self.spaces[0].axis[i]['park_order'] == order:
-								nums[2 + 2 * i] = self.spaces[0].axis[i]['park']
-						dst.write(struct.pack('=Bl' + 'd' * 12, protocol.parsed['GOTO'], *add_timedist(True, nums)))
-						for i in range(3):
-							nums[1 + i * 2] = nums[2 + i * 2]
-					if bbox[0] is not None:
-						bbox_last[:] = bbox
-					#log('reset bbox park')
-					#bbox[:] = [None] * 6
+				if type == protocol.parsed['LINE']:
+					for i in range(3):
+						if nums[2 * i + 1] != nums[2 * i + 2]:
+							value = nums[2 * i + 2]
+							if math.isnan(value):
+								continue
+							if bbox[2 * i] is None or value < bbox[2 * i]:
+								#log('new min bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i] is None else bbox[2 * i] / 25.4)))
+								bbox[2 * i] = value
+							if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
+								#log('new max bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i + 1] is None else bbox[2 * i + 1] / 25.4)))
+								bbox[2 * i + 1] = value
+				dst.write(struct.pack('=Bl' + 'd' * 12, type, *add_timedist(type == protocol.parsed['LINE'], nums)))
 			def add_string(string):
 				if string is None:
 					return 0
@@ -2239,7 +2219,7 @@ class Printer: # {{{
 							pos[1].extend([0.] * (target - len(pos[1]) + 1))
 						current_extruder = target
 						# Force update of extruder.
-						add_record(protocol.parsed['GOTO'], {'x': pos[0][0], 'y': pos[0][1], 'z': pos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': pos[1][current_extruder], 'E': pos[1][current_extruder], 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+						add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': pos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': pos[1][current_extruder], 'E': pos[1][current_extruder], 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
 						continue
 					elif cmd == ('G', 20):
 						unit = 25.4
@@ -2344,22 +2324,22 @@ class Printer: # {{{
 									f0 = float('inf')
 							if math.isnan(dist):
 								dist = 0
-							add_record(protocol.parsed['GOTO'], {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
+							add_record(protocol.parsed['LINE'], {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
 						else:
 							# Drill cycle.
 							# Only support OLD_Z (G90) retract mode; don't support repeats(L).
 							# goto x,y
-							add_record(protocol.parsed['GOTO'], {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							add_record(protocol.parsed['LINE'], {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
 							# goto r
-							add_record(protocol.parsed['GOTO'], {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
 							# goto z; this is always straight down, because the move before and after it are also vertical.
 							if z != r:
 								f0 = pos[2] / abs(z - r)
-								add_record(protocol.parsed['GOTO'], {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'e': 0, 'E': 0, 'f': f0, 'F': f0, 'T': current_extruder})
+								add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'e': 0, 'E': 0, 'f': f0, 'F': f0, 'T': current_extruder})
 							# retract; this is always straight up, because the move before and after it are also non-horizontal.
-							add_record(protocol.parsed['GOTO'], {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
 							# empty move; this makes sure the previous move is entirely vertical.
-							add_record(protocol.parsed['GOTO'], {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
 							# Set up current z position so next G81 will work.
 							pos[0][2] = oldpos[0][2]
 					elif cmd == ('G', 4):

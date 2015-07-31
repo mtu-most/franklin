@@ -78,18 +78,19 @@ rcommand = {
 	'UPDATE_PIN': 0x52,
 	'CONFIRM': 0x53,
 	'FILE_DONE': 0x54,
+	'PARKWAIT': 0x55,
 	}
 
 parsed = {
-	'PARK': None,
 	'SYSTEM': 0,
-	'GOTO': 1,
+	'LINE': 1,
 	'GPIO': 2,
 	'SETTEMP': 3,
 	'WAITTEMP': 4,
 	'SETPOS': 5,
 	'WAIT': 6,
 	'CONFIRM': 7,
+	'PARK': 8
 }
 
 mask = [[0xc0, 0xc3, 0xff, 0x09],

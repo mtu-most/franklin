@@ -139,6 +139,7 @@ enum Command {
 	CMD_UPDATE_PIN,
 	CMD_CONFIRM,
 	CMD_FILE_DONE,
+	CMD_PARKWAIT,
 };
 
 // All temperatures are stored in Kelvin, but communicated in °C.
