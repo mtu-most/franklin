@@ -159,6 +159,9 @@ static void free(Space *s) {
 	delete reinterpret_cast <Delta_private *>(s->type_data);
 }
 
+static void afree(Space *s, int a) {
+}
+
 static double change0(Space *s, int axis, double value) {
 	return value;
 }
@@ -183,6 +186,7 @@ void Delta_init(int num) {
 	space_types[num].save = save;
 	space_types[num].init = init;
 	space_types[num].free = free;
+	space_types[num].afree = afree;
 	space_types[num].change0 = change0;
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;
