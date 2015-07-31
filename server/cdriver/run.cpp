@@ -203,7 +203,7 @@ void run_file_fill_queue() {
 				break;
 			if (settings.run_file_current >= run_file_num_records) {
 				run_file_finishing = true;
-				debug("done running audio");
+				//debug("done running audio");
 				break;
 			}
 			int16_t next = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
@@ -245,7 +245,7 @@ void run_file_fill_queue() {
 					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
 					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
 					double z = r.Z + run_file_refz;
-					debug("goto %f %f %f", x, y, z);
+					//debug("goto %f %f %f", x, y, z);
 					int num0 = spaces[0].num_axes;
 					if (num0 > 0) {
 						queue[settings.queue_end].data[0] = x;
@@ -377,7 +377,7 @@ void run_file_fill_queue() {
 	rundebug("run queue done");
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
 		// Done.
-		debug("done running file");
+		//debug("done running file");
 		if (stopped && !sending_fragment && !arch_running()) {
 			send_host(CMD_FILE_DONE);
 			abort_run_file();
