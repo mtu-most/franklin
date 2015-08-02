@@ -2106,9 +2106,13 @@ class Printer: # {{{
 		def add_timedist(goto, nums):
 			if goto:
 				if nums[-2] == float('inf'):
-					time_dist[1] += sum((nums[2 * i + 1] - nums[2 * i + 2]) ** 2 for i in range(3)) ** .5
+					extra = sum((nums[2 * i + 1] - nums[2 * i + 2]) ** 2 for i in range(3)) ** .5
+					if not math.isnan(extra):
+						time_dist[1] += extra
 				else:
-					time_dist[0] += 2 / (nums[-2] + nums[-1])
+					extra = 2 / (nums[-2] + nums[-1])
+					if not math.isnan(extra):
+						time_dist[0] += extra
 			return nums + time_dist
 		with fhs.write_spool(os.path.join(self.uuid, 'gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin')) as dst:
 			def add_record(type, nums = None):
@@ -2136,10 +2140,6 @@ class Printer: # {{{
 				if string not in strings:
 					strings.append(string)
 				return strings.index(string)
-			# Expect to start with a park.
-			for a in range(3):
-				if len(self.spaces[0].axis) > a and not math.isnan(self.spaces[0].axis[a]['park']):
-					pos[0][a] = self.spaces[0].axis[a]['park']
 			current_extruder = 0
 			for lineno, origline in enumerate(src):
 				line = origline.strip()
@@ -2261,20 +2261,12 @@ class Printer: # {{{
 						cmd = ('G', 28)
 					if cmd == ('G', 28):
 						nums = [current_extruder]
-						for i in range(3):
-							if len(self.spaces) > 0 and len(self.spaces[0].axis) > i:
-								nums += [pos[0][i], pos[0][i]]
-							else:
-								nums += [0, 0]
 						if len(self.spaces) > 1 and len(self.spaces[1].axis) > current_extruder:
-							nums += [pos[1][current_extruder], pos[1][current_extruder]]
-						else:
-							nums += [0, 0]
-						nums += [float('inf'), float('inf')]
-						add_record(protocol.parsed['PARK'], nums)
+							pos[1][current_extruder] = 0.
+						add_record(protocol.parsed['PARK'])
 						for a in range(len(pos[0])):
 							if len(self.spaces[0].axis) > a and not math.isnan(self.spaces[0].axis[a]['park']):
-								pos[0][a] = self.spaces[0].axis[a]['park']
+								pos[0][a] = float('nan')
 					elif cmd[0] == 'G' and cmd[1] in (0, 1, 81):
 						if cmd[1] != 0:
 							mode = cmd
@@ -2326,6 +2318,9 @@ class Printer: # {{{
 								dist = 0
 							add_record(protocol.parsed['LINE'], {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
 						else:
+							# If old pos is unknown, use safe distance.
+							if math.isnan(oldpos[0][2]):
+								oldpos[0][2] = r
 							# Drill cycle.
 							# Only support OLD_Z (G90) retract mode; don't support repeats(L).
 							# goto x,y
@@ -2335,6 +2330,8 @@ class Printer: # {{{
 							# goto z; this is always straight down, because the move before and after it are also vertical.
 							if z != r:
 								f0 = pos[2] / abs(z - r)
+								if math.isnan(f0):
+									f0 = float('inf')
 								add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'e': 0, 'E': 0, 'f': f0, 'F': f0, 'T': current_extruder})
 							# retract; this is always straight up, because the move before and after it are also non-horizontal.
 							add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
