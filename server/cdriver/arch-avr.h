@@ -105,7 +105,7 @@ void arch_setup_end(char const *run_id);
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0);
 void arch_disconnect();
 int arch_fds();
-void arch_tick();
+int arch_tick();
 void arch_reconnect(char *port);
 void arch_addpos(int s, int m, int diff);
 void arch_stop(bool fake);
@@ -595,7 +595,7 @@ double arch_get_duty(Pin_t _pin) {
 void arch_set_duty(Pin_t _pin, double duty) {
 	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
-		return 1;
+		return;
 	}
 	avr_pins[_pin.pin].duty = int(duty * 256 + .5) - 1;
 	if (avr_pins[_pin.pin].duty < 0)
@@ -860,7 +860,7 @@ void arch_reconnect(char *port) {
 // }}}
 
 // Running hooks. {{{
-void arch_tick() {
+int arch_tick() {
 	serial(1);
 	return 500;
 }
