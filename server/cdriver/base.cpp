@@ -51,11 +51,12 @@ int main(int argc, char **argv) { // {{{
 	zero.it_interval.tv_nsec = 0;
 	zero.it_value.tv_sec = 0;
 	zero.it_value.tv_nsec = 0;
+	int delay = 0;
 	while (true) {
 		int arch = arch_fds();
 		for (int i = 0; i < 2 + arch; ++i)
 			pollfds[i].revents = 0;
-		poll(running ? pollfds : &pollfds[2], arch + (running ? 2 : 0), 500);
+		poll(running ? pollfds : &pollfds[2], arch + (running ? 2 : 0), 0);
 		if (pollfds[0].revents) {
 			timerfd_settime(pollfds[0].fd, 0, &zero, NULL);
 			debug("gcode wait done; stop waiting (was %d)", run_file_wait);
@@ -63,9 +64,8 @@ int main(int argc, char **argv) { // {{{
 				run_file_wait -= 1;
 			run_file_fill_queue();
 		}
-		for (int i = 0; i < 2; ++i) {
-			if (i == 1 || pollfds[1 + i].revents)
-				serial(i);
-		}
+		if (pollfds[1].revents)
+			serial(0);
+		delay = arch_tick();
 	}
 } // }}}

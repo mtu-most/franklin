@@ -87,11 +87,11 @@ void RESET(Pin_t _pin);
 void SET(Pin_t _pin);
 void SET_OUTPUT(Pin_t _pin);
 void avr_get_cb_wrap();
-bool GET(Pin_t _pin, bool _default, void(*cb)(bool));
+void GET(Pin_t _pin, bool _default, void(*cb)(bool));
 void avr_send_pin(Pin_t _pin);
 void arch_pin_set_reset(Pin_t _pin, char state);
 double arch_get_duty(Pin_t _pin);
-double arch_set_duty(Pin_t _pin, double duty);
+void arch_set_duty(Pin_t _pin, double duty);
 void arch_reset();
 void arch_motor_change(uint8_t s, uint8_t sm);
 void arch_change(bool motors);
@@ -105,6 +105,7 @@ void arch_setup_end(char const *run_id);
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0);
 void arch_disconnect();
 int arch_fds();
+void arch_tick();
 void arch_reconnect(char *port);
 void arch_addpos(int s, int m, int diff);
 void arch_stop(bool fake);
@@ -552,9 +553,9 @@ void avr_get_cb_wrap() {
 	cb(arg);
 }
 
-bool GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
+void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
 	if (!_pin.valid())
-		return _default;
+		cb(_default);
 	wait_for_reply[expected_replies++] = avr_get_cb_wrap;
 	avr_get_cb = cb;
 	avr_get_pin_invert = _pin.inverted();
@@ -591,7 +592,7 @@ double arch_get_duty(Pin_t _pin) {
 	return (avr_pins[_pin.pin].duty + 1) / 256.;
 }
 
-double arch_set_duty(Pin_t _pin, double duty) {
+void arch_set_duty(Pin_t _pin, double duty) {
 	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return 1;
@@ -859,6 +860,11 @@ void arch_reconnect(char *port) {
 // }}}
 
 // Running hooks. {{{
+void arch_tick() {
+	serial(1);
+	return 500;
+}
+
 void arch_addpos(int s, int m, int diff) {
 	int mi = m;
 	for (uint8_t st = 0; st < s; ++st)

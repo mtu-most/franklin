@@ -533,7 +533,7 @@ void SET_INPUT_NOPULLUP(Pin_t _pin);
 void RESET(Pin_t _pin);
 void SET(Pin_t _pin);
 void SET_OUTPUT(Pin_t _pin);
-bool GET(Pin_t _pin, bool _default, void(*cb)(bool));
+void GET(Pin_t _pin, bool _default, void(*cb)(bool));
 void arch_setup_start(char const *port);
 void arch_setup_end(char const *run_id);
 void arch_motors_change();

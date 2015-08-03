@@ -47,7 +47,8 @@ void settemp(int which, double target) {
 		//debug("Temp %d set to %f", which, target);
 		initialized = true;
 	}
-	arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin[0].valid() ? temps[which].power_pin[0].pin : ~0, temps[which].power_pin[0].inverted(), temps[which].adctarget[0], temps[which].power_pin[1].valid() ? temps[which].power_pin[1].pin : ~0, temps[which].power_pin[1].inverted(), temps[which].adctarget[1]);
+	if (temps[which].thermistor_pin.valid())
+		arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin[0].valid() ? temps[which].power_pin[0].pin : ~0, temps[which].power_pin[0].inverted(), temps[which].adctarget[0], temps[which].power_pin[1].valid() ? temps[which].power_pin[1].pin : ~0, temps[which].power_pin[1].inverted(), temps[which].adctarget[1]);
 }
 
 void waittemp(int which, double mintemp, double maxtemp) {
@@ -241,7 +242,7 @@ void packet()
 		last_active = millis();
 		if (command[0][2]) {
 			//debug("sleeping");
-			if (avr_running && !stop_pending)
+			if (arch_running() && !stop_pending)
 			{
 				debug("Sleeping while moving");
 				abort();
