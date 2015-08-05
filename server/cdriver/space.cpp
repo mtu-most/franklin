@@ -811,9 +811,11 @@ void send_fragment() { // {{{
 		if (current_fragment_pos < 2) {
 			// TODO: find out why this is attempted and avoid it.
 			//debug("not sending short fragment for 0 motors");
-			return;
+			// FIXME: handle cbs for this move; workaround: send the fragment.
+			//return;
 		}
-		debug("sending fragment for 0 motors at position %d", current_fragment_pos);
+		else
+			debug("sending fragment for 0 motors at position %d", current_fragment_pos);
 		//abort();
 	}
 	//debug("sending %d prevcbs %d", current_fragment, settings[(current_fragment - 1) % FRAGMENTS_PER_BUFFER].cbs);
