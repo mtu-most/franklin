@@ -232,22 +232,25 @@ class Printer: # {{{
 			g.read(self._read('GPIO', i))
 		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
 		self.pause(True, False, update = False)
-		self._send_packet(struct.pack('=B', protocol.command['GET_UUID']))
-		cmd, s, m, f, e, uuid = self._get_reply()
-		uuid = map(ord, uuid)
-		if (uuid[7] & 0xf0) != 0x40 or (uuid[9] & 0xc0) != 0x80:
-			# Broken uuid; create a new one and set it.
-			log(repr(uuid))
-			uuid = [random.randrange(256) for i in range(16)]
-			uuid[7] &= 0x0f
-			uuid[7] |= 0x40
-			uuid[9] &= 0x3f
-			uuid[9] |= 0x80
-			log('new uuid: ' + repr(uuid))
-			self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + ''.join(map(chr, uuid)))
-		uuid = ''.join(map(lambda x: '%02x' % x, uuid[:16]))
-		self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
-		assert cmd == protocol.rcommand['UUID']
+		if port != '-' and not port.startswith('!'):
+			self._send_packet(struct.pack('=B', protocol.command['GET_UUID']))
+			cmd, s, m, f, e, uuid = self._get_reply()
+			uuid = map(ord, uuid)
+			if (uuid[7] & 0xf0) != 0x40 or (uuid[9] & 0xc0) != 0x80:
+				# Broken uuid; create a new one and set it.
+				log(repr(uuid))
+				uuid = [random.randrange(256) for i in range(16)]
+				uuid[7] &= 0x0f
+				uuid[7] |= 0x40
+				uuid[9] &= 0x3f
+				uuid[9] |= 0x80
+				log('new uuid: ' + repr(uuid))
+				self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + ''.join(map(chr, uuid)))
+			uuid = ''.join(map(lambda x: '%02x' % x, uuid[:16]))
+			self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
+			assert cmd == protocol.rcommand['UUID']
+		else:
+			self.uuid = 'local'
 		try:
 			with fhs.read_data(os.path.join(self.uuid, 'profile')) as pfile:
 				self.profile = pfile.readline().strip()

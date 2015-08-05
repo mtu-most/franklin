@@ -138,7 +138,7 @@ static void copy_next(int s) { // {{{
 
 // Used from previous segment (if prepared): tp, vq.
 uint8_t next_move() { // {{{
-	probing = false;
+	settings.probing = false;
 	uint8_t num_cbs = 0;
 	uint8_t a0;
 	run_file_fill_queue();
@@ -275,7 +275,7 @@ uint8_t next_move() { // {{{
 
 	double v0 = queue[settings.queue_start].f[0] * feedrate;
 	double vp = queue[settings.queue_start].f[1] * feedrate;
-	probing = queue[settings.queue_start].probe;
+	settings.probing = queue[settings.queue_start].probe;
 	run_time = queue[settings.queue_start].time;
 	run_dist = queue[settings.queue_start].dist;
 
@@ -319,7 +319,7 @@ uint8_t next_move() { // {{{
 		if (isnan(sp.max_v) || isinf(sp.max_v) || sp.max_v <= 0)
 			continue;
 		// max_mm is the maximum speed in mm/s.
-		double max_mm = probing ? space_types[sp.type].probe_speed(&sp) : sp.max_v;
+		double max_mm = settings.probing ? space_types[sp.type].probe_speed(&sp) : sp.max_v;
 		double dist = 0, distn = 0;
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			dist += sp.axis[a]->settings.dist[0] * sp.axis[a]->settings.dist[0];

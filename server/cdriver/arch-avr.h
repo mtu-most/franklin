@@ -1,6 +1,5 @@
 // vim: set foldmethod=marker :
-#ifndef _ARCH_AVR_H
-#define _ARCH_AVR_H
+#ifndef ADCBITS
 
 // Includes and defines. {{{
 //#define DEBUG_AVRCOMM
@@ -23,6 +22,15 @@
 // Enable all the parts for a serial connection (which can fail) to the printer.
 #define SERIAL
 #define ADCBITS 10
+#define DATA_TYPE char
+#define DATA_DECL DATA_TYPE *data
+#define DATA_NEW(s, m) new DATA_TYPE[BYTES_PER_FRAGMENT]
+#define DATA_DELETE(x) delete[] (x)
+#define DATA_CLEAR(x) memset((x), 0, BYTES_PER_FRAGMENT)
+#define DATA_SET(s, m, v) spaces[s].motor[m]->data[current_fragment_pos] = v;
+#define SAMPLES_PER_FRAGMENT BYTES_PER_FRAGMENT
+
+#else
 
 // Not defines, because they can change value.
 EXTERN uint8_t NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT;
@@ -105,7 +113,7 @@ void arch_setup_end(char const *run_id);
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0);
 void arch_disconnect();
 int arch_fds();
-void arch_tick();
+int arch_tick();
 void arch_reconnect(char *port);
 void arch_addpos(int s, int m, int diff);
 void arch_stop(bool fake);
@@ -595,7 +603,7 @@ double arch_get_duty(Pin_t _pin) {
 void arch_set_duty(Pin_t _pin, double duty) {
 	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
-		return 1;
+		return;
 	}
 	avr_pins[_pin.pin].duty = int(duty * 256 + .5) - 1;
 	if (avr_pins[_pin.pin].duty < 0)
@@ -860,7 +868,7 @@ void arch_reconnect(char *port) {
 // }}}
 
 // Running hooks. {{{
-void arch_tick() {
+int arch_tick() {
 	serial(1);
 	return 500;
 }
@@ -913,7 +921,7 @@ bool arch_send_fragment() {
 	}
 	if (stop_pending || discard_pending)
 		return false;
-	avr_buffer[0] = probing ? HWC_START_PROBE : HWC_START_MOVE;
+	avr_buffer[0] = settings.probing ? HWC_START_PROBE : HWC_START_MOVE;
 	//debug("send fragment %d %d %d", current_fragment_pos, fragment, settings.num_active_motors);
 	avr_buffer[1] = current_fragment_pos;
 	avr_buffer[2] = num_active_motors;

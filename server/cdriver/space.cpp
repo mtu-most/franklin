@@ -83,8 +83,8 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) { // {{{
 			new_motors[m]->limit_a = INFINITY;
 			new_motors[m]->active = false;
 			new_motors[m]->history = new Motor_History[FRAGMENTS_PER_BUFFER];
-			new_motors[m]->data = new char[BYTES_PER_FRAGMENT];
-			memset(new_motors[m]->data, 0, BYTES_PER_FRAGMENT);
+			new_motors[m]->data = DATA_NEW(id, m);
+			DATA_CLEAR(new_motors[m]->data);
 			new_motors[m]->settings.last_v = 0;
 			new_motors[m]->settings.current_pos = 0;
 			new_motors[m]->settings.last_v = NAN;
@@ -101,7 +101,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) { // {{{
 			}
 		}
 		for (uint8_t m = nm; m < old_nm; ++m) {
-			delete[] motor[m]->data;
+			DATA_DELETE(motor[m]->data);
 			delete[] motor[m]->history;
 			delete motor[m];
 		}
@@ -420,7 +420,7 @@ static void check_distance(Motor *mtr, double distance, double dt, double &facto
 	//debug("cd4 %f %f", distance, dt); */
 	int steps = distance * mtr->steps_per_unit;
 	//cpdebug(s, m, "cp %d hwcp %d cf %d value %d", mtr.settings.current_pos, mtr.settings.current_pos, current_fragment, value);
-	if (probing && steps)
+	if (settings.probing && steps)
 		steps = s;
 	else {
 		if (abs(steps) > 8 * mtr->max_steps)	// TODO: fix 8.
@@ -550,7 +550,7 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 					mtr.active = true;
 					num_active_motors += 1;
 				}
-				mtr.data[current_fragment_pos] = new_cp - mtr.settings.current_pos;
+				DATA_SET(s, m, new_cp - mtr.settings.current_pos);
 			}
 			mtr.settings.current_pos = new_cp;
 			//cpdebug(s, m, "cp three %f", target);
@@ -725,7 +725,7 @@ void store_settings() { // {{{
 		}
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->active = false;
-			memset(sp.motor[m]->data, 0, BYTES_PER_FRAGMENT);
+			DATA_CLEAR(sp.motor[m]->data);
 			sp.motor[m]->history[current_fragment].last_v = sp.motor[m]->settings.last_v;
 			sp.motor[m]->history[current_fragment].target_v = sp.motor[m]->settings.target_v;
 			sp.motor[m]->history[current_fragment].target_dist = sp.motor[m]->settings.target_dist;
@@ -783,7 +783,7 @@ void restore_settings() { // {{{
 		}
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->active = false;
-			memset(sp.motor[m]->data, 0, BYTES_PER_FRAGMENT);
+			DATA_CLEAR(sp.motor[m]->data);
 			sp.motor[m]->settings.last_v = sp.motor[m]->history[current_fragment].last_v;
 			sp.motor[m]->settings.target_v = sp.motor[m]->history[current_fragment].target_v;
 			sp.motor[m]->settings.target_dist = sp.motor[m]->history[current_fragment].target_dist;
@@ -846,7 +846,7 @@ void buffer_refill() { // {{{
 		// fill fragment until full.
 		apply_tick();
 		//debug("refill2 %d %d", current_fragment, spaces[0].motor[0]->settings.current_pos);
-		if (current_fragment_pos >= BYTES_PER_FRAGMENT) {
+		if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
 			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
 			send_fragment();
 		}

@@ -579,7 +579,7 @@ class Port: # {{{
 # }}}
 
 def detect(port): # {{{
-	if port.startswith('!'):
+	if port == '-' or port.startswith('!'):
 		run_id = nextid()
 		process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		ports[port] = Port(port, process, None, run_id)

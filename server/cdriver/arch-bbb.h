@@ -1,6 +1,5 @@
 // vim: set foldmethod=marker :
-#ifndef _ARCH_BBB_H
-#define _ARCH_BBB_H
+#ifndef ADCBITS
 
 // Includes. {{{
 #include <stdint.h>
@@ -18,11 +17,37 @@
 
 // Defines. {{{
 #define NUM_ANALOG_INPUTS 7
-#define NUM_DIGITAL_PINS (4 * 32)
+#define NUM_GPIO_PINS (4 * 32)
+#define NUM_DIGITAL_PINS (NUM_GPIO_PINS + 32)
 #define ADCBITS 12
 #define FRAGMENTS_PER_BUFFER 32
-#define BYTES_PER_FRAGMENT 4096
+#define SAMPLES_PER_FRAGMENT 1024
+#define MAX_MOTORS 32
+#define DATA_TYPE volatile uint32_t
+#define DATA_DECL DATA_TYPE (*data)[SAMPLES_PER_FRAGMENT / 32 * 2]
+#define DATA_NEW(s, m) bbb_pru->buffer[bbb_motorseq(s, m)]
+#define DATA_DELETE(x) do {} while (0)
+#define DATA_CLEAR(x) memset((void *)(x), 0, sizeof(uint32_t) * (SAMPLES_PER_FRAGMENT / 32 * 2) * FRAGMENTS_PER_BUFFER)
+#define DATA_SET(s, m, x) do { \
+	if (x) { \
+		spaces[s].motor[m]->data[current_fragment][(current_fragment_pos >> 5) * 2] |= 1 << (current_fragment_pos & 0x1f); \
+		if ((x) < 0) { \
+			if ((x) != -1) { \
+				debug("invalid sample %d for %d %d", (x), (s), (m)); \
+				abort(); \
+			} \
+			spaces[s].motor[m]->data[current_fragment][(current_fragment_pos >> 5) * 2 + 1] |= 1 << (current_fragment_pos & 0x1f); \
+		} \
+		else { \
+			if ((x) != 1) \
+				debug("invalid sample %d for %d %d", (x), (s), (m)); \
+				abort(); \
+		} \
+	} \
+} while (0)
 // }}}
+
+#else
 
 struct bbb_Gpio { // {{{
 	unsigned revision;		// 0
@@ -68,6 +93,13 @@ struct bbb_Temp { // {{{
 	int power_target, fan_target;
 }; // }}}
 
+struct bbb_Pru { // {{{
+	DATA_TYPE buffer[MAX_MOTORS][FRAGMENTS_PER_BUFFER][SAMPLES_PER_FRAGMENT / 32 * 2];
+	volatile uint32_t state;
+	volatile uint32_t cfcs;
+	volatile bool active[MAX_MOTORS];
+}; // }}}
+
 // Function declarations. {{{
 void SET_OUTPUT(Pin_t _pin);
 void SET_INPUT(Pin_t _pin);
@@ -75,6 +107,7 @@ void SET_INPUT_NOPULLUP(Pin_t _pin);
 void SET(Pin_t _pin);
 void RESET(Pin_t _pin);
 void GET(Pin_t _pin, bool _default, void(*cb)(bool));
+int bbb_motorseq(int s, int m);
 void arch_setup_start(char const *port);
 void arch_setup_end(char const *run_id);
 void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0);
@@ -98,49 +131,53 @@ EXTERN volatile bbb_Gpio *bbb_gpio[4];
 EXTERN int bbb_devmem;
 EXTERN int bbb_active_temp;
 EXTERN bbb_Temp bbb_temp[NUM_ANALOG_INPUTS];
+EXTERN bbb_Pru *bbb_pru;
 // }}}
 
 #ifdef DEFINE_VARIABLES
 // Pin setting. {{{
 void SET_OUTPUT(Pin_t _pin) {
-	if (_pin.valid()) {
+	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		bbb_gpio[_pin.pin >> 5]->oe &= ~(1 << (_pin.pin & 0x1f));
 	}
 }
 
 void SET_INPUT(Pin_t _pin) {
-	if (_pin.valid()) {
+	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
 	}
 }
 
 void SET_INPUT_NOPULLUP(Pin_t _pin) {
-	if (_pin.valid()) {
+	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
 	}
 }
 
+#define RAWSET(_p) bbb_gpio[(_p) >> 5]->setdataout = 1 << ((_p) & 0x1f)
+#define RAWRESET(_p) bbb_gpio[(_p) >> 5]->cleardataout = 1 << ((_p) & 0x1f)
 void SET(Pin_t _pin) {
-	if (_pin.valid()) {
+	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		if (_pin.inverted())
-			bbb_gpio[_pin.pin >> 5]->cleardataout = 1 << (_pin.pin & 0x1f);
+			RAWRESET(_pin.pin);
 		else
-			bbb_gpio[_pin.pin >> 5]->setdataout = 1 << (_pin.pin & 0x1f);
+			RAWSET(_pin.pin);
 	}
 }
 
 void RESET(Pin_t _pin) {
-	if (_pin.valid()) {
+	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		if (_pin.inverted())
-			bbb_gpio[_pin.pin >> 5]->setdataout = 1 << (_pin.pin & 0x1f);
+			RAWSET(_pin.pin);
 		else
-			bbb_gpio[_pin.pin >> 5]->cleardataout = 1 << (_pin.pin & 0x1f);
+			RAWRESET(_pin.pin);
 	}
 }
 
+#define RAWGET(_p) (bool(bbb_gpio[(_p) >> 5]->datain & (1 << ((_p) & 0x1f))))
 void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
-	if (_pin.valid()) {
-		if (bbb_gpio[_pin.pin >> 5]->datain & (1 << (_pin.pin & 0x1f)))
+	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
+		if (RAWGET(_pin.pin))
 			cb(!_pin.inverted());
 		else
 			cb(_pin.inverted());
@@ -151,10 +188,17 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
 // }}}
 
 // Setup helpers. {{{ TODO
+int bbb_motorseq(int s, int m) {
+	int ret = 0;
+	for (int sp = 0; sp < s; ++sp)
+		ret += spaces[sp].num_motors;
+	return ret + m;
+}
+
 void arch_setup_start(char const *port) {
 	// TODO: find out if this thing varies, implement a search if it does.
 	FILE *f = fopen("/sys/devices/bone_capemgr.9/slots", "w");
-	fprintf(f, "cape-bone-iio\n");
+	fprintf(f, "athena-0\n");
 	fclose(f);
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
 		// TODO: find out if this varies, implement a search if so.
@@ -164,7 +208,7 @@ void arch_setup_start(char const *port) {
 		free(filename);
 		bbb_temp[i].active = false;
 	}
-	for (int i = 0; i < NUM_DIGITAL_PINS; ++i) {
+	for (int i = 0; i < NUM_GPIO_PINS; ++i) {
 		f = std::fopen("/sys/class/gpio/export", "w");
 		fprintf(f, "%d\n", i);
 		fclose(f);
@@ -177,6 +221,7 @@ void arch_setup_start(char const *port) {
 }
 
 void arch_setup_end(char const *run_id) {
+	setup_end();
 }
 
 static void bbb_next_adc() {
@@ -215,7 +260,7 @@ void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin, b
 // PRU globals:
 // state: 0: waiting for limit check; writable by cpu.
 // state: 1: not running; writable by cpu.
-// state: 2: Doing single step; pru can write to 0, cpu can write to 1. XXX
+// state: 2: Doing single step; pru can write to 0, cpu can NOT write to 1; must wait for step to be done.
 // state: 3: Free running; cpu can set to 1.
 int arch_tick() {
 	// Handle temps and check limit switches.
@@ -227,11 +272,69 @@ int arch_tick() {
 		bbb_next_adc();
 		if (num <= 0)
 			debug("Error reading from adc.");
-		else
-			handle_temp(bbb_temp[a].id, atoi(data));
+		else if (bbb_temp[a].active) {
+			int t = atoi(data);
+			if (bbb_temp[a].power_pin >= 0) {
+				if ((bbb_temp[a].power_target < t) ^ bbb_temp[a].power_inverted)
+					RAWSET(bbb_temp[a].power_pin);
+				else
+					RAWRESET(bbb_temp[a].power_pin);
+			}
+			if (bbb_temp[a].fan_pin >= 0) {
+				if ((bbb_temp[a].fan_target < t) ^ bbb_temp[a].fan_inverted)
+					RAWSET(bbb_temp[a].fan_pin);
+				else
+					RAWRESET(bbb_temp[a].fan_pin);
+			}
+			handle_temp(bbb_temp[a].id, t);
+		}
 	}
-	// Limit switches. TODO
-	return 10;
+	else
+		bbb_next_adc();
+	// TODO: Pwm.
+	int state = bbb_pru->state;
+	if (state != 2 && state != 1) {
+		// Check probe.
+		if (settings.probing && probe_pin.valid()) {
+			if (RAWGET(probe_pin.pin) ^ probe_pin.inverted()) {
+				// Probe hit.
+				sending_fragment = 0;
+				stopping = 2;
+				send_host(CMD_LIMIT, -1, -1, NAN);
+				cbs_after_current_move = 0;
+			}
+		}
+		int m0 = 0;
+		uint32_t cfcs = bbb_pru->cfcs;	// 32-bit values are read and written atomically.
+		int cf = cfcs >> 16;
+		int cs = cfcs & 0xffff;
+		for (int s = 0; s < num_spaces; ++s) {
+			for (int m = 0; m < spaces[s].num_motors; ++m) {
+				if (!bbb_pru->active[m0 + m])
+					continue;
+				bool negative = bbb_pru->buffer[m0 + m][cf][(cs >> 5) + 1] & (1 << (cs & 0x1f));
+				Pin_t *p = negative ? &spaces[s].motor[m]->limit_max_pin : &spaces[s].motor[m]->limit_min_pin;
+				if (!p->valid())
+					continue;
+				if (RAWGET(p->pin) ^ p->inverted()) {
+					// Limit hit.
+					sending_fragment = 0;
+					stopping = 2;
+					send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit);
+					cbs_after_current_move = 0;
+				}
+			}
+			m0 += spaces[s].num_motors;
+		}
+		// TODO: homing.
+		if (state == 0) {
+			state = settings.probing ? 2 : 3; // TODO: homing.
+			bbb_pru->state = state;
+		}
+		// TODO: LED.
+		// TODO: Timeout.
+	}
+	return state == 3 ? 100 : state == 2 ? 10 : 200;
 }
 
 void arch_motors_change() { // TODO
@@ -244,8 +347,8 @@ void arch_motors_change() { // TODO
 	// motor pins
 }
 
-void arch_addpos(int s, int m, int diff) { // TODO
-	// hwcurrent_pos has been modified; this function must update arch internals to match.
+void arch_addpos(int s, int m, int diff) {
+	// Nothing to do.
 }
 
 void arch_stop(bool fake) { // TODO
@@ -256,9 +359,9 @@ void arch_home() { // TODO
 	// Start homing.
 }
 
-bool arch_running() { // TODO
+bool arch_running() {
 	// True if an underrun will follow.
-	return false;
+	return bbb_pru->state != 1;
 }
 
 void arch_start_move(int extra) { // TODO
@@ -266,7 +369,7 @@ void arch_start_move(int extra) { // TODO
 }
 
 bool arch_send_fragment() {
-	// Send a fragment to the PRU. TODO
+	// Nothing to do.
 }
 
 int arch_fds() {
@@ -274,16 +377,16 @@ int arch_fds() {
 }
 
 double arch_get_duty(Pin_t _pin) { // TODO
-	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
-		debug("invalid pin for arch_get_duty: %d(max %d)", _pin.pin, NUM_DIGITAL_PINS);
+	if (_pin.pin < 0 || _pin.pin >= NUM_GPIO_PINS) {
+		debug("invalid pin for arch_get_duty: %d(max %d)", _pin.pin, NUM_GPIO_PINS);
 		return 1;
 	}
 	return 1;
 }
 
 void arch_set_duty(Pin_t _pin, double duty) { // TODO
-	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
-		debug("invalid pin for arch_set_duty: %d(max %d)", _pin.pin, NUM_DIGITAL_PINS);
+	if (_pin.pin < 0 || _pin.pin >= NUM_GPIO_PINS) {
+		debug("invalid pin for arch_set_duty: %d(max %d)", _pin.pin, NUM_GPIO_PINS);
 		return;
 	}
 	// TODO.

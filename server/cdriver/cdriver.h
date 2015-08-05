@@ -24,6 +24,8 @@
 #define DEFINE_VARIABLES
 #endif
 
+#include ARCH_INCLUDE
+
 #define debug(...) do { buffered_debug_flush(); fprintf(stderr, "#"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while (0)
 
 static inline int min(int a, int b) {
@@ -194,6 +196,7 @@ struct History {
 	int queue_start, queue_end;
 	bool queue_full;
 	int run_file_current;
+	bool probing;
 };
 
 struct Space_History {
@@ -244,7 +247,7 @@ struct Motor {
 	uint8_t sense_state;
 	double sense_pos;
 	bool active;
-	char *data;
+	DATA_DECL;
 	double limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
 };
@@ -381,7 +384,6 @@ EXTERN Gpio *gpios;
 EXTERN FILE *store_adc;
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];
-EXTERN bool probing;
 EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.

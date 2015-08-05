@@ -1,0 +1,43 @@
+/dts-v1/;
+/plugin/;
+/ { compatible = "ti,beaglebone-black";
+	/* identification */
+	part-number = "athena-0";
+	version = "00a0";
+	fragment@0 {
+		target = <&am33xx_pinmux>;
+		__overlay__ {
+			athena: athena_0_pins {
+				athena-single,pins = <
+				106 7 /*59 7	/* disable HDMI audio clock */
+				12 6 /*44	dir */
+				105 5 /*115	step 0 */
+				102 5 /*112	step 1 */
+				13 6 /*45	step 2 */
+				107 5 /*117	step 3 */
+				11 7 /*27	enable 0 */
+				89 7 /*7	enable 1 */
+				97 7 /*15	enable 2 */
+				96 7 /*14	enable 3 */
+				18 0x17 /*50	limit 0 */
+				30 0x17 /*60	limit 1 */
+				28 0x17 /*30	limit 2 */
+				36 7 /*66	mosfet 0 */
+				39 7 /*69	mosfet 1 */
+				>;
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&ocp>;
+		__overlay__ {
+			athena_helper: helper {
+				compatible = "bone-pinmux-helper";
+				pinctrl-names = "default";
+				pinctrl-0 = <&athena>;
+				status = "okay";
+			};
+		};
+	};
+};
