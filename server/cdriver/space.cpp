@@ -83,8 +83,6 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) { // {{{
 			new_motors[m]->limit_a = INFINITY;
 			new_motors[m]->active = false;
 			new_motors[m]->history = new Motor_History[FRAGMENTS_PER_BUFFER];
-			new_motors[m]->data = DATA_NEW(id, m);
-			DATA_CLEAR(new_motors[m]->data);
 			new_motors[m]->settings.last_v = 0;
 			new_motors[m]->settings.current_pos = 0;
 			new_motors[m]->settings.last_v = NAN;
@@ -99,9 +97,10 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) { // {{{
 				new_motors[m]->history[f].target_dist = NAN;
 				new_motors[m]->history[f].endpos = NAN;
 			}
+			ARCH_NEW_MOTOR(id, m, new_motors);
 		}
 		for (uint8_t m = nm; m < old_nm; ++m) {
-			DATA_DELETE(motor[m]->data);
+			DATA_DELETE(id, m);
 			delete[] motor[m]->history;
 			delete motor[m];
 		}
@@ -725,7 +724,7 @@ void store_settings() { // {{{
 		}
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->active = false;
-			DATA_CLEAR(sp.motor[m]->data);
+			DATA_CLEAR(s, m);
 			sp.motor[m]->history[current_fragment].last_v = sp.motor[m]->settings.last_v;
 			sp.motor[m]->history[current_fragment].target_v = sp.motor[m]->settings.target_v;
 			sp.motor[m]->history[current_fragment].target_dist = sp.motor[m]->settings.target_dist;
@@ -783,7 +782,7 @@ void restore_settings() { // {{{
 		}
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->active = false;
-			DATA_CLEAR(sp.motor[m]->data);
+			DATA_CLEAR(s, m);
 			sp.motor[m]->settings.last_v = sp.motor[m]->history[current_fragment].last_v;
 			sp.motor[m]->settings.target_v = sp.motor[m]->history[current_fragment].target_v;
 			sp.motor[m]->settings.target_dist = sp.motor[m]->history[current_fragment].target_dist;

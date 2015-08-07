@@ -18,33 +18,18 @@
 // Defines. {{{
 #define NUM_ANALOG_INPUTS 7
 #define NUM_GPIO_PINS (4 * 32)
-#define NUM_DIGITAL_PINS (NUM_GPIO_PINS + 32)
+#define NUM_DIGITAL_PINS (NUM_GPIO_PINS + 16)
 #define ADCBITS 12
-#define FRAGMENTS_PER_BUFFER 32
-#define SAMPLES_PER_FRAGMENT 1024
-#define MAX_MOTORS 32
-#define DATA_TYPE volatile uint32_t
-#define DATA_DECL DATA_TYPE (*data)[SAMPLES_PER_FRAGMENT / 32 * 2]
-#define DATA_NEW(s, m) bbb_pru->buffer[bbb_motorseq(s, m)]
-#define DATA_DELETE(x) do {} while (0)
-#define DATA_CLEAR(x) memset((void *)(x), 0, sizeof(uint32_t) * (SAMPLES_PER_FRAGMENT / 32 * 2) * FRAGMENTS_PER_BUFFER)
-#define DATA_SET(s, m, x) do { \
-	if (x) { \
-		spaces[s].motor[m]->data[current_fragment][(current_fragment_pos >> 5) * 2] |= 1 << (current_fragment_pos & 0x1f); \
-		if ((x) < 0) { \
-			if ((x) != -1) { \
-				debug("invalid sample %d for %d %d", (x), (s), (m)); \
-				abort(); \
-			} \
-			spaces[s].motor[m]->data[current_fragment][(current_fragment_pos >> 5) * 2 + 1] |= 1 << (current_fragment_pos & 0x1f); \
-		} \
-		else { \
-			if ((x) != 1) \
-				debug("invalid sample %d for %d %d", (x), (s), (m)); \
-				abort(); \
-		} \
-	} \
-} while (0)
+#define FRAGMENTS_PER_BUFFER 8
+#define SAMPLES_PER_FRAGMENT 256
+#define BBB_PRU_FRAGMENT_MASK (FRAGMENTS_PER_BUFFER - 1)
+
+#define ARCH_MOTOR int bbb_id;
+#define ARCH_SPACE int bbb_id, bbb_m0;
+
+#define DATA_CLEAR(s, m) do {} while (0)
+#define ARCH_NEW_MOTOR(s, m, base) do {} while (0)
+#define DATA_DELETE(s, m) do {} while (0)
 // }}}
 
 #else
@@ -94,10 +79,10 @@ struct bbb_Temp { // {{{
 }; // }}}
 
 struct bbb_Pru { // {{{
-	DATA_TYPE buffer[MAX_MOTORS][FRAGMENTS_PER_BUFFER][SAMPLES_PER_FRAGMENT / 32 * 2];
-	volatile uint32_t state;
-	volatile uint32_t cfcs;
-	volatile bool active[MAX_MOTORS];
+	volatile uint16_t buffer[FRAGMENTS_PER_BUFFER][SAMPLES_PER_FRAGMENT][2];
+	volatile uint16_t neg_base, pos_base;
+	// These must be bytes, because read and write must be atomic.
+	volatile uint8_t current_sample, current_fragment, next_fragment, state;
 }; // }}}
 
 // Function declarations. {{{
@@ -107,7 +92,6 @@ void SET_INPUT_NOPULLUP(Pin_t _pin);
 void SET(Pin_t _pin);
 void RESET(Pin_t _pin);
 void GET(Pin_t _pin, bool _default, void(*cb)(bool));
-int bbb_motorseq(int s, int m);
 void arch_setup_start(char const *port);
 void arch_setup_end(char const *run_id);
 void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0);
@@ -124,6 +108,7 @@ void arch_set_duty(Pin_t pin, double duty);
 double arch_get_duty(Pin_t pin);
 void arch_discard();
 off_t arch_send_audio(uint8_t *data, off_t sample, off_t num_records, int motor);
+void DATA_SET(int s, int m, int value);
 // }}}
 
 // Variables. {{{
@@ -188,13 +173,6 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
 // }}}
 
 // Setup helpers. {{{ TODO
-int bbb_motorseq(int s, int m) {
-	int ret = 0;
-	for (int sp = 0; sp < s; ++sp)
-		ret += spaces[sp].num_motors;
-	return ret + m;
-}
-
 void arch_setup_start(char const *port) {
 	// TODO: find out if this thing varies, implement a search if it does.
 	FILE *f = fopen("/sys/devices/bone_capemgr.9/slots", "w");
@@ -258,10 +236,11 @@ void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin, b
 // current moving direction (-1/0/1): writable by pru, readable by cpu.
 //
 // PRU globals:
-// state: 0: waiting for limit check; writable by cpu.
-// state: 1: not running; writable by cpu.
-// state: 2: Doing single step; pru can write to 0, cpu can NOT write to 1; must wait for step to be done.
-// state: 3: Free running; cpu can set to 1.
+// state: 0: waiting for limit check; cpu can set to 1, 2, or 3.
+// state: 1: not running; cpu can set to 0.
+// state: 2: Doing single step; pru can set to 0; cpu can set to 4 (and expect pru to set it to 0 or 1).
+// state: 3: Free running; cpu can set to 4.
+// state: 4: cpu requested stop; pru must set to 1.
 int arch_tick() {
 	// Handle temps and check limit switches.
 	if (bbb_active_temp >= 0) {
@@ -305,14 +284,22 @@ int arch_tick() {
 			}
 		}
 		int m0 = 0;
-		uint32_t cfcs = bbb_pru->cfcs;	// 32-bit values are read and written atomically.
-		int cf = cfcs >> 16;
-		int cs = cfcs & 0xffff;
+		// Avoid race condition by reading cf twice.
+		int cf = bbb_pru->current_fragment;
+		int cs;
+		while (true) {
+			cs = bbb_pru->current_sample;
+			int cf2 = bbb_pru->current_fragment;
+			if (cf == cf2)
+				break;
+			cf = cf2;
+		}
 		for (int s = 0; s < num_spaces; ++s) {
 			for (int m = 0; m < spaces[s].num_motors; ++m) {
-				if (!bbb_pru->active[m0 + m])
+				if (!spaces[s].motor[m]->active || !spaces[s].motor[m]->step_pin.valid() || spaces[s].motor[m]->step_pin.pin < NUM_GPIO_PINS)
 					continue;
-				bool negative = bbb_pru->buffer[m0 + m][cf][(cs >> 5) + 1] & (1 << (cs & 0x1f));
+				int pin = spaces[s].motor[m]->step_pin.pin - NUM_GPIO_PINS;
+				bool negative = bool((bbb_pru->buffer[cf][cs][0] ^ bbb_pru->neg_base) & (1 << pin)) ^ spaces[s].motor[m]->dir_pin.inverted();
 				Pin_t *p = negative ? &spaces[s].motor[m]->limit_max_pin : &spaces[s].motor[m]->limit_min_pin;
 				if (!p->valid())
 					continue;
@@ -338,6 +325,24 @@ int arch_tick() {
 }
 
 void arch_motors_change() { // TODO
+	for (int s = 0; s < num_spaces; ++s) {
+		for (int m = 0; m < spaces[s].num_motors; ++m) {
+			Pin_t *p = &spaces[s].motor[m]->dir_pin;
+			if (p->valid() && p->pin >= NUM_GPIO_PINS) {
+				int pin = p->pin - NUM_GPIO_PINS;
+				if (p->inverted())
+					bbb_pru->pos_base |= 1 << pin;
+				else
+					bbb_pru->neg_base |= 1 << pin;
+			}
+			p = &spaces[s].motor[m]->step_pin;
+			if (p->valid() && p->pin >= NUM_GPIO_PINS && p->inverted()) {
+				int pin = p->pin - NUM_GPIO_PINS;
+				bbb_pru->pos_base |= 1 << pin;
+				bbb_pru->neg_base |= 1 << pin;
+			}
+		}
+	}
 	// Configure hardware for updated settings.
 	// number of active motors.
 	// hwtime_step
@@ -351,8 +356,25 @@ void arch_addpos(int s, int m, int diff) {
 	// Nothing to do.
 }
 
-void arch_stop(bool fake) { // TODO
+void arch_stop(bool fake) {
 	// Stop moving, update current_pos.
+	int state = bbb_pru->state;
+	switch (state) {
+	case 1:
+		return;
+	case 0:
+		break;
+	case 2:
+	case 3:
+		bbb_pru->state = 4;
+		// Wait for pru to ack.
+		while (bbb_pru->state == 4) {}
+		break;
+	}
+	bbb_pru->state = 1;
+	// Update current_pos.
+	abort_move(bbb_pru->current_sample);
+	current_fragment_pos = 0;
 }
 
 void arch_home() { // TODO
@@ -364,12 +386,16 @@ bool arch_running() {
 	return bbb_pru->state != 1;
 }
 
-void arch_start_move(int extra) { // TODO
+void arch_start_move(int extra) {
 	// Start moving with sent buffers.
+	int state = bbb_pru->state;
+	if (state != 1)
+		debug("arch_start_move called with non-1 state %d", state);
+	bbb_pru->state = 0;
 }
 
 bool arch_send_fragment() {
-	// Nothing to do.
+	bbb_pru->next_fragment = (bbb_pru->next_fragment + 1) & BBB_PRU_FRAGMENT_MASK;
 }
 
 int arch_fds() {
@@ -393,11 +419,41 @@ void arch_set_duty(Pin_t _pin, double duty) { // TODO
 }
 
 void arch_discard() {
-	// TODO.
+	int fragments = (current_fragment - bbb_pru->current_fragment) & BBB_PRU_FRAGMENT_MASK;
+	if (fragments <= 2)
+		return;
+	current_fragment = (current_fragment - (fragments - 2)) & BBB_PRU_FRAGMENT_MASK;
+	bbb_pru->next_fragment = current_fragment;
+	restore_settings();
 }
 
 off_t arch_send_audio(uint8_t *data, off_t sample, off_t num_records, int motor) {
 	// TODO.
+}
+
+static void bbb_set_pru(int which, int s, int m) {
+	int pin = spaces[s].motor[m]->step_pin.pin - NUM_GPIO_PINS;
+	if (spaces[s].motor[m]->step_pin.valid() && pin >= 0) {
+		if (spaces[s].motor[m]->step_pin.inverted())
+			bbb_pru->buffer[current_fragment][current_fragment_pos][which] &= ~(1 << pin);
+		else
+			bbb_pru->buffer[current_fragment][current_fragment_pos][which] |= 1 << pin;
+	}
+}
+
+void DATA_SET(int s, int m, int value) {
+	int id = spaces[s].motor[m]->bbb_id;
+	if (value) {
+		if (value < -1 || value > 1) {
+			debug("invalid sample %d for %d %d", value, s, m);
+			abort();
+		}
+		// The invert flag of the dir pin is used even if the pin is invalid.
+		if ((value < 0) ^ spaces[s].motor[m]->dir_pin.inverted())
+			bbb_set_pru(0, s, m);
+		else
+			bbb_set_pru(1, s, m);
+	}
 }
 // }}}
 #endif

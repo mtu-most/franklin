@@ -23,11 +23,12 @@
 #define SERIAL
 #define ADCBITS 10
 #define DATA_TYPE char
-#define DATA_DECL DATA_TYPE *data
-#define DATA_NEW(s, m) new DATA_TYPE[BYTES_PER_FRAGMENT]
-#define DATA_DELETE(x) delete[] (x)
-#define DATA_CLEAR(x) memset((x), 0, BYTES_PER_FRAGMENT)
-#define DATA_SET(s, m, v) spaces[s].motor[m]->data[current_fragment_pos] = v;
+#define ARCH_MOTOR DATA_TYPE *avr_data;
+#define ARCH_SPACE
+#define ARCH_NEW_MOTOR(s, m, base) base[m]->avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT]
+#define DATA_DELETE(s, m) delete[] (spaces[s].motor[m]->avr_data)
+#define DATA_CLEAR(s, m) memset((spaces[s].motor[m]->avr_data), 0, BYTES_PER_FRAGMENT)
+#define DATA_SET(s, m, v) spaces[s].motor[m]->avr_data[current_fragment_pos] = v;
 #define SAMPLES_PER_FRAGMENT BYTES_PER_FRAGMENT
 
 #else
@@ -945,7 +946,7 @@ bool arch_send_fragment() {
 				avr_buffer[0] = HWC_MOVE;
 				avr_buffer[1] = mi + m;
 				for (int i = 0; i < current_fragment_pos; ++i)
-					avr_buffer[2 + i] = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->data[i];
+					avr_buffer[2 + i] = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->avr_data[i];
 				if (prepare_packet(avr_buffer, 2 + current_fragment_pos))
 					avr_send();
 				else

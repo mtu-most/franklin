@@ -247,9 +247,9 @@ struct Motor {
 	uint8_t sense_state;
 	double sense_pos;
 	bool active;
-	DATA_DECL;
 	double limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
+	ARCH_MOTOR
 };
 
 struct Space;
@@ -290,6 +290,7 @@ struct Space {
 	void copy(Space &dst);
 	bool setup_nums(uint8_t na, uint8_t nm);
 	void cancel_update();
+	ARCH_SPACE
 };
 
 #define DEFAULT_TYPE 0
