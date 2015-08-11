@@ -79,11 +79,11 @@ struct bbb_Temp { // {{{
 }; // }}}
 
 struct bbb_Pru { // {{{
-	volatile uint16_t buffer[FRAGMENTS_PER_BUFFER][SAMPLES_PER_FRAGMENT][2];
 	volatile uint16_t neg_base, pos_base;
 	// These must be bytes, because read and write must be atomic.
 	volatile uint8_t current_sample, current_fragment, next_fragment, state;
-}; // }}}
+	volatile uint16_t buffer[FRAGMENTS_PER_BUFFER][SAMPLES_PER_FRAGMENT][2];
+} __attribute__ ((packed)); // }}}
 
 // Function declarations. {{{
 void SET_OUTPUT(Pin_t _pin);
@@ -172,7 +172,7 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
 }
 // }}}
 
-// Setup helpers. {{{ TODO
+// Setup helpers. {{{
 void arch_setup_start(char const *port) {
 	// TODO: find out if this thing varies, implement a search if it does.
 	FILE *f = fopen("/sys/devices/bone_capemgr.9/slots", "w");
@@ -199,6 +199,8 @@ void arch_setup_start(char const *port) {
 }
 
 void arch_setup_end(char const *run_id) {
+	// Override hwtime_step.
+	hwtime_step = 40;
 	setup_end();
 }
 
@@ -324,7 +326,7 @@ int arch_tick() {
 	return state == 3 ? 100 : state == 2 ? 10 : 200;
 }
 
-void arch_motors_change() { // TODO
+void arch_motors_change() {
 	for (int s = 0; s < num_spaces; ++s) {
 		for (int m = 0; m < spaces[s].num_motors; ++m) {
 			Pin_t *p = &spaces[s].motor[m]->dir_pin;

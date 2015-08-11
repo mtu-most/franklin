@@ -1,14 +1,15 @@
 /dts-v1/;
 /plugin/;
-/ { compatible = "ti,beaglebone-black";
+/ { compatible = "ti,beaglebone", "ti,beaglebone-black";
 	/* identification */
 	part-number = "athena-0";
-	version = "00a0";
+	version = "00A0";
+	exclusive_use = "P8.12,P8.11,P9.25,P9.27,P9.30";
 	fragment@0 {
 		target = <&am33xx_pinmux>;
 		__overlay__ {
-			athena: athena_0_pins {
-				athena-single,pins = <
+			athena {
+				pinctrl-single,pins = <
 				106 7 /*59 7	/* disable HDMI audio clock */
 				12 6 /*44	dir */
 				105 5 /*115	step 0 */
@@ -38,6 +39,13 @@
 				pinctrl-0 = <&athena>;
 				status = "okay";
 			};
+		};
+	};
+
+	fragment@2 {
+		target = <&pruss>;
+		__overlay__ {
+			status = "okay";
 		};
 	};
 };
