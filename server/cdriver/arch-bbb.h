@@ -13,9 +13,14 @@
 #include <errno.h>
 #include <math.h>
 #include <sys/mman.h>
+#include <prussdrv.h>
+#include <pruss_intc_mapping.h>
 // }}}
 
 // Defines. {{{
+#if !defined(PRU) || (PRU != 0 && PRU != 1)
+#error PRU must be defined as 0 or 1.
+#endif
 #define NUM_ANALOG_INPUTS 7
 #define NUM_GPIO_PINS (4 * 32)
 #define NUM_DIGITAL_PINS (NUM_GPIO_PINS + 16)
@@ -35,37 +40,37 @@
 #else
 
 struct bbb_Gpio { // {{{
-	unsigned revision;		// 0
-	unsigned reserved0[3];
-	unsigned sysconfig;		// 10
-	unsigned reserved1[3];
-	unsigned eoi;			// 20
-	unsigned irqstatus_raw_0;	// 24
-	unsigned irqstatus_raw_1;	// 28
-	unsigned irqstatus_0;		// 2c
-	unsigned irqstatus_1;		// 30
-	unsigned irqstatus_set_0;	// 34
-	unsigned irqstatus_set_1;	// 38
-	unsigned irqstatus_clr_0;	// 3c
-	unsigned irqstatus_clr_1;	// 40
-	unsigned irqwaken_0;		// 44
-	unsigned irqwaken_1;		// 48
-	unsigned reserved2[50];
-	unsigned sysstatus;		// 114
-	unsigned reserved3[6];
-	unsigned ctrl;			// 130
-	unsigned oe;			// 134
-	unsigned datain;		// 138
-	unsigned dataout;		// 13c
-	unsigned leveldetect0;		// 140
-	unsigned leveldetect1;		// 144
-	unsigned risingdetect;		// 148
-	unsigned fallingdetect;		// 14c
-	unsigned debounceenable;	// 150
-	unsigned debouncingtime;	// 154
-	unsigned reserved4[14];
-	unsigned cleardataout;		// 190
-	unsigned setdataout;		// 194
+	uint32_t revision;		// 0
+	uint32_t reserved0[3];
+	uint32_t sysconfig;		// 10
+	uint32_t reserved1[3];
+	uint32_t eoi;			// 20
+	uint32_t irqstatus_raw_0;	// 24
+	uint32_t irqstatus_raw_1;	// 28
+	uint32_t irqstatus_0;		// 2c
+	uint32_t irqstatus_1;		// 30
+	uint32_t irqstatus_set_0;	// 34
+	uint32_t irqstatus_set_1;	// 38
+	uint32_t irqstatus_clr_0;	// 3c
+	uint32_t irqstatus_clr_1;	// 40
+	uint32_t irqwaken_0;		// 44
+	uint32_t irqwaken_1;		// 48
+	uint32_t reserved2[50];
+	uint32_t sysstatus;		// 114
+	uint32_t reserved3[6];
+	uint32_t ctrl;			// 130
+	uint32_t oe;			// 134
+	uint32_t datain;		// 138
+	uint32_t dataout;		// 13c
+	uint32_t leveldetect0;		// 140
+	uint32_t leveldetect1;		// 144
+	uint32_t risingdetect;		// 148
+	uint32_t fallingdetect;		// 14c
+	uint32_t debounceenable;	// 150
+	uint32_t debouncingtime;	// 154
+	uint32_t reserved4[14];
+	uint32_t cleardataout;		// 190
+	uint32_t setdataout;		// 194
 };
 // }}}
 
@@ -113,29 +118,61 @@ void DATA_SET(int s, int m, int value);
 
 // Variables. {{{
 EXTERN volatile bbb_Gpio *bbb_gpio[4];
+EXTERN volatile uint32_t *bbb_padmap;
+EXTERN volatile uint32_t *bbb_gpio_pad[32 * 4];
 EXTERN int bbb_devmem;
 EXTERN int bbb_active_temp;
 EXTERN bbb_Temp bbb_temp[NUM_ANALOG_INPUTS];
 EXTERN bbb_Pru *bbb_pru;
+extern int bbb_pru_pad[16], bbb_pru_mode[16];
 // }}}
 
 #ifdef DEFINE_VARIABLES
+#if PRU == 0
+int bbb_pru_pad[16] = { 110, 111, 112, 113, 114, 115, 116, 127, 90, 91, 92, 93, 94, 95, 44, 45 };
+int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6 };
+#else
+int bbb_pru_pad[16] = { 70, 71, 72, 73, 74, 75, 76, 77, 86, 87, 88, 89, 62, 63, 42, 43};
+int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5 };
+#endif
 // Pin setting. {{{
 void SET_OUTPUT(Pin_t _pin) {
-	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
-		bbb_gpio[_pin.pin >> 5]->oe &= ~(1 << (_pin.pin & 0x1f));
+	if (_pin.valid()) {
+		if (_pin.pin < NUM_GPIO_PINS) {
+			bbb_gpio[_pin.pin >> 5]->oe &= ~(1 << (_pin.pin & 0x1f));
+			if (bbb_gpio_pad[_pin.pin])
+				*bbb_gpio_pad[_pin.pin] = 0x2f;	// Fast, with receiver, no pull, gpio.
+		}
+		else {
+			int pin = _pin.pin - NUM_GPIO_PINS;
+			*bbb_gpio_pad[bbb_pru_pad[pin]] = 0x28 | bbb_pru_mode[pin];	// Fast, with receiver, no pull, gpio.
+		}
 	}
 }
 
 void SET_INPUT(Pin_t _pin) {
-	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
-		bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
+	if (_pin.valid()) {
+		if (_pin.pin < NUM_GPIO_PINS) {
+			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
+			if (bbb_gpio_pad[_pin.pin])
+				*bbb_gpio_pad[_pin.pin] = 0x37;	// Fast, with receiver, pull, up, gpio.
+		}
+		else {
+			debug("warning: trying to set pru pin to input");
+		}
 	}
 }
 
 void SET_INPUT_NOPULLUP(Pin_t _pin) {
-	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
-		bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
+	if (_pin.valid())
+		if (_pin.pin < NUM_GPIO_PINS) {
+			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
+			if (bbb_gpio_pad[_pin.pin])
+				*bbb_gpio_pad[_pin.pin] = 0x2f;	// Fast, with receiver, no pull, gpio.
+		}
+		else {
+			debug("warning: trying to set pru pin to input");
+		}
 	}
 }
 
@@ -176,26 +213,48 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
 void arch_setup_start(char const *port) {
 	// TODO: find out if this thing varies, implement a search if it does.
 	FILE *f = fopen("/sys/devices/bone_capemgr.9/slots", "w");
-	fprintf(f, "athena-0\n");
+	fprintf(f, "BB-ADC\n");
 	fclose(f);
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
 		// TODO: find out if this varies, implement a search if so.
 		char *filename;
-		asprintf(&filename, "/sys/devices/ocp.3/helper.15/AIN%d", i);
+		asprintf(&filename, "/sys/devices/ocp.3/helper.12/AIN%d", i);
 		bbb_temp[i].fd = open(filename, O_RDONLY);
 		free(filename);
 		bbb_temp[i].active = false;
 	}
-	for (int i = 0; i < NUM_GPIO_PINS; ++i) {
-		f = std::fopen("/sys/class/gpio/export", "w");
-		fprintf(f, "%d\n", i);
-		fclose(f);
-	}
 	bbb_devmem = open("/dev/mem", O_RDWR);
 	unsigned gpio_base[4] = { 0x44E07000, 0x4804C000, 0x481AC000, 0x481AE000 };
+	unsigned pad_control_base = 0x44e10000;
 	for (int i = 0; i < 4; ++i)
 		bbb_gpio[i] = (volatile bbb_Gpio *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, gpio_base[i]);
+	int pad_offset[32 * 4] = {
+		0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0xd0, 0xd4, 0xd8, 0xdc, 0x178, 0x17c, 0x180, 0x184,
+		0x11c, 0x120, 0x21c, 0x1b0, 0x1b4, 0x124, 0x20, 0x24, -1, -1, 0x28, 0x2c, 0x128, 0x144, 0x70, 0x74,
+
+		0x0, 0x4, 0x8, 0xc, 0x10, 0x14, 0x18, 0x1c, 0x168, 0x16c, 0x170, 0x174, 0x30, 0x34, 0x38, 0x3c,
+		0x40, 0x44, 0x48, 0x4c, 0x50, 0x54, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c, 0x78, 0x7c, 0x80, 0x84,
+
+		0x88, 0x8c, 0x90, 0x94, 0x98, 0x9c, 0xa0, 0xa4, 0xa8, 0xac, 0xb0, 0xb4, 0xb8, 0xbc, 0xc0, 0xc4,
+		0xc8, 0xcc, 0x134, 0x138, 0x13c, 0x140, 0xe0, 0xe4, 0xe8, 0xec, 0xf0, 0xf4, 0xf8, 0xfc, 0x100, 0x104,
+
+		0x108, 0x10c, 0x110, 0x114, 0x118, 0x188, 0x18c, 0x1e4, 0x1e8, 0x12c, 0x130, -1, -1, 0x234, 0x190, 0x194,
+		0x198, 0x19c, 0x1a0, 0x1a4, 0x1a8, 0x1ac, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
+	};
+	bbb_padmap = (volatile uint32_t *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, pad_control_base);
+	for (int i = 0; i < 32 * 4; ++i)
+		bbb_gpio_pad[i] = pad_offset[i] >= 0 ? &bbb_padmap[(0x800 + pad_offset[i]) / 4] : NULL;
 	bbb_active_temp = -1;
+	tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
+	prussdrv_init();
+	int ret = prussdrv_open(PRU_EVTOUT_0);
+	if (ret) {
+		debug("unable to open pru system");
+		abort();
+	}
+	prussdrv_intc_init(&pruss_intc_initdata);
+	prussdrv_map_prumem(PRU_DATARAM, (void **)&bbb_pru);
+	prussdrv_exec_program(PRU, "bbb_pru.bin");
 }
 
 void arch_setup_end(char const *run_id) {
