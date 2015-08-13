@@ -6,7 +6,10 @@
 #include <unistd.h>
 #include <cstdlib>
 #include <cstdio>
+#include <iostream>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <dirent.h>
 #include <poll.h>
 #include <fcntl.h>
 #include <string.h>
@@ -120,65 +123,94 @@ void DATA_SET(int s, int m, int value);
 
 // Variables. {{{
 EXTERN volatile bbb_Gpio *bbb_gpio[4];
-EXTERN volatile uint32_t *bbb_padmap;
-EXTERN volatile uint32_t *bbb_gpio_pad[32 * 4];
+enum BBB_State { MUX_DISABLED, MUX_INPUT, MUX_OUTPUT, MUX_PRU };
+EXTERN BBB_State bbb_gpio_state[NUM_GPIO_PINS];
+extern std::string bbb_muxpath[NUM_GPIO_PINS];
 EXTERN int bbb_devmem;
 EXTERN int bbb_active_temp;
 EXTERN bbb_Temp bbb_temp[NUM_ANALOG_INPUTS];
 EXTERN bbb_Pru *bbb_pru;
-extern int bbb_pru_pad[16], bbb_pru_mode[16];
+extern int bbb_pru_pad[16];
 // }}}
 
 #ifdef DEFINE_VARIABLES
 #if PRU == 0
 int bbb_pru_pad[16] = { 110, 111, 112, 113, 114, 115, 116, 117, 90, 91, 92, 93, 94, 95, 44, 45 };
-int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6 };
+//int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6 };
 #else
 int bbb_pru_pad[16] = { 70, 71, 72, 73, 74, 75, 76, 77, 86, 87, 88, 89, 62, 63, 42, 43 };
-int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5 };
+//int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5 };
 #endif
+#define USABLE(x) std::string(x)
+#define HDMI(x) std::string(x)
+#define FLASH(x) std::string()
+#define INTERNAL std::string()
+#define UNUSABLE std::string()
+std::string bbb_muxpath[NUM_GPIO_PINS] = {
+	UNUSABLE, UNUSABLE, USABLE("P9_22"), USABLE("P9_21"), USABLE("P9_18"), USABLE("P9_17"), INTERNAL, USABLE("P9_42"),
+	HDMI("P8_35"), HDMI("P8_33"), HDMI("P8_31"), HDMI("P8_32"), USABLE("P9_20"), USABLE("P9_19"), USABLE("P9_26"), USABLE("P9_24"),
+	UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, USABLE("P9_41"), UNUSABLE, USABLE("P8_19"), USABLE("P8_13"),
+	UNUSABLE, UNUSABLE, USABLE("P8_14"), USABLE("P8_17"), UNUSABLE, UNUSABLE, USABLE("P9_11"), USABLE("P9_13"),
+
+	FLASH("P8_25"), FLASH("P8_24"), FLASH("P8_5"), FLASH("P8_6"), FLASH("P8_23"), FLASH("P8_22"), FLASH("P8_3"), FLASH("P8_4"),
+	UNUSABLE, UNUSABLE, INTERNAL, INTERNAL, USABLE("P8_12"), USABLE("P8_11"), USABLE("P8_16"), USABLE("P8_15"),
+	USABLE("P9_15"), USABLE("P9_23"), USABLE("P9_14"), USABLE("P9_16"), UNUSABLE, INTERNAL, INTERNAL, INTERNAL,
+	INTERNAL, UNUSABLE, UNUSABLE, INTERNAL, USABLE("P9_12"), USABLE("P8_26"), FLASH("P8_21"), FLASH("P8_20"),
+
+	UNUSABLE, USABLE("P8_18"), USABLE("P8_7"), USABLE("P8_8"), USABLE("P8_10"), USABLE("P8_9"), HDMI("P8_45"), HDMI("P8_46"),
+	HDMI("P8_43"), HDMI("P8_44"), HDMI("P8_41"), HDMI("P8_42"), HDMI("P8_39"), HDMI("P8_40"), HDMI("P8_37"), HDMI("P8_38"),
+	HDMI("P8_36"), HDMI("P8_34"), UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, HDMI("P8_27"), HDMI("P8_29"),
+	HDMI("P8_28"), HDMI("P8_30"), INTERNAL, INTERNAL, INTERNAL, INTERNAL, INTERNAL, INTERNAL,
+
+	UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE,
+	UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, HDMI("P9_31"), HDMI("P9_29"),
+	USABLE("P9_30"), HDMI("P9_28"), USABLE("P9_42"), USABLE("P9_27"), USABLE("P9_41"), HDMI("P9_25"), UNUSABLE, UNUSABLE,
+	UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE
+};
 // Pin setting. {{{
+static void bbb_setmux(Pin_t _pin, BBB_State mode) {
+	int pin = _pin.pin;
+	if (pin >= NUM_GPIO_PINS)
+		pin = bbb_pru_pad[pin - NUM_GPIO_PINS];
+	if (bbb_gpio_state[pin] == mode)
+		return;
+	if (bbb_muxpath[pin] == "") {
+		if (mode != MUX_DISABLED)
+			debug("trying to set up unusable gpio %d", pin);
+		return;
+	}
+	std::ofstream f(bbb_muxpath[pin].c_str());
+	char *codes[4] = { "gpio\n", "gpio_pu\n", "gpio\n", "pruout\n" };
+	f << codes[mode];
+	f.close()
+};
+
 void SET_OUTPUT(Pin_t _pin) {
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS) {
 			bbb_gpio[_pin.pin >> 5]->oe &= ~(1 << (_pin.pin & 0x1f));
-			if (bbb_gpio_pad[_pin.pin])
-				*bbb_gpio_pad[_pin.pin] = 0x2f;	// Fast, with receiver, no pull, gpio.
+			bbb_setmux(_pin, MUX_OUTPUT);
 		}
-		else {
-			int pin = _pin.pin - NUM_GPIO_PINS;
-			debug("setting pru pin to output: pru pin %d gpio %d target %x", pin, bbb_pru_pad[pin], bbb_pru_mode[pin]);
-			*bbb_gpio_pad[bbb_pru_pad[pin]] = bbb_pru_mode[pin];	// Fast, with receiver, no pull.
-			debug("new state: %x", *bbb_gpio_pad[bbb_pru_pad[pin]]);
-		}
+		else
+			bbb_setmux(_pin, MUX_PRU);
 	}
 }
 
 void SET_INPUT(Pin_t _pin) {
 	if (_pin.valid()) {
-		if (_pin.pin < NUM_GPIO_PINS) {
+		if (_pin.pin < NUM_GPIO_PINS)
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
-			if (bbb_gpio_pad[_pin.pin])
-				*bbb_gpio_pad[_pin.pin] = 0x37;	// Fast, with receiver, pull, up, gpio.
-		}
-		else {
+		else
 			debug("warning: trying to set pru pin to input");
-		}
+		bbb_setmux(_pin, MUX_INPUT);
 	}
 }
 
 void SET_INPUT_NOPULLUP(Pin_t _pin) {
 	if (_pin.valid()) {
-		if (_pin.pin < NUM_GPIO_PINS) {
+		if (_pin.pin < NUM_GPIO_PINS)
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
-			if (bbb_gpio_pad[_pin.pin])
-				*bbb_gpio_pad[_pin.pin] = 0x2f;	// Fast, with receiver, no pull, gpio.
-		}
-		else {
-			// Disable this pin.
-			int pin = _pin.pin - NUM_GPIO_PINS;
-			*bbb_gpio_pad[bbb_pru_pad[pin]] = 0x2f;	// Fast, with receiver, no pull, gpio.
-		}
+		bbb_setmux(_pin, MUX_DISABLED);
 	}
 }
 
@@ -218,33 +250,51 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
 // }}}
 
 // Setup helpers. {{{
+static std::string setup_base(std::string const &base, std::string const &prefix) {
+	DIR *d = opendir(base.c_str());
+	if (!d) {
+		debug("unable to open base dir %s", base.c_str());
+		abort();
+	}
+	struct dirent *de;
+	std::string name;
+	while ((de = readdir(d))) {
+		name = de->d_name;
+		if (name.substr(0, prefix.size()) == prefix)
+			return base + '/' + name;
+	}
+	debug("base dir %s has no file with prefix %s in it", base.c_str(), prefix.c_str());
+	abort();
+}
+
 void arch_setup_start(char const *port) {
-	// TODO: find out if this thing varies, implement a search if it does.
-	//FILE *f = fopen("/sys/devices/bone_capemgr.9/slots", "w");
-	//if (!f) {
-	//	fprintf(stderr, "unable to open slots file; are you root?");
-	//	abort();
-	//}
-	//fprintf(f, "BB-ADC\n");
-	//fclose(f);
+	std::string base = find_base("/sys/devices", "bone_capemgr.");
+	std::string name = base + "/slots";
+	std::ofstream f(name.c_str());
+	c << "cape-universal\n";
+	f.close();
+	base = find_base("/sys/devices", "ocp.");
+	base = find_base(base, "helper.");
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
-		// TODO: find out if this varies, implement a search if so.
-		//char *filename;
-		//asprintf(&filename, "/sys/devices/ocp.3/helper.15/AIN%d", i);
-		//bbb_temp[i].fd = open(filename, O_RDONLY);
-		bbb_temp[i].fd = -1;
-		//free(filename);
-		//if (bbb_temp[i].fd < 0) {
-		//	fprintf(stderr, "unable to open analog input");
-		//	abort();
-		//}
+		name = base + "/AIN" + ('0' + i);
+		bbb_temp[i].fd = open(name.c_str(), O_RDONLY);
+		if (bbb_temp[i].fd < 0)
+			fprintf(stderr, "unable to open analog input %d", i);
 		bbb_temp[i].active = false;
+	}
+	base = find_base("/sys/devices", "ocp.");
+	for (int i = 0; i < NUM_GPIO_PINS; ++i) {
+		if (bbb_muxpath[i] == "")
+			continue;
+		bbb_muxpath[i] = find_base(base, bbb_muxpath[i] + "_pixmux.") + "/state";
 	}
 	bbb_devmem = open("/dev/mem", O_RDWR);
 	unsigned gpio_base[4] = { 0x44E07000, 0x4804C000, 0x481AC000, 0x481AE000 };
 	unsigned pad_control_base = 0x44e10000;
 	for (int i = 0; i < 4; ++i)
 		bbb_gpio[i] = (volatile bbb_Gpio *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, gpio_base[i]);
+	/*
+	   Linux does not allow direct access to these memory addresses, even through /dev/mem. :-(
 	int pad_offset[32 * 4] = {
 		0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0xd0, 0xd4, 0xd8, 0xdc, 0x178, 0x17c, 0x180, 0x184,
 		0x11c, 0x120, 0x21c, 0x1b0, 0x1b4, 0x124, 0x20, 0x24, -1, -1, 0x28, 0x2c, 0x128, 0x144, 0x70, 0x74,
@@ -261,6 +311,7 @@ void arch_setup_start(char const *port) {
 	bbb_padmap = (volatile uint32_t *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, pad_control_base);
 	for (int i = 0; i < 32 * 4; ++i)
 		bbb_gpio_pad[i] = pad_offset[i] >= 0 ? &bbb_padmap[(0x800 + pad_offset[i]) / 4] : NULL;
+	*/
 	bbb_active_temp = -1;
 	tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
 	prussdrv_init();
