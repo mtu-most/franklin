@@ -131,10 +131,10 @@ extern int bbb_pru_pad[16], bbb_pru_mode[16];
 
 #ifdef DEFINE_VARIABLES
 #if PRU == 0
-int bbb_pru_pad[16] = { 110, 111, 112, 113, 114, 115, 116, 127, 90, 91, 92, 93, 94, 95, 44, 45 };
+int bbb_pru_pad[16] = { 110, 111, 112, 113, 114, 115, 116, 117, 90, 91, 92, 93, 94, 95, 44, 45 };
 int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6 };
 #else
-int bbb_pru_pad[16] = { 70, 71, 72, 73, 74, 75, 76, 77, 86, 87, 88, 89, 62, 63, 42, 43};
+int bbb_pru_pad[16] = { 70, 71, 72, 73, 74, 75, 76, 77, 86, 87, 88, 89, 62, 63, 42, 43 };
 int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5 };
 #endif
 // Pin setting. {{{
@@ -147,7 +147,9 @@ void SET_OUTPUT(Pin_t _pin) {
 		}
 		else {
 			int pin = _pin.pin - NUM_GPIO_PINS;
-			*bbb_gpio_pad[bbb_pru_pad[pin]] = 0x28 | bbb_pru_mode[pin];	// Fast, with receiver, no pull, gpio.
+			debug("setting pru pin to output: pru pin %d gpio %d target %x", pin, bbb_pru_pad[pin], bbb_pru_mode[pin]);
+			*bbb_gpio_pad[bbb_pru_pad[pin]] = bbb_pru_mode[pin];	// Fast, with receiver, no pull.
+			debug("new state: %x", *bbb_gpio_pad[bbb_pru_pad[pin]]);
 		}
 	}
 }
@@ -173,7 +175,9 @@ void SET_INPUT_NOPULLUP(Pin_t _pin) {
 				*bbb_gpio_pad[_pin.pin] = 0x2f;	// Fast, with receiver, no pull, gpio.
 		}
 		else {
-			debug("warning: trying to set pru pin to input");
+			// Disable this pin.
+			int pin = _pin.pin - NUM_GPIO_PINS;
+			*bbb_gpio_pad[bbb_pru_pad[pin]] = 0x2f;	// Fast, with receiver, no pull, gpio.
 		}
 	}
 }
@@ -181,6 +185,7 @@ void SET_INPUT_NOPULLUP(Pin_t _pin) {
 #define RAWSET(_p) bbb_gpio[(_p) >> 5]->setdataout = 1 << ((_p) & 0x1f)
 #define RAWRESET(_p) bbb_gpio[(_p) >> 5]->cleardataout = 1 << ((_p) & 0x1f)
 void SET(Pin_t _pin) {
+	SET_OUTPUT(_pin);
 	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		if (_pin.inverted())
 			RAWRESET(_pin.pin);
@@ -190,6 +195,7 @@ void SET(Pin_t _pin) {
 }
 
 void RESET(Pin_t _pin) {
+	SET_OUTPUT(_pin);
 	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		if (_pin.inverted())
 			RAWSET(_pin.pin);
@@ -214,23 +220,24 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
 // Setup helpers. {{{
 void arch_setup_start(char const *port) {
 	// TODO: find out if this thing varies, implement a search if it does.
-	FILE *f = fopen("/sys/devices/bone_capemgr.9/slots", "w");
-	if (!f) {
-		fprintf(stderr, "unable to open slots file; are you root?");
-		abort();
-	}
-	fprintf(f, "BB-ADC\n");
-	fclose(f);
+	//FILE *f = fopen("/sys/devices/bone_capemgr.9/slots", "w");
+	//if (!f) {
+	//	fprintf(stderr, "unable to open slots file; are you root?");
+	//	abort();
+	//}
+	//fprintf(f, "BB-ADC\n");
+	//fclose(f);
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
 		// TODO: find out if this varies, implement a search if so.
-		char *filename;
-		asprintf(&filename, "/sys/devices/ocp.3/helper.15/AIN%d", i);
-		bbb_temp[i].fd = open(filename, O_RDONLY);
-		free(filename);
-		if (bbb_temp[i].fd < 0) {
-			fprintf(stderr, "unable to open analog input");
-			abort();
-		}
+		//char *filename;
+		//asprintf(&filename, "/sys/devices/ocp.3/helper.15/AIN%d", i);
+		//bbb_temp[i].fd = open(filename, O_RDONLY);
+		bbb_temp[i].fd = -1;
+		//free(filename);
+		//if (bbb_temp[i].fd < 0) {
+		//	fprintf(stderr, "unable to open analog input");
+		//	abort();
+		//}
 		bbb_temp[i].active = false;
 	}
 	bbb_devmem = open("/dev/mem", O_RDWR);
@@ -318,12 +325,12 @@ int arch_tick() {
 		int a = bbb_active_temp;
 		// New temperature ready to read.
 		char data[6];	// 12 bit adc: maximum 4 digits, plus newline and NUL.
-		int num = read(bbb_temp[a].fd, data, sizeof(data));
+		/*int num = read(bbb_temp[a].fd, data, sizeof(data));
 		bbb_next_adc();
 		if (num <= 0)
 			debug("Error reading from adc.");
-		else if (bbb_temp[a].active) {
-			int t = atoi(data);
+		else */if (bbb_temp[a].active) {
+			int t = 0; //atoi(data);
 			if (bbb_temp[a].power_pin >= 0) {
 				if ((bbb_temp[a].power_target < t) ^ bbb_temp[a].power_inverted)
 					RAWSET(bbb_temp[a].power_pin);
