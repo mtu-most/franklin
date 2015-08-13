@@ -39,7 +39,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'expert': '',
 		'user': '',
 		'done': '',
-		'local': 'False',
+		'local': '',
 		'driver': '',
 		'cdriver': '',
 		'log': '',
@@ -59,7 +59,6 @@ httpd = None
 default_printer = (None, None)
 ports = {}
 autodetect = config['autodetect'].lower() == 'true'
-local = config['local'].lower() == 'true'
 tls = config['tls'].lower() == 'true'
 orphans = {}
 scripts = {}
@@ -581,7 +580,7 @@ class Port: # {{{
 def detect(port): # {{{
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
-		process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = subprocess.Popen((config['driver'], '--cdriver', config['local'] or config['cdriver'], '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		ports[port] = Port(port, process, None, run_id)
 		return False
 	if not os.path.exists(port):
@@ -702,23 +701,23 @@ def print_done(port, completed, reason): # {{{
 		GLib.io_add_watch(p.stdout.fileno(), GLib.IO_IN, process_done)
 # }}}
 
-# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
-if local:
+if config['local'] != '':
 	websockets.call(None, Connection.add_port, '-')()
-else:
+
+# Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
+try:
+	# Try Linux sysfs.
+	for tty in os.listdir('/sys/class/tty'):
+		websockets.call(None, Connection.add_port, '/dev/' + tty)()
+except:
+	# Try more generic approach.  Don't use this by default, because it doesn't detect all ports on GNU/Linux.
 	try:
-		# Try Linux sysfs.
-		for tty in os.listdir('/sys/class/tty'):
-			websockets.call(None, Connection.add_port, '/dev/' + tty)()
+		import serial.tools.list_ports
+		for tty in serial.tools.list_ports.comports():
+			websockets.call(None, Connection.add_port, tty[0])()
 	except:
-		# Try more generic approach.  Don't use this by default, because it doesn't detect all port on GNU/Linux.
-		try:
-			import serial.tools.list_ports
-			for tty in serial.tools.list_ports.comports():
-				websockets.call(None, Connection.add_port, tty[0])()
-		except:
-			traceback.print_exc()
-			log('Not probing serial ports, because an error occurred: %s' % sys.exc_info()[1])
+		traceback.print_exc()
+		log('Not probing serial ports, because an error occurred: %s' % sys.exc_info()[1])
 
 # Set default printer. {{{
 if ' ' in config['printer']:
