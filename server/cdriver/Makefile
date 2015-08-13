@@ -9,11 +9,12 @@ all: cdriver
 
 ifeq (${TARGET}, bbb)
 ARCH_HEADER = arch-bbb.h
-DTS = athena-0.dts
-DTBO = athena-0-00A0.dtbo
+LIBS += -lprussdrv
 
-$(DTBO): $(DTS)
-	dtc -O dtb -o $@ -b 0 -@ $<
+%.bin: %.asm Makefile
+	pasm -V2 -b $<
+
+cdriver: bbb_pru.bin
 else
 ARCH_HEADER = arch-avr.h
 endif
@@ -45,7 +46,7 @@ CPPFLAGS += -DARCH_INCLUDE=\"${ARCH_HEADER}\"
 OBJECTS = $(addprefix build/,$(patsubst %.cpp,%.o,$(SOURCES)))
 
 cdriver: $(OBJECTS) Makefile
-	g++ $(LDFLAGS) $(OBJECTS) -o $@
+	g++ $(LDFLAGS) $(OBJECTS) $(LIBS) -o $@
 
 build/stamp:
 	mkdir -p build

@@ -52,7 +52,7 @@ start:
 	.endm
 
 mainloop:
-	lbbo r3, c24, 0, 8	; load current settings
+	lbco r3, c24, 0, 8	; load current settings
 	; r3.w0 = neg_base
 	; r3.w1 = pos_base
 	; r4.b0 = current_sample

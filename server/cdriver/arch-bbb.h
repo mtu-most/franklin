@@ -18,10 +18,12 @@
 // }}}
 
 // Defines. {{{
+#define PRU 0
+#define PRU_DATARAM PRUSS0_PRU0_DATARAM
 #if !defined(PRU) || (PRU != 0 && PRU != 1)
 #error PRU must be defined as 0 or 1.
 #endif
-#define NUM_ANALOG_INPUTS 7
+#define NUM_ANALOG_INPUTS 8
 #define NUM_GPIO_PINS (4 * 32)
 #define NUM_DIGITAL_PINS (NUM_GPIO_PINS + 16)
 #define ADCBITS 12
@@ -164,7 +166,7 @@ void SET_INPUT(Pin_t _pin) {
 }
 
 void SET_INPUT_NOPULLUP(Pin_t _pin) {
-	if (_pin.valid())
+	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS) {
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
 			if (bbb_gpio_pad[_pin.pin])
@@ -213,14 +215,22 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
 void arch_setup_start(char const *port) {
 	// TODO: find out if this thing varies, implement a search if it does.
 	FILE *f = fopen("/sys/devices/bone_capemgr.9/slots", "w");
+	if (!f) {
+		fprintf(stderr, "unable to open slots file; are you root?");
+		abort();
+	}
 	fprintf(f, "BB-ADC\n");
 	fclose(f);
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
 		// TODO: find out if this varies, implement a search if so.
 		char *filename;
-		asprintf(&filename, "/sys/devices/ocp.3/helper.12/AIN%d", i);
+		asprintf(&filename, "/sys/devices/ocp.3/helper.15/AIN%d", i);
 		bbb_temp[i].fd = open(filename, O_RDONLY);
 		free(filename);
+		if (bbb_temp[i].fd < 0) {
+			fprintf(stderr, "unable to open analog input");
+			abort();
+		}
 		bbb_temp[i].active = false;
 	}
 	bbb_devmem = open("/dev/mem", O_RDWR);
@@ -252,9 +262,9 @@ void arch_setup_start(char const *port) {
 		debug("unable to open pru system");
 		abort();
 	}
-	prussdrv_intc_init(&pruss_intc_initdata);
+	prussdrv_pruintc_init(&pruss_intc_initdata);
 	prussdrv_map_prumem(PRU_DATARAM, (void **)&bbb_pru);
-	prussdrv_exec_program(PRU, "bbb_pru.bin");
+	prussdrv_exec_program(PRU, "/usr/lib/franklin/bbb_pru.bin");
 }
 
 void arch_setup_end(char const *run_id) {

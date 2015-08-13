@@ -14,6 +14,7 @@ override_dh_auto_build:
 ifeq (${ARCH}, armhf)
 	${MAKE} -C server/cdriver TARGET=bbb
 	mv server/cdriver/cdriver server/cdriver/cdriver.local
+	${MAKE} -C server/cdriver clean
 endif
 	${MAKE} -C server/cdriver
 	${MAKE} -C firmware TARGET=melzi
@@ -25,7 +26,7 @@ override_dh_auto_install:
 	dh_auto_install
 ifeq (${ARCH}, armhf)
 	dh_install server/cdriver/cdriver.local /usr/lib/franklin/
-	dh_install server/cdriver/athena-0-00A0.dtbo /lib/firmware/
+	dh_install server/cdriver/bbb_pru.bin /usr/lib/franklin/
 endif
 
 override_dh_auto_clean:
