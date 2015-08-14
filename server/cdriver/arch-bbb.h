@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <iostream>
+#include <fstream>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <dirent.h>
@@ -180,9 +181,9 @@ static void bbb_setmux(Pin_t _pin, BBB_State mode) {
 		return;
 	}
 	std::ofstream f(bbb_muxpath[pin].c_str());
-	char *codes[4] = { "gpio\n", "gpio_pu\n", "gpio\n", "pruout\n" };
+	char const *codes[4] = { "gpio\n", "gpio_pu\n", "gpio\n", "pruout\n" };
 	f << codes[mode];
-	f.close()
+	f.close();
 };
 
 void SET_OUTPUT(Pin_t _pin) {
@@ -250,7 +251,7 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
 // }}}
 
 // Setup helpers. {{{
-static std::string setup_base(std::string const &base, std::string const &prefix) {
+static std::string find_base(std::string const &base, std::string const &prefix) {
 	DIR *d = opendir(base.c_str());
 	if (!d) {
 		debug("unable to open base dir %s", base.c_str());
@@ -264,19 +265,24 @@ static std::string setup_base(std::string const &base, std::string const &prefix
 			return base + '/' + name;
 	}
 	debug("base dir %s has no file with prefix %s in it", base.c_str(), prefix.c_str());
-	abort();
+	return std::string();
 }
 
 void arch_setup_start(char const *port) {
 	std::string base = find_base("/sys/devices", "bone_capemgr.");
 	std::string name = base + "/slots";
 	std::ofstream f(name.c_str());
-	c << "cape-universal\n";
+	f << "cape-universal\n";
+	f.close();
+	f.open(name.c_str());
+	f << "BB-ADC\n";
 	f.close();
 	base = find_base("/sys/devices", "ocp.");
 	base = find_base(base, "helper.");
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
-		name = base + "/AIN" + ('0' + i);
+		char num[2] = "0";
+		num[0] += i;
+		name = base + "/AIN" + num;
 		bbb_temp[i].fd = open(name.c_str(), O_RDONLY);
 		if (bbb_temp[i].fd < 0)
 			fprintf(stderr, "unable to open analog input %d", i);
@@ -286,7 +292,7 @@ void arch_setup_start(char const *port) {
 	for (int i = 0; i < NUM_GPIO_PINS; ++i) {
 		if (bbb_muxpath[i] == "")
 			continue;
-		bbb_muxpath[i] = find_base(base, bbb_muxpath[i] + "_pixmux.") + "/state";
+		bbb_muxpath[i] = find_base(base, bbb_muxpath[i] + "_pinmux.") + "/state";
 	}
 	bbb_devmem = open("/dev/mem", O_RDWR);
 	unsigned gpio_base[4] = { 0x44E07000, 0x4804C000, 0x481AC000, 0x481AE000 };
@@ -373,15 +379,22 @@ void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin, b
 int arch_tick() {
 	// Handle temps and check limit switches.
 	if (bbb_active_temp >= 0) {
-		int a = bbb_active_temp;
 		// New temperature ready to read.
-		char data[6];	// 12 bit adc: maximum 4 digits, plus newline and NUL.
-		/*int num = read(bbb_temp[a].fd, data, sizeof(data));
+		int a = bbb_active_temp;
 		bbb_next_adc();
-		if (num <= 0)
-			debug("Error reading from adc.");
-		else */if (bbb_temp[a].active) {
-			int t = 0; //atoi(data);
+		char data[6];	// 12 bit adc: maximum 4 digits, plus newline and NUL.
+		int num = read(bbb_temp[a].fd, data, sizeof(data));
+		if (num <= 0) {
+			if (errno == EAGAIN)
+				a = -1;
+			else {
+				debug("Error reading from adc %d: %s.", a, strerror(errno));
+				data[0] = '0';
+				data[1] = '\0';
+			}
+		}
+		if (a >= 0 && bbb_temp[a].active) {
+			int t = atoi(data);
 			if (bbb_temp[a].power_pin >= 0) {
 				if ((bbb_temp[a].power_target < t) ^ bbb_temp[a].power_inverted)
 					RAWSET(bbb_temp[a].power_pin);

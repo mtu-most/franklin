@@ -1,4 +1,3 @@
-#define EXTERN	// This must be done in exactly one source file.
 #include "cdriver.h"
 
 void setup(char const *port, char const *run_id)

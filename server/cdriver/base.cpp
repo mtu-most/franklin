@@ -1,5 +1,6 @@
 // vim: set foldmethod=marker :
 
+#define EXTERN	// This must be done in exactly one source file.
 #include "cdriver.h"
 
 #ifdef SERIAL
