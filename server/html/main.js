@@ -1377,7 +1377,7 @@ function move_axis(printer, axes, amounts, pos) { // {{{
 	var target = new Object;
 	for (var a = 0; a < axes.length; ++a)
 		target[axes[a]] = pos[a];
-	printer.call('goto', [[target]], {'cb': true}, function() {
+	printer.call('line', [[target]], {'cb': true}, function() {
 		printer.call('wait_for_cb', [], {}, function() {
 			update_canvas_and_spans(printer);
 		});
@@ -1396,7 +1396,7 @@ function set_reference(printer, x, y, ctrl) { // {{{
 				var dx = Math.cos(printer.targetangle) * (x - printer.reference[0]) - Math.sin(printer.targetangle) * (y - printer.reference[1]);
 				var dy = Math.cos(printer.targetangle) * (y - printer.reference[1]) + Math.sin(printer.targetangle) * (x - printer.reference[0]);
 				printer.reference = [x, y];
-				printer.call('goto', [[[current_x + dx, current_y + dy]]], {'cb': true}, function() {
+				printer.call('line', [[[current_x + dx, current_y + dy]]], {'cb': true}, function() {
 					printer.call('wait_for_cb', [], {}, function() {
 						update_canvas_and_spans(printer);
 					});
@@ -1850,7 +1850,7 @@ function xymove(printer, e) { // {{{
 		return false;
 	if (e.buttons & 1) {
 		drag[3] = true;
-		printer.call('goto', [[[drag[0][1] + dx, drag[1][1] + dy]]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
+		printer.call('line', [[[drag[0][1] + dx, drag[1][1] + dy]]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
 	}
 	else if (e.buttons & 4) {
 		printer.targetx = drag[0][1] + dx;
@@ -1883,7 +1883,7 @@ function zmove(printer, e) { // {{{
 		return false;
 	if (e.buttons & 1) {
 		drag[3] = true;
-		printer.call('goto', [[{2: drag[2][1] + dz}]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
+		printer.call('line', [[{2: drag[2][1] + dz}]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
 	}
 	else if (e.buttons & 4) {
 		printer.targetz = drag[2][1] + dz;

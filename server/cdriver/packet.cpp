@@ -133,11 +133,11 @@ void packet()
 		break;
 	}
 #endif
-	case CMD_GOTO:	// goto
+	case CMD_LINE:	// line
 	case CMD_PROBE:	// probe
 	{
 #ifdef DEBUG_CMD
-		debug("CMD_GOTO/PROBE");
+		debug("CMD_LINE/PROBE");
 #endif
 		last_active = millis();
 		if (settings.queue_full)
@@ -163,7 +163,7 @@ void packet()
 					queue[settings.queue_end].f[ch] = f.f;
 				else
 					queue[settings.queue_end].data[ch - 2] = f.f;
-				//debug("goto (%d) %d %f", settings.queue_end, ch, f.f);
+				//debug("line (%d) %d %f", settings.queue_end, ch, f.f);
 				initialized = true;
 				++t;
 			}
@@ -172,7 +172,7 @@ void packet()
 					queue[settings.queue_end].f[ch] = NAN;
 				else
 					queue[settings.queue_end].data[ch - 2] = NAN;
-				//debug("goto %d -", ch);
+				//debug("line %d -", ch);
 			}
 		}
 		if (!(command[0][2] & 0x1) || isnan(queue[settings.queue_end].f[0]))

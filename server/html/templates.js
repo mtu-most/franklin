@@ -393,9 +393,9 @@ function Map() { // {{{
 	b.type = 'button';
 	b.printer = printer;
 	t.Add(make_tablerow(add_name('space', 0, 0), [
-		Float([['axis', [0, 0]], 'current'], 2, 1, '', function(v) { b.printer.call('goto', [[{0: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
-		Float([['axis', [0, 1]], 'current'], 2, 1, '', function(v) { b.printer.call('goto', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
-		Float([['axis', [0, 2]], 'current'], 2, 1, '', function(v) { b.printer.call('goto', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
+		Float([['axis', [0, 0]], 'current'], 2, 1, '', function(v) { b.printer.call('line', [[{0: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
+		Float([['axis', [0, 1]], 'current'], 2, 1, '', function(v) { b.printer.call('line', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
+		Float([['axis', [0, 2]], 'current'], 2, 1, '', function(v) { b.printer.call('line', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
 		b,
 		[[add_name('axis', 0, 2), ' Offset:'], Float([null, 'zoffset'], 2, 1), add_name('unit', 0, 0)]
 	], ['', '', '', '', '', '']));
@@ -468,7 +468,7 @@ function Multipliers() { // {{{
 			var obj = {};
 			obj[space] = {};
 			obj[space][axis] = v;
-			e.printer.call('goto', [obj], {cb: true}, function() {
+			e.printer.call('line', [obj], {cb: true}, function() {
 				e.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(e.printer); });
 			});
 		}));
