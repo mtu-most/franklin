@@ -1,0 +1,84 @@
+#!/usr/bin/python3
+
+import joystick as js
+import os
+import sys
+import ctypes
+import fcntl
+import select
+import struct
+import fhs
+
+config = fhs.init({'buttons': '', 'axes': '', 'js': '/dev/input/js0', 'printer': '8000', 'epsilon': 100, 'small': 2000})
+
+p = websockets.RPC(config['printer'])
+fd = os.open(config['js'], os.O_RDWR)
+if fd < 0:
+	sys.stderr.write('Cannot open joystick file')
+	sys.exit(1)
+
+def ioctl(op, t):
+	value = t()
+	ret = fcntl.ioctl(fd, op, value)
+	if ret < 0:
+		sys.stderr.write('ioctl failed')
+		sys.exit(1)
+	return value.value
+
+version = ioctl(js.gversion, ctypes.c_uint32)
+if version != js.version:
+	sys.stderr.write('version mismatch (%x != %x)' % (version, js.version))
+
+axes = [0] * ioctl(js.gaxes, ctypes.c_uint8)
+axes_zero = [0] * len(axes)
+buttons = [None] * ioctl(js.gbuttons, ctypes.c_uint8)
+
+print('axes: %d buttons: %d' % (len(axes), len(buttons)))
+
+controls = {2: [0, 0, -1], 3: [1, 0, 0], 4: [0, 1, 0], 5: [0, 0, 1]}
+scale = [50., 50., 10.]
+
+def handle_axis(num, value):
+	if axes[num] - value < config['epsilon'] and abs(value) < config['small']:
+		was_zero = axis[num] == axes_zero[num]
+		axes_zero[num] = value
+	axes[num] = value
+	value -= axes_zero[num]
+	if value == 0 and was_zero:
+		return
+	print('axis %d moved to %d' % (num, value))
+	# handle it.
+
+def handle_button(num, value):
+	buttons[num] = value
+	if value == 0 or button_action[num] is MODIFIER:
+		return
+	for i, m in enumerate(modifiers):
+		if buttons[m]:
+			num += len(buttons) << i
+	print('button %d pressed' % num)
+	# handle it.
+	if button_action[num] is None:
+		return
+
+def tick():
+	move = [0., 0., 0.]
+	for a in controls:
+		for c in controls[a]:
+			move[c] += controls[a][c] * (axes[a] - axes_zero[a]) * scale[a] / 10e15	# 10 for updates/s, e15 for internal scale of joystick readings.
+	if any(move):
+		p.line(move, rel = True)
+
+start = time.time()
+while True:
+	ret = select.select([fd], [], [fd], .1 - (time.time() - start))
+	if all(len(f) == 0 for f in ret):
+		# Timeout.
+		tick()
+		start += .1
+		continue
+	time, value, type, number = js.event.unpack(os.read(fd, js.event.size))
+	if type & js.event_axis:
+		handle_axis(number, value)
+	if type & js.event_button:
+		handle_button(number, value)
