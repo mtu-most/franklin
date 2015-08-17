@@ -82,7 +82,7 @@ struct bbb_Gpio { // {{{
 
 struct bbb_Temp { // {{{
 	int id;
-	int fd;	// For reading the ADC.
+	FILE *fd;	// For reading the ADC.
 	bool active;
 	int power_pin, fan_pin;
 	bool power_inverted, fan_inverted;
@@ -90,7 +90,7 @@ struct bbb_Temp { // {{{
 }; // }}}
 
 struct bbb_Pru { // {{{
-	volatile uint16_t neg_base, pos_base;
+	volatile uint16_t base, dirs;
 	// These must be bytes, because read and write must be atomic.
 	volatile uint8_t current_sample, current_fragment, next_fragment, state;
 	volatile uint16_t buffer[FRAGMENTS_PER_BUFFER][SAMPLES_PER_FRAGMENT][2];
@@ -283,9 +283,9 @@ void arch_setup_start(char const *port) {
 		char num[2] = "0";
 		num[0] += i;
 		name = base + "/AIN" + num;
-		bbb_temp[i].fd = open(name.c_str(), O_RDONLY);
-		if (bbb_temp[i].fd < 0)
-			fprintf(stderr, "unable to open analog input %d", i);
+		bbb_temp[i].file = fopen(name.c_str(), "r");
+		if (!bbb_temp[i].file)
+			fprintf(stderr, "unable to open analog input %d: %s", i, strerror(errno));
 		bbb_temp[i].active = false;
 	}
 	base = find_base("/sys/devices", "ocp.");
@@ -320,15 +320,21 @@ void arch_setup_start(char const *port) {
 	*/
 	bbb_active_temp = -1;
 	tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
-	prussdrv_init();
+	debug("pru init %d", prussdrv_init());
 	int ret = prussdrv_open(PRU_EVTOUT_0);
 	if (ret) {
 		debug("unable to open pru system");
 		abort();
 	}
-	prussdrv_pruintc_init(&pruss_intc_initdata);
-	prussdrv_map_prumem(PRU_DATARAM, (void **)&bbb_pru);
-	prussdrv_exec_program(PRU, "/usr/lib/franklin/bbb_pru.bin");
+	debug("init intc %d", prussdrv_pruintc_init(&pruss_intc_initdata));
+	debug("pru mmap %d", prussdrv_map_prumem(PRU_DATARAM, (void **)&bbb_pru));
+	bbb_pru->base = 0;
+	bbb_pru->dirs = 0;
+	bbb_pru->current_fragment = 0;
+	bbb_pru->current_sample = 0;
+	bbb_pru->next_fragment = 0;
+	bbb_pru->state = 1;
+	debug("pru exec %d", prussdrv_exec_program(PRU, "/usr/lib/franklin/bbb_pru.bin"));
 }
 
 void arch_setup_end(char const *run_id) {
@@ -368,9 +374,8 @@ void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin, b
 // buffer with steps: writable by cpu until active, then readable by pru until discarded.
 // current fragment in buffer: writable by pru, readable by cpu.
 // current sample in buffer: writable by pru, readable by cpu.
-// current moving direction (-1/0/1): writable by pru, readable by cpu.
+// state.
 //
-// PRU globals:
 // state: 0: waiting for limit check; cpu can set to 1, 2, or 3.
 // state: 1: not running; cpu can set to 0.
 // state: 2: Doing single step; pru can set to 0; cpu can set to 4 (and expect pru to set it to 0 or 1).
@@ -383,7 +388,8 @@ int arch_tick() {
 		int a = bbb_active_temp;
 		bbb_next_adc();
 		char data[6];	// 12 bit adc: maximum 4 digits, plus newline and NUL.
-		int num = read(bbb_temp[a].fd, data, sizeof(data));
+		fseek(bbb_temp[a].file, SEEK_SET, 0);
+		int num = fread(data, 1, sizeof(data), bbb_temp[a].file);
 		if (num <= 0) {
 			if (errno == EAGAIN)
 				a = -1;
@@ -414,6 +420,7 @@ int arch_tick() {
 		bbb_next_adc();
 	// TODO: Pwm.
 	int state = bbb_pru->state;
+	debug("pru state: %d %d %d", state, bbb_pru->current_fragment, bbb_pru->current_sample);
 	if (state != 2 && state != 1) {
 		// Check probe.
 		if (settings.probing && probe_pin.valid()) {
@@ -441,7 +448,7 @@ int arch_tick() {
 				if (!spaces[s].motor[m]->active || !spaces[s].motor[m]->step_pin.valid() || spaces[s].motor[m]->step_pin.pin < NUM_GPIO_PINS)
 					continue;
 				int pin = spaces[s].motor[m]->step_pin.pin - NUM_GPIO_PINS;
-				bool negative = bool((bbb_pru->buffer[cf][cs][0] ^ bbb_pru->neg_base) & (1 << pin)) ^ spaces[s].motor[m]->dir_pin.inverted();
+				bool negative = bool(bbb_pru->buffer[cf][cs][0] & (1 << pin)) ^ spaces[s].motor[m]->dir_pin.inverted();
 				Pin_t *p = negative ? &spaces[s].motor[m]->limit_max_pin : &spaces[s].motor[m]->limit_min_pin;
 				if (!p->valid())
 					continue;
@@ -467,21 +474,21 @@ int arch_tick() {
 }
 
 void arch_motors_change() {
+	bbb_pru->base = 0;
+	bbb_pru->dirs = 0;
 	for (int s = 0; s < num_spaces; ++s) {
 		for (int m = 0; m < spaces[s].num_motors; ++m) {
 			Pin_t *p = &spaces[s].motor[m]->dir_pin;
 			if (p->valid() && p->pin >= NUM_GPIO_PINS) {
 				int pin = p->pin - NUM_GPIO_PINS;
 				if (p->inverted())
-					bbb_pru->pos_base |= 1 << pin;
-				else
-					bbb_pru->neg_base |= 1 << pin;
+					bbb_pru->base |= 1 << pin;
+				bbb_pru->dirs |= 1 << pin;
 			}
 			p = &spaces[s].motor[m]->step_pin;
 			if (p->valid() && p->pin >= NUM_GPIO_PINS && p->inverted()) {
 				int pin = p->pin - NUM_GPIO_PINS;
-				bbb_pru->pos_base |= 1 << pin;
-				bbb_pru->neg_base |= 1 << pin;
+				bbb_pru->base |= 1 << pin;
 			}
 		}
 	}
@@ -531,8 +538,10 @@ bool arch_running() {
 void arch_start_move(int extra) {
 	// Start moving with sent buffers.
 	int state = bbb_pru->state;
-	if (state != 1)
-		debug("arch_start_move called with non-1 state %d", state);
+	if (state != 1) {
+		//debug("arch_start_move called with non-1 state %d", state);
+		return;
+	}
 	bbb_pru->state = 0;
 }
 
@@ -576,10 +585,7 @@ off_t arch_send_audio(uint8_t *data, off_t sample, off_t num_records, int motor)
 static void bbb_set_pru(int which, int s, int m) {
 	int pin = spaces[s].motor[m]->step_pin.pin - NUM_GPIO_PINS;
 	if (spaces[s].motor[m]->step_pin.valid() && pin >= 0) {
-		if (spaces[s].motor[m]->step_pin.inverted())
-			bbb_pru->buffer[current_fragment][current_fragment_pos][which] &= ~(1 << pin);
-		else
-			bbb_pru->buffer[current_fragment][current_fragment_pos][which] |= 1 << pin;
+		bbb_pru->buffer[current_fragment][current_fragment_pos][which] |= 1 << pin;
 	}
 }
 
@@ -590,7 +596,7 @@ void DATA_SET(int s, int m, int value) {
 			debug("invalid sample %d for %d %d", value, s, m);
 			abort();
 		}
-		// The invert flag of the dir pin is used even if the pin is invalid.
+		// The invert flag of the dir pin is used even if the pin is invalid (which it should never be).
 		if ((value < 0) ^ spaces[s].motor[m]->dir_pin.inverted())
 			bbb_set_pru(0, s, m);
 		else
