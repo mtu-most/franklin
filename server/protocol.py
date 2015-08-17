@@ -24,7 +24,7 @@ single = {
 command = {
 	'SET_UUID': 0x00,
 	'GET_UUID': 0x01,
-	'GOTO': 0x02,
+	'LINE': 0x02,
 	'RUN_FILE': 0x03,
 	'PROBE': 0x04,
 	'SLEEP': 0x05,
@@ -50,10 +50,8 @@ command = {
 	'READPIN': 0x19,
 	'HOME': 0x1a,
 	'RECONNECT': 0x1b,
-	'AUDIO_SETUP': 0x1c,
-	'AUDIO_DATA': 0x1d,
-	'RESUME': 0x1e,
-	'GETTIME': 0x1f,
+	'RESUME': 0x1c,
+	'GETTIME': 0x1d,
 	}
 
 rcommand = {

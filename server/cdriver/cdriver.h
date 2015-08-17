@@ -86,7 +86,7 @@ enum Command {
 	// from host
 	CMD_SET_UUID,	// 22 bytes: uuid.
 	CMD_GET_UUID,	// 0.  Reply: UUID.
-	CMD_GOTO,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
+	CMD_LINE,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
 	CMD_RUN_FILE,	// n byte: filename.
 	CMD_PROBE,	// same.  Reply (later): LIMIT/MOVECB.
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
@@ -112,8 +112,6 @@ enum Command {
 	CMD_READPIN,	// 1 byte: which channel. Reply: GPIO.
 	CMD_HOME,	// 1 byte: homing space; n bytes: homing type (0=pos, 1=neg, 3=no)
 	CMD_RECONNECT,	// 1 byte: name length, n bytes: port name
-	CMD_AUDIO_SETUP,	// 1-2 byte: which channels (like for goto); 2 byte: μs_per_sample.
-	CMD_AUDIO_DATA,	// AUDIO_FRAGMENT_SIZE bytes: data.  Returns ACK or ACKWAIT.
 	CMD_RESUME,
 	CMD_GETTIME,
 	// to host

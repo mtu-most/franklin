@@ -775,7 +775,7 @@ class Printer: # {{{
 				self.job_id = None
 				self.jobs_active = []
 		while self.queue_pos < len(self.queue):
-			id, axes, e, f0, f1, which, cb = self.queue[self.queue_pos]
+			id, axes, e, f0, f1, which, cb, rel = self.queue[self.queue_pos]
 			self.queue_pos += 1
 			if id is not None:
 				self._send(id, 'error', 'aborted')
@@ -883,7 +883,7 @@ class Printer: # {{{
 				log('unpaused, %d %d' % (self.queue_pos, len(self.queue)))
 				if self.queue_pos >= len(self.queue):
 					break
-			id, axes, f0, f1, cb, probe = self.queue[self.queue_pos]
+			id, axes, f0, f1, cb, probe, rel = self.queue[self.queue_pos]
 			#log('queueing %s' % repr((id, axes, f0, f1, cb, probe)))
 			self.queue_pos += 1
 			# Turn sequences into a dict.
@@ -912,9 +912,11 @@ class Printer: # {{{
 							continue
 						if axis is not None and not math.isnan(axis):
 							if i == 1 and ij != self.current_extruder:
-								log('setting current extruder to %d' % ij)
+								#log('setting current extruder to %d' % ij)
 								self.current_extruder = ij
 								self._write_globals()
+							if rel:
+								axis += sp.get_current_pos(ij)
 							# Limit values for axis.
 							if axis > sp.axis[ij]['max'] - (0 if i != 0 or ij != 2 else self.zoffset):
 								log('limiting %d %d to %f because it exceeds max' % (i, ij, axis))
@@ -934,6 +936,8 @@ class Printer: # {{{
 								log('Setting current extruder to %d' % ij)
 								self.current_extruder = ij
 								self._write_globals(len(self.spaces), len(self.temps), len(self.gpios))
+							if rel:
+								axis += sp.get_current_pos(ij)
 							# Limit values for axis.
 							if axis > sp.axis[ij]['max'] - (0 if i != 0 or ij != 2 else self.zoffset):
 								log('limiting %d %d to %f because it exceeds max' % (i, ij, axis))
@@ -975,7 +979,7 @@ class Printer: # {{{
 			else:
 				self.movewait += 1
 				#log('movewait +1 -> %d' % self.movewait)
-				p = chr(protocol.command['GOTO'])
+				p = chr(protocol.command['LINE'])
 			#log('queueing %s' % repr((axes, f0, f1, cb, self.flushing)))
 			self._send_packet(p + ''.join([chr(t) for t in targets]) + args, move = True)
 			if id is not None:
@@ -1033,7 +1037,7 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("N t %s" % (self.home_target))
-				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
+				self.line({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 1:
@@ -1054,7 +1058,7 @@ class Printer: # {{{
 				k = self.home_target.keys()[0]
 				dist = abs(self.home_target[k] - self.spaces[self.home_space].get_current_pos(k))
 				if dist > 0:
-					self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
+					self.line({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
 					return
 				# Fall through.
 			#log('done 1')
@@ -1071,7 +1075,7 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("1 t %s" % (self.home_target))
-				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
+				self.line({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 2:
@@ -1091,7 +1095,7 @@ class Printer: # {{{
 				#log("2 t %s" % (self.home_target))
 				k = self.home_target.keys()[0]
 				dist = abs(self.home_target[k] - self.spaces[self.home_space].get_current_pos(k))
-				self.goto({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
+				self.line({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
 				return
 			if len(self.home_target) > 0:
 				log('Warning: not all limits were found during homing')
@@ -1146,7 +1150,7 @@ class Printer: # {{{
 					self.home_cb[0] = False
 					if self.home_cb not in self.movecb:
 						self.movecb.append(self.home_cb)
-					self.goto({self.home_space: target}, cb = True, force = True)[1](None)
+					self.line({self.home_space: target}, cb = True, force = True)[1](None)
 					return
 			# Fall through.
 		if self.home_phase == 5:
@@ -1189,7 +1193,7 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log('target: %s' % repr(target))
-				self.goto({self.home_space: target}, cb = True, force = True)[1](None)
+				self.line({self.home_space: target}, cb = True, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 7:
@@ -1243,14 +1247,14 @@ class Printer: # {{{
 			self.movecb.append(self.probe_cb)
 			px = p[0][0] + p[0][2] * x / p[1][0]
 			py = p[0][1] + p[0][3] * y / p[1][1]
-			self.goto([[px * self.gcode_angle[1] - py * self.gcode_angle[0], py * self.gcode_angle[1] + px * self.gcode_angle[0]]], cb = True)[1](None)
+			self.line([[px * self.gcode_angle[1] - py * self.gcode_angle[0], py * self.gcode_angle[1] + px * self.gcode_angle[0]]], cb = True)[1](None)
 		elif phase == 1:
 			# Probe
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 2, good)
 			if self.pin_valid(self.probe_pin):
 				self.movecb.append(self.probe_cb)
 				z_low = self.spaces[0].axis[2]['min']
-				self.goto([{2: z_low}], f0 = float(speed) / (z - z_low) if z > z_low else float('inf'), cb = True, probe = True)[1](None)
+				self.line([{2: z_low}], f0 = float(speed) / (z - z_low) if z > z_low else float('inf'), cb = True, probe = True)[1](None)
 			else:
 				self.request_confirmation('Please move the tool to the surface')[1](False)
 		else:
@@ -1279,7 +1283,7 @@ class Printer: # {{{
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 0, good)
 			self.movecb.append(self.probe_cb)
 			# Retract
-			self.goto([{2: z}], cb = True)[1](None)
+			self.line([{2: z}], cb = True)[1](None)
 	# }}}
 	def _next_job(self): # {{{
 		# Set all extruders to 0.
@@ -1523,7 +1527,7 @@ class Printer: # {{{
 				self._send(id, 'return', w)
 		self.movecb.append((False, cb))
 		if self.flushing is not True:
-			self.goto(cb = True)[1](None)
+			self.line(cb = True)[1](None)
 		#log('end flush preparation')
 	# }}}
 	@delayed
@@ -1539,20 +1543,20 @@ class Printer: # {{{
 		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
 	# }}}
 	@delayed
-	def goto(self, id, moves = (), f0 = None, f1 = None, cb = False, probe = False, force = False): # {{{
-		#log('goto %s %s %s %d %d' % (repr(moves), f0, f1, cb, probe))
+	def line(self, id, moves = (), f0 = None, f1 = None, rel = False, cb = False, probe = False, force = False): # {{{
+		#log('line %s %s %s %d %d' % (repr(moves), f0, f1, cb, probe))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
 		if not force and self.home_phase is not None and not self.paused:
-			log('ignoring goto during home')
+			log('ignoring line during home')
 			return
-		self.queue.append((id, moves, f0, f1, cb, probe))
+		self.queue.append((id, moves, f0, f1, cb, probe, rel))
 		if not self.wait:
 			self._do_queue()
 	# }}}
 	@delayed
-	def gotocb(self, id, moves = (), f0 = None, f1 = None): # {{{
-		self.queue.append((None, moves, f0, f1, True, False))
+	def line_cb(self, id, moves = (), f0 = None, f1 = None, rel = False): # {{{
+		self.queue.append((None, moves, f0, f1, True, False, rel))
 		if not self.wait:
 			self._do_queue()
 		self.wait_for_cb(False)[1](id)
@@ -1673,7 +1677,7 @@ class Printer: # {{{
 				# Go back to pausing position.
 				# First reset all axes that don't have a limit switch.
 				self._reset_extruders(self.queue_info[1])
-				self.goto(self.queue_info[1])
+				self.line(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
 				#log('resuming')
 				self.resuming = True
@@ -1769,13 +1773,13 @@ class Printer: # {{{
 					if id is not None:
 						self._send(id, 'return', None)
 				self.movecb.append((False, wrap_cb))
-				self.goto(cb = True)[1](None)
+				self.line(cb = True)[1](None)
 			else:
 				if id is not None:
 					self._send(id, 'return', None)
 			return
 		self.movecb.append((False, lambda done: self.park(cb, False, next_order + 1, not done)[1](id)))
-		self.goto([[a['park'] - (0 if si != 0 or ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(s.axis)] for si, s in enumerate(self.spaces)], cb = True)[1](None)
+		self.line([[a['park'] - (0 if si != 0 or ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(s.axis)] for si, s in enumerate(self.spaces)], cb = True)[1](None)
 	# }}}
 	@delayed
 	def benjamin_audio_play(self, id, name, motor = 0): # {{{
@@ -2106,8 +2110,8 @@ class Printer: # {{{
 		erel = None
 		pos = [[float('nan'), float('nan'), float('nan')], [0.], float('inf')]
 		time_dist = [0., 0.]
-		def add_timedist(goto, nums):
-			if goto:
+		def add_timedist(line, nums):
+			if line:
 				if nums[-2] == float('inf'):
 					extra = sum((nums[2 * i + 1] - nums[2 * i + 2]) ** 2 for i in range(3)) ** .5
 					if not math.isnan(extra):

@@ -245,7 +245,7 @@ void run_file_fill_queue() {
 					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
 					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
 					double z = r.Z + run_file_refz;
-					//debug("goto %f %f %f", x, y, z);
+					//debug("line %f %f %f", x, y, z);
 					int num0 = spaces[0].num_axes;
 					if (num0 > 0) {
 						queue[settings.queue_end].data[0] = x;
