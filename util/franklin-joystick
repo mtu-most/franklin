@@ -16,7 +16,7 @@ tick_time = .05
 config = fhs.init({'buttons': '', 'axes': '', 'js': '/dev/input/js0', 'printer': '8000', 'epsilon': 100, 'small': 2000})
 
 MODIFIER = -1
-p = websockets.RPC(config['printer'])
+p = websockets.RPC(config['printer'], tls = False)
 fd = os.open(config['js'], os.O_RDWR)
 if fd < 0:
 	sys.stderr.write('Cannot open joystick file')
@@ -37,16 +37,39 @@ if version != js.version:
 axes = [0] * ioctl(js.gaxes, ctypes.c_uint8)
 axes_zero = [0] * len(axes)
 buttons = [None] * ioctl(js.gbuttons, ctypes.c_uint8)
-button_action = [None] * len(buttons)
-modifiers = []
 
-print('axes: %d buttons: %d' % (len(axes), len(buttons)))
+#print('axes: %d buttons: %d' % (len(axes), len(buttons)))
 
 controls = {2: [0, 0, -1], 3: [1, 0, 0], 4: [0, -1, 0], 5: [0, 0, 1]}
 scale = [50., 50., 10.]
+mem = {}
 
-def handle_axis(num, value):
-	if abs(axes[num] - value) < config['epsilon'] and abs(value) < config['small']:
+def start():
+	pass
+
+def gomem(i):
+	def impl():
+		if i not in mem:
+			print('position %d not stored' % i)
+			return
+		p.line_cb([mem[i]])
+	return impl
+
+def storemem(i):
+	def impl():
+		mem[i] = p.get_axis_pos(0)
+	return impl
+
+# A, B, X, Y, LT, RT, BACK, START, SELECT, L, R
+button_action = {7: start, 8: MODIFIER}
+button_action.update({i: gomem(i) for i in range(4) })
+button_action.update({i + 11: storemem(i) for i in range(4) })
+
+modifiers = [x for x in button_action if button_action[x] is MODIFIER]
+modifiers.sort()
+
+def handle_axis(num, value, init):
+	if (init or abs(axes[num] - value) < config['epsilon']) and abs(value) < config['small']:
 		was_zero = axes[num] == axes_zero[num]
 		axes_zero[num] = value
 	else:
@@ -55,20 +78,20 @@ def handle_axis(num, value):
 	value -= axes_zero[num]
 	if value == 0 and was_zero:
 		return
-	print('axis %d moved to %d (- %d)' % (num, value, axes_zero[num]))
-	# handle it.
+	#print('axis %d moved to %d (- %d)' % (num, value, axes_zero[num]))
 
-def handle_button(num, value):
+def handle_button(num, value, init):
 	buttons[num] = value
-	if value == 0 or button_action[num] is MODIFIER:
+	if num in button_action and button_action[num] is MODIFIER:
 		return
 	for i, m in enumerate(modifiers):
 		if buttons[m]:
 			num += len(buttons) << i
-	print('button %d pressed' % num)
-	# handle it.
-	if button_action[num] is None:
+	if num not in button_action:
 		return
+	if value == 0:
+		return
+	button_action[num]()
 
 def tick():
 	move = [0., 0., 0.]
@@ -82,10 +105,11 @@ def tick():
 
 def handle_js():
 	t, value, type, number = js.event.unpack(os.read(fd, js.event.size))
+	init = bool(type & js.event_init)
 	if type & js.event_axis:
-		handle_axis(number, value)
+		handle_axis(number, value, init)
 	if type & js.event_button:
-		handle_button(number, value)
+		handle_button(number, value, init)
 
 start = time.time()
 while True:

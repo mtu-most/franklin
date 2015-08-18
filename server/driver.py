@@ -2498,11 +2498,14 @@ class Printer: # {{{
 		return self.expert_set_globals(update = update, **real_ka)
 	# }}}
 	# Space {{{
-	def get_axis_pos(self, space, axis):
+	def get_axis_pos(self, space, axis = None):
 		if space >= len(self.spaces) or axis >= len(self.spaces[space].axis):
 			log('request for invalid axis position %d %d' % (space, axis))
 			return float('nan')
-		return self.spaces[space].get_current_pos(axis)
+		if axis is None:
+			return [self.spaces[space].get_current_pos(a) for a in range(len(self.spaces[space].axis))]
+		else:
+			return self.spaces[space].get_current_pos(axis)
 	def set_axis_pos(self, space, axis, pos):
 		if space >= len(self.spaces) or axis >= len(self.spaces[space].axis):
 			log('request to set invalid axis position %d %d' % (space, axis))
