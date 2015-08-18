@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import joystick as js
+import time
 import os
 import sys
 import ctypes
@@ -8,9 +9,13 @@ import fcntl
 import select
 import struct
 import fhs
+import websockets
+
+tick_time = .05
 
 config = fhs.init({'buttons': '', 'axes': '', 'js': '/dev/input/js0', 'printer': '8000', 'epsilon': 100, 'small': 2000})
 
+MODIFIER = -1
 p = websockets.RPC(config['printer'])
 fd = os.open(config['js'], os.O_RDWR)
 if fd < 0:
@@ -32,21 +37,25 @@ if version != js.version:
 axes = [0] * ioctl(js.gaxes, ctypes.c_uint8)
 axes_zero = [0] * len(axes)
 buttons = [None] * ioctl(js.gbuttons, ctypes.c_uint8)
+button_action = [None] * len(buttons)
+modifiers = []
 
 print('axes: %d buttons: %d' % (len(axes), len(buttons)))
 
-controls = {2: [0, 0, -1], 3: [1, 0, 0], 4: [0, 1, 0], 5: [0, 0, 1]}
+controls = {2: [0, 0, -1], 3: [1, 0, 0], 4: [0, -1, 0], 5: [0, 0, 1]}
 scale = [50., 50., 10.]
 
 def handle_axis(num, value):
-	if axes[num] - value < config['epsilon'] and abs(value) < config['small']:
-		was_zero = axis[num] == axes_zero[num]
+	if abs(axes[num] - value) < config['epsilon'] and abs(value) < config['small']:
+		was_zero = axes[num] == axes_zero[num]
 		axes_zero[num] = value
+	else:
+		was_zero = False
 	axes[num] = value
 	value -= axes_zero[num]
 	if value == 0 and was_zero:
 		return
-	print('axis %d moved to %d' % (num, value))
+	print('axis %d moved to %d (- %d)' % (num, value, axes_zero[num]))
 	# handle it.
 
 def handle_button(num, value):
@@ -64,21 +73,33 @@ def handle_button(num, value):
 def tick():
 	move = [0., 0., 0.]
 	for a in controls:
-		for c in controls[a]:
-			move[c] += controls[a][c] * (axes[a] - axes_zero[a]) * scale[a] / 10e15	# 10 for updates/s, e15 for internal scale of joystick readings.
+		for c, v in enumerate(controls[a]):
+			move[c] += v * (axes[a] - axes_zero[a]) * scale[c] * tick_time / (1 << 15)
+			#print('move %d %f %d' % (c, move[c], axes[a] - axes_zero[a]))
 	if any(move):
-		p.line(move, rel = True)
+		#print(repr(move))
+		p.line_cb([move], rel = True)
 
-start = time.time()
-while True:
-	ret = select.select([fd], [], [fd], .1 - (time.time() - start))
-	if all(len(f) == 0 for f in ret):
-		# Timeout.
-		tick()
-		start += .1
-		continue
-	time, value, type, number = js.event.unpack(os.read(fd, js.event.size))
+def handle_js():
+	t, value, type, number = js.event.unpack(os.read(fd, js.event.size))
 	if type & js.event_axis:
 		handle_axis(number, value)
 	if type & js.event_button:
 		handle_button(number, value)
+
+start = time.time()
+while True:
+	dt = tick_time - (time.time() - start)
+	if dt <= 0:
+		tick()
+		dt += tick_time
+		start += tick_time
+	while dt <= 0:
+		dt += tick_time
+		start += tick_time
+	ret = select.select([fd], [], [fd], dt)
+	if all(len(f) == 0 for f in ret):
+		continue
+	handle_js()
+	while any(len(x) for x in select.select([fd], [], [fd], 0)):
+		handle_js()

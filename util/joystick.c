@@ -12,19 +12,19 @@ int main() {
 	printf("event_axis = 0x%x\n", JS_EVENT_AXIS);
 	printf("event_init = 0x%x\n", JS_EVENT_INIT);
 
-	printf("gversion = 0x%lx\n", JSIOCGVERSION);
-	printf("gaxes = 0x%lx\n", JSIOCGAXES);
-	printf("gbuttons = 0x%lx\n", JSIOCGBUTTONS);
+	printf("gversion = 0x%x\n", (unsigned)JSIOCGVERSION);
+	printf("gaxes = 0x%x\n", (unsigned)JSIOCGAXES);
+	printf("gbuttons = 0x%x\n", (unsigned)JSIOCGBUTTONS);
 	printf("gname = 0x%x\n", JSIOCGNAME(4096));
 
-	printf("scorr = 0x%lx\n", JSIOCSCORR);
-	printf("gcorr = 0x%lx\n", JSIOCGCORR);
+	printf("scorr = 0x%x\n", JSIOCSCORR);
+	printf("gcorr = 0x%x\n", JSIOCGCORR);
 
-	printf("saxmap = 0x%lx\n", JSIOCSAXMAP);
-	printf("gaxmap = 0x%lx\n", JSIOCGAXMAP);
+	printf("saxmap = 0x%x\n", (unsigned)JSIOCSAXMAP);
+	printf("gaxmap = 0x%x\n", (unsigned)JSIOCGAXMAP);
 
-	printf("sbtnmap = 0x%lx\n", JSIOCSBTNMAP);
-	printf("gbtnmap = 0x%lx\n", JSIOCGBTNMAP);
+	printf("sbtnmap = 0x%x\n", (unsigned)JSIOCSBTNMAP);
+	printf("gbtnmap = 0x%x\n", (unsigned)JSIOCGBTNMAP);
 
 	printf("corr_none = 0x%x\n", JS_CORR_NONE);
 	printf("corr_broken = 0x%x\n", JS_CORR_BROKEN);
