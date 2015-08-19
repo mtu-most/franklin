@@ -82,7 +82,7 @@ struct bbb_Gpio { // {{{
 
 struct bbb_Temp { // {{{
 	int id;
-	FILE *fd;	// For reading the ADC.
+	FILE *file;	// For reading the ADC.
 	bool active;
 	int power_pin, fan_pin;
 	bool power_inverted, fan_inverted;
