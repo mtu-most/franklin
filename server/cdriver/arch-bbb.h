@@ -382,6 +382,22 @@ void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin, b
 // state: 3: Free running; cpu can set to 4.
 // state: 4: cpu requested stop; pru must set to 1.
 int arch_tick() {
+	int cf = bbb_pru->current_fragment;
+	if (cf != running_fragment) {
+		int cbs = 0;
+		while (cf != running_fragment) {
+			cbs += history[running_fragment].cbs;
+			running_fragment += 1;
+		}
+		if (cbs)
+			send_host(CMD_MOVECB, cbs);
+		buffer_refill();
+		run_file_fill_queue();
+		if (moving && stopped && run_file_finishing) {
+			send_host(CMD_FILE_DONE);
+			abort_run_file();
+		}
+	}
 	// Handle temps and check limit switches.
 	if (bbb_active_temp >= 0) {
 		// New temperature ready to read.
@@ -420,7 +436,7 @@ int arch_tick() {
 		bbb_next_adc();
 	// TODO: Pwm.
 	int state = bbb_pru->state;
-	debug("pru state: %d %d %d", state, bbb_pru->current_fragment, bbb_pru->current_sample);
+	//debug("pru state: %d %d %d", state, bbb_pru->current_fragment, bbb_pru->current_sample);
 	if (state != 2 && state != 1) {
 		// Check probe.
 		if (settings.probing && probe_pin.valid()) {
@@ -433,8 +449,7 @@ int arch_tick() {
 			}
 		}
 		int m0 = 0;
-		// Avoid race condition by reading cf twice.
-		int cf = bbb_pru->current_fragment;
+		// Avoid race condition by reading cf twice (first was done at start of function).
 		int cs;
 		while (true) {
 			cs = bbb_pru->current_sample;
@@ -467,6 +482,7 @@ int arch_tick() {
 			state = settings.probing ? 2 : 3; // TODO: homing.
 			bbb_pru->state = state;
 		}
+		// TODO: Pin state monitoring.
 		// TODO: LED.
 		// TODO: Timeout.
 	}
@@ -539,14 +555,17 @@ void arch_start_move(int extra) {
 	// Start moving with sent buffers.
 	int state = bbb_pru->state;
 	if (state != 1) {
-		//debug("arch_start_move called with non-1 state %d", state);
+		debug("arch_start_move called with non-1 state %d", state);
 		return;
 	}
 	bbb_pru->state = 0;
 }
 
 bool arch_send_fragment() {
+	if (stopping)
+		return false;
 	bbb_pru->next_fragment = (bbb_pru->next_fragment + 1) & BBB_PRU_FRAGMENT_MASK;
+	return true;
 }
 
 int arch_fds() {

@@ -2,8 +2,6 @@
 	.origin 0
 	.entrypoint start
 start:
-	mov r2, 7
-	sbco r2, c24, 7, 1	; test if anything is happening; store 7 in state.
 	; Set up IEP (counter).
 	; Set increments.
 	ldi r0, 0x0111
@@ -20,8 +18,6 @@ start:
 	; Set cmp0 value.
 	mov r0, 200
 	sbco r0, c26, 0x48, 4
-
-	sbco r2.b0, c24, 7, 1	; test if anything is happening; store 7 in state.
 
 	; Set up intc.
 	; Enable interrupts.
@@ -47,7 +43,7 @@ start:
 	mov r0, 0
 	mov r1, 1
 	mov r2, 7
-	mov r5, TICK_US - 3
+	mov r5, TICK_US - 5
 
 	.macro wait_for_tick
 	wbs r31, 30		; wait
@@ -66,16 +62,22 @@ mainloop:
 	; r4.b3 = state
 
 	; output base
+	wait_for_tick
 	mov r30.w0, r3.w0
 	; if state < 2: continue
-	qblt mainloop, r4.b3, 2
+	qbge mainloop, r4.b3, 2
 	; if state == 4: state = 1; continue
 	qbne skip1, r4.b3, 4
 	sbco r1.b0, c24, 7, 1
 	qba mainloop
 skip1:
-	; Prepare things before wait_for_tick, to ensure optimal timing.
-	; This only needs to be done if r5 will be 0, but doing it after that check means the timing will be slightly off.
+
+	sub r5, r5, 1
+	; wait for enough time to allow next tick.
+	wait_for_tick
+	qbne mainloop, r5, 0
+	mov r5, TICK_US - 5
+
 	; data is at buffer[fragment][sample][which] with sample array 256 elements, which array 2 elements and 2 bytes per element.
 	; So that's buffer_start + fragment * 256 * 2 * 2 + sample * 2 * 2 + which * 2; I want both which values.
 	lsl r6, r4.b1, 10
@@ -87,24 +89,17 @@ skip1:
 	xor r7.w0, r7.w0, r3.w0	; Apply base to neg
 	xor r7.w1, r7.w1, r3.w1	; Apply base+dirs to pos
 
-	sub r5, r5, 1
-	; wait for enough time to allow next tick.
-	wait_for_tick
-	qbne mainloop, r5, 0
-
 	; do step
-	mov r30.w0, r7.w0
-
-	; Do this here instead of above, because the move to r30 should be as soon as possible after wait_for_tick.
-	mov r5, TICK_US - 3
-
 	wait_for_tick
-	mov r30.w0, r3.w0	; Just to be sure; disable steps before flipping dirs.
+	mov r30.w0, r7.w0
+	wait_for_tick
+	mov r30.w0, r3.w0
+	wait_for_tick
 	mov r30.w0, r3.w1
 	wait_for_tick
 	mov r30.w0, r7.w1
 	wait_for_tick
-	mov r30.w0, r3.w1	; Just to be sure; disable steps before flipping dirs.
+	mov r30.w0, r3.w1
 	; r3.w0 is sent in the next loop iteration.
 
 	; next sample
@@ -117,7 +112,7 @@ skip1:
 	qbne skip2, r4.b1, r4.b2
 	mov r4.b3, 1
 skip2:
-	sbco r4, c24, 0, 4
+	sbco r4, c24, 4, 4
 	; if state == 2: state = 0
 	qbne mainloop, r4.b3, 2
 	sbco r0.b0, c24, 7, 1
