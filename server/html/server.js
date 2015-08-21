@@ -116,6 +116,7 @@ function _setup_updater() {
 					num_gpios: 0,
 					led_pin: 0,
 					probe_pin: 0,
+					spiss_pin: 0,
 					probe_dist: Infinity,
 					probe_safe_dist: Infinity,
 					bed_id: 255,
@@ -125,6 +126,7 @@ function _setup_updater() {
 					park_after_print: true,
 					sleep_after_print: true,
 					cool_after_print: true,
+					spi_setup: '',
 					status: 'Starting',
 					timeout: 0,
 					feedrate: 1,
@@ -187,22 +189,24 @@ function _setup_updater() {
 			var new_num_gpios = values[3];
 			printers[port].led_pin = values[4];
 			printers[port].probe_pin = values[5];
-			printers[port].probe_dist = values[6];
-			printers[port].probe_safe_dist = values[7];
-			printers[port].bed_id = values[8];
-			printers[port].fan_id = values[9];
-			printers[port].spindle_id = values[10];
-			printers[port].unit_name = values[11];
-			printers[port].timeout = values[12];
-			printers[port].feedrate = values[13];
-			printers[port].zoffset = values[14];
-			printers[port].store_adc = values[15];
-			printers[port].park_after_print = values[16];
-			printers[port].sleep_after_print = values[17];
-			printers[port].cool_after_print = values[18];
-			printers[port].temp_scale_min = values[19];
-			printers[port].temp_scale_max = values[20];
-			printers[port].status = values[21];
+			printers[port].spiss_pin = values[6];
+			printers[port].probe_dist = values[7];
+			printers[port].probe_safe_dist = values[8];
+			printers[port].bed_id = values[9];
+			printers[port].fan_id = values[10];
+			printers[port].spindle_id = values[11];
+			printers[port].unit_name = values[12];
+			printers[port].timeout = values[13];
+			printers[port].feedrate = values[14];
+			printers[port].zoffset = values[15];
+			printers[port].store_adc = values[16];
+			printers[port].park_after_print = values[17];
+			printers[port].sleep_after_print = values[18];
+			printers[port].cool_after_print = values[19];
+			printers[port].spi_setup = values[20];
+			printers[port].temp_scale_min = values[21];
+			printers[port].temp_scale_max = values[22];
+			printers[port].status = values[23];
 			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
 				printers[port].spaces.push({
 					name: null,

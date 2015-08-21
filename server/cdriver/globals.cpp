@@ -54,6 +54,7 @@ bool globals_load(int32_t &addr)
 	ldebug("new done");
 	led_pin.read(read_16(addr));
 	probe_pin.read(read_16(addr));
+	spiss_pin.read(read_16(addr));
 	timeout = read_16(addr);
 	bed_id = read_16(addr);
 	fan_id = read_16(addr);
@@ -112,6 +113,7 @@ void globals_save(int32_t &addr)
 	write_8(addr, num_gpios);
 	write_16(addr, led_pin.write());
 	write_16(addr, probe_pin.write());
+	write_16(addr, spiss_pin.write());
 	write_16(addr, timeout);
 	write_16(addr, bed_id);
 	write_16(addr, fan_id);

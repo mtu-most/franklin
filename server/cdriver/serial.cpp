@@ -104,6 +104,10 @@ void serial(uint8_t channel) {
 			had_data = false;
 		}
 #endif
+		if (channel == 0) {
+			if (host_block)
+				break;
+		}
 		if (!serialdev[channel]->available())
 			break;
 		while (command_end[channel] == 0)
@@ -114,7 +118,7 @@ void serial(uint8_t channel) {
 			}
 			command[channel][0] = serialdev[channel]->read();
 #ifdef DEBUG_SERIAL
-			//debug("received on %d: %x", channel, command[channel][0]);
+			debug("received on %d: %x", channel, command[channel][0]);
 #endif
 #ifdef SERIAL
 			if (channel == 1) {
@@ -184,13 +188,16 @@ void serial(uint8_t channel) {
 						}
 						else if (stop_pending) {
 							stop_pending = false;
+							debug("do pending stop");
 							arch_stop();
 						}
 						else if (discard_pending) {
 							arch_do_discard();
 						}
-						else if (!sending_fragment && !stopping && arch_running())
+						else if (!sending_fragment && !stopping && arch_running()) {
+							run_file_fill_queue();
 							buffer_refill();
+						}
 					}
 					continue;
 				case CMD_NACK3:
@@ -267,7 +274,7 @@ void serial(uint8_t channel) {
 		if (len == 0)
 		{
 #ifdef DEBUG_SERIAL
-			//debug("no more data available on %d now", channel);
+			debug("no more data available on %d now", channel);
 #endif
 #ifdef SERIAL
 			// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
@@ -315,10 +322,10 @@ void serial(uint8_t channel) {
 			len = cmd_len - command_end[channel];
 		serialdev[channel]->readBytes(reinterpret_cast <char *> (&command[channel][command_end[channel]]), len);
 #ifdef DEBUG_SERIAL
-		//debug("read %d bytes on %d:", len, channel);
-		//for (uint8_t i = 0; i < len; ++i)
-			//fprintf(stderr, " %02x", command[channel][command_end[channel] + i]);
-		//fprintf(stderr, "\n");
+		debug("read %d bytes on %d:", len, channel);
+		for (uint8_t i = 0; i < len; ++i)
+			fprintf(stderr, " %02x", command[channel][command_end[channel] + i]);
+		fprintf(stderr, "\n");
 #endif
 #ifdef SERIAL
 		if (channel == 1)

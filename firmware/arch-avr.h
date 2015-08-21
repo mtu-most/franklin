@@ -537,6 +537,25 @@ static inline void arch_set_speed(uint16_t count) { // {{{
 		TIMSK1 = 1 << OCIE1A;
 	}
 } // }}}
+
+static inline void arch_spi_start() { // {{{
+	SET_OUTPUT(SS);
+	if (!(SPCR & 0x40)) {
+		SPCR = 0x53;
+		SPSR = 0;
+	}
+} // }}}
+
+static inline void arch_spi_send(uint8_t data) { // {{{
+	arch_spi_start();
+	SPDR = data;
+	while (!(SPSR & 0x80)) {}
+} // }}}
+
+static inline void arch_spi_stop() { // {{{
+	SPCR = 0x10;
+} // }}}
+
 // }}}
 
 #ifdef DEFINE_VARIABLES

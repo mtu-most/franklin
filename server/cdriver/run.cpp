@@ -24,7 +24,7 @@ struct String {
 static String *strings;
 
 void run_file(int name_len, char const *name, int probe_name_len, char const *probename, bool start, double refx, double refy, double refz, double sina, double cosa, int audio) {
-	//debug("run file %d %f %f %f %f %f", start, refx, refy, refz, sina, cosa);
+	rundebug("run file %d %f %f %f %f %f", start, refx, refy, refz, sina, cosa);
 	abort_run_file();
 	if (name_len == 0)
 		return;

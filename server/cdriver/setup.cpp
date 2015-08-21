@@ -2,7 +2,7 @@
 
 void setup(char const *port, char const *run_id)
 {
-	running = false;
+	host_block = true;
 	last_active = millis();
 	last_micros = utime();
 	serialdev[0] = &host_serial;
@@ -105,6 +105,6 @@ void setup_end() {
 	}
 	// Update current position.
 	first_fragment = current_fragment;
+	host_block = false;
 	arch_stop(true);
-	running = true;
 }

@@ -50,6 +50,9 @@ static inline int16_t fullpacketlen() { // {{{
 	else if ((command(0) & 0x1f) == CMD_MOVE) {
 		return 2 + last_len;
 	}
+	else if ((command(0) & 0x1f) == CMD_SPI) {
+		return 2 + command(1);
+	}
 	else
 		return minpacketlen();
 }
@@ -185,7 +188,7 @@ void serial() { // {{{
 		default:
 			break;
 		}
-		if ((firstbyte & 0x90) != 0x00) {
+		if ((firstbyte & 0x80) != 0x00) {
 			// This cannot be a good packet.
 			debug("invalid command %x", firstbyte);
 			inc_tail(1);

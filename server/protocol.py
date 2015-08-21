@@ -52,6 +52,7 @@ command = {
 	'RECONNECT': 0x1b,
 	'RESUME': 0x1c,
 	'GETTIME': 0x1d,
+	'SPI': 0x1e,
 	}
 
 rcommand = {

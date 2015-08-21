@@ -197,6 +197,7 @@ class Printer: # {{{
 		self.park_after_print = True
 		self.sleep_after_print = True
 		self.cool_after_print = True
+		self.spi_setup = []
 		# Set up state.
 		self.probe_time_dist = [float('nan'), float('nan')]
 		self.sending = False
@@ -293,6 +294,8 @@ class Printer: # {{{
 						log('failed to stat audio file %s' % os.path.join(audio, filename))
 		try:
 			self.load(update = False)
+			if self.spi_setup:
+				self.spi_send(self.spi_setup)
 		except:
 			log('Failed to import initial settings')
 			traceback.print_exc()
@@ -624,7 +627,7 @@ class Printer: # {{{
 		if data is None:
 			return False
 		self.queue_length, self.num_digital_pins, self.num_analog_pins, num_spaces, num_temps, num_gpios = struct.unpack('=BBBBBB', data[:6])
-		self.led_pin, self.probe_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.current_extruder, self.zoffset, self.store_adc = struct.unpack('=HHHhhhdBd?', data[6:])
+		self.led_pin, self.probe_pin, self.spiss_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.current_extruder, self.zoffset, self.store_adc = struct.unpack('=HHHHhhhdBd?', data[6:])
 		while len(self.spaces) < num_spaces:
 			self.spaces.append(self.Space(self, len(self.spaces)))
 			if update:
@@ -663,7 +666,7 @@ class Printer: # {{{
 		ds = ns - len(self.spaces)
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
-		data = struct.pack('=BBBHHHhhhdBd?', ns, nt, ng, self.led_pin, self.probe_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.current_extruder, self.zoffset, self.store_adc)
+		data = struct.pack('=BBBHHHHhhhdBd?', ns, nt, ng, self.led_pin, self.probe_pin, self.spiss_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.current_extruder, self.zoffset, self.store_adc)
 		self._send_packet(struct.pack('=B', protocol.command['WRITE_GLOBALS']) + data)
 		self._read_globals(update = True)
 		if update:
@@ -676,10 +679,14 @@ class Printer: # {{{
 				self._gpio_update(ng - dg + g)
 		return True
 	# }}}
+	def _mangle_spi(self):
+		return ';'.join(','.join('%02x' % x for x in p) for p in self.spi_setup), 
+	def _unmangle_spi(self, data):
+		return [[int(x, 16) for x in p.split(',')] for p in data.split(';')]
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, self.store_adc, self.park_after_print, self.sleep_after_print, self.cool_after_print, self.temp_scale_min, self.temp_scale_max, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
+		self._broadcast(target, 'globals_update', [self.profile, len(self.spaces), len(self.temps), len(self.gpios), self.led_pin, self.probe_pin, self.spiss_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.zoffset, self.store_adc, self.park_after_print, self.sleep_after_print, self.cool_after_print, self._mangle_spi(), self.temp_scale_min, self.temp_scale_max, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		if not self.initialized:
@@ -1095,7 +1102,8 @@ class Printer: # {{{
 				#log("2 t %s" % (self.home_target))
 				k = self.home_target.keys()[0]
 				dist = abs(self.home_target[k] - self.spaces[self.home_space].get_current_pos(k))
-				self.line({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
+				if dist > 0:
+					self.line({self.home_space: self.home_target}, f0 = home_v / dist, cb = True, force = True)[1](None)
 				return
 			if len(self.home_target) > 0:
 				log('Warning: not all limits were found during homing')
@@ -1549,6 +1557,8 @@ class Printer: # {{{
 		#traceback.print_stack()
 		if not force and self.home_phase is not None and not self.paused:
 			log('ignoring line during home')
+			if id is not None:
+				self._send(id, 'return', None)
 			return
 		self.queue.append((id, moves, f0, f1, cb, probe, rel))
 		if not self.wait:
@@ -1556,6 +1566,11 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def line_cb(self, id, moves = (), f0 = None, f1 = None, rel = False): # {{{
+		if self.home_phase is not None and not self.paused:
+			log('ignoring linecb during home')
+			if id is not None:
+				self._send(id, 'return', None)
+			return
 		self.queue.append((None, moves, f0, f1, True, False, rel))
 		if not self.wait:
 			self._do_queue()
@@ -1786,7 +1801,7 @@ class Printer: # {{{
 		self.audio_id = id
 		self.sleep(False)
 		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
-		self._send_packet(struct.pack('=BBdddddBB', protocol.command['RUN_FILE'], 0, 0, 0, 0, 0, 0, motor, 0) + filename.encode('utf8'))
+		self._send_packet(struct.pack('=BBdddddBB', protocol.command['RUN_FILE'], 1, 0, 0, 0, 0, 0, motor, 0) + filename.encode('utf8'))
 	# }}}
 	def benjamin_audio_add_file(self, filename, name): # {{{
 		with open(filename, 'rb') as f:
@@ -1859,7 +1874,8 @@ class Printer: # {{{
 		for t in ('spaces', 'temps', 'gpios'):
 			message += 'num_%s = %d\r\n' % (t, len(getattr(self, t)))
 		message += 'unit_name=%s\r\n' % self.unit_name
-		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'probe_pin')])
+		message += 'spi_setup=%s\r\n' % self._mangle_spi()
+		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'probe_pin', 'spiss_pin')])
 		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print')])
 		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_safe_dist', 'timeout', 'temp_scale_min', 'temp_scale_max')])
 		for i, s in enumerate(self.spaces):
@@ -1888,7 +1904,7 @@ class Printer: # {{{
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set()}
 		keys = {
-				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print'},
+				'general': {'num_spaces', 'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup'},
 				'space': {'name', 'type', 'max_deviation', 'max_v', 'num_axes', 'delta_angle'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
@@ -1947,6 +1963,8 @@ class Printer: # {{{
 			value = r.group(7)
 			if key.endswith('name'):
 				pass
+			elif key == 'spi_setup':
+				value = self._unmangle_spi(value)
 			elif key.endswith('pin'):
 				value = read_pin(value)
 			elif key.startswith('num'):
@@ -2048,18 +2066,19 @@ class Printer: # {{{
 		self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
 	def confirm(self, confirm_id, success = True): # {{{
-		if confirm_id != self.confirm_id:
-			# Confirmation was already sent.
+		if confirm_id not in (self.confirm_id, None) or self.confirm_axes is None:
+			# Confirmation was already sent, or never reguested.
 			#log('no confirm %s' % repr((confirm_id, self.confirm_id)))
 			return False
 		id = self.confirmer
 		self.confirmer = None
 		self.confirm_message = None
 		self._broadcast(None, 'confirm', None)
+		self._reset_extruders(self.confirm_axes)
+		self.confirm_axes = None
 		if id not in (False, None):
 			self._send(id, 'return', success)
 		else:
-			self._reset_extruders(self.confirm_axes)
 			if self.probing:
 				call_queue.append((self.probe_cb[1], [success]))
 			else:
@@ -2067,7 +2086,6 @@ class Printer: # {{{
 					self._print_done(False, 'aborted by failed confirmation')
 				else:
 					self._send_packet(chr(protocol.command['RESUME']))
-		self.confirm_axes = None
 		return True
 	# }}}
 	def queue_add(self, data, name): # {{{
@@ -2464,12 +2482,16 @@ class Printer: # {{{
 				return 'Error', float('nan'), float('nan')
 		return state, f, (self.total_time[0] + (0 if len(self.spaces) < 1 else self.total_time[1] / self.spaces[0].max_v)) / self.feedrate
 	# }}}
+	def spi_send(self, data): # {{{
+		for p in data:
+			self._send_packet(struct.pack('=B', protocol.command['SPI']) + ''.join(struct.pack('=B', b) for b in p))
+	# }}}
 	# }}}
 	# Accessor functions. {{{
 	# Globals. {{{
 	def get_globals(self):
 		ret = {'num_spaces': len(self.spaces), 'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('uuid', 'queue_length', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
+		for key in ('uuid', 'queue_length', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup'):
 			ret[key] = getattr(self, key)
 		return ret
 	def expert_set_globals(self, update = True, **ka):
@@ -2481,7 +2503,11 @@ class Printer: # {{{
 			self.store_adc = bool(ka.pop('store_adc'))
 		if 'unit_name' in ka:
 			self.unit_name = ka.pop('unit_name')
-		for key in ('led_pin', 'probe_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
+		if 'spi_setup' in ka:
+			self.spi_setup = self._unmangle_spi(ka.pop('spi_setup'))
+			if self.spi_setup:
+				self.spi_send(self.spi_setup)
+		for key in ('led_pin', 'probe_pin', 'spiss_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
 		for key in ('probe_dist', 'probe_safe_dist', 'timeout', 'feedrate', 'zoffset', 'temp_scale_min', 'temp_scale_max'):

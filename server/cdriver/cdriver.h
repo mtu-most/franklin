@@ -114,6 +114,7 @@ enum Command {
 	CMD_RECONNECT,	// 1 byte: name length, n bytes: port name
 	CMD_RESUME,
 	CMD_GETTIME,
+	CMD_SPI,
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_UUID = 0x40,	// 16 byte uuid.
@@ -367,7 +368,7 @@ EXTERN uint8_t num_temps;
 EXTERN uint8_t num_gpios;
 EXTERN uint32_t protocol_version;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
-EXTERN Pin_t led_pin, probe_pin;
+EXTERN Pin_t led_pin, probe_pin, spiss_pin;
 EXTERN uint16_t timeout;
 EXTERN int bed_id, fan_id, spindle_id;
 //EXTERN double room_T;	//[°C]
@@ -489,7 +490,7 @@ EXTERN double run_time, run_dist;
 // setup.cpp
 void setup(char const *port, char const *run_id);
 void setup_end();
-EXTERN bool running;
+EXTERN bool host_block;
 
 // storage.cpp
 uint8_t read_8(int32_t &address);

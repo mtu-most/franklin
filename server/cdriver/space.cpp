@@ -809,9 +809,16 @@ void send_fragment() { // {{{
 	if (num_active_motors == 0) {
 		if (current_fragment_pos < 2) {
 			// TODO: find out why this is attempted and avoid it.
-			//debug("not sending short fragment for 0 motors");
-			// FIXME: handle cbs for this move; workaround: send the fragment.
-			//return;
+			debug("not sending short fragment for 0 motors; %d %d", current_fragment, running_fragment);
+			if (history[current_fragment].cbs) {
+				if (settings.queue_start == settings.queue_end && !settings.queue_full) {
+					// Send cbs immediately.
+					arch_send_movecbs(history[current_fragment].cbs);
+					history[current_fragment].cbs;
+				}
+			}
+			current_fragment_pos = 0;
+			return;
 		}
 		else
 			debug("sending fragment for 0 motors at position %d", current_fragment_pos);

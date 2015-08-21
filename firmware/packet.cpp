@@ -119,6 +119,24 @@ void packet()
 			full_phase = 1 << full_phase_bits;
 			sei();
 		}
+		p = spiss_pin;
+		spiss_pin = command(12);
+		if (p != spiss_pin) {
+			if ((p < NUM_DIGITAL_PINS) ^ (spiss_pin < NUM_DIGITAL_PINS)) {
+				if (spiss_pin < NUM_DIGITAL_PINS)
+					arch_spi_start();
+				else
+					arch_spi_stop();
+			}
+			if (p < NUM_DIGITAL_PINS)
+				UNSET(p);
+			if (spiss_pin < NUM_DIGITAL_PINS) {
+				if (pin_flags & 4)
+					SET(spiss_pin);
+				else
+					RESET(spiss_pin);
+			}
+		}
 		write_ack();
 		return;
 	}
@@ -497,6 +515,23 @@ void packet()
 		reply[0] = CMD_PIN;
 		reply[1] = GET(command(1));
 		reply_ready = 2;
+		write_ack();
+		return;
+	}
+	case CMD_SPI:
+	{
+		cmddebug("CMD_SPI");
+		uint8_t len = command(1);
+		if (pin_flags & 4)
+			RESET(spiss_pin);
+		else
+			SET(spiss_pin);
+		for (uint8_t i = 0; i < len; ++i)
+			arch_spi_send(command(2 + i));
+		if (pin_flags & 4)
+			SET(spiss_pin);
+		else
+			RESET(spiss_pin);
 		write_ack();
 		return;
 	}

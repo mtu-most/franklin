@@ -85,6 +85,7 @@ EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
 EXTERN uint16_t led_last, led_phase, time_per_sample;
 EXTERN uint8_t led_pin, probe_pin, pin_flags;
+EXTERN uint8_t spiss_pin;
 EXTERN uint16_t timeout_time, last_active;
 EXTERN uint8_t enabled_pins;
 EXTERN uint8_t audio;	// Bit 0: state; bit 1: enable.
@@ -208,7 +209,10 @@ enum Command {
 	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.
 	CMD_DISCARD,	// 1:num_fragments
 	CMD_GETPIN,	// 1:pin
+	CMD_SPI,	// 1:size, size: data.
+};
 
+enum RCommand {
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_READY = 0x10,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:fragments/motor, 1:bytes/fragment
@@ -242,7 +246,7 @@ static inline int16_t minpacketlen() {
 	case CMD_SET_UUID:
 		return 1 + UUID_SIZE;
 	case CMD_SETUP:
-		return 12;
+		return 13;
 	case CMD_CONTROL:
 		return 4;
 	case CMD_MSETUP:
@@ -266,6 +270,8 @@ static inline int16_t minpacketlen() {
 	case CMD_DISCARD:
 		return 2;
 	case CMD_GETPIN:
+		return 2;
+	case CMD_SPI:
 		return 2;
 	default:
 		debug("invalid command passed to minpacketlen: %x", command(0));

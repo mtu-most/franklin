@@ -57,7 +57,7 @@ int main(int argc, char **argv) { // {{{
 		int arch = arch_fds();
 		for (int i = 0; i < 2 + arch; ++i)
 			pollfds[i].revents = 0;
-		poll(running ? pollfds : &pollfds[2], arch + (running ? 2 : 0), delay);
+		poll(host_block ? &pollfds[2] : pollfds, arch + (host_block ? 0 : 2), delay);
 		if (pollfds[0].revents) {
 			timerfd_settime(pollfds[0].fd, 0, &zero, NULL);
 			debug("gcode wait done; stop waiting (was %d)", run_file_wait);

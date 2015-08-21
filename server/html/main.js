@@ -744,6 +744,7 @@ function update_globals() { // {{{
 	update_float(printer, [null, 'num_gpios']);
 	update_pin([null, 'led_pin']);
 	update_pin([null, 'probe_pin']);
+	update_pin([null, 'spiss_pin']);
 	update_float(printer, [null, 'probe_dist']);
 	update_float(printer, [null, 'probe_safe_dist']);
 	update_float(printer, [null, 'timeout']);
@@ -753,6 +754,7 @@ function update_globals() { // {{{
 	update_checkbox(printer, [null, 'park_after_print']);
 	update_checkbox(printer, [null, 'sleep_after_print']);
 	update_checkbox(printer, [null, 'cool_after_print']);
+	update_str(printer, [null, 'spi_setup']);
 	update_float(printer, [null, 'temp_scale_min']);
 	update_float(printer, [null, 'temp_scale_max']);
 	set_name(printer, 'unit', 0, 0, printer.unit_name);
@@ -1065,6 +1067,11 @@ function update_float(printer, id) { // {{{
 function update_checkbox(printer, id) { // {{{
 	var e = get_element(printer, id);
 	e.checked = get_value(printer, id);
+} // }}}
+
+function update_str(printer, id) { // {{{
+	var e = get_element(printer, id);
+	e.ClearAll().AddText(get_value(printer, id));
 } // }}}
 
 function update_floats(id) { // {{{

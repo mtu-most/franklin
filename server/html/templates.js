@@ -138,6 +138,24 @@ function Checkbox(obj) { // {{{
 	return ret;
 } // }}}
 
+function Str(obj) { // {{{
+	var ret = Create('span');
+	var input = ret.AddElement('input');
+	input.type = 'text';
+	ret.obj = obj;
+	ret.printer = printer;
+	var e = ret.AddElement('button');
+	e.type = 'button';
+	e.AddText('Set');
+	e.AddEvent('click', function(event) {
+		set_value(ret.printer, ret.obj, input.value);
+		return false;
+	});
+	e = ret.AddElement('span');
+	e.id = make_id(printer, obj);
+	return ret;
+} // }}}
+
 function Id(obj) { // {{{
 	if (obj[0][1] === null)
 		return '';
@@ -574,6 +592,8 @@ function Printer() {	// {{{
 	e = setup.AddElement('div').AddText('Probe Safe Retract Distance:');
 	e.Add(Float([null, 'probe_safe_dist'], 0, 1));
 	e.AddText(' ').Add(add_name('unit', 0, 0));
+	e = setup.AddElement('div').AddText('SPI setup:');
+	e.Add(Str([null, 'spi_setup']));
 	e = setup.AddElement('div').AddText('Spaces:').Add(Float([null, 'num_spaces'], 0));
 	e = setup.AddElement('div').AddText('Temps:').Add(Float([null, 'num_temps'], 0));
 	e = setup.AddElement('div').AddText('Gpios:').Add(Float([null, 'num_gpios'], 0));
@@ -793,6 +813,7 @@ function Printer() {	// {{{
 	var globalpins = pins.AddElement('tbody');
 	globalpins.Add(Pin('LED', [null, 'led_pin']));
 	globalpins.Add(Pin('Probe', [null, 'probe_pin']));
+	globalpins.Add(Pin('SPI SS', [null, 'spiss_pin']));
 	pins.AddMultiple('motor', Pins_space, false);
 	pins.AddMultiple('temp', Pins_temp, false);
 	pins.AddMultiple('gpio', Pins_gpio, false);
