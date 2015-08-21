@@ -51,7 +51,7 @@ static inline int16_t fullpacketlen() { // {{{
 		return 2 + last_len;
 	}
 	else if ((command(0) & 0x1f) == CMD_SPI) {
-		return 2 + command(1);
+		return 2 + ((command(1) + 7) >> 3);
 	}
 	else
 		return minpacketlen();

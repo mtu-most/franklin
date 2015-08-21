@@ -539,21 +539,27 @@ static inline void arch_set_speed(uint16_t count) { // {{{
 } // }}}
 
 static inline void arch_spi_start() { // {{{
-	SET_OUTPUT(SS);
-	if (!(SPCR & 0x40)) {
-		SPCR = 0x53;
-		SPSR = 0;
+	SET_OUTPUT(MOSI);
+	RESET(SCK);
+} // }}}
+
+static inline void arch_spi_send(uint8_t data, uint8_t bits) { // {{{
+	arch_spi_start();
+	while (bits > 0) {
+		if (data & 0x80)
+			SET(MOSI);
+		else
+			RESET(MOSI);
+		SET(SCK);
+		RESET(SCK);
+		data <<= 1;
+		bits -= 1;
 	}
 } // }}}
 
-static inline void arch_spi_send(uint8_t data) { // {{{
-	arch_spi_start();
-	SPDR = data;
-	while (!(SPSR & 0x80)) {}
-} // }}}
-
 static inline void arch_spi_stop() { // {{{
-	SPCR = 0x10;
+	UNSET(MOSI);
+	UNSET(SCK);
 } // }}}
 
 // }}}

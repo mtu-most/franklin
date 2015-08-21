@@ -521,13 +521,15 @@ void packet()
 	case CMD_SPI:
 	{
 		cmddebug("CMD_SPI");
-		uint8_t len = command(1);
+		uint8_t bits = command(1);
 		if (pin_flags & 4)
 			RESET(spiss_pin);
 		else
 			SET(spiss_pin);
-		for (uint8_t i = 0; i < len; ++i)
-			arch_spi_send(command(2 + i));
+		for (uint8_t i = 0; i * 8 < bits; ++i) {
+			uint8_t b = bits - i * 8;
+			arch_spi_send(command(2 + i), b > 8 ? 8 : b);
+		}
 		if (pin_flags & 4)
 			SET(spiss_pin);
 		else

@@ -88,6 +88,7 @@ enum HWResponses {
 // Function declarations. {{{
 int hwpacketsize(int len, int *available);
 void try_send_control();
+void arch_had_ack();
 void avr_send();
 void avr_call1(uint8_t cmd, uint8_t arg);
 void avr_get_current_pos(int offset, bool check);
@@ -223,7 +224,7 @@ int hwpacketsize(int len, int *available) {
 }
 
 void try_send_control() {
-	if (out_busy >= 3 || avr_control_queue_length == 0)
+	if (preparing || out_busy >= 3 || avr_control_queue_length == 0)
 		return;
 	avr_control_queue_length -= 1;
 	avr_buffer[0] = HWC_CONTROL;
@@ -233,6 +234,11 @@ void try_send_control() {
 	avr_in_control_queue[avr_control_queue[avr_control_queue_length * 3]] = false;
 	prepare_packet(avr_buffer, 4);
 	avr_send();
+}
+
+void arch_had_ack() {
+	if (out_busy == 0)
+		try_send_control();
 }
 
 void avr_send() {
@@ -1084,16 +1090,16 @@ void arch_discard() {
 		arch_do_discard();
 }
 
-void arch_send_spi(int len, uint8_t *data) {
-	while (out_busy >= 3) {
+void arch_send_spi(int bits, uint8_t *data) {
+	while (preparing || out_busy >= 3) {
 		poll(&pollfds[2], 1, -1);
 		serial(1);
 	}
 	avr_buffer[0] = HWC_SPI;
-	avr_buffer[1] = len;
-	for (int i = 0; i < len; ++i)
+	avr_buffer[1] = bits;
+	for (int i = 0; i * 8 < bits; ++i)
 		avr_buffer[2 + i] = data[i];
-	if (prepare_packet(avr_buffer, 2 + len))
+	if (prepare_packet(avr_buffer, 2 + (bits + 7) / 8))
 		avr_send();
 }
 

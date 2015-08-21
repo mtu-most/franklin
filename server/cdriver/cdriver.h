@@ -400,7 +400,7 @@ EXTERN uint32_t last_micros;
 EXTERN int16_t led_phase;
 EXTERN History *history;
 EXTERN History settings;
-EXTERN bool moving, aborting, stopped, prepared;
+EXTERN bool moving, aborting, stopped, prepared, preparing;
 EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.
 EXTERN int sending_fragment;	// To compute how many fragments are in use from free_fragments.

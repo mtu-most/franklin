@@ -2,6 +2,7 @@
 
 void setup(char const *port, char const *run_id)
 {
+	preparing = false;
 	host_block = true;
 	last_active = millis();
 	last_micros = utime();

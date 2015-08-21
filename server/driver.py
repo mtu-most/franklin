@@ -680,9 +680,18 @@ class Printer: # {{{
 		return True
 	# }}}
 	def _mangle_spi(self):
-		return ';'.join(','.join('%02x' % x for x in p) for p in self.spi_setup), 
+		ret = []
+		for bits, data in self.spi_setup:
+			ret.append('%d:%s' % (bits, ','.join('%02x' % x for x in data)))
+		return ';'.join(ret)
 	def _unmangle_spi(self, data):
-		return [[int(x, 16) for x in p.split(',')] for p in data.split(';')]
+		ret = []
+		for p in data.split(';'):
+			bits, data = p.split(':')
+			bits = int(bits)
+			data = [int(x, 16) for x in data.split(',')]
+			ret.append([bits, data])
+		return ret
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
@@ -2483,8 +2492,11 @@ class Printer: # {{{
 		return state, f, (self.total_time[0] + (0 if len(self.spaces) < 1 else self.total_time[1] / self.spaces[0].max_v)) / self.feedrate
 	# }}}
 	def spi_send(self, data): # {{{
-		for p in data:
-			self._send_packet(struct.pack('=B', protocol.command['SPI']) + ''.join(struct.pack('=B', b) for b in p))
+		for bits, p in data:
+			shift = (8 - bits % 8) % 8
+			if shift > 0:
+				p = [(p[b] << shift | p[b + 1] >> (8 - shift)) & 0xff for b in range(len(p) - 1)] + [(p[-1] << shift) & 0xff]
+			self._send_packet(struct.pack('=BB', protocol.command['SPI'], bits) + ''.join(struct.pack('=B', b) for b in p))
 	# }}}
 	# }}}
 	# Accessor functions. {{{

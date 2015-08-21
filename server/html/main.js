@@ -738,7 +738,7 @@ function update_globals() { // {{{
 		ports[port][3] = printer.uuid;
 		select_printer();
 	}
-	get_element(printer, [null, 'export']).href = printer.uuid + '.ini?port=' + encodeURIComponent(port);
+	get_element(printer, [null, 'export']).href = encodeURIComponent(printer.profile) + '.ini?port=' + encodeURIComponent(port);
 	update_float(printer, [null, 'num_spaces']);
 	update_float(printer, [null, 'num_temps']);
 	update_float(printer, [null, 'num_gpios']);

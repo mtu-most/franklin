@@ -137,6 +137,9 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		move = [0., 0., 0.]
 		for a in controls:
 			for c, v in enumerate(controls[a]):
+				if a >= len(axis_state) or a >= len(axis_zero):
+					print('invalid control %d (%s, %s)' % (a, repr(axis_state), repr(axis_zero)))
+					continue
 				move[c] += v * (axis_state[a] - axis_zero[a]) * scale[c] * cfg['tick_time'] / (1 << 15)
 				#print('move %d %f %d' % (c, move[c], axis_state[a] - axis_zero[a]))
 		if any(move):

@@ -198,6 +198,7 @@ void serial(uint8_t channel) {
 							run_file_fill_queue();
 							buffer_refill();
 						}
+						arch_had_ack();
 					}
 					continue;
 				case CMD_NACK3:
@@ -460,11 +461,13 @@ bool prepare_packet(char *the_packet, int size) {
 		return false;
 	}
 	// Wait for room in the queue.  This is required to avoid a stall being received in between prepare and send.
+	preparing = true;
 	while (out_busy >= 3) {
 		//debug("avr send");
 		poll(&pollfds[2], 1, -1);
 		serial(1);
 	}
+	preparing = false;	// Not yet, but there are no further interruptions.
 	if (stopping)
 		return false;
 	// Set flipflop bit.
@@ -527,7 +530,7 @@ void send_packet()
 {
 	int which = (ff_out - 1) & 3;
 #ifdef DEBUG_DATA
-	fprintf(stderr, "send (%d, %x): ", out_busy, ff_out);
+	fprintf(stderr, "send (%d, %x %d): ", out_busy, ff_out, pending_len[which]);
 	for (uint8_t i = 0; i < pending_len[which]; ++i)
 		fprintf(stderr, " %02x", int(uint8_t(pending_packet[which][i])));
 	fprintf(stderr, "\n");

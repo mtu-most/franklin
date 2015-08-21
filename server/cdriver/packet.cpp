@@ -250,6 +250,7 @@ void packet()
 			}
 			for (uint8_t t = 0; t < num_spaces; ++t) {
 				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
+					//debug("resetting %d %d %x", t, m, spaces[t].motor[m]->enable_pin.write());
 					RESET(spaces[t].motor[m]->enable_pin);
 				}
 				for (uint8_t a = 0; a < spaces[t].num_axes; ++a) {
@@ -261,8 +262,10 @@ void packet()
 		}
 		else {
 			for (uint8_t t = 0; t < num_spaces; ++t) {
-				for (uint8_t m = 0; m < spaces[t].num_motors; ++m)
+				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
+					//debug("setting %d %d %x", t, m, spaces[t].motor[m]->enable_pin.write());
 					SET(spaces[t].motor[m]->enable_pin);
+				}
 			}
 			motors_busy = true;
 		}
@@ -669,7 +672,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_SPI");
 #endif
-		arch_send_spi(command[0][0] - 2, &command[0][2]);
+		arch_send_spi(command[0][2], &command[0][3]);
 		return;
 	}
 	default:
