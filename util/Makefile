@@ -5,3 +5,6 @@ all: joystick.py
 
 %.elf: %.c
 	gcc -Wall -Wextra -Werror $< -o $@
+
+clean:
+	rm -rf __pycache__

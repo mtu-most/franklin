@@ -814,7 +814,7 @@ void send_fragment() { // {{{
 				if (settings.queue_start == settings.queue_end && !settings.queue_full) {
 					// Send cbs immediately.
 					arch_send_movecbs(history[current_fragment].cbs);
-					history[current_fragment].cbs;
+					history[current_fragment].cbs = 0;
 				}
 			}
 			current_fragment_pos = 0;

@@ -411,6 +411,7 @@ bool hwpacket(int len) {
 			int f = (running_fragment + i) % FRAGMENTS_PER_BUFFER;
 			//debug("fragment %d: cbs=%d current=%d", f, history[f].cbs, current_fragment);
 			cbs += history[f].cbs;
+			history[f].cbs = 0;
 		}
 		if (cbs)
 			send_host(CMD_MOVECB, cbs);
