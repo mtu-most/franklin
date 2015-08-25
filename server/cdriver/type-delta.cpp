@@ -91,8 +91,14 @@ static void reset_pos (Space *s) {
 
 static void check_position(Space *s, double *data) {
 	if (isnan(data[0]) || isnan(data[1])) {
-		// Cannot check; assume it's ok.
-		return;
+		if (!isnan(data[0]))
+			data[1] = s->axis[1]->settings.source;
+		else if (!isnan(data[1]))
+			data[0] = s->axis[0]->settings.source;
+		else {
+			// Cannot check; assume it's ok.
+			return;
+		}
 	}
 	for (uint8_t counter = 0; counter < 2; ++counter) {
 		bool ok = true;
