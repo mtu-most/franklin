@@ -791,7 +791,7 @@ class Printer: # {{{
 				self.job_id = None
 				self.jobs_active = []
 		while self.queue_pos < len(self.queue):
-			id, axes, e, f0, f1, which, cb, rel = self.queue[self.queue_pos]
+			id, axes, e, f0, f1, v0, v1, which, cb, rel = self.queue[self.queue_pos]
 			self.queue_pos += 1
 			if id is not None:
 				self._send(id, 'error', 'aborted')
@@ -899,7 +899,7 @@ class Printer: # {{{
 				log('unpaused, %d %d' % (self.queue_pos, len(self.queue)))
 				if self.queue_pos >= len(self.queue):
 					break
-			id, axes, f0, f1, cb, probe, rel = self.queue[self.queue_pos]
+			id, axes, f0, f1, v0, v1, cb, probe, rel = self.queue[self.queue_pos]
 			#log('queueing %s' % repr((id, axes, f0, f1, cb, probe)))
 			self.queue_pos += 1
 			# Turn sequences into a dict.
@@ -967,11 +967,17 @@ class Printer: # {{{
 			axes = a
 			args = ''
 			# Set defaults for feedrates.
-			if f0 is None:
+			if v0 is not None:
+				assert f0 is None
+				f0 = -v0
+			elif f0 is None:
 				f0 = float('inf')
-			if f1 is None:
+			if v1 is not None:
+				assert f1 is None
+				f1 = -v1
+			elif f1 is None:
 				f1 = f0
-			assert f0 >= 0 and f1 >= 0 and (f0 > 0 or f1 > 0)
+			assert f0 != 0 and f1 != 0
 			# If feedrates are equal to firmware defaults, don't send them.
 			if f0 != float('inf'):
 				targets[0] |= 1 << 0
@@ -1560,7 +1566,7 @@ class Printer: # {{{
 		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
 	# }}}
 	@delayed
-	def line(self, id, moves = (), f0 = None, f1 = None, rel = False, cb = False, probe = False, force = False): # {{{
+	def line(self, id, moves = (), f0 = None, f1 = None, relative = False, cb = False, probe = False, force = False, v0 = None, v1 = None): # {{{
 		#log('line %s %s %s %d %d' % (repr(moves), f0, f1, cb, probe))
 		#log('speed %s' % f0)
 		#traceback.print_stack()
@@ -1569,18 +1575,18 @@ class Printer: # {{{
 			if id is not None:
 				self._send(id, 'return', None)
 			return
-		self.queue.append((id, moves, f0, f1, cb, probe, rel))
+		self.queue.append((id, moves, f0, f1, v0, v1, cb, probe, relative))
 		if not self.wait:
 			self._do_queue()
 	# }}}
 	@delayed
-	def line_cb(self, id, moves = (), f0 = None, f1 = None, rel = False): # {{{
+	def line_cb(self, id, moves = (), f0 = None, f1 = None, v0 = None, v1 = None, relative = False): # {{{
 		if self.home_phase is not None and not self.paused:
 			log('ignoring linecb during home')
 			if id is not None:
 				self._send(id, 'return', None)
 			return
-		self.queue.append((None, moves, f0, f1, True, False, rel))
+		self.queue.append((None, moves, f0, f1, v0, v1, True, False, relative))
 		if not self.wait:
 			self._do_queue()
 		self.wait_for_cb(False)[1](id)

@@ -136,6 +136,10 @@ static void copy_next(int s) { // {{{
 	}
 } // }}}
 
+static float fix_v(float f, bool next = false) { // {{{
+	return f;
+} // }}}
+
 // Used from previous segment (if prepared): tp, vq.
 uint8_t next_move() { // {{{
 	settings.probing = false;
@@ -328,6 +332,12 @@ uint8_t next_move() { // {{{
 		dist = sqrt(dist);
 		distn = sqrt(distn);
 		double max = max_mm / dist;
+		if (v0 < 0)
+			v0 = -v0 / dist;
+		if (vp < 0)
+			vp = -vp / dist;
+		if (vq < 0)
+			vq = -vq / distn;
 		if (v0 > max)
 			v0 = max;
 		if (vp > max)

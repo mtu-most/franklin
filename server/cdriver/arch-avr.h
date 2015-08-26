@@ -951,8 +951,8 @@ bool arch_send_fragment() {
 		avr_send();
 		int mi = 0;
 		avr_filling = true;
-		for (int s = 0; !stopping && !discard_pending && s < num_spaces; mi += spaces[s++].num_motors) {
-			for (uint8_t m = 0; !stopping && !discard_pending && m < spaces[s].num_motors; ++m) {
+		for (int s = 0; !stopping && !discard_pending && !stop_pending && s < num_spaces; mi += spaces[s++].num_motors) {
+			for (uint8_t m = 0; !stopping && !discard_pending && !stop_pending && m < spaces[s].num_motors; ++m) {
 				if (!spaces[s].motor[m]->active)
 					continue;
 				cpdebug(s, m, "sending %d %d", fragment, current_fragment_pos);

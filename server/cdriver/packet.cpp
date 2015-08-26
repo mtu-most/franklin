@@ -182,7 +182,7 @@ void packet()
 		// F0 and F1 must be valid.
 		double F0 = queue[settings.queue_end].f[0];
 		double F1 = queue[settings.queue_end].f[1];
-		if (isnan(F0) || isnan(F1) || F0 < 0 || F1 < 0 || (F0 == 0 && F1 == 0))
+		if (isnan(F0) || isnan(F1) || (F0 == 0 && F1 == 0))
 		{
 			debug("Invalid F0 or F1: %f %f", F0, F1);
 			abort();

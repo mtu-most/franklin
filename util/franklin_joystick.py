@@ -18,6 +18,9 @@ printer = None
 fd = None
 num_axes = None
 num_buttons = None
+axis_state = []
+axis_zero = []
+button_state = []
 
 def ioctl(op, t):
 	value = t()
@@ -33,7 +36,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		configdata = {'tick_time': .05, 'js': '/dev/input/js0', 'printer': '8000', 'epsilon': 100, 'small': 6556}
 		configdata.update(config)
 		cfg = fhs.init(configdata)
-		printer = websockets.RPC(cfg['printer'])
+		printer = websockets.RPC(cfg['printer'], tls = False)
 		fd = os.open(cfg['js'], os.O_RDWR)
 		if fd < 0:
 			sys.stderr.write('Cannot open joystick file')
@@ -46,13 +49,13 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		num_axes = ioctl(js.gaxes, ctypes.c_uint8)
 		num_buttons = ioctl(js.gbuttons, ctypes.c_uint8)
 
-	axis_state = [0.] * num_axes
-	axis_zero = [0.] * num_axes
-	button_state = [None] * num_buttons
+	axis_state[:] = [0.] * num_axes
+	axis_zero[:] = [0.] * num_axes
+	button_state[:] = [None] * num_buttons
 
 	#print('axes: %d buttons: %d' % (num_axes, num_buttons))
 
-	controls = {2: [0, 0, -1], 3: [1, 0, 0], 4: [0, -1, 0], 5: [0, 0, 1]}
+	controls = {2: [0, 0, 1], 3: [1, 0, 0], 4: [0, -1, 0], 5: [0, 0, -1]}
 	controls.update(axes)
 	scale = [50., 50., 10.]
 	mem = {}
@@ -69,7 +72,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		def impl():
 			if i not in mem:
 				print('position %d not stored' % i)
-				return
+				return True
 			printer.line_cb([mem[i]])
 			return True
 		return impl
@@ -118,7 +121,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		for i, m in enumerate(modifiers):
 			if button_state[m]:
 				num += num_buttons << i
-		if num not in button_action:
+		if num not in button_action or button_action[num] is None:
 			return
 		if value == 0:
 			if any(button_state) or None not in button_action:
@@ -144,7 +147,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 				#print('move %d %f %d' % (c, move[c], axis_state[a] - axis_zero[a]))
 		if any(move):
 			#print(repr(move))
-			printer.line_cb([move], rel = True)
+			printer.line_cb([move], relative = True)
 		return True
 
 	def handle_js():
