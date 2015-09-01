@@ -189,7 +189,7 @@ EXTERN bool avr_stop_fake;
 // }}}
 
 #define avr_write_ack(reason) do { \
-	/*debug("ack: %s", reason); */\
+	/*debug("ack %d: %s", ff_in, reason);*/ \
 	write_ack(); \
 } while(0)
 
@@ -373,6 +373,11 @@ bool hwpacket(int len) {
 	}
 	case HWC_UNDERRUN:
 	{
+		if (host_block) {
+			// STOP was sent; ignore UNDERRUN.
+			avr_write_ack("stopped underrun");
+			return false;
+		}
 		if (!avr_running) {
 			debug("unexpected underrun?");
 			//abort();
@@ -399,6 +404,11 @@ bool hwpacket(int len) {
 	}
 	case HWC_DONE:
 	{
+		if (host_block) {
+			// STOP was sent; ignore DONE.
+			avr_write_ack("stopped done");
+			return false;
+		}
 		//debug("done: %d %d %d", command[1][1], command[1][2], sending_fragment);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			debug("Done received while fragments per buffer is zero");
@@ -413,7 +423,7 @@ bool hwpacket(int len) {
 			cbs += history[f].cbs;
 			history[f].cbs = 0;
 		}
-		if (cbs)
+		if (cbs && !host_block)
 			send_host(CMD_MOVECB, cbs);
 		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER + 1 < command[1][1] + command[1][2]) {
 			//debug("Done count %d+%d higher than busy fragments %d+1; clipping", command[1][1], command[1][2], (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
@@ -899,11 +909,14 @@ void arch_stop(bool fake) {
 	host_block = true;
 	avr_homing = false;
 	if (out_busy >= 3) {
+		//debug("not yet stopping");
 		stop_pending = true;
 		return;
 	}
 	if (!avr_running) {
+		//debug("not running, so not stopping");
 		current_fragment_pos = 0;
+		stopped = true;	// Not running, but preparations could have started.
 		host_block = false;
 		return;
 	}
@@ -928,8 +941,10 @@ void avr_stop2() {
 }
 
 bool arch_send_fragment() {
-	if (stopping || discard_pending || stop_pending)
+	if (host_block || stopping || discard_pending || stop_pending) {
+		debug("not sending arch frag %d %d %d %d", host_block, stopping, discard_pending, stop_pending);
 		return false;
+	}
 	if (avr_audio >= 0) {
 		debug("audio recover");
 		arch_stop(false);
@@ -951,8 +966,8 @@ bool arch_send_fragment() {
 		avr_send();
 		int mi = 0;
 		avr_filling = true;
-		for (int s = 0; !stopping && !discard_pending && !stop_pending && s < num_spaces; mi += spaces[s++].num_motors) {
-			for (uint8_t m = 0; !stopping && !discard_pending && !stop_pending && m < spaces[s].num_motors; ++m) {
+		for (int s = 0; !host_block && !stopping && !discard_pending && !stop_pending && s < num_spaces; mi += spaces[s++].num_motors) {
+			for (uint8_t m = 0; !host_block && !stopping && !discard_pending && !stop_pending && m < spaces[s].num_motors; ++m) {
 				if (!spaces[s].motor[m]->active)
 					continue;
 				cpdebug(s, m, "sending %d %d", fragment, current_fragment_pos);
@@ -975,10 +990,12 @@ bool arch_send_fragment() {
 		}
 	}
 	avr_filling = false;
-	return !stopping && !discard_pending && !stop_pending;
+	return !host_block && !stopping && !discard_pending && !stop_pending;
 }
 
 void arch_start_move(int extra) {
+	if (host_block)
+		return;
 	if (out_busy >= 3) {
 		start_pending = true;
 		return;
@@ -1105,7 +1122,8 @@ void arch_send_spi(int bits, uint8_t *data) {
 }
 
 void arch_send_movecbs(int cbs) {
-	send_host(CMD_MOVECB, cbs);
+	if (!host_block)
+		send_host(CMD_MOVECB, cbs);
 }
 // }}}
 

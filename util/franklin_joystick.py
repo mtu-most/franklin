@@ -49,13 +49,13 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		num_axes = ioctl(js.gaxes, ctypes.c_uint8)
 		num_buttons = ioctl(js.gbuttons, ctypes.c_uint8)
 
-	axis_state[:] = [0.] * num_axes
-	axis_zero[:] = [0.] * num_axes
-	button_state[:] = [None] * num_buttons
+		axis_state[:] = [0.] * num_axes
+		axis_zero[:] = [0.] * num_axes
+		button_state[:] = [None] * num_buttons
 
 	#print('axes: %d buttons: %d' % (num_axes, num_buttons))
 
-	controls = {2: [0, 0, 1], 3: [1, 0, 0], 4: [0, -1, 0], 5: [0, 0, -1]}
+	controls = {2: [0, 0, .3], 3: [1, 0, 0], 4: [0, -1, 0], 5: [0, 0, -.3]}
 	controls.update(axes)
 	scale = [50., 50., 10.]
 	mem = {}
@@ -117,14 +117,17 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 	def handle_button(num, value, init):
 		button_state[num] = value
 		if num in button_action and button_action[num] is MODIFIER:
+			print('ignoring mod %d %s' % (num, repr(button_state)))
 			return
 		for i, m in enumerate(modifiers):
 			if button_state[m]:
 				num += num_buttons << i
 		if num not in button_action or button_action[num] is None:
+			print('ignoring no action %d %s' % (num, repr(button_state)))
 			return
 		if value == 0:
-			if any(button_state) or None not in button_action:
+			if any(x for i, x in enumerate(button_state) if i not in modifiers) or None not in button_action:
+				print('ignoring %s' % repr(button_state))
 				return
 			# Handle release of all buttons as event None.
 			num = None

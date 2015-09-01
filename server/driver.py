@@ -686,11 +686,12 @@ class Printer: # {{{
 		return ';'.join(ret)
 	def _unmangle_spi(self, data):
 		ret = []
-		for p in data.split(';'):
-			bits, data = p.split(':')
-			bits = int(bits)
-			data = [int(x, 16) for x in data.split(',')]
-			ret.append([bits, data])
+		if len(data) > 0:
+			for p in data.split(';'):
+				bits, data = p.split(':')
+				bits = int(bits)
+				data = [int(x, 16) for x in data.split(',')]
+				ret.append([bits, data])
 		return ret
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:

@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-#define DEBUG_DATA
+//#define DEBUG_DATA
 //#define DEBUG_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
@@ -36,8 +36,6 @@ static bool had_stall = false;
 static bool doing_debug = false;
 static uint8_t need_id = 0;
 static char out_buffer[16];
-static uint8_t ff_in = 0;	// Index of next in-packet that is expected.
-static uint8_t ff_out = 0;	// Index of next out-packet that will be sent.
 
 // Parity masks for decoding.
 static const uint8_t MASK[5][4] = {
@@ -188,7 +186,7 @@ void serial(uint8_t channel) {
 						}
 						else if (stop_pending) {
 							stop_pending = false;
-							debug("do pending stop");
+							//debug("do pending stop");
 							arch_stop();
 						}
 						else if (discard_pending) {
@@ -411,7 +409,7 @@ void serial(uint8_t channel) {
 			{
 				// Wrong: this must be a retry to send the previous packet, so our ack was lost.
 				// Resend the ack, but don't do anything (the action has already been taken).
-				debug("%d duplicate", channel);
+				//debug("%d duplicate %x", channel, command[channel][0]);
 #ifdef DEBUG_FF
 				debug("old ff_in: %d", ff_in);
 #endif

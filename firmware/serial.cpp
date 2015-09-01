@@ -111,6 +111,7 @@ void serial() { // {{{
 		}
 		had_data = true;
 		uint8_t firstbyte = *serial_buffer_tail;
+		debug_add(firstbyte);
 		sdebug2("received: %x", firstbyte);
 		// If this is a 1-byte command, handle it.
 		uint8_t which = 0;
@@ -126,6 +127,7 @@ void serial() { // {{{
 		{
 			// Ack: everything was ok; flip the flipflop.
 			//debug("a%d out %d busy %d", which, ff_out, out_busy);
+			//debug("a%d", ff_out);
 			if (out_busy > 0 && ((ff_out - out_busy) & 3) == which) {	// Only if we expected it and it is the right type.
 				out_busy -= 1;
 				if ((pending_packet[(ff_out - (out_busy + 1)) & 3][0] & 0x1f) == CMD_LIMIT) {
@@ -156,6 +158,7 @@ void serial() { // {{{
 			arch_claim_serial();
 			// Nack: the host didn't properly receive the packet: resend.
 			//debug("n%d out %d busy %d", which, ff_out, out_busy);
+			//debug_dump();
 			// Unless the last packet was already received; in that case ignore the NACK.
 			uint8_t amount = (ff_out - which) & 3;
 			if (amount <= out_busy) {
@@ -445,10 +448,10 @@ void try_send_next() { // Call send_packet if we can. {{{
 		}
 		else {
 			pending_packet[ff_out][0] = CMD_DONE;
-			debug_add(0x102);
-			debug_add(cf);
-			debug_add(last_fragment);
-			debug_add(notified_current_fragment);
+			//debug_add(0x102);
+			//debug_add(cf);
+			//debug_add(last_fragment);
+			//debug_add(notified_current_fragment);
 		}
 		cli();
 		uint8_t num = (cf - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;

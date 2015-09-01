@@ -804,8 +804,14 @@ void restore_settings() { // {{{
 } // }}}
 
 void send_fragment() { // {{{
-	if (current_fragment_pos <= 0 || stopping || sending_fragment)
+	if (host_block) {
+		current_fragment_pos = 0;
 		return;
+	}
+	if (current_fragment_pos <= 0 || stopping || sending_fragment) {
+		debug("no send fragment %d %d %d", current_fragment_pos, stopping, sending_fragment);
+		return;
+	}
 	if (num_active_motors == 0) {
 		if (current_fragment_pos < 2) {
 			// TODO: find out why this is attempted and avoid it.
@@ -847,6 +853,9 @@ void buffer_refill() { // {{{
 		return;
 	}
 	refilling = true;
+	// send_fragment in the previous refill may have failed; try it again.
+	if (current_fragment_pos > 0)
+		send_fragment();
 	//debug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
 	while (moving && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 4 && !sending_fragment) {

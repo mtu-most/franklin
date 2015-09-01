@@ -1,0 +1,129 @@
+#!/usr/bin/python3
+import franklin_joystick as js
+import time
+
+while True:
+	mem = js.main(config = {'fast': 1.5, 'slow': .5, 'lines': 19})
+	if all(x in mem for x in (0, 1)):
+		break
+	print('Not all markers are set; not starting yet')
+
+js.printer.line_cb([[mem[0][0], mem[1][1]]])
+js.main()
+z_ul = js.printer.get_axis_pos(0, 2)
+
+js.printer.line_cb([[mem[1][0], mem[0][1]]])
+js.main()
+z_lr = js.printer.get_axis_pos(0, 2)
+
+def startpoint(n):
+	f = n / int(js.cfg['lines'])
+	return [mem[0][0], mem[0][1] + (mem[1][1] - mem[0][1]) * f, mem[0][2] + (z_ul - mem[0][2]) * f]
+
+def endpoint(n):
+	f = n / int(js.cfg['lines'])
+	return [mem[1][0], mem[0][1] + (mem[1][1] - mem[0][1]) * f, z_lr + (mem[1][2] - z_lr) * f]
+
+js.printer.line_cb([startpoint(0)])
+lastpos = startpoint(0)
+
+target = float(js.cfg['slow'])
+speed = 0.
+running = [False]
+target_pos = endpoint(0)
+current_line = 0
+current = 0
+counted = [0.] * 3
+log = [[]]
+
+def set_speed():
+	global speed
+	if running[0]:
+		newspeed = target
+	else:
+		newspeed = 0.
+	if newspeed == speed:
+		return
+	speed = newspeed
+	js.printer.pause(store = False)
+	if speed != 0:
+		js.printer.line([target_pos], v0 = speed)
+		js.printer.wait_for_cb.event()
+
+def record_count():
+	global lastpos
+	pos = js.printer.get_axis_pos(0)
+	if pos is None:
+		return
+	dist = sum((a[0] - a[1]) ** 2 for a in zip(pos, lastpos)) ** .5
+	if dist == 0:
+		return
+	if len(log[-1]) > 0 and log[-1][-1][1] == current:
+		log[-1][-1] = (log[-1][-1][0] + dist, current)
+	else:
+		log[-1].append((dist, current))
+	counted[current] += dist
+	print(repr(counted))
+	lastpos = pos
+
+def count(i):
+	def impl():
+		global current
+		record_count()
+		current = i
+		return True
+	return impl
+
+def start():
+	time.sleep(.5)
+	running[0] = True
+	set_speed()
+	return True
+
+def stop():
+	running[0] = False
+	set_speed()
+	return True
+
+def fast():
+	global target
+	if js.button_state[4]:
+		target = float(js.cfg['fast'])
+	else:
+		target = float(js.cfg['slow'])
+	set_speed()
+	return True
+
+def tick(axes):
+	if speed != 0 and not js.printer.waiting_for_cb():
+		record_count()
+		global current_line, lastpos
+		current_line += 1
+		if current_line >= int(js.cfg['lines']):
+			return False	# Stop running.
+		log.append([])
+		js.printer.line_cb([startpoint(current_line)])
+		lastpos = startpoint(current_line)
+		target_pos[:] = endpoint(current_line)
+		stop()
+	fast()
+	return None	# Prevent default tick from running.
+
+# 0: paste
+# 1: air
+# 2: aggregate
+
+buttons = {8: None, 6: None, 7: None,
+		4: js.MODIFIER,
+		0: stop,
+		1: count(1),
+		2: count(2),
+		3: start,
+		0 + 11: stop,
+		1 + 11: count(1),
+		2 + 11: count(2),
+		3 + 11: start,
+		None: count(0)}
+js.main(tick = tick, buttons = buttons)
+
+print(log)

@@ -446,6 +446,8 @@ void send_packet();
 void write_ack();
 void write_nack();
 void send_host(char cmd, int s = 0, int m = 0, double f = 0, int e = 0, int len = 0);
+EXTERN uint8_t ff_in;	// Index of next in-packet that is expected.
+EXTERN uint8_t ff_out;	// Index of next out-packet that will be sent.
 
 // move.cpp
 uint8_t next_move();

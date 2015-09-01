@@ -330,7 +330,6 @@ void packet()
 		last_len = command(1);	// Do this even when ignoring the command.
 		if (stopping >= 0) {
 			//debug("ignoring start move while stopping");
-			debug_add(1);
 			write_ack();
 			return;
 		}
@@ -375,7 +374,6 @@ void packet()
 		}
 		if (stopping >= 0) {
 			//debug("ignoring move while stopping");
-			debug_add(0);
 			write_ack();
 			return;
 		}
@@ -465,6 +463,7 @@ void packet()
 			return;
 		}
 		arch_set_speed(0);
+		filling = 0;
 		homers = 0;
 		home_step_time = 0;
 		reply[0] = CMD_STOPPED;
@@ -488,11 +487,7 @@ void packet()
 	{
 		cmddebug("CMD_DISCARD");
 		// TODO: work well with interrupts.
-		if (filling > 0) {
-			debug("DISCARD seen while filling");
-			write_stall();
-			return;
-		}
+		filling = 0;
 		if (command(1) >= ((last_fragment - current_fragment) & FRAGMENTS_PER_MOTOR_MASK)) {
 			debug("discarding more than entire buffer");
 			write_stall();

@@ -216,8 +216,8 @@ void packet()
 			//debug("no movecbs to add (prev %d)", settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs);
 			buffer_refill();
 		}
-		//else
-			//debug("waiting with move");
+		else
+			debug("waiting with move");
 		break;
 	}
 	case CMD_RUN_FILE: // Run commands from a file.
@@ -339,6 +339,7 @@ void packet()
 		}
 		send_host(CMD_POWER, temps[which].time_on, t);
 		temps[which].time_on = 0;
+		return;
 	}
 	case CMD_SETPOS:	// Set current position
 	{
