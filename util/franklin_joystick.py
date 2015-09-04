@@ -30,28 +30,32 @@ def ioctl(op, t):
 		sys.exit(1)
 	return value.value
 
-def main(config = {}, buttons = {}, axes = {}, tick = None):
+def init(config = {}):
 	global cfg, printer, fd, num_axes, num_buttons
-	if cfg is None:
-		configdata = {'tick_time': .05, 'js': '/dev/input/js0', 'printer': '8000', 'epsilon': 100, 'small': 6556}
-		configdata.update(config)
-		cfg = fhs.init(configdata)
-		printer = websockets.RPC(cfg['printer'], tls = False)
-		fd = os.open(cfg['js'], os.O_RDWR)
-		if fd < 0:
-			sys.stderr.write('Cannot open joystick file')
-			sys.exit(1)
+	if cfg is not None:
+		return
+	configdata = {'tick_time': .05, 'js': '/dev/input/js0', 'printer': '8000', 'epsilon': 100, 'small': 6556}
+	configdata.update(config)
+	cfg = fhs.init(configdata)
+	printer = websockets.RPC(cfg['printer'], tls = False)
+	fd = os.open(cfg['js'], os.O_RDWR)
+	if fd < 0:
+		sys.stderr.write('Cannot open joystick file')
+		sys.exit(1)
 
-		version = ioctl(js.gversion, ctypes.c_uint32)
-		if version != js.version:
-			sys.stderr.write('version mismatch (%x != %x)' % (version, js.version))
+	version = ioctl(js.gversion, ctypes.c_uint32)
+	if version != js.version:
+		sys.stderr.write('version mismatch (%x != %x)' % (version, js.version))
 
-		num_axes = ioctl(js.gaxes, ctypes.c_uint8)
-		num_buttons = ioctl(js.gbuttons, ctypes.c_uint8)
+	num_axes = ioctl(js.gaxes, ctypes.c_uint8)
+	num_buttons = ioctl(js.gbuttons, ctypes.c_uint8)
 
-		axis_state[:] = [0.] * num_axes
-		axis_zero[:] = [0.] * num_axes
-		button_state[:] = [None] * num_buttons
+	axis_state[:] = [0.] * num_axes
+	axis_zero[:] = [0.] * num_axes
+	button_state[:] = [None] * num_buttons
+
+def main(config = {}, buttons = {}, axes = {}, tick = None):
+	init(config)
 
 	#print('axes: %d buttons: %d' % (num_axes, num_buttons))
 
@@ -117,25 +121,26 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 	def handle_button(num, value, init):
 		button_state[num] = value
 		if num in button_action and button_action[num] is MODIFIER:
-			print('ignoring mod %d %s' % (num, repr(button_state)))
+			#print('ignoring mod %d %s' % (num, repr(button_state)))
 			return
 		for i, m in enumerate(modifiers):
 			if button_state[m]:
 				num += num_buttons << i
 		if num not in button_action or button_action[num] is None:
-			print('ignoring no action %d %s' % (num, repr(button_state)))
+			#print('ignoring no action %d %s' % (num, repr(button_state)))
 			return
 		if value == 0:
 			if any(x for i, x in enumerate(button_state) if i not in modifiers) or None not in button_action:
-				print('ignoring %s' % repr(button_state))
+				#print('ignoring %s' % repr(button_state))
 				return
 			# Handle release of all buttons as event None.
 			num = None
 		running[0] &= button_action[num]()
 
 	def my_tick():
+		axes = [a - z for a, z in zip(axis_state, axis_zero)]
 		if tick:
-			ret = tick([a - z for a, z in zip(axis_state, axis_zero)])
+			ret = tick(axes)
 			if ret is None:
 				return True
 			if ret is False:
@@ -143,10 +148,10 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		move = [0., 0., 0.]
 		for a in controls:
 			for c, v in enumerate(controls[a]):
-				if a >= len(axis_state) or a >= len(axis_zero):
-					print('invalid control %d (%s, %s)' % (a, repr(axis_state), repr(axis_zero)))
+				if a >= len(axes):
+					print('invalid control %d >= %d' % (a, len(axes)))
 					continue
-				move[c] += v * (axis_state[a] - axis_zero[a]) * scale[c] * cfg['tick_time'] / (1 << 15)
+				move[c] += v * axes[a] * scale[c] * cfg['tick_time'] / (1 << 15)
 				#print('move %d %f %d' % (c, move[c], axis_state[a] - axis_zero[a]))
 		if any(move):
 			#print(repr(move))
