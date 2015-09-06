@@ -898,10 +898,12 @@ function update_space(index) { // {{{
 		update_pin([['motor', [index, m]], 'sense_pin']);
 		update_float(printer, [['motor', [index, m]], 'steps_per_unit']);
 		update_float(printer, [['motor', [index, m]], 'max_steps']);
-		update_float(printer, [['motor', [index, m]], 'home_pos']);
+		if (index == 0)
+			update_float(printer, [['motor', [index, m]], 'home_pos']);
 		update_float(printer, [['motor', [index, m]], 'limit_v']);
 		update_float(printer, [['motor', [index, m]], 'limit_a']);
-		update_float(printer, [['motor', [index, m]], 'home_order']);
+		if (index == 0)
+			update_float(printer, [['motor', [index, m]], 'home_order']);
 	}
 	if (printer.spaces[index].type == TYPE_DELTA) {
 		for (var d = 0; d < 3; ++d) {
