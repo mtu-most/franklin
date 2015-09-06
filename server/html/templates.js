@@ -213,7 +213,8 @@ function Motor(space, motor) {
 	var e = [Name('motor', [space, motor]), ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
+		if (space == 0 || i != 1)
+			div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
 	return make_tablerow(motor_name(space, motor), e, ['rowtitle4']);
@@ -223,7 +224,8 @@ function Motor_hardware(space, motor) {
 	var e = [['steps_per_unit', 3, 1], ['max_steps', 0, 1], ['home_pos', 3, 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
+		if (space == 0 || i != 2)
+			div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
 	return make_tablerow(motor_name(space, motor), e, ['rowtitle3']);
