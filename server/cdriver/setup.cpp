@@ -44,6 +44,8 @@ void setup(char const *port, char const *run_id)
 	audio_hwtime_step = 1;	// This is set by audio file.
 	moving = false;
 	feedrate = 1;
+	max_deviation = 0;
+	max_v = INFINITY;
 	zoffset = 0;
 	aborting = false;
 	stopped = true;
@@ -65,8 +67,6 @@ void setup(char const *port, char const *run_id)
 	expected_replies = 0;
 	for (int i = 0; i < 4; ++i)
 		wait_for_reply[i] = NULL;
-	num_spaces = 0;
-	spaces = NULL;
 	num_temps = 0;
 	temps = NULL;
 	num_gpios = 0;
@@ -85,6 +85,8 @@ void setup_end() {
 	}
 	// Now set things up that need information from the firmware.
 	history = new History[FRAGMENTS_PER_BUFFER];
+	spaces[0].init(0);
+	spaces[1].init(1);
 	for (int i = 0; i < 2; ++i) {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		history[f].t0 = 0;

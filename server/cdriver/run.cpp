@@ -238,36 +238,28 @@ void run_file_fill_queue() {
 				break;
 			}
 			case RUN_LINE:
+			{
 				queue[settings.queue_end].probe = false;
 				queue[settings.queue_end].f[0] = r.f;
 				queue[settings.queue_end].f[1] = r.F;
-				if (num_spaces > 0) {
-					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
-					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
-					double z = r.Z + run_file_refz;
-					//debug("line %f %f %f", x, y, z);
-					int num0 = spaces[0].num_axes;
-					if (num0 > 0) {
-						queue[settings.queue_end].data[0] = x;
-						if (num0 > 1) {
-							queue[settings.queue_end].data[1] = y;
-							if (num0 > 2)
-								queue[settings.queue_end].data[2] = handle_probe(x, y, z);
-						}
-					}
-					for (int i = 3; i < num0; ++i)
-						queue[settings.queue_end].data[i] = NAN;
-					if (num_spaces > 1) {
-						for (int i = 0; i < spaces[1].num_axes; ++i)
-							queue[settings.queue_end].data[num0 + i] = (i == r.tool ? r.E : NAN);
-						num0 += spaces[1].num_axes;
-						for (int s = 2; s < num_spaces; ++s) {
-							for (int i = 0; i < spaces[s].num_axes; ++i)
-								queue[settings.queue_end].data[num0] = NAN;
-							num0 += spaces[s].num_axes;
-						}
+				double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
+				double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
+				double z = r.Z + run_file_refz;
+				//debug("line %f %f %f", x, y, z);
+				int num0 = spaces[0].num_axes;
+				if (num0 > 0) {
+					queue[settings.queue_end].data[0] = x;
+					if (num0 > 1) {
+						queue[settings.queue_end].data[1] = y;
+						if (num0 > 2)
+							queue[settings.queue_end].data[2] = handle_probe(x, y, z);
 					}
 				}
+				for (int i = 3; i < num0; ++i)
+					queue[settings.queue_end].data[i] = NAN;
+				for (int i = 0; i < spaces[1].num_axes; ++i)
+					queue[settings.queue_end].data[num0 + i] = (i == r.tool ? r.E : NAN);
+				num0 += spaces[1].num_axes;
 				queue[settings.queue_end].time = r.time;
 				queue[settings.queue_end].dist = r.dist;
 				queue[settings.queue_end].cb = false;
@@ -278,6 +270,7 @@ void run_file_fill_queue() {
 					rundebug("no");
 				buffer_refill();
 				break;
+			}
 			case RUN_GPIO:
 			{
 				int tool = r.tool;
@@ -342,7 +335,7 @@ void run_file_fill_queue() {
 				break;
 			}
 			case RUN_SETPOS:
-				if (num_spaces < 2 || r.tool >= spaces[1].num_axes) {
+				if (r.tool >= spaces[1].num_axes) {
 					debug("Not setting position of invalid extruder %d", r.tool);
 					break;
 				}

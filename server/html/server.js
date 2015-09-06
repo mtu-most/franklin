@@ -111,7 +111,6 @@ function _setup_updater() {
 					queue_length: constants[1],
 					num_digital_pins: constants[2],
 					num_analog_pins: constants[3],
-					num_spaces: 0,
 					num_temps: 0,
 					num_gpios: 0,
 					led_pin: 0,
@@ -130,12 +129,31 @@ function _setup_updater() {
 					status: 'Starting',
 					timeout: 0,
 					feedrate: 1,
+					max_deviation: 0,
+					max_v: 0,
 					zoffset: 0,
 					store_adc: false,
 					temp_scale_min: 0,
 					temp_scale_max: 0,
 					message: null,
-					spaces: [],
+					spaces: [{
+							name: null,
+							type: TYPE_CARTESIAN,
+							num_axes: 0,
+							num_motors: 0,
+							delta_angle: 0,
+							axis: [],
+							motor: []
+						},
+						{
+							name: null,
+							type: TYPE_EXTRUDER,
+							num_axes: 0,
+							num_motors: 0,
+							delta_angle: 0,
+							axis: [],
+							motor: []
+						}],
 					temps: [],
 					gpios: []
 				};
@@ -184,43 +202,30 @@ function _setup_updater() {
 		},
 		globals_update: function(port, values) {
 			printers[port].profile = values[0];
-			var new_num_spaces = values[1];
-			var new_num_temps = values[2];
-			var new_num_gpios = values[3];
-			printers[port].led_pin = values[4];
-			printers[port].probe_pin = values[5];
-			printers[port].spiss_pin = values[6];
-			printers[port].probe_dist = values[7];
-			printers[port].probe_safe_dist = values[8];
-			printers[port].bed_id = values[9];
-			printers[port].fan_id = values[10];
-			printers[port].spindle_id = values[11];
-			printers[port].unit_name = values[12];
-			printers[port].timeout = values[13];
-			printers[port].feedrate = values[14];
-			printers[port].zoffset = values[15];
-			printers[port].store_adc = values[16];
-			printers[port].park_after_print = values[17];
-			printers[port].sleep_after_print = values[18];
-			printers[port].cool_after_print = values[19];
-			printers[port].spi_setup = values[20];
-			printers[port].temp_scale_min = values[21];
-			printers[port].temp_scale_max = values[22];
-			printers[port].status = values[23];
-			for (var i = printers[port].num_spaces; i < new_num_spaces; ++i) {
-				printers[port].spaces.push({
-					name: null,
-					type: TYPE_CARTESIAN,
-					max_deviation: 0,
-					num_axes: 0,
-					num_motors: 0,
-					delta_angle: 0,
-					axis: [],
-					motor: []
-				});
-			}
-			printers[port].spaces.length = new_num_spaces;
-			printers[port].num_spaces = new_num_spaces;
+			var new_num_temps = values[1];
+			var new_num_gpios = values[2];
+			printers[port].led_pin = values[3];
+			printers[port].probe_pin = values[4];
+			printers[port].spiss_pin = values[5];
+			printers[port].probe_dist = values[6];
+			printers[port].probe_safe_dist = values[7];
+			printers[port].bed_id = values[8];
+			printers[port].fan_id = values[9];
+			printers[port].spindle_id = values[10];
+			printers[port].unit_name = values[11];
+			printers[port].timeout = values[12];
+			printers[port].feedrate = values[13];
+			printers[port].max_deviation = values[14];
+			printers[port].max_v = values[15];
+			printers[port].zoffset = values[16];
+			printers[port].store_adc = values[17];
+			printers[port].park_after_print = values[18];
+			printers[port].sleep_after_print = values[19];
+			printers[port].cool_after_print = values[20];
+			printers[port].spi_setup = values[21];
+			printers[port].temp_scale_min = values[22];
+			printers[port].temp_scale_max = values[23];
+			printers[port].status = values[24];
 			for (var i = printers[port].num_temps; i < new_num_temps; ++i) {
 				printers[port].temps.push({
 					name: null,
@@ -255,10 +260,8 @@ function _setup_updater() {
 		space_update: function(port, index, values) {
 			printers[port].spaces[index].name = values[0];
 			printers[port].spaces[index].type = values[1];
-			printers[port].spaces[index].max_deviation = values[2];
-			printers[port].spaces[index].max_v = values[3];
-			printers[port].spaces[index].num_axes = values[4].length;
-			printers[port].spaces[index].num_motors = values[5].length;
+			printers[port].spaces[index].num_axes = values[2].length;
+			printers[port].spaces[index].num_motors = values[3].length;
 			var current = [];
 			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a)
 				current.push(a < printers[port].spaces[index].axis.length ? printers[port].spaces[index].axis[a].current : NaN);
@@ -267,48 +270,48 @@ function _setup_updater() {
 			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a) {
 				printers[port].spaces[index].axis.push({
 					current: current[a],
-					name: values[4][a][0],
-					park: values[4][a][1],
-					park_order: values[4][a][2],
-					min: values[4][a][3],
-					max: values[4][a][4]
+					name: values[2][a][0],
+					park: values[2][a][1],
+					park_order: values[2][a][2],
+					min: values[2][a][3],
+					max: values[2][a][4]
 				});
 			}
 			for (var m = 0; m < printers[port].spaces[index].num_motors; ++m) {
 				printers[port].spaces[index].motor.push({
-					name: values[5][m][0],
-					step_pin: values[5][m][1],
-					dir_pin: values[5][m][2],
-					enable_pin: values[5][m][3],
-					limit_min_pin: values[5][m][4],
-					limit_max_pin: values[5][m][5],
-					sense_pin: values[5][m][6],
-					steps_per_unit: values[5][m][7],
-					max_steps: values[5][m][8],
-					home_pos: values[5][m][9],
-					limit_v: values[5][m][10],
-					limit_a: values[5][m][11],
-					home_order: values[5][m][12]
+					name: values[3][m][0],
+					step_pin: values[3][m][1],
+					dir_pin: values[3][m][2],
+					enable_pin: values[3][m][3],
+					limit_min_pin: values[3][m][4],
+					limit_max_pin: values[3][m][5],
+					sense_pin: values[3][m][6],
+					steps_per_unit: values[3][m][7],
+					max_steps: values[3][m][8],
+					home_pos: values[3][m][9],
+					limit_v: values[3][m][10],
+					limit_a: values[3][m][11],
+					home_order: values[3][m][12]
 				});
 			}
 			if (index == 1) {
-				for (var a = 0; a < values[6].length; ++a)
-					printers[port].spaces[index].axis[a].multiplier = values[6][a];
+				for (var a = 0; a < values[4].length; ++a)
+					printers[port].spaces[index].axis[a].multiplier = values[4][a];
 			}
 			if (printers[port].spaces[index].type == TYPE_DELTA) {
 				for (var i = 0; i < 3; ++i) {
-					printers[port].spaces[index].motor[i].delta_axis_min = values[7][i][0];
-					printers[port].spaces[index].motor[i].delta_axis_max = values[7][i][1];
-					printers[port].spaces[index].motor[i].delta_rodlength = values[7][i][2];
-					printers[port].spaces[index].motor[i].delta_radius = values[7][i][3];
+					printers[port].spaces[index].motor[i].delta_axis_min = values[5][i][0];
+					printers[port].spaces[index].motor[i].delta_axis_max = values[5][i][1];
+					printers[port].spaces[index].motor[i].delta_rodlength = values[5][i][2];
+					printers[port].spaces[index].motor[i].delta_radius = values[5][i][3];
 				}
-				printers[port].spaces[index].delta_angle = values[7][3];
+				printers[port].spaces[index].delta_angle = values[5][3];
 			}
 			if (printers[port].spaces[index].type == TYPE_EXTRUDER) {
 				for (var i = 0; i < printers[port].spaces[index].axis.length; ++i) {
-					printers[port].spaces[index].axis[i].extruder_dx = values[7][i][0];
-					printers[port].spaces[index].axis[i].extruder_dy = values[7][i][1];
-					printers[port].spaces[index].axis[i].extruder_dz = values[7][i][2];
+					printers[port].spaces[index].axis[i].extruder_dx = values[5][i][0];
+					printers[port].spaces[index].axis[i].extruder_dy = values[5][i][1];
+					printers[port].spaces[index].axis[i].extruder_dz = values[5][i][2];
 				}
 			}
 			trigger_update(port, 'space_update', index);

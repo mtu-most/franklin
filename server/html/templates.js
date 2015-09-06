@@ -111,19 +111,6 @@ function File(obj, action, buttontext, cb) { // {{{
 	return [input, button];
 } // }}}
 
-function Spacetype(num) { // {{{
-	var select = create_space_type_select();
-	var button = Create('button').AddText('Set');
-	button.type = 'button';
-	button.index = num;
-	button.obj = select;
-	button.printer = printer;
-	button.AddEvent('click', function() { set_value(this.printer, [['space', this.index], 'type'], this.obj.selectedIndex); });
-	var span = Create('span');
-	span.id = make_id(printer, [['space', num], 'type']);
-	return make_tablerow(space_name(num), [Name('space', num), [select, button, span], Float([['space', num], 'max_deviation'], 2, 1), Float([['space', num], 'max_v'], 2, 1)], ['rowtitle1']);
-} // }}}
-
 function Checkbox(obj) { // {{{
 	var ret = Create('input');
 	ret.type = 'checkbox';
@@ -577,15 +564,16 @@ function Printer() {	// {{{
 	e = setup.AddElement('div').AddText('Timeout:');
 	e.Add(Float([null, 'timeout'], 0, 60));
 	e.AddText(' min');
-	e = setup.AddElement('div').AddText('Unit:');
-	e.Add(Name('unit', []));
-	e.Add(add_name('unit', 0, 0));
-	e = setup.AddElement('div').AddText('Park after Print:');
-	e.Add(Checkbox([null, 'park_after_print']));
-	e = setup.AddElement('div').AddText('Sleep after Print:');
-	e.Add(Checkbox([null, 'sleep_after_print']));
-	e = setup.AddElement('div').AddText('Cool after Print:');
-	e.Add(Checkbox([null, 'cool_after_print']));
+	e = setup.AddElement('div').AddText('After Print:');
+	var l = e.AddElement('label');
+	l.Add(Checkbox([null, 'park_after_print']));
+	l.AddText('Park');
+	l = e.AddElement('label');
+	l.Add(Checkbox([null, 'sleep_after_print']));
+	l.AddText('Sleep');
+	l = e.AddElement('label');
+	l.Add(Checkbox([null, 'cool_after_print']));
+	l.AddText('Cool');
 	e = setup.AddElement('div').AddText('Max Probe Distance:');
 	e.Add(Float([null, 'probe_dist'], 0, 1));
 	e.AddText(' ').Add(add_name('unit', 0, 0));
@@ -594,33 +582,29 @@ function Printer() {	// {{{
 	e.AddText(' ').Add(add_name('unit', 0, 0));
 	e = setup.AddElement('div').AddText('SPI setup:');
 	e.Add(Str([null, 'spi_setup']));
-	e = setup.AddElement('div').AddText('Spaces:').Add(Float([null, 'num_spaces'], 0));
+	e = setup.AddElement('div').AddText('Printer Type:');
+	var select = e.Add(create_space_type_select());
+	var button = e.AddElement('button').AddText('Set');
+	button.type = 'button';
+	button.obj = select;
+	button.printer = printer;
+	button.AddEvent('click', function() { set_value(this.printer, [['space', 0], 'type'], this.obj.selectedIndex); });
+	e.AddElement('span').id = make_id(printer, [['space', 0], 'type']);
 	e = setup.AddElement('div').AddText('Temps:').Add(Float([null, 'num_temps'], 0));
 	e = setup.AddElement('div').AddText('Gpios:').Add(Float([null, 'num_gpios'], 0));
 	e = setup.AddElement('div').AddText('Temp Scale Minimum:');
 	e.Add(Float([null, 'temp_scale_min'], 0, 1));
+	e.AddText('°C');
 	e = setup.AddElement('div').AddText('Temp Scale Maximum:');
 	e.Add(Float([null, 'temp_scale_max'], 0, 1));
-	// Space. {{{
-	setup.Add([make_table().AddMultipleTitles([
-		'Spaces',
-		'Name',
-		'Type',
-		UnitTitle('Max Deviation'),
-		UnitTitle('Max v', '/s')
-	], [
-		'htitle5',
-		'title5',
-		'title5',
-		'title5',
-		'title5'
-	], [
-		null,
-		'Space name',
-		'Space type',
-		'Corners are rounded from requested path to this amount'
-	]).AddMultiple('space', Spacetype)]);
-	// }}}
+	e.AddText('°C');
+	e = setup.AddElement('div').AddText('Max Deviation:');
+	e.Add(Float([null, 'max_deviation'], 2, 1));
+	e.AddText(' ').Add(add_name('unit', 0, 0));
+	e = setup.AddElement('div').AddText('Max v');
+	e.Add(Float([null, 'max_v'], 2, 1));
+	e.AddText(' ').Add(add_name('unit', 0, 0));
+	e.AddText('/s')
 	// Cartesian. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Cartesian/Extruder',

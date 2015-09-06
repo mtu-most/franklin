@@ -130,7 +130,7 @@ static void move_to_current() { // {{{
 	settings.start_time = 0;
 	settings.last_time = 0;
 	settings.last_current_time = 0;
-	for (uint8_t s = 0; s < num_spaces; ++s) {
+	for (uint8_t s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			cpdebug(s, a, "using current %f", sp.axis[a]->settings.current);
@@ -155,7 +155,7 @@ void Space::load_info(int32_t &addr) { // {{{
 	if (t >= NUM_SPACE_TYPES)
 		t = DEFAULT_TYPE;
 	type = read_8(addr);
-	if (type >= NUM_SPACE_TYPES) {
+	if (type >= NUM_SPACE_TYPES || (id == 1 && type != EXTRUDER_TYPE)) {
 		debug("request for type %d ignored", type);
 		type = t;
 	}
@@ -178,8 +178,6 @@ void Space::load_info(int32_t &addr) { // {{{
 		else
 			ok = true;
 	}
-	max_deviation = read_float(addr);
-	max_v = read_float(addr);
 	space_types[type].load(this, t, addr);
 	if (t != type) {
 		space_types[type].reset_pos(this);
@@ -267,10 +265,7 @@ void Space::load_motor(uint8_t m, int32_t &addr) { // {{{
 } // }}}
 
 void Space::save_info(int32_t &addr) { // {{{
-	//debug("saving info %d %f %d %d", type, max_deviation, num_axes, num_motors);
 	write_8(addr, type);
-	write_float(addr, max_deviation);
-	write_float(addr, max_v);
 	space_types[type].save(this, addr);
 } // }}}
 
@@ -297,59 +292,15 @@ void Space::save_motor(uint8_t m, int32_t &addr) { // {{{
 } // }}}
 
 void Space::init(uint8_t space_id) { // {{{
-	type = DEFAULT_TYPE;
+	type = space_id == 0 ? DEFAULT_TYPE : EXTRUDER_TYPE;
 	id = space_id;
-	max_deviation = 0;
-	max_v = INFINITY;
 	type_data = NULL;
 	num_axes = 0;
 	num_motors = 0;
 	motor = NULL;
 	axis = NULL;
 	history = new Space_History[FRAGMENTS_PER_BUFFER];
-} // }}}
-
-void Space::free() { // {{{
-	space_types[type].free(this);
-	for (uint8_t a = 0; a < num_axes; ++a)
-		delete axis[a];
-	delete[] axis;
-	for (uint8_t m = 0; m < num_motors; ++m) {
-		motor[m]->step_pin.read(0);
-		motor[m]->dir_pin.read(0);
-		motor[m]->enable_pin.read(0);
-		motor[m]->limit_min_pin.read(0);
-		motor[m]->limit_max_pin.read(0);
-		motor[m]->sense_pin.read(0);
-		delete motor[m];
-	}
-	delete[] motor;
-	delete history;
-} // }}}
-
-void Space::copy(Space &dst) { // {{{
-	//debug("copy space");
-	dst.type = type;
-	dst.type_data = type_data;
-	dst.num_axes = num_axes;
-	dst.num_motors = num_motors;
-	dst.axis = axis;
-	dst.motor = motor;
-	for (int next = 0; next < 2; ++next) {
-		dst.settings.arc[next] = settings.arc[next];
-		for (int i = 0; i < 2; ++i) {
-			dst.settings.radius[next][i] = settings.radius[next][i];
-		}
-		for (int i = 0; i < 3; ++i) {
-			dst.settings.offset[next][i] = settings.offset[next][i];
-			dst.settings.e1[next][i] = settings.e1[next][i];
-			dst.settings.e2[next][i] = settings.e2[next][i];
-			dst.settings.normal[next][i] = settings.normal[next][i];
-		}
-		dst.settings.angle[next] = settings.angle[next];
-		dst.settings.helix[next] = settings.helix[next];
-	}
-	dst.history = history;
+	space_types[type].init(this);
 } // }}}
 
 void Space::cancel_update() { // {{{
@@ -474,7 +425,7 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 		movedebug("end move");
 		return false;
 	}
-	for (uint8_t s = 0; s < num_spaces; ++s) {
+	for (uint8_t s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			if (!isnan(sp.axis[a]->settings.target))
@@ -484,7 +435,7 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 	if (factor < 1) {
 		// Recalculate steps; ignore resulting factor.
 		double dummy_factor = 1;
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if (!isnan(sp.axis[a]->settings.target))
@@ -499,7 +450,7 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 	// Adjust start time if factor < 1.
 	bool have_steps = false;
 	if (factor < 1) {
-		for (uint8_t s = 0; !have_steps && s < num_spaces; ++s) {
+		for (uint8_t s = 0; !have_steps && s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t m = 0; m < sp.num_motors; ++m) {
 				Motor &mtr = *sp.motor[m];
@@ -529,7 +480,7 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 	settings.last_time = current_time;
 	// Move the motors.
 	//debug("start move");
-	for (uint8_t s = 0; s < num_spaces; ++s) {
+	for (uint8_t s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
@@ -592,7 +543,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 	double t = (current_time - settings.start_time) / 1e6;
 	if (t >= settings.t0 + settings.tp) {	// Finish this move and prepare next. {{{
 		movedebug("finishing %f %f %f %ld %ld", t, settings.t0, settings.tp, long(current_time), long(settings.start_time));
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if (!isnan(sp.axis[a]->settings.dist[0])) {
@@ -631,7 +582,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 					//debug("done move");
 					moving = false;
 				}
-				for (uint8_t s = 0; s < num_spaces; ++s) {
+				for (uint8_t s = 0; s < 2; ++s) {
 					Space &sp = spaces[s];
 					for (uint8_t m = 0; m < sp.num_motors; ++m)
 						sp.motor[m]->settings.last_v = 0;
@@ -651,7 +602,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		double t_fraction = t / settings.t0;
 		double current_f = (settings.f1 * (2 - t_fraction) + settings.f2 * t_fraction) * t_fraction;
 		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", t, settings.t0, settings.tp, t_fraction, settings.f1, settings.f2, current_f);
-		for (int s = 0; s < num_spaces; ++s) {
+		for (int s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if (isnan(sp.axis[a]->settings.dist[0]) || sp.axis[a]->settings.dist[0] == 0) {
@@ -670,7 +621,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		double t_fraction = tc / settings.tp;
 		double current_f2 = settings.fp * (2 - t_fraction) * t_fraction;
 		double current_f3 = settings.fq * t_fraction * t_fraction;
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if ((isnan(sp.axis[a]->settings.dist[0]) || sp.axis[a]->settings.dist[0] == 0) && (isnan(sp.axis[a]->settings.dist[1]) || sp.axis[a]->settings.dist[1] == 0)) {
@@ -707,7 +658,7 @@ void store_settings() { // {{{
 	history[current_fragment].queue_end = settings.queue_end;
 	history[current_fragment].queue_full = settings.queue_full;
 	history[current_fragment].run_file_current = settings.run_file_current;
-	for (int s = 0; s < num_spaces; ++s) {
+	for (int s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		for (int i = 0; i < 2; ++i) {
 			sp.history[current_fragment].arc[i] = sp.settings.arc[i];
@@ -765,7 +716,7 @@ void restore_settings() { // {{{
 	settings.queue_end = history[current_fragment].queue_end;
 	settings.queue_full = history[current_fragment].queue_full;
 	settings.run_file_current = history[current_fragment].run_file_current;
-	for (int s = 0; s < num_spaces; ++s) {
+	for (int s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		for (int i = 0; i < 2; ++i) {
 			sp.settings.arc[i] = sp.history[current_fragment].arc[i];
@@ -843,7 +794,7 @@ void send_fragment() { // {{{
 void apply_tick() { // {{{
 	settings.hwtime += hwtime_step;
 	handle_motors(settings.hwtime);
-	//if (num_spaces > 0 && spaces[0].num_axes >= 2)
+	//if (spaces[0].num_axes >= 2)
 		//debug("move z %d %d %f %d %d", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings.current, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 } // }}}
 

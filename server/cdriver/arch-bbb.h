@@ -458,7 +458,7 @@ int arch_tick() {
 				break;
 			cf = cf2;
 		}
-		for (int s = 0; s < num_spaces; ++s) {
+		for (int s = 0; s < 2; ++s) {
 			for (int m = 0; m < spaces[s].num_motors; ++m) {
 				if (!spaces[s].motor[m]->active || !spaces[s].motor[m]->step_pin.valid() || spaces[s].motor[m]->step_pin.pin < NUM_GPIO_PINS)
 					continue;
@@ -492,7 +492,7 @@ int arch_tick() {
 void arch_motors_change() {
 	bbb_pru->base = 0;
 	bbb_pru->dirs = 0;
-	for (int s = 0; s < num_spaces; ++s) {
+	for (int s = 0; s < 2; ++s) {
 		for (int m = 0; m < spaces[s].num_motors; ++m) {
 			Pin_t *p = &spaces[s].motor[m]->dir_pin;
 			if (p->valid() && p->pin >= NUM_GPIO_PINS) {

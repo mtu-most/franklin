@@ -263,7 +263,7 @@ void avr_call1(uint8_t cmd, uint8_t arg) {
 
 void avr_get_current_pos(int offset, bool check) {
 	int mi = 0;
-	for (int ts = 0; ts < num_spaces; mi += spaces[ts++].num_motors) {
+	for (int ts = 0; ts < 2; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
 			int old = spaces[ts].motor[tm]->settings.current_pos;
 			cpdebug(ts, tm, "cpb offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
@@ -310,7 +310,7 @@ bool hwpacket(int len) {
 			pos = NAN;
 		}
 		else {
-			for (s = 0; s < num_spaces; ++s) {
+			for (s = 0; s < 2; ++s) {
 				if (which < spaces[s].num_motors) {
 					m = which;
 					break;
@@ -325,13 +325,13 @@ bool hwpacket(int len) {
 			avr_homing = false;
 			abort_move(int8_t(command[1][2]));
 			//int i = 0;
-			//for (int is = 0; is < num_spaces; ++is)
+			//for (int is = 0; is < 2; ++is)
 			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
 			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
 			//fprintf(stderr, "\n");
 			avr_get_current_pos(3, false);
 			//i = 0;
-			//for (int is = 0; is < num_spaces; ++is)
+			//for (int is = 0; is < 2; ++is)
 			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
 			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
 			//fprintf(stderr, "\n");
@@ -452,7 +452,7 @@ bool hwpacket(int len) {
 		avr_homing = false;
 		avr_get_current_pos(1, false);
 		//int i = 0;
-		//for (int s = 0; s < num_spaces; ++s)
+		//for (int s = 0; s < 2; ++s)
 		//	for (int m = 0; m < spaces[s].num_motors; ++m, ++i)
 		//		fprintf(stderr, "\t%8d", spaces[s].motor[m]->settings.current_pos + avr_pos_offset[i]);
 		//fprintf(stderr, "\n");
@@ -470,7 +470,7 @@ bool hwpacket(int len) {
 		motors_busy = false;
 		// Everything has shut down; reset pins to normal (but inactive).
 		arch_motors_change();
-		for (int s = 0; s < num_spaces; ++s) {
+		for (int s = 0; s < 2; ++s) {
 			for (int m = 0; m < spaces[s].num_motors; ++m) {
 				RESET(spaces[s].motor[m]->step_pin);
 				RESET(spaces[s].motor[m]->dir_pin);
@@ -721,7 +721,7 @@ void arch_change(bool motors) {
 	int old_active_motors = avr_active_motors;
 	if (motors) {
 		avr_active_motors = 0;
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			avr_active_motors += spaces[s].num_motors;
 		}
 	}
@@ -747,7 +747,7 @@ void arch_change(bool motors) {
 	prepare_packet(avr_buffer, 13);
 	avr_send();
 	if (motors) {
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			for (uint8_t m = 0; m < spaces[s].num_motors; ++m) {
 				arch_motor_change(s, m);
 			}
@@ -966,7 +966,7 @@ bool arch_send_fragment() {
 		avr_send();
 		int mi = 0;
 		avr_filling = true;
-		for (int s = 0; !host_block && !stopping && !discard_pending && !stop_pending && s < num_spaces; mi += spaces[s++].num_motors) {
+		for (int s = 0; !host_block && !stopping && !discard_pending && !stop_pending && s < 2; mi += spaces[s++].num_motors) {
 			for (uint8_t m = 0; !host_block && !stopping && !discard_pending && !stop_pending && m < spaces[s].num_motors; ++m) {
 				if (!spaces[s].motor[m]->active)
 					continue;
@@ -1028,7 +1028,7 @@ void arch_home() {
 	for (int i = 0; i < 4; ++i)
 		avr_buffer[1 + i] = (speed >> (8 * i)) & 0xff;
 	int mi = 0;
-	for (int s = 0; s < num_spaces; mi += spaces[s++].num_motors) {
+	for (int s = 0; s < 2; mi += spaces[s++].num_motors) {
 		Space &sp = spaces[s];
 		for (int m = 0; m < sp.num_motors; ++m) {
 			if (abs(int8_t(command[0][2 + mi + m])) <= 1) {

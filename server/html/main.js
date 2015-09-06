@@ -208,7 +208,7 @@ function init() { // {{{
 } // }}}
 
 function make_id(printer, id, extra) { // {{{
-	// [null, 'num_spaces']
+	// [null, 'num_temps']
 	// [['space', 1], 'num_axes']
 	// [['axis', [0, 1]], 'offset']
 	// [['motor', [0, 1]], 'delta_radius']
@@ -238,7 +238,7 @@ function set_value(printer, id, value, reply, arg) { // {{{
 		var obj = {};
 		obj[id[1]] = value;
 		if (id[0] === null) {
-			// [null, 'num_spaces']
+			// [null, 'num_temps']
 			printer.call('set_globals', [], obj, reply);
 		}
 		else {
@@ -588,7 +588,7 @@ function new_printer() { // {{{
 	update_float(printer, [null, 'targety']);
 	update_float(printer, [null, 'targetz']);
 	update_globals();
-	for (var i = 0; i < printer.num_spaces; ++i)
+	for (var i = 0; i < 2; ++i)
 		update_space(i);
 	for (var i = 0; i < printer.num_temps; ++i)
 		update_temp(i);
@@ -739,7 +739,6 @@ function update_globals() { // {{{
 		select_printer();
 	}
 	get_element(printer, [null, 'export']).href = encodeURIComponent(printer.profile) + '.ini?port=' + encodeURIComponent(port);
-	update_float(printer, [null, 'num_spaces']);
 	update_float(printer, [null, 'num_temps']);
 	update_float(printer, [null, 'num_gpios']);
 	update_pin([null, 'led_pin']);
@@ -749,6 +748,8 @@ function update_globals() { // {{{
 	update_float(printer, [null, 'probe_safe_dist']);
 	update_float(printer, [null, 'timeout']);
 	update_float(printer, [null, 'feedrate']);
+	update_float(printer, [null, 'max_deviation']);
+	update_float(printer, [null, 'max_v']);
 	update_float(printer, [null, 'zoffset']);
 	update_checkbox(printer, [null, 'store_adc']);
 	update_checkbox(printer, [null, 'park_after_print']);
@@ -769,39 +770,19 @@ function update_globals() { // {{{
 	}
 	update_state(get_value(printer, [null, 'status']));
 	var m = printer.multiples;
-	// Remove table rows.
-	for (var t = 0; t < m.axis.length; ++t) {
-		while (m.axis[t].space.length > printer.num_spaces) {
-			var s = m.axis[t].space.pop();
-			while (s.tr.length > 0)
-				m.axis[t].table.removeChild(s.tr.pop());
-		}
-	}
-	for (var t = 0; t < m.motor.length; ++t) {
-		while (m.motor[t].space.length > printer.num_spaces) {
-			var s = m.motor[t].space.pop();
-			while (s.tr.length > 0)
-				m.motor[t].table.removeChild(s.tr.pop());
-		}
-	}
 	for (var t = 0; t < m.space.length; ++t) {
-		while (m.space[t].tr.length > printer.num_spaces)
-			m.space[t].table.removeChild(m.space[t].tr.pop());
-		// And add table rows.
-		while (m.space[t].tr.length < printer.num_spaces) {
+		// Add table rows.
+		while (m.space[t].tr.length < 2) { // TODO: force num spaces to be 2 at initialization.
 			var n = m.space[t].create(m.space[t].tr.length);
 			m.space[t].tr.push(n);
 			m.space[t].table.insertBefore(n, m.space[t].after);
 		}
 		if (!(m.space[t].after instanceof Comment)) {
-			if (printer.num_spaces >= 2)
-				m.space[t].after.RemoveClass('hidden');
-			else
-				m.space[t].after.AddClass('hidden');
+			m.space[t].after.RemoveClass('hidden');
 		}
 	}
 	for (var t = 0; t < m.axis.length; ++t) {
-		while (m.axis[t].space.length < printer.num_spaces) {
+		while (m.axis[t].space.length < 2) { // TODO: force num spaces to be 2 at initialization.
 			var n;
 			if (m.axis[t].all)
 				n = m.axis[t].create(m.axis[t].space.length, null);
@@ -812,7 +793,7 @@ function update_globals() { // {{{
 		}
 	}
 	for (var t = 0; t < m.motor.length; ++t) {
-		while (m.motor[t].space.length < printer.num_spaces) {
+		while (m.motor[t].space.length < 2) { // TODO: force num spaces to be 2 at initialization.
 			var n;
 			if (m.motor[t].all)
 				n = m.motor[t].create(m.motor[t].space.length, null);
@@ -861,11 +842,11 @@ function update_space(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
 	set_name(printer, 'space', index, 0, printer.spaces[index].name);
-	var e = get_element(printer, [['space', index], 'type']);
-	e.ClearAll();
-	e.AddText(space_types[printer.spaces[index].type]);
-	update_float(printer, [['space', index], 'max_deviation']);
-	update_float(printer, [['space', index], 'max_v']);
+	if (index == 0) {
+		var e = get_element(printer, [['space', 0], 'type']);
+		e.ClearAll();
+		e.AddText(space_types[printer.spaces[index].type]);
+	}
 	update_float(printer, [['space', index], 'num_axes']);
 	var m = printer.multiples;
 	for (var t = 0; t < m.axis.length; ++t) {

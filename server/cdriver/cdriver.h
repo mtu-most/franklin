@@ -273,10 +273,8 @@ struct Space {
 	void *type_data;
 	Motor **motor;
 	Axis **axis;
-	double max_deviation;
-	double max_v;
-	uint8_t type;
 	uint8_t id;
+	uint8_t type;
 	uint8_t num_axes, num_motors;
 	void load_info(int32_t &addr);
 	void load_axis(uint8_t a, int32_t &addr);
@@ -285,14 +283,13 @@ struct Space {
 	void save_axis(uint8_t a, int32_t &addr);
 	void save_motor(uint8_t m, int32_t &addr);
 	void init(uint8_t space_id);
-	void free();
-	void copy(Space &dst);
 	bool setup_nums(uint8_t na, uint8_t nm);
 	void cancel_update();
 	ARCH_SPACE
 };
 
 #define DEFAULT_TYPE 0
+#define EXTRUDER_TYPE 2
 void Cartesian_init(int num);
 void Delta_init(int num);
 void Extruder_init(int num);
@@ -361,8 +358,9 @@ EXTERN HostSerial host_serial;
 #define FULL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
 
 // Globals
+EXTERN double max_deviation;
+EXTERN double max_v;
 EXTERN unsigned char uuid[UUID_SIZE];
-EXTERN uint8_t num_spaces;
 EXTERN uint8_t num_extruders;
 EXTERN uint8_t num_temps;
 EXTERN uint8_t num_gpios;
@@ -378,7 +376,7 @@ EXTERN double zoffset;	// Offset for axis 2 of space 0.
 EXTERN Serial_t *serialdev[2];
 EXTERN unsigned char command[2][FULL_COMMAND_SIZE];
 EXTERN int command_end[2];
-EXTERN Space *spaces;
+EXTERN Space spaces[2];
 EXTERN Temp *temps;
 EXTERN Gpio *gpios;
 EXTERN FILE *store_adc;

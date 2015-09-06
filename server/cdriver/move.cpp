@@ -14,9 +14,7 @@
 // vq			end velocity of connector part. (fraction/s)
 
 static void change0(int qpos) { // {{{
-	if (num_spaces < 1)
-		return;
-	for (int s = 0; s < num_spaces; ++s) {
+	for (int s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		for (int a = 0; a < spaces[0].num_axes; ++a)
 			queue[qpos].data[a] = space_types[sp.type].change0(&sp, a, queue[qpos].data[a]);
@@ -162,7 +160,7 @@ uint8_t next_move() { // {{{
 	// If the source is unknown, determine it from current_pos.
 	//for (uint8_t a = 0; a < num_axes; ++a)
 	//	debug("target %d %f", a, queue[settings.queue_start].data[a]);
-	for (uint8_t s = 0; s < num_spaces; ++s) {
+	for (uint8_t s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			if (isnan(sp.axis[a]->settings.source)) {
@@ -188,7 +186,7 @@ uint8_t next_move() { // {{{
 		settings.f0 = 0;
 		a0 = 0;
 		change0(settings.queue_start);
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[settings.queue_start].data[a0]);
 			for (int a = 0; a < sp.num_axes; ++a) {
@@ -202,7 +200,7 @@ uint8_t next_move() { // {{{
 	// }}}
 	// Fill unspecified coordinates with previous values. {{{
 	a0 = 0;
-	for (uint8_t s = 0; s < num_spaces; ++s) {
+	for (uint8_t s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			if (n != settings.queue_end) {
@@ -244,7 +242,7 @@ uint8_t next_move() { // {{{
 #ifdef DEBUG_MOVE
 		debug("Building final segment.");
 #endif
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			copy_next(s);
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
@@ -262,7 +260,7 @@ uint8_t next_move() { // {{{
 #endif
 		a0 = 0;
 		change0(n);
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[n].data[a0]);
 			copy_next(s);
@@ -296,7 +294,7 @@ uint8_t next_move() { // {{{
 #endif
 		num_cbs += cbs_after_current_move;
 		cbs_after_current_move = 0;
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a)
 				sp.axis[a]->settings.dist[0] = NAN;
@@ -318,12 +316,19 @@ uint8_t next_move() { // {{{
 #endif
 
 	// Limit v0, vp, vq. {{{
-	for (uint8_t s = 0; s < num_spaces; ++s) {
+	for (uint8_t s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
-		if (isnan(sp.max_v) || isinf(sp.max_v) || sp.max_v <= 0)
+		double limit;
+		if (s == 0)
+			limit = max_v;
+		else if (current_extruder < sp.num_motors)
+			limit = sp.motor[current_extruder]->limit_v;
+		else
+			continue;
+		if (isnan(limit) || isinf(limit) || limit <= 0)
 			continue;
 		// max_mm is the maximum speed in mm/s.
-		double max_mm = settings.probing ? space_types[sp.type].probe_speed(&sp) : sp.max_v;
+		double max_mm = settings.probing ? space_types[sp.type].probe_speed(&sp) : limit;
 		double dist = 0, distn = 0;
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			dist += sp.axis[a]->settings.dist[0] * sp.axis[a]->settings.dist[0];
@@ -365,11 +370,11 @@ uint8_t next_move() { // {{{
 	}
 	else {
 		settings.fp = factor > 1 ? .5 / factor : .5;
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			if (sp.num_axes < 2)
 				continue;
-			if (sp.max_deviation == 0) {
+			if (s != 0 || max_deviation == 0) {
 				settings.fp = 0;
 				break;
 			}
@@ -388,13 +393,13 @@ uint8_t next_move() { // {{{
 			double norma(sqrt(norma2));
 			if (norma <= 0)
 				continue;
-			double done = 1 - sp.max_deviation / norma;
+			double done = 1 - max_deviation / norma;
 			// Set it also if done_factor is NaN.
 			if (!(done <= done_factor))
 				done_factor = done;
-			double new_fp = sp.max_deviation / sqrt(normb / (norma + normb) * diff2);
+			double new_fp = max_deviation / sqrt(normb / (norma + normb) * diff2);
 #ifdef DEBUG_MOVE
-			debug("Space %d fp %f dev %f", s, settings.fp, sp.max_deviation);
+			debug("Space %d fp %f dev %f", s, settings.fp, max_deviation);
 #endif
 			if (new_fp < settings.fp)
 				settings.fp = new_fp;
@@ -411,7 +416,7 @@ uint8_t next_move() { // {{{
 	settings.f2 = 1 - settings.fp - settings.f1;
 
 	// Set up endpos. {{{
-	for (uint8_t s = 0; s < num_spaces; ++s) {
+	for (uint8_t s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			sp.axis[a]->settings.main_dist = sp.axis[a]->settings.dist[0] * (1 - settings.fp);
@@ -432,7 +437,7 @@ uint8_t next_move() { // {{{
 
 	// Enable motors if they weren't. {{{
 	if (!motors_busy) {
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t m = 0; m < sp.num_motors; ++m)
 				SET(sp.motor[m]->enable_pin);
@@ -453,7 +458,7 @@ uint8_t next_move() { // {{{
 #ifdef DEBUG_MOVE
 		debug("starting new move");
 #endif
-		for (uint8_t s = 0; s < num_spaces; ++s) {
+		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a)
 				sp.axis[a]->settings.source = sp.axis[a]->settings.current;
@@ -483,17 +488,17 @@ void abort_move(int pos) { // {{{
 #endif
 	//debug("free abort reset");
 	current_fragment_pos = 0;
-	//if (num_spaces > 0 && spaces[0].num_axes > 0)
+	//if (spaces[0].num_axes > 0)
 	//	fcpdebug(0, 0, "starting hwpos %x", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 	moving = true;
 	//debug("restoring position for fragment %d to position %d", current_fragment, pos);
 	while (moving && current_fragment_pos < pos) {
 		//debug("tick %d %d %d", current_fragment_pos, settings.hwtime, current_fragment);
 		apply_tick();
-		//if (num_spaces > 0 && spaces[0].num_axes > 0)
+		//if (spaces[0].num_axes > 0)
 		//	fcpdebug(0, 0, "current hwpos %x time %d", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0], settings.hwtime);
 	}
-	//if (num_spaces > 0 && spaces[0].num_axes > 0)
+	//if (spaces[0].num_axes > 0)
 	//	fcpdebug(0, 0, "ending hwpos %x", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 	//debug("done restoring position");
 	// Copy settings back to previous fragment.
@@ -502,10 +507,10 @@ void abort_move(int pos) { // {{{
 	stopped = true;
 	prepared = false;
 	current_fragment_pos = 0;
-	//if (num_spaces > 0 && spaces[0].num_axes > 0)
+	//if (spaces[0].num_axes > 0)
 	//	fcpdebug(0, 0, "final hwpos %x", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 	//debug("curf3 %d", current_fragment);
-	for (uint8_t s = 0; s < num_spaces; ++s) {
+	for (uint8_t s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			//debug("setting axis %d source to %f", a, sp.axis[a]->settings.current);
