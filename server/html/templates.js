@@ -606,7 +606,7 @@ function Printer() {	// {{{
 	e = setup.AddElement('div').AddText('Max v');
 	e.Add(Float([null, 'max_v'], 2, 1));
 	e.AddText(' ').Add(add_name('unit', 0, 0));
-	e.AddText('/s')
+	e.AddText('/s');
 	// Cartesian. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Cartesian/Extruder',
