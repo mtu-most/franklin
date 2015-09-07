@@ -3,6 +3,7 @@ import franklin_joystick as js
 import time
 import sys
 import gui
+import subprocess
 
 def save(filename):
 	with open(filename, 'w') as f:
@@ -59,6 +60,9 @@ def do_gtk(axes = None):
 	return True
 
 do_gtk()
+
+id = g.id
+subprocess.Popen(['./display', '%d' % id])
 
 while True:
 	mem = js.main(tick = do_gtk)

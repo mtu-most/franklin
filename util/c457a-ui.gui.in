@@ -7,7 +7,7 @@ Gtk
 					MenuItem title=Quit action=file_quit
 				Menu title=Help
 					MenuItem title=About action=help_about
-			NoteBook
+			Notebook
 				VBox label=:Settings
 					Label value=':Enter file description' expand=:False
 					TextView text=message expand=:True

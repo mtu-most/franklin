@@ -34,7 +34,7 @@ def new_pixbuf(bus, message):
 		im.set_from_pixbuf(pb)
 	return True
 
-overlayfile = '/usr/share/franklin/overlay.png'
+overlayfile = '/usr/lib/franklin/overlay.png'
 overlay = None
 im = None
 # Set up gstreamer pipeline.
