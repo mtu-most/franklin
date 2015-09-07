@@ -1,0 +1,21 @@
+Gtk
+	FileChooserDialog filename=filename action=:save response=save show=show_save:False overwrite_confirmation=:True
+	Window show=opened
+		VBox
+			MenuBar expand=:False
+				Menu title=File
+					MenuItem title=Quit action=file_quit
+				Menu title=Help
+					MenuItem title=About action=help_about
+			Label value=':Enter file description' expand=:False
+			TextView text=message expand=:True
+			Table columns=2 expand=:False
+				'Lines:
+				SpinButton range=:1,100 value=lines:19
+				'Slow speed
+				SpinButton range=:.1,10 value=slow:.2 increment=:.1,1 digits=:2
+				'Fast speed
+				SpinButton range=:.1,10 value=fast:2 increment=:.1,1 digits=:2
+			Button clicked=want_save expand=:False sensitive=allow_save:False
+				'Save
+			Statusbar text=state expand=:False

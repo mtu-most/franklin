@@ -1,0 +1,193 @@
+#!/usr/bin/python3
+import franklin_joystick as js
+import time
+import sys
+import gui
+
+def save(filename):
+	with open(filename, 'w') as f:
+		f.write('Name: %s\n' % filename)
+		f.write('Method: c457 A\n')
+		f.write('Description:\n%s\n' % g.message.strip().replace('\n', '\n\t'))
+		total = sum(counted)
+		f.write('Total Length of Traverse: %f mm\n' % total)
+		f.write('Total Area of Traverse: %f mm^2\n' % ((mem[1][0] - mem[0][0]) * (mem[1][1] - mem[0][1])))
+		f.write('Air: %f mm %f%%\n' % (counted[2], counted[2] / total * 100))
+		bubbles = [[l[0] for l in lg if l[1] == 2] for lg in log]
+		num_voids = sum(len(b) for b in bubbles)
+		f.write('Void Frequency: %f mm^-1\n' % (num_voids / total))
+		if all(len(b) == 0 for b in bubbles):
+			f.write('No voids found; not writing report\n')
+			return
+		acl = sum(sum(b for b in bb) / len(bb) for bb in bubbles) / len(bubbles)
+		alpha = 4 / acl
+		f.write('Specific Surface: %f mm^-1\n' % alpha)
+		pa = counted[1] / counted[2]
+		if pa <= 4.342:
+			sf = counted[1] / (4 * num_voids)
+		else:
+			sf = 3 / alpha * (1.4 * (1 + pa) ** (1/3) - 1)
+		f.write('Spacing Factor: %f mm\n' % sf)
+		f.write('Paste to Air Ratio: %f\n' % pa)
+		f.write('Average chord length: %f mm\n' % acl)
+		f.write('Aggregate: %f mm %f%%\n' % (counted[1], counted[1] / total * 100))
+		f.write('Slow speed: %f mm/s\n' % g.slow)
+		f.write('Fast speed: %f mm/s\n' % g.fast)
+		f.write('Lines: %d\n' % len(log))
+		f.write('Voids:' + ''.join('\n\t' + ','.join('%f' % b for b in bb) for bb in bubbles) + '\n')
+	g.state = 'File saved to %s' % filename
+
+js.init()
+
+def no_xy(axes):
+	do_gtk()
+	axes[3] = 0
+	axes[4] = 0
+	return True
+
+events = {'save': save, 'help_about': lambda: setattr(g, 'show_about', True), 'file_quit': lambda: g(False), 'want_save': lambda: setattr(g, 'show_save', True)}
+inputs = ('message', 'lines', 'slow', 'fast', 'opened')
+outputs = ('state', 'allow_save', 'filename', 'show_save')
+
+g = gui.Gui('c457a', events = events, inputs = inputs, outputs = outputs)
+g.allow_save = False
+g.state = 'Store lower right corner in A and upper left corner in B, then press start'
+
+def do_gtk(axes = None):
+	if g(1) is not None:
+		sys.exit(0)
+	return True
+
+do_gtk()
+
+while True:
+	mem = js.main(tick = do_gtk)
+	if all(x in mem for x in (0, 1)):
+		break
+	print('Not all markers are set; not starting yet')
+
+js.printer.line_cb([[mem[0][0], mem[1][1]]])
+g.state = 'Make sure the image is in focus, then press start'
+js.main(tick = no_xy)
+z_ul = js.printer.get_axis_pos(0, 2)
+
+js.printer.line_cb([[mem[1][0], mem[0][1]]])
+js.main(tick = no_xy)
+z_lr = js.printer.get_axis_pos(0, 2)
+
+def startpoint(n):
+	f = n / int(g.lines)
+	return [mem[0][0], mem[0][1] + (mem[1][1] - mem[0][1]) * f, mem[0][2] + (z_ul - mem[0][2]) * f]
+
+def endpoint(n):
+	f = n / int(g.lines)
+	return [mem[1][0], mem[0][1] + (mem[1][1] - mem[0][1]) * f, z_lr + (mem[1][2] - z_lr) * f]
+
+js.printer.line_cb([startpoint(0)])
+lastpos = startpoint(0)
+
+target = float(g.slow)
+speed = 0.
+running = [False]
+target_pos = endpoint(0)
+current_line = 0
+current = 0
+counted = [0.] * 3
+log = [[]]
+
+def set_speed():
+	global speed
+	g.state = '%s; line %d/%d Y:start, A:stop, X:aggregate, B:air, LT:fast' % ('stopped' if not running[0] else 'slow' if target == g.slow else 'fast', current_line + 1, g.lines)	# RT:store position
+	if running[0]:
+		newspeed = target
+	else:
+		newspeed = 0.
+	if newspeed == speed:
+		return
+	speed = newspeed
+	js.printer.pause(store = False)
+	if speed != 0:
+		js.printer.line([target_pos], v0 = speed)
+		js.printer.wait_for_cb.event()
+set_speed()	# Update gui state.
+
+def record_count():
+	global lastpos
+	pos = js.printer.get_axis_pos(0)
+	if pos is None:
+		return
+	dist = sum((a[0] - a[1]) ** 2 for a in zip(pos, lastpos)) ** .5
+	if dist == 0:
+		return
+	if len(log[-1]) > 0 and log[-1][-1][1] == current:
+		log[-1][-1] = (log[-1][-1][0] + dist, current)
+	else:
+		log[-1].append((dist, current))
+	counted[current] += dist
+	print(repr(counted))
+	lastpos = pos
+
+def count(i):
+	def impl():
+		global current
+		record_count()
+		current = i
+		return True
+	return impl
+
+def start():
+	time.sleep(.5)
+	running[0] = True
+	set_speed()
+	return True
+
+def stop():
+	running[0] = False
+	set_speed()
+	return True
+
+def fast():
+	global target
+	if js.button_state[4]:
+		target = float(g.fast)
+	else:
+		target = float(g.slow)
+	set_speed()
+	return True
+
+def tick(axes):
+	do_gtk()
+	if speed != 0 and not js.printer.waiting_for_cb():
+		record_count()
+		global current_line, lastpos
+		current_line += 1
+		if current_line >= int(g.lines):
+			return False	# Stop running.
+		log.append([])
+		js.printer.line_cb([startpoint(current_line)])
+		lastpos = startpoint(current_line)
+		target_pos[:] = endpoint(current_line)
+		stop()
+	fast()
+	return None	# Prevent default tick from running.
+
+# 0: paste
+# 1: air
+# 2: aggregate
+
+buttons = {8: None, 6: None, 7: None,
+		4: js.MODIFIER,
+		0: stop,
+		1: count(2),
+		2: count(1),
+		3: start,
+		0 + 11: stop,
+		1 + 11: count(2),
+		2 + 11: count(1),
+		3 + 11: start,
+		None: count(0)}
+js.main(tick = tick, buttons = buttons)
+
+g.state = 'done; please save your results'
+g.allow_save = True
+js.main(tick = do_gtk)
