@@ -140,6 +140,8 @@ void abort_run_file() {
 enum {
 	RUN_SYSTEM,
 	RUN_LINE,
+	RUN_PRE_ARC,
+	RUN_ARC,
 	RUN_GPIO,
 	RUN_SETTEMP,
 	RUN_WAITTEMP,
@@ -237,9 +239,25 @@ void run_file_fill_queue() {
 				debug("Done running system command, return = %d", ret);
 				break;
 			}
+			case RUN_PRE_ARC:
+			{
+				double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
+				double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
+				double z = r.Z + run_file_refz;
+				//debug("line %f %f %f", x, y, z);
+				queue[settings.queue_end].center[0] = x;
+				queue[settings.queue_end].center[1] = y;
+				queue[settings.queue_end].center[2] = handle_probe(x, y, z);
+				queue[settings.queue_end].normal[0] = r.E;
+				queue[settings.queue_end].normal[1] = r.f;
+				queue[settings.queue_end].normal[2] = r.F;
+				break;
+			}
 			case RUN_LINE:
+			case RUN_ARC:
 			{
 				queue[settings.queue_end].probe = false;
+				queue[settings.queue_end].arc = r.type == RUN_ARC;
 				queue[settings.queue_end].f[0] = r.f;
 				queue[settings.queue_end].f[1] = r.F;
 				double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
@@ -259,7 +277,6 @@ void run_file_fill_queue() {
 					queue[settings.queue_end].data[i] = NAN;
 				for (int i = 0; i < spaces[1].num_axes; ++i)
 					queue[settings.queue_end].data[num0 + i] = (i == r.tool ? r.E : NAN);
-				num0 += spaces[1].num_axes;
 				queue[settings.queue_end].time = r.time;
 				queue[settings.queue_end].dist = r.dist;
 				queue[settings.queue_end].cb = false;
@@ -283,7 +300,7 @@ void run_file_fill_queue() {
 						debug("cannot set invalid gpio %d", tool);
 					break;
 				}
-				if (r.x) {
+				if (r.X) {
 					gpios[tool].state = 1;
 					SET(gpios[tool].pin);
 				}
@@ -299,9 +316,9 @@ void run_file_fill_queue() {
 				int tool = r.tool;
 				if (tool == -1)
 					tool = bed_id;
-				rundebug("settemp %d %f", tool, r.x);
-				settemp(tool, r.x);
-				send_host(CMD_UPDATE_TEMP, tool, 0, r.x);
+				rundebug("settemp %d %f", tool, r.X);
+				settemp(tool, r.X);
+				send_host(CMD_UPDATE_TEMP, tool, 0, r.X);
 				break;
 			}
 			case RUN_WAITTEMP:
@@ -339,12 +356,12 @@ void run_file_fill_queue() {
 					debug("Not setting position of invalid extruder %d", r.tool);
 					break;
 				}
-				setpos(1, r.tool, r.x);
+				setpos(1, r.tool, r.X);
 				break;
 			case RUN_WAIT:
-				if (r.x > 0) {
-					run_file_timer.it_value.tv_sec = r.x;
-					run_file_timer.it_value.tv_nsec = (r.x - run_file_timer.it_value.tv_sec) * 1e9;
+				if (r.X > 0) {
+					run_file_timer.it_value.tv_sec = r.X;
+					run_file_timer.it_value.tv_nsec = (r.X - run_file_timer.it_value.tv_sec) * 1e9;
 					run_file_wait += 1;
 					timerfd_settime(pollfds[0].fd, 0, &run_file_timer, NULL);
 				}

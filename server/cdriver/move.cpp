@@ -27,7 +27,6 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 		sp.axis[a]->settings.endpos[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0);
 	int a = 0;
 	if (s == 0 && queue[qpos].arc) {
-		debug("arc");
 		sp.settings.arc[1] = true;
 		double src = 0, normal = 0, dst = 0;
 		double target[3];
@@ -59,7 +58,6 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 		src = sqrt(src);
 		dst = sqrt(dst);
 		for (int i = 0; i < 3; ++i) {
-			target[i] -= sp.settings.helix[1] * sp.settings.normal[1][i];
 			sp.settings.e1[1][i] = sp.settings.offset[1][i] / src;
 			sp.settings.normal[1][i] /= normal;
 		}
@@ -68,12 +66,12 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 			int c1 = (i + 1) % 3;
 			int c2 = (i + 2) % 3;
 			sp.settings.e2[1][i] = sp.settings.normal[1][c1] * sp.settings.e1[1][c2] - sp.settings.normal[1][c2] * sp.settings.e1[1][c1];
-			cosa += sp.settings.e1[1][i] * (target[i] - center[i]);
-			sina += sp.settings.e2[1][i] * (target[i] - center[i]);
+			cosa += sp.settings.e1[1][i] * (target[i] - center[i]) / dst;
+			sina += sp.settings.e2[1][i] * (target[i] - center[i]) / dst;
 		}
 		sp.settings.angle[1] = atan2(sina, cosa);
-		if (sp.settings.angle[1] < 0)
-			sp.settings.angle[1] += M_2_PI;
+		if (sp.settings.angle[1] <= 0)
+			sp.settings.angle[1] += 2 * M_PI;
 		sp.settings.radius[1][0] = src;
 		sp.settings.radius[1][1] = dst;
 		for (int i = 0; i < 3; ++i) {

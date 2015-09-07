@@ -521,8 +521,9 @@ void make_target(Space &sp, double f, bool next) { // {{{
 		double helix = sp.settings.helix[next] * f;
 		double cosa = cos(angle);
 		double sina = sin(angle);
+		//debug("e1 %f %f %f e2 %f %f %f", sp.settings.e1[next][0], sp.settings.e1[next][1], sp.settings.e1[next][2], sp.settings.e2[next][0], sp.settings.e2[next][1], sp.settings.e2[next][2]);
 		for (int i = 0; i < min(3, sp.num_axes); ++i)
-			sp.axis[i]->settings.target += cosa * sp.settings.e1[next][i] + sina * sp.settings.e2[next][i] - sp.settings.offset[next][i] + helix * sp.settings.normal[next][i];
+			sp.axis[i]->settings.target += radius * cosa * sp.settings.e1[next][i] + radius * sina * sp.settings.e2[next][i] - sp.settings.offset[next][i] + helix * sp.settings.normal[next][i];
 		a = 3;
 		// Fall through.
 	}
@@ -546,9 +547,13 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
+				sp.axis[a]->settings.target = sp.axis[a]->settings.source;
+			}
+			make_target(sp, 1, false);
+			for (uint8_t a = 0; a < sp.num_axes; ++a) {
 				if (!isnan(sp.axis[a]->settings.dist[0])) {
 					//debug("before source %d %f %f", a, sp.axis[a]->settings.source, sp.axis[a]->settings.dist[0]);
-					sp.axis[a]->settings.source += sp.axis[a]->settings.dist[0];
+					sp.axis[a]->settings.source = sp.axis[a]->settings.target;
 					sp.axis[a]->settings.dist[0] = NAN;
 					//debug("after source %d %f %f %d %f", a, sp.axis[a]->settings.target, sp.axis[a]->settings.dist[0], sp.motor[a]->settings.current_pos, factor);
 				}

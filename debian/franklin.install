@@ -13,3 +13,4 @@ server/html/templates.js /usr/lib/franklin/html
 server/html/index.html /usr/lib/franklin/html
 server/html/main.js /usr/lib/franklin/html
 server/html/main.css /usr/lib/franklin/html
+debian/franklin.xml /usr/share/mime/packages

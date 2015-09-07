@@ -2114,6 +2114,7 @@ class Printer: # {{{
 		bbox_last = [None] * 6
 		strings = ['']
 		unit = 1.
+		arc_normal = (0, 0, 1)
 		rel = False
 		erel = None
 		pos = [[float('nan'), float('nan'), float('nan')], [0.], float('inf')]
@@ -2134,21 +2135,20 @@ class Printer: # {{{
 				if nums is None:
 					nums = []
 				if isinstance(nums, dict):
-					nums = [nums['T'], nums['x'], nums['X'], nums['y'], nums['Y'], nums['z'], nums['Z'], nums['e'], nums['E'], nums['f'], nums['F']]
-				nums += [0] * (11 - len(nums))
+					nums = [nums['T'], nums['X'], nums['Y'], nums['Z'], nums['E'], nums['f'], nums['F']]
+				nums += [0] * (7 - len(nums))
 				if type == protocol.parsed['LINE']:
 					for i in range(3):
-						if nums[2 * i + 1] != nums[2 * i + 2]:
-							value = nums[2 * i + 2]
-							if math.isnan(value):
-								continue
-							if bbox[2 * i] is None or value < bbox[2 * i]:
-								#log('new min bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i] is None else bbox[2 * i] / 25.4)))
-								bbox[2 * i] = value
-							if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
-								#log('new max bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i + 1] is None else bbox[2 * i + 1] / 25.4)))
-								bbox[2 * i + 1] = value
-				dst.write(struct.pack('=Bl' + 'd' * 12, type, *add_timedist(type == protocol.parsed['LINE'], nums)))
+						value = nums[i + 1]
+						if math.isnan(value):
+							continue
+						if bbox[2 * i] is None or value < bbox[2 * i]:
+							#log('new min bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i] is None else bbox[2 * i] / 25.4)))
+							bbox[2 * i] = value
+						if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
+							#log('new max bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i + 1] is None else bbox[2 * i + 1] / 25.4)))
+							bbox[2 * i + 1] = value
+				dst.write(struct.pack('=Bl' + 'd' * 8, type, *add_timedist(type == protocol.parsed['LINE'], nums)))
 			def add_string(string):
 				if string is None:
 					return 0
@@ -2234,7 +2234,16 @@ class Printer: # {{{
 							pos[1].extend([0.] * (target - len(pos[1]) + 1))
 						current_extruder = target
 						# Force update of extruder.
-						add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': pos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': pos[1][current_extruder], 'E': pos[1][current_extruder], 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+						add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': pos[1][current_extruder], 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+						continue
+					elif cmd == ('G', 17):
+						arc_normal = (0, 0, 1)
+						continue
+					elif cmd == ('G', 18):
+						arc_normal = (0, 1, 0)
+						continue
+					elif cmd == ('G', 19):
+						arc_normal = (1, 0, 0)
 						continue
 					elif cmd == ('G', 20):
 						unit = 25.4
@@ -2262,7 +2271,6 @@ class Printer: # {{{
 							continue
 						args['E'] *= unit
 						pos[1][current_extruder] = args['E']
-						args['e'] = current_extruder
 					elif cmd[0] == 'M' and cmd[1] in (104, 109, 116):
 						args['E'] = int(args['T']) if 'T' in args else current_extruder
 					if cmd == ('M', 140):
@@ -2331,7 +2339,7 @@ class Printer: # {{{
 									f0 = float('inf')
 							if math.isnan(dist):
 								dist = 0
-							add_record(protocol.parsed['LINE'], {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'e': oldpos[1][current_extruder], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
+							add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
 						else:
 							# If old pos is unknown, use safe distance.
 							if math.isnan(oldpos[0][2]):
@@ -2339,21 +2347,71 @@ class Printer: # {{{
 							# Drill cycle.
 							# Only support OLD_Z (G90) retract mode; don't support repeats(L).
 							# goto x,y
-							add_record(protocol.parsed['LINE'], {'x': oldpos[0][0], 'y': oldpos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
 							# goto r
-							add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': r, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
 							# goto z; this is always straight down, because the move before and after it are also vertical.
 							if z != r:
 								f0 = pos[2] / abs(z - r)
 								if math.isnan(f0):
 									f0 = float('inf')
-								add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': r, 'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'e': 0, 'E': 0, 'f': f0, 'F': f0, 'T': current_extruder})
+								add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': z, 'E': 0, 'f': f0, 'F': f0, 'T': current_extruder})
 							# retract; this is always straight up, because the move before and after it are also non-horizontal.
-							add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': z, 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
 							# empty move; this makes sure the previous move is entirely vertical.
-							add_record(protocol.parsed['LINE'], {'x': pos[0][0], 'y': pos[0][1], 'z': oldpos[0][2], 'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'e': 0, 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
+							add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': oldpos[0][2], 'E': 0, 'f': float('inf'), 'F': float('inf'), 'T': current_extruder})
 							# Set up current z position so next G81 will work.
 							pos[0][2] = oldpos[0][2]
+					elif cmd[0] == 'G' and cmd[1] in (2, 3):
+						# Arc.
+						mode = cmd
+						components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None, 'I': None, 'J': None, 'K': None}
+						for c in args:
+							if c not in components:
+								errors.append('%d:invalid arc component %s' % (lineno, c))
+								continue
+							assert components[c] is None
+							components[c] = args[c]
+						f0 = pos[2]
+						if components['F'] is not None:
+							pos[2] = components['F'] * unit / 60
+						oldpos = pos[0][:], pos[1][:]
+						if components['E'] is not None:
+							if erel or (erel is None and rel):
+								estep = components['E'] * unit
+							else:
+								estep = components['E'] * unit - pos[1][current_extruder]
+							pos[1][current_extruder] += estep
+						else:
+							estep = 0
+						center = [None] * 3
+						for axis in range(3):
+							value = components[chr(ord('X') + axis)]
+							if value is not None:
+								if rel:
+									pos[0][axis] += value * unit
+								else:
+									pos[0][axis] = value * unit
+								if axis == 2:
+									z = pos[0][2]
+							value = components[chr(ord('I') + axis)]
+							if value is not None:
+								center[axis] = oldpos[0][axis] + value
+							else:
+								center[axis] = oldpos[0][axis]
+						# FIXME: This is not the distance of an arc.
+						dist = sum([0] + [(pos[0][x] - oldpos[0][x]) ** 2 for x in range(3) if not math.isnan(pos[0][x] - oldpos[0][x])]) ** .5
+						if dist > 0:
+							#if f0 is None:
+							#	f0 = pos[1][current_extruder]
+							f0 = pos[2]	# Always use new value.
+							if f0 == 0:
+								f0 = float('inf')
+						if math.isnan(dist):
+							dist = 0
+						s = -1 if cmd[1] == 2 else 1
+						add_record(protocol.parsed['PRE_ARC'], {'X': center[0], 'Y': center[1], 'Z': center[2], 'E': s * arc_normal[0], 'f': s * arc_normal[1], 'F': s * arc_normal[2], 'T': 0})
+						add_record(protocol.parsed['ARC'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
 					elif cmd == ('G', 4):
 						add_record(protocol.parsed['WAIT'], [0, float(args['P']) / 1000 if 'P' in args else 0])
 					elif cmd == ('G', 92):

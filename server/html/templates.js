@@ -100,6 +100,7 @@ function Float(obj, digits, factor, className, set) { // {{{
 function File(obj, action, buttontext, cb) { // {{{
 	var input = Create('input');
 	input.type = 'file';
+	input.accept = 'application/x-gcode';
 	input.id = make_id(printer, obj);
 	var button = Create('button', 'button').AddText(buttontext);
 	button.type = 'button';

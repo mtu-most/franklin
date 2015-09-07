@@ -455,7 +455,7 @@ void abort_move(int pos);
 struct Run_Record {
 	uint8_t type;
 	int32_t tool;
-	double x, X, y, Y, z, Z, e, E, f, F;
+	double X, Y, Z, E, f, F;
 	double time, dist;
 } __attribute__((__packed__));
 struct ProbeFile {

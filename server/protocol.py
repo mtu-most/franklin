@@ -83,13 +83,15 @@ rcommand = {
 parsed = {
 	'SYSTEM': 0,
 	'LINE': 1,
-	'GPIO': 2,
-	'SETTEMP': 3,
-	'WAITTEMP': 4,
-	'SETPOS': 5,
-	'WAIT': 6,
-	'CONFIRM': 7,
-	'PARK': 8
+	'PRE_ARC': 2,
+	'ARC': 3,
+	'GPIO': 4,
+	'SETTEMP': 5,
+	'WAITTEMP': 6,
+	'SETPOS': 7,
+	'WAIT': 8,
+	'CONFIRM': 9,
+	'PARK': 10
 }
 
 mask = [[0xc0, 0xc3, 0xff, 0x09],
