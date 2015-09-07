@@ -1005,6 +1005,9 @@ class Printer: # {{{
 		#traceback.print_stack()
 		home_v = 50 / self.feedrate
 		if self.home_phase is None:
+			log('_do_home ignored because home_phast is None')
+			return
+		if self.home_phase == -1:
 			if done is not None:
 				# Continuing call received after homing was aborted; ignore.
 				return
@@ -1359,7 +1362,7 @@ class Printer: # {{{
 	# Subclasses.  {{{
 	class Space: # {{{
 		def __init__(self, printer, id):
-			self.name = 'Space %d' % id
+			self.name = 'Extruders' if id == 1 else 'Position'
 			self.printer = printer
 			self.id = id
 			self.axis = []
@@ -1372,13 +1375,21 @@ class Printer: # {{{
 			if self.id == 1:
 				self.printer.multipliers = (self.printer.multipliers + [1.] * len(axes))[:len(axes)]
 			if len(axes) > len(self.axis):
-				self.axis += [{'name': 'Axis %d' % i} for i in range(len(self.axis), len(axes))]
+				def nm(i):
+					if self.id == 0:
+						if i < 3:
+							return chr(ord('X') + i)
+						else:
+							return 'Axis %d' % i
+					else:
+						return 'E%d' % i
+				self.axis += [{'name': nm(i)} for i in range(len(self.axis), len(axes))]
 			else:
 				self.axis[len(axes):] = []
 			for a in range(len(axes)):
 				self.axis[a]['park'], self.axis[a]['park_order'], self.axis[a]['min'], self.axis[a]['max'] = struct.unpack('=dBdd', axes[a])
 			if len(motors) > len(self.motor):
-				self.motor += [{'name': 'Motor %d' % i} for i in range(len(self.motor), len(motors))]
+				self.motor += [{} for i in range(len(self.motor), len(motors))]
 			else:
 				self.motor[len(motors):] = []
 			for m in range(len(motors)):
@@ -1406,7 +1417,10 @@ class Printer: # {{{
 				raise AssertionError('invalid space type')
 			return data
 		def write_axis(self, axis):
-			return struct.pack('=dBdd', self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['min'], self.axis[axis]['max'])
+			if self.id == 0:
+				return struct.pack('=dBdd', self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['min'], self.axis[axis]['max'])
+			else:
+				return struct.pack('=dBdd', float('nan'), 0, float('-inf'), float('inf'))
 		def write_motor(self, motor):
 			return struct.pack('=HHHHHHdBdddB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['sense_pin'], self.motor[motor]['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['max_steps'], self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
 		def set_current_pos(self, axis, pos):
@@ -1419,8 +1433,16 @@ class Printer: # {{{
 			assert cmd == protocol.rcommand['POS']
 			#log('get current pos %d %d: %f' % (self.id, axis, f))
 			return f
+		def motor_name(self, i):
+			if self.type in (TYPE_CARTESIAN, TYPE_EXTRUDER):
+				return self.axis[i]['name']
+			elif self.type == TYPE_DELTA:
+				return chr(ord('U') + i)
+			else:
+				log('invalid type')
+				raise AssertionError('invalid space type')
 		def export(self):
-			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max']] for a in self.axis], [[m['name'], m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['sense_pin'], m['steps_per_unit'], m['max_steps'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for m in self.motor], None if self.id != 1 else self.printer.multipliers]
+			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max']] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['sense_pin'], m['steps_per_unit'], m['max_steps'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.printer.multipliers]
 			if self.type == TYPE_CARTESIAN:
 				return std
 			elif self.type == TYPE_DELTA:
@@ -1432,7 +1454,6 @@ class Printer: # {{{
 				raise AssertionError('invalid space type')
 		def export_settings(self):
 			ret = '[space %d]\r\n' % self.id
-			ret += 'name = %s\r\n' % self.name
 			if self.id == 0:
 				ret += 'type = %d\r\n' % self.type
 			if self.type == TYPE_CARTESIAN:
@@ -1450,10 +1471,10 @@ class Printer: # {{{
 			for i, a in enumerate(self.axis):
 				ret += '[axis %d %d]\r\n' % (self.id, i)
 				ret += 'name = %s\r\n' % a['name']
-				ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('park', 'park_order', 'min', 'max')])
+				if self.id == 0:
+					ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('park', 'park_order', 'min', 'max')])
 			for i, m in enumerate(self.motor):
 				ret += '[motor %d %d]\r\n' % (self.id, i)
-				ret += 'name = %s\r\n' % m['name']
 				ret += ''.join(['%s = %s\r\n' % (x, write_pin(m[x])) for x in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin')])
 				ret += ''.join(['%s = %d\r\n' % (x, m[x]) for x in ('max_steps', 'home_order')])
 				ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'home_pos', 'limit_v', 'limit_a')])
@@ -1533,7 +1554,7 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def probe(self, id, area, angle = 0, speed = 3): # {{{
-		if len(self.spaces) < 1 or len(self.spaces[0].axis) < 3 or not self.probe_safe_dist > 0:
+		if len(self.spaces[0].axis) < 3 or not self.probe_safe_dist > 0:
 			if id is not None:
 				self._send(id, 'return', None)
 			return
@@ -1735,7 +1756,6 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def home(self, id, speed = 5, cb = None, abort = True): # {{{
-		#log('homing')
 		if self.home_phase is not None and not self.paused:
 			log("ignoring request to home because we're already homing")
 			if id is not None:
@@ -1744,6 +1764,7 @@ class Printer: # {{{
 		# Abort only if it is requested, and the job is not paused.
 		if abort and self.queue_info is None:
 			self._print_done(False, 'aborted by homing')
+		self.home_phase = -1
 		self.home_id = id
 		self.home_speed = speed
 		self.home_done_cb = cb
@@ -1895,11 +1916,11 @@ class Printer: # {{{
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set()}
 		keys = {
 				'general': {'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'},
-				'space': {'name', 'type', 'num_axes', 'delta_angle'},
+				'space': {'type', 'num_axes', 'delta_angle'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
 				'axis': {'name', 'park', 'park_order', 'min', 'max'},
-				'motor': {'name', 'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_unit', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'},
+				'motor': {'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_unit', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'},
 				'extruder': {'dx', 'dy', 'dz'},
 				'delta': {'axis_min', 'axis_max', 'rodlength', 'radius'}
 			}
@@ -2485,6 +2506,11 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def queue_print(self, id, names, ref = (0, 0, 0), angle = 0, probemap = None): # {{{
+		if len(self.jobs_active) > 0 and not self.paused:
+			log('ignoring print request while print is in progress')
+			if id is not None:
+				self._send(id, 'return', None)
+			return
 		self.job_output = ''
 		self.jobs_active = names
 		self.jobs_ref = ref
@@ -2497,6 +2523,11 @@ class Printer: # {{{
 	# }}}
 	@delayed
 	def queue_probe(self, id, names, ref = (0, 0, 0), angle = 0, speed = 3): # {{{
+		if len(self.jobs_active) > 0 and not self.paused:
+			log('ignoring probe request while print is in progress')
+			if id is not None:
+				self._send(id, 'return', None)
+			return
 		bbox = [float('nan'), float('nan'), float('nan'), float('nan')]
 		for n in names:
 			bb = self.jobqueue[n]
@@ -2610,21 +2641,20 @@ class Printer: # {{{
 			log('invalid type')
 		return ret
 	def get_axis(self, space, axis):
-		ret = {}
+		ret = {'name': self.spaces[space].axis[axis]['name']}
 		if space == 1:
 			ret['multiplier'] = self.multipliers[axis]
-		for key in ('name', 'park', 'park_order', 'min', 'max'):
-			ret[key] = self.spaces[space].axis[axis][key]
+		if space == 0:
+			for key in ('park', 'park_order', 'min', 'max'):
+				ret[key] = self.spaces[space].axis[axis][key]
 		return ret
 	def get_motor(self, space, motor):
-		ret = {}
-		for key in ('name', 'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_unit', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
+		ret = {'name': self.spaces[space].motor_name(motor)}
+		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_unit', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
 			ret[key] = self.spaces[space].motor[motor][key]
 		return ret
 	def expert_set_space(self, space, readback = True, update = True, **ka):
-		if 'name' in ka:
-			self.spaces[space].name = ka.pop('name')
-		if 'type' in ka:
+		if space == 0 and 'type' in ka:
 			self.spaces[space].type = int(ka.pop('type'))
 		if self.spaces[space].type == TYPE_EXTRUDER:
 			if 'extruder' in ka:
@@ -2663,9 +2693,12 @@ class Printer: # {{{
 		if len(ka) != 0:
 			log('invalid input ignored: %s' % repr(ka))
 	def expert_set_axis(self, (space, axis), readback = True, update = True, **ka):
-		for key in ('name', 'park', 'park_order', 'min', 'max'):
-			if key in ka:
-				self.spaces[space].axis[axis][key] = ka.pop(key)
+		if 'name' in ka:
+			self.spaces[space].axis[axis]['name'] = ka.pop('name')
+		if space == 0:
+			for key in ('park', 'park_order', 'min', 'max'):
+				if key in ka:
+					self.spaces[space].axis[axis][key] = ka.pop(key)
 		if space == 1 and 'multiplier' in ka and axis < len(self.spaces[space].motor):
 			assert(ka['multiplier'] > 0)
 			self.multipliers[axis] = ka.pop('multiplier')
@@ -2677,7 +2710,7 @@ class Printer: # {{{
 				self._space_update(space)
 		assert len(ka) == 0
 	def expert_set_motor(self, (space, motor), readback = True, update = True, **ka):
-		for key in ('name', 'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_unit', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
+		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'sense_pin', 'steps_per_unit', 'max_steps', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
 			if key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
 		self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_MOTOR'], space, motor) + self.spaces[space].write_motor(motor))

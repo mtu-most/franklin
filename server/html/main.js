@@ -451,16 +451,21 @@ function floatkey(event, element) { // {{{
 // }}}
 
 function add_name(type, index1, index2) { // {{{
-	while (printer.names[type].length <= index1)
+	while (printer.names[type].length <= index1) {
 		printer.names[type].push([]);
-	while (printer.names[type][index1].length <= index2)
+		printer.name_values[type].push([]);
+	}
+	while (printer.names[type][index1].length <= index2) {
 		printer.names[type][index1].push([]);
-	var ret = Create('span', 'name');
+		printer.name_values[type][index1].push('');
+	}
+	var ret = Create('span', 'name').AddText(printer.name_values[type][index1][index2]);
 	printer.names[type][index1][index2].push(ret);
 	return ret;
 } // }}}
 
 function set_name(printer, type, index1, index2, name) { // {{{
+	printer.name_values[type][index1][index2] = name;
 	for (var i = 0; i < printer.names[type][index1][index2].length; ++i)
 		printer.names[type][index1][index2][i].ClearAll().AddText(name);
 } // }}}
@@ -566,6 +571,7 @@ function new_port() { // {{{
 
 function new_printer() { // {{{
 	printer.names = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
+	printer.name_values = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
 	printer.temphistory = [];
 	printer.targetangle = 0;
 	printer.targetx = 0;
@@ -881,10 +887,12 @@ function update_space(index) { // {{{
 	}
 	for (var a = 0; a < printer.spaces[index].num_axes; ++a) {
 		set_name(printer, 'axis', index, a, printer.spaces[index].axis[a].name);
-		update_float(printer, [['axis', [index, a]], 'park']);
-		update_float(printer, [['axis', [index, a]], 'park_order']);
-		update_float(printer, [['axis', [index, a]], 'min']);
-		update_float(printer, [['axis', [index, a]], 'max']);
+		if (index == 0) {
+			update_float(printer, [['axis', [index, a]], 'park']);
+			update_float(printer, [['axis', [index, a]], 'park_order']);
+			update_float(printer, [['axis', [index, a]], 'min']);
+			update_float(printer, [['axis', [index, a]], 'max']);
+		}
 		if (index == 1)
 			update_float(printer, [['axis', [index, a]], 'multiplier']);
 	}
@@ -1244,7 +1252,7 @@ function make_pin_title(title, content) { // {{{
 	return container;
 } // }}}
 
-Object.prototype.AddMultiple = function(type, template, all) { // {{{
+Object.prototype.AddMultiple = function(type, template, all, forbidden) { // {{{
 	var one = function(t, template, i, arg) {
 		var ret = template(i, arg, t);
 		if (ret !== null && (i === null || arg === null))
@@ -1263,7 +1271,7 @@ Object.prototype.AddMultiple = function(type, template, all) { // {{{
 	}
 	else {
 		me.appendChild(last);
-		printer.multiples[type].push({table: me, space: [], after: last, all: all != false, create: function(i, arg) { return one(me, template, i, arg) || document.createComment(''); }});
+		printer.multiples[type].push({table: me, space: [], after: last, all: all != false, create: function(i, arg) { return (i != forbidden && one(me, template, i, arg)) || document.createComment(''); }});
 	}
 	return me;
 }; // }}}

@@ -97,10 +97,10 @@ function Float(obj, digits, factor, className, set) { // {{{
 	return [input, /*button,*/ span];
 } // }}}
 
-function File(obj, action, buttontext, cb) { // {{{
+function File(obj, action, buttontext, types, cb) { // {{{
 	var input = Create('input');
 	input.type = 'file';
-	input.accept = 'application/x-gcode';
+	input.accept = types;
 	input.id = make_id(printer, obj);
 	var button = Create('button', 'button').AddText(buttontext);
 	button.type = 'button';
@@ -211,10 +211,10 @@ function Axis(space, axis) {
 }
 
 function Motor(space, motor) {
-	var e = [Name('motor', [space, motor]), ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
-	for (var i = 1; i < e.length; ++i) {
+	var e = [['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
+	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		if (space == 0 || i != 1)
+		if (space == 0 || i != 0)
 			div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
@@ -346,9 +346,9 @@ function Top() { // {{{
 	// }}}
 	// Jobbuttons. {{{
 	e = ret.AddElement('div', 'jobbuttons');
-	e.Add(File([null, 'queue_add', 'queue_add'], 'queue_add', 'Add', function() { return queue_deselect(the_printer); }));
+	e.Add(File([null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode', function() { return queue_deselect(the_printer); }));
 	e.AddElement('br');
-	e.Add(File([null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', function() { return queue_deselect(the_printer); }), 'benjamin');
+	e.Add(File([null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav', function() { return queue_deselect(the_printer); }), 'benjamin');
 	e.AddElement('br');
 	var b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(this.printer); }).AddText('Print selected');
 	b.type = 'button';
@@ -405,7 +405,7 @@ function Map() { // {{{
 		Float([['axis', [0, 1]], 'current'], 2, 1, '', function(v) { b.printer.call('line', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
 		Float([['axis', [0, 2]], 'current'], 2, 1, '', function(v) { b.printer.call('line', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
 		b,
-		[[add_name('axis', 0, 2), ' Offset:'], Float([null, 'zoffset'], 2, 1), add_name('unit', 0, 0)]
+		[[add_name('axis', 0, 2), ' Offset:'], Float([null, 'zoffset'], 2, 1), ' ', add_name('unit', 0, 0)]
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
 	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
@@ -554,7 +554,7 @@ function Printer() {	// {{{
 	e.AddEvent('click', function() {
 		this.printer.call('load', [this.printer.profile], {});
 	});
-	setup.AddElement('div').Add(File([null, 'import', 'import_settings'], 'import', 'Import'));
+	setup.AddElement('div').Add(File([null, 'import', 'import_settings'], 'import', 'Import', '.ini'));
 	e = setup.AddElement('a', 'title').AddText('Export settings to file');
 	e.id = make_id(printer, [null, 'export']);
 	e.title = 'Save settings to disk.';
@@ -643,24 +643,21 @@ function Printer() {	// {{{
 		'Maximum speed that the motor is allowed to move.',
 		'Minimum position that the axis is allowed to go to.',
 		'Maximum position that the axis is allowed to go to.'
-	]).AddMultiple('axis', Axis)]);
+	]).AddMultiple('axis', Axis, undefined, 1)]);
 	// }}}
 	// Motor. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Motor Settings',
-		'Name',
 		'Home order',
 		UnitTitle('Limit v', '/s'),
 		UnitTitle('Limit a', '/s²')
 	], [
-		'htitle4',
-		'title4',
-		'title4',
-		'title4',
-		'title4'
+		'htitle3',
+		'title3',
+		'title3',
+		'title3'
 	], [
 		null,
-		'Name of the motor',
 		'Order when homing.  Equal order homes simultaneously; lower order homes first.',
 		'Maximum speed of the motor.',
 		'Maximum acceleration of the motor.'
