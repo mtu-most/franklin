@@ -10,4 +10,4 @@ all: joystick.py c457a-ui.gui
 	xmlgen <$< >$@
 
 clean:
-	rm -rf __pycache__
+	rm -rf __pycache__ joystick.py c457a-ui.gui *.pyc

@@ -21,6 +21,7 @@ endif
 	${MAKE} -C firmware TARGET=ramps
 	${MAKE} -C firmware TARGET=mega
 	${MAKE} -C firmware TARGET=mini
+	${MAKE} -C util
 
 override_dh_auto_install:
 	dh_auto_install
