@@ -189,6 +189,7 @@ void packet()
 			return;
 		}
 		queue[settings.queue_end].cb = true;
+		queue[settings.queue_end].arc = false;
 		settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
 		if (settings.queue_end == settings.queue_start) {
 			settings.queue_full = true;
