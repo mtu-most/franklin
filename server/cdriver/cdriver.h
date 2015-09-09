@@ -199,6 +199,7 @@ struct History {
 };
 
 struct Space_History {
+	double dist[2];
 	bool arc[2];
 	double angle[2], helix[2];
 	double offset[2][3];

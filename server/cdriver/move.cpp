@@ -23,9 +23,18 @@ static void change0(int qpos) { // {{{
 
 static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 	Space &sp = spaces[s];
-	for (int a = 0; a < sp.num_axes; ++a)
+	for (int a = 0; a < sp.num_axes; ++a) {
 		sp.axis[a]->settings.endpos[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0);
-	int a = 0;
+		if (isnan(queue[qpos].data[a0 + a])) {
+			sp.axis[a]->settings.dist[1] = 0;
+		}
+		else {
+			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
+#ifdef DEBUG_MOVE
+			debug("setting dist %d %d %f %d %f %f %f", s, a, queue[qpos].data[a0 + a], next, sp.axis[a]->settings.endpos[0], sp.axis[a]->settings.source, sp.axis[a]->settings.dist[1]);
+#endif
+		}
+	}
 	if (s == 0 && queue[qpos].arc) {
 		sp.settings.arc[1] = true;
 		double src = 0, normal = 0, dst = 0;
@@ -40,9 +49,9 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 		normal = sqrt(normal);
 		for (int i = 0; i < 3; ++i) {
 			sp.settings.normal[1][i] /= normal;
-			center[i] = queue[qpos].center[i] + (s == 0 && a == 2 ? zoffset : 0);
+			center[i] = queue[qpos].center[i] + (s == 0 && i == 2 ? zoffset : 0);
 			source[i] = i < sp.num_axes ? sp.axis[i]->settings.source : 0;
-			target[i] = queue[qpos].data[a0 + i] + (s == 0 && a == 2 ? zoffset : 0);
+			target[i] = queue[qpos].data[a0 + i] + (s == 0 && i == 2 ? zoffset : 0);
 			sn += source[i] * sp.settings.normal[1][i];
 			cn += center[i] * sp.settings.normal[1][i];
 			tn += target[i] * sp.settings.normal[1][i];
@@ -74,11 +83,8 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 			sp.settings.angle[1] += 2 * M_PI;
 		sp.settings.radius[1][0] = src;
 		sp.settings.radius[1][1] = dst;
-		for (int i = 0; i < 3; ++i) {
-			if (i < sp.num_axes)
-				sp.axis[i]->settings.dist[1] = (src + dst) / 2 * sp.settings.angle[1];
-		}
-		a = 3;
+		double d = (src + dst) / 2 * sp.settings.angle[1];
+		sp.settings.dist[1] = sqrt(d * d + sp.settings.helix[1] * sp.settings.helix[1]);
 		// Fall through.
 	}
 	else {
@@ -94,22 +100,17 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 			sp.settings.e2[1][i] = NAN;
 			sp.settings.normal[1][i] = NAN;
 		}
-	}
-	for (; a < sp.num_axes; ++a) {
-		if (isnan(queue[qpos].data[a0 + a])) {
-			sp.axis[a]->settings.dist[1] = 0;
-		}
-		else {
-			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
-#ifdef DEBUG_MOVE
-			debug("setting dist %d %d %f %d %f %f %f", s, a, queue[qpos].data[a0 + a], next, sp.axis[a]->settings.endpos[0], sp.axis[a]->settings.source, sp.axis[a]->settings.dist[1]);
-#endif
-		}
+		double d = 0;
+		for (int a = 0; a < sp.num_axes; ++a)
+			d += sp.axis[a]->settings.dist[1] * sp.axis[a]->settings.dist[1];
+		sp.settings.dist[1] = sqrt(d);
 	}
 } // }}}
 
 static void copy_next(int s) { // {{{
 	Space &sp = spaces[s];
+	sp.settings.dist[0] = sp.settings.dist[1];
+	sp.settings.dist[1] = 0;
 	sp.settings.arc[0] = sp.settings.arc[1];
 	sp.settings.angle[0] = sp.settings.angle[1];
 	sp.settings.helix[0] = sp.settings.helix[1];
@@ -187,6 +188,7 @@ uint8_t next_move() { // {{{
 		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[settings.queue_start].data[a0]);
+			sp.settings.dist[0] = 0;
 			for (int a = 0; a < sp.num_axes; ++a) {
 				sp.axis[a]->settings.dist[0] = 0;
 				sp.axis[a]->settings.endpos[0] = sp.axis[a]->settings.source;
@@ -243,10 +245,8 @@ uint8_t next_move() { // {{{
 		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			copy_next(s);
-			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (sp.axis[a]->settings.dist[0] != 0)
-					action = true;
-			}
+			if (sp.settings.dist[0] != 0)
+				action = true;
 		}
 		vq = 0;
 	}
@@ -263,10 +263,8 @@ uint8_t next_move() { // {{{
 			space_types[sp.type].check_position(&sp, &queue[n].data[a0]);
 			copy_next(s);
 			set_from_queue(s, n, a0, true);
-			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (sp.axis[a]->settings.dist[1] != 0 || sp.axis[a]->settings.dist[0] != 0)
-					action = true;
-			}
+			if (sp.settings.dist[1] != 0 || sp.settings.dist[0] != 0)
+				action = true;
 			a0 += sp.num_axes;
 		}
 		vq = queue[n].f[0] * feedrate;
@@ -294,6 +292,7 @@ uint8_t next_move() { // {{{
 		cbs_after_current_move = 0;
 		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
+			sp.settings.dist[0] = NAN;
 			for (uint8_t a = 0; a < sp.num_axes; ++a)
 				sp.axis[a]->settings.dist[0] = NAN;
 		}
@@ -307,8 +306,10 @@ uint8_t next_move() { // {{{
 	// vp: this move's requested ending speed.
 	// vq: next move's requested starting speed.
 	// cbs_after_current_move: number of cbs that should be fired after this segment is complete.
-	// mtr->dist[0]: total distance of this segment (mm).
-	// mtr->dist[1]: total distance of next segment (mm).
+	// dist[0]: total distance of this segment (mm).
+	// dist[1]: total distance of next segment (mm).
+	// mtr->dist[0]: motor distance of this segment (mm).
+	// mtr->dist[1]: motor distance of next segment (mm).
 #ifdef DEBUG_MOVE
 	debug("Set up: v0 = %f /s, vp = %f /s, vq = %f /s", v0, vp, vq);
 #endif
@@ -327,25 +328,18 @@ uint8_t next_move() { // {{{
 			continue;
 		// max_mm is the maximum speed in mm/s.
 		double max_mm = settings.probing ? space_types[sp.type].probe_speed(&sp) : limit;
-		double dist = 0, distn = 0;
-		for (uint8_t a = 0; a < sp.num_axes; ++a) {
-			dist += sp.axis[a]->settings.dist[0] * sp.axis[a]->settings.dist[0];
-			distn += sp.axis[a]->settings.dist[1] * sp.axis[a]->settings.dist[1];
-		}
-		dist = sqrt(dist);
-		distn = sqrt(distn);
-		double max = max_mm / dist;
+		double max = max_mm / sp.settings.dist[0];
 		if (v0 < 0)
-			v0 = -v0 / dist;
+			v0 = -v0 / sp.settings.dist[0];
 		if (vp < 0)
-			vp = -vp / dist;
+			vp = -vp / sp.settings.dist[0];
 		if (vq < 0)
-			vq = -vq / distn;
+			vq = -vq / sp.settings.dist[1];
 		if (v0 > max)
 			v0 = max;
 		if (vp > max)
 			vp = max;
-		max = max_mm / distn;
+		max = max_mm / sp.settings.dist[1];
 		if (vq > max)
 			vq = max;
 	}
@@ -353,7 +347,7 @@ uint8_t next_move() { // {{{
 	debug("After limiting, v0 = %f /s, vp = %f /s and vq = %f /s", v0, vp, vq);
 #endif
 	// }}}
-	// Already set up: f0, v0, vp, vq, mtr->dist[0], mtr->dist[1].
+	// Already set up: f0, v0, vp, vq, dist[0], dist[1], mtr->dist[0], mtr->dist[1].
 	// To do: start_time, t0, tp, fmain, fp, fq, mtr->main_dist
 #ifdef DEBUG_MOVE
 	debug("Preparation did f0 = %f", settings.f0);
@@ -376,26 +370,18 @@ uint8_t next_move() { // {{{
 				settings.fp = 0;
 				break;
 			}
-			double norma2 = 0, normb2 = 0, diff2 = 0;
-			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				double nd = sp.axis[a]->settings.dist[1] * factor;
-				norma2 += sp.axis[a]->settings.dist[0] * sp.axis[a]->settings.dist[0];
-				normb2 += nd * nd;
-				double d = sp.axis[a]->settings.dist[0] - sp.axis[a]->settings.dist[1];
-				diff2 += d * d;
-			}
+			double nd = sp.settings.dist[1] * factor;
+			double d = sp.settings.dist[0] - sp.settings.dist[1];
 			// Calculate distances and ignore spaces which don't have two segments.
-			double normb(sqrt(normb2));
-			if (normb <= 0)
+			if (nd <= 0)
 				continue;
-			double norma(sqrt(norma2));
-			if (norma <= 0)
+			if (sp.settings.dist[0] <= 0)
 				continue;
-			double done = 1 - max_deviation / norma;
+			double done = 1 - max_deviation / sp.settings.dist[0];
 			// Set it also if done_factor is NaN.
 			if (!(done <= done_factor))
 				done_factor = done;
-			double new_fp = max_deviation / sqrt(normb / (norma + normb) * diff2);
+			double new_fp = max_deviation / sqrt(nd / (sp.settings.dist[0] + nd) * d);
 #ifdef DEBUG_MOVE
 			debug("Space %d fp %f dev %f", s, settings.fp, max_deviation);
 #endif
@@ -510,6 +496,8 @@ void abort_move(int pos) { // {{{
 	//debug("curf3 %d", current_fragment);
 	for (uint8_t s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
+		sp.settings.dist[0] = NAN;
+		sp.settings.dist[1] = NAN;
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			//debug("setting axis %d source to %f", a, sp.axis[a]->settings.current);
 			sp.axis[a]->settings.source = sp.axis[a]->settings.current;

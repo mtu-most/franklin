@@ -43,9 +43,12 @@ void handle_motors() {
 			}
 			// Check limit switches.
 			if (stopping < 0) {
-				uint8_t limit_pin = buffer[cf][m][cs] < 0 ? motor[m].limit_min_pin : motor[m].limit_max_pin;
+				int8_t value = buffer[cf][m][cs];
+				if (value == 0)
+					continue;
+				uint8_t limit_pin = value < 0 ? motor[m].limit_min_pin : motor[m].limit_max_pin;
 				if (limit_pin < NUM_DIGITAL_PINS) {
-					bool inverted = motor[m].flags & (buffer[cf][m][cs] < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
+					bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
 					if (GET(limit_pin) ^ inverted) {
 						//debug("hit %d %d", state, buffer[cf][m][cs]);
 						stopping = m;

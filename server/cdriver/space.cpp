@@ -132,6 +132,8 @@ static void move_to_current() { // {{{
 	settings.last_current_time = 0;
 	for (uint8_t s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
+		sp.settings.dist[0] = 0;
+		sp.settings.dist[1] = 0;
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			cpdebug(s, a, "using current %f", sp.axis[a]->settings.current);
 			sp.axis[a]->settings.source = sp.axis[a]->settings.current;
@@ -529,7 +531,7 @@ void make_target(Space &sp, double f, bool next) { // {{{
 	}
 	for (; a < sp.num_axes; ++a) {
 		sp.axis[a]->settings.target += sp.axis[a]->settings.dist[next] * f;
-		movedebug("do %d %d %f %f", sp.id, a, sp.axis[a]->settings.dist, sp.axis[a]->settings.target);
+		movedebug("do %d %d %f %f", sp.id, a, sp.axis[a]->settings.dist[0], sp.axis[a]->settings.target);
 	}
 } // }}}
 
@@ -546,19 +548,15 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		movedebug("finishing %f %f %f %ld %ld", t, settings.t0, settings.tp, long(current_time), long(settings.start_time));
 		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
-			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				sp.axis[a]->settings.target = sp.axis[a]->settings.source;
-			}
-			make_target(sp, 1, false);
-			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (!isnan(sp.axis[a]->settings.dist[0])) {
-					//debug("before source %d %f %f", a, sp.axis[a]->settings.source, sp.axis[a]->settings.dist[0]);
-					sp.axis[a]->settings.source = sp.axis[a]->settings.target;
+			if (!isnan(sp.settings.dist[0])) {
+				for (uint8_t a = 0; a < sp.num_axes; ++a) {
+					sp.axis[a]->settings.source += sp.axis[a]->settings.dist[0];
 					sp.axis[a]->settings.dist[0] = NAN;
-					//debug("after source %d %f %f %d %f", a, sp.axis[a]->settings.target, sp.axis[a]->settings.dist[0], sp.motor[a]->settings.current_pos, factor);
 				}
-				sp.axis[a]->settings.target = sp.axis[a]->settings.source;
+				sp.settings.dist[0] = NAN;
 			}
+			for (uint8_t a = 0; a < sp.num_axes; ++a)
+				sp.axis[a]->settings.target = sp.axis[a]->settings.source;
 			move_axes(&sp, current_time, factor);
 			//debug("f %f", factor);
 		}
@@ -610,7 +608,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		for (int s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if (isnan(sp.axis[a]->settings.dist[0]) || sp.axis[a]->settings.dist[0] == 0) {
+				if (isnan(sp.axis[a]->settings.dist[0])) {
 					sp.axis[a]->settings.target = NAN;
 					continue;
 				}
@@ -629,7 +627,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a) {
-				if ((isnan(sp.axis[a]->settings.dist[0]) || sp.axis[a]->settings.dist[0] == 0) && (isnan(sp.axis[a]->settings.dist[1]) || sp.axis[a]->settings.dist[1] == 0)) {
+				if (isnan(sp.axis[a]->settings.dist[0]) && isnan(sp.axis[a]->settings.dist[1])) {
 					sp.axis[a]->settings.target = NAN;
 					continue;
 				}
@@ -665,6 +663,8 @@ void store_settings() { // {{{
 	history[current_fragment].run_file_current = settings.run_file_current;
 	for (int s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
+		sp.history[current_fragment].dist[0] = sp.settings.dist[0];
+		sp.history[current_fragment].dist[1] = sp.settings.dist[1];
 		for (int i = 0; i < 2; ++i) {
 			sp.history[current_fragment].arc[i] = sp.settings.arc[i];
 			sp.history[current_fragment].angle[i] = sp.settings.angle[i];
@@ -723,6 +723,8 @@ void restore_settings() { // {{{
 	settings.run_file_current = history[current_fragment].run_file_current;
 	for (int s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
+		sp.settings.dist[0] = sp.history[current_fragment].dist[0];
+		sp.settings.dist[1] = sp.history[current_fragment].dist[1];
 		for (int i = 0; i < 2; ++i) {
 			sp.settings.arc[i] = sp.history[current_fragment].arc[i];
 			sp.settings.angle[i] = sp.history[current_fragment].angle[i];

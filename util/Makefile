@@ -1,4 +1,4 @@
-all: joystick.py c457a-ui.gui
+all: joystick.py
 
 %.py: %.elf
 	./$< > $@

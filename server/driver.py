@@ -960,7 +960,7 @@ class Printer: # {{{
 				f1 = -v1
 			elif f1 is None:
 				f1 = f0
-			assert f0 != 0 and f1 != 0
+			assert f0 != 0 or f1 != 0
 			# If feedrates are equal to firmware defaults, don't send them.
 			if f0 != float('inf'):
 				targets[0] |= 1 << 0
@@ -2420,19 +2420,9 @@ class Printer: # {{{
 								center[axis] = oldpos[0][axis] + value
 							else:
 								center[axis] = oldpos[0][axis]
-						# FIXME: This is not the distance of an arc.
-						dist = sum([0] + [(pos[0][x] - oldpos[0][x]) ** 2 for x in range(3) if not math.isnan(pos[0][x] - oldpos[0][x])]) ** .5
-						if dist > 0:
-							#if f0 is None:
-							#	f0 = pos[1][current_extruder]
-							f0 = pos[2]	# Always use new value.
-							if f0 == 0:
-								f0 = float('inf')
-						if math.isnan(dist):
-							dist = 0
 						s = -1 if cmd[1] == 2 else 1
 						add_record(protocol.parsed['PRE_ARC'], {'X': center[0], 'Y': center[1], 'Z': center[2], 'E': s * arc_normal[0], 'f': s * arc_normal[1], 'F': s * arc_normal[2], 'T': 0})
-						add_record(protocol.parsed['ARC'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
+						add_record(protocol.parsed['ARC'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': pos[1][current_extruder], 'f': -f0, 'F': -pos[2], 'T': current_extruder})
 					elif cmd == ('G', 4):
 						add_record(protocol.parsed['WAIT'], [0, float(args['P']) / 1000 if 'P' in args else 0])
 					elif cmd == ('G', 92):

@@ -13,10 +13,5 @@ server/html/templates.js /usr/lib/franklin/html
 server/html/index.html /usr/lib/franklin/html
 server/html/main.js /usr/lib/franklin/html
 server/html/main.css /usr/lib/franklin/html
-debian/franklin.xml /usr/lib/mime/packages
-util/c457a-ui /usr/lib/franklin
 util/joystick.py /usr/lib/franklin
-util/c457a-ui.gui /usr/lib/franklin
-util/display /usr/lib/franklin
-util/overlay.png /usr/lib/franklin
 util/franklin_joystick.py /usr/lib/franklin

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
-  <mime-type type="application/x-gcode">
-    <sub-class-of type="application/text"/>
-    <comment>GCode</comment>
-    <comment xml:lang="de">GCode</comment>
-    <glob pattern="*.gcode"/>
-  </mime-type>
-</mime-info>

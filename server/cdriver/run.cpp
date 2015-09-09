@@ -198,7 +198,7 @@ void run_file_fill_queue() {
 	if (lock)
 		return;
 	lock = true;
-	rundebug("run queue, wait = %d tempwait = %d q = %d %d", run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start);
+	rundebug("run queue, wait = %d tempwait = %d q = %d %d %d finish = %d", run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start, settings.queue_full, run_file_finishing);
 	if (run_file_audio >= 0) {
 		while (true) {
 			if (!run_file_map || run_file_wait || run_file_finishing)
@@ -223,11 +223,13 @@ void run_file_fill_queue() {
 	while (run_file_map	// There is a file to run.
 		       	&& (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2	// There is space in the queue.
 			&& !settings.queue_full	// Really, there is space in the queue.
-			&& (run_file_map[settings.run_file_current].type == RUN_LINE || !arch_running())	// The command is LINE (buffered), or the buffer is empty.
 			&& settings.run_file_current < run_file_num_records	// There are records to send.
 			&& !run_file_wait_temp	// We are not waiting for a temp alarm.
 			&& !run_file_wait	// We are not waiting for something else (pause or confirm).
 			&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
+		int t = run_file_map[settings.run_file_current].type;
+		if (t != RUN_LINE && t != RUN_PRE_ARC && t != RUN_ARC && arch_running())	// The command is buffered, or the buffer is empty.
+			break;
 		Run_Record &r = run_file_map[settings.run_file_current];
 		rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
 		switch (r.type) {
