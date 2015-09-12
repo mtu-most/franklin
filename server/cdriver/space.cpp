@@ -552,6 +552,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				for (uint8_t a = 0; a < sp.num_axes; ++a) {
 					sp.axis[a]->settings.source += sp.axis[a]->settings.dist[0];
 					sp.axis[a]->settings.dist[0] = NAN;
+					//debug("new source %d %f", a, sp.axis[a]->settings.source);
 				}
 				sp.settings.dist[0] = NAN;
 			}

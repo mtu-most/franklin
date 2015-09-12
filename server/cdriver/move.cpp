@@ -50,13 +50,15 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 		for (int i = 0; i < 3; ++i) {
 			sp.settings.normal[1][i] /= normal;
 			center[i] = queue[qpos].center[i] + (s == 0 && i == 2 ? zoffset : 0);
-			source[i] = i < sp.num_axes ? sp.axis[i]->settings.source : 0;
+			source[i] = i < sp.num_axes ? next ? sp.axis[i]->settings.endpos[0] : sp.axis[i]->settings.source : 0;
 			target[i] = queue[qpos].data[a0 + i] + (s == 0 && i == 2 ? zoffset : 0);
 			sn += source[i] * sp.settings.normal[1][i];
 			cn += center[i] * sp.settings.normal[1][i];
 			tn += target[i] * sp.settings.normal[1][i];
+			//debug("%d src %f target %f", i, source[i], target[i]);
 		}
 		sp.settings.helix[1] = tn - sn;
+		//debug("helix %f %f %f", tn, sn, sp.settings.helix[1]);
 		for (int i = 0; i < 3; ++i) {
 			center[i] -= sp.settings.normal[1][i] * (cn - sn);
 			target[i] -= sp.settings.normal[1][i] * sp.settings.helix[1];
