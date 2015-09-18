@@ -9,12 +9,12 @@ all: cdriver
 
 ifeq (${TARGET}, bbb)
 ARCH_HEADER = arch-bbb.h
-LIBS += -lprussdrv
+#LIBS += -lprussdrv
 
-%.bin: %.asm Makefile
-	pasm -V2 -b $<
+#%.bin: %.asm Makefile
+#	pasm -V2 -b $<
 
-cdriver: bbb_pru.bin
+#cdriver: bbb_pru.bin
 else
 ARCH_HEADER = arch-avr.h
 endif
