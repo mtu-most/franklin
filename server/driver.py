@@ -1214,18 +1214,19 @@ class Printer: # {{{
 			return
 		log('Internal error: invalid home phase')
 	# }}}
-	def _do_probe(self, id, x, y, z, angle, speed, phase = 0, good = True): # {{{
+	def _do_probe(self, id, x, y, z, ref, angle, speed, phase = 0, good = True): # {{{
 		#log('probe %d' % phase)
 		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
 		if not good:
 			# This means the probe has been aborted.
+			log('abort probe')
 			self.probing = False
 			if id is not None:
 				self._send(id, 'error', 'aborted')
 			return
 		self.probing = True
 		if not self.position_valid:
-			self.home(cb = lambda: self._do_probe(id, x, y, z, angle, speed, phase, good), abort = False)[1](None)
+			self.home(cb = lambda: self._do_probe(id, x, y, z, ref, angle, speed, phase, good), abort = False)[1](None)
 			return
 		p = self.probemap
 		if phase == 0:
@@ -1248,14 +1249,14 @@ class Printer: # {{{
 						self._next_job()
 				return
 			# Goto x,y
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 1, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, ref, angle, speed, 1, good)
 			self.movecb.append(self.probe_cb)
 			px = p[0][0] + p[0][2] * x / p[1][0]
 			py = p[0][1] + p[0][3] * y / p[1][1]
-			self.line([[px * self.gcode_angle[1] - py * self.gcode_angle[0], py * self.gcode_angle[1] + px * self.gcode_angle[0]]], cb = True)[1](None)
+			self.line([[ref[0] + px * self.gcode_angle[1] - py * self.gcode_angle[0], ref[1] + py * self.gcode_angle[1] + px * self.gcode_angle[0]]], cb = True)[1](None)
 		elif phase == 1:
 			# Probe
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 2, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, ref, angle, speed, 2, good)
 			if self.pin_valid(self.probe_pin):
 				self.movecb.append(self.probe_cb)
 				z_low = self.spaces[0].axis[2]['min']
@@ -1268,7 +1269,6 @@ class Printer: # {{{
 			p[2][y][x].append(z + self.zoffset)
 			if len(p[2][y][x]) >= self.num_probes:
 				p[2][y][x].sort()
-				log('before average: %s' % p[2][y][x])
 				trash = self.num_probes // 3
 				if trash == 0:
 					p[2][y][x] = sum(p[2][y][x]) / len(p[2][y][x])
@@ -1285,7 +1285,7 @@ class Printer: # {{{
 						x = p[1][0]
 						y += 1
 			z += self.probe_safe_dist
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 0, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, ref, angle, speed, 0, good)
 			self.movecb.append(self.probe_cb)
 			# Retract
 			self.line([{2: z}], cb = True)[1](None)
@@ -1553,16 +1553,17 @@ class Printer: # {{{
 		#log('end flush preparation')
 	# }}}
 	@delayed
-	def probe(self, id, area, angle = 0, speed = 3): # {{{
+	def probe(self, id, area, ref = (0, 0, 0), angle = 0, speed = 3): # {{{
 		if len(self.spaces[0].axis) < 3 or not self.probe_safe_dist > 0:
 			if id is not None:
 				self._send(id, 'return', None)
 			return
 		density = [int(area[t + 2] / self.probe_dist) + 1 for t in range(2)]
 		self.probemap = [area, density, [[[] for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
+		self.gcode_ref = ref
+		angle = math.radians(angle)
 		self.gcode_angle = math.sin(angle), math.cos(angle)
-		#log(repr(self.probemap))
-		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
+		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), ref, angle, speed)
 	# }}}
 	@delayed
 	def line(self, id, moves = (), f0 = None, f1 = None, relative = False, cb = False, probe = False, force = False, v0 = None, v1 = None): # {{{
@@ -2140,8 +2141,8 @@ class Printer: # {{{
 		erel = None
 		pos = [[float('nan'), float('nan'), float('nan')], [0.], float('inf')]
 		time_dist = [0., 0.]
-		def add_timedist(line, nums):
-			if line:
+		def add_timedist(type, nums):
+			if type == protocol.parsed['LINE']:
 				if nums[-2] == float('inf'):
 					extra = sum((nums[2 * i + 1] - nums[2 * i + 2]) ** 2 for i in range(3)) ** .5
 					if not math.isnan(extra):
@@ -2150,6 +2151,8 @@ class Printer: # {{{
 					extra = 2 / (nums[-2] + nums[-1])
 					if not math.isnan(extra):
 						time_dist[0] += extra
+			elif type == protocol.parsed['ARC']:
+				pass	# TODO: add time+dist.
 			return nums + time_dist
 		with fhs.write_spool(os.path.join(self.uuid, 'gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin')) as dst:
 			def add_record(type, nums = None):
@@ -2169,7 +2172,7 @@ class Printer: # {{{
 						if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
 							#log('new max bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i + 1] is None else bbox[2 * i + 1] / 25.4)))
 							bbox[2 * i + 1] = value
-				dst.write(struct.pack('=Bl' + 'd' * 8, type, *add_timedist(type == protocol.parsed['LINE'], nums)))
+				dst.write(struct.pack('=Bl' + 'd' * 8, type, *add_timedist(type, nums)))
 			def add_string(string):
 				if string is None:
 					return 0
@@ -2529,8 +2532,7 @@ class Printer: # {{{
 				bbox[2] = bb[1]
 			if not bbox[3] > bb[3]:
 				bbox[3] = bb[3]
-		log(repr(bb))
-		self.probe((bbox[0] + ref[0], bbox[1] + ref[1], bbox[2] - bbox[0], bbox[3] - bbox[1]), angle, speed)[1](None)
+		self.probe((bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]), ref, angle, speed)[1](None)
 		# Pass probemap to make sure it doesn't get overwritten.
 		self.queue_print(names, ref, angle, self.probemap)[1](id)
 	# }}}
