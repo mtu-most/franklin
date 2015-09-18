@@ -151,10 +151,14 @@ enum {
 	RUN_PARK,
 };
 
-static double handle_probe(double x, double y, double z) {
+static double handle_probe(double ox, double oy, double z) {
 	ProbeFile *&p = probe_file_map;
-	if (!p || isnan(x) || isnan(y) || isnan(z))
+	if (!p)
 		return z;
+	if (isnan(ox) || isnan(oy) || isnan(z))
+		return NAN;
+	double x = ox * p->cosa + oy * p->sina;
+	double y = oy * p->cosa - ox * p->sina;
 	int ix, iy;
 	if (p->w == 0 || p->nx == 0) {
 		x = 0;
@@ -188,6 +192,7 @@ static double handle_probe(double x, double y, double z) {
 	}
 	double fx = x - ix;
 	double fy = y - iy;
+	debug("probe %d %f %d %f %f %f %f %f", ix, fx, iy, fy, p->sina, p->cosa, p->x, p->y);
 	double l = p->sample[iy * (p->nx + 1) + ix] * (1 - fy) + p->sample[(iy + 1) * (p->nx + 1) + ix] * fy;
 	double r = p->sample[iy * (p->nx + 1) + (ix + 1)] * (1 - fy) + p->sample[(iy + 1) * (p->nx + 1) + (ix + 1)] * fy;
 	return z + l * (1 - fx) + r * fx;

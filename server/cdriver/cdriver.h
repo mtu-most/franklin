@@ -460,7 +460,7 @@ struct Run_Record {
 	double time, dist;
 } __attribute__((__packed__));
 struct ProbeFile {
-	double x, y, w, h;
+	double x, y, w, h, sina, cosa;
 	unsigned long nx, ny;
 	double sample[0];
 } __attribute__((__packed__));

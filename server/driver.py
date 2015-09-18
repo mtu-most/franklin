@@ -1341,7 +1341,10 @@ class Printer: # {{{
 			with fhs.write_spool(os.path.join(self.uuid, 'probe', src + os.extsep + 'bin'), text = False) as probemap_file:
 				encoded_probemap_filename = probemap_file.name.encode('utf8')
 				# Map = [[x, y, w, h], [nx, ny], [[...], [...], ...]]
-				probemap_file.write(struct.pack('@ddddLL', *(tuple(self.probemap[0]) + tuple(self.probemap[1]))))
+				sina, cosa = self.gcode_angle
+				x, y, w, h = self.probemap[0]
+				log('pos %f %f' % (x, y))
+				probemap_file.write(struct.pack('@ddddddLL', ref[0] + x * cosa + y * sina, ref[1] + y * cosa - x * sina, w, h, sina, cosa, *self.probemap[1]))
 				for y in range(self.probemap[1][1] + 1):
 					for x in range(self.probemap[1][0] + 1):
 						probemap_file.write(struct.pack('@d', self.probemap[2][y][x]))
