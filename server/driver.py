@@ -850,7 +850,7 @@ class Printer: # {{{
 			return 'Unable to open audio file'
 		rate = wav.getframerate()
 		channels = wav.getnchannels()
-		self._broadcast(None, 'blocked', 'parsing audio')
+		self._broadcast(None, 'blocked', 'Parsing audio')
 		data = [ord(x) for x in wav.readframes(wav.getnframes())]
 		# Data is 16 bit signed ints per channel, but it is read as bytes.  First convert it to 16 bit numbers.
 		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2 * channels], data[1::2 * channels])]
@@ -868,6 +868,7 @@ class Printer: # {{{
 					bit = 0
 		self.audioqueue[os.path.splitext(name)[0]] = wav.getnframes()
 		self._broadcast(None, 'blocked', '')
+		self._broadcast(None, 'audioqueue', self.audioqueue.keys())
 		return ''
 	# }}}
 	def _do_queue(self): # {{{
@@ -1826,6 +1827,13 @@ class Printer: # {{{
 		with open(filename, 'rb') as f:
 			self._audio_add(f, name)
 	# }}}
+	def benjamin_audio_del(self, name): # {{{
+		assert name in self.audioqueue
+		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
+		os.unlink(filename)
+		del self.audioqueue[name]
+		self._broadcast(None, 'audioqueue', self.audioqueue.keys())
+	# }}}
 	def audio_list(self): # {{{
 		return self.audioqueue
 	# }}}
@@ -2124,6 +2132,7 @@ class Printer: # {{{
 		if audio:
 			filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
 			del self.audioqueue[name]
+			self._broadcast(None, 'audioqueue', self.audioqueue.keys())
 		else:
 			filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', name + os.extsep + 'bin'), opened = False)
 			del self.jobqueue[name]
@@ -2781,6 +2790,7 @@ class Printer: # {{{
 		for i, g in enumerate(self.gpios):
 			self._gpio_update(i, target)
 		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
+		self._broadcast(None, 'audioqueue', self.audioqueue.keys())
 		if self.confirmer is not None:
 			self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}

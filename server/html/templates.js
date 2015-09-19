@@ -350,7 +350,15 @@ function Top() { // {{{
 	e.AddElement('br');
 	e.Add(File([null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav', function() { return queue_deselect(the_printer); }), 'benjamin');
 	e.AddElement('br');
-	var b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(this.printer); }).AddText('Print selected');
+	var b = e.AddElement('button', 'benjamin').AddText('×').AddEvent('click', function() { audio_del(this.printer); });
+	b.type = 'button';
+	b.printer = printer;
+	e.AddElement('select', 'benjamin').id = make_id(printer, [null, 'audio']);
+	var b = e.AddElement('button', 'benjamin').AddText('Play').AddEvent('click', function() { audio_play(this.printer); });
+	b.type = 'button';
+	b.printer = printer;
+	e.AddElement('br');
+	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(this.printer); }).AddText('Print selected');
 	b.type = 'button';
 	b.printer = printer;
 	var l = e.AddElement('label');

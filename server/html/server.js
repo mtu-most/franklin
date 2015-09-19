@@ -98,6 +98,10 @@ function _setup_updater() {
 			printers[port].queue = q;
 			trigger_update(port, 'queue');
 		},
+		audioqueue: function(port, q) {
+			printers[port].audioqueue = q;
+			trigger_update(port, 'audioqueue');
+		},
 		serial: function(port, serialport, data) {
 			trigger_update(port, 'serial', serialport, data);
 		},
@@ -107,6 +111,7 @@ function _setup_updater() {
 					port: port,
 					profile: 'default',
 					queue: [],
+					audioqueue: [],
 					uuid: constants[0],
 					queue_length: constants[1],
 					num_digital_pins: constants[2],

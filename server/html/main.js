@@ -31,6 +31,7 @@ function init() { // {{{
 	setup();
 	register_update('confirm', do_confirm);
 	register_update('queue', do_queue);
+	register_update('audioqueue', do_audio_queue);
 	register_update('new_port', new_port);
 	register_update('new_printer', new_printer);
 	register_update('new_script', new_script);
@@ -554,6 +555,24 @@ function queue_print(printer) { // {{{
 		action('queue_print');
 }
 // }}}
+
+function audio_play(printer) { // {{{
+	var e = get_element(printer, [null, 'audio']);
+	var o = e.options[e.selectedIndex];
+	if (o === undefined)
+		return;
+	printer.call('audio_play', [o.value]);
+}
+
+// }}}
+function audio_del(printer) { // {{{
+	var e = get_element(printer, [null, 'audio']);
+	var o = e.options[e.selectedIndex];
+	if (o === undefined)
+		return;
+	printer.call('audio_del', [o.value]);
+}
+// }}}
 // }}}
 
 // Non-update events. {{{
@@ -719,10 +738,41 @@ function do_queue() { // {{{
 		if (i < 0) {
 			continue;
 		}
-		rm.push(item);
+		rm.push(e.options[item]);
 	}
 	for (var item = 0; item < rm.length; ++rm)
-		e.removeChild(e.options[rm[item]]);
+		e.removeChild(rm[item]);
+	for (var i = 0; i < q.length; ++i) {
+		var option = e.AddElement('option');
+		option.AddText(q[i]);
+		option.value = q[i];
+		option.selected = true;
+	}
+	start_move(printer);
+} // }}}
+
+function do_audio_queue() { // {{{
+	var e = get_element(printer, [null, 'audio']);
+	var q = [];
+	for (var i = 0; i < printer.audioqueue.length; ++i)
+		q.push(printer.audioqueue[i]);
+	var rm = [];
+	for (var item = 0; item < e.options.length; ++item) {
+		var i;
+		for (i = 0; i < q.length; ++i) {
+			if (q[i] == e.options[item].value) {
+				q.splice(i, 1);
+				i = -1;
+				break;
+			}
+		}
+		if (i < 0) {
+			continue;
+		}
+		rm.push(e.options[item]);
+	}
+	for (var item = 0; item < rm.length; ++rm)
+		e.removeChild(rm[item]);
 	for (var i = 0; i < q.length; ++i) {
 		var option = e.AddElement('option');
 		option.AddText(q[i]);
