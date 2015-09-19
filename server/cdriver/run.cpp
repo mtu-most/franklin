@@ -192,7 +192,6 @@ static double handle_probe(double ox, double oy, double z) {
 	}
 	double fx = x - ix;
 	double fy = y - iy;
-	debug("probe %d %f %d %f %f %f %f %f", ix, fx, iy, fy, p->sina, p->cosa, p->x, p->y);
 	double l = p->sample[iy * (p->nx + 1) + ix] * (1 - fy) + p->sample[(iy + 1) * (p->nx + 1) + ix] * fy;
 	double r = p->sample[iy * (p->nx + 1) + (ix + 1)] * (1 - fy) + p->sample[(iy + 1) * (p->nx + 1) + (ix + 1)] * fy;
 	return z + l * (1 - fx) + r * fx;

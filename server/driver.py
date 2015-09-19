@@ -1343,8 +1343,12 @@ class Printer: # {{{
 				# Map = [[x, y, w, h], [nx, ny], [[...], [...], ...]]
 				sina, cosa = self.gcode_angle
 				x, y, w, h = self.probemap[0]
-				log('pos %f %f' % (x, y))
-				probemap_file.write(struct.pack('@ddddddLL', ref[0] + x * cosa + y * sina, ref[1] + y * cosa - x * sina, w, h, sina, cosa, *self.probemap[1]))
+				# Transform origin because only rotation is done by cdriver.
+				x, y = cosa * x - sina * y, cosa * y + sina * x
+				x += ref[0]
+				y += ref[1]
+				x, y = cosa * x + sina * y, cosa * y - sina * x
+				probemap_file.write(struct.pack('@ddddddLL', x, y, w, h, sina, cosa, *self.probemap[1]))
 				for y in range(self.probemap[1][1] + 1):
 					for x in range(self.probemap[1][0] + 1):
 						probemap_file.write(struct.pack('@d', self.probemap[2][y][x]))

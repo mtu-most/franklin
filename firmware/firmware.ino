@@ -135,7 +135,7 @@ int main(void) {
 			// Disable pins.
 			for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p)
 				pin[p].disable(p);
-			debug("timeout %d %d %d", seconds(), dt, last_active);
+			//debug("timeout");
 			timeout = true;
 		}
 		arch_tick();
