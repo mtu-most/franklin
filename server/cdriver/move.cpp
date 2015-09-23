@@ -444,11 +444,13 @@ uint8_t next_move() { // {{{
 #ifdef DEBUG_MOVE
 		debug("starting new move");
 #endif
+		//debug("current %d running %d", current_fragment, running_fragment);
 		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
 			for (uint8_t a = 0; a < sp.num_axes; ++a)
 				sp.axis[a]->settings.source = sp.axis[a]->settings.current;
 		}
+		store_settings();
 #ifdef DEBUG_PATH
 		fprintf(stderr, "\n");
 #endif
@@ -463,9 +465,8 @@ uint8_t next_move() { // {{{
 void abort_move(int pos) { // {{{
 	aborting = true;
 	//debug("abort pos %d", pos);
-	//debug("abort; cf %d rf %d first %d moving %d discarding %d fragments, regenerating %d ticks", current_fragment, running_fragment, first_fragment, moving, FRAGMENTS_PER_BUFFER - free_fragments - 3, pos);
+	//debug("abort; cf %d rf %d first %d moving %d fragments, regenerating %d ticks", current_fragment, running_fragment, first_fragment, moving, pos);
 	//debug("try aborting move");
-	//debug("abort copying from %d", prev_f);
 	current_fragment = running_fragment;
 	//debug("current abort -> %x", current_fragment);
 	restore_settings();
