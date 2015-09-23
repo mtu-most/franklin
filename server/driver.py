@@ -11,7 +11,8 @@ WAIT = object()	# Sentinel for blocking functions.
 # Space types
 TYPE_CARTESIAN = 0
 TYPE_DELTA = 1
-TYPE_EXTRUDER = 2
+TYPE_POLAR = 2
+TYPE_EXTRUDER = 3
 # }}}
 
 # Imports.  {{{
@@ -597,6 +598,10 @@ class Printer: # {{{
 				for a in range(3):
 					self.spaces[channel].delta[a]['axis_min'], self.spaces[channel].delta[a]['axis_max'], self.spaces[channel].delta[a]['rodlength'], self.spaces[channel].delta[a]['radius'] = struct.unpack('=dddd', info[32 * a:32 * (a + 1)])
 				self.spaces[channel].delta_angle = struct.unpack('=d', info[32 * 3:])[0]
+				num_axes = 3
+				num_motors = 3
+			elif self.spaces[channel].type == TYPE_POLAR:
+				self.spaces[channel].polar_max_r = struct.unpack('=d', info)[0]
 				num_axes = 3
 				num_motors = 3
 			elif self.spaces[channel].type == TYPE_EXTRUDER:
@@ -1377,6 +1382,7 @@ class Printer: # {{{
 			self.motor = []
 			self.delta = [{'axis_min': 0., 'axis_max': 0., 'rodlength': 0., 'radius': 0.} for t in range(3)]
 			self.delta_angle = 0
+			self.polar_max_r = float('inf')
 			self.extruder = []
 		def read(self, data):
 			axes, motors = data
@@ -1386,7 +1392,7 @@ class Printer: # {{{
 				def nm(i):
 					if self.id == 0:
 						if i < 3:
-							return chr(ord('X') + i)
+							return chr(ord('x') + i)
 						else:
 							return 'Axis %d' % i
 					else:
@@ -1412,6 +1418,8 @@ class Printer: # {{{
 				for a in range(3):
 					data += struct.pack('=dddd', self.delta[a]['axis_min'], self.delta[a]['axis_max'], self.delta[a]['rodlength'], self.delta[a]['radius'])
 				data += struct.pack('=d', self.delta_angle)
+			elif self.type == TYPE_POLAR:
+				data += struct.pack('=d', self.polar_max_r)
 			elif self.type == TYPE_EXTRUDER:
 				num = num_axes if num_axes is not None else len(self.axis)
 				data += struct.pack('=B', num)
@@ -1445,7 +1453,9 @@ class Printer: # {{{
 			if self.type in (TYPE_CARTESIAN, TYPE_EXTRUDER):
 				return self.axis[i]['name']
 			elif self.type == TYPE_DELTA:
-				return chr(ord('U') + i)
+				return chr(ord('u') + i)
+			elif self.type == TYPE_POLAR:
+				return ['r', 'θ', 'z'][i]
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -1455,6 +1465,8 @@ class Printer: # {{{
 				return std
 			elif self.type == TYPE_DELTA:
 				return std + [[[a['axis_min'], a['axis_max'], a['rodlength'], a['radius']] for a in self.delta] + [self.delta_angle]]
+			elif self.type == TYPE_POLAR:
+				return std + [self.polar_max_r]
 			elif self.type == TYPE_EXTRUDER:
 				return std + [[[a['dx'], a['dy'], a['dz']] for a in self.extruder]]
 			else:
@@ -1471,11 +1483,16 @@ class Printer: # {{{
 				for i in range(3):
 					ret += '[delta %d %d]\r\n' % (self.id, i)
 					ret += ''.join(['%s = %f\r\n' % (x, self.delta[i][x]) for x in ('rodlength', 'radius', 'axis_min', 'axis_max')])
+			elif self.type == TYPE_POLAR:
+				ret += 'polar_max_r = %f\r\n' % self.polar_max_r
 			elif self.type == TYPE_EXTRUDER:
 				ret += 'num_axes = %d\r\n' % len(self.axis)
 				for i in range(len(self.extruder)):
 					ret += '[extruder %d %d]\r\n' % (self.id, i)
 					ret += ''.join(['%s = %f\r\n' % (x, self.extruder[i][x]) for x in ('dx', 'dy', 'dz')])
+			else:
+				log('invalid type')
+				raise AssertionError('invalid space type')
 			for i, a in enumerate(self.axis):
 				ret += '[axis %d %d]\r\n' % (self.id, i)
 				ret += 'name = %s\r\n' % a['name']
@@ -1932,7 +1949,7 @@ class Printer: # {{{
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set()}
 		keys = {
 				'general': {'num_temps', 'num_gpios', 'led_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'},
-				'space': {'type', 'num_axes', 'delta_angle'},
+				'space': {'type', 'num_axes', 'delta_angle', 'polar_max_r'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
 				'axis': {'name', 'park', 'park_order', 'min', 'max'},
@@ -2639,6 +2656,8 @@ class Printer: # {{{
 				delta.append(d)
 			delta.append(self.spaces[space].delta_angle)
 			ret['delta'] = delta
+		elif self.spaces[space].type == TYPE_POLAR:
+			ret['polar_max_r'] = self.spaces[space].polar_max_r
 		elif self.spaces[space].type == TYPE_EXTRUDER:
 			ret['extruder'] = []
 			for a in range(len(self.spaces[space].axis)):
@@ -2693,6 +2712,11 @@ class Printer: # {{{
 					assert len(dd) == 0
 			if 'delta_angle' in ka:
 				self.spaces[space].delta_angle = ka.pop('delta_angle')
+		elif self.spaces[space].type == TYPE_POLAR:
+			num_axes = 3;
+			num_motors = 3;
+			if 'polar_max_r' in ka:
+				self.spaces[space].polar_max_r = ka.pop('polar_max_r')
 		self._send_packet(struct.pack('=BB', protocol.command['WRITE_SPACE_INFO'], space) + self.spaces[space].write_info(num_axes))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))

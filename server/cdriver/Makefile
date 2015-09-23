@@ -34,7 +34,8 @@ SOURCES = \
 	storage.cpp \
 	temp.cpp \
 	type-cartesian.cpp \
-	type-delta.cpp
+	type-delta.cpp \
+	type-polar.cpp
 
 HEADERS = \
 	configuration.h \

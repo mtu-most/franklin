@@ -7,7 +7,7 @@ var labels_element, printers_element;
 var selected_port, selected_printer;
 var script_cbs;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
-var space_types = ['Cartesian', 'Delta', 'Extruder'];
+var space_types = ['Cartesian', 'Delta', 'Polar', 'Extruder'];
 // }}}
 
 // General supporting functions. {{{
@@ -972,13 +972,15 @@ function update_space(index) { // {{{
 		}
 		update_float(printer, [['space', index], 'delta_angle']);
 	}
+	if (printer.spaces[index].type == TYPE_POLAR) {
+		update_float(printer, [['space', index], 'polar_max_r']);
+	}
 	if (printer.spaces[index].type == TYPE_EXTRUDER) {
 		for (var d = 0; d < printer.spaces[index].axis.length; ++d) {
 			update_float(printer, [['axis', [index, d]], 'extruder_dx']);
 			update_float(printer, [['axis', [index, d]], 'extruder_dy']);
 			update_float(printer, [['axis', [index, d]], 'extruder_dz']);
 		}
-		update_float(printer, [['space', index], 'delta_angle']);
 	}
 	var newhidetypes = [];
 	function hide_check(type, onlytype) {
@@ -1606,6 +1608,16 @@ function redraw_canvas(printer) { // {{{
 			var extra = c.measureText(printer.spaces[0].motor[0].name).width + .02;
 			printerwidth = 2 * (maxx + extra);
 			printerheight = 2 * (maxy + extra);
+			break;
+		case TYPE_POLAR:
+			printerwidth = 2 * printer.spaces[0].polar_max_r + 2;
+			printerheight = 2 * printer.spaces[0].polar_max_r + 2;
+			center = [0, 0];
+			outline = function(printer, c) {
+				c.beginPath();
+				c.arc(0, 0, printer.spaces[0].polar_max_r, 0, 2 * Math.PI, false);
+				c.stroke();
+			};
 			break;
 		}
 		//var factor = Math.sqrt(printerwidth * printerwidth + printerheight * printerheight);

@@ -22,7 +22,8 @@ var role;
 
 var TYPE_CARTESIAN = 0;
 var TYPE_DELTA = 1;
-var TYPE_EXTRUDER = 2;
+var TYPE_POLAR = 2;
+var TYPE_EXTRUDER = 3;
 // }}}
 
 function dbg(msg) {
@@ -147,6 +148,7 @@ function _setup_updater() {
 							num_axes: 0,
 							num_motors: 0,
 							delta_angle: 0,
+							polar_max_r: Infinity,
 							axis: [],
 							motor: []
 						},
@@ -156,6 +158,7 @@ function _setup_updater() {
 							num_axes: 0,
 							num_motors: 0,
 							delta_angle: 0,
+							polar_max_r: Infinity,
 							axis: [],
 							motor: []
 						}],
@@ -311,6 +314,9 @@ function _setup_updater() {
 					printers[port].spaces[index].motor[i].delta_radius = values[5][i][3];
 				}
 				printers[port].spaces[index].delta_angle = values[5][3];
+			}
+			if (printers[port].spaces[index].type == TYPE_POLAR) {
+				printers[port].spaces[index].polar_max_r = values[5];
 			}
 			if (printers[port].spaces[index].type == TYPE_EXTRUDER) {
 				for (var i = 0; i < printers[port].spaces[index].axis.length; ++i) {

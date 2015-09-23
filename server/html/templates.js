@@ -200,6 +200,12 @@ function Delta_space(num) {
 	return make_tablerow(space_name(num), [div], ['rowtitle1'], undefined, TYPE_DELTA, num);
 }
 
+function Polar_space(num) {
+	var div = Create('div');
+	div.Add(Float([['space', num], 'polar_max_r'], 1, 1));
+	return make_tablerow(space_name(num), [div], ['rowtitle1'], undefined, TYPE_POLAR, num);
+}
+
 function Axis(space, axis) {
 	var e = [Name('axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['min', 1, 1], ['max', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
@@ -717,6 +723,18 @@ function Printer() {	// {{{
 		null,
 		'Correction angle for the printer. (degrees)'
 	]).AddMultiple('space', Delta_space, false)]);
+	// }}}
+	// Polar. {{{
+	setup.Add([make_table().AddMultipleTitles([
+		'Polar',
+		UnitTitle('Radius')
+	], [
+		'htitle1',
+		'title1'
+	], [
+		null,
+		'Bed radius'
+	]).AddMultiple('space', Polar_space, false)]);
 	// }}}
 	// Extruder. {{{
 	setup.Add([make_table().AddMultipleTitles([

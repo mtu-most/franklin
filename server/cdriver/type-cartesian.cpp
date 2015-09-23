@@ -52,11 +52,7 @@ static double unchange0(Space *s, int axis, double value) {
 }
 
 static double probe_speed(Space *s) {
-	double max_spu = 0;
-	for (int i = 0; i < s->num_motors; ++i)
-		if (max_spu < s->motor[i]->steps_per_unit)
-			max_spu = s->motor[i]->steps_per_unit;
-	return 1e6 / hwtime_step / max_spu;
+	return 1e6 / hwtime_step / s->motor[2]->steps_per_unit;
 }
 
 void Cartesian_init(int num) {
