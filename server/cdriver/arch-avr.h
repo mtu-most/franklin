@@ -321,7 +321,7 @@ bool hwpacket(int len) {
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
 		if ((command[1][0]) == HWC_LIMIT) {
-			debug("limit %d", command[1][1]);
+			//debug("limit %d", command[1][1]);
 			avr_homing = false;
 			abort_move(int8_t(command[1][2]));
 			//int i = 0;

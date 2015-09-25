@@ -408,7 +408,7 @@ class Printer: # {{{
 			self._send(die, 'return', None)
 			sys.exit(0)
 	# }}}
-	def _trigger_movewaits(self, num): # {{{
+	def _trigger_movewaits(self, num, done = True): # {{{
 		#traceback.print_stack()
 		#log('trigger %s' % repr(self.movecb))
 		#log('movecbs: %d/%d' % (num, self.movewait))
@@ -419,7 +419,7 @@ class Printer: # {{{
 			#log('movewait %d/%d' % (num, self.movewait))
 			self.movewait -= num
 		if self.movewait == 0:
-			call_queue.extend([(x[1], [True]) for x in self.movecb])
+			call_queue.extend([(x[1], [done]) for x in self.movecb])
 			self.movecb = []
 			if self.flushing and self.queue_pos >= len(self.queue):
 				#log('done flushing')
@@ -484,7 +484,7 @@ class Printer: # {{{
 				if s < len(self.spaces) and m < len(self.spaces[s].motor):
 					self.limits[s][m] = f
 				#log('limit; %d waits' % e)
-				self._trigger_movewaits(self.movewait)
+				self._trigger_movewaits(self.movewait, False)
 				continue
 			elif cmd == protocol.rcommand['TIMEOUT']:
 				self.position_valid = False
@@ -1764,7 +1764,7 @@ class Printer: # {{{
 					#log('stopping')
 					self.paused = False
 					if len(self.movecb) > 0:
-						call_queue.extend([(x[1], [True]) for x in self.movecb])
+						call_queue.extend([(x[1], [False]) for x in self.movecb])
 				self.queue = []
 				self.movecb = []
 				self.flushing = False
@@ -1820,7 +1820,7 @@ class Printer: # {{{
 		if next_order is None:
 			self.parking = False
 			if cb:
-				def wrap_cb(self):
+				def wrap_cb(done):
 					call_queue.append((cb, []))
 					if id is not None:
 						self._send(id, 'return', None)

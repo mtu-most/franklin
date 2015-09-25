@@ -50,7 +50,7 @@ void handle_motors() {
 				if (limit_pin < NUM_DIGITAL_PINS) {
 					bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
 					if (GET(limit_pin) ^ inverted) {
-						//debug("hit %d %d", state, buffer[cf][m][cs]);
+						debug("hit %d pos %d state %d sample %d", m, motor[m].current_pos, state, buffer[cf][m][cs]);
 						stopping = m;
 						motor[m].flags |= Motor::LIMIT;
 						break;
