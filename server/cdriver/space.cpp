@@ -111,10 +111,13 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) { // {{{
 	return true;
 } // }}}
 
-static void move_to_current() { // {{{
-	if (!stopped || moving || !motors_busy)
+void move_to_current() { // {{{
+	if (!(stopped && !moving && motors_busy)) {
+		moving_to_current = true;
 		return;
-	//debug("move to current");
+	}
+	moving_to_current = false;
+	debug("move to current");
 	settings.f0 = 0;
 	settings.fmain = 1;
 	settings.fp = 0;
@@ -548,11 +551,14 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		movedebug("finishing %f %f %f %ld %ld", t, settings.t0, settings.tp, long(current_time), long(settings.start_time));
 		for (uint8_t s = 0; s < 2; ++s) {
 			Space &sp = spaces[s];
+			bool new_move = false;
 			if (!isnan(sp.settings.dist[0])) {
 				for (uint8_t a = 0; a < sp.num_axes; ++a) {
-					sp.axis[a]->settings.source += sp.axis[a]->settings.dist[0];
-					sp.axis[a]->settings.dist[0] = NAN;
-					//debug("new source %d %f", a, sp.axis[a]->settings.source);
+					if (!isnan(sp.axis[a]->settings.dist[0])) {
+						sp.axis[a]->settings.source += sp.axis[a]->settings.dist[0];
+						sp.axis[a]->settings.dist[0] = NAN;
+						//debug("new source %d %f", a, sp.axis[a]->settings.source);
+					}
 				}
 				sp.settings.dist[0] = NAN;
 			}

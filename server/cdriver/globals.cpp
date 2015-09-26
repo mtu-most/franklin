@@ -51,7 +51,7 @@ bool globals_load(int32_t &addr)
 	max_v = read_float(addr);
 	int ce = read_8(addr);
 	double zo = read_float(addr);
-	if (motors_busy && (current_extruder != ce || zoffset != zo) && settings.queue_start == settings.queue_end && !settings.queue_full) {
+	if (motors_busy && (current_extruder != ce || zoffset != zo) && settings.queue_start == settings.queue_end && !settings.queue_full && stopped) {
 		queue[settings.queue_end].probe = false;
 		queue[settings.queue_end].cb = false;
 		queue[settings.queue_end].f[0] = INFINITY;

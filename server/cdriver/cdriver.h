@@ -512,6 +512,8 @@ void store_settings();
 void restore_settings();
 void apply_tick();
 void send_fragment();
+void move_to_current();
+EXTERN bool moving_to_current;
 
 // globals.cpp
 bool globals_load(int32_t &address);

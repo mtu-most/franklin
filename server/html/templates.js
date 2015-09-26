@@ -652,11 +652,10 @@ function Printer() {	// {{{
 	], [
 		null,
 		'Name of the axis',
-		'Park position of the nozzle.',
+		'Park position of the nozzle.  This is where the nozzle is sent when it is requested to get out of the way through a park command.',
 		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
-		'Maximum speed that the motor is allowed to move.',
-		'Minimum position that the axis is allowed to go to.',
-		'Maximum position that the axis is allowed to go to.'
+		'Minimum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to less than -radius.  Cannot be -Infinity for technical reasons; set to -2r if unsure.',
+		'Maximum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to more than radius.  Cannot be Infinity for technical reasons; set to 2r if unsure.'
 	]).AddMultiple('axis', Axis, undefined, 1)]);
 	// }}}
 	// Motor. {{{
@@ -674,7 +673,7 @@ function Printer() {	// {{{
 		null,
 		'Order when homing.  Equal order homes simultaneously; lower order homes first.',
 		'Maximum speed of the motor.',
-		'Maximum acceleration of the motor.'
+		'Maximum acceleration of the motor.  4000 is a normal value.'
 	]).AddMultiple('motor', Motor)]);
 	setup.Add([make_table().AddMultipleTitles([
 		'Motor Hardware',
@@ -708,10 +707,10 @@ function Printer() {	// {{{
 		'title4'
 	], [
 		null,
-		'Minimum distance of end effector from nozzle.  Usually 0.',
-		'Maximum distance of end effector from nozzle.  Usually rod length.',
-		'Length of the tie rods.',
-		'Length of horizontal projection of the tie rod when the end effector is at (0, 0).'
+		'Minimum horizontal distance between tie rod pivot points.  Usually 0.',
+		'Maximum horizontal distance between tie rod pivot points.  Usually Infinity.',
+		'Length of the tie rods between pivot points.  Measure this with as high precision as possible.',
+		'Horizontal distance between tie rod pivot points when the end effector is at (0, 0, 0).'
 	]).AddMultiple('motor', Delta)]);
 	setup.Add([make_table().AddMultipleTitles([
 		'Delta',
@@ -733,7 +732,7 @@ function Printer() {	// {{{
 		'title1'
 	], [
 		null,
-		'Bed radius'
+		'Maximum value for the r motor.'
 	]).AddMultiple('space', Polar_space, false)]);
 	// }}}
 	// Extruder. {{{
@@ -749,9 +748,9 @@ function Printer() {	// {{{
 		'title3'
 	], [
 		null,
-		'Offset in X direction when this extruder is in use.',
-		'Offset in Y direction when this extruder is in use.',
-		'Offset in Z direction when this extruder is in use.'
+		'Offset in X direction when this extruder is in use.  Set to 0 for the first extruder.',
+		'Offset in Y direction when this extruder is in use.  Set to 0 for the first extruder.',
+		'Offset in Z direction when this extruder is in use.  Set to 0 for the first extruder.'
 	]).AddMultiple('axis', Extruder, false)]);
 	// }}}
 	// Temp. {{{
@@ -769,7 +768,7 @@ function Printer() {	// {{{
 		null,
 		'Name of the temperature control',
 		'Temerature above which the cooling is turned on.',
-		'Whether this Temp is the bed pin, used by G-code commands.'
+		'Whether this Temp is the heated bed, used by G-code commands M140 and M190.'
 	]).AddMultiple('temp', Temp_setup)]);
 	setup.Add([make_table().AddMultipleTitles([
 		'Temp Hardware',
@@ -791,7 +790,7 @@ function Printer() {	// {{{
 		'Resistance on the board in parallel with the thermistor.  Normally Infinity.  Or, if β is NaN, the value of this sensor is ax+b with x the measured ADC value; this value is b.',
 		'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.  Or, if β is NaN, the scale for plotting the value on the temperature graph.',
 		'Temperature at which the thermistor has value Rc.  Normally 20.  Or, if β is NaN, the offset for plotting the value on the temperature graph.',
-		"Temperature dependence of the thermistor.  Normally around 3800.  It can be found in the thermistor's data sheet.  Or, if NaN, the value of this sensor is ax+b with x the measured ADC value."
+		"Temperature dependence of the thermistor.  Normally around 4000.  It can be found in the thermistor's data sheet.  Or, if NaN, the value of this sensor is ax+b with x the measured ADC value."
 	]).AddMultiple('temp', Temp_hardware)]);
 	// }}}
 	// Gpio. {{{
@@ -812,10 +811,10 @@ function Printer() {	// {{{
 	], [
 		null,
 		'Name of the Gpio.',
-		'Initial state and reset state of the Gpio.',
-		'Fraction of the time that the pin is enabled when on.',
-		'Whether this Gpio is the fan pin, used by G-code commands.',
-		'Whether this Gpio is the spindle pin, used by G-code commands.'
+		'Initial state and reset state of the Gpio.  There is a checkbox for the pin if this is not disabled.  If it is input, the checkbox shows the current value.  Otherwise it can be used to change the value.',
+		'Fraction of the time that the pin is enabled when on.  Note that this value can only be set up when the corresponding pin is valid.',
+		'Whether this Gpio is the fan pin, used by G-code commands M106 and M107.',
+		'Whether this Gpio is the spindle pin, used by G-code commands M3, M4 and M5.'
 	]).AddMultiple('gpio', Gpio)]);
 	// }}}
 	// Pins. {{{
