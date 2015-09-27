@@ -1877,8 +1877,8 @@ var drag = [[NaN, NaN], [NaN, NaN], [NaN, NaN], false];
 
 function xydown(printer, e) { // {{{
 	var pos = get_pointer_pos_xy(printer, e);
-		drag[0][0] = pos[0];
-		drag[1][0] = pos[1];
+	drag[0][0] = pos[0];
+	drag[1][0] = pos[1];
 	if (e.button == 0) {
 		printer.call('get_axis_pos', [0, 0], {}, function(x) {
 			printer.call('get_axis_pos', [0, 1], {}, function(y) {
@@ -1892,6 +1892,15 @@ function xydown(printer, e) { // {{{
 		drag[1][1] = printer.targety;
 	}
 	return false;
+}
+// }}}
+
+function xyup(printer, e) { // {{{
+	var pos = get_pointer_pos_xy(printer, e);
+	if (pos[0] != drag[0][0] || pos[1] != drag[1][0])
+		return false;
+	console.info(pos);
+	console.info(drag);
 }
 // }}}
 
@@ -1928,6 +1937,15 @@ function zdown(printer, e) { // {{{
 	else
 		drag[2][1] = printer.targetz;
 	return false;
+}
+// }}}
+
+function zup(printer, e) { // {{{
+	var pos = get_pointer_pos_z(printer, e);
+	if (pos != drag[2][0])
+		return false;
+	console.info(pos);
+	console.info(drag);
 }
 // }}}
 
