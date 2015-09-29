@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import websockets
+import websocketd
 import os
 import sys
 
@@ -20,7 +20,7 @@ with open('/etc/default/franklin') as f:
 			tls = value.lower().strip() == 'true'
 
 try:
-	p = websockets.RPC(port, tls = tls)
+	p = websocketd.RPC(port, tls = tls)
 	action = os.getenv('ACTION')
 	dev = os.getenv('DEVNAME')
 	if action == 'add':

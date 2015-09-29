@@ -9,7 +9,7 @@ import fcntl
 import select
 import struct
 import fhs
-import websockets
+import websocketd
 
 class MODIFIER: pass	#Make this a unique object.
 
@@ -41,7 +41,7 @@ def init(config = {}):
 	configdata = {'tick_time': .05, 'js': '/dev/input/js0', 'printer': '8000', 'epsilon': 100, 'small': 6556}
 	configdata.update(config)
 	cfg = fhs.init(configdata)
-	printer = websockets.RPC(cfg['printer'], tls = False)
+	printer = websocketd.RPC(cfg['printer'], tls = False)
 	fd = os.open(cfg['js'], os.O_RDWR)
 	if fd < 0:
 		sys.stderr.write('Cannot open joystick file')
