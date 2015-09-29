@@ -1,6 +1,6 @@
 # Module for the communication protocol.
 
-from websockets import log
+from websocketd import log
 
 single = {
 	'NACK0': '\xf0',       # Incorrect packet; please resend.

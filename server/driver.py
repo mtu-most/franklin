@@ -23,8 +23,8 @@ config = fhs.init(packagename = 'franklin', config = {
 	'run-id': None,
 	'allow-system': None
 	})
-import websockets
-from websockets import log
+import websocketd
+from websocketd import log
 import serial
 import time
 import math

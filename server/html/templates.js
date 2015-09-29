@@ -76,24 +76,19 @@ function Pin(title, obj, analog) { // {{{
 
 function Float(obj, digits, factor, className, set) { // {{{
 	var input = Create('input', className);
-	//var button = Create('button', className).AddText('Set');
 	var span = Create('span', className);
 	input.obj = obj;
-	//button.obj = obj;
 	if (factor === undefined)
 		factor = 1;
 	input.factor = factor;
-	//button.factor = factor;
 	span.factor = factor;
 	input.id = make_id(printer, obj, 'new');
 	span.id = make_id(printer, obj);
 	span.digits = digits;
-	//button.source = input;
 	input.type = 'text';
 	input.set = set;
 	input.printer = printer;
 	input.AddEvent('keydown', function(event) { floatkey(event, this); });
-	//button.AddEvent('click', function() { floatkey({keyCode: 13, preventDefault: function() {}}, this.source); });
 	return [input, /*button,*/ span];
 } // }}}
 
@@ -439,11 +434,11 @@ function Map() { // {{{
 	], ['', '', '', '', '', '']));
 	// Canvas for xy and for z.
 	var c = ret.AddElement('canvas', 'xymap');
-	c.AddEvent('mousemove', function(e) { return xymove(b.printer, e); }).AddEvent('mousedown', function(e) { return xydown(b.printer, e); });
+	c.AddEvent('mousemove', function(e) { return xymove(b.printer, e); }).AddEvent('mousedown', function(e) { return xydown(b.printer, e); }).AddEvent('mouseup', function(e) { return xyup(b.printer, e); });
 	c.id = make_id(printer, [null, 'xymap']);
 	c.printer = printer;
 	c = ret.AddElement('canvas', 'zmap');
-	c.AddEvent('mousemove', function(e) { return zmove(b.printer, e); }).AddEvent('mousedown', function(e) { return zdown(b.printer, e); });
+	c.AddEvent('mousemove', function(e) { return zmove(b.printer, e); }).AddEvent('mousedown', function(e) { return zdown(b.printer, e); }).AddEvent('mouseup', function(e) { return zup(b.printer, e); });
 	c.id = make_id(printer, [null, 'zmap']);
 	c.printer = printer;
 	return ret;

@@ -7,8 +7,8 @@ import os
 import sys
 import math
 import random
-import websockets
-from websockets import log
+import websocketd
+from websocketd import log
 import fhs
 try:
 	from gi.repository import GLib
@@ -77,7 +77,7 @@ while '%04d' % nextscriptname in scripts:
 	nextscriptname += 1
 # }}}
 
-class Server(websockets.RPChttpd): # {{{
+class Server(websocketd.RPChttpd): # {{{
 	def auth_message(self, connection, is_websocket):
 		path = connection.address.path
 		for extra in ('/', '/websocket'):
@@ -122,9 +122,9 @@ class Server(websockets.RPChttpd): # {{{
 				message = ''
 			self.reply(connection, 200, message, 'text/plain;charset=utf8')
 		elif any(connection.address.path.endswith('/' + x) for x in ('benjamin', 'admin', 'expert', 'user')):
-			websockets.RPChttpd.page(self, connection, path = connection.address.path[:connection.address.path.rfind('/') + 1])
+			websocketd.RPChttpd.page(self, connection, path = connection.address.path[:connection.address.path.rfind('/') + 1])
 		else:
-			websockets.RPChttpd.page(self, connection)
+			websocketd.RPChttpd.page(self, connection)
 	def post(self, connection):
 		# Add to queue (POST).
 		if 'file' not in connection.post[1] or 'port' not in connection.post[0] or 'action' not in connection.post[0]:
@@ -187,7 +187,7 @@ class Connection: # {{{
 				log("not broadcasting to target, because it isn't set to monitor")
 		elif httpd:
 			#log('broadcasting to all: %s' % repr((name, args)))
-			for c in httpd.websockets:
+			for c in httpd.websocketd:
 				if c.monitor and c.initialized:
 					#log('broadcasting to one')
 					getattr(c, name).event(*args)
@@ -219,8 +219,8 @@ class Connection: # {{{
 			log('port is not in detectable state')
 			return
 		ports[port] = False
-		c = websockets.call(resumeinfo, detect, port)
-		while c(): c.args = (yield websockets.WAIT)
+		c = websocketd.call(resumeinfo, detect, port)
+		while c(): c.args = (yield websocketd.WAIT)
 	# }}}
 	@classmethod
 	def detect_all(cls): # {{{
@@ -228,8 +228,8 @@ class Connection: # {{{
 		for p in ports:
 			if ports[p] is not None:
 				continue
-			c = websockets.call(resumeinfo, cls.detect, p)
-			while c(): c.args = (yield websockets.WAIT)
+			c = websocketd.call(resumeinfo, cls.detect, p)
+			while c(): c.args = (yield websocketd.WAIT)
 	# }}}
 	@classmethod
 	def add_port(cls, port): # {{{
@@ -243,8 +243,8 @@ class Connection: # {{{
 		ports[port] = None
 		cls._broadcast(None, 'new_port', port);
 		if autodetect:
-			c = websockets.call(resumeinfo, cls.detect, port)
-			while c(): c.args = (yield websockets.WAIT)
+			c = websocketd.call(resumeinfo, cls.detect, port)
+			while c(): c.args = (yield websocketd.WAIT)
 	# }}}
 	@classmethod
 	def remove_port(cls, port): # {{{
@@ -409,7 +409,7 @@ class Connection: # {{{
 		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP, output)
 		self._broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
 		self._broadcast(None, 'message', port, '')
-		d = (yield websockets.WAIT)
+		d = (yield websocketd.WAIT)
 		try:
 			process.kill()	# In case it wasn't dead yet.
 		except OSError:
@@ -418,7 +418,7 @@ class Connection: # {{{
 		self._broadcast(None, 'blocked', port, None)
 		self._broadcast(None, 'message', port, '')
 		if autodetect:
-			websockets.call(None, self.detect, port)()
+			websocketd.call(None, self.detect, port)()
 		if d:
 			yield ('firmware upload for %s: ' % board + d)
 		else:
@@ -465,7 +465,7 @@ class Connection: # {{{
 				resumeinfo[0](None)
 				#Connection._disable('admin', self.printer)
 		ports[self.printer].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
-		yield (yield websockets.WAIT)
+		yield (yield websocketd.WAIT)
 	# }}}
 	def __getattr__ (self, attr): # {{{
 		return lambda *a, **ka: self._call(attr, a, ka)
@@ -558,7 +558,7 @@ class Port: # {{{
 			orphans[self.run_id] = self
 			Connection._broadcast(None, 'del_printer', port)
 			if autodetect:
-				websockets.call(None, Connection.detect, self.port)()
+				websocketd.call(None, Connection.detect, self.port)()
 		elif data[1] == 'error':
 			if data[0] is None:
 				# Error on command without id.
@@ -702,19 +702,19 @@ def print_done(port, completed, reason): # {{{
 # }}}
 
 if config['local'] != '':
-	websockets.call(None, Connection.add_port, '-')()
+	websocketd.call(None, Connection.add_port, '-')()
 
 # Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
 try:
 	# Try Linux sysfs.
 	for tty in os.listdir('/sys/class/tty'):
-		websockets.call(None, Connection.add_port, '/dev/' + tty)()
+		websocketd.call(None, Connection.add_port, '/dev/' + tty)()
 except:
 	# Try more generic approach.  Don't use this by default, because it doesn't detect all ports on GNU/Linux.
 	try:
 		import serial.tools.list_ports
 		for tty in serial.tools.list_ports.comports():
-			websockets.call(None, Connection.add_port, tty[0])()
+			websocketd.call(None, Connection.add_port, tty[0])()
 	except:
 		traceback.print_exc()
 		log('Not probing serial ports, because an error occurred: %s' % sys.exc_info()[1])
@@ -729,4 +729,4 @@ else:
 httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = tls)
 
 log('running')
-websockets.fgloop()
+websocketd.fgloop()

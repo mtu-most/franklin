@@ -9,7 +9,7 @@ import fcntl
 import select
 import struct
 import fhs
-import websockets
+import websocketd
 
 class MODIFIER: pass	#Make this a unique object.
 
@@ -21,6 +21,10 @@ num_buttons = None
 axis_state = []
 axis_zero = []
 button_state = []
+xmax = 1
+vmax = 60
+c2 = 1
+c1 = vmax / xmax - c2 * xmax
 
 def ioctl(op, t):
 	value = t()
@@ -37,7 +41,7 @@ def init(config = {}):
 	configdata = {'tick_time': .05, 'js': '/dev/input/js0', 'printer': '8000', 'epsilon': 100, 'small': 6556}
 	configdata.update(config)
 	cfg = fhs.init(configdata)
-	printer = websockets.RPC(cfg['printer'], tls = False)
+	printer = websocketd.RPC(cfg['printer'], tls = False)
 	fd = os.open(cfg['js'], os.O_RDWR)
 	if fd < 0:
 		sys.stderr.write('Cannot open joystick file')
@@ -59,9 +63,8 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 
 	#print('axes: %d buttons: %d' % (num_axes, num_buttons))
 
-	controls = {2: [0, 0, .3], 3: [1, 0, 0], 4: [0, -1, 0], 5: [0, 0, -.3]}
+	controls = {2: [0, 0, 1], 0: [1, 0, 0], 1: [0, -1, 0], 5: [0, 0, -1]}
 	controls.update(axes)
-	scale = [50., 50., 10.]
 	mem = {}
 
 	running = [True]
@@ -151,10 +154,10 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 				if a >= len(axes):
 					print('invalid control %d >= %d' % (a, len(axes)))
 					continue
-				move[c] += v * axes[a] * scale[c] * cfg['tick_time'] / (1 << 15)
+				ax = axes[a] / (1 << 15)
+				move[c] += v * (c2 * ax ** 2 + c1 * ax) * cfg['tick_time']
 				#print('move %d %f %d' % (c, move[c], axis_state[a] - axis_zero[a]))
 		if any(move):
-			#print(repr(move))
 			printer.line_cb([move], relative = True)
 		return True
 

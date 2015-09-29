@@ -1,9 +1,9 @@
 #!/usr/bin/python
 
 import sys
-import websockets
+import websocketd
 
-p = websockets.RPC (8080)
+p = websocketd.RPC (8080)
 
 def parse (f):
 	section = None
