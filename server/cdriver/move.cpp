@@ -142,7 +142,7 @@ static float fix_v(float f, bool next = false) { // {{{
 // Used from previous segment (if prepared): tp, vq.
 uint8_t next_move() { // {{{
 	settings.probing = false;
-	moving_to_current = false;
+	moving_to_current = 0;
 	uint8_t num_cbs = 0;
 	uint8_t a0;
 	run_file_fill_queue();

@@ -49,7 +49,7 @@ void setup(char const *port, char const *run_id)
 	zoffset = 0;
 	aborting = false;
 	stopped = true;
-	moving_to_current = false;
+	moving_to_current = 0;
 	prepared = false;
 	stopping = 0;
 	sending_fragment = 0;

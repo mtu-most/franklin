@@ -113,10 +113,11 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) { // {{{
 
 void move_to_current() { // {{{
 	if (!(stopped && !moving && motors_busy)) {
-		moving_to_current = true;
+		if (moving_to_current == 0)
+			moving_to_current = 1;
 		return;
 	}
-	moving_to_current = false;
+	moving_to_current = 0;
 	debug("move to current");
 	settings.f0 = 0;
 	settings.fmain = 1;
@@ -813,6 +814,8 @@ void apply_tick() { // {{{
 } // }}}
 
 void buffer_refill() { // {{{
+	if (moving_to_current == 2)
+		move_to_current();
 	if (!moving || refilling || stopping || discard_pending || discarding) {
 		//debug("refill block %d %d %d", moving, refilling, stopping);
 		return;

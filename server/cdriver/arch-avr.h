@@ -277,8 +277,8 @@ void avr_get_current_pos(int offset, bool check) {
 			cpdebug(ts, tm, "cpa offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
 			cpdebug(ts, tm, "getpos offset %d diff %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos - old);
 			if (check && old != spaces[ts].motor[tm]->settings.current_pos) {
-				if (moving_to_current)
-					move_to_current();
+				if (moving_to_current == 1)
+					moving_to_current = 2;
 				else {
 					//abort();
 					debug("WARNING: position out of sync! (This is normal after sleep), old = %d, new = %d", old, spaces[ts].motor[tm]->settings.current_pos);
