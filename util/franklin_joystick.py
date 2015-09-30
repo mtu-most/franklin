@@ -18,13 +18,16 @@ printer = None
 fd = None
 num_axes = None
 num_buttons = None
+dead = None
 axis_state = []
-axis_zero = []
+xy_state = [0., 0.]
 button_state = []
-xmax = 1
+dmax = 1
+dhalf = dmax / 2
 vmax = 60
-c2 = 1
-c1 = vmax / xmax - c2 * xmax
+vhalf = 5
+c4 = (vhalf - vmax * dhalf ** 2 / dmax ** 2) / (dhalf ** 4 - dmax ** 2 * dhalf ** 2)
+c2 = vmax / dmax ** 2 - c4 * dmax ** 2
 
 def ioctl(op, t):
 	value = t()
@@ -35,12 +38,13 @@ def ioctl(op, t):
 	return value.value
 
 def init(config = {}):
-	global cfg, printer, fd, num_axes, num_buttons
+	global cfg, printer, fd, num_axes, num_buttons, dead
 	if cfg is not None:
 		return
-	configdata = {'tick_time': .05, 'js': '/dev/input/js0', 'printer': '8000', 'epsilon': 100, 'small': 6556}
+	configdata = {'tick_time': .05, 'js': '/dev/input/js0', 'printer': '8000', 'dead': .1}
 	configdata.update(config)
 	cfg = fhs.init(configdata)
+	dead = float(cfg['dead'])
 	printer = websocketd.RPC(cfg['printer'], tls = False)
 	fd = os.open(cfg['js'], os.O_RDWR)
 	if fd < 0:
@@ -55,7 +59,6 @@ def init(config = {}):
 	num_buttons = ioctl(js.gbuttons, ctypes.c_uint8)
 
 	axis_state[:] = [0.] * num_axes
-	axis_zero[:] = [0.] * num_axes
 	button_state[:] = [None] * num_buttons
 
 def main(config = {}, buttons = {}, axes = {}, tick = None):
@@ -110,16 +113,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 	modifiers.sort()
 
 	def handle_axis(num, value, init):
-		if (init or abs(axis_state[num] - value) < cfg['epsilon']) and abs(value) < cfg['small']:
-			was_zero = axis_state[num] == axis_zero[num]
-			axis_zero[num] = value
-		else:
-			was_zero = False
 		axis_state[num] = value
-		value -= axis_zero[num]
-		if value == 0 and was_zero:
-			return
-		#print('axis %d moved to %d (- %d)' % (num, value, axis_zero[num]))
 
 	def handle_button(num, value, init):
 		button_state[num] = value
@@ -141,22 +135,37 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		running[0] &= button_action[num]()
 
 	def my_tick():
-		axes = [a - z for a, z in zip(axis_state, axis_zero)]
+		move = [0., 0., 0.]
+		n = [0, 0, 0]
+		for a in controls:
+			if a >= len(axis_state):
+				print('invalid control %d >= %d' % (a, len(axes)))
+				continue
+			for c, v in enumerate(controls[a]):
+				if v != 0:
+					n[c] += 1
+					move[c] += v * axis_state[a] / (1 << 15)
+		for i, nn in enumerate(n):
+			move[i] /= nn
+		d = (move[0] ** 2 + move[1] ** 2) ** .5
+		if d <= dead:
+			move[0] = 0.
+			move[1] = 0.
+		else:
+			new_d = d - dead
+			if d >= dmax:
+				factor = vmax / d
+			else:
+				factor = c4 * new_d ** 4 + c2 * new_d ** 2
+			move[0] *= factor * cfg['tick_time']
+			move[1] *= factor * cfg['tick_time']
+		move[2] *= (c4 * move[2] ** 4 + c2 * move[2] ** 2) * cfg['tick_time']
 		if tick:
-			ret = tick(axes)
+			ret = tick(axes, move)
 			if ret is None:
 				return True
 			if ret is False:
 				return False
-		move = [0., 0., 0.]
-		for a in controls:
-			for c, v in enumerate(controls[a]):
-				if a >= len(axes):
-					print('invalid control %d >= %d' % (a, len(axes)))
-					continue
-				ax = axes[a] / (1 << 15)
-				move[c] += v * (c2 * ax ** 2 + c1 * ax) * cfg['tick_time']
-				#print('move %d %f %d' % (c, move[c], axis_state[a] - axis_zero[a]))
 		if any(move):
 			printer.line_cb([move], relative = True)
 		return True
