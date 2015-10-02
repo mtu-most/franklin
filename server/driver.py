@@ -181,6 +181,7 @@ class Printer: # {{{
 		self.queue = []
 		self.queue_pos = 0
 		self.queue_info = None
+		self.gpio_waits = {}
 		self.total_time = [float('nan'), float('nan')]
 		self.resuming = False
 		self.flushing = False
@@ -501,6 +502,10 @@ class Printer: # {{{
 			elif cmd == protocol.rcommand['PINCHANGE']:
 				self.gpios[s].value = m
 				call_queue.append((self._gpio_update, (s,)))
+				if s in self.gpio_waits:
+					for id in self.gpio_waits[s]:
+						self._send(id, 'return', None)
+					del self.gpio_waits[s]
 				continue
 			elif cmd == protocol.rcommand['SENSE']:
 				if m not in self.sense[s]:
@@ -1232,7 +1237,7 @@ class Printer: # {{{
 			return
 		self.probing = True
 		if not self.position_valid:
-			self.home(cb = lambda: self._do_probe(id, x, y, z, ref, angle, speed, phase, good), abort = False)[1](None)
+			self.home(cb = lambda good: self._do_probe(id, x, y, z, ref, angle, speed, phase, good), abort = False)[1](None)
 			return
 		p = self.probemap
 		if phase == 0:
@@ -2109,6 +2114,9 @@ class Printer: # {{{
 		self.confirm_message = message
 		self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
+	def get_confirm_id(self): # {{{
+		return self.confirm_id, self.confirm_message
+	# }}}
 	def confirm(self, confirm_id, success = True): # {{{
 		if confirm_id not in (self.confirm_id, None) or self.confirm_axes is None:
 			# Confirmation was already sent, or never reguested.
@@ -2778,6 +2786,15 @@ class Printer: # {{{
 		return self.expert_set_temp(temp, update = update, **real_ka)
 	# }}}
 	# Gpio {{{
+	@delayed
+	def wait_gpio(self, id, gpio, value = 1):
+		assert gpio <= len(self.gpios)
+		if int(value) == int(self.gpios[gpio].value):
+			self._send(id, 'return', None)
+			return
+		if gpio not in self.gpio_waits:
+			self.gpio_waits[gpio] = []
+		self.gpio_waits[gpio].append(id)
 	def get_gpio(self, gpio):
 		ret = {}
 		for key in ('name', 'pin', 'state', 'reset', 'duty', 'value'):
@@ -2789,8 +2806,9 @@ class Printer: # {{{
 				setattr(self.gpios[gpio], key, ka.pop(key))
 		self.gpios[gpio].state = int(self.gpios[gpio].state)
 		self.gpios[gpio].reset = int(self.gpios[gpio].reset)
-		if (self.gpios[gpio].reset >= 2 and self.gpios[gpio].state < 2) or (self.gpios[gpio].reset < 2 and self.gpios[gpio].state >= 2):
+		if self.gpios[gpio].reset >= 2 or (self.gpios[gpio].reset < 2 and self.gpios[gpio].state >= 2):
 			self.gpios[gpio].state = self.gpios[gpio].reset
+		#log('gpio %d reset %d' % (gpio, self.gpios[gpio].reset))
 		self._send_packet(struct.pack('=BB', protocol.command['WRITE_GPIO'], gpio) + self.gpios[gpio].write())
 		self.gpios[gpio].read(self._read('GPIO', gpio))
 		if update:

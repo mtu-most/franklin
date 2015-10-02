@@ -187,7 +187,7 @@ class Connection: # {{{
 				log("not broadcasting to target, because it isn't set to monitor")
 		elif httpd:
 			#log('broadcasting to all: %s' % repr((name, args)))
-			for c in httpd.websocketd:
+			for c in httpd.websockets:
 				if c.monitor and c.initialized:
 					#log('broadcasting to one')
 					getattr(c, name).event(*args)

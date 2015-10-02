@@ -52,7 +52,9 @@ static double unchange0(Space *s, int axis, double value) {
 }
 
 static double probe_speed(Space *s) {
-	return 1e6 / hwtime_step / s->motor[2]->steps_per_unit;
+	if (s->num_motors >= 3)
+		return 1e6 / hwtime_step / s->motor[2]->steps_per_unit;
+	return INFINITY;
 }
 
 void Cartesian_init(int num) {

@@ -513,6 +513,7 @@ bool hwpacket(int len) {
 
 // Hardware interface {{{
 void avr_setup_pin(int pin, int type, int resettype, int extra) {
+	//debug("pin %d type %d reset %d extra %d", pin, type, resettype, extra);
 	if (avr_in_control_queue[pin])
 	{
 		for (int i = 0; i < avr_control_queue_length; ++i) {
