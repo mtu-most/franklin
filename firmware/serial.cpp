@@ -404,14 +404,15 @@ void try_send_next() { // Call send_packet if we can. {{{
 			sdebug2("sense %d", m);
 			uint8_t type = (motor[m].flags & Motor::SENSE1 ? 1 : 0);
 			pending_packet[ff_out][0] = (type ? CMD_SENSE1 : CMD_SENSE0);
-			pending_packet[ff_out][1] = m;
+			pending_packet[ff_out][1] = active_motors;
+			pending_packet[ff_out][2] = m;
 			for (uint8_t mi = 0; mi < active_motors; ++mi) {
-				BUFFER_CHECK(pending_packet[ff_out], 2 + 4 * mi);
+				BUFFER_CHECK(pending_packet[ff_out], 3 + 4 * mi);
 				BUFFER_CHECK(motor, mi);
-				*reinterpret_cast <int32_t *>(&pending_packet[ff_out][2 + 4 * mi]) = motor[mi].sense_pos[type];
+				*reinterpret_cast <int32_t *>(&pending_packet[ff_out][3 + 4 * mi]) = motor[mi].sense_pos[type];
 			}
 			motor[m].flags &= ~(type ? Motor::SENSE1 : Motor::SENSE0);
-			prepare_packet(2 + 4 * active_motors);
+			prepare_packet(3 + 4 * active_motors);
 			send_packet();
 			return;
 		} // }}}
@@ -438,8 +439,11 @@ void try_send_next() { // Call send_packet if we can. {{{
 	} // }}}
 	uint8_t cf = current_fragment;
 	if (notified_current_fragment != cf) { // {{{
+		uint8_t offset;
 		if (step_state == 1 && stopping < 0) {
 			pending_packet[ff_out][0] = CMD_UNDERRUN;
+			pending_packet[ff_out][1] = active_motors;
+			offset = 2;
 			debug_add(0x101);
 			debug_add(cf);
 			debug_add(last_fragment);
@@ -448,6 +452,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		}
 		else {
 			pending_packet[ff_out][0] = CMD_DONE;
+			offset = 1;
 			//debug_add(0x102);
 			//debug_add(cf);
 			//debug_add(last_fragment);
@@ -457,12 +462,12 @@ void try_send_next() { // Call send_packet if we can. {{{
 		uint8_t num = (cf - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
 		sei();
 		sdebug2("done %ld %d %d %d", &motor[0].current_pos, cf, notified_current_fragment, last_fragment);
-		pending_packet[ff_out][1] = num;
+		pending_packet[ff_out][offset] = num;
 		notified_current_fragment = (notified_current_fragment + num) & FRAGMENTS_PER_MOTOR_MASK;
-		pending_packet[ff_out][2] = (last_fragment - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
+		pending_packet[ff_out][offset + 1] = (last_fragment - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
 		if (pending_packet[ff_out][0] == CMD_UNDERRUN) {
-			write_current_pos(3);
-			prepare_packet(3 + 4 * active_motors);
+			write_current_pos(4);
+			prepare_packet(4 + 4 * active_motors);
 		}
 		else
 			prepare_packet(3);
@@ -472,14 +477,15 @@ void try_send_next() { // Call send_packet if we can. {{{
 	if (stopping >= 0 && (stopping == active_motors || motor[stopping].flags & Motor::LIMIT)) { // {{{
 		sdebug2("limit %d", stopping);
 		pending_packet[ff_out][0] = CMD_LIMIT;
-		pending_packet[ff_out][1] = stopping;
-		pending_packet[ff_out][2] = limit_fragment_pos;
-		write_current_pos(3);
+		pending_packet[ff_out][1] = active_motors;
+		pending_packet[ff_out][2] = stopping;
+		pending_packet[ff_out][3] = limit_fragment_pos;
+		write_current_pos(4);
 		if (stopping < active_motors)
 			motor[stopping].flags &= ~Motor::LIMIT;
 		else
 			stopping += 1;	// Prevent triggering another notification.
-		prepare_packet(3 + 4 * active_motors);
+		prepare_packet(4 + 4 * active_motors);
 		send_packet();
 		debug_add(0x100);
 		//debug_dump();
@@ -499,9 +505,10 @@ void try_send_next() { // Call send_packet if we can. {{{
 	} // }}}
 	if (home_step_time > 0 && homers == 0 && step_state == 1) { // {{{
 		pending_packet[ff_out][0] = CMD_HOMED;
-		write_current_pos(1);
+		pending_packet[ff_out][1] = active_motors;
+		write_current_pos(2);
 		home_step_time = 0;
-		prepare_packet(1 + 4 * active_motors);
+		prepare_packet(2 + 4 * active_motors);
 		send_packet();
 		return;
 	} // }}}

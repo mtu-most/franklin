@@ -198,28 +198,35 @@ EXTERN bool avr_stop_fake;
 int hwpacketsize(int len, int *available) {
 	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 3, 0, 4, 0, 0, 0, 1, 3, -1, -1, -1 };
 	int num_motors = avr_audio >= 0 ? NUM_MOTORS : avr_active_motors;
-	switch (command[1][0] & 0x1f) {
-	case HWC_READY:
-		if (len >= 2)
-			return command[1][1];
+	if (arch_packetsize[command[1][0] & 0xf] > 0)
+		return arch_packetsize[command[1][0] & 0xf];
+	if (len < 2) {
 		if (*available == 0)
 			return 2;	// The data is not available, so this will not trigger the packet to be parsed yet.
 		command[1][1] = serialdev[1]->read();
 		command_end[1] += 1;
 		*available -= 1;
+	}
+	switch (command[1][0] & 0x1f) {
+	case HWC_READY:
 		return command[1][1];
 	case HWC_HOMED:
-		return 1 + 4 * num_motors;
+		return 2 + 4 * command[1][1];
 	case HWC_STOPPED:
-		return 2 + 4 * num_motors;
+		return 3 + 4 * command[1][1];
 	case HWC_LIMIT:
 	case HWC_UNDERRUN:
-		return 3 + 4 * num_motors;
+		return 4 + 4 * command[1][1];
 	case HWC_SENSE0:
 	case HWC_SENSE1:
-		return 2 + 4 * num_motors;
+		return 3 + 4 * command[1][1];
 	default:
-		return arch_packetsize[command[1][0] & 0xf];
+		if (arch_packetsize[command[1][0] & 0xf] < 0) {
+			debug("ignoring invalid serial command %x", command[1][0]);
+			return 1;	// Parse and fail immediately.
+		}
+		debug("bug: invalid value in arch_packetsize");
+		abort();
 	}
 }
 
@@ -301,7 +308,7 @@ bool hwpacket(int len) {
 	case HWC_SENSE0:
 	case HWC_SENSE1:
 	{
-		uint8_t which = command[1][1];
+		uint8_t which = command[1][2];
 		if (which >= NUM_MOTORS) {
 			debug("cdriver: Invalid limit or sense for avr motor %d", which);
 			abort();
@@ -326,15 +333,15 @@ bool hwpacket(int len) {
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
 		if ((command[1][0]) == HWC_LIMIT) {
-			//debug("limit %d", command[1][1]);
+			//debug("limit %d", command[1][2]);
 			avr_homing = false;
-			abort_move(int8_t(command[1][2]));
+			abort_move(int8_t(command[1][3]));
 			//int i = 0;
 			//for (int is = 0; is < 2; ++is)
 			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
 			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
 			//fprintf(stderr, "\n");
-			avr_get_current_pos(3, false);
+			avr_get_current_pos(4, false);
 			//i = 0;
 			//for (int is = 0; is < 2; ++is)
 			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
@@ -349,7 +356,7 @@ bool hwpacket(int len) {
 		}
 		else {
 			// Sense
-			avr_get_current_pos(2, false);	// TODO: this must not mess up actual current pos.
+			avr_get_current_pos(3, false);	// TODO: this must not mess up actual current pos.
 			spaces[s].motor[m]->sense_state = 1;
 			send_host(CMD_SENSE, s, m, 0, command[1][0] == HWC_SENSE1);
 		}
@@ -390,14 +397,14 @@ bool hwpacket(int len) {
 		avr_running = false;
 		if (computing_move) {
 			debug("underrun");
-			arch_start_move(command[1][1]);
+			arch_start_move(command[1][2]);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
 		else {
 			// Only overwrite current position if the new value is correct.
 			//debug("underrun ok computing_move=%d sending=%d pending=%d finishing=%d", computing_move, sending_fragment, command[1][2], run_file_finishing);
-			if (!computing_move && !sending_fragment && command[1][2] == 0) {
-				avr_get_current_pos(3, true);
+			if (!computing_move && !sending_fragment && command[1][3] == 0) {
+				avr_get_current_pos(4, true);
 				if (run_file_finishing) {
 					send_host(CMD_FILE_DONE);
 					abort_run_file();
@@ -421,7 +428,8 @@ bool hwpacket(int len) {
 		}
 		first_fragment = -1;
 		int cbs = 0;
-		for (int i = 0; i < command[1][1]; ++i) {
+		int offset = command[1][0] == HWC_UNDERRUN ? 1 : 0;
+		for (int i = 0; i < command[1][offset + 1]; ++i) {
 			int f = (running_fragment + i) % FRAGMENTS_PER_BUFFER;
 			//debug("fragment %d: cbs=%d current=%d", f, history[f].cbs, current_fragment);
 			cbs += history[f].cbs;
@@ -429,14 +437,14 @@ bool hwpacket(int len) {
 		}
 		if (cbs && !host_block)
 			send_host(CMD_MOVECB, cbs);
-		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER + 1 < command[1][1] + command[1][2]) {
+		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER + 1 < command[1][offset + 1] + command[1][offset + 2]) {
 			//debug("Done count %d+%d higher than busy fragments %d+1; clipping", command[1][1], command[1][2], (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
 			avr_write_ack("invalid done");
 			//abort();
 		}
 		else
 			avr_write_ack("done");
-		running_fragment = (running_fragment + command[1][1]) % FRAGMENTS_PER_BUFFER;
+		running_fragment = (running_fragment + command[1][offset + 1]) % FRAGMENTS_PER_BUFFER;
 		//debug("running -> %x", running_fragment);
 		if (current_fragment == running_fragment && command[1][0] == HWC_DONE) {
 			debug("Done received, but should be underrun");
@@ -453,7 +461,7 @@ bool hwpacket(int len) {
 			abort();
 		computing_move = false;
 		avr_homing = false;
-		avr_get_current_pos(1, false);
+		avr_get_current_pos(2, false);
 		//int i = 0;
 		//for (int s = 0; s < 2; ++s)
 		//	for (int m = 0; m < spaces[s].num_motors; ++m, ++i)
@@ -934,8 +942,8 @@ void arch_stop(bool fake) {
 
 void avr_stop2() {
 	if (!avr_stop_fake)
-		abort_move(command[1][1]);
-	avr_get_current_pos(2, false);
+		abort_move(command[1][2]);
+	avr_get_current_pos(3, false);
 	current_fragment = running_fragment;
 	current_fragment_pos = 0;
 	num_active_motors = 0;

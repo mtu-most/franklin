@@ -467,15 +467,16 @@ void packet()
 		homers = 0;
 		home_step_time = 0;
 		reply[0] = CMD_STOPPED;
-		reply[1] = current_sample;
+		reply[1] = active_motors;
+		reply[2] = current_sample;
 		for (uint8_t m = 0; m < active_motors; ++m) {
 			motor[m].intflags &= ~Motor::ACTIVE;
 			motor[m].steps_current = 0;
 			BUFFER_CHECK(reply, 2 + 4 * m);
-			*reinterpret_cast <int32_t *>(&reply[2 + 4 * m]) = motor[m].current_pos;
+			*reinterpret_cast <int32_t *>(&reply[3 + 4 * m]) = motor[m].current_pos;
 			//debug("cp %d %ld", m, F(motor[m].current_pos));
 		}
-		reply_ready = 2 + 4 * active_motors;
+		reply_ready = 3 + 4 * active_motors;
 		current_fragment = last_fragment;
 		notified_current_fragment = current_fragment;
 		//debug("stop new current %d", current_fragment);

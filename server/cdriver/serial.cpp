@@ -75,22 +75,36 @@ static void send_to_host() {
 	free(r);
 }
 
+#ifdef SERIAL
+static void command_cancel() {
+	while (true) {
+		command_end[1] -= 1;
+		memmove(command[1], &command[1][1], command_end[1]);
+		if (command_end[1] == 0)
+			break;
+		int len = 0;
+		if (hwpacketsize(command_end[1], &len) <= command_end[1])
+			break;
+	}
+}
+#endif
+
 // There may be serial data available.
 void serial(uint8_t channel) {
 	while (true) {
 #ifdef SERIAL
 		if (channel == 1) {
 			uint32_t utm = utime();
-			if (uint32_t(utm - last_micros) >= 500000)
+			if (uint32_t(utm - last_micros) >= 100000)
 			{
 				if (command_end[channel] > 0) {
 					if (!had_data) {
 						// Command not finished; ignore it and wait for next.
 						debug("Ignoring unfinished command");
-						command_end[channel] = 0;
+						command_cancel();
 						last_micros = utm;
 					}
-					else
+					if (command_end[channel] > 0)
 						debug("Silence, but handle data first");
 				}
 				else {
@@ -358,7 +372,6 @@ void serial(uint8_t channel) {
 		}
 #endif
 		int end = command_end[channel];
-		command_end[channel] = 0;
 #ifdef SERIAL
 		// Check packet integrity.
 		if (channel == 1) {
@@ -375,7 +388,11 @@ void serial(uint8_t channel) {
 				{
 					debug("incorrect extra bit, size = %d t = %d", len, t);
 					//abort();
-					write_nack();
+					command_cancel();
+					if (command_end[channel] == 0)
+						write_nack();
+					else
+						continue;
 					return;
 				}
 				for (uint8_t bit = 0; bit < 5; ++bit)
@@ -394,15 +411,17 @@ void serial(uint8_t channel) {
 			//for (uint8_t i = 0; i < len + (len + 2) / 3; ++i)
 			//	fprintf(stderr, " %02x", command[channel][i]);
 			//fprintf(stderr, "\n");
-						write_nack();
+						command_cancel();
+						if (command_end[channel] == 0)
+							write_nack();
+						else
+							continue;
 						return;
 					}
 				}
 			}
 			// Packet is good.
-#ifdef DEBUG_SERIAL
 			//debug("%d good", channel);
-#endif
 			// Flip-flop must have good state.
 			int which = (command[channel][0] >> 5) & 3;
 			if (which != ff_in)
@@ -414,6 +433,7 @@ void serial(uint8_t channel) {
 				debug("old ff_in: %d", ff_in);
 #endif
 				serialdev[channel]->write(cmd_ack[which]);
+				command_end[channel] = 0;
 				continue;
 			}
 #ifdef DEBUG_FF
@@ -421,6 +441,7 @@ void serial(uint8_t channel) {
 #endif
 			// Clear flag for easier parsing.
 			command[channel][0] &= 0x1f;
+			command_end[channel] = 0;
 			if (hwpacket(cmd_len)) {
 				void (*cb)() = wait_for_reply[0];
 				expected_replies -= 1;
@@ -431,9 +452,13 @@ void serial(uint8_t channel) {
 				break;
 			}
 		}
-		else
+		else {
 #endif
+			command_end[channel] = 0;
 			packet();
+#ifdef SERIAL
+		}
+#endif
 	}
 }
 
