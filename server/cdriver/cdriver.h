@@ -196,6 +196,7 @@ struct History {
 	bool queue_full;
 	int run_file_current;
 	bool probing;
+	double run_time, run_dist;
 };
 
 struct Space_History {
@@ -401,7 +402,8 @@ EXTERN uint32_t last_micros;
 EXTERN int16_t led_phase;
 EXTERN History *history;
 EXTERN History settings;
-EXTERN bool moving, aborting, stopped, prepared, preparing;
+EXTERN bool computing_move;	// True as long as steps are sent to firmware.
+EXTERN bool aborting, prepared, preparing;
 EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.
 EXTERN int sending_fragment;	// To compute how many fragments are in use from free_fragments.
@@ -488,7 +490,6 @@ EXTERN double run_file_sina;
 EXTERN double run_file_cosa;
 EXTERN bool run_file_finishing;
 EXTERN int run_file_audio;
-EXTERN double run_time, run_dist;
 
 // setup.cpp
 void setup(char const *port, char const *run_id);

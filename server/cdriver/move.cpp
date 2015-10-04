@@ -148,7 +148,7 @@ uint8_t next_move() { // {{{
 	run_file_fill_queue();
 	if (settings.queue_start == settings.queue_end && !settings.queue_full) {
 		//debug("no next move");
-		stopped = true;
+		computing_move = false;
 		prepared = false;
 		return num_cbs;
 	}
@@ -277,8 +277,8 @@ uint8_t next_move() { // {{{
 	double v0 = queue[settings.queue_start].f[0] * feedrate;
 	double vp = queue[settings.queue_start].f[1] * feedrate;
 	settings.probing = queue[settings.queue_start].probe;
-	run_time = queue[settings.queue_start].time;
-	run_dist = queue[settings.queue_start].dist;
+	settings.run_time = queue[settings.queue_start].time;
+	settings.run_dist = queue[settings.queue_start].dist;
 
 	if (queue[settings.queue_start].cb)
 		cbs_after_current_move += 1;
@@ -441,7 +441,7 @@ uint8_t next_move() { // {{{
 	settings.start_time = settings.last_time - uint32_t(settings.f0 / fabs(vp) * 1e6);
 	// }}}
 
-	if (stopped) {	// Set up source if this is a new move. {{{
+	if (!computing_move) {	// Set up source if this is a new move. {{{
 #ifdef DEBUG_MOVE
 		debug("starting new move");
 #endif
@@ -458,15 +458,14 @@ uint8_t next_move() { // {{{
 	} // }}}
 
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
-	stopped = false;
-	moving = true;
+	computing_move = true;
 	return num_cbs;
 } // }}}
 
 void abort_move(int pos) { // {{{
 	aborting = true;
 	//debug("abort pos %d", pos);
-	//debug("abort; cf %d rf %d first %d moving %d fragments, regenerating %d ticks", current_fragment, running_fragment, first_fragment, moving, pos);
+	//debug("abort; cf %d rf %d first %d computing_move %d fragments, regenerating %d ticks", current_fragment, running_fragment, first_fragment, computing_move, pos);
 	//debug("try aborting move");
 	current_fragment = running_fragment;
 	//debug("current abort -> %x", current_fragment);
@@ -478,9 +477,9 @@ void abort_move(int pos) { // {{{
 	current_fragment_pos = 0;
 	//if (spaces[0].num_axes > 0)
 	//	fcpdebug(0, 0, "starting hwpos %x", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
-	moving = true;
+	computing_move = true;
 	//debug("restoring position for fragment %d to position %d", current_fragment, pos);
-	while (moving && current_fragment_pos < pos) {
+	while (computing_move && current_fragment_pos < pos) {
 		//debug("tick %d %d %d", current_fragment_pos, settings.hwtime, current_fragment);
 		apply_tick();
 		//if (spaces[0].num_axes > 0)
@@ -491,8 +490,7 @@ void abort_move(int pos) { // {{{
 	//debug("done restoring position");
 	// Copy settings back to previous fragment.
 	store_settings();
-	moving = false;
-	stopped = true;
+	computing_move = false;
 	prepared = false;
 	current_fragment_pos = 0;
 	//if (spaces[0].num_axes > 0)

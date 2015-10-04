@@ -181,6 +181,7 @@ class Printer: # {{{
 		self.queue = []
 		self.queue_pos = 0
 		self.queue_info = None
+		self.confirm_waits = set()
 		self.gpio_waits = {}
 		self.total_time = [float('nan'), float('nan')]
 		self.resuming = False
@@ -2113,9 +2114,19 @@ class Printer: # {{{
 		self.confirm_axes = [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces]
 		self.confirm_message = message
 		self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
+		for c in self.confirm_waits:
+			self._send(c, 'return', self.confirm_id, self.confirm_message)
+		self.confirm_waits.clear()
 	# }}}
 	def get_confirm_id(self): # {{{
 		return self.confirm_id, self.confirm_message
+	# }}}
+	@delayed
+	def wait_confirm(self, id): # {{{
+		if self.confirmer is not None:
+			self._send(id, 'return', self.confirm_id, self.confirm_message)
+			return
+		self.confirm_waits.add(id)
 	# }}}
 	def confirm(self, confirm_id, success = True): # {{{
 		if confirm_id not in (self.confirm_id, None) or self.confirm_axes is None:

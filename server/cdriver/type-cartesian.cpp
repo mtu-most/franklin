@@ -99,7 +99,7 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) {
 	}
 	EDATA(s).num_axes = s->num_axes;
 	bool move = false;
-	if (motors_busy && stopped && settings.queue_start == settings.queue_end && !settings.queue_full) {
+	if (motors_busy && !computing_move && settings.queue_start == settings.queue_end && !settings.queue_full) {
 		move = true;
 		queue[settings.queue_end].probe = false;
 		queue[settings.queue_end].cb = false;

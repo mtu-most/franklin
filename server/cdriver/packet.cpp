@@ -197,19 +197,13 @@ void packet()
 		}
 		else
 			serialdev[0]->write(OK);
-		if (stopped) {
+		if (!computing_move) {
 			//debug("starting move");
 			int num_movecbs = next_move();
 			if (num_movecbs > 0) {
 				if (arch_running()) {
-					if (moving) {
-						//debug("adding %d cbs after current move", num_movecbs);
-						cbs_after_current_move += num_movecbs;
-					}
-					else {
-						//debug("instant-adding %d cbs to fragment %d - 1", num_movecbs, current_fragment);
-						history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += num_movecbs;
-					}
+					//debug("adding %d cbs after current move", num_movecbs);
+					cbs_after_current_move += num_movecbs;
 				}
 				else
 					send_host(CMD_MOVECB, num_movecbs);
@@ -356,7 +350,7 @@ void packet()
 			abort();
 			return;
 		}
-		if (!stopped)
+		if (arch_running() && !stop_pending)
 		{
 			debug("Setting position while moving");
 			abort();
@@ -666,7 +660,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_GETTIME");
 #endif
-		send_host(CMD_TIME, 0, 0, (run_time + run_dist / max_v) / feedrate);
+		send_host(CMD_TIME, 0, 0, (history[running_fragment].run_time + history[running_fragment].run_dist / max_v) / feedrate + settings.hwtime / 1e6);
 		return;
 	}
 	case CMD_SPI:

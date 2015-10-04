@@ -5,10 +5,13 @@ import gst
 import gobject
 gobject.threads_init()
 import gtk
+import glib
 import sys
 
+filename = None
+
 def new_pixbuf(bus, message):
-	global im, overlay
+	global im, overlay, filename
 	if message.type != gst.MESSAGE_ELEMENT:
 		return True
 	pb = sink.get_property('last-pixbuf')
@@ -32,6 +35,17 @@ def new_pixbuf(bus, message):
 		oh = overlay.get_height()
 		overlay.composite(pb, 0, 0, width, height, 0, 0, width * 1.0 / ow, height * 1.0 / oh, gtk.gdk.INTERP_NEAREST, 255)
 		im.set_from_pixbuf(pb)
+	if filename is not None:
+		pb.save(filename, 'png')
+		filename = None
+	return True
+
+def store(source, condition):
+	global filename
+	if condition != glib.IO_IN:
+		gtk.main_quit()
+		return False
+	filename = sys.stdin.readline()
 	return True
 
 overlayfile = '/usr/lib/franklin/overlay.png'
@@ -44,6 +58,8 @@ sink = pipeline.get_by_name('sink')
 bus = pipeline.get_bus()
 bus.add_watch(new_pixbuf)
 pipeline.set_state(gst.STATE_PLAYING)
+# Wait for events on stdin
+glib.io_add_watch(0, glib.IO_IN | glib.IO_ERR | glib.IO_HUP | glib.IO_PRI, store)
 # Run main loop.
 gtk.main()
 # Clean up.

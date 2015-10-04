@@ -46,6 +46,14 @@ def no_xy(axes):
 	axes[4] = 0
 	return True
 
+img_nr = 0
+def save_img():
+	global img_nr
+	filename = '/tmp/img-%d.png\n' % img_nr
+	display.stdin.write(filename)
+	g.state = 'Saved image as %s' % filename
+	img_nr += 1
+
 events = {'save': save, 'help_about': lambda: setattr(g, 'show_about', True), 'file_quit': lambda: g(False), 'want_save': lambda: setattr(g, 'show_save', True)}
 inputs = ('message', 'lines', 'slow', 'fast', 'opened')
 outputs = ('state', 'allow_save', 'filename', 'show_save')
@@ -62,21 +70,21 @@ def do_gtk(axes = None):
 do_gtk()
 
 id = g.id
-subprocess.Popen(['./display', '%d' % id])
+display = subprocess.Popen(['./display', '%d' % id], stdin = subprocess.PIPE)
 
 while True:
-	mem = js.main(tick = do_gtk)
+	mem = js.main(tick = do_gtk, {5: save_img})
 	if all(x in mem for x in (0, 1)):
 		break
 	print('Not all markers are set; not starting yet')
 
 js.printer.line_cb([[mem[0][0], mem[1][1]]])
 g.state = 'Make sure the image is in focus, then press start'
-js.main(tick = no_xy)
+js.main(tick = no_xy, {5: save_img})
 z_ul = js.printer.get_axis_pos(0, 2)
 
 js.printer.line_cb([[mem[1][0], mem[0][1]]])
-js.main(tick = no_xy)
+js.main(tick = no_xy, {5: save_img})
 z_lr = js.printer.get_axis_pos(0, 2)
 
 def startpoint(n):
@@ -181,6 +189,7 @@ def tick(axes):
 
 buttons = {8: None, 6: None, 7: None,
 		4: js.MODIFIER,
+		5: save_img,
 		0: stop,
 		1: count(2),
 		2: count(1),
@@ -194,4 +203,4 @@ js.main(tick = tick, buttons = buttons)
 
 g.state = 'done; please save your results'
 g.allow_save = True
-js.main(tick = do_gtk)
+js.main(tick = do_gtk, buttons = {5: save_img})

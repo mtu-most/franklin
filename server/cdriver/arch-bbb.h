@@ -393,7 +393,7 @@ int arch_tick() {
 			send_host(CMD_MOVECB, cbs);
 		buffer_refill();
 		run_file_fill_queue();
-		if (moving && stopped && run_file_finishing) {
+		if (!computing_move && run_file_finishing) {
 			send_host(CMD_FILE_DONE);
 			abort_run_file();
 		}

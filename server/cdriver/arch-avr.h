@@ -388,16 +388,15 @@ bool hwpacket(int len) {
 			//abort();
 		}
 		avr_running = false;
-		if (moving) {
+		if (computing_move) {
 			debug("underrun");
-			if (stopped)
-				arch_start_move(command[1][1]);
+			arch_start_move(command[1][1]);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
 		else {
 			// Only overwrite current position if the new value is correct.
-			//debug("underrun ok stopped=%d sending=%d pending=%d finishing=%d", stopped, sending_fragment, command[1][2], run_file_finishing);
-			if (stopped && !sending_fragment && command[1][2] == 0) {
+			//debug("underrun ok computing_move=%d sending=%d pending=%d finishing=%d", computing_move, sending_fragment, command[1][2], run_file_finishing);
+			if (!computing_move && !sending_fragment && command[1][2] == 0) {
 				avr_get_current_pos(3, true);
 				if (run_file_finishing) {
 					send_host(CMD_FILE_DONE);
@@ -452,8 +451,7 @@ bool hwpacket(int len) {
 	{
 		if (!avr_homing)
 			abort();
-		stopped = true;
-		moving = false;
+		computing_move = false;
 		avr_homing = false;
 		avr_get_current_pos(1, false);
 		//int i = 0;
@@ -913,20 +911,20 @@ void arch_addpos(int s, int m, int diff) {
 
 void arch_stop(bool fake) {
 	host_block = true;
-	avr_homing = false;
 	if (out_busy >= 3) {
 		//debug("not yet stopping");
 		stop_pending = true;
 		return;
 	}
-	if (!avr_running) {
+	if (!avr_running && !avr_homing) {
 		//debug("not running, so not stopping");
 		current_fragment_pos = 0;
-		stopped = true;	// Not running, but preparations could have started.
+		computing_move = false;	// Not running, but preparations could have started.
 		host_block = false;
 		return;
 	}
 	avr_running = false;
+	avr_homing = false;
 	avr_buffer[0] = HWC_STOP;
 	wait_for_reply[expected_replies++] = avr_stop2;
 	avr_stop_fake = fake;

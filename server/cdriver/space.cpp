@@ -112,7 +112,7 @@ bool Space::setup_nums(uint8_t na, uint8_t nm) { // {{{
 } // }}}
 
 void move_to_current() { // {{{
-	if (!(stopped && !moving && motors_busy)) {
+	if (computing_move || !motors_busy) {
 		if (moving_to_current == 0)
 			moving_to_current = 1;
 		return;
@@ -128,7 +128,7 @@ void move_to_current() { // {{{
 	cbs_after_current_move = 0;
 	current_fragment_pos = 0;
 	first_fragment = current_fragment;
-	moving = true;
+	computing_move = true;
 	settings.cbs = 0;
 	settings.hwtime = 0;
 	settings.start_time = 0;
@@ -179,7 +179,7 @@ void Space::load_info(int32_t &addr) { // {{{
 		ok = false;
 	}
 	else {
-		if (!stopped || !motors_busy)
+		if (computing_move || !motors_busy)
 			ok = false;
 		else
 			ok = true;
@@ -541,11 +541,11 @@ void make_target(Space &sp, double f, bool next) { // {{{
 
 static void handle_motors(unsigned long long current_time) { // {{{
 	// Check for move.
-	if (stopped && !moving) {
+	if (!computing_move) {
 		movedebug("handle motors not moving");
 		return;
 	}
-	movedebug("handling %d %d", stopped, moving);
+	movedebug("handling %d", computing_move);
 	double factor = 1;
 	double t = (current_time - settings.start_time) / 1e6;
 	if (t >= settings.t0 + settings.tp) {	// Finish this move and prepare next. {{{
@@ -588,10 +588,9 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			cbs_after_current_move += had_cbs;
 			if (factor == 1) {
 				//debug("queue done");
-				stopped = true;
 				if (!did_steps) {
 					//debug("done move");
-					moving = false;
+					computing_move = false;
 				}
 				for (uint8_t s = 0; s < 2; ++s) {
 					Space &sp = spaces[s];
@@ -669,6 +668,8 @@ void store_settings() { // {{{
 	history[current_fragment].queue_end = settings.queue_end;
 	history[current_fragment].queue_full = settings.queue_full;
 	history[current_fragment].run_file_current = settings.run_file_current;
+	history[current_fragment].run_time = settings.run_time;
+	history[current_fragment].run_dist = settings.run_dist;
 	for (int s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		sp.history[current_fragment].dist[0] = sp.settings.dist[0];
@@ -729,6 +730,8 @@ void restore_settings() { // {{{
 	settings.queue_end = history[current_fragment].queue_end;
 	settings.queue_full = history[current_fragment].queue_full;
 	settings.run_file_current = history[current_fragment].run_file_current;
+	settings.run_time = history[current_fragment].run_time;
+	settings.run_dist = history[current_fragment].run_dist;
 	for (int s = 0; s < 2; ++s) {
 		Space &sp = spaces[s];
 		sp.settings.dist[0] = sp.history[current_fragment].dist[0];
@@ -816,7 +819,7 @@ void apply_tick() { // {{{
 void buffer_refill() { // {{{
 	if (moving_to_current == 2)
 		move_to_current();
-	if (!moving || refilling || stopping || discard_pending || discarding) {
+	if (!computing_move || refilling || stopping || discard_pending || discarding) {
 		//debug("refill block %d %d %d", moving, refilling, stopping);
 		return;
 	}
@@ -826,13 +829,13 @@ void buffer_refill() { // {{{
 		send_fragment();
 	//debug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
-	while (moving && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 4 && !sending_fragment) {
+	while (computing_move && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 4 && !sending_fragment) {
 		//debug("refill %d %d %d", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings.current_pos);
 		// fill fragment until full.
 		apply_tick();
 		//debug("refill2 %d %d", current_fragment, spaces[0].motor[0]->settings.current_pos);
 		if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
-			//debug("fragment full %d %d %d", moving, current_fragment_pos, BYTES_PER_FRAGMENT);
+			//debug("fragment full %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
 			send_fragment();
 		}
 		// Check for commands from host; in case of many short buffers, this loop may not end in a reasonable time.
@@ -843,7 +846,7 @@ void buffer_refill() { // {{{
 		refilling = false;
 		return;
 	}
-	if (!moving && current_fragment_pos > 0) {
+	if (!computing_move && current_fragment_pos > 0) {
 		//debug("finalize");
 		send_fragment();
 	}

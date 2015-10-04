@@ -32,8 +32,8 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	run_file_name[name_len] = '\0';
 	strncpy(probe_file_name, probename, probe_name_len);
 	probe_file_name[probe_name_len] = '\0';
-	run_time = 0;
-	run_dist = 0;
+	settings.run_time = 0;
+	settings.run_dist = 0;
 	settings.run_file_current = 0;
 	int probe_fd;
 	if (probe_name_len > 0) {
@@ -287,7 +287,7 @@ void run_file_fill_queue() {
 				queue[settings.queue_end].dist = r.dist;
 				queue[settings.queue_end].cb = false;
 				settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
-				if (stopped)
+				if (!computing_move)
 					next_move();
 				else
 					rundebug("no");
@@ -394,7 +394,7 @@ void run_file_fill_queue() {
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
 		// Done.
 		//debug("done running file");
-		if (stopped && !sending_fragment && !arch_running()) {
+		if (!computing_move && !sending_fragment && !arch_running()) {
 			send_host(CMD_FILE_DONE);
 			abort_run_file();
 		}

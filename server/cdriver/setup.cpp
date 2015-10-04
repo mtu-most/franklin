@@ -42,13 +42,12 @@ void setup(char const *port, char const *run_id)
 	num_active_motors = 0;
 	hwtime_step = 4000;
 	audio_hwtime_step = 1;	// This is set by audio file.
-	moving = false;
 	feedrate = 1;
 	max_deviation = 0;
 	max_v = INFINITY;
 	zoffset = 0;
 	aborting = false;
-	stopped = true;
+	computing_move = false;
 	moving_to_current = 0;
 	prepared = false;
 	stopping = 0;
