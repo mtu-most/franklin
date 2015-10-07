@@ -261,6 +261,10 @@ class Printer: # {{{
 		except:
 			log("No default profile; using 'default'.")
 			self.profile = 'default'
+		profiles = self.list_profiles()
+		if self.profile not in profiles and len(profiles) > 0:
+			log('Default profile does not exist; using %s instead' % self.profile)
+			self.profile = profiles[0]
 		# Fill job queue.
 		self.jobqueue = {}
 		self.audioqueue = {}
@@ -1017,7 +1021,7 @@ class Printer: # {{{
 		#traceback.print_stack()
 		home_v = 50 / self.feedrate
 		if self.home_phase is None:
-			log('_do_home ignored because home_phast is None')
+			log('_do_home ignored because home_phase is None')
 			return
 		if self.home_phase == -1:
 			if done is not None:

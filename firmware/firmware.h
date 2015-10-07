@@ -42,7 +42,7 @@
 } while (0)
 
 // BEGIN reply is the longest command that doesn't depend on NUM_MOTORS.
-#define MAX_REPLY_LEN ((3 + 4 * NUM_MOTORS) > 11 + UUID_SIZE ? (3 + 4 * NUM_MOTORS) : 11 + UUID_SIZE)
+#define MAX_REPLY_LEN ((4 + 4 * NUM_MOTORS) > 11 + UUID_SIZE ? (4 + 4 * NUM_MOTORS) : 11 + UUID_SIZE)
 #define REPLY_BUFFER_SIZE (MAX_REPLY_LEN + (MAX_REPLY_LEN + 2) / 3)
 
 #define SERIAL_BUFFER_SIZE (1 << SERIAL_SIZE_BITS)
