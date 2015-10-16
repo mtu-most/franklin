@@ -210,7 +210,8 @@ void serial(uint8_t channel) {
 							run_file_fill_queue();
 							buffer_refill();
 						}
-						arch_had_ack();
+						if (!preparing)
+							arch_had_ack();
 					}
 					continue;
 				case CMD_NACK3:
@@ -483,10 +484,13 @@ bool prepare_packet(char *the_packet, int size) {
 		debug("packet is too large: %d > %d", size, COMMAND_SIZE);
 		return false;
 	}
+	if (preparing) {
+		debug("Prepare_packet is called recursively.  Aborting.");
+		abort();
+	}
 	// Wait for room in the queue.  This is required to avoid a stall being received in between prepare and send.
 	preparing = true;
 	while (out_busy >= 3) {
-		//debug("avr send");
 		poll(&pollfds[2], 1, -1);
 		serial(1);
 	}

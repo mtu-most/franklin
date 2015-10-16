@@ -1899,8 +1899,17 @@ function xyup(printer, e) { // {{{
 	var pos = get_pointer_pos_xy(printer, e);
 	if (pos[0] != drag[0][0] || pos[1] != drag[1][0])
 		return false;
-	console.info(pos);
-	console.info(drag);
+	if (!(e.buttons & 5))
+		return false;
+	if (e.buttons & 1) {
+		printer.call('line', [[[pos[0], pos[1]]]], {}, function() { update_canvas_and_spans(printer); });
+	}
+	else if (e.buttons & 4) {
+		printer.targetx = pos[0];
+		printer.targety = pos[1];
+		redraw_canvas(printer);
+	}
+	return false;
 }
 // }}}
 
@@ -1944,8 +1953,16 @@ function zup(printer, e) { // {{{
 	var pos = get_pointer_pos_z(printer, e);
 	if (pos != drag[2][0])
 		return false;
-	console.info(pos);
-	console.info(drag);
+	if (!(e.buttons & 5))
+		return false;
+	if (e.buttons & 1) {
+		printer.call('line', [[{2: pos}]], {}, function() { update_canvas_and_spans(printer); });
+	}
+	else if (e.buttons & 4) {
+		printer.targetz = pos;
+		redraw_canvas(printer);
+	}
+	return false;
 }
 // }}}
 

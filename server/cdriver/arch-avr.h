@@ -919,7 +919,7 @@ void arch_addpos(int s, int m, int diff) {
 
 void arch_stop(bool fake) {
 	host_block = true;
-	if (out_busy >= 3) {
+	if (preparing || out_busy >= 3) {
 		//debug("not yet stopping");
 		stop_pending = true;
 		return;
@@ -1008,7 +1008,7 @@ bool arch_send_fragment() {
 void arch_start_move(int extra) {
 	if (host_block)
 		return;
-	if (out_busy >= 3) {
+	if (preparing || out_busy >= 3) {
 		start_pending = true;
 		return;
 	}
@@ -1126,7 +1126,7 @@ void arch_discard() {
 }
 
 void arch_send_spi(int bits, uint8_t *data) {
-	while (preparing || out_busy >= 3) {
+	while (out_busy >= 3) {
 		poll(&pollfds[2], 1, -1);
 		serial(1);
 	}

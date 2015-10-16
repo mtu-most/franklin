@@ -1626,8 +1626,10 @@ class Printer: # {{{
 			self._do_queue()
 		self.wait_for_cb(False)[1](id)
 	# }}}
-	def sleep(self, sleeping = True, update = True): # {{{
+	def sleep(self, sleeping = True, update = True, force = False): # {{{
 		if sleeping:
+			if self.home_phase is not None or (not force and not self.paused and (self.gcode_map is not None or self.gcode_file)):
+				return
 			self.position_valid = False
 			if update:
 				self._globals_update()
@@ -1721,7 +1723,7 @@ class Printer: # {{{
 		for t, temp in enumerate(self.temps):
 			self.settemp(t, float('nan'))
 		self.pause(store = False)
-		self.sleep();
+		self.sleep(force = True);
 		for g, gpio in enumerate(self.gpios):
 			self.set_gpio(g, state = gpio.reset)
 		self._print_done(False, 'aborted by user')
@@ -2119,16 +2121,16 @@ class Printer: # {{{
 		self.confirm_message = message
 		self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
 		for c in self.confirm_waits:
-			self._send(c, 'return', self.confirm_id, self.confirm_message)
+			self._send(c, 'return', (self.confirm_id, self.confirm_message))
 		self.confirm_waits.clear()
 	# }}}
 	def get_confirm_id(self): # {{{
 		return self.confirm_id, self.confirm_message
 	# }}}
 	@delayed
-	def wait_confirm(self, id): # {{{
-		if self.confirmer is not None:
-			self._send(id, 'return', self.confirm_id, self.confirm_message)
+	def wait_confirm(self, id, pending = True): # {{{
+		if pending and self.confirmer is not None:
+			self._send(id, 'return', (self.confirm_id, self.confirm_message))
 			return
 		self.confirm_waits.add(id)
 	# }}}
@@ -2803,7 +2805,7 @@ class Printer: # {{{
 	# Gpio {{{
 	@delayed
 	def wait_gpio(self, id, gpio, value = 1):
-		assert gpio <= len(self.gpios)
+		assert gpio < len(self.gpios)
 		if int(value) == int(self.gpios[gpio].value):
 			self._send(id, 'return', None)
 			return

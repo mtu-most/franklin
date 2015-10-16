@@ -240,7 +240,7 @@ void packet()
 			if (arch_running() && !stop_pending)
 			{
 				debug("Sleeping while moving");
-				abort();
+				//abort();
 				return;
 			}
 			for (uint8_t t = 0; t < 2; ++t) {
@@ -353,7 +353,7 @@ void packet()
 		if (arch_running() && !stop_pending)
 		{
 			debug("Setting position while moving");
-			abort();
+			//abort();
 			return;
 		}
 		double f = get_float(4);

@@ -26,7 +26,7 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 	for (int a = 0; a < sp.num_axes; ++a) {
 		sp.axis[a]->settings.endpos[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0);
 		if (isnan(queue[qpos].data[a0 + a])) {
-			sp.axis[a]->settings.dist[1] = (s == 0 && a == 2 ? zoffset : 0);
+			sp.axis[a]->settings.dist[1] = 0;
 		}
 		else {
 			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
