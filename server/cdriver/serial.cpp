@@ -192,8 +192,11 @@ void serial(uint8_t channel) {
 					if (out_busy > 0 && ((ff_out - out_busy) & 3) == which) // Only if we expected it and it is the right type.
 						out_busy -= 1;
 					if (out_busy < 3) {
-						if (sending_fragment > 0)
+						if (sending_fragment > 0) {
 							sending_fragment -= 1;
+							if (sending_fragment > 0)
+								continue;
+						}
 						if (start_pending) {
 							start_pending = false;
 							arch_start_move(0);
