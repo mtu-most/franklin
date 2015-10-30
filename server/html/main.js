@@ -64,6 +64,7 @@ function init() { // {{{
 	else
 		container.AddClass('nosetup');
 	var reading_temps = false;
+	window.AddEvent('keypress', keypress);
 	setInterval(function() {
 		if (reading_temps || !selected_printer || selected_printer.disabling)
 			return;
@@ -381,6 +382,8 @@ function upload_buttons(port, ul, buttons) { // {{{
 // }}}
 
 function floatkey(event, element) { // {{{
+	if (event.ctrlKey || event.altKey)
+		return;
 	var amount;
 	var set = false;
 	if (event.keyCode == 13) { // Enter
@@ -593,6 +596,7 @@ function new_printer() { // {{{
 	printer.name_values = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
 	printer.temphistory = [];
 	printer.targetangle = 0;
+	printer.nextangle = null;
 	printer.targetx = 0;
 	printer.targety = 0;
 	printer.targetz = 0;
@@ -721,6 +725,7 @@ function do_queue() { // {{{
 	var e = get_element(printer, [null, 'queue']);
 	var q = [];
 	var must_deselect = printer.queue.length > e.options.length;
+	var no_select = e.options.length == 0;
 	for (var i = 0; i < printer.queue.length; ++i)
 		q.push(printer.queue[i][0]);
 	var rm = [];
@@ -746,7 +751,8 @@ function do_queue() { // {{{
 		var option = e.AddElement('option');
 		option.AddText(q[i]);
 		option.value = q[i];
-		option.selected = true;
+		if (!no_select)
+			option.selected = true;
 	}
 	start_move(printer);
 } // }}}
@@ -1414,49 +1420,6 @@ function set_file(printer, id, action) { // {{{
 // }}}
 
 // Canvas functions. {{{
-function move_axis(printer, axes, amounts, pos) { // {{{
-	if (pos === undefined)
-		pos = [];
-	if (pos.length < axes.length) {
-		printer.call('get_axis_pos', [0, axes[pos.length]], {}, function(result) {
-			pos.push(result + amounts[pos.length]);
-			move_axis(printer, axes, amounts, pos);
-		});
-		return;
-	}
-	var target = new Object;
-	for (var a = 0; a < axes.length; ++a)
-		target[axes[a]] = pos[a];
-	printer.call('line', [[target]], {'cb': true}, function() {
-		printer.call('wait_for_cb', [], {}, function() {
-			update_canvas_and_spans(printer);
-		});
-	});
-}
-// }}}
-
-function set_reference(printer, x, y, ctrl) { // {{{
-	printer.call('get_axis_pos', [0, 0], {}, function(current_x) {
-		printer.call('get_axis_pos', [0, 1], {}, function(current_y) {
-			if (ctrl) {
-				printer.reference = [x, y];
-				update_canvas_and_spans(printer);
-			}
-			else {
-				var dx = Math.cos(printer.targetangle) * (x - printer.reference[0]) - Math.sin(printer.targetangle) * (y - printer.reference[1]);
-				var dy = Math.cos(printer.targetangle) * (y - printer.reference[1]) + Math.sin(printer.targetangle) * (x - printer.reference[0]);
-				printer.reference = [x, y];
-				printer.call('line', [[[current_x + dx, current_y + dy]]], {'cb': true}, function() {
-					printer.call('wait_for_cb', [], {}, function() {
-						update_canvas_and_spans(printer);
-					});
-				});
-			}
-		});
-	});
-}
-// }}}
-
 function fill(s) { // {{{
 	s = s.toFixed(0);
 	while (s.length < 2)
@@ -1771,77 +1734,6 @@ function redraw_canvas(printer) { // {{{
 }
 // }}}
 
-function key_move(printer, key, shift, ctrl) { // {{{
-	var value = Number(document.getElementById('move_amount').value);
-	if (shift)
-		value /= 10;
-	var spanx = document.getElementById('move_span_0');
-	var spany = document.getElementById('move_span_1');
-	var spanz = document.getElementById('move_span_2');
-	// 10: enter
-	if (key == 13) {
-		update_canvas_and_spans(printer);
-	}
-	// 27: escape
-	else if (key == 27) {
-		switch_show(false, 'mover');
-		return false;
-	}
-	// 33: pgup
-	else if (key == 33)
-		move_axis(printer, [2], [value]);
-	// 34: pgdn
-	else if (key == 34)
-		move_axis(printer, [2], [-value]);
-	// 37: left
-	else if (key == 37)
-		move_axis(printer, [0], [-value]);
-	// 38: up
-	else if (key == 38)
-		move_axis(printer, [1], [value]);
-	// 39: right
-	else if (key == 39)
-		move_axis(printer, [0], [value]);
-	// 40: down
-	else if (key == 40)
-		move_axis(printer, [1], [-value]);
-	/* numeric 0: reference point is 0,0.
-	else if (key == 96)
-		set_reference(printer, 0, 0, ctrl);
-	// numeric 1: reference point is bottom left.
-	else if (key == 97)
-		set_reference(printer, printer.bbox[0][0], printer.bbox[1][0], ctrl);
-	// numeric 2: reference point is bottom center.
-	else if (key == 98)
-		set_reference(printer, (printer.bbox[0][0] + printer.bbox[0][1]) / 2, printer.bbox[1][0], ctrl);
-	// numeric 3: reference point is bottom right.
-	else if (key == 99)
-		set_reference(printer, printer.bbox[0][1], printer.bbox[1][0], ctrl);
-	// numeric 4: reference point is center left.
-	else if (key == 100)
-		set_reference(printer, printer.bbox[0][0], (printer.bbox[1][0] + printer.bbox[1][1]) / 2, ctrl);
-	// numeric 5: reference point is center.
-	else if (key == 101)
-		set_reference(printer, (printer.bbox[0][0] + printer.bbox[0][1]) / 2, (printer.bbox[1][0] + printer.bbox[1][1]) / 2, ctrl);
-	// numeric 6: reference point is center right.
-	else if (key == 102)
-		set_reference(printer, printer.bbox[0][1], (printer.bbox[1][0] + printer.bbox[1][1]) / 2, ctrl);
-	// numeric 7: reference point is top left.
-	else if (key == 103)
-		set_reference(printer, printer.bbox[0][0], printer.bbox[1][1], ctrl);
-	// numeric 8: reference point is top center.
-	else if (key == 104)
-		set_reference(printer, (printer.bbox[0][0] + printer.bbox[0][1]) / 2, printer.bbox[1][1], ctrl);
-	// numeric 9: reference point is top right.
-	else if (key == 105)
-		set_reference(printer, printer.bbox[0][1], printer.bbox[1][1], ctrl); */
-	else {
-		//dbg('other key:' + key);
-		return true;
-	}
-	return false;
-} // }}}
-
 function start_move(printer) { // {{{
 	// Update bbox.
 	var q = get_element(printer, [null, 'queue']);
@@ -1873,12 +1765,13 @@ function reset_position(printer) { // {{{
 	update_canvas_and_spans(printer);
 } // }}}
 
-var drag = [[NaN, NaN], [NaN, NaN], [NaN, NaN], false];
+var drag = [[NaN, NaN], [NaN, NaN], [NaN, NaN], false, false];
 
 function xydown(printer, e) { // {{{
 	var pos = get_pointer_pos_xy(printer, e);
 	drag[0][0] = pos[0];
 	drag[1][0] = pos[1];
+	drag[4] = false;
 	if (e.button == 0) {
 		printer.call('get_axis_pos', [0, 0], {}, function(x) {
 			printer.call('get_axis_pos', [0, 1], {}, function(y) {
@@ -1897,7 +1790,7 @@ function xydown(printer, e) { // {{{
 
 function xyup(printer, e) { // {{{
 	var pos = get_pointer_pos_xy(printer, e);
-	if (pos[0] != drag[0][0] || pos[1] != drag[1][0])
+	if (drag[4])
 		return false;
 	if (!(e.buttons & 5))
 		return false;
@@ -1914,6 +1807,7 @@ function xyup(printer, e) { // {{{
 // }}}
 
 function xymove(printer, e) { // {{{
+	drag[4] = true;
 	if (drag[3])
 		return false;
 	if (!(e.buttons & 5)) {
@@ -1931,15 +1825,22 @@ function xymove(printer, e) { // {{{
 		printer.call('line', [[[drag[0][1] + dx, drag[1][1] + dy]]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
 	}
 	else if (e.buttons & 4) {
-		printer.targetx = drag[0][1] + dx;
-		printer.targety = drag[1][1] + dy;
-		redraw_canvas(printer);
+		drag[3] = true;
+		printer.call('line', [[[dx, dy]]], {relative: true}, function() {
+			printer.targetx += dx;
+			printer.targety += dy;
+			drag[0][0] += dx;
+			drag[1][0] += dy;
+			drag[3] = false;
+			update_canvas_and_spans(printer);
+		});
 	}
 	return false;
 }
 // }}}
 
 function zdown(printer, e) { // {{{
+	drag[4] = false;
 	drag[2][0] = get_pointer_pos_z(printer, e);
 	if (e.button == 0)
 		printer.call('get_axis_pos', [0, 2], {}, function(z) { drag[2][1] = z; });
@@ -1951,7 +1852,7 @@ function zdown(printer, e) { // {{{
 
 function zup(printer, e) { // {{{
 	var pos = get_pointer_pos_z(printer, e);
-	if (pos != drag[2][0])
+	if (drag[4])
 		return false;
 	if (!(e.buttons & 5))
 		return false;
@@ -1967,6 +1868,7 @@ function zup(printer, e) { // {{{
 // }}}
 
 function zmove(printer, e) { // {{{
+	drag[4] = true;
 	if (drag[3])
 		return false;
 	if (!(e.buttons & 5)) {
@@ -1987,4 +1889,73 @@ function zmove(printer, e) { // {{{
 	return false;
 }
 // }}}
+
+function keypress(event) { // {{{
+	var p = selected_printer;
+	if (!p)
+		return;
+	if (event.keyCode >= 37 && event.keyCode <= 40 && (event.ctrlKey || event.altKey)) {
+		var amount = 10;	// TODO: make this a setting.
+		if (event.shiftKey)
+			amount /= 10;
+		var target = [[-amount, 0], [0, amount], [amount, 0], [0, -amount]][event.keyCode - 37];
+		p.call('line', [[target]], {relative: true}, function() {
+			if (event.altKey) {
+				p.targetx += target[0];
+				p.targety += target[1];
+			}
+			update_canvas_and_spans(p);
+		});
+		event.preventDefault();
+	}
+	else if (event.charCode >= 48 && event.charCode <= 57 && event.ctrlKey) {
+		var minx = p.bbox[0];
+		var maxx = p.bbox[1];
+		var miny = p.bbox[2];
+		var maxy = p.bbox[3];
+		var pos = [[0, 0],
+			[minx, miny], [(minx + maxx) / 2, miny], [maxx, miny],
+			[minx, (miny + maxy) / 2], [(minx + maxx) / 2, (miny + maxy) / 2], [maxx, (miny + maxy) / 2],
+			[minx, maxy], [(minx + maxx) / 2, maxy], [maxx, maxy]][event.charCode - 48];
+		var posx = Math.cos(p.targetangle) * pos[0] - Math.sin(p.targetangle) * pos[1];
+		var posy = Math.cos(p.targetangle) * pos[1] + Math.sin(p.targetangle) * pos[0];
+		posx += p.targetx;
+		posy += p.targety;
+		p.call('line', [[[posx, posy]]], {}, function() { update_canvas_and_spans(p); });
+		event.preventDefault();
+	}
+} // }}}
+
+function update_target(printer, value, target, numtarget) {
+	var old = printer['target' + target];
+	var diff = value - old;
+	var obj = {};
+	obj[numtarget] = diff;
+	printer.call('line', [[obj]], {relative: true}, function() { printer['target' + target] += diff; update_canvas_and_spans(printer); });
+}
+
+function update_angle(printer, value) {
+	if (printer.nextangle !== null) {
+		printer.nextangle = value;
+		return;
+	}
+	printer.call('get_axis_pos', [0], {}, function(pos) {
+		pos[0] -= printer.targetx;
+		pos[1] -= printer.targety;
+		var posx = Math.cos(printer.targetangle) * pos[0] + Math.sin(printer.targetangle) * pos[1];
+		var posy = Math.cos(printer.targetangle) * pos[1] - Math.sin(printer.targetangle) * pos[0];
+		pos[0] = Math.cos(value) * posx - Math.sin(value) * posy + printer.targetx;
+		pos[1] = Math.cos(value) * posy + Math.sin(value) * posx + printer.targety;
+		printer.call('line', [[[pos[0], pos[1]]]], {}, function() {
+			printer.targetangle = value;
+			if (printer.nextangle !== null) {
+				var a = printer.nextangle;
+				printer.nextangle = null;
+				return update_angle(printer, a);
+			}
+			else
+				update_canvas_and_spans(printer);
+		});
+	});
+}
 // }}}

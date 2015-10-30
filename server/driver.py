@@ -342,11 +342,15 @@ class Printer: # {{{
 					self._send(id, 'return', None)
 					return
 				elif func in ('export_settings', 'die'):
+					role = a.pop(0) + '_'
+					# TODO: Use role.
 					ret = getattr(self, ('expert_' if func == 'die' else '') + func)(*a, **ka)
-					self._send(id, 'return', ret)
 					if ret == (WAIT, WAIT):
 						# Special case: request to die.
+						self._send(id, 'return', None)
 						sys.exit(0)
+					else:
+						self._send(id, 'return', ret)
 				else:
 					waiting_commands += ln + '\n'
 	# }}}
@@ -2199,6 +2203,7 @@ class Printer: # {{{
 		erel = None
 		pos = [[float('nan'), float('nan'), float('nan')], [0.], float('inf')]
 		time_dist = [0., 0.]
+		pending = []
 		def add_timedist(type, nums):
 			if type == protocol.parsed['LINE']:
 				if nums[-2] == float('inf'):
@@ -2213,13 +2218,13 @@ class Printer: # {{{
 				pass	# TODO: add time+dist.
 			return nums + time_dist
 		with fhs.write_spool(os.path.join(self.uuid, 'gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin')) as dst:
-			def add_record(type, nums = None):
+			def add_record(type, nums = None, force = False):
 				if nums is None:
 					nums = []
 				if isinstance(nums, dict):
 					nums = [nums['T'], nums['X'], nums['Y'], nums['Z'], nums['E'], nums['f'], nums['F']]
 				nums += [0] * (7 - len(nums))
-				if type == protocol.parsed['LINE']:
+				if not force and type == protocol.parsed['LINE']:
 					for i in range(3):
 						value = nums[i + 1]
 						if math.isnan(value):
@@ -2230,7 +2235,35 @@ class Printer: # {{{
 						if bbox[2 * i + 1] is None or value > bbox[2 * i + 1]:
 							#log('new max bbox %f: %f from %f' % (i, value / 25.4, float('nan' if bbox[2 * i + 1] is None else bbox[2 * i + 1] / 25.4)))
 							bbox[2 * i + 1] = value
+					# Analyze this move in combination with pending moves.
+					if len(pending) == 0:
+						pending.append([0, pos[0][0], pos[0][1], pos[0][2], pos[1][nums[0]], pos[2], pos[2]])
+					if len(pending) < 2:
+						pending.append(nums)
+					if len(pending) == 3:
+						# If the points are not on a circle with equal angles, or the angle is too large, push pending[1] through to output.
+						# Otherwise, record settings.
+						#TODO
+						#d12 = (pending[1][1] - pending[0][1]) ** 2 + (pending[1][2] - pending[0][2]) ** 2
+						#d22 = (pending[2][1] - pending[1][1]) ** 2 + (pending[2][2] - pending[1][2]) ** 2
+						#de1 = pending[1][4] - pending[0][4]
+						#de2 = pending[2][4] - pending[1][4]
+						#f = pending[0][5]
+						#current_arc = ...
+						pending.append(nums)
+					if len(pending) > 3:
+						# TODO: If new point doesn't fit on circle, push pending as circle to output.  Otherwise, add current point.
+						pending.append(nums)
+					flush_pending()
+					return
+				else:
+					flush_pending()
 				dst.write(struct.pack('=Bl' + 'd' * 8, type, *add_timedist(type, nums)))
+			def flush_pending():
+				tmp = pending[1:]
+				pending[:] = []
+				for p in tmp:
+					add_record(protocol.parsed['LINE'], p, True)
 			def add_string(string):
 				if string is None:
 					return 0
@@ -2536,6 +2569,7 @@ class Printer: # {{{
 					else:
 						errors.append('%d:invalid gcode command %s' % (lineno, repr((cmd, args))))
 					message = None
+			flush_pending()
 			stringmap = []
 			size = 0
 			for s in strings:

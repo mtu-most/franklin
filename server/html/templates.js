@@ -426,11 +426,11 @@ function Map() { // {{{
 	b.printer = printer;
 	b.type = 'button';
 	t.Add(make_tablerow('Target:', [
-		Float([null, 'targetx'], 2, 1, '', function(v) { b.printer.targetx = v; update_canvas_and_spans(b.printer); }),
-		Float([null, 'targety'], 2, 1, '', function(v) { b.printer.targety = v; update_canvas_and_spans(b.printer); }),
-		Float([null, 'targetz'], 2, 1, '', function(v) { b.printer.targetz = v; update_canvas_and_spans(b.printer); }),
+		Float([null, 'targetx'], 2, 1, '', function(v) { update_target(b.printer, v, 'x', 0); }),
+		Float([null, 'targety'], 2, 1, '', function(v) { update_target(b.printer, v, 'y', 1); }),
+		Float([null, 'targetz'], 2, 1, '', function(v) { update_target(b.printer, v, 'z', 2); }),
 		b,
-		['Angle:', Float([null, 'targetangle'], 1, Math.PI / 180, '', function(v) { b.printer.targetangle = v; update_canvas_and_spans(b.printer); }), '°']
+		['Angle:', Float([null, 'targetangle'], 1, Math.PI / 180, '', function(v) { update_angle(b.printer, v); }), '°']
 	], ['', '', '', '', '', '']));
 	// Canvas for xy and for z.
 	var c = ret.AddElement('canvas', 'xymap');

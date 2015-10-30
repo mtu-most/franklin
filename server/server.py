@@ -507,7 +507,7 @@ class Port: # {{{
 			self.uuid = vars['uuid']
 			# Copy settings from orphan with the same run_id, then kill the orphan.
 			if self.run_id in orphans and orphans[self.run_id].uuid == self.uuid:
-				orphans[self.run_id].call('admin', 'export_settings', (), {}, get_settings)
+				orphans[self.run_id].call('export_settings', ('admin',), {}, get_settings)
 		self.call('send_printer', ['admin', None], {}, lambda success, data: success and self.call('get_globals', ('admin',), {}, get_vars))
 	# }}}
 	def call(self, name, args, kargs, cb): # {{{
@@ -551,9 +551,10 @@ class Port: # {{{
 			port = self.port
 			ports[self.port] = None
 			# If there already is an orphan with the same uuid, kill the old orphan.
-			for o in [x for x in orphans if x[0] == self.uuid]:
+			for o in [x for x in orphans if orphans[x].uuid == self.uuid]:
 				# This for loop always runs 0 or 1 times, never more.
 				log('killing duplicate orphan')
+				orphans[o].call('die', ('admin', 'replaced by connection with same uuid',), {}, lambda success, ret: None)
 				del orphans[x]
 			orphans[self.run_id] = self
 			Connection._broadcast(None, 'del_printer', port)
