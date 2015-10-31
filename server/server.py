@@ -342,7 +342,8 @@ class Connection: # {{{
 		if port == '/dev/ttyO0':
 			return (('bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone)'),)
 		else:
-			return (('melzi', 'atmega1284p with optiboot (Melzi)'), ('sanguinololu', 'atmega1284p (Sanguinololu)'), ('ramps', 'atmega2560 (Ramps)'), ('mega', 'atmega1280'), ('mini', 'atmega328 (Uno)'))
+			#return (('melzi', 'atmega1284p with optiboot (Melzi)'), ('sanguinololu', 'atmega1284p (Sanguinololu)'), ('ramps', 'atmega2560 (Ramps)'), ('mega', 'atmega1280'), ('mini', 'atmega328 (Uno)'))
+			return (('melzi', 'atmega1284p with optiboot (Melzi)'), ('sanguinololu', 'atmega1284p (Sanguinololu)'), ('ramps', 'atmega2560 (Ramps)'))
 	# }}}
 	def _get_info(self, board): # {{{
 		sudo = ()
@@ -366,14 +367,14 @@ class Connection: # {{{
 			protocol = 'wiring'
 			baudrate = ('-b', '115200')
 			mcu = 'atmega2560'
-		elif board == 'mega':
-			protocol = 'arduino'
-			baudrate = ('-b', '57600')
-			mcu = 'atmega1280'
-		elif board == 'mini':
-			protocol = 'wiring'
-			baudrate = ('-b', '115200')
-			mcu = 'atmega328'
+		#elif board == 'mega':
+		#	protocol = 'arduino'
+		#	baudrate = ('-b', '57600')
+		#	mcu = 'atmega1280'
+		#elif board == 'mini':
+		#	protocol = 'wiring'
+		#	baudrate = ('-b', '115200')
+		#	mcu = 'atmega328'
 		else:
 			raise ValueError('board type not supported')
 		return sudo, board, protocol, baudrate, mcu
