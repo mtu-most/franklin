@@ -1769,14 +1769,17 @@ class Printer: # {{{
 							self.movecb.remove(self.home_cb)
 							if self.home_id is not None:
 								self._send(self.home_id, 'return', None)
+						store = False
 					if self.probe_cb in self.movecb:
 						#log('killing prober')
 						self.movecb.remove(self.probe_cb)
 						self.probe_cb[1](None)
+						store = False
 					#log('pausing gcode %d/%d/%d' % (self.queue_pos, s, len(self.queue)))
 					if self.flushing is None:
 						self.flushing = False
-					self.queue_info = [len(self.queue) if self.gcode_file else self.queue_pos - s, [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing]
+					if store:
+						self.queue_info = [len(self.queue) if self.gcode_file else self.queue_pos - s, [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing]
 				else:
 					#log('stopping')
 					self.paused = False
