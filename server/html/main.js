@@ -550,7 +550,7 @@ function queue_print(printer) { // {{{
 	var sina = Math.sin(angle);
 	var cosa = Math.cos(angle);
 	var action = function(a) {
-		printer.call(a, [get_queue(printer), [printer.targetx, printer.targety, printer.targetz], angle * 180 / Math.PI], {});
+		printer.call(a, [get_queue(printer), angle * 180 / Math.PI], {});
 	};
 	if (get_element(printer, [null, 'probebox']).checked)
 		action('queue_probe');
@@ -597,9 +597,6 @@ function new_printer() { // {{{
 	printer.temphistory = [];
 	printer.targetangle = 0;
 	printer.nextangle = null;
-	printer.targetx = 0;
-	printer.targety = 0;
-	printer.targetz = 0;
 	printer.disabling = false;
 	printer.temptargets = [];
 	printer.hidetypes = [];
@@ -613,9 +610,6 @@ function new_printer() { // {{{
 	ports[port][1].AddClass('connected');
 	ports[port][2].RemoveClass('notconnected');
 	ports[port][2].AddClass('connected');
-	update_float(printer, [null, 'targetx']);
-	update_float(printer, [null, 'targety']);
-	update_float(printer, [null, 'targetz']);
 	update_globals();
 	for (var i = 0; i < 2; ++i)
 		update_space(i);
@@ -751,7 +745,7 @@ function do_queue() { // {{{
 		var option = e.AddElement('option');
 		option.AddText(q[i]);
 		option.value = q[i];
-		if (!no_select)
+		if (i == 0 || !no_select)
 			option.selected = true;
 	}
 	start_move(printer);
@@ -812,6 +806,8 @@ function update_globals() { // {{{
 	update_float(printer, [null, 'feedrate']);
 	update_float(printer, [null, 'max_deviation']);
 	update_float(printer, [null, 'max_v']);
+	update_float(printer, [null, 'targetx']);
+	update_float(printer, [null, 'targety']);
 	update_float(printer, [null, 'zoffset']);
 	update_checkbox(printer, [null, 'store_adc']);
 	update_checkbox(printer, [null, 'park_after_print']);
@@ -1473,9 +1469,6 @@ function update_canvas_and_spans(p, space, axis) { // {{{
 			e.AddText('State: ' + state[0]);
 		else
 			e.AddText('State: ' + state[0] + ' - Time: ' + display_time(state[1]) + '/' + display_time(state[2]) + ' - Remaining: ' + display_time(state[2] - state[1]));
-		update_float(p, [null, 'targetx']);
-		update_float(p, [null, 'targety']);
-		update_float(p, [null, 'targetz']);
 		update_float(p, [null, 'targetangle']);
 		redraw_canvas(p);
 	});
@@ -1486,7 +1479,7 @@ function redraw_canvas(printer) { // {{{
 	if (printer.spaces.length < 1 || printer.spaces[0].axis.length < 1)
 		return;
 	var canvas = document.getElementById(make_id(printer, [null, 'xymap']));
-	if (printer.spaces[0].axis.length >= 2) {
+	if (printer.spaces[0].axis.length >= 2) { // Draw XY {{{
 		var c = canvas.getContext('2d');
 		var box = document.getElementById(make_id(printer, [null, 'map']));
 		var extra_height = box.clientHeight - canvas.clientHeight;
@@ -1676,10 +1669,18 @@ function redraw_canvas(printer) { // {{{
 
 		c.restore();
 		c.restore();
-	}
+	} // }}}
 
-	if (printer.spaces[0].axis.length != 2) {
-		var zaxis = printer.spaces[0].axis[printer.spaces[0].axis.length >= 3 ? 2 : 0];
+	if (printer.spaces[0].axis.length != 2) { // Draw Z {{{
+		var zaxis, zoffset;
+		if (printer.spaces[0].axis.length >= 3) {
+			zaxis = printer.spaces[0].axis[2];
+			zoffset = printer.zoffset;
+		}
+		else {
+			zaxis = printer.spaces[0].axis[0];
+			zoffset = 0;
+		}
 		var zcanvas = document.getElementById(make_id(printer, [null, 'zmap']));
 		var zc = zcanvas.getContext('2d');
 		zcanvas.style.height = canvas.clientWidth + 'px';
@@ -1704,9 +1705,9 @@ function redraw_canvas(printer) { // {{{
 
 		// Draw current position.
 		zc.beginPath();
-		zc.moveTo(0, zaxis.current);
-		zc.lineTo(-d, zaxis.current - d);
-		zc.lineTo(-d, zaxis.current + d);
+		zc.moveTo(0, zaxis.current + zoffset);
+		zc.lineTo(-d, zaxis.current - d + zoffset);
+		zc.lineTo(-d, zaxis.current + d + zoffset);
 		zc.closePath();
 		zc.fillStyle = '#44f';
 		zc.fill();
@@ -1720,17 +1721,7 @@ function redraw_canvas(printer) { // {{{
 		zc.strokeStyle = '#888';
 		zc.lineWidth = 1.2 / zfactor;
 		zc.stroke();
-
-		// Draw target position.
-		zc.beginPath();
-		zc.moveTo(0, printer.targetz);
-		zc.lineTo(-d, printer.targetz - d);
-		zc.lineTo(-d, printer.targetz + d);
-		zc.closePath();
-		zc.strokeStyle = '#000';
-		zc.lineWidth = 1.5 / zfactor;
-		zc.stroke();
-	}
+	} // }}}
 }
 // }}}
 
@@ -1798,9 +1789,8 @@ function xyup(printer, e) { // {{{
 		printer.call('line', [[[pos[0], pos[1]]]], {}, function() { update_canvas_and_spans(printer); });
 	}
 	else if (e.buttons & 4) {
-		printer.targetx = pos[0];
-		printer.targety = pos[1];
-		redraw_canvas(printer);
+		drag[3] = true;
+		printer.call('set_globals', [], {'targetx': pos[0], 'targety': pos[1]}, function() { drag[3] = false; });
 	}
 	return false;
 }
@@ -1827,12 +1817,11 @@ function xymove(printer, e) { // {{{
 	else if (e.buttons & 4) {
 		drag[3] = true;
 		printer.call('line', [[[dx, dy]]], {relative: true}, function() {
-			printer.targetx += dx;
-			printer.targety += dy;
-			drag[0][0] += dx;
-			drag[1][0] += dy;
-			drag[3] = false;
-			update_canvas_and_spans(printer);
+			printer.call('set_globals', [], {'targetx': printer.targetx + dx, 'targety': printer.targety + dy}, function() {
+				drag[0][0] += dx;
+				drag[1][0] += dy;
+				drag[3] = false;
+			});
 		});
 	}
 	return false;
@@ -1844,8 +1833,6 @@ function zdown(printer, e) { // {{{
 	drag[2][0] = get_pointer_pos_z(printer, e);
 	if (e.button == 0)
 		printer.call('get_axis_pos', [0, 2], {}, function(z) { drag[2][1] = z; });
-	else
-		drag[2][1] = printer.targetz;
 	return false;
 }
 // }}}
@@ -1858,10 +1845,6 @@ function zup(printer, e) { // {{{
 		return false;
 	if (e.buttons & 1) {
 		printer.call('line', [[{2: pos}]], {}, function() { update_canvas_and_spans(printer); });
-	}
-	else if (e.buttons & 4) {
-		printer.targetz = pos;
-		redraw_canvas(printer);
 	}
 	return false;
 }
@@ -1882,10 +1865,6 @@ function zmove(printer, e) { // {{{
 		drag[3] = true;
 		printer.call('line', [[{2: drag[2][1] + dz}]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
 	}
-	else if (e.buttons & 4) {
-		printer.targetz = drag[2][1] + dz;
-		redraw_canvas(printer);
-	}
 	return false;
 }
 // }}}
@@ -1901,10 +1880,10 @@ function keypress(event) { // {{{
 		var target = [[-amount, 0], [0, amount], [amount, 0], [0, -amount]][event.keyCode - 37];
 		p.call('line', [[target]], {relative: true}, function() {
 			if (event.altKey) {
-				p.targetx += target[0];
-				p.targety += target[1];
+				printer.call('set_globals', [], {'targetx': printer.targetx + target[0], 'targety': printer.targety + target[1]});
 			}
-			update_canvas_and_spans(p);
+			else
+				update_canvas_and_spans(p);
 		});
 		event.preventDefault();
 	}
@@ -1926,15 +1905,7 @@ function keypress(event) { // {{{
 	}
 } // }}}
 
-function update_target(printer, value, target, numtarget) {
-	var old = printer['target' + target];
-	var diff = value - old;
-	var obj = {};
-	obj[numtarget] = diff;
-	printer.call('line', [[obj]], {relative: true}, function() { printer['target' + target] += diff; update_canvas_and_spans(printer); });
-}
-
-function update_angle(printer, value) {
+function update_angle(printer, value) { // {{{
 	if (printer.nextangle !== null) {
 		printer.nextangle = value;
 		return;
@@ -1958,4 +1929,5 @@ function update_angle(printer, value) {
 		});
 	});
 }
+// }}}
 // }}}

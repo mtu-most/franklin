@@ -23,8 +23,8 @@ struct String {
 
 static String *strings;
 
-void run_file(int name_len, char const *name, int probe_name_len, char const *probename, bool start, double refx, double refy, double refz, double sina, double cosa, int audio) {
-	rundebug("run file %d %f %f %f %f %f", start, refx, refy, refz, sina, cosa);
+void run_file(int name_len, char const *name, int probe_name_len, char const *probename, bool start, double sina, double cosa, int audio) {
+	rundebug("run file %d %f %f", start, sina, cosa);
 	abort_run_file();
 	if (name_len == 0)
 		return;
@@ -114,9 +114,8 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	run_file_wait = start ? 0 : 1;
 	run_file_timer.it_interval.tv_sec = 0;
 	run_file_timer.it_interval.tv_nsec = 0;
-	run_file_refx = refx;
-	run_file_refy = refy;
-	run_file_refz = refz;
+	run_file_refx = targetx;
+	run_file_refy = targety;
 	run_file_sina = sina;
 	run_file_cosa = cosa;
 	run_file_audio = audio;
@@ -249,7 +248,7 @@ void run_file_fill_queue() {
 			{
 				double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
 				double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
-				double z = r.Z + run_file_refz;
+				double z = r.Z;
 				//debug("line %f %f %f", x, y, z);
 				queue[settings.queue_end].center[0] = x;
 				queue[settings.queue_end].center[1] = y;
@@ -268,7 +267,7 @@ void run_file_fill_queue() {
 				queue[settings.queue_end].f[1] = r.F;
 				double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
 				double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
-				double z = r.Z + run_file_refz;
+				double z = r.Z;
 				//debug("line/arc %f %f %f", x, y, z);
 				int num0 = spaces[0].num_axes;
 				if (num0 > 0) {

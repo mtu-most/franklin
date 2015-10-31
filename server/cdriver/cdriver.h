@@ -375,7 +375,7 @@ EXTERN uint16_t timeout;
 EXTERN int bed_id, fan_id, spindle_id;
 //EXTERN double room_T;	//[°C]
 EXTERN double feedrate;		// Multiplication factor for f values, used at start of move.
-EXTERN double zoffset;	// Offset for axis 2 of space 0.
+EXTERN double targetx, targety, zoffset;	// Offset for axis 2 of space 0.
 // Other variables.
 EXTERN Serial_t *serialdev[2];
 EXTERN unsigned char command[2][FULL_COMMAND_SIZE];
@@ -468,7 +468,7 @@ struct ProbeFile {
 	unsigned long nx, ny;
 	double sample[0];
 } __attribute__((__packed__));
-void run_file(int name_len, char const *name, int probe_name_len, char const *probe_name, bool start, double refx, double refy, double refz, double sina, double cosa, int audio);
+void run_file(int name_len, char const *name, int probe_name_len, char const *probe_name, bool start, double sina, double cosa, int audio);
 void abort_run_file();
 void run_file_fill_queue();
 EXTERN char probe_file_name[256];

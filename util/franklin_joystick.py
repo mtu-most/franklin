@@ -66,7 +66,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 
 	#print('axes: %d buttons: %d' % (num_axes, num_buttons))
 
-	controls = {2: [0, 0, 1], 0: [1, 0, 0], 1: [0, -1, 0], 5: [0, 0, -1]}
+	controls = {2: [0, 0, 1, 0, 0], 0: [1, 0, 0, 0, 0], 1: [0, -1, 0, 0, 0], 5: [0, 0, -1, 0, 0], 3: [0, 0, 0, 1, 0], 4: [0, 0, 0, 0, -1]}
 	controls.update(axes)
 	mem = {}
 
@@ -135,8 +135,8 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		running[0] &= button_action[num]()
 
 	def my_tick():
-		move = [0., 0., 0.]
-		n = [0, 0, 0]
+		move = [0., 0., 0., 0., 0.]
+		n = [0, 0, 0, 0, 0]
 		for a in controls:
 			if a >= len(axis_state):
 				print('invalid control %d >= %d' % (a, len(axes)))
@@ -147,18 +147,19 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 					move[c] += v * axis_state[a] / (1 << 15)
 		for i, nn in enumerate(n):
 			move[i] /= nn
-		d = (move[0] ** 2 + move[1] ** 2) ** .5
-		if d <= dead:
-			move[0] = 0.
-			move[1] = 0.
-		else:
-			new_d = d - dead
-			if d >= dmax:
-				factor = vmax / d
+		for stick in (0, 3):
+			d = (move[stick + 0] ** 2 + move[stick + 1] ** 2) ** .5
+			if d <= dead:
+				move[stick + 0] = 0.
+				move[stick + 1] = 0.
 			else:
-				factor = c4 * new_d ** 4 + c2 * new_d ** 2
-			move[0] *= factor * cfg['tick_time']
-			move[1] *= factor * cfg['tick_time']
+				new_d = d - dead
+				if d >= dmax:
+					factor = vmax / d
+				else:
+					factor = c4 * new_d ** 4 + c2 * new_d ** 2
+				move[stick + 0] *= factor * cfg['tick_time']
+				move[stick + 1] *= factor * cfg['tick_time']
 		move[2] *= (c4 * move[2] ** 4 + c2 * move[2] ** 2) * cfg['tick_time']
 		if tick:
 			ret = tick(axes, move)
@@ -166,8 +167,18 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 				return True
 			if ret is False:
 				return False
-		if any(move):
-			printer.line_cb([move], relative = True)
+		move[0] += move[3]
+		move[1] += move[4]
+		if any(move[:3]):
+			printer.line_cb([move[:3]], relative = True)
+		if any(move[3:]):
+			target = {}
+			g = printer.get_globals()
+			if move[3]:
+				target['targetx'] = move[3] + g['targetx']
+			if move[4]:
+				target['targety'] = move[4] + g['targety']
+			printer.set_globals(**target)
 		return True
 
 	def handle_js():

@@ -137,6 +137,8 @@ function _setup_updater() {
 					feedrate: 1,
 					max_deviation: 0,
 					max_v: 0,
+					targetx: 0,
+					targety: 0,
 					zoffset: 0,
 					store_adc: false,
 					temp_scale_min: 0,
@@ -225,15 +227,17 @@ function _setup_updater() {
 			printers[port].feedrate = values[13];
 			printers[port].max_deviation = values[14];
 			printers[port].max_v = values[15];
-			printers[port].zoffset = values[16];
-			printers[port].store_adc = values[17];
-			printers[port].park_after_print = values[18];
-			printers[port].sleep_after_print = values[19];
-			printers[port].cool_after_print = values[20];
-			printers[port].spi_setup = values[21];
-			printers[port].temp_scale_min = values[22];
-			printers[port].temp_scale_max = values[23];
-			printers[port].status = values[24];
+			printers[port].targetx = values[16];
+			printers[port].targety = values[17];
+			printers[port].zoffset = values[18];
+			printers[port].store_adc = values[19];
+			printers[port].park_after_print = values[20];
+			printers[port].sleep_after_print = values[21];
+			printers[port].cool_after_print = values[22];
+			printers[port].spi_setup = values[23];
+			printers[port].temp_scale_min = values[24];
+			printers[port].temp_scale_max = values[25];
+			printers[port].status = values[26];
 			for (var i = printers[port].num_temps; i < new_num_temps; ++i) {
 				printers[port].temps.push({
 					name: null,

@@ -45,6 +45,8 @@ void setup(char const *port, char const *run_id)
 	feedrate = 1;
 	max_deviation = 0;
 	max_v = INFINITY;
+	targetx = 0;
+	targety = 0;
 	zoffset = 0;
 	aborting = false;
 	computing_move = false;

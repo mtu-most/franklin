@@ -211,8 +211,8 @@ void packet()
 			//debug("no movecbs to add (prev %d)", settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs);
 			buffer_refill();
 		}
-		else
-			debug("waiting with move");
+		//else
+		//	debug("waiting with move");
 		break;
 	}
 	case CMD_RUN_FILE: // Run commands from a file.
@@ -220,13 +220,13 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_RUN_FILE");
 #endif
-		ReadFloat args[5];
+		ReadFloat args[2];
 		for (int i = 0; i < sizeof(double); ++i)
 		{
-			for (int j = 0; j < 5; ++j)
+			for (int j = 0; j < 2; ++j)
 				args[j].b[i] = command[0][3 + i + j * sizeof(double)];
 		}
-		run_file(command[0][0] - 45 - command[0][44], reinterpret_cast<char const *>(&command[0][45]), command[0][44], reinterpret_cast<char const *>(&command[0][45 + command[0][44]]), command[0][2], args[0].f, args[1].f, args[2].f, args[3].f, args[4].f, uint8_t(command[0][43]) == 0xff ? -1 : command[0][43]);
+		run_file(command[0][0] - 21 - command[0][20], reinterpret_cast<char const *>(&command[0][21]), command[0][20], reinterpret_cast<char const *>(&command[0][21 + command[0][20]]), command[0][2], args[0].f, args[1].f, uint8_t(command[0][19]) == 0xff ? -1 : command[0][19]);
 		break;
 	}
 	case CMD_SLEEP:	// Enable or disable motor current

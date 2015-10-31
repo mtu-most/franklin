@@ -413,22 +413,18 @@ function Map() { // {{{
 		Float([['axis', [0, 0]], 'current'], 2, 1, '', function(v) { b.printer.call('line', [[{0: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
 		Float([['axis', [0, 1]], 'current'], 2, 1, '', function(v) { b.printer.call('line', [[{1: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
 		Float([['axis', [0, 2]], 'current'], 2, 1, '', function(v) { b.printer.call('line', [[{2: v}]], {cb: true}); b.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
-		b,
-		[[add_name('axis', 0, 2), ' Offset:'], Float([null, 'zoffset'], 2, 1), ' ', add_name('unit', 0, 0)]
+		b
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
 	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
-		b.printer.targetx = b.printer.spaces[0].axis[0].current;
-		b.printer.targety = b.printer.spaces[0].axis[1].current;
-		// Don't copy Z.
-		update_canvas_and_spans(b.printer);
+		b.printer.call('set_globals', [], {'targetx': b.printer.spaces[0].axis[0].current, 'targety': b.printer.spaces[0].axis[1].current});
 	});
 	b.printer = printer;
 	b.type = 'button';
 	t.Add(make_tablerow('Target:', [
-		Float([null, 'targetx'], 2, 1, '', function(v) { update_target(b.printer, v, 'x', 0); }),
-		Float([null, 'targety'], 2, 1, '', function(v) { update_target(b.printer, v, 'y', 1); }),
-		Float([null, 'targetz'], 2, 1, '', function(v) { update_target(b.printer, v, 'z', 2); }),
+		Float([null, 'targetx'], 2, 1),
+		Float([null, 'targety'], 2, 1),
+		Float([null, 'zoffset'], 2, 1),
 		b,
 		['Angle:', Float([null, 'targetangle'], 1, Math.PI / 180, '', function(v) { update_angle(b.printer, v); }), '°']
 	], ['', '', '', '', '', '']));
