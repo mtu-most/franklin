@@ -1244,6 +1244,7 @@ class Printer: # {{{
 			self.probing = False
 			if id is not None:
 				self._send(id, 'error', 'aborted')
+			self._print_done(False, 'Probe aborted')
 			return
 		self.probing = True
 		if not self.position_valid:
@@ -1367,8 +1368,8 @@ class Printer: # {{{
 				x, y, w, h = self.probemap[0]
 				# Transform origin because only rotation is done by cdriver.
 				x, y = cosa * x - sina * y, cosa * y + sina * x
-				x += targetx
-				y += targety
+				x += self.targetx
+				y += self.targety
 				x, y = cosa * x + sina * y, cosa * y - sina * x
 				probemap_file.write(struct.pack('@ddddddLL', x, y, w, h, sina, cosa, *self.probemap[1]))
 				for y in range(self.probemap[1][1] + 1):
@@ -2601,7 +2602,7 @@ class Printer: # {{{
 	@delayed
 	def queue_print(self, id, names, angle = 0, probemap = None): # {{{
 		if len(self.jobs_active) > 0 and not self.paused:
-			log('ignoring print request while print is in progress')
+			log('ignoring probe request while print is in progress: %s' % repr(self.jobs_active) + str(self.paused))
 			if id is not None:
 				self._send(id, 'return', None)
 			return
@@ -2617,7 +2618,7 @@ class Printer: # {{{
 	@delayed
 	def queue_probe(self, id, names, angle = 0, speed = 3): # {{{
 		if len(self.jobs_active) > 0 and not self.paused:
-			log('ignoring probe request while print is in progress')
+			log('ignoring probe request while print is in progress: %s' % repr(self.jobs_active) + str(self.paused))
 			if id is not None:
 				self._send(id, 'return', None)
 			return
@@ -2890,10 +2891,10 @@ class Printer: # {{{
 			self._temp_update(i, target)
 		for i, g in enumerate(self.gpios):
 			self._gpio_update(i, target)
-		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
-		self._broadcast(None, 'audioqueue', self.audioqueue.keys())
+		self._broadcast(target, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
+		self._broadcast(target, 'audioqueue', self.audioqueue.keys())
 		if self.confirmer is not None:
-			self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
+			self._broadcast(target, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
 	# }}}
 # }}}

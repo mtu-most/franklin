@@ -116,6 +116,7 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	run_file_timer.it_interval.tv_nsec = 0;
 	run_file_refx = targetx;
 	run_file_refy = targety;
+	//debug("run target %f %f", targetx, targety);
 	run_file_sina = sina;
 	run_file_cosa = cosa;
 	run_file_audio = audio;

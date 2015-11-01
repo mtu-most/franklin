@@ -282,6 +282,7 @@ uint8_t next_move() { // {{{
 
 	if (queue[settings.queue_start].cb)
 		cbs_after_current_move += 1;
+	//debug("add cb to current starting at %d", current_fragment);
 	if (settings.queue_end == settings.queue_start)
 		send_host(CMD_CONTINUE, 0);
 	settings.queue_full = false;

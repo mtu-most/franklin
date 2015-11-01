@@ -8,6 +8,7 @@
 
 bool globals_load(int32_t &addr)
 {
+	bool change_hw = false;
 	uint8_t nt = read_8(addr);
 	uint8_t ng = read_8(addr);
 	// Free the old memory and initialize the new memory.
@@ -37,10 +38,22 @@ bool globals_load(int32_t &addr)
 		num_gpios = ng;
 	}
 	ldebug("new done");
+	int p = led_pin.write();
 	led_pin.read(read_16(addr));
+	if (p != led_pin.write())
+		change_hw = true;
+	p = probe_pin.write();
 	probe_pin.read(read_16(addr));
+	if (p != probe_pin.write())
+		change_hw = true;
+	p = spiss_pin.write();
 	spiss_pin.read(read_16(addr));
+	if (p != spiss_pin.write())
+		change_hw = true;
+	int t = timeout;
 	timeout = read_16(addr);
+	if (t != timeout)
+		change_hw = true;
 	bed_id = read_16(addr);
 	fan_id = read_16(addr);
 	spindle_id = read_16(addr);
@@ -88,7 +101,8 @@ bool globals_load(int32_t &addr)
 		store_adc = NULL;
 	}
 	ldebug("all done");
-	arch_motors_change();
+	if (change_hw)
+		arch_motors_change();
 	return true;
 }
 

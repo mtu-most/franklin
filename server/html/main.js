@@ -1756,7 +1756,7 @@ function reset_position(printer) { // {{{
 	update_canvas_and_spans(printer);
 } // }}}
 
-var drag = [[NaN, NaN], [NaN, NaN], [NaN, NaN], false, false];
+var drag = [[NaN, NaN], [NaN, NaN], [NaN, NaN], 0, false];
 
 function xydown(printer, e) { // {{{
 	var pos = get_pointer_pos_xy(printer, e);
@@ -1789,8 +1789,8 @@ function xyup(printer, e) { // {{{
 		printer.call('line', [[[pos[0], pos[1]]]], {}, function() { update_canvas_and_spans(printer); });
 	}
 	else if (e.buttons & 4) {
-		drag[3] = true;
-		printer.call('set_globals', [], {'targetx': pos[0], 'targety': pos[1]}, function() { drag[3] = false; });
+		drag[3] += 1;
+		printer.call('set_globals', [], {'targetx': pos[0], 'targety': pos[1]}, function() { drag[3] -= 1; });
 	}
 	return false;
 }
@@ -1811,16 +1811,16 @@ function xymove(printer, e) { // {{{
 	if (isNaN(drag[0][1]) || isNaN(drag[1][1]))
 		return false;
 	if (e.buttons & 1) {
-		drag[3] = true;
-		printer.call('line', [[[drag[0][1] + dx, drag[1][1] + dy]]], {}, function() { drag[3] = false; update_canvas_and_spans(printer); });
+		drag[3] += 1;
+		printer.call('line', [[[drag[0][1] + dx, drag[1][1] + dy]]], {}, function() { drag[3] -= 1; update_canvas_and_spans(printer); });
 	}
 	else if (e.buttons & 4) {
-		drag[3] = true;
+		drag[3] += 1;
 		printer.call('line', [[[dx, dy]]], {relative: true}, function() {
-			printer.call('set_globals', [], {'targetx': printer.targetx + dx, 'targety': printer.targety + dy}, function() {
+			printer.call('move_target', [dx, dy], {}, function() {
 				drag[0][0] += dx;
 				drag[1][0] += dy;
-				drag[3] = false;
+				drag[3] -= 1;
 			});
 		});
 	}
