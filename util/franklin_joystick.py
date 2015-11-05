@@ -172,7 +172,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		if any(move[:3]):
 			printer.line_cb([move[:3]], relative = True)
 		if any(move[3:]):
-			printer.move_target(*move[3:])
+			printer.move_target.event(*move[3:])
 		return True
 
 	def handle_js():
