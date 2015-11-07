@@ -1244,10 +1244,11 @@ class Printer: # {{{
 			self.probing = False
 			if id is not None:
 				self._send(id, 'error', 'aborted')
+			self._print_done(False, 'Probe aborted')
 			return
 		self.probing = True
 		if not self.position_valid:
-			self.home(cb = lambda good: self._do_probe(id, x, y, z, angle, speed, phase, good), abort = False)[1](None)
+			self.home(cb = lambda: self._do_probe(id, x, y, z, angle, speed, phase, True), abort = False)[1](None)
 			return
 		p = self.probemap
 		if phase == 0:
@@ -1272,6 +1273,7 @@ class Printer: # {{{
 			# Goto x,y
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 1, good)
 			self.movecb.append(self.probe_cb)
+			#log(repr(self.movecb))
 			px = p[0][0] + p[0][2] * x / p[1][0]
 			py = p[0][1] + p[0][3] * y / p[1][1]
 			self.line([[self.targetx + px * self.gcode_angle[1] - py * self.gcode_angle[0], self.targety + py * self.gcode_angle[1] + px * self.gcode_angle[0]]], cb = True)[1](None)
@@ -1283,6 +1285,7 @@ class Printer: # {{{
 				z_low = self.spaces[0].axis[2]['min']
 				self.line([{2: z_low}], f0 = float(speed) / (z - z_low) if z > z_low else float('inf'), cb = True, probe = True)[1](None)
 			else:
+				#log('confirm probe')
 				self.request_confirmation('Please move the tool to the surface')[1](False)
 		else:
 			# Record result
@@ -1367,8 +1370,8 @@ class Printer: # {{{
 				x, y, w, h = self.probemap[0]
 				# Transform origin because only rotation is done by cdriver.
 				x, y = cosa * x - sina * y, cosa * y + sina * x
-				x += targetx
-				y += targety
+				x += self.targetx
+				y += self.targety
 				x, y = cosa * x + sina * y, cosa * y - sina * x
 				probemap_file.write(struct.pack('@ddddddLL', x, y, w, h, sina, cosa, *self.probemap[1]))
 				for y in range(self.probemap[1][1] + 1):
@@ -2601,7 +2604,7 @@ class Printer: # {{{
 	@delayed
 	def queue_print(self, id, names, angle = 0, probemap = None): # {{{
 		if len(self.jobs_active) > 0 and not self.paused:
-			log('ignoring print request while print is in progress')
+			log('ignoring probe request while print is in progress: %s' % repr(self.jobs_active) + str(self.paused))
 			if id is not None:
 				self._send(id, 'return', None)
 			return
@@ -2617,7 +2620,7 @@ class Printer: # {{{
 	@delayed
 	def queue_probe(self, id, names, angle = 0, speed = 3): # {{{
 		if len(self.jobs_active) > 0 and not self.paused:
-			log('ignoring probe request while print is in progress')
+			log('ignoring probe request while print is in progress: %s' % repr(self.jobs_active) + str(self.paused))
 			if id is not None:
 				self._send(id, 'return', None)
 			return
@@ -2890,10 +2893,10 @@ class Printer: # {{{
 			self._temp_update(i, target)
 		for i, g in enumerate(self.gpios):
 			self._gpio_update(i, target)
-		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
-		self._broadcast(None, 'audioqueue', self.audioqueue.keys())
+		self._broadcast(target, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
+		self._broadcast(target, 'audioqueue', self.audioqueue.keys())
 		if self.confirmer is not None:
-			self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
+			self._broadcast(target, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
 	# }}}
 # }}}

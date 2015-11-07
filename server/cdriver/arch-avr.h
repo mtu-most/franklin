@@ -221,12 +221,8 @@ int hwpacketsize(int len, int *available) {
 	case HWC_SENSE1:
 		return 3 + 4 * command[1][1];
 	default:
-		if (arch_packetsize[command[1][0] & 0xf] < 0) {
-			debug("ignoring invalid serial command %x", command[1][0]);
-			return 1;	// Parse and fail immediately.
-		}
-		debug("bug: invalid value in arch_packetsize");
-		abort();
+		debug("ignoring invalid serial command %x", command[1][0]);
+		return 1;	// Parse and fail immediately.
 	}
 }
 
@@ -420,7 +416,7 @@ bool hwpacket(int len) {
 			avr_write_ack("stopped done");
 			return false;
 		}
-		//debug("done: %d %d %d", command[1][1], command[1][2], sending_fragment);
+		//debug("done: %d pending %d sending %d current %d", command[1][1], command[1][2], sending_fragment, current_fragment);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			debug("Done received while fragments per buffer is zero");
 			avr_write_ack("invalid done");
@@ -978,6 +974,7 @@ bool arch_send_fragment() {
 		avr_send();
 		int mi = 0;
 		avr_filling = true;
+		int cfp = current_fragment_pos;
 		for (int s = 0; !host_block && !stopping && !discard_pending && !stop_pending && s < 2; mi += spaces[s++].num_motors) {
 			for (uint8_t m = 0; !host_block && !stopping && !discard_pending && !stop_pending && m < spaces[s].num_motors; ++m) {
 				if (!spaces[s].motor[m]->active)
@@ -992,9 +989,9 @@ bool arch_send_fragment() {
 					break;
 				avr_buffer[0] = HWC_MOVE;
 				avr_buffer[1] = mi + m;
-				for (int i = 0; i < current_fragment_pos; ++i)
+				for (int i = 0; i < cfp; ++i)
 					avr_buffer[2 + i] = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->avr_data[i];
-				if (prepare_packet(avr_buffer, 2 + current_fragment_pos))
+				if (prepare_packet(avr_buffer, 2 + cfp))
 					avr_send();
 				else
 					break;
@@ -1118,9 +1115,16 @@ void arch_discard() {
 	if (fragments <= 2)
 		return;
 	discard_pending = fragments - 2;
-	current_fragment = (current_fragment - discard_pending + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+	int cbs = 0;
+	for (int i = 0; i < discard_pending; ++i) {
+		cbs += history[current_fragment].cbs;
+		current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+	}
+	cbs += history[current_fragment].cbs;
 	//debug("current discard -> %x", current_fragment);
 	restore_settings();
+	//debug("restored cbs: %d", cbs);
+	history[current_fragment].cbs = cbs;
 	if (!avr_filling)
 		arch_do_discard();
 }
