@@ -425,6 +425,7 @@ bool hwpacket(int len) {
 		first_fragment = -1;
 		int cbs = 0;
 		int offset = command[1][0] == HWC_UNDERRUN ? 1 : 0;
+		//debug("done: %d pending %d sending %d current %d running %d", command[1][offset + 1], command[1][offset + 2], sending_fragment, current_fragment, running_fragment);
 		for (int i = 0; i < command[1][offset + 1]; ++i) {
 			int f = (running_fragment + i) % FRAGMENTS_PER_BUFFER;
 			//debug("fragment %d: cbs=%d current=%d", f, history[f].cbs, current_fragment);
@@ -434,7 +435,7 @@ bool hwpacket(int len) {
 		if (cbs && !host_block)
 			send_host(CMD_MOVECB, cbs);
 		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER + 1 < command[1][offset + 1] + command[1][offset + 2]) {
-			//debug("Done count %d+%d higher than busy fragments %d+1; clipping", command[1][1], command[1][2], (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
+			debug("Done count %d+%d higher than busy fragments %d+1; clipping", command[1][1], command[1][2], (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
 			avr_write_ack("invalid done");
 			//abort();
 		}
@@ -1117,14 +1118,13 @@ void arch_discard() {
 	discard_pending = fragments - 2;
 	int cbs = 0;
 	for (int i = 0; i < discard_pending; ++i) {
-		cbs += history[current_fragment].cbs;
 		current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		//debug("restoring %d %d", current_fragment, history[current_fragment].cbs);
+		cbs += history[current_fragment].cbs;
 	}
-	cbs += history[current_fragment].cbs;
-	//debug("current discard -> %x", current_fragment);
 	restore_settings();
-	//debug("restored cbs: %d", cbs);
-	history[current_fragment].cbs = cbs;
+	history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += cbs + cbs_after_current_move;
+	cbs_after_current_move = 0;
 	if (!avr_filling)
 		arch_do_discard();
 }

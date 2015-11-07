@@ -118,7 +118,7 @@ void move_to_current() { // {{{
 		return;
 	}
 	moving_to_current = 0;
-	debug("move to current");
+	//debug("move to current");
 	settings.f0 = 0;
 	settings.fmain = 1;
 	settings.fp = 0;

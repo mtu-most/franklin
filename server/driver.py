@@ -1635,9 +1635,7 @@ class Printer: # {{{
 		self.wait_for_cb(False)[1](id)
 	# }}}
 	def move_target(self, dx, dy): # {{{
-		self.targetx += dx
-		self.targety += dy
-		self._globals_update()
+		self.set_globals(targetx = self.targetx + dx, targety = self.targety + dy)
 	# }}}
 	def sleep(self, sleeping = True, update = True, force = False): # {{{
 		if sleeping:

@@ -11,6 +11,10 @@ void disconnect() { // {{{
 	send_host(CMD_DISCONNECT);
 	while (arch_fds() == 0) {
 		poll(&pollfds[1], 1, -1);
+		if (pollfds[1].revents & (POLLHUP | POLLERR)) {
+			debug("Hang up (or error) on command input");
+			exit(0);
+		}
 		serial(0);
 	}
 }
