@@ -1941,7 +1941,7 @@ class Printer: # {{{
 	# }}}
 	def export_settings(self): # {{{
 		message = '[general]\r\n'
-		for t in ('spaces', 'temps', 'gpios'):
+		for t in ('temps', 'gpios'):
 			message += 'num_%s = %d\r\n' % (t, len(getattr(self, t)))
 		message += 'unit_name=%s\r\n' % self.unit_name
 		message += 'spi_setup=%s\r\n' % self._mangle_spi()
