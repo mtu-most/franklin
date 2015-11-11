@@ -798,6 +798,7 @@ function update_globals() { // {{{
 	update_float(printer, [null, 'num_temps']);
 	update_float(printer, [null, 'num_gpios']);
 	update_pin([null, 'led_pin']);
+	update_pin([null, 'stop_pin']);
 	update_pin([null, 'probe_pin']);
 	update_pin([null, 'spiss_pin']);
 	update_float(printer, [null, 'probe_dist']);

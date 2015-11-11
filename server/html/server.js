@@ -120,6 +120,7 @@ function _setup_updater() {
 					num_temps: 0,
 					num_gpios: 0,
 					led_pin: 0,
+					stop_pin: 0,
 					probe_pin: 0,
 					spiss_pin: 0,
 					probe_dist: Infinity,
@@ -215,29 +216,30 @@ function _setup_updater() {
 			var new_num_temps = values[1];
 			var new_num_gpios = values[2];
 			printers[port].led_pin = values[3];
-			printers[port].probe_pin = values[4];
-			printers[port].spiss_pin = values[5];
-			printers[port].probe_dist = values[6];
-			printers[port].probe_safe_dist = values[7];
-			printers[port].bed_id = values[8];
-			printers[port].fan_id = values[9];
-			printers[port].spindle_id = values[10];
-			printers[port].unit_name = values[11];
-			printers[port].timeout = values[12];
-			printers[port].feedrate = values[13];
-			printers[port].max_deviation = values[14];
-			printers[port].max_v = values[15];
-			printers[port].targetx = values[16];
-			printers[port].targety = values[17];
-			printers[port].zoffset = values[18];
-			printers[port].store_adc = values[19];
-			printers[port].park_after_print = values[20];
-			printers[port].sleep_after_print = values[21];
-			printers[port].cool_after_print = values[22];
-			printers[port].spi_setup = values[23];
-			printers[port].temp_scale_min = values[24];
-			printers[port].temp_scale_max = values[25];
-			printers[port].status = values[26];
+			printers[port].stop_pin = values[4];
+			printers[port].probe_pin = values[5];
+			printers[port].spiss_pin = values[6];
+			printers[port].probe_dist = values[7];
+			printers[port].probe_safe_dist = values[8];
+			printers[port].bed_id = values[9];
+			printers[port].fan_id = values[10];
+			printers[port].spindle_id = values[11];
+			printers[port].unit_name = values[12];
+			printers[port].timeout = values[13];
+			printers[port].feedrate = values[14];
+			printers[port].max_deviation = values[15];
+			printers[port].max_v = values[16];
+			printers[port].targetx = values[17];
+			printers[port].targety = values[18];
+			printers[port].zoffset = values[19];
+			printers[port].store_adc = values[20];
+			printers[port].park_after_print = values[21];
+			printers[port].sleep_after_print = values[22];
+			printers[port].cool_after_print = values[23];
+			printers[port].spi_setup = values[24];
+			printers[port].temp_scale_min = values[25];
+			printers[port].temp_scale_max = values[26];
+			printers[port].status = values[27];
 			for (var i = printers[port].num_temps; i < new_num_temps; ++i) {
 				printers[port].temps.push({
 					name: null,

@@ -353,7 +353,7 @@ class Connection: # {{{
 			# No need for a baudrate here, so abuse this to send a config file.
 			baudrate = ('-C', '+' + config['avrdudeconfig'])
 			mcu = 'atmega1284p'
-			sudo = ('sudo',)
+			sudo = ('sudo', '/usr/lib/franklin/flash-bbb')
 		elif board == 'melzi':
 			protocol = 'arduino'
 			baudrate = ('-b', '115200')

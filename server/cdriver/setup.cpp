@@ -30,6 +30,7 @@ void setup(char const *port, char const *run_id)
 		pending_len[i] = 0;
 	out_busy = 0;
 	led_pin.init();
+	stop_pin.init();
 	probe_pin.init();
 	led_phase = 0;
 	temps_busy = 0;

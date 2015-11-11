@@ -10,7 +10,7 @@
 #include <sys/types.h>
 #include <sys/timerfd.h>
 
-#define PROTOCOL_VERSION ((uint32_t)0)	// Required version response in BEGIN.
+#define PROTOCOL_VERSION ((uint32_t)1)	// Required version response in BEGIN.
 #define ID_SIZE 8
 #define UUID_SIZE 16
 
@@ -370,7 +370,7 @@ EXTERN uint8_t num_temps;
 EXTERN uint8_t num_gpios;
 EXTERN uint32_t protocol_version;
 EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
-EXTERN Pin_t led_pin, probe_pin, spiss_pin;
+EXTERN Pin_t led_pin, stop_pin, probe_pin, spiss_pin;
 EXTERN uint16_t timeout;
 EXTERN int bed_id, fan_id, spindle_id;
 //EXTERN double room_T;	//[°C]

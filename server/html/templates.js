@@ -812,6 +812,7 @@ function Printer() {	// {{{
 	var pins = setup.Add(make_table());
 	var globalpins = pins.AddElement('tbody');
 	globalpins.Add(Pin('LED', [null, 'led_pin']));
+	globalpins.Add(Pin('Stop', [null, 'stop_pin']));
 	globalpins.Add(Pin('Probe', [null, 'probe_pin']));
 	globalpins.Add(Pin('SPI SS', [null, 'spiss_pin']));
 	pins.AddMultiple('motor', Pins_space, false);

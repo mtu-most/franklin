@@ -91,21 +91,29 @@ void packet()
 			if (led_pin < NUM_DIGITAL_PINS)
 				SET_OUTPUT(led_pin);
 		}
+		p = stop_pin;
+		stop_pin = command(7);
+		if (p != stop_pin) {
+			if (p < NUM_DIGITAL_PINS)
+				UNSET(p);
+			if (stop_pin < NUM_DIGITAL_PINS)
+				SET_INPUT(stop_pin);
+		}
 		p = probe_pin;
-		probe_pin = command(7);
+		probe_pin = command(8);
 		if (p != probe_pin) {
 			if (p < NUM_DIGITAL_PINS)
 				UNSET(p);
 			if (probe_pin < NUM_DIGITAL_PINS)
 				SET_INPUT(probe_pin);
 		}
-		pin_flags = command(8);
-		timeout_time = read_16(9);
-		if (command(11) < active_motors) {
+		pin_flags = command(9);
+		timeout_time = read_16(10);
+		if (command(13) < active_motors) {
 			audio = 2;
 			move_phase = 0;
 			full_phase = 1;
-			audio_motor = &motor[command(11)];
+			audio_motor = &motor[command(13)];
 		}
 		else {
 			uint8_t fpb = 0;
@@ -131,7 +139,7 @@ void packet()
 			if (p < NUM_DIGITAL_PINS)
 				UNSET(p);
 			if (spiss_pin < NUM_DIGITAL_PINS) {
-				if (pin_flags & 4)
+				if (pin_flags & 8)
 					SET(spiss_pin);
 				else
 					RESET(spiss_pin);
@@ -518,7 +526,7 @@ void packet()
 	{
 		cmddebug("CMD_SPI");
 		uint8_t bits = command(1);
-		if (pin_flags & 4)
+		if (pin_flags & 8)
 			RESET(spiss_pin);
 		else
 			SET(spiss_pin);
@@ -526,7 +534,7 @@ void packet()
 			uint8_t b = bits - i * 8;
 			arch_spi_send(command(2 + i), b > 8 ? 8 : b);
 		}
-		if (pin_flags & 4)
+		if (pin_flags & 8)
 			SET(spiss_pin);
 		else
 			RESET(spiss_pin);

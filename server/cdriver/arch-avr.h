@@ -739,21 +739,22 @@ void arch_change(bool motors) {
 		avr_buffer[1] = NUM_MOTORS;
 		for (int i = 0; i < 4; ++i)
 			avr_buffer[2 + i] = (audio_hwtime_step >> (8 * i)) & 0xff;
-		avr_buffer[11] = avr_audio;
+		avr_buffer[13] = avr_audio;
 	}
 	else {
 		avr_buffer[1] = avr_active_motors;
 		for (int i = 0; i < 4; ++i)
 			avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
-		avr_buffer[11] = 0xff;
+		avr_buffer[13] = 0xff;
 	}
 	avr_buffer[6] = led_pin.valid() ? led_pin.pin : ~0;
-	avr_buffer[7] = probe_pin.valid() ? probe_pin.pin : ~0;
-	avr_buffer[8] = (led_pin.inverted() ? 1 : 0) | (probe_pin.inverted() ? 2 : 0) | (spiss_pin.inverted() ? 4 : 0);
-	avr_buffer[9] = timeout & 0xff;
-	avr_buffer[10] = (timeout >> 8) & 0xff;
+	avr_buffer[7] = stop_pin.valid() ? stop_pin.pin : ~0;
+	avr_buffer[8] = probe_pin.valid() ? probe_pin.pin : ~0;
+	avr_buffer[9] = (led_pin.inverted() ? 1 : 0) | (probe_pin.inverted() ? 2 : 0) | (stop_pin.inverted() ? 4 : 0) | (spiss_pin.inverted() ? 8 : 0);
+	avr_buffer[10] = timeout & 0xff;
+	avr_buffer[11] = (timeout >> 8) & 0xff;
 	avr_buffer[12] = spiss_pin.valid() ? spiss_pin.pin : ~0;
-	prepare_packet(avr_buffer, 13);
+	prepare_packet(avr_buffer, 14);
 	avr_send();
 	if (motors) {
 		for (uint8_t s = 0; s < 2; ++s) {

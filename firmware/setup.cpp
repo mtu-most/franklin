@@ -58,8 +58,9 @@ void setup()
 	led_last = millis();
 	led_phase = 0;
 	led_pin = ~0;
-	spiss_pin = ~0;
+	stop_pin = ~0;
 	probe_pin = ~0;
+	spiss_pin = ~0;
 	audio = 0;
 	audio_motor = 0;
 	// Do arch-specific things.  This fills printerid and uuid.

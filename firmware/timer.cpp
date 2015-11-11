@@ -23,37 +23,42 @@ void handle_motors() {
 	else
 		probed = true;	// If we didn't need to probe; don't block later on.
 	if (stopping < 0) {
-		// Check sensors.
-		for (uint8_t m = 0; m < active_motors; ++m) {
-			if (!(motor[m].intflags & Motor::ACTIVE))
-				continue;
-			//debug("check %d", m);
-			// Check sense pins.
-			if (motor[m].sense_pin < NUM_DIGITAL_PINS) {
-				if (GET(motor[m].sense_pin) ^ bool(motor[m].flags & Motor::SENSE_STATE)) {
-					//debug("sense %d %x", m, motor[m].flags);
-					motor[m].flags ^= Motor::SENSE_STATE;
-					motor[m].flags |= (motor[m].flags & Motor::SENSE_STATE ? Motor::SENSE1 : Motor::SENSE0);
-					uint8_t sense_state = motor[m].flags & Motor::SENSE_STATE ? 1 : 0;
-					cli();
-					for (int mi = 0; mi < active_motors; ++mi)
-						motor[mi].sense_pos[sense_state] = motor[mi].current_pos;
-					sei();
-				}
-			}
-			// Check limit switches.
-			if (stopping < 0) {
-				int8_t value = buffer[cf][m][cs];
-				if (value == 0)
+		if (stop_pin < NUM_DIGITAL_PINS && GET(stop_pin) ^ bool(pin_flags & 4)) {
+			stopping = active_motors;
+		}
+		else {
+			// Check sensors.
+			for (uint8_t m = 0; m < active_motors; ++m) {
+				if (!(motor[m].intflags & Motor::ACTIVE))
 					continue;
-				uint8_t limit_pin = value < 0 ? motor[m].limit_min_pin : motor[m].limit_max_pin;
-				if (limit_pin < NUM_DIGITAL_PINS) {
-					bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
-					if (GET(limit_pin) ^ inverted) {
-						debug("hit %d pos %d state %d sample %d", m, motor[m].current_pos, state, buffer[cf][m][cs]);
-						stopping = m;
-						motor[m].flags |= Motor::LIMIT;
-						break;
+				//debug("check %d", m);
+				// Check sense pins.
+				if (motor[m].sense_pin < NUM_DIGITAL_PINS) {
+					if (GET(motor[m].sense_pin) ^ bool(motor[m].flags & Motor::SENSE_STATE)) {
+						//debug("sense %d %x", m, motor[m].flags);
+						motor[m].flags ^= Motor::SENSE_STATE;
+						motor[m].flags |= (motor[m].flags & Motor::SENSE_STATE ? Motor::SENSE1 : Motor::SENSE0);
+						uint8_t sense_state = motor[m].flags & Motor::SENSE_STATE ? 1 : 0;
+						cli();
+						for (int mi = 0; mi < active_motors; ++mi)
+							motor[mi].sense_pos[sense_state] = motor[mi].current_pos;
+						sei();
+					}
+				}
+				// Check limit switches.
+				if (stopping < 0) {
+					int8_t value = buffer[cf][m][cs];
+					if (value == 0)
+						continue;
+					uint8_t limit_pin = value < 0 ? motor[m].limit_min_pin : motor[m].limit_max_pin;
+					if (limit_pin < NUM_DIGITAL_PINS) {
+						bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
+						if (GET(limit_pin) ^ inverted) {
+							debug("hit %d pos %d state %d sample %d", m, motor[m].current_pos, state, buffer[cf][m][cs]);
+							stopping = m;
+							motor[m].flags |= Motor::LIMIT;
+							break;
+						}
 					}
 				}
 			}

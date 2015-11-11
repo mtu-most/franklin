@@ -42,6 +42,10 @@ bool globals_load(int32_t &addr)
 	led_pin.read(read_16(addr));
 	if (p != led_pin.write())
 		change_hw = true;
+	p = stop_pin.write();
+	stop_pin.read(read_16(addr));
+	if (p != stop_pin.write())
+		change_hw = true;
 	p = probe_pin.write();
 	probe_pin.read(read_16(addr));
 	if (p != probe_pin.write())
@@ -114,6 +118,7 @@ void globals_save(int32_t &addr)
 	write_8(addr, num_temps);
 	write_8(addr, num_gpios);
 	write_16(addr, led_pin.write());
+	write_16(addr, stop_pin.write());
 	write_16(addr, probe_pin.write());
 	write_16(addr, spiss_pin.write());
 	write_16(addr, timeout);

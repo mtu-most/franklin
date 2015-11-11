@@ -8,7 +8,7 @@
 
 #define ID_SIZE 8	// Number of bytes in printerid; 8.
 #define UUID_SIZE 16	// Number of bytes in uuid; 16.
-#define PROTOCOL_VERSION 0
+#define PROTOCOL_VERSION 1
 
 #define ADC_INTERVAL 1000	// Delay 1 ms between ADC measurements.
 
@@ -84,7 +84,7 @@ EXTERN volatile uint8_t move_phase, full_phase, full_phase_bits;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
 EXTERN uint16_t led_last, led_phase, time_per_sample;
-EXTERN uint8_t led_pin, probe_pin, pin_flags;
+EXTERN uint8_t led_pin, stop_pin, probe_pin, pin_flags;
 EXTERN uint8_t spiss_pin;
 EXTERN uint16_t timeout_time, last_active;
 EXTERN uint8_t enabled_pins;
@@ -195,7 +195,7 @@ enum Command {
 	CMD_BEGIN = 0x00,	// 0
 	CMD_PING,	// 1:code
 	CMD_SET_UUID,	// 16: UUID
-	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin, 1:probe_pin 1:pin_flags 2:timeout
+	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin, 1:stop_pin 1:probe_pin 1:pin_flags 2:timeout
 	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
 	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:sense_pin, 1:flags
 	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:values	(including flags)
@@ -246,7 +246,7 @@ static inline int16_t minpacketlen() {
 	case CMD_SET_UUID:
 		return 1 + UUID_SIZE;
 	case CMD_SETUP:
-		return 13;
+		return 14;
 	case CMD_CONTROL:
 		return 4;
 	case CMD_MSETUP:
