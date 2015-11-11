@@ -1880,7 +1880,7 @@ function keypress(event) { // {{{
 		var target = [[-amount, 0], [0, amount], [amount, 0], [0, -amount]][event.keyCode - 37];
 		p.call('line', [[target]], {relative: true}, function() {
 			if (event.altKey) {
-				printer.call('set_globals', [], {'targetx': printer.targetx + target[0], 'targety': printer.targety + target[1]});
+				p.call('set_globals', [], {'targetx': p.targetx + target[0], 'targety': p.targety + target[1]});
 			}
 			else
 				update_canvas_and_spans(p);

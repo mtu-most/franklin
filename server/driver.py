@@ -2589,12 +2589,16 @@ class Printer: # {{{
 			for s in stringmap:
 				dst.write(struct.pack('=L', s))
 			ret = bbox
-			if any(x is None for x in bbox):
+			if any(x is None for x in bbox[:4]):
 				bbox = bbox_last
 				ret = bbox
-				if any(x is None for x in bbox):
+				if any(x is None for x in bbox[:4]):
 					bbox = [0] * 6
 					ret = None
+			if any(x is None for x in bbox):
+				for t, b in enumerate(bbox):
+					if b is None:
+						bbox[t] = 0;
 			dst.write(struct.pack('=L' + 'd' * 8, len(strings), *(bbox + time_dist)))
 		self._broadcast(None, 'blocked', None)
 		return ret and ret + time_dist, errors

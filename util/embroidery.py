@@ -24,11 +24,13 @@ Procedure:
 '''
 
 while True:
-	id, message = p.wait_confirm(False)
+	id, message = p.wait_confirm()
 	msg = message.split()
-	if len(msg) != 2 or msg[0] != 'EMBROIDERY':
+	if len(msg) != 2 or msg[0] != 'EMBROIDER':
+		#websocketd.log('skip %s' % repr(msg))
 		continue
 	if msg[1] == 'stitch':
+		#websocketd.log('do %s' % repr(msg))
 		p.set_gpio(motor, state = 1)
 		p.wait_gpio(sensor, 0)
 		time.sleep(.01)
