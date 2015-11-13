@@ -958,7 +958,7 @@ function update_space(index) { // {{{
 	}
 	for (var a = 0; a < printer.spaces[index].num_axes; ++a) {
 		set_name(printer, 'axis', index, a, printer.spaces[index].axis[a].name);
-		if (index != 1) {
+		if (index == 0) {
 			update_float(printer, [['axis', [index, a]], 'park']);
 			update_float(printer, [['axis', [index, a]], 'park_order']);
 			update_float(printer, [['axis', [index, a]], 'min']);
