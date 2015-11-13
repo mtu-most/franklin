@@ -1109,6 +1109,21 @@ class Printer: # {{{
 			#log('done 1')
 			if len(self.home_target) > 0:
 				log('Warning: not all limits were found during homing')
+			# set current position.
+			for s, i, a, m in self.home_motors:
+				if i in self.limits[s]:
+					if not math.isnan(m['home_pos']):
+						#log('set %d %d %f' % (s, i, m['home_pos']))
+						self.spaces[s].set_current_pos(i, m['home_pos'])
+			n = set()
+			for s in self.spaces:
+				for m in s.motor:
+					if (self.pin_valid(m['limit_min_pin']) or self.pin_valid(m['limit_max_pin'])) and m['home_order'] > self.home_order:
+						n.add(m['home_order'])
+			if len(n) > 0:
+				self.home_phase = 1
+				self.home_order = min(n)
+				return self._do_home()
 			# Move away slowly.
 			data = ''
 			num = 0
@@ -1131,24 +1146,6 @@ class Printer: # {{{
 				return
 			# Fall through.
 		if self.home_phase == 3:
-			# set current position.
-			for s, i, a, m in self.home_motors:
-				if i in self.limits[s]:
-					if not math.isnan(m['home_pos']):
-						#log('set %d %d %f' % (s, i, m['home_pos']))
-						self.spaces[s].set_current_pos(i, m['home_pos'])
-			n = set()
-			for s in self.spaces:
-				for m in s.motor:
-					if (self.pin_valid(m['limit_min_pin']) or self.pin_valid(m['limit_max_pin'])) and m['home_order'] > self.home_order:
-						n.add(m['home_order'])
-			if len(n) > 0:
-				self.home_phase = 1
-				self.home_order = min(n)
-				return self._do_home()
-			self.home_phase = 4
-			# Fall through
-		if self.home_phase == 4:
 			# Pre-insert delta axes as followers to align.
 			groups = ([], [], [])	# min limits; max limits; just move.
 			if self.home_orig_type == TYPE_DELTA:
@@ -1205,7 +1202,7 @@ class Printer: # {{{
 				fm = self.spaces[s].follower[m]['motor']
 				if self.spaces[fs].motor[fm]['home_pos'] != self.spaces[s].motor[m]['home_pos']:
 					self.home_target[(s, m)] = self.spaces[fs].motor[fm]['home_pos']
-			self.home_phase = 5
+			self.home_phase = 4
 			if len(self.home_target) > 0:
 				self.home_cb[0] = False
 				if self.home_cb not in self.movecb:
@@ -1213,7 +1210,7 @@ class Printer: # {{{
 				self.line(mktarget(), cb = True, force = True, single = True)[1](None)
 				return
 			# Fall through.
-		if self.home_phase == 5:
+		if self.home_phase == 4:
 			for s, sp in enumerate(self.spaces):
 				for i, m in enumerate(sp.motor):
 					if not self.pin_valid(m['limit_min_pin']) and not self.pin_valid(m['limit_max_pin']):
@@ -1235,7 +1232,7 @@ class Printer: # {{{
 						if s not in target:
 							target[s] = {}
 						target[s][i] = a['min'] - offset
-			self.home_phase = 6
+			self.home_phase = 5
 			if len(target) > 0:
 				self.home_cb[0] = False
 				if self.home_cb not in self.movecb:
@@ -1243,7 +1240,7 @@ class Printer: # {{{
 				self.line(target, cb = True, force = True)[1](None)
 				return
 			# Fall through.
-		if self.home_phase == 6:
+		if self.home_phase == 5:
 			self.home_phase = None
 			self.position_valid = True
 			if self.home_id is not None:
@@ -2787,6 +2784,7 @@ class Printer: # {{{
 			if 'follower' in ka:
 				f = ka.pop('follower')
 				for fi, ff in f.items():
+					fi = int(fi)
 					for key in ('space', 'motor'):
 						if key in ff:
 							self.spaces[space].follower[fi][key] = int(ff.pop(key))
