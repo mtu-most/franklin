@@ -1283,37 +1283,37 @@ function UnitTitle(title, post, pre) { // {{{
 
 function space_name(index) { // {{{
 	if (index === null)
-		return 'All Spaces';
+		return 'all spaces';
 	return add_name('space', index, 0);
 } // }}}
 
 function axis_name(index1, index2) { // {{{
 	if (index2 === null)
-		return 'All axes ' + String(index1);
+		return ['all ', space_name(index1), ' axes'];
 	return add_name('axis', index1, index2);
 } // }}}
 
 function motor_name(index1, index2) { // {{{
 	if (index2 === null)
-		return 'All motors ' + String(index1);
+		return ['all ', space_name(index1), ' motors'];
 	return add_name('motor', index1, index2);
 } // }}}
 
 function delta_name(index1, index2) { // {{{
 	if (index1 === null)
-		return 'All Apexes';
+		return 'all apexes';
 	return motor_name(index1, index2);
 } // }}}
 
 function temp_name(printer, index) { // {{{
 	if (index === null)
-		return 'All Temps';
+		return 'all temps';
 	return add_name('temp', index, 0);
 } // }}}
 
 function gpio_name(index) { // {{{
 	if (index === null)
-		return 'All Gpios';
+		return 'all gpios';
 	return add_name('gpio', index, 0);
 } // }}}
 

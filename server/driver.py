@@ -1412,7 +1412,7 @@ class Printer: # {{{
 	# Subclasses.  {{{
 	class Space: # {{{
 		def __init__(self, printer, id):
-			self.name = ['Position', 'Extruders', 'Followers'][id]
+			self.name = ['position', 'extruders', 'followers'][id]
 			self.printer = printer
 			self.id = id
 			self.axis = []
@@ -1433,7 +1433,7 @@ class Printer: # {{{
 						else:
 							return 'Axis %d' % i
 					elif self.id == 1:
-						return 'e%d' % i
+						return 'extruder %d' % i
 					else:
 						return 'follower %d' % i
 				self.axis += [{'name': nm(i)} for i in range(len(self.axis), len(axes))]
@@ -1561,7 +1561,7 @@ class Printer: # {{{
 	# }}}
 	class Temp: # {{{
 		def __init__(self, id):
-			self.name = 'Temp %d' % id
+			self.name = 'temp %d' % id
 			self.id = id
 			self.value = float('nan')
 		def read(self, data):
@@ -1590,7 +1590,7 @@ class Printer: # {{{
 	# }}}
 	class Gpio: # {{{
 		def __init__(self, id):
-			self.name = 'Gpio %d' % id
+			self.name = 'gpio %d' % id
 			self.id = id
 			self.state = 3
 			self.reset = 3
