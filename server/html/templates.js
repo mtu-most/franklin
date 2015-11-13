@@ -215,7 +215,8 @@ function Axis(space, axis) {
 	var e = [Name('axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['min', 1, 1], ['max', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float([['axis', [space, axis]], e[i][0]], e[i][1], e[i][2]));
+		if (space == 0)
+			div.Add(Float([['axis', [space, axis]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
 	return make_tablerow(axis_name(space, axis), e, ['rowtitle6']);
@@ -646,7 +647,7 @@ function Printer() {	// {{{
 		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
 		'Minimum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to less than -radius.  Cannot be -Infinity for technical reasons; set to -2r if unsure.',
 		'Maximum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to more than radius.  Cannot be Infinity for technical reasons; set to 2r if unsure.'
-	]).AddMultiple('axis', Axis, undefined, 1)]);
+	]).AddMultiple('axis', Axis)]);
 	// }}}
 	// Motor. {{{
 	setup.Add([make_table().AddMultipleTitles([
