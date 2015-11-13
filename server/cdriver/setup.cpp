@@ -88,8 +88,8 @@ void setup_end() {
 	}
 	// Now set things up that need information from the firmware.
 	history = new History[FRAGMENTS_PER_BUFFER];
-	spaces[0].init(0);
-	spaces[1].init(1);
+	for (int s = 0; s < NUM_SPACES; ++s)
+		spaces[s].init(s);
 	for (int i = 0; i < 2; ++i) {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		history[f].t0 = 0;

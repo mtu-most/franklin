@@ -175,8 +175,18 @@ function Extruder(space, axis) {
 	return make_tablerow(axis_name(space, axis), e, ['rowtitle3'], undefined, TYPE_EXTRUDER, space);
 }
 
+function Follower(space, motor) {
+	var f = ['follower_space', 'follower_motor'];
+	for (var i = 0; i < f.length; ++i) {
+		var div = Create('div');
+		div.Add(Float([['motor', [space, motor]], f[i]], 0));
+		f[i] = div;
+	}
+	return make_tablerow(motor_name(space, motor), f, ['rowtitle2'], undefined, TYPE_FOLLOWER, space);
+}
+
 function Cartesian(num) {
-	return make_tablerow(space_name(num), [Float([['space', num], 'num_axes'], 0, 1)], ['rowtitle1'], undefined, [TYPE_CARTESIAN, TYPE_EXTRUDER], num);
+	return make_tablerow(space_name(num), [Float([['space', num], 'num_axes'], 0, 1)], ['rowtitle1'], undefined, [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER], num);
 }
 
 function Delta(space, motor) {
@@ -212,29 +222,18 @@ function Axis(space, axis) {
 }
 
 function Motor(space, motor) {
-	var e = [['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
+	var e = [['steps_per_unit', 3, 1], ['home_pos', 3, 1], ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		if (space == 0 || i != 0)
+		if (space != 1 || (i != 1 && i != 2))
 			div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
-	return make_tablerow(motor_name(space, motor), e, ['rowtitle4']);
-}
-
-function Motor_hardware(space, motor) {
-	var e = [['steps_per_unit', 3, 1], ['max_steps', 0, 1], ['home_pos', 3, 1]];
-	for (var i = 0; i < e.length; ++i) {
-		var div = Create('div');
-		if (space == 0 || i != 2)
-			div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
-		e[i] = div;
-	}
-	return make_tablerow(motor_name(space, motor), e, ['rowtitle3']);
+	return make_tablerow(motor_name(space, motor), e, ['rowtitle5']);
 }
 
 function Pins_space(space, motor) {
-	var e = [['Step', 'step'], ['Dir', 'dir'], ['Enable', 'enable'], ['Min Limit', 'limit_min'], ['Max Limit', 'limit_max'], ['Sense', 'sense']];
+	var e = [['Step', 'step'], ['Dir', 'dir'], ['Enable', 'enable'], ['Min Limit', 'limit_min'], ['Max Limit', 'limit_max']];
 	for (var i = 0; i < e.length; ++i)
 		e[i] = Pin(e[i][0], [['motor', [space, motor]], e[i][1] + '_pin']);
 	return make_pin_title(motor_name(space, motor), e, ['rowtitle6']);
@@ -615,7 +614,7 @@ function Printer() {	// {{{
 	e.AddText('/s');
 	// Cartesian. {{{
 	setup.Add([make_table().AddMultipleTitles([
-		'Cartesian/Extruder',
+		'Cartesian/Other',
 		'Number of axes'
 	], [
 		'htitle1',
@@ -652,36 +651,26 @@ function Printer() {	// {{{
 	// Motor. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Motor Settings',
+		UnitTitle('Coupling', null, 'steps/'),
+		UnitTitle('Switch pos'),
 		'Home order',
 		UnitTitle('Limit v', '/s'),
 		UnitTitle('Limit a', '/s²')
 	], [
-		'htitle3',
-		'title3',
-		'title3',
-		'title3'
+		'htitle5',
+		'title5',
+		'title5',
+		'title5',
+		'title5',
+		'title5'
 	], [
 		null,
+		'Number of (micro)steps that the motor needs to do to move the hardware by one unit.',
+		'Position of the home switch.',
 		'Order when homing.  Equal order homes simultaneously; lower order homes first.',
 		'Maximum speed of the motor.',
 		'Maximum acceleration of the motor.  4000 is a normal value.'
 	]).AddMultiple('motor', Motor)]);
-	setup.Add([make_table().AddMultipleTitles([
-		'Motor Hardware',
-		UnitTitle('Coupling', null, 'steps/'),
-		'Microsteps',
-		UnitTitle('Switch pos')
-	], [
-		'htitle3',
-		'title3',
-		'title3',
-		'title3'
-	], [
-		null,
-		'Number of (micro)steps that the motor needs to do to move the hardware by one unit.',
-		'Maximum number of steps to do in one iteration.  Set to number of microsteps.',
-		'Position of the home switch.'
-	]).AddMultiple('motor', Motor_hardware)]);
 	// }}} -->
 	// Delta. {{{
 	setup.Add([make_table().AddMultipleTitles([
@@ -743,6 +732,22 @@ function Printer() {	// {{{
 		'Offset in Y direction when this extruder is in use.  Set to 0 for the first extruder.',
 		'Offset in Z direction when this extruder is in use.  Set to 0 for the first extruder.'
 	]).AddMultiple('axis', Extruder, false)]);
+	// }}}
+	// Follower. {{{
+	setup.Add([make_table().AddMultipleTitles([
+		'Follower',
+		'Space',
+		'Motor'
+	], [
+		'htitle2',
+		'title2',
+		'title2',
+		'title2'
+	], [
+		null,
+		'Space of motor to follow.',
+		'Motor to follow.'
+	]).AddMultiple('motor', Follower, false)]);
 	// }}}
 	// Temp. {{{
 	setup.Add([make_table().AddMultipleTitles([

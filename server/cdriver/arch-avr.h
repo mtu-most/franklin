@@ -59,12 +59,13 @@ enum HWCommands { // {{{
 	HWC_START_MOVE,	// 08
 	HWC_START_PROBE,// 09
 	HWC_MOVE,	// 0a
-	HWC_START,	// 0b
-	HWC_STOP,	// 0c
-	HWC_ABORT,	// 0d
-	HWC_DISCARD,	// 0e
-	HWC_GETPIN,	// 0f
-	HWC_SPI,	// 10
+	HWC_MOVE_SINGLE,// 0b
+	HWC_START,	// 0c
+	HWC_STOP,	// 0d
+	HWC_ABORT,	// 0e
+	HWC_DISCARD,	// 0f
+	HWC_GETPIN,	// 10
+	HWC_SPI,	// 11
 };
 
 enum HWResponses {
@@ -78,10 +79,8 @@ enum HWResponses {
 	HWC_UNDERRUN,	// 16
 	HWC_ADC,	// 17
 	HWC_LIMIT,	// 18
-	HWC_SENSE0,	// 19
-	HWC_SENSE1,	// 1a
-	HWC_TIMEOUT,	// 1b
-	HWC_PINCHANGE,	// 1c
+	HWC_TIMEOUT,	// 19
+	HWC_PINCHANGE,	// 1a
 };
 // }}}
 
@@ -123,6 +122,7 @@ void arch_reconnect(char *port);
 void arch_addpos(int s, int m, int diff);
 void arch_stop(bool fake);
 void avr_stop2();
+void arch_apply_follow(int cfp);
 bool arch_send_fragment();
 void arch_start_move(int extra);
 bool arch_running();
@@ -196,7 +196,7 @@ EXTERN bool avr_stop_fake;
 #ifdef DEFINE_VARIABLES
 // Serial port communication. {{{
 int hwpacketsize(int len, int *available) {
-	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 3, 0, 4, 0, 0, 0, 1, 3, -1, -1, -1 };
+	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 3, 0, 4, 0, 1, 3, -1, -1, -1, -1, -1 };
 	int num_motors = avr_audio >= 0 ? NUM_MOTORS : avr_active_motors;
 	if (arch_packetsize[command[1][0] & 0xf] > 0)
 		return arch_packetsize[command[1][0] & 0xf];
@@ -217,9 +217,6 @@ int hwpacketsize(int len, int *available) {
 	case HWC_LIMIT:
 	case HWC_UNDERRUN:
 		return 4 + 4 * command[1][1];
-	case HWC_SENSE0:
-	case HWC_SENSE1:
-		return 3 + 4 * command[1][1];
 	default:
 		debug("ignoring invalid serial command %x", command[1][0]);
 		return 1;	// Parse and fail immediately.
@@ -266,7 +263,7 @@ void avr_call1(uint8_t cmd, uint8_t arg) {
 
 void avr_get_current_pos(int offset, bool check) {
 	int mi = 0;
-	for (int ts = 0; ts < 2; mi += spaces[ts++].num_motors) {
+	for (int ts = 0; ts < NUM_SPACES; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
 			int old = spaces[ts].motor[tm]->settings.current_pos;
 			cpdebug(ts, tm, "cpb offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
@@ -284,7 +281,7 @@ void avr_get_current_pos(int offset, bool check) {
 					moving_to_current = 2;
 				else {
 					//abort();
-					debug("WARNING: position out of sync! (This is normal after sleep), old = %d, new = %d", old, spaces[ts].motor[tm]->settings.current_pos);
+					debug("WARNING: position for %d %d out of sync! (This is normal after sleep), old = %d, new = %d", ts, tm, old, spaces[ts].motor[tm]->settings.current_pos);
 				}
 			}
 		}
@@ -301,15 +298,13 @@ bool hwpacket(int len) {
 #endif
 	switch (command[1][0]) {
 	case HWC_LIMIT:
-	case HWC_SENSE0:
-	case HWC_SENSE1:
 	{
 		uint8_t which = command[1][2];
 		if (which >= NUM_MOTORS) {
-			debug("cdriver: Invalid limit or sense for avr motor %d", which);
+			debug("cdriver: Invalid limit for avr motor %d", which);
 			abort();
 		}
-		avr_write_ack("limit/sense");
+		avr_write_ack("limit");
 		double pos;
 		int s, m;
 		if (which >= avr_active_motors) {
@@ -318,44 +313,36 @@ bool hwpacket(int len) {
 			pos = NAN;
 		}
 		else {
-			for (s = 0; s < 2; ++s) {
+			for (s = 0; s < NUM_SPACES; ++s) {
 				if (which < spaces[s].num_motors) {
 					m = which;
 					break;
 				}
 				which -= spaces[s].num_motors;
 			}
-			cpdebug(s, m, "limit/sense");
+			cpdebug(s, m, "limit");
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
-		if ((command[1][0]) == HWC_LIMIT) {
-			//debug("limit %d", command[1][2]);
-			avr_homing = false;
-			abort_move(int8_t(command[1][3]));
-			//int i = 0;
-			//for (int is = 0; is < 2; ++is)
-			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
-			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
-			//fprintf(stderr, "\n");
-			avr_get_current_pos(4, false);
-			//i = 0;
-			//for (int is = 0; is < 2; ++is)
-			//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
-			//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
-			//fprintf(stderr, "\n");
-			sending_fragment = 0;
-			stopping = 2;
-			send_host(CMD_LIMIT, s, m, pos);
-			cbs_after_current_move = 0;
-			avr_running = false;
-			//debug("free limit");
-		}
-		else {
-			// Sense
-			avr_get_current_pos(3, false);	// TODO: this must not mess up actual current pos.
-			spaces[s].motor[m]->sense_state = 1;
-			send_host(CMD_SENSE, s, m, 0, command[1][0] == HWC_SENSE1);
-		}
+		//debug("limit %d", command[1][2]);
+		avr_homing = false;
+		abort_move(int8_t(command[1][3]));
+		//int i = 0;
+		//for (int is = 0; is < NUM_SPACES; ++is)
+		//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
+		//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
+		//fprintf(stderr, "\n");
+		avr_get_current_pos(4, false);
+		//i = 0;
+		//for (int is = 0; is < NUM_SPACES; ++is)
+		//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
+		//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
+		//fprintf(stderr, "\n");
+		sending_fragment = 0;
+		stopping = 2;
+		send_host(CMD_LIMIT, s, m, pos);
+		cbs_after_current_move = 0;
+		avr_running = false;
+		//debug("free limit");
 		return false;
 	}
 	case HWC_PONG:
@@ -460,7 +447,7 @@ bool hwpacket(int len) {
 		avr_homing = false;
 		avr_get_current_pos(2, false);
 		//int i = 0;
-		//for (int s = 0; s < 2; ++s)
+		//for (int s = 0; s < NUM_SPACES; ++s)
 		//	for (int m = 0; m < spaces[s].num_motors; ++m, ++i)
 		//		fprintf(stderr, "\t%8d", spaces[s].motor[m]->settings.current_pos + avr_pos_offset[i]);
 		//fprintf(stderr, "\n");
@@ -478,7 +465,7 @@ bool hwpacket(int len) {
 		motors_busy = false;
 		// Everything has shut down; reset pins to normal (but inactive).
 		arch_motors_change();
-		for (int s = 0; s < 2; ++s) {
+		for (int s = 0; s < NUM_SPACES; ++s) {
 			for (int m = 0; m < spaces[s].num_motors; ++m) {
 				RESET(spaces[s].motor[m]->step_pin);
 				RESET(spaces[s].motor[m]->dir_pin);
@@ -691,9 +678,6 @@ enum MotorFlags {
 	LIMIT			= 0x01,
 	INVERT_LIMIT_MIN	= 0x02,
 	INVERT_LIMIT_MAX	= 0x04,
-	SENSE0			= 0x08,
-	SENSE1			= 0x10,
-	SENSE_STATE		= 0x20,
 	INVERT_STEP		= 0x40
 };
 
@@ -720,7 +704,16 @@ void arch_motor_change(uint8_t s, uint8_t sm) {
 		mininvert = mtr.limit_min_pin.inverted();
 		maxinvert = mtr.limit_max_pin.inverted();
 	}
-	avr_buffer[6] = (mtr.sense_pin.valid() ? mtr.sense_pin.pin : ~0);
+	int fm = space_types[spaces[s].type].follow(&spaces[s], sm);
+	if (fm >= 0) {
+		int fs = fm >> 8;
+		fm &= 0xff;
+		for (int fi = 0; fi < fs; ++fi)
+			fm += spaces[fi].num_motors;
+		avr_buffer[6] = fm;
+	}
+	else
+		avr_buffer[6] = 0xff;
 	avr_buffer[7] = (mtr.step_pin.inverted() ? INVERT_STEP : 0) | (mininvert ? INVERT_LIMIT_MIN : 0) | (maxinvert ? INVERT_LIMIT_MAX : 0);
 	prepare_packet(avr_buffer, 8);
 	avr_send();
@@ -730,7 +723,7 @@ void arch_change(bool motors) {
 	int old_active_motors = avr_active_motors;
 	if (motors) {
 		avr_active_motors = 0;
-		for (uint8_t s = 0; s < 2; ++s) {
+		for (uint8_t s = 0; s < NUM_SPACES; ++s) {
 			avr_active_motors += spaces[s].num_motors;
 		}
 	}
@@ -757,7 +750,7 @@ void arch_change(bool motors) {
 	prepare_packet(avr_buffer, 14);
 	avr_send();
 	if (motors) {
-		for (uint8_t s = 0; s < 2; ++s) {
+		for (uint8_t s = 0; s < NUM_SPACES; ++s) {
 			for (uint8_t m = 0; m < spaces[s].num_motors; ++m) {
 				arch_motor_change(s, m);
 			}
@@ -977,7 +970,7 @@ bool arch_send_fragment() {
 		int mi = 0;
 		avr_filling = true;
 		int cfp = current_fragment_pos;
-		for (int s = 0; !host_block && !stopping && !discard_pending && !stop_pending && s < 2; mi += spaces[s++].num_motors) {
+		for (int s = 0; !host_block && !stopping && !discard_pending && !stop_pending && s < NUM_SPACES; mi += spaces[s++].num_motors) {
 			for (uint8_t m = 0; !host_block && !stopping && !discard_pending && !stop_pending && m < spaces[s].num_motors; ++m) {
 				if (!spaces[s].motor[m]->active)
 					continue;
@@ -989,7 +982,7 @@ bool arch_send_fragment() {
 				}
 				if (stop_pending || discard_pending)
 					break;
-				avr_buffer[0] = HWC_MOVE;
+				avr_buffer[0] = settings.single ? HWC_MOVE_SINGLE : HWC_MOVE;
 				avr_buffer[1] = mi + m;
 				for (int i = 0; i < cfp; ++i)
 					avr_buffer[2 + i] = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->avr_data[i];
@@ -1039,7 +1032,7 @@ void arch_home() {
 	for (int i = 0; i < 4; ++i)
 		avr_buffer[1 + i] = (speed >> (8 * i)) & 0xff;
 	int mi = 0;
-	for (int s = 0; s < 2; mi += spaces[s++].num_motors) {
+	for (int s = 0; s < NUM_SPACES; mi += spaces[s++].num_motors) {
 		Space &sp = spaces[s];
 		for (int m = 0; m < sp.num_motors; ++m) {
 			if (abs(int8_t(command[0][2 + mi + m])) <= 1) {
@@ -1083,7 +1076,7 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) {
 			poll(&pollfds[2], 1, -1);
 			serial(1);
 		}
-		avr_buffer[0] = HWC_MOVE;
+		avr_buffer[0] = HWC_MOVE_SINGLE;
 		avr_buffer[1] = m;
 		for (int i = 0; i < len; ++i)
 			avr_buffer[2 + i] = map[pos + m * len + i];

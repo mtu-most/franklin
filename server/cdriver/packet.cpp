@@ -67,7 +67,7 @@ void waittemp(int which, double mintemp, double maxtemp) {
 void setpos(int which, int t, double f) {
 	if (!motors_busy)
 	{
-		for (uint8_t s = 0; s < 2; ++s) {
+		for (uint8_t s = 0; s < NUM_SPACES; ++s) {
 			for (uint8_t m = 0; m < spaces[s].num_motors; ++m)
 				SET(spaces[s].motor[m]->enable_pin);
 		}
@@ -134,6 +134,7 @@ void packet()
 	}
 #endif
 	case CMD_LINE:	// line
+	case CMD_SINGLE:	// line without followers
 	case CMD_PROBE:	// probe
 	{
 #ifdef DEBUG_CMD
@@ -147,9 +148,10 @@ void packet()
 			return;
 		}
 		uint8_t num = 2;
-		for (uint8_t t = 0; t < 2; ++t)
+		for (uint8_t t = 0; t < NUM_SPACES; ++t)
 			num += spaces[t].num_axes;
 		queue[settings.queue_end].probe = command[0][1] == CMD_PROBE;
+		queue[settings.queue_end].single = command[0][1] == CMD_SINGLE;
 		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
 		uint8_t t = 0;
 		for (uint8_t ch = 0; ch < num; ++ch)
@@ -243,7 +245,7 @@ void packet()
 				//abort();
 				return;
 			}
-			for (uint8_t t = 0; t < 2; ++t) {
+			for (uint8_t t = 0; t < NUM_SPACES; ++t) {
 				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
 					//debug("resetting %d %d %x", t, m, spaces[t].motor[m]->enable_pin.write());
 					RESET(spaces[t].motor[m]->enable_pin);
@@ -256,7 +258,7 @@ void packet()
 			motors_busy = false;
 		}
 		else {
-			for (uint8_t t = 0; t < 2; ++t) {
+			for (uint8_t t = 0; t < NUM_SPACES; ++t) {
 				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
 					//debug("setting %d %d %x", t, m, spaces[t].motor[m]->enable_pin.write());
 					SET(spaces[t].motor[m]->enable_pin);
@@ -344,7 +346,7 @@ void packet()
 		last_active = millis();
 		which = get_which();
 		uint8_t t = command[0][3];
-		if (which >= 2 || t >= spaces[which].num_axes)
+		if (which >= NUM_SPACES || t >= spaces[which].num_axes)
 		{
 			debug("Invalid axis for setting position: %d %d", which, t);
 			abort();
@@ -367,7 +369,7 @@ void packet()
 #endif
 		which = get_which();
 		uint8_t t = command[0][3];
-		if (which >= 2 || t >= spaces[which].num_axes)
+		if (which >= NUM_SPACES || t >= spaces[which].num_axes)
 		{
 			debug("Getting position of invalid axis %d %d", which, t);
 			abort();
@@ -385,7 +387,7 @@ void packet()
 		}
 		double value = spaces[which].axis[t]->settings.current;
 		if (which == 0) {
-			for (int s = 0; s < 2; ++s) {
+			for (int s = 0; s < NUM_SPACES; ++s) {
 				value = space_types[spaces[s].type].unchange0(&spaces[s], t, value);
 			}
 			if (t == 2)
@@ -424,7 +426,7 @@ void packet()
 #endif
 		addr = 0;
 		which = get_which();
-		if (which >= 2) {
+		if (which >= NUM_SPACES) {
 			debug("Reading invalid space %d", which);
 			abort();
 			return;
@@ -441,7 +443,7 @@ void packet()
 		addr = 0;
 		which = get_which();
 		uint8_t axis = command[0][3];
-		if (which >= 2 || axis >= spaces[which].num_axes) {
+		if (which >= NUM_SPACES || axis >= spaces[which].num_axes) {
 			debug("Reading invalid axis %d %d", which, axis);
 			abort();
 			return;
@@ -458,8 +460,8 @@ void packet()
 		addr = 0;
 		which = get_which();
 		uint8_t motor = command[0][3];
-		if (which >= 2 || motor >= spaces[which].num_motors) {
-			debug("Reading invalid motor %d %d > %d", which, motor, which < 2 ? spaces[which].num_motors : -1);
+		if (which >= NUM_SPACES || motor >= spaces[which].num_motors) {
+			debug("Reading invalid motor %d %d > %d", which, motor, which < NUM_SPACES ? spaces[which].num_motors : -1);
 			abort();
 			return;
 		}
@@ -473,7 +475,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_WRITE_SPACE_INFO");
 #endif
-		if (which >= 2) {
+		if (which >= NUM_SPACES) {
 			debug("Writing invalid space %d", which);
 			abort();
 			return;
@@ -493,7 +495,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_WRITE_SPACE_MOTOR");
 #endif
-		if (which >= 2 || axis >= spaces[which].num_axes) {
+		if (which >= NUM_SPACES || axis >= spaces[which].num_axes) {
 			debug("Writing invalid axis %d %d", which, axis);
 			abort();
 			return;
@@ -513,7 +515,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_WRITE_SPACE_MOTOR");
 #endif
-		if (which >= 2 || motor >= spaces[which].num_motors) {
+		if (which >= NUM_SPACES || motor >= spaces[which].num_motors) {
 			debug("Writing invalid motor %d %d", which, motor);
 			abort();
 			return;

@@ -197,13 +197,14 @@ enum Command {
 	CMD_SET_UUID,	// 16: UUID
 	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin, 1:stop_pin 1:probe_pin 1:pin_flags 2:timeout
 	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
-	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:sense_pin, 1:flags
+	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:follow, 1:flags
 	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:values	(including flags)
 	CMD_HOME,	// 4:us/step, {1:dir}*
 
 	CMD_START_MOVE,	// 1:num_samples, 1:num_moving_motors
 	CMD_START_PROBE,// 1:num_samples, 1:num_moving_motors
 	CMD_MOVE,	// 1:which, *:samples
+	CMD_MOVE_SINGLE,// 1:which, *:samples
 	CMD_START,	// 0 start moving.
 	CMD_STOP,	// 0 stop moving.
 	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.
@@ -226,8 +227,6 @@ enum RCommand {
 	CMD_UNDERRUN,	// 1:num
 	CMD_ADC,	// 1:which, 2:adc reading
 	CMD_LIMIT,	// 1:which, 1:pos, {4:motor_pos}*
-	CMD_SENSE0,	// 1:which, {4:motor_pos}*
-	CMD_SENSE1,	// 1:which, {4:motor_pos}*
 	CMD_TIMEOUT,	// 0
 	CMD_PINCHANGE,	// 1:which, 1: state
 };
@@ -261,6 +260,8 @@ static inline int16_t minpacketlen() {
 		return 3;
 	case CMD_MOVE:
 		return 3;
+	case CMD_MOVE_SINGLE:
+		return 3;
 	case CMD_START:
 		return 1;
 	case CMD_STOP:
@@ -285,10 +286,9 @@ struct Motor
 	uint8_t step_pin;
 	uint8_t dir_pin;
 	volatile uint8_t steps_current;
-	int32_t sense_pos[2];
 	uint8_t limit_min_pin;
 	uint8_t limit_max_pin;
-	uint8_t sense_pin;
+	uint8_t follow;
 	volatile uint8_t intflags;	// Flags that are used by the interrupt handler.
 	uint8_t flags;	// Flags that are not used by the interrupt handler.
 	ARCH_MOTOR
@@ -305,14 +305,9 @@ struct Motor
 		LIMIT			= 0x01,
 		INVERT_LIMIT_MIN	= 0x02,
 		INVERT_LIMIT_MAX	= 0x04,
-		SENSE0			= 0x08,
-		SENSE1			= 0x10,
-		SENSE_STATE		= 0x20
 	};
 	void init(uint8_t m) {
 		current_pos = 0;
-		sense_pos[0] = 0xBEEFBEEF;
-		sense_pos[1] = 0xFACEFACE;
 		intflags = 0;
 		flags = 0;
 		steps_current = 0;
@@ -320,7 +315,7 @@ struct Motor
 		dir_pin = ~0;
 		limit_min_pin = ~0;
 		limit_max_pin = ~0;
-		sense_pin = ~0;
+		follow = ~0;
 		arch_msetup(m);
 	}
 	void disable(uint8_t m) {
@@ -336,13 +331,11 @@ struct Motor
 			UNSET(limit_min_pin);
 		if (limit_max_pin < NUM_DIGITAL_PINS)
 			UNSET(limit_max_pin);
-		if (sense_pin < NUM_DIGITAL_PINS)
-			UNSET(sense_pin);
 		step_pin = ~0;
 		dir_pin = ~0;
 		limit_min_pin = ~0;
 		limit_max_pin = ~0;
-		sense_pin = ~0;
+		follow = ~0;
 		arch_msetup(m);
 	}
 };

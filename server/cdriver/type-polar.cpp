@@ -91,6 +91,10 @@ static double probe_speed(Space *s) {
 	return 1e6 / hwtime_step / s->motor[2]->steps_per_unit;
 }
 
+static int follow(Space *s, int axis) {
+	return -1;
+}
+
 void Polar_init(int num) {
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].reset_pos = reset_pos;
@@ -103,4 +107,5 @@ void Polar_init(int num) {
 	space_types[num].change0 = change0;
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;
+	space_types[num].follow = follow;
 }

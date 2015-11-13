@@ -24,6 +24,7 @@ var TYPE_CARTESIAN = 0;
 var TYPE_DELTA = 1;
 var TYPE_POLAR = 2;
 var TYPE_EXTRUDER = 3;
+var TYPE_FOLLOWER = 4;
 // }}}
 
 function dbg(msg) {
@@ -158,6 +159,16 @@ function _setup_updater() {
 						{
 							name: null,
 							type: TYPE_EXTRUDER,
+							num_axes: 0,
+							num_motors: 0,
+							delta_angle: 0,
+							polar_max_r: Infinity,
+							axis: [],
+							motor: []
+						},
+						{
+							name: null,
+							type: TYPE_FOLLOWER,
 							num_axes: 0,
 							num_motors: 0,
 							delta_angle: 0,
@@ -299,13 +310,11 @@ function _setup_updater() {
 					enable_pin: values[3][m][3],
 					limit_min_pin: values[3][m][4],
 					limit_max_pin: values[3][m][5],
-					sense_pin: values[3][m][6],
-					steps_per_unit: values[3][m][7],
-					max_steps: values[3][m][8],
-					home_pos: values[3][m][9],
-					limit_v: values[3][m][10],
-					limit_a: values[3][m][11],
-					home_order: values[3][m][12]
+					steps_per_unit: values[3][m][6],
+					home_pos: values[3][m][7],
+					limit_v: values[3][m][8],
+					limit_a: values[3][m][9],
+					home_order: values[3][m][10]
 				});
 			}
 			if (index == 1) {
@@ -329,6 +338,12 @@ function _setup_updater() {
 					printers[port].spaces[index].axis[i].extruder_dx = values[5][i][0];
 					printers[port].spaces[index].axis[i].extruder_dy = values[5][i][1];
 					printers[port].spaces[index].axis[i].extruder_dz = values[5][i][2];
+				}
+			}
+			if (printers[port].spaces[index].type == TYPE_FOLLOWER) {
+				for (var i = 0; i < printers[port].spaces[index].axis.length; ++i) {
+					printers[port].spaces[index].motor[i].follower_space = values[5][i][0];
+					printers[port].spaces[index].motor[i].follower_motor = values[5][i][1];
 				}
 			}
 			trigger_update(port, 'space_update', index);

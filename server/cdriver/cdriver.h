@@ -24,6 +24,8 @@
 #define DEFINE_VARIABLES
 #endif
 
+#define NUM_SPACES 3
+
 #include ARCH_INCLUDE
 
 #define debug(...) do { buffered_debug_flush(); fprintf(stderr, "#"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while (0)
@@ -87,8 +89,9 @@ enum Command {
 	CMD_SET_UUID,	// 22 bytes: uuid.
 	CMD_GET_UUID,	// 0.  Reply: UUID.
 	CMD_LINE,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
+	CMD_SINGLE,	// Same as CMD_LINE.
+	CMD_PROBE,	// Same as CMD_LINE.
 	CMD_RUN_FILE,	// n byte: filename.
-	CMD_PROBE,	// same.  Reply (later): LIMIT/MOVECB.
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
 	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [°C].
 	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [°C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
@@ -132,7 +135,6 @@ enum Command {
 	CMD_CONTINUE,	// 1 byte: is_audio.  Bool flag if it needs to be sent.
 	CMD_LIMIT,	// 1 byte: which channel.
 	CMD_TIMEOUT,	// 0
-	CMD_SENSE,	// 1 byte: which channel (b0-6); new state (b7); 4 byte: motor position at trigger.
 	CMD_DISCONNECT,	// 0
 	CMD_PINCHANGE,	// 1 byte: pin, 1 byte: current value.
 		// Updates from RUN_FILE.
@@ -195,7 +197,7 @@ struct History {
 	int queue_start, queue_end;
 	bool queue_full;
 	int run_file_current;
-	bool probing;
+	bool probing, single;
 	double run_time, run_dist;
 };
 
@@ -240,13 +242,9 @@ struct Motor {
 	Pin_t dir_pin;
 	Pin_t enable_pin;
 	double steps_per_unit;			// hardware calibration [steps/unit].
-	uint8_t max_steps;			// maximum number of steps in one iteration.
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;
 	double home_pos;	// Position of motor (in μm) when the home switch is triggered.
-	Pin_t sense_pin;
-	uint8_t sense_state;
-	double sense_pos;
 	bool active;
 	double limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
@@ -267,6 +265,7 @@ struct SpaceType {
 	double (*change0)(Space *s, int axis, double value);
 	double (*unchange0)(Space *s, int axis, double value);
 	double (*probe_speed)(Space *s);
+	int (*follow)(Space *s, int axis);
 };
 
 struct Space {
@@ -292,18 +291,21 @@ struct Space {
 
 #define DEFAULT_TYPE 0
 #define EXTRUDER_TYPE 3
+#define FOLLOWER_TYPE 4
 void Cartesian_init(int num);
 void Delta_init(int num);
 void Polar_init(int num);
 void Extruder_init(int num);
+void Follower_init(int num);
 
 #define setup_spacetypes() do { \
 	Cartesian_init(0); \
 	Delta_init(1); \
 	Polar_init(2); \
 	Extruder_init(3); \
+	Follower_init(4); \
 } while(0)
-#define NUM_SPACE_TYPES 4
+#define NUM_SPACE_TYPES 5
 EXTERN SpaceType space_types[NUM_SPACE_TYPES];
 EXTERN int current_extruder;
 
@@ -320,7 +322,7 @@ struct Gpio {
 
 struct MoveCommand {
 	bool cb;
-	bool probe;
+	bool probe, single;
 	double f[2];
 	double data[10];	// Value if given, NAN otherwise.  Variable size array. TODO
 	double time, dist;
@@ -380,7 +382,7 @@ EXTERN double targetx, targety, zoffset;	// Offset for axis 2 of space 0.
 EXTERN Serial_t *serialdev[2];
 EXTERN unsigned char command[2][FULL_COMMAND_SIZE];
 EXTERN int command_end[2];
-EXTERN Space spaces[2];
+EXTERN Space spaces[NUM_SPACES];
 EXTERN Temp *temps;
 EXTERN Gpio *gpios;
 EXTERN FILE *store_adc;

@@ -47,7 +47,7 @@ static inline int16_t fullpacketlen() { // {{{
 	else if ((command(0) & 0x1f) == CMD_HOME) {
 		return 5 + active_motors;
 	}
-	else if ((command(0) & 0x1f) == CMD_MOVE) {
+	else if ((command(0) & 0x1f) == CMD_MOVE || (command(0) & 0x1f) == CMD_MOVE_SINGLE) {
 		return 2 + last_len;
 	}
 	else if ((command(0) & 0x1f) == CMD_SPI) {
@@ -294,12 +294,12 @@ void serial() { // {{{
 	{
 		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
 		// Resend the ack, but don't do anything (the action has already been taken).
-		debug("duplicate %d %d", ff_in, which);
+		debug("duplicate %d %d len: %d", ff_in, which, cmd_len);
 #ifdef DEBUG_FF
 		debug("old ff_in: %d", ff_in);
 #endif
-		arch_serial_write(cmd_ack[which]);
 		inc_tail(cmd_len);
+		arch_serial_write(cmd_ack[which]);
 		return;
 	}
 #ifdef DEBUG_FF
@@ -399,24 +399,6 @@ void try_send_next() { // Call send_packet if we can. {{{
 		// Still busy sending other packet.
 		return;
 	} // }}}
-	for (uint8_t m = 0; m < active_motors; ++m) {
-		if (motor[m].flags & (Motor::SENSE0 | Motor::SENSE1)) { // {{{
-			sdebug2("sense %d", m);
-			uint8_t type = (motor[m].flags & Motor::SENSE1 ? 1 : 0);
-			pending_packet[ff_out][0] = (type ? CMD_SENSE1 : CMD_SENSE0);
-			pending_packet[ff_out][1] = active_motors;
-			pending_packet[ff_out][2] = m;
-			for (uint8_t mi = 0; mi < active_motors; ++mi) {
-				BUFFER_CHECK(pending_packet[ff_out], 3 + 4 * mi);
-				BUFFER_CHECK(motor, mi);
-				*reinterpret_cast <int32_t *>(&pending_packet[ff_out][3 + 4 * mi]) = motor[mi].sense_pos[type];
-			}
-			motor[m].flags &= ~(type ? Motor::SENSE1 : Motor::SENSE0);
-			prepare_packet(3 + 4 * active_motors);
-			send_packet();
-			return;
-		} // }}}
-	}
 	if (pin_events > 0) { // {{{
 		for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
 			if (!pin[p].event())

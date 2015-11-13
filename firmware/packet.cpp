@@ -190,13 +190,12 @@ void packet()
 		uint8_t dir = motor[m].dir_pin;
 		uint8_t limit_min = motor[m].limit_min_pin;
 		uint8_t limit_max = motor[m].limit_max_pin;
-		uint8_t sense = motor[m].sense_pin;
 		uint8_t flags = motor[m].flags;
 		motor[m].step_pin = command(2);
 		motor[m].dir_pin = command(3);
 		motor[m].limit_min_pin = command(4);
 		motor[m].limit_max_pin = command(5);
-		motor[m].sense_pin = command(6);
+		motor[m].follow = command(6);
 		uint8_t const intmask = Motor::INVERT_STEP;
 		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX;
 		cli();
@@ -237,13 +236,6 @@ void packet()
 				UNSET(limit_max);
 			if (motor[m].limit_max_pin < NUM_DIGITAL_PINS)
 				SET_INPUT(motor[m].limit_max_pin);
-		}
-		if (sense != motor[m].sense_pin) {
-			//debug("new sense for %d", m);
-			if (sense < NUM_DIGITAL_PINS)
-				UNSET(sense);
-			if (motor[m].sense_pin < NUM_DIGITAL_PINS)
-				SET_INPUT(motor[m].sense_pin);
 		}
 		write_ack();
 		return;
@@ -372,8 +364,9 @@ void packet()
 		return;
 	}
 	case CMD_MOVE:
+	case CMD_MOVE_SINGLE:
 	{
-		cmddebug("CMD_MOVE");
+		cmddebug("CMD_MOVE(_SINGLE)");
 		uint8_t m = command(1);
 		if (m >= NUM_MOTORS) {
 			debug("invalid buffer %d to fill", m);
@@ -397,6 +390,14 @@ void packet()
 		}
 		for (uint8_t b = 0; b < last_len; ++b)
 			buffer[last_fragment][m][b] = static_cast<int8_t>(command(2 + b));
+		if (command(0) != CMD_MOVE_SINGLE) {
+			for (uint8_t f = 0; f < active_motors; ++f) {
+				if (motor[f].follow == m) {
+					for (uint8_t b = 0; b < last_len; ++b)
+						buffer[last_fragment][f][b] = buffer[last_fragment][m][b];
+				}
+			}
+		}
 		filling -= 1;
 		if (filling == 0) {
 			//debug("filled %d; current %d notified %d", last_fragment, current_fragment, notified_current_fragment);

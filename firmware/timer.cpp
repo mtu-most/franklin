@@ -31,20 +31,6 @@ void handle_motors() {
 			for (uint8_t m = 0; m < active_motors; ++m) {
 				if (!(motor[m].intflags & Motor::ACTIVE))
 					continue;
-				//debug("check %d", m);
-				// Check sense pins.
-				if (motor[m].sense_pin < NUM_DIGITAL_PINS) {
-					if (GET(motor[m].sense_pin) ^ bool(motor[m].flags & Motor::SENSE_STATE)) {
-						//debug("sense %d %x", m, motor[m].flags);
-						motor[m].flags ^= Motor::SENSE_STATE;
-						motor[m].flags |= (motor[m].flags & Motor::SENSE_STATE ? Motor::SENSE1 : Motor::SENSE0);
-						uint8_t sense_state = motor[m].flags & Motor::SENSE_STATE ? 1 : 0;
-						cli();
-						for (int mi = 0; mi < active_motors; ++mi)
-							motor[mi].sense_pos[sense_state] = motor[mi].current_pos;
-						sei();
-					}
-				}
 				// Check limit switches.
 				if (stopping < 0) {
 					int8_t value = buffer[cf][m][cs];

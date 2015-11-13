@@ -1,63 +1,69 @@
+// vim: set foldmethod=marker :
 #include "cdriver.h"
 
-static void xyz2motors(Space *s, double *motors, bool *ok) {
+// Cartesian functions. {{{
+static void xyz2motors(Space *s, double *motors, bool *ok) { // {{{
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
 		if (motors)
 			motors[a] = s->axis[a]->settings.target;
 		else
 			s->motor[a]->settings.endpos = s->axis[a]->settings.target;
 	}
-}
+} // }}}
 
-static void reset_pos(Space *s) {
+static void reset_pos(Space *s) { // {{{
 	// If positions are unknown, pretend that they are 0.
 	// This is mostly useful for extruders.
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
 		s->axis[a]->settings.source = s->motor[a]->settings.current_pos / s->motor[a]->steps_per_unit;
 		//debug("set pos for %d to %f", a, s->axis[a]->settings.source);
 	}
-}
+} // }}}
 
-static void check_position(Space *s, double *data) {
-}
+static void check_position(Space *s, double *data) { // {{{
+} // }}}
 
-static void load(Space *s, uint8_t old_type, int32_t &addr) {
+static void load(Space *s, uint8_t old_type, int32_t &addr) { // {{{
 	uint8_t num = read_8(addr);
 	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up cartesian axes");
 		s->cancel_update();
 	}
-}
+} // }}}
 
-static void save(Space *s, int32_t &addr) {
+static void save(Space *s, int32_t &addr) { // {{{
 	write_8(addr, s->num_axes);
-}
+} // }}}
 
-static bool init(Space *s) {
+static bool init(Space *s) { // {{{
 	return true;
-}
+} // }}}
 
-static void free(Space *s) {
-}
+static void free(Space *s) { // {{{
+} // }}}
 
-static void afree(Space *s, int a) {
-}
+static void afree(Space *s, int a) { // {{{
+} // }}}
 
-static double change0(Space *s, int axis, double value) {
+static double change0(Space *s, int axis, double value) { // {{{
 	return value;
-}
+} // }}}
 
-static double unchange0(Space *s, int axis, double value) {
+static double unchange0(Space *s, int axis, double value) { // {{{
 	return value;
-}
+} // }}}
 
-static double probe_speed(Space *s) {
+static double probe_speed(Space *s) { // {{{
 	if (s->num_motors >= 3)
 		return 1e6 / hwtime_step / s->motor[2]->steps_per_unit;
 	return INFINITY;
-}
+} // }}}
 
-void Cartesian_init(int num) {
+static int follow(Space *s, int axis) { // {{{
+	return -1;
+} // }}}
+
+void Cartesian_init(int num) { // {{{
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].reset_pos = reset_pos;
 	space_types[num].check_position = check_position;
@@ -69,20 +75,23 @@ void Cartesian_init(int num) {
 	space_types[num].change0 = change0;
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;
-}
+	space_types[num].follow = follow;
+} // }}}
+// }}}
 
-struct ExtruderData {
+// Extruder functions. {{{
+struct ExtruderData { // {{{
 	int num_axes;
-};
+}; // }}}
 
-struct ExtruderAxisData {
+struct ExtruderAxisData { // {{{
 	double offset[3];
-};
+}; // }}}
 
 #define EDATA(s) (*reinterpret_cast <ExtruderData *>(s->type_data))
 #define EADATA(s, a) (*reinterpret_cast <ExtruderAxisData *>(s->axis[a]->type_data))
 
-static void eload(Space *s, uint8_t old_type, int32_t &addr) {
+static void eload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
 	uint8_t num = read_8(addr);
 	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up extruder axes");
@@ -107,7 +116,7 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) {
 		queue[settings.queue_end].f[1] = INFINITY;
 		for (int i = 0; i < spaces[0].num_axes; ++i) {
 			queue[settings.queue_end].data[i] = spaces[0].axis[i]->settings.current;
-			for (int ss = 0; ss < 2; ++ss)
+			for (int ss = 0; ss < NUM_SPACES; ++ss)
 				queue[settings.queue_end].data[i] = space_types[spaces[ss].type].unchange0(&spaces[ss], i, queue[settings.queue_end].data[i]);
 			if (i == 2)
 				queue[settings.queue_end].data[i] -= zoffset;
@@ -129,43 +138,43 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) {
 		next_move();
 		buffer_refill();
 	}
-}
+} // }}}
 
-static void esave(Space *s, int32_t &addr) {
+static void esave(Space *s, int32_t &addr) { // {{{
 	write_8(addr, s->num_axes);
 	for (int a = 0; a < s->num_axes; ++a) {
 		for (int o = 0; o < 3; ++o)
 			write_float(addr, EADATA(s, a).offset[o]);
 	}
-}
+} // }}}
 
-static bool einit(Space *s) {
+static bool einit(Space *s) { // {{{
 	s->type_data = new ExtruderData;
 	EDATA(s).num_axes = 0;
 	return true;
-}
+} // }}}
 
-static void efree(Space *s) {
+static void efree(Space *s) { // {{{
 	delete reinterpret_cast <ExtruderData *>(s->type_data);
-}
+} // }}}
 
-static void eafree(Space *s, int a) {
+static void eafree(Space *s, int a) { // {{{
 	delete reinterpret_cast <ExtruderAxisData *>(s->axis[a]->type_data);
-}
+} // }}}
 
-static double echange0(Space *s, int axis, double value) {
+static double echange0(Space *s, int axis, double value) { // {{{
 	if (current_extruder >= s->num_axes || axis >= 3)
 		return value;
 	return value + EADATA(s, current_extruder).offset[axis];
-}
+} // }}}
 
-static double eunchange0(Space *s, int axis, double value) {
+static double eunchange0(Space *s, int axis, double value) { // {{{
 	if (current_extruder >= s->num_axes || axis >= 3)
 		return value;
 	return value - EADATA(s, current_extruder).offset[axis];
-}
+} // }}}
 
-void Extruder_init(int num) {
+void Extruder_init(int num) { // {{{
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].reset_pos = reset_pos;
 	space_types[num].check_position = check_position;
@@ -177,4 +186,91 @@ void Extruder_init(int num) {
 	space_types[num].change0 = echange0;
 	space_types[num].unchange0 = eunchange0;
 	space_types[num].probe_speed = probe_speed;
-}
+	space_types[num].follow = follow;
+} // }}}
+// }}}
+
+// Follower functions. {{{
+struct FollowerData { // {{{
+	int num_axes;
+}; // }}}
+
+struct FollowerAxisData { // {{{
+	int space, motor;
+}; // }}}
+
+#define FDATA(s) (*reinterpret_cast <FollowerData *>(s->type_data))
+#define FADATA(s, a) (*reinterpret_cast <FollowerAxisData *>(s->axis[a]->type_data))
+
+static void fload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
+	uint8_t num = read_8(addr);
+	if (!s->setup_nums(num, num)) {
+		debug("Failed to set up follower axes");
+		uint8_t n = min(s->num_axes, s->num_motors);
+		if (!s->setup_nums(n, n)) {
+			debug("Trouble!  Failed to abort.  Cancelling.");
+			s->cancel_update();
+		}
+	}
+	for (int a = FDATA(s).num_axes; a < s->num_axes; ++a) {
+		s->axis[a]->type_data = new FollowerAxisData;
+		FADATA(s, a).space = -1;
+		FADATA(s, a).motor = -1;
+	}
+	FDATA(s).num_axes = s->num_axes;
+	for (int a = 0; a < s->num_axes; ++a) {
+		FADATA(s, a).space = read_8(addr);
+		FADATA(s, a).motor = read_8(addr);
+	}
+	arch_motors_change();
+} // }}}
+
+static void fsave(Space *s, int32_t &addr) { // {{{
+	write_8(addr, s->num_axes);
+	for (int a = 0; a < s->num_axes; ++a) {
+		write_8(addr, FADATA(s, a).space);
+		write_8(addr, FADATA(s, a).motor);
+	}
+} // }}}
+
+static bool finit(Space *s) { // {{{
+	s->type_data = new FollowerData;
+	FDATA(s).num_axes = 0;
+	return true;
+} // }}}
+
+static void ffree(Space *s) { // {{{
+	delete reinterpret_cast <FollowerData *>(s->type_data);
+} // }}}
+
+static void fafree(Space *s, int a) { // {{{
+	delete reinterpret_cast <FollowerAxisData *>(s->axis[a]->type_data);
+} // }}}
+
+static int ffollow(Space *s, int axis) { // {{{
+	if (FDATA(s).num_axes <= axis)
+		return -1;
+	int fs = FADATA(s, axis).space;
+	if (fs >= 0 && fs < NUM_SPACES) {
+		int fm = FADATA(s, axis).motor;
+		if (fm >= 0 && fm < spaces[fs].num_motors)
+			return (fs << 8) | fm;
+	}
+	return -1;
+} // }}}
+
+void Follower_init(int num) { // {{{
+	space_types[num].xyz2motors = xyz2motors;
+	space_types[num].reset_pos = reset_pos;
+	space_types[num].check_position = check_position;
+	space_types[num].load = fload;
+	space_types[num].save = fsave;
+	space_types[num].init = finit;
+	space_types[num].free = ffree;
+	space_types[num].afree = fafree;
+	space_types[num].change0 = change0;
+	space_types[num].unchange0 = unchange0;
+	space_types[num].probe_speed = probe_speed;
+	space_types[num].follow = ffollow;
+} // }}}
+// }}}

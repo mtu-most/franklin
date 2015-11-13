@@ -7,7 +7,7 @@ var labels_element, printers_element;
 var selected_port, selected_printer;
 var script_cbs;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
-var space_types = ['Cartesian', 'Delta', 'Polar', 'Extruder'];
+var space_types = ['Cartesian', 'Delta', 'Polar', 'Extruder', 'Follower'];
 // }}}
 
 // General supporting functions. {{{
@@ -252,7 +252,7 @@ function set_value(printer, id, value, reply, arg) { // {{{
 			else if (typeof id[0][1] != 'number' && id[0][1][1] == null) {
 				// [['axis', [0, null]], 'offset']
 				// [['motor', [0, null]], 'delta_radius']
-				if ((id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') && (id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_')) {
+				if ((id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') && (id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_') && (id[0][0] != 'motor' || id[1].substr(0, 9) != 'follower_')) {
 					for (var n = 0; n < printer.spaces[id[0][1][0]]['num_' + type2plural[id[0][0]]]; ++n)
 						printer.call('set_' + id[0][0], [[id[0][1][0], n]], obj, reply);
 				}
@@ -264,7 +264,7 @@ function set_value(printer, id, value, reply, arg) { // {{{
 						o[n] = obj;
 					printer.call('set_space', [id[0][1][0]], {delta: o}, reply);
 				}
-				else {
+				else if (id[1][0] == 'e') {
 					obj = {};	// obj was wrong in this case.
 					obj[id[1].substr(9)] = value;
 					var o = {};
@@ -272,19 +272,37 @@ function set_value(printer, id, value, reply, arg) { // {{{
 						o[n] = obj;
 					printer.call('set_space', [id[0][1][0]], {extruder: o}, reply);
 				}
+				else {
+					obj = {};	// obj was wrong in this case.
+					obj[id[1].substr(9)] = value;
+					var o = {};
+					for (var n = 0; n < printer.spaces[id[0][1][0]].num_axes; ++n)
+						o[n] = obj;
+					printer.call('set_motor', [id[0][1][0]], {follower: o}, reply);
+				}
 			}
-			else if ((id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') && (id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_')) {
+			else if ((id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') && (id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_') && (id[0][0] != 'motor' || id[1].substr(0, 9) != 'follower_')) {
 				// [['space', 1], 'num_axes']
 				// [['axis', [0, 1]], 'offset']
 				printer.call('set_' + id[0][0], [id[0][1]], obj, reply);
 			}
 			else if (id[0][0] == 'motor') {
-				// [['motor', [0, 1]], 'delta_radius']
-				obj = {};	// obj was wrong in this case.
-				obj[id[1].substr(6)] = value;
-				var o = {};
-				o[id[0][1][1]] = obj;
-				printer.call('set_space', [id[0][1][0]], {delta: o}, reply);
+				if (id[1][0] != 'f') {
+					// [['motor', [0, 1]], 'delta_radius']
+					obj = {};	// obj was wrong in this case.
+					obj[id[1].substr(6)] = value;
+					var o = {};
+					o[id[0][1][1]] = obj;
+					printer.call('set_space', [id[0][1][0]], {delta: o}, reply);
+				}
+				else {
+					// [['motor', [0, 1]], 'delta_radius']
+					obj = {};	// obj was wrong in this case.
+					obj[id[1].substr(9)] = value;
+					var o = {};
+					o[id[0][1][1]] = obj;
+					printer.call('set_space', [id[0][1][0]], {follower: o}, reply);
+				}
 			}
 			else {
 				// [['motor', [0, 1]], 'delta_radius']
@@ -611,7 +629,7 @@ function new_printer() { // {{{
 	ports[port][2].RemoveClass('notconnected');
 	ports[port][2].AddClass('connected');
 	update_globals();
-	for (var i = 0; i < 2; ++i)
+	for (var i = 0; i < printer.spaces.length; ++i)
 		update_space(i);
 	for (var i = 0; i < printer.num_temps; ++i)
 		update_temp(i);
@@ -831,7 +849,7 @@ function update_globals() { // {{{
 	var m = printer.multiples;
 	for (var t = 0; t < m.space.length; ++t) {
 		// Add table rows.
-		while (m.space[t].tr.length < 2) { // TODO: force num spaces to be 2 at initialization.
+		while (m.space[t].tr.length < printer.spaces.length) { // TODO: set num spaces at initialization.
 			var n = m.space[t].create(m.space[t].tr.length);
 			m.space[t].tr.push(n);
 			m.space[t].table.insertBefore(n, m.space[t].after);
@@ -841,7 +859,7 @@ function update_globals() { // {{{
 		}
 	}
 	for (var t = 0; t < m.axis.length; ++t) {
-		while (m.axis[t].space.length < 2) { // TODO: force num spaces to be 2 at initialization.
+		while (m.axis[t].space.length < printer.spaces.length) { // TODO: set num spaces at initialization.
 			var n;
 			if (m.axis[t].all)
 				n = m.axis[t].create(m.axis[t].space.length, null);
@@ -852,7 +870,7 @@ function update_globals() { // {{{
 		}
 	}
 	for (var t = 0; t < m.motor.length; ++t) {
-		while (m.motor[t].space.length < 2) { // TODO: force num spaces to be 2 at initialization.
+		while (m.motor[t].space.length < printer.spaces.length) { // TODO: set num spaces at initialization.
 			var n;
 			if (m.motor[t].all)
 				n = m.motor[t].create(m.motor[t].space.length, null);
@@ -940,7 +958,7 @@ function update_space(index) { // {{{
 	}
 	for (var a = 0; a < printer.spaces[index].num_axes; ++a) {
 		set_name(printer, 'axis', index, a, printer.spaces[index].axis[a].name);
-		if (index == 0) {
+		if (index != 1) {
 			update_float(printer, [['axis', [index, a]], 'park']);
 			update_float(printer, [['axis', [index, a]], 'park_order']);
 			update_float(printer, [['axis', [index, a]], 'min']);
@@ -956,14 +974,12 @@ function update_space(index) { // {{{
 		update_pin([['motor', [index, m]], 'enable_pin']);
 		update_pin([['motor', [index, m]], 'limit_min_pin']);
 		update_pin([['motor', [index, m]], 'limit_max_pin']);
-		update_pin([['motor', [index, m]], 'sense_pin']);
 		update_float(printer, [['motor', [index, m]], 'steps_per_unit']);
-		update_float(printer, [['motor', [index, m]], 'max_steps']);
-		if (index == 0)
+		if (index != 1)
 			update_float(printer, [['motor', [index, m]], 'home_pos']);
 		update_float(printer, [['motor', [index, m]], 'limit_v']);
 		update_float(printer, [['motor', [index, m]], 'limit_a']);
-		if (index == 0)
+		if (index != 1)
 			update_float(printer, [['motor', [index, m]], 'home_order']);
 	}
 	if (printer.spaces[index].type == TYPE_DELTA) {
@@ -983,6 +999,12 @@ function update_space(index) { // {{{
 			update_float(printer, [['axis', [index, d]], 'extruder_dx']);
 			update_float(printer, [['axis', [index, d]], 'extruder_dy']);
 			update_float(printer, [['axis', [index, d]], 'extruder_dz']);
+		}
+	}
+	if (printer.spaces[index].type == TYPE_FOLLOWER) {
+		for (var d = 0; d < printer.spaces[index].motor.length; ++d) {
+			update_float(printer, [['motor', [index, d]], 'follower_space']);
+			update_float(printer, [['motor', [index, d]], 'follower_motor']);
 		}
 	}
 	var newhidetypes = [];
@@ -1445,22 +1467,18 @@ function display_time(t) { // {{{
 }
 // }}}
 
-function update_canvas_and_spans(p, space, axis) { // {{{
-	// When called as a cb, space may not be undefined.
-	if (axis === undefined) {
+function update_canvas_and_spans(p, space) { // {{{
+	if (space === undefined) {
 		space = 0;
-		axis = 0;
 	}
-	while (space < p.spaces.length && (axis >= p.spaces[space].axis.length || space == 0 && axis >= 3)) {
-		space += 1;
-		axis = 0;
-	}
-	if (space < p.spaces.length && space < 2) {
-		p.call('get_axis_pos', [space, axis], {}, function(x) {
+	if (space < 2) {	// Ignore follower positions.
+		p.call('get_axis_pos', [space], {}, function(x) {
 			//dbg('update ' + space + ',' + axis + ':' + x);
-			p.spaces[space].axis[axis].current = x;
-			update_float(p, [['axis', [space, axis]], 'current']);
-			update_canvas_and_spans(p, space, axis + 1);
+			for (var i = 0; i < x.length; ++i) {
+				p.spaces[space].axis[i].current = x[i];
+				update_float(p, [['axis', [space, i]], 'current']);
+			}
+			update_canvas_and_spans(p, space + 1);
 		});
 		return;
 	}
