@@ -1140,7 +1140,7 @@ class Printer: # {{{
 			n = set()
 			for s in self.spaces:
 				for m in s.motor:
-					if self.pin_valid(m['limit_min_pin']) or self.pin_valid(m['limit_max_pin']) and m['home_order'] > self.home_order:
+					if (self.pin_valid(m['limit_min_pin']) or self.pin_valid(m['limit_max_pin'])) and m['home_order'] > self.home_order:
 						n.add(m['home_order'])
 			if len(n) > 0:
 				self.home_phase = 1
