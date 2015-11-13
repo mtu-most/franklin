@@ -1432,8 +1432,10 @@ class Printer: # {{{
 							return chr(ord('x') + i)
 						else:
 							return 'Axis %d' % i
+					elif self.id == 1:
+						return 'e%d' % i
 					else:
-						return 'E%d' % i
+						return 'follower %d' % i
 				self.axis += [{'name': nm(i)} for i in range(len(self.axis), len(axes))]
 			else:
 				self.axis[len(axes):] = []
