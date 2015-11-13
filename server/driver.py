@@ -1109,12 +1109,6 @@ class Printer: # {{{
 			#log('done 1')
 			if len(self.home_target) > 0:
 				log('Warning: not all limits were found during homing')
-			# set current position.
-			for s, i, a, m in self.home_motors:
-				if i in self.limits[s]:
-					if not math.isnan(m['home_pos']):
-						#log('set %d %d %f' % (s, i, m['home_pos']))
-						self.spaces[s].set_current_pos(i, m['home_pos'])
 			n = set()
 			for s in self.spaces:
 				for m in s.motor:
@@ -1146,14 +1140,24 @@ class Printer: # {{{
 				return
 			# Fall through.
 		if self.home_phase == 3:
+			# set current position.
+			for s, sp in enumerate(self.spaces):
+				for i, m in enumerate(sp.motor):
+					if i in self.limits[s]:
+						if not math.isnan(m['home_pos']):
+							#log('set %d %d %f' % (s, i, m['home_pos']))
+							sp.set_current_pos(i, m['home_pos'])
+					else:
+						if (self.pin_valid(m['limit_min_pin']) or self.pin_valid(m['limit_max_pin'])) and not math.isnan(m['home_pos']):
+							#log('defset %d %d %f' % (0, i, m['home_pos']))
+							sp.set_current_pos(i, m['home_pos'])
+						else:
+							sp.set_current_pos(i, 0)
 			# Pre-insert delta axes as followers to align.
 			groups = ([], [], [])	# min limits; max limits; just move.
 			if self.home_orig_type == TYPE_DELTA:
 				groups[1].append([])
 				for i, m in enumerate(self.spaces[0].motor):
-					if not self.pin_valid(m['limit_min_pin']) and not self.pin_valid(m['limit_max_pin']):
-						#log('defset %d %d %f' % (0, i, m['home_pos']))
-						self.spaces[0].set_current_pos(i, m['home_pos'])
 					groups[1][-1].append((0, i))
 			# Align followers.
 			for i, m in enumerate(self.spaces[2].motor):
