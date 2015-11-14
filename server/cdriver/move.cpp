@@ -31,7 +31,7 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 		else {
 			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
 #ifdef DEBUG_MOVE
-			debug("setting dist %d %d %f %d %f %f %f", s, a, queue[qpos].data[a0 + a], next, sp.axis[a]->settings.endpos[0], sp.axis[a]->settings.source, sp.axis[a]->settings.dist[1]);
+			debug("setting dist for %d %d queue %f next %d end %f src %f dist %f", s, a, queue[qpos].data[a0 + a], next, sp.axis[a]->settings.endpos[0], sp.axis[a]->settings.source, sp.axis[a]->settings.dist[1]);
 #endif
 		}
 	}

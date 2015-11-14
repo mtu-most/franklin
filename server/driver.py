@@ -1017,11 +1017,11 @@ class Printer: # {{{
 	def _do_home(self, done = None): # {{{
 		#log('do_home: %s %s' % (self.home_phase, done))
 		# 0: Prepare for next order.
-		# 1: Move to limits.
-		# 2: Move slowly away from switch.
-		# 4: Set current position; move delta and followers.
-		# 5: Move within limits.
-		# 6: Return.
+		# 1: Move to limits. (enter from loop after 2).
+		# 2: Finish moving to limits; loop home_order; move slowly away from switch.
+		# 3: Set current position; move delta and followers.
+		# 4: Move within limits.
+		# 5: Return.
 		#log('home %s %s' % (self.home_phase, repr(self.home_target)))
 		#traceback.print_stack()
 		home_v = 50 / self.feedrate
@@ -1069,15 +1069,13 @@ class Printer: # {{{
 						self.home_motors.append((s, i, sp.axis[i], m))
 				self.limits[s].clear()
 			self.home_target = {}
+			dist = 1000 #TODO: use better value.
 			for s, i, a, m in self.home_motors:
+				self.spaces[s].set_current_pos(i, 0)
 				if self.pin_valid(m['limit_max_pin']):
-					dist = 1000 + m['home_pos']	#TODO: use better value.
-					self.spaces[s].set_current_pos(i, self.home_limits[i][1] - dist)
-					self.home_target[(s, i)] = self.home_limits[i][1] - (0 if s != 0 or i != 2 else self.zoffset)
+					self.home_target[(s, i)] = dist - (0 if s != 0 or i != 2 else self.zoffset)
 				else:
-					dist = 1000 - m['home_pos']	# TODO: use better value.
-					self.spaces[s].set_current_pos(i, self.home_limits[i][0] + dist)
-					self.home_target[(s, i)] = self.home_limits[i][0] - (0 if s != 0 or i != 2 else self.zoffset)
+					self.home_target[(s, i)] = -dist - (0 if s != 0 or i != 2 else self.zoffset)
 			if len(self.home_target) > 0:
 				self.home_cb[0] = [(s, k) for s, k in self.home_target.keys()]
 				if self.home_cb not in self.movecb:
@@ -1106,7 +1104,6 @@ class Printer: # {{{
 					self.line(mktarget(), f0 = home_v / dist, cb = True, force = True, single = True)[1](None)
 					return
 				# Fall through.
-			#log('done 1')
 			if len(self.home_target) > 0:
 				log('Warning: not all limits were found during homing')
 			n = set()
@@ -1149,9 +1146,10 @@ class Printer: # {{{
 							sp.set_current_pos(i, m['home_pos'])
 					else:
 						if (self.pin_valid(m['limit_min_pin']) or self.pin_valid(m['limit_max_pin'])) and not math.isnan(m['home_pos']):
-							#log('defset %d %d %f' % (0, i, m['home_pos']))
+							#log('defset %d %d %f' % (s, i, m['home_pos']))
 							sp.set_current_pos(i, m['home_pos'])
 						else:
+							#log('zeroset %d %d' % (s, i))
 							sp.set_current_pos(i, 0)
 			# Pre-insert delta axes as followers to align.
 			groups = ([], [], [])	# min limits; max limits; just move.
@@ -1194,18 +1192,21 @@ class Printer: # {{{
 				target = self.spaces[target[0]].motor[target[1]]['home_pos']
 				for s, m in g:
 					if target != self.spaces[s].motor[m]['home_pos']:
-						self.home_target[(s, m)] = target
+						offset = (0 if s != 0 or m != 2 else self.zoffset)
+						self.home_target[(s, m)] = target - offset
 			for g in groups[1]:
 				target = min(g, key = lambda x: self.spaces[x[0]].motor[x[1]]['home_pos'])
 				target = self.spaces[target[0]].motor[target[1]]['home_pos']
 				for s, m in g:
 					if target != self.spaces[s].motor[m]['home_pos']:
-						self.home_target[(s, m)] = target
+						offset = (0 if s != 0 or m != 2 else self.zoffset)
+						self.home_target[(s, m)] = target - offset
 			for s, m in groups[2]:
 				fs = self.spaces[s].follower[m]['space']
 				fm = self.spaces[s].follower[m]['motor']
 				if self.spaces[fs].motor[fm]['home_pos'] != self.spaces[s].motor[m]['home_pos']:
-					self.home_target[(s, m)] = self.spaces[fs].motor[fm]['home_pos']
+					offset = (0 if s != 0 or m != 2 else self.zoffset)
+					self.home_target[(s, m)] = self.spaces[fs].motor[fm]['home_pos'] - offset
 			self.home_phase = 4
 			if len(self.home_target) > 0:
 				self.home_cb[0] = False

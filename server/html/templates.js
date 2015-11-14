@@ -645,8 +645,8 @@ function Printer() {	// {{{
 		'Name of the axis',
 		'Park position of the nozzle.  This is where the nozzle is sent when it is requested to get out of the way through a park command.',
 		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
-		'Minimum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to less than -radius.  Cannot be -Infinity for technical reasons; set to -2r if unsure.',
-		'Maximum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to more than radius.  Cannot be Infinity for technical reasons; set to 2r if unsure.'
+		'Minimum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to -Infinity for x and y.',
+		'Maximum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to Infinity for x and y.'
 	]).AddMultiple('axis', Axis)]);
 	// }}}
 	// Motor. {{{
