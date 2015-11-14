@@ -647,7 +647,7 @@ def detect(port): # {{{
 			# This printer was running and tried to send an id.  Check the id.
 			id[0] = id[0][1:9]
 			if id[0] in orphans:
-				log('accepting orphan %s on %s' % (id[0], port))
+				log('accepting orphan %s on %s' % (''.join('%02x' % ord(x) for x in id[0]), port))
 				ports[port] = orphans.pop(id[0])
 				ports[port].port = port
 				def close_port(success, data):

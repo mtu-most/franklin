@@ -29,7 +29,7 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 			sp.axis[a]->settings.dist[1] = 0;
 		}
 		else {
-			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
+			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next && !isnan(sp.axis[a]->settings.endpos[0]) ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
 #ifdef DEBUG_MOVE
 			debug("setting dist for %d %d queue %f next %d end %f src %f dist %f", s, a, queue[qpos].data[a0 + a], next, sp.axis[a]->settings.endpos[0], sp.axis[a]->settings.source, sp.axis[a]->settings.dist[1]);
 #endif
@@ -103,9 +103,14 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 			sp.settings.normal[1][i] = NAN;
 		}
 		double d = 0;
-		for (int a = 0; a < sp.num_axes; ++a)
-			d += sp.axis[a]->settings.dist[1] * sp.axis[a]->settings.dist[1];
-		sp.settings.dist[1] = sqrt(d);
+		int n = 0;
+		for (int a = 0; a < sp.num_axes; ++a) {
+			if (!isnan(sp.axis[a]->settings.dist[1])) {
+				d += sp.axis[a]->settings.dist[1] * sp.axis[a]->settings.dist[1];
+				n += 1;
+			}
+		}
+		sp.settings.dist[1] = n > 0 ? sqrt(d) / n : 0;
 	}
 } // }}}
 
@@ -167,6 +172,10 @@ uint8_t next_move() { // {{{
 		Space &sp = spaces[s];
 		for (uint8_t a = 0; a < sp.num_axes; ++a) {
 			if (isnan(sp.axis[a]->settings.source)) {
+				if (!isnan(sp.axis[a]->settings.current)) {
+					sp.axis[a]->settings.source = sp.axis[a]->settings.current;
+					continue;
+				}
 				space_types[sp.type].reset_pos(&sp);
 				for (uint8_t aa = 0; aa < sp.num_axes; ++aa)
 					sp.axis[aa]->settings.current = sp.axis[aa]->settings.source;
@@ -394,7 +403,10 @@ uint8_t next_move() { // {{{
 			if (new_fp < settings.fp)
 				settings.fp = new_fp;
 		}
-		settings.fq = settings.fp * factor;
+		if (isnan(done_factor))
+			settings.fq = 0;
+		else
+			settings.fq = settings.fp * factor;
 	}
 	if (isnan(done_factor))
 		done_factor = 1;
