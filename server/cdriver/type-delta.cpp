@@ -73,9 +73,11 @@ static void xyz2motors(Space *s, double *motors, bool *ok) {
 static void reset_pos (Space *s) {
 	// All axes' current_pos must be valid and equal, in other words, x=y=0.
 	double p[3];
+	// Epsilon is average step length.
+	double epsilon = 3 / (s->motor[0]->steps_per_unit + s->motor[1]->steps_per_unit + s->motor[2]->steps_per_unit);
 	for (uint8_t i = 0; i < 3; ++i)
 		p[i] = s->motor[i]->settings.current_pos / s->motor[i]->steps_per_unit;
-	if (p[0] != p[1] || p[0] != p[2]) {
+	if (abs(p[0] - p[1]) > epsilon || int(p[0] - p[2]) > epsilon) {
 		//debug("resetpos fails");
 		s->axis[0]->settings.source = NAN;
 		s->axis[1]->settings.source = NAN;
@@ -85,7 +87,7 @@ static void reset_pos (Space *s) {
 		//debug("resetpos %f", p[0]);
 		s->axis[0]->settings.source = 0;
 		s->axis[1]->settings.source = 0;
-		s->axis[2]->settings.source = p[0];
+		s->axis[2]->settings.source = (p[0] + p[1] + p[2]) / 3;
 	}
 }
 

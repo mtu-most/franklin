@@ -78,8 +78,10 @@ void setpos(int which, int t, double f) {
 		spaces[which].axis[a]->settings.current = NAN;
 	}
 	//debug("setting pos for %d %d", which, t);
-	int32_t diff = int32_t(f * spaces[which].motor[t]->steps_per_unit + (f > 0 ? .49 : -.49)) - spaces[which].motor[t]->settings.current_pos;
+	double diff = f * spaces[which].motor[t]->steps_per_unit - spaces[which].motor[t]->settings.current_pos;
+	int32_t ipos = int(spaces[which].motor[t]->settings.current_pos);
 	spaces[which].motor[t]->settings.current_pos += diff;
+	int32_t idiff = int(spaces[which].motor[t]->settings.current_pos) - ipos;
 	for (int fragment = 0; fragment < FRAGMENTS_PER_BUFFER; ++fragment)
 		spaces[which].motor[t]->history[fragment].current_pos += diff;
 	if (isnan(spaces[which].axis[t]->settings.current)) {
@@ -87,8 +89,8 @@ void setpos(int which, int t, double f) {
 		for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
 			spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
 	}
-	arch_addpos(which, t, diff);
-	cpdebug(which, t, "setpos diff %d to %d", diff, spaces[which].motor[t]->settings.current_pos);
+	arch_addpos(which, t, idiff);
+	cpdebug(which, t, "setpos diff %d", diff);
 	//arch_stop();
 	space_types[spaces[which].type].reset_pos(&spaces[which]);
 	for (uint8_t a = 0; a < spaces[which].num_axes; ++a)

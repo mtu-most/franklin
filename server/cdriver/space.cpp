@@ -231,24 +231,24 @@ void Space::load_motor(uint8_t m, int32_t &addr) { // {{{
 	if (!isnan(motor[m]->home_pos)) {
 		// Axes with a limit switch.
 		if (motors_busy && (old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !isnan(old_home_pos)) {
-			int32_t hp = motor[m]->home_pos * motor[m]->steps_per_unit + (motor[m]->home_pos > 0 ? .49 : -.49);
-			int32_t ohp = old_home_pos * old_steps_per_unit + (old_home_pos > 0 ? .49 : -.49);
-			int32_t diff = hp - ohp;
+			double hp = motor[m]->home_pos * motor[m]->steps_per_unit;
+			double ohp = old_home_pos * old_steps_per_unit;
+			double diff = hp - ohp;
+			int ipos = int(motor[m]->settings.current_pos);
 			motor[m]->settings.current_pos += diff;
 			cpdebug(id, m, "load motor new home add %d", diff);
-			arch_addpos(id, m, diff);
+			arch_addpos(id, m, int(motor[m]->settings.current_pos) - ipos);
 			must_move = true;
 		}
 	}
 	else {
 		// Axes without a limit switch, including extruders.
 		if (motors_busy && old_steps_per_unit != motor[m]->steps_per_unit) {
-			int32_t cp = motor[m]->settings.current_pos;
-			double pos = cp / old_steps_per_unit;
 			cpdebug(id, m, "load motor new steps no home");
+			double pos = motor[m]->settings.current_pos / old_steps_per_unit;
+			int ipos = int(motor[m]->settings.current_pos);
 			motor[m]->settings.current_pos = pos * motor[m]->steps_per_unit;
-			int diff = motor[m]->settings.current_pos - cp;
-			arch_addpos(id, m, diff);
+			arch_addpos(id, m, int(motor[m]->settings.current_pos) - ipos);
 		}
 	}
 	if (must_move)
@@ -358,7 +358,7 @@ static void check_distance(Motor *mtr, double distance, double dt, double &facto
 	}*/
 	//debug("cd4 %f %f", distance, dt); */
 	int steps = distance * mtr->steps_per_unit;
-	//cpdebug(s, m, "cp %d hwcp %d cf %d value %d", mtr.settings.current_pos, mtr.settings.current_pos, current_fragment, value);
+	//cpdebug(s, m, "cf %d value %d", current_fragment, value);
 	if (settings.probing && steps)
 		steps = s;
 	else {
@@ -371,7 +371,6 @@ static void check_distance(Motor *mtr, double distance, double dt, double &facto
 		distance = steps / mtr->steps_per_unit;
 		v = fabs(distance / dt);
 	}
-	//debug("move pos %d %d cf %d time %d cp %d hwcp %d diff %d value %d", s, m, current_fragment, settings.hwtime, sp.motor[m]->settings.current_pos + avr_pos_offset[m], sp.motor[m]->settings.current_pos + avr_pos_offset[m], sp.motor[m]->settings.current_pos - sp.motor[m]->settings.current_pos, value);
 	//debug("=============");
 	double f = distance / mtr->settings.target_dist;
 	//debug("checked %f %f %f %f", mtr->settings.target_dist, distance, factor, f);
@@ -400,7 +399,7 @@ static void move_axes(Space *s, uint32_t current_time, double &factor) { // {{{
 	}
 	//movedebug("ok %d", ok);
 	for (uint8_t m = 0; m < s->num_motors; ++m) {
-		//debug("move %d %d %f %f", s->id, m, motors_target[m], s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit);
+		//debug("move %d %f %f %f", s->id, m, motors_target[m], s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit);
 		double distance = motors_target[m] - s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit;
 		check_distance(s->motor[m], distance, (current_time - settings.last_time) / 1e6, factor);
 	}
@@ -448,8 +447,8 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 			for (uint8_t m = 0; m < sp.num_motors; ++m) {
 				Motor &mtr = *sp.motor[m];
 				double num = (mtr.settings.current_pos / mtr.steps_per_unit + mtr.settings.target_dist * factor) * mtr.steps_per_unit;
-				if (mtr.settings.current_pos != int(num + (num > 0 ? .49 : -.49))) {
-					//debug("have steps %d %f %f", mtr.settings.current_pos, mtr.settings.target_dist, factor);
+				if (int(mtr.settings.current_pos) != int(num)) {
+					//debug("have steps %f %f %f", mtr.settings.current_pos, mtr.settings.target_dist, factor);
 					have_steps = true;
 					break;
 				}
@@ -488,16 +487,16 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 			cpdebug(s, m, "ccp3 stopping %d target %f lastv %f spm %f tdist %f factor %f frag %d", stopping, target, mtr.settings.last_v, mtr.steps_per_unit, mtr.settings.target_dist, factor, current_fragment);
 			//if (fabs(mtr.settings.target_dist * factor) > .01)	// XXX: This shouldn't ever happen on my printer, but shouldn't be a limitation.
 				//abort();
-			int new_cp = target * mtr.steps_per_unit + (target > 0 ? .49 : -.49);
-			if (mtr.settings.current_pos != new_cp) {
+			int new_cp = target * mtr.steps_per_unit;
+			if (int(mtr.settings.current_pos) != int(new_cp)) {
 				have_steps = true;
 				if (!mtr.active) {
 					mtr.active = true;
 					num_active_motors += 1;
 				}
-				int diff = new_cp - mtr.settings.current_pos;
+				int diff = int(new_cp) - int(mtr.settings.current_pos);
 				DATA_SET(s, m, diff);
-				mtr.settings.current_pos += diff;
+				mtr.settings.current_pos = new_cp;
 				if (!settings.single) {
 					for (int mm = 0; mm < spaces[2].num_motors; ++mm) {
 						int fm = space_types[spaces[2].type].follow(&spaces[2], mm);
@@ -507,7 +506,7 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 						fm &= 0xff;
 						if (fs != s || fm != m || (fs == 2 && fm >= mm))
 							continue;
-						spaces[2].motor[mm]->settings.current_pos += diff;
+						spaces[2].motor[mm]->settings.current_pos += new_cp - mtr.settings.current_pos;
 					}
 				}
 			}
@@ -821,7 +820,7 @@ void apply_tick() { // {{{
 	settings.hwtime += hwtime_step;
 	handle_motors(settings.hwtime);
 	//if (spaces[0].num_axes >= 2)
-		//debug("move z %d %d %f %d %d", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings.current, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
+		//debug("move z %d %d %f %f %f", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings.current, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 } // }}}
 
 void buffer_refill() { // {{{
@@ -838,10 +837,10 @@ void buffer_refill() { // {{{
 	//debug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
 	while (computing_move && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 4 && !sending_fragment) {
-		//debug("refill %d %d %d", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings.current_pos);
+		//debug("refill %d %d %f", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings.current_pos);
 		// fill fragment until full.
 		apply_tick();
-		//debug("refill2 %d %d", current_fragment, spaces[0].motor[0]->settings.current_pos);
+		//debug("refill2 %d %f", current_fragment, spaces[0].motor[0]->settings.current_pos);
 		if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
 			//debug("fragment full %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
 			send_fragment();

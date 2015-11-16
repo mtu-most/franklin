@@ -266,7 +266,7 @@ void avr_get_current_pos(int offset, bool check) {
 	for (int ts = 0; ts < NUM_SPACES; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
 			int old = spaces[ts].motor[tm]->settings.current_pos;
-			cpdebug(ts, tm, "cpb offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
+			cpdebug(ts, tm, "cpb offset %d raw %d hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
 			spaces[ts].motor[tm]->settings.current_pos = 0;
 			for (int i = 0; i < 4; ++i) {
 				spaces[ts].motor[tm]->settings.current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
@@ -274,14 +274,14 @@ void avr_get_current_pos(int offset, bool check) {
 			if (spaces[ts].motor[tm]->dir_pin.inverted())
 				spaces[ts].motor[tm]->settings.current_pos *= -1;
 			spaces[ts].motor[tm]->settings.current_pos -= avr_pos_offset[tm + mi];
-			cpdebug(ts, tm, "cpa offset %d raw %d hwpos %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
-			cpdebug(ts, tm, "getpos offset %d diff %d", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos - old);
-			if (check && old != spaces[ts].motor[tm]->settings.current_pos) {
+			cpdebug(ts, tm, "cpa offset %d raw %d hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
+			cpdebug(ts, tm, "getpos offset %d diff %d", avr_pos_offset[tm + mi], int(spaces[ts].motor[tm]->settings.current_pos) - old);
+			if (check && old != int(spaces[ts].motor[tm]->settings.current_pos)) {
 				if (moving_to_current == 1)
 					moving_to_current = 2;
 				else {
 					//abort();
-					debug("WARNING: position for %d %d out of sync! (This is normal after sleep), old = %d, new = %d", ts, tm, old, spaces[ts].motor[tm]->settings.current_pos);
+					debug("WARNING: position for %d %d out of sync! (This is normal after sleep), old = %d, new = %d", ts, tm, old, int(spaces[ts].motor[tm]->settings.current_pos));
 				}
 			}
 		}
@@ -323,20 +323,9 @@ bool hwpacket(int len) {
 			cpdebug(s, m, "limit");
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
-		//debug("limit %d", command[1][2]);
 		avr_homing = false;
 		abort_move(int8_t(command[1][3]));
-		//int i = 0;
-		//for (int is = 0; is < NUM_SPACES; ++is)
-		//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
-		//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
-		//fprintf(stderr, "\n");
 		avr_get_current_pos(4, false);
-		//i = 0;
-		//for (int is = 0; is < NUM_SPACES; ++is)
-		//	for (int im = 0; im < spaces[is].num_motors; ++im, ++i)
-		//		fprintf(stderr, "\t%8d", spaces[is].motor[im]->settings.current_pos + avr_pos_offset[i]);
-		//fprintf(stderr, "\n");
 		sending_fragment = 0;
 		stopping = 2;
 		send_host(CMD_LIMIT, s, m, pos);
@@ -446,11 +435,6 @@ bool hwpacket(int len) {
 		computing_move = false;
 		avr_homing = false;
 		avr_get_current_pos(2, false);
-		//int i = 0;
-		//for (int s = 0; s < NUM_SPACES; ++s)
-		//	for (int m = 0; m < spaces[s].num_motors; ++m, ++i)
-		//		fprintf(stderr, "\t%8d", spaces[s].motor[m]->settings.current_pos + avr_pos_offset[i]);
-		//fprintf(stderr, "\n");
 		avr_write_ack("homed");
 		send_host(CMD_HOMED);
 		return false;
@@ -905,7 +889,7 @@ void arch_addpos(int s, int m, int diff) {
 	for (uint8_t st = 0; st < s; ++st)
 		mi += spaces[st].num_motors;
 	avr_pos_offset[mi] -= diff;
-	cpdebug(s, m, "arch addpos %d %d %d %d", diff, avr_pos_offset[m], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
+	cpdebug(s, m, "arch addpos %d %d %d", diff, avr_pos_offset[m], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi]);
 }
 
 void arch_stop(bool fake) {
