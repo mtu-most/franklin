@@ -27,14 +27,6 @@ var TYPE_EXTRUDER = 3;
 var TYPE_FOLLOWER = 4;
 // }}}
 
-function dbg(msg) {
-	// Don't use Add, because this should be callable from anywhere, including Add.
-	var div = document.getElementById('debug');
-	var p = document.createElement('p');
-	div.appendChild(p);
-	p.appendChild(document.createTextNode(msg));
-}
-
 // {{{ Events from server.
 function trigger_update(called_port, name) {
 	//dbg(called_port + ':' + name + ',' + printers[called_port] + ',' + arguments[2]);
@@ -419,63 +411,6 @@ function setup() {
 	scripts = new Object;
 	autodetect = true;
 	blacklist = '';
-	var proto = Object.prototype;
-	proto.Add = function(object, className) {
-		if (!(object instanceof Array))
-			object = [object];
-		for (var i = 0; i < object.length; ++i) {
-			if (typeof object[i] == 'string')
-				this.AddText(object[i]);
-			else {
-				this.appendChild(object[i]);
-				object[i].AddClass(className);
-			}
-		}
-		return object[0];
-	};
-	proto.AddElement = function(name, className) { var element = document.createElement(name); return this.Add(element, className); };
-	proto.AddText = function(text) { var t = document.createTextNode(text); this.Add(t); return this; };
-	proto.ClearAll = function() { while (this.firstChild) this.removeChild(this.firstChild); return this; };
-	proto.AddClass = function(className) {
-		if (!className)
-			return this;
-		var classes = this.className.split(' ');
-		var newclasses = className.split(' ');
-		for (var i = 0; i < newclasses.length; ++i) {
-			if (classes.indexOf(newclasses[i]) < 0)
-				classes.push(newclasses[i]);
-		}
-		this.className = classes.join(' ');
-		return this;
-	};
-	proto.RemoveClass = function(className) {
-		if (!className)
-			return this;
-		var classes = this.className.split(' ');
-		var oldclasses = className.split(' ');
-		for (var i = 0; i < oldclasses.length; ++i) {
-			var pos = classes.indexOf(oldclasses[i]);
-			if (pos >= 0)
-				classes.splice(pos, 1);
-		}
-		this.className = classes.join(' ');
-		return this;
-	};
-	proto.HaveClass = function(className) {
-		if (!className)
-			return true;
-		var classes = this.className.split(' ');
-		for (var i = 0; i < classes.length; ++i) {
-			var pos = classes.indexOf(className);
-			if (pos >= 0)
-				return true;
-		}
-		return false;
-	};
-	proto.AddEvent = function(name, impl) {
-		this.addEventListener(name, impl, false);
-		return this;
-	};
 	_setup_updater();
 	rpc = Rpc(_updater, _setup_connection, _reconnect);
 }

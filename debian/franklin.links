@@ -1,2 +1,3 @@
 /usr/lib/franklin/server.py /usr/bin/franklin
+/usr/share/python-websocketd/builders.js /usr/lib/franklin/html/builders.js
 /usr/share/python-websocketd/rpc.js /usr/lib/franklin/html/rpc.js

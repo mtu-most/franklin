@@ -1329,29 +1329,34 @@ function make_pin_title(title, content) { // {{{
 	return container;
 } // }}}
 
-Object.prototype.AddMultiple = function(type, template, all, forbidden) { // {{{
-	var one = function(t, template, i, arg) {
-		var ret = template(i, arg, t);
-		if (ret !== null && (i === null || arg === null))
-			ret.AddClass('all hidden');
-		return ret;
-	};
-	var me = this;
-	var last;
-	if (all !== false && type != 'axis' && type != 'motor')
-		last = one(me, template, null);
-	else
-		last = document.createComment('');
-	if (type != 'axis' && type != 'motor') {
-		me.appendChild(last);
-		printer.multiples[type].push({table: me, tr: [], after: last, create: function(i) { return one(me, template, i) || document.createComment(''); }});
+Object.defineProperty(Object.prototype, 'AddMultiple', { // {{{
+	enumerable: false,
+	configurarable: true,
+	writable: true,
+	value: function(type, template, all, forbidden) {
+		var one = function(t, template, i, arg) {
+			var ret = template(i, arg, t);
+			if (ret !== null && (i === null || arg === null))
+				ret.AddClass('all hidden');
+			return ret;
+		};
+		var me = this;
+		var last;
+		if (all !== false && type != 'axis' && type != 'motor')
+			last = one(me, template, null);
+		else
+			last = document.createComment('');
+		if (type != 'axis' && type != 'motor') {
+			me.appendChild(last);
+			printer.multiples[type].push({table: me, tr: [], after: last, create: function(i) { return one(me, template, i) || document.createComment(''); }});
+		}
+		else {
+			me.appendChild(last);
+			printer.multiples[type].push({table: me, space: [], after: last, all: all != false, create: function(i, arg) { return (i != forbidden && one(me, template, i, arg)) || document.createComment(''); }});
+		}
+		return me;
 	}
-	else {
-		me.appendChild(last);
-		printer.multiples[type].push({table: me, space: [], after: last, all: all != false, create: function(i, arg) { return (i != forbidden && one(me, template, i, arg)) || document.createComment(''); }});
-	}
-	return me;
-}; // }}}
+}); // }}}
 
 function make_table() { // {{{
 	var t = document.createElement('table');
