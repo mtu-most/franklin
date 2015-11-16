@@ -1,6 +1,11 @@
 #!/bin/bash
 
+tmp=`tempfile`
+
+trap "rm '$tmp'" EXIT
+
 rom="`avrdude -q -q -C +/usr/lib/franklin/avrdude.conf -c bbbmelzi -p atmega1284p -U eeprom:r:-:d`"
 avrdude -q -q -C +/usr/lib/franklin/avrdude.conf -c bbbmelzi -p atmega1284p -U flash:w:/usr/lib/franklin/firmware/melzi.hex:i
-avrdude -D -q -q -C +/usr/lib/franklin/avrdude.conf -c bbbmelzi -p atmega1284p -U flash:w:/usr/share/arduino/hardware/mighty-1284p/bootloaders/optiboot/optiboot_atmega1284p.hex:i
+sed -e '/^:..00..00/d' < /usr/share/arduino/hardware/mighty-1284p/bootloaders/optiboot/optiboot_atmega1284p.hex > "$tmp"
+avrdude -D -q -q -C +/usr/lib/franklin/avrdude.conf -c bbbmelzi -p atmega1284p -U flash:w:"$tmp":i
 avrdude -q -q -C +/usr/lib/franklin/avrdude.conf -c bbbmelzi -p atmega1284p -U eeprom:w:$rom:m
