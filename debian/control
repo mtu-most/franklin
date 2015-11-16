@@ -2,12 +2,12 @@ Source: franklin
 Section: electronics
 Priority: optional
 Maintainer: Bas Wijnen <wijnen@debian.org>
-Build-Depends: debhelper (>= 9), python-all, dh-python, gcc-avr, arduino-mighty-1284p, arduino-mk, ruby-ronn, closure-linter
+Build-Depends: debhelper (>= 9), python-all, dh-python, gcc-avr, arduino-mighty-1284p (>= 1-2), arduino-mk (>= 1.5-2), ruby-ronn, closure-linter
 Standards-Version: 3.9.6
 
 Package: franklin
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}, python-websocketd, python-network, python-serial, avrdude, python-fhs, adduser, python-gi, python-gtk2
+Depends: ${misc:Depends}, ${shlibs:Depends}, ${python:Depends}, python-websocketd, python-network, python-serial, avrdude (>= 6.1-3.1), python-fhs, adduser, python-gi, python-gtk2, arduino-mighty-1284p (>= 1-2)
 Recommends: python-avahi
 Description: server for controlling RepRap 3-D printers
  3-D printers need firmware and host software to work.  This package contains
