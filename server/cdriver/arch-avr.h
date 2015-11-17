@@ -267,21 +267,30 @@ void avr_get_current_pos(int offset, bool check) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
 			int old = spaces[ts].motor[tm]->settings.current_pos;
 			cpdebug(ts, tm, "cpb offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
-			spaces[ts].motor[tm]->settings.current_pos = 0;
+			double p = 0;
 			for (int i = 0; i < 4; ++i) {
-				spaces[ts].motor[tm]->settings.current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
+				p += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
 			if (spaces[ts].motor[tm]->dir_pin.inverted())
-				spaces[ts].motor[tm]->settings.current_pos *= -1;
-			spaces[ts].motor[tm]->settings.current_pos -= avr_pos_offset[tm + mi];
+				p *= -1;
+			p -= avr_pos_offset[tm + mi];
 			cpdebug(ts, tm, "cpa offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
 			cpdebug(ts, tm, "getpos offset %f diff %d", avr_pos_offset[tm + mi], int(spaces[ts].motor[tm]->settings.current_pos) - old);
-			if (check && old != int(spaces[ts].motor[tm]->settings.current_pos)) {
-				if (moving_to_current == 1)
-					moving_to_current = 2;
-				else {
-					//abort();
-					debug("WARNING: position for %d %d out of sync! (This is normal after sleep), old = %d, new = %d", ts, tm, old, int(spaces[ts].motor[tm]->settings.current_pos));
+			if (check) {
+				if (old != int(p)) {
+					if (moving_to_current == 1)
+						moving_to_current = 2;
+					else {
+						//abort();
+						debug("WARNING: position for %d %d out of sync! (This is normal after sleep), old = %d, new = %d", ts, tm, old, int(p));
+						spaces[ts].motor[tm]->settings.current_pos = p;
+					}
+				}
+			}
+			else {
+				if (int(p) != int(spaces[ts].motor[tm]->settings.current_pos)) {
+					//debug("update current pos %d %d from %f to %f", ts, tm, spaces[ts].motor[tm]->settings.current_pos, p);
+					spaces[ts].motor[tm]->settings.current_pos = p;
 				}
 			}
 		}
@@ -327,7 +336,7 @@ bool hwpacket(int len) {
 		abort_move(int8_t(command[1][3]));
 		avr_get_current_pos(4, false);
 		if (spaces[0].num_axes > 0)
-			fcpdebug(0, 0, "ending hwpos %f", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
+			cpdebug(0, 0, "ending hwpos %f", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 		sending_fragment = 0;
 		stopping = 2;
 		send_host(CMD_LIMIT, s, m, pos);
@@ -371,7 +380,8 @@ bool hwpacket(int len) {
 		avr_running = false;
 		if (computing_move) {
 			debug("underrun");
-			arch_start_move(command[1][2]);
+			if (!sending_fragment || (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 1)
+				arch_start_move(command[1][2]);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
 		else {
@@ -990,7 +1000,7 @@ void arch_start_move(int extra) {
 		start_pending = true;
 		return;
 	}
-	if (avr_running || avr_filling || stopping || avr_homing || (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= (sending_fragment ? 1 : 0))
+	if (avr_running || avr_filling || stopping || avr_homing)
 		return;
 	if ((running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= extra + 2)
 		return;

@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-#define DEBUG_DATA
+//#define DEBUG_DATA
 //#define DEBUG_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF

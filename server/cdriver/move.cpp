@@ -491,8 +491,8 @@ void abort_move(int pos) { // {{{
 	while (computing_move && current_fragment_pos < pos) {
 		apply_tick();
 	}
-	if (spaces[0].num_axes > 0)
-		fcpdebug(0, 0, "ending hwpos %f", int(spaces[0].motor[0]->settings.current_pos) + avr_pos_offset[0]);
+	//if (spaces[0].num_axes > 0)
+		//fcpdebug(0, 0, "ending hwpos %f", int(spaces[0].motor[0]->settings.current_pos) + avr_pos_offset[0]);
 	// Copy settings back to previous fragment.
 	store_settings();
 	computing_move = false;
@@ -503,14 +503,14 @@ void abort_move(int pos) { // {{{
 		sp.settings.dist[0] = NAN;
 		sp.settings.dist[1] = NAN;
 		for (int a = 0; a < sp.num_axes; ++a) {
-			debug("setting axis %d source to %f", a, sp.axis[a]->settings.current);
+			//debug("setting axis %d source to %f", a, sp.axis[a]->settings.current);
 			sp.axis[a]->settings.source = sp.axis[a]->settings.current;
 			sp.axis[a]->settings.dist[0] = NAN;
 			sp.axis[a]->settings.dist[1] = NAN;
 		}
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->settings.last_v = 0;
-			debug("setting motor %d pos to %f", m, sp.motor[m]->settings.current_pos);
+			//debug("setting motor %d pos to %f", m, sp.motor[m]->settings.current_pos);
 		}
 	}
 	//debug("aborted move");

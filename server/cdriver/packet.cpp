@@ -2,15 +2,15 @@
 
 //#define DEBUG_CMD
 
-static uint8_t get_which()
+static int get_which()
 {
 	return command[0][2] & 0x3f;
 }
 
-static double get_float(uint8_t offset)
+static double get_float(int offset)
 {
 	ReadFloat ret;
-	for (uint8_t t = 0; t < sizeof(double); ++t)
+	for (int t = 0; t < sizeof(double); ++t)
 		ret.b[t] = command[0][offset + t];
 	return ret.f;
 }
@@ -67,35 +67,33 @@ void waittemp(int which, double mintemp, double maxtemp) {
 void setpos(int which, int t, double f) {
 	if (!motors_busy)
 	{
-		for (uint8_t s = 0; s < NUM_SPACES; ++s) {
-			for (uint8_t m = 0; m < spaces[s].num_motors; ++m)
+		for (int s = 0; s < NUM_SPACES; ++s) {
+			for (int m = 0; m < spaces[s].num_motors; ++m)
 				SET(spaces[s].motor[m]->enable_pin);
 		}
 		motors_busy = true;
 	}
-	for (uint8_t a = 0; a < spaces[which].num_axes; ++a) {
+	for (int a = 0; a < spaces[which].num_axes; ++a) {
 		spaces[which].axis[a]->settings.source = NAN;
 		spaces[which].axis[a]->settings.current = NAN;
 	}
 	//debug("setting pos for %d %d", which, t);
 	double diff = f * spaces[which].motor[t]->steps_per_unit - spaces[which].motor[t]->settings.current_pos;
-	int32_t ipos = int(spaces[which].motor[t]->settings.current_pos);
 	spaces[which].motor[t]->settings.current_pos += diff;
-	int32_t idiff = int(spaces[which].motor[t]->settings.current_pos) - ipos;
 	for (int fragment = 0; fragment < FRAGMENTS_PER_BUFFER; ++fragment)
 		spaces[which].motor[t]->history[fragment].current_pos += diff;
 	if (isnan(spaces[which].axis[t]->settings.current)) {
 		space_types[spaces[which].type].reset_pos(&spaces[which]);
-		for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
+		for (int a = 0; a < spaces[which].num_axes; ++a)
 			spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
 	}
-	arch_addpos(which, t, idiff);
+	arch_addpos(which, t, diff);
 	cpdebug(which, t, "setpos diff %d", diff);
 	//arch_stop();
 	space_types[spaces[which].type].reset_pos(&spaces[which]);
-	for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
+	for (int a = 0; a < spaces[which].num_axes; ++a)
 		spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
-	/*for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
+	/*for (int a = 0; a < spaces[which].num_axes; ++a)
 		debug("setpos done source %f", spaces[which].axis[a]->settings.source);
 	// */
 }
@@ -149,19 +147,19 @@ void packet()
 			abort();
 			return;
 		}
-		uint8_t num = 2;
-		for (uint8_t t = 0; t < NUM_SPACES; ++t)
+		int num = 2;
+		for (int t = 0; t < NUM_SPACES; ++t)
 			num += spaces[t].num_axes;
 		queue[settings.queue_end].probe = command[0][1] == CMD_PROBE;
 		queue[settings.queue_end].single = command[0][1] == CMD_SINGLE;
-		uint8_t const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
-		uint8_t t = 0;
-		for (uint8_t ch = 0; ch < num; ++ch)
+		int const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
+		int t = 0;
+		for (int ch = 0; ch < num; ++ch)
 		{
 			if (command[0][2 + (ch >> 3)] & (1 << (ch & 0x7)))
 			{
 				ReadFloat f;
-				for (uint8_t i = 0; i < sizeof(double); ++i)
+				for (int i = 0; i < sizeof(double); ++i)
 					f.b[i] = command[0][offset + i + t * sizeof(double)];
 				if (ch < 2)
 					queue[settings.queue_end].f[ch] = f.f;
@@ -247,12 +245,12 @@ void packet()
 				//abort();
 				return;
 			}
-			for (uint8_t t = 0; t < NUM_SPACES; ++t) {
-				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
+			for (int t = 0; t < NUM_SPACES; ++t) {
+				for (int m = 0; m < spaces[t].num_motors; ++m) {
 					//debug("resetting %d %d %x", t, m, spaces[t].motor[m]->enable_pin.write());
 					RESET(spaces[t].motor[m]->enable_pin);
 				}
-				for (uint8_t a = 0; a < spaces[t].num_axes; ++a) {
+				for (int a = 0; a < spaces[t].num_axes; ++a) {
 					spaces[t].axis[a]->settings.source = NAN;
 					spaces[t].axis[a]->settings.current = NAN;
 				}
@@ -260,8 +258,8 @@ void packet()
 			motors_busy = false;
 		}
 		else {
-			for (uint8_t t = 0; t < NUM_SPACES; ++t) {
-				for (uint8_t m = 0; m < spaces[t].num_motors; ++m) {
+			for (int t = 0; t < NUM_SPACES; ++t) {
+				for (int m = 0; m < spaces[t].num_motors; ++m) {
 					//debug("setting %d %d %x", t, m, spaces[t].motor[m]->enable_pin.write());
 					SET(spaces[t].motor[m]->enable_pin);
 				}
@@ -289,7 +287,7 @@ void packet()
 		initialized = true;
 		which = get_which();
 		ReadFloat min_temp, max_temp;
-		for (uint8_t i = 0; i < sizeof(double); ++i)
+		for (int i = 0; i < sizeof(double); ++i)
 		{
 			min_temp.b[i] = command[0][3 + i];
 			max_temp.b[i] = command[0][3 + i + sizeof(double)];
@@ -384,7 +382,7 @@ void packet()
 		if (isnan(spaces[which].axis[t]->settings.source)) {
 			//debug("resetting space %d for getpos; %f", which, spaces[0].axis[0]->settings.current);
 			space_types[spaces[which].type].reset_pos(&spaces[which]);
-			for (uint8_t a = 0; a < spaces[which].num_axes; ++a)
+			for (int a = 0; a < spaces[which].num_axes; ++a)
 				spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
 		}
 		double value = spaces[which].axis[t]->settings.current;
