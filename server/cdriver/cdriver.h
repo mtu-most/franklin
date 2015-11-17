@@ -274,17 +274,17 @@ struct Space {
 	void *type_data;
 	Motor **motor;
 	Axis **axis;
-	uint8_t id;
-	uint8_t type;
-	uint8_t num_axes, num_motors;
+	int id;
+	int type;
+	int num_axes, num_motors;
 	void load_info(int32_t &addr);
-	void load_axis(uint8_t a, int32_t &addr);
-	void load_motor(uint8_t m, int32_t &addr);
+	void load_axis(int a, int32_t &addr);
+	void load_motor(int m, int32_t &addr);
 	void save_info(int32_t &addr);
-	void save_axis(uint8_t a, int32_t &addr);
-	void save_motor(uint8_t m, int32_t &addr);
-	void init(uint8_t space_id);
-	bool setup_nums(uint8_t na, uint8_t nm);
+	void save_axis(int a, int32_t &addr);
+	void save_motor(int m, int32_t &addr);
+	void init(int space_id);
+	bool setup_nums(int na, int nm);
 	void cancel_update();
 	ARCH_SPACE
 };
@@ -455,7 +455,7 @@ EXTERN uint8_t ff_in;	// Index of next in-packet that is expected.
 EXTERN uint8_t ff_out;	// Index of next out-packet that will be sent.
 
 // move.cpp
-uint8_t next_move();
+int next_move();
 void abort_move(int pos);
 
 // run.cpp
@@ -547,7 +547,7 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool));
 void arch_setup_start(char const *port);
 void arch_setup_end(char const *run_id);
 void arch_motors_change();
-void arch_addpos(int s, int m, int diff);
+void arch_addpos(int s, int m, double diff);
 void arch_stop(bool fake = false);
 void arch_home();
 bool arch_running();

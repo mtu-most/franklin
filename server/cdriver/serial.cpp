@@ -1,6 +1,6 @@
 #include "cdriver.h"
 
-//#define DEBUG_DATA
+#define DEBUG_DATA
 //#define DEBUG_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
@@ -335,6 +335,12 @@ void serial(uint8_t channel) {
 		else
 #endif
 			cmd_len = command[channel][0] & 0xff;
+		if (cmd_len > FULL_COMMAND_SIZE) {
+			// This command does not fit in the buffer, so it cannot be parsed.  Reject it.
+			debug("Command length %d larger than buffer; rejecting", cmd_len);
+			command_cancel();
+			continue;
+		}
 		if (command_end[channel] + len > cmd_len)
 			len = cmd_len - command_end[channel];
 		serialdev[channel]->readBytes(reinterpret_cast <char *> (&command[channel][command_end[channel]]), len);
@@ -353,7 +359,7 @@ void serial(uint8_t channel) {
 		if (command_end[channel] < cmd_len)
 		{
 #ifdef DEBUG_SERIAL
-			//debug("%d not done yet; %d of %d received.", channel, command_end[channel], cmd_len);
+			debug("%d not done yet; %d of %d received.", channel, command_end[channel], cmd_len);
 #endif
 			return;
 		}

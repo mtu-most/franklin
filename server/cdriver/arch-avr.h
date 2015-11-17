@@ -119,7 +119,7 @@ void arch_disconnect();
 int arch_fds();
 int arch_tick();
 void arch_reconnect(char *port);
-void arch_addpos(int s, int m, int diff);
+void arch_addpos(int s, int m, double diff);
 void arch_stop(bool fake);
 void avr_stop2();
 void arch_apply_follow(int cfp);
@@ -174,7 +174,7 @@ EXTERN int avr_limiter_motor;
 EXTERN int *avr_adc;
 EXTERN bool avr_running;
 EXTERN Avr_pin_t *avr_pins;
-EXTERN int32_t *avr_pos_offset;
+EXTERN double *avr_pos_offset;
 EXTERN int avr_active_motors;
 EXTERN int *avr_adc_id;
 EXTERN uint8_t *avr_control_queue;
@@ -266,7 +266,7 @@ void avr_get_current_pos(int offset, bool check) {
 	for (int ts = 0; ts < NUM_SPACES; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
 			int old = spaces[ts].motor[tm]->settings.current_pos;
-			cpdebug(ts, tm, "cpb offset %d raw %d hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
+			cpdebug(ts, tm, "cpb offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
 			spaces[ts].motor[tm]->settings.current_pos = 0;
 			for (int i = 0; i < 4; ++i) {
 				spaces[ts].motor[tm]->settings.current_pos += int(uint8_t(command[1][offset + 4 * (tm + mi) + i])) << (i * 8);
@@ -274,8 +274,8 @@ void avr_get_current_pos(int offset, bool check) {
 			if (spaces[ts].motor[tm]->dir_pin.inverted())
 				spaces[ts].motor[tm]->settings.current_pos *= -1;
 			spaces[ts].motor[tm]->settings.current_pos -= avr_pos_offset[tm + mi];
-			cpdebug(ts, tm, "cpa offset %d raw %d hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
-			cpdebug(ts, tm, "getpos offset %d diff %d", avr_pos_offset[tm + mi], int(spaces[ts].motor[tm]->settings.current_pos) - old);
+			cpdebug(ts, tm, "cpa offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
+			cpdebug(ts, tm, "getpos offset %f diff %d", avr_pos_offset[tm + mi], int(spaces[ts].motor[tm]->settings.current_pos) - old);
 			if (check && old != int(spaces[ts].motor[tm]->settings.current_pos)) {
 				if (moving_to_current == 1)
 					moving_to_current = 2;
@@ -326,6 +326,8 @@ bool hwpacket(int len) {
 		avr_homing = false;
 		abort_move(int8_t(command[1][3]));
 		avr_get_current_pos(4, false);
+		if (spaces[0].num_axes > 0)
+			fcpdebug(0, 0, "ending hwpos %f", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 		sending_fragment = 0;
 		stopping = 2;
 		send_host(CMD_LIMIT, s, m, pos);
@@ -820,7 +822,7 @@ void avr_setup_end2() {
 		avr_adc[i] = ~0;
 		avr_adc_id[i] = ~0;
 	}
-	avr_pos_offset = new int32_t[NUM_MOTORS];
+	avr_pos_offset = new double[NUM_MOTORS];
 	for (int m = 0; m < NUM_MOTORS; ++m)
 		avr_pos_offset[m] = 0;
 	setup_end();
@@ -884,12 +886,12 @@ int arch_tick() {
 	return 500;
 }
 
-void arch_addpos(int s, int m, int diff) {
+void arch_addpos(int s, int m, double diff) {
 	int mi = m;
 	for (uint8_t st = 0; st < s; ++st)
 		mi += spaces[st].num_motors;
 	avr_pos_offset[mi] -= diff;
-	cpdebug(s, m, "arch addpos %d %d %d", diff, avr_pos_offset[m], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi]);
+	cpdebug(s, m, "arch addpos %f %f %f", diff, avr_pos_offset[m], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi]);
 }
 
 void arch_stop(bool fake) {
@@ -988,7 +990,9 @@ void arch_start_move(int extra) {
 		start_pending = true;
 		return;
 	}
-	if (avr_running || avr_filling || stopping || avr_homing || (running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= extra + 2)
+	if (avr_running || avr_filling || stopping || avr_homing || (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= (sending_fragment ? 1 : 0))
+		return;
+	if ((running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= extra + 2)
 		return;
 	//debug("start move %d %d %d %d", current_fragment, running_fragment, sending_fragment, extra);
 	while (out_busy >= 3) {
