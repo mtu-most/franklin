@@ -274,8 +274,8 @@ void avr_get_current_pos(int offset, bool check) {
 			if (spaces[ts].motor[tm]->dir_pin.inverted())
 				p *= -1;
 			p -= avr_pos_offset[tm + mi];
-			cpdebug(ts, tm, "cpa offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
-			cpdebug(ts, tm, "getpos offset %f diff %d", avr_pos_offset[tm + mi], int(spaces[ts].motor[tm]->settings.current_pos) - old);
+			cpdebug(ts, tm, "cpa offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], p, p + avr_pos_offset[tm + mi]);
+			cpdebug(ts, tm, "getpos offset %f diff %d", avr_pos_offset[tm + mi], int(p) - old);
 			if (check) {
 				if (old != int(p)) {
 					if (moving_to_current == 1)
@@ -288,8 +288,8 @@ void avr_get_current_pos(int offset, bool check) {
 				}
 			}
 			else {
-				if (int(p) != int(spaces[ts].motor[tm]->settings.current_pos)) {
-					//debug("update current pos %d %d from %f to %f", ts, tm, spaces[ts].motor[tm]->settings.current_pos, p);
+				if (int(p) != old) {
+					cpdebug(ts, tm, "update current pos from %f to %f", spaces[ts].motor[tm]->settings.current_pos, p);
 					spaces[ts].motor[tm]->settings.current_pos = p;
 				}
 			}
@@ -333,7 +333,7 @@ bool hwpacket(int len) {
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
 		avr_homing = false;
-		abort_move(int8_t(command[1][3]));
+		abort_move(int8_t(command[1][3]) - 2);
 		avr_get_current_pos(4, false);
 		if (spaces[0].num_axes > 0)
 			cpdebug(0, 0, "ending hwpos %f", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
@@ -768,6 +768,10 @@ void arch_change(bool motors) {
 }
 
 void arch_motors_change() {
+	if (preparing || out_busy >= 3) {
+		change_pending = true;
+		return;
+	}
 	arch_change(true);
 }
 

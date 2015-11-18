@@ -1120,9 +1120,7 @@ class Printer: # {{{
 			num = 0
 			for s, spc in enumerate(self.spaces):
 				for m in spc.motor:
-					if m['home_order'] != self.home_order:
-						data += '\x00'
-					elif self.pin_valid(m['limit_max_pin']):
+					if self.pin_valid(m['limit_max_pin']):
 						data += '\xff'
 						num += 1
 					elif self.pin_valid(m['limit_min_pin']):
@@ -1524,24 +1522,28 @@ class Printer: # {{{
 				log('invalid type')
 				raise AssertionError('invalid space type')
 		def export_settings(self):
+			# Things to handle specially while homing:
+			# * self.home_limits = [(a['min'], a['max']) for a in self.spaces[0].axis]
+			# * self.home_orig_type = self.spaces[0].type
 			ret = '[space %d]\r\n' % self.id
+			type = self.type if self.id != 0 or self.printer.home_phase is None else self.printer.home_orig_type
 			if self.id == 0:
-				ret += 'type = %d\r\n' % self.type
-			if self.type == TYPE_CARTESIAN:
+				ret += 'type = %d\r\n' % type
+			if type == TYPE_CARTESIAN:
 				ret += 'num_axes = %d\r\n' % len(self.axis)
-			elif self.type == TYPE_DELTA:
+			elif type == TYPE_DELTA:
 				ret += 'delta_angle = %f\r\n' % self.delta_angle
 				for i in range(3):
 					ret += '[delta %d %d]\r\n' % (self.id, i)
 					ret += ''.join(['%s = %f\r\n' % (x, self.delta[i][x]) for x in ('rodlength', 'radius', 'axis_min', 'axis_max')])
-			elif self.type == TYPE_POLAR:
+			elif type == TYPE_POLAR:
 				ret += 'polar_max_r = %f\r\n' % self.polar_max_r
-			elif self.type == TYPE_EXTRUDER:
+			elif type == TYPE_EXTRUDER:
 				ret += 'num_axes = %d\r\n' % len(self.axis)
 				for i in range(len(self.extruder)):
 					ret += '[extruder %d %d]\r\n' % (self.id, i)
 					ret += ''.join(['%s = %f\r\n' % (x, self.extruder[i][x]) for x in ('dx', 'dy', 'dz')])
-			elif self.type == TYPE_FOLLOWER:
+			elif type == TYPE_FOLLOWER:
 				ret += 'num_axes = %d\r\n' % len(self.axis)
 				for i in range(len(self.follower)):
 					ret += '[follower %d %d]\r\n' % (self.id, i)
@@ -1553,7 +1555,11 @@ class Printer: # {{{
 				ret += '[axis %d %d]\r\n' % (self.id, i)
 				ret += 'name = %s\r\n' % a['name']
 				if self.id == 0:
-					ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('park', 'park_order', 'min', 'max')])
+					ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('park', 'park_order')])
+					if self.printer.home_phase is None:
+						ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('min', 'max')])
+					else:
+						ret += ''.join(['%s = %f\r\n' % (x, y) for x, y in zip(('min', 'max'), self.printer.home_limits[self.id])])
 			for i, m in enumerate(self.motor):
 				ret += '[motor %d %d]\r\n' % (self.id, i)
 				ret += ''.join(['%s = %s\r\n' % (x, write_pin(m[x])) for x in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin')])

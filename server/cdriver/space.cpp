@@ -398,7 +398,8 @@ static void move_axes(Space *s, uint32_t current_time, double &factor) { // {{{
 	}
 	//movedebug("ok %d", ok);
 	for (int m = 0; m < s->num_motors; ++m) {
-		//debug("check move %d %d %f %f", s->id, m, motors_target[m], s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit);
+		//if (s->id == 0 && m == 0)
+			//debug("check move %d %d target %f current %f", s->id, m, motors_target[m], s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit);
 		double distance = motors_target[m] - s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit;
 		check_distance(s->motor[m], distance, (current_time - settings.last_time) / 1e6, factor);
 	}
@@ -422,6 +423,7 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 	if (factor < 1) {
 		// Recalculate steps; ignore resulting factor.
 		double dummy_factor = 1;
+		//debug("redo steps %d", current_fragment);
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			if (!settings.single && s == 2)
 				continue;
@@ -430,7 +432,6 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 				if (!isnan(sp.axis[a]->settings.target))
 					sp.axis[a]->settings.target = sp.axis[a]->settings.current;
 			}
-			//debug("redo steps");
 			move_axes(&sp, settings.last_time, dummy_factor);
 		}
 	}
@@ -455,15 +456,6 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 				//debug("no steps yet %d %d", s, m);
 			}
 		}
-		// If there are no steps to take, wait until there are.
-		//static int streak = 0;
-		if (!have_steps) {
-			//movedebug("no steps");
-		//	if (streak++ > 50)
-		//		abort();
-			return false;
-		}
-		//streak = 0;
 		settings.start_time += (current_time - the_last_time) * ((1 - factor) * .99);
 		movedebug("correct: %f %d", factor, int(settings.start_time));
 	}
@@ -552,6 +544,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 	double t = (current_time - settings.start_time) / 1e6;
 	if (t >= settings.t0 + settings.tp) {	// Finish this move and prepare next. {{{
 		movedebug("finishing %f %f %f %ld %ld", t, settings.t0, settings.tp, long(current_time), long(settings.start_time));
+		//debug("finish steps");
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			if (!settings.single && s == 2)
 				continue;
@@ -569,7 +562,6 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			}
 			for (int a = 0; a < sp.num_axes; ++a)
 				sp.axis[a]->settings.target = sp.axis[a]->settings.source;
-			//debug("finish steps");
 			move_axes(&sp, current_time, factor);
 			//debug("f %f", factor);
 		}
@@ -617,6 +609,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		double t_fraction = t / settings.t0;
 		double current_f = (settings.f1 * (2 - t_fraction) + settings.f2 * t_fraction) * t_fraction;
 		movedebug("main t %f t0 %f tp %f tfrac %f f1 %f f2 %f cf %f", t, settings.t0, settings.tp, t_fraction, settings.f1, settings.f2, current_f);
+		//debug("main steps");
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			if (!settings.single && s == 2)
 				continue;
@@ -629,7 +622,6 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				sp.axis[a]->settings.target = sp.axis[a]->settings.source;
 			}
 			make_target(sp, current_f, false);
-			//debug("main steps");
 			move_axes(&sp, current_time, factor);
 		}
 	} // }}}
@@ -639,6 +631,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		double t_fraction = tc / settings.tp;
 		double current_f2 = settings.fp * (2 - t_fraction) * t_fraction;
 		double current_f3 = settings.fq * t_fraction * t_fraction;
+		//debug("connect steps");
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			if (!settings.single && s == 2)
 				continue;
@@ -652,7 +645,6 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			}
 			make_target(sp, (1 - settings.fp) + current_f2, false);
 			make_target(sp, current_f3, true);
-			//debug("connect steps");
 			move_axes(&sp, current_time, factor);
 		}
 	} // }}}

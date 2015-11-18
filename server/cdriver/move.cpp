@@ -322,7 +322,7 @@ int next_move() { // {{{
 	// mtr->dist[0]: motor distance of this segment (mm).
 	// mtr->dist[1]: motor distance of next segment (mm).
 #ifdef DEBUG_MOVE
-	debug("Set up: v0 = %f /s, vp = %f /s, vq = %f /s", v0, vp, vq);
+	debug("Set up: v0 = %f /s, vp = %f /s, vq = %f /s", v0, vp, v1);
 #endif
 
 	// Limit v0, vp, vq. {{{
@@ -481,6 +481,16 @@ void abort_move(int pos) { // {{{
 	//debug("try aborting move");
 	current_fragment = running_fragment;
 	//debug("current abort -> %x", current_fragment);
+	while (pos < 0) {
+		if (current_fragment == first_fragment) {
+			pos = 0;
+		}
+		else {
+			current_fragment = (current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER;
+			pos += SAMPLES_PER_FRAGMENT;
+			running_fragment = current_fragment;
+		}
+	}
 	restore_settings();
 #ifdef DEBUG_MOVE
 	debug("move no longer prepared");
@@ -491,8 +501,8 @@ void abort_move(int pos) { // {{{
 	while (computing_move && current_fragment_pos < pos) {
 		apply_tick();
 	}
-	//if (spaces[0].num_axes > 0)
-		//fcpdebug(0, 0, "ending hwpos %f", int(spaces[0].motor[0]->settings.current_pos) + avr_pos_offset[0]);
+	if (spaces[0].num_axes > 0)
+		cpdebug(0, 0, "ending hwpos %f", int(spaces[0].motor[0]->settings.current_pos) + avr_pos_offset[0]);
 	// Copy settings back to previous fragment.
 	store_settings();
 	computing_move = false;
