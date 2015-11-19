@@ -171,7 +171,6 @@ EXTERN uint8_t avr_pong;
 EXTERN char avr_buffer[256];
 EXTERN int avr_limiter_space;
 EXTERN int avr_limiter_motor;
-EXTERN int *avr_adc;
 EXTERN bool avr_running;
 EXTERN Avr_pin_t *avr_pins;
 EXTERN double *avr_pos_offset;
@@ -265,7 +264,7 @@ void avr_get_current_pos(int offset, bool check) {
 	int mi = 0;
 	for (int ts = 0; ts < NUM_SPACES; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
-			int old = spaces[ts].motor[tm]->settings.current_pos;
+			double old = int(spaces[ts].motor[tm]->settings.current_pos);
 			cpdebug(ts, tm, "cpb offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
 			double p = 0;
 			for (int i = 0; i < 4; ++i) {
@@ -275,20 +274,20 @@ void avr_get_current_pos(int offset, bool check) {
 				p *= -1;
 			p -= avr_pos_offset[tm + mi];
 			cpdebug(ts, tm, "cpa offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], p, p + avr_pos_offset[tm + mi]);
-			cpdebug(ts, tm, "getpos offset %f diff %d", avr_pos_offset[tm + mi], int(p) - old);
+			cpdebug(ts, tm, "getpos offset %f diff %d", avr_pos_offset[tm + mi], int(p) - int(old));
 			if (check) {
-				if (old != int(p)) {
+				if (int(old) != int(p)) {
 					if (moving_to_current == 1)
 						moving_to_current = 2;
 					else {
 						//abort();
-						debug("WARNING: position for %d %d out of sync! (This is normal after sleep), old = %d, new = %d", ts, tm, old, int(p));
+						debug("WARNING: position for %d %d out of sync! (This is normal after sleep), old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
 						spaces[ts].motor[tm]->settings.current_pos = p;
 					}
 				}
 			}
 			else {
-				if (int(p) != old) {
+				if (int(p) != int(old)) {
 					cpdebug(ts, tm, "update current pos from %f to %f", spaces[ts].motor[tm]->settings.current_pos, p);
 					spaces[ts].motor[tm]->settings.current_pos = p;
 				}
@@ -360,10 +359,10 @@ bool hwpacket(int len) {
 			avr_write_ack("invalid adc");
 			return false;
 		}
-		avr_adc[pin] = (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
+		int adc = (command[1][2] & 0xff) | ((command[1][3] & 0xff) << 8);
 		avr_write_ack("adc");
-		if (avr_adc_id[pin] >= 0 && avr_adc_id[pin] < num_temps)
-			handle_temp(avr_adc_id[pin], avr_adc[pin]);
+		if (pin < NUM_ANALOG_INPUTS && avr_adc_id[pin] >= 0 && avr_adc_id[pin] < num_temps)
+			handle_temp(avr_adc_id[pin], adc);
 		return false;
 	}
 	case HWC_UNDERRUN:
@@ -781,7 +780,6 @@ void arch_globals_change() {
 
 void arch_setup_start(char const *port) {
 	// Set up arch variables.
-	avr_adc = NULL;
 	avr_running = true;	// Force arch_stop from setup to do something.
 	avr_homing = false;
 	avr_filling = false;
@@ -830,12 +828,9 @@ void avr_setup_end2() {
 		avr_pins[i].duty = 255;
 		avr_in_control_queue[i] = false;
 	}
-	avr_adc = new int[NUM_ANALOG_INPUTS];
 	avr_adc_id = new int[NUM_ANALOG_INPUTS];
-	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
-		avr_adc[i] = ~0;
+	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i)
 		avr_adc_id[i] = ~0;
-	}
 	avr_pos_offset = new double[NUM_MOTORS];
 	for (int m = 0; m < NUM_MOTORS; ++m)
 		avr_pos_offset[m] = 0;
@@ -854,6 +849,10 @@ void arch_setup_end(char const *run_id) {
 }
 
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int fan_pin, bool fan_invert, int fan_adctemp) {
+	if (id == requested_temp) {
+		send_host(CMD_TEMP, 0, 0, NAN);
+		requested_temp = ~0;
+	}
 	avr_adc_id[thermistor_pin] = id;
 	avr_buffer[0] = HWC_ASETUP;
 	avr_buffer[1] = thermistor_pin;

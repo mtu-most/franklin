@@ -13,8 +13,10 @@ void handle_motors() {
 	bool probed;
 	if (settings[cf].flags & Settings::PROBING && probe_pin < NUM_DIGITAL_PINS) {
 		if (state == 0) {
-			if (GET(probe_pin) ^ bool(pin_flags & 2))
+			if (GET(probe_pin) ^ bool(pin_flags & 2)) {
+				step_state = 1;
 				stopping = active_motors;
+			}
 			probed = true;
 		}
 		else
@@ -24,6 +26,7 @@ void handle_motors() {
 		probed = true;	// If we didn't need to probe; don't block later on.
 	if (stopping < 0) {
 		if (stop_pin < NUM_DIGITAL_PINS && GET(stop_pin) ^ bool(pin_flags & 4)) {
+			step_state = 1;
 			stopping = active_motors;
 		}
 		else {
@@ -40,7 +43,8 @@ void handle_motors() {
 					if (limit_pin < NUM_DIGITAL_PINS) {
 						bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
 						if (GET(limit_pin) ^ inverted) {
-							debug("hit %d pos %d state %d sample %d", m, int(motor[m].current_pos), state, buffer[cf][m][cs]);
+							step_state = 1;
+							debug("hit %d pos %d state %d sample %d", m, int(motor[m].current_pos), state, current_sample);
 							stopping = m;
 							motor[m].flags |= Motor::LIMIT;
 							break;
@@ -51,9 +55,6 @@ void handle_motors() {
 		}
 	}
 	if (stopping >= 0) {
-		// Hit endstop or probe; disable timer interrupt.
-		step_state = 1;
-		//debug("hit limit %d curpos %ld cf %d ncf %d lf %d cfp %d", m, F(motor[m].current_pos), cf, notified_current_fragment, last_fragment, cs);
 		// Notify host.
 		// Use actual current sample, not the one that was used for testing.
 		limit_fragment_pos = current_sample;

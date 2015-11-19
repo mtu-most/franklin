@@ -19,6 +19,7 @@ void Temp::load(int32_t &addr, int id)
 	power_pin[0].read(read_16(addr));
 	power_pin[1].read(read_16(addr));
 	int old_pin = thermistor_pin.write();
+	int old_pin_pin = thermistor_pin.pin;
 	bool old_valid = thermistor_pin.valid();
 	thermistor_pin.read(read_16(addr));
 	target[1] = read_float(addr);
@@ -32,7 +33,7 @@ void Temp::load(int32_t &addr, int id)
 			RESET(power_pin[i]);
 	}
 	if (old_pin != thermistor_pin.write() && old_valid)
-		arch_setup_temp(~0, old_pin, false);
+		arch_setup_temp(~0, old_pin_pin, false);
 	if (thermistor_pin.valid())
 		arch_setup_temp(id, thermistor_pin.pin, true, power_pin[0].valid() ? power_pin[0].pin : ~0, power_pin[0].inverted(), adctarget[0], power_pin[1].valid() ? power_pin[1].pin : ~0, power_pin[1].inverted(), adctarget[1]);
 }
@@ -166,7 +167,7 @@ void Temp::copy(Temp &dst) {
 void handle_temp(int id, int temp) { // {{{
 	if (store_adc)
 		fprintf(store_adc, "%d %d %f %d\n", millis(), id, temps[id].fromadc(temp), temp);
-	if (requested_temp == id) {
+	if (requested_temp < num_temps && temps[requested_temp].thermistor_pin.pin == temps[id].thermistor_pin.pin) {
 		//debug("replying temp");
 		double result = temps[requested_temp].fromadc(temp);
 		requested_temp = ~0;

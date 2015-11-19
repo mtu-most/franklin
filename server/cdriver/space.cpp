@@ -230,24 +230,22 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 	if (!isnan(motor[m]->home_pos)) {
 		// Axes with a limit switch.
 		if (motors_busy && (old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !isnan(old_home_pos)) {
-			double hp = motor[m]->home_pos * motor[m]->steps_per_unit;
 			double ohp = old_home_pos * old_steps_per_unit;
+			double hp = motor[m]->home_pos * motor[m]->steps_per_unit;
 			double diff = hp - ohp;
-			int ipos = int(motor[m]->settings.current_pos);
 			motor[m]->settings.current_pos += diff;
-			cpdebug(id, m, "load motor new home add %d", diff);
-			arch_addpos(id, m, int(motor[m]->settings.current_pos) - ipos);
+			//debug("load motor %d %d new home add %f", id, m, diff);
+			arch_addpos(id, m, diff);
 			must_move = true;
 		}
 	}
 	else {
 		// Axes without a limit switch, including extruders.
 		if (motors_busy && old_steps_per_unit != motor[m]->steps_per_unit) {
-			cpdebug(id, m, "load motor new steps no home");
+			//debug("load motor %d %d new steps no home", id, m);
 			double pos = motor[m]->settings.current_pos / old_steps_per_unit;
-			int ipos = int(motor[m]->settings.current_pos);
 			motor[m]->settings.current_pos = pos * motor[m]->steps_per_unit;
-			arch_addpos(id, m, int(motor[m]->settings.current_pos) - ipos);
+			arch_addpos(id, m, motor[m]->settings.current_pos - pos);
 		}
 	}
 	if (must_move)

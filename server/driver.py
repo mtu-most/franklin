@@ -1092,6 +1092,7 @@ class Printer: # {{{
 			for s, sp in enumerate(self.spaces):
 				for a in self.limits[s].keys():
 					if (s, a) in self.home_target:
+						#log('found limit %d %d' % (s, a))
 						self.home_target.pop((s, a))
 						found_limits = True
 			# Repeat until move is done, or all limits are hit.
@@ -1566,7 +1567,9 @@ class Printer: # {{{
 				ret += '[motor %d %d]\r\n' % (self.id, i)
 				ret += ''.join(['%s = %s\r\n' % (x, write_pin(m[x])) for x in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin')])
 				ret += ''.join(['%s = %d\r\n' % (x, m[x]) for x in ('home_order',)])
-				ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'home_pos', 'limit_v', 'limit_a')])
+				ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'limit_v', 'limit_a')])
+				if self.id != 1:
+					ret += 'home_pos = %f\r\n' % m['home_pos']
 			return ret
 	# }}}
 	class Temp: # {{{
@@ -2078,7 +2081,7 @@ class Printer: # {{{
 				value = int(value)
 			else:
 				value = float(value)
-			if key not in keys[section]:
+			if key not in keys[section] or (section == 'motor' and key == 'home_pos' and index[0] == 1):
 				errors.append((l, 'invalid key for section %s' % section))
 				continue
 			# If something critical is changed, update instantly.
@@ -2778,7 +2781,9 @@ class Printer: # {{{
 		return ret
 	def get_motor(self, space, motor):
 		ret = {'name': self.spaces[space].motor_name(motor)}
-		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
+		if space != 1:
+			ret['home_pos'] = self.spaces[space].motor[motor]['home_pos']
+		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'limit_v', 'limit_a', 'home_order'):
 			ret[key] = self.spaces[space].motor[motor][key]
 		return ret
 	def expert_set_space(self, space, readback = True, update = True, **ka):
@@ -2852,9 +2857,11 @@ class Printer: # {{{
 				self._space_update(space)
 		assert len(ka) == 0
 	def expert_set_motor(self, (space, motor), readback = True, update = True, **ka):
-		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'home_pos', 'limit_v', 'limit_a', 'home_order'):
+		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'limit_v', 'limit_a', 'home_order'):
 			if key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
+		if space != 1 and 'home_pos' in ka:
+			self.spaces[space].motor[motor]['home_pos'] = ka.pop('home_pos')
 		self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_MOTOR'], space, motor) + self.spaces[space].write_motor(motor))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
