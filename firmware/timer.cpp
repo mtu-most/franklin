@@ -55,7 +55,8 @@ void handle_motors() {
 		step_state = 1;
 		//debug("hit limit %d curpos %ld cf %d ncf %d lf %d cfp %d", m, F(motor[m].current_pos), cf, notified_current_fragment, last_fragment, cs);
 		// Notify host.
-		limit_fragment_pos = cs;
+		// Use actual current sample, not the one that was used for testing.
+		limit_fragment_pos = current_sample;
 		arch_set_speed(0);
 		return;
 	}

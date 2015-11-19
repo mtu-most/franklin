@@ -19,12 +19,6 @@ TYPE_FOLLOWER = 4
 
 # Imports.  {{{
 import fhs
-config = fhs.init(packagename = 'franklin', config = {
-	'cdriver': None,
-	'port': None,
-	'run-id': None,
-	'allow-system': None
-	})
 import websocketd
 from websocketd import log
 import serial
@@ -46,6 +40,14 @@ import traceback
 import protocol
 import mmap
 import random
+# }}}
+
+config = fhs.init(packagename = 'franklin', config = { # {{{
+	'cdriver': None,
+	'port': None,
+	'run-id': None,
+	'allow-system': None
+	})
 # }}}
 
 # Enable code trace. {{{

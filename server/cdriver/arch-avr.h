@@ -333,7 +333,7 @@ bool hwpacket(int len) {
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
 		avr_homing = false;
-		abort_move(int8_t(command[1][3]) - 2);
+		abort_move(int8_t(command[1][3]));
 		avr_get_current_pos(4, false);
 		if (spaces[0].num_axes > 0)
 			cpdebug(0, 0, "ending hwpos %f", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
@@ -379,8 +379,8 @@ bool hwpacket(int len) {
 		}
 		avr_running = false;
 		if (computing_move) {
-			debug("underrun");
-			if (!sending_fragment || (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 1)
+			debug("underrun %d %d %d", sending_fragment, current_fragment, running_fragment);
+			if (!sending_fragment && (current_fragment - (running_fragment + command[1][2] + command[1][3]) + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 1)
 				arch_start_move(command[1][2]);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
