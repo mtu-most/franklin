@@ -1087,7 +1087,7 @@ class Printer: # {{{
 				return
 			# Fall through.
 		if self.home_phase == 2:
-			# Continue moving up to find limit switch.
+			# Continue moving to find limit switch.
 			found_limits = False
 			for s, sp in enumerate(self.spaces):
 				for a in self.limits[s].keys():
@@ -1095,6 +1095,7 @@ class Printer: # {{{
 						#log('found limit %d %d' % (s, a))
 						self.home_target.pop((s, a))
 						found_limits = True
+						sp.set_current_pos(a, sp.get_current_pos(a))
 			# Repeat until move is done, or all limits are hit.
 			if (not done or found_limits) and len(self.home_target) > 0:
 				self.home_cb[0] = list(self.home_target.keys())

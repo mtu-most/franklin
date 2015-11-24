@@ -276,7 +276,7 @@ void avr_get_current_pos(int offset, bool check) {
 			cpdebug(ts, tm, "cpa offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], p, p + avr_pos_offset[tm + mi]);
 			cpdebug(ts, tm, "getpos offset %f diff %d", avr_pos_offset[tm + mi], int(p) - int(old));
 			if (check) {
-				if (int(old) != int(p)) {
+				if (fabs(old - p) > 1) {
 					if (moving_to_current == 1)
 						moving_to_current = 2;
 					else {
@@ -287,7 +287,7 @@ void avr_get_current_pos(int offset, bool check) {
 				}
 			}
 			else {
-				if (int(p) != int(old)) {
+				if (fabs(old - p) > 1) {
 					cpdebug(ts, tm, "update current pos from %f to %f", spaces[ts].motor[tm]->settings.current_pos, p);
 					spaces[ts].motor[tm]->settings.current_pos = p;
 				}
@@ -313,6 +313,11 @@ bool hwpacket(int len) {
 			abort();
 		}
 		avr_write_ack("limit");
+		avr_homing = false;
+		abort_move(int8_t(command[1][3]));
+		avr_get_current_pos(4, false);
+		if (spaces[0].num_axes > 0)
+			cpdebug(0, 0, "ending hwpos %f", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 		double pos;
 		int s, m;
 		if (which >= avr_active_motors) {
@@ -331,11 +336,6 @@ bool hwpacket(int len) {
 			cpdebug(s, m, "limit");
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
-		avr_homing = false;
-		abort_move(int8_t(command[1][3]));
-		avr_get_current_pos(4, false);
-		if (spaces[0].num_axes > 0)
-			cpdebug(0, 0, "ending hwpos %f", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 		sending_fragment = 0;
 		stopping = 2;
 		send_host(CMD_LIMIT, s, m, pos);
