@@ -20,6 +20,7 @@
 
 //#define DEBUG_DATA
 //#define DEBUG_HOST
+//#define DEBUG_ALL_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
@@ -74,7 +75,10 @@ static void send_to_host() {
 	if (!hostqueue_head)
 		hostqueue_tail = NULL;
 #ifdef DEBUG_HOST
-	debug("**** host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->s, r->m, r->e, r->f, r->len);
+#ifndef DEBUG_ALL_HOST
+	if (r->cmd != CMD_POS && r->cmd != CMD_TIME && r->cmd != CMD_TEMP)
+#endif
+		debug("**** host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->s, r->m, r->e, r->f, r->len);
 #endif
 	serialdev[0]->write(22 + r->len);
 	serialdev[0]->write(r->cmd);
@@ -397,10 +401,15 @@ void serial(uint8_t channel) {
 #endif
 #ifdef DEBUG_HOST
 		if (channel == 0) {
-			fprintf(stderr, "**** host recv:");
-			for (uint8_t i = 0; i < command_end[channel]; ++i)
-				fprintf(stderr, " %02x", command[channel][i]);
-			fprintf(stderr, "\n");
+#ifndef DEBUG_ALL_HOST
+			if (command[channel][1] != CMD_GETPOS && command[channel][1] != CMD_GETTIME && command[channel][1] != CMD_READTEMP)
+#endif
+			{
+				fprintf(stderr, "**** host recv:");
+				for (uint8_t i = 0; i < command_end[channel]; ++i)
+					fprintf(stderr, " %02x", command[channel][i]);
+				fprintf(stderr, "\n");
+			}
 		}
 #endif
 		int end = command_end[channel];

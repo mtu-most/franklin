@@ -8,7 +8,6 @@ export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector
 ARCH = $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
 override_dh_auto_build:
-	dh_auto_build
 	${MAKE} -C server/html
 	ronn -r server/franklin.8.ronn
 #ifeq (${ARCH}, armhf)

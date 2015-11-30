@@ -5,3 +5,8 @@ server/cdriver/build
 server/cdriver/*.o
 util/joystick.py
 util/c457a-ui.gui
+mkdeb
+module-python-fhs
+module-python-network
+module-python-websocketd
+zipdir

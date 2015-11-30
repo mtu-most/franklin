@@ -53,6 +53,7 @@ while True:
 		time.sleep(.01)
 		p.wait_gpio(sensor, 1)
 		p.set_gpio(motor, state = 0)
-		p.confirm(None)
+		time.sleep(.1)
+		p.confirm(id)
 		continue
 	websocketd.log('unrecognized embroidery command %s' % msg[1])

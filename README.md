@@ -7,13 +7,13 @@ Please see the wiki on github for up to date information.
 ## Installation
 
 On a Debian or Debian-based system, you can build and install the program by
-running ./build.sh.
+running make.
 
 On other Unix-based systems you need to build and install the files manually.
 
-For information on how build.sh works, please refer to [this
-page](https://people.debian.org/~wijnen/mypackages.html).  You do not need to
-read this in order to run the script.
+For information on how the build system works, please refer to the Makefile and
+[this page](https://people.debian.org/~wijnen/mypackages.html).  You do not
+need to read this in order to run the build.
 
 I tried to keep the code as portable as possible.  It should work on any system
 except Windows[1].  The automatic device detection relies on udev, so that will

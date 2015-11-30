@@ -1,0 +1,9 @@
+[submodule "python-fhs"]
+	path = python-fhs
+	url = https://github.com/wijnen/python-fhs
+[submodule "python-network"]
+	path = python-network
+	url = https://github.com/wijnen/python-network
+[submodule "python-websocketd"]
+	path = python-websocketd
+	url = https://github.com/wijnen/python-websocketd
