@@ -34,7 +34,7 @@ zip:
 	rm -rf zipdir
 	mkdir zipdir
 	sshpass -p"$(BB_PASS)" ssh $(BB) sudo ntpdate -u time.mtu.edu
-	sshpass -p"$(BB_PASS)" ssh $(BB) rm -rf franklin
+	sshpass -p"$(BB_PASS)" ssh $(BB) rm -rf franklin '/tmp/*.{dsc,changes,tar.gz,deb}'
 	cd zipdir && git clone .. franklin
 	tar cf - -C zipdir franklin | sshpass -p"$(BB_PASS)" ssh $(BB) tar xf -
 	rm -rf zipdir/franklin
@@ -49,7 +49,7 @@ zip:
 	cd zipdir && for f in python-websocketd_* python3-websocketd_* ; do mv $$f 3-$$f ; done
 	cd zipdir && for f in arduino-mighty-1284p_* ; do mv $$f 4-$$f ; done
 	cd zipdir && for f in franklin_* ; do mv $$f 5-$$f ; done
-	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || sshpass -p"$(BB_PASS)" scp $(BB):'/tmp/*.{dsc,changes,tar.gz}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL
+	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || sshpass -p"$(BB_PASS)" scp $(BB):'/tmp/*.{dsc,changes,tar.gz,deb}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL
 	# Prepare script.
 	echo '#!/bin/sh' > zipdir/0-prepare
 	echo 'ip route del default' >> zipdir/0-prepare
@@ -64,7 +64,7 @@ zip:
 	echo 'EOF' >> zipdir/9-finalize
 	echo 'shutdown -h now' >> zipdir/9-finalize
 	cd zipdir && for f in * ; do echo "$$FRANKLIN_PASSPHRASE" | gpg --local-user $(UPGRADE_KEY) --passphrase-fd 0 --detach-sign $$f ; done
-	changelog="`dpkg-parsechangelog`" && name="`echo "$$changelog" | grep '^Source: ' | cut -b9-`" && fullversion="`echo "$$changelog" | grep '^Version: ' | cut -b10-`" && version="$${fullversion%-*}" && cd zipdir && zip ../$$name-$$version.zip *
+	changelog="`dpkg-parsechangelog`" && name="`echo "$$changelog" | grep '^Source: ' | cut -b9-`" && fullversion="`echo "$$changelog" | grep '^Version: ' | cut -b10-`" && version="$${fullversion%-*}" && cd zipdir && rm -f ../$$name-$$version.zip && zip ../$$name-$$version.zip *
 
 install:
 	# Fake target to make debhelper happy.
