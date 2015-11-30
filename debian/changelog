@@ -1,5 +1,11 @@
-franklin (0.1-1) UNRELEASED; urgency=low
+franklin (0.2-1) UNRELEASED; urgency=medium
+
+  * New release.
+
+ -- Bas Wijnen <wijnen@debian.org>  Mon, 30 Nov 2015 11:23:00 -0500
+
+franklin (0.1-1) unstable; urgency=medium
 
   * Initial release.
 
- -- Bas Wijnen <wijnen@debian.org>  Tue, 24 Feb 2015 11:40:39 -0500
+ -- Bas Wijnen <wijnen@debian.org>  Mon, 30 Nov 2015 11:22:56 -0500

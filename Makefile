@@ -20,22 +20,36 @@ MODULES = python-fhs python-network python-websocketd
 install-all: build
 	sudo dpkg -i $(wildcard $(patsubst %,/tmp/%*.deb,$(MODULES)) /tmp/franklin*.deb)
 
+# This target is meant for producing release packages for Athena.
+# Some preparations are required to make ti work:
+# - A beaglebone must be attached to a USB port, and accessible on the address given below.
+# - It must have a user with password as given below.
+# - All build dependencies must be installed on it. (Note that some come from backports or jessie (or newer).)
+# - DEBFULLNAME and DEBEMAIL should be set.
+# - On the host system, FRANKLIN_PASSPHRASE must be set and the secret key given below must be available.
 BB = debian@192.168.7.2
+BB_PASS = reprap
+UPGRADE_KEY = 46BEB154
 zip:
 	rm -rf zipdir
 	mkdir zipdir
-	sshpass -preprap ssh $(BB) rm -rf franklin
-	sshpass -preprap ssh $(BB) mkdir franklin || :
-	git archive HEAD | sshpass -preprap ssh $(BB) tar xf - -C franklin
-	sshpass -preprap ssh $(BB) make -C franklin build
-	sshpass -preprap ssh $(BB) cd /tmp \; aptitude download avrdude
-	sshpass -preprap scp $(BB):/tmp/*deb zipdir/
+	sshpass -p"$(BB_PASS)" ssh $(BB) sudo ntpdate -u time.mtu.edu
+	sshpass -p"$(BB_PASS)" ssh $(BB) rm -rf franklin
+	cd zipdir && git clone .. franklin
+	tar cf - -C zipdir franklin | sshpass -p"$(BB_PASS)" ssh $(BB) tar xf -
+	rm -rf zipdir/franklin
+	sshpass -p"$(BB_PASS)" ssh $(BB) sed -i -e 's/-stackprotector/\\0,-relro/' franklin/debian/rules
+	sshpass -p"$(BB_PASS)" ssh $(BB) make -C franklin build MKDEB_ARG=-S
+	sshpass -p"$(BB_PASS)" ssh $(BB) cd /tmp \; aptitude download avrdude
+	sshpass -p"$(BB_PASS)" scp $(BB):/tmp/*deb zipdir/
 	cd zipdir && aptitude download arduino-mighty-1284p
-	for f in avrdude* ; do mv $$f 1-$$f ; done
-	for f in python-fhs* ; do mv $$f 1-$$f ; done
-	for f in python-network* ; do mv $$f 2-$$f ; done
-	for f in python-websocketd* ; do mv $$f 3-$$f ; done
-	for f in python-franklin* ; do mv $$f 4-$$f ; done
+	cd zipdir && for f in avrdude_* ; do mv $$f 1-$$f ; done
+	cd zipdir && for f in python-fhs_* python3-fhs_* ; do mv $$f 1-$$f ; done
+	cd zipdir && for f in python-network_* python3-network_* ; do mv $$f 2-$$f ; done
+	cd zipdir && for f in python-websocketd_* python3-websocketd_* ; do mv $$f 3-$$f ; done
+	cd zipdir && for f in arduino-mighty-1284p_* ; do mv $$f 4-$$f ; done
+	cd zipdir && for f in franklin_* ; do mv $$f 5-$$f ; done
+	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || sshpass -p"$(BB_PASS)" scp $(BB):'/tmp/*.{dsc,changes,tar.gz}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL
 	# Prepare script.
 	echo '#!/bin/sh' > zipdir/0-prepare
 	echo 'ip route del default' >> zipdir/0-prepare
@@ -49,24 +63,24 @@ zip:
 	echo "TLS=False" >> zipdir/9-finalize
 	echo 'EOF' >> zipdir/9-finalize
 	echo 'shutdown -h now' >> zipdir/9-finalize
-	cd zipdir && echo -n 'Passphrase for signing key: ' && read passphrase && for f in * ; do echo "$$passphrase" | gpg --local-user 46BEB154 --passphrase-fd 0 --detach-sign $$f ; done
-	cd zipdir && zip ../franklin.zip *
+	cd zipdir && for f in * ; do echo "$$FRANKLIN_PASSPHRASE" | gpg --local-user $(UPGRADE_KEY) --passphrase-fd 0 --detach-sign $$f ; done
+	changelog="`dpkg-parsechangelog`" && name="`echo "$$changelog" | grep '^Source: ' | cut -b9-`" && fullversion="`echo "$$changelog" | grep '^Version: ' | cut -b10-`" && version="$${fullversion%-*}" && cd zipdir && zip ../$$name-$$version.zip *
 
 install:
 	# Fake target to make debhelper happy.
 	:
 
 build: mkdeb $(addprefix module-,$(MODULES))
-	./mkdeb
+	./mkdeb $(MKDEB_ARG)
 
 mkdeb:
-	wget http://people.debian.org/~wijnen/mkdeb
+	wget https://people.debian.org/~wijnen/mkdeb
 	chmod a+x mkdeb
 
 module-%: base = $(patsubst module-%,%,$@)
 module-%: mkdeb
 	git submodule add https://github.com/wijnen/$(base) || git submodule update $(base)
-	cd $(base) && ../mkdeb
+	cd $(base) && ../mkdeb $(MKDEB_ARG)
 	touch $@
 
 clean-%: base = $(patsubst clean-%,%,$@)
