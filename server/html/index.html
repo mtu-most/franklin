@@ -1,3 +1,20 @@
+<!-- index.html - html source for Franklin
+  .. Copyright 2014 Michigan Technological University
+  .. Author: Bas Wijnen <wijnen@debian.org>
+  ..
+  .. This program is free software: you can redistribute it and/or modify
+  .. it under the terms of the GNU Affero General Public License as
+  .. published by the Free Software Foundation, either version 3 of the
+  .. License, or (at your option) any later version.
+  ..
+  .. This program is distributed in the hope that it will be useful,
+  .. but WITHOUT ANY WARRANTY; without even the implied warranty of
+  .. MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  .. GNU Affero General Public License for more details.
+  ..
+  .. You should have received a copy of the GNU Affero General Public License
+  .. along with this program.  If not, see <http://www.gnu.org/licenses/>.
+  -->
 <!DOCTYPE html>
 <html>
 	<head>
@@ -13,11 +30,12 @@
 	</head>
 	<body onload='init()' id='container' class='nosetup'>
 		<div id='labels'>
-			<div class='expert' id='setupbutton'>
+			<div id='setupbutton'>
+				<a href='https://github.com/mtu-most/franklin'>Get Franklin Source</a>
 				<button class='expert setup' type='button' onclick='exit()'>
 					Exit Franklin
 				</button>
-				<label>
+				<label class='expert'>
 					<input type='checkbox' id='setupbox' onchange='toggle_setup()'/>
 					Show setup
 				</label>
