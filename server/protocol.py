@@ -150,7 +150,7 @@ def check(packet):
 			check ^= check >> 4
 			check ^= check >> 2
 			check ^= check >> 1
-			if check & 1 != 0:
+			if (check & 1) != 0:
 				log('bad checksum')
 				return False
 	log('good')

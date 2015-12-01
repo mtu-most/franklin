@@ -653,9 +653,8 @@ def detect(port): # {{{
 							if p < f:
 								f = p
 							log('Keeping some')
-							break
-					else:
-						id[0] = ''
+					if f == 0:
+						f = 1
 					id[0] = id[0][f:]
 					return True
 			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset. (I don't think this even works, but it doesn't hurt.)
