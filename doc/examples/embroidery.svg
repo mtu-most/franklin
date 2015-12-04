@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Downloaded from: echtefriesevlag.nl -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   version="1.0"
+   width="72.325577mm"
+   height="50.07156mm"
+   id="svg2"
+   inkscape:version="0.91 r13725"
+   sodipodi:docname="embroidery.svg">
+  <sodipodi:namedview
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1"
+     objecttolerance="10"
+     gridtolerance="10"
+     guidetolerance="10"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:window-width="1280"
+     inkscape:window-height="960"
+     id="namedview26"
+     showgrid="false"
+     inkscape:document-units="mm"
+     units="mm"
+     inkscape:object-nodes="true"
+     inkscape:zoom="1.6544938"
+     inkscape:cx="185.56704"
+     inkscape:cy="137.22687"
+     inkscape:window-x="0"
+     inkscape:window-y="21"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg2"
+     fit-margin-top="0"
+     fit-margin-left="0"
+     fit-margin-right="0"
+     fit-margin-bottom="0" />
+  <metadata
+     id="metadata30">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <defs
+     id="defs28" />
+  <path
+     id="path4379"
+     d="m 183.05115,0 73.22059,50.69115 0,-50.69115 z"
+     style="opacity:1;fill:#244994;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:0.17716534;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+     inkscape:connector-curvature="0" />
+  <path
+     id="path4377"
+     d="m 36.610193,0 219.661547,152.07343 0,-50.69113 L 109.83077,0 Z"
+     style="opacity:1;fill:#244994;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:0.17716534;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+     inkscape:connector-curvature="0" />
+  <path
+     id="path4375"
+     d="m 0,76.03663 146.44098,101.38228 73.22137,0 L 0,25.34548 Z"
+     style="opacity:1;fill:#244994;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:0.17716534;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+     inkscape:connector-curvature="0" />
+  <path
+     id="path4191"
+     d="m 0,177.41891 73.220585,0 -73.14762641,-50.62037 z"
+     style="opacity:1;fill:#244994;fill-opacity:1;fill-rule:evenodd;stroke:none;stroke-width:0.17716534;stroke-linecap:round;stroke-linejoin:bevel;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+     inkscape:connector-curvature="0" />
+  <path
+     d="m 74.809273,145.25286 c -0.264911,0.38256 -0.713838,0.59469 -1.177531,0.55658 -0.46381,-0.0381 -0.871954,-0.32075 -1.070763,-0.74137 -0.198906,-0.42076 -0.158219,-0.91556 0.106668,-1.2981 2.858256,-4.17732 2.97902,-9.02662 -1.234583,-11.94416 -4.052026,-2.80584 -10.084786,-1.45083 -13.42706,3.37607 -5.996268,8.6598 -4.659316,20.42014 3.127757,27.51294 9.379131,4.79374 20.857958,1.90739 26.854321,-6.75228 3.342279,-4.82692 2.488085,-10.95071 -1.563947,-13.75643 -4.213603,-2.91759 -8.710164,-1.09842 -11.614809,3.04682 z"
+     style="fill:#c73326"
+     id="a"
+     inkscape:connector-curvature="0">
+    <desc
+       id="desc4198">embroider_angle=60</desc>
+  </path>
+  <path
+     inkscape:connector-curvature="0"
+     id="use14"
+     style="fill:#c73326"
+     d="m 30.405262,114.51169 c -0.264906,0.38256 -0.713834,0.59468 -1.177528,0.55658 -0.463813,-0.0381 -0.871955,-0.32075 -1.070762,-0.74137 -0.198907,-0.42077 -0.158219,-0.91556 0.106668,-1.2981 2.858258,-4.17733 2.979022,-9.02662 -1.234579,-11.94417 -4.05203,-2.80585 -10.084785,-1.45081 -13.427063,3.37609 -5.9962652,8.65979 -4.6593151,20.42012 3.127759,27.51293 9.379131,4.79373 20.857956,1.90739 26.854321,-6.75229 3.342277,-4.82692 2.488084,-10.95071 -1.563948,-13.75643 -4.213599,-2.91757 -8.710164,-1.09842 -11.614807,3.04681 z">
+    <desc
+       id="desc4386">embroider_angle=60</desc>
+  </path>
+  <path
+     inkscape:connector-curvature="0"
+     id="use16"
+     style="fill:#c73326"
+     d="m 201.26953,131.40433 c -0.26492,0.38255 -0.71384,0.59469 -1.17754,0.55659 -0.46381,-0.0381 -0.87195,-0.32076 -1.07076,-0.74137 -0.19891,-0.42077 -0.15822,-0.91556 0.10661,-1.2981 2.85826,-4.17734 2.97902,-9.02662 -1.23458,-11.94419 -4.05203,-2.80583 -10.08478,-1.4508 -13.42706,3.3761 -5.99626,8.65978 -4.65932,20.42012 3.12776,27.51294 9.37913,4.79374 20.85796,1.90739 26.85432,-6.7523 3.34228,-4.82691 2.48809,-10.9507 -1.56395,-13.75642 -4.2136,-2.91759 -8.71016,-1.09842 -11.6148,3.04682 z">
+    <desc
+       id="desc4390">embroider_angle=60</desc>
+  </path>
+  <path
+     inkscape:connector-curvature="0"
+     id="use18"
+     style="fill:#c73326"
+     d="m 64.591914,36.78092 c -0.264904,0.38255 -0.713837,0.5947 -1.17753,0.55659 -0.463811,-0.0381 -0.871953,-0.32076 -1.070764,-0.74138 -0.198905,-0.42076 -0.158218,-0.91557 0.106669,-1.2981 2.858255,-4.17733 2.979019,-9.02662 -1.234583,-11.94417 -4.052027,-2.80585 -10.084782,-1.45082 -13.42706,3.37608 -5.996265,8.6598 -4.659316,20.42013 3.127757,27.51294 9.379133,4.79374 20.857957,1.90739 26.85432,-6.75229 3.342279,-4.82692 2.488086,-10.9507 -1.563947,-13.75643 -4.213597,-2.91757 -8.710164,-1.09842 -11.614803,3.04681 z">
+    <desc
+       id="desc4394">embroider_angle=60</desc>
+  </path>
+  <path
+     inkscape:connector-curvature="0"
+     id="use20"
+     style="fill:#c73326"
+     d="m 132.93111,84.09263 c -0.26489,0.38256 -0.71383,0.59468 -1.17753,0.55658 -0.46381,-0.0381 -0.87195,-0.32076 -1.07076,-0.74137 -0.19891,-0.42077 -0.15822,-0.91556 0.10661,-1.2981 2.85826,-4.17733 2.97903,-9.02662 -1.23458,-11.94418 -4.05202,-2.80584 -10.08478,-1.4508 -13.42706,3.37609 -5.99627,8.6598 -4.65931,20.42012 3.12775,27.51294 9.37915,4.79373 20.85797,1.90739 26.85433,-6.75229 3.34228,-4.82692 2.48809,-10.95072 -1.56395,-13.75643 -4.2136,-2.91757 -8.71016,-1.09842 -11.61481,3.04681 z">
+    <desc
+       id="desc4398">embroider_angle=60</desc>
+  </path>
+  <path
+     inkscape:connector-curvature="0"
+     id="use22"
+     style="fill:#c73326"
+     d="m 235.43291,53.68381 c -0.2649,0.38256 -0.71383,0.59469 -1.17752,0.55658 -0.46382,-0.0381 -0.87196,-0.32076 -1.07077,-0.74137 -0.1989,-0.42076 -0.15821,-0.91556 0.10662,-1.2981 2.85827,-4.17732 2.97902,-9.02662 -1.23458,-11.94417 -4.05203,-2.80583 -10.08478,-1.45082 -13.42706,3.37608 -5.99627,8.65979 -4.65932,20.42014 3.12776,27.51295 9.37913,4.79374 20.85796,1.90738 26.85432,-6.75229 3.34227,-4.82692 2.48808,-10.95071 -1.56395,-13.75643 -4.2136,-2.91758 -8.71015,-1.09843 -11.61481,3.04682 z">
+    <desc
+       id="desc4402">embroider_angle=60</desc>
+  </path>
+  <path
+     inkscape:connector-curvature="0"
+     id="use24"
+     style="fill:#c73326"
+     d="m 191.01865,22.94106 c -0.2649,0.38255 -0.71383,0.59469 -1.17753,0.55658 -0.46381,-0.0381 -0.87195,-0.32074 -1.07076,-0.74137 -0.19891,-0.42076 -0.15822,-0.91557 0.10661,-1.29809 2.85826,-4.17734 2.97903,-9.02663 -1.23458,-11.94418 -4.05202,-2.80584 -10.08478,-1.45082 -13.42706,3.37608 -5.99626,8.6598 -4.65931,20.42013 3.12775,27.51295 9.37914,4.79374 20.85796,1.90737 26.85433,-6.75229 3.34228,-4.82692 2.48809,-10.95071 -1.56395,-13.75643 -4.21359,-2.91758 -8.71016,-1.09842 -11.61481,3.04681 z">
+    <desc
+       id="desc4406">embroider_angle=60</desc>
+  </path>
+  <g
+     transform="translate(0,-722.58109)"
+     inkscape:label="Layer 1"
+     id="layer1"
+     inkscape:groupmode="layer" />
+</svg>

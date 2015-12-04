@@ -2118,7 +2118,7 @@ class Printer: # {{{
 				self._send(id, 'return', None)
 			return
 		self.line(moves, f0, f1, v0, v1, relative, probe, single)
-		self.wait_for_cb(False)[1](id)
+		self.wait_for_cb()[1](id)
 	# }}}
 	def move_target(self, dx, dy): # {{{
 		'''Move the target position.
