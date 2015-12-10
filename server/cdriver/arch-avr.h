@@ -981,7 +981,7 @@ bool arch_send_fragment() {
 	//debug("send fragment %d %d %d", current_fragment_pos, current_fragment, num_active_motors);
 	avr_buffer[1] = current_fragment_pos;
 	avr_buffer[2] = num_active_motors;
-	sending_fragment = num_active_motors + 1;
+	sending_fragment = out_busy + num_active_motors + 1;
 	if (prepare_packet(avr_buffer, 3)) {
 		avr_send();
 		int mi = 0;
@@ -1083,7 +1083,7 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) {
 	avr_buffer[0] = HWC_START_MOVE;
 	avr_buffer[1] = len;
 	avr_buffer[2] = NUM_MOTORS;
-	sending_fragment = NUM_MOTORS + 1;
+	sending_fragment = out_busy + NUM_MOTORS + 1;
 	if (!prepare_packet(avr_buffer, 3)) {
 		debug("audio upload failed");
 		return pos + NUM_MOTORS * len;

@@ -796,7 +796,7 @@ void send_fragment() { // {{{
 		current_fragment_pos = 0;
 		return;
 	}
-	if (current_fragment_pos <= 0 || stopping || sending_fragment) {
+	if (current_fragment_pos <= 0 || stopping || sending_fragment > out_busy) {
 		debug("no send fragment %d %d %d", current_fragment_pos, stopping, sending_fragment);
 		return;
 	}
@@ -848,7 +848,7 @@ void buffer_refill() { // {{{
 		send_fragment();
 	//debug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
-	while (computing_move && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 4 && !sending_fragment) {
+	while (computing_move && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 4 && sending_fragment <= out_busy) {
 		//debug("refill %d %d %f", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings.current_pos);
 		// fill fragment until full.
 		apply_tick();

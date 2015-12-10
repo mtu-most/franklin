@@ -211,14 +211,15 @@ void serial(uint8_t channel) {
 					//debug("ack%d ff %d busy %d", which, ff_out, out_busy);
 					which &= 3;
 					// Ack: flip the flipflop.
-					if (out_busy > 0 && ((ff_out - out_busy) & 3) == which) // Only if we expected it and it is the right type.
+					if (out_busy > 0 && ((ff_out - out_busy) & 3) == which) { // Only if we expected it and it is the right type.
 						out_busy -= 1;
-					if (out_busy < 3) {
 						if (sending_fragment > 0) {
 							sending_fragment -= 1;
-							if (sending_fragment > 0)
+							if (sending_fragment > out_busy)
 								continue;
 						}
+					}
+					if (out_busy < 3) {
 						if (change_pending) {
 							change_pending = false;
 							arch_motors_change();
