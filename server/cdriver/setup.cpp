@@ -44,8 +44,11 @@ void setup(char const *port, char const *run_id)
 	current_extruder = 0;
 	continue_cb = 0;
 	ping = 0;
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < 4; ++i) {
 		pending_len[i] = 0;
+		wait_for_reply[i] = NULL;
+		serial_cb[i] = NULL;
+	}
 	out_busy = 0;
 	led_pin.init();
 	stop_pin.init();
@@ -73,6 +76,7 @@ void setup(char const *port, char const *run_id)
 	prepared = false;
 	stopping = 0;
 	sending_fragment = 0;
+	transmitting_fragment = false;
 	start_pending = false;
 	stop_pending = false;
 	discard_pending = 0;
@@ -87,8 +91,6 @@ void setup(char const *port, char const *run_id)
 	run_file_map = NULL;
 	run_file_finishing = false;
 	expected_replies = 0;
-	for (int i = 0; i < 4; ++i)
-		wait_for_reply[i] = NULL;
 	num_temps = 0;
 	temps = NULL;
 	num_gpios = 0;

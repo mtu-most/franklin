@@ -17,6 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+// Do this the first time the file is included, the rest the second time.
 #ifndef ADCBITS
 
 // Includes and defines. {{{
@@ -203,6 +204,7 @@ EXTERN bool avr_filling;
 EXTERN void (*avr_get_cb)(bool);
 EXTERN bool avr_get_pin_invert;
 EXTERN bool avr_stop_fake;
+EXTERN void (*avr_cb)();
 // }}}
 
 #define avr_write_ack(reason) do { \
@@ -265,6 +267,8 @@ void avr_send() {
 		poll(&pollfds[2], 1, -1);
 		serial(1);
 	}
+	serial_cb[out_busy] = avr_cb;
+	avr_cb = NULL;
 	out_busy += 1;
 	send_packet();
 	if (out_busy < 3)
@@ -354,7 +358,6 @@ bool hwpacket(int len) {
 			cpdebug(s, m, "limit");
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
-		sending_fragment = 0;
 		stopping = 2;
 		send_host(CMD_LIMIT, s, m, pos);
 		cbs_after_current_move = 0;
@@ -404,7 +407,7 @@ bool hwpacket(int len) {
 		else {
 			// Only overwrite current position if the new value is correct.
 			//debug("underrun ok computing_move=%d sending=%d pending=%d finishing=%d", computing_move, sending_fragment, command[1][2], run_file_finishing);
-			if (!computing_move && !sending_fragment && command[1][3] == 0) {
+			if (!computing_move && !transmitting_fragment && command[1][3] == 0) {
 				avr_get_current_pos(4, true);
 				if (run_file_finishing) {
 					send_host(CMD_FILE_DONE);
@@ -960,6 +963,18 @@ void avr_stop2() {
 	serial(0);	// Handle any data that was refused before.
 }
 
+static void avr_sent_fragment() {
+	if (sending_fragment == 0) {
+		debug("calling avr_sent_fragment with zero sending_fragment");
+		return;
+	}
+	if (stopping)
+		return;
+	sending_fragment -= 1;
+	if (sending_fragment == 0) {
+	}
+}
+
 bool arch_send_fragment() {
 	if (host_block || stopping || discard_pending || stop_pending) {
 		debug("not sending arch frag %d %d %d %d", host_block, stopping, discard_pending, stop_pending);
@@ -981,8 +996,10 @@ bool arch_send_fragment() {
 	//debug("send fragment %d %d %d", current_fragment_pos, current_fragment, num_active_motors);
 	avr_buffer[1] = current_fragment_pos;
 	avr_buffer[2] = num_active_motors;
-	sending_fragment = out_busy + num_active_motors + 1;
+	sending_fragment = num_active_motors + 1;
 	if (prepare_packet(avr_buffer, 3)) {
+		transmitting_fragment = true;
+		avr_cb = &avr_sent_fragment;
 		avr_send();
 		int mi = 0;
 		avr_filling = true;
@@ -1003,12 +1020,15 @@ bool arch_send_fragment() {
 				avr_buffer[1] = mi + m;
 				for (int i = 0; i < cfp; ++i)
 					avr_buffer[2 + i] = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->avr_data[i];
-				if (prepare_packet(avr_buffer, 2 + cfp))
+				if (prepare_packet(avr_buffer, 2 + cfp)) {
+					avr_cb = &avr_sent_fragment;
 					avr_send();
+				}
 				else
 					break;
 			}
 		}
+		transmitting_fragment = false;
 	}
 	avr_filling = false;
 	return !host_block && !stopping && !discard_pending && !stop_pending;
@@ -1110,6 +1130,15 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) {
 }
 
 void arch_do_discard() {
+	int cbs = 0;
+	for (int i = 0; i < discard_pending; ++i) {
+		current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		//debug("restoring %d %d", current_fragment, history[current_fragment].cbs);
+		cbs += history[current_fragment].cbs;
+	}
+	restore_settings();
+	history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += cbs + cbs_after_current_move;
+	cbs_after_current_move = 0;
 	while (out_busy >= 3) {
 		poll(&pollfds[2], 1, -1);
 		serial(1);
@@ -1129,15 +1158,6 @@ void arch_discard() {
 	if (fragments <= 2)
 		return;
 	discard_pending = fragments - 2;
-	int cbs = 0;
-	for (int i = 0; i < discard_pending; ++i) {
-		current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-		//debug("restoring %d %d", current_fragment, history[current_fragment].cbs);
-		cbs += history[current_fragment].cbs;
-	}
-	restore_settings();
-	history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += cbs + cbs_after_current_move;
-	cbs_after_current_move = 0;
 	if (!avr_filling)
 		arch_do_discard();
 }

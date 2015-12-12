@@ -27,9 +27,9 @@ install-all: build
 # - All build dependencies must be installed on it. (Note that some come from backports or jessie (or newer).)
 # - DEBFULLNAME and DEBEMAIL should be set.
 # - On the host system, FRANKLIN_PASSPHRASE must be set and the secret key given below must be available.
-BB = debian@192.168.7.2
-BB_PASS = reprap
-UPGRADE_KEY = 46BEB154
+BB ?= debian@192.168.7.2
+BB_PASS ?= reprap
+UPGRADE_KEY ?= 46BEB154
 zip:
 	rm -rf zipdir
 	mkdir zipdir
@@ -86,6 +86,7 @@ module-%: mkdeb
 clean-%: base = $(patsubst clean-%,%,$@)
 clean-%:
 	git submodule deinit -f $(base) || :
+	rm -rf $(base) || :
 	git rm -f $(base) || :
 	rm -rf .git/modules/$(base)
 	rm -f module-$(base)

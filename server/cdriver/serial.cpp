@@ -213,11 +213,12 @@ void serial(uint8_t channel) {
 					// Ack: flip the flipflop.
 					if (out_busy > 0 && ((ff_out - out_busy) & 3) == which) { // Only if we expected it and it is the right type.
 						out_busy -= 1;
-						if (sending_fragment > 0) {
-							sending_fragment -= 1;
-							if (sending_fragment > out_busy)
-								continue;
-						}
+						void (*cb)() = serial_cb[0];
+						for (int i = 0; i < out_busy; ++i)
+							serial_cb[i] = serial_cb[i + 1];
+						serial_cb[out_busy] = NULL;
+						if (cb)
+							cb();
 					}
 					if (out_busy < 3) {
 						if (change_pending) {
@@ -301,6 +302,7 @@ void serial(uint8_t channel) {
 						if (stopping == 1) {
 							//debug("done stopping");
 							stopping = 0;
+							sending_fragment = 0;
 						}
 						if (hostqueue_head)
 							send_to_host();

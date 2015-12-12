@@ -416,6 +416,7 @@ EXTERN int out_busy;
 EXTERN uint32_t out_time;
 EXTERN char pending_packet[4][FULL_COMMAND_SIZE];
 EXTERN int pending_len[4];
+EXTERN void (*serial_cb[4])();
 EXTERN char datastore[FULL_COMMAND_SIZE];
 EXTERN uint32_t last_active;
 EXTERN uint32_t last_micros;
@@ -426,7 +427,8 @@ EXTERN bool computing_move;	// True as long as steps are sent to firmware.
 EXTERN bool aborting, prepared, preparing;
 EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.
-EXTERN int sending_fragment;	// To compute how many fragments are in use from free_fragments.
+EXTERN int sending_fragment;
+EXTERN bool transmitting_fragment;
 EXTERN bool start_pending, stop_pending, change_pending, discarding;
 EXTERN int discard_pending;
 EXTERN double done_factor;
