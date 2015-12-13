@@ -40,15 +40,21 @@ zip:
 	rm -rf zipdir/franklin
 	sshpass -p"$(BB_PASS)" ssh $(BB) sed -i -e 's/-stackprotector/\\0,-relro/' franklin/debian/rules
 	sshpass -p"$(BB_PASS)" ssh $(BB) make -C franklin build MKDEB_ARG=-S
-	sshpass -p"$(BB_PASS)" ssh $(BB) cd /tmp \; aptitude download avrdude
+	sshpass -p"$(BB_PASS)" ssh $(BB) cd /tmp \; aptitude download avrdude arduino-core avr-libc binutils-avr gcc-avr python-avahi python-gdbm 
 	sshpass -p"$(BB_PASS)" scp $(BB):/tmp/*deb zipdir/
 	cd zipdir && aptitude download arduino-mighty-1284p
+	cd zipdir && for f in python-gdbm_* ; do mv $$f 1-$$f ; done
+	cd zipdir && for f in binutils-avr_* ; do mv $$f 1-$$f ; done
 	cd zipdir && for f in avrdude_* ; do mv $$f 1-$$f ; done
+	cd zipdir && for f in python-avahi_* ; do mv $$f 2-$$f ; done
+	cd zipdir && for f in gcc-avr_* ; do mv $$f 2-$$f ; done
+	cd zipdir && for f in avr-libc_* ; do mv $$f 3-$$f ; done
+	cd zipdir && for f in arduino-core_* ; do mv $$f 4-$$f ; done
+	cd zipdir && for f in arduino-mighty-1284p_* ; do mv $$f 5-$$f ; done
 	cd zipdir && for f in python-fhs_* python3-fhs_* ; do mv $$f 1-$$f ; done
 	cd zipdir && for f in python-network_* python3-network_* ; do mv $$f 2-$$f ; done
 	cd zipdir && for f in python-websocketd_* python3-websocketd_* ; do mv $$f 3-$$f ; done
-	cd zipdir && for f in arduino-mighty-1284p_* ; do mv $$f 4-$$f ; done
-	cd zipdir && for f in franklin_* ; do mv $$f 5-$$f ; done
+	cd zipdir && for f in franklin_* ; do mv $$f 6-$$f ; done
 	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || sshpass -p"$(BB_PASS)" scp $(BB):'/tmp/*.{dsc,changes,tar.gz,deb}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL
 	# Prepare script.
 	echo '#!/bin/sh' > zipdir/0-prepare
@@ -59,7 +65,7 @@ zip:
 	# Finalize script.
 	echo '#!/bin/sh' > zipdir/9-finalize
 	echo 'cat > /etc/default/franklin <<EOF' >> zipdir/9-finalize
-	echo "ATEXIT='sudo shutdown -h now'" >> zipdir/9-finalize
+	echo "#ATEXIT='sudo shutdown -h now'" >> zipdir/9-finalize
 	echo "TLS=False" >> zipdir/9-finalize
 	echo 'EOF' >> zipdir/9-finalize
 	echo 'shutdown -h now' >> zipdir/9-finalize
