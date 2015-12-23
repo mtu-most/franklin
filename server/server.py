@@ -47,7 +47,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\\d*))$',
 		'add-blacklist': '$',
 		'autodetect': 'True',
-		'predetect': 'stty -F #PORT# raw 115200',
+		'predetect': 'stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',
 		'atexit': '',
 		'avrdude': '/usr/bin/avrdude',
 		'allow-system': '^$',
