@@ -1218,16 +1218,16 @@ function pinrange(analog) { // {{{
 	var ret = [];
 	var pin = 0;
 	if (analog) {
-		for (var i = 0; i < printer.num_analog_pins; ++i) {
-			var node = Create('option').AddText('A' + String(i));
+		for (var i = 0; i < printer.analog_pin_names.length; ++i) {
+			var node = Create('option').AddText(printer.analog_pin_names[i]);
 			node.value = String(pin);
 			ret.push(node);
 			pin += 1;
 		}
 	}
 	else {
-		for (var i = 0; i < printer.num_digital_pins; ++i) {
-			var node = Create('option').AddText('D' + String(i));
+		for (var i = 0; i < printer.digital_pin_names.length; ++i) {
+			var node = Create('option').AddText(printer.digital_pin_names[i]);
 			node.value = String(pin);
 			ret.push(node);
 			pin += 1;

@@ -22,6 +22,7 @@ void setup(char const *port, char const *run_id)
 {
 	preparing = false;
 	host_block = true;
+	sent_names = false;
 	last_active = millis();
 	last_micros = utime();
 	serialdev[0] = &host_serial;

@@ -93,6 +93,7 @@ rcommand = {
 	'CONFIRM': 0x52,
 	'FILE_DONE': 0x53,
 	'PARKWAIT': 0x54,
+	'PINNAME': 0x55,
 	}
 
 parsed = {

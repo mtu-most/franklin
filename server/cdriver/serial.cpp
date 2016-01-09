@@ -394,7 +394,7 @@ void serial(uint8_t channel) {
 		}
 #ifdef SERIAL
 #ifdef DEBUG_DATA
-		if (channel == 1 && (command[1][0] & 0xf) != 7) {
+		if (channel == 1 && (command[1][0] & 0xf) != 8) {
 			fprintf(stderr, "recv:");
 			for (uint8_t i = 0; i < command_end[channel]; ++i)
 				fprintf(stderr, " %02x", command[channel][i]);

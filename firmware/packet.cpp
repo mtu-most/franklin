@@ -562,6 +562,16 @@ void packet()
 		write_ack();
 		return;
 	}
+	case CMD_PINNAME:
+	{
+		cmddebug("CMD_PINNAME");
+		uint8_t pin_ = command(1);
+		reply[0] = CMD_NAMED_PIN;
+		reply[1] = arch_pin_name(reinterpret_cast <char *>(&reply[2]), pin_ < 128, pin_ & 0x7f);
+		reply_ready = 2 + reply[1];
+		write_ack();
+		return;
+	}
 	default:
 	{
 		debug("Invalid command %x %x %x %x", uint8_t(command(0)), uint8_t(command(1)), uint8_t(command(2)), uint8_t(command(3)));

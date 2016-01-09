@@ -66,6 +66,7 @@
 #define TIMER5C 17
 // }}}
 
+#include <stdio.h>
 #include <pins_arduino.h>
 #include <avr/wdt.h>
 #include <avr/io.h>
@@ -578,6 +579,21 @@ static inline void arch_spi_send(uint8_t data, uint8_t bits) { // {{{
 static inline void arch_spi_stop() { // {{{
 	UNSET(MOSI);
 	UNSET(SCK);
+} // }}}
+
+static inline int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { // {{{
+	if (digital) {
+		if (pin_ >= A0)
+			return sprintf(buffer_, "D%d (A%d)", pin_, pin_ - A0);
+		else
+			return sprintf(buffer_, "D%d", pin_);
+	}
+	else {
+		if (pin_ + A0 < NUM_DIGITAL_PINS)
+			return sprintf(buffer_, "A%d (D%d)", pin_, pin_ + A0);
+		else
+			return sprintf(buffer_, "A%d", pin_);
+	}
 } // }}}
 
 // }}}

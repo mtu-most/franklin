@@ -85,6 +85,7 @@ enum HWCommands { // {{{
 	HWC_DISCARD,	// 0f
 	HWC_GETPIN,	// 10
 	HWC_SPI,	// 11
+	HWC_PINNAME,	// 12
 };
 
 enum HWResponses {
@@ -93,13 +94,14 @@ enum HWResponses {
 	HWC_HOMED,	// 12
 	HWC_PIN,	// 13
 	HWC_STOPPED,	// 14
+	HWC_NAMED_PIN,	// 15
 
-	HWC_DONE,	// 15
-	HWC_UNDERRUN,	// 16
-	HWC_ADC,	// 17
-	HWC_LIMIT,	// 18
-	HWC_TIMEOUT,	// 19
-	HWC_PINCHANGE,	// 1a
+	HWC_DONE,	// 16
+	HWC_UNDERRUN,	// 17
+	HWC_ADC,	// 18
+	HWC_LIMIT,	// 19
+	HWC_TIMEOUT,	// 1a
+	HWC_PINCHANGE,	// 1b
 };
 // }}}
 
@@ -131,6 +133,7 @@ void arch_globals_change();
 void arch_setup_start(char const *port);
 void arch_set_uuid();
 void arch_setup_end(char const *run_id);
+void arch_send_pin_name(int pin);
 void avr_setup_end2();
 void arch_setup_end(char const *run_id);
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit = ~0);
@@ -205,6 +208,8 @@ EXTERN void (*avr_get_cb)(bool);
 EXTERN bool avr_get_pin_invert;
 EXTERN bool avr_stop_fake;
 EXTERN void (*avr_cb)();
+EXTERN int *avr_pin_name_len;
+EXTERN char **avr_pin_name;
 // }}}
 
 #define avr_write_ack(reason) do { \
@@ -215,7 +220,7 @@ EXTERN void (*avr_cb)();
 #ifdef DEFINE_VARIABLES
 // Serial port communication. {{{
 int hwpacketsize(int len, int *available) {
-	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 3, 0, 4, 0, 1, 3, -1, -1, -1, -1, -1 };
+	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 0, 3, 0, 4, 0, 1, 3, -1, -1, -1, -1 };
 	int num_motors = avr_audio >= 0 ? NUM_MOTORS : avr_active_motors;
 	if (arch_packetsize[command[1][0] & 0xf] > 0)
 		return arch_packetsize[command[1][0] & 0xf];
@@ -233,6 +238,8 @@ int hwpacketsize(int len, int *available) {
 		return 2 + 4 * command[1][1];
 	case HWC_STOPPED:
 		return 3 + 4 * command[1][1];
+	case HWC_NAMED_PIN:
+		return 2 + command[1][1];
 	case HWC_LIMIT:
 	case HWC_UNDERRUN:
 		return 4 + 4 * command[1][1];
@@ -825,6 +832,35 @@ void arch_set_uuid() {
 	avr_send();
 }
 
+static void avr_setup_end3();
+static int avr_next_pin_name;
+
+void arch_send_pin_name(int pin) {
+	memcpy(datastore, avr_pin_name[pin], avr_pin_name_len[pin]);
+	send_host(CMD_PINNAME, pin, 0, 0, 0, avr_pin_name_len[pin]);
+}
+
+static void avr_setup_end4() {
+	avr_pin_name_len[avr_next_pin_name] = command[1][1];
+	avr_pin_name[avr_next_pin_name] = new char[command[1][1]];
+	memcpy(avr_pin_name[avr_next_pin_name], &command[1][2], command[1][1]);
+	avr_write_ack("pin name");
+	avr_next_pin_name += 1;
+	avr_setup_end3();
+}
+
+static void avr_setup_end3() {
+	if (avr_next_pin_name >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS) {
+		setup_end();
+		return;
+	}
+	avr_buffer[0] = HWC_PINNAME;
+	avr_buffer[1] = avr_next_pin_name < NUM_DIGITAL_PINS ? avr_next_pin_name : (avr_next_pin_name - NUM_DIGITAL_PINS) | 0x80;
+	wait_for_reply[expected_replies++] = avr_setup_end4;
+	prepare_packet(avr_buffer, 2);
+	avr_send();
+}
+
 void avr_setup_end2() {
 	protocol_version = 0;
 	for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
@@ -855,7 +891,10 @@ void avr_setup_end2() {
 	avr_pos_offset = new double[NUM_MOTORS];
 	for (int m = 0; m < NUM_MOTORS; ++m)
 		avr_pos_offset[m] = 0;
-	setup_end();
+	avr_next_pin_name = 0;
+	avr_pin_name_len = new int[NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS];
+	avr_pin_name = new char *[NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS];
+	avr_setup_end3();
 }
 
 void arch_setup_end(char const *run_id) {

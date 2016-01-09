@@ -161,6 +161,8 @@ enum Command {
 	CMD_CONFIRM,
 	CMD_FILE_DONE,
 	CMD_PARKWAIT,
+		// Pin names; broadcast during setup.
+	CMD_PINNAME,
 };
 
 // All temperatures are stored in Kelvin, but communicated in °C.
@@ -517,6 +519,7 @@ EXTERN int run_file_audio;
 void setup(char const *port, char const *run_id);
 void setup_end();
 EXTERN bool host_block;
+EXTERN bool sent_names;
 
 // storage.cpp
 uint8_t read_8(int32_t &address);

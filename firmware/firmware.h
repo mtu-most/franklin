@@ -230,6 +230,7 @@ enum Command {
 	CMD_DISCARD,	// 1:num_fragments
 	CMD_GETPIN,	// 1:pin
 	CMD_SPI,	// 1:size, size: data.
+	CMD_PINNAME,	// 1:pin (0-127: digital, 128-255: analog)
 };
 
 enum RCommand {
@@ -240,6 +241,7 @@ enum RCommand {
 	CMD_HOMED,	// {4:motor_pos}*
 	CMD_PIN,	// 1:state
 	CMD_STOPPED,	// 1:fragment_pos, {4:motor_pos}*
+	CMD_NAMED_PIN,	// 1:length, n:name
 
 		// asynchronous events.
 	CMD_DONE,	// 1:num
@@ -292,6 +294,8 @@ static inline int16_t minpacketlen() {
 	case CMD_GETPIN:
 		return 2;
 	case CMD_SPI:
+		return 2;
+	case CMD_PINNAME:
 		return 2;
 	default:
 		debug("invalid command passed to minpacketlen: %x", command(0));
