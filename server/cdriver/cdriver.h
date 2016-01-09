@@ -180,8 +180,8 @@ struct Temp {
 	Pin_t power_pin[2];
 	Pin_t thermistor_pin;
 	// Volatile variables.
-	double target[2];			// target temperature; NAN to disable. [K]
-	int32_t adctarget[2];		// target temperature in adc counts; -1 for disabled. [adccounts]
+	double target[2], limit[2];			// target and limit temperature; NAN to disable. [K]
+	int32_t adctarget[2], adclimit[2];		// target and limit temperature in adc counts; -1 for disabled. [adccounts]
 	int32_t adclast;		// last measured temperature. [adccounts]
 	/*
 	double core_T, shell_T;	// current temperatures. [K]
@@ -571,7 +571,7 @@ void arch_addpos(int s, int m, double diff);
 void arch_stop(bool fake = false);
 void arch_home();
 bool arch_running();
-//void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0);
+//void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int power_limit = ~0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0, int fan_limit = ~0);
 void arch_start_move(int extra);
 bool arch_send_fragment();
 

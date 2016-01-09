@@ -133,7 +133,7 @@ void arch_set_uuid();
 void arch_setup_end(char const *run_id);
 void avr_setup_end2();
 void arch_setup_end(char const *run_id);
-void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0);
+void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit = ~0);
 void arch_disconnect();
 int arch_fds();
 int arch_tick();
@@ -869,7 +869,7 @@ void arch_setup_end(char const *run_id) {
 	avr_send();
 }
 
-void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int fan_pin, bool fan_invert, int fan_adctemp) {
+void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit) {
 	if (id == requested_temp) {
 		send_host(CMD_TEMP, 0, 0, NAN);
 		requested_temp = ~0;
@@ -879,21 +879,29 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bo
 	avr_buffer[1] = thermistor_pin;
 	avr_buffer[2] = heater_pin;
 	avr_buffer[3] = fan_pin;
-	int32_t th, tf;
+	int32_t th, tf, lh, lf;
 	if (active) {
 		th = (min(0x3fff, max(0, heater_adctemp))) | (heater_invert ? 0x4000 : 0);
 		tf = (min(0x3fff, max(0, fan_adctemp))) | (fan_invert ? 0x4000 : 0);
+		lh = heater_limit & 0x3fff;
+		lf = fan_limit & 0x3fff;
 	}
 	else {
 		th = 0xffff;
 		tf = 0xffff;
+		lh = 0x3fff;
+		lf = 0x3fff;
 	}
 	//debug("setup adc %d 0x%x 0x%x -> %x %x", id, heater_adctemp, fan_adctemp, th, tf);
-	avr_buffer[4] = th & 0xff;
-	avr_buffer[5] = (th >> 8) & 0xff;
-	avr_buffer[6] = tf & 0xff;
-	avr_buffer[7] = (tf >> 8) & 0xff;
-	prepare_packet(avr_buffer, 8);
+	avr_buffer[4] = lh & 0xff;
+	avr_buffer[5] = (lh >> 8) & 0xff;
+	avr_buffer[6] = lf & 0xff;
+	avr_buffer[7] = (lf >> 8) & 0xff;
+	avr_buffer[8] = th & 0xff;
+	avr_buffer[9] = (th >> 8) & 0xff;
+	avr_buffer[10] = tf & 0xff;
+	avr_buffer[11] = (tf >> 8) & 0xff;
+	prepare_packet(avr_buffer, 12);
 	avr_send();
 }
 

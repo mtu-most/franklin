@@ -278,7 +278,8 @@ void packet()
 				}
 			}
 			adc[a].linked[i] = command(2 + i);
-			adc[a].value[i] = read_16(4 + 2 * i);
+			adc[a].limit[i] = read_16(4 + 2 * i);
+			adc[a].value[i] = read_16(8 + 2 * i);
 			//debug("adc %d link %d pin %d value %x", a, i, adc[a].linked[i], adc[a].value[i]);
 		}
 		if (adc_phase == INACTIVE && ~adc[a].value[0] & 0x8000) {

@@ -38,7 +38,7 @@ static void handle_adc() {
 		//debug("adc %d not ready", adc_current);
 		return;
 	}
-	uint16_t value = adc_get(adc_current);
+	int16_t value = adc_get(adc_current);
 	//debug("adc %d = %d", adc_current, value);
 	// Send to host if it is waiting and buffer is free.
 	if (adc_current == adc_next && !adcreply_ready) {
@@ -51,7 +51,19 @@ static void handle_adc() {
 	// Adjust heater and fan.
 	for (uint8_t n = 0; n < 2; ++n) {
 		if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS) {
-			if (((adc[adc_current].value[n] & 0x4000) != 0) ^ ((adc[adc_current].value[n] & 0x3fff) > value)) {
+			bool invert = (adc[adc_current].value[n] & 0x4000) == 0;
+			int16_t treshold = adc[adc_current].value[n] & 0x3fff;
+			int16_t limit = adc[adc_current].limit[n];
+			bool higher = value >= treshold;
+			if (higher) {
+				if (limit >= treshold && value >= limit)
+					higher = false;
+			}
+			else {
+				if (treshold < 0x3fff && limit < treshold && value < limit)
+					higher = true;
+			}
+			if (invert ^ higher) {
 				RESET(adc[adc_current].linked[n]);
 				if (n == 0 && adc[adc_current].is_on) {
 					led_fast -= 1;

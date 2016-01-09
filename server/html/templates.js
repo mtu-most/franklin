@@ -260,9 +260,13 @@ function Pins_space(space, motor) {
 
 // Temp. {{{
 function Temp_setup(num) {
-	var fan = Create('div');
-	fan.Add(Float([['temp', num], 'fan_temp'], 0));
-	return make_tablerow(temp_name(printer, num), [Name('temp', num), fan, Id([['temp', num], 'bed'])], ['rowtitle3']);
+	var e = [Name('temp', num), ['fan_temp', 0, 1], ['heater_limit', 0, 1], ['fan_limit', 0, 1], Id([['temp', num], 'bed'])];
+	for (var i = 1; i < e.length - 1; ++i) {
+		var div = Create('div');
+		div.Add(Float([['temp', num], e[i][0]], e[i][1], e[i][2]));
+		e[i] = div;
+	}
+	return make_tablerow(temp_name(printer, num), e, ['rowtitle5']);
 }
 
 function Temp_hardware(num) {
@@ -633,7 +637,7 @@ function Printer() {	// {{{
 	// Cartesian. {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Cartesian/Other',
-		'Number of axes'
+		'Number of Axes'
 	], [
 		'htitle1',
 		'title1'
@@ -646,8 +650,8 @@ function Printer() {	// {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Axes',
 		'Name',
-		UnitTitle('Park pos'),
-		'Park order',
+		UnitTitle('Park Pos'),
+		'Park Order',
 		UnitTitle('Min'),
 		UnitTitle('Max')
 	], [
@@ -670,8 +674,8 @@ function Printer() {	// {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Motor Settings',
 		UnitTitle('Coupling', null, 'steps/'),
-		UnitTitle('Switch pos'),
-		'Home order',
+		UnitTitle('Switch Pos'),
+		'Home Order',
 		UnitTitle('Limit v', '/s'),
 		UnitTitle('Limit a', '/s²')
 	], [
@@ -771,25 +775,31 @@ function Printer() {	// {{{
 	setup.Add([make_table().AddMultipleTitles([
 		'Temp Settings',
 		'Name',
-		'Fan temp (°C)',
+		'Fan Temp (°C)',
+		'Heater Limit (°C)',
+		'Fan Limit (°C)',
 		'Bed'
 	], [
-		'htitle3',
-		'title3',
-		'title3',
-		'title3'
+		'htitle5',
+		'title5',
+		'title5',
+		'title5',
+		'title5',
+		'title5'
 	], [
 		null,
 		'Name of the temperature control',
 		'Temerature above which the cooling is turned on.',
+		'Temerature below which the heater is never turned on.  Set to NaN to disable limit.  (Must always be lower than the target.)',
+		'Temerature above which the cooling is never turned on.  Set to NaN to disable limit.  (Must always be higher than the target.)',
 		'Whether this Temp is the heated bed, used by G-code commands M140 and M190.'
 	]).AddMultiple('temp', Temp_setup)]);
 	setup.Add([make_table().AddMultipleTitles([
 		'Temp Hardware',
 		'R0 (kΩ) or a',
 		'R1 (kΩ) or b',
-		'Rc (kΩ) or scale (%)',
-		'Tc (°C) or offset',
+		'Rc (kΩ) or Scale (%)',
+		'Tc (°C) or Offset',
 		'β (1) or NaN'
 	], [
 		'htitle5',

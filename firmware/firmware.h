@@ -217,7 +217,7 @@ enum Command {
 	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin, 1:stop_pin 1:probe_pin 1:pin_flags 2:timeout
 	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
 	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:follow, 1:flags
-	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:values	(including flags)
+	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:limits, 4:values	(including flags)
 	CMD_HOME,	// 4:us/step, {1:dir}*
 
 	CMD_START_MOVE,	// 1:num_samples, 1:num_moving_motors
@@ -270,7 +270,7 @@ static inline int16_t minpacketlen() {
 	case CMD_MSETUP:
 		return 8;
 	case CMD_ASETUP:
-		return 8;
+		return 12;
 	case CMD_HOME:
 		return 5;
 	case CMD_START_MOVE:
@@ -390,6 +390,7 @@ EXTERN uint8_t last_len;	// copy of settings[last_fragment].len, for when curren
 struct Adc {
 	uint8_t linked[2];
 	uint16_t value[2];	// bit 15 in [0] set => invalid; bit 14 set => linked inverted.
+	uint16_t limit[2];
 	bool is_on;
 	void disable() {
 		if (value[0] & 0x8000)
