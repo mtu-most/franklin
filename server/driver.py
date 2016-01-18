@@ -172,8 +172,7 @@ class Printer: # {{{
 	# }}}
 	def __init__(self, port, run_id, allow_system): # {{{
 		self.initialized = False
-		self.digital_pin_names = None
-		self.analog_pin_names = None
+		self.pin_names = None
 		self.printer = Driver(port, run_id)
 		self.allow_system = allow_system
 		self.job_output = ''
@@ -567,12 +566,7 @@ class Printer: # {{{
 				call_queue.append((self._print_done, (True, 'completed')))
 				continue
 			elif cmd == protocol.rcommand['PINNAME']:
-				if s < self.num_digital_pins:
-					self.digital_pin_names[s] = data
-					log('pin %d %s' % (s, data))
-				else:
-					self.analog_pin_names[s - self.num_digital_pins] = data
-					log('apin %d %s' % (s, data))
+				self.pin_names[s] = data
 				continue
 			if reply:
 				return ('packet', (cmd, s, m, f, e, data))
@@ -669,11 +663,10 @@ class Printer: # {{{
 		data = self._read('GLOBALS', None)
 		if data is None:
 			return False
-		self.queue_length, self.num_digital_pins, self.num_analog_pins, num_temps, num_gpios = struct.unpack('=BBBBB', data[:5])
-		if self.digital_pin_names is None:
-			self.digital_pin_names = [''] * self.num_digital_pins
-			self.analog_pin_names = [''] * self.num_analog_pins
-		self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.max_deviation, self.max_v, self.current_extruder, self.targetx, self.targety, self.zoffset, self.store_adc = struct.unpack('=HHHHHhhhdddBddd?', data[5:])
+		self.queue_length, self.num_pins, num_temps, num_gpios = struct.unpack('=BBBB', data[:4])
+		if self.pin_names is None:
+			self.pin_names = [''] * self.num_pins
+		self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.max_deviation, self.max_v, self.current_extruder, self.targetx, self.targety, self.zoffset, self.store_adc = struct.unpack('=HHHHHhhhdddBddd?', data[4:])
 		while len(self.temps) < num_temps:
 			self.temps.append(self.Temp(len(self.temps)))
 			if update:
@@ -2840,7 +2833,7 @@ class Printer: # {{{
 		'''Return all settings about a machine.
 		'''
 		self.initialized = True
-		self._broadcast(target, 'new_printer', [self.uuid, self.queue_length, self.digital_pin_names, self.analog_pin_names])
+		self._broadcast(target, 'new_printer', [self.uuid, self.queue_length, self.pin_names])
 		self._globals_update(target)
 		for i, s in enumerate(self.spaces):
 			self._space_update(i, target)
@@ -2858,7 +2851,7 @@ class Printer: # {{{
 	# Globals. {{{
 	def get_globals(self): # {{{
 		ret = {'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('uuid', 'queue_length', 'num_analog_pins', 'num_digital_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'):
+		for key in ('uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'):
 			ret[key] = getattr(self, key)
 		return ret
 	# }}}

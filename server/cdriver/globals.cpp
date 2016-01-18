@@ -131,8 +131,7 @@ bool globals_load(int32_t &addr)
 void globals_save(int32_t &addr)
 {
 	write_8(addr, QUEUE_LENGTH);
-	write_8(addr, NUM_DIGITAL_PINS);
-	write_8(addr, NUM_ANALOG_INPUTS);
+	write_8(addr, NUM_PINS);
 	write_8(addr, num_temps);
 	write_8(addr, num_gpios);
 	write_16(addr, led_pin.write());

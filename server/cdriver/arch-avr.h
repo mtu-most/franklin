@@ -53,7 +53,7 @@
 #else
 
 // Not defines, because they can change value.
-EXTERN uint8_t NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT;
+EXTERN uint8_t NUM_PINS, NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT;
 EXTERN int avr_audio;
 // }}}
 
@@ -153,7 +153,6 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor);
 void arch_do_discard();
 void arch_discard();
 void arch_send_spi(int len, uint8_t *data);
-void arch_send_movecbs(int cbs);
 void START_DEBUG();
 void DO_DEBUG(char c);
 void END_DEBUG();
@@ -526,6 +525,10 @@ bool hwpacket(int len) {
 
 // Hardware interface {{{
 void avr_setup_pin(int pin, int type, int resettype, int extra) {
+	if (pin < 0 || pin >= NUM_DIGITAL_PINS) {
+		debug("invalid pin to set up");
+		abort();
+	}
 	//debug("pin %d type %d reset %d extra %d", pin, type, resettype, extra);
 	if (avr_in_control_queue[pin])
 	{
@@ -555,7 +558,7 @@ void SET_INPUT(Pin_t _pin) {
 }
 
 void SET_INPUT_NOPULLUP(Pin_t _pin) {
-	if (!_pin.valid())
+	if (!_pin.valid() || _pin.pin >= NUM_DIGITAL_PINS)
 		return;
 	if (avr_pins[_pin.pin].state == 3)
 		return;
@@ -811,6 +814,7 @@ void arch_setup_start(char const *port) {
 	avr_running = true;	// Force arch_stop from setup to do something.
 	avr_homing = false;
 	avr_filling = false;
+	NUM_PINS = 0;
 	NUM_ANALOG_INPUTS = 0;
 	avr_pong = -2;
 	avr_limiter_space = -1;
@@ -841,16 +845,20 @@ void arch_send_pin_name(int pin) {
 }
 
 static void avr_setup_end4() {
-	avr_pin_name_len[avr_next_pin_name] = command[1][1];
-	avr_pin_name[avr_next_pin_name] = new char[command[1][1]];
-	memcpy(avr_pin_name[avr_next_pin_name], &command[1][2], command[1][1]);
+	avr_pin_name_len[avr_next_pin_name] = command[1][1] + 1;
+	avr_pin_name[avr_next_pin_name] = new char[command[1][1] + 1];
+	memcpy(&avr_pin_name[avr_next_pin_name][1], &command[1][2], command[1][1]);
+	if (avr_next_pin_name < NUM_DIGITAL_PINS)
+		avr_pin_name[avr_next_pin_name][0] = 7;
+	else
+		avr_pin_name[avr_next_pin_name][0] = 8;
 	avr_write_ack("pin name");
 	avr_next_pin_name += 1;
 	avr_setup_end3();
 }
 
 static void avr_setup_end3() {
-	if (avr_next_pin_name >= NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS) {
+	if (avr_next_pin_name >= NUM_PINS) {
 		setup_end();
 		return;
 	}
@@ -867,6 +875,7 @@ void avr_setup_end2() {
 		protocol_version |= int(uint8_t(command[1][2 + i])) << (i * 8);
 	NUM_DIGITAL_PINS = command[1][6];
 	NUM_ANALOG_INPUTS = command[1][7];
+	NUM_PINS = NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS;
 	NUM_MOTORS = command[1][8];
 	FRAGMENTS_PER_BUFFER = command[1][9];
 	BYTES_PER_FRAGMENT = command[1][10];
@@ -892,8 +901,8 @@ void avr_setup_end2() {
 	for (int m = 0; m < NUM_MOTORS; ++m)
 		avr_pos_offset[m] = 0;
 	avr_next_pin_name = 0;
-	avr_pin_name_len = new int[NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS];
-	avr_pin_name = new char *[NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS];
+	avr_pin_name_len = new int[NUM_PINS];
+	avr_pin_name = new char *[NUM_PINS];
 	avr_setup_end3();
 }
 
@@ -909,6 +918,11 @@ void arch_setup_end(char const *run_id) {
 }
 
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit) {
+	if (thermistor_pin < NUM_DIGITAL_PINS || thermistor_pin >= NUM_PINS) {
+		debug("setup for invalid adc %d requested", thermistor_pin);
+		return;
+	}
+	thermistor_pin -= NUM_DIGITAL_PINS;
 	if (id == requested_temp) {
 		send_host(CMD_TEMP, 0, 0, NAN);
 		requested_temp = ~0;
@@ -1220,11 +1234,6 @@ void arch_send_spi(int bits, uint8_t *data) {
 		avr_buffer[2 + i] = data[i];
 	if (prepare_packet(avr_buffer, 2 + (bits + 7) / 8))
 		avr_send();
-}
-
-void arch_send_movecbs(int cbs) {
-	if (!host_block)
-		send_host(CMD_MOVECB, cbs);
 }
 // }}}
 

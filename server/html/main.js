@@ -1140,10 +1140,17 @@ function update_toggle(id) { // {{{
 
 function update_pin(id) { // {{{
 	var e = get_element(printer, id);
-	e.selectedIndex = get_value(printer, id) & 0xff;
-	get_element(printer, id, 'valid').checked = Boolean(get_value(printer, id) & 0x100);
-	if (!e.analog)
-		get_element(printer, id, 'inverted').checked = Boolean(get_value(printer, id) & 0x200);
+	var value = get_value(printer, id);
+	var pin = value & 0xff;
+	for (var i = 0; i < e.options.length; ++i) {
+		if (Number(e.options[i].value) == pin) {
+			e.selectedIndex = i;
+			break;
+		}
+	}
+	get_element(printer, id, 'valid').checked = Boolean(value & 0x100);
+	if (e.can_invert)
+		get_element(printer, id, 'inverted').checked = Boolean(value & 0x200);
 } // }}}
 
 function update_float(printer, id) { // {{{
@@ -1214,23 +1221,13 @@ function update_state(state) { // {{{
 // }}}
 
 // Builders. {{{
-function pinrange(analog) { // {{{
+function pinrange(type) { // {{{
 	var ret = [];
-	var pin = 0;
-	if (analog) {
-		for (var i = 0; i < printer.analog_pin_names.length; ++i) {
-			var node = Create('option').AddText(printer.analog_pin_names[i]);
-			node.value = String(pin);
+	for (var i = 0; i < printer.pin_names.length; ++i) {
+		if (printer.pin_names[i].charCodeAt(0) & type) {
+			var node = Create('option').AddText(printer.pin_names[i]);
+			node.value = String(i);
 			ret.push(node);
-			pin += 1;
-		}
-	}
-	else {
-		for (var i = 0; i < printer.digital_pin_names.length; ++i) {
-			var node = Create('option').AddText(printer.digital_pin_names[i]);
-			node.value = String(pin);
-			ret.push(node);
-			pin += 1;
 		}
 	}
 	return ret;
@@ -1433,11 +1430,11 @@ function set_pin(printer, id) { // {{{
 	var e = get_element(printer, id);
 	var valid = get_element(printer, id, 'valid').checked;
 	var inverted;
-	if (e.analog)
-		inverted = false;
-	else
+	if (e.can_invert)
 		inverted = get_element(printer, id, 'inverted').checked;
-	set_value(printer, id, e.selectedIndex + 0x100 * valid + 0x200 * inverted);
+	else
+		inverted = false;
+	set_value(printer, id, Number(e.options[e.selectedIndex].value) + 0x100 * valid + 0x200 * inverted);
 } // }}}
 
 function set_file(printer, id, action) { // {{{

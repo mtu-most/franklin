@@ -556,8 +556,7 @@ uint32_t millis();
 // Arch interface.
 // ===============
 // Defined or variables:
-// NUM_ANALOG_INPUTS
-// NUM_DIGITAL_PINS
+// NUM_PINS
 // ADCBITS
 // FRAGMENTS_PER_BUFFER
 // BYTES_PER_FRAGMENT
@@ -604,7 +603,7 @@ void Pin_t::read(uint16_t data) {
 	}
 	pin = new_pin;
 	flags = new_flags;
-	if (flags & ~3 || pin >= NUM_DIGITAL_PINS) {
+	if (flags & ~3 || pin >= NUM_PINS) {
 		flags = 0;
 		pin = 0;
 	}

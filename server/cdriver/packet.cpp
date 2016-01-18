@@ -423,10 +423,8 @@ void packet()
 		globals_save(addr);
 		send_host(CMD_DATA, 0, 0, 0, 0, addr);
 		if (!sent_names) {
-			for (int d = 0; d < NUM_DIGITAL_PINS; ++d)
+			for (int d = 0; d < NUM_PINS; ++d)
 				arch_send_pin_name(d);
-			for (int a = 0; a < NUM_ANALOG_INPUTS; ++a)
-				arch_send_pin_name(NUM_DIGITAL_PINS + a);
 			sent_names = true;
 		}
 		return;

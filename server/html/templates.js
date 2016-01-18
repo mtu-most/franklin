@@ -60,20 +60,20 @@ function Name(type, num) { // {{{
 	return ret;
 } // }}}
 
-function Pin(title, obj, analog) { // {{{
+function Pin(title, obj, type) { // {{{
 	var pinselect = Create('select', 'pinselect');
 	pinselect.id = make_id(printer, obj);
 	pinselect.obj = obj;
 	pinselect.printer = printer;
-	pinselect.Add(pinrange(analog));
-	pinselect.analog = analog;
+	pinselect.Add(pinrange(type));
+	pinselect.can_invert = Boolean(type & 7);
 	var validlabel = Create('label');
 	var validinput = validlabel.AddElement('input');
 	validlabel.AddText('Valid');
 	validinput.type = 'checkbox';
 	validinput.id = make_id(printer, obj, 'valid');
 	var inverts;
-	if (!analog) {
+	if (pinselect.can_invert) {
 		var invertedlabel = Create('label');
 		var invertedinput = invertedlabel.AddElement('input');
 		invertedlabel.AddText('Inverted');
@@ -251,9 +251,9 @@ function Motor(space, motor) {
 }
 
 function Pins_space(space, motor) {
-	var e = [['Step', 'step'], ['Dir', 'dir'], ['Enable', 'enable'], ['Min Limit', 'limit_min'], ['Max Limit', 'limit_max']];
+	var e = [['Step', 'step', 1], ['Dir', 'dir', 1], ['Enable', 'enable', 2], ['Min Limit', 'limit_min', 4], ['Max Limit', 'limit_max', 4]];
 	for (var i = 0; i < e.length; ++i)
-		e[i] = Pin(e[i][0], [['motor', [space, motor]], e[i][1] + '_pin']);
+		e[i] = Pin(e[i][0], [['motor', [space, motor]], e[i][1] + '_pin'], e[i][2]);
 	return make_pin_title(motor_name(space, motor), e, ['rowtitle6']);
 }
 // }}}
@@ -293,7 +293,7 @@ function Temp(num) {
 }
 
 function Pins_temp(num, dummy, table) {
-	var e = [['Heater', 'heater', false], ['Fan', 'fan', false], ['Thermistor', 'thermistor', true]];
+	var e = [['Heater', 'heater', 2], ['Fan', 'fan', 2], ['Thermistor', 'thermistor', 8]];
 	for (var i = 0; i < e.length; ++i)
 		e[i] = Pin(e[i][0], [['temp', num], e[i][1] + '_pin'], e[i][2]);
 	return make_pin_title(temp_name(printer, num), e);
@@ -321,10 +321,10 @@ function Gpio(num) {
 }
 
 function Pins_gpio(num) {
-	var e = [['Pin', 'pin']];
+	var e = [['Pin', 'pin', 6]];
 	for (var i = 0; i < e.length; ++i)
-		e[i] = Pin(e[i][0], [['gpio', num], e[i][1] + '_pin']);
-	return make_pin_title(gpio_name(num), [Pin('Pin', [['gpio', num], 'pin'])]);
+		e[i] = Pin(e[i][0], [['gpio', num], e[i][1]], e[i][2]);
+	return make_pin_title(gpio_name(num), e);
 }
 // }}}
 
@@ -844,10 +844,10 @@ function Printer() {	// {{{
 	// Pins. {{{
 	var pins = setup.Add(make_table());
 	var globalpins = pins.AddElement('tbody');
-	globalpins.Add(Pin('LED', [null, 'led_pin']));
-	globalpins.Add(Pin('Stop', [null, 'stop_pin']));
-	globalpins.Add(Pin('Probe', [null, 'probe_pin']));
-	globalpins.Add(Pin('SPI SS', [null, 'spiss_pin']));
+	globalpins.Add(Pin('LED', [null, 'led_pin'], 2));
+	globalpins.Add(Pin('Stop', [null, 'stop_pin'], 4));
+	globalpins.Add(Pin('Probe', [null, 'probe_pin'], 4));
+	globalpins.Add(Pin('SPI SS', [null, 'spiss_pin'], 2));
 	pins.AddMultiple('motor', Pins_space, false);
 	pins.AddMultiple('temp', Pins_temp, false);
 	pins.AddMultiple('gpio', Pins_gpio, false);

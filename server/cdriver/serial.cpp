@@ -78,7 +78,12 @@ static void send_to_host() {
 #ifndef DEBUG_ALL_HOST
 	if (r->cmd != CMD_POS && r->cmd != CMD_TIME && r->cmd != CMD_TEMP)
 #endif
+	{
 		debug("**** host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->s, r->m, r->e, r->f, r->len);
+		for (uint8_t i = 0; i < r->len; ++i)
+			fprintf(stderr, " %02x", reinterpret_cast <char *>(r)[sizeof(Queuerecord) + i]);
+		fprintf(stderr, "\n");
+	}
 #endif
 	serialdev[0]->write(22 + r->len);
 	serialdev[0]->write(r->cmd);
@@ -367,7 +372,9 @@ void serial(uint8_t channel) {
 		if (cmd_len > FULL_COMMAND_SIZE) {
 			// This command does not fit in the buffer, so it cannot be parsed.  Reject it.
 			debug("Command length %d larger than buffer; rejecting", cmd_len);
+#ifdef SERIAL
 			command_cancel();
+#endif
 			continue;
 		}
 		if (command_end[channel] + len > cmd_len)

@@ -807,8 +807,10 @@ void send_fragment() { // {{{
 			if (history[current_fragment].cbs) {
 				if (settings.queue_start == settings.queue_end && !settings.queue_full) {
 					// Send cbs immediately.
-					arch_send_movecbs(history[current_fragment].cbs);
-					history[current_fragment].cbs = 0;
+					if (!host_block) {
+						send_host(CMD_MOVECB, history[current_fragment].cbs);  
+						history[current_fragment].cbs = 0;
+					}
 				}
 			}
 			current_fragment_pos = 0;
@@ -836,6 +838,8 @@ void apply_tick() { // {{{
 } // }}}
 
 void buffer_refill() { // {{{
+	if (preparing)
+		return;
 	if (moving_to_current == 2)
 		move_to_current();
 	if (!computing_move || refilling || stopping || discard_pending || discarding) {
