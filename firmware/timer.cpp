@@ -63,7 +63,7 @@ void handle_motors() {
 						bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
 						if (GET(limit_pin) ^ inverted) {
 							step_state = 1;
-							debug("hit %d pos %d state %d sample %d", m, int(motor[m].current_pos), state, current_sample);
+							debug("hit %d pin %d pos %d state %d sample %d", m, limit_pin, int(motor[m].current_pos), state, current_sample);
 							stopping = m;
 							motor[m].flags |= Motor::LIMIT;
 							break;

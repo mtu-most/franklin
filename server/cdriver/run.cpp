@@ -280,6 +280,7 @@ void run_file_fill_queue() {
 			case RUN_LINE:
 			case RUN_ARC:
 			{
+				queue[settings.queue_end].single = false;
 				queue[settings.queue_end].probe = false;
 				queue[settings.queue_end].arc = r.type == RUN_ARC;
 				queue[settings.queue_end].f[0] = r.f;
@@ -299,8 +300,13 @@ void run_file_fill_queue() {
 				}
 				for (int i = 3; i < num0; ++i)
 					queue[settings.queue_end].data[i] = NAN;
-				for (int i = 0; i < spaces[1].num_axes; ++i)
-					queue[settings.queue_end].data[num0 + i] = (i == r.tool ? r.E : NAN);
+				for (int s = 1; s < NUM_SPACES; ++s) {
+					for (int i = 0; i < spaces[s].num_axes; ++i) {
+						queue[settings.queue_end].data[num0 + i] = (s == 1 && i == r.tool ? r.E : NAN);
+						//debug("queue %d + %d = %f", num0, i, queue[settings.queue_end].data[num0 + i]);
+					}
+					num0 += spaces[s].num_axes;
+				}
 				queue[settings.queue_end].time = r.time;
 				queue[settings.queue_end].dist = r.dist;
 				queue[settings.queue_end].cb = false;
