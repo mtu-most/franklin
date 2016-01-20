@@ -323,6 +323,7 @@ void packet()
 		{
 			debug("Reading invalid temp %d", which);
 			//abort();
+			send_host(CMD_TEMP);
 			return;
 		}
 		if (!temps[which].thermistor_pin.valid()) {
@@ -331,7 +332,7 @@ void packet()
 			send_host(CMD_TEMP);
 			return;
 		}
-		requested_temp = which;
+		arch_request_temp(which);
 		return;
 	}
 	case CMD_READPOWER:	// read used power

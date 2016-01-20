@@ -136,6 +136,7 @@ void arch_setup_end(char const *run_id);
 void arch_send_pin_name(int pin);
 void avr_setup_end2();
 void arch_setup_end(char const *run_id);
+void arch_request_temp(int which);
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit = ~0);
 void arch_disconnect();
 int arch_fds();
@@ -917,16 +918,20 @@ void arch_setup_end(char const *run_id) {
 	avr_send();
 }
 
+void arch_request_temp(int which) {
+	if (which >= 0 && which < num_temps && temps[which].thermistor_pin.pin >= NUM_DIGITAL_PINS && temps[which].thermistor_pin.pin < NUM_PINS) {
+		requested_temp = which;
+		return;
+	}
+	requested_temp = ~0;
+}
+
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit) {
 	if (thermistor_pin < NUM_DIGITAL_PINS || thermistor_pin >= NUM_PINS) {
 		debug("setup for invalid adc %d requested", thermistor_pin);
 		return;
 	}
 	thermistor_pin -= NUM_DIGITAL_PINS;
-	if (id == requested_temp) {
-		send_host(CMD_TEMP, 0, 0, NAN);
-		requested_temp = ~0;
-	}
 	avr_adc_id[thermistor_pin] = id;
 	avr_buffer[0] = HWC_ASETUP;
 	avr_buffer[1] = thermistor_pin;
@@ -940,6 +945,10 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bo
 		lf = fan_limit & 0x3fff;
 	}
 	else {
+		if (id == requested_temp) {
+			send_host(CMD_TEMP, 0, 0, NAN);
+			requested_temp = ~0;
+		}
 		th = 0xffff;
 		tf = 0xffff;
 		lh = 0x3fff;

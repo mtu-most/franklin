@@ -37,7 +37,6 @@
 #include <sys/mman.h>
 #include <prussdrv.h>
 #include <pruss_intc_mapping.h>
-#include <sys/uio.h>
 // }}}
 
 // Defines. {{{
@@ -125,6 +124,7 @@ void RESET(Pin_t _pin);
 void GET(Pin_t _pin, bool _default, void(*cb)(bool));
 void arch_setup_start(char const *port);
 void arch_setup_end(char const *run_id);
+void arch_request_temp(int which);
 void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int power_limit = ~0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0, int fan_limit = ~0);
 void arch_send_pin_name(int pin);
 void arch_motors_change();
@@ -144,41 +144,33 @@ off_t arch_send_audio(uint8_t *data, off_t sample, off_t num_records, int motor)
 void DATA_SET(int s, int m, int value);
 // }}}
 
-// Variables. {{{
-EXTERN volatile bbb_Gpio *bbb_gpio[4];
-#define BBB_MUX_DISABLED 0x3f
-#define BBB_MUX_INPUT 0x37
-#define BBB_MUX_OUTPUT 0x1f
-#define BBB_MUX_PRU(_pin) (0x18 | bbb_pru_mode[_pin])
-EXTERN int bbb_gpio_state[NUM_GPIO_PINS];
-extern char const *bbb_muxname[NUM_GPIO_PINS];
-EXTERN int bbb_devmem;
-EXTERN int bbb_active_temp;
-EXTERN bbb_Temp bbb_temp[NUM_ANALOG_INPUTS];
-EXTERN bbb_Pru *bbb_pru;
-extern int bbb_pru_pad[16];
-EXTERN volatile uint32_t *bbb_padmap;
-EXTERN volatile uint32_t *bbb_gpio_pad[NUM_GPIO_PINS];
-EXTERN pid_t bbb_pid;
-// }}}
-
 #ifdef DEFINE_VARIABLES
-char const *bbb_apin_name[8] = {"P9_39", "P9_40", "P9_37", "P9_38", "P9_33", "P9_36", "P9_35", "1.65V"};
+// Variables. {{{
 #if PRU == 0
-int bbb_pru_pad[16] = { 110, 111, 112, 113, 114, 115, 116, 117, 90, 91, 92, 93, 94, 95, 44, 45 };
-int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6 };
+static int bbb_pru_pad[16] = { 110, 111, 112, 113, 114, 115, 116, 117, 90, 91, 92, 93, 94, 95, 44, 45 };
+//int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6 };
 #else
-int bbb_pru_pad[16] = { 70, 71, 72, 73, 74, 75, 76, 77, 86, 87, 88, 89, 62, 63, 42, 43 };
-int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5 };
+static int bbb_pru_pad[16] = { 70, 71, 72, 73, 74, 75, 76, 77, 86, 87, 88, 89, 62, 63, 42, 43 };
+//int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5 };
 #endif
+
+static char const *bbb_apin_name[8] = {"P9_39", "P9_40", "P9_37", "P9_38", "P9_33", "P9_36", "P9_35", "1.65V"};
+static volatile bbb_Gpio *bbb_gpio[4];
+enum BBB_State { MUX_DISABLED, MUX_INPUT, MUX_OUTPUT, MUX_PRU };
+static int bbb_devmem;
+static int bbb_active_temp;
+static bbb_Temp bbb_temp[NUM_ANALOG_INPUTS];
+static bbb_Pru *bbb_pru;
 #define USABLE(x) (x)
 #define HDMI(x) (x)
 #define FLASH(x) ""
 #define INTERNAL ""
 #define UNUSABLE ""
-char const *bbb_muxname[NUM_GPIO_PINS] = {
+static int bbb_gpio_state[NUM_GPIO_PINS];
+static std::string bbb_muxpath[NUM_GPIO_PINS];
+static char const *bbb_muxname[NUM_GPIO_PINS] = {
 	UNUSABLE, UNUSABLE, USABLE("P9_22"), USABLE("P9_21"), USABLE("P9_18"), USABLE("P9_17"), INTERNAL, USABLE("P9_42"),
-	HDMI("P8_35"), HDMI("P8_33"), HDMI("P8_31"), HDMI("P8_32"), USABLE("P9_20"), USABLE("P9_19"), USABLE("P9_26"), USABLE("P9_24"),
+	HDMI("P8_35"), HDMI("P8_33"), HDMI("P8_31"), HDMI("P8_32"), UNUSABLE, UNUSABLE, USABLE("P9_26"), USABLE("P9_24"),
 	UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, USABLE("P9_41"), UNUSABLE, USABLE("P8_19"), USABLE("P8_13"),
 	UNUSABLE, UNUSABLE, USABLE("P8_14"), USABLE("P8_17"), UNUSABLE, UNUSABLE, USABLE("P9_11"), USABLE("P9_13"),
 
@@ -187,7 +179,7 @@ char const *bbb_muxname[NUM_GPIO_PINS] = {
 	USABLE("P9_15"), USABLE("P9_23"), USABLE("P9_14"), USABLE("P9_16"), UNUSABLE, INTERNAL, INTERNAL, INTERNAL,
 	INTERNAL, UNUSABLE, UNUSABLE, INTERNAL, USABLE("P9_12"), USABLE("P8_26"), FLASH("P8_21"), FLASH("P8_20"),
 
-	UNUSABLE, USABLE("P8_18"), USABLE("P8_7"), USABLE("P8_8"), USABLE("P8_10"), USABLE("P8_9"), HDMI("P8_45"), HDMI("P8_46"),
+	UNUSABLE, USABLE("P8_18"), USABLE("P8_07"), USABLE("P8_08"), USABLE("P8_10"), USABLE("P8_09"), HDMI("P8_45"), HDMI("P8_46"),
 	HDMI("P8_43"), HDMI("P8_44"), HDMI("P8_41"), HDMI("P8_42"), HDMI("P8_39"), HDMI("P8_40"), HDMI("P8_37"), HDMI("P8_38"),
 	HDMI("P8_36"), HDMI("P8_34"), UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, HDMI("P8_27"), HDMI("P8_29"),
 	HDMI("P8_28"), HDMI("P8_30"), INTERNAL, INTERNAL, INTERNAL, INTERNAL, INTERNAL, INTERNAL,
@@ -197,61 +189,52 @@ char const *bbb_muxname[NUM_GPIO_PINS] = {
 	USABLE("P9_30"), HDMI("P9_28"), USABLE("P9_42"), USABLE("P9_27"), USABLE("P9_41"), HDMI("P9_25"), UNUSABLE, UNUSABLE,
 	UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE
 };
+// }}}
+
 // Pin setting. {{{
-static void bbb_setmux(Pin_t _pin, int mode) {
+static void bbb_setmux(Pin_t _pin, BBB_State mode) {
 	int pin = _pin.pin;
 	if (pin >= NUM_GPIO_PINS)
 		pin = bbb_pru_pad[pin - NUM_GPIO_PINS];
-	volatile uint32_t *pad = bbb_gpio_pad[pin];
 	if (bbb_gpio_state[pin] == mode)
 		return;
-	if (pad == NULL) {
-		if (mode != BBB_MUX_DISABLED)
+	if (bbb_muxname[pin][0] == '\0') {
+		if (mode != MUX_DISABLED)
 			debug("trying to set up unusable gpio %d", pin);
 		return;
 	}
-	// This doesn't work, because the processor requires the write to be made from kernel mode.
-	// *pad = mode;
-	// This hack will hopefully continue working; it exploits the "feature"
-	// that the kernel will normally perform a privileged write even when
-	// writing on behalf of userspace.
-	debug("set mode %s %d", bbb_muxname[pin], mode);
-	iovec dstv = { (void *)pad, 4 };
-	iovec srcv = { (void *)&mode, 4 };
-	ssize_t ret = process_vm_readv(bbb_pid, &dstv, 1, &srcv, 1, 0);
-	if (ret < 0)
-		debug("process_vm_readv: %d (%s)", ret, strerror(errno));
+	std::ofstream f(bbb_muxpath[pin].c_str());
+	char const *codes[4] = { "gpio\n", "gpio_pu\n", "gpio\n", "pruout\n" };
+	f << codes[mode];
+	f.close();
 };
 
 void SET_OUTPUT(Pin_t _pin) {
-	//debug("set %d to output", _pin.pin);
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS) {
 			bbb_gpio[_pin.pin >> 5]->oe &= ~(1 << (_pin.pin & 0x1f));
-			bbb_setmux(_pin, BBB_MUX_OUTPUT);
+			bbb_setmux(_pin, MUX_OUTPUT);
 		}
 		else
-			bbb_setmux(_pin, BBB_MUX_PRU(_pin.pin - NUM_GPIO_PINS));
+			bbb_setmux(_pin, MUX_PRU);
 	}
 }
 
 void SET_INPUT(Pin_t _pin) {
-	//debug("set %d to input", _pin.pin);
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS)
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
 		else
 			debug("warning: trying to set pru pin to input");
-		bbb_setmux(_pin, BBB_MUX_INPUT);
+		bbb_setmux(_pin, MUX_INPUT);
 	}
 }
 
 void SET_INPUT_NOPULLUP(Pin_t _pin) {
-	//debug("disable %d", _pin.pin);
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS)
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
-		bbb_setmux(_pin, BBB_MUX_DISABLED);
+		bbb_setmux(_pin, MUX_DISABLED);
 	}
 }
 
@@ -301,7 +284,6 @@ static std::string find_base(std::string const &base, std::string const &prefix)
 	std::string name;
 	while ((de = readdir(d))) {
 		name = de->d_name;
-		//debug("find %s %s", base.c_str(), name.c_str());
 		if (name.substr(0, prefix.size()) == prefix)
 			return base + '/' + name;
 	}
@@ -310,17 +292,19 @@ static std::string find_base(std::string const &base, std::string const &prefix)
 }
 
 void arch_setup_start(char const *port) {
-	bbb_pid = getpid();
 	std::string base = find_base("/sys/devices", "bone_capemgr.");
 	std::string name = base + "/slots";
 	std::ofstream f(name.c_str());
-	f << "BB-BONE-PRU-01\n";
+	f << "cape-universal\n";
+	f.close();
+	f.open(name.c_str());
+	f << "cape-univ-hdmi\n";
 	f.close();
 	f.open(name.c_str());
 	f << "BB-ADC\n";
 	f.close();
-	std::string ocpbase = find_base("/sys/devices", "ocp.");
-	base = find_base(ocpbase, "helper.");
+	base = find_base("/sys/devices", "ocp.");
+	base = find_base(base, "helper.");
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
 		char num[2] = "0";
 		num[0] += i;
@@ -330,11 +314,19 @@ void arch_setup_start(char const *port) {
 			fprintf(stderr, "unable to open analog input %d: %s", i, strerror(errno));
 		bbb_temp[i].active = false;
 	}
+	base = find_base("/sys/devices", "ocp.");
+	for (int i = 0; i < NUM_GPIO_PINS; ++i) {
+		if (bbb_muxname[i][0] == '\0')
+			continue;
+		bbb_muxpath[i] = find_base(base, std::string(bbb_muxname[i]) + "_pinmux.") + "/state";
+	}
 	bbb_devmem = open("/dev/mem", O_RDWR);
 	unsigned gpio_base[4] = { 0x44E07000, 0x4804C000, 0x481AC000, 0x481AE000 };
 	unsigned pad_control_base = 0x44e10000;
 	for (int i = 0; i < 4; ++i)
 		bbb_gpio[i] = (volatile bbb_Gpio *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, gpio_base[i]);
+	/*
+	   The CPU does not allow user mode access to these memory addresses, even through /dev/mem. :-(
 	int pad_offset[32 * 4] = {
 		0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0xd0, 0xd4, 0xd8, 0xdc, 0x178, 0x17c, 0x180, 0x184,
 		0x11c, 0x120, 0x21c, 0x1b0, 0x1b4, 0x124, 0x20, 0x24, -1, -1, 0x28, 0x2c, 0x128, 0x144, 0x70, 0x74,
@@ -349,30 +341,26 @@ void arch_setup_start(char const *port) {
 		0x198, 0x19c, 0x1a0, 0x1a4, 0x1a8, 0x1ac, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
 	};
 	bbb_padmap = (volatile uint32_t *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, pad_control_base);
-	for (int i = 0; i < 32 * 4; ++i) {
-		bbb_gpio_pad[i] = pad_offset[i] >= 0 && bbb_muxname[i][0] != '\0' ? &bbb_padmap[(0x800 + pad_offset[i]) / 4] : NULL;
-	}
+	for (int i = 0; i < 32 * 4; ++i)
+		bbb_gpio_pad[i] = pad_offset[i] >= 0 ? &bbb_padmap[(0x800 + pad_offset[i]) / 4] : NULL;
+	*/
 	bbb_active_temp = -1;
 	tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
-	int ret = prussdrv_init();
-	debug("pru init %d", ret);
-	ret = prussdrv_open(PRU_EVTOUT_0);
+	debug("pru init %d", prussdrv_init());
+	int ret = prussdrv_open(PRU_EVTOUT_0);
 	if (ret) {
 		debug("unable to open pru system");
 		abort();
 	}
-	ret = prussdrv_pruintc_init(&pruss_intc_initdata);
-	debug("init intc %d", ret);
-	ret = prussdrv_map_prumem(PRU_DATARAM, (void **)&bbb_pru);
-	debug("pru mmap %d", ret);
+	debug("init intc %d", prussdrv_pruintc_init(&pruss_intc_initdata));
+	debug("pru mmap %d", prussdrv_map_prumem(PRU_DATARAM, (void **)&bbb_pru));
 	bbb_pru->base = 0;
 	bbb_pru->dirs = 0;
 	bbb_pru->current_fragment = 0;
 	bbb_pru->current_sample = 0;
 	bbb_pru->next_fragment = 0;
 	bbb_pru->state = 1;
-	ret = prussdrv_exec_program(PRU, "/usr/lib/franklin/bbb_pru.bin");
-	debug("pru exec %d", ret);
+	debug("pru exec %d", prussdrv_exec_program(PRU, "/usr/lib/franklin/bbb_pru.bin"));
 }
 
 void arch_setup_end(char const *run_id) {
@@ -392,6 +380,14 @@ static void bbb_next_adc() {
 		}
 	}
 	bbb_active_temp = -1;
+}
+
+void arch_request_temp(int which) {
+	if (which >= 0 && which < num_temps && temps[which].thermistor_pin.pin >= NUM_DIGITAL_PINS && temps[which].thermistor_pin.pin < NUM_PINS) {
+		requested_temp = which;
+		return;
+	}
+	requested_temp = ~0;
 }
 
 void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin, bool power_inverted, int power_target, int power_limit, int fan_pin, bool fan_inverted, int fan_target, int fan_limit) {
@@ -460,7 +456,7 @@ int arch_tick() {
 		while (cf != running_fragment) {
 			cbs += history[running_fragment].cbs;
 			history[running_fragment].cbs = 0;
-			running_fragment = (running_fragment + 2) % FRAGMENTS_PER_BUFFER;
+			running_fragment = (running_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		}
 		if (cbs)
 			send_host(CMD_MOVECB, cbs);
@@ -646,19 +642,18 @@ int arch_fds() {
 }
 
 double arch_get_duty(Pin_t _pin) { // TODO
-	if (_pin.pin < 0 || _pin.pin >= NUM_GPIO_PINS) {
-		debug("invalid pin for arch_get_duty: %d(max %d)", _pin.pin, NUM_GPIO_PINS);
+	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
+		debug("invalid pin for arch_get_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return 1;
 	}
 	return 1;
 }
 
 void arch_set_duty(Pin_t _pin, double duty) { // TODO
-	if (_pin.pin < 0 || _pin.pin >= NUM_GPIO_PINS) {
-		debug("invalid pin for arch_set_duty: %d(max %d)", _pin.pin, NUM_GPIO_PINS);
+	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
+		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return;
 	}
-	// TODO.
 }
 
 void arch_discard() {
