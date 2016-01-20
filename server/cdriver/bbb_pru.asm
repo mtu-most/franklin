@@ -81,8 +81,8 @@ mainloop:
 	; output base
 	wait_for_tick
 	mov r30.w0, r3.w0
-	; if state < 2: continue
-	qbge mainloop, r4.b3, 2
+	; if 2 > state: continue
+	qbgt mainloop, r4.b3, 2
 	; if state == 4: state = 1; continue
 	qbne skip1, r4.b3, 4
 	sbco r1.b0, c24, 7, 1
@@ -120,10 +120,9 @@ skip1:
 	; r3.w0 is sent in the next loop iteration.
 
 	; next sample
-	add r4.b0, r4.b0, 1
+	add r4.w0, r4.w0, 1
 	qbne skip2, r4.b0, 0
 	; next fragment
-	add r4.b1, r4.b1, 1
 	and r4.b1, r4.b1, 0x7
 	; underrun
 	qbne skip2, r4.b1, r4.b2
