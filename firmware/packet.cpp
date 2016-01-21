@@ -378,7 +378,7 @@ void packet()
 		else
 			settings[last_fragment].flags |= Settings::PROBING;
 		if (filling == 0)
-			last_fragment = (last_fragment + 1) & FRAGMENTS_PER_MOTOR_MASK;
+			last_fragment = next;
 		//debug("new filling: %d %d", filling, last_fragment);
 		write_ack();
 		return;

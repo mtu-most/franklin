@@ -23,6 +23,8 @@
 #define sdebug(...) do {} while (0)
 //#define sdebug2 debug
 #define sdebug2(...) do {} while (0)
+#define senddebug debug
+//#define senddebug(...) do {} while (0)
 //#define DEBUG_FF
 
 // Protocol explanation.  {{{
@@ -108,7 +110,7 @@ static inline void inc_tail(int16_t amount) { // {{{
 void serial() { // {{{
 	uint16_t milliseconds = millis();
 	sdebug("command end %d", command_end);
-	if (milliseconds - last_millis >= 100) {
+	if (milliseconds - last_millis >= 500) {
 		if (serial_overflow)
 			clear_overflow();
 		if (!had_data && command_end > 0)
@@ -129,7 +131,7 @@ void serial() { // {{{
 		}
 		had_data = true;
 		uint8_t firstbyte = *serial_buffer_tail;
-		debug_add(firstbyte);
+		//debug_add(firstbyte);
 		sdebug2("received: %x", firstbyte);
 		// If this is a 1-byte command, handle it.
 		uint8_t which = 0;
@@ -148,11 +150,12 @@ void serial() { // {{{
 			//debug("a%d", ff_out);
 			if (out_busy > 0 && ((ff_out - out_busy) & 3) == which) {	// Only if we expected it and it is the right type.
 				out_busy -= 1;
-				if ((pending_packet[(ff_out - (out_busy + 1)) & 3][0] & 0x1f) == CMD_LIMIT) {
+				if ((pending_packet[which][0] & 0x1f) == CMD_LIMIT) {
 					current_fragment = (current_fragment + 1) & FRAGMENTS_PER_MOTOR_MASK;
 					last_fragment = current_fragment;
 					notified_current_fragment = current_fragment;
 					filling = 0;
+					debug("end limit");
 					stopping = -1;
 					for (uint8_t m = 0; m < active_motors; ++m) {
 						if (motor[m].flags & Motor::LIMIT) {
@@ -417,137 +420,152 @@ void try_send_next() { // Call send_packet if we can. {{{
 		// Still busy sending other packet.
 		return;
 	} // }}}
-	if (pin_events > 0) { // {{{
-		for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
-			if (!pin[p].event())
-				continue;
-			pending_packet[ff_out][0] = CMD_PINCHANGE;
-			pending_packet[ff_out][1] = p;
-			pending_packet[ff_out][2] = pin[p].state & CTRL_VALUE ? 1 : 0;
-			pin[p].clear_event();
-			prepare_packet(3);
-			send_packet();
-			return;
-		}
-	} // }}}
-	if (timeout) { // {{{
-		pending_packet[ff_out][0] = CMD_TIMEOUT;
-		timeout = false;
-		prepare_packet(1);
-		send_packet();
-		return;
-	} // }}}
-	uint8_t cf = current_fragment;
-	if (notified_current_fragment != cf) { // {{{
-		uint8_t offset;
-		if (step_state == 1 && stopping < 0) {
-			pending_packet[ff_out][0] = CMD_UNDERRUN;
-			pending_packet[ff_out][1] = active_motors;
-			offset = 2;
-			debug_add(0x101);
-			debug_add(cf);
-			debug_add(last_fragment);
-			debug_add(notified_current_fragment);
-			//debug_dump();
-		}
-		else {
-			pending_packet[ff_out][0] = CMD_DONE;
-			offset = 1;
-			//debug_add(0x102);
-			//debug_add(cf);
-			//debug_add(last_fragment);
-			//debug_add(notified_current_fragment);
-		}
-		cli();
-		uint8_t num = (cf - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
-		sei();
-		sdebug2("done %ld %d %d %d", &motor[0].current_pos, cf, notified_current_fragment, last_fragment);
-		pending_packet[ff_out][offset] = num;
-		notified_current_fragment = (notified_current_fragment + num) & FRAGMENTS_PER_MOTOR_MASK;
-		pending_packet[ff_out][offset + 1] = (last_fragment - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
-		if (pending_packet[ff_out][0] == CMD_UNDERRUN) {
-			write_current_pos(4);
-			prepare_packet(4 + 4 * active_motors);
-		}
-		else
-			prepare_packet(3);
-		send_packet();
-		return;
-	} // }}}
-	if (stopping >= 0 && (stopping == active_motors || (stopping < active_motors && motor[stopping].flags & Motor::LIMIT))) { // {{{
-		sdebug2("limit %d", stopping);
-		pending_packet[ff_out][0] = CMD_LIMIT;
-		pending_packet[ff_out][1] = active_motors;
-		pending_packet[ff_out][2] = stopping;
-		pending_packet[ff_out][3] = limit_fragment_pos;
-		write_current_pos(4);
-		if (stopping < active_motors)
-			motor[stopping].flags &= ~Motor::LIMIT;
-		else
-			stopping += 1;	// Prevent triggering another notification.
-		prepare_packet(4 + 4 * active_motors);
-		send_packet();
-		debug_add(0x100);
-		//debug_dump();
-		return;
-	} // }}}
-	if (reply_ready) { // {{{
-		sdebug2("reply %x %d", reply[1], reply[0]);
-		for (uint8_t i = 0; i < reply_ready; ++i) {
-			BUFFER_CHECK(reply, i);
-			BUFFER_CHECK(pending_packet[ff_out], i);
-			pending_packet[ff_out][i] = reply[i];
-		}
-		prepare_packet(reply_ready);
-		reply_ready = 0;
-		send_packet();
-		return;
-	} // }}}
-	if (home_step_time > 0 && homers == 0 && step_state == 1) { // {{{
-		pending_packet[ff_out][0] = CMD_HOMED;
-		pending_packet[ff_out][1] = active_motors;
-		write_current_pos(2);
-		home_step_time = 0;
-		prepare_packet(2 + 4 * active_motors);
-		send_packet();
-		return;
-	} // }}}
-	if (ping != 0) { // {{{
-		//debug("P%x", ping);
-		for (uint8_t b = 0; b < 8; ++b)
-		{
-			if (ping & (1 << b))
-			{
-				pending_packet[ff_out][0] = CMD_PONG;
-				pending_packet[ff_out][1] = b;
-				ping &= ~(1 << b);
-				prepare_packet(2);
+	while (out_busy < 3) {
+		if (pin_events > 0) { // {{{
+			senddebug("pin");
+			for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
+				if (!pin[p].event())
+					continue;
+				pending_packet[ff_out][0] = CMD_PINCHANGE;
+				pending_packet[ff_out][1] = p;
+				pending_packet[ff_out][2] = pin[p].state & CTRL_VALUE ? 1 : 0;
+				pin[p].clear_event();
+				prepare_packet(3);
 				send_packet();
-				return;
+				break;
 			}
-		}
-	} // }}}
-	// This is pretty much always true, so make it the least important (nothing below this will ever be sent).
-	if (adcreply_ready) { // {{{
-		//debug("adcreply %x %d", adcreply[1], adcreply[0]);
-		for (uint8_t i = 0; i < adcreply_ready; ++i) {
-			BUFFER_CHECK(pending_packet[ff_out], i);
-			BUFFER_CHECK(adcreply, i);
-			pending_packet[ff_out][i] = adcreply[i];
-		}
-		prepare_packet(adcreply_ready);
-		adcreply_ready = 0;
-		send_packet();
+			continue;
+		} // }}}
+		if (timeout) { // {{{
+			senddebug("timeout");
+			pending_packet[ff_out][0] = CMD_TIMEOUT;
+			timeout = false;
+			prepare_packet(1);
+			send_packet();
+			continue;
+		} // }}}
+		uint8_t cf = current_fragment;
+		if (notified_current_fragment != cf) { // {{{
+			senddebug("done/underrun");
+			uint8_t offset;
+			// If a limit was hit, ignore underrun and send done instead.
+			if (step_state == 1 && stopping < 0) {
+				pending_packet[ff_out][0] = CMD_UNDERRUN;
+				pending_packet[ff_out][1] = active_motors;
+				offset = 2;
+				//debug_add(0x101);
+				//debug_add(cf);
+				//debug_add(last_fragment);
+				//debug_add(notified_current_fragment);
+				//debug_dump();
+			}
+			else {
+				pending_packet[ff_out][0] = CMD_DONE;
+				offset = 1;
+				//debug_add(0x102);
+				//debug_add(cf);
+				//debug_add(last_fragment);
+				//debug_add(notified_current_fragment);
+			}
+			cli();
+			uint8_t num = (cf - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
+			sei();
+			sdebug2("done %ld %d %d %d", &motor[0].current_pos, cf, notified_current_fragment, last_fragment);
+			pending_packet[ff_out][offset] = num;
+			notified_current_fragment = (notified_current_fragment + num) & FRAGMENTS_PER_MOTOR_MASK;
+			pending_packet[ff_out][offset + 1] = (last_fragment - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
+			if (pending_packet[ff_out][0] == CMD_UNDERRUN) {
+				write_current_pos(4);
+				prepare_packet(4 + 4 * active_motors);
+			}
+			else
+				prepare_packet(3);
+			send_packet();
+			continue;
+		} // }}}
+		if (stopping >= 0 && (stopping == active_motors || (stopping < active_motors && motor[stopping].flags & Motor::LIMIT))) { // {{{
+			senddebug("limit");
+			sdebug2("limit %d", stopping);
+			pending_packet[ff_out][0] = CMD_LIMIT;
+			pending_packet[ff_out][1] = active_motors;
+			pending_packet[ff_out][2] = stopping;
+			pending_packet[ff_out][3] = limit_fragment_pos;
+			write_current_pos(4);
+			if (stopping < active_motors)
+				motor[stopping].flags &= ~Motor::LIMIT;
+			else
+				stopping += 1;	// Prevent triggering another notification.
+			prepare_packet(4 + 4 * active_motors);
+			send_packet();
+			//debug_add(0x100);
+			//debug_dump();
+			continue;
+		} // }}}
+		if (reply_ready) { // {{{
+			senddebug("reply");
+			sdebug2("reply %x %d", reply[1], reply[0]);
+			for (uint8_t i = 0; i < reply_ready; ++i) {
+				BUFFER_CHECK(reply, i);
+				BUFFER_CHECK(pending_packet[ff_out], i);
+				pending_packet[ff_out][i] = reply[i];
+			}
+			prepare_packet(reply_ready);
+			reply_ready = 0;
+			send_packet();
+			continue;
+		} // }}}
+		if (home_step_time > 0 && homers == 0 && step_state == 1) { // {{{
+			senddebug("homed");
+			pending_packet[ff_out][0] = CMD_HOMED;
+			pending_packet[ff_out][1] = active_motors;
+			write_current_pos(2);
+			home_step_time = 0;
+			prepare_packet(2 + 4 * active_motors);
+			send_packet();
+			continue;
+		} // }}}
+		if (ping != 0) { // {{{
+			senddebug("pong");
+			//debug("P%x", ping);
+			for (uint8_t b = 0; b < 8; ++b)
+			{
+				if (ping & (1 << b))
+				{
+					pending_packet[ff_out][0] = CMD_PONG;
+					pending_packet[ff_out][1] = b;
+					ping &= ~(1 << b);
+					prepare_packet(2);
+					send_packet();
+					break;
+				}
+			}
+			continue;
+		} // }}}
+		// This is pretty much always true, so make it the least important (nothing below this will ever be sent).
+		if (adcreply_ready) { // {{{
+			senddebug("adc");
+			//debug("adcreply %x %d", adcreply[1], adcreply[0]);
+			for (uint8_t i = 0; i < adcreply_ready; ++i) {
+				BUFFER_CHECK(pending_packet[ff_out], i);
+				BUFFER_CHECK(adcreply, i);
+				pending_packet[ff_out][i] = adcreply[i];
+			}
+			prepare_packet(adcreply_ready);
+			adcreply_ready = 0;
+			send_packet();
+			continue;
+		} // }}}
+		sdebug("Nothing to send %d %d", cf, notified_current_fragment);
 		return;
-	} // }}}
-	sdebug("Nothing to send %d %d", cf, notified_current_fragment);
+	}
 }
 // }}}
 
 // Respond with proper ff. {{{
 void write_ack()
 {
-	//debug("acking");
+	//debug("acking %d", out_busy);
+	//debug_dump();
 	had_stall = false;
 	arch_serial_write(cmd_ack[ff_in]);
 	ff_in = (ff_in + 1) & 3;
