@@ -23,8 +23,8 @@
 #define sdebug(...) do {} while (0)
 //#define sdebug2 debug
 #define sdebug2(...) do {} while (0)
-#define senddebug debug
-//#define senddebug(...) do {} while (0)
+//#define senddebug debug
+#define senddebug(...) do {} while (0)
 //#define DEBUG_FF
 
 // Protocol explanation.  {{{
@@ -155,7 +155,6 @@ void serial() { // {{{
 					last_fragment = current_fragment;
 					notified_current_fragment = current_fragment;
 					filling = 0;
-					debug("end limit");
 					stopping = -1;
 					for (uint8_t m = 0; m < active_motors; ++m) {
 						if (motor[m].flags & Motor::LIMIT) {

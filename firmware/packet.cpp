@@ -329,10 +329,12 @@ void packet()
 			// current_sample is always 0 while homing; set len to 2, so it doesn't go to the next fragment.
 			settings[current_fragment].len = 2;
 			current_len = settings[current_fragment].len;
+			//debug("home no probe %d", current_fragment);
 			settings[current_fragment].flags &= ~Settings::PROBING;
 			BUFFER_CHECK(buffer, current_fragment);
 			current_buffer = &buffer[current_fragment];
 			current_sample = 0;
+			//debug("step_state home 0");
 			step_state = 0;
 			arch_set_speed(home_step_time);
 			write_ack();
@@ -373,10 +375,14 @@ void packet()
 		filling = command(2);
 		for (uint8_t m = 0; m < active_motors; ++m)
 			buffer[last_fragment][m][0] = 0x80;	// Sentinel indicating no data is available for this motor.
-		if (command(0) == CMD_START_MOVE)
+		if (command(0) == CMD_START_MOVE) {
+			//debug("move no probe %d", last_fragment);
 			settings[last_fragment].flags &= ~Settings::PROBING;
-		else
+		}
+		else {
+			//debug("move probe %d", last_fragment);
 			settings[last_fragment].flags |= Settings::PROBING;
+		}
 		if (filling == 0)
 			last_fragment = next;
 		//debug("new filling: %d %d", filling, last_fragment);
@@ -457,6 +463,7 @@ void packet()
 		}
 		current_sample = 0;
 		current_len = settings[current_fragment].len;
+		//debug("step_state start 0");
 		step_state = 0;
 		arch_set_speed(time_per_sample);
 		write_ack();

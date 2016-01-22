@@ -31,6 +31,16 @@ void handle_motors() {
 	// Check probe.
 	bool probed;
 	if (settings[cf].flags & Settings::PROBING && probe_pin < NUM_DIGITAL_PINS) {
+		if (state == 3) {
+			// Probing, but state is set to 3; fix that.
+			cli();
+			step_state = 0;
+			// Update other variables which may have been changed by the ISR.
+			state = step_state;
+			cf = current_fragment;
+			cs = current_sample;
+			sei();
+		}
 		if (state == 0) {
 			if (GET(probe_pin) ^ bool(pin_flags & 2)) {
 				step_state = 1;
@@ -38,8 +48,9 @@ void handle_motors() {
 			}
 			probed = true;
 		}
-		else
+		else {
 			probed = false;
+		}
 	}
 	else
 		probed = true;	// If we didn't need to probe; don't block later on.
@@ -108,6 +119,8 @@ void handle_motors() {
 	if (state == 0 && probed) {
 		if (homers > 0)
 			current_sample = 0;	// Use only the first sample for homing.
-		step_state = homers > 0 || (settings[cf].flags & Settings::PROBING) ? 2 : 3;
+		uint8_t new_state = homers > 0 || (settings[cf].flags & Settings::PROBING) ? 2 : 3;
+		//debug("step_state non 0 %d (fragment %d)", new_state, cf);
+		step_state = new_state;
 	}
 }
