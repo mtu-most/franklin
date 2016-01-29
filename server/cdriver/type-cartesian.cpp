@@ -33,7 +33,7 @@ static void reset_pos(Space *s) { // {{{
 	// This is mostly useful for extruders.
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
 		s->axis[a]->settings.source = s->motor[a]->settings.current_pos / s->motor[a]->steps_per_unit;
-		//debug("set pos for %d to %f", a, s->axis[a]->settings.source);
+		debug("set pos for %d to %f / %f = %f", a, s->motor[a]->settings.current_pos, s->motor[a]->steps_per_unit, s->axis[a]->settings.source);
 	}
 } // }}}
 

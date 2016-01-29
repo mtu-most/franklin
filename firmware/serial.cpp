@@ -466,9 +466,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 				//debug_add(last_fragment);
 				//debug_add(notified_current_fragment);
 			}
-			cli();
 			uint8_t num = (cf - notified_current_fragment) & FRAGMENTS_PER_MOTOR_MASK;
-			sei();
 			sdebug2("done %ld %d %d %d", &motor[0].current_pos, cf, notified_current_fragment, last_fragment);
 			pending_packet[ff_out][offset] = num;
 			notified_current_fragment = (notified_current_fragment + num) & FRAGMENTS_PER_MOTOR_MASK;

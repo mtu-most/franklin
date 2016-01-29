@@ -1241,6 +1241,7 @@ class Printer: # {{{
 				for i, m in enumerate(sp.motor):
 					if not self._pin_valid(m['limit_min_pin']) and not self._pin_valid(m['limit_max_pin']):
 						if self.home_orig_type != TYPE_DELTA or s != 0:
+							log('set %d %d to 0' % (s, i))
 							sp.set_current_pos(i, 0 if s == 1 else m['home_pos'])
 			self.expert_set_space(0, type = self.home_orig_type)
 			for a, ax in enumerate(self.spaces[0].axis):
@@ -1438,7 +1439,7 @@ class Printer: # {{{
 		arc_normal = (0, 0, 1)
 		rel = False
 		erel = None
-		pos = [[float('nan'), float('nan'), float('nan')], [0.], float('inf')]
+		pos = [[float('nan') for a in range(6)], [0., 0.], float('inf')]
 		time_dist = [0., 0.]
 		pending = []
 		def add_timedist(type, nums):
@@ -1645,7 +1646,7 @@ class Printer: # {{{
 					elif cmd[0] == 'G' and cmd[1] in (0, 1, 81):
 						if cmd[1] != 0:
 							mode = cmd
-						components = {'X': None, 'Y': None, 'Z': None, 'E': None, 'F': None, 'R': None}
+						components = {'X': None, 'Y': None, 'Z': None, 'A': None, 'B': None, 'C': None, 'E': None, 'F': None, 'R': None}
 						for c in args:
 							if c not in components:
 								errors.append('%d:invalid component %s' % (lineno, c))
@@ -1672,8 +1673,8 @@ class Printer: # {{{
 									r = pos[0][2] + components['R'] * unit
 								else:
 									r = components['R'] * unit
-						for axis in range(3):
-							value = components[chr(ord('X') + axis)]
+						for axis in range(6):
+							value = components['XYZABC'[axis]]
 							if value is not None:
 								if rel:
 									pos[0][axis] += value * unit
@@ -1691,7 +1692,11 @@ class Printer: # {{{
 									f0 = float('inf')
 							if math.isnan(dist):
 								dist = 0
-							add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
+							if all(pos[0][i] == oldpos[0][i] for i in range(3, 6)):
+								add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
+							else:
+								add_record(protocol.parsed['PRE_LINE'], {'X': pos[0][3], 'Y': pos[0][4], 'Z': pos[0][5], 'E': float('NaN'), 'f': float('NaN'), 'F': float('NaN'), 'T': current_extruder})
+								add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
 						else:
 							# If old pos is unknown, use safe distance.
 							if math.isnan(oldpos[0][2]):
@@ -2664,7 +2669,9 @@ class Printer: # {{{
 			f.write(code)
 			f.seek(0)
 			self.gcode_id = id
-			return self._gcode_run(f.filename, angle)
+			# Break this in two, otherwise tail recursion may destroy f before call is done?
+			ret = self._gcode_run(f.filename, angle)
+			return ret
 	# }}}
 	@delayed
 	def request_confirmation(self, id, message): # {{{

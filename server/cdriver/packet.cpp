@@ -95,11 +95,24 @@ void setpos(int which, int t, double f) {
 		spaces[which].axis[a]->settings.source = NAN;
 		spaces[which].axis[a]->settings.current = NAN;
 	}
-	//debug("setting pos for %d %d", which, t);
-	double diff = f * spaces[which].motor[t]->steps_per_unit - spaces[which].motor[t]->settings.current_pos;
-	spaces[which].motor[t]->settings.current_pos += diff;
-	for (int fragment = 0; fragment < FRAGMENTS_PER_BUFFER; ++fragment)
-		spaces[which].motor[t]->history[fragment].current_pos += diff;
+	//debug("setting pos for %d %d to %f", which, t, f);
+	double diff;
+	if (!isnan(spaces[which].motor[t]->settings.current_pos)) {
+		diff = f * spaces[which].motor[t]->steps_per_unit - spaces[which].motor[t]->settings.current_pos;
+		spaces[which].motor[t]->settings.current_pos += diff;
+		//debug("non nan %f %f %f", spaces[which].motor[t]->settings.current_pos, diff, f);
+	}
+	else {
+		diff = f * spaces[which].motor[t]->steps_per_unit;
+		spaces[which].motor[t]->settings.current_pos = diff;
+		//debug("nan %f", diff);
+	}
+	for (int fragment = 0; fragment < FRAGMENTS_PER_BUFFER; ++fragment) {
+		if (!isnan(spaces[which].motor[t]->history[fragment].current_pos))
+			spaces[which].motor[t]->history[fragment].current_pos += diff;
+		else
+			spaces[which].motor[t]->history[fragment].current_pos = diff;
+	}
 	if (isnan(spaces[which].axis[t]->settings.current)) {
 		space_types[spaces[which].type].reset_pos(&spaces[which]);
 		for (int a = 0; a < spaces[which].num_axes; ++a)

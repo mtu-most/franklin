@@ -41,6 +41,8 @@ struct String {
 
 static String *strings;
 
+static Run_Record run_preline;
+
 void run_file(int name_len, char const *name, int probe_name_len, char const *probename, bool start, double sina, double cosa, int audio) {
 	rundebug("run file %d %f %f", start, sina, cosa);
 	abort_run_file();
@@ -138,6 +140,10 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	run_file_sina = sina;
 	run_file_cosa = cosa;
 	run_file_audio = audio;
+	run_preline.X = NAN;
+	run_preline.Y = NAN;
+	run_preline.Z = NAN;
+	run_preline.E = NAN;
 	run_file_fill_queue();
 }
 
@@ -157,6 +163,7 @@ void abort_run_file() {
 
 enum {
 	RUN_SYSTEM,
+	RUN_PRE_LINE,
 	RUN_LINE,
 	RUN_PRE_ARC,
 	RUN_ARC,
@@ -277,6 +284,15 @@ void run_file_fill_queue() {
 				queue[settings.queue_end].normal[2] = r.F;
 				break;
 			}
+			case RUN_PRE_LINE:
+			{
+				run_preline.X = r.X;
+				run_preline.Y = r.Y;
+				run_preline.Z = r.Z;
+				run_preline.E = r.E;
+				run_preline.tool = r.tool;
+				break;
+			}
 			case RUN_LINE:
 			case RUN_ARC:
 			{
@@ -294,17 +310,37 @@ void run_file_fill_queue() {
 					queue[settings.queue_end].data[0] = x;
 					if (num0 > 1) {
 						queue[settings.queue_end].data[1] = y;
-						if (num0 > 2)
+						if (num0 > 2) {
 							queue[settings.queue_end].data[2] = handle_probe(x, y, z);
+							if (num0 > 3) {
+								x = run_preline.X * run_file_cosa - run_preline.Y * run_file_sina + run_file_refx;
+								y = run_preline.Y * run_file_cosa + run_preline.X * run_file_sina + run_file_refy;
+								z = run_preline.Z;
+								queue[settings.queue_end].data[3] = x;
+								if (num0 > 4) {
+									queue[settings.queue_end].data[4] = y;
+									if (num0 > 5) {
+										queue[settings.queue_end].data[5] = handle_probe(x, y, z);
+									}
+								}
+								run_preline.X = NAN;
+								run_preline.Y = NAN;
+								run_preline.Z = NAN;
+							}
+						}
 					}
 				}
-				for (int i = 3; i < num0; ++i)
+				for (int i = 6; i < num0; ++i)
 					queue[settings.queue_end].data[i] = NAN;
-				for (int s = 1; s < NUM_SPACES; ++s) {
-					for (int i = 0; i < spaces[s].num_axes; ++i) {
-						queue[settings.queue_end].data[num0 + i] = (s == 1 && i == r.tool ? r.E : NAN);
-						//debug("queue %d + %d = %f", num0, i, queue[settings.queue_end].data[num0 + i]);
-					}
+				for (int i = 0; i < spaces[1].num_axes; ++i) {
+					queue[settings.queue_end].data[num0 + i] = (i == r.tool ? r.E : i == run_preline.tool ? run_preline.E : NAN);
+					//debug("queue %d + %d = %f", num0, i, queue[settings.queue_end].data[num0 + i]);
+				}
+				run_preline.E = NAN;
+				num0 += spaces[1].num_axes;
+				for (int s = 2; s < NUM_SPACES; ++s) {
+					for (int i = 0; i < spaces[s].num_axes; ++i)
+						queue[settings.queue_end].data[num0 + i] = NAN;
 					num0 += spaces[s].num_axes;
 				}
 				queue[settings.queue_end].time = r.time;
