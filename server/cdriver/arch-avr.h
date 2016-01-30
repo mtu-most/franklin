@@ -414,7 +414,7 @@ bool hwpacket(int len) {
 		else {
 			// Only overwrite current position if the new value is correct.
 			//debug("underrun ok computing_move=%d sending=%d pending=%d finishing=%d", computing_move, sending_fragment, command[1][2], run_file_finishing);
-			if (!computing_move && !transmitting_fragment && command[1][3] == 0) {
+			if (!computing_move && !sending_fragment && !transmitting_fragment && command[1][3] == 0) {
 				avr_get_current_pos(4, true);
 				if (run_file_finishing) {
 					send_host(CMD_FILE_DONE);

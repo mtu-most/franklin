@@ -1241,7 +1241,7 @@ class Printer: # {{{
 				for i, m in enumerate(sp.motor):
 					if not self._pin_valid(m['limit_min_pin']) and not self._pin_valid(m['limit_max_pin']):
 						if self.home_orig_type != TYPE_DELTA or s != 0:
-							log('set %d %d to 0' % (s, i))
+							#log('set %d %d to 0' % (s, i))
 							sp.set_current_pos(i, 0 if s == 1 else m['home_pos'])
 			self.expert_set_space(0, type = self.home_orig_type)
 			for a, ax in enumerate(self.spaces[0].axis):
