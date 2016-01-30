@@ -227,15 +227,12 @@ void serial(uint8_t channel) {
 					}
 					if (out_busy < 3) {
 						if (change_pending) {
-							change_pending = false;
 							arch_motors_change();
 						}
 						else if (start_pending) {
-							start_pending = false;
 							arch_start_move(0);
 						}
 						else if (stop_pending) {
-							stop_pending = false;
 							//debug("do pending stop");
 							arch_stop();
 						}

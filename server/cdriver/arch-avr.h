@@ -805,6 +805,7 @@ void arch_motors_change() {
 		change_pending = true;
 		return;
 	}
+	change_pending = false;
 	arch_change(true);
 }
 
@@ -1015,6 +1016,7 @@ void arch_stop(bool fake) {
 		host_block = false;
 		return;
 	}
+	stop_pending = false;
 	avr_running = false;
 	avr_homing = false;
 	avr_buffer[0] = HWC_STOP;
@@ -1110,7 +1112,7 @@ bool arch_send_fragment() {
 void arch_start_move(int extra) {
 	if (host_block)
 		return;
-	if (preparing || out_busy >= 3) {
+	if (preparing || sending_fragment || out_busy >= 3) {
 		start_pending = true;
 		return;
 	}
@@ -1123,6 +1125,7 @@ void arch_start_move(int extra) {
 		poll(&pollfds[2], 1, -1);
 		serial(1);
 	}
+	start_pending = false;
 	avr_running = true;
 	avr_buffer[0] = HWC_START;
 	if (prepare_packet(avr_buffer, 1))
