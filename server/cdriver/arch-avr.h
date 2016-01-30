@@ -630,8 +630,10 @@ void avr_send_pin(Pin_t _pin) {
 }
 
 void arch_pin_set_reset(Pin_t _pin, char state) {
-	if (!_pin.valid())
+	if (!_pin.valid() || _pin.pin >= NUM_DIGITAL_PINS) {
+		// Ignore requests to set reset state of invalid and analog pins.
 		return;
+	}
 	if (avr_pins[_pin.pin].reset == state)
 		return;
 	avr_pins[_pin.pin].reset = state;

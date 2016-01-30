@@ -373,17 +373,19 @@ static void check_distance(Motor *mtr, double distance, double dt, double &facto
 	}
 	//debug("cd4 %f %f", distance, dt); */
 	int steps = int(mtr->settings.current_pos + distance * mtr->steps_per_unit) - int(mtr->settings.current_pos);
+	int targetsteps = steps;
 	//cpdebug(s, m, "cf %d value %d", current_fragment, value);
 	if (settings.probing && steps)
 		steps = s;
 	else {
-		if (abs(steps) > 0x7f) {
-			debug("overflow %d", steps);
-			steps = 0x7f * s;
+		// Set max to 7e, because -7f becomes 80 (not 81) through rounding, and 80 doesn't work in firmware.
+		if (abs(steps) > 0x7e) {
+			debug("overflow %d from cp %f dist %f steps/mm %f dt %f s %d", steps, mtr->settings.current_pos, distance, mtr->steps_per_unit, dt, s);
+			steps = 0x7e * s;
 		}
 	}
-	if (steps < int(mtr->settings.current_pos + distance * mtr->steps_per_unit) - int(mtr->settings.current_pos)) {
-		distance = (int(mtr->settings.current_pos) + (steps + s * .5) / mtr->steps_per_unit) - mtr->settings.current_pos;
+	if (abs(steps) < abs(targetsteps)) {
+		distance = (int(mtr->settings.current_pos) + steps + s * .5 - mtr->settings.current_pos) / mtr->steps_per_unit;
 		v = fabs(distance / dt);
 	}
 	//debug("=============");
@@ -432,8 +434,10 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 			continue;
 		Space &sp = spaces[s];
 		for (int a = 0; a < sp.num_axes; ++a) {
-			if (!isnan(sp.axis[a]->settings.target))
+			if (!isnan(sp.axis[a]->settings.target)) {
+				//debug("add %d %d %f -> %f", s, a, (sp.axis[a]->settings.target - sp.axis[a]->settings.current) * factor, sp.axis[a]->settings.current);
 				sp.axis[a]->settings.current += (sp.axis[a]->settings.target - sp.axis[a]->settings.current) * factor;
+			}
 		}
 	}
 	if (factor < 1) {

@@ -1063,8 +1063,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 ISR(TIMER1_COMPA_vect) {
 	SLOW_ISR();
 }
-#endif
 // }}}
+#endif
 
 // Timekeeping. {{{
 ISR(TIMER0_OVF_vect) { // {{{

@@ -1874,7 +1874,7 @@ class Printer: # {{{
 						if i < 3:
 							return chr(ord('x') + i)
 						elif i < 6:
-							return chr(ord('a') + i)
+							return chr(ord('a') + i - 3)
 						else:
 							return 'Axis %d' % i
 					elif self.id == 1:
