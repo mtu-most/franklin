@@ -111,7 +111,7 @@ class Driver: # {{{
 				return ret
 			try:
 				r = os.read(self.driver.stdout.fileno(), 4096)
-			except BlockingIOError:
+			except IOError:
 				r = self.buffer[:length]
 				self.buffer = self.buffer[length:]
 				return r
