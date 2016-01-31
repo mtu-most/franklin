@@ -7,7 +7,7 @@ Standards-Version: 3.9.6
 
 Package: franklin
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}, ${python3:Depends}, python3-websocketd, python3-network, python3-serial, avrdude (>= 6.1), python3-fhs, adduser, python3-gi, python3-gtk2, arduino-mighty-1284p (>= 1)
+Depends: ${misc:Depends}, ${shlibs:Depends}, ${python3:Depends}, python3-websocketd, python3-network, python3-serial, avrdude (>= 6.1), python3-fhs, adduser, python3-gi, libgtk-3-0, arduino-mighty-1284p (>= 1)
 Recommends: python3-avahi
 Description: server for controlling RepRap 3-D printers
  3-D printers need firmware and host software to work.  This package contains
