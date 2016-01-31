@@ -55,6 +55,7 @@ import traceback
 import protocol
 import mmap
 import random
+import errno
 # }}}
 
 config = fhs.init(packagename = 'franklin', config = { # {{{
@@ -115,6 +116,12 @@ class Driver: # {{{
 				r = self.buffer[:length]
 				self.buffer = self.buffer[length:]
 				return r
+			except OSError as exc:
+				if exc.errno == errno.EAGAIN:
+					r = self.buffer[:length]
+					self.buffer = self.buffer[length:]
+					return r
+				raise
 			if r == b'':
 				log('EOF!')
 				self.close()
