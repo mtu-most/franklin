@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # vim: foldmethod=marker :
 # server.py - printer multiplexing for Franklin
 # Copyright 2014 Michigan Technological University
@@ -531,7 +531,8 @@ class Port: # {{{
 		data = json.dumps([self.next_mid, name, args, kargs]) + '\n'
 		#log('calling %s on %d' % (repr(data), self.process.stdin.fileno()))
 		try:
-			self.process.stdin.write(data)
+			self.process.stdin.write(data.encode('utf-8'))
+			self.process.stdin.flush()
 		except:
 			log('killing printer handle because of IOError')
 			#traceback.print_exc()
@@ -559,7 +560,7 @@ class Port: # {{{
 					self.waiters[t][w](False, 'Printer died')
 			Connection._disable('admin', self.port)
 			return False
-		data = json.loads(line)
+		data = json.loads(line.decode('utf-8'))
 		#log('printer input:' + repr(data))
 		if data[1] == 'broadcast':
 			Connection._broadcast(data[2], data[3], self.port, *(data[4:]))
@@ -617,7 +618,7 @@ def detect(port): # {{{
 	id = [None, None, None, None]	# data, timeouts, had data
 	# Wait to make sure the command is interpreted as a new packet.
 	def part2():
-		id[0] = ''
+		id[0] = b''
 		id[1] = 0
 		id[2] = False
 		def timeout():
@@ -636,7 +637,7 @@ def detect(port): # {{{
 			return True
 		def boot_printer_input(fd, cond):
 			id[2] = True
-			ids = [protocol.single[code] for code in ('ID', 'STARTUP')]
+			ids = [protocol.single[code][0] for code in ('ID', 'STARTUP')]
 			# CMD:1 ID:8 Checksum:3
 			while len(id[0]) < 12:
 				data = printer.read(12 - len(id[0]))
@@ -644,8 +645,8 @@ def detect(port): # {{{
 				#log('incomplete id: ' + id[0])
 				if len(id[0]) < 12:
 					return True
-				if id[0][0] not in ids or not protocol.check(map(ord, id[0])):
-					log('skip non-id: %s (%s)' % (''.join('%02x' % ord(x) for x in id[0]), repr(id[0])))
+				if id[0][0] not in ids or not protocol.check(id[0]):
+					log('skip non-id: %s (%s)' % (''.join('%02x' % x for x in id[0]), repr(id[0])))
 					f = len(id[0])
 					for start in ids:
 						if start in id[0][1:]:
@@ -662,7 +663,7 @@ def detect(port): # {{{
 			# This printer was running and tried to send an id.  Check the id.
 			id[0] = id[0][1:9]
 			if id[0] in orphans:
-				log('accepting orphan %s on %s' % (''.join('%02x' % ord(x) for x in id[0]), port))
+				log('accepting orphan %s on %s' % (''.join('%02x' % x for x in id[0]), port))
 				ports[port] = orphans.pop(id[0])
 				ports[port].port = port
 				def close_port(success, data):
@@ -672,7 +673,7 @@ def detect(port): # {{{
 				ports[port].call('reconnect', ['admin', port], {}, lambda success, ret: ports[port].call('send_printer', ['admin', None], {}, close_port) if success else close_port)
 				return False
 			run_id = nextid()
-			log('accepting unknown printer on port %s (id %s)' % (port, ''.join('%02x' % ord(x) for x in run_id)))
+			log('accepting unknown printer on port %s (id %s)' % (port, ''.join('%02x' % x for x in run_id)))
 			log('orphans: %s' % repr(orphans.keys()))
 			process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, printer, run_id)
@@ -695,11 +696,10 @@ def nextid(): # {{{
 	# them, because it loops at 2**32, which is not divisible by anything
 	# except 2).
 	last_id = (last_id + 0x23456789) & 0xffffffff
-	return ''.join([chr(id_map[(last_id >> (4 * c)) & 0xf]) for c in range(8)])
+	return bytes([id_map[(last_id >> (4 * c)) & 0xf] for c in range(8)])
 last_id = random.randrange(1 << 32)
 # Parity table is [0x8b, 0x2d, 0x1e]; half of these codes overlap with codes from the single command map; those single commands are not used.
 id_map = [0x40, 0xe1, 0xd2, 0x73, 0x74, 0xd5, 0xe6, 0x47, 0xf8, 0x59, 0x6a, 0xcb, 0xcc, 0x6d, 0x5e, 0xff]
-str_id_map = ''.join([chr(x) for x in id_map])
 # }}}
 
 def print_done(port, completed, reason): # {{{

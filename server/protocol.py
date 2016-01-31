@@ -18,22 +18,22 @@
 from websocketd import log
 
 single = {
-	'NACK0': '\xf0',       # Incorrect packet; please resend.
-	'NACK1': '\x91',       # Incorrect packet; please resend.
-	'NACK2': '\xa2',       # Incorrect packet; please resend.
-	'NACK3': '\xc3',       # Incorrect packet; please resend.
-	'ACK0': '\xc4',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	'ACK1': '\xa5',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	'ACK2': '\x96',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	'ACK3': '\xf7',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	'STALL0': '\x88',      # Packet properly received, but not accepted; don't resend packet unmodified.
-	'STALL1': '\xe9',      # Packet properly received, but not accepted; don't resend packet unmodified.
-	'STALL2': '\xda',      # Packet properly received, but not accepted; don't resend packet unmodified.
-	'STALL3': '\xbb',      # Packet properly received, but not accepted; don't resend packet unmodified.
-	'ID': '\xbc',          # Request/reply printer ID code.
-	'DEBUG': '\xdd',       # Debug message; a nul-terminated message follows (no checksum; no resend).
-	'STARTUP': '\xee',     # Starting up.
-	'STALLACK': '\x8f'     # Clear stall.
+	'NACK0': b'\xf0',       # Incorrect packet; please resend.
+	'NACK1': b'\x91',       # Incorrect packet; please resend.
+	'NACK2': b'\xa2',       # Incorrect packet; please resend.
+	'NACK3': b'\xc3',       # Incorrect packet; please resend.
+	'ACK0': b'\xc4',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	'ACK1': b'\xa5',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	'ACK2': b'\x96',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	'ACK3': b'\xf7',        # Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	'STALL0': b'\x88',      # Packet properly received, but not accepted; don't resend packet unmodified.
+	'STALL1': b'\xe9',      # Packet properly received, but not accepted; don't resend packet unmodified.
+	'STALL2': b'\xda',      # Packet properly received, but not accepted; don't resend packet unmodified.
+	'STALL3': b'\xbb',      # Packet properly received, but not accepted; don't resend packet unmodified.
+	'ID': b'\xbc',          # Request/reply printer ID code.
+	'DEBUG': b'\xdd',       # Debug message; a nul-terminated message follows (no checksum; no resend).
+	'STARTUP': b'\xee',     # Starting up.
+	'STALLACK': b'\x8f'     # Clear stall.
 	}
 
 command = {

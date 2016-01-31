@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 # vim: set foldmethod=marker fileencoding=utf8 :
 # driver.py - high level driver implementation for Franklin
 # Copyright 2014 Michigan Technological University
@@ -19,7 +19,6 @@
 
 show_own_debug = False
 #show_own_debug = True
-show_firmware_debug = True
 
 # Constants {{{
 C0 = 273.15	# Conversion between K and °C
@@ -79,7 +78,7 @@ fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 
 def dprint(x, data): # {{{
 	if show_own_debug:
-		log('%s: %s' %(x, ' '.join(['%02x' % ord(c) for c in data])))
+		log('%s: %s' % (x, ' '.join(['%02x' % c for c in data])))
 # }}}
 
 # Decorator for functions which block.
@@ -98,7 +97,7 @@ class Driver: # {{{
 	def __init__(self, port, run_id):
 		self.driver = subprocess.Popen((config['cdriver'], port, run_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		fcntl.fcntl(self.driver.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
-		self.buffer = ''
+		self.buffer = b''
 	def available(self):
 		return len(self.buffer) > 0
 	def write(self, data):
@@ -106,20 +105,20 @@ class Driver: # {{{
 		self.driver.stdin.flush()
 	def read(self, length):
 		while True:
-			try:
-				r = self.driver.stdout.read()
-			except IOError:
-				r = self.buffer[:length]
-				self.buffer = self.buffer[length:]
-				return r
-			if r == '':
-				log('EOF!')
-				self.close()
-			self.buffer += r
 			if len(self.buffer) >= length:
 				ret = self.buffer[:length]
 				self.buffer = self.buffer[length:]
 				return ret
+			try:
+				r = os.read(self.driver.stdout.fileno(), 4096)
+			except BlockingIOError:
+				r = self.buffer[:length]
+				self.buffer = self.buffer[length:]
+				return r
+			if r == b'':
+				log('EOF!')
+				self.close()
+			self.buffer += r
 	def close(self):
 		log('Closing printer driver; exiting.')
 		sys.exit(0)
@@ -258,18 +257,16 @@ class Printer: # {{{
 		if port != '-' and not port.startswith('!'):
 			self._send_packet(struct.pack('=B', protocol.command['GET_UUID']))
 			cmd, s, m, f, e, uuid = self._get_reply()
-			uuid = map(ord, uuid)
 			if (uuid[7] & 0xf0) != 0x40 or (uuid[9] & 0xc0) != 0x80:
 				# Broken uuid; create a new one and set it.
-				log(repr(uuid))
 				uuid = [random.randrange(256) for i in range(16)]
 				uuid[7] &= 0x0f
 				uuid[7] |= 0x40
 				uuid[9] &= 0x3f
 				uuid[9] |= 0x80
 				log('new uuid: ' + repr(uuid))
-				self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + ''.join(map(chr, uuid)))
-			uuid = ''.join(map(lambda x: '%02x' % x, uuid[:16]))
+				self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + b''.join(uuid))
+			uuid = ''.join('%02x' % x for x in uuid[:16])
 			self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
 			assert cmd == protocol.rcommand['UUID']
 		else:
@@ -331,7 +328,7 @@ class Printer: # {{{
 	# }}}
 	# Constants.  {{{
 	# Single-byte commands.
-	single = {'OK': '\xb3', 'WAIT': '\xad' }
+	single = {'OK': b'\xb3', 'WAIT': b'\xad' }
 	# }}}
 	def _broadcast(self, *a): # {{{
 		self._send(None, 'broadcast', *a)
@@ -357,7 +354,7 @@ class Printer: # {{{
 				id, func, a, ka = json.loads(ln)
 				if func == 'reconnect':
 					log('reconnect %s' % a[1])
-					self._send_packet(chr(protocol.command['RECONNECT']) + a[1] + '\x00')
+					self._send_packet(bytes((protocol.command['RECONNECT'],)) + a[1].encode('utf-8') + b'\x00')
 					self.command_buffer = waiting_commands + self.command_buffer
 					self._send(id, 'return', None)
 					return
@@ -384,7 +381,7 @@ class Printer: # {{{
 				sys.exit(0)
 	# }}}
 	def _printer_write(self, data): # {{{
-		#log('writing %s' % ' '.join(['%02x' % ord(x) for x in data]))
+		#log('writing %s' % ' '.join(['%02x' % x for x in data]))
 		while True:
 			try:
 				self.printer.write(data)
@@ -401,6 +398,7 @@ class Printer: # {{{
 			sys.exit(0)
 		self.command_buffer += data
 		die = None
+		#log('cmd buf %s' % repr(self.command_buffer))
 		while '\n' in self.command_buffer:
 			pos = self.command_buffer.index('\n')
 			id, func, a, ka = json.loads(self.command_buffer[:pos])
@@ -462,7 +460,7 @@ class Printer: # {{{
 			if len(self.printer_buffer) == 0:
 				r = self._printer_read(1)
 				dprint('(1) read', r)
-				if r == '':
+				if r == b'':
 					return ('no data', None)
 				if r == self.single['WAIT']:
 					return ('wait', None)
@@ -470,7 +468,7 @@ class Printer: # {{{
 					return ('ok', None)
 				# Regular packet.
 				self.printer_buffer = r
-			packet_len = ord(self.printer_buffer[0])
+			packet_len = self.printer_buffer[0]
 			while True:
 				r = self._printer_read(packet_len - len(self.printer_buffer))
 				dprint('rest of packet read', r)
@@ -559,7 +557,7 @@ class Printer: # {{{
 				continue
 			elif cmd == protocol.rcommand['PARKWAIT']:
 				def cb():
-					self._send_packet(chr(protocol.command['RESUME']))
+					self._send_packet(bytes((protocol.command['RESUME'],)))
 				call_queue.append((self.park(cb = cb, abort = False)[1], (None,)))
 				continue
 			elif cmd == protocol.rcommand['FILE_DONE']:
@@ -574,7 +572,7 @@ class Printer: # {{{
 			raise AssertionError('Received unexpected reply packet')
 	# }}}
 	def _send_packet(self, data, move = False): # {{{
-		data = chr(len(data) + 1) + data
+		data = bytes((len(data) + 1,)) + data
 		dprint('(1) writing', data);
 		self._printer_write(data)
 		if not move:
@@ -688,7 +686,7 @@ class Printer: # {{{
 			ng = len(self.gpios)
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
-		data = struct.pack('=BBHHHHHhhhdddBddd?', nt, ng, self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.max_deviation, self.max_v, self.current_extruder, self.targetx, self.targety, self.zoffset, self.store_adc)
+		data = struct.pack('=BBHHHHHhhhdddBddd?', nt, ng, self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, int(self.timeout), self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.max_deviation, self.max_v, self.current_extruder, self.targetx, self.targety, self.zoffset, self.store_adc)
 		self._send_packet(struct.pack('=B', protocol.command['WRITE_GLOBALS']) + data)
 		self._read_globals(update = True)
 		if update:
@@ -850,7 +848,7 @@ class Printer: # {{{
 	# }}}
 	def _unpause(self): # {{{
 		if self.gcode_file:
-			self._send_packet(chr(protocol.command['RESUME']))	# Just in case.
+			self._send_packet(bytes((protocol.command['RESUME'],)))	# Just in case.
 		if self.queue_info is None:
 			return
 		log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
@@ -893,7 +891,7 @@ class Printer: # {{{
 		rate = wav.getframerate()
 		channels = wav.getnchannels()
 		self._broadcast(None, 'blocked', 'Parsing audio')
-		data = [ord(x) for x in wav.readframes(wav.getnframes())]
+		data = wav.readframes(wav.getnframes())
 		# Data is 16 bit signed ints per channel, but it is read as bytes.  First convert it to 16 bit numbers.
 		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2 * channels], data[1::2 * channels])]
 		bit = 0
@@ -905,12 +903,12 @@ class Printer: # {{{
 					byte |= 1 << bit
 				bit += 1
 				if bit >= 8:
-					dst.write(chr(byte))
+					dst.write(bytes((byte,)))
 					byte = 0
 					bit = 0
 		self.audioqueue[os.path.splitext(name)[0]] = wav.getnframes()
 		self._broadcast(None, 'blocked', '')
-		self._broadcast(None, 'audioqueue', self.audioqueue.keys())
+		self._broadcast(None, 'audioqueue', list(self.audioqueue.keys()))
 		return ''
 	# }}}
 	def _do_queue(self): # {{{
@@ -992,7 +990,7 @@ class Printer: # {{{
 				a0 += len(sp.axis)
 			targets = [0] * (((2 + a0 - 1) >> 3) + 1)
 			axes = a
-			args = ''
+			args = b''
 			# Set defaults for feedrates.
 			if v0 is not None:
 				assert f0 is None
@@ -1022,15 +1020,15 @@ class Printer: # {{{
 				args += struct.pack('=d', axes[axis])
 				#log('axis %d: %f' %(axis, axes[axis]))
 			if probe:
-				p = chr(protocol.command['PROBE'])
+				p = bytes((protocol.command['PROBE'],))
 			elif single:
-				p = chr(protocol.command['SINGLE'])
+				p = bytes((protocol.command['SINGLE'],))
 			else:
-				p = chr(protocol.command['LINE'])
+				p = bytes((protocol.command['LINE'],))
 			#log('movewait +1 -> %d' % self.movewait)
 			self.movewait += 1
 			#log('queueing %s' % repr((axes, f0, f1, self.flushing)))
-			self._send_packet(p + ''.join([chr(t) for t in targets]) + args, move = True)
+			self._send_packet(p + bytes(targets) + args, move = True)
 			if self.flushing is None:
 				self.flushing = False
 		#log('queue done %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
@@ -1121,7 +1119,7 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("0 t %s" % (self.home_target))
-				k = list(self.home_target.keys())[0]
+				k = tuple(self.home_target.keys())[0]
 				dist = abs(self.home_target[k] - self.spaces[k[0]].get_current_pos(k[1]))
 				if dist > 0:
 					self.line(mktarget(), f0 = home_v / dist, force = True, single = True)
@@ -1139,22 +1137,22 @@ class Printer: # {{{
 				self.home_order = min(n)
 				return self._do_home()
 			# Move away slowly.
-			data = ''
+			data = b''
 			num = 0
 			for s, spc in enumerate(self.spaces):
 				for m in spc.motor:
 					if self._pin_valid(m['limit_max_pin']):
-						data += '\xff'
+						data += b'\xff'
 						num += 1
 					elif self._pin_valid(m['limit_min_pin']):
-						data += '\x01'
+						data += b'\x01'
 						num += 1
 					else:
-						data += '\x00'
+						data += b'\x00'
 			self.home_phase = 3
 			if num > 0:
 				dprint('homing', data)
-				self._send_packet(chr(protocol.command['HOME']) + data)
+				self._send_packet(bytes((protocol.command['HOME'],)) + data)
 				return
 			# Fall through.
 		if self.home_phase == 3:
@@ -1316,7 +1314,6 @@ class Printer: # {{{
 			# Goto x,y
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 1, good)
 			self.movecb.append(self.probe_cb)
-			#log(repr(self.movecb))
 			px = p[0][0] + p[0][2] * x / p[1][0]
 			py = p[0][1] + p[0][3] * y / p[1][1]
 			self.line([[self.targetx + px * self.gcode_angle[1] - py * self.gcode_angle[0], self.targety + py * self.gcode_angle[1] + px * self.gcode_angle[0]]])
@@ -1455,7 +1452,7 @@ class Printer: # {{{
 			elif type == protocol.parsed['ARC']:
 				pass	# TODO: add time+dist.
 			return nums + time_dist
-		with fhs.write_spool(os.path.join(self.uuid, 'gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin')) as dst:
+		with fhs.write_spool(os.path.join(self.uuid, 'gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin'), text = False) as dst:
 			def add_record(type, nums = None, force = False):
 				if nums is None:
 					nums = []
@@ -1743,7 +1740,7 @@ class Printer: # {{{
 							estep = 0
 						center = [None] * 3
 						for axis in range(3):
-							value = components[chr(ord('X') + axis)]
+							value = components[chr(b'X'[0] + axis)]
 							if value is not None:
 								if rel:
 									pos[0][axis] += value * unit
@@ -1751,7 +1748,7 @@ class Printer: # {{{
 									pos[0][axis] = value * unit
 								if axis == 2:
 									z = pos[0][2]
-							value = components[chr(ord('I') + axis)]
+							value = components[chr(b'I'[0] + axis)]
 							if value is not None:
 								center[axis] = oldpos[0][axis] + value
 							else:
@@ -1815,9 +1812,10 @@ class Printer: # {{{
 			stringmap = []
 			size = 0
 			for s in strings:
-				stringmap.append(len(s))
-				dst.write(s)
-				size += len(s)
+				us = s.encode('utf-8')
+				stringmap.append(len(us))
+				dst.write(us)
+				size += len(us)
 			for s in stringmap:
 				dst.write(struct.pack('=L', s))
 			ret = bbox
@@ -1926,11 +1924,11 @@ class Printer: # {{{
 			return data
 		def write_axis(self, axis):
 			if self.id == 0:
-				return struct.pack('=dBdd', self.axis[axis]['park'], self.axis[axis]['park_order'], self.axis[axis]['min'], self.axis[axis]['max'])
+				return struct.pack('=dBdd', self.axis[axis]['park'], int(self.axis[axis]['park_order']), self.axis[axis]['min'], self.axis[axis]['max'])
 			else:
 				return struct.pack('=dBdd', float('nan'), 0, float('-inf'), float('inf'))
 		def write_motor(self, motor):
-			return struct.pack('=HHHHHddddB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], self.motor[motor]['home_order'])
+			return struct.pack('=HHHHHddddB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], int(self.motor[motor]['home_order']))
 		def set_current_pos(self, axis, pos):
 			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
 			self.printer._send_packet(struct.pack('=BBBd', protocol.command['SETPOS'], self.id, axis, pos))
@@ -2300,7 +2298,7 @@ class Printer: # {{{
 				#log('resuming')
 				self.resuming = True
 			#log('sending resume')
-			self._send_packet(chr(protocol.command['RESUME']))
+			self._send_packet(bytes((protocol.command['RESUME'],)))
 			self._do_queue()
 		else:
 			#log('pausing')
@@ -2424,7 +2422,7 @@ class Printer: # {{{
 		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
 		os.unlink(filename)
 		del self.audioqueue[name]
-		self._broadcast(None, 'audioqueue', self.audioqueue.keys())
+		self._broadcast(None, 'audioqueue', tuple(self.audioqueue.keys()))
 	# }}}
 	def audio_list(self): # {{{
 		return self.audioqueue
@@ -2499,8 +2497,8 @@ class Printer: # {{{
 		message += 'unit_name=%s\r\n' % self.unit_name
 		message += 'spi_setup=%s\r\n' % self._mangle_spi()
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin')])
-		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print')])
-		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_safe_dist', 'timeout', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v')])
+		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'timeout')])
+		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_safe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v')])
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings()
 		for i, t in enumerate(self.temps):
@@ -2595,7 +2593,7 @@ class Printer: # {{{
 				value = self._unmangle_spi(value)
 			elif key.endswith('pin'):
 				value = read_pin(value)
-			elif key.startswith('num') or section == 'follower':
+			elif key.startswith('num') or section == 'follower' or key.endswith('_id'):
 				value = int(value)
 			else:
 				value = float(value)
@@ -2734,7 +2732,7 @@ class Printer: # {{{
 				if not success:
 					self._print_done(False, 'aborted by failed confirmation')
 				else:
-					self._send_packet(chr(protocol.command['RESUME']))
+					self._send_packet(bytes((protocol.command['RESUME'],)))
 		return True
 	# }}}
 	def queue_add(self, data, name): # {{{
@@ -2761,7 +2759,7 @@ class Printer: # {{{
 		if audio:
 			filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
 			del self.audioqueue[name]
-			self._broadcast(None, 'audioqueue', self.audioqueue.keys())
+			self._broadcast(None, 'audioqueue', tuple(self.audioqueue.keys()))
 		else:
 			filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', name + os.extsep + 'bin'), opened = False)
 			del self.jobqueue[name]
@@ -2842,7 +2840,7 @@ class Printer: # {{{
 		'''Return all settings about a machine.
 		'''
 		self.initialized = True
-		self._broadcast(target, 'new_printer', [self.uuid, self.queue_length, self.pin_names])
+		self._broadcast(target, 'new_printer', [self.uuid, self.queue_length, [(x[0], x[1:].decode('utf-8')) for x in self.pin_names]])
 		self._globals_update(target)
 		for i, s in enumerate(self.spaces):
 			self._space_update(i, target)
@@ -2851,7 +2849,7 @@ class Printer: # {{{
 		for i, g in enumerate(self.gpios):
 			self._gpio_update(i, target)
 		self._broadcast(target, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
-		self._broadcast(target, 'audioqueue', self.audioqueue.keys())
+		self._broadcast(target, 'audioqueue', tuple(self.audioqueue.keys()))
 		if self.confirmer is not None:
 			self._broadcast(target, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
@@ -2876,10 +2874,10 @@ class Printer: # {{{
 			self.spi_setup = self._unmangle_spi(ka.pop('spi_setup'))
 			if self.spi_setup:
 				self._spi_send(self.spi_setup)
-		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print'):
+		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'timeout'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
-		for key in ('probe_dist', 'probe_safe_dist', 'timeout', 'feedrate', 'targetx', 'targety', 'zoffset', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v'):
+		for key in ('probe_dist', 'probe_safe_dist', 'feedrate', 'targetx', 'targety', 'zoffset', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v'):
 			if key in ka:
 				setattr(self, key, float(ka.pop(key)))
 		self._write_globals(nt, ng, update = update)
@@ -2896,7 +2894,7 @@ class Printer: # {{{
 	# }}}
 	# Space {{{
 	def get_axis_pos(self, space, axis = None): # {{{
-		if space >= len(self.spaces) or axis >= len(self.spaces[space].axis):
+		if space >= len(self.spaces) or (axis is not None and axis >= len(self.spaces[space].axis)):
 			log('request for invalid axis position %d %d' % (space, axis))
 			return float('nan')
 		if axis is None:
@@ -2905,7 +2903,7 @@ class Printer: # {{{
 			return self.spaces[space].get_current_pos(axis)
 	# }}}
 	def set_axis_pos(self, space, axis, pos): # {{{
-		if space >= len(self.spaces) or axis >= len(self.spaces[space].axis):
+		if space >= len(self.spaces) or (axis is not None and axis >= len(self.spaces[space].axis)):
 			log('request to set invalid axis position %d %d' % (space, axis))
 			return False
 		return self.spaces[space].set_current_pos(axis, pos)
@@ -3012,7 +3010,8 @@ class Printer: # {{{
 		if len(ka) != 0:
 			log('invalid input ignored: %s' % repr(ka))
 	# }}}
-	def expert_set_axis(self, (space, axis), readback = True, update = True, **ka): # {{{
+	def expert_set_axis(self, spaceaxis, readback = True, update = True, **ka): # {{{
+		space, axis = spaceaxis
 		if 'name' in ka:
 			self.spaces[space].axis[axis]['name'] = ka.pop('name')
 		if space == 0:
@@ -3030,7 +3029,8 @@ class Printer: # {{{
 				self._space_update(space)
 		assert len(ka) == 0
 	# }}}
-	def expert_set_motor(self, (space, motor), readback = True, update = True, **ka): # {{{
+	def expert_set_motor(self, spacemotor, readback = True, update = True, **ka): # {{{
+		space, motor = spacemotor
 		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'limit_v', 'limit_a', 'home_order'):
 			if key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
@@ -3132,7 +3132,6 @@ while True: # {{{
 	fds = [sys.stdin, printer.printer]
 	#log('waiting; movewait = %d' % printer.movewait)
 	found = select.select(fds, [], fds, None)
-	#log(repr(found))
 	if sys.stdin in found[0] or sys.stdin in found[2]:
 		#log('command')
 		printer._command_input()

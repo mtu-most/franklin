@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # control.py - USB hotplug handling for Franklin
 # Copyright 2014 Michigan Technological University
 # Author: Bas Wijnen <wijnen@debian.org>

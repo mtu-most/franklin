@@ -81,7 +81,7 @@ static void send_to_host() {
 	{
 		debug("**** host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->s, r->m, r->e, r->f, r->len);
 		for (uint8_t i = 0; i < r->len; ++i)
-			fprintf(stderr, " %02x", reinterpret_cast <char *>(r)[sizeof(Queuerecord) + i]);
+			fprintf(stderr, " %02x", reinterpret_cast <unsigned char *>(r)[sizeof(Queuerecord) + i]);
 		fprintf(stderr, "\n");
 	}
 #endif

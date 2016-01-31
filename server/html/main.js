@@ -1224,8 +1224,8 @@ function update_state(state) { // {{{
 function pinrange(type) { // {{{
 	var ret = [];
 	for (var i = 0; i < printer.pin_names.length; ++i) {
-		if (printer.pin_names[i].charCodeAt(0) & type) {
-			var node = Create('option').AddText(printer.pin_names[i]);
+		if (printer.pin_names[i][0] & type) {
+			var node = Create('option').AddText(printer.pin_names[i][1]);
 			node.value = String(i);
 			ret.push(node);
 		}
