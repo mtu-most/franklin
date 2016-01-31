@@ -552,7 +552,7 @@ class Port: # {{{
 	# }}}
 	def printer_input(self, fd, cond): # {{{
 		line = self.process.stdout.readline()
-		if line == '':
+		if line == b'':
 			log('%s died.' % self.name)
 			self.process.communicate()	# Clean up the zombie.
 			for t in range(3):
@@ -573,7 +573,7 @@ class Port: # {{{
 				# This for loop always runs 0 or 1 times, never more.
 				log('killing duplicate orphan')
 				orphans[o].call('die', ('admin', 'replaced by connection with same uuid',), {}, lambda success, ret: None)
-				del orphans[x]
+				del orphans[o]
 			orphans[self.run_id] = self
 			Connection._broadcast(None, 'del_printer', port)
 			if autodetect:
