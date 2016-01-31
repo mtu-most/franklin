@@ -63,7 +63,7 @@ void setup(char const *port, char const *run_id)
 	current_fragment = running_fragment;
 	current_fragment_pos = 0;
 	num_active_motors = 0;
-	hwtime_step = 10000;
+	hwtime_step = 10000; // Note: When changing this, also change max in cdriver/space.cpp
 	audio_hwtime_step = 1;	// This is set by audio file.
 	feedrate = 1;
 	max_deviation = 0;

@@ -120,7 +120,7 @@ void handle_motors() {
 		if (homers > 0)
 			current_sample = 0;	// Use only the first sample for homing.
 		uint8_t new_state = homers > 0 || (settings[cf].flags & Settings::PROBING) ? 2 : 3;
-		//debug("step_state non 0 %d (fragment %d)", new_state, cf);
+		//debug("step_state non zero %d (fragment %d)", new_state, cf);
 		step_state = new_state;
 	}
 }

@@ -41,14 +41,14 @@
 // Enable all the parts for a serial connection (which can fail) to the printer.
 #define SERIAL
 #define ADCBITS 10
-#define DATA_TYPE char
+#define DATA_TYPE int16_t
 #define ARCH_MOTOR DATA_TYPE *avr_data;
 #define ARCH_SPACE
-#define ARCH_NEW_MOTOR(s, m, base) base[m]->avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT]
+#define ARCH_NEW_MOTOR(s, m, base) base[m]->avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT / sizeof(DATA_TYPE)]
 #define DATA_DELETE(s, m) delete[] (spaces[s].motor[m]->avr_data)
 #define DATA_CLEAR(s, m) memset((spaces[s].motor[m]->avr_data), 0, BYTES_PER_FRAGMENT)
 #define DATA_SET(s, m, v) spaces[s].motor[m]->avr_data[current_fragment_pos] = v;
-#define SAMPLES_PER_FRAGMENT BYTES_PER_FRAGMENT
+#define SAMPLES_PER_FRAGMENT (BYTES_PER_FRAGMENT / sizeof(DATA_TYPE))
 
 #else
 
@@ -1069,7 +1069,7 @@ bool arch_send_fragment() {
 		return false;
 	avr_buffer[0] = settings.probing ? HWC_START_PROBE : HWC_START_MOVE;
 	//debug("send fragment %d %d %d", current_fragment_pos, current_fragment, num_active_motors);
-	avr_buffer[1] = current_fragment_pos;
+	avr_buffer[1] = current_fragment_pos * 2;
 	avr_buffer[2] = num_active_motors;
 	sending_fragment = num_active_motors + 1;
 	if (prepare_packet(avr_buffer, 3)) {
@@ -1093,9 +1093,12 @@ bool arch_send_fragment() {
 					break;
 				avr_buffer[0] = settings.single ? HWC_MOVE_SINGLE : HWC_MOVE;
 				avr_buffer[1] = mi + m;
-				for (int i = 0; i < cfp; ++i)
-					avr_buffer[2 + i] = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->avr_data[i];
-				if (prepare_packet(avr_buffer, 2 + cfp)) {
+				for (int i = 0; i < cfp; ++i) {
+					int value = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->avr_data[i];
+					avr_buffer[2 + 2 * i] = value & 0xff;
+					avr_buffer[2 + 2 * i + 1] = (value >> 8) & 0xff;
+				}
+				if (prepare_packet(avr_buffer, 2 + 2 * cfp)) {
 					avr_cb = &avr_sent_fragment;
 					avr_send();
 				}

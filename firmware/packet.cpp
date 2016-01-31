@@ -305,16 +305,29 @@ void packet()
 			return;
 		}
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			if (command(5 + m) == 1 || int8_t(command(5 + m)) == -1) {
+			if (command(5 + m) == 1) {
 				// Fill both sample 0 and 1, because the interrupt handler may change current_sample at any time.
-				buffer[current_fragment][m][0] = command(5 + m);
-				buffer[current_fragment][m][1] = command(5 + m);
+				buffer[current_fragment][m][0] = 1;
+				buffer[current_fragment][m][1] = 0;
+				buffer[current_fragment][m][2] = 1;
+				buffer[current_fragment][m][3] = 0;
+				homers += 1;
+				motor[m].intflags |= Motor::ACTIVE;
+				motor[m].steps_current = 0;
+			}
+			else if (int8_t(command(5 + m)) == -1) {
+				// Fill both sample 0 and 1, because the interrupt handler may change current_sample at any time.
+				buffer[current_fragment][m][0] = 0xff;
+				buffer[current_fragment][m][1] = 0xff;
+				buffer[current_fragment][m][2] = 0xff;
+				buffer[current_fragment][m][3] = 0xff;
 				homers += 1;
 				motor[m].intflags |= Motor::ACTIVE;
 				motor[m].steps_current = 0;
 			}
 			else if (command(5 + m) == 0) {
 				buffer[current_fragment][m][0] = 0x80;
+				buffer[current_fragment][m][1] = 0;
 				motor[m].intflags &= ~Motor::ACTIVE;
 			}
 			else {
@@ -327,7 +340,7 @@ void packet()
 		if (homers > 0) {
 			home_step_time = read_32(1);
 			// current_sample is always 0 while homing; set len to 2, so it doesn't go to the next fragment.
-			settings[current_fragment].len = 2;
+			settings[current_fragment].len = 4;
 			current_len = settings[current_fragment].len;
 			//debug("home no probe %d", current_fragment);
 			settings[current_fragment].flags &= ~Settings::PROBING;

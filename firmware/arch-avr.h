@@ -22,6 +22,7 @@
 #define _ARCH_AVR_H
 
 // Defines and includes.  {{{
+// Note: When changing this, also change max in cdriver/space.cpp
 #ifdef FAST_ISR
 #define TIME_PER_ISR 75
 #else
@@ -634,6 +635,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"push 19"			"\n"
 		"\t"	"push 20"			"\n"
 		"\t"	"push 21"			"\n"
+		"\t"	"push 24"			"\n"
+		"\t"	"push 25"			"\n"
 		"\t"	"push 26"			"\n"
 		"\t"	"push 28"			"\n"
 		"\t"	"push 29"			"\n"
@@ -676,8 +679,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"rjmp isr_action_continue"	"\n"
 		// }}}
 		// Load value.
-		"\t"	"ld 18, z"			"\n"
-		"\t"	"mov 19, 18"			"\n"
+		"\t"	"ld 24, z"			"\n"
+		"\t"	"ldd 25, z + 1"			"\n"
 		// Load dir data. >26+27(dir port) >0(bitmask) >21(current value) <20(flags) {{{
 		"\t"	"ldd 26, y + %[dir_port]"	"\n"
 		"\t"	"ldd 27, y + %[dir_port] + 1"	"\n"	// r27 can be non-zero from here.
@@ -685,32 +688,55 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"ld 21, x"			"\n"	// 1 is current port value.
 		// }}}
 		// positive ? set dir : reset dir (don't send yet) <18(numsteps) <0(dir bitmask) <21(current value) >21(new value) >19(abs numsteps) {{{
-		"\t"	"tst 18"			"\n"	// Test sample sign.
+		"\t"	"tst 25"			"\n"	// Test sample sign.
 		"\t"	"brmi 1f"			"\n"
 		"\t"	"or 21, 0"			"\n"
+		"\t"	"clt"				"\n"
 		"\t"	"rjmp 2f"			"\n"
 	"1:\t"		"com 0"				"\n"
 		"\t"	"and 21, 0"			"\n"
-		"\t"	"neg 19"			"\n"
+		"\t"	"com 24"			"\n"
+		"\t"	"com 25"			"\n"
+		"\t"	"adiw 24, 1"			"\n"
+		"\t"	"set"				"\n"
 	"2:\t"						"\n"
 		// }}}
 
-		/* Compute steps.  <19(abs numsteps) <17(move_phase) <y(motor) >0(steps) X1 {{{ */
+		/* Compute steps.  <24+25(abs numsteps) <17(move_phase) <y(motor) >0(steps) X1 {{{ */
 		/* steps target = b.sample * move_phase / full_phase - m.steps_current; */
-		"\t"	"mul 19, 17"			"\n"
+		"\t"	"mul 24, 17"			"\n"
 		"\t"	"lds 19, full_phase_bits"	"\n"
+		"\t"	"mov 18, 19"			"\n"
 		"\t"	"tst 19"			"\n"
 		"\t"	"rjmp 2f"			"\n"
 	"1:\t"		"lsr 1"				"\n"
 		"\t"	"ror 0"				"\n"
 		"\t"	"dec 19"			"\n"
 	"2:\t"		"brne 1b"			"\n"
-		"\t"	"ldd 19, y + %[steps_current]"	"\n"
-		"\t"	"std y + %[steps_current], 0"	"\n" /* motor[m].steps_current += steps_target; */
-		"\t"	"sub 0, 19"			"\n"
+		"\t"	"mov 19, 0"			"\n"
+
+		"\t"	"mul 25, 17"			"\n"
+		"\t"	"subi 18, 8"			"\n"
+		"\t"	"neg 18"			"\n"
+		"\t"	"rjmp 2f"			"\n"
+		// High byte of steps target must be 0; ignore it instead of updating it.
+	"1:\t"		"lsl 0"				"\n"
+		//"\t"	"rol 1"				"\n"
+		"\t"	"dec 18"			"\n"
+	"2:\t"		"brne 1b"			"\n"
+		"\t"	"add 0, 19"			"\n"
+		//"\t"	"clr 27"			"\n"
+		//"\t"	"adc 1, 27"			"\n"
+
+		"\t"	"ldd 24, y + %[steps_current]"	"\n"
+		//"\t"	"ldd 25, y + %[steps_current] + 1"	// Note that this would not work; steps_current is a 1-byte field.
+		"\t"	"std y + %[steps_current], 0"	"\n"	// motor[m].steps_current += steps_target;
+		//"\t"	"std y + %[steps_current] + 1, 1"
+		"\t"	"sub 0, 24"			"\n"
+		//"\t"	"sbc 1, 25"			"\n"
 		/* If no steps: continue. */
 		"\t"	"brne 1f"			"\n"
-		"\t"	"clr 27"			"\n"	/* We jump into the zone where r27 is expected to be 0. */
+		"\t"	"clr 27"			"\n"
 		"\t"	"rjmp isr_action_continue"	"\n"
 	"1:\t"						"\n"
 		// }}}
@@ -720,8 +746,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 
 		//motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
 		"\t"	"ldd 19, y + %[current_pos]"		"\n"
-		"\t"	"tst 18"				"\n"
-		"\t"	"brmi 1f"				"\n"
+		"\t"	"brts 1f"				"\n"
 		"\t"	"add 19, 0"				"\n"
 		"\t"	"std y + %[current_pos], 19"		"\n"
 		"\t"	"brcc 2f"				"\n"
@@ -822,7 +847,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"brne 1b"			"\n"
 		// If current_sample + 1 < len: inc and return.
 		"\t"	"lds 16, current_sample"	"\n"
-		"\t"	"inc 16"			"\n"
+		"\t"	"subi 16, 0x100-2"		"\n"
 		"\t"	"lds 17, current_len"		"\n"
 		"\t"	"cp 16, 17"			"\n"
 		"\t"	"brcc 1f"			"\n"
@@ -892,6 +917,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"pop 29"			"\n"
 		"\t"	"pop 28"			"\n"
 		"\t"	"pop 26"			"\n"
+		"\t"	"pop 25"			"\n"
+		"\t"	"pop 24"			"\n"
 		"\t"	"pop 21"			"\n"
 		"\t"	"pop 20"			"\n"
 		"\t"	"pop 19"			"\n"
