@@ -409,7 +409,7 @@ class Connection: # {{{
 		def output(fd, cond):
 			d = ''
 			try:
-				d = process.stdout.read()
+				d = process.stdout.read().decode('utf-8')
 			except:
 				data[0] += '\nError writing %s firmware: ' % board + traceback.format_exc()
 				log(repr(data[0]))
