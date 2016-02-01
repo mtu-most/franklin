@@ -1485,6 +1485,17 @@ class Printer: # {{{
 					if len(pending) == 3:
 						# If the points are not on a circle with equal angles, or the angle is too large, push pending[1] through to output.
 						# Otherwise, record settings.
+						def center(a, b, c):
+							tb = ((b[0] - c[0]) * (c[0] - a[0]) / 2 - (b[1] - c[1]) * (c[1] - a[1]) / 2) / ((b[0] - a[0]) * (c[1] - a[1]) - (b[0] - c[0]) * (c[0] - a[0]))
+							ctr = (b[0] - a[0] / 2 + tb * (b[1] - a[1]), b[1] - a[1] / 2 + tb * (b[0] - a[0])) 
+							r = ((a[0] - ctr[0]) ** 2 + (a[1] - ctr[1]) ** 2) ** .5
+							diff = 0
+							for o in b, c:
+								mid = (o[0] - a[0] / 2, o[1] - a[1] / 2)
+								d = ((mid[0] - ctr[0]) ** 2 + (mid[1] - ctr[1]) ** 2) ** .5
+								if abs(d - r) > diff:
+									diff = abs(d - r)
+							return (ctr, r, diff)
 						#TODO
 						#d12 = (pending[1][1] - pending[0][1]) ** 2 + (pending[1][2] - pending[0][2]) ** 2
 						#d22 = (pending[2][1] - pending[1][1]) ** 2 + (pending[2][2] - pending[1][2]) ** 2
