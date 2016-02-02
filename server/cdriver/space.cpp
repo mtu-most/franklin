@@ -610,6 +610,8 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				if (!did_steps) {
 					//debug("done move");
 					computing_move = false;
+					// Cut off final sample, which was no steps anyway.
+					current_fragment_pos -= 1;
 				}
 				for (int s = 0; s < NUM_SPACES; ++s) {
 					Space &sp = spaces[s];
@@ -838,7 +840,8 @@ void send_fragment() { // {{{
 
 void apply_tick() { // {{{
 	settings.hwtime += hwtime_step;
-	handle_motors(settings.hwtime);
+	if (current_fragment_pos < SAMPLES_PER_FRAGMENT)
+		handle_motors(settings.hwtime);
 	//if (spaces[0].num_axes >= 2)
 		//debug("move z %d %d %f %f %f", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings.current, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 } // }}}

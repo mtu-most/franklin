@@ -328,10 +328,12 @@ void avr_get_current_pos(int offset, bool check) {
 bool hwpacket(int len) {
 	// Handle data in command[1].
 #if 0
-	fprintf(stderr, "packet received:");
-	for (uint8_t i = 0; i < len; ++i)
-		fprintf(stderr, " %02x", command[1][i]);
-	fprintf(stderr, "\n");
+	if (command[1][0] != HWC_ADC) {
+		fprintf(stderr, "packet received:");
+		for (uint8_t i = 0; i < len; ++i)
+			fprintf(stderr, " %02x", command[1][i]);
+		fprintf(stderr, "\n");
+	}
 #endif
 	switch (command[1][0]) {
 	case HWC_LIMIT:
@@ -343,7 +345,7 @@ bool hwpacket(int len) {
 		}
 		avr_write_ack("limit");
 		avr_homing = false;
-		abort_move(int8_t(command[1][3]));
+		abort_move(int8_t(command[1][3] / 2));
 		avr_get_current_pos(4, false);
 		if (spaces[0].num_axes > 0)
 			cpdebug(0, 0, "ending hwpos %f", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
@@ -365,11 +367,11 @@ bool hwpacket(int len) {
 			cpdebug(s, m, "limit");
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
-		stopping = 2;
-		send_host(CMD_LIMIT, s, m, pos);
 		cbs_after_current_move = 0;
 		avr_running = false;
-		//debug("free limit");
+		stopping = 2;
+		send_host(CMD_LIMIT, s, m, pos);
+		debug("limit done");
 		return false;
 	}
 	case HWC_PONG:
@@ -398,6 +400,7 @@ bool hwpacket(int len) {
 		if (host_block) {
 			// STOP was sent; ignore UNDERRUN.
 			avr_write_ack("stopped underrun");
+			debug("underrun check2 %d %d %d", sending_fragment, current_fragment, running_fragment);
 			return false;
 		}
 		if (!avr_running) {
@@ -421,6 +424,7 @@ bool hwpacket(int len) {
 					abort_run_file();
 				}
 			}
+			debug("underrun check %d %d %d", sending_fragment, current_fragment, running_fragment);
 		}
 		// Fall through.
 	}
@@ -1028,7 +1032,7 @@ void arch_stop(bool fake) {
 
 void avr_stop2() {
 	if (!avr_stop_fake)
-		abort_move(command[1][2]);
+		abort_move(command[1][2] / 2);
 	avr_get_current_pos(3, false);
 	current_fragment = running_fragment;
 	current_fragment_pos = 0;

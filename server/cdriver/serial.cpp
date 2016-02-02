@@ -239,13 +239,13 @@ void serial(uint8_t channel) {
 						else if (discard_pending) {
 							arch_do_discard();
 						}
-						else if (!sending_fragment && !stopping && arch_running()) {
-							run_file_fill_queue();
-							buffer_refill();
-						}
-						if (!preparing)
-							arch_had_ack();
 					}
+					if (!sending_fragment && !stopping && arch_running()) {
+						run_file_fill_queue();
+						buffer_refill();
+					}
+					if (!preparing)
+						arch_had_ack();
 					continue;
 				case CMD_NACK3:
 					which += 1;

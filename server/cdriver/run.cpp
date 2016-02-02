@@ -1,5 +1,5 @@
 /* run.cpp - parsed gcode execution handling for Franklin
- * Copyright 2014 Michigan Technological University
+ * Copyright 2014-2016 Michigan Technological University
  * Author: Bas Wijnen <wijnen@debian.org>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -257,7 +257,7 @@ void run_file_fill_queue() {
 			&& !run_file_wait	// We are not waiting for something else (pause or confirm).
 			&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
 		int t = run_file_map[settings.run_file_current].type;
-		if (t != RUN_LINE && t != RUN_PRE_ARC && t != RUN_ARC && (arch_running() || settings.queue_end != settings.queue_start || computing_move))
+		if (t != RUN_LINE && t != RUN_PRE_LINE && t != RUN_PRE_ARC && t != RUN_ARC && (arch_running() || settings.queue_end != settings.queue_start || computing_move))
 			break;
 		Run_Record &r = run_file_map[settings.run_file_current];
 		rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);

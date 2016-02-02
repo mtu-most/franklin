@@ -517,6 +517,7 @@ void abort_move(int pos) { // {{{
 	current_fragment_pos = 0;
 	computing_move = true;
 	while (computing_move && current_fragment_pos < pos) {
+		//debug("abort reconstruct %d %d", current_fragment_pos, pos);
 		apply_tick();
 	}
 	if (spaces[0].num_axes > 0)
