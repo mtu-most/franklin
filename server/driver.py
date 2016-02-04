@@ -266,13 +266,14 @@ class Printer: # {{{
 			cmd, s, m, f, e, uuid = self._get_reply()
 			if (uuid[7] & 0xf0) != 0x40 or (uuid[9] & 0xc0) != 0x80:
 				# Broken uuid; create a new one and set it.
+				log('old uuid: ' + repr(uuid))
 				uuid = [random.randrange(256) for i in range(16)]
 				uuid[7] &= 0x0f
 				uuid[7] |= 0x40
 				uuid[9] &= 0x3f
 				uuid[9] |= 0x80
 				log('new uuid: ' + repr(uuid))
-				self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + b''.join(uuid))
+				self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + bytes(uuid)
 			uuid = ''.join('%02x' % x for x in uuid[:16])
 			self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
 			assert cmd == protocol.rcommand['UUID']
