@@ -250,7 +250,7 @@ void run_file_fill_queue() {
 		return;
 	}
 	while (run_file_map	// There is a file to run.
-		       	&& (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 2	// There is space in the queue.
+			&& (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 4	// There is space in the queue.
 			&& !settings.queue_full	// Really, there is space in the queue.
 			&& settings.run_file_current < run_file_num_records	// There are records to send.
 			&& !run_file_wait_temp	// We are not waiting for a temp alarm.

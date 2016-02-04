@@ -19,6 +19,8 @@
 
 #include "cdriver.h"
 
+//#define DEBUG_PATH
+
 #if 0
 #define loaddebug debug
 #else
@@ -162,9 +164,6 @@ void move_to_current() { // {{{
 		for (int m = 0; m < sp.num_motors; ++m)
 			sp.motor[m]->settings.last_v = 0;
 	}
-#ifdef DEBUG_PATH
-	fprintf(stderr, "\n");
-#endif
 	buffer_refill();
 } // }}}
 
@@ -398,16 +397,6 @@ static void check_distance(Motor *mtr, double distance, double dt, double &facto
 } // }}}
 
 static void move_axes(Space *s, uint32_t current_time, double &factor) { // {{{
-#ifdef DEBUG_PATH
-	fprintf(stderr, "%d\t%d", current_time, s->id);
-	for (int a = 0; a < s->num_axes; ++a) {
-		if (isnan(s->axis[a]->settings.target))
-			fprintf(stderr, "\t%f", s->axis[a]->settings.source);
-		else
-			fprintf(stderr, "\t%f", s->axis[a]->settings.target);
-	}
-	fprintf(stderr, "\n");
-#endif
 	double motors_target[s->num_motors];
 	bool ok = true;
 	space_types[s->type].xyz2motors(s, motors_target, &ok);
@@ -484,6 +473,16 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 	else
 		movedebug("no correct: %f %d", factor, int(settings.start_time));
 	settings.last_time = current_time;
+#ifdef DEBUG_PATH
+	fprintf(stderr, "%d", current_time);
+	for (int a = 0; a < spaces[0].num_axes; ++a) {
+		if (isnan(spaces[0].axis[a]->settings.target))
+			fprintf(stderr, "\t%f", spaces[0].axis[a]->settings.source);
+		else
+			fprintf(stderr, "\t%f", spaces[0].axis[a]->settings.target);
+	}
+	fprintf(stderr, "\n");
+#endif
 	// Move the motors.
 	//debug("start move");
 	for (int s = 0; s < NUM_SPACES; ++s) {
