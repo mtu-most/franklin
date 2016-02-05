@@ -136,6 +136,7 @@ enum Command {
 	CMD_RESUME,
 	CMD_GETTIME,
 	CMD_SPI,
+	CMD_ADJUSTPROBE,	// 3 doubles: probe position.
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_UUID = 0x40,	// 16 byte uuid.
@@ -495,6 +496,7 @@ struct ProbeFile {
 void run_file(int name_len, char const *name, int probe_name_len, char const *probe_name, bool start, double sina, double cosa, int audio);
 void abort_run_file();
 void run_file_fill_queue();
+void run_adjust_probe(double x, double y, double z);
 EXTERN char probe_file_name[256];
 EXTERN off_t probe_file_size;
 EXTERN ProbeFile *probe_file_map;

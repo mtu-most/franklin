@@ -69,6 +69,7 @@ command = {
 	'RESUME': 0x1d,
 	'GETTIME': 0x1e,
 	'SPI': 0x1f,
+	'ADJUSTPROBE': 0x20,
 	}
 
 rcommand = {
@@ -108,7 +109,7 @@ parsed = {
 	'SETPOS': 8,
 	'WAIT': 9,
 	'CONFIRM': 10,
-	'PARK': 11
+	'PARK': 11,
 }
 
 mask = [[0xc0, 0xc3, 0xff, 0x09],

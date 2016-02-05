@@ -1,6 +1,6 @@
 #! /usr/bin/python3
 # vim: set foldmethod=marker fileencoding=utf8 :
-# driver.py - high level driver implementation for Franklin
+# driver.py - high level driver implementation for Franklin {{{
 # Copyright 2014 Michigan Technological University
 # Author: Bas Wijnen <wijnen@debian.org>
 #
@@ -16,6 +16,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# }}}
 
 show_own_debug = False
 #show_own_debug = True
@@ -193,11 +194,13 @@ class Printer: # {{{
 		self.confirmer = None
 		self.position_valid = False
 		self.probing = False
+		self.probe_pending = False
 		self.parking = False
 		self.home_phase = None
 		self.home_target = None
 		self.home_cb = [False, self._do_home]
 		self.probe_cb = [False, None]
+		self.probe_speed = 3.
 		self.gcode_file = False
 		self.gcode_map = None
 		self.gcode_id = None
@@ -273,7 +276,7 @@ class Printer: # {{{
 				uuid[9] &= 0x3f
 				uuid[9] |= 0x80
 				log('new uuid: ' + repr(uuid))
-				self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + bytes(uuid)
+				self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + bytes(uuid))
 			uuid = ''.join('%02x' % x for x in uuid[:16])
 			self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
 			assert cmd == protocol.rcommand['UUID']
@@ -561,6 +564,8 @@ class Printer: # {{{
 				call_queue.append((self._gpio_update, (s,)))
 				continue
 			elif cmd == protocol.rcommand['CONFIRM']:
+				if s:
+					self.probe_pending = True
 				call_queue.append((self.request_confirmation(data.decode('utf-8', 'replace') or 'Continue?')[1], (False,)))
 				continue
 			elif cmd == protocol.rcommand['PARKWAIT']:
@@ -1284,7 +1289,23 @@ class Printer: # {{{
 			return
 		log('Internal error: invalid home phase')
 	# }}}
-	def _do_probe(self, id, x, y, z, angle, speed, phase = 0, good = True): # {{{
+	def _handle_one_probe(self, good): # {{{
+		if good is None:
+			return
+		pos = self.get_axis_pos(0)
+		self._send_packet(struct.pack('=Bddd', protocol.command['ADJUSTPROBE'], pos[0], pos[1], pos[2]))
+		self.probe_cb[1] = lambda good: self.request_confirmation("Continue?")[1](False) if good is not None else None
+		self.movecb.append(self.probe_cb)
+		self.line([{2: self.probe_safe_dist}], relative = True)
+	# }}}
+	def _one_probe(self): # {{{
+		self.probe_cb[1] = self._handle_one_probe
+		self.movecb.append(self.probe_cb)
+		z = self.get_axis_pos(0, 2)
+		z_low = self.spaces[0].axis[2]['min']
+		self.line([{2: z_low}], f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)
+	# }}}
+	def _do_probe(self, id, x, y, z, angle, phase = 0, good = True): # {{{
 		#log('probe %d' % phase)
 		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
 		if good is None:
@@ -1293,11 +1314,11 @@ class Printer: # {{{
 			self.probing = False
 			if id is not None:
 				self._send(id, 'error', 'aborted')
-			self._print_done(False, 'Probe aborted')
+			#self._print_done(False, 'Probe aborted')
 			return
 		self.probing = True
 		if not self.position_valid:
-			self.home(cb = lambda: self._do_probe(id, x, y, z, angle, speed, phase, True), abort = False)[1](None)
+			self.home(cb = lambda: self._do_probe(id, x, y, z, angle, phase, True), abort = False)[1](None)
 			return
 		p = self.probemap
 		if phase == 0:
@@ -1320,18 +1341,18 @@ class Printer: # {{{
 						self._next_job()
 				return
 			# Goto x,y
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 1, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, 1, good)
 			self.movecb.append(self.probe_cb)
 			px = p[0][0] + p[0][2] * x / p[1][0]
 			py = p[0][1] + p[0][3] * y / p[1][1]
 			self.line([[self.targetx + px * self.gcode_angle[1] - py * self.gcode_angle[0], self.targety + py * self.gcode_angle[1] + px * self.gcode_angle[0]]])
 		elif phase == 1:
 			# Probe
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 2, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, 2, good)
 			if self._pin_valid(self.probe_pin):
 				self.movecb.append(self.probe_cb)
 				z_low = self.spaces[0].axis[2]['min']
-				self.line([{2: z_low}], f0 = float(speed) / (z - z_low) if z > z_low else float('inf'), probe = True)
+				self.line([{2: z_low}], f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)
 			else:
 				#log('confirm probe')
 				self.request_confirmation('Please move the tool to the surface')[1](False)
@@ -1359,7 +1380,7 @@ class Printer: # {{{
 						x = p[1][0]
 						y += 1
 			z += self.probe_safe_dist
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, speed, 0, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, 0, good)
 			self.movecb.append(self.probe_cb)
 			# Retract
 			self.line([{2: z}])
@@ -1447,6 +1468,7 @@ class Printer: # {{{
 		pos = [[float('nan') for a in range(6)], [0., 0.], float('inf')]
 		time_dist = [0., 0.]
 		pending = []
+		tool_changed = False
 		def add_timedist(type, nums):
 			if type == protocol.parsed['LINE']:
 				if nums[-2] == float('inf'):
@@ -1649,8 +1671,9 @@ class Printer: # {{{
 						cmd = ('M', 109)
 						args['E'] = -2
 					elif cmd == ('M', 6):
-						# Tool change: park.
+						# Tool change: park and remember to probe.
 						cmd = ('G', 28)
+						tool_changed = True
 					if cmd == ('G', 28):
 						nums = [current_extruder]
 						if len(self.spaces) > 1 and len(self.spaces[1].axis) > current_extruder:
@@ -1783,7 +1806,8 @@ class Printer: # {{{
 						# Set feedrate to units per minute; this is always used, and it shouldn't raise an error.
 						pass
 					elif cmd == ('M', 0):
-						add_record(protocol.parsed['CONFIRM'], [add_string(message)])
+						add_record(protocol.parsed['CONFIRM'], [add_string(message), 1 if tool_changed else 0])
+						tool_changed = False
 					elif cmd == ('M', 3):
 						# Spindle on, clockwise.
 						add_record(protocol.parsed['GPIO'], [-3, 1])
@@ -2110,7 +2134,7 @@ class Printer: # {{{
 		#log('end flush preparation')
 	# }}}
 	@delayed
-	def probe(self, id, area, angle = 0, speed = 3): # {{{
+	def probe(self, id, area, angle = 0, speed = 3.): # {{{
 		'''Run a probing routine.
 		This moves over the given area and probes a grid of points less
 		than max_probe_distance apart.
@@ -2125,7 +2149,8 @@ class Printer: # {{{
 		self.probemap = [area, density, [[[] for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
 		angle = math.radians(angle)
 		self.gcode_angle = math.sin(angle), math.cos(angle)
-		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle, speed)
+		self.probe_speed = speed
+		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle)
 	# }}}
 	def line(self, moves = (), f0 = None, f1 = None, v0 = None, v1 = None, relative = False, probe = False, single = False, force = False): # {{{
 		'''Move the tool in a straight line.
@@ -2749,9 +2774,15 @@ class Printer: # {{{
 				call_queue.append((self.probe_cb[1], [False if success else None]))
 			else:
 				if not success:
+					self.probe_pending = False
 					self._print_done(False, 'aborted by failed confirmation')
 				else:
-					self._send_packet(bytes((protocol.command['RESUME'],)))
+					if self.probe_pending and self._pin_valid(self.probe_pin):
+						self.probe_pending = False
+						call_queue.append((self._one_probe, []))
+					else:
+						self.probe_pending = False
+						self._send_packet(bytes((protocol.command['RESUME'],)))
 		return True
 	# }}}
 	def queue_add(self, data, name): # {{{

@@ -43,6 +43,8 @@ static String *strings;
 
 static Run_Record run_preline;
 
+static double probe_adjust;
+
 void run_file(int name_len, char const *name, int probe_name_len, char const *probename, bool start, double sina, double cosa, int audio) {
 	rundebug("run file %d %f %f", start, sina, cosa);
 	abort_run_file();
@@ -136,6 +138,7 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	run_file_timer.it_interval.tv_nsec = 0;
 	run_file_refx = targetx;
 	run_file_refy = targety;
+	probe_adjust = 0;
 	//debug("run target %f %f", targetx, targety);
 	run_file_sina = sina;
 	run_file_cosa = cosa;
@@ -179,7 +182,7 @@ enum {
 static double handle_probe(double ox, double oy, double z) {
 	ProbeFile *&p = probe_file_map;
 	if (!p)
-		return z;
+		return z + probe_adjust;
 	if (isnan(ox) || isnan(oy) || isnan(z))
 		return NAN;
 	double x = ox * p->cosa + oy * p->sina;
@@ -219,7 +222,7 @@ static double handle_probe(double ox, double oy, double z) {
 	double fy = y - iy;
 	double l = p->sample[iy * (p->nx + 1) + ix] * (1 - fy) + p->sample[(iy + 1) * (p->nx + 1) + ix] * fy;
 	double r = p->sample[iy * (p->nx + 1) + (ix + 1)] * (1 - fy) + p->sample[(iy + 1) * (p->nx + 1) + (ix + 1)] * fy;
-	return z + l * (1 - fx) + r * fx;
+	return z + l * (1 - fx) + r * fx + probe_adjust;
 }
 
 void run_file_fill_queue() {
@@ -437,7 +440,7 @@ void run_file_fill_queue() {
 				int len = min(strings[r.tool].len, 250);
 				memcpy(datastore, &reinterpret_cast<char const *>(run_file_map)[run_file_first_string + strings[r.tool].start], len);
 				run_file_wait += 1;
-				send_host(CMD_CONFIRM, 0, 0, 0, 0, len);
+				send_host(CMD_CONFIRM, r.X ? 1 : 0, 0, 0, 0, len);
 				break;
 			}
 			case RUN_PARK:
@@ -463,4 +466,10 @@ void run_file_fill_queue() {
 	}
 	lock = false;
 	return;
+}
+
+void run_adjust_probe(double x, double y, double z) {
+	probe_adjust = 0;
+	double probe_z = handle_probe(x, y, 0);
+	probe_adjust = z - probe_z;
 }

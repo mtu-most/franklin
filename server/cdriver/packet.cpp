@@ -710,6 +710,18 @@ void packet()
 		arch_send_spi(command[0][2], &command[0][3]);
 		return;
 	}
+	case CMD_ADJUSTPROBE:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_ADJUSTPROBE");
+#endif
+		double pos[3];
+		for (int i = 0; i < 3; ++i) {
+			pos[i] = get_float(2 + i * sizeof(double));
+		}
+		run_adjust_probe(pos[0], pos[1], pos[2]);
+		return;
+	}
 	default:
 	{
 		debug("Invalid command %x %x %x %x", command[0][0], command[0][1], command[0][2], command[0][3]);
