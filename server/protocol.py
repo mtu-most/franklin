@@ -156,5 +156,4 @@ def check(packet):
 			if (check & 1) != 0:
 				log('bad checksum')
 				return False
-	log('good')
 	return True

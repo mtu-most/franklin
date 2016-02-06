@@ -114,6 +114,19 @@ static void command_cancel() {
 			break;
 	}
 }
+
+static void resend(int amount) {
+	// Unless the last packet was already received; in that case ignore the NACK.
+	//debug("nack%d ff %d busy %d", which, ff_out, out_busy);
+	if (out_busy >= amount) {
+		ff_out = (ff_out - amount) & 3;
+		out_busy -= amount;
+		while (amount--) {
+			ff_out = (ff_out + 1) & 3;
+			send_packet();
+		}
+	}
+}
 #endif
 
 // There may be serial data available.
@@ -131,12 +144,12 @@ void serial(uint8_t channel) {
 						command_cancel();
 						last_micros = utm;
 					}
-					if (command_end[channel] > 0)
-						debug("Silence, but handle data first");
+					//debug("Silence, but handle data first");
 				}
 				else {
-					debug("Too much silence (%d - %d = %d); request packet to be sure", utm, last_micros, utm - last_micros);
+					debug("Too much silence; request packet to be sure");
 					write_nack();
+					resend(out_busy);
 					last_micros = utm;
 				}
 			}
@@ -256,17 +269,8 @@ void serial(uint8_t channel) {
 				case CMD_NACK0:
 				{
 					// Nack: the host didn't properly receive the packet: resend.
-					// Unless the last packet was already received; in that case ignore the NACK.
-					//debug("nack%d ff %d busy %d", which, ff_out, out_busy);
 					int amount = ((ff_out - which - 1) & 3) + 1;
-					if (out_busy >= amount) {
-						ff_out = which;
-						out_busy -= amount;
-						while (amount--) {
-							ff_out = (ff_out + 1) & 3;
-							send_packet();
-						}
-					}
+					resend(amount);
 					continue;
 				}
 				case CMD_ID:
@@ -319,28 +323,6 @@ void serial(uint8_t channel) {
 			command_end[channel] = 1;
 		}
 		int len = serialdev[channel]->available();
-		if (len == 0)
-		{
-#ifdef DEBUG_SERIAL
-			debug("no more data available on %d now", channel);
-#endif
-#ifdef SERIAL
-			// If an out packet is waiting for ACK for too long, assume it didn't arrive and resend it.
-			if (channel == 1 && out_busy < 3 && utime() - out_time >= 1000000) {
-#ifdef DEBUG_SERIAL
-				debug("resending packet on %d", channel);
-#endif
-				int amount = out_busy;
-				out_busy = 0;
-				ff_out = (ff_out - amount) & 3;
-				while (out_busy < amount) {
-					ff_out = (ff_out + 1) & 3;
-					send_packet();
-				}
-			}
-#endif
-			return;
-		}
 #ifdef SERIAL
 		if (channel == 1) {
 			had_data = true;

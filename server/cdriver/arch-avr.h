@@ -364,14 +364,14 @@ bool hwpacket(int len) {
 				}
 				which -= spaces[s].num_motors;
 			}
-			cpdebug(s, m, "limit");
+			fcpdebug(s, m, "limit");
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
 		cbs_after_current_move = 0;
 		avr_running = false;
 		stopping = 2;
 		send_host(CMD_LIMIT, s, m, pos);
-		debug("limit done");
+		//debug("limit done");
 		return false;
 	}
 	case HWC_PONG:

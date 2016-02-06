@@ -564,7 +564,7 @@ class Printer: # {{{
 				call_queue.append((self._gpio_update, (s,)))
 				continue
 			elif cmd == protocol.rcommand['CONFIRM']:
-				if s:
+				if s and self.probemap is not None:
 					self.probe_pending = True
 				call_queue.append((self.request_confirmation(data.decode('utf-8', 'replace') or 'Continue?')[1], (False,)))
 				continue

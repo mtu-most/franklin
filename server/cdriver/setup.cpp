@@ -28,6 +28,7 @@ void setup(char const *port, char const *run_id)
 	serialdev[0] = &host_serial;
 	host_serial.begin(115200);
 	serialdev[1] = NULL;
+	command_end[1] = 0;
 	arch_setup_start(port);
 	setup_spacetypes();
 	// Initialize volatile variables.
@@ -40,7 +41,6 @@ void setup(char const *port, char const *run_id)
 	pollfds[0].events = POLLIN | POLLPRI;
 	pollfds[0].revents = 0;
 	command_end[0] = 0;
-	command_end[1] = 0;
 	motors_busy = false;
 	current_extruder = 0;
 	continue_cb = 0;

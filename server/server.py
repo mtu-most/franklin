@@ -605,7 +605,6 @@ def detect(port): # {{{
 	if not os.path.exists(port):
 		log("not detecting on %s, because file doesn't exist." % port)
 		return False
-	log('detecting on %s' % port)
 	if config['predetect']:
 		subprocess.call(config['predetect'].replace('#PORT#', port), shell = True)
 	try:
@@ -745,5 +744,5 @@ else:
 
 httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = tls)
 
-log('running')
+log('Franklin server is running')
 websocketd.fgloop()
