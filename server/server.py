@@ -639,7 +639,12 @@ def detect(port): # {{{
 			ids = [protocol.single[code][0] for code in ('ID', 'STARTUP')]
 			# CMD:1 ID:8 Checksum:3
 			while len(id[0]) < 12:
-				data = printer.read(12 - len(id[0]))
+				try:
+					data = printer.read(12 - len(id[0]))
+				except OSError:
+					continue
+				except IOError:
+					continue
 				id[0] += data
 				#log('incomplete id: ' + id[0])
 				if len(id[0]) < 12:
@@ -711,8 +716,9 @@ def print_done(port, completed, reason): # {{{
 		def process_done(fd, cond):
 			data = p.stdout.read()
 			if data:
+				log('Data from completion callback: %s' % repr(data))
 				return True
-			log('Flashing done; return: %s' % repr(p.wait()))
+			log('Callback for print completion done; return: %s' % repr(p.wait()))
 			return False
 		GLib.io_add_watch(p.stdout.fileno(), GLib.IO_IN, process_done)
 # }}}
