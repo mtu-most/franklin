@@ -346,7 +346,7 @@ class Connection: # {{{
 
 	def exit(self):
 		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
-		for p in ports.keys():
+		for p in tuple(ports.keys()):
 			Connection.remove_port(p)
 		if config['atexit']:
 			subprocess.call(config['atexit'], shell = True)
