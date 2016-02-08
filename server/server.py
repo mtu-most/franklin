@@ -654,7 +654,7 @@ def detect(port): # {{{
 					f = len(id[0])
 					for start in ids:
 						if start in id[0][1:]:
-							p = id[0].index(start)
+							p = id[0].index(bytes((start,)))
 							if p < f:
 								f = p
 							log('Keeping some')
