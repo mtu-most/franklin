@@ -3,7 +3,7 @@
 %:
 	dh $@ --with python3
 
-export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector
+export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector,-relro
 
 ARCH = $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
@@ -18,7 +18,7 @@ override_dh_auto_build:
 	${MAKE} -C server/cdriver
 	${MAKE} -C firmware TARGET=melzi
 	${MAKE} -C firmware TARGET=ramps
-	#${MAKE} -C firmware TARGET=mega
+	${MAKE} -C firmware TARGET=mega
 	${MAKE} -C firmware TARGET=mini
 	${MAKE} -C util
 

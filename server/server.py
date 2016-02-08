@@ -356,54 +356,37 @@ class Connection: # {{{
 	# }}}
 	def upload_options(self, port): # {{{
 		if port == '/dev/ttyO0':
-			return (('bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone)'),)
+			return (('bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone; bridgeboard v1)'),)
+		elif port == '/dev/ttyO4':
+			return (('bb4melzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone; bridgeboard v2)'),)
 		else:
-			#return (('melzi', 'atmega1284p with optiboot (Melzi)'), ('sanguinololu', 'atmega1284p (Sanguinololu)'), ('ramps', 'atmega2560 (Ramps)'), ('mega', 'atmega1280'), ('mini', 'atmega328p (Uno)'))
-			return (('melzi', 'atmega1284p with optiboot (Melzi)'), ('sanguinololu', 'atmega1284p (Sanguinololu)'), ('ramps', 'atmega2560 (Ramps)'), ('mini', 'atmega328p (Uno)'))
+			return (('melzi', 'atmega1284p with optiboot (Melzi)'), ('sanguinololu', 'atmega1284p (Sanguinololu)'), ('ramps', 'atmega2560 (Ramps)'), ('mega', 'atmega1280'), ('mini', 'atmega328p (Uno)'))
 	# }}}
-	def _get_info(self, board): # {{{
-		sudo = ()
+	def _get_command(self, board, filename, port): # {{{
 		if board == 'bbbmelzi':
-			board = 'melzi'
-			protocol = 'bbbmelzi'
-			# No need for a baudrate here, so abuse this to send a config file.
-			baudrate = ('-C', '+' + config['avrdudeconfig'])
-			mcu = 'atmega1284p'
-			sudo = ('sudo', '/usr/lib/franklin/flash-bbb')
+			return ('sudo', '/usr/lib/franklin/flash-bbb')
+		if board == 'bb4melzi':
+			return ('sudo', '/usr/lib/franklin/flash-bb-O4')
 		elif board == 'melzi':
-			protocol = 'arduino'
-			baudrate = ('-b', '115200')
-			mcu = 'atmega1284p'
+			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '115200', '-p', 'atmega1284p', '-P', port, '-U', 'flash:w:' + filename + ':i')
 		elif board == 'sanguinololu':
-			board = 'melzi'
-			protocol = 'wiring'
-			baudrate = ('-b', '115200')
-			mcu = 'atmega1284p'
+			return (config['avrdude'], '-q', '-q', '-c', 'wiring', '-b', '115200', '-p', 'atmega1284p', '-P', port, '-U', 'flash:w:' + filename + ':i')
 		elif board == 'ramps':
-			protocol = 'wiring'
-			baudrate = ('-b', '115200')
-			mcu = 'atmega2560'
-		#elif board == 'mega':
-		#	protocol = 'arduino'
-		#	baudrate = ('-b', '57600')
-		#	mcu = 'atmega1280'
+			return (config['avrdude'], '-q', '-q', '-c', 'wiring', '-b', '115200', '-p', 'atmega2560', '-P', port, '-U', 'flash:w:' + filename + ':i')
+		elif board == 'mega':
+			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '57600', '-p', 'atmega1280', '-P', port, '-U', 'flash:w:' + filename + ':i')
 		elif board == 'mini':
-			protocol = 'arduino'
-			baudrate = ('-b', '115200')
-			mcu = 'atmega328p'
+			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '115200', '-p', 'atmega328p', '-P', port, '-U', 'flash:w:' + filename + ':i')
 		else:
 			raise ValueError('board type not supported')
-		return sudo, board, protocol, baudrate, mcu
 	# }}}
 	def upload(self, port, board): # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin')
 		assert ports[port] is None
 		resumeinfo = [(yield), None]
-		sudo, brd, protocol, baudrate, mcu = self._get_info(board)
-		self.disable(port)
-		data = ['']
 		filename = fhs.read_data(os.path.join('firmware', brd + '.hex'), opened = False)
-		command = sudo + (config['avrdude'], '-q', '-q', '-c', protocol) + baudrate + ('-p', mcu, '-P', port, '-U', 'flash:w:' + filename + ':i')
+		command = self._get_command(board, filename, port)
+		data = ['']
 		log('Flashing firmware: ' + ' '.join(command))
 		process = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
 		def output(fd, cond):

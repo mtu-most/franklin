@@ -9,6 +9,7 @@ server/cdriver/cdriver /usr/lib/franklin
 server/control.py /usr/lib/franklin
 server/avrdude.conf /usr/lib/franklin
 server/flash-bbb /usr/lib/franklin
+server/flash-bb-O4 /usr/lib/franklin
 server/html/server.js /usr/lib/franklin/html
 server/html/templates.js /usr/lib/franklin/html
 server/html/index.html /usr/lib/franklin/html
