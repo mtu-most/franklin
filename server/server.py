@@ -362,21 +362,21 @@ class Connection: # {{{
 		else:
 			return (('melzi', 'atmega1284p with optiboot (Melzi)'), ('sanguinololu', 'atmega1284p (Sanguinololu)'), ('ramps', 'atmega2560 (Ramps)'), ('mega', 'atmega1280'), ('mini', 'atmega328p (Uno)'))
 	# }}}
-	def _get_command(self, board, filename, port): # {{{
+	def _get_command(self, board, dirname, port): # {{{
 		if board == 'bbbmelzi':
 			return ('sudo', '/usr/lib/franklin/flash-bbb')
 		if board == 'bb4melzi':
 			return ('sudo', '/usr/lib/franklin/flash-bb-O4')
 		elif board == 'melzi':
-			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '115200', '-p', 'atmega1284p', '-P', port, '-U', 'flash:w:' + filename + ':i')
+			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '115200', '-p', 'atmega1284p', '-P', port, '-U', 'flash:w:' + os.path.join(dirname, 'melzi.hex:i'))
 		elif board == 'sanguinololu':
-			return (config['avrdude'], '-q', '-q', '-c', 'wiring', '-b', '115200', '-p', 'atmega1284p', '-P', port, '-U', 'flash:w:' + filename + ':i')
+			return (config['avrdude'], '-q', '-q', '-c', 'wiring', '-b', '115200', '-p', 'atmega1284p', '-P', port, '-U', 'flash:w:' + os.path.join(dirname, 'melzi.hex:i'))
 		elif board == 'ramps':
-			return (config['avrdude'], '-q', '-q', '-c', 'wiring', '-b', '115200', '-p', 'atmega2560', '-P', port, '-U', 'flash:w:' + filename + ':i')
+			return (config['avrdude'], '-q', '-q', '-c', 'wiring', '-b', '115200', '-p', 'atmega2560', '-P', port, '-U', 'flash:w:' + os.path.join(dirname, 'ramps.hex:i'))
 		elif board == 'mega':
-			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '57600', '-p', 'atmega1280', '-P', port, '-U', 'flash:w:' + filename + ':i')
+			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '57600', '-p', 'atmega1280', '-P', port, '-U', 'flash:w:' + os.path.join(dirname, 'mega.hex:i'))
 		elif board == 'mini':
-			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '115200', '-p', 'atmega328p', '-P', port, '-U', 'flash:w:' + filename + ':i')
+			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '115200', '-p', 'atmega328p', '-P', port, '-U', 'flash:w:' + os.path.join(dirname, 'mini.hex:i'))
 		else:
 			raise ValueError('board type not supported')
 	# }}}
@@ -384,8 +384,8 @@ class Connection: # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin')
 		assert ports[port] is None
 		resumeinfo = [(yield), None]
-		filename = fhs.read_data(os.path.join('firmware', brd + '.hex'), opened = False)
-		command = self._get_command(board, filename, port)
+		dirname = fhs.read_data('firmware', dir = True, opened = False)
+		command = self._get_command(board, dirname, port)
 		data = ['']
 		log('Flashing firmware: ' + ' '.join(command))
 		process = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
