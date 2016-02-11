@@ -228,28 +228,34 @@ class Connection: # {{{
 		return autodetect
 	# }}}
 	@classmethod
+	def _generator_call(cls, wake, target, *a, **ka):
+		ret = target(*a, **ka)
+		if type(ret) is not type((lambda: (yield))()):
+			return ret
+		ret.send(None)
+		ret.send(wake)
+		return (yield from ret)
+	@classmethod
 	def detect(cls, port): # {{{
-		resumeinfo = [(yield), None]
+		wake = (yield)
 		log('detecting printer on %s' % port)
 		if port not in ports or ports[port] != None:
 			log('port is not in detectable state')
 			return
 		ports[port] = False
-		c = websocketd.call(resumeinfo, detect, port)
-		while c(): c.args = (yield websocketd.WAIT)
+		return (yield from cls._generator_call(wake, detect, port))
 	# }}}
 	@classmethod
 	def detect_all(cls): # {{{
-		resumeinfo = [(yield), None]
+		wake = (yield)
 		for p in ports:
 			if ports[p] is not None:
 				continue
-			c = websocketd.call(resumeinfo, cls.detect, p)
-			while c(): c.args = (yield websocketd.WAIT)
+			yield from cls._generator_call(wake, cls.detect, p)
 	# }}}
 	@classmethod
 	def add_port(cls, port): # {{{
-		resumeinfo = [(yield), None]
+		wake = (yield)
 		if port in ports:
 			log('already existing port %s cannot be added' % port)
 			return
@@ -259,8 +265,7 @@ class Connection: # {{{
 		ports[port] = None
 		cls._broadcast(None, 'new_port', port);
 		if autodetect:
-			c = websocketd.call(resumeinfo, cls.detect, port)
-			while c(): c.args = (yield websocketd.WAIT)
+			return (yield from cls._generator_call(wake, cls.detect, port))
 	# }}}
 	@classmethod
 	def remove_port(cls, port): # {{{
@@ -383,7 +388,7 @@ class Connection: # {{{
 	def upload(self, port, board): # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin')
 		assert ports[port] is None
-		resumeinfo = [(yield), None]
+		wake = (yield)
 		dirname = fhs.read_data('firmware', dir = True, opened = False)
 		command = self._get_command(board, dirname, port)
 		data = ['']
@@ -396,20 +401,20 @@ class Connection: # {{{
 			except:
 				data[0] += '\nError writing %s firmware: ' % board + traceback.format_exc()
 				log(repr(data[0]))
-				resumeinfo[0](data[0])
+				wake(data[0])
 				return False
 			if d != '':
 				self._broadcast(None, 'message', port, '\n'.join(data[0].split('\n')[-4:]))
 				data[0] += d
 				return True
-			resumeinfo[0](data[0])
+			wake(data[0])
 			return False
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
 		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP, output)
 		self._broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
 		self._broadcast(None, 'message', port, '')
-		d = (yield websocketd.WAIT)
+		d = (yield)
 		try:
 			process.kill()	# In case it wasn't dead yet.
 		except OSError:
@@ -418,11 +423,11 @@ class Connection: # {{{
 		self._broadcast(None, 'blocked', port, None)
 		self._broadcast(None, 'message', port, '')
 		if autodetect:
-			websocketd.call(None, self.detect, port)()
+			websocketd.call(None, self.detect, port)
 		if d:
-			yield ('firmware upload for %s: ' % board + d)
+			return 'firmware upload for %s: ' % board + d
 		else:
-			yield ('firmware for %s successfully uploaded' % board)
+			return 'firmware for %s successfully uploaded' % board
 	# }}}
 	def set_printer(self, printer = None, port = None): # {{{
 		self.printer = self.find_printer(printer, port)
@@ -450,22 +455,22 @@ class Connection: # {{{
 		return self.socket.data['role']
 	# }}}
 	def _call (self, name, a, ka): # {{{
-		resumeinfo = [(yield), None]
+		wake = (yield)
 		#log('other: %s %s %s' % (name, repr(a), repr(ka)))
 		if not self.printer or self.printer not in ports or not ports[self.printer]:
 			self.printer = self.find_printer()
 			if not self.printer:
 				log('No printer found')
-				yield ('error', 'No printer found')
+				return ('error', 'No printer found')
 		def reply(success, ret):
 			if success:
-				resumeinfo[0](ret)
+				wake(ret)
 			else:
 				log('printer errors')
-				resumeinfo[0](None)
+				wake(None)
 				#Connection._disable('admin', self.printer)
 		ports[self.printer].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
-		yield (yield websocketd.WAIT)
+		return (yield)
 	# }}}
 	def __getattr__ (self, attr): # {{{
 		return lambda *a, **ka: self._call(attr, a, ka)
@@ -560,7 +565,7 @@ class Port: # {{{
 			orphans[self.run_id] = self
 			Connection._broadcast(None, 'del_printer', port)
 			if autodetect:
-				websocketd.call(None, Connection.detect, self.port)()
+				websocketd.call(None, Connection.detect, self.port)
 		elif data[1] == 'error':
 			if data[0] is None:
 				# Error on command without id.
@@ -661,7 +666,7 @@ def detect(port): # {{{
 				return False
 			run_id = nextid()
 			log('accepting unknown printer on port %s (id %s)' % (port, ''.join('%02x' % x for x in run_id)))
-			log('orphans: %s' % repr(orphans.keys()))
+			#log('orphans: %s' % repr(tuple(orphans.keys())))
 			process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, printer, run_id)
 			return False
@@ -707,19 +712,19 @@ def print_done(port, completed, reason): # {{{
 # }}}
 
 if config['local'] != '':
-	websocketd.call(None, Connection.add_port, '-')()
+	websocketd.call(None, Connection.add_port, '-')
 
 # Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
 try:
 	# Try Linux sysfs.
 	for tty in os.listdir('/sys/class/tty'):
-		websocketd.call(None, Connection.add_port, '/dev/' + tty)()
+		websocketd.call(None, Connection.add_port, '/dev/' + tty)
 except:
 	# Try more generic approach.  Don't use this by default, because it doesn't detect all ports on GNU/Linux.
 	try:
 		import serial.tools.list_ports
 		for tty in serial.tools.list_ports.comports():
-			websocketd.call(None, Connection.add_port, tty[0])()
+			websocketd.call(None, Connection.add_port, tty[0])
 	except:
 		traceback.print_exc()
 		log('Not probing serial ports, because an error occurred: %s' % sys.exc_info()[1])
