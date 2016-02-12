@@ -125,7 +125,7 @@ class Server(websocketd.RPChttpd): # {{{
 				self.reply(connection, 404)
 			else:
 				def export_reply(success, message):
-					self.reply(connection, 200, message, 'text/plain;charset=utf8')
+					self.reply(connection, 200, message.encode('utf-8'), 'text/plain;charset=utf8')
 					connection.socket.close()
 				ports[port].call('export_settings', (connection.data['role'],), {}, export_reply)
 				return True
