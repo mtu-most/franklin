@@ -2277,7 +2277,7 @@ class Printer: # {{{
 			log('setting profile to %s' % profile.strip())
 			self.profile = profile.strip()
 			self._globals_update()
-		with fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini')) as f:
+		with fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'), text = False) as f:
 			f.write(self.export_settings())
 	# }}}
 	def list_profiles(self): # {{{
@@ -2549,7 +2549,7 @@ class Printer: # {{{
 			message += t.export_settings()
 		for i, g in enumerate(self.gpios):
 			message += g.export_settings()
-		return message
+		return message.encode('utf-8')
 	# }}}
 	def expert_import_settings(self, settings, filename = None, update = True): # {{{
 		'''Import new settings.
