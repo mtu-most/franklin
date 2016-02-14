@@ -18,7 +18,7 @@
 MODULES = python-fhs python-network python-websocketd
 
 install-all: build
-	sudo dpkg -i $(wildcard $(patsubst %,/tmp/%*.deb,$(MODULES)) /tmp/franklin*.deb)
+	sudo dpkg -i $(wildcard $(patsubst %,/tmp/python3-%*.deb,$(subst python-,,$(MODULES))) /tmp/franklin*.deb)
 
 # This target is meant for producing release packages for Athena.
 # Some preparations are required to make ti work:
@@ -51,9 +51,9 @@ zip:
 	cd zipdir && for f in avr-libc_* ; do mv $$f 3-$$f ; done
 	cd zipdir && for f in arduino-core_* ; do mv $$f 4-$$f ; done
 	cd zipdir && for f in arduino-mighty-1284p_* ; do mv $$f 5-$$f ; done
-	cd zipdir && for f in python-fhs_* python3-fhs_* ; do mv $$f 1-$$f ; done
-	cd zipdir && for f in python-network_* python3-network_* ; do mv $$f 2-$$f ; done
-	cd zipdir && for f in python-websocketd_* python3-websocketd_* ; do mv $$f 3-$$f ; done
+	cd zipdir && for f in python3-fhs_* ; do mv $$f 1-$$f ; done
+	cd zipdir && for f in python3-network_* ; do mv $$f 2-$$f ; done
+	cd zipdir && for f in python3-websocketd_* ; do mv $$f 3-$$f ; done
 	cd zipdir && for f in franklin_* ; do mv $$f 6-$$f ; done
 	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || sshpass -p"$(BB_PASS)" scp $(BB):'/tmp/*.{dsc,changes,tar.gz,deb}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL
 	# Prepare script.
@@ -98,6 +98,7 @@ clean-%:
 	rm -f module-$(base)
 
 clean: $(addprefix clean-,$(MODULES))
+	git rm .gitmodules || :
 	rm -f mkdeb .gitmodules
 	rm -rf zipdir
 

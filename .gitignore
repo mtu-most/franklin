@@ -9,4 +9,8 @@ mkdeb
 module-python-fhs
 module-python-network
 module-python-websocketd
+python-fhs
+python-network
+python-websocketd
+.gitmodules
 zipdir
