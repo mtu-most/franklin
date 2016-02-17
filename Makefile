@@ -85,7 +85,7 @@ mkdeb:
 
 module-%: base = $(patsubst module-%,%,$@)
 module-%: mkdeb
-	git submodule add https://github.com/wijnen/$(base) || git submodule update $(base)
+	git submodule add https://github.com/wijnen/$(base) || (cd $(base) && git pull)
 	cd $(base) && ../mkdeb $(MKDEB_ARG)
 	touch $@
 
