@@ -77,6 +77,9 @@ install:
 	:
 
 build: mkdeb $(addprefix module-,$(MODULES))
+	git pull
+	git submodule foreach git pull
+	git submodule foreach ../mkdeb $(MKDEB_ARG)
 	./mkdeb $(MKDEB_ARG)
 
 mkdeb:
@@ -84,9 +87,8 @@ mkdeb:
 	chmod a+x mkdeb
 
 module-%: base = $(patsubst module-%,%,$@)
-module-%: mkdeb
-	git submodule add https://github.com/wijnen/$(base) || (cd $(base) && git pull)
-	cd $(base) && ../mkdeb $(MKDEB_ARG)
+module-%:
+	git submodule add https://github.com/wijnen/$(base)
 	touch $@
 
 clean-%: base = $(patsubst clean-%,%,$@)
@@ -95,7 +97,6 @@ clean-%:
 	rm -rf $(base) || :
 	git rm -f $(base) || :
 	rm -rf .git/modules/$(base)
-	rm -f module-$(base)
 
 clean: $(addprefix clean-,$(MODULES))
 	git rm .gitmodules || :
