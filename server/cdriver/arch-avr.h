@@ -276,7 +276,6 @@ void avr_send() {
 	}
 	serial_cb[out_busy] = avr_cb;
 	avr_cb = NULL;
-	out_busy += 1;
 	send_packet();
 	if (out_busy < 3)
 		try_send_control();

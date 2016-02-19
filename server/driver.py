@@ -97,6 +97,7 @@ def delayed(f): # {{{
 # Call cdriver running on same machine.
 class Driver: # {{{
 	def __init__(self, port, run_id):
+		#log(repr(config))
 		self.driver = subprocess.Popen((config['cdriver'], port, run_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		fcntl.fcntl(self.driver.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 		self.buffer = b''

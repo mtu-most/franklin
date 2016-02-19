@@ -593,6 +593,7 @@ void send_packet()
 #endif
 	for (uint8_t t = 0; t < pending_len[which]; ++t)
 		serialdev[1]->write(pending_packet[which][t]);
+	out_busy += 1;
 	out_time = utime();
 }
 
