@@ -30,13 +30,6 @@ RUN=1
 # Location of log file or directory.  Set to /var/log/franklin to enable logging in the default location.
 #LOG=
 
-# Programs to manage the printer.
-#DRIVER=/usr/lib/franklin/driver.py
-#CDRIVER=/usr/lib/franklin/cdriver
-
-# Location where audio files are stored.
-#AUDIODIR=/var/cache/franklin/audio
-
 # Regular expression of default printer; normally empty.
 #PRINTER=''
 
@@ -74,9 +67,6 @@ RUN=1
 # 'echo "your print was [[STATE]]: [[REASON]]" | mail -s "print [[STATE]] - [[REASON]]" your@mail.address.example.com'
 #DONE=''
 
-# Avrdude executable, including path if it isn't in the system path.
-#AVRDUDE='avrdude'
-
 # File for storing the pid.  You probably don't need to change this.
 PIDFILE=/run/franklin.pid
 
@@ -99,17 +89,13 @@ if [ -v ADDRESS ] ; then	START_ARGS+=(--address="$ADDRESS") ; fi
 if [ -v TLS ] ; then		START_ARGS+=(--tls="$TLS") ; fi
 if [ -v LOG ] ; then		START_ARGS+=(--log="$LOG") ; fi
 if [ -v PRINTER ] ; then	START_ARGS+=(--printer="$PRINTER") ; fi
-if [ -v AUDIODIR ] ; then	START_ARGS+=(--audiodir="$AUDIODIR") ; fi
 if [ -v BLACKLIST ] ; then	START_ARGS+=(--blacklist="$BLACKLIST") ; fi
 if [ -v ADD_BLACKLIST ] ; then	START_ARGS+=(--add-blacklist="$ADD_BLACKLIST") ; fi
-if [ -v DRIVER ] ; then		START_ARGS+=(--driver="$DRIVER") ; fi
-if [ -v CDRIVER ] ; then	START_ARGS+=(--cdriver="$CDRIVER") ; fi
 if [ -v ALLOW_SYSTEM ] ; then	START_ARGS+=(--allow-system="$ALLOW_SYSTEM") ; fi
 if [ -v USERPWD ] ; then		START_ARGS+=(--user="$USERPWD") ; fi
 if [ -v EXPERTPWD ] ; then		START_ARGS+=(--expert="$EXPERTPWD") ; fi
 if [ -v ADMINPWD ] ; then		START_ARGS+=(--admin="$ADMINPWD") ; fi
 if [ -v DONE ] ; then		START_ARGS+=(--done="$DONE") ; fi
-if [ -v AVRDUDE ] ; then	START_ARGS+=(--avrdude="$AVRDUDE") ; fi
 STOP_ARGS=("${ARGS[@]}" --oknodo --stop)
 
 if test ! -x "$DAEMON"; then

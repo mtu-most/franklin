@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # vim: foldmethod=marker :
-# server.py - printer multiplexing for Franklin
+# server.py - printer multiplexing for Franklin {{{
 # Copyright 2014 Michigan Technological University
 # Author: Bas Wijnen <wijnen@debian.org>
 #
@@ -16,6 +16,73 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# }}}
+
+# File documentation. {{{
+'''@file
+This is the main program.  It runs a WebSockets server and starts driver.py
+processes when new machines are detected.  It sends any requests it doesn't
+handle itself to those processes.
+
+This file is installed as "franklin" in the executable path.  When run, it
+accepts the following options (prefix with "--" on the commandline, or use as
+is in a configuration file):
+* port: which port to listen on for requests.  Default: 8000
+* address: which address to bind to.  If set to empty, it binds the both
+  0.0.0.0 and ::1, so it responds to both IPv4 and IPv6 requests.  If IPv6 is
+  not supported (this is currently the case on the Raspberry Pi), you need to
+  explicitly set it to 0.0.0.0 or the server will not start.  This can also be
+  used to listen only on one interface, by setting it to the local address of
+  that interface.  Default: ''
+* printer: default printer for new client connections.  Leave empty to use the
+  first detected printer.  Default: ''
+* blacklist: regular expression of serial ports that detection should not be
+  attempted on.  This should normally not be used.  add-blacklist should be
+  used instead.
+* add-blacklist: same as blacklist.  However, add-blacklist has a empty
+  default, so it can be used to add ports to the standard blacklist, as opposed
+  to replacing it.
+* autodetect: if true, communication is attempted on newly detected ports.
+  This is normally good, but it can be disabled if autodetection prevents
+  flashing new firmware, or if it is unclear which ports should be blacklisted
+  and Franklin must not interfere with some ports.  Default: True
+* predetect: system command that is run before detection is attempted.  The
+  substring #PORT# is replaced with the port.  Use this to set up the port.
+  Default: ``stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt``
+* atexit: system command to run when exiting Franklin.  Default: ''
+* allow-system: regular expression for commands that are allowed to be run from
+  G-Code.  Default: '^$'
+* admin: Credentials for accessing the /admin interface.  This can either be a
+  password, or a username:password pair.  If only a password is supplied, any
+  username is accepted with that password.  Default: ''
+* expert: Credentials for accessing the /expert interface.  This can either be a
+  password, or a username:password pair.  If only a password is supplied, any
+  username is accepted with that password.  Default: ''
+* user: Credentials for accessing the default interface.  This can either be a
+  password, or a username:password pair.  If only a password is supplied, any
+  username is accepted with that password.  Default: ''
+* done: system command to run after completing a job.  Default: ''
+* local: Internal use only.  Do not use.
+* log: passed on to the websockets server, which uses it to create a log file
+  with websockets traffic.
+* tls: passed on to the websockets server, which uses it to enable encryption.
+  Default: True
+'''
+# }}}
+
+# Main page documentation. {{{
+'''@mainpage
+This is the documentation for Franklin that was generated from its source code.
+It is meant to help people make changes to the code, and as a reference for
+people who write programs that access Franklin with a WebSocket.
+
+For the latter purpose, most of this documentation should be ignored.  Two
+classes are useful: Connection and Printer.  Functions from those classes can
+be called using RPC requests.  In Printer, functions with a role prefix must be
+called by a connections with at least those permissions.  The prefix must not
+be part of the RPC request.
+'''
+# }}}
 
 # Imports and config. {{{
 import re
@@ -43,31 +110,20 @@ config = fhs.init(packagename = 'franklin', config = {
 		'port': '8000',
 		'address': '',
 		'printer': '',
-		'audiodir': '',
 		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\\d*))$',
 		'add-blacklist': '$',
 		'autodetect': 'True',
 		'predetect': 'stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',
 		'atexit': '',
-		'avrdude': '/usr/bin/avrdude',
 		'allow-system': '^$',
 		'admin': '',
 		'expert': '',
 		'user': '',
 		'done': '',
 		'local': '',
-		'driver': '',
-		'cdriver': '',
 		'log': '',
 		'tls': 'True',
-		'avrdudeconfig': '/usr/lib/franklin/avrdude.conf'
 	})
-if config['audiodir'] == '':
-	config['audiodir'] = fhs.write_cache(name = 'audio', dir = True),
-if config['driver'] == '':
-	config['driver'] = fhs.read_data('driver.py', opened = False)
-if config['cdriver'] == '':
-	config['cdriver'] = fhs.read_data('cdriver', opened = False)
 # }}}
 
 # Global variables. {{{
@@ -171,9 +227,18 @@ class Server(websocketd.RPChttpd): # {{{
 # }}}
 
 class Connection: # {{{
+	'''Object to handle a single network connection.
+	This class is used with the WebSocket RPC server.  Functions in it can
+	be called from the remote end using RPC requests.
+	'''
+	## Currently active connections.  Keys are their id, an int for internal use.
 	connections = {}
+	## Id for next connection.
 	nextid = 0
 	def __init__(self, socket): # {{{
+		'''Constructor, as required by python-websockets.
+		@param socket: remote end of RPC connection.
+		'''
 		socket.initialized = False
 		socket.monitor = False
 		self.socket = socket
@@ -185,8 +250,8 @@ class Connection: # {{{
 		self.socket()
 	# }}}
 	@classmethod
-	def disconnect(cls, socket, data): # {{{
-		del connections[id]
+	def _disconnect(cls, socket, data): # {{{
+		del Connection.connections[id]
 	# }}}
 	@classmethod
 	def _broadcast(cls, target, name, *args): # {{{
@@ -210,6 +275,12 @@ class Connection: # {{{
 	# }}}
 	@classmethod
 	def find_printer(cls, uuid = None, port = None): # {{{
+		'''Detect a printer by uuid or port.
+		If both uuid and port are None, return any connected printer.
+		@param uuid: requested uuid, or None to allow any uuid.
+		@param port: regular expression for port, or None to allow any port.
+		@return The printer name, or None if no printer matches the request.
+		'''
 		for p in ports:
 			if not ports[p]:
 				continue
@@ -219,27 +290,42 @@ class Connection: # {{{
 	# }}}
 	@classmethod
 	def set_autodetect(cls, detect): # {{{
+		'''Enable or disable autodetection on new ports.
+		If autodetection is enabled, detection will be attempted for
+		any newly detected port, both at boot time and later.  Changing
+		to autodetect does not trigger a detection on ports that were
+		already known to Franklin.
+		@param detect: New autodetect state.
+		@return: None.
+		'''
 		global autodetect
 		autodetect = detect
 		cls._broadcast(None, 'autodetect', autodetect)
 	# }}}
 	@classmethod
 	def get_autodetect(cls): # {{{
+		'''Get autodetection status.
+		@return: Autodetection status.
+		'''
 		return autodetect
 	# }}}
 	@classmethod
-	def _generator_call(cls, wake, target, *a, **ka):
+	def _generator_call(cls, wake, target, *a, **ka): # {{{
 		ret = target(*a, **ka)
 		if type(ret) is not type((lambda: (yield))()):
 			return ret
 		ret.send(None)
 		ret.send(wake)
 		return (yield from ret)
+	# }}}
 	@classmethod
 	def detect(cls, port): # {{{
 		wake = (yield)
 		log('detecting printer on %s' % port)
-		if port not in ports or ports[port] != None:
+		if port not in ports:
+			log('port does not exist')
+		if ports[port] != None:
+			# TODO: abort detection in progress.
 			log('port is not in detectable state')
 			return
 		ports[port] = False
@@ -349,48 +435,85 @@ class Connection: # {{{
 		cls._broadcast(None, 'new_data', name, data)
 	# }}}
 
-	def exit(self):
+	def exit(self): # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
 		for p in tuple(ports.keys()):
 			Connection.remove_port(p)
 		if config['atexit']:
 			subprocess.call(config['atexit'], shell = True)
 		GLib.idle_add(lambda: sys.exit(0))
+	# }}}
 	def disable(self, port): # {{{
 		return Connection._disable(self.socket.data['role'], port)
 	# }}}
+	def _read_boards(self):
+		boards = {}
+		for d in fhs.read_data('hardware', packagename = 'arduino', dir = True, multiple = True):
+			for board in os.listdir(d):
+				boards_txt = os.path.join(d, board, 'boards' + os.extsep + 'txt')
+				if not os.path.exists(boards_txt):
+					continue
+				with open(boards_txt) as b:
+					for line in b:
+						if line.startswith('#') or line.strip() == '':
+							continue
+						parse = re.match('([^.=]+)\.([^=]+)=(.*)$', line.strip())
+						if parse is None:
+							log('Warning: invalid line in %s: %s' % (boards_txt, line.strip()))
+							continue
+						tag, option, value = parse.groups()
+						if tag not in boards:
+							boards[tag] = {}
+						if option in boards[tag]:
+							if boards[tag][option] != value:
+								log('%s: duplicate tag %s.%s with different value (%s != %s); using %s' % (boards_txt, tag, option, value, boards[tag][option], boards[tag][option]))
+								continue
+						boards[tag][option] = value
+		for tag in tuple(boards.keys()):
+			if 'name' not in boards[tag]:
+				boards[tag]['name'] = tag
+			if any(x not in boards[tag] for x in ('upload.protocol', 'upload.speed', 'build.mcu', 'upload.maximum_size')):
+				log('skipping %s because hardware information is incomplete (%s)' % (boards[tag]['name'], repr(boards[tag])))
+				del boards[tag]
+				continue
+			if int(boards[tag]['upload.maximum_size']) < 32000:
+				# Not enough memory; don't complain about skipping this board.
+				del boards[tag]
+				continue
+			if fhs.read_data(os.path.join('firmware', boards[tag]['build.mcu'] + os.extsep + 'hex'), opened = False) is None:
+				log('skipping %s because firmware for %s is not installed' % (boards[tag]['name'], boards[tag]['build.mcu']))
+				del boards[tag]
+				continue
+		return boards
 	def upload_options(self, port): # {{{
 		if port == '/dev/ttyO0':
-			return (('bbbmelzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone; bridgeboard v1)'),)
+			return (('bbbmelzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v1)'),)
 		elif port == '/dev/ttyO4':
-			return (('bb4melzi', 'atmega1284p with linuxgpio (Melzi from BeagleBone; bridgeboard v2)'),)
+			return (('bb4melzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v2)'),)
 		else:
-			return (('melzi', 'atmega1284p with optiboot (Melzi)'), ('sanguinololu', 'atmega1284p (Sanguinololu)'), ('ramps', 'atmega2560 (Ramps)'), ('mega', 'atmega1280'), ('mini', 'atmega328p (Uno)'))
+			boards = self._read_boards()
+			ret = list((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
+			ret.sort(key = lambda x: (boards[x[0]]['build.mcu'], x[1]))
+			return tuple((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
 	# }}}
-	def _get_command(self, board, dirname, port): # {{{
-		if board == 'bbbmelzi':
-			return ('sudo', '/usr/lib/franklin/flash-bbb')
-		if board == 'bb4melzi':
-			return ('sudo', '/usr/lib/franklin/flash-bb-O4')
-		elif board == 'melzi':
-			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '115200', '-p', 'atmega1284p', '-P', port, '-U', 'flash:w:' + os.path.join(dirname, 'melzi.hex:i'))
-		elif board == 'sanguinololu':
-			return (config['avrdude'], '-q', '-q', '-c', 'wiring', '-b', '115200', '-p', 'atmega1284p', '-P', port, '-U', 'flash:w:' + os.path.join(dirname, 'melzi.hex:i'))
-		elif board == 'ramps':
-			return (config['avrdude'], '-q', '-q', '-c', 'wiring', '-b', '115200', '-p', 'atmega2560', '-P', port, '-U', 'flash:w:' + os.path.join(dirname, 'ramps.hex:i'))
-		elif board == 'mega':
-			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '57600', '-p', 'atmega1280', '-P', port, '-U', 'flash:w:' + os.path.join(dirname, 'mega.hex:i'))
-		elif board == 'mini':
-			return (config['avrdude'], '-q', '-q', '-c', 'arduino', '-b', '115200', '-p', 'atmega328p', '-P', port, '-U', 'flash:w:' + os.path.join(dirname, 'mini.hex:i'))
-		else:
+	def _get_command(self, board, port): # {{{
+		if board == 'bbbmelzi ':
+			return ('sudo', fhs.read_data('flash-bbb', opened = False))
+		if board == 'bb4melzi ':
+			return ('sudo', fhs.read_data('flash-bb-O4', opened = False))
+		boards = self._read_boards()
+		if board not in boards:
 			raise ValueError('board type not supported')
+		filename = fhs.read_data(os.path.join('firmware', boards[board]['build.mcu'] + os.extsep + 'hex'), opened = False)
+		if filename is None:
+			raise NotImplementedError('Firmware is not available')
+		return ('avrdude', '-q', '-q', '-p', boards[board]['build.mcu'], '-b', boards[board]['upload.speed'], '-c', boards[board]['upload.protocol'], '-P', port, '-U', 'flash:w:' + filename + ':i')
 	# }}}
 	def upload(self, port, board): # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin')
 		assert ports[port] is None
 		wake = (yield)
-		dirname = fhs.read_data('firmware', dir = True, opened = False)
-		command = self._get_command(board, dirname, port)
+		command = self._get_command(board, port)
 		data = ['']
 		log('Flashing firmware: ' + ' '.join(command))
 		process = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
@@ -587,7 +710,7 @@ class Port: # {{{
 def detect(port): # {{{
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
-		process = subprocess.Popen((config['driver'], '--cdriver', config['local'] or config['cdriver'], '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', config['local'] or fhs.read_data('cdriver', opened = False), '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		ports[port] = Port(port, process, None, run_id)
 		return False
 	if not os.path.exists(port):
@@ -667,7 +790,7 @@ def detect(port): # {{{
 			run_id = nextid()
 			log('accepting unknown printer on port %s (id %s)' % (port, ''.join('%02x' % x for x in run_id)))
 			#log('orphans: %s' % repr(tuple(orphans.keys())))
-			process = subprocess.Popen((config['driver'], '--cdriver', config['cdriver'], '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+			process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('cdriver', opened = False), '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, printer, run_id)
 			return False
 		printer.write(protocol.single['ID'])
@@ -714,6 +837,7 @@ def print_done(port, completed, reason): # {{{
 if config['local'] != '':
 	websocketd.call(None, Connection.add_port, '-')
 
+# Detect serial ports. {{{
 # Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
 try:
 	# Try Linux sysfs.
@@ -728,6 +852,7 @@ except:
 	except:
 		traceback.print_exc()
 		log('Not probing serial ports, because an error occurred: %s' % sys.exc_info()[1])
+# }}}
 
 # Set default printer. {{{
 if ' ' in config['printer']:
@@ -736,7 +861,7 @@ else:
 	default_printer = (config['printer'], None)
 # }}}
 
-httpd = Server(config['port'], Connection, disconnect_cb = Connection.disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = tls)
+httpd = Server(config['port'], Connection, disconnect_cb = Connection._disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = tls)
 
 log('Franklin server is running')
 websocketd.fgloop()

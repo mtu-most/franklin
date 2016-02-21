@@ -22,7 +22,7 @@ PROFILE = #-pg
 CPPFLAGS ?= -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow $(PROFILE)
 LDFLAGS ?= $(PROFILE)
 
-all: cdriver
+all: ../cdriver
 
 ifeq (${TARGET}, bbb)
 ARCH_HEADER = arch-bbb.h
@@ -31,7 +31,7 @@ LIBS += -lprussdrv
 %.bin: %.asm Makefile
 	pasm -V2 -b $<
 
-cdriver: bbb_pru.bin
+../cdriver: bbb_pru.bin
 else
 ARCH_HEADER = arch-avr.h
 endif
@@ -63,7 +63,7 @@ CPPFLAGS += -DARCH_INCLUDE=\"${ARCH_HEADER}\"
 
 OBJECTS = $(addprefix build/,$(patsubst %.cpp,%.o,$(SOURCES)))
 
-cdriver: $(OBJECTS) Makefile
+../cdriver: $(OBJECTS) Makefile
 	g++ $(LDFLAGS) $(OBJECTS) $(LIBS) -o $@
 
 build/stamp:
@@ -74,4 +74,4 @@ build/%.o: %.cpp $(HEADERS) build/stamp Makefile
 	g++ $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(OBJECTS) build cdriver $(DTBO)
+	rm -rf $(OBJECTS) build ../cdriver $(DTBO)

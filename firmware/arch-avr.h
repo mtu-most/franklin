@@ -704,26 +704,26 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 
 		/* Compute steps.  <24+25(abs numsteps) <17(move_phase) <y(motor) >0(steps) X1 {{{ */
 		/* steps target = b.sample * move_phase / full_phase - m.steps_current; */
-		"\t"	"mul 24, 17"			"\n"
+		"\t"	"mul 24, 17"			"\n"	// r0:r1 = r24*r17
 		"\t"	"lds 19, full_phase_bits"	"\n"
-		"\t"	"mov 18, 19"			"\n"
+		"\t"	"mov 18, 19"			"\n"	// r18 = fpb
 		"\t"	"tst 19"			"\n"
 		"\t"	"rjmp 2f"			"\n"
-	"1:\t"		"lsr 1"				"\n"
+	"1:\t"		"lsr 1"				"\n"	// r0:r1 >>= full_phase_bits
 		"\t"	"ror 0"				"\n"
 		"\t"	"dec 19"			"\n"
 	"2:\t"		"brne 1b"			"\n"
-		"\t"	"mov 19, 0"			"\n"
+		"\t"	"mov 19, 0"			"\n"	// r19 = (r24 * r17) >> full_phase_bits
 
-		"\t"	"mul 25, 17"			"\n"
-		"\t"	"subi 18, 8"			"\n"
+		"\t"	"mul 25, 17"			"\n"	// r0:r1 = r25 * r17
+		"\t"	"subi 18, 8"			"\n"	// r18 = -(full_phase_bits - 8)
 		"\t"	"neg 18"			"\n"
 		"\t"	"rjmp 2f"			"\n"
 		// High byte of steps target must be 0; ignore it instead of updating it.
 	"1:\t"		"lsl 0"				"\n"
 		//"\t"	"rol 1"				"\n"
 		"\t"	"dec 18"			"\n"
-	"2:\t"		"brne 1b"			"\n"
+	"2:\t"		"brne 1b"			"\n"	// r0 = (r25 * r17) << (8 - full_phase_bits) + (r24 * r17) >> full_phase_bits
 		"\t"	"add 0, 19"			"\n"
 		//"\t"	"clr 27"			"\n"
 		//"\t"	"adc 1, 27"			"\n"

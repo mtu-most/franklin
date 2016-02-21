@@ -18,7 +18,7 @@
 
 MONITOR_PORT = /dev/ttyACM* /dev/ttyUSB*
 RESET_CMD=:
-TARGET ?= melzi
+TARGET ?= atmega1284p
 #TARGET ?= ramps
 
 CPPFLAGS = -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow -fno-strict-aliasing -Wall -Wextra -Werror
@@ -62,22 +62,22 @@ HEX_MAXIMUM_SIZE  = $(call PARSE_BOARD,$(BOARD_TAG),upload.maximum_size)
 # Avoid including Arduino.h
 ARDUINO_HEADER = firmware.h
 
-ifeq (${TARGET}, mini)
+ifeq (${TARGET}, atmega328p)
 BOARD_TAG = uno
 CPPFLAGS += -DNUM_MOTORS=8 -DFRAGMENTS_PER_MOTOR_BITS=2 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=8
 CPPFLAGS += -DUSART0_RX_vect=USART_RX_vect -DNO_DEBUG
 else
-ifeq (${TARGET}, melzi)
+ifeq (${TARGET}, atmega1284p)
 BOARD_TAG = mighty_opt
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
 BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
 CPPFLAGS += -DNUM_MOTORS=10 -DFRAGMENTS_PER_MOTOR_BITS=5 -DBYTES_PER_FRAGMENT=32 -DSERIAL_SIZE_BITS=10
 else
-ifeq (${TARGET}, mega)
+ifeq (${TARGET}, atmega1280)
 BOARD_TAG = mega
 CPPFLAGS += -DNUM_MOTORS=10 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
 else
-ifeq (${TARGET}, ramps)
+ifeq (${TARGET}, atmega2560)
 BOARD_TAG = mega2560
 CPPFLAGS += -DNUM_MOTORS=10 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
 else

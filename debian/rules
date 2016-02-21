@@ -15,11 +15,11 @@ override_dh_auto_build:
 #	mv server/cdriver/cdriver server/cdriver/cdriver.local
 #	${MAKE} -C server/cdriver clean
 #endif
-	${MAKE} -C server/cdriver
-	${MAKE} -C firmware TARGET=melzi
-	${MAKE} -C firmware TARGET=ramps
-	${MAKE} -C firmware TARGET=mega
-	${MAKE} -C firmware TARGET=mini
+	${MAKE} -C server/cdriver_src
+	${MAKE} -C firmware TARGET=atmega1284p
+	${MAKE} -C firmware TARGET=atmega2560
+	${MAKE} -C firmware TARGET=atmega1280
+	${MAKE} -C firmware TARGET=atmega328p
 	${MAKE} -C util
 
 override_dh_auto_install:
@@ -33,5 +33,5 @@ override_dh_auto_clean:
 	dh_auto_clean
 	rm -f *.pyc *.pyo server/franklin.8
 	rm -rf firmware/build-*
-	$(MAKE) -C server/cdriver clean
+	$(MAKE) -C server/cdriver_src clean
 	$(MAKE) -C util clean
