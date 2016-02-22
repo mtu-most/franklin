@@ -1,6 +1,5 @@
 *.pyc
 firmware/build-*
-server/cdriver
 server/cdriver_src/build
 server/cdriver_src/*.o
 util/joystick.py
