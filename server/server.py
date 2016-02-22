@@ -494,7 +494,7 @@ class Connection: # {{{
 			boards = self._read_boards()
 			ret = list((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
 			ret.sort(key = lambda x: (boards[x[0]]['build.mcu'], x[1]))
-			return tuple((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
+			return ret
 	# }}}
 	def _get_command(self, board, port): # {{{
 		if board == 'bbbmelzi ':

@@ -1,5 +1,6 @@
 *.pyc
 firmware/build-*
+server/firmware
 server/cdriver
 server/cdriver_src/cdriver
 server/cdriver_src/build
