@@ -851,7 +851,7 @@ void buffer_refill() { // {{{
 	if (moving_to_current == 2)
 		move_to_current();
 	if (!computing_move || refilling || stopping || discard_pending || discarding) {
-		//debug("refill block %d %d %d", moving, refilling, stopping);
+		//debug("refill block %d %d %d %d %d", computing_move, refilling, stopping, discard_pending, discarding);
 		return;
 	}
 	refilling = true;

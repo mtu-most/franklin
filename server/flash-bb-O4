@@ -26,10 +26,13 @@ fini() {
 
 trap fini EXIT
 
+config="${1:-/usr/lib/franklin/avrdude.conf}"
+hex="${2:-/usr/lib/franklin/firmware/atmega1284p.hex}"
+
 config-pin P9_11 gpio
 config-pin P9_13 gpio
-rom="`avrdude -q -q -C +/usr/lib/franklin/avrdude.conf -c bbbmelziO4 -p atmega1284p -U eeprom:r:-:d`"
-avrdude -q -q -C +/usr/lib/franklin/avrdude.conf -c bbbmelziO4 -p atmega1284p -U flash:w:/usr/lib/franklin/firmware/melzi.hex:i
+rom="`avrdude -q -q -C +"${config}" -c bbbmelziO4 -p atmega1284p -U eeprom:r:-:d`"
+avrdude -q -q -C +"${config}" -c bbbmelziO4 -p atmega1284p -U flash:w:"${hex}":i
 sed -e '/^:..00..00/d' < /usr/share/arduino/hardware/mighty-1284p/bootloaders/optiboot/optiboot_atmega1284p.hex > "$tmp"
-avrdude -D -q -q -C +/usr/lib/franklin/avrdude.conf -c bbbmelziO4 -p atmega1284p -U flash:w:"$tmp":i
-avrdude -q -q -C +/usr/lib/franklin/avrdude.conf -c bbbmelziO4 -p atmega1284p -U eeprom:w:$rom:m
+avrdude -D -q -q -C +"${config}" -c bbbmelziO4 -p atmega1284p -U flash:w:"$tmp":i
+avrdude -q -q -C +"${config}" -c bbbmelziO4 -p atmega1284p -U eeprom:w:$rom:m

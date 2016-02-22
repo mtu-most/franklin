@@ -431,6 +431,7 @@ bool hwpacket(int len) {
 	{
 		if (host_block) {
 			// STOP was sent; ignore DONE.
+			//debug("done during stop");
 			avr_write_ack("stopped done");
 			return false;
 		}
@@ -443,7 +444,7 @@ bool hwpacket(int len) {
 		first_fragment = -1;
 		int cbs = 0;
 		int offset = command[1][0] == HWC_UNDERRUN ? 1 : 0;
-		//debug("done: %d pending %d sending %d current %d running %d", command[1][offset + 1], command[1][offset + 2], sending_fragment, current_fragment, running_fragment);
+		//debug("done: %d pending %d sending %d preparing %d current %d running %d", command[1][offset + 1], command[1][offset + 2], sending_fragment, preparing, current_fragment, running_fragment);
 		for (int i = 0; i < command[1][offset + 1]; ++i) {
 			int f = (running_fragment + i) % FRAGMENTS_PER_BUFFER;
 			//debug("fragment %d: cbs=%d current=%d", f, history[f].cbs, current_fragment);
