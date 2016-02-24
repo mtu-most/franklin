@@ -31,7 +31,7 @@ hex="${2:-/usr/lib/franklin/firmware/atmega1284p.hex}"
 
 # Unexport the programmer pins, just in case.
 for pin in 30 31 50 60 ; do
-	echo $pin > /sys/class/gpio/unexport
+	echo $pin > /sys/class/gpio/unexport 2>/dev/null
 done
 
 config-pin P9_11 gpio
