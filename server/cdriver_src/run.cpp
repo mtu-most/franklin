@@ -316,14 +316,11 @@ void run_file_fill_queue() {
 						if (num0 > 2) {
 							queue[settings.queue_end].data[2] = handle_probe(x, y, z);
 							if (num0 > 3) {
-								x = run_preline.X * run_file_cosa - run_preline.Y * run_file_sina + run_file_refx;
-								y = run_preline.Y * run_file_cosa + run_preline.X * run_file_sina + run_file_refy;
-								z = run_preline.Z;
-								queue[settings.queue_end].data[3] = x;
+								queue[settings.queue_end].data[3] = run_preline.X;
 								if (num0 > 4) {
-									queue[settings.queue_end].data[4] = y;
+									queue[settings.queue_end].data[4] = run_preline.Y;
 									if (num0 > 5) {
-										queue[settings.queue_end].data[5] = handle_probe(x, y, z);
+										queue[settings.queue_end].data[5] = run_preline.Z;
 									}
 								}
 								run_preline.X = NAN;

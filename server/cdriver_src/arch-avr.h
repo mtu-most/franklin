@@ -1013,6 +1013,7 @@ void arch_stop(bool fake) {
 		stop_pending = true;
 		return;
 	}
+	stop_pending = false;
 	if (!avr_running && !avr_homing) {
 		//debug("not running, so not stopping");
 		current_fragment_pos = 0;
@@ -1020,7 +1021,6 @@ void arch_stop(bool fake) {
 		host_block = false;
 		return;
 	}
-	stop_pending = false;
 	avr_running = false;
 	avr_homing = false;
 	avr_buffer[0] = HWC_STOP;

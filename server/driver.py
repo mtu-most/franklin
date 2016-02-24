@@ -1732,7 +1732,7 @@ class Printer: # {{{
 									f0 = float('inf')
 							if math.isnan(dist):
 								dist = 0
-							if all(pos[0][i] == oldpos[0][i] for i in range(3, 6)):
+							if all((math.isnan(pos[0][i]) and math.isnan(oldpos[0][i])) or pos[0][i] == oldpos[0][i] for i in range(3, 6)):
 								add_record(protocol.parsed['LINE'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': pos[1][current_extruder], 'f': f0 / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'F': pos[2] / dist if dist > 0 and cmd[1] == 1 else float('inf'), 'T': current_extruder})
 							else:
 								add_record(protocol.parsed['PRE_LINE'], {'X': pos[0][3], 'Y': pos[0][4], 'Z': pos[0][5], 'E': float('NaN'), 'f': float('NaN'), 'F': float('NaN'), 'T': current_extruder})
