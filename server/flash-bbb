@@ -23,6 +23,11 @@ trap "rm '$tmp'" EXIT
 config="${1:-/usr/lib/franklin/avrdude.conf}"
 hex="${2:-/usr/lib/franklin/firmware/atmega1284p.hex}"
 
+# Unexport the programmer pins, just in case.
+for pin in 30 31 50 60 ; do
+	echo $pin > /sys/class/gpio/unexport
+done
+
 rom="`avrdude -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U eeprom:r:-:d`"
 avrdude -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U flash:w:"${hex}":i
 sed -e '/^:..00..00/d' < /usr/share/arduino/hardware/mighty-1284p/bootloaders/optiboot/optiboot_atmega1284p.hex > "$tmp"
