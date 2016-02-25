@@ -1892,7 +1892,7 @@ class Printer: # {{{
 			shift = (8 - bits % 8) % 8
 			if shift > 0:
 				p = [(p[b] << shift | p[b + 1] >> (8 - shift)) & 0xff for b in range(len(p) - 1)] + [(p[-1] << shift) & 0xff]
-			self._send_packet(struct.pack('=BB', protocol.command['SPI'], bits) + ''.join(struct.pack('=B', b) for b in p))
+			self._send_packet(struct.pack('=BB', protocol.command['SPI'], bits) + b''.join(struct.pack('=B', b) for b in p))
 	# }}}
 	# Subclasses.  {{{
 	class Space: # {{{
