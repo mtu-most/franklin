@@ -26,7 +26,6 @@ var port;
 var _update_handle;
 var _updater;
 var _templates;
-var _updates;
 var rpc;
 var printers;
 var _ports;
@@ -47,11 +46,8 @@ var TYPE_FOLLOWER = 4;
 // {{{ Events from server.
 function trigger_update(called_port, name) {
 	//dbg(called_port + ':' + name + ',' + printers[called_port] + ',' + arguments[2]);
-	if (!(name in _updates)) {
-		/*var r = '';
-		for (var i in _updates)
-			r += ' ' + i;
-		dbg('not found:' + r);*/
+	if (window[name] === undefined) {
+		alert('called undefined update function ' + name);
 		return;
 	}
 	var old_port = port;
@@ -61,19 +57,16 @@ function trigger_update(called_port, name) {
 		printer = printers[port];
 	else
 		printer = null;
-	for (var i = 0; i < _updates[name].length; ++i) {
-		var args = [];
-		for (var a = 2; a < arguments.length; ++a)
-			args.push(arguments[a]);
-		_updates[name][i].apply(null, args);
-	}
+	var args = [];
+	for (var a = 2; a < arguments.length; ++a)
+		args.push(arguments[a]);
+	window[name].apply(null, args);
 	printer = old_printer;
 	port = old_port;
 	//dbg('done ' + name);
 }
 
 function _setup_updater() {
-	_updates = new Object;
 	_updater = {
 		signal: function(port, name, arg) {
 			trigger_update(port, 'signal', name, arg);
@@ -87,6 +80,9 @@ function _setup_updater() {
 		del_port: function(port) {
 			trigger_update(port, 'del_port');
 			_ports.splice(_ports.indexOf(port), 1);
+		},
+		port_state: function(port, state) {
+			trigger_update(port, 'port_state', state);
 		},
 		reset: function(port) {
 			trigger_update(port, 'reset');
@@ -202,10 +198,6 @@ function _setup_updater() {
 			if (_active_printer == port)
 				_active_printer = null;
 			trigger_update(port, 'del_printer');
-			for (var cb in _updates) {
-				if (cb.substring(0, port.length + 1) == port + ' ')
-					delete _updates[cb];
-			}
 			delete printers[port];
 		},
 		new_audio: function(list) {
@@ -382,16 +374,6 @@ function _setup_updater() {
 			printers[port].gpios[index].value = values[5];
 			trigger_update(port, 'gpio_update', index);
 		}
-	};
-}
-
-function register_update(name, cb) {
-	if (!(name in _updates))
-		_updates[name] = [];
-	_updates[name].push(cb);
-	return function() {
-		var pos = _updates[name].indexOf(cb);
-		_updates[name].splice(pos, 1);
 	};
 }
 // }}}

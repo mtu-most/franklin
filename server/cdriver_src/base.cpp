@@ -22,10 +22,11 @@
 
 #ifdef SERIAL
 // Only for connections that can fail.
-void disconnect() { // {{{
+void disconnect(bool notify) { // {{{
 	// Hardware has disconnected.  Notify host and wait for reconnect.
 	arch_disconnect();
-	send_host(CMD_DISCONNECT);
+	if (notify)
+		send_host(CMD_DISCONNECT);
 	while (arch_fds() == 0) {
 		poll(&pollfds[1], 1, -1);
 		if (pollfds[1].revents & (POLLHUP | POLLERR)) {

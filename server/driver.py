@@ -345,9 +345,10 @@ class Printer: # {{{
 	def _broadcast(self, *a): # {{{
 		self._send(None, 'broadcast', *a)
 	# }}}
-	def _close(self): # {{{
+	def _close(self, notify = True): # {{{
 		log('disconnecting')
-		self._send(None, 'disconnect')
+		if notify:
+			self._send(None, 'disconnect')
 		waiting_commands = ''
 		while True:
 			s = select.select([sys.stdin], [], [sys.stdin])
@@ -370,6 +371,9 @@ class Printer: # {{{
 					self.command_buffer = waiting_commands + self.command_buffer
 					self._send(id, 'return', None)
 					return
+				elif func == 'disconnect':
+					# Ignore disconnect requests while disconnected.
+					pass
 				elif func in ('export_settings', 'die'):
 					role = a.pop(0) + '_'
 					# TODO: Use role.
@@ -2904,6 +2908,9 @@ class Printer: # {{{
 		if self.confirmer is not None:
 			self._broadcast(target, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
+	def admin_disconnect(self):
+		self._send_packet(struct.pack('=B', protocol.command['FORCE_DISCONNECT']))
+		self._close(False)
 	# }}}
 	# Accessor functions. {{{
 	# Globals. {{{

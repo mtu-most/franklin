@@ -1320,7 +1320,7 @@ void AVRSerial::write(char c) {
 			break;
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
 			debug("write to avr failed: %d %s", ret, strerror(errno));
-			disconnect();
+			disconnect(true);
 		}
 	}
 }
@@ -1337,7 +1337,7 @@ void AVRSerial::refill() {
 	}
 	if (end_ == 0 && pollfds[2].revents) {
 		debug("EOF detected on serial port; waiting for reconnect.");
-		disconnect();
+		disconnect(true);
 	}
 	pollfds[2].revents = 0;
 }
@@ -1349,7 +1349,7 @@ int AVRSerial::read() {
 		if (start != end_)
 			break;
 		debug("eof on input; waiting for reconnect.");
-		disconnect();
+		disconnect(true);
 	}
 	int ret = buffer[start++];
 #ifdef DEBUG_AVRCOMM

@@ -670,6 +670,14 @@ void packet()
 		return;
 	}
 #ifdef SERIAL
+	case CMD_FORCE_DISCONNECT:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_FORCE_DISCONNECT");
+#endif
+		disconnect(false);
+		return;
+	}
 	case CMD_RECONNECT:
 	{
 #ifdef DEBUG_CMD

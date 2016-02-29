@@ -132,6 +132,7 @@ enum Command {
 	CMD_QUEUED,	// 1 byte: 0: query queue length; 1: stop and query queue length.  Reply: QUEUE.
 	CMD_READPIN,	// 1 byte: which channel. Reply: GPIO.
 	CMD_HOME,	// 1 byte: homing space; n bytes: homing type (0=pos, 1=neg, 3=no)
+	CMD_FORCE_DISCONNECT,	// 0
 	CMD_RECONNECT,	// 1 byte: name length, n bytes: port name
 	CMD_RESUME,
 	CMD_GETTIME,
@@ -548,7 +549,7 @@ bool globals_load(int32_t &address);
 void globals_save(int32_t &address);
 
 // base.cpp
-void disconnect();
+void disconnect(bool notify);
 uint32_t utime();
 uint32_t millis();
 

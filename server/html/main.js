@@ -47,22 +47,6 @@ function init() { // {{{
 	selected_port = null;
 	selected_printer = null;
 	setup();
-	register_update('confirm', do_confirm);
-	register_update('queue', do_queue);
-	register_update('audioqueue', do_audio_queue);
-	register_update('new_port', new_port);
-	register_update('new_printer', new_printer);
-	register_update('new_script', new_script);
-	register_update('new_data', new_script_data);
-	register_update('blocked', blocked);
-	register_update('message', new_message);
-	register_update('del_script', del_script);
-	register_update('del_printer', del_printer);
-	register_update('del_port', del_port);
-	register_update('globals_update', update_globals);
-	register_update('space_update', update_space);
-	register_update('temp_update', update_temp);
-	register_update('gpio_update', update_gpio);
 	var setupbox = document.getElementById('setupbox');
 	if (document.location.search.length > 0 && document.location.search[0] == '?') {
 		var things = document.location.search.split('&');
@@ -92,6 +76,10 @@ function init() { // {{{
 				reading_temps = false;
 				// Update temperature graph.
 				var canvas = get_element(printer, [null, 'tempgraph']);
+				if (!canvas) {
+					reading_temps = false;
+					return;
+				}
 				var c = canvas.getContext('2d');
 				canvas.height = canvas.clientHeight;
 				canvas.width = canvas.clientWidth;
@@ -406,7 +394,7 @@ function upload_buttons(port, ul, buttons) { // {{{
 	for (var b = 0; b < buttons.length; ++b) {
 		var li = ul.AddElement('li');
 		// Add the upload button.
-		var button = li.AddElement('button');
+		var button = li.AddElement('button', 'upload');
 		button.type = 'button';
 		button.target = buttons[b][0];
 		button.onclick = function() {
@@ -615,6 +603,12 @@ function audio_del(printer) { // {{{
 // }}}
 
 // Non-update events. {{{
+function connect(connected) { // {{{
+} // }}}
+
+function autodetect() { // {{{
+} // }}}
+
 function new_port() { // {{{
 	var p = port;
 	var nop = NoPrinter();
@@ -624,7 +618,49 @@ function new_port() { // {{{
 	printers_element.Add(ports[p][1]);
 	rpc.call('upload_options', [p], {}, function(options) {
 		upload_buttons(p, nop.options, options);
+		if (!selected_port)
+			select_printer(p);
 	});
+} // }}}
+
+function disable_buttons(state) { // {{{
+	var buttons = document.getElementsByClassName('upload');
+	for (var b = 0; b < buttons.length; ++b) {
+		buttons[b].disabled = state;
+	}
+} // }}}
+
+function port_state(state) { // {{{
+	// 0: No printer.
+	// 1: Detecting.
+	// 2: Running.
+	// 3: Flashing.
+	for (var t = 0; t < 2; ++t) {	// Set class for Label and NoPrinter.
+		switch (state) {
+		case 0:
+			ports[port][t].AddClass('nodetect');
+			ports[port][t].AddClass('noflash');
+			disable_buttons(false);
+			break;
+		case 1:
+			ports[port][t].RemoveClass('nodetect');
+			ports[port][t].AddClass('noflash');
+			disable_buttons(true);
+			break;
+		case 2:
+			ports[port][t].AddClass('nodetect');
+			ports[port][t].AddClass('noflash');
+			disable_buttons(false);
+			break;
+		case 3:
+			ports[port][t].AddClass('nodetect');
+			ports[port][t].RemoveClass('noflash');
+			disable_buttons(true);
+			break;
+		default:
+			alert('Invalid printer state ' + state);
+		}
+	}
 } // }}}
 
 function new_printer() { // {{{
@@ -646,13 +682,13 @@ function new_printer() { // {{{
 	ports[port][1].AddClass('connected');
 	ports[port][2].RemoveClass('notconnected');
 	ports[port][2].AddClass('connected');
-	update_globals();
+	globals_update();
 	for (var i = 0; i < printer.spaces.length; ++i)
-		update_space(i);
+		space_update(i);
 	for (var i = 0; i < printer.num_temps; ++i)
-		update_temp(i);
+		temp_update(i);
 	for (var i = 0; i < printer.num_gpios; ++i)
-		update_gpio(i);
+		gpio_update(i);
 	select_printer(port);
 } // }}}
 
@@ -669,7 +705,7 @@ function new_script(name) { // {{{
 	script_cbs[name] = [div, new_data];
 } // }}}
 
-function new_script_data(name) { // {{{
+function new_data(name) { // {{{
 	script_cbs[name][1] ();
 } // }}}
 
@@ -684,7 +720,7 @@ function blocked(reason) { // {{{
 		e.AddClass('hidden');
 } // }}}
 
-function new_message(msg) { // {{{
+function message(msg) { // {{{
 	var e = ports[port][2] !== null ? get_element(printer, [null, 'message1']) : get_element({'port': port}, [null, 'message2']);
 	e.ClearAll();
 	e.AddText(msg);
@@ -718,7 +754,7 @@ function del_port() { // {{{
 		selected_port = null;
 } // }}}
 
-function do_confirm(id, message) { // {{{
+window['confirm'] = function(id, message) { // {{{
 	update_canvas_and_spans(printer);
 	var e = get_element(printer, [null, 'confirm']);
 	e.ClearAll();
@@ -749,9 +785,9 @@ function do_confirm(id, message) { // {{{
 	button.type = 'button';
 	button.printer = printer;
 	button.confirm_id = id;
-} // }}}
+}; // }}}
 
-function do_queue() { // {{{
+function queue() { // {{{
 	var e = get_element(printer, [null, 'queue']);
 	var q = [];
 	var must_deselect = printer.queue.length > e.options.length;
@@ -787,7 +823,7 @@ function do_queue() { // {{{
 	start_move(printer);
 } // }}}
 
-function do_audio_queue() { // {{{
+function audioqueue() { // {{{
 	var e = get_element(printer, [null, 'audio']);
 	var q = [];
 	for (var i = 0; i < printer.audioqueue.length; ++i)
@@ -820,7 +856,7 @@ function do_audio_queue() { // {{{
 // }}}
 
 // Update events(from server). {{{
-function update_globals() { // {{{
+function globals_update() { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
 	if (ports[port][3] != printer.uuid) {
@@ -933,7 +969,7 @@ function update_globals() { // {{{
 	update_canvas_and_spans(printer);
 } // }}}
 
-function update_space(index) { // {{{
+function space_update(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
 	set_name(printer, 'space', index, 0, printer.spaces[index].name);
@@ -1053,7 +1089,7 @@ function update_space(index) { // {{{
 	update_canvas_and_spans(printer);
 } // }}}
 
-function update_temp(index) { // {{{
+function temp_update(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
 	set_name(printer, 'temp', index, 0, printer.temps[index].name);
@@ -1077,7 +1113,7 @@ function update_temp(index) { // {{{
 	update_float(printer, [['temp', index], 'value', 'settemp']);
 } // }}}
 
-function update_gpio(index) { // {{{
+function gpio_update(index) { // {{{
 	if (!get_element(printer, [null, 'container']))
 		return;
 	set_name(printer, 'gpio', index, 0, printer.gpios[index].name);
@@ -1155,25 +1191,30 @@ function update_pin(id) { // {{{
 
 function update_float(printer, id) { // {{{
 	var e = get_element(printer, id);
-	e.ClearAll();
-	e.AddText((get_value(printer, id) / e.factor).toFixed(e.digits));
+	if (e !== null) {
+		e.ClearAll();
+		e.AddText((get_value(printer, id) / e.factor).toFixed(e.digits));
+	}
 } // }}}
 
 function update_checkbox(printer, id) { // {{{
 	var e = get_element(printer, id);
-	e.checked = get_value(printer, id);
+	if (e !== null)
+		e.checked = get_value(printer, id);
 } // }}}
 
 function update_str(printer, id) { // {{{
 	var e = get_element(printer, id);
-	e.ClearAll().AddText(get_value(printer, id));
+	if (e !== null)
+		e.ClearAll().AddText(get_value(printer, id));
 } // }}}
 
 function update_floats(id) { // {{{
 	var value = get_value(printer, id);
 	for (var i = 0; i < value.length; ++i) {
 		var e = get_element(printer, id.concat([i]));
-		e.value = String(value[i]);
+		if (e !== null)
+			e.value = String(value[i]);
 	}
 } // }}}
 
@@ -1490,6 +1531,9 @@ function display_time(t) { // {{{
 // }}}
 
 function update_canvas_and_spans(p, space) { // {{{
+	// The printer may have disappeared.
+	if (!p)
+		return;
 	if (space === undefined) {
 		space = 0;
 	}

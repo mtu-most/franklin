@@ -31,6 +31,9 @@
 .role_expert .benjamin,
 .role_admin .benjamin,
 
+.noflash .ifflash,
+.nodetect .ifdetect,
+
 .nomover .movediv
 {
 	display: none;

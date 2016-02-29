@@ -22,6 +22,20 @@ import sys
 
 port = 8000
 tls = True
+user = None
+password = None
+current_level = 0
+
+def credentials(level, value):
+	global current_level
+	if level < current_level:
+		return
+	current_level = level
+	if ':' in value:
+		user, password = value.split(':', 1)
+	else:
+		user = 'admin'
+		password = value
 
 with open('/etc/default/franklin') as f:
 	for l in f.readlines():
@@ -34,9 +48,15 @@ with open('/etc/default/franklin') as f:
 			port = value.strip()
 		if key == 'TLS':
 			tls = value.lower().strip() == 'true'
+		if key == 'USER':
+			credentials(0, value.strip())
+		if key == 'EXPERT':
+			credentials(1, value.strip())
+		if key == 'ADMIN':
+			credentials(2, value.strip())
 
 try:
-	p = websocketd.RPC(port, tls = tls)
+	p = websocketd.RPC(port, tls = tls, url = '/admin', user = user, password = password)
 	action = os.getenv('ACTION')
 	dev = os.getenv('DEVNAME')
 	if action == 'add':

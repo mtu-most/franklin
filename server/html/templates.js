@@ -330,7 +330,9 @@ function Pins_gpio(num) {
 
 
 function Label(printer) {	// {{{
-	var ret = Create('div', 'tab');
+	var ret = Create('div', 'tab noflash nodetect');
+	if (selected_port == port)
+		ret.AddClass('active');
 	ret.AddEvent('click', function() { select_printer(this.port); });
 	ret.port = port;
 	if (printer) {
@@ -342,7 +344,9 @@ function Label(printer) {	// {{{
 		selector.id = make_id(printer, [null, 'profiles']);
 		update_profiles(printer);
 	}
-	ret.AddElement('span', 'port setup').AddText('@' + port);
+	var span = ret.AddElement('span', 'port setup').AddText('@' + port);
+	span.AddElement('span', 'ifflash').AddText('[!]');
+	span.AddElement('span', 'ifdetect').AddText('[?]');
 	return ret;
 }
 // }}}
@@ -871,7 +875,7 @@ function NoPrinter(options) { // {{{
 	var blocker = ret.AddElement('div', 'hidden blocker');
 	blocker.id = make_id({'port': port}, [null, 'block2']);
 	ret.AddElement('h2').AddText('No printer is found on port ' + port + '.');
-	var detect = ret.AddElement('p').AddText('If autodetect does not work, you can request to detect a printer:').AddElement('button').AddText('Detect');
+	var detect = ret.AddElement('p').AddText('If autodetect does not work, you can request to detect a printer:').AddElement('button', 'upload').AddText('Detect');
 	detect.type = 'button';
 	detect.port = port;
 	detect.AddEvent('click', function() { rpc.call('detect', [this.port], {}); });
