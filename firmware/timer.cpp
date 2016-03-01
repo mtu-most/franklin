@@ -20,14 +20,14 @@
 #include "firmware.h"
 
 void handle_motors() {
-	if (step_state == 1)
-		return;
-	last_active = seconds();
 	cli();
 	uint8_t state = step_state;
 	uint8_t cf = current_fragment;
 	uint8_t cs = current_sample;
 	sei();
+	if (state == 1)
+		return;
+	last_active = seconds();
 	// Check probe.
 	bool probed;
 	if (settings[cf].flags & Settings::PROBING && probe_pin < NUM_DIGITAL_PINS) {
@@ -66,7 +66,7 @@ void handle_motors() {
 					continue;
 				// Check limit switches.
 				if (stopping < 0) {
-					int8_t value = buffer[cf][m][cs];
+					int16_t value = buffer[cf][m][cs] + (buffer[cf][m][cs + 1] << 8);
 					if (value == 0)
 						continue;
 					uint8_t limit_pin = value < 0 ? motor[m].limit_min_pin : motor[m].limit_max_pin;
@@ -98,7 +98,7 @@ void handle_motors() {
 			for (uint8_t m = 0; m < active_motors; ++m) {
 				if (!(motor[m].intflags & Motor::ACTIVE))
 					continue;
-				// Get twe "wrong" limit pin for the given direction.
+				// Get the "wrong" limit pin for the given direction.
 				uint8_t limit_pin = (buffer[cf][m][cs] < 0 ? motor[m].limit_max_pin : motor[m].limit_min_pin);
 				bool inverted = motor[m].flags & (buffer[cf][m][cs] < 0 ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
 				if (limit_pin >= NUM_DIGITAL_PINS || GET(limit_pin) ^ inverted) {

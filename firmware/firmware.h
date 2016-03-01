@@ -459,10 +459,10 @@ static inline void SLOW_ISR() {
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (~motor[m].intflags & Motor::ACTIVE)
 			continue;
-		int8_t sample = (*current_buffer)[m][current_sample];
+		int16_t sample = (*current_buffer)[m][current_sample] + ((*current_buffer)[m][current_sample + 1] << 8);
 		if (sample == 0)
 			continue;
-		int8_t target = abs(sample) * move_phase / full_phase - motor[m].steps_current;
+		int8_t target = ((abs(sample) * move_phase) >> full_phase_bits) - motor[m].steps_current;
 		//debug("sample %d %d %d %d %d %d %d", m, sample, abs(sample), move_phase, full_phase, target, motor[m].steps_current);
 		if (target == 0)
 			continue;
@@ -490,7 +490,7 @@ static inline void SLOW_ISR() {
 			step_state = 0;
 		for (uint8_t m = 0; m < active_motors; ++m)
 			motor[m].steps_current = 0;
-		current_sample += 1;
+		current_sample += 2;
 		if (current_sample >= current_len) {
 			current_sample = 0;
 			current_fragment = (current_fragment + 1) & ((1 << FRAGMENTS_PER_MOTOR_BITS) - 1);
@@ -500,7 +500,7 @@ static inline void SLOW_ISR() {
 				for (uint8_t m = 0; m < active_motors; ++m) {
 					//debug("active %d %d", m, (*current_buffer)[m][0]);
 					BUFFER_CHECK(motor, m);
-					if ((*current_buffer)[m][0] != int8_t(0x80))
+					if ((*current_buffer)[m][0] != 0 || (*current_buffer)[m][1] != int8_t(0x80))
 						motor[m].intflags |= Motor::ACTIVE;
 					else
 						motor[m].intflags &= ~Motor::ACTIVE;

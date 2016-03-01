@@ -326,8 +326,8 @@ void packet()
 				motor[m].steps_current = 0;
 			}
 			else if (command(5 + m) == 0) {
-				buffer[current_fragment][m][0] = 0x80;
-				buffer[current_fragment][m][1] = 0;
+				buffer[current_fragment][m][0] = 0x00;
+				buffer[current_fragment][m][1] = 0x80;
 				motor[m].intflags &= ~Motor::ACTIVE;
 			}
 			else {
@@ -386,8 +386,10 @@ void packet()
 		}
 		settings[last_fragment].len = command(1);
 		filling = command(2);
-		for (uint8_t m = 0; m < active_motors; ++m)
-			buffer[last_fragment][m][0] = 0x80;	// Sentinel indicating no data is available for this motor.
+		for (uint8_t m = 0; m < active_motors; ++m) {
+			buffer[last_fragment][m][0] = 0x00;	// Sentinel indicating no data is available for this motor.
+			buffer[last_fragment][m][1] = 0x80;
+		}
 		if (command(0) == CMD_START_MOVE) {
 			//debug("move no probe %d", last_fragment);
 			settings[last_fragment].flags &= ~Settings::PROBING;
@@ -422,7 +424,7 @@ void packet()
 			write_stall();
 			return;
 		}
-		if (buffer[last_fragment][m][0] != int8_t(0x80)) {
+		if (buffer[last_fragment][m][0] != 0 || buffer[last_fragment][m][1] != int8_t(0x80)) {
 			debug("duplicate buffer %d to fill", m);
 			write_stall();
 			return;
@@ -467,7 +469,7 @@ void packet()
 		BUFFER_CHECK(buffer, current_fragment);
 		current_buffer = &buffer[current_fragment];
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			if (buffer[current_fragment][m][0] != int8_t(0x80)) {
+			if (buffer[current_fragment][m][0] != 0 || buffer[current_fragment][m][1] != int8_t(0x80)) {
 				motor[m].intflags |= Motor::ACTIVE;
 				motor[m].steps_current = 0;
 			}

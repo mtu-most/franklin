@@ -623,9 +623,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		// If audio, everything is different.
 		"\t"	"lds 16, audio"			"\n"
 		"\t"	"tst 16"			"\n"
-		"\t"	"breq 1f"			"\n"
-		"\t"	"rjmp isr_audio"		"\n"
-	"1:\t"						"\n"
+		"\t"	"brne 2f"			"\n"
 
 		// Save all registers that are used.
 		"\t"	"push 0"			"\n"
@@ -654,6 +652,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"tst 16"			"\n"
 		"\t"	"brne 1f"			"\n"
 		"\t"	"rjmp isr_underrun"		"\n"
+	"2:\t"						"\n"
+		"\t"	"rjmp isr_audio"		"\n"
 	"1:\t"						"\n"
 
 	// Register usage:
@@ -706,7 +706,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		/* steps target = b.sample * move_phase / full_phase - m.steps_current; */
 		"\t"	"mul 24, 17"			"\n"	// r0:r1 = r24*r17
 		"\t"	"lds 19, full_phase_bits"	"\n"
-		"\t"	"mov 18, 19"			"\n"	// r18 = fpb
+		"\t"	"ldi 18, 8"			"\n"
+		"\t"	"sub 18, 19"			"\n"	// r18 = 8 - fpb
 		"\t"	"tst 19"			"\n"
 		"\t"	"rjmp 2f"			"\n"
 	"1:\t"		"lsr 1"				"\n"	// r0:r1 >>= full_phase_bits
@@ -716,8 +717,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"mov 19, 0"			"\n"	// r19 = (r24 * r17) >> full_phase_bits
 
 		"\t"	"mul 25, 17"			"\n"	// r0:r1 = r25 * r17
-		"\t"	"subi 18, 8"			"\n"	// r18 = -(full_phase_bits - 8)
-		"\t"	"neg 18"			"\n"
+		"\t"	"tst 18"			"\n"
 		"\t"	"rjmp 2f"			"\n"
 		// High byte of steps target must be 0; ignore it instead of updating it.
 	"1:\t"		"lsl 0"				"\n"
@@ -895,11 +895,14 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"ldi 28, lo8(motor)"		"\n"
 		"\t"	"ldi 29, hi8(motor)"		"\n"
 	"2:\t"		"ldd 18, y + %[flags]"		"\n"
-		"\t"	"andi 18, ~%[active]"		"\n"
-		"\t"	"ld 19, z"			"\n"
-		"\t"	"cpi 19, 0x80"			"\n"
-		"\t"	"breq 1f"			"\n"
 		"\t"	"ori 18, %[active]"		"\n"
+		"\t"	"ld 19, z"			"\n"
+		"\t"	"cpi 19, 0x0"			"\n"
+		"\t"	"brne 1f"			"\n"
+		"\t"	"ldd 19, z + 1"			"\n"
+		"\t"	"cpi 19, 0x80"			"\n"
+		"\t"	"brne 1f"			"\n"
+		"\t"	"andi 18, ~%[active]"		"\n"
 	"1:\t"		"std y + %[flags], 18"		"\n"
 		"\t"	"adiw 28, %[motor_size]"	"\n"
 		"\t"	"adiw 30, %[fragment_size]"	"\n"
