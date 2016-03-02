@@ -384,6 +384,18 @@ EXTERN uint8_t notified_current_fragment;
 EXTERN volatile uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
 EXTERN volatile uint8_t current_sample;		// The sample in the current fragment that is active.
 EXTERN volatile uint8_t current_len;		// Copy of settings[current_fragment].len, for easy access from asm.
+
+// Step states.  The non-moving states must be first.
+#define STATE_DECAY 2
+enum StepState {
+	STEP_STATE_STOP,	// Not running.
+	STEP_STATE_WAIT,	// Waiting for a probe before continuing as RUN
+	STEP_STATE_PROBE,	// Waiting for a probe before continuing as SINGLE
+	STEP_STATE_NEXT = STATE_DECAY + STEP_STATE_WAIT,	// Running a sample, then move to PROBE; reset to RUN when limits are checked.
+	STEP_STATE_SINGLE = STATE_DECAY + STEP_STATE_PROBE,	// Running a single step, then fall back to PROBE.
+	STEP_STATE_RUN = STATE_DECAY + STEP_STATE_NEXT,		// Running a sample, then move to NEXT.
+};
+#define NUM_NON_MOVING_STATES 3
 EXTERN volatile uint8_t step_state;		// 0: disabled; 1: Waiting for limit switch check; 2: Waiting for step; 3: free running.
 EXTERN volatile int8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN volatile uint8_t audio_bit;	// Bitmask for current audio playback.
@@ -451,7 +463,7 @@ static inline void write_current_pos(uint8_t offset) {
 
 static inline void SLOW_ISR() {
 #ifndef FAST_ISR
-	if (step_state < 2)
+	if (step_state < NON_MOVING_STATES)
 		return;
 	arch_disable_isr();
 	sei();
@@ -486,8 +498,7 @@ static inline void SLOW_ISR() {
 	//debug("iteration frag %d sample %d = %d current %d pos %d", current_fragment, current_sample, (*current_buffer)[0][current_sample], motor[0].steps_current, motor[0].current_pos);
 	if (move_phase >= full_phase) {
 		move_phase = 0;
-		if (step_state == 2)
-			step_state = 0;
+		step_state -= STATE_DECAY;
 		for (uint8_t m = 0; m < active_motors; ++m)
 			motor[m].steps_current = 0;
 		current_sample += 2;
@@ -516,7 +527,7 @@ static inline void SLOW_ISR() {
 		}
 	}
 	cli();
-	if (step_state != 1)
+	if (step_state != STEP_STATE_STOP)
 		arch_enable_isr();
 #endif
 }

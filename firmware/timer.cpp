@@ -25,25 +25,25 @@ void handle_motors() {
 	uint8_t cf = current_fragment;
 	uint8_t cs = current_sample;
 	sei();
-	if (state == 1)
+	if (state == STEP_STATE_STOP)
 		return;
 	last_active = seconds();
 	// Check probe.
 	bool probed;
 	if (settings[cf].flags & Settings::PROBING && probe_pin < NUM_DIGITAL_PINS) {
-		if (state == 3) {
-			// Probing, but state is set to 3; fix that.
+		if (state == STEP_STATE_RUN || state == STEP_STATE_NEXT || state == STEP_STATE_WAIT) {
+			// Probing, but state is set to run; fix that.
 			cli();
-			step_state = 0;
+			step_state = STEP_STATE_PROBE;
 			// Update other variables which may have been changed by the ISR.
 			state = step_state;
 			cf = current_fragment;
 			cs = current_sample;
 			sei();
 		}
-		if (state == 0) {
+		if (state == STEP_STATE_PROBE) {
 			if (GET(probe_pin) ^ bool(pin_flags & 2)) {
-				step_state = 1;
+				step_state = STEP_STATE_STOP;
 				stopping = active_motors;
 			}
 			probed = true;
@@ -56,7 +56,7 @@ void handle_motors() {
 		probed = true;	// If we didn't need to probe; don't block later on.
 	if (stopping < 0) {
 		if (stop_pin < NUM_DIGITAL_PINS && GET(stop_pin) ^ bool(pin_flags & 4)) {
-			step_state = 1;
+			step_state = STEP_STATE_STOP;
 			stopping = active_motors;
 		}
 		else {
@@ -66,14 +66,14 @@ void handle_motors() {
 					continue;
 				// Check limit switches.
 				if (stopping < 0) {
-					int16_t value = buffer[cf][m][cs] + (buffer[cf][m][cs + 1] << 8);
+					int16_t value = *reinterpret_cast <volatile int16_t *>(&buffer[cf][m][cs]);
 					if (value == 0)
 						continue;
 					uint8_t limit_pin = value < 0 ? motor[m].limit_min_pin : motor[m].limit_max_pin;
 					if (limit_pin < NUM_DIGITAL_PINS) {
 						bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
 						if (GET(limit_pin) ^ inverted) {
-							step_state = 1;
+							step_state = STEP_STATE_STOP;
 							//debug("hit %d pin %d pos %d state %d sample %d", m, limit_pin, int(motor[m].current_pos), state, current_sample);
 							stopping = m;
 							motor[m].flags |= Motor::LIMIT;
@@ -93,7 +93,7 @@ void handle_motors() {
 	}
 	if (homers > 0) {
 		// Homing.
-		if (state == 0) {
+		if (state == STEP_STATE_PROBE) {
 			probed = true;
 			for (uint8_t m = 0; m < active_motors; ++m) {
 				if (!(motor[m].intflags & Motor::ACTIVE))
@@ -116,11 +116,15 @@ void handle_motors() {
 		else
 			probed = false;
 	}
-	if (state == 0 && probed) {
+	if (state == STEP_STATE_PROBE && probed) {
 		if (homers > 0)
 			current_sample = 0;	// Use only the first sample for homing.
-		uint8_t new_state = homers > 0 || (settings[cf].flags & Settings::PROBING) ? 2 : 3;
+		uint8_t new_state = homers > 0 || (settings[cf].flags & Settings::PROBING) ? STEP_STATE_SINGLE : STEP_STATE_RUN;
 		//debug("step_state non zero %d (fragment %d)", new_state, cf);
 		step_state = new_state;
 	}
+	cli();
+	if (step_state == STEP_STATE_NEXT || step_state == STEP_STATE_WAIT)
+		step_state = STEP_STATE_RUN;
+	sei();
 }

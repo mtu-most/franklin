@@ -294,7 +294,7 @@ void packet()
 	case CMD_HOME:
 	{
 		cmddebug("CMD_HOME");
-		if (step_state != 1 || stopping >= 0) {
+		if (step_state != STEP_STATE_STOP || stopping >= 0) {
 			debug("HOME seen while moving");
 			write_stall();
 			return;
@@ -348,7 +348,7 @@ void packet()
 			current_buffer = &buffer[current_fragment];
 			current_sample = 0;
 			//debug("step_state home 0");
-			step_state = 0;
+			step_state = STEP_STATE_PROBE;
 			arch_set_speed(home_step_time);
 			write_ack();
 		}
@@ -455,7 +455,7 @@ void packet()
 			write_ack();
 			return;
 		}
-		if (step_state != 1) {
+		if (step_state != STEP_STATE_STOP) {
 			debug("Received START while not stopped");
 			write_stall();
 			return;
@@ -479,7 +479,7 @@ void packet()
 		current_sample = 0;
 		current_len = settings[current_fragment].len;
 		//debug("step_state start 0");
-		step_state = 0;
+		step_state = STEP_STATE_PROBE;
 		arch_set_speed(time_per_sample);
 		write_ack();
 		return;

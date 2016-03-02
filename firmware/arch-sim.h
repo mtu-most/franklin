@@ -134,7 +134,7 @@ static inline void arch_msetup(uint8_t m) {
 
 static inline void arch_set_speed(uint16_t count) {
 	if (count == 0)
-		step_state = 1;
+		step_state = STEP_STATE_STOP;
 }
 
 static inline void arch_tick() {

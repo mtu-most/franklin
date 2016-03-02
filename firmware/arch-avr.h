@@ -540,7 +540,7 @@ static inline void arch_msetup(uint8_t m) { // {{{
 static inline void arch_set_speed(uint16_t count) { // {{{
 	if (count == 0) {
 		TIMSK1 = 0;
-		step_state = 1;
+		step_state = STEP_STATE_STOP;
 	}
 	else {
 		uint32_t c = count;
@@ -610,7 +610,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"push 16"			"\n"
 		// If step_state < 2: return.
 		"\t"	"lds 16, step_state"		"\n"
-		"\t"	"cpi 16, 2"			"\n"
+		"\t"	"cpi 16, %[state_non_move]"	"\n"
 		"\t"	"brcc 1f"			"\n"
 		"\t"	"rjmp isr_end16"		"\n"
 	"1:\t"						"\n"
@@ -833,9 +833,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"sts move_phase, 27"		"\n"
 		// If step_state == 2(single): step_state = 0(wait for sensor).
 		"\t"	"lds 16, step_state"		"\n"
-		"\t"	"cpi 16, 2"			"\n"
-		"\t"	"brne 1f"			"\n"
-		"\t"	"sts step_state, 27"		"\n"
+		"\t"	"subi 16, %[state_decay]"	"\n"
+		"\t"	"sts step_state, 16"		"\n"
 	"1:\t"						"\n"
 		// for all motors: steps_current = 0.
 		"\t"	"lds 17, active_motors"		"\n"
@@ -912,7 +911,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"rjmp isr_end"			"\n"
 		// Underrun.
 	"isr_underrun:\t"				"\n"
-		"\t"	"ldi 16, 1"			"\n"
+		"\t"	"ldi 16, %[state_stop]"		"\n"
 		"\t"	"sts step_state, 16"		"\n"
 	"isr_end:"					"\n"
 		"\t"	"pop 31"			"\n"
@@ -932,7 +931,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	"isr_end_audio:"				"\n"
 		"\t"	"cli"				"\n"
 		"\t"	"lds 16, step_state"		"\n"
-		"\t"	"cpi 16, 1"			"\n"
+		"\t"	"cpi 16, %[state_stop]"		"\n"
 		"\t"	"breq 1f"			"\n"
 		"\t"	"ldi 27, %[timskval]"		"\n"
 		"\t"	"sts %[timsk], 27"		"\n"
@@ -1063,7 +1062,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"pop 17"			"\n"
 		"\t"	"rjmp isr_end_audio"		"\n"
 	"isr_audio_underrun:"				"\n"
-		"\t"	"ldi 16, 1"			"\n"
+		"\t"	"ldi 16, %[state_stop]"		"\n"
 		"\t"	"sts step_state, 16"		"\n"
 		"\t"	"rjmp 5b"			"\n"
 
@@ -1086,7 +1085,13 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 			[settings_size] "I" (sizeof(Settings)),
 			[len] "I" (offsetof(Settings, len)),
 			[timsk] "M" (_SFR_MEM_ADDR(TIMSK1)),
-			[timskval] "M" (1 << OCIE1A)
+			[timskval] "M" (1 << OCIE1A),
+			[state_probe] "M" (STEP_STATE_PROBE),
+			[state_stop] "M" (STEP_STATE_STOP),
+			[state_single] "M" (STEP_STATE_SINGLE),
+			[state_run] "M" (STEP_STATE_RUN),
+			[state_non_move] "M" (NUM_NON_MOVING_STATES),
+			[state_decay] "M" (STATE_DECAY)
 		);
 }
 #else

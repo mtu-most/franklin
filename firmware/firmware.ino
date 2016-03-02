@@ -151,7 +151,7 @@ int main(void) {
 		handle_motors();
 		// Timeout.
 		uint16_t dt = seconds() - last_active;
-		if (enabled_pins > 0 && step_state == 1 && timeout_time > 0 && timeout_time <= dt) {
+		if (enabled_pins > 0 && step_state == STEP_STATE_STOP && timeout_time > 0 && timeout_time <= dt) {
 			// Disable LED and probe.
 			led_pin = ~0;
 			probe_pin = ~0;

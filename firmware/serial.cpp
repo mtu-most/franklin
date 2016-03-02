@@ -450,7 +450,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			senddebug("done/underrun");
 			uint8_t offset;
 			// If a limit was hit, ignore underrun and send done instead.
-			if (step_state == 1 && stopping < 0) {
+			if (step_state == STEP_STATE_STOP && stopping < 0) {
 				pending_packet[ff_out][0] = CMD_UNDERRUN;
 				pending_packet[ff_out][1] = active_motors;
 				offset = 2;
@@ -513,7 +513,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			send_packet();
 			continue;
 		} // }}}
-		if (home_step_time > 0 && homers == 0 && step_state == 1) { // {{{
+		if (home_step_time > 0 && homers == 0 && step_state == STEP_STATE_STOP) { // {{{
 			senddebug("homed");
 			pending_packet[ff_out][0] = CMD_HOMED;
 			pending_packet[ff_out][1] = active_motors;

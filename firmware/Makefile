@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-MONITOR_PORT = /dev/ttyACM* /dev/ttyUSB*
+MONITOR_PORT ?= /dev/ttyACM* /dev/ttyUSB*
 RESET_CMD=:
 TARGET ?= atmega1284p
 #TARGET ?= ramps
