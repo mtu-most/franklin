@@ -565,7 +565,7 @@ class Port: # {{{
 				pass
 			del orphans[self.run_id]
 			self.detecting = False
-			broadcast(None, 'port_state', port, 2)
+			self.call('send_printer', ['admin', None], {}, lambda success, data: broadcast(None, 'port_state', port, 2))
 		def get_vars(success, vars):
 			if not success:
 				log('failed to get vars')
@@ -580,8 +580,8 @@ class Port: # {{{
 				orphans[self.run_id].call('export_settings', ('admin',), {}, get_settings)
 			else:
 				self.detecting = False
-				broadcast(None, 'port_state', port, 2)
-		self.call('send_printer', ['admin', None], {}, lambda success, data: success and self.call('get_globals', ('admin',), {}, get_vars))
+				self.call('send_printer', ['admin', None], {}, lambda success, data: broadcast(None, 'port_state', port, 2))
+		self.call('get_globals', ('admin',), {}, get_vars)
 	# }}}
 	def call(self, name, args, kargs, cb): # {{{
 		data = json.dumps([self.next_mid, name, args, kargs]) + '\n'
