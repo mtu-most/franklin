@@ -260,7 +260,7 @@ class Connection: # {{{
 		for p in ports:
 			if not ports[p] or ports[p].detecting:
 				continue
-			if (uuid is None or uuid == ports[p].uuid) and (port is None or re.match(port, p)):
+			if (not uuid or uuid == ports[p].uuid) and (not port or re.match(port, p)):
 				return p
 		return None
 	# }}}
@@ -467,7 +467,7 @@ class Connection: # {{{
 		self.printer = self.find_printer(printer, port)
 	# }}}
 	def get_printer(self): # {{{
-		return self.printer.name if self.printer is not None else None
+		return self.printer
 	# }}}
 	def set_monitor(self, value): # {{{
 		if value:

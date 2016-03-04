@@ -30,32 +30,24 @@ install-all: build
 BB ?= debian@192.168.7.2
 BB_PASS ?= reprap
 UPGRADE_KEY ?= 46BEB154
+SSHPASS ?= "sshpass -p'${BB_PASS}'"
 zip:
 	rm -rf zipdir
 	mkdir zipdir
-	sshpass -p"$(BB_PASS)" ssh $(BB) sudo ntpdate -u time.mtu.edu
-	sshpass -p"$(BB_PASS)" ssh $(BB) rm -rf franklin '/tmp/*.{dsc,changes,tar.gz,deb}'
+	$(SSHPASS) ssh $(BB) sudo ntpdate -u time.mtu.edu
+	$(SSHPASS) ssh $(BB) rm -rf franklin '/tmp/*.{dsc,changes,tar.gz,deb}'
 	cd zipdir && git clone .. franklin
-	tar cf - -C zipdir franklin | sshpass -p"$(BB_PASS)" ssh $(BB) tar xf -
+	tar cf - -C zipdir franklin | $(SSHPASS) ssh $(BB) tar xf -
 	rm -rf zipdir/franklin
-	sshpass -p"$(BB_PASS)" ssh $(BB) sed -i -e 's/-stackprotector/\\0,-relro/' franklin/debian/rules
-	sshpass -p"$(BB_PASS)" ssh $(BB) make -C franklin build MKDEB_ARG=-S
-	sshpass -p"$(BB_PASS)" ssh $(BB) cd /tmp \; aptitude download avrdude arduino-core avr-libc binutils-avr gcc-avr python-avahi python-gdbm 
-	sshpass -p"$(BB_PASS)" scp $(BB):/tmp/*deb zipdir/
+	$(SSHPASS) ssh $(BB) git -C franklin remote set-url origin https://github.com/mtu-most/franklin
+	$(SSHPASS) ssh $(BB) make -C franklin build
+	$(SSHPASS) scp $(BB):/tmp/*deb zipdir/
 	cd zipdir && aptitude download arduino-mighty-1284p
-	cd zipdir && for f in python-gdbm_* ; do mv $$f 1-$$f ; done
-	cd zipdir && for f in binutils-avr_* ; do mv $$f 1-$$f ; done
-	cd zipdir && for f in avrdude_* ; do mv $$f 1-$$f ; done
-	cd zipdir && for f in python-avahi_* ; do mv $$f 2-$$f ; done
-	cd zipdir && for f in gcc-avr_* ; do mv $$f 2-$$f ; done
-	cd zipdir && for f in avr-libc_* ; do mv $$f 3-$$f ; done
-	cd zipdir && for f in arduino-core_* ; do mv $$f 4-$$f ; done
-	cd zipdir && for f in arduino-mighty-1284p_* ; do mv $$f 5-$$f ; done
 	cd zipdir && for f in python3-fhs_* ; do mv $$f 1-$$f ; done
 	cd zipdir && for f in python3-network_* ; do mv $$f 2-$$f ; done
 	cd zipdir && for f in python3-websocketd_* ; do mv $$f 3-$$f ; done
 	cd zipdir && for f in franklin_* ; do mv $$f 6-$$f ; done
-	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || sshpass -p"$(BB_PASS)" scp $(BB):'/tmp/*.{dsc,changes,tar.gz,deb}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL
+	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || $(SSHPASS) scp $(BB):'/tmp/*.{dsc,changes,tar.gz,deb}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL
 	# Prepare script.
 	echo '#!/bin/sh' > zipdir/0-prepare
 	echo 'ip route del default' >> zipdir/0-prepare
