@@ -11,11 +11,11 @@ override_dh_auto_build:
 	${MAKE} -C server/html
 	ronn -r server/franklin.8.ronn
 #ifeq (${ARCH}, armhf)
-#	${MAKE} -C server/cdriver_src TARGET=bbb
-#	mv server/cdriver/cdriver_src server/cdriver_src/cdriver.local
-#	${MAKE} -C server/cdriver_src clean
+#	${MAKE} -C server/cdriver TARGET=bbb
+#	mv server/cdriver/franklin-cdriver server/cdriver/franklin-cdriver.local
+#	${MAKE} -C server/cdriver clean
 #endif
-	${MAKE} -C server/cdriver_src
+	${MAKE} -C server/cdriver
 	${MAKE} -C firmware TARGET=atmega1284p
 	${MAKE} -C firmware TARGET=atmega2560
 	${MAKE} -C firmware TARGET=atmega1280
@@ -25,13 +25,13 @@ override_dh_auto_build:
 override_dh_auto_install:
 	dh_auto_install
 #ifeq (${ARCH}, armhf)
-#	dh_install server/cdriver_src/cdriver.local /usr/lib/franklin/
-#	dh_install server/cdriver_src/bbb_pru.bin /usr/lib/franklin/
+#	dh_install server/cdriver/franklin-cdriver.local /usr/lib/franklin/
+#	dh_install server/cdriver/bbb_pru.bin /usr/lib/franklin/
 #endif
 
 override_dh_auto_clean:
 	dh_auto_clean
 	rm -f *.pyc *.pyo server/franklin.8
 	rm -rf firmware/build-*
-	$(MAKE) -C server/cdriver_src clean
+	$(MAKE) -C server/cdriver clean
 	$(MAKE) -C util clean

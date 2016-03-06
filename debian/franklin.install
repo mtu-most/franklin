@@ -2,7 +2,7 @@ firmware/build-*/*.hex /usr/lib/franklin/firmware
 server/server.py /usr/lib/franklin
 server/protocol.py /usr/lib/franklin
 server/driver.py /usr/lib/franklin
-server/cdriver_src/cdriver /usr/lib/franklin
+server/cdriver/franklin-cdriver /usr/lib/franklin
 server/control.py /usr/lib/franklin
 server/avrdude.conf /usr/lib/franklin
 server/flash-bbb /usr/lib/franklin

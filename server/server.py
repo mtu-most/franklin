@@ -49,7 +49,6 @@ is in a configuration file):
 * predetect: system command that is run before detection is attempted.  The
   substring #PORT# is replaced with the port.  Use this to set up the port.
   Default: ``stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt``
-* atexit: system command to run when exiting Franklin.  Default: ''
 * allow-system: regular expression for commands that are allowed to be run from
   G-Code.  Default: '^$'
 * admin: Credentials for accessing the /admin interface.  This can either be a
@@ -114,7 +113,6 @@ config = fhs.init(packagename = 'franklin', config = {
 		'add-blacklist': '$',
 		'autodetect': 'True',
 		'predetect': 'stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',
-		'atexit': '',
 		'allow-system': '^$',
 		'admin': '',
 		'expert': '',
@@ -340,14 +338,6 @@ class Connection: # {{{
 			with open(filename, 'wb') as f:
 				f.write(data)
 		broadcast(None, 'new_data', name, data)
-	# }}}
-	def exit(self): # {{{
-		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
-		for p in tuple(ports.keys()):
-			remove_port(p)
-		if config['atexit']:
-			subprocess.call(config['atexit'], shell = True)
-		GLib.idle_add(lambda: sys.exit(0))
 	# }}}
 	def disable(self, port): # {{{
 		return disable(self.socket.data['role'], port)
@@ -672,7 +662,7 @@ def detect(port, role): # {{{
 	broadcast(None, 'port_state', port, 1)
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
-		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', config['local'] or fhs.read_data('cdriver', opened = False), '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', config['local'] or fhs.read_data('franklin-cdriver', opened = False), '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		ports[port] = Port(port, process, None, run_id)
 		return False
 	if not os.path.exists(port):
@@ -754,7 +744,7 @@ def detect(port, role): # {{{
 			run_id = nextid()
 			log('accepting unknown printer on port %s (id %s)' % (port, ''.join('%02x' % x for x in run_id)))
 			#log('orphans: %s' % repr(tuple(orphans.keys())))
-			process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('cdriver', opened = False), '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+			process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, printer, run_id)
 			return False
 		printer.write(protocol.single['ID'])

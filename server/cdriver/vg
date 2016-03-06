@@ -1,0 +1,3 @@
+#!/bin/sh
+ulimit -c unlimited
+exec valgrind "`dirname $0`"/franklin-cdriver "$@"

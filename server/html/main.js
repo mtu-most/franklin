@@ -506,11 +506,6 @@ function toggle_setup() { // {{{
 	else
 		c.AddClass('nosetup');
 } // }}}
-
-function exit() { // {{{
-	if (confirm('Do you really want to shut down?'))
-		rpc.call('exit');
-} // }}}
 // }}}
 
 // Queue functions.  {{{
