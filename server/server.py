@@ -109,7 +109,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'port': '8000',
 		'address': '',
 		'printer': '',
-		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\\d*))$',
+		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(O|GS)?\\d*))$',
 		'add-blacklist': '$',
 		'autodetect': 'True',
 		'predetect': 'stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',
@@ -383,15 +383,15 @@ class Connection: # {{{
 		return boards
 	# }}}
 	def upload_options(self, port): # {{{
-		if port == '/dev/ttyO0':
-			return (('bbbmelzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v1)'),)
-		elif port == '/dev/ttyO4':
-			return (('bb4melzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v2)'),)
-		else:
-			boards = self._read_boards()
-			ret = list((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
-			ret.sort(key = lambda x: (boards[x[0]]['build.mcu'], x[1]))
-			return ret
+		ret = []
+		if port == '/dev/ttyS0':
+			ret += [('bbbmelzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v1)')]
+		elif port == '/dev/ttyS4':
+			ret += [('bb4melzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v2)')]
+		boards = self._read_boards()
+		ret += list((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
+		ret.sort(key = lambda x: (boards[x[0]]['build.mcu'] if x[0] in boards else '', x[1]))
+		return ret
 	# }}}
 	def _get_command(self, board, port): # {{{
 		if board == 'bbbmelzi ':

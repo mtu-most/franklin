@@ -91,7 +91,7 @@ function _setup_updater() {
 			trigger_update(port, 'stall');
 		},
 		confirm: function(port, id, message) {
-			trigger_update(port, 'confirm', id, message);
+			trigger_update(port, 'ask_confirmation', id, message);
 		},
 		autodetect: function(state) {
 			autodetect = state;

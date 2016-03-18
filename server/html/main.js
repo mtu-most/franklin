@@ -749,7 +749,7 @@ function del_port() { // {{{
 		selected_port = null;
 } // }}}
 
-window['confirm'] = function(id, message) { // {{{
+function ask_confirmation(id, message) { // {{{
 	update_canvas_and_spans(printer);
 	var e = get_element(printer, [null, 'confirm']);
 	e.ClearAll();
@@ -1508,7 +1508,7 @@ function fill(s) { // {{{
 function display_time(t) { // {{{
 	if (isNaN(t))
 		return '-';
-	var s = t;
+	var s = Math.floor(t);
 	var m = Math.floor(s / 60);
 	var h = Math.floor(m / 60);
 	var d = Math.floor(h / 24);
