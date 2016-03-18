@@ -109,7 +109,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'port': '8000',
 		'address': '',
 		'printer': '',
-		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(O|GS)?\\d*))$',
+		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(GS)?\\d*))$',
 		'add-blacklist': '$',
 		'autodetect': 'True',
 		'predetect': 'stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',
@@ -384,9 +384,9 @@ class Connection: # {{{
 	# }}}
 	def upload_options(self, port): # {{{
 		ret = []
-		if port == '/dev/ttyS0':
+		if port in ('/dev/ttyS0', '/dev/ttyO0'):
 			ret += [('bbbmelzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v1)')]
-		elif port == '/dev/ttyS4':
+		elif port in ('/dev/ttyS4', '/dev/ttyO4'):
 			ret += [('bb4melzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v2)')]
 		boards = self._read_boards()
 		ret += list((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
