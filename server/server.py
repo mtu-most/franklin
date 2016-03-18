@@ -672,9 +672,9 @@ def detect(port, role): # {{{
 		subprocess.call(config['predetect'].replace('#PORT#', port), shell = True)
 	try:
 		printer = serial.Serial(port, baudrate = 115200, timeout = 0)
-	except serial.SerialException:
-		log('failed to open serial port.')
-		traceback.print_exc()
+	except serial.SerialException as e:
+		log('failed to open serial port %s (%s).' % (port, e.message))
+		#traceback.print_exc()
 		return False
 	# We need to get the printer id first.  If the printer is booting, this can take a while.
 	id = [None, None, None, None]	# data, timeouts, had data

@@ -780,7 +780,7 @@ function ask_confirmation(id, message) { // {{{
 	button.type = 'button';
 	button.printer = printer;
 	button.confirm_id = id;
-}; // }}}
+} // }}}
 
 function queue() { // {{{
 	var e = get_element(printer, [null, 'queue']);

@@ -1,10 +1,9 @@
 *.pyc
 firmware/build-*
 server/firmware
-server/cdriver
-server/cdriver_src/cdriver
-server/cdriver_src/build
-server/cdriver_src/*.o
+server/franklin-cdriver
+server/cdriver/franklin-cdriver
+server/cdriver/build
 util/joystick.py
 util/c457a-ui.gui
 mkdeb
