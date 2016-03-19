@@ -331,6 +331,11 @@ void serial(uint8_t channel) {
 			if (len + command_end[channel] > COMMAND_SIZE) {
 				debug("clip size! %d %d %d", len, command_end[channel], COMMAND_SIZE);
 				len = COMMAND_SIZE - command_end[channel];
+				if (len == 0) {
+					debug("canceling command");
+					command_cancel();
+					continue;
+				}
 			}
 		}
 		else
