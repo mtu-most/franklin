@@ -673,7 +673,7 @@ def detect(port, role): # {{{
 	try:
 		printer = serial.Serial(port, baudrate = 115200, timeout = 0)
 	except serial.SerialException as e:
-		log('failed to open serial port %s (%s).' % (port, e.message))
+		log('failed to open serial port %s (%s).' % (port, str(e)))
 		#traceback.print_exc()
 		return False
 	# We need to get the printer id first.  If the printer is booting, this can take a while.
