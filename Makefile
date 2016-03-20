@@ -42,26 +42,12 @@ zip:
 	$(SSHPASS) ssh $(BB) git -C franklin remote set-url origin https://github.com/mtu-most/franklin
 	$(SSHPASS) ssh $(BB) make -C franklin build
 	$(SSHPASS) scp $(BB):/tmp/*deb zipdir/
-	cd zipdir && aptitude download arduino-mighty-1284p
 	cd zipdir && for f in python3-fhs_* ; do mv $$f 1-$$f ; done
 	cd zipdir && for f in python3-network_* ; do mv $$f 2-$$f ; done
 	cd zipdir && for f in python3-websocketd_* ; do mv $$f 3-$$f ; done
-	cd zipdir && for f in franklin_* ; do mv $$f 6-$$f ; done
-	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || $(SSHPASS) scp $(BB):'/tmp/*.{dsc,changes,tar.gz,deb}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL
-	# Prepare script.
-	echo '#!/bin/sh' > zipdir/0-prepare
-	echo 'ip route del default' >> zipdir/0-prepare
-	echo 'dpkg --purge repetier-server' >> zipdir/0-prepare
-	echo "sed -i -e 's/apt-get update -f/#apt-get install -f/' /etc/rc.local" >> zipdir/0-prepare
-	echo 'rm /etc/default/franklin' >> zipdir/0-prepare
-	# Finalize script.
-	echo '#!/bin/sh' > zipdir/9-finalize
-	echo 'cat > /etc/default/franklin <<EOF' >> zipdir/9-finalize
-	echo "#ATEXIT='sudo shutdown -h now'" >> zipdir/9-finalize
-	echo "TLS=False" >> zipdir/9-finalize
-	echo 'EOF' >> zipdir/9-finalize
-	echo 'shutdown -h now' >> zipdir/9-finalize
-	cd zipdir && for f in * ; do echo "$$FRANKLIN_PASSPHRASE" | gpg --local-user $(UPGRADE_KEY) --passphrase-fd 0 --detach-sign $$f ; done
+	cd zipdir && for f in franklin_* ; do mv $$f 4-$$f ; done
+	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || $(SSHPASS) scp $(BB):'/tmp/*.{dsc,changes,tar.gz,deb}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL && $$DINSTALL
+	cd zipdir && for f in * ; do echo "$$FRANKLIN_PASSPHRASE" | gpg --local-user $(UPGRADE_KEY) --passphrase-fd 0 --sign $$f ; rm $$f ; done
 	changelog="`dpkg-parsechangelog`" && name="`echo "$$changelog" | grep '^Source: ' | cut -b9-`" && fullversion="`echo "$$changelog" | grep '^Version: ' | cut -b10-`" && version="$${fullversion%-*}" && cd zipdir && rm -f ../$$name-$$version.zip && zip ../$$name-$$version.zip *
 
 install:
