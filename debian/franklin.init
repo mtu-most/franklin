@@ -42,7 +42,7 @@ RUN=1
 #PREDETECT='stty -F #PORT# raw 115200'
 
 # Regular expression of serial ports to ignore.
-#BLACKLIST='/dev/(input/.*|ptmx|console|tty(printk|(S|GS)?\d*))$'
+#BLACKLIST='/dev/(input/.*|ptmx|console|tty(printk|(GS)?\d*))$'
 #ADD_BLACKLIST='$'
 
 # Allowed system commands.  This must be a regular expressing.  Use '.*' for

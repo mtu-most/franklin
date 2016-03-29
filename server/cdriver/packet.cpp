@@ -530,7 +530,7 @@ void packet()
 		which = get_which();
 		uint8_t axis = command[0][3];
 #ifdef DEBUG_CMD
-		debug("CMD_WRITE_SPACE_MOTOR");
+		debug("CMD_WRITE_SPACE_AXIS");
 #endif
 		if (which >= NUM_SPACES || axis >= spaces[which].num_axes) {
 			debug("Writing invalid axis %d %d", which, axis);

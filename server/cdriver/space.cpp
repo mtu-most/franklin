@@ -251,7 +251,7 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 			double hp = motor[m]->home_pos * motor[m]->steps_per_unit;
 			double diff = hp - ohp;
 			motor[m]->settings.current_pos += diff;
-			//debug("load motor %d %d new home add %f", id, m, diff);
+			//debug("load motor %d %d new home %f add %f", id, m, motor[m]->home_pos, diff);
 			arch_addpos(id, m, diff);
 			must_move = true;
 		}
@@ -518,10 +518,13 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 					if (fm < 0)
 						continue;
 					int fs = fm >> 8;
-					fm &= 0xff;
+					fm &= 0x7f;
 					if (fs != s || fm != m || (fs == 2 && fm >= mm))
 						continue;
-					spaces[2].motor[mm]->settings.current_pos += new_cp - mtr.settings.current_pos;
+					if (mtr.dir_pin.inverted() ^ spaces[2].motor[mm]->dir_pin.inverted())
+						spaces[2].motor[mm]->settings.current_pos -= new_cp - mtr.settings.current_pos;
+					else
+						spaces[2].motor[mm]->settings.current_pos += new_cp - mtr.settings.current_pos;
 				}
 			}
 			//cpdebug(s, m, "cp three %f", target);

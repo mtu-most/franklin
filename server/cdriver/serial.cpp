@@ -238,21 +238,16 @@ void serial(uint8_t channel) {
 						if (cb)
 							cb();
 					}
-					if (out_busy < 3) {
-						if (change_pending) {
-							arch_motors_change();
-						}
-						else if (start_pending) {
-							arch_start_move(0);
-						}
-						else if (stop_pending) {
-							//debug("do pending stop");
-							arch_stop();
-						}
-						else if (discard_pending) {
-							arch_do_discard();
-						}
+					if (out_busy < 3 && change_pending)
+						arch_motors_change();
+					if (out_busy < 3 && start_pending)
+						arch_start_move(0);
+					if (out_busy < 3 && stop_pending) {
+						//debug("do pending stop");
+						arch_stop();
 					}
+					if (out_busy < 3 && discard_pending)
+						arch_do_discard();
 					if (!sending_fragment && !stopping && arch_running()) {
 						run_file_fill_queue();
 						buffer_refill();
@@ -591,7 +586,7 @@ void send_packet()
 {
 	int which = (ff_out - 1) & 3;
 #ifdef DEBUG_DATA
-	fprintf(stderr, "send (%d, %x %d): ", out_busy, ff_out, pending_len[which]);
+	fprintf(stderr, "send (%d): ", out_busy);
 	for (uint8_t i = 0; i < pending_len[which]; ++i)
 		fprintf(stderr, " %02x", int(uint8_t(pending_packet[which][i])));
 	fprintf(stderr, "\n");

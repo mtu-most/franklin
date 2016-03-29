@@ -433,9 +433,13 @@ void packet()
 			buffer[last_fragment][m][b] = static_cast<int8_t>(command(2 + b));
 		if (command(0) != CMD_MOVE_SINGLE) {
 			for (uint8_t f = 0; f < active_motors; ++f) {
-				if (motor[f].follow == m) {
-					for (uint8_t b = 0; b < last_len; ++b)
-						buffer[last_fragment][f][b] = buffer[last_fragment][m][b];
+				if ((motor[f].follow & 0x7f) == m) {
+					for (uint8_t b = 0; b < last_len; ++b) {
+						if (motor[f].follow & 0x80)
+							buffer[last_fragment][f][b] = -buffer[last_fragment][m][b];
+						else
+							buffer[last_fragment][f][b] = buffer[last_fragment][m][b];
+					}
 				}
 			}
 		}
