@@ -30,7 +30,7 @@ install-all: build
 BB ?= debian@192.168.7.2
 BB_PASS ?= reprap
 UPGRADE_KEY ?= 46BEB154
-SSHPASS ?= "sshpass -p'${BB_PASS}'"
+SSHPASS ?= sshpass -p'${BB_PASS}'
 zip:
 	rm -rf zipdir
 	mkdir zipdir
