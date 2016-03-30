@@ -25,6 +25,7 @@
 // Note: When changing this, also change max in cdriver/space.cpp
 #ifdef FAST_ISR
 #define TIME_PER_ISR 75
+#define STEPS_DELAY 0	// Extra delay for steps, in units of 6 clock pulses.
 #else
 #define TIME_PER_ISR 500
 #endif
@@ -685,7 +686,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"ldd 26, y + %[dir_port]"	"\n"
 		"\t"	"ldd 27, y + %[dir_port] + 1"	"\n"	// r27 can be non-zero from here.
 		"\t"	"ldd 0, y + %[dir_bitmask]"	"\n"
-		"\t"	"ld 21, x"			"\n"	// 1 is current port value.
+		"\t"	"ld 21, x"			"\n"	// r21 is current port value.
 		// }}}
 		// positive ? set dir : reset dir (don't send yet) <18(numsteps) <0(dir bitmask) <21(current value) >21(new value) >19(abs numsteps) {{{
 		"\t"	"tst 25"			"\n"	// Test sample sign.
@@ -700,6 +701,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"adiw 24, 1"			"\n"
 		"\t"	"set"				"\n"
 	"2:\t"						"\n"
+		// Set direction.
+		"\t"	"st x, 21"			"\n"
 		// }}}
 
 		/* Compute steps.  <24+25(abs numsteps) <17(move_phase) <y(motor) >0(steps) X1 {{{ */
@@ -740,9 +743,6 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"rjmp isr_action_continue"	"\n"
 	"1:\t"						"\n"
 		// }}}
-
-		// Set direction.
-		"\t"	"st x, 21"			"\n"
 
 		//motor[m].current_pos += (motor[m].dir == DIR_POSITIVE ? steps_target : -steps_target);
 		"\t"	"ldd 19, y + %[current_pos]"		"\n"
@@ -797,20 +797,20 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 
 		// Send pulses.  Delay of 1 μs is required according to a4988 datasheet.  At 16MHz, that's 16 clock cycles.
 		"\t"	"tst 0"				"\n"
-	"2:\t"		"breq 3f"			"\n"	// 1	3m+4
-		"\t"	"nop"				"\n"	// 1	3m+5
-		"\t"	"st x, 19"			"\n"	// 2	3m+7=16 => m=3
-		"\t"	"ldi 18, 4"			"\n"	// 1	1
-		"\t"	"nop"				"\n"	// 1	2
-		"\t"	"nop"				"\n"	// 1	3
-	"1:\t"		"dec 18"			"\n"	// n	n+3
-		"\t"	"brne 1b"			"\n"	// 2n-1	3n+2
-		"\t"	"st x, 1"			"\n"	// 2	3n+4=16 => n=4
-		"\t"	"ldi 18, 3"			"\n"	// 1	1
+	"2:\t"		"breq 3f"			"\n"	// 1	3
+		"\t"	"nop"				"\n"	// 1	4
+		"\t"	"ldi 18, 3 + %[delay]"		"\n"	// 1	5
+		"\t"	"nop"				"\n"	// 1	6
+	"1:\t"		"dec 18"			"\n"	// n	n+6
+		"\t"	"brne 1b"			"\n"	// 2n-1	3n+5
+		"\t"	"st x, 19"			"\n"	// 2	3n+7=16 => n=3
+		"\t"	"ldi 18, 4 + %[delay]"		"\n"	// 1	1
 	"1:\t"		"dec 18"			"\n"	// m	m+1
 		"\t"	"brne 1b"			"\n"	// 2m-1	3m
 		"\t"	"dec 0"				"\n"	// 1	3m+1
-		"\t"	"rjmp 2b"			"\n"	// 2	3m+3
+		"\t"	"nop"				"\n"	// 1	3m+2
+		"\t"	"st x, 1"			"\n"	// 2	3m+4=16 => n=4
+		"\t"	"rjmp 2b"			"\n"	// 2	2
 	"3:\t"		"clr 27"			"\n"	// r27 is 0 again.
 		//*/
 
@@ -1091,7 +1091,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 			[state_single] "M" (STEP_STATE_SINGLE),
 			[state_run] "M" (STEP_STATE_RUN),
 			[state_non_move] "M" (NUM_NON_MOVING_STATES),
-			[state_decay] "M" (STATE_DECAY)
+			[state_decay] "M" (STATE_DECAY),
+			[delay] "M" (STEPS_DELAY)
 		);
 }
 #else
