@@ -410,7 +410,7 @@ bool hwpacket(int len) { // {{{
 		}
 		else {
 			// Only overwrite current position if the new value is correct.
-			//debug("underrun ok computing_move=%d sending=%d pending=%d finishing=%d", computing_move, sending_fragment, command[1][2], run_file_finishing);
+			//debug("underrun ok computing_move=%d sending=%d pending=%d finishing=%d", computing_move, sending_fragment, command[1][3], run_file_finishing);
 			if (!computing_move && !sending_fragment && !transmitting_fragment && command[1][3] == 0) {
 				avr_get_current_pos(4, true);
 				if (run_file_finishing) {
@@ -432,7 +432,7 @@ bool hwpacket(int len) { // {{{
 		}
 		//debug("done: %d pending %d sending %d current %d", command[1][1], command[1][2], sending_fragment, current_fragment);
 		if (FRAGMENTS_PER_BUFFER == 0) {
-			debug("Done received while fragments per buffer is zero");
+			//debug("Done received while fragments per buffer is zero");
 			avr_write_ack("invalid done");
 			return false;
 		}
@@ -463,6 +463,8 @@ bool hwpacket(int len) { // {{{
 		}
 		if (out_busy < 3)
 			buffer_refill();
+		//else
+			//debug("no refill");
 		run_file_fill_queue();
 		return false;
 	} // }}}
@@ -1055,7 +1057,7 @@ static void avr_sent_fragment() { // {{{
 
 bool arch_send_fragment() { // {{{
 	if (host_block || stopping || discard_pending || stop_pending) {
-		debug("not sending arch frag %d %d %d %d", host_block, stopping, discard_pending, stop_pending);
+		//debug("not sending arch frag %d %d %d %d", host_block, stopping, discard_pending, stop_pending);
 		return false;
 	}
 	if (avr_audio >= 0) {
@@ -1071,7 +1073,7 @@ bool arch_send_fragment() { // {{{
 	if (stop_pending || discard_pending)
 		return false;
 	avr_buffer[0] = settings.probing ? HWC_START_PROBE : HWC_START_MOVE;
-	//debug("send fragment %d %d %d", current_fragment_pos, current_fragment, num_active_motors);
+	//debug("send fragment current-fragment-pos=%d current-fragment=%d active-moters=%d running=%d num-running=0x%x", current_fragment_pos, current_fragment, num_active_motors, running_fragment, (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
 	avr_buffer[1] = current_fragment_pos * 2;
 	avr_buffer[2] = num_active_motors;
 	sending_fragment = num_active_motors + 1;
@@ -1213,7 +1215,17 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{
 
 void arch_do_discard() { // {{{
 	int cbs = 0;
-	for (int i = 0; i < discard_pending; ++i) {
+	while (out_busy >= 3) {
+		poll(&pollfds[2], 1, -1);
+		serial(1);
+	}
+	if (!discard_pending)
+		return;
+	discard_pending = false;
+	int fragments = (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+	if (fragments <= 2)
+		return;
+	for (int i = 0; i < fragments - 2; ++i) {
 		current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		//debug("restoring %d %d", current_fragment, history[current_fragment].cbs);
 		cbs += history[current_fragment].cbs;
@@ -1221,26 +1233,18 @@ void arch_do_discard() { // {{{
 	restore_settings();
 	history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += cbs + cbs_after_current_move;
 	cbs_after_current_move = 0;
-	while (out_busy >= 3) {
-		poll(&pollfds[2], 1, -1);
-		serial(1);
-	}
 	avr_buffer[0] = HWC_DISCARD;
-	avr_buffer[1] = discard_pending;
-	discard_pending = 0;
+	avr_buffer[1] = fragments - 2;
+	computing_move = true;
 	if (prepare_packet(avr_buffer, 2))
 		avr_send();
 } // }}}
 
 void arch_discard() { // {{{
 	// Discard much of the buffer, so the upcoming change will be used almost immediately.
-	return;
 	if (!avr_running || stopping || avr_homing)
 		return;
-	int fragments = (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-	if (fragments <= 2)
-		return;
-	discard_pending = fragments - 2;
+	discard_pending = true;
 	if (!avr_filling)
 		arch_do_discard();
 } // }}}

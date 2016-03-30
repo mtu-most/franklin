@@ -849,8 +849,10 @@ void apply_tick() { // {{{
 } // }}}
 
 void buffer_refill() { // {{{
-	if (preparing)
+	if (preparing) {
+		//debug("no refill because prepare");
 		return;
+	}
 	if (moving_to_current == 2)
 		move_to_current();
 	if (!computing_move || refilling || stopping || discard_pending || discarding) {

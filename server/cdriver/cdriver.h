@@ -434,7 +434,7 @@ EXTERN int stopping;		// From limit.
 EXTERN int sending_fragment;
 EXTERN bool transmitting_fragment;
 EXTERN bool start_pending, stop_pending, change_pending, discarding;
-EXTERN int discard_pending;
+EXTERN bool discard_pending;
 EXTERN double done_factor;
 EXTERN uint8_t requested_temp;
 EXTERN bool refilling;

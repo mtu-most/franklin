@@ -80,7 +80,7 @@ void setup(char const *port, char const *run_id)
 	transmitting_fragment = false;
 	start_pending = false;
 	stop_pending = false;
-	discard_pending = 0;
+	discard_pending = false;
 	change_pending = false;
 	discarding = false;
 	cbs_after_current_move = 0;
