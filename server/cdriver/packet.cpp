@@ -98,14 +98,15 @@ void setpos(int which, int t, double f) {
 	//debug("setting pos for %d %d to %f", which, t, f);
 	double diff;
 	if (!isnan(spaces[which].motor[t]->settings.current_pos)) {
-		diff = f * spaces[which].motor[t]->steps_per_unit - spaces[which].motor[t]->settings.current_pos;
+		diff = f * spaces[which].motor[t]->steps_per_unit - arch_round_pos(which, t, spaces[which].motor[t]->settings.current_pos);
 		spaces[which].motor[t]->settings.current_pos += diff;
 		//debug("non nan %f %f %f", spaces[which].motor[t]->settings.current_pos, diff, f);
+		//debug("setpos non-nan %d %d %f", which, t, diff);
 	}
 	else {
 		diff = f * spaces[which].motor[t]->steps_per_unit;
 		spaces[which].motor[t]->settings.current_pos = diff;
-		//debug("nan %f", diff);
+		//debug("setpos nan %d %d %f", which, t, diff);
 	}
 	for (int fragment = 0; fragment < FRAGMENTS_PER_BUFFER; ++fragment) {
 		if (!isnan(spaces[which].motor[t]->history[fragment].current_pos))

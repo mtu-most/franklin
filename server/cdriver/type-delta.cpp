@@ -95,7 +95,7 @@ static void reset_pos (Space *s) {
 	double epsilon = 3 / (s->motor[0]->steps_per_unit + s->motor[1]->steps_per_unit + s->motor[2]->steps_per_unit);
 	for (uint8_t i = 0; i < 3; ++i)
 		p[i] = s->motor[i]->settings.current_pos / s->motor[i]->steps_per_unit;
-	if (abs(p[0] - p[1]) > epsilon || int(p[0] - p[2]) > epsilon) {
+	if (fabs(p[0] - p[1]) > epsilon || fabs(p[0] - p[2]) > epsilon) {
 		//debug("resetpos fails");
 		s->axis[0]->settings.source = NAN;
 		s->axis[1]->settings.source = NAN;

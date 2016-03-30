@@ -110,6 +110,7 @@ void arch_had_ack();
 void avr_send();
 void avr_call1(uint8_t cmd, uint8_t arg);
 void avr_get_current_pos(int offset, bool check);
+double arch_round_pos(int s, int m, double pos);
 bool hwpacket(int len);
 void avr_setup_pin(int pin, int type, int resettype, int extra);
 void SET_INPUT(Pin_t _pin);
@@ -287,7 +288,7 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 	int mi = 0;
 	for (int ts = 0; ts < NUM_SPACES; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
-			double old = int(spaces[ts].motor[tm]->settings.current_pos);
+			double old = spaces[ts].motor[tm]->settings.current_pos;
 			cpdebug(ts, tm, "cpb offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
 			double p = 0;
 			for (int i = 0; i < 4; ++i) {
@@ -297,26 +298,36 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 				p *= -1;
 			p -= avr_pos_offset[tm + mi];
 			cpdebug(ts, tm, "cpa offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], p, p + avr_pos_offset[tm + mi]);
-			cpdebug(ts, tm, "getpos offset %f diff %d", avr_pos_offset[tm + mi], int(p) - int(old));
+			cpdebug(ts, tm, "getpos offset %f diff %d", avr_pos_offset[tm + mi], arch_round_pos(ts, tm, p) - arch_round_pos(ts, tm, old));
 			if (check) {
-				if (fabs(old - p) > 1) {
+				if (arch_round_pos(ts, tm, old) != arch_round_pos(ts, tm, p)) {
 					if (moving_to_current == 1)
 						moving_to_current = 2;
 					else {
+						debug("WARNING: position for %d %d out of sync!  old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
 						//abort();
-						debug("WARNING: position for %d %d out of sync! (This is normal after sleep), old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
 						spaces[ts].motor[tm]->settings.current_pos = p;
 					}
 				}
+				else {
+					//debug("Check: position for %d %d in sync, old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
+				}
 			}
 			else {
-				if (fabs(old - p) > 1) {
+				// Motor positions were unknown; no check, just update position.
+				if (arch_round_pos(ts, tm, old) != arch_round_pos(ts, tm, p)) {
 					cpdebug(ts, tm, "update current pos from %f to %f", spaces[ts].motor[tm]->settings.current_pos, p);
 					spaces[ts].motor[tm]->settings.current_pos = p;
 				}
 			}
 		}
 	}
+} // }}}
+
+double arch_round_pos(int s, int m, double pos) { // {{{
+	int mi = 0;
+	for (int ts = 0; ts < s; ++ts) mi += spaces[ts].num_motors;
+	return round(pos + avr_pos_offset[mi]) - avr_pos_offset[mi];
 } // }}}
 
 bool hwpacket(int len) { // {{{
@@ -656,7 +667,7 @@ void arch_set_duty(Pin_t _pin, double duty) { // {{{
 		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return;
 	}
-	avr_pins[_pin.pin].duty = int(duty * 256 + .5) - 1;
+	avr_pins[_pin.pin].duty = round(duty * 256) - 1;
 	if (avr_pins[_pin.pin].duty < 0)
 		avr_pins[_pin.pin].duty = 0;
 	if (avr_pins[_pin.pin].duty > 255) {
@@ -1004,7 +1015,7 @@ void arch_addpos(int s, int m, double diff) { // {{{
 	for (uint8_t st = 0; st < s; ++st)
 		mi += spaces[st].num_motors;
 	avr_pos_offset[mi] -= diff;
-	cpdebug(s, m, "arch addpos %f %f %f", diff, avr_pos_offset[m], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi]);
+	cpdebug(s, m, "arch addpos diff %f offset %f raw %f pos %f", diff, avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
 } // }}}
 
 void arch_stop(bool fake) { // {{{

@@ -259,10 +259,11 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 	else {
 		// Axes without a limit switch, including extruders.
 		if (motors_busy && old_steps_per_unit != motor[m]->steps_per_unit) {
-			//debug("load motor %d %d new steps no home", id, m);
-			double pos = motor[m]->settings.current_pos / old_steps_per_unit;
+			debug("load motor %d %d new steps no home", id, m);
+			double oldpos = motor[m]->settings.current_pos;
+			double pos = oldpos / old_steps_per_unit;
 			motor[m]->settings.current_pos = pos * motor[m]->steps_per_unit;
-			arch_addpos(id, m, motor[m]->settings.current_pos - pos);
+			arch_addpos(id, m, motor[m]->settings.current_pos - oldpos);
 		}
 	}
 	if (must_move)
@@ -319,7 +320,7 @@ void Space::cancel_update() { // {{{
 // }}}
 
 // Movement handling. {{{
-static void check_distance(Motor *mtr, double distance, double dt, double &factor) { // {{{
+static void check_distance(int sp, int mt, Motor *mtr, double distance, double dt, double &factor) { // {{{
 	if (dt == 0) {
 		factor = 0;
 		return;
@@ -371,7 +372,7 @@ static void check_distance(Motor *mtr, double distance, double dt, double &facto
 		distance = s * v * dt;
 	}
 	//debug("cd4 %f %f", distance, dt); */
-	int steps = int(mtr->settings.current_pos + distance * mtr->steps_per_unit) - int(mtr->settings.current_pos);
+	int steps = arch_round_pos(sp, mt, mtr->settings.current_pos + distance * mtr->steps_per_unit) - round(mtr->settings.current_pos);
 	int targetsteps = steps;
 	//cpdebug(s, m, "cf %d value %d", current_fragment, value);
 	if (settings.probing && steps)
@@ -386,7 +387,7 @@ static void check_distance(Motor *mtr, double distance, double dt, double &facto
 		}
 	}
 	if (abs(steps) < abs(targetsteps)) {
-		distance = (int(mtr->settings.current_pos) + steps + s * .5 - mtr->settings.current_pos) / mtr->steps_per_unit;
+		distance = (arch_round_pos(sp, mt, mtr->settings.current_pos) + steps + s * .5 - mtr->settings.current_pos) / mtr->steps_per_unit;
 		v = fabs(distance / dt);
 	}
 	//debug("=============");
@@ -410,7 +411,7 @@ static void move_axes(Space *s, uint32_t current_time, double &factor) { // {{{
 		//if (s->id == 0 && m == 0)
 			//debug("check move %d %d target %f current %f", s->id, m, motors_target[m], s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit);
 		double distance = motors_target[m] - s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit;
-		check_distance(s->motor[m], distance, (current_time - settings.last_time) / 1e6, factor);
+		check_distance(s->id, m, s->motor[m], distance, (current_time - settings.last_time) / 1e6, factor);
 	}
 } // }}}
 
@@ -419,6 +420,25 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 	if (factor <= 0) {
 		movedebug("end move");
 		return false;
+	}
+	// Check if more steps should be done, to detect end of move.
+	bool have_steps = false;
+	for (int s = 0; !have_steps && s < NUM_SPACES; ++s) {
+		if (!settings.single && s == 2)
+			continue;
+		Space &sp = spaces[s];
+		for (int m = 0; m < sp.num_motors; ++m) {
+			Motor &mtr = *sp.motor[m];
+			// Check if there are steps to be done; ignore factor.
+			double num = (mtr.settings.current_pos / mtr.steps_per_unit + mtr.settings.target_dist);
+			//debug("num: %f ; current: %f", num, mtr.settings.current_pos);
+			if (arch_round_pos(s, m, mtr.settings.current_pos) != arch_round_pos(s, m, num * mtr.steps_per_unit)) {
+				//debug("have steps %f %f %f", mtr.settings.current_pos, mtr.settings.target_dist, factor);
+				have_steps = true;
+				break;
+			}
+			//debug("no steps yet %d %d %f %f %f", s, m, mtr.settings.current_pos, mtr.settings.target_dist, factor);
+		}
 	}
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		if (!settings.single && s == 2)
@@ -450,23 +470,7 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 	uint32_t the_last_time = settings.last_current_time;
 	settings.last_current_time = current_time;
 	// Adjust start time if factor < 1.
-	bool have_steps = false;
 	if (factor < 1) {
-		for (int s = 0; !have_steps && s < NUM_SPACES; ++s) {
-			if (!settings.single && s == 2)
-				continue;
-			Space &sp = spaces[s];
-			for (int m = 0; m < sp.num_motors; ++m) {
-				Motor &mtr = *sp.motor[m];
-				double num = (mtr.settings.current_pos / mtr.steps_per_unit + mtr.settings.target_dist * factor) * mtr.steps_per_unit;
-				if (int(mtr.settings.current_pos) != int(num)) {
-					//debug("have steps %f %f %f", mtr.settings.current_pos, mtr.settings.target_dist, factor);
-					have_steps = true;
-					break;
-				}
-				//debug("no steps yet %d %d", s, m);
-			}
-		}
 		settings.start_time += (current_time - the_last_time) * ((1 - factor) * .99);
 		movedebug("correct: %f %d", factor, int(settings.start_time));
 	}
@@ -502,15 +506,16 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 			//if (fabs(mtr.settings.target_dist * factor) > .01)	// XXX: This shouldn't ever happen on my printer, but shouldn't be a limitation.
 				//abort();
 			double new_cp = target * mtr.steps_per_unit;
-			if (int(mtr.settings.current_pos) != int(new_cp)) {
+			if (arch_round_pos(s, m, mtr.settings.current_pos) != arch_round_pos(s, m, new_cp)) {
 				have_steps = true;
 				if (!mtr.active) {
 					mtr.active = true;
 					num_active_motors += 1;
 				}
-				int diff = int(new_cp) - int(mtr.settings.current_pos);
+				int diff = arch_round_pos(s, m, new_cp) - arch_round_pos(s, m, mtr.settings.current_pos);
 				DATA_SET(s, m, diff);
 			}
+			//debug("new cp: %d %d %f %d", s, m, new_cp, current_fragment_pos);
 			mtr.settings.current_pos = new_cp;
 			if (!settings.single) {
 				for (int mm = 0; mm < spaces[2].num_motors; ++mm) {
@@ -724,7 +729,7 @@ void store_settings() { // {{{
 			sp.motor[m]->history[current_fragment].target_dist = sp.motor[m]->settings.target_dist;
 			sp.motor[m]->history[current_fragment].current_pos = sp.motor[m]->settings.current_pos;
 			sp.motor[m]->history[current_fragment].endpos = sp.motor[m]->settings.endpos;
-			//fcpdebug(s, m, "store");
+			cpdebug(s, m, "store");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
 			sp.axis[a]->history[current_fragment].dist[0] = sp.axis[a]->settings.dist[0];
@@ -786,7 +791,7 @@ void restore_settings() { // {{{
 			sp.motor[m]->settings.target_dist = sp.motor[m]->history[current_fragment].target_dist;
 			sp.motor[m]->settings.current_pos = sp.motor[m]->history[current_fragment].current_pos;
 			sp.motor[m]->settings.endpos = sp.motor[m]->history[current_fragment].endpos;
-			//fcpdebug(s, m, "restore");
+			cpdebug(s, m, "restore");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
 			sp.axis[a]->settings.dist[0] = sp.axis[a]->history[current_fragment].dist[0];
@@ -814,6 +819,7 @@ void send_fragment() { // {{{
 		if (current_fragment_pos < 2) {
 			// TODO: find out why this is attempted and avoid it.
 			debug("not sending short fragment for 0 motors; %d %d", current_fragment, running_fragment);
+			abort();
 			if (history[current_fragment].cbs) {
 				if (settings.queue_start == settings.queue_end && !settings.queue_full) {
 					// Send cbs immediately.

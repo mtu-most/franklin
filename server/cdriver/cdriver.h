@@ -458,7 +458,7 @@ void buffered_debug(char const *fmt, ...);
 #endif
 
 // Force cpdebug if requested, to enable only specific lines without adding all the cp things in manually.
-#define fcpdebug(s, m, fmt, ...) do { if (s == 0 && m == 0) debug("CP curfragment %d curpos %f current %f " fmt, current_fragment, spaces[s].motor[m]->settings.current_pos, spaces[s].axis[m]->settings.current, ##__VA_ARGS__); } while (0)
+#define fcpdebug(s, m, fmt, ...) do { if (s == 1 && m == 0) debug("CP curfragment %d curpos %f current %f " fmt, current_fragment, spaces[s].motor[m]->settings.current_pos, spaces[s].axis[m]->settings.current, ##__VA_ARGS__); } while (0)
 //#define cpdebug fcpdebug
 #define cpdebug(...) do {} while (0)
 

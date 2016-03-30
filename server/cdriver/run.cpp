@@ -197,10 +197,10 @@ static double handle_probe(double ox, double oy, double z) {
 		x /= p->w / p->nx;
 		if (x < 0)
 			x = 0;
-		ix = int(x);
+		ix = floor(x);
 		if (x >= p->nx) {
 			x = p->nx;
-			ix = int(x) - 1;
+			ix = floor(x) - 1;
 		}
 	}
 	if (p->h == 0 || p->ny == 0) {
@@ -212,10 +212,10 @@ static double handle_probe(double ox, double oy, double z) {
 		y /= p->h / p->ny;
 		if (y < 0)
 			y = 0;
-		iy = int(y);
+		iy = floor(y);
 		if (y >= p->ny) {
 			y = p->ny;
-			iy = int(y) - 1;
+			iy = floor(y) - 1;
 		}
 	}
 	double fx = x - ix;
@@ -230,7 +230,7 @@ void run_file_fill_queue() {
 	if (lock)
 		return;
 	lock = true;
-	rundebug("run queue, wait = %d tempwait = %d q = %d %d %d finish = %d", run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start, settings.queue_full, run_file_finishing);
+	rundebug("run queue, current = %d wait = %d tempwait = %d q = %d %d %d finish = %d", settings.run_file_current, run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start, settings.queue_full, run_file_finishing);
 	if (run_file_audio >= 0) {
 		while (true) {
 			if (!run_file_map || run_file_wait || run_file_finishing)
@@ -260,7 +260,7 @@ void run_file_fill_queue() {
 			&& !run_file_wait	// We are not waiting for something else (pause or confirm).
 			&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
 		int t = run_file_map[settings.run_file_current].type;
-		if (t != RUN_LINE && t != RUN_PRE_LINE && t != RUN_PRE_ARC && t != RUN_ARC && (arch_running() || settings.queue_end != settings.queue_start || computing_move))
+		if (t != RUN_LINE && t != RUN_PRE_LINE && t != RUN_PRE_ARC && t != RUN_ARC && (arch_running() || settings.queue_end != settings.queue_start || computing_move || sending_fragment || transmitting_fragment))
 			break;
 		Run_Record &r = run_file_map[settings.run_file_current];
 		rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);

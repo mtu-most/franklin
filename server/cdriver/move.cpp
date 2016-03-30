@@ -521,7 +521,7 @@ void abort_move(int pos) { // {{{
 		apply_tick();
 	}
 	if (spaces[0].num_axes > 0)
-		cpdebug(0, 0, "ending hwpos %f", int(spaces[0].motor[0]->settings.current_pos) + avr_pos_offset[0]);
+		cpdebug(0, 0, "ending hwpos %f", arch_round_pos(0, 0, spaces[0].motor[0]->settings.current_pos) + avr_pos_offset[0]);
 	// Copy settings back to previous fragment.
 	store_settings();
 	computing_move = false;
