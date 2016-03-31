@@ -1538,8 +1538,8 @@ function update_canvas_and_spans(p, space) { // {{{
 	if (space < 2) {	// Ignore follower positions.
 		p.call('get_axis_pos', [space], {}, function(x) {
 			//dbg('update ' + space + ',' + axis + ':' + x);
-			if (p.spaces[space].axis[i]) {
-				for (var i = 0; i < x.length; ++i) {
+			for (var i = 0; i < x.length; ++i) {
+				if (p.spaces[space].axis[i]) {
 					p.spaces[space].axis[i].current = x[i];
 					update_float(p, [['axis', [space, i]], 'current']);
 				}
