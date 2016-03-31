@@ -264,6 +264,12 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 			double pos = oldpos / old_steps_per_unit;
 			motor[m]->settings.current_pos = pos * motor[m]->steps_per_unit;
 			arch_addpos(id, m, motor[m]->settings.current_pos - oldpos);
+			// Adjust current_pos in all history.
+			for (int h = 0; h < FRAGMENTS_PER_BUFFER; ++h) {
+				oldpos = motor[m]->history[h].current_pos;
+				pos = oldpos / old_steps_per_unit;
+				motor[m]->history[h].current_pos = pos * motor[m]->steps_per_unit;
+			}
 		}
 	}
 	if (must_move)
@@ -503,8 +509,6 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 			}
 			double target = mtr.settings.current_pos / mtr.steps_per_unit + mtr.settings.target_dist * factor;
 			cpdebug(s, m, "ccp3 stopping %d target %f lastv %f spm %f tdist %f factor %f frag %d", stopping, target, mtr.settings.last_v, mtr.steps_per_unit, mtr.settings.target_dist, factor, current_fragment);
-			//if (fabs(mtr.settings.target_dist * factor) > .01)	// XXX: This shouldn't ever happen on my printer, but shouldn't be a limitation.
-				//abort();
 			double new_cp = target * mtr.steps_per_unit;
 			if (arch_round_pos(s, m, mtr.settings.current_pos) != arch_round_pos(s, m, new_cp)) {
 				have_steps = true;
@@ -819,7 +823,6 @@ void send_fragment() { // {{{
 		if (current_fragment_pos < 2) {
 			// TODO: find out why this is attempted and avoid it.
 			debug("not sending short fragment for 0 motors; %d %d", current_fragment, running_fragment);
-			abort();
 			if (history[current_fragment].cbs) {
 				if (settings.queue_start == settings.queue_end && !settings.queue_full) {
 					// Send cbs immediately.
