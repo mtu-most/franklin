@@ -127,8 +127,10 @@ function init() { // {{{
 				// Draw data.
 				var time = new Date();
 				printer.temphistory.push(time);
+				for (var t = 0; t < printer.temps.length; ++t)
+					printer.temps[t].history.push([printer.temps[t].temp, printer.temps[t].value]);
 				var cutoff = time - 2 * 60 * 1000;
-				while (printer.temphistory[0] < cutoff) {
+				while (printer.temphistory.length > 1 && printer.temphistory[0] < cutoff) {
 					printer.temphistory.shift();
 					for (var t = 0; t < printer.temps.length; ++t)
 						printer.temps[t].history.shift();
@@ -146,7 +148,6 @@ function init() { // {{{
 				for (var t = 0; t < printer.temps.length; ++t) {
 					// Draw measured data.
 					var value = printer.temps[t].temp;
-					printer.temps[t].history.push([value, printer.temps[t].value]);
 					var data = printer.temps[t].history;
 					c.beginPath();
 					value = data[0][0];
@@ -1222,6 +1223,8 @@ function update_temprange(id) { // {{{
 function update_profiles(prt) { // {{{
 	prt.call('list_profiles', [], {}, function(profiles) {
 		var selector = get_element(prt, [null, 'profiles']);
+		if (!selector)
+			return;
 		selector.ClearAll();
 		for (var i = 0; i < profiles.length; ++i) {
 			selector.AddElement('option').AddText(profiles[i]).value = profiles[i];
@@ -1535,9 +1538,11 @@ function update_canvas_and_spans(p, space) { // {{{
 	if (space < 2) {	// Ignore follower positions.
 		p.call('get_axis_pos', [space], {}, function(x) {
 			//dbg('update ' + space + ',' + axis + ':' + x);
-			for (var i = 0; i < x.length; ++i) {
-				p.spaces[space].axis[i].current = x[i];
-				update_float(p, [['axis', [space, i]], 'current']);
+			if (p.spaces[space].axis[i]) {
+				for (var i = 0; i < x.length; ++i) {
+					p.spaces[space].axis[i].current = x[i];
+					update_float(p, [['axis', [space, i]], 'current']);
+				}
 			}
 			update_canvas_and_spans(p, space + 1);
 		});
