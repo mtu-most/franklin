@@ -1198,11 +1198,12 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{
 	avr_buffer[0] = HWC_START_MOVE;
 	avr_buffer[1] = len;
 	avr_buffer[2] = NUM_MOTORS;
-	sending_fragment = out_busy + NUM_MOTORS + 1;
+	sending_fragment = NUM_MOTORS + 1;
 	if (!prepare_packet(avr_buffer, 3)) {
 		debug("audio upload failed");
 		return pos + NUM_MOTORS * len;
 	}
+	avr_cb = &avr_sent_fragment;
 	avr_send();
 	avr_filling = true;
 	for (int m = 0; m < NUM_MOTORS; ++m) {
@@ -1218,6 +1219,7 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{
 			debug("audio data upload failed");
 			break;
 		}
+		avr_cb = &avr_sent_fragment;
 		avr_send();
 	}
 	avr_filling = false;

@@ -260,7 +260,8 @@ void packet()
 			for (int j = 0; j < 2; ++j)
 				args[j].b[i] = command[0][4 + i + j * sizeof(double)];
 		}
-		run_file((((command[0][0] & 0xff) << 8) | (command[0][1] & 0xff)) - 22 - command[0][21], reinterpret_cast<char const *>(&command[0][22]), command[0][21], reinterpret_cast<char const *>(&command[0][22 + command[0][21]]), command[0][3], args[0].f, args[1].f, uint8_t(command[0][20]) == 0xff ? -1 : command[0][20]);
+		int namelen = (((command[0][0] & 0xff) << 8) | (command[0][1] & 0xff)) - 22 - command[0][21];
+		run_file(namelen, reinterpret_cast<char const *>(&command[0][22]), command[0][21], reinterpret_cast<char const *>(&command[0][22 + namelen]), command[0][3], args[0].f, args[1].f, uint8_t(command[0][20]) == 0xff ? -1 : command[0][20]);
 		break;
 	}
 	case CMD_SLEEP:	// Enable or disable motor current
