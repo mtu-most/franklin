@@ -383,7 +383,9 @@ struct HostSerial : public Serial_t {
 EXTERN HostSerial host_serial;
 
 #define COMMAND_SIZE 256
-#define FULL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
+#define FULL_SERIAL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
+#define HOST_COMMAND_SIZE 0x4000
+static int const FULL_COMMAND_SIZE[2] = {HOST_COMMAND_SIZE, FULL_SERIAL_COMMAND_SIZE};
 
 // Globals
 EXTERN double max_deviation;
@@ -402,7 +404,7 @@ EXTERN double feedrate;		// Multiplication factor for f values, used at start of
 EXTERN double targetx, targety, zoffset;	// Offset for axis 2 of space 0.
 // Other variables.
 EXTERN Serial_t *serialdev[2];
-EXTERN unsigned char command[2][FULL_COMMAND_SIZE];
+EXTERN unsigned char *command[2];
 EXTERN int command_end[2];
 EXTERN Space spaces[NUM_SPACES];
 EXTERN Temp *temps;
@@ -418,10 +420,10 @@ EXTERN int cbs_after_current_move;
 EXTERN bool motors_busy;
 EXTERN int out_busy;
 EXTERN uint32_t out_time;
-EXTERN char pending_packet[4][FULL_COMMAND_SIZE];
+EXTERN char pending_packet[4][FULL_SERIAL_COMMAND_SIZE];
 EXTERN int pending_len[4];
 EXTERN void (*serial_cb[4])();
-EXTERN char datastore[FULL_COMMAND_SIZE];
+EXTERN char datastore[HOST_COMMAND_SIZE];
 EXTERN uint32_t last_active;
 EXTERN uint32_t last_micros;
 EXTERN int16_t led_phase;

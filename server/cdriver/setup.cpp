@@ -18,8 +18,17 @@
 
 #include "cdriver.h"
 
+static unsigned char host_command[HOST_COMMAND_SIZE];
+#ifdef SERIAL
+static unsigned char serial_command[FULL_SERIAL_COMMAND_SIZE];
+#endif
+
 void setup(char const *port, char const *run_id)
 {
+	command[0] = host_command;
+#ifdef SERIAL
+	command[1] = serial_command;
+#endif
 	preparing = false;
 	host_block = true;
 	sent_names = false;

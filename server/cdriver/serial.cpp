@@ -1,4 +1,5 @@
-/* serial.cpp - serial port data handling for Franklin
+/* serial.cpp - serial port data handling for Franklin {{{
+ * vim: set foldmethod=marker :
  * Copyright 2014 Michigan Technological University
  * Author: Bas Wijnen <wijnen@debian.org>
  *
@@ -14,7 +15,7 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+ * }}} */
 
 #include "cdriver.h"
 
@@ -24,7 +25,7 @@
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
-// Commands which can be sent:
+// Commands which can be sent: {{{
 // Packet: n*4 bytes, of which n*3 bytes are data.
 // Ack: 1 byte.
 // Nack: 1 byte.
@@ -37,16 +38,17 @@
 // Codes (low nybble is data): 80 (e1 d2) b3 b4 (d5 e6) 87 (f8) 99 aa (cb cc) ad 9e (ff)
 // Codes which have duplicates in printer id codes are not used.
 // These are defined in cdriver.h.
+// }}}
 
-
-struct Queuerecord {
+struct Queuerecord { // {{{
 	Queuerecord *next;
 	int len;
 	char cmd;
 	int32_t s, m, e;
 	double f;
-};
+}; // }}}
 
+// Globals. {{{
 static bool sending_to_host = false;
 static Queuerecord *hostqueue_head = NULL;
 static Queuerecord *hostqueue_tail = NULL;
@@ -55,20 +57,24 @@ static bool had_stall = false;
 static bool doing_debug = false;
 static uint8_t need_id = 0;
 static char out_buffer[16];
+// }}}
 
-// Parity masks for decoding.
+// Parity masks for decoding. {{{
 static const uint8_t MASK[5][4] = {
 	{0xc0, 0xc3, 0xff, 0x09},
 	{0x38, 0x3a, 0x7e, 0x13},
 	{0x26, 0xb5, 0xb9, 0x23},
 	{0x95, 0x6c, 0xd5, 0x43},
 	{0x4b, 0xdc, 0xe2, 0x83}};
+// }}}
 
+// Constants. {{{
 const SingleByteCommands cmd_ack[4] = { CMD_ACK0, CMD_ACK1, CMD_ACK2, CMD_ACK3 };
 const SingleByteCommands cmd_nack[4] = { CMD_NACK0, CMD_NACK1, CMD_NACK2, CMD_NACK3 };
 const SingleByteCommands cmd_stall[4] = { CMD_STALL0, CMD_STALL1, CMD_STALL2, CMD_STALL3 };
+// }}}
 
-static void send_to_host() {
+static void send_to_host() { // {{{
 	sending_to_host = true;
 	Queuerecord *r = hostqueue_head;
 	hostqueue_head = r->next;
@@ -100,10 +106,10 @@ static void send_to_host() {
 	if (r->cmd == CMD_LIMIT)
 		stopping = 1;
 	free(r);
-}
+} // }}}
 
 #ifdef SERIAL
-static void command_cancel() {
+static void command_cancel() { // {{{
 	while (true) {
 		command_end[1] -= 1;
 		memmove(command[1], &command[1][1], command_end[1]);
@@ -113,9 +119,9 @@ static void command_cancel() {
 		if (hwpacketsize(command_end[1], &len) <= command_end[1])
 			break;
 	}
-}
+} // }}}
 
-static void resend(int amount) {
+static void resend(int amount) { // {{{
 	// Unless the last packet was already received; in that case ignore the NACK.
 	//debug("nack%d ff %d busy %d", which, ff_out, out_busy);
 	if (out_busy >= amount) {
@@ -126,13 +132,13 @@ static void resend(int amount) {
 			send_packet();
 		}
 	}
-}
+} // }}}
 #endif
 
 // There may be serial data available.
-void serial(uint8_t channel) {
-	while (true) {
-#ifdef SERIAL
+void serial(uint8_t channel) { // {{{
+	while (true) { // Loop until all data is handled.
+#ifdef SERIAL // Handle timeouts on serial line. {{{
 		if (channel == 1) {
 			uint32_t utm = utime();
 			if (uint32_t(utm - last_micros) >= 100000)
@@ -155,15 +161,14 @@ void serial(uint8_t channel) {
 			}
 			had_data = false;
 		}
-#endif
-		if (channel == 0) {
+#endif // }}}
+		if (channel == 0) { // Ignore host data while blocking it.
 			if (host_block)
 				break;
 		}
 		if (!serialdev[channel]->available())
 			break;
-		while (command_end[channel] == 0)
-		{
+		while (command_end[channel] == 0) { // First byte. {{{
 			if (!serialdev[channel]->available()) {
 				//debug("serial %d done", channel);
 				return;
@@ -172,7 +177,7 @@ void serial(uint8_t channel) {
 #ifdef DEBUG_SERIAL
 			debug("received on %d: %x", channel, command[channel][0]);
 #endif
-#ifdef SERIAL
+#ifdef SERIAL // {{{
 			if (channel == 1) {
 				had_data = true;
 				if (doing_debug) {
@@ -294,7 +299,7 @@ void serial(uint8_t channel) {
 				}
 			}
 			else {
-#endif
+#endif // }}}
 				// Message received.
 				if (command[channel][0] == OK) {
 					if (sending_to_host) {
@@ -308,17 +313,31 @@ void serial(uint8_t channel) {
 						if (hostqueue_head)
 							send_to_host();
 					}
-					else
+					else {
 						debug("received unexpected OK");
+						abort();
+					}
 					continue;
 				}
-#ifdef SERIAL
+				else if (command[channel][0] & 0x80) {
+					debug("invalid first byte from host: 0x%02x", command[channel][0] & 0xff);
+					abort();
+				}
+#ifdef SERIAL // {{{
 			}
-#endif
+#endif // }}}
 			command_end[channel] = 1;
-		}
+		} // }}}
 		int len = serialdev[channel]->available();
-#ifdef SERIAL
+		// Get at least two bytes in buffer.
+		if (command_end[channel] == 1) {
+			if (len == 0)
+				break;
+			command[channel][1] = serialdev[channel]->read();
+			len -= 1;
+			command_end[channel] += 1;
+		}
+#ifdef SERIAL // {{{
 		if (channel == 1) {
 			had_data = true;
 			if (!expected_replies)
@@ -334,51 +353,52 @@ void serial(uint8_t channel) {
 			}
 		}
 		else
-#endif
-			if (len + command_end[channel] > FULL_COMMAND_SIZE) {
-				debug("clip size! %d %d %d", len, command_end[channel], FULL_COMMAND_SIZE);
-				len = FULL_COMMAND_SIZE - command_end[channel];
+#endif // }}}
+			if (len + command_end[channel] > FULL_COMMAND_SIZE[channel]) {
+				debug("clip size! %d %d %d", len, command_end[channel], FULL_COMMAND_SIZE[channel]);
+				len = FULL_COMMAND_SIZE[channel] - command_end[channel];
 			}
 		int cmd_len;
-#ifdef SERIAL
+#ifdef SERIAL // {{{
 		if (channel == 1) {
 			cmd_len = hwpacketsize(command_end[channel], &len);
 			cmd_len += (cmd_len + 2) / 3;
 		}
 		else
-#endif
-			cmd_len = command[channel][0] & 0xff;
-		if (cmd_len > FULL_COMMAND_SIZE) {
+#endif // }}}
+			cmd_len = ((command[channel][0] & 0xff) << 8) | (command[channel][1] & 0xff);
+		if (cmd_len > FULL_COMMAND_SIZE[channel]) {
 			// This command does not fit in the buffer, so it cannot be parsed.  Reject it.
 			debug("Command length %d larger than buffer; rejecting", cmd_len);
-#ifdef SERIAL
-			command_cancel();
-#endif
+#ifdef SERIAL // {{{
+			if (channel == 1)
+				command_cancel();
+#endif // }}}
 			continue;
 		}
 		if (command_end[channel] + len > cmd_len)
 			len = cmd_len - command_end[channel];
 		serialdev[channel]->readBytes(reinterpret_cast <char *> (&command[channel][command_end[channel]]), len);
-#ifdef DEBUG_SERIAL
+#ifdef DEBUG_SERIAL // {{{
 		debug("read %d bytes on %d:", len, channel);
 		for (uint8_t i = 0; i < len; ++i)
 			fprintf(stderr, " %02x", command[channel][command_end[channel] + i]);
 		fprintf(stderr, "\n");
-#endif
-#ifdef SERIAL
+#endif // }}}
+#ifdef SERIAL // {{{
 		if (channel == 1)
 			if (!expected_replies)
 				last_micros = utime();
-#endif
+#endif // }}}
 		command_end[channel] += len;
 		if (command_end[channel] < cmd_len)
 		{
-#ifdef DEBUG_SERIAL
+#ifdef DEBUG_SERIAL // {{{
 			debug("%d not done yet; %d of %d received.", channel, command_end[channel], cmd_len);
-#endif
+#endif // }}}
 			return;
 		}
-#ifdef SERIAL
+#ifdef SERIAL // {{{
 #ifdef DEBUG_DATA
 		if (channel == 1 && (command[1][0] & 0xf) != 8) {
 			fprintf(stderr, "recv:");
@@ -387,11 +407,11 @@ void serial(uint8_t channel) {
 			fprintf(stderr, "\n");
 		}
 #endif
-#endif
-#ifdef DEBUG_HOST
+#endif // }}}
+#ifdef DEBUG_HOST // {{{
 		if (channel == 0) {
 #ifndef DEBUG_ALL_HOST
-			if (command[channel][1] != CMD_GETPOS && command[channel][1] != CMD_GETTIME && command[channel][1] != CMD_READTEMP)
+			if (command[channel][2] != CMD_GETPOS && command[channel][2] != CMD_GETTIME && command[channel][2] != CMD_READTEMP)
 #endif
 			{
 				fprintf(stderr, "**** host recv:");
@@ -400,9 +420,9 @@ void serial(uint8_t channel) {
 				fprintf(stderr, "\n");
 			}
 		}
-#endif
+#endif // }}}
 		int end = command_end[channel];
-#ifdef SERIAL
+#ifdef SERIAL // {{{
 		// Check packet integrity.
 		if (channel == 1) {
 			// Checksum must be good.
@@ -483,14 +503,14 @@ void serial(uint8_t channel) {
 			}
 		}
 		else {
-#endif
+#endif // }}}
 			command_end[channel] = 0;
 			packet();
-#ifdef SERIAL
+#ifdef SERIAL // {{{
 		}
-#endif
+#endif // }}}
 	}
-}
+} // }}}
 
 #ifdef SERIAL
 // Command sending method:
@@ -506,7 +526,7 @@ void serial(uint8_t channel) {
 // - call send_packet to resend the last packet
 
 // Set checksum bytes.
-bool prepare_packet(char *the_packet, int size) {
+bool prepare_packet(char *the_packet, int size) { // {{{
 	//debug("prepare %d %d %d", size, ff_out, out_busy);
 	if (size >= COMMAND_SIZE)
 	{
@@ -579,11 +599,10 @@ bool prepare_packet(char *the_packet, int size) {
 #endif
 	ff_out = (ff_out + 1) & 3;
 	return true;
-}
+} // }}}
 
 // Send packet to firmware.
-void send_packet()
-{
+void send_packet() { // {{{
 	int which = (ff_out - 1) & 3;
 #ifdef DEBUG_DATA
 	fprintf(stderr, "send (%d): ", out_busy);
@@ -595,28 +614,25 @@ void send_packet()
 		serialdev[1]->write(pending_packet[which][t]);
 	out_busy += 1;
 	out_time = utime();
-}
+} // }}}
 
-void write_ack()
-{
+void write_ack() { // {{{
 //#ifdef DEBUG_DATA
 	//debug("wack %d", ff_in);
 //#endif
 	serialdev[1]->write(cmd_ack[ff_in]);
 	ff_in = (ff_in + 1) & 3;
-}
+} // }}}
 
-void write_nack()
-{
+void write_nack() { // {{{
 //#ifdef DEBUG_DATA
 	//debug("wnack %d", ff_in);
 //#endif
 	serialdev[1]->write(cmd_nack[ff_in]);
-}
+} // }}}
 #endif
 
-void send_host(char cmd, int s, int m, double f, int e, int len)
-{
+void send_host(char cmd, int s, int m, double f, int e, int len) { // {{{
 	//debug("queueing for host cmd %x", cmd);
 	// Use malloc, not mem_alloc, because there are multiple pointers to the same memory and mem_alloc cannot handle that.
 	Queuerecord *record = reinterpret_cast <Queuerecord *>(malloc(sizeof(Queuerecord) + len));
@@ -636,4 +652,4 @@ void send_host(char cmd, int s, int m, double f, int e, int len)
 		reinterpret_cast <char *>(record)[sizeof(Queuerecord) + i] = datastore[i];
 	if (!sending_to_host)
 		send_to_host();
-}
+} // }}}

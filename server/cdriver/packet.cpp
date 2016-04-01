@@ -22,7 +22,7 @@
 
 static int get_which()
 {
-	return command[0][2] & 0x3f;
+	return command[0][3] & 0x3f;
 }
 
 static double get_float(int offset)
@@ -136,11 +136,11 @@ static void get_cb(bool value) {
 
 void packet()
 {
-	// command[0][0] is the length not including checksum bytes.
-	// command[0][1] is the command.
+	// command[0][0:1] is the length not including checksum bytes.
+	// command[0][2] is the command.
 	uint8_t which;
 	int32_t addr;
-	switch (command[0][1])
+	switch (command[0][2])
 	{
 #ifdef SERIAL
 	case CMD_SET_UUID: // Program a new uuid into the flash.
@@ -149,7 +149,7 @@ void packet()
 		debug("CMD_SET_UUID");
 #endif
 		for (int i = 0; i < UUID_SIZE; ++i) {
-			uuid[i] = command[0][2 + i];
+			uuid[i] = command[0][3 + i];
 			debug("uuid %d: %x", i, uuid[i]);
 		}
 		arch_set_uuid();
@@ -182,13 +182,13 @@ void packet()
 		int num = 2;
 		for (int t = 0; t < NUM_SPACES; ++t)
 			num += spaces[t].num_axes;
-		queue[settings.queue_end].probe = command[0][1] == CMD_PROBE;
-		queue[settings.queue_end].single = command[0][1] == CMD_SINGLE;
-		int const offset = 2 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
+		queue[settings.queue_end].probe = command[0][2] == CMD_PROBE;
+		queue[settings.queue_end].single = command[0][2] == CMD_SINGLE;
+		int const offset = 3 + ((num - 1) >> 3) + 1;	// Bytes from start of command where values are.
 		int t = 0;
 		for (int ch = 0; ch < num; ++ch)
 		{
-			if (command[0][2 + (ch >> 3)] & (1 << (ch & 0x7)))
+			if (command[0][3 + (ch >> 3)] & (1 << (ch & 0x7)))
 			{
 				ReadFloat f;
 				for (int i = 0; i < sizeof(double); ++i)
@@ -209,9 +209,9 @@ void packet()
 				//debug("line %d -", ch);
 			}
 		}
-		if (!(command[0][2] & 0x1) || isnan(queue[settings.queue_end].f[0]))
+		if (!(command[0][3] & 0x1) || isnan(queue[settings.queue_end].f[0]))
 			queue[settings.queue_end].f[0] = INFINITY;
-		if (!(command[0][2] & 0x2) || isnan(queue[settings.queue_end].f[1]))
+		if (!(command[0][3] & 0x2) || isnan(queue[settings.queue_end].f[1]))
 			queue[settings.queue_end].f[1] = queue[settings.queue_end].f[0];
 		// F0 and F1 must be valid.
 		double F0 = queue[settings.queue_end].f[0];
@@ -258,9 +258,9 @@ void packet()
 		for (int i = 0; i < sizeof(double); ++i)
 		{
 			for (int j = 0; j < 2; ++j)
-				args[j].b[i] = command[0][3 + i + j * sizeof(double)];
+				args[j].b[i] = command[0][4 + i + j * sizeof(double)];
 		}
-		run_file(command[0][0] - 21 - command[0][20], reinterpret_cast<char const *>(&command[0][21]), command[0][20], reinterpret_cast<char const *>(&command[0][21 + command[0][20]]), command[0][2], args[0].f, args[1].f, uint8_t(command[0][19]) == 0xff ? -1 : command[0][19]);
+		run_file((((command[0][0] & 0xff) << 8) | (command[0][1] & 0xff)) - 22 - command[0][21], reinterpret_cast<char const *>(&command[0][22]), command[0][21], reinterpret_cast<char const *>(&command[0][22 + command[0][21]]), command[0][3], args[0].f, args[1].f, uint8_t(command[0][20]) == 0xff ? -1 : command[0][20]);
 		break;
 	}
 	case CMD_SLEEP:	// Enable or disable motor current
@@ -269,7 +269,7 @@ void packet()
 		debug("CMD_SLEEP");
 #endif
 		last_active = millis();
-		if (command[0][2]) {
+		if (command[0][3]) {
 			//debug("sleeping");
 			if (arch_running() && !stop_pending)
 			{
@@ -307,7 +307,7 @@ void packet()
 #endif
 		last_active = millis();
 		which = get_which();
-		double target = get_float(3);
+		double target = get_float(4);
 		settemp(which, target);
 		return;
 	}
@@ -321,8 +321,8 @@ void packet()
 		ReadFloat min_temp, max_temp;
 		for (int i = 0; i < sizeof(double); ++i)
 		{
-			min_temp.b[i] = command[0][3 + i];
-			max_temp.b[i] = command[0][3 + i + sizeof(double)];
+			min_temp.b[i] = command[0][4 + i];
+			max_temp.b[i] = command[0][4 + i + sizeof(double)];
 		}
 		waittemp(which, min_temp.f, max_temp.f);
 		return;
@@ -378,7 +378,7 @@ void packet()
 #endif
 		last_active = millis();
 		which = get_which();
-		uint8_t t = command[0][3];
+		uint8_t t = command[0][4];
 		if (which >= NUM_SPACES || t >= spaces[which].num_axes)
 		{
 			debug("Invalid axis for setting position: %d %d", which, t);
@@ -391,7 +391,7 @@ void packet()
 			//abort();
 			return;
 		}
-		double f = get_float(4);
+		double f = get_float(5);
 		setpos(which, t, f);
 		return;
 	}
@@ -401,7 +401,7 @@ void packet()
 		debug("CMD_GETPOS");
 #endif
 		which = get_which();
-		uint8_t t = command[0][3];
+		uint8_t t = command[0][4];
 		if (which >= NUM_SPACES || t >= spaces[which].num_axes)
 		{
 			debug("Getting position of invalid axis %d %d", which, t);
@@ -451,7 +451,7 @@ void packet()
 #endif
 		discarding = true;
 		arch_discard();
-		addr = 2;
+		addr = 3;
 		globals_load(addr);
 		discarding = false;
 		buffer_refill();
@@ -480,7 +480,7 @@ void packet()
 #endif
 		addr = 0;
 		which = get_which();
-		uint8_t axis = command[0][3];
+		uint8_t axis = command[0][4];
 		if (which >= NUM_SPACES || axis >= spaces[which].num_axes) {
 			debug("Reading invalid axis %d %d", which, axis);
 			abort();
@@ -497,7 +497,7 @@ void packet()
 #endif
 		addr = 0;
 		which = get_which();
-		uint8_t motor = command[0][3];
+		uint8_t motor = command[0][4];
 		if (which >= NUM_SPACES || motor >= spaces[which].num_motors) {
 			debug("Reading invalid motor %d %d > %d", which, motor, which < NUM_SPACES ? spaces[which].num_motors : -1);
 			abort();
@@ -520,7 +520,7 @@ void packet()
 		}
 		discarding = true;
 		arch_discard();
-		addr = 3;
+		addr = 4;
 		spaces[which].load_info(addr);
 		discarding = false;
 		buffer_refill();
@@ -529,7 +529,7 @@ void packet()
 	case CMD_WRITE_SPACE_AXIS:
 	{
 		which = get_which();
-		uint8_t axis = command[0][3];
+		uint8_t axis = command[0][4];
 #ifdef DEBUG_CMD
 		debug("CMD_WRITE_SPACE_AXIS");
 #endif
@@ -540,7 +540,7 @@ void packet()
 		}
 		discarding = true;
 		arch_discard();
-		addr = 4;
+		addr = 5;
 		spaces[which].load_axis(axis, addr);
 		discarding = false;
 		buffer_refill();
@@ -549,7 +549,7 @@ void packet()
 	case CMD_WRITE_SPACE_MOTOR:
 	{
 		which = get_which();
-		uint8_t motor = command[0][3];
+		uint8_t motor = command[0][4];
 #ifdef DEBUG_CMD
 		debug("CMD_WRITE_SPACE_MOTOR");
 #endif
@@ -560,7 +560,7 @@ void packet()
 		}
 		discarding = true;
 		arch_discard();
-		addr = 4;
+		addr = 5;
 		spaces[which].load_motor(motor, addr);
 		discarding = false;
 		buffer_refill();
@@ -593,7 +593,7 @@ void packet()
 			abort();
 			return;
 		}
-		addr = 3;
+		addr = 4;
 		temps[which].load(addr, which);
 		return;
 	}
@@ -624,7 +624,7 @@ void packet()
 			abort();
 			return;
 		}
-		addr = 3;
+		addr = 4;
 		gpios[which].load(which, addr);
 		return;
 	}
@@ -635,7 +635,7 @@ void packet()
 #endif
 		last_active = millis();
 		send_host(CMD_QUEUE, settings.queue_full ? QUEUE_LENGTH : (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH);
-		if (command[0][2]) {
+		if (command[0][3]) {
 			if (run_file_map)
 				run_file_wait += 1;
 			else
@@ -689,7 +689,7 @@ void packet()
 			abort();
 			return;
 		}
-		arch_reconnect(reinterpret_cast <char *>(&command[0][2]));
+		arch_reconnect(reinterpret_cast <char *>(&command[0][3]));
 		return;
 	}
 #endif
@@ -716,7 +716,7 @@ void packet()
 #ifdef DEBUG_CMD
 		debug("CMD_SPI");
 #endif
-		arch_send_spi(command[0][2], &command[0][3]);
+		arch_send_spi(command[0][3], &command[0][4]);
 		return;
 	}
 	case CMD_ADJUSTPROBE:
@@ -726,7 +726,7 @@ void packet()
 #endif
 		double pos[3];
 		for (int i = 0; i < 3; ++i) {
-			pos[i] = get_float(2 + i * sizeof(double));
+			pos[i] = get_float(3 + i * sizeof(double));
 		}
 		run_adjust_probe(pos[0], pos[1], pos[2]);
 		return;

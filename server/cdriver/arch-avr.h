@@ -1169,11 +1169,11 @@ void arch_home() { // {{{
 	for (int s = 0; s < NUM_SPACES; mi += spaces[s++].num_motors) {
 		Space &sp = spaces[s];
 		for (int m = 0; m < sp.num_motors; ++m) {
-			if (abs(int8_t(command[0][2 + mi + m])) <= 1) {
-				avr_buffer[5 + mi + m] = (sp.motor[m]->dir_pin.inverted() ? -1 : 1) * command[0][2 + mi + m];
+			if (abs(int8_t(command[0][3 + mi + m])) <= 1) {
+				avr_buffer[5 + mi + m] = (sp.motor[m]->dir_pin.inverted() ? -1 : 1) * command[0][3 + mi + m];
 			}
 			else {
-				debug("invalid code in home: %d", command[0][2 + m]);
+				debug("invalid code in home: %d", command[0][3 + mi + m]);
 				return;
 			}
 		}

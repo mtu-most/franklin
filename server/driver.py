@@ -590,11 +590,15 @@ class Printer: # {{{
 			raise AssertionError('Received unexpected reply packet')
 	# }}}
 	def _send_packet(self, data, move = False): # {{{
-		data = bytes((len(data) + 1,)) + data
+		if len(data) + 2 >= 0x8000:
+			log('Message too long (%d >= %d)' % (len(data) + 2, 0x8000))
+			return
+		# Pack length as big endian, so first byte never has bit 7 set.
+		data = struct.pack('>H', len(data) + 2) + data
 		dprint('(1) writing', data);
 		self._printer_write(data)
 		if not move:
-			return True
+			return
 		start_time = time.time()
 		while True:
 			if not self.printer.available():
@@ -608,9 +612,9 @@ class Printer: # {{{
 			if ret[0] == 'wait':
 				#log('wait')
 				self.wait = True
-				return True
+				return
 			elif ret[0] == 'ok':
-				return True
+				return
 			#log('no response yet')
 	# }}}
 	def _get_reply(self, cb = False): # {{{
