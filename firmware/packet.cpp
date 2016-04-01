@@ -512,11 +512,6 @@ void packet()
 	case CMD_STOP:
 	{
 		cmddebug("CMD_STOP");
-		if (filling > 0) {
-			debug("STOP seen while filling");
-			write_stall();
-			return;
-		}
 		arch_set_speed(0);
 		filling = 0;
 		homers = 0;

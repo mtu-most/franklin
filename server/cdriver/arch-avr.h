@@ -345,8 +345,12 @@ bool hwpacket(int len) { // {{{
 	{
 		uint8_t which = command[1][2];
 		if (which >= NUM_MOTORS) {
-			debug("cdriver: Invalid limit for avr motor %d", which);
-			abort();
+			if (initialized) {
+				debug("cdriver: Invalid limit for avr motor %d", which);
+				abort();
+			}
+			avr_write_ack("pre-limit");
+			return false;
 		}
 		avr_write_ack("limit");
 		avr_homing = false;
@@ -481,8 +485,12 @@ bool hwpacket(int len) { // {{{
 	} // }}}
 	case HWC_HOMED: // {{{
 	{
-		if (!avr_homing)
-			abort();
+		if (!avr_homing) {
+			if (initialized)
+				abort();
+			avr_write_ack("pre-homed");
+			return false;
+		}
 		computing_move = false;
 		avr_homing = false;
 		avr_get_current_pos(2, false);

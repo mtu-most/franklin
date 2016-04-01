@@ -276,10 +276,14 @@ class Printer: # {{{
 				uuid[7] |= 0x40
 				uuid[9] &= 0x3f
 				uuid[9] |= 0x80
-				log('new uuid: ' + repr(uuid))
 				self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + bytes(uuid))
+				new = True
+			else:
+				new = False
 			uuid = ''.join('%02x' % x for x in uuid[:16])
 			self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
+			if new:
+				log('new uuid: ' + self.uuid)
 			assert cmd == protocol.rcommand['UUID']
 		else:
 			self.uuid = 'local'
@@ -308,7 +312,7 @@ class Printer: # {{{
 						log('skipping %s' % filename)
 						continue
 					try:
-						log('opening %s' % filename)
+						#log('opening %s' % filename)
 						with open(os.path.join(gcode, filename), 'rb') as f:
 							f.seek(-8 * 8, os.SEEK_END)
 							self.jobqueue[name] = struct.unpack('=' + 'd' * 8, f.read())
@@ -322,7 +326,7 @@ class Printer: # {{{
 						log('skipping %s' % filename)
 						continue
 					try:
-						log('opening audio %s' % filename)
+						#log('opening audio %s' % filename)
 						self.audioqueue[name] = os.stat(os.path.join(audio, filename)).st_size
 					except:
 						traceback.print_exc()
@@ -463,6 +467,7 @@ class Printer: # {{{
 			#log('movewait %d/%d' % (num, self.movewait))
 			self.movewait -= num
 		if self.movewait == 0:
+			#log('running cbs: %s' % repr(self.movecb))
 			call_queue.extend([(x[1], [done]) for x in self.movecb])
 			self.movecb = []
 			if self.flushing and self.queue_pos >= len(self.queue):
@@ -873,7 +878,7 @@ class Printer: # {{{
 			self._send_packet(bytes((protocol.command['RESUME'],)))	# Just in case.
 		if self.queue_info is None:
 			return
-		log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
+		#log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
 		self.queue = self.queue_info[2]
 		self.queue_pos = self.queue_info[0]
 		self.movecb = self.queue_info[3]
@@ -942,7 +947,7 @@ class Printer: # {{{
 			#log('queue not empty %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 			if self.queue_pos >= len(self.queue):
 				self._unpause()
-				log('unpaused, %d %d' % (self.queue_pos, len(self.queue)))
+				#log('unpaused, %d %d' % (self.queue_pos, len(self.queue)))
 				if self.queue_pos >= len(self.queue):
 					break
 			axes, f0, f1, v0, v1, probe, single, rel = self.queue[self.queue_pos]
@@ -1074,7 +1079,7 @@ class Printer: # {{{
 				ret[s][m] = self.home_target[(s, m)]
 			return ret
 		if self.home_phase is None:
-			log('_do_home ignored because home_phase is None')
+			#log('_do_home ignored because home_phase is None')
 			return
 		if self.home_phase == 0:
 			if done is not None:
@@ -1315,11 +1320,11 @@ class Printer: # {{{
 		self.line([{2: z_low}], f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)
 	# }}}
 	def _do_probe(self, id, x, y, z, angle, phase = 0, good = True): # {{{
-		#log('probe %d' % phase)
+		#log('probe %d %s' % (phase, good))
 		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
 		if good is None:
 			# This means the probe has been aborted.
-			log('abort probe')
+			#log('abort probe')
 			self.probing = False
 			if id is not None:
 				self._send(id, 'error', 'aborted')
@@ -2323,10 +2328,11 @@ class Printer: # {{{
 		for t, temp in enumerate(self.temps):
 			self.settemp(t, float('nan'))
 		self.pause(store = False)
-		self.sleep(force = True);
 		for g, gpio in enumerate(self.gpios):
 			self.set_gpio(g, state = gpio.reset)
 		self._print_done(False, 'aborted by user')
+		# Sleep doesn't work as long as home_phase is non-None, so do it after _print_done.
+		self.sleep(force = True);
 	# }}}
 	def pause(self, pausing = True, store = True, update = True): # {{{
 		'''Pause or resume the machine.
@@ -2370,7 +2376,6 @@ class Printer: # {{{
 								self._send(self.home_id, 'return', None)
 						store = False
 					if self.probe_cb in self.movecb:
-						#log('killing prober')
 						self.movecb.remove(self.probe_cb)
 						self.probe_cb[1](None)
 						store = False
@@ -2382,6 +2387,9 @@ class Printer: # {{{
 				else:
 					#log('stopping')
 					self.paused = False
+					if self.probe_cb in self.movecb:
+						self.movecb.remove(self.probe_cb)
+						self.probe_cb[1](None)
 					if len(self.movecb) > 0:
 						call_queue.extend([(x[1], [False]) for x in self.movecb])
 				self.queue = []
@@ -2806,7 +2814,6 @@ class Printer: # {{{
 		'''Add g-code to queue using a POST request.
 		Note that this function can only be called using POST; not with the regular websockets system.
 		'''	# FIXME: At the moment there is no protection against calling it from the websocket.  This is a security risk.
-		log('post queue add')
 		with open(filename) as f:
 			return ', '.join(self._queue_add(f, name))
 	# }}}
