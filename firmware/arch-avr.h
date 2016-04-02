@@ -25,7 +25,19 @@
 // Note: When changing this, also change max in cdriver/space.cpp
 #ifdef FAST_ISR
 #define TIME_PER_ISR 75
+#ifndef STEPS_DELAY // {{{
 #define STEPS_DELAY 0	// Extra delay for steps, in units of 6 clock pulses.
+#endif // }}}
+#ifndef ADD_DIR_DELAY // {{{
+#if 1
+#define ADD_DIR_DELAY
+#else
+#define ADD_DIR_DELAY \
+		"\t"	"ldi 18, 40"	"\n" \
+	"1:\t"		"dec 18"	"\n" \
+		"\t"	"brne 1b"	"\n"
+#endif
+#endif // }}}
 #else
 #define TIME_PER_ISR 500
 #endif
@@ -794,7 +806,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"eor 1, 19"			"\n"
 		"\t"	"eor 19, 1"			"\n"
 	"1:\t"						"\n"
-
+		ADD_DIR_DELAY
 		// Send pulses.  Delay of 1 μs is required according to a4988 datasheet.  At 16MHz, that's 16 clock cycles.
 		"\t"	"tst 0"				"\n"
 	"2:\t"		"breq 3f"			"\n"	// 1	3
