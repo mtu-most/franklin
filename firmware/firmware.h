@@ -330,6 +330,7 @@ struct Motor
 		INVERT_LIMIT_MAX	= 0x04,
 	};
 	void init(uint8_t m) {
+		//debug("init motor %d", m);
 		current_pos = 0;
 		intflags = 0;
 		flags = 0;
@@ -342,6 +343,7 @@ struct Motor
 		arch_msetup(m);
 	}
 	void disable(uint8_t m) {
+		//debug("disable motor %d", m);
 		intflags = 0;
 		flags = 0;
 		current_pos = 0;

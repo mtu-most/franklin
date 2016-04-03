@@ -162,6 +162,7 @@ void abort_run_file() {
 	}
 	free(strings);
 	strings = NULL;
+	arch_stop_audio();
 }
 
 enum {

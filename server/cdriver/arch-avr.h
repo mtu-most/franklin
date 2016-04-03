@@ -148,6 +148,7 @@ bool arch_send_fragment();
 void arch_start_move(int extra);
 bool arch_running();
 void arch_home();
+void arch_stop_audio();
 off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor);
 void arch_do_discard();
 void arch_discard();
@@ -1031,6 +1032,7 @@ void arch_addpos(int s, int m, double diff) { // {{{
 	for (uint8_t st = 0; st < s; ++st)
 		mi += spaces[st].num_motors;
 	avr_pos_offset[mi] -= diff;
+	//debug("addpos %d %d %f -> %f", s, m, diff, avr_pos_offset[mi]);
 	cpdebug(s, m, "arch addpos diff %f offset %f raw %f pos %f", diff, avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
 } // }}}
 
@@ -1086,12 +1088,6 @@ bool arch_send_fragment() { // {{{
 	if (host_block || stopping || discard_pending || stop_pending) {
 		//debug("not sending arch frag %d %d %d %d", host_block, stopping, discard_pending, stop_pending);
 		return false;
-	}
-	if (avr_audio >= 0) {
-		debug("audio recover");
-		arch_stop(false);
-		avr_audio = -1;
-		arch_globals_change();
 	}
 	while (out_busy >= 3) {
 		poll(&pollfds[2], 1, -1);
@@ -1201,6 +1197,15 @@ void arch_home() { // {{{
 	}
 	if (prepare_packet(avr_buffer, 5 + avr_active_motors))
 		avr_send();
+} // }}}
+
+void arch_stop_audio() { // {{{
+	if (avr_audio < 0)
+		return;
+	debug("audio recover");
+	arch_stop(false);
+	avr_audio = -1;
+	arch_globals_change();
 } // }}}
 
 off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{

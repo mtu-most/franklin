@@ -1,7 +1,5 @@
 *.pyc
 firmware/build-*
-server/firmware
-server/franklin-cdriver
 server/cdriver/franklin-cdriver
 server/cdriver/build
 util/joystick.py
