@@ -40,7 +40,7 @@ void disconnect(bool notify) { // {{{
 #endif
 
 // Time handling.  {{{
-static void get_current_times(uint32_t *current_time, uint32_t *longtime) {
+static void get_current_times(int32_t *current_time, int32_t *longtime) {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	if (current_time)
@@ -50,14 +50,14 @@ static void get_current_times(uint32_t *current_time, uint32_t *longtime) {
 	//fprintf(stderr, "current times: %d %d\n", *current_time, *longtime);
 }
 
-uint32_t utime() {
-	uint32_t ret;
+int32_t utime() {
+	int32_t ret;
 	get_current_times(&ret, NULL);
 	return ret;
 }
 
-uint32_t millis() {
-	uint32_t ret;
+int32_t millis() {
+	int32_t ret;
 	get_current_times(NULL, &ret);
 	return ret;
 }

@@ -236,8 +236,8 @@ void packet()
 			int num_movecbs = next_move();
 			if (num_movecbs > 0) {
 				if (arch_running()) {
-					//debug("adding %d cbs after current move", num_movecbs);
 					cbs_after_current_move += num_movecbs;
+					//debug("adding %d cbs after current move to %d", num_movecbs, cbs_after_current_move);
 				}
 				else
 					send_host(CMD_MOVECB, num_movecbs);
@@ -362,7 +362,7 @@ void packet()
 			//abort();
 			return;
 		}
-		uint32_t t = utime();
+		int32_t t = utime();
 		if (temps[which].is_on) {
 			// This causes an insignificant error in the model, but when using this you probably aren't using the model anyway, and besides you won't notice the error even if you do.
 			temps[which].time_on += t - temps[which].last_temp_time;
@@ -639,8 +639,10 @@ void packet()
 		if (command[0][3]) {
 			if (run_file_map)
 				run_file_wait += 1;
-			else
+			else {
+				//debug("clearing %d cbs after current move for abort", cbs_after_current_move);
 				cbs_after_current_move = 0;
+			}
 			arch_stop();
 			settings.queue_start = 0;
 			settings.queue_end = 0;

@@ -376,6 +376,7 @@ bool hwpacket(int len) { // {{{
 			fcpdebug(s, m, "limit");
 			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
 		}
+		//debug("cbs after current cleared %d for limit", cbs_after_current_move);
 		cbs_after_current_move = 0;
 		avr_running = false;
 		stopping = 2;
@@ -425,12 +426,14 @@ bool hwpacket(int len) { // {{{
 		}
 		else {
 			// Only overwrite current position if the new value is correct.
-			//debug("underrun ok computing_move=%d sending=%d pending=%d finishing=%d", computing_move, sending_fragment, command[1][3], run_file_finishing);
-			if (!computing_move && !sending_fragment && !transmitting_fragment && command[1][3] == 0) {
-				avr_get_current_pos(4, true);
-				if (run_file_finishing) {
-					send_host(CMD_FILE_DONE);
-					abort_run_file();
+			//debug("underrun ok current=%d running=%d computing_move=%d sending=%d pending=%d finishing=%d transmitting=%d", current_fragment, running_fragment, computing_move, sending_fragment, command[1][3], run_file_finishing, transmitting_fragment);
+			if (!sending_fragment && !transmitting_fragment) {
+				if (command[1][3] == 0) {
+					avr_get_current_pos(4, true);
+					if (run_file_finishing) {
+						send_host(CMD_FILE_DONE);
+						abort_run_file();
+					}
 				}
 			}
 			//debug("underrun check %d %d %d", sending_fragment, current_fragment, running_fragment);
@@ -445,7 +448,8 @@ bool hwpacket(int len) { // {{{
 			avr_write_ack("stopped done");
 			return false;
 		}
-		//debug("done: %d pending %d sending %d current %d", command[1][1], command[1][2], sending_fragment, current_fragment);
+		int offset = command[1][0] == HWC_UNDERRUN ? 1 : 0;
+		//debug("done: %d pending %d sending %d current %d running %d", command[1][offset + 1], command[1][offset + 2], sending_fragment, current_fragment, running_fragment);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			//debug("Done received while fragments per buffer is zero");
 			avr_write_ack("invalid done");
@@ -453,7 +457,6 @@ bool hwpacket(int len) { // {{{
 		}
 		first_fragment = -1;
 		int cbs = 0;
-		int offset = command[1][0] == HWC_UNDERRUN ? 1 : 0;
 		//debug("done: %d pending %d sending %d preparing %d current %d running %d", command[1][offset + 1], command[1][offset + 2], sending_fragment, preparing, current_fragment, running_fragment);
 		for (int i = 0; i < command[1][offset + 1]; ++i) {
 			int f = (running_fragment + i) % FRAGMENTS_PER_BUFFER;
@@ -461,10 +464,15 @@ bool hwpacket(int len) { // {{{
 			cbs += history[f].cbs;
 			history[f].cbs = 0;
 		}
+		if (!avr_running) {
+			cbs += cbs_after_current_move;
+			cbs_after_current_move = 0;
+		}
+		//debug("cbs: %d after current %d computing %d", cbs, cbs_after_current_move, computing_move);
 		if (cbs && !host_block)
 			send_host(CMD_MOVECB, cbs);
 		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER + 1 < command[1][offset + 1] + command[1][offset + 2]) {
-			debug("Done count %d+%d higher than busy fragments %d+1; clipping", command[1][1], command[1][2], (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
+			debug("Done count %d+%d higher than busy fragments %d+1; clipping", command[1][offset + 1], command[1][offset + 2], (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
 			avr_write_ack("invalid done");
 			//abort();
 		}
@@ -479,7 +487,7 @@ bool hwpacket(int len) { // {{{
 		if (out_busy < 3)
 			buffer_refill();
 		//else
-			//debug("no refill");
+		//	debug("no refill");
 		run_file_fill_queue();
 		return false;
 	} // }}}
@@ -712,7 +720,7 @@ void arch_reset() { // {{{
 	avr_call1(HWC_PING, 5);
 	avr_call1(HWC_PING, 6);
 	avr_call1(HWC_PING, 7);
-	uint32_t before = millis();
+	int32_t before = millis();
 	while (avr_pong != 7 && millis() - before < 2000) {
 		//debug("avr pongwait %d", avr_pong);
 		pollfds[2].revents = 0;
@@ -1140,13 +1148,18 @@ void arch_start_move(int extra) { // {{{
 	if (host_block)
 		return;
 	if (preparing || sending_fragment || out_busy >= 3) {
+		//debug("no start yet");
 		start_pending = true;
 		return;
 	}
-	if (avr_running || avr_filling || stopping || avr_homing)
+	if (avr_running || avr_filling || stopping || avr_homing) {
+		//debug("not startable");
 		return;
-	if ((running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= extra + 2)
+	}
+	if ((running_fragment - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER <= extra + 2) {
+		//debug("no buffer no start");
 		return;
+	}
 	//debug("start move %d %d %d %d", current_fragment, running_fragment, sending_fragment, extra);
 	while (out_busy >= 3) {
 		poll(&pollfds[2], 1, -1);
@@ -1253,9 +1266,11 @@ void arch_do_discard() { // {{{
 	}
 	restore_settings();
 	history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += cbs + cbs_after_current_move;
+	//debug("cbs after current cleared after setting %d+%d in history", cbs, cbs_after_current_move);
 	cbs_after_current_move = 0;
 	avr_buffer[0] = HWC_DISCARD;
 	avr_buffer[1] = fragments - 2;
+	// We're in the middle of a move again, so make sure the computation is restarted.
 	computing_move = true;
 	if (prepare_packet(avr_buffer, 2))
 		avr_send();

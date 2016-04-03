@@ -1408,6 +1408,9 @@ class Printer: # {{{
 			self._print_done(True, 'Queue finished')
 			return
 		def cb():
+			if len(self.jobs_active) < self.job_current:
+				log('requested job does not exist')
+				return
 			if len(self.jobs_active) > 1:
 				self.request_confirmation("Prepare for job '%s'." % self.jobs_active[self.job_current])[1](False)
 			self._gcode_run(self.jobs_active[self.job_current], self.jobs_angle, abort = False)

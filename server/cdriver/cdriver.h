@@ -196,8 +196,8 @@ struct Temp {
 	int32_t adcmin_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
 	int32_t adcmax_alarm;		// -1, or the temperature at which to trigger the callback.  [adccounts]
 	// Internal variables.
-	uint32_t last_temp_time;	// last value of micros when this heater was handled.
-	uint32_t time_on;		// Time that the heater has been on since last reading.  [μs]
+	int32_t last_temp_time;		// last value of micros when this heater was handled.
+	int32_t time_on;		// Time that the heater has been on since last reading.  [μs]
 	bool is_on[2];			// If the heater is currently on.
 	double K;			// Thermistor constant; kept in memory for performance.
 	// Functions.
@@ -214,7 +214,7 @@ struct Temp {
 struct History {
 	double t0, tp;
 	double f0, f1, f2, fp, fq, fmain;
-	uint32_t hwtime, start_time, last_time, last_current_time;
+	int32_t hwtime, start_time, last_time, last_current_time;
 	int cbs;
 	int queue_start, queue_end;
 	bool queue_full;
@@ -419,13 +419,13 @@ EXTERN bool initialized;
 EXTERN int cbs_after_current_move;
 EXTERN bool motors_busy;
 EXTERN int out_busy;
-EXTERN uint32_t out_time;
+EXTERN int32_t out_time;
 EXTERN char pending_packet[4][FULL_SERIAL_COMMAND_SIZE];
 EXTERN int pending_len[4];
 EXTERN void (*serial_cb[4])();
 EXTERN char datastore[HOST_COMMAND_SIZE];
-EXTERN uint32_t last_active;
-EXTERN uint32_t last_micros;
+EXTERN int32_t last_active;
+EXTERN int32_t last_micros;
 EXTERN int16_t led_phase;
 EXTERN History *history;
 EXTERN History settings;
@@ -552,8 +552,8 @@ void globals_save(int32_t &address);
 
 // base.cpp
 void disconnect(bool notify);
-uint32_t utime();
-uint32_t millis();
+int32_t utime();
+int32_t millis();
 
 #include ARCH_INCLUDE
 

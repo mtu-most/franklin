@@ -347,11 +347,6 @@ void run_file_fill_queue() {
 				queue[settings.queue_end].dist = r.dist;
 				queue[settings.queue_end].cb = false;
 				settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
-				if (!computing_move)
-					next_move();
-				else
-					rundebug("no");
-				buffer_refill();
 				break;
 			}
 			case RUN_GPIO:
@@ -450,6 +445,9 @@ void run_file_fill_queue() {
 		}
 		settings.run_file_current += 1;
 	}
+	if (!computing_move && (settings.queue_start != settings.queue_end || settings.queue_full))
+		next_move();
+	buffer_refill();
 	rundebug("run queue done");
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
 		// Done.

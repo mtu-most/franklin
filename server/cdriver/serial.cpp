@@ -140,8 +140,8 @@ void serial(uint8_t channel) { // {{{
 	while (true) { // Loop until all data is handled.
 #ifdef SERIAL // Handle timeouts on serial line. {{{
 		if (channel == 1) {
-			uint32_t utm = utime();
-			if (uint32_t(utm - last_micros) >= 100000)
+			int32_t utm = utime();
+			if (int32_t(utm - last_micros) >= 100000)
 			{
 				if (command_end[channel] > 0) {
 					if (!had_data) {

@@ -514,6 +514,7 @@ int arch_tick() {
 				sending_fragment = 0;
 				stopping = 2;
 				send_host(CMD_LIMIT, -1, -1, NAN);
+				//debug("cbs after current cleared %d for probe", cbs_after_current_move);
 				cbs_after_current_move = 0;
 			}
 		}
@@ -541,6 +542,7 @@ int arch_tick() {
 					sending_fragment = 0;
 					stopping = 2;
 					send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit);
+					//debug("cbs after current cleared %d after sending limit", cbs_after_current_move);
 					cbs_after_current_move = 0;
 				}
 			}

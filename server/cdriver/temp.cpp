@@ -218,7 +218,7 @@ void handle_temp(int id, int temp) { // {{{
 	/*
 	// TODO: Make this work and decide on units.
 	// We have model settings.
-	uint32_t dt = current_time - temps[id].last_temp_time;
+	int32_t dt = current_time - temps[id].last_temp_time;
 	if (dt == 0)
 		return;
 	temps[id].last_temp_time = current_time;

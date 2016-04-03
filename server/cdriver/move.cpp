@@ -53,7 +53,7 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 #endif
 		}
 	}
-	if (s == 0 && queue[qpos].arc) {
+	if (s == 0 && queue[qpos].arc) { // {{{
 		sp.settings.arc[1] = true;
 		double src = 0, normal = 0, dst = 0;
 		double target[3];
@@ -105,9 +105,8 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 		sp.settings.radius[1][1] = dst;
 		double d = (src + dst) / 2 * sp.settings.angle[1];
 		sp.settings.dist[1] = sqrt(d * d + sp.settings.helix[1] * sp.settings.helix[1]);
-		// Fall through.
-	}
-	else {
+	} // }}}
+	else { // {{{
 		sp.settings.arc[1] = false;
 		sp.settings.angle[1] = NAN;
 		sp.settings.helix[1] = NAN;
@@ -121,15 +120,12 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 			sp.settings.normal[1][i] = NAN;
 		}
 		double d = 0;
-		int n = 0;
-		for (int a = 0; a < sp.num_axes; ++a) {
-			if (!isnan(sp.axis[a]->settings.dist[1])) {
+		for (int a = 0; a < min(3, sp.num_axes); ++a) {
+			if (!isnan(sp.axis[a]->settings.dist[1]))
 				d += sp.axis[a]->settings.dist[1] * sp.axis[a]->settings.dist[1];
-				n += 1;
-			}
 		}
-		sp.settings.dist[1] = n > 0 ? sqrt(d) / n : 0;
-	}
+		sp.settings.dist[1] = sqrt(d);
+	} // }}}
 } // }}}
 
 static void copy_next(int s) { // {{{
@@ -168,7 +164,6 @@ int next_move() { // {{{
 	run_file_fill_queue();
 	if (settings.queue_start == settings.queue_end && !settings.queue_full) {
 		//debug("no next move");
-		computing_move = false;
 		prepared = false;
 		return num_cbs;
 	}
@@ -305,8 +300,10 @@ int next_move() { // {{{
 	settings.run_time = queue[settings.queue_start].time;
 	settings.run_dist = queue[settings.queue_start].dist;
 
-	if (queue[settings.queue_start].cb)
+	if (queue[settings.queue_start].cb) {
 		cbs_after_current_move += 1;
+		//debug("cbs after current inc'd to %d", cbs_after_current_move);
+	}
 	//debug("add cb to current starting at %d", current_fragment);
 	if (settings.queue_end == settings.queue_start)
 		send_host(CMD_CONTINUE, 0);
@@ -318,6 +315,7 @@ int next_move() { // {{{
 		debug("Skipping zero-distance prepared move");
 #endif
 		num_cbs += cbs_after_current_move;
+		//debug("cbs after current cleared for return from next move as %d+%d", num_cbs, cbs_after_current_move);
 		cbs_after_current_move = 0;
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
@@ -359,6 +357,9 @@ int next_move() { // {{{
 		// max_mm is the maximum speed in mm/s.
 		double max_mm = settings.probing ? space_types[sp.type].probe_speed(&sp) : limit;
 		double max = max_mm / sp.settings.dist[0];
+#ifdef DEBUG_MOVE
+		debug("limiting space %d, max_mm = %f, max = %f, limit = %f", s, max_mm, max, limit);
+#endif
 		if (v0 < 0)
 			v0 = -v0 / sp.settings.dist[0];
 		if (vp < 0)
@@ -468,7 +469,7 @@ int next_move() { // {{{
 	settings.hwtime = 0;
 	settings.last_time = 0;
 	settings.last_current_time = 0;
-	settings.start_time = settings.last_time - uint32_t(settings.f0 / fabs(vp) * 1e6);
+	settings.start_time = settings.last_time - int32_t(settings.f0 / fabs(vp) * 1e6);
 	// }}}
 
 	if (!computing_move) {	// Set up source if this is a new move. {{{

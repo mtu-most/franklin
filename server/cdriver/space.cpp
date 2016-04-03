@@ -140,6 +140,7 @@ void move_to_current() { // {{{
 	settings.fq = 0;
 	settings.t0 = 0;
 	settings.tp = 0;
+	//debug("clearing %d cbs after current move for move to current", cbs_after_current_move);
 	cbs_after_current_move = 0;
 	current_fragment_pos = 0;
 	first_fragment = current_fragment;
@@ -403,7 +404,7 @@ static void check_distance(int sp, int mt, Motor *mtr, double distance, double d
 		factor = f;
 } // }}}
 
-static void move_axes(Space *s, uint32_t current_time, double &factor) { // {{{
+static void move_axes(Space *s, int32_t current_time, double &factor) { // {{{
 	double motors_target[s->num_motors];
 	bool ok = true;
 	space_types[s->type].xyz2motors(s, motors_target, &ok);
@@ -421,7 +422,7 @@ static void move_axes(Space *s, uint32_t current_time, double &factor) { // {{{
 	}
 } // }}}
 
-static bool do_steps(double &factor, uint32_t current_time) { // {{{
+static bool do_steps(double &factor, int32_t current_time) { // {{{
 	//debug("steps");
 	if (factor <= 0) {
 		movedebug("end move");
@@ -473,7 +474,7 @@ static bool do_steps(double &factor, uint32_t current_time) { // {{{
 		}
 	}
 	//debug("do steps %f", factor);
-	uint32_t the_last_time = settings.last_current_time;
+	int32_t the_last_time = settings.last_current_time;
 	settings.last_current_time = current_time;
 	// Adjust start time if factor < 1.
 	if (factor < 1) {
@@ -605,17 +606,24 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		t = (current_time - settings.start_time) / 1e6;
 		if (t / (settings.t0 + settings.tp) >= done_factor) {
 			int had_cbs = cbs_after_current_move;
+			//debug("clearing %d cbs after current move for later inserting into history", cbs_after_current_move);
 			cbs_after_current_move = 0;
 			run_file_fill_queue();
 			if (settings.queue_start != settings.queue_end || settings.queue_full) {
 				had_cbs += next_move();
 				if (!aborting && had_cbs > 0) {
-					//debug("adding %d cbs to fragment %d", had_cbs, current_fragment);
-					history[current_fragment].cbs += had_cbs;
+					int fragment;
+					if (num_active_motors == 0)
+						fragment = (current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER;
+					else
+						fragment = current_fragment;
+					//debug("adding %d cbs to fragment %d", had_cbs, fragment);
+					history[fragment].cbs += had_cbs;
 				}
 				return;
 			}
 			cbs_after_current_move += had_cbs;
+			//debug("adding %d to cbs after current move making it %d", had_cbs, cbs_after_current_move);
 			if (factor == 1) {
 				//debug("queue done");
 				if (!did_steps) {
@@ -631,9 +639,15 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				}
 				if (cbs_after_current_move > 0) {
 					if (!aborting) {
-						//debug("adding %d cbs to final fragment %d", cbs_after_current_move, current_fragment);
-						history[current_fragment].cbs += cbs_after_current_move;
+						int fragment;
+						if (num_active_motors == 0)
+							fragment = (current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER;
+						else
+							fragment = current_fragment;
+						//debug("adding %d cbs to final fragment %d", cbs_after_current_move, fragment);
+						history[fragment].cbs += cbs_after_current_move;
 					}
+					//debug("clearing %d cbs after current move in final", cbs_after_current_move);
 					cbs_after_current_move = 0;
 				}
 			}
