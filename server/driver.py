@@ -1052,8 +1052,8 @@ class Printer: # {{{
 				p = bytes((protocol.command['SINGLE'],))
 			else:
 				p = bytes((protocol.command['LINE'],))
-			#log('movewait +1 -> %d' % self.movewait)
 			self.movewait += 1
+			#log('movewait +1 -> %d' % self.movewait)
 			#log('queueing %s' % repr((axes, f0, f1, self.flushing)))
 			self._send_packet(p + bytes(targets) + args, move = True)
 			if self.flushing is None:
@@ -1401,6 +1401,7 @@ class Printer: # {{{
 	# }}}
 	def _next_job(self): # {{{
 		# Set all extruders to 0.
+		#log('next job list: %s, current: %d' % (repr(self.jobs_active), self.job_current))
 		for i, e in enumerate(self.spaces[1].axis):
 			self.set_axis_pos(1, i, 0)
 		self.job_current += 1
@@ -1408,7 +1409,8 @@ class Printer: # {{{
 			self._print_done(True, 'Queue finished')
 			return
 		def cb():
-			if len(self.jobs_active) < self.job_current:
+			#log('start job %d, list %s' % (self.job_current, repr(self.jobs_active)))
+			if self.job_current >= len(self.jobs_active):
 				log('requested job does not exist')
 				return
 			if len(self.jobs_active) > 1:
@@ -2441,7 +2443,7 @@ class Printer: # {{{
 			if id is not None:
 				self._send(id, 'error', 'aborted')
 			return
-		#log('parking')
+		#log('parking with cb %s' % repr(cb))
 		if abort:
 			self._print_done(False, 'aborted by parking')
 		self.parking = True
@@ -2455,6 +2457,7 @@ class Printer: # {{{
 			if len(topark) > 0 and (next_order is None or min(topark) > next_order):
 				next_order = min(topark)
 		if next_order is None:
+			#log('done parking; cb = %s' % repr(cb))
 			self.parking = False
 			if cb:
 				def wrap_cb(done):
@@ -2843,11 +2846,12 @@ class Printer: # {{{
 		'''Run one or more new jobs.
 		'''
 		if len(self.jobs_active) > 0 and not self.paused:
-			log('ignoring probe request while print is in progress: %s' % repr(self.jobs_active) + str(self.paused))
+			log('ignoring print request while print is in progress: %s' % repr(self.jobs_active) + str(self.paused))
 			if id is not None:
 				self._send(id, 'return', None)
 			return
 		self.job_output = ''
+		#log('set active jobs to %s' % names)
 		self.jobs_active = names
 		self.jobs_angle = angle
 		self.probemap = probemap

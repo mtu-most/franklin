@@ -445,8 +445,11 @@ void run_file_fill_queue() {
 		}
 		settings.run_file_current += 1;
 	}
-	if (!computing_move && (settings.queue_start != settings.queue_end || settings.queue_full))
-		next_move();
+	if (!computing_move && (settings.queue_start != settings.queue_end || settings.queue_full)) {
+		int cbs = next_move();
+		if (cbs > 0)
+			send_host(CMD_MOVECB, cbs);
+	}
 	buffer_refill();
 	rundebug("run queue done");
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {

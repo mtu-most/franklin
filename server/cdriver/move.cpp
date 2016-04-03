@@ -312,7 +312,7 @@ int next_move() { // {{{
 
 	if (!action) {	// Skip zero-distance move. {{{
 #ifdef DEBUG_MOVE
-		debug("Skipping zero-distance prepared move");
+		debug("Skipping zero-distance prepared move (cbs %d)", cbs_after_current_move);
 #endif
 		num_cbs += cbs_after_current_move;
 		//debug("cbs after current cleared for return from next move as %d+%d", num_cbs, cbs_after_current_move);

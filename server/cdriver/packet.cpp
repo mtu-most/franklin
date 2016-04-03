@@ -239,8 +239,10 @@ void packet()
 					cbs_after_current_move += num_movecbs;
 					//debug("adding %d cbs after current move to %d", num_movecbs, cbs_after_current_move);
 				}
-				else
+				else {
 					send_host(CMD_MOVECB, num_movecbs);
+					//debug("sent immediate %d cbs", num_movecbs);
+				}
 			}
 			//debug("no movecbs to add (prev %d)", settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs);
 			buffer_refill();
