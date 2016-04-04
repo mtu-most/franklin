@@ -31,9 +31,15 @@ BB ?= debian@192.168.7.2
 BB_PASS ?= reprap
 UPGRADE_KEY ?= 46BEB154
 SSHPASS ?= sshpass -p'${BB_PASS}'
-zip:
-	rm -rf zipdir
+zip: armhf
+	cd zipdir && for f in * ; do echo "$$FRANKLIN_PASSPHRASE" | gpg --local-user $(UPGRADE_KEY) --passphrase-fd 0 --sign $$f ; rm $$f ; done
+	changelog="`dpkg-parsechangelog`" && name="`echo "$$changelog" | grep '^Source: ' | cut -b9-`" && fullversion="`echo "$$changelog" | grep '^Version: ' | cut -b10-`" && version="$${fullversion%-*}" && rm -f $$name-$$version.zip && cd zipdir && zip ../$$name-$$version.zip *
+
+armhf:
+	rm -r zipdir
 	mkdir zipdir
+	$(SSHPASS) ssh $(BB) sudo ip route del default || true
+	$(SSHPASS) ssh $(BB) sudo ip route add default via 192.168.7.1
 	$(SSHPASS) ssh $(BB) sudo ntpdate -u time.mtu.edu
 	$(SSHPASS) ssh $(BB) rm -rf franklin '/tmp/*.{dsc,changes,tar.gz,deb}'
 	cd zipdir && git clone .. franklin
@@ -42,13 +48,10 @@ zip:
 	$(SSHPASS) ssh $(BB) git -C franklin remote set-url origin https://github.com/mtu-most/franklin
 	$(SSHPASS) ssh $(BB) make -C franklin build
 	$(SSHPASS) scp $(BB):/tmp/*deb zipdir/
-	cd zipdir && for f in python3-fhs_* ; do mv $$f 1-$$f ; done
-	cd zipdir && for f in python3-network_* ; do mv $$f 2-$$f ; done
-	cd zipdir && for f in python3-websocketd_* ; do mv $$f 3-$$f ; done
-	cd zipdir && for f in franklin_* ; do mv $$f 4-$$f ; done
 	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || $(SSHPASS) scp $(BB):'/tmp/*.{dsc,changes,tar.gz,tar.xz,deb}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL && $$DINSTALL
-	cd zipdir && for f in * ; do echo "$$FRANKLIN_PASSPHRASE" | gpg --local-user $(UPGRADE_KEY) --passphrase-fd 0 --sign $$f ; rm $$f ; done
-	changelog="`dpkg-parsechangelog`" && name="`echo "$$changelog" | grep '^Source: ' | cut -b9-`" && fullversion="`echo "$$changelog" | grep '^Version: ' | cut -b10-`" && version="$${fullversion%-*}" && cd zipdir && rm -f ../$$name-$$version.zip && zip ../$$name-$$version.zip *
+
+bb: armhf
+	rm -r zipdir
 
 install:
 	# Fake target to make debhelper happy.
@@ -81,4 +84,4 @@ clean: $(addprefix clean-,$(MODULES))
 	rm -f mkdeb .gitmodules
 	rm -rf zipdir
 
-.PHONY: install build clean zip
+.PHONY: install build clean zip bb
