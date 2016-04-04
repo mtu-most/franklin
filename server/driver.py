@@ -174,7 +174,7 @@ class Printer: # {{{
 		return cmd, s, m, f, e, data[21:]
 	# }}}
 	def _send(self, *data): # {{{
-		#sys.stderr.write(repr(data) + '\n')
+		#log('writing to server: %s' % repr(data))
 		sys.stdout.write(json.dumps(data) + '\n')
 		sys.stdout.flush()
 	# }}}
@@ -1553,6 +1553,7 @@ class Printer: # {{{
 					return
 				else:
 					flush_pending()
+				#log(repr((type, nums, add_timedist(type, nums))))
 				dst.write(struct.pack('=Bl' + 'd' * 8, type, *add_timedist(type, nums)))
 			def flush_pending():
 				tmp = pending[1:]
@@ -1840,7 +1841,7 @@ class Printer: # {{{
 						pass
 					elif cmd == ('M', 42):
 						if 'P' in args and 'S' in args:
-							add_record(protocol.parsed['GPIO'], [args['P'], args.get('S')])
+							add_record(protocol.parsed['GPIO'], [int(args['P']), args.get('S')])
 						else:
 							errors.append('%d:invalid M42 request (needs P and S)' % lineno)
 					elif cmd == ('M', 84):
@@ -1853,15 +1854,15 @@ class Printer: # {{{
 						elif 'S' not in args:
 							errors.append('ignoring M104 without S')
 						else:
-							add_record(protocol.parsed['SETTEMP'], [args['E'], args['S'] + C0])
+							add_record(protocol.parsed['SETTEMP'], [int(args['E']), args['S'] + C0])
 					elif cmd == ('M', 106):
 						add_record(protocol.parsed['GPIO'], [-2, 1])
 					elif cmd == ('M', 107):
 						add_record(protocol.parsed['GPIO'], [-2, 0])
 					elif cmd == ('M', 109):
 						if 'S' in args:
-							add_record(protocol.parsed['SETTEMP'], [args['E'], args['S'] + C0])
-						add_record(protocol.parsed['WAITTEMP'], [args['E']])
+							add_record(protocol.parsed['SETTEMP'], [int(args['E']), args['S'] + C0])
+						add_record(protocol.parsed['WAITTEMP'], [int(args['E'])])
 					elif cmd == ('M', 116):
 						add_record(protocol.parsed['WAITTEMP'], [-2])
 					elif cmd[0] == 'S':
@@ -2933,6 +2934,7 @@ class Printer: # {{{
 	# Accessor functions. {{{
 	# Globals. {{{
 	def get_globals(self): # {{{
+		#log('getting globals')
 		ret = {'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
 		for key in ('uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'):
 			ret[key] = getattr(self, key)

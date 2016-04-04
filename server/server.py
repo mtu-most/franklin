@@ -433,7 +433,7 @@ class Connection: # {{{
 			return False
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
-		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP, output)
+		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP | GLib.IO_ERR, output)
 		broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
 		broadcast(None, 'message', port, '')
 		d = (yield)
@@ -539,7 +539,10 @@ class Port: # {{{
 		self.process = process
 		self.waiters = ({}, {}, {})
 		self.next_mid = 0
-		self.input_handle = GLib.io_add_watch(process.stdout.fileno(), GLib.IO_IN | GLib.IO_HUP, self.printer_input)
+		self.buffer = b''
+		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
+		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
+		self.input_handle = GLib.io_add_watch(process.stdout.fileno(), GLib.IO_IN | GLib.IO_PRI | GLib.IO_ERR | GLib.IO_HUP, self.printer_input)
 		old = []
 		def get_settings(success, settings):
 			if not success:
@@ -597,42 +600,53 @@ class Port: # {{{
 		self.next_mid += 1
 	# }}}
 	def printer_input(self, fd, cond): # {{{
-		line = self.process.stdout.readline()
-		if line == b'':
-			log('%s died.' % self.name)
-			self.process.communicate()	# Clean up the zombie.
-			for t in range(3):
-				for w in self.waiters[t]:
-					self.waiters[t][w](False, 'Printer died')
-			disable('admin', self.port)
-			return False
-		data = json.loads(line.decode('utf-8'))
-		#log('printer input:' + repr(data))
-		if data[1] == 'broadcast':
-			broadcast(data[2], data[3], self.port, *(data[4:]))
-		elif data[1] == 'disconnect':
-			# Don't remember a printer that hasn't sent its name yet.
-			port = self.port
-			ports[self.port] = None
-			broadcast(None, 'port_state', port, 0)
-			self.make_orphan()
-			if autodetect:
-				detect(self.port, 'admin')
-		elif data[1] == 'error':
-			if data[0] is None:
-				# Error on command without id.
-				log('error on command without id: %s' % repr(data))
-			else:
-				self.waiters[0].pop(data[0])(False, data[2])
-		elif data[1] == 'return':
-			self.waiters[0].pop(data[0])(True, data[2])
-		elif data[1] == 'movecb':
-			self.waiters[1].pop(data[0])(True, data[2])
-		elif data[1] == 'tempcb':
-			self.waiters[2].pop(data[0])(True, data[2])
-		else:
-			raise AssertionError('invalid reply from printer process: %s' % repr(data))
-		return True
+		while True:
+			data = self.process.stdout.read()
+			if data is None:
+				#log('%s: no data now' % self.name)
+				# No more data.
+				return True
+			if data == b'':
+				# Connection closed.
+				log('%s died.' % self.name)
+				self.process.communicate()	# Clean up the zombie.
+				for t in range(3):
+					for w in self.waiters[t]:
+						self.waiters[t][w](False, 'Printer died')
+				disable('admin', self.port)
+				return False
+			self.buffer += data
+			#log('printer input:' + repr(data))
+			while b'\n'[0] in self.buffer:
+				pos = self.buffer.index(b'\n'[0])
+				line = self.buffer[:pos]
+				self.buffer = self.buffer[pos + 1:]
+				data = json.loads(line.decode('utf-8'))
+				#log('printer command input:' + repr(data))
+				if data[1] == 'broadcast':
+					broadcast(data[2], data[3], self.port, *(data[4:]))
+				elif data[1] == 'disconnect':
+					# Don't remember a printer that hasn't sent its name yet.
+					port = self.port
+					ports[self.port] = None
+					broadcast(None, 'port_state', port, 0)
+					self.make_orphan()
+					if autodetect:
+						detect(self.port, 'admin')
+				elif data[1] == 'error':
+					if data[0] is None:
+						# Error on command without id.
+						log('error on command without id: %s' % repr(data))
+					else:
+						self.waiters[0].pop(data[0])(False, data[2])
+				elif data[1] == 'return':
+					self.waiters[0].pop(data[0])(True, data[2])
+				elif data[1] == 'movecb':
+					self.waiters[1].pop(data[0])(True, data[2])
+				elif data[1] == 'tempcb':
+					self.waiters[2].pop(data[0])(True, data[2])
+				else:
+					raise AssertionError('invalid reply from printer process: %s' % repr(data))
 	# }}}
 	def make_orphan(self): # {{{
 		if ports[self.port]:
@@ -749,7 +763,7 @@ def detect(port, role): # {{{
 			return False
 		printer.write(protocol.single['ID'])
 		timeout_handle = GLib.timeout_add(500, timeout)
-		watcher = GLib.io_add_watch(printer.fileno(), GLib.IO_IN, boot_printer_input)
+		watcher = GLib.io_add_watch(printer.fileno(), GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP | GLib.IO_ERR, boot_printer_input)
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
 	# This is only a problem for RAMPS; don't wait for ports that cannot be RAMPS.
 	if 'ACM' in port:
@@ -839,7 +853,7 @@ def print_done(port, completed, reason): # {{{
 				return True
 			log('Callback for print completion done; return: %s' % repr(p.wait()))
 			return False
-		GLib.io_add_watch(p.stdout.fileno(), GLib.IO_IN, process_done)
+		GLib.io_add_watch(p.stdout.fileno(), GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP | GLib.IO_ERR, process_done)
 # }}}
 
 if config['local'] != '':
