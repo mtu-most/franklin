@@ -434,11 +434,11 @@ void packet()
 		if (command(0) != CMD_MOVE_SINGLE) {
 			for (uint8_t f = 0; f < active_motors; ++f) {
 				if ((motor[f].follow & 0x7f) == m) {
-					for (uint8_t b = 0; b < last_len; ++b) {
+					for (uint8_t b = 0; b < last_len; b += 2) {
+						int16_t value = *reinterpret_cast <volatile int16_t *>(&buffer[last_fragment][m][b]);
 						if (motor[f].follow & 0x80)
-							buffer[last_fragment][f][b] = -buffer[last_fragment][m][b];
-						else
-							buffer[last_fragment][f][b] = buffer[last_fragment][m][b];
+							value = -value;
+						*reinterpret_cast <volatile int16_t *>(buffer[last_fragment][f][b]) = value;
 					}
 				}
 			}
