@@ -531,10 +531,7 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 					fm &= 0x7f;
 					if (fs != s || fm != m || (fs == 2 && fm >= mm))
 						continue;
-					if (mtr.dir_pin.inverted() ^ spaces[2].motor[mm]->dir_pin.inverted())
-						spaces[2].motor[mm]->settings.current_pos -= new_cp - mtr.settings.current_pos;
-					else
-						spaces[2].motor[mm]->settings.current_pos += new_cp - mtr.settings.current_pos;
+					spaces[2].motor[mm]->settings.current_pos += new_cp - mtr.settings.current_pos;
 				}
 			}
 			//cpdebug(s, m, "cp three %f", target);
