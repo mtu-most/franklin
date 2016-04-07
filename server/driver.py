@@ -1290,6 +1290,7 @@ class Printer: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				self.line(target, force = True)
+				#log('movecb: ' + repr(self.movecb))
 				return
 			# Fall through.
 		if self.home_phase == 5:

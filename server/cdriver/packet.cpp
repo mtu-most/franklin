@@ -244,7 +244,7 @@ void packet()
 					//debug("sent immediate %d cbs", num_movecbs);
 				}
 			}
-			//debug("no movecbs to add (prev %d)", settings[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs);
+			//debug("no movecbs to add (prev %d)", history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs);
 			buffer_refill();
 		}
 		//else

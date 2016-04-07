@@ -1,4 +1,4 @@
-/* space.cpp - Implementations of Space internals for Franklin
+/* space.cpp - Implementations of Space internals for Franklin {{{
  * vim: foldmethod=marker :
  * Copyright 2014 Michigan Technological University
  * Author: Bas Wijnen <wijnen@debian.org>
@@ -15,7 +15,7 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+ * }}} */
 
 #include "cdriver.h"
 
@@ -570,7 +570,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		movedebug("handle motors not moving");
 		return;
 	}
-	movedebug("handling %d", computing_move);
+	movedebug("handling %d %d", computing_move, cbs_after_current_move);
 	double factor = 1;
 	double t = (current_time - settings.start_time) / 1e6;
 	if (t >= settings.t0 + settings.tp) {	// Finish this move and prepare next. {{{
@@ -638,7 +638,14 @@ static void handle_motors(unsigned long long current_time) { // {{{
 					if (!aborting) {
 						int fragment;
 						if (num_active_motors == 0)
-							fragment = (current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER;
+							if (running_fragment == current_fragment) {
+								//debug("sending movecbs immediately");
+								send_host(CMD_MOVECB, cbs_after_current_move);
+								cbs_after_current_move = 0;
+								return;
+							}
+							else
+								fragment = (current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER;
 						else
 							fragment = current_fragment;
 						//debug("adding %d cbs to final fragment %d", cbs_after_current_move, fragment);

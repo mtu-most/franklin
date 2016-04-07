@@ -438,7 +438,7 @@ void packet()
 						int16_t value = *reinterpret_cast <volatile int16_t *>(&buffer[last_fragment][m][b]);
 						if (motor[f].follow & 0x80)
 							value = -value;
-						*reinterpret_cast <volatile int16_t *>(buffer[last_fragment][f][b]) = value;
+						*reinterpret_cast <volatile int16_t *>(&buffer[last_fragment][f][b]) = value;
 					}
 				}
 			}
