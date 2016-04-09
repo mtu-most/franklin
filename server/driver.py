@@ -1484,7 +1484,7 @@ class Printer: # {{{
 		unit = 1.
 		arc_normal = (0, 0, 1)
 		rel = False
-		erel = None
+		erel = False
 		pos = [[float('nan') for a in range(6)], [0., 0.], float('inf')]
 		time_dist = [0., 0.]
 		pending = []
@@ -1665,9 +1665,11 @@ class Printer: # {{{
 						continue
 					elif cmd == ('G', 90):
 						rel = False
+						erel = False
 						continue
 					elif cmd == ('G', 91):
 						rel = True
+						erel = True
 						continue
 					elif cmd == ('M', 82):
 						erel = False
@@ -1719,7 +1721,7 @@ class Printer: # {{{
 						oldpos = pos[0][:], pos[1][:]
 						if cmd[1] != 81:
 							if components['E'] is not None:
-								if erel or (erel is None and rel):
+								if erel:
 									estep = components['E'] * unit
 								else:
 									estep = components['E'] * unit - pos[1][current_extruder]
@@ -1794,7 +1796,7 @@ class Printer: # {{{
 							pos[2] = components['F'] * unit / 60
 						oldpos = pos[0][:], pos[1][:]
 						if components['E'] is not None:
-							if erel or (erel is None and rel):
+							if erel:
 								estep = components['E'] * unit
 							else:
 								estep = components['E'] * unit - pos[1][current_extruder]

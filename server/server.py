@@ -92,10 +92,6 @@ import random
 import websocketd
 from websocketd import log
 import fhs
-try:
-	from gi.repository import GLib
-except ImportError:
-	import glib as GLib
 import subprocess
 import crypt
 import time
@@ -416,7 +412,7 @@ class Connection: # {{{
 		log('Flashing firmware: ' + ' '.join(command))
 		broadcast(None, 'port_state', port, 3)
 		process = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
-		def output(fd, cond):
+		def output():
 			d = ''
 			try:
 				d = process.stdout.read().decode('utf-8')
@@ -433,7 +429,7 @@ class Connection: # {{{
 			return False
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
-		GLib.io_add_watch(process.stdout, GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP | GLib.IO_ERR, output)
+		websocketd.add_read(process.stdout, output, output)
 		broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
 		broadcast(None, 'message', port, '')
 		d = (yield)
@@ -542,14 +538,14 @@ class Port: # {{{
 		self.buffer = b''
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
-		self.input_handle = GLib.io_add_watch(process.stdout.fileno(), GLib.IO_IN | GLib.IO_PRI | GLib.IO_ERR | GLib.IO_HUP, self.printer_input)
+		self.input_handle = websocketd.add_read(process.stdout, self.printer_input, self.printer_input)
 		old = []
 		def get_settings(success, settings):
 			if not success:
 				log('failed to get settings')
 				return
 			self.call('import_settings', ['admin', settings], {}, lambda success, ret: None)
-			GLib.source_remove(orphans[self.run_id].input_handle)
+			websocketd.remove_read(orphans[self.run_id].input_handle)
 			orphans[self.run_id].call('die', ('admin', 'replaced by new connection',), {}, lambda success, ret: None)
 			try:
 				orphans[self.run_id].process.kill()
@@ -599,7 +595,7 @@ class Port: # {{{
 		self.waiters[2][self.next_mid] = cb
 		self.next_mid += 1
 	# }}}
-	def printer_input(self, fd, cond): # {{{
+	def printer_input(self): # {{{
 		while True:
 			data = self.process.stdout.read()
 			if data is None:
@@ -701,18 +697,18 @@ def detect(port, role): # {{{
 			id[1] += 1
 			if id[1] >= 30:
 				# Timeout.  Give up.
-				GLib.source_remove(watcher)
+				websocketd.remove_read(watcher)
 				printer.close()
 				log('Timeout waiting for printer on port %s; giving up.' % port)
 				ports[port] = None
 				broadcast(None, 'port_state', port, 0)
-				return False
+				return
 			if not id[2]:
 				printer.write(protocol.single['ID'])
 			else:
 				id[2] = False
-			return True
-		def boot_printer_input(fd, cond):
+			websocketd.add_timeout(time.time() + .5, timeout)
+		def boot_printer_input():
 			id[2] = True
 			ids = [protocol.single[code][0] for code in ('ID', 'STARTUP')]
 			# CMD:1 ID:8 Checksum:3
@@ -741,7 +737,7 @@ def detect(port, role): # {{{
 					id[0] = id[0][f:]
 					return True
 			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset. (I don't think this even works, but it doesn't hurt.)
-			GLib.source_remove(timeout_handle)
+			websocketd.remove_timeout(timeout_handle)
 			# This printer was running and tried to send an id.  Check the id.
 			id[0] = id[0][1:9]
 			if id[0] in orphans:
@@ -762,12 +758,12 @@ def detect(port, role): # {{{
 			ports[port] = Port(port, process, printer, run_id)
 			return False
 		printer.write(protocol.single['ID'])
-		timeout_handle = GLib.timeout_add(500, timeout)
-		watcher = GLib.io_add_watch(printer.fileno(), GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP | GLib.IO_ERR, boot_printer_input)
+		timeout_handle = websocketd.add_timeout(time.time() + .5, timeout)
+		watcher = websocketd.add_read(printer, boot_printer_input, boot_printer_input)
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
 	# This is only a problem for RAMPS; don't wait for ports that cannot be RAMPS.
 	if 'ACM' in port:
-		GLib.timeout_add(1500, part2)
+		websocketd.add_timeout(time.time() + 1.5, part2)
 	else:
 		part2()
 # }}}
@@ -811,7 +807,7 @@ def disable(role, port): # {{{
 	ports[port] = None
 	if p:
 		def done(success, ret):
-			GLib.source_remove(p.input_handle)
+			websocketd.remove_read(p.input_handle)
 			try:
 				p.process.kill()
 			except OSError:
@@ -846,14 +842,14 @@ def print_done(port, completed, reason): # {{{
 		cmd = cmd.replace('[[STATE]]', 'completed' if completed else 'aborted').replace('[[REASON]]', reason)
 		log('running %s' % cmd)
 		p = subprocess.Popen(cmd, stdout = subprocess.PIPE, shell = True, close_fds = True)
-		def process_done(fd, cond):
+		def process_done():
 			data = p.stdout.read()
 			if data:
 				log('Data from completion callback: %s' % repr(data))
 				return True
 			log('Callback for print completion done; return: %s' % repr(p.wait()))
 			return False
-		GLib.io_add_watch(p.stdout.fileno(), GLib.IO_IN | GLib.IO_PRI | GLib.IO_HUP | GLib.IO_ERR, process_done)
+		websocketd.add_read(p.stdout, process_done, process_done)
 # }}}
 
 if config['local'] != '':

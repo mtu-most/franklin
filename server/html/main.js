@@ -39,7 +39,7 @@ function get_elements(list) { // {{{
 	return ret;
 } // }}}
 
-function init() { // {{{
+AddEvent('load', function () { // {{{
 	script_cbs = new Object;
 	ports = new Object;
 	labels_element = document.getElementById('labels');
@@ -215,7 +215,7 @@ function init() { // {{{
 		};
 		read(selected_printer, 0);
 	}, 400);
-} // }}}
+}); // }}}
 
 function make_id(printer, id, extra) { // {{{
 	// [null, 'num_temps']
