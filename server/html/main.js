@@ -130,9 +130,10 @@ function init() { // {{{
 				for (var t = 0; t < printer.temps.length; ++t)
 					printer.temps[t].history.push([printer.temps[t].temp, printer.temps[t].value]);
 				var cutoff = time - 2 * 60 * 1000;
-				while (printer.temphistory.length > 1 && printer.temphistory[0] < cutoff) {
+				while (printer.temphistory.length > 1 && printer.temphistory[0] < cutoff)
 					printer.temphistory.shift();
-					for (var t = 0; t < printer.temps.length; ++t)
+				for (var t = 0; t < printer.temps.length; ++t) {
+					while (printer.temps[t].history.length > printer.temphistory.length)
 						printer.temps[t].history.shift();
 				}
 				var x = function(t) {
@@ -147,7 +148,7 @@ function init() { // {{{
 				};
 				for (var t = 0; t < printer.temps.length; ++t) {
 					// Draw measured data.
-					var value = printer.temps[t].temp;
+					var value;
 					var data = printer.temps[t].history;
 					c.beginPath();
 					value = data[0][0];

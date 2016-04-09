@@ -41,14 +41,14 @@ armhf:
 	$(SSHPASS) ssh $(BB) sudo ip route del default || true
 	$(SSHPASS) ssh $(BB) sudo ip route add default via 192.168.7.1
 	$(SSHPASS) ssh $(BB) sudo ntpdate -u time.mtu.edu
-	$(SSHPASS) ssh $(BB) rm -rf franklin '/tmp/*.{dsc,changes,tar.gz,deb}'
+	$(SSHPASS) ssh $(BB) rm -rf franklin '/tmp/*.{dsc,changes,tar.gz,tar.xz,deb}'
 	cd zipdir && git clone .. franklin
 	tar cf - -C zipdir franklin | $(SSHPASS) ssh $(BB) tar xf -
 	rm -rf zipdir/franklin
 	$(SSHPASS) ssh $(BB) git -C franklin remote set-url origin https://github.com/mtu-most/franklin
 	$(SSHPASS) ssh $(BB) make -C franklin build
 	$(SSHPASS) scp $(BB):/tmp/*deb zipdir/
-	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || $(SSHPASS) scp $(BB):'/tmp/*.{dsc,changes,tar.gz,tar.xz,deb}' "$$DINSTALL_INCOMING" && cd "$$DINSTALL_DIR" && $$DINSTALL && $$DINSTALL
+	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || $(SSHPASS) scp $(BB):'/tmp/*.{dsc,changes,tar.gz,tar.xz,deb}' "$$DINSTALL_INCOMING" ; cd "$$DINSTALL_DIR" && $$DINSTALL && $$DINSTALL
 
 bb: armhf
 	rm -r zipdir
