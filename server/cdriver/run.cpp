@@ -354,9 +354,9 @@ void run_file_fill_queue() {
 			{
 				int tool = r.tool;
 				if (tool == -2)
-					tool = fan_id;
+					tool = fan_id != 255 ? fan_id : -1;
 				else if (tool == -3)
-					tool = spindle_id;
+					tool = spindle_id != 255 ? spindle_id : -1;
 				if (tool < 0 || tool >= num_gpios) {
 					if (tool != -1)
 						debug("cannot set invalid gpio %d", tool);
@@ -377,7 +377,7 @@ void run_file_fill_queue() {
 			{
 				int tool = r.tool;
 				if (tool == -1)
-					tool = bed_id;
+					tool = bed_id != 255 ? bed_id : -1;
 				rundebug("settemp %d %f", tool, r.X);
 				settemp(tool, r.X);
 				send_host(CMD_UPDATE_TEMP, tool, 0, r.X);
@@ -387,7 +387,7 @@ void run_file_fill_queue() {
 			{
 				int tool = r.tool;
 				if (tool == -2)
-					tool = bed_id;
+					tool = bed_id != 255 ? bed_id : -1;
 				if (tool == -3) {
 					for (int i = 0; i < num_temps; ++i) {
 						if (temps[i].min_alarm >= 0 || temps[i].max_alarm < MAXINT) {
