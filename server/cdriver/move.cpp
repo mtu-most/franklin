@@ -126,6 +126,8 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 		}
 		sp.settings.dist[1] = sqrt(d);
 	} // }}}
+	if (isnan(sp.settings.dist[1]))
+		sp.settings.dist[1] = 0;
 } // }}}
 
 static void copy_next(int s) { // {{{
@@ -319,7 +321,7 @@ int next_move() { // {{{
 		cbs_after_current_move = 0;
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
-			sp.settings.dist[0] = NAN;
+			sp.settings.dist[0] = 0;
 			for (int a = 0; a < sp.num_axes; ++a)
 				sp.axis[a]->settings.dist[0] = NAN;
 		}
@@ -530,8 +532,8 @@ void abort_move(int pos) { // {{{
 	current_fragment_pos = 0;
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
-		sp.settings.dist[0] = NAN;
-		sp.settings.dist[1] = NAN;
+		sp.settings.dist[0] = 0;
+		sp.settings.dist[1] = 0;
 		for (int a = 0; a < sp.num_axes; ++a) {
 			//debug("setting axis %d source to %f", a, sp.axis[a]->settings.current);
 			sp.axis[a]->settings.source = sp.axis[a]->settings.current;

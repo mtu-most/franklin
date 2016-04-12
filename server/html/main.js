@@ -39,7 +39,7 @@ function get_elements(list) { // {{{
 	return ret;
 } // }}}
 
-AddEvent('load', function () { // {{{
+AddEvent('load', function() { // {{{
 	script_cbs = new Object;
 	ports = new Object;
 	labels_element = document.getElementById('labels');
