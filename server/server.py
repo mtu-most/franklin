@@ -707,7 +707,7 @@ def detect(port, role): # {{{
 				printer.write(protocol.single['ID'])
 			else:
 				id[2] = False
-			websocketd.add_timeout(time.time() + .5, timeout)
+			timeout_handle = websocketd.add_timeout(time.time() + .5, timeout)
 		def boot_printer_input():
 			id[2] = True
 			ids = [protocol.single[code][0] for code in ('ID', 'STARTUP')]
