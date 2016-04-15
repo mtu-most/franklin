@@ -707,7 +707,7 @@ def detect(port, role): # {{{
 				printer.write(protocol.single['ID'])
 			else:
 				id[2] = False
-			timeout_handle = websocketd.add_timeout(time.time() + .5, timeout)
+			timeout_handle[0] = websocketd.add_timeout(time.time() + .5, timeout)
 		def boot_printer_input():
 			id[2] = True
 			ids = [protocol.single[code][0] for code in ('ID', 'STARTUP')]
@@ -737,7 +737,7 @@ def detect(port, role): # {{{
 					id[0] = id[0][f:]
 					return True
 			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset. (I don't think this even works, but it doesn't hurt.)
-			websocketd.remove_timeout(timeout_handle)
+			websocketd.remove_timeout(timeout_handle[0])
 			# This printer was running and tried to send an id.  Check the id.
 			id[0] = id[0][1:9]
 			if id[0] in orphans:
@@ -758,7 +758,7 @@ def detect(port, role): # {{{
 			ports[port] = Port(port, process, printer, run_id)
 			return False
 		printer.write(protocol.single['ID'])
-		timeout_handle = websocketd.add_timeout(time.time() + .5, timeout)
+		timeout_handle = [websocketd.add_timeout(time.time() + .5, timeout)]
 		watcher = websocketd.add_read(printer, boot_printer_input, boot_printer_input)
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
 	# This is only a problem for RAMPS; don't wait for ports that cannot be RAMPS.
