@@ -427,9 +427,14 @@ class Connection: # {{{
 				return True
 			wake(data[0])
 			return False
+		def error():
+			data[0] += '\nError writing %s firmware: ' % board
+			log(repr(data[0]))
+			wake(data[0])
+			return False
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
-		websocketd.add_read(process.stdout, output, output)
+		websocketd.add_read(process.stdout, output, error)
 		broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
 		broadcast(None, 'message', port, '')
 		d = (yield)
@@ -538,7 +543,7 @@ class Port: # {{{
 		self.buffer = b''
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
-		self.input_handle = websocketd.add_read(process.stdout, self.printer_input, self.printer_input)
+		self.input_handle = websocketd.add_read(process.stdout, self.printer_input, self.printer_error)
 		old = []
 		def get_settings(success, settings):
 			if not success:
@@ -595,8 +600,17 @@ class Port: # {{{
 		self.waiters[2][self.next_mid] = cb
 		self.next_mid += 1
 	# }}}
+	def printer_error(self): # {{{
+		log('%s died from error.' % self.name)
+		self.process.communicate()	# Clean up the zombie.
+		for t in range(3):
+			for w in self.waiters[t]:
+				self.waiters[t][w](False, 'Printer died from error')
+		disable('admin', self.port)
+		return False
+	# }}}
 	def printer_input(self): # {{{
-		while True:
+		while self.process is not None:
 			data = self.process.stdout.read()
 			if data is None:
 				#log('%s: no data now' % self.name)
@@ -757,9 +771,16 @@ def detect(port, role): # {{{
 			process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 			ports[port] = Port(port, process, printer, run_id)
 			return False
+		def boot_printer_error():
+			log('error during printer detection on port %s.' % port)
+			websocketd.remove_timeout(timeout_handle[0])
+			printer.close()
+			ports[port] = None
+			broadcast(None, 'port_state', port, 0)
+			return False
 		printer.write(protocol.single['ID'])
 		timeout_handle = [websocketd.add_timeout(time.time() + .5, timeout)]
-		watcher = websocketd.add_read(printer, boot_printer_input, boot_printer_input)
+		watcher = websocketd.add_read(printer, boot_printer_input, boot_printer_error)
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
 	# This is only a problem for RAMPS; don't wait for ports that cannot be RAMPS.
 	if 'ACM' in port:
@@ -816,6 +837,7 @@ def disable(role, port): # {{{
 				p.process.communicate()
 			except:
 				pass
+			p.process = None
 		p.call('die', (role, 'disabled by user',), {}, done)
 	if p not in (None, False):
 		broadcast(None, 'del_printer', port)
@@ -849,7 +871,10 @@ def print_done(port, completed, reason): # {{{
 				return True
 			log('Callback for print completion done; return: %s' % repr(p.wait()))
 			return False
-		websocketd.add_read(p.stdout, process_done, process_done)
+		def process_error():
+			log('Print completion process returned error.')
+			return False
+		websocketd.add_read(p.stdout, process_done, process_error)
 # }}}
 
 if config['local'] != '':
