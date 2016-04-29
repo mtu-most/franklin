@@ -1290,6 +1290,7 @@ class Printer: # {{{
 					return
 			# Fall through.
 		if self.home_phase == 5:
+			target = {}
 			for s, sp in enumerate(self.spaces[:2]):
 				for i, a in enumerate(sp.axis):
 					current = sp.get_current_pos(i)
@@ -1963,7 +1964,7 @@ class Printer: # {{{
 						return 'extruder %d' % i
 					else:
 						return 'follower %d' % i
-				self.axis += [{'name': nm(i)} for i in range(len(self.axis), len(axes))]
+				self.axis += [{'name': nm(i), 'home_pos2': float('nan')} for i in range(len(self.axis), len(axes))]
 			else:
 				self.axis[len(axes):] = []
 			for a in range(len(axes)):

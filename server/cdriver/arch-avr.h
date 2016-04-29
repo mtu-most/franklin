@@ -1003,7 +1003,7 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bo
 	uint16_t hold_time_ms = hold_time * 1000;
 	avr_buffer[12] = hold_time_ms & 0xff;
 	avr_buffer[13] = (hold_time_ms >> 8) & 0xff;
-	prepare_packet(avr_buffer, 12);
+	prepare_packet(avr_buffer, 14);
 	avr_send();
 } // }}}
 

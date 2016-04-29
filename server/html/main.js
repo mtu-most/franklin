@@ -1014,6 +1014,7 @@ function space_update(index) { // {{{
 			update_float(printer, [['axis', [index, a]], 'park_order']);
 			update_float(printer, [['axis', [index, a]], 'min']);
 			update_float(printer, [['axis', [index, a]], 'max']);
+			update_float(printer, [['axis', [index, a]], 'home_pos2']);
 		}
 		if (index == 1)
 			update_float(printer, [['axis', [index, a]], 'multiplier']);
@@ -1107,6 +1108,7 @@ function temp_update(index) { // {{{
 	//update_float(printer, [['temp', index], 'transfer']);
 	//update_float(printer, [['temp', index], 'radiation']);
 	//update_float(printer, [['temp', index], 'power']);
+	update_float(printer, [['temp', index], 'hold_time']);
 	update_float(printer, [['temp', index], 'value', 'settemp']);
 } // }}}
 

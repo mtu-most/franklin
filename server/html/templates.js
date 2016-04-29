@@ -657,7 +657,7 @@ function Printer() {	// {{{
 		UnitTitle('Park Pos'),
 		'Park Order',
 		UnitTitle('Min'),
-		UnitTitle('Max')
+		UnitTitle('Max'),
 		UnitTitle('2nd Home Pos')
 	], [
 		'htitle6',
