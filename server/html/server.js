@@ -299,7 +299,8 @@ function _setup_updater() {
 					park: values[2][a][1],
 					park_order: values[2][a][2],
 					min: values[2][a][3],
-					max: values[2][a][4]
+					max: values[2][a][4],
+					home_pos2: values[2][a][5]
 				});
 			}
 			for (var m = 0; m < printers[port].spaces[index].num_motors; ++m) {
@@ -362,7 +363,8 @@ function _setup_updater() {
 			printers[port].temps[index].fan_duty = values[10];
 			printers[port].temps[index].heater_limit = values[11];
 			printers[port].temps[index].fan_limit = values[12];
-			printers[port].temps[index].value = values[13];
+			printers[port].temps[index].hold_time = values[13];
+			printers[port].temps[index].value = values[14];
 			trigger_update(port, 'temp_update', index);
 		},
 		gpio_update: function(port, index, values) {

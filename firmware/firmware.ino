@@ -49,33 +49,40 @@ static void handle_adc() {
 		adc_next = next_adc(adc_next);
 	}
 	// Adjust heater and fan.
-	for (uint8_t n = 0; n < 2; ++n) {
-		if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS) {
-			bool invert = (adc[adc_current].value[n] & 0x4000) == 0;
-			int16_t treshold = adc[adc_current].value[n] & 0x3fff;
-			int16_t limit = adc[adc_current].limit[n];
-			bool higher = value >= treshold;
-			if (higher) {
-				if (limit >= treshold && value >= limit)
-					higher = false;
-			}
-			else {
-				if (treshold < 0x3fff && limit < treshold && value < limit)
-					higher = true;
-			}
-			if (invert ^ higher) {
-				RESET(adc[adc_current].linked[n]);
-				if (n == 0 && adc[adc_current].is_on) {
-					led_fast -= 1;
-					adc[adc_current].is_on = false;
+	unsigned long now = millis();
+	if (now - adc[adc_current].last_change >= adc[adc_current].hold_time) {
+		for (uint8_t n = 0; n < 2; ++n) {
+			if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS) {
+				bool invert = (adc[adc_current].value[n] & 0x4000) == 0;
+				int16_t treshold = adc[adc_current].value[n] & 0x3fff;
+				int16_t limit = adc[adc_current].limit[n];
+				bool higher = value >= treshold;
+				if (higher) {
+					if (limit >= treshold && value >= limit)
+						higher = false;
 				}
-			}
-			else {
-				//debug("adc set %d %d %d", n, value, adc[adc_current].value[n]);
-				SET(adc[adc_current].linked[n]);
-				if (n == 0 && !adc[adc_current].is_on) {
-					led_fast += 1;
-					adc[adc_current].is_on = true;
+				else {
+					if (treshold < 0x3fff && limit < treshold && value < limit)
+						higher = true;
+				}
+				if (invert ^ higher) {
+					if (adc[adc_current].is_on[n]) {
+						adc[adc_current].last_change = now;
+						RESET(adc[adc_current].linked[n]);
+						if (n == 0)
+							led_fast -= 1;
+						adc[adc_current].is_on[n] = false;
+					}
+				}
+				else {
+					//debug("adc set %d %d %d", n, value, adc[adc_current].value[n]);
+					if (!adc[adc_current].is_on[n]) {
+						SET(adc[adc_current].linked[n]);
+						adc[adc_current].last_change = now;
+						if (n == 0)
+							led_fast += 1;
+						adc[adc_current].is_on[n] = true;
+					}
 				}
 			}
 		}

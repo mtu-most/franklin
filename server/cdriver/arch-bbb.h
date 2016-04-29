@@ -125,7 +125,7 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool));
 void arch_setup_start(char const *port);
 void arch_setup_end(char const *run_id);
 void arch_request_temp(int which);
-void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int power_limit = ~0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0, int fan_limit = ~0);
+void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int power_limit = ~0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0, int fan_limit = ~0, double hold_time = 0);
 void arch_send_pin_name(int pin);
 void arch_motors_change();
 void arch_addpos(int s, int m, double diff);
@@ -390,7 +390,7 @@ void arch_request_temp(int which) {
 	requested_temp = ~0;
 }
 
-void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin, bool power_inverted, int power_target, int power_limit, int fan_pin, bool fan_inverted, int fan_target, int fan_limit) {
+void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin, bool power_inverted, int power_target, int power_limit, int fan_pin, bool fan_inverted, int fan_target, int fan_limit, double hold_time) {
 	if (thermistor_pin < NUM_DIGITAL_PINS || thermistor_pin >= NUM_PINS) {
 		debug("setup for invalid adc %d requested", thermistor_pin);
 		return;
@@ -406,6 +406,7 @@ void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin, b
 	bbb_temp[thermistor_pin].fan_target = fan_target;
 	if (bbb_active_temp < 0)
 		bbb_next_adc();
+	// TODO: use hold_time.
 }
 
 // Pin bit capabilities:

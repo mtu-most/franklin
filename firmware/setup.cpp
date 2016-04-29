@@ -44,7 +44,7 @@ void setup()
 		for (uint8_t i = 0; i < 2; ++i) {
 			adc[a].linked[i] = ~0;
 			adc[a].value[i] = 1 << 15;
-			adc[a].is_on = false;
+			adc[a].is_on[i] = false;
 		}
 	}
 	adc_phase = INACTIVE;

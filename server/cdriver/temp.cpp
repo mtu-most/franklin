@@ -52,10 +52,12 @@ void Temp::load(int32_t &addr, int id)
 		else
 			RESET(power_pin[i]);
 	}
+	last_change_time = millis();
+	hold_time = read_float(addr);
 	if (old_pin != thermistor_pin.write() && old_valid)
 		arch_setup_temp(~0, old_pin_pin, false);
 	if (thermistor_pin.valid())
-		arch_setup_temp(id, thermistor_pin.pin, true, power_pin[0].valid() ? power_pin[0].pin : ~0, power_pin[0].inverted(), adctarget[0], adclimit[0], power_pin[1].valid() ? power_pin[1].pin : ~0, power_pin[1].inverted(), adctarget[1], adclimit[1]);
+		arch_setup_temp(id, thermistor_pin.pin, true, power_pin[0].valid() ? power_pin[0].pin : ~0, power_pin[0].inverted(), adctarget[0], adclimit[0], power_pin[1].valid() ? power_pin[1].pin : ~0, power_pin[1].inverted(), adctarget[1], adclimit[1], hold_time);
 }
 
 void Temp::save(int32_t &addr)
@@ -79,6 +81,7 @@ void Temp::save(int32_t &addr)
 	write_float(addr, arch_get_duty(power_pin[1]));
 	write_float(addr, limit[0]);
 	write_float(addr, limit[1]);
+	write_float(addr, hold_time);
 }
 
 double Temp::fromadc(int32_t adc) {

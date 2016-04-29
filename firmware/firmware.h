@@ -272,7 +272,7 @@ static inline int16_t minpacketlen() {
 	case CMD_MSETUP:
 		return 8;
 	case CMD_ASETUP:
-		return 12;
+		return 14;
 	case CMD_HOME:
 		return 5;
 	case CMD_START_MOVE:
@@ -409,7 +409,9 @@ struct Adc {
 	uint8_t linked[2];
 	uint16_t value[2];	// bit 15 in [0] set => invalid; bit 14 set => linked inverted.
 	uint16_t limit[2];
-	bool is_on;
+	bool is_on[2];
+	uint16_t hold_time;
+	unsigned long last_change;
 	void disable() {
 		if (value[0] & 0x8000)
 			return;

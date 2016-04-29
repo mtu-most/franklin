@@ -271,10 +271,11 @@ void packet()
 		for (uint8_t i = 0; i < 2; ++i) {
 			// If the old one was active, deactivate it.
 			if (~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
-				UNSET(adc[a].linked[i]);
-				if (i == 0 && adc[a].is_on) {
-					adc[a].is_on = false;
-					led_fast -= 1;
+				if (adc[a].is_on[i]) {
+					UNSET(adc[a].linked[i]);
+					adc[a].is_on[i] = false;
+					if (i == 0)
+						led_fast -= 1;
 				}
 			}
 			adc[a].linked[i] = command(2 + i);
@@ -282,6 +283,7 @@ void packet()
 			adc[a].value[i] = read_16(8 + 2 * i);
 			//debug("adc %d link %d pin %d value %x", a, i, adc[a].linked[i], adc[a].value[i]);
 		}
+		adc[a].hold_time = read_16(12);
 		if (adc_phase == INACTIVE && ~adc[a].value[0] & 0x8000) {
 			adc_phase = PREPARING;
 			adc_current = a;

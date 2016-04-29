@@ -199,6 +199,8 @@ struct Temp {
 	int32_t last_temp_time;		// last value of micros when this heater was handled.
 	int32_t time_on;		// Time that the heater has been on since last reading.  [μs]
 	bool is_on[2];			// If the heater is currently on.
+	double hold_time;		// Minimum time to hold value after change.
+	unsigned long last_change_time;	// millis() when value was last changed.
 	double K;			// Thermistor constant; kept in memory for performance.
 	// Functions.
 	int32_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
@@ -578,7 +580,7 @@ void arch_addpos(int s, int m, double diff);
 void arch_stop(bool fake = false);
 void arch_home();
 bool arch_running();
-//void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int power_limit = ~0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0, int fan_limit = ~0);
+//void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int power_limit = ~0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0, int fan_limit = ~0, double hold_time = 0);
 void arch_start_move(int extra);
 bool arch_send_fragment();
 

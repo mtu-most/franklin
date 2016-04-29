@@ -1183,7 +1183,7 @@ class Printer: # {{{
 				return
 			# Fall through.
 		if self.home_phase == 3:
-			# set current position.
+			# Move followers and delta into alignment.
 			for s, sp in enumerate(self.spaces):
 				for i, m in enumerate(sp.motor):
 					if i in self.limits[s]:
@@ -1262,6 +1262,7 @@ class Printer: # {{{
 				return
 			# Fall through.
 		if self.home_phase == 4:
+			# Set current position, reset space type and move to pos2.
 			for s, sp in enumerate(self.spaces):
 				for i, m in enumerate(sp.motor):
 					if not self._pin_valid(m['limit_min_pin']) and not self._pin_valid(m['limit_max_pin']):
@@ -1271,7 +1272,24 @@ class Printer: # {{{
 			self.expert_set_space(0, type = self.home_orig_type)
 			for a, ax in enumerate(self.spaces[0].axis):
 				self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1])
+			# Move within bounds.
 			target = {}
+			for s, sp in enumerate(self.spaces[:2]):
+				for i, a in enumerate(sp.axis):
+					if not math.isnan(a['home_pos2']):
+						offset = (0 if s != 0 or i != 2 else self.zoffset)
+						if s not in target:
+							target[s] = {}
+						target[s][i] = a['home_pos2'] - offset
+			self.home_phase = 5
+			if len(target) > 0:
+				self.home_cb[0] = False
+				if self.home_cb not in self.movecb:
+					self.movecb.append(self.home_cb)
+					self.line(target, force = True)
+					return
+			# Fall through.
+		if self.home_phase == 5:
 			for s, sp in enumerate(self.spaces[:2]):
 				for i, a in enumerate(sp.axis):
 					current = sp.get_current_pos(i)
@@ -1284,7 +1302,7 @@ class Printer: # {{{
 						if s not in target:
 							target[s] = {}
 						target[s][i] = a['min'] - offset
-			self.home_phase = 5
+			self.home_phase = 6
 			if len(target) > 0:
 				self.home_cb[0] = False
 				if self.home_cb not in self.movecb:
@@ -1293,7 +1311,7 @@ class Printer: # {{{
 				#log('movecb: ' + repr(self.movecb))
 				return
 			# Fall through.
-		if self.home_phase == 5:
+		if self.home_phase == 6:
 			self.home_phase = None
 			self.position_valid = True
 			if self.home_id is not None:
@@ -2016,7 +2034,7 @@ class Printer: # {{{
 				log('invalid type')
 				raise AssertionError('invalid space type')
 		def export(self):
-			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max']] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['steps_per_unit'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.printer.multipliers]
+			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max'], a['home_pos2'] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['steps_per_unit'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.printer.multipliers]
 			if self.type == TYPE_CARTESIAN:
 				return std
 			elif self.type == TYPE_DELTA:
@@ -2064,7 +2082,7 @@ class Printer: # {{{
 				ret += '[axis %d %d]\r\n' % (self.id, i)
 				ret += 'name = %s\r\n' % a['name']
 				if self.id == 0:
-					ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('park', 'park_order')])
+					ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('park', 'park_order', 'home_pos2')])
 					if self.printer.home_phase is None:
 						ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('min', 'max')])
 					else:
@@ -2084,7 +2102,7 @@ class Printer: # {{{
 			self.id = id
 			self.value = float('nan')
 		def read(self, data):
-			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp, self.fan_duty, heater_limit, fan_limit = struct.unpack('=dddddHHHdddd', data)
+			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp, self.fan_duty, heater_limit, fan_limit, self.hold_time = struct.unpack('=dddddHHHddddd', data)
 			try:
 				self.Rc = math.exp(logRc)
 			except:
@@ -2099,14 +2117,14 @@ class Printer: # {{{
 				logRc = math.log(self.Rc)
 			except:
 				logRc = float('nan')
-			return struct.pack('=dddddHHHdddd', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0, self.fan_duty, self.heater_limit + C0, self.fan_limit + C0)
+			return struct.pack('=dddddHHHddddd', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0, self.fan_duty, self.heater_limit + C0, self.fan_limit + C0, self.hold_time)
 		def export(self):
-			return [self.name, self.R0, self.R1, self.Rc, self.Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp, self.fan_duty, self.heater_limit, self.fan_limit, self.value]
+			return [self.name, self.R0, self.R1, self.Rc, self.Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp, self.fan_duty, self.heater_limit, self.fan_limit, self.hold_time, self.value]
 		def export_settings(self):
 			ret = '[temp %d]\r\n' % self.id
 			ret += 'name = %s\r\n' % self.name
 			ret += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('heater_pin', 'fan_pin', 'thermistor_pin')])
-			ret += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('fan_temp', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'fan_duty', 'heater_limit', 'fan_limit')])
+			ret += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('fan_temp', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'fan_duty', 'heater_limit', 'fan_limit', 'hold_time')])
 			return ret
 	# }}}
 	class Gpio: # {{{
@@ -2602,9 +2620,9 @@ class Printer: # {{{
 		keys = {
 				'general': {'num_temps', 'num_gpios', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'},
 				'space': {'type', 'num_axes', 'delta_angle', 'polar_max_r'},
-				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit', 'fan_limit'},
+				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit', 'fan_limit', 'hold_time'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
-				'axis': {'name', 'park', 'park_order', 'min', 'max'},
+				'axis': {'name', 'park', 'park_order', 'min', 'max', 'home_pos2'},
 				'motor': {'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'home_pos', 'limit_v', 'limit_a', 'home_order'},
 				'extruder': {'dx', 'dy', 'dz'},
 				'delta': {'axis_min', 'axis_max', 'rodlength', 'radius'},
@@ -3025,7 +3043,7 @@ class Printer: # {{{
 		if space == 1:
 			ret['multiplier'] = self.multipliers[axis]
 		if space == 0:
-			for key in ('park', 'park_order', 'min', 'max'):
+			for key in ('park', 'park_order', 'min', 'max', 'home_pos2'):
 				ret[key] = self.spaces[space].axis[axis][key]
 		return ret
 	# }}}
@@ -3096,7 +3114,7 @@ class Printer: # {{{
 		if 'name' in ka:
 			self.spaces[space].axis[axis]['name'] = ka.pop('name')
 		if space == 0:
-			for key in ('park', 'park_order', 'min', 'max'):
+			for key in ('park', 'park_order', 'min', 'max', 'home_pos2'):
 				if key in ka:
 					self.spaces[space].axis[axis][key] = ka.pop(key)
 		if space == 1 and 'multiplier' in ka and axis < len(self.spaces[space].motor):
@@ -3128,13 +3146,13 @@ class Printer: # {{{
 	# Temp {{{
 	def get_temp(self, temp): # {{{
 		ret = {}
-		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit', 'fan_limit'):
+		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit', 'fan_limit', 'hold_time'):
 			ret[key] = getattr(self.temps[temp], key)
 		return ret
 	# }}}
 	def expert_set_temp(self, temp, update = True, **ka): # {{{
 		ret = {}
-		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit', 'fan_limit'):
+		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit', 'fan_limit', 'hold_time'):
 			if key in ka:
 				setattr(self.temps[temp], key, ka.pop(key))
 		self._send_packet(struct.pack('=BB', protocol.command['WRITE_TEMP'], temp) + self.temps[temp].write())

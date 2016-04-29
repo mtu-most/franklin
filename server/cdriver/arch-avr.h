@@ -136,7 +136,7 @@ void arch_send_pin_name(int pin);
 void avr_setup_end2();
 void arch_setup_end(char const *run_id);
 void arch_request_temp(int which);
-void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit = ~0);
+void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit = ~0, double hold_time = 0);
 void arch_disconnect();
 int arch_fds();
 int arch_tick();
@@ -963,7 +963,7 @@ void arch_request_temp(int which) { // {{{
 	send_host(CMD_TEMP);
 } // }}}
 
-void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit) { // {{{
+void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit, double hold_time) { // {{{
 	if (thermistor_pin < NUM_DIGITAL_PINS || thermistor_pin >= NUM_PINS) {
 		debug("setup for invalid adc %d requested", thermistor_pin);
 		return;
@@ -1000,6 +1000,9 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bo
 	avr_buffer[9] = (th >> 8) & 0xff;
 	avr_buffer[10] = tf & 0xff;
 	avr_buffer[11] = (tf >> 8) & 0xff;
+	uint16_t hold_time_ms = hold_time * 1000;
+	avr_buffer[12] = hold_time_ms & 0xff;
+	avr_buffer[13] = (hold_time_ms >> 8) & 0xff;
 	prepare_packet(avr_buffer, 12);
 	avr_send();
 } // }}}

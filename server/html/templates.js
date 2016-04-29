@@ -229,7 +229,7 @@ function Polar_space(num) {
 }
 
 function Axis(space, axis) {
-	var e = [Name('axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['min', 1, 1], ['max', 1, 1]];
+	var e = [Name('axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['min', 1, 1], ['max', 1, 1], ['home_pos2', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		if (space == 0)
@@ -270,7 +270,7 @@ function Temp_setup(num) {
 }
 
 function Temp_hardware(num) {
-	var e = [['R0', 1, 1e3], ['R1', 1, 1e3], ['Rc', 1, 1e3], ['Tc', 0, 1], ['beta', 0, 1]];
+	var e = [['R0', 1, 1e3], ['R1', 1, 1e3], ['Rc', 1, 1e3], ['Tc', 0, 1], ['beta', 0, 1], ['hold_time', 1, 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
 		div.Add(Float([['temp', num], e[i][0]], e[i][1], e[i][2]));
@@ -658,20 +658,23 @@ function Printer() {	// {{{
 		'Park Order',
 		UnitTitle('Min'),
 		UnitTitle('Max')
+		UnitTitle('2nd Home Pos')
 	], [
-		'htitle5',
-		'title5',
-		'title5',
-		'title5',
-		'title5',
-		'title5'
+		'htitle6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6'
 	], [
 		null,
 		'Name of the axis',
 		'Park position of the nozzle.  This is where the nozzle is sent when it is requested to get out of the way through a park command.',
 		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
 		'Minimum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to -Infinity for x and y.',
-		'Maximum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to Infinity for x and y.'
+		'Maximum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to Infinity for x and y.',
+		'Position to move to after hitting limit switches, before moving in range of limits.'
 	]).AddMultiple('axis', Axis)]);
 	// }}}
 	// Motor. {{{
@@ -804,21 +807,24 @@ function Printer() {	// {{{
 		'R1 (kΩ) or b',
 		'Rc (kΩ) or Scale (%)',
 		'Tc (°C) or Offset',
-		'β (1) or NaN'
+		'β (1) or NaN',
+		'Hold Time (s)'
 	], [
-		'htitle5',
-		'title5',
-		'title5',
-		'title5',
-		'title5',
-		'title5'
+		'htitle6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6'
 	], [
 		null,
 		'Resistance on the board in series with the thermistor.  Normally 4.7 or 10.  Or, if β is NaN, the value of this sensor is ax+b with x the measured ADC value; this value is a.',
 		'Resistance on the board in parallel with the thermistor.  Normally Infinity.  Or, if β is NaN, the value of this sensor is ax+b with x the measured ADC value; this value is b.',
 		'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.  Or, if β is NaN, the scale for plotting the value on the temperature graph.',
 		'Temperature at which the thermistor has value Rc.  Normally 20.  Or, if β is NaN, the offset for plotting the value on the temperature graph.',
-		"Temperature dependence of the thermistor.  Normally around 4000.  It can be found in the thermistor's data sheet.  Or, if NaN, the value of this sensor is ax+b with x the measured ADC value."
+		"Temperature dependence of the thermistor.  Normally around 4000.  It can be found in the thermistor's data sheet.  Or, if NaN, the value of this sensor is ax+b with x the measured ADC value.",
+		'Minimum time to keep the heater and fan pins at their values after a change.'
 	]).AddMultiple('temp', Temp_hardware)]);
 	// }}}
 	// Gpio. {{{
