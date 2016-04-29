@@ -2034,7 +2034,7 @@ class Printer: # {{{
 				log('invalid type')
 				raise AssertionError('invalid space type')
 		def export(self):
-			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max'], a['home_pos2'] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['steps_per_unit'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.printer.multipliers]
+			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max'], a['home_pos2']] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['steps_per_unit'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.printer.multipliers]
 			if self.type == TYPE_CARTESIAN:
 				return std
 			elif self.type == TYPE_DELTA:
