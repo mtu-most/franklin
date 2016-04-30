@@ -159,6 +159,7 @@ inline bool GET(uint8_t pin_no);
 struct Pin_t {
 	uint8_t state;
 	uint8_t duty;
+	uint8_t num_temps;
 	bool value() {
 		return CONTROL_VALUE(state);
 	}

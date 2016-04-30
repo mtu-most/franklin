@@ -601,6 +601,7 @@ void SET_INPUT_NOPULLUP(Pin_t _pin) { // {{{
 void RESET(Pin_t _pin) { // {{{
 	if (!_pin.valid())
 		return;
+	//debug("reset %d", _pin.pin);
 	if (avr_pins[_pin.pin].state == 0)
 		return;
 	avr_pins[_pin.pin].state = 0;
@@ -613,6 +614,7 @@ void RESET(Pin_t _pin) { // {{{
 void SET(Pin_t _pin) { // {{{
 	if (!_pin.valid())
 		return;
+	//debug("set %d", _pin.pin);
 	if (avr_pins[_pin.pin].state == 1)
 		return;
 	avr_pins[_pin.pin].state = 1;
@@ -684,14 +686,17 @@ void arch_set_duty(Pin_t _pin, double duty) { // {{{
 		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return;
 	}
-	avr_pins[_pin.pin].duty = round(duty * 256) - 1;
-	if (avr_pins[_pin.pin].duty < 0)
-		avr_pins[_pin.pin].duty = 0;
-	if (avr_pins[_pin.pin].duty > 255) {
-		debug("invalid duty value %d; clipping to 255.", avr_pins[_pin.pin].duty);
-		avr_pins[_pin.pin].duty = 255;
+	int hwduty = round(duty * 256) - 1;
+	if (hwduty < 0)
+		hwduty = 0;
+	if (hwduty > 255) {
+		debug("invalid duty value %d; clipping to 255.", hwduty);
+		hwduty = 255;
 	}
-	avr_send_pin(_pin);
+	if (hwduty != avr_pins[_pin.pin].duty) {
+		avr_pins[_pin.pin].duty = hwduty;
+		avr_send_pin(_pin);
+	}
 } // }}}
 // }}}
 
@@ -967,6 +972,14 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bo
 	if (thermistor_pin < NUM_DIGITAL_PINS || thermistor_pin >= NUM_PINS) {
 		debug("setup for invalid adc %d requested", thermistor_pin);
 		return;
+	}
+	// Make sure the controls for the heater and fan have been sent, otherwise they override this.
+	try_send_control();
+	while (out_busy >= 3) {
+		//debug("avr send");
+		poll(&pollfds[2], 1, -1);
+		serial(1);
+		try_send_control();
 	}
 	thermistor_pin -= NUM_DIGITAL_PINS;
 	avr_adc_id[thermistor_pin] = id;

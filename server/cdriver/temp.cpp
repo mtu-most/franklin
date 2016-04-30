@@ -47,10 +47,6 @@ void Temp::load(int32_t &addr, int id)
 		adctarget[i] = toadc(target[i], MAXINT);
 		adclimit[i] = toadc(limit[i], MAXINT);
 		SET_OUTPUT(power_pin[i]);
-		if (is_on[i])
-			SET(power_pin[i]);
-		else
-			RESET(power_pin[i]);
 	}
 	last_change_time = millis();
 	hold_time = read_float(addr);

@@ -50,7 +50,7 @@ static void handle_adc() {
 	}
 	// Adjust heater and fan.
 	unsigned long now = millis();
-	if (now - adc[adc_current].last_change >= adc[adc_current].hold_time) {
+	if (unsigned(now - adc[adc_current].last_change) >= adc[adc_current].hold_time) {
 		for (uint8_t n = 0; n < 2; ++n) {
 			if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS) {
 				bool invert = (adc[adc_current].value[n] & 0x4000) == 0;
@@ -65,24 +65,31 @@ static void handle_adc() {
 					if (treshold < 0x3fff && limit < treshold && value < limit)
 						higher = true;
 				}
+				//debug("adc test diff %d hold %d current %d %d higher %d invert %d", int(now - adc[adc_current].last_change), adc[adc_current].hold_time, adc_current, n, higher, invert);
 				if (invert ^ higher) {
 					if (adc[adc_current].is_on[n]) {
+						//debug("switch off");
 						adc[adc_current].last_change = now;
 						RESET(adc[adc_current].linked[n]);
 						if (n == 0)
 							led_fast -= 1;
 						adc[adc_current].is_on[n] = false;
 					}
+					//else
+						//debug("already off");
 				}
 				else {
 					//debug("adc set %d %d %d", n, value, adc[adc_current].value[n]);
 					if (!adc[adc_current].is_on[n]) {
+						//debug("switch on");
 						SET(adc[adc_current].linked[n]);
 						adc[adc_current].last_change = now;
 						if (n == 0)
 							led_fast += 1;
 						adc[adc_current].is_on[n] = true;
 					}
+					//else
+						//debug("already on");
 				}
 			}
 		}

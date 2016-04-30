@@ -36,7 +36,7 @@ zip: armhf
 	changelog="`dpkg-parsechangelog`" && name="`echo "$$changelog" | grep '^Source: ' | cut -b9-`" && fullversion="`echo "$$changelog" | grep '^Version: ' | cut -b10-`" && version="$${fullversion%-*}" && rm -f $$name-$$version.zip && cd zipdir && zip ../$$name-$$version.zip *
 
 armhf:
-	rm -r zipdir
+	test ! -d zipdir || rm -r zipdir
 	mkdir zipdir
 	$(SSHPASS) ssh $(BB) sudo ip route del default || true
 	$(SSHPASS) ssh $(BB) sudo ip route add default via 192.168.7.1

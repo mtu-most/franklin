@@ -59,11 +59,10 @@ static inline int max(int a, int b) {
 struct Pin_t {
 	uint8_t flags;
 	uint8_t pin;
-	int duty;
 	bool valid() { return flags & 1; }
 	bool inverted() { return flags & 2; }
 	uint16_t write() { return flags << 8 | pin; }
-	void init() { flags = 0; pin = 0; duty = 255; }
+	void init() { flags = 0; pin = 0; }
 	inline void read(uint16_t data);
 };
 

@@ -177,21 +177,23 @@ void packet()
 			return;
 		}
 		uint8_t value = command(2);
-		pin[p].duty = command(3);
 		pin[p].set_state((pin[p].state & ~0xc) | (value & 0xc));
-		switch (CONTROL_CURRENT(value)) {
-		case CTRL_RESET:
-			RESET(p);
-			break;
-		case CTRL_SET:
-			SET(p);
-			break;
-		case CTRL_UNSET:
-			UNSET(p);
-			break;
-		case CTRL_INPUT:
-			SET_INPUT(p);
-			break;
+		pin[p].duty = command(3);
+		if (pin[p].num_temps == 0) {
+			switch (CONTROL_CURRENT(value)) {
+			case CTRL_RESET:
+				RESET(p);
+				break;
+			case CTRL_SET:
+				SET(p);
+				break;
+			case CTRL_UNSET:
+				UNSET(p);
+				break;
+			case CTRL_INPUT:
+				SET_INPUT(p);
+				break;
+			}
 		}
 		write_ack();
 		return;
@@ -269,10 +271,13 @@ void packet()
 			return;
 		}
 		for (uint8_t i = 0; i < 2; ++i) {
-			// If the old one was active, deactivate it.
-			if (~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
+			// If the pin is changed, and the old one was active, deactivate it.
+			bool changed = adc[a].linked[i] != command(2 + i);
+			if (changed && ~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
+				//debug("unset for change adc %d %d: %d", a, i, adc[a].linked[i]);
+				pin[adc[a].linked[i]].num_temps -= 1;
+				UNSET(adc[a].linked[i]);
 				if (adc[a].is_on[i]) {
-					UNSET(adc[a].linked[i]);
 					adc[a].is_on[i] = false;
 					if (i == 0)
 						led_fast -= 1;
@@ -281,8 +286,20 @@ void packet()
 			adc[a].linked[i] = command(2 + i);
 			adc[a].limit[i] = read_16(4 + 2 * i);
 			adc[a].value[i] = read_16(8 + 2 * i);
+			if (changed && ~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
+				pin[adc[a].linked[i]].num_temps += 1;
+				if (adc[a].is_on[i]) {
+					//debug("set for change adc %d %d: %d %d %x", a, i, adc[a].linked[i], adc[a].is_on[i], adc[a].value[i]);
+					SET(adc[a].linked[i]);
+				}
+				else {
+					//debug("reset for change adc %d %d: %d %d %x", a, i, adc[a].linked[i], adc[a].is_on[i], adc[a].value[i]);
+					RESET(adc[a].linked[i]);
+				}
+			}
 			//debug("adc %d link %d pin %d value %x", a, i, adc[a].linked[i], adc[a].value[i]);
 		}
+		adc[a].last_change = millis();
 		adc[a].hold_time = read_16(12);
 		if (adc_phase == INACTIVE && ~adc[a].value[0] & 0x8000) {
 			adc_phase = PREPARING;
