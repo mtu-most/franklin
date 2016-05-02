@@ -147,6 +147,7 @@ void Temp::init() {
 	last_temp_time = utime();
 	time_on = 0;
 	K = NAN;
+	hold_time = 0;
 }
 
 void Temp::free() {

@@ -243,7 +243,7 @@ function Motor(space, motor) {
 	var e = [['steps_per_unit', 3, 1], ['home_pos', 3, 1], ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		if (space != 1 || (i != 1 && i != 2))
+		if (space == 0 || (space == 1 && i != 1 && i != 2) || (space == 2 && i == 1))
 			div.Add(Float([['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}

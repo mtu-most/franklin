@@ -521,7 +521,6 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 				DATA_SET(s, m, diff);
 			}
 			//debug("new cp: %d %d %f %d", s, m, new_cp, current_fragment_pos);
-			mtr.settings.current_pos = new_cp;
 			if (!settings.single) {
 				for (int mm = 0; mm < spaces[2].num_motors; ++mm) {
 					int fm = space_types[spaces[2].type].follow(&spaces[2], mm);
@@ -531,9 +530,11 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 					fm &= 0x7f;
 					if (fs != s || fm != m || (fs == 2 && fm >= mm))
 						continue;
+					//debug("follow %d %d %d %d %d %f %f", s, m, fs, fm, mm, new_cp, mtr.settings.current_pos);
 					spaces[2].motor[mm]->settings.current_pos += new_cp - mtr.settings.current_pos;
 				}
 			}
+			mtr.settings.current_pos = new_cp;
 			//cpdebug(s, m, "cp three %f", target);
 			mtr.settings.last_v = mtr.settings.target_v * factor;
 		}

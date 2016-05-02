@@ -2013,7 +2013,11 @@ class Printer: # {{{
 			else:
 				return struct.pack('=dBdd', float('nan'), 0, float('-inf'), float('inf'))
 		def write_motor(self, motor):
-			return struct.pack('=HHHHHddddB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], self.motor[motor]['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['home_pos'], self.motor[motor]['limit_v'], self.motor[motor]['limit_a'], int(self.motor[motor]['home_order']))
+			if self.id == 2:
+				base = self.printer.spaces[0].motor[motor]
+			else:
+				base = self.motor[motor]
+			return struct.pack('=HHHHHddddB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], base['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['home_pos'], base['limit_v'], base['limit_a'], int(base['home_order']))
 		def set_current_pos(self, axis, pos):
 			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
 			self.printer._send_packet(struct.pack('=BBBd', protocol.command['SETPOS'], self.id, axis, pos))
@@ -2090,11 +2094,14 @@ class Printer: # {{{
 						ret += ''.join(['%s = %f\r\n' % (x, y) for x, y in zip(('min', 'max'), self.printer.home_limits[self.id])])
 			for i, m in enumerate(self.motor):
 				ret += '[motor %d %d]\r\n' % (self.id, i)
-				ret += ''.join(['%s = %s\r\n' % (x, write_pin(m[x])) for x in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin')])
-				ret += ''.join(['%s = %d\r\n' % (x, m[x]) for x in ('home_order',)])
-				ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'limit_v', 'limit_a')])
+				ret += ''.join(['%s = %s\r\n' % (x, write_pin(m[x])) for x in ('step_pin', 'dir_pin', 'enable_pin')])
 				if self.id != 1:
-					ret += 'home_pos = %f\r\n' % m['home_pos']
+					ret += ''.join(['%s = %s\r\n' % (x, write_pin(m[x])) for x in ('limit_min_pin', 'limit_max_pin')])
+					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'limit_v', 'limit_a')])
+				if self.id == 0:
+					ret += ''.join(['%s = %d\r\n' % (x, m[x]) for x in ('home_order',)])
+				if self.id != 1:
+					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('home_pos',)])
 			return ret
 	# }}}
 	class Temp: # {{{
@@ -2670,7 +2677,7 @@ class Printer: # {{{
 					globals_changed = True
 				continue
 			elif obj is None:
-				# Ignore settings for incorrect setion.
+				# Ignore settings for incorrect section.
 				continue
 			if not r.group(6):
 				# Comment or empty line.
@@ -2687,7 +2694,7 @@ class Printer: # {{{
 				value = int(value)
 			else:
 				value = float(value)
-			if key not in keys[section] or (section == 'motor' and key == 'home_pos' and index[0] == 1):
+			if key not in keys[section] or (section == 'motor' and ((key in ('home_pos', 'home_order') and index[0] == 1) or (key in ('steps_per_unit', 'home_order', 'limit_v', 'limit_a') and index[0] == 2))):
 				errors.append((l, 'invalid key for section %s' % section))
 				continue
 			# If something critical is changed, update instantly.
@@ -3050,10 +3057,16 @@ class Printer: # {{{
 	# }}}
 	def get_motor(self, space, motor): # {{{
 		ret = {'name': self.spaces[space].motor_name(motor)}
-		if space != 1:
-			ret['home_pos'] = self.spaces[space].motor[motor]['home_pos']
-		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'limit_v', 'limit_a', 'home_order'):
+		for key in ('step_pin', 'dir_pin', 'enable_pin'):
 			ret[key] = self.spaces[space].motor[motor][key]
+		if space != 1:
+			for key in ('limit_min_pin', 'limit_max_pin', 'home_pos'):
+				ret[key] = self.spaces[space].motor[motor][key]
+		if space == 0:
+			ret['home_order'] = self.spaces[space].motor[motor]['home_order']
+		if space != 2:
+			for key in ('steps_per_unit', 'limit_v', 'limit_a'):
+				ret[key] = self.spaces[space].motor[motor][key]
 		return ret
 	# }}}
 	def expert_set_space(self, space, readback = True, update = True, **ka): # {{{
@@ -3131,16 +3144,33 @@ class Printer: # {{{
 	# }}}
 	def expert_set_motor(self, spacemotor, readback = True, update = True, **ka): # {{{
 		space, motor = spacemotor
-		for key in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'limit_v', 'limit_a', 'home_order'):
+		for key in ('step_pin', 'dir_pin', 'enable_pin'):
 			if key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
-		if space != 1 and 'home_pos' in ka:
-			self.spaces[space].motor[motor]['home_pos'] = ka.pop('home_pos')
+		for key in ('home_pos', 'limit_min_pin', 'limit_max_pin'):
+			if space != 1 and key in ka:
+				self.spaces[space].motor[motor][key] = ka.pop(key)
+		if space == 0 and 'home_order' in ka:
+			self.spaces[space].motor[motor]['home_order'] = ka.pop('home_order')
+		for key in ('steps_per_unit', 'limit_v', 'limit_a'):
+			if space != 1 and key in ka:
+				self.spaces[space].motor[motor][key] = ka.pop(key)
 		self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_MOTOR'], space, motor) + self.spaces[space].write_motor(motor))
+		followers = False
+		for m, mt in enumerate(self.spaces[2].motor):
+			fs = self.spaces[2].follower[m]['space']
+			fm = self.spaces[2].follower[m]['motor']
+			if fs == space and fm == motor:
+				followers = True
+				self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_MOTOR'], 2, m) + self.spaces[2].write_motor(m))
 		if readback:
 			self.spaces[space].read(self._read('SPACE', space))
 			if update:
 				self._space_update(space)
+			if followers:
+				self.spaces[2].read(self._read('SPACE', 2))
+				if update:
+					self._space_update(2)
 		assert len(ka) == 0
 	# }}}
 	# }}}
