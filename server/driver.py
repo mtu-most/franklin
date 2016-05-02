@@ -1231,7 +1231,7 @@ class Printer: # {{{
 							g.append((2, i))
 							break
 					else:
-						groups[1].append([(2, i), (fs, fm)])
+						groups[0].append([(2, i), (fs, fm)])
 			self.home_target = {}
 			for g in groups[0]:
 				target = max(g, key = lambda x: self.spaces[x[0]].motor[x[1]]['home_pos'])
@@ -2097,11 +2097,11 @@ class Printer: # {{{
 				ret += ''.join(['%s = %s\r\n' % (x, write_pin(m[x])) for x in ('step_pin', 'dir_pin', 'enable_pin')])
 				if self.id != 1:
 					ret += ''.join(['%s = %s\r\n' % (x, write_pin(m[x])) for x in ('limit_min_pin', 'limit_max_pin')])
-					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'limit_v', 'limit_a')])
+					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('home_pos',)])
 				if self.id == 0:
 					ret += ''.join(['%s = %d\r\n' % (x, m[x]) for x in ('home_order',)])
-				if self.id != 1:
-					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('home_pos',)])
+				if self.id != 2:
+					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'limit_v', 'limit_a')])
 			return ret
 	# }}}
 	class Temp: # {{{
