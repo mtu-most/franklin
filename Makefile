@@ -80,7 +80,7 @@ clean-%:
 	rm -rf .git/modules/$(base)
 
 clean: $(addprefix clean-,$(MODULES))
-	git rm .gitmodules || :
+	git rm -f .gitmodules || :
 	rm -f mkdeb .gitmodules
 	rm -rf zipdir
 
