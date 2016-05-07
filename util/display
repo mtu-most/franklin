@@ -25,6 +25,9 @@ gobject.threads_init()
 import gtk
 import glib
 import sys
+import fhs
+
+config = fhs.init({'overlay': '/var/lib/franklin/overlay.png'})
 
 filename = None
 
@@ -36,10 +39,11 @@ def new_pixbuf(bus, message):
 	if im is None:
 		width = pb.get_width()
 		height = pb.get_height()
-		overlay = gtk.gdk.pixbuf_new_from_file(overlayfile)
-		ow = overlay.get_width()
-		oh = overlay.get_height()
-		overlay.composite(pb, 0, 0, width, height, 0, 0, width * 1.0 / ow, height * 1.0 / oh, gtk.gdk.INTERP_NEAREST, 255)
+		if config['overlay']:
+			overlay = gtk.gdk.pixbuf_new_from_file(config['overlay'])
+			ow = overlay.get_width()
+			oh = overlay.get_height()
+			overlay.composite(pb, 0, 0, width, height, 0, 0, width * 1.0 / ow, height * 1.0 / oh, gtk.gdk.INTERP_NEAREST, 255)
 		window = gtk.Plug(int(sys.argv[1]))
 		window.connect('destroy', lambda x: gtk.main_quit())
 		im = gtk.image_new_from_pixbuf(pb)
@@ -49,9 +53,10 @@ def new_pixbuf(bus, message):
 	else:
 		width = pb.get_width()
 		height = pb.get_height()
-		ow = overlay.get_width()
-		oh = overlay.get_height()
-		overlay.composite(pb, 0, 0, width, height, 0, 0, width * 1.0 / ow, height * 1.0 / oh, gtk.gdk.INTERP_NEAREST, 255)
+		if overlay:
+			ow = overlay.get_width()
+			oh = overlay.get_height()
+			overlay.composite(pb, 0, 0, width, height, 0, 0, width * 1.0 / ow, height * 1.0 / oh, gtk.gdk.INTERP_NEAREST, 255)
 		im.set_from_pixbuf(pb)
 	if filename is not None:
 		pb.save(filename, 'png')
@@ -66,7 +71,6 @@ def store(source, condition):
 	filename = sys.stdin.readline()
 	return True
 
-overlayfile = '/usr/lib/franklin/overlay.png'
 overlay = None
 im = None
 # Set up gstreamer pipeline.
