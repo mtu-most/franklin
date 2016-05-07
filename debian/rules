@@ -15,6 +15,7 @@ override_dh_auto_build:
 #	mv server/cdriver/franklin-cdriver server/cdriver/franklin-cdriver.local
 #	${MAKE} -C server/cdriver clean
 #endif
+	${MAKE} -C server/bb
 	${MAKE} -C server/cdriver
 	${MAKE} -C firmware TARGET=atmega1284p
 	${MAKE} -C firmware TARGET=atmega2560

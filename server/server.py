@@ -391,9 +391,9 @@ class Connection: # {{{
 	# }}}
 	def _get_command(self, board, port): # {{{
 		if board == 'bbbmelzi ':
-			return ('sudo', fhs.read_data('flash-bbb', opened = False), fhs.read_data('avrdude.conf', opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p' + os.extsep + 'hex'), opened = False))
+			return ('sudo', fhs.read_data(os.path.join('bb', 'flash-bb-0'), opened = False), fhs.read_data(os.path.join('bb', 'avrdude.conf'), opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p' + os.extsep + 'hex'), opened = False))
 		if board == 'bb4melzi ':
-			return ('sudo', fhs.read_data('flash-bb-O4', opened = False), fhs.read_data('avrdude.conf', opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p' + os.extsep + 'hex'), opened = False))
+			return ('sudo', fhs.read_data(os.path.join('bb', 'flash-bb-4'), opened = False), fhs.read_data(os.path.join('bb', 'avrdude.conf'), opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p' + os.extsep + 'hex'), opened = False))
 		boards = self._read_boards()
 		if board not in boards:
 			raise ValueError('board type not supported')

@@ -83,5 +83,6 @@ clean: $(addprefix clean-,$(MODULES))
 	git rm -f .gitmodules || :
 	rm -f mkdeb .gitmodules
 	rm -rf zipdir
+	rm -f $(addprefix module-,$(MODULES))
 
 .PHONY: install build clean zip bb

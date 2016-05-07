@@ -3,7 +3,7 @@ Section: electronics
 Priority: optional
 Maintainer: Bas Wijnen <wijnen@debian.org>
 Build-Depends: debhelper (>= 9), python3-all, dh-python, gcc-avr, arduino-mighty-1284p (>= 1), arduino-mk (>= 1.3.4), ruby-ronn, closure-linter
-Standards-Version: 3.9.6
+Standards-Version: 3.9.8
 
 Package: franklin
 Architecture: any

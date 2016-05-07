@@ -2,6 +2,7 @@
 firmware/build-*
 server/cdriver/franklin-cdriver
 server/cdriver/build
+server/bb/setpin
 util/joystick.py
 util/c457a-ui.gui
 mkdeb

@@ -1520,6 +1520,8 @@ class Printer: # {{{
 						time_dist[0] += extra
 			elif type == protocol.parsed['ARC']:
 				pass	# TODO: add time+dist.
+			elif type == protocol.parsed['WAIT']:
+				time_dist[0] += nums[1]
 			return nums + time_dist
 		with fhs.write_spool(os.path.join(self.uuid, 'gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin'), text = False) as dst:
 			def add_record(type, nums = None, force = False):
@@ -1816,9 +1818,9 @@ class Printer: # {{{
 						oldpos = pos[0][:], pos[1][:]
 						if components['E'] is not None:
 							if erel:
-								estep = components['E'] * unit
-							else:
 								estep = components['E'] * unit - pos[1][current_extruder]
+							else:
+								estep = components['E'] * unit
 							pos[1][current_extruder] += estep
 						else:
 							estep = 0
