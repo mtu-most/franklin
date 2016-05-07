@@ -22,8 +22,8 @@ cd "`dirname "$0"`"
 
 fini() {
 	rm "$tmp"
-	./setpin 42 0x30
-	./setpin 43 0x00
+	./setpin 42 0x30 >/dev/null
+	./setpin 43 0x00 >/dev/null
 }
 
 trap fini EXIT
@@ -36,8 +36,8 @@ for pin in 30 31 50 60 ; do
 	echo $pin > /sys/class/gpio/unexport 2>/dev/null
 done
 
-./setpin 42 0x0f
-./setpin 43 0x0f
+./setpin 42 0x0f >/dev/null
+./setpin 43 0x0f >/dev/null
 
 rom="`avrdude -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U eeprom:r:-:d`"
 avrdude -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U flash:w:"${hex}":i

@@ -22,8 +22,8 @@ cd "`dirname "$0"`"
 
 fini() {
 	rm "$tmp"
-	./setpin 30 0x2e
-	./setpin 31 0xe
+	./setpin 30 0x2e >/dev/null
+	./setpin 31 0xe >/dev/null
 }
 
 trap fini EXIT
@@ -36,8 +36,8 @@ for pin in 30 31 50 60 ; do
 	echo $pin > /sys/class/gpio/unexport 2>/dev/null
 done
 
-./setpin 30 0x37
-./setpin 31 0x37
+./setpin 30 0x37 >/dev/null
+./setpin 31 0x37 >/dev/null
 rom="`avrdude -q -q -C +"${config}" -c bbbmelziO4 -p atmega1284p -U eeprom:r:-:d`"
 avrdude -q -q -C +"${config}" -c bbbmelziO4 -p atmega1284p -U flash:w:"${hex}":i
 sed -e '/^:..00..00/d' < /usr/share/arduino/hardware/mighty-1284p/bootloaders/optiboot/optiboot_atmega1284p.hex > "$tmp"
