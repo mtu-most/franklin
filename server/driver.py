@@ -3153,7 +3153,7 @@ class Printer: # {{{
 		if space == 0 and 'home_order' in ka:
 			self.spaces[space].motor[motor]['home_order'] = ka.pop('home_order')
 		for key in ('steps_per_unit', 'limit_v', 'limit_a'):
-			if space != 1 and key in ka:
+			if space != 2 and key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
 		self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_MOTOR'], space, motor) + self.spaces[space].write_motor(motor))
 		followers = False
