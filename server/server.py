@@ -171,7 +171,7 @@ class Server(websocketd.RPChttpd): # {{{
 		if 'port' in connection.query:
 			# Export request.
 			port = connection.query['port'][0]
-			if port not in ports or not ports[port] or ports[port].detecting:
+			if port not in ports or not isinstance(ports[port], Port) or ports[port].detecting:
 				self.reply(connection, 404)
 			else:
 				def export_reply(success, message):
@@ -198,7 +198,7 @@ class Server(websocketd.RPChttpd): # {{{
 			return False
 		port = connection.post[0]['port'][0]
 		action = connection.post[0]['action'][0]
-		if port not in ports or not ports[port] or ports[port].detecting:
+		if port not in ports or not isinstance(ports[port], Port) or ports[port].detecting:
 			log('port not found: %s' % port)
 			self.reply(connection, 404)
 			return False
@@ -252,7 +252,7 @@ class Connection: # {{{
 		@return The printer name, or None if no printer matches the request.
 		'''
 		for p in ports:
-			if not ports[p] or ports[p].detecting:
+			if not isinstance(ports[p], Port) or ports[p].detecting:
 				continue
 			if (not uuid or uuid == ports[p].uuid) and (not port or re.match(port, p)):
 				return p
@@ -405,8 +405,11 @@ class Connection: # {{{
 	def upload(self, port, board): # {{{
 		wake = (yield)
 		assert self.socket.data['role'] in ('benjamin', 'admin')
-		assert ports[port] is None
-		ports[port] = 0
+		disable('admin', port)
+		def cancel():
+			# Waking the generator kills the process.
+			wake('Aborted')
+		ports[port] = cancel
 		command = self._get_command(board, port)
 		data = ['']
 		log('Flashing firmware: ' + ' '.join(command))
@@ -468,9 +471,9 @@ class Connection: # {{{
 				self.socket.new_port.event(p)
 				if ports[p] is None:
 					self.socket.port_state.event(p, 0)
-				elif ports[p] == 0:
+				elif not isinstance(ports[p], Port):	# TODO: distinguish initial detect from flashing.
 					self.socket.port_state.event(p, 3)
-				elif ports[p] is False or ports[p].detecting:
+				elif ports[p].detecting:
 					self.socket.port_state.event(p, 1)
 				else:
 					self.socket.port_state.event(p, 2)
@@ -489,7 +492,7 @@ class Connection: # {{{
 	def _call (self, name, a, ka): # {{{
 		wake = (yield)
 		#log('other: %s %s %s' % (name, repr(a), repr(ka)))
-		if not self.printer or self.printer not in ports or not ports[self.printer] or ports[self.printer].detecting:
+		if not self.printer or self.printer not in ports or not isinstance(ports[self.printer], Port) or ports[self.printer].detecting:
 			self.printer = self.find_printer()
 			if not self.printer:
 				log('No printer found')
@@ -601,13 +604,18 @@ class Port: # {{{
 		self.next_mid += 1
 	# }}}
 	def printer_error(self): # {{{
-		log('%s died from error.' % self.name)
-		self.process.communicate()	# Clean up the zombie.
+		log('%s died from error; removing port.' % self.name)
+		self.die('from error')
+		del self.ports[port]
+		return False
+	# }}}
+	def die(self, reason = 'at request'): # {{{
+		log('{} died {}.'.format(self.name, reason))
+		self.process.kill()
+		self.process.communicate()
 		for t in range(3):
 			for w in self.waiters[t]:
-				self.waiters[t][w](False, 'Printer died from error')
-		disable('admin', self.port)
-		return False
+				self.waiters[t][w](False, 'Printer {} died {}'.format(self.name, reason))
 	# }}}
 	def printer_input(self): # {{{
 		while self.process is not None:
@@ -682,7 +690,6 @@ def detect(port, role): # {{{
 		if ports[port] != None:
 			log('port is not in detectable state')
 			return
-	ports[port] = False
 	broadcast(None, 'port_state', port, 1)
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
@@ -698,6 +705,7 @@ def detect(port, role): # {{{
 		printer = serial.Serial(port, baudrate = 115200, timeout = 0)
 	except serial.SerialException as e:
 		log('failed to open serial port %s (%s).' % (port, str(e)))
+		del ports[port]
 		#traceback.print_exc()
 		return False
 	# We need to get the printer id first.  If the printer is booting, this can take a while.
@@ -781,10 +789,20 @@ def detect(port, role): # {{{
 		printer.write(protocol.single['ID'])
 		timeout_handle = [websocketd.add_timeout(time.time() + .5, timeout)]
 		watcher = websocketd.add_read(printer, boot_printer_input, boot_printer_error)
+		def cancel():
+			websocketd.remove_timeout(timeout_handle[0])
+			websocketd.remove_read(watcher)
+			printer.close()
+			ports[port] = None
+		ports[port] = cancel
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
 	# This is only a problem for RAMPS; don't wait for ports that cannot be RAMPS.
 	if 'ACM' in port:
-		websocketd.add_timeout(time.time() + 1.5, part2)
+		handle = websocketd.add_timeout(time.time() + 1.5, part2)
+		def cancel():
+			websocketd.remove_timeout(handle)
+			ports[port] = None
+		ports[port] = cancel
 	else:
 		part2()
 # }}}
@@ -821,10 +839,15 @@ def disable(role, port): # {{{
 	if p is None:
 		log('not disabling inactive port %s' % port)
 		return
-	if p is False or p.detecting or p == 0:
-		# TODO: Kill things that are in progress.
-		pass
+	if not isinstance(p, Port):
+		# Detecting or similar; cancel operation.
+		p()
+		return
+	if p.detecting:
+		p.die()
+		return
 	# Forget the printer.  First tell the printer to die
+	p.die()
 	ports[port] = None
 	if p:
 		def done(success, ret):
