@@ -443,13 +443,13 @@ void packet()
 			write_stall();
 			return;
 		}
-		if (buffer[last_fragment][m][0] != 0 || buffer[last_fragment][m][1] != int8_t(0x80)) {
+		if (buffer[last_fragment][m][0] != 0 || buffer[last_fragment][m][1] != uint8_t(0x80)) {
 			debug("duplicate buffer %d to fill", m);
 			write_stall();
 			return;
 		}
 		for (uint8_t b = 0; b < last_len; ++b)
-			buffer[last_fragment][m][b] = static_cast<int8_t>(command(2 + b));
+			buffer[last_fragment][m][b] = static_cast <uint8_t>(command(2 + b));
 		if (command(0) != CMD_MOVE_SINGLE) {
 			for (uint8_t f = 0; f < active_motors; ++f) {
 				if ((motor[f].follow & 0x7f) == m) {
@@ -492,7 +492,7 @@ void packet()
 		BUFFER_CHECK(buffer, current_fragment);
 		current_buffer = &buffer[current_fragment];
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			if (buffer[current_fragment][m][0] != 0 || buffer[current_fragment][m][1] != int8_t(0x80)) {
+			if (buffer[current_fragment][m][0] != 0 || buffer[current_fragment][m][1] != uint8_t(0x80)) {
 				motor[m].intflags |= Motor::ACTIVE;
 				motor[m].steps_current = 0;
 			}

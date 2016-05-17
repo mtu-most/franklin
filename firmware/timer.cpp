@@ -99,8 +99,9 @@ void handle_motors() {
 				if (!(motor[m].intflags & Motor::ACTIVE))
 					continue;
 				// Get the "wrong" limit pin for the given direction.
-				uint8_t limit_pin = (buffer[cf][m][cs] < 0 ? motor[m].limit_max_pin : motor[m].limit_min_pin);
-				bool inverted = motor[m].flags & (buffer[cf][m][cs] < 0 ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
+				int16_t value = *reinterpret_cast <volatile int16_t *>(&buffer[cf][m][cs]);
+				uint8_t limit_pin = (value < 0 ? motor[m].limit_max_pin : motor[m].limit_min_pin);
+				bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
 				if (limit_pin >= NUM_DIGITAL_PINS || GET(limit_pin) ^ inverted) {
 					// Limit pin still triggered; continue moving.
 					continue;

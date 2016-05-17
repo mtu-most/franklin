@@ -366,7 +366,7 @@ struct Motor
 	}
 };
 
-EXTERN volatile int8_t buffer[1 << FRAGMENTS_PER_MOTOR_BITS][NUM_MOTORS][BYTES_PER_FRAGMENT];
+EXTERN volatile uint8_t buffer[1 << FRAGMENTS_PER_MOTOR_BITS][NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN Motor motor[NUM_MOTORS];
 EXTERN Motor *audio_motor;
 EXTERN volatile uint8_t active_motors;
@@ -400,7 +400,7 @@ enum StepState {
 };
 #define NUM_NON_MOVING_STATES 3
 EXTERN volatile uint8_t step_state;		// 0: disabled; 1: Waiting for limit switch check; 2: Waiting for step; 3: free running.
-EXTERN volatile int8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
+EXTERN volatile uint8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN volatile uint8_t audio_bit;	// Bitmask for current audio playback.
 EXTERN volatile uint8_t last_fragment;	// Fragment that is currently being filled.
 EXTERN uint8_t limit_fragment_pos;
@@ -468,7 +468,7 @@ static inline void write_current_pos(uint8_t offset) {
 
 static inline void SLOW_ISR() {
 #ifndef FAST_ISR
-	if (step_state < NON_MOVING_STATES)
+	if (step_state < NUM_NON_MOVING_STATES)
 		return;
 	arch_disable_isr();
 	sei();
@@ -476,7 +476,7 @@ static inline void SLOW_ISR() {
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		if (~motor[m].intflags & Motor::ACTIVE)
 			continue;
-		int16_t sample = (*current_buffer)[m][current_sample] + ((*current_buffer)[m][current_sample + 1] << 8);
+		int16_t sample = *reinterpret_cast <volatile int16_t *> (&(*current_buffer)[m][current_sample]);
 		if (sample == 0)
 			continue;
 		int8_t target = ((abs(sample) * move_phase) >> full_phase_bits) - motor[m].steps_current;
@@ -516,7 +516,7 @@ static inline void SLOW_ISR() {
 				for (uint8_t m = 0; m < active_motors; ++m) {
 					//debug("active %d %d", m, (*current_buffer)[m][0]);
 					BUFFER_CHECK(motor, m);
-					if ((*current_buffer)[m][0] != 0 || (*current_buffer)[m][1] != int8_t(0x80))
+					if ((*current_buffer)[m][0] != 0 || (*current_buffer)[m][1] != uint8_t(0x80))
 						motor[m].intflags |= Motor::ACTIVE;
 					else
 						motor[m].intflags &= ~Motor::ACTIVE;

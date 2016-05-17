@@ -824,6 +824,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"st x, 1"			"\n"	// 2	3m+4=16 => n=4
 		"\t"	"rjmp 2b"			"\n"	// 2	2
 	"3:\t"		"clr 27"			"\n"	// r27 is 0 again.
+		ADD_DIR_DELAY
 		//*/
 
 		// Increment Y and Z, dec counter 16 and loop.

@@ -923,7 +923,7 @@ class Printer: # {{{
 		data = [(h << 8) + l if h < 128 else(h << 8) + l -(1 << 16) for l, h in zip(data[::2 * channels], data[1::2 * channels])]
 		bit = 0
 		byte = 0
-		with fhs.write_spool(os.path.join(self.uuid, 'audio', name + os.path.extsep + 'bin')) as dst:
+		with fhs.write_spool(os.path.join(self.uuid, 'audio', name + os.path.extsep + 'bin'), text = False) as dst:
 			dst.write(struct.pack('@d', rate))
 			for t, sample in enumerate(data):
 				if sample > 0:
@@ -2506,7 +2506,7 @@ class Printer: # {{{
 		self.line([[a['park'] - (0 if si != 0 or ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(s.axis)] for si, s in enumerate(self.spaces)])
 	# }}}
 	@delayed
-	def benjamin_audio_play(self, id, name, motor = 0): # {{{
+	def benjamin_audio_play(self, id, name, motor = 2): # {{{
 		self.audio_id = id
 		self.sleep(False)
 		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)

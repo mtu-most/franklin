@@ -1127,7 +1127,7 @@ bool arch_send_fragment() { // {{{
 			for (uint8_t m = 0; !host_block && !stopping && !discard_pending && !stop_pending && m < spaces[s].num_motors; ++m) {
 				if (!spaces[s].motor[m]->active)
 					continue;
-				cpdebug(s, m, "sending %d %d", fragment, current_fragment_pos);
+				cpdebug(s, m, "sending %d %d", current_fragment, current_fragment_pos);
 				//debug("sending %d %d cf %d cp 0x%x", s, m, current_fragment, current_fragment_pos);
 				while (out_busy >= 3) {
 					poll(&pollfds[2], 1, -1);

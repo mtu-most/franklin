@@ -253,204 +253,212 @@ void run_file_fill_queue() {
 		lock = false;
 		return;
 	}
-	while (run_file_map	// There is a file to run.
-			&& (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 4	// There is space in the queue.
-			&& !settings.queue_full	// Really, there is space in the queue.
-			&& settings.run_file_current < run_file_num_records	// There are records to send.
-			&& !run_file_wait_temp	// We are not waiting for a temp alarm.
-			&& !run_file_wait	// We are not waiting for something else (pause or confirm).
-			&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
-		int t = run_file_map[settings.run_file_current].type;
-		if (t != RUN_LINE && t != RUN_PRE_LINE && t != RUN_PRE_ARC && t != RUN_ARC && (arch_running() || settings.queue_end != settings.queue_start || computing_move || sending_fragment || transmitting_fragment))
-			break;
-		Run_Record &r = run_file_map[settings.run_file_current];
-		rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
-		switch (r.type) {
-			case RUN_SYSTEM:
-			{
-				char const *cmd = strndupa(&reinterpret_cast<char const *>(run_file_map)[run_file_first_string + strings[r.tool].start], strings[r.tool].len);
-				debug("Running system command: %ld %d %s", strings[r.tool].start, strings[r.tool].len, cmd);
-				int ret = system(cmd);
-				debug("Done running system command, return = %d", ret);
+	int cbs = 0;
+	bool must_move = true;
+	while (must_move) {
+		must_move = false;
+		while (run_file_map	// There is a file to run.
+				&& (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 4	// There is space in the queue.
+				&& !settings.queue_full	// Really, there is space in the queue.
+				&& settings.run_file_current < run_file_num_records	// There are records to send.
+				&& !run_file_wait_temp	// We are not waiting for a temp alarm.
+				&& !run_file_wait	// We are not waiting for something else (pause or confirm).
+				&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
+			int t = run_file_map[settings.run_file_current].type;
+			if (t != RUN_LINE && t != RUN_PRE_LINE && t != RUN_PRE_ARC && t != RUN_ARC && (arch_running() || settings.queue_end != settings.queue_start || computing_move || sending_fragment || transmitting_fragment))
 				break;
-			}
-			case RUN_PRE_ARC:
-			{
-				double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
-				double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
-				double z = r.Z;
-				//debug("line %f %f %f", x, y, z);
-				queue[settings.queue_end].center[0] = x;
-				queue[settings.queue_end].center[1] = y;
-				queue[settings.queue_end].center[2] = handle_probe(x, y, z);
-				queue[settings.queue_end].normal[0] = r.E;
-				queue[settings.queue_end].normal[1] = r.f;
-				queue[settings.queue_end].normal[2] = r.F;
-				break;
-			}
-			case RUN_PRE_LINE:
-			{
-				run_preline.X = r.X;
-				run_preline.Y = r.Y;
-				run_preline.Z = r.Z;
-				run_preline.E = r.E;
-				run_preline.tool = r.tool;
-				break;
-			}
-			case RUN_LINE:
-			case RUN_ARC:
-			{
-				queue[settings.queue_end].single = false;
-				queue[settings.queue_end].probe = false;
-				queue[settings.queue_end].arc = r.type == RUN_ARC;
-				queue[settings.queue_end].f[0] = r.f;
-				queue[settings.queue_end].f[1] = r.F;
-				double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
-				double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
-				double z = r.Z;
-				//debug("line/arc %f %f %f", x, y, z);
-				int num0 = spaces[0].num_axes;
-				if (num0 > 0) {
-					queue[settings.queue_end].data[0] = x;
-					if (num0 > 1) {
-						queue[settings.queue_end].data[1] = y;
-						if (num0 > 2) {
-							queue[settings.queue_end].data[2] = handle_probe(x, y, z);
-							if (num0 > 3) {
-								queue[settings.queue_end].data[3] = run_preline.X;
-								if (num0 > 4) {
-									queue[settings.queue_end].data[4] = run_preline.Y;
-									if (num0 > 5) {
-										queue[settings.queue_end].data[5] = run_preline.Z;
+			Run_Record &r = run_file_map[settings.run_file_current];
+			rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
+			switch (r.type) {
+				case RUN_SYSTEM:
+				{
+					char const *cmd = strndupa(&reinterpret_cast<char const *>(run_file_map)[run_file_first_string + strings[r.tool].start], strings[r.tool].len);
+					debug("Running system command: %ld %d %s", strings[r.tool].start, strings[r.tool].len, cmd);
+					int ret = system(cmd);
+					debug("Done running system command, return = %d", ret);
+					break;
+				}
+				case RUN_PRE_ARC:
+				{
+					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
+					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
+					double z = r.Z;
+					//debug("line %f %f %f", x, y, z);
+					queue[settings.queue_end].center[0] = x;
+					queue[settings.queue_end].center[1] = y;
+					queue[settings.queue_end].center[2] = handle_probe(x, y, z);
+					queue[settings.queue_end].normal[0] = r.E;
+					queue[settings.queue_end].normal[1] = r.f;
+					queue[settings.queue_end].normal[2] = r.F;
+					break;
+				}
+				case RUN_PRE_LINE:
+				{
+					run_preline.X = r.X;
+					run_preline.Y = r.Y;
+					run_preline.Z = r.Z;
+					run_preline.E = r.E;
+					run_preline.tool = r.tool;
+					break;
+				}
+				case RUN_LINE:
+				case RUN_ARC:
+				{
+					queue[settings.queue_end].single = false;
+					queue[settings.queue_end].probe = false;
+					queue[settings.queue_end].arc = r.type == RUN_ARC;
+					queue[settings.queue_end].f[0] = r.f;
+					queue[settings.queue_end].f[1] = r.F;
+					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
+					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
+					double z = r.Z;
+					//debug("line/arc %f %f %f", x, y, z);
+					int num0 = spaces[0].num_axes;
+					if (num0 > 0) {
+						queue[settings.queue_end].data[0] = x;
+						if (num0 > 1) {
+							queue[settings.queue_end].data[1] = y;
+							if (num0 > 2) {
+								queue[settings.queue_end].data[2] = handle_probe(x, y, z);
+								if (num0 > 3) {
+									queue[settings.queue_end].data[3] = run_preline.X;
+									if (num0 > 4) {
+										queue[settings.queue_end].data[4] = run_preline.Y;
+										if (num0 > 5) {
+											queue[settings.queue_end].data[5] = run_preline.Z;
+										}
 									}
+									run_preline.X = NAN;
+									run_preline.Y = NAN;
+									run_preline.Z = NAN;
 								}
-								run_preline.X = NAN;
-								run_preline.Y = NAN;
-								run_preline.Z = NAN;
 							}
 						}
 					}
-				}
-				for (int i = 6; i < num0; ++i)
-					queue[settings.queue_end].data[i] = NAN;
-				for (int i = 0; i < spaces[1].num_axes; ++i) {
-					queue[settings.queue_end].data[num0 + i] = (i == r.tool ? r.E : i == run_preline.tool ? run_preline.E : NAN);
-					//debug("queue %d + %d = %f", num0, i, queue[settings.queue_end].data[num0 + i]);
-				}
-				run_preline.E = NAN;
-				num0 += spaces[1].num_axes;
-				for (int s = 2; s < NUM_SPACES; ++s) {
-					for (int i = 0; i < spaces[s].num_axes; ++i)
-						queue[settings.queue_end].data[num0 + i] = NAN;
-					num0 += spaces[s].num_axes;
-				}
-				queue[settings.queue_end].time = r.time;
-				queue[settings.queue_end].dist = r.dist;
-				queue[settings.queue_end].cb = false;
-				settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
-				break;
-			}
-			case RUN_GPIO:
-			{
-				int tool = r.tool;
-				if (tool == -2)
-					tool = fan_id != 255 ? fan_id : -1;
-				else if (tool == -3)
-					tool = spindle_id != 255 ? spindle_id : -1;
-				if (tool < 0 || tool >= num_gpios) {
-					if (tool != -1)
-						debug("cannot set invalid gpio %d", tool);
+					for (int i = 6; i < num0; ++i)
+						queue[settings.queue_end].data[i] = NAN;
+					for (int i = 0; i < spaces[1].num_axes; ++i) {
+						queue[settings.queue_end].data[num0 + i] = (i == r.tool ? r.E : i == run_preline.tool ? run_preline.E : NAN);
+						//debug("queue %d + %d = %f", num0, i, queue[settings.queue_end].data[num0 + i]);
+					}
+					run_preline.E = NAN;
+					num0 += spaces[1].num_axes;
+					for (int s = 2; s < NUM_SPACES; ++s) {
+						for (int i = 0; i < spaces[s].num_axes; ++i)
+							queue[settings.queue_end].data[num0 + i] = NAN;
+						num0 += spaces[s].num_axes;
+					}
+					queue[settings.queue_end].time = r.time;
+					queue[settings.queue_end].dist = r.dist;
+					queue[settings.queue_end].cb = false;
+					settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
 					break;
 				}
-				if (r.X) {
-					gpios[tool].state = 1;
-					SET(gpios[tool].pin);
+				case RUN_GPIO:
+				{
+					int tool = r.tool;
+					if (tool == -2)
+						tool = fan_id != 255 ? fan_id : -1;
+					else if (tool == -3)
+						tool = spindle_id != 255 ? spindle_id : -1;
+					if (tool < 0 || tool >= num_gpios) {
+						if (tool != -1)
+							debug("cannot set invalid gpio %d", tool);
+						break;
+					}
+					if (r.X) {
+						gpios[tool].state = 1;
+						SET(gpios[tool].pin);
+					}
+					else {
+						gpios[tool].state = 0;
+						RESET(gpios[tool].pin);
+					}
+					send_host(CMD_UPDATE_PIN, tool, gpios[tool].state);
+					break;
 				}
-				else {
-					gpios[tool].state = 0;
-					RESET(gpios[tool].pin);
+				case RUN_SETTEMP:
+				{
+					int tool = r.tool;
+					if (tool == -1)
+						tool = bed_id != 255 ? bed_id : -1;
+					rundebug("settemp %d %f", tool, r.X);
+					settemp(tool, r.X);
+					send_host(CMD_UPDATE_TEMP, tool, 0, r.X);
+					break;
 				}
-				send_host(CMD_UPDATE_PIN, tool, gpios[tool].state);
-				break;
-			}
-			case RUN_SETTEMP:
-			{
-				int tool = r.tool;
-				if (tool == -1)
-					tool = bed_id != 255 ? bed_id : -1;
-				rundebug("settemp %d %f", tool, r.X);
-				settemp(tool, r.X);
-				send_host(CMD_UPDATE_TEMP, tool, 0, r.X);
-				break;
-			}
-			case RUN_WAITTEMP:
-			{
-				int tool = r.tool;
-				if (tool == -2)
-					tool = bed_id != 255 ? bed_id : -1;
-				if (tool == -3) {
-					for (int i = 0; i < num_temps; ++i) {
-						if (temps[i].min_alarm >= 0 || temps[i].max_alarm < MAXINT) {
-							run_file_wait_temp += 1;
-							waittemp(i, temps[i].min_alarm, temps[i].max_alarm);
+				case RUN_WAITTEMP:
+				{
+					int tool = r.tool;
+					if (tool == -2)
+						tool = bed_id != 255 ? bed_id : -1;
+					if (tool == -3) {
+						for (int i = 0; i < num_temps; ++i) {
+							if (temps[i].min_alarm >= 0 || temps[i].max_alarm < MAXINT) {
+								run_file_wait_temp += 1;
+								waittemp(i, temps[i].min_alarm, temps[i].max_alarm);
+							}
 						}
+						break;
+					}
+					if (tool < 0 || tool >= num_temps) {
+						if (tool != -1)
+							debug("cannot wait for invalid temp %d", tool);
+						break;
+					}
+					else
+						rundebug("waittemp %d", tool);
+					if (temps[tool].adctarget[0] >= 0 && temps[tool].adctarget[0] < MAXINT) {
+						rundebug("waiting");
+						run_file_wait_temp += 1;
+						waittemp(tool, temps[tool].target[0], temps[tool].max_alarm);
+					}
+					else
+						rundebug("not waiting");
+					break;
+				}
+				case RUN_SETPOS:
+					if (r.tool >= spaces[1].num_axes) {
+						debug("Not setting position of invalid extruder %d", r.tool);
+						break;
+					}
+					setpos(1, r.tool, r.X);
+					break;
+				case RUN_WAIT:
+					if (r.X > 0) {
+						run_file_timer.it_value.tv_sec = r.X;
+						run_file_timer.it_value.tv_nsec = (r.X - run_file_timer.it_value.tv_sec) * 1e9;
+						run_file_wait += 1;
+						timerfd_settime(pollfds[0].fd, 0, &run_file_timer, NULL);
 					}
 					break;
-				}
-				if (tool < 0 || tool >= num_temps) {
-					if (tool != -1)
-						debug("cannot wait for invalid temp %d", tool);
-					break;
-				}
-				else
-					rundebug("waittemp %d", tool);
-				if (temps[tool].adctarget[0] >= 0 && temps[tool].adctarget[0] < MAXINT) {
-					rundebug("waiting");
-					run_file_wait_temp += 1;
-					waittemp(tool, temps[tool].target[0], temps[tool].max_alarm);
-				}
-				else
-					rundebug("not waiting");
-				break;
-			}
-			case RUN_SETPOS:
-				if (r.tool >= spaces[1].num_axes) {
-					debug("Not setting position of invalid extruder %d", r.tool);
-					break;
-				}
-				setpos(1, r.tool, r.X);
-				break;
-			case RUN_WAIT:
-				if (r.X > 0) {
-					run_file_timer.it_value.tv_sec = r.X;
-					run_file_timer.it_value.tv_nsec = (r.X - run_file_timer.it_value.tv_sec) * 1e9;
+				case RUN_CONFIRM:
+				{
+					int len = min(strings[r.tool].len, 250);
+					memcpy(datastore, &reinterpret_cast<char const *>(run_file_map)[run_file_first_string + strings[r.tool].start], len);
 					run_file_wait += 1;
-					timerfd_settime(pollfds[0].fd, 0, &run_file_timer, NULL);
+					send_host(CMD_CONFIRM, r.X ? 1 : 0, 0, 0, 0, len);
+					break;
 				}
-				break;
-			case RUN_CONFIRM:
-			{
-				int len = min(strings[r.tool].len, 250);
-				memcpy(datastore, &reinterpret_cast<char const *>(run_file_map)[run_file_first_string + strings[r.tool].start], len);
-				run_file_wait += 1;
-				send_host(CMD_CONFIRM, r.X ? 1 : 0, 0, 0, 0, len);
-				break;
+				case RUN_PARK:
+					run_file_wait += 1;
+					send_host(CMD_PARKWAIT);
+					break;
+				default:
+					debug("Invalid record type %d in %s", r.type, run_file_name);
+					break;
 			}
-			case RUN_PARK:
-				run_file_wait += 1;
-				send_host(CMD_PARKWAIT);
-				break;
-			default:
-				debug("Invalid record type %d in %s", r.type, run_file_name);
-				break;
+			settings.run_file_current += 1;
+			if (!computing_move && (settings.queue_start != settings.queue_end || settings.queue_full))
+				must_move = true;
 		}
-		settings.run_file_current += 1;
+		if (must_move) {
+			while (!computing_move && (settings.queue_start != settings.queue_end || settings.queue_full))
+				cbs += next_move();
+		}
 	}
-	if (!computing_move && (settings.queue_start != settings.queue_end || settings.queue_full)) {
-		int cbs = next_move();
-		if (cbs > 0)
-			send_host(CMD_MOVECB, cbs);
-	}
+	if (cbs > 0)
+		send_host(CMD_MOVECB, cbs);
 	buffer_refill();
 	rundebug("run queue done");
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
