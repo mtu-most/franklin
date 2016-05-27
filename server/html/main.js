@@ -642,7 +642,7 @@ function port_state(state) { // {{{
 		case 1:
 			ports[port][t].RemoveClass('nodetect');
 			ports[port][t].AddClass('noflash');
-			disable_buttons(true);
+			disable_buttons(false);
 			break;
 		case 2:
 			ports[port][t].AddClass('nodetect');
@@ -1095,8 +1095,10 @@ function temp_update(index) { // {{{
 	update_pin([['temp', index], 'fan_pin']);
 	update_pin([['temp', index], 'thermistor_pin']);
 	update_float(printer, [['temp', index], 'fan_duty']);
-	update_float(printer, [['temp', index], 'heater_limit']);
-	update_float(printer, [['temp', index], 'fan_limit']);
+	update_float(printer, [['temp', index], 'heater_limit_l']);
+	update_float(printer, [['temp', index], 'heater_limit_h']);
+	update_float(printer, [['temp', index], 'fan_limit_l']);
+	update_float(printer, [['temp', index], 'fan_limit_h']);
 	update_float(printer, [['temp', index], 'fan_temp']);
 	update_float(printer, [['temp', index], 'R0']);
 	update_float(printer, [['temp', index], 'R1']);

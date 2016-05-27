@@ -28,7 +28,7 @@
 #include <sys/types.h>
 #include <sys/timerfd.h>
 
-#define PROTOCOL_VERSION ((uint32_t)1)	// Required version response in BEGIN.
+#define PROTOCOL_VERSION ((uint32_t)2)	// Required version response in BEGIN.
 #define ID_SIZE 8
 #define UUID_SIZE 16
 
@@ -183,8 +183,8 @@ struct Temp {
 	Pin_t power_pin[2];
 	Pin_t thermistor_pin;
 	// Volatile variables.
-	double target[2], limit[2];			// target and limit temperature; NAN to disable. [K]
-	int32_t adctarget[2], adclimit[2];		// target and limit temperature in adc counts; -1 for disabled. [adccounts]
+	double target[2], limit[2][2];			// target and limit temperature; NAN to disable. [K]
+	int32_t adctarget[2], adclimit[2][2];		// target and limit temperature in adc counts; -1 for disabled. [adccounts]
 	int32_t adclast;		// last measured temperature. [adccounts]
 	/*
 	double core_T, shell_T;	// current temperatures. [K]
@@ -580,7 +580,7 @@ void arch_addpos(int s, int m, double diff);
 void arch_stop(bool fake = false);
 void arch_home();
 bool arch_running();
-//void arch_setup_temp(int which, int thermistor_pin, int active, int power_pin = -1, bool power_inverted = true, int power_target = 0, int power_limit = ~0, int fan_pin = -1, bool fan_inverted = false, int fan_target = 0, int fan_limit = ~0, double hold_time = 0);
+//void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit_l = ~0, int heater_limit_h = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit_l = ~0, int fan_limit_h = ~0, double hold_time = 0);
 void arch_start_move(int extra);
 bool arch_send_fragment();
 

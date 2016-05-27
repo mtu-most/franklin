@@ -260,13 +260,23 @@ function Pins_space(space, motor) {
 
 // Temp. {{{
 function Temp_setup(num) {
-	var e = [Name('temp', num), ['fan_temp', 0, 1], ['heater_limit', 0, 1], ['fan_limit', 0, 1], Id([['temp', num], 'bed'])];
+	var e = [Name('temp', num), ['fan_temp', 0, 1], Id([['temp', num], 'bed'])];
 	for (var i = 1; i < e.length - 1; ++i) {
 		var div = Create('div');
 		div.Add(Float([['temp', num], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
-	return make_tablerow(temp_name(printer, num), e, ['rowtitle5']);
+	return make_tablerow(temp_name(printer, num), e, ['rowtitle3']);
+}
+
+function Temp_limits(num) {
+	var e = [['heater_limit_l', 0, 1], ['heater_limit_h', 0, 1], ['fan_limit_l', 0, 1], ['fan_limit_h', 0, 1]];
+	for (var i = 0; i < e.length; ++i) {
+		var div = Create('div');
+		div.Add(Float([['temp', num], e[i][0]], e[i][1], e[i][2]));
+		e[i] = div;
+	}
+	return make_tablerow(temp_name(printer, num), e, ['rowtitle4']);
 }
 
 function Temp_hardware(num) {
@@ -783,24 +793,37 @@ function Printer() {	// {{{
 		'Temp Settings',
 		'Name',
 		'Fan Temp (°C)',
-		'Heater Limit (°C)',
-		'Fan Limit (°C)',
 		'Bed'
 	], [
-		'htitle5',
-		'title5',
-		'title5',
-		'title5',
-		'title5',
-		'title5'
+		'htitle3',
+		'title3',
+		'title3',
+		'title3'
 	], [
 		null,
 		'Name of the temperature control',
 		'Temerature above which the cooling is turned on.',
-		'Temerature below which the heater is never turned on.  Set to NaN to disable limit.  (Must always be lower than the target.)',
-		'Temerature above which the cooling is never turned on.  Set to NaN to disable limit.  (Must always be higher than the target.)',
 		'Whether this Temp is the heated bed, used by G-code commands M140 and M190.'
 	]).AddMultiple('temp', Temp_setup)]);
+	setup.Add([make_table().AddMultipleTitles([
+		'Temp Limits',
+		'Heater Low Limit (°C)',
+		'Heater High Limit (°C)',
+		'Fan Low Limit (°C)',
+		'Fan High Limit (°C)'
+	], [
+		'htitle4',
+		'title4',
+		'title4',
+		'title4',
+		'title4'
+	], [
+		null,
+		'Temerature below which the heater is never turned on.  Set to NaN to disable limit.',
+		'Temerature above which the heater is never turned on.  Set to NaN to disable limit.',
+		'Temerature below which the cooling is never turned on.  Set to NaN to disable limit.',
+		'Temerature above which the cooling is never turned on.  Set to NaN to disable limit.'
+	]).AddMultiple('temp', Temp_limits)]);
 	setup.Add([make_table().AddMultipleTitles([
 		'Temp Hardware',
 		'R0 (kΩ) or a',

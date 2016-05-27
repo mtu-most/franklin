@@ -65,8 +65,14 @@ void settemp(int which, double target) {
 		//debug("Temp %d set to %f", which, target);
 		initialized = true;
 	}
-	if (temps[which].thermistor_pin.valid())
-		arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin[0].valid() ? temps[which].power_pin[0].pin : ~0, temps[which].power_pin[0].inverted(), temps[which].adctarget[0], temps[which].adclimit[0], temps[which].power_pin[1].valid() ? temps[which].power_pin[1].pin : ~0, temps[which].power_pin[1].inverted(), temps[which].adctarget[1], temps[which].adclimit[1], temps[which].hold_time);
+	if (temps[which].thermistor_pin.valid()) {
+		int i = isnan(temps[which].beta) && temps[which].R0 >= 0 ? 0 : 1;
+		int llh = temps[which].adclimit[0][0];
+		int lhh = temps[which].adclimit[0][1];
+		int llf = temps[which].adclimit[1][0];
+		int lhf = temps[which].adclimit[1][1];
+		arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin[0].valid() ? temps[which].power_pin[0].pin : ~0, temps[which].power_pin[0].inverted(), temps[which].adctarget[0], llh, lhh, temps[which].power_pin[1].valid() ? temps[which].power_pin[1].pin : ~0, temps[which].power_pin[1].inverted(), temps[which].adctarget[1], llf, lhf, temps[which].hold_time);
+	}
 }
 
 void waittemp(int which, double mintemp, double maxtemp) {

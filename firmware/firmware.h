@@ -27,7 +27,7 @@
 
 #define ID_SIZE 8	// Number of bytes in printerid; 8.
 #define UUID_SIZE 16	// Number of bytes in uuid; 16.
-#define PROTOCOL_VERSION 1
+#define PROTOCOL_VERSION 2
 
 #define ADC_INTERVAL 1000	// Delay 1 ms between ADC measurements.
 
@@ -273,7 +273,7 @@ static inline int16_t minpacketlen() {
 	case CMD_MSETUP:
 		return 8;
 	case CMD_ASETUP:
-		return 14;
+		return 18;
 	case CMD_HOME:
 		return 5;
 	case CMD_START_MOVE:
@@ -408,8 +408,8 @@ EXTERN uint8_t last_len;	// copy of settings[last_fragment].len, for when curren
 
 struct Adc {
 	uint8_t linked[2];
-	uint16_t value[2];	// bit 15 in [0] set => invalid; bit 14 set => linked inverted.
-	uint16_t limit[2];
+	int16_t value[2];	// bit 15 in [0] set => invalid; bit 14 set => linked inverted.
+	int16_t limit[2][2];
 	bool is_on[2];
 	uint16_t hold_time;
 	unsigned long last_change;

@@ -284,8 +284,9 @@ void packet()
 				}
 			}
 			adc[a].linked[i] = command(2 + i);
-			adc[a].limit[i] = read_16(4 + 2 * i);
-			adc[a].value[i] = read_16(8 + 2 * i);
+			adc[a].limit[i][0] = read_16(4 + 2 * i);
+			adc[a].limit[i][1] = read_16(8 + 2 * i);
+			adc[a].value[i] = read_16(12 + 2 * i);
 			if (changed && ~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
 				pin[adc[a].linked[i]].num_temps += 1;
 				if (adc[a].is_on[i]) {
@@ -300,7 +301,7 @@ void packet()
 			//debug("adc %d link %d pin %d value %x", a, i, adc[a].linked[i], adc[a].value[i]);
 		}
 		adc[a].last_change = millis();
-		adc[a].hold_time = read_16(12);
+		adc[a].hold_time = read_16(16);
 		if (adc_phase == INACTIVE && ~adc[a].value[0] & 0x8000) {
 			adc_phase = PREPARING;
 			adc_current = a;

@@ -445,7 +445,10 @@ class Connection: # {{{
 			process.kill()	# In case it wasn't dead yet.
 		except OSError:
 			pass
-		process.communicate()	# Clean up.
+		try:
+			process.communicate()	# Clean up.
+		except:
+			pass
 		broadcast(None, 'blocked', port, None)
 		broadcast(None, 'message', port, '')
 		broadcast(None, 'port_state', port, 0)
@@ -557,7 +560,10 @@ class Port: # {{{
 			orphans[self.run_id].call('die', ('admin', 'replaced by new connection',), {}, lambda success, ret: None)
 			try:
 				orphans[self.run_id].process.kill()
-				orphans[self.run_id].process.communicate()
+				try:
+					orphans[self.run_id].process.communicate()
+				except:
+					pass
 			except OSError:
 				pass
 			del orphans[self.run_id]
@@ -612,7 +618,10 @@ class Port: # {{{
 	def die(self, reason = 'at request'): # {{{
 		log('{} died {}.'.format(self.name, reason))
 		self.process.kill()
-		self.process.communicate()
+		try:
+			self.process.communicate()
+		except:
+			pass
 		for t in range(3):
 			for w in self.waiters[t]:
 				self.waiters[t][w](False, 'Printer {} died {}'.format(self.name, reason))
@@ -627,7 +636,10 @@ class Port: # {{{
 			if data == b'':
 				# Connection closed.
 				log('%s died.' % self.name)
-				self.process.communicate()	# Clean up the zombie.
+				try:
+					self.process.communicate()	# Clean up the zombie.
+				except:
+					pass
 				for t in range(3):
 					for w in self.waiters[t]:
 						self.waiters[t][w](False, 'Printer died')

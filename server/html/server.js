@@ -361,10 +361,12 @@ function _setup_updater() {
 			printers[port].temps[index].thermistor_pin = values[8];
 			printers[port].temps[index].fan_temp = values[9];
 			printers[port].temps[index].fan_duty = values[10];
-			printers[port].temps[index].heater_limit = values[11];
-			printers[port].temps[index].fan_limit = values[12];
-			printers[port].temps[index].hold_time = values[13];
-			printers[port].temps[index].value = values[14];
+			printers[port].temps[index].heater_limit_l = values[11];
+			printers[port].temps[index].heater_limit_h = values[12];
+			printers[port].temps[index].fan_limit_l = values[13];
+			printers[port].temps[index].fan_limit_h = values[14];
+			printers[port].temps[index].hold_time = values[15];
+			printers[port].temps[index].value = values[16];
 			trigger_update(port, 'temp_update', index);
 		},
 		gpio_update: function(port, index, values) {

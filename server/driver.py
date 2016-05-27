@@ -2112,14 +2112,16 @@ class Printer: # {{{
 			self.id = id
 			self.value = float('nan')
 		def read(self, data):
-			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp, self.fan_duty, heater_limit, fan_limit, self.hold_time = struct.unpack('=dddddHHHddddd', data)
+			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp, self.fan_duty, heater_limit_l, heater_limit_h, fan_limit_l, fan_limit_h, self.hold_time = struct.unpack('=dddddHHHddddddd', data)
 			try:
 				self.Rc = math.exp(logRc)
 			except:
 				self.Rc = float('nan')
 			self.Tc = Tc - C0
-			self.heater_limit = heater_limit - C0
-			self.fan_limit = fan_limit - C0
+			self.heater_limit_l = heater_limit_l - C0
+			self.heater_limit_h = heater_limit_h - C0
+			self.fan_limit_l = fan_limit_l - C0
+			self.fan_limit_h = fan_limit_h - C0
 			self.fan_temp = fan_temp - C0
 			self.fan_pin ^= 0x200
 		def write(self):
@@ -2127,14 +2129,14 @@ class Printer: # {{{
 				logRc = math.log(self.Rc)
 			except:
 				logRc = float('nan')
-			return struct.pack('=dddddHHHddddd', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0, self.fan_duty, self.heater_limit + C0, self.fan_limit + C0, self.hold_time)
+			return struct.pack('=dddddHHHddddddd', self.R0, self.R1, logRc, self.Tc + C0, self.beta, self.heater_pin, self.fan_pin ^ 0x200, self.thermistor_pin, self.fan_temp + C0, self.fan_duty, self.heater_limit_l + C0, self.heater_limit_h + C0, self.fan_limit_l + C0, self.fan_limit_h + C0, self.hold_time)
 		def export(self):
-			return [self.name, self.R0, self.R1, self.Rc, self.Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp, self.fan_duty, self.heater_limit, self.fan_limit, self.hold_time, self.value]
+			return [self.name, self.R0, self.R1, self.Rc, self.Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, self.fan_temp, self.fan_duty, self.heater_limit_l, self.heater_limit_h, self.fan_limit_l, self.fan_limit_h, self.hold_time, self.value]
 		def export_settings(self):
 			ret = '[temp %d]\r\n' % self.id
 			ret += 'name = %s\r\n' % self.name
 			ret += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('heater_pin', 'fan_pin', 'thermistor_pin')])
-			ret += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('fan_temp', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'fan_duty', 'heater_limit', 'fan_limit', 'hold_time')])
+			ret += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('fan_temp', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time')])
 			return ret
 	# }}}
 	class Gpio: # {{{
@@ -2630,7 +2632,7 @@ class Printer: # {{{
 		keys = {
 				'general': {'num_temps', 'num_gpios', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'},
 				'space': {'type', 'num_axes', 'delta_angle', 'polar_max_r'},
-				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit', 'fan_limit', 'hold_time'},
+				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
 				'axis': {'name', 'park', 'park_order', 'min', 'max', 'home_pos2'},
 				'motor': {'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'home_pos', 'limit_v', 'limit_a', 'home_order'},
@@ -3179,13 +3181,13 @@ class Printer: # {{{
 	# Temp {{{
 	def get_temp(self, temp): # {{{
 		ret = {}
-		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit', 'fan_limit', 'hold_time'):
+		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'):
 			ret[key] = getattr(self.temps[temp], key)
 		return ret
 	# }}}
 	def expert_set_temp(self, temp, update = True, **ka): # {{{
 		ret = {}
-		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit', 'fan_limit', 'hold_time'):
+		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'):
 			if key in ka:
 				setattr(self.temps[temp], key, ka.pop(key))
 		self._send_packet(struct.pack('=BB', protocol.command['WRITE_TEMP'], temp) + self.temps[temp].write())

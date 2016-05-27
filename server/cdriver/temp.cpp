@@ -41,19 +41,29 @@ void Temp::load(int32_t &addr, int id)
 	bool old_valid = thermistor_pin.valid();
 	thermistor_pin.read(read_16(addr));
 	target[1] = read_float(addr);
+	adctarget[1] = toadc(target[1], MAXINT);
 	arch_set_duty(power_pin[1], read_float(addr));
 	for (int i = 0; i < 2; ++i) {
-		limit[i] = read_float(addr);
-		adctarget[i] = toadc(target[i], MAXINT);
-		adclimit[i] = toadc(limit[i], MAXINT);
+		limit[i][0] = read_float(addr);
+		limit[i][1] = read_float(addr);
+		int adc_i = isnan(beta) && R0 >= 0 ? 0 : 1;
+		debug("%d %d %f %f %d", id, i, beta, R0, adc_i);
+		adclimit[i][adc_i] = toadc(limit[i][0], adc_i * MAXINT);
+		adclimit[i][1 - adc_i] = toadc(limit[i][1], (1 - adc_i) * MAXINT);
 		SET_OUTPUT(power_pin[i]);
 	}
 	last_change_time = millis();
 	hold_time = read_float(addr);
 	if (old_pin != thermistor_pin.write() && old_valid)
 		arch_setup_temp(~0, old_pin_pin, false);
-	if (thermistor_pin.valid())
-		arch_setup_temp(id, thermistor_pin.pin, true, power_pin[0].valid() ? power_pin[0].pin : ~0, power_pin[0].inverted(), adctarget[0], adclimit[0], power_pin[1].valid() ? power_pin[1].pin : ~0, power_pin[1].inverted(), adctarget[1], adclimit[1], hold_time);
+	if (thermistor_pin.valid()) {
+		int llh = adclimit[0][0];
+		int lhh = adclimit[0][1];
+		int llf = adclimit[1][0];
+		int lhf = adclimit[1][1];
+		//debug("limits: %x %x %x %x", llh, lhh, llf, lhf);
+		arch_setup_temp(id, thermistor_pin.pin, true, power_pin[0].valid() ? power_pin[0].pin : ~0, power_pin[0].inverted(), adctarget[0], llh, lhh, power_pin[1].valid() ? power_pin[1].pin : ~0, power_pin[1].inverted(), adctarget[1], llf, lhf, hold_time);
+	}
 }
 
 void Temp::save(int32_t &addr)
@@ -75,8 +85,10 @@ void Temp::save(int32_t &addr)
 	write_16(addr, thermistor_pin.write());
 	write_float(addr, target[1]);
 	write_float(addr, arch_get_duty(power_pin[1]));
-	write_float(addr, limit[0]);
-	write_float(addr, limit[1]);
+	write_float(addr, limit[0][0]);
+	write_float(addr, limit[0][1]);
+	write_float(addr, limit[1][0]);
+	write_float(addr, limit[1][1]);
 	write_float(addr, hold_time);
 }
 
@@ -138,9 +150,11 @@ void Temp::init() {
 	for (int i = 0; i < 2; ++i) {
 		power_pin[i].init();
 		target[i] = NAN;
-		limit[i] = NAN;
+		limit[i][0] = NAN;
+		limit[i][1] = NAN;
 		adctarget[i] = MAXINT;
-		adclimit[i] = MAXINT;
+		adclimit[i][0] = MAXINT;
+		adclimit[i][1] = 0;
 		is_on[i] = false;
 	}
 	following_gpios = ~0;
@@ -174,9 +188,11 @@ void Temp::copy(Temp &dst) {
 	for (int i = 0; i < 2; ++i) {
 		dst.power_pin[i].read(power_pin[i].write());
 		dst.target[i] = target[i];
-		dst.limit[i] = limit[i];
+		dst.limit[i][0] = limit[i][0];
+		dst.limit[i][1] = limit[i][1];
 		dst.adctarget[i] = adctarget[i];
-		dst.adclimit[i] = adclimit[i];
+		dst.adclimit[i][0] = adclimit[i][0];
+		dst.adclimit[i][1] = adclimit[i][1];
 		dst.is_on[i] = is_on[i];
 	}
 	dst.thermistor_pin.read(thermistor_pin.write());
