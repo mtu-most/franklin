@@ -559,8 +559,8 @@ class Port: # {{{
 			websocketd.remove_read(orphans[self.run_id].input_handle)
 			orphans[self.run_id].call('die', ('admin', 'replaced by new connection',), {}, lambda success, ret: None)
 			try:
-				orphans[self.run_id].process.kill()
 				try:
+					orphans[self.run_id].process.kill()
 					orphans[self.run_id].process.communicate()
 				except:
 					pass
@@ -617,8 +617,8 @@ class Port: # {{{
 	# }}}
 	def die(self, reason = 'at request'): # {{{
 		log('{} died {}.'.format(self.name, reason))
-		self.process.kill()
 		try:
+			self.process.kill()
 			self.process.communicate()
 		except:
 			pass
