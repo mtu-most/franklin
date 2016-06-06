@@ -443,7 +443,7 @@ class Connection: # {{{
 		d = (yield)
 		try:
 			process.kill()	# In case it wasn't dead yet.
-		except OSError:
+		except:
 			pass
 		try:
 			process.communicate()	# Clean up.
@@ -559,12 +559,12 @@ class Port: # {{{
 			websocketd.remove_read(orphans[self.run_id].input_handle)
 			orphans[self.run_id].call('die', ('admin', 'replaced by new connection',), {}, lambda success, ret: None)
 			try:
-				try:
-					orphans[self.run_id].process.kill()
-					orphans[self.run_id].process.communicate()
-				except:
-					pass
-			except OSError:
+				orphans[self.run_id].process.kill()
+			except:
+				pass
+			try:
+				orphans[self.run_id].process.communicate()
+			except:
 				pass
 			del orphans[self.run_id]
 			self.detecting = False
@@ -619,6 +619,9 @@ class Port: # {{{
 		log('{} died {}.'.format(self.name, reason))
 		try:
 			self.process.kill()
+		except:
+			pass
+		try:
 			self.process.communicate()
 		except:
 			pass
@@ -866,7 +869,7 @@ def disable(role, port): # {{{
 			websocketd.remove_read(p.input_handle)
 			try:
 				p.process.kill()
-			except OSError:
+			except:
 				pass
 			try:
 				p.process.communicate()
