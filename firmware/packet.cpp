@@ -277,11 +277,6 @@ void packet()
 				//debug("unset for change adc %d %d: %d", a, i, adc[a].linked[i]);
 				pin[adc[a].linked[i]].num_temps -= 1;
 				UNSET(adc[a].linked[i]);
-				if (adc[a].is_on[i]) {
-					adc[a].is_on[i] = false;
-					if (i == 0)
-						led_fast -= 1;
-				}
 			}
 			adc[a].linked[i] = command(2 + i);
 			adc[a].limit[i][0] = read_16(4 + 2 * i);

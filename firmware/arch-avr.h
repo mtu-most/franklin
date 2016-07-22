@@ -1201,8 +1201,8 @@ inline bool GET(uint8_t pin_no) { // {{{
 EXTERN uint8_t avr_outputs_last;
 inline void arch_outputs() { // {{{
 	uint8_t now = TCNT0;
-	uint16_t interval = now - avr_outputs_last;
-	if (interval == 0)
+	int16_t interval = (now - avr_outputs_last) & 0xff;
+	if (interval <= 0)
 		return;
 	avr_outputs_last = now;
 	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {

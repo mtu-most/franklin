@@ -52,58 +52,58 @@ static void handle_adc() {
 	unsigned long now = millis();
 	if (unsigned(now - adc[adc_current].last_change) >= adc[adc_current].hold_time) {
 		for (uint8_t n = 0; n < 2; ++n) {
-			if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS) {
-				bool invert = (adc[adc_current].value[n] & 0x4000) == 0;
-				int16_t treshold = adc[adc_current].value[n] & 0x3fff;
-				bool higher = value >= treshold;
-				//debug("limits %d %d %x %x %x %x", adc_current, n, adc[adc_current].limit[n][0], adc[adc_current].limit[n][1], value, adc[adc_current].value[n]);
-				if (value < (adc[adc_current].limit[n][0] & 0x3fff)) {
-					if (adc[adc_current].limit[n][0] & 0x4000) {
-						//debug("limit l0 %d %d", adc_current, n);
-						higher = true;
-					}
-					else {
-						//debug("limit l1 %d %d", adc_current, n);
-						higher = false;
-					}
-				}
-				else if (value >= (adc[adc_current].limit[n][1] & 0x3fff)) {
-					if (adc[adc_current].limit[n][1] & 0x4000) {
-						//debug("limit h0 %d %d", adc_current, n);
-						higher = true;
-					}
-					else {
-						//debug("limit h1 %d %d", adc_current, n);
-						higher = false;
-					}
-				}
-				//debug("adc test diff %d hold %d current %d %d higher %d invert %d", int(now - adc[adc_current].last_change), adc[adc_current].hold_time, adc_current, n, higher, invert);
-				if (invert ^ higher) {
-					if (adc[adc_current].is_on[n]) {
-						//debug("switch off");
-						adc[adc_current].last_change = now;
-						RESET(adc[adc_current].linked[n]);
-						if (n == 0)
-							led_fast -= 1;
-						adc[adc_current].is_on[n] = false;
-					}
-					else {
-						//debug("already off");
-					}
+			bool invert = (adc[adc_current].value[n] & 0x4000) == 0;
+			int16_t treshold = adc[adc_current].value[n] & 0x3fff;
+			bool higher = value >= treshold;
+			//debug("limits %d %d %x %x %x %x", adc_current, n, adc[adc_current].limit[n][0], adc[adc_current].limit[n][1], value, adc[adc_current].value[n]);
+			if (value < (adc[adc_current].limit[n][0] & 0x3fff)) {
+				if (adc[adc_current].limit[n][0] & 0x4000) {
+					//debug("limit l0 %d %d", adc_current, n);
+					higher = true;
 				}
 				else {
-					//debug("adc set %d %d %d", n, value, adc[adc_current].value[n]);
-					if (!adc[adc_current].is_on[n]) {
-						//debug("switch on");
+					//debug("limit l1 %d %d", adc_current, n);
+					higher = false;
+				}
+			}
+			else if (value >= (adc[adc_current].limit[n][1] & 0x3fff)) {
+				if (adc[adc_current].limit[n][1] & 0x4000) {
+					//debug("limit h0 %d %d", adc_current, n);
+					higher = true;
+				}
+				else {
+					//debug("limit h1 %d %d", adc_current, n);
+					higher = false;
+				}
+			}
+			//debug("adc test diff %d hold %d current %d %d higher %d invert %d", int(now - adc[adc_current].last_change), adc[adc_current].hold_time, adc_current, n, higher, invert);
+			if (invert ^ higher) {
+				if (adc[adc_current].is_on[n]) {
+					debug("switch off");
+					adc[adc_current].last_change = now;
+					if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS)
+						RESET(adc[adc_current].linked[n]);
+					if (n == 0)
+						led_fast -= 1;
+					adc[adc_current].is_on[n] = false;
+				}
+				else {
+					//debug("already off");
+				}
+			}
+			else {
+				//debug("adc set %d %d %d", n, value, adc[adc_current].value[n]);
+				if (!adc[adc_current].is_on[n]) {
+					debug("switch on");
+					if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS)
 						SET(adc[adc_current].linked[n]);
-						adc[adc_current].last_change = now;
-						if (n == 0)
-							led_fast += 1;
-						adc[adc_current].is_on[n] = true;
-					}
-					else {
-						//debug("already on");
-					}
+					adc[adc_current].last_change = now;
+					if (n == 0)
+						led_fast += 1;
+					adc[adc_current].is_on[n] = true;
+				}
+				else {
+					//debug("already on");
 				}
 			}
 		}

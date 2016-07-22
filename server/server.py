@@ -368,7 +368,7 @@ class Connection: # {{{
 				log('skipping %s because hardware information is incomplete (%s)' % (boards[tag]['name'], repr(boards[tag])))
 				del boards[tag]
 				continue
-			if int(boards[tag]['upload.maximum_size']) < 32000:
+			if int(boards[tag]['upload.maximum_size']) < 30000:
 				# Not enough memory; don't complain about skipping this board.
 				del boards[tag]
 				continue

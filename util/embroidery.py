@@ -49,7 +49,7 @@ import websocketd
 import time
 import fhs
 
-config = fhs.init({'port': 8000, 'tls': 'False', 'motor': 3, 'sensor': 4})
+config = fhs.init({'port': '8000', 'tls': 'False', 'motor': 3, 'sensor': 4})
 motor = int(config['motor'])
 sensor = int(config['sensor'])
 tls = config['tls'].lower() != 'false'

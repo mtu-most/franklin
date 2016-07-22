@@ -2960,7 +2960,7 @@ class Printer: # {{{
 		if self.confirmer is not None:
 			self._broadcast(target, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
-	def admin_disconnect(self):
+	def admin_disconnect(self): # {{{
 		self._send_packet(struct.pack('=B', protocol.command['FORCE_DISCONNECT']))
 		self._close(False)
 	# }}}
