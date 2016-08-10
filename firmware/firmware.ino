@@ -160,7 +160,7 @@ int main(void) {
 		// Handle all periodic things.
 		// LED
 		if (led_pin < NUM_DIGITAL_PINS)
-			handle_led();	// heart beat.
+			handle_led();	// heartbeat.
 		handle_motors();
 		// ADC
 		handle_adc();

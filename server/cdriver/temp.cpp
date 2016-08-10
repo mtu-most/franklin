@@ -47,7 +47,6 @@ void Temp::load(int32_t &addr, int id)
 		limit[i][0] = read_float(addr);
 		limit[i][1] = read_float(addr);
 		int adc_i = isnan(beta) && R0 >= 0 ? 0 : 1;
-		debug("%d %d %f %f %d", id, i, beta, R0, adc_i);
 		adclimit[i][adc_i] = toadc(limit[i][0], adc_i * MAXINT);
 		adclimit[i][1 - adc_i] = toadc(limit[i][1], (1 - adc_i) * MAXINT);
 		SET_OUTPUT(power_pin[i]);

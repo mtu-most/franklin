@@ -1507,6 +1507,7 @@ class Printer: # {{{
 		pos = [[float('nan') for a in range(6)], [0., 0.], float('inf')]
 		time_dist = [0., 0.]
 		pending = []
+		arc = []	# center, r, diff, angle_start, angle_diff
 		tool_changed = False
 		def add_timedist(type, nums):
 			if type == protocol.parsed['LINE']:
@@ -1531,6 +1532,7 @@ class Printer: # {{{
 					nums = [nums['T'], nums['X'], nums['Y'], nums['Z'], nums['E'], nums['f'], nums['F']]
 				nums += [0] * (7 - len(nums))
 				if not force and type == protocol.parsed['LINE']:
+					# Update bounding box.
 					for i in range(3):
 						value = nums[i + 1]
 						if math.isnan(value):
@@ -1544,44 +1546,73 @@ class Printer: # {{{
 					# Analyze this move in combination with pending moves.
 					if len(pending) == 0:
 						pending.append([0, pos[0][0], pos[0][1], pos[0][2], pos[1][nums[0]], pos[2], pos[2]])
-					if len(pending) < 2:
-						pending.append(nums)
+					pending.append(nums)
+					if len(pending) == 2:
+						if pending[0][3] != pending[1][3]:
+							log('non equal z')
+							flush_pending()
+							return
+						return
+					def center(a, b, c):
+						'''Given 3 points, determine center, radius, angles of points on circle, deviation of polygon from circle.'''
+						try:
+							x0, y0, z0 = a
+							x1, y1, z1 = b
+							x2, y2, z2 = c
+							xc = ((y0 - y1) * (y0 ** 2 - y2 ** 2 + x0 ** 2 - x2 ** 2) - (y0 - y2) * (x0 ** 2 - x1 ** 2 + y0 ** 2 - y1 ** 2)) / (2 * (-x0 * y1 - x2 * y0 + x2 * y1 + x1 * y0 + x0 * y2 - x1 * y2))
+							yc = (x0 ** 2 - x1 ** 2 + y0 ** 2 - y1 ** 2 - 2 * xc * (x0 - x1)) / (2 * (y0 - y1))
+							r = ((xc - x0) ** 2 + (yc - y0) ** 2) ** .5
+						except ZeroDivisionError:
+							log('div by 0: %s' % repr((a, b, c)))
+							return (None, None, None, float('inf'))
+						angles = []
+						for p in a, b, c:
+							angles.append(math.atan2(p[1] - yc, p[0] - xc))
+						mid = [(p2 + p1) / 2 for p1, p2 in zip(a, b)]
+						amid = (angles[0] + angles[1]) / 2
+						cmid = [math.cos(amid) * r + xc, math.sin(amid) * r + yc]
+						diff = sum([(p2 - p1) ** 2 for p1, p2 in zip(mid, cmid)])
+						log('center returns %s' % repr(((xc, yc, z0), r, angles, diff)))
+						return ((xc, yc, z0), r, angles, diff)
+					epsilon = .1	# TODO: check if this should be configurable
+					aepsilon = math.radians(10)	# TODO: check if this should be configurable
 					if len(pending) == 3:
 						# If the points are not on a circle with equal angles, or the angle is too large, push pending[1] through to output.
 						# Otherwise, record settings.
-						def center(a, b, c):
-							tb = ((b[0] - c[0]) * (c[0] - a[0]) / 2 - (b[1] - c[1]) * (c[1] - a[1]) / 2) / ((b[0] - a[0]) * (c[1] - a[1]) - (b[0] - c[0]) * (c[0] - a[0]))
-							ctr = (b[0] - a[0] / 2 + tb * (b[1] - a[1]), b[1] - a[1] / 2 + tb * (b[0] - a[0])) 
-							r = ((a[0] - ctr[0]) ** 2 + (a[1] - ctr[1]) ** 2) ** .5
-							diff = 0
-							for o in b, c:
-								mid = (o[0] - a[0] / 2, o[1] - a[1] / 2)
-								d = ((mid[0] - ctr[0]) ** 2 + (mid[1] - ctr[1]) ** 2) ** .5
-								if abs(d - r) > diff:
-									diff = abs(d - r)
-							return (ctr, r, diff)
-						#TODO
-						#d12 = (pending[1][1] - pending[0][1]) ** 2 + (pending[1][2] - pending[0][2]) ** 2
-						#d22 = (pending[2][1] - pending[1][1]) ** 2 + (pending[2][2] - pending[1][2]) ** 2
-						#de1 = pending[1][4] - pending[0][4]
-						#de2 = pending[2][4] - pending[1][4]
-						#f = pending[0][5]
-						#current_arc = ...
-						pending.append(nums)
-					if len(pending) > 3:
-						# TODO: If new point doesn't fit on circle, push pending as circle to output.  Otherwise, add current point.
-						pending.append(nums)
-					flush_pending()
+						arc_ctr, arc_r, angles, arc_diff = center(pending[0][1:4], pending[1][1:4], pending[2][1:4])
+						if arc_diff > epsilon or abs(angles[1] - angles[0] - angles[2] + angles[1]) > aepsilon:
+							log('not arc: %s' % repr((arc_ctr, arc_r, angles, arc_diff)))
+							dst.write(struct.pack('=Bl' + 'd' * 8, protocol.parsed['LINE'], *add_timedist(type, pending[1])))
+							pending.pop(0)
+							return
+						arc[:] = [arc_ctr, arc_r, arc_diff, angles[0], (angles[2] - angles[0]) / 2]
+						return
+					a = arc[3] + arc[4] * (len(pending) - 1)
+					p = [arc[0][0] + math.cos(a) * arc[1], arc[0][1] + math.sin(a) * arc[1]]
+					# If new point doesn't fit on circle, push pending as circle to output.
+					if (p[0] - pending[-1][1]) ** 2 + (p[1] - pending[-1][2]) ** 2 > epsilon ** 2 or pending[0][3] != pending[-1][3]:
+						log('point not on arc; flushing %s' % repr((p, pending[-1][1:4])))
+						flush_arc()
 					return
 				else:
 					flush_pending()
 				#log(repr((type, nums, add_timedist(type, nums))))
 				dst.write(struct.pack('=Bl' + 'd' * 8, type, *add_timedist(type, nums)))
 			def flush_pending():
+				if len(pending) >= 3:
+					flush_arc()
 				tmp = pending[1:]
 				pending[:] = []
 				for p in tmp:
 					add_record(protocol.parsed['LINE'], p, True)
+			def flush_arc():
+				start = pending[0]
+				end = pending[-2]
+				tmp = pending[-1]
+				pending[:] = []
+				add_record(protocol.parsed['PRE_ARC'], {'X': arc[0][0], 'Y': arc[0][1], 'Z': start[3], 'E': 0, 'f': 0, 'F': 1 if arc[4] > 0 else -1, 'T': 0}, True)
+				add_record(protocol.parsed['ARC'], {'X': end[1], 'Y': end[2], 'Z': end[3], 'E': pos[1][current_extruder], 'f': -pos[2], 'F': -pos[2], 'T': current_extruder}, True)
+				pending.append(tmp)
 			def add_string(string):
 				if string is None:
 					return 0
@@ -2016,7 +2047,8 @@ class Printer: # {{{
 				return struct.pack('=dBdd', float('nan'), 0, float('-inf'), float('inf'))
 		def write_motor(self, motor):
 			if self.id == 2:
-				base = self.printer.spaces[0].motor[motor]
+				log('write motor for follower %d with base %s' % (motor, self.printer.spaces[0].motor))
+				base = self.printer.spaces[self.follower[motor]['space']].motor[self.follower[motor]['motor']]
 			else:
 				base = self.motor[motor]
 			return struct.pack('=HHHHHddddB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], base['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['home_pos'], base['limit_v'], base['limit_a'], int(base['home_order']))

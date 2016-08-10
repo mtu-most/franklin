@@ -492,12 +492,18 @@ static inline void SLOW_ISR() {
 			SET(motor[m].dir_pin);
 			//debug("set dir %d", m);
 		}
-		motor[m].steps_current += target;
-		motor[m].current_pos += sample > 0 ? target : -target;
 		for (uint8_t i = 0; i < target; ++i) {
-			SET(motor[m].step_pin);
-			RESET(motor[m].step_pin);
+			if (motor[m].intflags & Motor::INVERT_STEP) {
+				RESET(motor[m].step_pin);
+				SET(motor[m].step_pin);
+			}
+			else {
+				SET(motor[m].step_pin);
+				RESET(motor[m].step_pin);
+			}
 			//debug("pulse %d", m);
+			motor[m].steps_current += 1;
+			motor[m].current_pos += sample > 0 ? 1 : -1;
 		}
 	}
 	//debug("iteration frag %d sample %d = %d current %d pos %d", current_fragment, current_sample, (*current_buffer)[0][current_sample], motor[0].steps_current, motor[0].current_pos);

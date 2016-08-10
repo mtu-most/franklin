@@ -393,6 +393,11 @@ void packet()
 			write_stall();
 			return;
 		}
+		if ((command(1) & 1) != 0) {
+			debug("Odd fragment size (%d)", command(1));
+			write_stall();
+			return;
+		}
 		uint8_t next = (last_fragment + 1) & FRAGMENTS_PER_MOTOR_MASK;
 		if (next == current_fragment) {
 			debug("New buffer sent with full buffer.");
@@ -439,7 +444,7 @@ void packet()
 			write_stall();
 			return;
 		}
-		if (buffer[last_fragment][m][0] != 0 || buffer[last_fragment][m][1] != uint8_t(0x80)) {
+		if (*reinterpret_cast <volatile uint16_t *>(&buffer[last_fragment][m][0]) != uint16_t(0x8000)) {
 			debug("duplicate buffer %d to fill", m);
 			write_stall();
 			return;
