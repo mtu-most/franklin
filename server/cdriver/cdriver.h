@@ -28,7 +28,7 @@
 #include <sys/types.h>
 #include <sys/timerfd.h>
 
-#define PROTOCOL_VERSION ((uint32_t)2)	// Required version response in BEGIN.
+#define PROTOCOL_VERSION ((uint32_t)3)	// Required version response in BEGIN.
 #define ID_SIZE 8
 #define UUID_SIZE 16
 
@@ -132,7 +132,8 @@ enum Command {
 	CMD_READPIN,	// 1 byte: which channel. Reply: GPIO.
 	CMD_HOME,	// 1 byte: homing space; n bytes: homing type (0=pos, 1=neg, 3=no)
 	CMD_FORCE_DISCONNECT,	// 0
-	CMD_RECONNECT,	// 1 byte: name length, n bytes: port name
+	CMD_CONNECT,	// 8 byte: run ID, n bytes: port name (0-terminated)
+	CMD_RECONNECT,	// n bytes: port name (0-terminated)
 	CMD_RESUME,
 	CMD_GETTIME,
 	CMD_SPI,
@@ -523,8 +524,9 @@ EXTERN bool run_file_finishing;
 EXTERN int run_file_audio;
 
 // setup.cpp
-void setup(char const *port, char const *run_id);
-void setup_end();
+void setup();
+void connect(char const *port, char const *run_id);
+void connect_end();
 EXTERN bool host_block;
 EXTERN bool sent_names;
 
@@ -573,8 +575,8 @@ void RESET(Pin_t _pin);
 void SET(Pin_t _pin);
 void SET_OUTPUT(Pin_t _pin);
 void GET(Pin_t _pin, bool _default, void(*cb)(bool));
-void arch_setup_start(char const *port);
-void arch_setup_end(char const *run_id);
+void arch_setup_start();
+void arch_connect(char const *port, char const *run_id);
 void arch_motors_change();
 void arch_addpos(int s, int m, double diff);
 void arch_stop(bool fake = false);

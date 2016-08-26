@@ -66,11 +66,12 @@ command = {
 	'READPIN': 0x1a,
 	'HOME': 0x1b,
 	'FORCE_DISCONNECT': 0x1c,
-	'RECONNECT': 0x1d,
-	'RESUME': 0x1e,
-	'GETTIME': 0x1f,
-	'SPI': 0x20,
-	'ADJUSTPROBE': 0x21,
+	'CONNECT': 0x1d,
+	'RECONNECT': 0x1e,
+	'RESUME': 0x1f,
+	'GETTIME': 0x20,
+	'SPI': 0x21,
+	'ADJUSTPROBE': 0x22,
 	}
 
 rcommand = {

@@ -21,8 +21,6 @@
 var eval_code = ['[!(', ')!]'];
 var ref_code = ['[$(', ')$]'];
 var _active_printer;
-var printer;
-var port;
 var _update_handle;
 var _updater;
 var _templates;
@@ -32,8 +30,6 @@ var _ports;
 var autodetect;
 var blacklist;
 var audio_list;
-var scripts;
-var data;
 var role;
 
 var TYPE_CARTESIAN = 0;
@@ -44,84 +40,78 @@ var TYPE_FOLLOWER = 4;
 // }}}
 
 // {{{ Events from server.
-function trigger_update(called_port, name) {
-	//dbg(called_port + ':' + name + ',' + printers[called_port] + ',' + arguments[2]);
+function trigger_update(printer, name) {
 	if (window[name] === undefined) {
 		alert('called undefined update function ' + name);
 		return;
 	}
-	var old_port = port;
-	port = called_port;
-	var old_printer = printer;
-	if (port in printers)
-		printer = printers[port];
-	else
+	if (!(printer in printers)) {
+		if (printer)
+			alert('undefined printer referenced: ' + printer);
 		printer = null;
-	var args = [];
+	}
+	var args = [printer];
 	for (var a = 2; a < arguments.length; ++a)
 		args.push(arguments[a]);
+	console.info(name, args);
 	window[name].apply(null, args);
-	printer = old_printer;
-	port = old_port;
-	//dbg('done ' + name);
 }
 
 function _setup_updater() {
 	_updater = {
-		signal: function(port, name, arg) {
-			trigger_update(port, 'signal', name, arg);
+		signal: function(printer, name, arg) {
+			trigger_update(printer, 'signal', name, arg);
 		},
 		new_port: function(port) {
 			if (_ports.indexOf(port) < 0) {
 				_ports.push(port);
-				trigger_update(port, 'new_port');
+				trigger_update(null, 'new_port', port);
 			}
 		},
 		del_port: function(port) {
-			trigger_update(port, 'del_port');
+			trigger_update(null, 'del_port', port);
 			_ports.splice(_ports.indexOf(port), 1);
 		},
 		port_state: function(port, state) {
-			trigger_update(port, 'port_state', state);
+			trigger_update(null, 'port_state', port, state);
 		},
-		reset: function(port) {
-			trigger_update(port, 'reset');
+		reset: function(printer) {
+			trigger_update(printer, 'reset');
 		},
-		stall: function(port) {
-			trigger_update(port, 'stall');
+		stall: function(printer) {
+			trigger_update(printer, 'stall');
 		},
-		confirm: function(port, id, message) {
-			trigger_update(port, 'ask_confirmation', id, message);
+		confirm: function(printer, id, message) {
+			trigger_update(printer, 'ask_confirmation', id, message);
 		},
 		autodetect: function(state) {
 			autodetect = state;
-			trigger_update('', 'autodetect');
+			trigger_update(null, 'autodetect');
 		},
 		blacklist: function(value) {
 			blacklist = value;
-			trigger_update('', 'blacklist');
+			trigger_update(null, 'blacklist');
 		},
-		queue: function(port, q) {
-			printers[port].queue = q;
-			trigger_update(port, 'queue');
+		queue: function(printer, q) {
+			printers[printer].queue = q;
+			trigger_update(printer, 'queue');
 		},
-		audioqueue: function(port, q) {
-			printers[port].audioqueue = q;
-			trigger_update(port, 'audioqueue');
+		audioqueue: function(printer, q) {
+			printers[printer].audioqueue = q;
+			trigger_update(printer, 'audioqueue');
 		},
-		serial: function(port, serialport, data) {
-			trigger_update(port, 'serial', serialport, data);
+		serial: function(printer, serialport, data) {
+			trigger_update(printer, 'serial', serialport, data);
 		},
-		new_printer: function(port, constants) {
-			if (printers[port] === undefined) {
-				printers[port] = {
-					port: port,
+		new_printer: function(printer, constants) {
+			if (printers[printer] === undefined) {
+				printers[printer] = {
+					uuid: printer,
 					profile: 'default',
 					queue: [],
 					audioqueue: [],
-					uuid: constants[0],
-					queue_length: constants[1],
-					pin_names: constants[2],
+					queue_length: constants[0],
+					pin_names: [],
 					num_temps: 0,
 					num_gpios: 0,
 					led_pin: 0,
@@ -183,76 +173,66 @@ function _setup_updater() {
 					temps: [],
 					gpios: []
 				};
-				printers[port].call = function(name, a, ka, reply) {
-					var p = this.port;
-					if (_active_printer != p) {
-						rpc.call('set_printer', [null, p], {}, function() { _active_printer = p; rpc.call(name, a, ka, reply); });
+				printers[printer].call = function(name, a, ka, reply) {
+					console.info('calling', name);
+					var uuid = this.uuid;
+					if (_active_printer != uuid) {
+						rpc.call('set_printer', [uuid], {}, function() { _active_printer = uuid; rpc.call(name, a, ka, reply); });
 					}
 					else
 						rpc.call(name, a, ka, reply);
 				};
-				trigger_update(port, 'new_printer');
+				trigger_update(printer, 'new_printer');
 			}
 		},
-		del_printer: function(port) {
-			if (_active_printer == port)
+		del_printer: function(printer) {
+			if (_active_printer == printer)
 				_active_printer = null;
-			trigger_update(port, 'del_printer');
-			delete printers[port];
+			trigger_update(printer, 'del_printer');
+			delete printers[printer];
 		},
 		new_audio: function(list) {
 			audio_list = list;
-			trigger_update('', 'new_audio');
+			trigger_update(null, 'new_audio');
 		},
-		new_script: function(name, code, data) {
-			scripts[name] = [code, data];
-			trigger_update('', 'new_script', name);
+		blocked: function(printer, reason) {
+			trigger_update(printer, 'blocked', reason);
 		},
-		del_script: function(name) {
-			trigger_update('', 'del_script', name);
-			delete scripts[name];
+		message: function(printer, stat) {
+			trigger_update(printer, 'message', stat);
 		},
-		new_data: function(name, data) {
-			scripts[name][1] = data;
-			trigger_update('', 'new_data', name);
-		},
-		blocked: function(port, reason) {
-			trigger_update(port, 'blocked', reason);
-		},
-		message: function(port, stat) {
-			trigger_update(port, 'message', stat);
-		},
-		globals_update: function(port, values) {
-			printers[port].profile = values[0];
+		globals_update: function(printer, values) {
+			printers[printer].profile = values[0];
 			var new_num_temps = values[1];
 			var new_num_gpios = values[2];
-			printers[port].led_pin = values[3];
-			printers[port].stop_pin = values[4];
-			printers[port].probe_pin = values[5];
-			printers[port].spiss_pin = values[6];
-			printers[port].probe_dist = values[7];
-			printers[port].probe_safe_dist = values[8];
-			printers[port].bed_id = values[9];
-			printers[port].fan_id = values[10];
-			printers[port].spindle_id = values[11];
-			printers[port].unit_name = values[12];
-			printers[port].timeout = values[13];
-			printers[port].feedrate = values[14];
-			printers[port].max_deviation = values[15];
-			printers[port].max_v = values[16];
-			printers[port].targetx = values[17];
-			printers[port].targety = values[18];
-			printers[port].zoffset = values[19];
-			printers[port].store_adc = values[20];
-			printers[port].park_after_print = values[21];
-			printers[port].sleep_after_print = values[22];
-			printers[port].cool_after_print = values[23];
-			printers[port].spi_setup = values[24];
-			printers[port].temp_scale_min = values[25];
-			printers[port].temp_scale_max = values[26];
-			printers[port].status = values[27];
-			for (var i = printers[port].num_temps; i < new_num_temps; ++i) {
-				printers[port].temps.push({
+			printers[printer].pin_names = values[3];
+			printers[printer].led_pin = values[4];
+			printers[printer].stop_pin = values[5];
+			printers[printer].probe_pin = values[6];
+			printers[printer].spiss_pin = values[7];
+			printers[printer].probe_dist = values[8];
+			printers[printer].probe_safe_dist = values[9];
+			printers[printer].bed_id = values[10];
+			printers[printer].fan_id = values[11];
+			printers[printer].spindle_id = values[12];
+			printers[printer].unit_name = values[13];
+			printers[printer].timeout = values[14];
+			printers[printer].feedrate = values[15];
+			printers[printer].max_deviation = values[16];
+			printers[printer].max_v = values[17];
+			printers[printer].targetx = values[18];
+			printers[printer].targety = values[19];
+			printers[printer].zoffset = values[20];
+			printers[printer].store_adc = values[21];
+			printers[printer].park_after_print = values[22];
+			printers[printer].sleep_after_print = values[23];
+			printers[printer].cool_after_print = values[24];
+			printers[printer].spi_setup = values[25];
+			printers[printer].temp_scale_min = values[26];
+			printers[printer].temp_scale_max = values[27];
+			printers[printer].status = values[28];
+			for (var i = printers[printer].num_temps; i < new_num_temps; ++i) {
+				printers[printer].temps.push({
 					name: null,
 					heater_pin: 0,
 					fan_pin: 0,
@@ -268,32 +248,32 @@ function _setup_updater() {
 					history: []
 				});
 			}
-			printers[port].temps.length = new_num_temps;
-			printers[port].num_temps = new_num_temps;
-			for (var i = printers[port].num_gpios; i < new_num_gpios; ++i) {
-				printers[port].gpios.push({
+			printers[printer].temps.length = new_num_temps;
+			printers[printer].num_temps = new_num_temps;
+			for (var i = printers[printer].num_gpios; i < new_num_gpios; ++i) {
+				printers[printer].gpios.push({
 					name: null,
 					pin: 0,
 					state: 3,
 					reset: 3
 				});
 			}
-			printers[port].gpios.length = new_num_gpios;
-			printers[port].num_gpios = new_num_gpios;
-			trigger_update(port, 'globals_update');
+			printers[printer].gpios.length = new_num_gpios;
+			printers[printer].num_gpios = new_num_gpios;
+			trigger_update(printer, 'globals_update');
 		},
-		space_update: function(port, index, values) {
-			printers[port].spaces[index].name = values[0];
-			printers[port].spaces[index].type = values[1];
-			printers[port].spaces[index].num_axes = values[2].length;
-			printers[port].spaces[index].num_motors = values[3].length;
+		space_update: function(printer, index, values) {
+			printers[printer].spaces[index].name = values[0];
+			printers[printer].spaces[index].type = values[1];
+			printers[printer].spaces[index].num_axes = values[2].length;
+			printers[printer].spaces[index].num_motors = values[3].length;
 			var current = [];
-			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a)
-				current.push(a < printers[port].spaces[index].axis.length ? printers[port].spaces[index].axis[a].current : NaN);
-			printers[port].spaces[index].axis = [];
-			printers[port].spaces[index].motor = [];
-			for (var a = 0; a < printers[port].spaces[index].num_axes; ++a) {
-				printers[port].spaces[index].axis.push({
+			for (var a = 0; a < printers[printer].spaces[index].num_axes; ++a)
+				current.push(a < printers[printer].spaces[index].axis.length ? printers[printer].spaces[index].axis[a].current : NaN);
+			printers[printer].spaces[index].axis = [];
+			printers[printer].spaces[index].motor = [];
+			for (var a = 0; a < printers[printer].spaces[index].num_axes; ++a) {
+				printers[printer].spaces[index].axis.push({
 					current: current[a],
 					name: values[2][a][0],
 					park: values[2][a][1],
@@ -303,8 +283,8 @@ function _setup_updater() {
 					home_pos2: values[2][a][5]
 				});
 			}
-			for (var m = 0; m < printers[port].spaces[index].num_motors; ++m) {
-				printers[port].spaces[index].motor.push({
+			for (var m = 0; m < printers[printer].spaces[index].num_motors; ++m) {
+				printers[printer].spaces[index].motor.push({
 					name: values[3][m][0],
 					step_pin: values[3][m][1],
 					dir_pin: values[3][m][2],
@@ -320,63 +300,63 @@ function _setup_updater() {
 			}
 			if (index == 1) {
 				for (var a = 0; a < values[4].length; ++a)
-					printers[port].spaces[index].axis[a].multiplier = values[4][a];
+					printers[printer].spaces[index].axis[a].multiplier = values[4][a];
 			}
-			if (printers[port].spaces[index].type == TYPE_DELTA) {
+			if (printers[printer].spaces[index].type == TYPE_DELTA) {
 				for (var i = 0; i < 3; ++i) {
-					printers[port].spaces[index].motor[i].delta_axis_min = values[5][i][0];
-					printers[port].spaces[index].motor[i].delta_axis_max = values[5][i][1];
-					printers[port].spaces[index].motor[i].delta_rodlength = values[5][i][2];
-					printers[port].spaces[index].motor[i].delta_radius = values[5][i][3];
+					printers[printer].spaces[index].motor[i].delta_axis_min = values[5][i][0];
+					printers[printer].spaces[index].motor[i].delta_axis_max = values[5][i][1];
+					printers[printer].spaces[index].motor[i].delta_rodlength = values[5][i][2];
+					printers[printer].spaces[index].motor[i].delta_radius = values[5][i][3];
 				}
-				printers[port].spaces[index].delta_angle = values[5][3];
+				printers[printer].spaces[index].delta_angle = values[5][3];
 			}
-			if (printers[port].spaces[index].type == TYPE_POLAR) {
-				printers[port].spaces[index].polar_max_r = values[5];
+			if (printers[printer].spaces[index].type == TYPE_POLAR) {
+				printers[printer].spaces[index].polar_max_r = values[5];
 			}
-			if (printers[port].spaces[index].type == TYPE_EXTRUDER) {
-				for (var i = 0; i < printers[port].spaces[index].axis.length; ++i) {
-					printers[port].spaces[index].axis[i].extruder_dx = values[5][i][0];
-					printers[port].spaces[index].axis[i].extruder_dy = values[5][i][1];
-					printers[port].spaces[index].axis[i].extruder_dz = values[5][i][2];
-				}
-			}
-			if (printers[port].spaces[index].type == TYPE_FOLLOWER) {
-				for (var i = 0; i < printers[port].spaces[index].axis.length; ++i) {
-					printers[port].spaces[index].motor[i].follower_space = values[5][i][0];
-					printers[port].spaces[index].motor[i].follower_motor = values[5][i][1];
+			if (printers[printer].spaces[index].type == TYPE_EXTRUDER) {
+				for (var i = 0; i < printers[printer].spaces[index].axis.length; ++i) {
+					printers[printer].spaces[index].axis[i].extruder_dx = values[5][i][0];
+					printers[printer].spaces[index].axis[i].extruder_dy = values[5][i][1];
+					printers[printer].spaces[index].axis[i].extruder_dz = values[5][i][2];
 				}
 			}
-			trigger_update(port, 'space_update', index);
+			if (printers[printer].spaces[index].type == TYPE_FOLLOWER) {
+				for (var i = 0; i < printers[printer].spaces[index].axis.length; ++i) {
+					printers[printer].spaces[index].motor[i].follower_space = values[5][i][0];
+					printers[printer].spaces[index].motor[i].follower_motor = values[5][i][1];
+				}
+			}
+			trigger_update(printer, 'space_update', index);
 		},
-		temp_update: function(port, index, values) {
-			printers[port].temps[index].name = values[0];
-			printers[port].temps[index].R0 = values[1];
-			printers[port].temps[index].R1 = values[2];
-			printers[port].temps[index].Rc = values[3];
-			printers[port].temps[index].Tc = values[4];
-			printers[port].temps[index].beta = values[5];
-			printers[port].temps[index].heater_pin = values[6];
-			printers[port].temps[index].fan_pin = values[7];
-			printers[port].temps[index].thermistor_pin = values[8];
-			printers[port].temps[index].fan_temp = values[9];
-			printers[port].temps[index].fan_duty = values[10];
-			printers[port].temps[index].heater_limit_l = values[11];
-			printers[port].temps[index].heater_limit_h = values[12];
-			printers[port].temps[index].fan_limit_l = values[13];
-			printers[port].temps[index].fan_limit_h = values[14];
-			printers[port].temps[index].hold_time = values[15];
-			printers[port].temps[index].value = values[16];
-			trigger_update(port, 'temp_update', index);
+		temp_update: function(printer, index, values) {
+			printers[printer].temps[index].name = values[0];
+			printers[printer].temps[index].R0 = values[1];
+			printers[printer].temps[index].R1 = values[2];
+			printers[printer].temps[index].Rc = values[3];
+			printers[printer].temps[index].Tc = values[4];
+			printers[printer].temps[index].beta = values[5];
+			printers[printer].temps[index].heater_pin = values[6];
+			printers[printer].temps[index].fan_pin = values[7];
+			printers[printer].temps[index].thermistor_pin = values[8];
+			printers[printer].temps[index].fan_temp = values[9];
+			printers[printer].temps[index].fan_duty = values[10];
+			printers[printer].temps[index].heater_limit_l = values[11];
+			printers[printer].temps[index].heater_limit_h = values[12];
+			printers[printer].temps[index].fan_limit_l = values[13];
+			printers[printer].temps[index].fan_limit_h = values[14];
+			printers[printer].temps[index].hold_time = values[15];
+			printers[printer].temps[index].value = values[16];
+			trigger_update(printer, 'temp_update', index);
 		},
-		gpio_update: function(port, index, values) {
-			printers[port].gpios[index].name = values[0];
-			printers[port].gpios[index].pin = values[1];
-			printers[port].gpios[index].state = values[2];
-			printers[port].gpios[index].reset = values[3];
-			printers[port].gpios[index].duty = values[4];
-			printers[port].gpios[index].value = values[5];
-			trigger_update(port, 'gpio_update', index);
+		gpio_update: function(printer, index, values) {
+			printers[printer].gpios[index].name = values[0];
+			printers[printer].gpios[index].pin = values[1];
+			printers[printer].gpios[index].state = values[2];
+			printers[printer].gpios[index].reset = values[3];
+			printers[printer].gpios[index].duty = values[4];
+			printers[printer].gpios[index].value = values[5];
+			trigger_update(printer, 'gpio_update', index);
 		}
 	};
 }
@@ -384,12 +364,8 @@ function _setup_updater() {
 
 // {{{ Initialization.
 function _reconnect() {
-	trigger_update('', 'connect', false);
+	trigger_update(null, 'connect', false);
 	rpc = null;
-	for (var s in scripts) {
-		if (typeof scripts[s] == 'object')
-			_updater.del_script(s);
-	}
 	while (_ports.length > 0) {
 		var p = _ports[0];
 		if (printers[p] !== undefined)
@@ -412,7 +388,6 @@ function setup() {
 	// Make sure the globals have a value of the correct type.
 	printers = new Object;
 	_ports = [];
-	scripts = new Object;
 	autodetect = true;
 	blacklist = '';
 	_setup_updater();
@@ -423,7 +398,7 @@ function _setup_connection() {
 	rpc.call('get_role', [], {}, function(r) {
 		role = r;
 		document.getElementById('container').AddClass('role_' + role);
-		trigger_update('', 'connect', true);
+		trigger_update(null, 'connect', true);
 		rpc.call('set_monitor', [true], {}, null);
 	});
 }

@@ -446,7 +446,7 @@ void packet()
 		addr = 0;
 		globals_save(addr);
 		send_host(CMD_DATA, 0, 0, 0, 0, addr);
-		if (!sent_names) {
+		if (arch_fds() && !sent_names) {
 			for (int d = 0; d < NUM_PINS; ++d)
 				arch_send_pin_name(d);
 			sent_names = true;
@@ -688,6 +688,19 @@ void packet()
 		debug("CMD_FORCE_DISCONNECT");
 #endif
 		disconnect(false);
+		return;
+	}
+	case CMD_CONNECT:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_CONNECT");
+#endif
+		if (arch_fds() != 0) {
+			debug("Unexpected connect");
+			abort();
+			return;
+		}
+		arch_connect(reinterpret_cast <char *>(&command[0][3]), reinterpret_cast <char *>(&command[0][3 + ID_SIZE]));
 		return;
 	}
 	case CMD_RECONNECT:

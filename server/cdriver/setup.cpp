@@ -23,14 +23,14 @@ static unsigned char host_command[HOST_COMMAND_SIZE];
 static unsigned char serial_command[FULL_SERIAL_COMMAND_SIZE];
 #endif
 
-void setup(char const *port, char const *run_id)
+void setup()
 {
 	command[0] = host_command;
 #ifdef SERIAL
 	command[1] = serial_command;
 #endif
 	preparing = false;
-	host_block = true;
+	host_block = false;
 	sent_names = false;
 	last_active = millis();
 	last_micros = utime();
@@ -38,7 +38,7 @@ void setup(char const *port, char const *run_id)
 	host_serial.begin(115200);
 	serialdev[1] = NULL;
 	command_end[1] = 0;
-	arch_setup_start(port);
+	arch_setup_start();
 	setup_spacetypes();
 	// Initialize volatile variables.
 	initialized = false;
@@ -105,10 +105,9 @@ void setup(char const *port, char const *run_id)
 	temps = NULL;
 	num_gpios = 0;
 	gpios = NULL;
-	arch_setup_end(run_id);
 }
 
-void setup_end() {
+void connect_end() {
 	if (protocol_version < PROTOCOL_VERSION) {
 		debug("Printer has older Franklin version %d than host which has %d; please flash newer firmware.", protocol_version, PROTOCOL_VERSION);
 		exit(1);

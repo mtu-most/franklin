@@ -409,7 +409,7 @@ void send_packet()
 
 void send_id(uint8_t cmd) { // {{{
 	printerid[0] = cmd;
-	int16_t len = prepare_packet(ID_SIZE + 1, printerid);
+	int16_t len = prepare_packet(ID_SIZE + UUID_SIZE + 1, printerid);
 	for (uint8_t i = 0; i < len; ++i)
 		arch_serial_write(printerid[i]);
 } // }}}

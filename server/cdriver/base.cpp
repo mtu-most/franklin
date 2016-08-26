@@ -27,14 +27,6 @@ void disconnect(bool notify) { // {{{
 	arch_disconnect();
 	if (notify)
 		send_host(CMD_DISCONNECT);
-	while (arch_fds() == 0) {
-		poll(&pollfds[1], 1, -1);
-		if (pollfds[1].revents & (POLLHUP | POLLERR)) {
-			debug("Hang up (or error) on command input");
-			exit(0);
-		}
-		serial(0);
-	}
 }
 // }}}
 #endif
@@ -64,11 +56,9 @@ int32_t millis() {
 // }}}
 
 int main(int argc, char **argv) { // {{{
-	if (argc != 3) {
-		debug("Franklin cdriver is not intended to be called directly (argc = %d).\n", argc);
-		exit(1);
-	}
-	setup(argv[1], argv[2]);
+	(void)&argc;
+	(void)&argv;
+	setup();
 	struct itimerspec zero;
 	zero.it_interval.tv_sec = 0;
 	zero.it_interval.tv_nsec = 0;

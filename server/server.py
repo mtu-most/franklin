@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # vim: foldmethod=marker :
+# Documentation. {{{
 # server.py - printer multiplexing for Franklin {{{
 # Copyright 2014 Michigan Technological University
 # Author: Bas Wijnen <wijnen@debian.org>
@@ -119,6 +120,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'tls': 'True',
 	})
 # }}}
+# }}}
 
 # Global variables. {{{
 httpd = None
@@ -126,21 +128,7 @@ default_printer = (None, None)
 ports = {}
 autodetect = config['autodetect'].lower() == 'true'
 tls = config['tls'].lower() == 'true'
-orphans = {}
-scripts = {}
-# }}}
-
-# Load scripts. {{{
-for d in fhs.read_data('scripts', dir = True, multiple = True):
-	for s in os.listdir(d):
-		name, ext = os.path.splitext(s)
-		if ext != os.extsep + 'js' or name in scripts:
-			continue
-		dataname = os.path.join(d, name + os.extsep + 'dat')
-		scripts[name] = [open(os.path.join(d, s)).read(), open(dataname).read() if os.path.exists(dataname) else None]
-nextscriptname = 0
-while '%04d' % nextscriptname in scripts:
-	nextscriptname += 1
+printers = {}
 # }}}
 
 class Server(websocketd.RPChttpd): # {{{
@@ -168,19 +156,19 @@ class Server(websocketd.RPChttpd): # {{{
 		else:
 			return connection.data['password'] == connection.data['pwd']
 	def page(self, connection):
-		if 'port' in connection.query:
+		if 'uuid' in connection.query:
 			# Export request.
-			port = connection.query['port'][0]
-			if port not in ports or not isinstance(ports[port], Port) or ports[port].detecting:
+			printer = connection.query['uuid'][0]
+			if uuid not in printers or not isinstance(printers[uuid], Printer):
 				self.reply(connection, 404)
 			else:
 				def export_reply(success, message):
 					self.reply(connection, 200, message.encode('utf-8'), 'text/plain;charset=utf8')
 					connection.socket.close()
-				ports[port].call('export_settings', (connection.data['role'],), {}, export_reply)
+				printers[uuid].call('export_settings', (connection.data['role'],), {}, export_reply)
 				return True
 		elif connection.address.path.endswith('/adc'):
-			filename = '/tmp/franklin-adc-dump'
+			filename = '/tmp/franklin-adc-dump'	# FIXME
 			if os.path.exists(filename):
 				message = open(filename, 'rb').read()
 				os.unlink(filename)
@@ -196,10 +184,10 @@ class Server(websocketd.RPChttpd): # {{{
 		if 'file' not in connection.post[1] or 'port' not in connection.post[0] or 'action' not in connection.post[0]:
 			self.reply(connection, 400)
 			return False
-		port = connection.post[0]['port'][0]
+		uuid = connection.post[0]['printer'][0]
 		action = connection.post[0]['action'][0]
-		if port not in ports or not isinstance(ports[port], Port) or ports[port].detecting:
-			log('port not found: %s' % port)
+		if uuid not in printers or not isinstance(printers[uuid], Printer):
+			log('printer not found: %s' % printer)
 			self.reply(connection, 404)
 			return False
 		post = connection.post[1].pop('file')
@@ -208,11 +196,11 @@ class Server(websocketd.RPChttpd): # {{{
 			os.unlink(post[0])
 			connection.socket.close()
 		if action == 'queue_add':
-			ports[port].call('queue_add_file', [connection.data['role'], post[0], post[1]], {}, cb)
+			printers[printer].call('queue_add_file', [connection.data['role'], post[0], post[1]], {}, cb)
 		elif action == 'audio_add':
-			ports[port].call('audio_add_file', [connection.data['role'], post[0], post[1]], {}, cb)
+			printers[printer].call('audio_add_file', [connection.data['role'], post[0], post[1]], {}, cb)
 		elif action == 'import':
-			ports[port].call('import_file', [connection.data['role'], post[0], post[1]], {}, cb)
+			printers[printer].call('import_file', [connection.data['role'], post[0], post[1]], {}, cb)
 		else:
 			os.unlink(post[0])
 			self.reply(connection, 400)
@@ -237,26 +225,12 @@ class Connection: # {{{
 		socket.monitor = False
 		socket.connection = self
 		self.socket = socket
-		self.printer = self.find_printer(*default_printer)
+		self.printer = default_printer if default_printer in printers else None
 		self.id = Connection.nextid
 		Connection.nextid += 1
 		Connection.connections[self.id] = self
 		# Done with setup; activate connection.
 		self.socket()
-	# }}}
-	def find_printer(self, uuid = None, port = None): # {{{
-		'''Detect a printer by uuid or port.
-		If both uuid and port are None, return any connected printer.
-		@param uuid: requested uuid, or None to allow any uuid.
-		@param port: regular expression for port, or None to allow any port.
-		@return The printer name, or None if no printer matches the request.
-		'''
-		for p in ports:
-			if not isinstance(ports[p], Port) or ports[p].detecting:
-				continue
-			if (not uuid or uuid == ports[p].uuid) and (not port or re.match(port, p)):
-				return p
-		return None
 	# }}}
 	def set_autodetect(self, detect): # {{{
 		'''Enable or disable autodetection on new ports.
@@ -278,13 +252,15 @@ class Connection: # {{{
 		return autodetect
 	# }}}
 	def detect(self, port): # {{{
-		detect(port, self.socket.data['role'])
+		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
+		detect(port)
 	# }}}
 	def detect_all(self): # {{{
+		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
 		for p in ports:
 			if ports[p] is not None:
 				continue
-			self.detect(p)
+			detect(p)
 	# }}}
 	def add_port(self, port): # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin')
@@ -304,39 +280,9 @@ class Connection: # {{{
 	def get_default_printer(self): # {{{
 		return default_printer
 	# }}}
-	def new_script(self, code): # {{{
-		global nextscriptname
-		name = '%04d' % nextscriptname
-		scripts[name] = [code, None]
-		while '%04d' % nextscriptname in scripts:
-			nextscriptname += 1
-		f = fhs.write_data(os.path.join('scripts', name + os.extsep + 'js'), text = False)
-		f.write(code)
-		f.close()
-		broadcast(None, 'new_script', name, code, None)
-		return []
-	# }}}
-	def del_script(self, name): # {{{
-		del scripts[name]
-		for e in('js', 'dat'):
-			filename = fhs.write_data(os.path.join('scripts', name + os.extsep + e), opened = False)
-			if os.path.exists(filename):
-				os.unlink(filename)
-		broadcast(None, 'del_script', name)
-	# }}}
-	def set_data(self, name, data): # {{{
-		scripts[name][1] = data
-		filename = fhs.write_data(os.path.join('scripts', name + os.extsep + 'dat'), opened = False)
-		if data is None:
-			if os.path.exists(filename):
-				os.unlink(filename)
-		else:
-			with open(filename, 'wb') as f:
-				f.write(data)
-		broadcast(None, 'new_data', name, data)
-	# }}}
-	def disable(self, port): # {{{
-		return disable(self.socket.data['role'], port)
+	def disable(self, port, reason = 'disabled by user'): # {{{
+		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
+		return disable(port, reason)
 	# }}}
 	def _read_boards(self): # {{{
 		boards = {}
@@ -405,7 +351,7 @@ class Connection: # {{{
 	def upload(self, port, board): # {{{
 		wake = (yield)
 		assert self.socket.data['role'] in ('benjamin', 'admin')
-		disable('admin', port)
+		disable(port, 'disabled for upload')
 		def cancel():
 			# Waking the generator kills the process.
 			wake('Aborted')
@@ -460,8 +406,8 @@ class Connection: # {{{
 		else:
 			return 'firmware for %s successfully uploaded' % board
 	# }}}
-	def set_printer(self, printer = None, port = None): # {{{
-		self.printer = self.find_printer(printer, port)
+	def set_printer(self, printer): # {{{
+		self.printer = printer if printer in printers else None
 	# }}}
 	def get_printer(self): # {{{
 		return self.printer
@@ -474,15 +420,12 @@ class Connection: # {{{
 				self.socket.new_port.event(p)
 				if ports[p] is None:
 					self.socket.port_state.event(p, 0)
-				elif not isinstance(ports[p], Port):	# TODO: distinguish initial detect from flashing.
+				elif not isinstance(ports[p], str):	# TODO: distinguish initial detect from flashing.
 					self.socket.port_state.event(p, 3)
-				elif ports[p].detecting:
-					self.socket.port_state.event(p, 1)
 				else:
 					self.socket.port_state.event(p, 2)
-					ports[p].call('send_printer', [self.socket.data['role'], self.id], {}, lambda success, data: None)
-			for s in scripts:
-				broadcast(self.id, 'new_script', s, scripts[s][0], scripts[s][1])
+			for p in printers:
+				printers[p].call('send_printer', [self.socket.data['role'], self.id], {}, lambda success, data: None)
 			self.socket.initialized = True
 		self.socket.monitor = value
 	# }}}
@@ -492,22 +435,20 @@ class Connection: # {{{
 	def get_role(self): # {{{
 		return self.socket.data['role']
 	# }}}
-	def _call (self, name, a, ka): # {{{
+	def _call(self, name, a, ka): # {{{
 		wake = (yield)
 		#log('other: %s %s %s' % (name, repr(a), repr(ka)))
-		if not self.printer or self.printer not in ports or not isinstance(ports[self.printer], Port) or ports[self.printer].detecting:
-			self.printer = self.find_printer()
-			if not self.printer:
-				log('No printer found')
-				return ('error', 'No printer found')
+		if not self.printer:
+			log('No active printer')
+			return ('error', 'No active printer')
 		def reply(success, ret):
 			if success:
 				wake(ret)
 			else:
 				log('printer errors')
 				wake(None)
-				#disable('admin', self.printer)
-		ports[self.printer].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
+				#disable(self.printer, 'printer replied with error to wake up')
+		printers[self.printer].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
 		return (yield)
 	# }}}
 	def __getattr__ (self, attr): # {{{
@@ -535,10 +476,16 @@ def broadcast(target, name, *args): # {{{
 				getattr(c, name).event(*args)
 # }}}
 
-class Port: # {{{
+class Printer: # {{{
 	def __init__(self, port, process, detectport, run_id): # {{{
-		self.detecting = True
-		broadcast(None, 'port_state', port, 1)
+		'''Create a new Printer object.
+		This can be called for several reasons:
+		- At startup, every saved printer is started.  In this case, port is None.
+		- When a new printer with an unknown uuid is detected on a port.  In this case, port, detectport and run_id are set.
+		'''
+		if port is not None:
+			self.detecting = True
+			broadcast(None, 'port_state', port, 1)
 		self.name = None
 		self.uuid = None
 		self.port = port
@@ -550,40 +497,23 @@ class Port: # {{{
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
 		self.input_handle = websocketd.add_read(process.stdout, self.printer_input, self.printer_error)
-		old = []
-		def get_settings(success, settings):
-			if not success:
-				log('failed to get settings')
-				return
-			self.call('import_settings', ['admin', settings], {}, lambda success, ret: None)
-			websocketd.remove_read(orphans[self.run_id].input_handle)
-			orphans[self.run_id].call('die', ('admin', 'replaced by new connection',), {}, lambda success, ret: None)
-			try:
-				orphans[self.run_id].process.kill()
-			except:
-				pass
-			try:
-				orphans[self.run_id].process.communicate()
-			except:
-				pass
-			del orphans[self.run_id]
-			self.detecting = False
-			self.call('send_printer', ['admin', None], {}, lambda success, data: broadcast(None, 'port_state', port, 2))
 		def get_vars(success, vars):
 			if not success:
 				log('failed to get vars')
+				if detectport is not None:
+					log('Closing server port anyway')
+					detectport.close()
 				return
 			# The child has opened the port now; close our handle.
 			if detectport is not None:
 				log('Driver started; closing server port')
 				detectport.close()
-			self.uuid = vars['uuid']
-			# Copy settings from orphan with the same run_id, then kill the orphan.
-			if self.run_id in orphans and orphans[self.run_id].uuid == self.uuid:
-				orphans[self.run_id].call('export_settings', ('admin',), {}, get_settings)
+			if self.uuid is None:
+				self.uuid = vars['uuid']
 			else:
-				self.detecting = False
-				self.call('send_printer', ['admin', None], {}, lambda success, data: broadcast(None, 'port_state', port, 2))
+				assert self.uuid == vars['uuid']
+			self.detecting = False
+			self.call('send_printer', ['admin', None], {}, lambda success, data: broadcast(None, 'port_state', port, 2))
 		self.call('get_globals', ('admin',), {}, get_vars)
 	# }}}
 	def call(self, name, args, kargs, cb): # {{{
@@ -593,10 +523,10 @@ class Port: # {{{
 			self.process.stdin.write(data.encode('utf-8'))
 			self.process.stdin.flush()
 		except:
-			log('killing printer handle because of IOError')
+			log('killing printer handle because of error')
 			#traceback.print_exc()
 			cb(False, None)
-			disable('admin', self.port)
+			disable(self.port, 'error from printer')
 			return
 		self.waiters[0][self.next_mid] = cb
 		self.next_mid += 1
@@ -612,7 +542,7 @@ class Port: # {{{
 	def printer_error(self): # {{{
 		log('%s died from error; removing port.' % self.name)
 		self.die('from error')
-		del self.ports[port]
+		del ports[self.port]
 		return False
 	# }}}
 	def die(self, reason = 'at request'): # {{{
@@ -646,7 +576,7 @@ class Port: # {{{
 				for t in range(3):
 					for w in self.waiters[t]:
 						self.waiters[t][w](False, 'Printer died')
-				disable('admin', self.port)
+				disable(self.port, 'printer closed connection')
 				return False
 			self.buffer += data
 			#log('printer input:' + repr(data))
@@ -657,7 +587,7 @@ class Port: # {{{
 				data = json.loads(line.decode('utf-8'))
 				#log('printer command input:' + repr(data))
 				if data[1] == 'broadcast':
-					broadcast(data[2], data[3], self.port, *(data[4:]))
+					broadcast(data[2], data[3], self.uuid, *(data[4:]))
 				elif data[1] == 'disconnect':
 					# Don't remember a printer that hasn't sent its name yet.
 					port = self.port
@@ -685,31 +615,71 @@ class Port: # {{{
 		if ports[self.port]:
 			self.call('disconnect', ['admin'], {}, lambda cd, arg: None)
 		# If there already is an orphan with the same uuid, kill the old orphan.
-		for o in [x for x in orphans if orphans[x].uuid == self.uuid]:
+		for o in [x for x in printers if printers[x].uuid == self.uuid]:
 			# This for loop always runs 0 or 1 times, never more.
 			log('killing duplicate orphan')
-			orphans[o].call('die', ('admin', 'replaced by connection with same uuid',), {}, lambda success, ret: None)
-			del orphans[o]
-		orphans[self.run_id] = self
+			printers[o].call('die', ('admin', 'replaced by connection with same uuid',), {}, lambda success, ret: None)
+			del printers[o]
+		printers[self.run_id] = self
 		broadcast(None, 'del_printer', self.port)
 	# }}}
 # }}}
 
-def detect(port, role): # {{{
+def nextid(): # {{{
+	global last_id
+	# 0x23456789 is an arbitrary number with bits set in every nybble, that is
+	# odd(so it doesn't visit the same number twice until it did all of
+	# them, because it loops at 2**32, which is not divisible by anything
+	# except 2).
+	last_id = (last_id + 0x23456789) & 0xffffffff
+	return bytes([id_map[(last_id >> (4 * c)) & 0xf] for c in range(8)])
+last_id = random.randrange(1 << 32)
+# Parity table is [0x8b, 0x2d, 0x1e]; half of these codes overlap with codes from the single command map; those single commands are not used.
+id_map = [0x40, 0xe1, 0xd2, 0x73, 0x74, 0xd5, 0xe6, 0x47, 0xf8, 0x59, 0x6a, 0xcb, 0xcc, 0x6d, 0x5e, 0xff]
+# }}}
+
+def print_done(port, completed, reason): # {{{
+	broadcast(None, 'printing', port.port, False)
+	if config['done']:
+		cmd = config['done']
+		cmd = cmd.replace('[[STATE]]', 'completed' if completed else 'aborted').replace('[[REASON]]', reason)
+		log('running %s' % cmd)
+		p = subprocess.Popen(cmd, stdout = subprocess.PIPE, shell = True, close_fds = True)
+		def process_done():
+			data = p.stdout.read()
+			if data:
+				log('Data from completion callback: %s' % repr(data))
+				return True
+			log('Callback for print completion done; return: %s' % repr(p.wait()))
+			return False
+		def process_error():
+			log('Print completion process returned error.')
+			return False
+		websocketd.add_read(p.stdout, process_done, process_error)
+# }}}
+
+# Port management. {{{
+def detect(port): # {{{
 	log('detecting printer on %s' % port)
 	if port not in ports:
 		log('port does not exist')
+		return
 	if ports[port] != None:
 		# Abort detection in progress.
-		disable(role, port)
+		if isinstance(ports[port], str):
+			disable(ports[port], 'disabled to prepare for detection')
+		else:
+			ports[port]()
 		if ports[port] != None:
-			log('port is not in detectable state')
+			# This should never happen.
+			log('BUG: port is not in detectable state. Please report this.')
 			return
 	broadcast(None, 'port_state', port, 1)
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
-		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', config['local'] or fhs.read_data('franklin-cdriver', opened = False), '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-		ports[port] = Port(port, process, None, run_id)
+		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', '-', '--cdriver', config['local'] or fhs.read_data('franklin-cdriver', opened = False), '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		printers[port] = Printer(port, process, None, run_id)
+		ports[port] = port
 		return False
 	if not os.path.exists(port):
 		log("not detecting on %s, because file doesn't exist." % port)
@@ -748,24 +718,24 @@ def detect(port, role): # {{{
 		def boot_printer_input():
 			id[2] = True
 			ids = [protocol.single[code][0] for code in ('ID', 'STARTUP')]
-			# CMD:1 ID:8 Checksum:3
-			while len(id[0]) < 12:
+			# CMD:1 ID:8 + 16 Checksum:9 Total: 34
+			while len(id[0]) < 34:
 				try:
-					data = printer.read(12 - len(id[0]))
+					data = printer.read(34 - len(id[0]))
 				except OSError:
 					continue
 				except IOError:
 					continue
 				id[0] += data
 				#log('incomplete id: ' + id[0])
-				if len(id[0]) < 12:
+				if len(id[0]) < 34:
 					return True
 				if id[0][0] not in ids or not protocol.check(id[0]):
 					log('skip non-id: %s (%s)' % (''.join('%02x' % x for x in id[0]), repr(id[0])))
 					f = len(id[0])
 					for start in ids:
 						if start in id[0][1:]:
-							p = id[0].index(bytes((start,)))
+							p = id[0].index(bytes((start,)), 1)
 							if p < f:
 								f = p
 							log('Keeping some')
@@ -776,23 +746,54 @@ def detect(port, role): # {{{
 			# We have something to handle; cancel the timeout, but keep the serial port open to avoid a reset. (I don't think this even works, but it doesn't hurt.)
 			websocketd.remove_timeout(timeout_handle[0])
 			# This printer was running and tried to send an id.  Check the id.
-			id[0] = id[0][1:9]
-			if id[0] in orphans:
-				log('accepting orphan %s on %s' % (''.join('%02x' % x for x in id[0]), port))
-				ports[port] = orphans.pop(id[0])
-				ports[port].port = port
-				def close_port(success, data):
-					log('reconnect complete; closing server port')
-					printer.close()
-				log('reconnecting %s' % port)
-				ports[port].call('reconnect', ['admin', port], {}, lambda success, ret: ports[port].call('send_printer', ['admin', None], {}, close_port) if success else close_port)
-				broadcast(None, 'port_state', port, 2)
-				return False
+			uuid = id[0][9:9 + 16]
+			if (uuid[7] & 0xf0) != 0x40 or (uuid[9] & 0xc0) != 0x80:
+				# Broken uuid; create a new one and set it.
+				log('broken uuid: ' + repr(self.uuid))
+				uuid = None
+			else:
+				uuid = ''.join('%02x' % x for x in uuid[:16])
+				uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
+				id[0] = id[0][1:9]
+				running_printer = [p for p in printers if p.run_id == id[0]]
+				assert len(running_printer < 2)
+				if len(running_printer) > 0:
+					p = running_printer[0]
+					assert p.uuid == uuid
+					if p.port is not None:
+						disable(p.uuid, 'disabled printer which was detected on different port')
+					log('rediscovered printer %s on %s' % (''.join('%02x' % x for x in id[0]), port))
+					ports[port] = p.uuid
+					p.port = port
+					def close_port(success, data):
+						log('reconnect complete; closing server port')
+						printer.close()
+					p.call('reconnect', ['admin', port], {}, lambda success, ret: ports[port].call('send_printer', ['admin', None], {}, close_port) if success else close_port)
+					broadcast(None, 'port_state', port, 2)
+					return False
 			run_id = nextid()
-			log('accepting unknown printer on port %s (id %s)' % (port, ''.join('%02x' % x for x in run_id)))
-			#log('orphans: %s' % repr(tuple(orphans.keys())))
-			process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--port', port, '--run-id', run_id, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-			ports[port] = Port(port, process, printer, run_id)
+			# Find uuid or create new Printer object.
+			if uuid in printers:
+				log('accepting known printer on port %s (uuid %s)' % (port, ''.join('%02x' % x for x in uuid)))
+				printers[uuid].port = port
+				ports[port] = uuid
+				log('connecting %s to port %s' % (uuid, port))
+				p.call('connect', ['admin', port, run_id], {}, lambda success: None)
+			else:
+				log('accepting unknown printer on port %s' % port)
+				#log('printers: %s' % repr(tuple(printers.keys())))
+				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--uuid', uuid, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+				new_printer = Printer(port, process, printer, run_id)
+				def finish(success, uuid):
+					assert success
+					ports[port] = uuid
+					printers[uuid] = new_printer
+					log('connecting new printer %s to port %s' % (uuid, port))
+					p.call('connect', ['admin', port, run_id], {}, lambda success: None)
+				if uuid is None:
+					new_printer.call('reset_uuid', [], {}, finish)
+				else:
+					finish(True, uuid)
 			return False
 		def boot_printer_error():
 			log('error during printer detection on port %s.' % port)
@@ -822,6 +823,31 @@ def detect(port, role): # {{{
 		part2()
 # }}}
 
+def disable(uuid, reason): # {{{
+	if uuid not in printers:
+		log('not disabling nonexistent printer %s' % uuid)
+		return
+	if p.port not in ports:
+		log("not disabling printer which isn't enabled")
+	p = printers[uuid]
+	p.call('disable', ('admin', reason))
+	port = p.port
+	ports[port] = None
+	p.port = None
+	broadcast(None, 'port_state', port, 0)
+# }}}
+
+def remove_printer(uuid): # {{{
+	if uuid not in printers:
+		log('not removing non-existent printer %s' % uuid)
+		return
+	log('removing printer %s' % uuid)
+	p = printers[uuid]
+	if p.port is not None:
+		disable(uuid, 'printer is removed')
+	p.call('remove' ('admin',), {}, lambda success: None)
+# }}}
+
 def add_port(port): # {{{
 	if port in ports:
 		log('already existing port %s cannot be added' % port)
@@ -841,82 +867,27 @@ def remove_port(port): # {{{
 	if port not in ports:
 		return
 	if ports[port]:
-		ports[port].make_orphan()
+		printers[ports[port]].disconnect()
 	del ports[port]
 	broadcast(None, 'del_port', port)
 # }}}
-
-def disable(role, port): # {{{
-	if port not in ports:
-		log('not disabling nonexistent port %s' % port)
-		return
-	p = ports[port]
-	if p is None:
-		log('not disabling inactive port %s' % port)
-		return
-	if not isinstance(p, Port):
-		# Detecting or similar; cancel operation.
-		p()
-		return
-	if p.detecting:
-		p.die()
-		return
-	# Forget the printer.  First tell the printer to die
-	p.die()
-	ports[port] = None
-	if p:
-		def done(success, ret):
-			websocketd.remove_read(p.input_handle)
-			try:
-				p.process.kill()
-			except:
-				pass
-			try:
-				p.process.communicate()
-			except:
-				pass
-			p.process = None
-		p.call('die', (role, 'disabled by user',), {}, done)
-	if p not in (None, False):
-		broadcast(None, 'del_printer', port)
-	broadcast(None, 'port_state', port, 0)
 # }}}
 
-def nextid(): # {{{
-	global last_id
-	# 0x23456789 is an arbitrary number with bits set in every nybble, that is
-	# odd(so it doesn't visit the same number twice until it did all of
-	# them, because it loops at 2**32, which is not divisible by anything
-	# except 2).
-	last_id = (last_id + 0x23456789) & 0xffffffff
-	return bytes([id_map[(last_id >> (4 * c)) & 0xf] for c in range(8)])
-last_id = random.randrange(1 << 32)
-# Parity table is [0x8b, 0x2d, 0x1e]; half of these codes overlap with codes from the single command map; those single commands are not used.
-id_map = [0x40, 0xe1, 0xd2, 0x73, 0x74, 0xd5, 0xe6, 0x47, 0xf8, 0x59, 0x6a, 0xcb, 0xcc, 0x6d, 0x5e, 0xff]
-# }}}
-
-def print_done(port, completed, reason): # {{{
-	broadcast(None, 'printing', port.port, False)
-	if config['done']:
-		cmd = config['done']
-		cmd = cmd.replace('[[STATE]]', 'completed' if completed else 'aborted').replace('[[REASON]]', reason)
-		log('running %s' % cmd)
-		p = subprocess.Popen(cmd, stdout = subprocess.PIPE, shell = True, close_fds = True)
-		def process_done():
-			data = p.stdout.read()
-			if data:
-				log('Data from completion callback: %s' % repr(data))
-				return True
-			log('Callback for print completion done; return: %s' % repr(p.wait()))
-			return False
-		def process_error():
-			log('Print completion process returned error.')
-			return False
-		websocketd.add_read(p.stdout, process_done, process_error)
-# }}}
-
+# Initialization. {{{
+default_printer = config['printer']
 if config['local'] != '':
 	add_port('-')
+
+# Start known printer drivers.
+for d in fhs.read_data('.', dir = True, opened = False, multiple = True):
+	for uuid in os.listdir(d):
+		if uuid in printers:
+			continue
+		if not os.path.isdir(os.path.join(d, uuid, 'profiles')):
+			continue
+		log('starting printer %s' % uuid)
+		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		printers[uuid] = Printer(None, process, None, None)
 
 # Detect serial ports. {{{
 # Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.
@@ -934,17 +905,29 @@ except:
 		traceback.print_exc()
 		log('Not probing serial ports, because an error occurred: %s' % sys.exc_info()[1])
 # }}}
-
-# Set default printer. {{{
-if ' ' in config['printer']:
-	default_printer = config['printer'].rsplit(' ', 1)
-else:
-	default_printer = (config['printer'], None)
 # }}}
 
+# Main loop. {{{
 def _disconnect(socket, data):
 	del Connection.connections[socket.connection.id]
 httpd = Server(config['port'], Connection, disconnect_cb = _disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = tls)
 
 log('Franklin server is running')
 websocketd.fgloop()
+# }}}
+
+
+'''
+ports is a dict with ports as keys and uuids as values, or None if no printer
+is active on the port.
+printers is a dict with uuids as keys and Printer objects as values.
+
+As startup, all saved printers are loaded in the printers object, and all ports
+are first found and inserted into the ports object, then printers are detected
+on them.  If found, the printer is enabled and the dicts are updated.
+
+When a port is removed that has a printer attached, it is first disabled.
+
+Printers can also be disabled manually, and detection on a port can be
+requested manually as well.
+'''

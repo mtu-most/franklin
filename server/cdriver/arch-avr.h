@@ -21,7 +21,7 @@
 #ifndef ADCBITS
 
 // Includes and defines. {{{
-//#define DEBUG_AVRCOMM
+#define DEBUG_AVRCOMM
 
 #include <stdint.h>
 #include <unistd.h>
@@ -129,12 +129,11 @@ void arch_motor_change(uint8_t s, uint8_t sm);
 void arch_change(bool motors);
 void arch_motors_change();
 void arch_globals_change();
-void arch_setup_start(char const *port);
+void arch_setup_start();
 void arch_set_uuid();
-void arch_setup_end(char const *run_id);
+void arch_connect(char const *port, int len, char const *run_id);
 void arch_send_pin_name(int pin);
-void avr_setup_end2();
-void arch_setup_end(char const *run_id);
+void avr_connect2();
 void arch_request_temp(int which);
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit_l = ~0, int heater_limit_h = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit_l = ~0, int fan_limit_h = ~0, double hold_time = 0);
 void arch_disconnect();
@@ -207,6 +206,7 @@ EXTERN bool avr_stop_fake;
 EXTERN void (*avr_cb)();
 EXTERN int *avr_pin_name_len;
 EXTERN char **avr_pin_name;
+EXTERN bool avr_uuid_dirty;
 // }}}
 
 #define avr_write_ack(reason) do { \
@@ -247,7 +247,7 @@ int hwpacketsize(int len, int *available) { // {{{
 } // }}}
 
 void try_send_control() { // {{{
-	if (preparing || out_busy >= 3 || avr_control_queue_length == 0)
+	if (!avr_connected || preparing || out_busy >= 3 || avr_control_queue_length == 0)
 		return;
 	avr_control_queue_length -= 1;
 	avr_buffer[0] = HWC_CONTROL;
@@ -266,6 +266,10 @@ void arch_had_ack() { // {{{
 
 void avr_send() { // {{{
 	//debug("avr_send");
+	if (!avr_connected) {
+		debug("send called while not connected");
+		abort();
+	}
 	while (out_busy >= 3) {
 		//debug("avr send");
 		poll(&pollfds[2], 1, -1);
@@ -557,6 +561,8 @@ bool hwpacket(int len) { // {{{
 
 // Hardware interface {{{
 void avr_setup_pin(int pin, int type, int resettype, int extra) { // {{{
+	if (!avr_connected)
+		return;
 	if (pin < 0 || pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin to set up");
 		abort();
@@ -641,7 +647,7 @@ void avr_get_cb_wrap() { // {{{
 } // }}}
 
 void GET(Pin_t _pin, bool _default, void(*cb)(bool)) { // {{{
-	if (!_pin.valid())
+	if (!avr_connected || !_pin.valid())
 		cb(_default);
 	wait_for_reply[expected_replies++] = avr_get_cb_wrap;
 	avr_get_cb = cb;
@@ -674,6 +680,8 @@ void arch_pin_set_reset(Pin_t _pin, char state) { // {{{
 } // }}}
 
 double arch_get_duty(Pin_t _pin) { // {{{
+	if (!avr_connected)
+		return 1;
 	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin for arch_get_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return 1;
@@ -682,6 +690,8 @@ double arch_get_duty(Pin_t _pin) { // {{{
 } // }}}
 
 void arch_set_duty(Pin_t _pin, double duty) { // {{{
+	if (!avr_connected)
+		return;
 	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return;
@@ -737,6 +747,11 @@ void arch_reset() { // {{{
 		debug("no pong seen; giving up.\n");
 		abort();
 	}
+	arch_change(true);
+	if (avr_uuid_dirty) {
+		arch_set_uuid();
+		avr_uuid_dirty = false;
+	}
 } // }}}
 
 enum MotorFlags { // {{{
@@ -747,12 +762,14 @@ enum MotorFlags { // {{{
 }; // }}}
 
 void arch_motor_change(uint8_t s, uint8_t sm) { // {{{
+	Motor &mtr = *spaces[s].motor[sm];
+	if (!avr_connected)
+		return;
 	uint8_t m = sm;
 	for (uint8_t st = 0; st < s; ++st)
 		m += spaces[st].num_motors;
 	avr_buffer[0] = HWC_MSETUP;
 	avr_buffer[1] = m;
-	Motor &mtr = *spaces[s].motor[sm];
 	//debug("arch motor change %d %d %d %x", s, sm, m, p);
 	avr_buffer[2] = (mtr.step_pin.valid() ? mtr.step_pin.pin : ~0);
 	avr_buffer[3] = (mtr.dir_pin.valid() ? mtr.dir_pin.pin : ~0);
@@ -788,52 +805,56 @@ void arch_motor_change(uint8_t s, uint8_t sm) { // {{{
 
 void arch_change(bool motors) { // {{{
 	int old_active_motors = avr_active_motors;
-	if (motors) {
-		avr_active_motors = 0;
-		for (uint8_t s = 0; s < NUM_SPACES; ++s) {
-			avr_active_motors += spaces[s].num_motors;
+	if (avr_connected) {
+		if (motors) {
+			avr_active_motors = 0;
+			for (uint8_t s = 0; s < NUM_SPACES; ++s) {
+				avr_active_motors += spaces[s].num_motors;
+			}
 		}
+		avr_buffer[0] = HWC_SETUP;
+		if (avr_audio >= 0) {
+			avr_buffer[1] = NUM_MOTORS;
+			for (int i = 0; i < 4; ++i)
+				avr_buffer[2 + i] = (audio_hwtime_step >> (8 * i)) & 0xff;
+			avr_buffer[13] = avr_audio;
+		}
+		else {
+			avr_buffer[1] = avr_active_motors;
+			for (int i = 0; i < 4; ++i)
+				avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
+			avr_buffer[13] = 0xff;
+		}
+		avr_buffer[6] = led_pin.valid() ? led_pin.pin : ~0;
+		avr_buffer[7] = stop_pin.valid() ? stop_pin.pin : ~0;
+		avr_buffer[8] = probe_pin.valid() ? probe_pin.pin : ~0;
+		avr_buffer[9] = (led_pin.inverted() ? 1 : 0) | (probe_pin.inverted() ? 2 : 0) | (stop_pin.inverted() ? 4 : 0) | (spiss_pin.inverted() ? 8 : 0);
+		avr_buffer[10] = timeout & 0xff;
+		avr_buffer[11] = (timeout >> 8) & 0xff;
+		avr_buffer[12] = spiss_pin.valid() ? spiss_pin.pin : ~0;
+		prepare_packet(avr_buffer, 14);
+		avr_send();
 	}
-	avr_buffer[0] = HWC_SETUP;
-	if (avr_audio >= 0) {
-		avr_buffer[1] = NUM_MOTORS;
-		for (int i = 0; i < 4; ++i)
-			avr_buffer[2 + i] = (audio_hwtime_step >> (8 * i)) & 0xff;
-		avr_buffer[13] = avr_audio;
-	}
-	else {
-		avr_buffer[1] = avr_active_motors;
-		for (int i = 0; i < 4; ++i)
-			avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
-		avr_buffer[13] = 0xff;
-	}
-	avr_buffer[6] = led_pin.valid() ? led_pin.pin : ~0;
-	avr_buffer[7] = stop_pin.valid() ? stop_pin.pin : ~0;
-	avr_buffer[8] = probe_pin.valid() ? probe_pin.pin : ~0;
-	avr_buffer[9] = (led_pin.inverted() ? 1 : 0) | (probe_pin.inverted() ? 2 : 0) | (stop_pin.inverted() ? 4 : 0) | (spiss_pin.inverted() ? 8 : 0);
-	avr_buffer[10] = timeout & 0xff;
-	avr_buffer[11] = (timeout >> 8) & 0xff;
-	avr_buffer[12] = spiss_pin.valid() ? spiss_pin.pin : ~0;
-	prepare_packet(avr_buffer, 14);
-	avr_send();
 	if (motors) {
 		for (uint8_t s = 0; s < NUM_SPACES; ++s) {
 			for (uint8_t m = 0; m < spaces[s].num_motors; ++m) {
 				arch_motor_change(s, m);
 			}
 		}
-		for (int m = old_active_motors; m < avr_active_motors; ++m) {
-			avr_buffer[0] = HWC_MSETUP;
-			avr_buffer[1] = m;
-			//debug("arch motor change %d %d %d %x", s, sm, m, p);
-			avr_buffer[2] = ~0;
-			avr_buffer[3] = ~0;
-			avr_buffer[4] = ~0;
-			avr_buffer[5] = ~0;
-			avr_buffer[6] = ~0;
-			avr_buffer[7] = 0;
-			prepare_packet(avr_buffer, 8);
-			avr_send();
+		if (avr_connected) {
+			for (int m = old_active_motors; m < avr_active_motors; ++m) {
+				avr_buffer[0] = HWC_MSETUP;
+				avr_buffer[1] = m;
+				//debug("arch motor change %d %d %d %x", s, sm, m, p);
+				avr_buffer[2] = ~0;
+				avr_buffer[3] = ~0;
+				avr_buffer[4] = ~0;
+				avr_buffer[5] = ~0;
+				avr_buffer[6] = ~0;
+				avr_buffer[7] = 0;
+				prepare_packet(avr_buffer, 8);
+				avr_send();
+			}
 		}
 	}
 } // }}}
@@ -851,9 +872,9 @@ void arch_globals_change() { // {{{
 	arch_change(false);
 } // }}}
 
-void arch_setup_start(char const *port) { // {{{
+void arch_setup_start() { // {{{
 	// Set up arch variables.
-	avr_running = true;	// Force arch_stop from setup to do something.
+	avr_running = false;
 	avr_homing = false;
 	avr_filling = false;
 	NUM_PINS = 0;
@@ -863,14 +884,17 @@ void arch_setup_start(char const *port) { // {{{
 	avr_limiter_motor = 0;
 	avr_active_motors = 0;
 	avr_audio = -1;
+	avr_uuid_dirty = false;
 	// Set up serial port.
-	avr_connected = true;
-	avr_serial.begin(port, 115200);
+	avr_connected = false;
 	serialdev[1] = &avr_serial;
-	arch_reset();
 } // }}}
 
 void arch_set_uuid() { // {{{
+	if (!avr_connected) {
+		avr_uuid_dirty = true;
+		return;
+	}
 	avr_buffer[0] = HWC_SET_UUID;
 	for (uint8_t i = 0; i < UUID_SIZE; ++i)
 		avr_buffer[1 + i] = uuid[i];
@@ -878,7 +902,7 @@ void arch_set_uuid() { // {{{
 	avr_send();
 } // }}}
 
-static void avr_setup_end3();
+static void avr_connect3();
 static int avr_next_pin_name;
 
 void arch_send_pin_name(int pin) { // {{{
@@ -886,7 +910,7 @@ void arch_send_pin_name(int pin) { // {{{
 	send_host(CMD_PINNAME, pin, 0, 0, 0, avr_pin_name_len[pin]);
 } // }}}
 
-static void avr_setup_end4() { // {{{
+static void avr_connect4() { // {{{
 	avr_pin_name_len[avr_next_pin_name] = command[1][1] + 1;
 	avr_pin_name[avr_next_pin_name] = new char[command[1][1] + 1];
 	memcpy(&avr_pin_name[avr_next_pin_name][1], &command[1][2], command[1][1]);
@@ -896,22 +920,22 @@ static void avr_setup_end4() { // {{{
 		avr_pin_name[avr_next_pin_name][0] = 8;
 	avr_write_ack("pin name");
 	avr_next_pin_name += 1;
-	avr_setup_end3();
+	avr_connect3();
 } // }}}
 
-static void avr_setup_end3() { // {{{
+static void avr_connect3() { // {{{
 	if (avr_next_pin_name >= NUM_PINS) {
-		setup_end();
+		connect_end();
 		return;
 	}
 	avr_buffer[0] = HWC_PINNAME;
 	avr_buffer[1] = avr_next_pin_name < NUM_DIGITAL_PINS ? avr_next_pin_name : (avr_next_pin_name - NUM_DIGITAL_PINS) | 0x80;
-	wait_for_reply[expected_replies++] = avr_setup_end4;
+	wait_for_reply[expected_replies++] = avr_connect4;
 	prepare_packet(avr_buffer, 2);
 	avr_send();
 } // }}}
 
-void avr_setup_end2() { // {{{
+void avr_connect2() { // {{{
 	protocol_version = 0;
 	for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
 		protocol_version |= int(uint8_t(command[1][2 + i])) << (i * 8);
@@ -945,16 +969,19 @@ void avr_setup_end2() { // {{{
 	avr_next_pin_name = 0;
 	avr_pin_name_len = new int[NUM_PINS];
 	avr_pin_name = new char *[NUM_PINS];
-	avr_setup_end3();
+	avr_connect3();
 } // }}}
 
-void arch_setup_end(char const *run_id) { // {{{
+void arch_connect(char const *run_id, char const *port) { // {{{
+	avr_connected = true;
+	avr_serial.begin(port, 115200);
+	arch_reset();
 	// Get constants.
 	avr_buffer[0] = HWC_BEGIN;
 	avr_buffer[1] = 10;
-	for (int i = 0; i < 8; ++i)
+	for (int i = 0; i < ID_SIZE; ++i)
 		avr_buffer[2 + i] = run_id[i];
-	wait_for_reply[expected_replies++] = avr_setup_end2;
+	wait_for_reply[expected_replies++] = avr_connect2;
 	prepare_packet(avr_buffer, 10);
 	avr_send();
 } // }}}
@@ -969,6 +996,8 @@ void arch_request_temp(int which) { // {{{
 } // }}}
 
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit_l, int heater_limit_h, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit_l, int fan_limit_h, double hold_time) { // {{{
+	if (!avr_connected)
+		return;
 	if (thermistor_pin < NUM_DIGITAL_PINS || thermistor_pin >= NUM_PINS) {
 		debug("setup for invalid adc %d requested", thermistor_pin);
 		return;
@@ -1049,8 +1078,11 @@ void arch_reconnect(char *port) { // {{{
 
 // Running hooks. {{{
 int arch_tick() { // {{{
-	serial(1);
-	return 500;
+	if (avr_connected) {
+		serial(1);
+		return 500;
+	}
+	return -1;
 } // }}}
 
 void arch_addpos(int s, int m, double diff) { // {{{
@@ -1063,6 +1095,10 @@ void arch_addpos(int s, int m, double diff) { // {{{
 } // }}}
 
 void arch_stop(bool fake) { // {{{
+	if (!avr_connected) {
+		stop_pending = true;
+		return;
+	}
 	host_block = true;
 	if (preparing || out_busy >= 3) {
 		//debug("not yet stopping");
@@ -1111,7 +1147,7 @@ static void avr_sent_fragment() { // {{{
 } // }}}
 
 bool arch_send_fragment() { // {{{
-	if (host_block || stopping || discard_pending || stop_pending) {
+	if (!avr_connected || host_block || stopping || discard_pending || stop_pending) {
 		//debug("not sending arch frag %d %d %d %d", host_block, stopping, discard_pending, stop_pending);
 		return false;
 	}
@@ -1169,7 +1205,7 @@ bool arch_send_fragment() { // {{{
 void arch_start_move(int extra) { // {{{
 	if (host_block)
 		return;
-	if (preparing || sending_fragment || out_busy >= 3) {
+	if (!avr_connected || preparing || sending_fragment || out_busy >= 3) {
 		//debug("no start yet");
 		start_pending = true;
 		return;
@@ -1199,6 +1235,8 @@ bool arch_running() { // {{{
 } // }}}
 
 void arch_home() { // {{{
+	if (!avr_connected)
+		return;
 	avr_homing = true;
 	while (out_busy >= 3) {
 		poll(&pollfds[2], 1, -1);
@@ -1235,6 +1273,8 @@ void arch_stop_audio() { // {{{
 } // }}}
 
 off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{
+	if (!avr_connected)
+		return max;
 	if (avr_audio != motor) {
 		arch_stop(false);
 		avr_audio = motor;
@@ -1312,11 +1352,13 @@ void arch_discard() { // {{{
 	if (!avr_running || stopping || avr_homing)
 		return;
 	discard_pending = true;
-	if (!avr_filling)
+	if (avr_connected && !avr_filling)
 		arch_do_discard();
 } // }}}
 
 void arch_send_spi(int bits, uint8_t *data) { // {{{
+	if (!avr_connected)
+		return;
 	while (out_busy >= 3) {
 		poll(&pollfds[2], 1, -1);
 		serial(1);
@@ -1384,6 +1426,10 @@ void AVRSerial::write(char c) { // {{{
 #ifdef DEBUG_AVRCOMM
 	debug("w\t%02x", c & 0xff);
 #endif
+	if (!avr_connected) {
+		debug("writing to serial while not connected");
+		abort();
+	}
 	while (true) {
 		errno = 0;
 		int ret = ::write(fd, &c, 1);

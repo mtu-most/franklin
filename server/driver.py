@@ -61,9 +61,9 @@ import errno
 
 config = fhs.init(packagename = 'franklin', config = { # {{{
 	'cdriver': None,
-	'port': None,
-	'run-id': None,
-	'allow-system': None
+	'allow-system': None,
+	'uuid': None,
+	'local': False
 	})
 # }}}
 
@@ -96,9 +96,9 @@ def delayed(f): # {{{
 
 # Call cdriver running on same machine.
 class Driver: # {{{
-	def __init__(self, port, run_id):
+	def __init__(self):
 		#log(repr(config))
-		self.driver = subprocess.Popen((config['cdriver'], port, run_id), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		self.driver = subprocess.Popen((config['cdriver'],), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		fcntl.fcntl(self.driver.stdout.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
 		self.buffer = b''
 	def available(self):
@@ -178,10 +178,11 @@ class Printer: # {{{
 		sys.stdout.write(json.dumps(data) + '\n')
 		sys.stdout.flush()
 	# }}}
-	def __init__(self, port, run_id, allow_system): # {{{
+	def __init__(self, allow_system): # {{{
 		self.initialized = False
+		self.uuid = config['uuid']
 		self.pin_names = None
-		self.printer = Driver(port, run_id)
+		self.printer = Driver()
 		self.allow_system = allow_system
 		self.job_output = ''
 		self.jobs_active = []
@@ -242,7 +243,6 @@ class Printer: # {{{
 		self.movecb = []
 		self.tempcb = []
 		self.alarms = set()
-		self.run_id = run_id
 		self.zoffset = 0.
 		self.targetx = 0.
 		self.targety = 0.
@@ -251,43 +251,8 @@ class Printer: # {{{
 		self.temp_scale_max = 250
 		self.multipliers = []
 		self.current_extruder = 0
-		# Get the printer state.
-		self._read_globals(False)
-		for i, s in enumerate(self.spaces):
-			s.read(self._read('SPACE', i))
-		for i, t in enumerate(self.temps):
-			t.read(self._read('TEMP', i))
-			# Disable heater.
-			self.settemp(i, float('nan'), update = False)
-			# Disable heater alarm.
-			self.waittemp(i, None, None)
-		for i, g in enumerate(self.gpios):
-			g.read(self._read('GPIO', i))
-		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
-		self.pause(True, False, update = False)
-		if port != '-' and not port.startswith('!'):
-			self._send_packet(struct.pack('=B', protocol.command['GET_UUID']))
-			cmd, s, m, f, e, uuid = self._get_reply()
-			if (uuid[7] & 0xf0) != 0x40 or (uuid[9] & 0xc0) != 0x80:
-				# Broken uuid; create a new one and set it.
-				log('old uuid: ' + repr(uuid))
-				uuid = [random.randrange(256) for i in range(16)]
-				uuid[7] &= 0x0f
-				uuid[7] |= 0x40
-				uuid[9] &= 0x3f
-				uuid[9] |= 0x80
-				self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + bytes(uuid))
-				new = True
-			else:
-				new = False
-			uuid = ''.join('%02x' % x for x in uuid[:16])
-			self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
-			if new:
-				log('new uuid: ' + self.uuid)
-			assert cmd == protocol.rcommand['UUID']
-		else:
-			self.uuid = 'local'
 		try:
+			assert self.uuid is not None # Don't try reading if there is no uuid given.
 			with fhs.read_data(os.path.join(self.uuid, 'profile')) as pfile:
 				self.profile = pfile.readline().strip()
 			log('profile is %s' % self.profile)
@@ -298,46 +263,64 @@ class Printer: # {{{
 		if self.profile not in profiles and len(profiles) > 0:
 			log('Default profile does not exist; using %s instead' % self.profile)
 			self.profile = profiles[0]
+		# Globals.
+		self.queue_length = 0
+		self.num_pins = 0
+		self.led_pin = 0
+		self.stop_pin = 0
+		self.probe_pin = 0
+		self.spiss_pin = 0
+		self.timeout = 0
+		self.bed_id = -1
+		self.fan_id = -1
+		self.spindle_id = -1
+		self.feedrate = 1
+		self.max_deviation = 0
+		self.max_v = float('inf')
+		self.current_extruder = 0
+		self.targetx = 0
+		self.targety = 0
+		self.zoffset = 0
+		# Other things don't need to be initialized, because num_* == 0.
 		# Fill job queue.
 		self.jobqueue = {}
 		self.audioqueue = {}
-		spool = fhs.read_spool(self.uuid, dir = True, opened = False)
-		if spool is not None:
-			gcode = os.path.join(spool, 'gcode')
-			audio = os.path.join(spool, 'audio')
-			if os.path.isdir(gcode):
-				for filename in os.listdir(gcode):
-					name, ext = os.path.splitext(filename)
-					if ext != os.extsep + 'bin':
-						log('skipping %s' % filename)
-						continue
-					try:
-						#log('opening %s' % filename)
-						with open(os.path.join(gcode, filename), 'rb') as f:
-							f.seek(-8 * 8, os.SEEK_END)
-							self.jobqueue[name] = struct.unpack('=' + 'd' * 8, f.read())
-					except:
-						traceback.print_exc()
-						log('failed to open gcode file %s' % os.path.join(gcode, filename))
-			if os.path.isdir(audio):
-				for filename in os.listdir(audio):
-					name, ext = os.path.splitext(filename)
-					if ext != os.extsep + 'bin':
-						log('skipping %s' % filename)
-						continue
-					try:
-						#log('opening audio %s' % filename)
-						self.audioqueue[name] = os.stat(os.path.join(audio, filename)).st_size
-					except:
-						traceback.print_exc()
-						log('failed to stat audio file %s' % os.path.join(audio, filename))
-		try:
-			self.load(update = False)
-			if self.spi_setup:
-				self._spi_send(self.spi_setup)
-		except:
-			log('Failed to import initial settings')
-			traceback.print_exc()
+		if self.uuid is not None:
+			spool = fhs.read_spool(self.uuid, dir = True, opened = False)
+			if spool is not None:
+				gcode = os.path.join(spool, 'gcode')
+				audio = os.path.join(spool, 'audio')
+				if os.path.isdir(gcode):
+					for filename in os.listdir(gcode):
+						name, ext = os.path.splitext(filename)
+						if ext != os.extsep + 'bin':
+							log('skipping %s' % filename)
+							continue
+						try:
+							#log('opening %s' % filename)
+							with open(os.path.join(gcode, filename), 'rb') as f:
+								f.seek(-8 * 8, os.SEEK_END)
+								self.jobqueue[name] = struct.unpack('=' + 'd' * 8, f.read())
+						except:
+							traceback.print_exc()
+							log('failed to open gcode file %s' % os.path.join(gcode, filename))
+				if os.path.isdir(audio):
+					for filename in os.listdir(audio):
+						name, ext = os.path.splitext(filename)
+						if ext != os.extsep + 'bin':
+							log('skipping %s' % filename)
+							continue
+						try:
+							#log('opening audio %s' % filename)
+							self.audioqueue[name] = os.stat(os.path.join(audio, filename)).st_size
+						except:
+							traceback.print_exc()
+							log('failed to stat audio file %s' % os.path.join(audio, filename))
+			try:
+				self.load(update = False)
+			except:
+				log('Failed to import initial settings')
+				traceback.print_exc()
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
@@ -353,43 +336,7 @@ class Printer: # {{{
 		log('disconnecting')
 		if notify:
 			self._send(None, 'disconnect')
-		waiting_commands = ''
-		while True:
-			s = select.select([sys.stdin], [], [sys.stdin])
-			if len(s[2]) > 0:
-				log('Error on standard input; exiting.')
-				sys.exit(0)
-			data = sys.stdin.read()
-			if data == '':
-				log('EOF on standard input; exiting.')
-				sys.exit(0)
-			self.command_buffer += data
-			while '\n' in self.command_buffer:
-				pos = self.command_buffer.index('\n')
-				ln = self.command_buffer[:pos]
-				self.command_buffer = self.command_buffer[pos + 1:]
-				id, func, a, ka = json.loads(ln)
-				if func == 'reconnect':
-					log('reconnect %s' % a[1])
-					self._send_packet(bytes((protocol.command['RECONNECT'],)) + a[1].encode('utf-8') + b'\x00')
-					self.command_buffer = waiting_commands + self.command_buffer
-					self._send(id, 'return', None)
-					return
-				elif func == 'disconnect':
-					# Ignore disconnect requests while disconnected.
-					pass
-				elif func in ('export_settings', 'die'):
-					role = a.pop(0) + '_'
-					# TODO: Use role.
-					ret = getattr(self, ('expert_' if func == 'die' else '') + func)(*a, **ka)
-					if ret == (WAIT, WAIT):
-						# Special case: request to die.
-						self._send(id, 'return', None)
-						sys.exit(0)
-					else:
-						self._send(id, 'return', ret)
-				else:
-					waiting_commands += ln + '\n'
+		self.connected = False
 	# }}}
 	def _printer_read(self, *a, **ka): # {{{
 		while True:
@@ -689,7 +636,7 @@ class Printer: # {{{
 		if data is None:
 			return False
 		self.queue_length, self.num_pins, num_temps, num_gpios = struct.unpack('=BBBB', data[:4])
-		if self.pin_names is None:
+		if self.pin_names is None and self.num_pins > 0:
 			self.pin_names = [''] * self.num_pins
 		self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.max_deviation, self.max_v, self.current_extruder, self.targetx, self.targety, self.zoffset, self.store_adc = struct.unpack('=HHHHHhhhdddBddd?', data[4:])
 		while len(self.temps) < num_temps:
@@ -743,7 +690,8 @@ class Printer: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		self._broadcast(target, 'globals_update', [self.profile, len(self.temps), len(self.gpios), self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.max_deviation, self.max_v, self.targetx, self.targety, self.zoffset, self.store_adc, self.park_after_print, self.sleep_after_print, self.cool_after_print, self._mangle_spi(), self.temp_scale_min, self.temp_scale_max, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
+		pin_names = [] if self.pin_names is None else [(x[0], x[1:].decode('utf-8')) for x in self.pin_names]
+		self._broadcast(target, 'globals_update', [self.profile, len(self.temps), len(self.gpios), pin_names, self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.max_deviation, self.max_v, self.targetx, self.targety, self.zoffset, self.store_adc, self.park_after_print, self.sleep_after_print, self.cool_after_print, self._mangle_spi(), self.temp_scale_min, self.temp_scale_max, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		if not self.initialized:
@@ -1968,10 +1916,33 @@ class Printer: # {{{
 				p = [(p[b] << shift | p[b + 1] >> (8 - shift)) & 0xff for b in range(len(p) - 1)] + [(p[-1] << shift) & 0xff]
 			self._send_packet(struct.pack('=BB', protocol.command['SPI'], bits) + b''.join(struct.pack('=B', b) for b in p))
 	# }}}
+	def admin_connect(self, port, run_id): # {{{
+		self._send_packet(struct.pack('=B', protocol.command['CONNECT']) + run_id + port + b'\0')
+		# Get the printer state.
+		self._read_globals(False)
+		for i, s in enumerate(self.spaces):
+			s.read(self._read('SPACE', i))
+		for i, t in enumerate(self.temps):
+			t.read(self._read('TEMP', i))
+			# Disable heater.
+			self.settemp(i, float('nan'), update = False)
+			# Disable heater alarm.
+			self.waittemp(i, None, None)
+		for i, g in enumerate(self.gpios):
+			g.read(self._read('GPIO', i))
+		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
+		self.pause(True, False, update = False)
+		if self.spi_setup:
+			self._spi_send(self.spi_setup)
+	# }}}
+	def admin_reconnect(self, port): # {{{
+		pass
+	# }}}
 	# Subclasses.  {{{
 	class Space: # {{{
 		def __init__(self, printer, id):
 			self.name = ['position', 'extruders', 'followers'][id]
+			self.type = TYPE_CARTESIAN
 			self.printer = printer
 			self.id = id
 			self.axis = []
@@ -2198,6 +2169,17 @@ class Printer: # {{{
 	# }}}
 	# }}}
 	# Useful commands.  {{{
+	def admin_reset_uuid(self): # {{{
+		uuid = [random.randrange(256) for i in range(16)]
+		uuid[7] &= 0x0f
+		uuid[7] |= 0x40
+		uuid[9] &= 0x3f
+		uuid[9] |= 0x80
+		self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + bytes(uuid))
+		uuid = ''.join('%02x' % x for x in uuid[:16])
+		self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
+		return self.uuid
+	# }}}
 	def expert_die(self, reason): # {{{
 		'''Terminate the driver process.
 		'''
@@ -2720,16 +2702,20 @@ class Printer: # {{{
 				continue
 			key = r.group(6)
 			value = r.group(7)
-			if key.endswith('name'):
-				pass
-			elif key == 'spi_setup':
-				value = self._unmangle_spi(value)
-			elif key.endswith('pin'):
-				value = read_pin(value)
-			elif key.startswith('num') or section == 'follower' or key.endswith('_id'):
-				value = int(value)
-			else:
-				value = float(value)
+			try:
+				if key.endswith('name'):
+					pass
+				elif key == 'spi_setup':
+					value = self._unmangle_spi(value)
+				elif key.endswith('pin'):
+					value = read_pin(value)
+				elif key.startswith('num') or section == 'follower' or key.endswith('_id'):
+					value = int(value)
+				else:
+					value = float(value)
+			except ValueError:
+				errors.append((l, 'invalid value for %s' % key))
+				continue
 			if key not in keys[section] or (section == 'motor' and ((key in ('home_pos', 'home_order') and index[0] == 1) or (key in ('steps_per_unit', 'home_order', 'limit_v', 'limit_a') and index[0] == 2))):
 				errors.append((l, 'invalid key for section %s' % section))
 				continue
@@ -2979,7 +2965,8 @@ class Printer: # {{{
 		'''Return all settings about a machine.
 		'''
 		self.initialized = True
-		self._broadcast(target, 'new_printer', [self.uuid, self.queue_length, [(x[0], x[1:].decode('utf-8')) for x in self.pin_names]])
+		log('sending %s' % self.uuid)
+		self._broadcast(target, 'new_printer', self.uuid, [self.queue_length])
 		self._globals_update(target)
 		for i, s in enumerate(self.spaces):
 			self._space_update(i, target)
@@ -2995,6 +2982,7 @@ class Printer: # {{{
 	def admin_disconnect(self): # {{{
 		self._send_packet(struct.pack('=B', protocol.command['FORCE_DISCONNECT']))
 		self._close(False)
+	# }}}
 	# }}}
 	# Accessor functions. {{{
 	# Globals. {{{
@@ -3282,7 +3270,7 @@ class Printer: # {{{
 # }}}
 
 call_queue = []
-printer = Printer(config['port'], config['run-id'], config['allow-system'])
+printer = Printer(config['allow-system'])
 if printer.printer is None:
 	sys.exit(0)
 

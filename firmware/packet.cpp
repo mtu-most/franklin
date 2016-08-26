@@ -55,18 +55,14 @@ void packet()
 		homers = 0;
 		home_step_time = 0;
 		reply[0] = CMD_READY;
-		reply[1] = 27;
+		reply[1] = 11;
 		*reinterpret_cast <uint32_t *>(&reply[2]) = PROTOCOL_VERSION;
 		reply[6] = NUM_DIGITAL_PINS;
 		reply[7] = NUM_ANALOG_INPUTS;
 		reply[8] = NUM_MOTORS;
 		reply[9] = 1 << FRAGMENTS_PER_MOTOR_BITS;
 		reply[10] = BYTES_PER_FRAGMENT;
-		for (uint8_t i = 0; i < UUID_SIZE; ++i) {
-			BUFFER_CHECK(reply, 11 + i);
-			reply[11 + i] = uuid[i];
-		}
-		reply_ready = 11 + UUID_SIZE;
+		reply_ready = reply[1];	// Update the length there if it needs to change.
 		write_ack();
 		return;
 	}
@@ -81,8 +77,8 @@ void packet()
 	{
 		cmddebug("CMD_SET_UUID");
 		for (uint8_t i = 0; i < UUID_SIZE; ++i) {
-			uuid[i] = command(1 + i);
-			EEPROM.write(i, uuid[i]);
+			printerid[ID_SIZE + i] = command(1 + i);
+			EEPROM.write(i, printerid[ID_SIZE + i]);
 		}
 		write_ack();
 		return;
