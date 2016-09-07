@@ -21,7 +21,7 @@
 #ifndef ADCBITS
 
 // Includes and defines. {{{
-#define DEBUG_AVRCOMM
+//#define DEBUG_AVRCOMM
 
 #include <stdint.h>
 #include <unistd.h>
@@ -131,7 +131,7 @@ void arch_motors_change();
 void arch_globals_change();
 void arch_setup_start();
 void arch_set_uuid();
-void arch_connect(char const *port, int len, char const *run_id);
+void arch_connect(char const *run_id, char const *port);
 void arch_send_pin_name(int pin);
 void avr_connect2();
 void arch_request_temp(int which);
@@ -717,6 +717,8 @@ void arch_reset() { // {{{
 		debug("reset ignored");
 		return;
 	}
+	// Wait for reset to complete.
+	sleep(2);
 	avr_serial.write(CMD_ACK1);
 	avr_serial.write(CMD_ACK2);
 	avr_serial.write(CMD_ACK3);
@@ -919,11 +921,13 @@ static void avr_connect4() { // {{{
 	else
 		avr_pin_name[avr_next_pin_name][0] = 8;
 	avr_write_ack("pin name");
+	arch_send_pin_name(avr_next_pin_name);
 	avr_next_pin_name += 1;
 	avr_connect3();
 } // }}}
 
 static void avr_connect3() { // {{{
+	//debug("sending pin %d name", avr_next_pin_name);
 	if (avr_next_pin_name >= NUM_PINS) {
 		connect_end();
 		return;

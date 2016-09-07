@@ -20,7 +20,7 @@
 #include "cdriver.h"
 
 //#define DEBUG_DATA
-//#define DEBUG_HOST
+#define DEBUG_HOST
 //#define DEBUG_ALL_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
@@ -283,7 +283,7 @@ void serial(uint8_t channel) { // {{{
 						debug("ID request from host");
 						continue;
 					}
-					need_id = ID_SIZE + (1 + ID_SIZE + 2) / 3;
+					need_id = ID_SIZE + UUID_SIZE + (1 + ID_SIZE + UUID_SIZE + 2) / 3;
 					continue;
 				default:
 					if (!expected_replies)

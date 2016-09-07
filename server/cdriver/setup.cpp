@@ -143,4 +143,7 @@ void connect_end() {
 	first_fragment = current_fragment;
 	host_block = false;
 	arch_stop(true);
+	// Update pin names at next globals update.
+	sent_names = false;
+	send_host(CMD_CONNECTED);
 }

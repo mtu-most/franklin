@@ -136,7 +136,7 @@ class Driver: # {{{
 # }}}
 
 # Reading and writing pins to and from ini files. {{{
-def read_pin(pin):
+def read_pin(printer, pin):
 	extra = 0
 	if pin.startswith('X'):
 		pin = pin[1:]
@@ -148,10 +148,13 @@ def read_pin(pin):
 		extra += 512
 		pin = pin[1:]
 	try:
-		return int(pin) + extra
+		pin = int(pin)
 	except:
 		log('incorrect pin %s' % pin)
 		return 0
+	if pin >= len(printer.pin_names):
+		printer.pin_names.extend([[0xf, '(Pin %d)' % i] for i in range(len(printer.pin_names), pin + 1)])
+	return pin + extra
 
 def write_pin(pin):
 	if pin == 0:
@@ -180,8 +183,9 @@ class Printer: # {{{
 	# }}}
 	def __init__(self, allow_system): # {{{
 		self.initialized = False
+		self.connected = False
 		self.uuid = config['uuid']
-		self.pin_names = None
+		self.pin_names = []
 		self.printer = Driver()
 		self.allow_system = allow_system
 		self.job_output = ''
@@ -253,11 +257,13 @@ class Printer: # {{{
 		self.current_extruder = 0
 		try:
 			assert self.uuid is not None # Don't try reading if there is no uuid given.
-			with fhs.read_data(os.path.join(self.uuid, 'profile')) as pfile:
-				self.profile = pfile.readline().strip()
+			with fhs.read_data(os.path.join(self.uuid, 'info' + os.extsep + 'txt')) as pfile:
+				self.name = pfile.readline().rstrip('\n')
+				self.profile = pfile.readline().rstrip('\n')
 			log('profile is %s' % self.profile)
 		except:
 			log("No default profile; using 'default'.")
+			self.name = self.uuid
 			self.profile = 'default'
 		profiles = self.list_profiles()
 		if self.profile not in profiles and len(profiles) > 0:
@@ -334,9 +340,10 @@ class Printer: # {{{
 	# }}}
 	def _close(self, notify = True): # {{{
 		log('disconnecting')
+		self.connected = False
 		if notify:
 			self._send(None, 'disconnect')
-		self.connected = False
+		self._globals_update()
 	# }}}
 	def _printer_read(self, *a, **ka): # {{{
 		while True:
@@ -534,7 +541,35 @@ class Printer: # {{{
 				call_queue.append((self._print_done, (True, 'completed')))
 				continue
 			elif cmd == protocol.rcommand['PINNAME']:
-				self.pin_names[s] = data
+				if s >= len(self.pin_names):
+					self.pin_names.extend([[0xf, '(Pin %d)' % i] for i in range(len(self.pin_names), s + 1)])
+				self.pin_names[s] = [data[0], data[1:].decode('utf-8', 'replace')] if len(data) >= 1 else [0, '']
+				log('pin name {} = {}'.format(s, self.pin_names[s]))
+				continue
+			elif cmd == protocol.rcommand['CONNECTED']:
+				# Get the printer state.
+				self._write_globals(update = False)
+				for i, s in enumerate(self.spaces):
+					log('writing space info for {}'.format(i))
+					self._send_packet(struct.pack('=BB', protocol.command['WRITE_SPACE_INFO'], i) + s.write_info())
+					for a in range(len(s.axis)):
+						self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_AXIS'], i, a) + s.write_axis(a))
+					for m in range(len(s.motor)):
+						self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_MOTOR'], i, m) + s.write_motor(m))
+				for i, t in enumerate(self.temps):
+					self._send_packet(struct.pack('=BB', protocol.command['WRITE_TEMP'], i) + t.write())
+					# Disable heater.
+					self.settemp(i, float('nan'), update = False)
+					# Disable heater alarm.
+					self.waittemp(i, None, None)
+				for i, g in enumerate(self.gpios):
+					self._send_packet(struct.pack('=BB', protocol.command['WRITE_GPIO'], i) + g.write())
+				# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
+				self.pause(True, False, update = False)
+				if self.spi_setup:
+					self._spi_send(self.spi_setup)
+				self.connected = True
+				self._globals_update()
 				continue
 			if reply:
 				return ('packet', (cmd, s, m, f, e, data))
@@ -636,8 +671,6 @@ class Printer: # {{{
 		if data is None:
 			return False
 		self.queue_length, self.num_pins, num_temps, num_gpios = struct.unpack('=BBBB', data[:4])
-		if self.pin_names is None and self.num_pins > 0:
-			self.pin_names = [''] * self.num_pins
 		self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.timeout, self.bed_id, self.fan_id, self.spindle_id, self.feedrate, self.max_deviation, self.max_v, self.current_extruder, self.targetx, self.targety, self.zoffset, self.store_adc = struct.unpack('=HHHHHhhhdddBddd?', data[4:])
 		while len(self.temps) < num_temps:
 			self.temps.append(self.Temp(len(self.temps)))
@@ -653,7 +686,7 @@ class Printer: # {{{
 		self.gpios = self.gpios[:num_gpios]
 		return True
 	# }}}
-	def _write_globals(self, nt, ng, update = True): # {{{
+	def _write_globals(self, nt = None, ng = None, update = True): # {{{
 		if nt is None:
 			nt = len(self.temps)
 		if ng is None:
@@ -690,8 +723,7 @@ class Printer: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		pin_names = [] if self.pin_names is None else [(x[0], x[1:].decode('utf-8')) for x in self.pin_names]
-		self._broadcast(target, 'globals_update', [self.profile, len(self.temps), len(self.gpios), pin_names, self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.max_deviation, self.max_v, self.targetx, self.targety, self.zoffset, self.store_adc, self.park_after_print, self.sleep_after_print, self.cool_after_print, self._mangle_spi(), self.temp_scale_min, self.temp_scale_max, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
+		self._broadcast(target, 'globals_update', [self.name, self.profile, len(self.temps), len(self.gpios), self.pin_names, self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.probe_dist, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.max_deviation, self.max_v, self.targetx, self.targety, self.zoffset, self.store_adc, self.park_after_print, self.sleep_after_print, self.cool_after_print, self._mangle_spi(), self.temp_scale_min, self.temp_scale_max, self.connected, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		if not self.initialized:
@@ -1907,7 +1939,7 @@ class Printer: # {{{
 					self.set_axis_pos(i, a, pos)
 	# }}}
 	def _pin_valid(self, pin):	# {{{
-		return(pin & 0x100) != 0
+		return (pin & 0x100) != 0
 	# }}}
 	def _spi_send(self, data): # {{{
 		for bits, p in data:
@@ -1917,23 +1949,8 @@ class Printer: # {{{
 			self._send_packet(struct.pack('=BB', protocol.command['SPI'], bits) + b''.join(struct.pack('=B', b) for b in p))
 	# }}}
 	def admin_connect(self, port, run_id): # {{{
-		self._send_packet(struct.pack('=B', protocol.command['CONNECT']) + run_id + port + b'\0')
-		# Get the printer state.
-		self._read_globals(False)
-		for i, s in enumerate(self.spaces):
-			s.read(self._read('SPACE', i))
-		for i, t in enumerate(self.temps):
-			t.read(self._read('TEMP', i))
-			# Disable heater.
-			self.settemp(i, float('nan'), update = False)
-			# Disable heater alarm.
-			self.waittemp(i, None, None)
-		for i, g in enumerate(self.gpios):
-			g.read(self._read('GPIO', i))
-		# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
-		self.pause(True, False, update = False)
-		if self.spi_setup:
-			self._spi_send(self.spi_setup)
+		self._send_packet(struct.pack('=B', protocol.command['CONNECT']) + bytes([ord(x) for x in run_id]) + port.encode('utf-8') + b'\0')
+		# The rest happens in response to the CONNECTED reply.
 	# }}}
 	def admin_reconnect(self, port): # {{{
 		pass
@@ -2170,14 +2187,9 @@ class Printer: # {{{
 	# }}}
 	# Useful commands.  {{{
 	def admin_reset_uuid(self): # {{{
-		uuid = [random.randrange(256) for i in range(16)]
-		uuid[7] &= 0x0f
-		uuid[7] |= 0x40
-		uuid[9] &= 0x3f
-		uuid[9] |= 0x80
+		uuid = protocol.new_uuid(string = False)
 		self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + bytes(uuid))
-		uuid = ''.join('%02x' % x for x in uuid[:16])
-		self.uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
+		self.uuid = protocol.new_uuid(uuid = uuid, string = True)
 		return self.uuid
 	# }}}
 	def expert_die(self, reason): # {{{
@@ -2372,8 +2384,9 @@ class Printer: # {{{
 	def admin_set_default_profile(self, profile): # {{{
 		'''Set a profile as default.
 		'''
-		with fhs.write_data(os.path.join(self.uuid, 'profile')) as f:
-			f.write(profile.strip() + '\n')
+		with fhs.write_data(os.path.join(self.uuid, 'info' + os.extsep + 'txt')) as f:
+			f.write(self.name + '\n')
+			f.write(profile + '\n')
 	# }}}
 	def abort(self): # {{{
 		'''Abort the current job.
@@ -2609,6 +2622,7 @@ class Printer: # {{{
 		message = '[general]\r\n'
 		for t in ('temps', 'gpios'):
 			message += 'num_%s = %d\r\n' % (t, len(getattr(self, t)))
+		message += 'pin_names=%s\r\n' % ','.join(('%d' % p[0]) + p[1] for p in self.pin_names)
 		message += 'unit_name=%s\r\n' % self.unit_name
 		message += 'spi_setup=%s\r\n' % self._mangle_spi()
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin')])
@@ -2644,7 +2658,7 @@ class Printer: # {{{
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set(), 'follower': set()}
 		keys = {
-				'general': {'num_temps', 'num_gpios', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'},
+				'general': {'num_temps', 'num_gpios', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'},
 				'space': {'type', 'num_axes', 'delta_angle', 'polar_max_r'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
@@ -2703,12 +2717,14 @@ class Printer: # {{{
 			key = r.group(6)
 			value = r.group(7)
 			try:
-				if key.endswith('name'):
+				if key == 'pin_names':
+					value = [[int(x[0]), x[1:]] for x in value.split(',')]
+				elif 'name' in key:
 					pass
 				elif key == 'spi_setup':
 					value = self._unmangle_spi(value)
 				elif key.endswith('pin'):
-					value = read_pin(value)
+					value = read_pin(self, value)
 				elif key.startswith('num') or section == 'follower' or key.endswith('_id'):
 					value = int(value)
 				else:
@@ -2989,7 +3005,7 @@ class Printer: # {{{
 	def get_globals(self): # {{{
 		#log('getting globals')
 		ret = {'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'):
+		for key in ('name', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'):
 			ret[key] = getattr(self, key)
 		return ret
 	# }}}
@@ -2999,8 +3015,9 @@ class Printer: # {{{
 		ng = ka.pop('num_gpios') if 'num_gpios' in ka else None
 		if 'store_adc' in ka:
 			self.store_adc = bool(ka.pop('store_adc'))
-		if 'unit_name' in ka:
-			self.unit_name = ka.pop('unit_name')
+		for key in ('unit_name', 'name', 'pin_names'):
+			if key in ka:
+				setattr(self, key, ka.pop(key))
 		if 'spi_setup' in ka:
 			self.spi_setup = self._unmangle_spi(ka.pop('spi_setup'))
 			if self.spi_setup:

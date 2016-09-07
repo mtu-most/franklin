@@ -123,7 +123,7 @@ void SET(Pin_t _pin);
 void RESET(Pin_t _pin);
 void GET(Pin_t _pin, bool _default, void(*cb)(bool));
 void arch_setup_start(char const *port);
-void arch_connect(char const *port, char const *run_id);
+void arch_connect(char const *run_id, char const *port);
 void arch_request_temp(int which);
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit_l = ~0, int heater_limit_h = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit_l = ~0, int fan_limit_h = ~0, double hold_time = 0);
 void arch_send_pin_name(int pin);
@@ -363,7 +363,7 @@ void arch_setup_start(char const *port) {
 	debug("pru exec %d", prussdrv_exec_program(PRU, "/usr/lib/franklin/bbb_pru.bin"));
 }
 
-void arch_connect(char const *port, char const *run_id) {
+void arch_connect(char const *run_id, char const *port) {
 	// Override hwtime_step.
 	hwtime_step = 40;
 	// Claim that firmware has correct version.

@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import random
 from websocketd import log
 
 single = {
@@ -96,7 +97,8 @@ rcommand = {
 	'CONFIRM': 0x52,
 	'FILE_DONE': 0x53,
 	'PARKWAIT': 0x54,
-	'PINNAME': 0x55,
+	'CONNECTED': 0x55,
+	'PINNAME': 0x56,
 	}
 
 parsed = {
@@ -119,6 +121,18 @@ mask = [[0xc0, 0xc3, 0xff, 0x09],
 	[0x26, 0xb5, 0xb9, 0x23],
 	[0x95, 0x6c, 0xd5, 0x43],
 	[0x4b, 0xdc, 0xe2, 0x83]]
+
+def new_uuid(uuid = None, string = True):
+	if uuid is None:
+		uuid = [random.randrange(256) for i in range(16)]
+		uuid[7] &= 0x0f
+		uuid[7] |= 0x40
+		uuid[9] &= 0x3f
+		uuid[9] |= 0x80
+	if string:
+		uuid = ''.join('%02x' % x for x in uuid[:16])
+		uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
+	return uuid
 
 def build(packet):
 	l = len(packet)
@@ -144,7 +158,7 @@ def check(packet):
 	l = len(packet) - num
 	for t in range(num):
 		s = packet[l + t]
-		if s & 7 != t:
+		if s & 7 != t & 7:
 			log('bad index %x %x %x' % (s, l, t))
 			return False
 		for bit in range(5):

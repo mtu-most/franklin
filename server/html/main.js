@@ -20,20 +20,19 @@
 // Variables.  {{{
 var get_pointer_pos_xy = function() { return [NaN, NaN]; };
 var get_pointer_pos_z = function() { return [NaN, NaN]; };
-var ports;
 var upload_options = {};
-var labels_element, printers_element, ports_element;
+var labels_element, printers_element;
 var selected_printer;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
 var space_types = ['Cartesian', 'Delta', 'Polar', 'Extruder', 'Follower'];
+var new_tab;
 // }}}
 
 // General supporting functions. {{{
 AddEvent('load', function() { // {{{
-	ports = new Object;
 	labels_element = document.getElementById('labels');
 	printers_element = document.getElementById('printers');
-	ports_element = document.getElementById('new_port');
+	new_tab = document.getElementById('new_label');
 	selected_printer = null;
 	setup();
 	var setupbox = document.getElementById('setupbox');
@@ -61,7 +60,7 @@ AddEvent('load', function() { // {{{
 			return;
 		reading_temps = true;
 		var read = function(printer, num) {
-			if (num >= printer.temps.length) {
+			if (num >= printer.printer.temps.length) {
 				reading_temps = false;
 				// Update temperature graph.
 				var canvas = get_element(printer, [null, 'tempgraph']);
@@ -72,22 +71,22 @@ AddEvent('load', function() { // {{{
 				var c = canvas.getContext('2d');
 				canvas.height = canvas.clientHeight;
 				canvas.width = canvas.clientWidth;
-				var scale = canvas.height / (printer.temp_scale_max - printer.temp_scale_min);
+				var scale = canvas.height / (printer.printer.temp_scale_max - printer.printer.temp_scale_min);
 				c.clearRect(0, 0, canvas.width, canvas.height);
 				c.save();
 				c.translate(0, canvas.height);
 				c.scale(scale, -scale);
-				c.translate(0, -printer.temp_scale_min);
+				c.translate(0, -printer.printer.temp_scale_min);
 				// Draw grid.
 				c.beginPath();
 				var step = 15;
 				for (var t = step; t < 120; t += step) {
 					var x = (t / (2 * 60) * canvas.width) / scale;
-					c.moveTo(x, printer.temp_scale_min);
-					c.lineTo(x, printer.temp_scale_max);
+					c.moveTo(x, printer.printer.temp_scale_min);
+					c.lineTo(x, printer.printer.temp_scale_max);
 				}
-				step = Math.pow(10, Math.floor(Math.log(printer.temp_scale_max - printer.temp_scale_min) / Math.log(10)));
-				for (var y = step * Math.floor(printer.temp_scale_min / step); y < printer.temp_scale_max; y += step) {
+				step = Math.pow(10, Math.floor(Math.log(printer.printer.temp_scale_max - printer.printer.temp_scale_min) / Math.log(10)));
+				for (var y = step * Math.floor(printer.printer.temp_scale_min / step); y < printer.printer.temp_scale_max; y += step) {
 					c.moveTo(0, y);
 					c.lineTo(canvas.width / scale, y);
 				}
@@ -107,7 +106,7 @@ AddEvent('load', function() { // {{{
 				// Draw grid scale.
 				c.save();
 				c.scale(1 / scale, -1 / scale);
-				for (var y = step * Math.floor(printer.temp_scale_min / step); y < printer.temp_scale_max; y += step) {
+				for (var y = step * Math.floor(printer.printer.temp_scale_min / step); y < printer.printer.temp_scale_max; y += step) {
 					c.moveTo(0, y);
 					var text = y.toFixed(0);
 					c.fillText(text, (step / 50) * scale, -(y + step / 50) * scale);
@@ -116,41 +115,41 @@ AddEvent('load', function() { // {{{
 				// Draw data.
 				var time = new Date();
 				printer.temphistory.push(time);
-				for (var t = 0; t < printer.temps.length; ++t)
-					printer.temps[t].history.push([printer.temps[t].temp, printer.temps[t].value]);
+				for (var t = 0; t < printer.printer.temps.length; ++t)
+					printer.printer.temps[t].history.push([printer.printer.temps[t].temp, printer.printer.temps[t].value]);
 				var cutoff = time - 2 * 60 * 1000;
 				while (printer.temphistory.length > 1 && printer.temphistory[0] < cutoff)
 					printer.temphistory.shift();
-				for (var t = 0; t < printer.temps.length; ++t) {
-					while (printer.temps[t].history.length > printer.temphistory.length)
-						printer.temps[t].history.shift();
+				for (var t = 0; t < printer.printer.temps.length; ++t) {
+					while (printer.printer.temps[t].history.length > printer.temphistory.length)
+						printer.printer.temps[t].history.shift();
 				}
 				var x = function(t) {
 					return ((t - cutoff) / (2 * 60 * 1000) * canvas.width) / scale;
 				};
 				var y = function(d) {
 					if (isNaN(d))
-						return printer.temp_scale_min - 2 / scale;
+						return printer.printer.temp_scale_min - 2 / scale;
 					if (!isFinite(d))
-						return printer.temp_scale_max + 2 / scale;
+						return printer.printer.temp_scale_max + 2 / scale;
 					return d;
 				};
-				for (var t = 0; t < printer.temps.length; ++t) {
+				for (var t = 0; t < printer.printer.temps.length; ++t) {
 					// Draw measured data.
 					var value;
-					var data = printer.temps[t].history;
+					var data = printer.printer.temps[t].history;
 					c.beginPath();
 					value = data[0][0];
-					if (isNaN(printer.temps[t].beta)) {
-						value *= printer.temps[t].Rc / 100000;
-						value += printer.temps[t].Tc;
+					if (isNaN(printer.printer.temps[t].beta)) {
+						value *= printer.printer.temps[t].Rc / 100000;
+						value += printer.printer.temps[t].Tc;
 					}
 					c.moveTo(x(printer.temphistory[0]), y(value));
 					for (var i = 1; i < data.length; ++i) {
 						value = data[i][0];
-						if (isNaN(printer.temps[t].beta)) {
-							value *= printer.temps[t].Rc / 100000;
-							value += printer.temps[t].Tc;
+						if (isNaN(printer.printer.temps[t].beta)) {
+							value *= printer.printer.temps[t].Rc / 100000;
+							value += printer.printer.temps[t].Tc;
 						}
 						c.lineTo(x(printer.temphistory[i]), y(value));
 					}
@@ -174,10 +173,10 @@ AddEvent('load', function() { // {{{
 						if (data[i][1] != old && (!isNaN(data[i][1]) || !isNaN(old))) {
 							old = data[i][1];
 							var pos;
-							if (isNaN(data[i][1]) || data[i][1] < printer.temp_scale_min)
-								pos = printer.temp_scale_min;
-							else if (data[i][1] / scale >= printer.temp_scale_max / scale - 12)
-								pos = (printer.temp_scale_max / scale - 5) * scale;
+							if (isNaN(data[i][1]) || data[i][1] < printer.printer.temp_scale_min)
+								pos = printer.printer.temp_scale_min;
+							else if (data[i][1] / scale >= printer.printer.temp_scale_max / scale - 12)
+								pos = (printer.printer.temp_scale_max / scale - 5) * scale;
 							else
 								pos = data[i][1];
 							var text = data[i][1].toFixed(0);
@@ -191,9 +190,9 @@ AddEvent('load', function() { // {{{
 				update_canvas_and_spans(printer);
 				return;
 			}
-			printer.call('readtemp', [num], {}, function(t) {
-				if (num < printer.temps.length) {
-					printer.temps[num].temp = t;
+			printer.printer.call('readtemp', [num], {}, function(t) {
+				if (num < printer.printer.temps.length) {
+					printer.printer.temps[num].temp = t;
 					var e = get_element(printer, [['temp', num], 'temp']);
 					// Only update if printer still exists.
 					if (e)
@@ -202,7 +201,7 @@ AddEvent('load', function() { // {{{
 				read(printer, num + 1);
 			});
 		};
-		read(selected_printer, 0);
+		read(printers[selected_printer].printer, 0);
 	}, 400);
 }); // }}}
 
@@ -211,8 +210,11 @@ function make_id(printer, id, extra) { // {{{
 	// [['space', 1], 'num_axes']
 	// [['axis', [0, 1]], 'offset']
 	// [['motor', [0, 1]], 'delta_radius']
-	console.error(printer);
-	var ret = printer ? printer.uuid.replace(/[^a-zA-Z0-9_]/g, '') : '';
+	//console.log(printer);
+	//console.error(id);
+	if (!(printer instanceof Element))
+		console.error(printer);
+	var ret = printer ? printer.printer.uuid.replace(/[^a-zA-Z0-9_]/g, '') : '';
 	if (id[0] !== null) {
 		if (typeof id[0][0] == 'string')
 			ret += '_' + id[0][0];
@@ -336,7 +338,7 @@ function set_value(printer, id, value, reply, arg) { // {{{
 
 function get_value(printer, id) { // {{{
 	if (id[0] === null)
-		return printer[id[1]];
+		return printer.printer[id[1]];
 	if (id[0][0] == 'axis') {
 		return printer.printer.spaces[id[0][1][0]].axis[id[0][1][1]][id[1]];
 	}
@@ -353,13 +355,13 @@ function get_element(printer, id, extra) { // {{{
 } // }}}
 
 function select_printer(printer) { // {{{
-	selected_printer = printers[printer];
+	selected_printer = printer ? printer.printer.uuid : null;
 	for (var p in printers) {
 		if (typeof printers[p] != 'object')
 			continue;
-		if (p == printer) {
-			printer[p].label.AddClass('active');
-			printer[p].printer.RemoveClass('hidden');
+		if (p == selected_printer) {
+			printers[p].label.AddClass('active');
+			printers[p].printer.RemoveClass('hidden');
 		}
 		else {
 			printers[p].label.RemoveClass('active');
@@ -367,9 +369,11 @@ function select_printer(printer) { // {{{
 		}
 	}
 	if (selected_printer !== null && selected_printer !== undefined) {
+		new_tab.RemoveClass('active');
 		update_state(printer, get_value(printer, [null, 'status']));
 	}
 	else {
+		new_tab.AddClass('active');
 		update_state(printer, null);
 	}
 } // }}}
@@ -490,6 +494,24 @@ function toggle_setup() { // {{{
 	else
 		c.AddClass('nosetup');
 } // }}}
+
+function update_firmwares(ports, firmwares) { // {{{
+	var port = ports.options[ports.selectedIndex].value;
+	firmwares.ClearAll();
+	for (var o = 0; o < all_firmwares[port].length; ++o)
+		firmwares.AddElement('option').AddText(all_firmwares[port][o][1]).value = all_firmwares[port][o][0];
+} // }}}
+
+function detect(ports) { // {{{
+	var port = ports.options[ports.selectedIndex].value;
+	rpc.call('detect', [port], {}, null);
+} // }}}
+
+function upload(ports, firmwares) { // {{{
+	var port = ports.options[ports.selectedIndex].value;
+	var firmware = firmwares.options[firmwares.selectedIndex].value;
+	rpc.call('upload', [port, firmware], {}, function(ret) { alert('upload done: ' + ret);});
+} // }}}
 // }}}
 
 // Queue functions.  {{{
@@ -583,18 +605,19 @@ function audio_del(printer) { // {{{
 
 // Non-update events. {{{
 function connect(printer, connected) { // {{{
-	// TODO: show that connection to server is (not) lost.
+	// TODO
 } // }}}
 
 function autodetect() { // {{{
 } // }}}
 
 function new_port(printer, port) { // {{{
-	ports[port] = ports_element.AddElement('option').AddText(port);
-	ports[port].value = port;
-	rpc.call('upload_options', [port], {}, function(options) {
-		upload_options[port] = options;
-	});
+	for (var p in printers) {
+		var ports = get_element(printers[p].printer, [null, 'ports']);
+		ports.ClearAll();
+		var new_port = ports.AddElement('option').AddText(port);
+		new_port.value = port;
+	}
 } // }}}
 
 function disable_buttons(state) { // {{{
@@ -643,14 +666,24 @@ function port_state(printer, port, state) { // {{{
 function new_printer(printer) { // {{{
 	printers[printer].label = Label(printers[printer]);
 	printers[printer].printer = Printer(printers[printer]);
-	console.info('done');
 	var p = printers[printer].printer;
-	labels_element.Add(printers[printer].label);
+	labels_element.insertBefore(printers[printer].label, new_tab);
 	printers_element.Add(p);
 	printers[printer].label.RemoveClass('connected');
 	printers[printer].printer.RemoveClass('connected');
+	printers[printer].label.AddClass('notconnected');
+	printers[printer].printer.AddClass('notconnected');
 	globals_update(printer);
-	if (selected_printer !== null)
+	var ports_button = get_element(printers[printer].printer, [null, 'ports']);
+	ports_button.ClearAll();
+	for (var port = 0; port < all_ports.length; ++port) {
+		var new_port = ports_button.AddElement('option').AddText(all_ports[port]);
+		new_port.value = all_ports[port];
+		for (var o = 0; o < all_firmwares[new_port.value].length; ++o) {
+			printers[printer].printer.firmwares.AddElement('option').AddText(all_firmwares[new_port.value][o][1]).value = all_firmwares[new_port.value][o][0];
+		}
+	}
+	if (selected_printer === null)
 		select_printer(p);
 } // }}}
 
@@ -678,8 +711,13 @@ function del_printer(printer) { // {{{
 } // }}}
 
 function del_port(printer, port) { // {{{
-	ports_element.removeChild(ports[port]);
-	delete ports[port];
+	for (var p in printers) {
+		var ports = get_element(printers[p].printer, [null, 'ports']);
+		for (var o = 0; o < ports.options.length; ++o) {
+			if (ports.options[o].value == port)
+				ports.removeChild(ports.options[o]);
+		}
+	}
 } // }}}
 
 function ask_confirmation(printer, id, message) { // {{{
@@ -752,8 +790,6 @@ function queue(printer) { // {{{
 } // }}}
 
 function audioqueue(printer) { // {{{
-	for (var i in printers[printer])
-		console.info(i);
 	var e = get_element(printers[printer].printer, [null, 'audio']);
 	var q = [];
 	for (var i = 0; i < printers[printer].audioqueue.length; ++i)
@@ -788,9 +824,25 @@ function audioqueue(printer) { // {{{
 // Update events(from server). {{{
 function globals_update(printer) { // {{{
 	var p = printers[printer].printer;
-	if (!get_element(p, [null, 'container']))
+	p.uuid.ClearAll().AddText(printers[printer].uuid);
+	var container = get_element(p, [null, 'container']);
+	if (!container)
 		return;
-	get_element(p, [null, 'export']).href = encodeURIComponent(p.profile) + '.ini?uuid=' + encodeURIComponent(p.uuid);
+	console.info('globals', printer, printers[printer].connected);
+	if (printers[printer].connected) {
+		printers[printer].label.AddClass('isconnected');
+		printers[printer].printer.AddClass('isconnected');
+		printers[printer].label.RemoveClass('isnotconnected');
+		printers[printer].printer.RemoveClass('isnotconnected');
+	} else {
+		printers[printer].label.RemoveClass('isconnected');
+		printers[printer].printer.RemoveClass('isconnected');
+		printers[printer].label.AddClass('isnotconnected');
+		printers[printer].printer.AddClass('isnotconnected');
+	}
+	get_element(p, [null, 'export']).href = encodeURIComponent(printers[printer].name + '-' + printers[printer].profile) + '.ini?printer=' + encodeURIComponent(printers[printer].uuid);
+	printers[printer].label.span.ClearAll().AddText(printers[printer].name);
+	update_str(p, [null, 'name']);
 	update_float(p, [null, 'num_temps']);
 	update_float(p, [null, 'num_gpios']);
 	update_pin(p, [null, 'led_pin']);
@@ -813,7 +865,7 @@ function globals_update(printer) { // {{{
 	update_str(p, [null, 'spi_setup']);
 	update_float(p, [null, 'temp_scale_min']);
 	update_float(p, [null, 'temp_scale_max']);
-	set_name(p, 'unit', 0, 0, printer.unit_name);
+	set_name(p, 'unit', 0, 0, printers[printer].unit_name);
 	// IDs.
 	var ids = ['bed', 'fan', 'spindle'];
 	for (var i = 0; i < ids.length; ++i) {
@@ -824,6 +876,9 @@ function globals_update(printer) { // {{{
 		}
 	}
 	update_state(printer, get_value(p, [null, 'status']));
+	// Pin ranges.
+	for (var r = 0; r < p.pinranges.length; ++r)
+		p.pinranges[r].update()
 	var m = p.multiples;
 	for (var t = 0; t < m.space.length; ++t) {
 		// Add table rows.
@@ -888,7 +943,7 @@ function globals_update(printer) { // {{{
 				m.gpio[t].after.AddClass('hidden');
 		}
 	}
-	update_profiles(p.printer);
+	update_profiles(p);
 	update_table_visibility(p);
 	for (var i = 0; i < p.printer.spaces.length; ++i)
 		space_update(p.printer.uuid, i);
@@ -1053,14 +1108,14 @@ function gpio_update(printer, index) { // {{{
 	var p = printers[printer].printer;
 	if (!get_element(p, [null, 'container']))
 		return;
-	set_name(p, 'gpio', index, 0, p.gpios[index].name);
+	set_name(p, 'gpio', index, 0, printers[printer].gpios[index].name);
 	update_pin(p, [['gpio', index], 'pin']);
-	if (p.gpios[index].reset < 2)
+	if (printers[printer].gpios[index].reset < 2)
 		get_element(p, [['gpio', index], 'statespan']).RemoveClass('input');
 	else
 		get_element(p, [['gpio', index], 'statespan']).AddClass('input');
-	get_element(p, [['gpio', index], 'state']).checked = p.gpios[index].value;
-	get_element(p, [['gpio', index], 'reset']).selectedIndex = p.gpios[index].reset;
+	get_element(p, [['gpio', index], 'state']).checked = printers[printer].gpios[index].value;
+	get_element(p, [['gpio', index], 'reset']).selectedIndex = printers[printer].gpios[index].reset;
 	update_float(p, [['gpio', index], 'duty']);
 } // }}}
 // }}}
@@ -1142,8 +1197,10 @@ function update_checkbox(printer, id) { // {{{
 
 function update_str(printer, id) { // {{{
 	var e = get_element(printer, id);
-	if (e !== null)
-		e.ClearAll().AddText(get_value(printer, id));
+	if (e !== null) {
+		var value = get_value(printer, id);
+		e.ClearAll().AddText(value);
+	}
 } // }}}
 
 function update_floats(printer, id) { // {{{
@@ -1162,7 +1219,7 @@ function update_temprange(printer, id) { // {{{
 } // }}}
 
 function update_profiles(printer) { // {{{
-	printer.call('list_profiles', [], {}, function(profiles) {
+	printer.printer.call('list_profiles', [], {}, function(profiles) {
 		var selector = get_element(printer, [null, 'profiles']);
 		if (!selector)
 			return;
@@ -1197,16 +1254,37 @@ function update_state(printer, state) { // {{{
 // }}}
 
 // Builders. {{{
-function pinrange(printer, type) { // {{{
-	var ret = [];
-	for (var i = 0; i < printer.printer.pin_names.length; ++i) {
-		if (printer.printer.pin_names[i][0] & type) {
+function pinrange(printer, type, element) { // {{{
+	var pins = [];
+	printer.pinranges.push(pins);
+	pins.element = element;
+	pins.update = function() {
+		var t = 0;
+		for (var i = 0; i < printer.printer.pin_names.length; ++i) {
+			if (~printer.printer.pin_names[i][0] & type)
+				continue;
+			while (this.length <= t)
+				this.push(null);
+			if (this[t] !== null && this[t].value == String(i)) {
+				this[t].ClearAll().AddText(printer.printer.pin_names[i][1]);
+				t += 1;
+				continue;
+			}
 			var node = Create('option').AddText(printer.printer.pin_names[i][1]);
 			node.value = String(i);
-			ret.push(node);
+			if (this[t])
+				this.element.replaceChild(this[t], node);
+			else
+				this.element.Add(node);
+			this[t] = node;
+			t += 1;
 		}
+		var new_length = t;
+		for (; t < this.length; ++t)
+			this.element.removeChild(this[t]);
+		this.length = new_length;
 	}
-	return ret;
+	pins.update();
 } // }}}
 
 function temprange(printer) { // {{{
@@ -1421,7 +1499,7 @@ function set_file(printer, id, action) { // {{{
 	}
 	var post = new XMLHttpRequest();
 	var fd = new FormData();
-	fd.append('uuid', printer.uuid);
+	fd.append('printer', printer.printer.uuid);
 	fd.append('action', action);
 	fd.append('file', element.files[0]);
 	post.open('POST', String(document.location), true);
@@ -1756,19 +1834,19 @@ function start_move(printer) { // {{{
 			continue;
 		var name = q.options[e].value;
 		var item;
-		for (item = 0; item < printer.queue.length; ++item)
-			if (printer.queue[item][0] == name)
+		for (item = 0; item < printer.printer.queue.length; ++item)
+			if (printer.printer.queue[item][0] == name)
 				break;
-		if (item >= printer.queue.length)
+		if (item >= printer.printer.queue.length)
 			continue;
-		if (printer.bbox[0] == null || printer.queue[item][1][0] < printer.bbox[0])
-			printer.bbox[0] = printer.queue[item][1][0];
-		if (printer.bbox[1] == null || printer.queue[item][1][1] > printer.bbox[1])
-			printer.bbox[1] = printer.queue[item][1][1];
-		if (printer.bbox[2] == null || printer.queue[item][1][2] < printer.bbox[2])
-			printer.bbox[2] = printer.queue[item][1][2];
-		if (printer.bbox[3] == null || printer.queue[item][1][3] > printer.bbox[3])
-			printer.bbox[3] = printer.queue[item][1][3];
+		if (printer.bbox[0] == null || printer.printer.queue[item][1][0] < printer.bbox[0])
+			printer.bbox[0] = printer.printer.queue[item][1][0];
+		if (printer.bbox[1] == null || printer.printer.queue[item][1][1] > printer.bbox[1])
+			printer.bbox[1] = printer.printer.queue[item][1][1];
+		if (printer.bbox[2] == null || printer.printer.queue[item][1][2] < printer.bbox[2])
+			printer.bbox[2] = printer.printer.queue[item][1][2];
+		if (printer.bbox[3] == null || printer.printer.queue[item][1][3] > printer.bbox[3])
+			printer.bbox[3] = printer.printer.queue[item][1][3];
 	}
 	update_canvas_and_spans(printer);
 } // }}}

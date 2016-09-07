@@ -446,11 +446,6 @@ void packet()
 		addr = 0;
 		globals_save(addr);
 		send_host(CMD_DATA, 0, 0, 0, 0, addr);
-		if (arch_fds() && !sent_names) {
-			for (int d = 0; d < NUM_PINS; ++d)
-				arch_send_pin_name(d);
-			sent_names = true;
-		}
 		return;
 	}
 	case CMD_WRITE_GLOBALS:

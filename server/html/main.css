@@ -21,7 +21,8 @@
 
 .nosetup .setup,
 
-.connected.noprinter,
+.isconnected .notconnected,
+.isnotconnected .connected,
 .nodelta .delta,
 
 .role_user .expert,
@@ -235,6 +236,8 @@ body.printing {
 	margin: 2ex;
 	padding: .5ex 2ex;
 	background: #444;
+	border-top-left-radius: 1ex;
+	border-top-right-radius: 1ex;
 }
 
 .tab.active {
@@ -244,6 +247,10 @@ body.printing {
 .printer {
 	background: #ccc;
 	padding: 1% 1em;
+}
+
+#printers {
+	margin-top: .5ex;
 }
 
 .updown, .jobs, .jobbuttons, .stop {
@@ -368,4 +375,10 @@ input[type="text"] {
 
 #setupbutton {
 	float: right;
+}
+
+h2 {
+	background: red;
+	padding: 1ex;
+	text-align: center;
 }

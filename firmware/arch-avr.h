@@ -518,10 +518,10 @@ static inline void arch_setup_start() { // {{{
 	sei();
 	// printerid will be filled by CMD_BEGIN.  Initialize it to 0.
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
-		printerid[i] = 0;
+		printerid[1 + i] = 0;
 	// Initialize uuid from EEPROM.
 	for (uint8_t i = 0; i < UUID_SIZE; ++i)
-		printerid[ID_SIZE + i] = EEPROM.read(i);
+		printerid[1 + ID_SIZE + i] = EEPROM.read(i);
 } // }}}
 
 static inline void arch_setup_end() { // {{{

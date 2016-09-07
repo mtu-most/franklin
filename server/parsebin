@@ -1,0 +1,15 @@
+#!/usr/bin/python3
+
+import sys
+import struct
+
+file = open(sys.argv[1], 'rb')
+
+n = 0
+while True:
+	s = file.read(1 + 4 + 8 * 8)
+	if len(s) != 1 + 4 + 8 * 8:
+		break
+	t, T, X, Y, Z, E, f, F, time, dist = struct.unpack('=Bl' + 'd' * 8, s)
+	print('%d\t%d\t%d\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f' % (n, t, T, X, Y, Z, E, f, F, time, dist))
+	n += 1

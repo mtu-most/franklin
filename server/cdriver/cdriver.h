@@ -163,6 +163,7 @@ enum Command {
 	CMD_CONFIRM,
 	CMD_FILE_DONE,
 	CMD_PARKWAIT,
+	CMD_CONNECTED,
 		// Pin names; broadcast during setup.
 	CMD_PINNAME,
 };
@@ -576,7 +577,7 @@ void SET(Pin_t _pin);
 void SET_OUTPUT(Pin_t _pin);
 void GET(Pin_t _pin, bool _default, void(*cb)(bool));
 void arch_setup_start();
-void arch_connect(char const *port, char const *run_id);
+void arch_connect(char const *run_id, char const *port);
 void arch_motors_change();
 void arch_addpos(int s, int m, double diff);
 void arch_stop(bool fake = false);

@@ -86,7 +86,7 @@ template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 #define fabs abs
 
 EXTERN volatile uint16_t debug_value, debug_value1;
-EXTERN uint8_t printerid[1 + ID_SIZE + UUID_SIZE + (1 + ID_SIZE UUID_SIZE + 2) / 3];
+EXTERN uint8_t printerid[1 + ID_SIZE + UUID_SIZE + (1 + ID_SIZE + UUID_SIZE + 2) / 3];
 EXTERN int16_t command_end;
 EXTERN bool had_data;
 EXTERN uint8_t reply[MAX_REPLY_LEN], adcreply[6];

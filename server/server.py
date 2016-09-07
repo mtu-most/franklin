@@ -156,16 +156,16 @@ class Server(websocketd.RPChttpd): # {{{
 		else:
 			return connection.data['password'] == connection.data['pwd']
 	def page(self, connection):
-		if 'uuid' in connection.query:
+		if 'printer' in connection.query:
 			# Export request.
-			printer = connection.query['uuid'][0]
-			if uuid not in printers or not isinstance(printers[uuid], Printer):
+			printer = connection.query['printer'][0]
+			if printer not in printers or not isinstance(printers[printer], Printer):
 				self.reply(connection, 404)
 			else:
 				def export_reply(success, message):
 					self.reply(connection, 200, message.encode('utf-8'), 'text/plain;charset=utf8')
 					connection.socket.close()
-				printers[uuid].call('export_settings', (connection.data['role'],), {}, export_reply)
+				printers[printer].call('export_settings', (connection.data['role'],), {}, export_reply)
 				return True
 		elif connection.address.path.endswith('/adc'):
 			filename = '/tmp/franklin-adc-dump'	# FIXME
@@ -181,12 +181,13 @@ class Server(websocketd.RPChttpd): # {{{
 			websocketd.RPChttpd.page(self, connection)
 	def post(self, connection):
 		# Add to queue (POST).
-		if 'file' not in connection.post[1] or 'port' not in connection.post[0] or 'action' not in connection.post[0]:
+		if 'file' not in connection.post[1] or 'printer' not in connection.post[0] or 'action' not in connection.post[0]:
+			log('invalid post: {}'.format(connection.post))
 			self.reply(connection, 400)
 			return False
-		uuid = connection.post[0]['printer'][0]
+		printer = connection.post[0]['printer'][0]
 		action = connection.post[0]['action'][0]
-		if uuid not in printers or not isinstance(printers[uuid], Printer):
+		if printer not in printers or not isinstance(printers[printer], Printer):
 			log('printer not found: %s' % printer)
 			self.reply(connection, 404)
 			return False
@@ -207,6 +208,24 @@ class Server(websocketd.RPChttpd): # {{{
 			return False
 		return True
 # }}}
+
+'''
+class wrap:
+	def __init__(self, obj):
+		self.obj = obj
+	def __getattr__(self, x):
+		ret = getattr(self.obj, x)
+		if callable(ret):
+			def l(*a, **ka):
+				log('calling {} using {} and {}'.format(x, a, ka))
+				result = ret(*a, **ka)
+				log('result of call to {} is {}'.format(x, result))
+				return result
+			return l
+		else:
+			log('getting {} = {}'.format(x, ret))
+			return ret
+'''
 
 class Connection: # {{{
 	'''Object to handle a single network connection.
@@ -284,63 +303,12 @@ class Connection: # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
 		return disable(port, reason)
 	# }}}
-	def _read_boards(self): # {{{
-		boards = {}
-		for d in fhs.read_data('hardware', packagename = 'arduino', dir = True, multiple = True):
-			for board in os.listdir(d):
-				boards_txt = os.path.join(d, board, 'boards' + os.extsep + 'txt')
-				if not os.path.exists(boards_txt):
-					continue
-				with open(boards_txt) as b:
-					for line in b:
-						if line.startswith('#') or line.strip() == '':
-							continue
-						parse = re.match('([^.=]+)\.([^=]+)=(.*)$', line.strip())
-						if parse is None:
-							log('Warning: invalid line in %s: %s' % (boards_txt, line.strip()))
-							continue
-						tag, option, value = parse.groups()
-						if tag not in boards:
-							boards[tag] = {}
-						if option in boards[tag]:
-							if boards[tag][option] != value:
-								log('%s: duplicate tag %s.%s with different value (%s != %s); using %s' % (boards_txt, tag, option, value, boards[tag][option], boards[tag][option]))
-								continue
-						boards[tag][option] = value
-		for tag in tuple(boards.keys()):
-			if 'name' not in boards[tag]:
-				boards[tag]['name'] = tag
-			if any(x not in boards[tag] for x in ('upload.protocol', 'upload.speed', 'build.mcu', 'upload.maximum_size')):
-				log('skipping %s because hardware information is incomplete (%s)' % (boards[tag]['name'], repr(boards[tag])))
-				del boards[tag]
-				continue
-			if int(boards[tag]['upload.maximum_size']) < 30000:
-				# Not enough memory; don't complain about skipping this board.
-				del boards[tag]
-				continue
-			if fhs.read_data(os.path.join('firmware', boards[tag]['build.mcu'] + os.extsep + 'hex'), opened = False) is None:
-				log('skipping %s because firmware for %s is not installed' % (boards[tag]['name'], boards[tag]['build.mcu']))
-				del boards[tag]
-				continue
-		return boards
-	# }}}
-	def upload_options(self, port): # {{{
-		ret = []
-		if port in ('/dev/ttyS0', '/dev/ttyO0'):
-			ret += [('bbbmelzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v1)')]
-		elif port in ('/dev/ttyS4', '/dev/ttyO4'):
-			ret += [('bb4melzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v2)')]
-		boards = self._read_boards()
-		ret += list((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
-		ret.sort(key = lambda x: (boards[x[0]]['build.mcu'] if x[0] in boards else '', x[1]))
-		return ret
-	# }}}
 	def _get_command(self, board, port): # {{{
 		if board == 'bbbmelzi ':
 			return ('sudo', fhs.read_data(os.path.join('bb', 'flash-bb-0'), opened = False), fhs.read_data(os.path.join('bb', 'avrdude.conf'), opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p' + os.extsep + 'hex'), opened = False))
 		if board == 'bb4melzi ':
 			return ('sudo', fhs.read_data(os.path.join('bb', 'flash-bb-4'), opened = False), fhs.read_data(os.path.join('bb', 'avrdude.conf'), opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p' + os.extsep + 'hex'), opened = False))
-		boards = self._read_boards()
+		boards = read_boards()
 		if board not in boards:
 			raise ValueError('board type not supported')
 		filename = fhs.read_data(os.path.join('firmware', boards[board]['build.mcu'] + os.extsep + 'hex'), opened = False)
@@ -371,7 +339,7 @@ class Connection: # {{{
 				wake(data[0])
 				return False
 			if d != '':
-				broadcast(None, 'message', port, '\n'.join(data[0].split('\n')[-4:]))
+				#broadcast(None, 'message', port, '\n'.join(data[0].split('\n')[-4:]))
 				data[0] += d
 				return True
 			wake(data[0])
@@ -384,8 +352,8 @@ class Connection: # {{{
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
 		websocketd.add_read(process.stdout, output, error)
-		broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
-		broadcast(None, 'message', port, '')
+		#broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
+		#broadcast(None, 'message', port, '')
 		d = (yield)
 		try:
 			process.kill()	# In case it wasn't dead yet.
@@ -395,8 +363,8 @@ class Connection: # {{{
 			process.communicate()	# Clean up.
 		except:
 			pass
-		broadcast(None, 'blocked', port, None)
-		broadcast(None, 'message', port, '')
+		#broadcast(None, 'blocked', port, None)
+		#broadcast(None, 'message', port, '')
 		broadcast(None, 'port_state', port, 0)
 		ports[port] = None
 		if autodetect:
@@ -406,18 +374,25 @@ class Connection: # {{{
 		else:
 			return 'firmware for %s successfully uploaded' % board
 	# }}}
+	def upload_options(self, port): # {{{
+		return upload_options(port)
+	# }}}
 	def set_printer(self, printer): # {{{
 		self.printer = printer if printer in printers else None
 	# }}}
 	def get_printer(self): # {{{
 		return self.printer
 	# }}}
+	def create_printer(self): # {{{
+		printer = create_printer()
+		self.printer = printer
+	# }}}
 	def set_monitor(self, value): # {{{
 		if value:
 			self.socket.initialized = False
 			self.socket.autodetect.event(autodetect)
 			for p in ports:
-				self.socket.new_port.event(p)
+				self.socket.new_port.event(p, self.upload_options(p))
 				if ports[p] is None:
 					self.socket.port_state.event(p, 0)
 				elif not isinstance(ports[p], str):	# TODO: distinguish initial detect from flashing.
@@ -454,6 +429,59 @@ class Connection: # {{{
 	def __getattr__ (self, attr): # {{{
 		return lambda *a, **ka: self._call(attr, a, ka)
 	# }}}
+# }}}
+
+def read_boards(): # {{{
+	boards = {}
+	for d in fhs.read_data('hardware', packagename = 'arduino', dir = True, multiple = True):
+		for board in os.listdir(d):
+			boards_txt = os.path.join(d, board, 'boards' + os.extsep + 'txt')
+			if not os.path.exists(boards_txt):
+				continue
+			with open(boards_txt) as b:
+				for line in b:
+					if line.startswith('#') or line.strip() == '':
+						continue
+					parse = re.match('([^.=]+)\.([^=]+)=(.*)$', line.strip())
+					if parse is None:
+						log('Warning: invalid line in %s: %s' % (boards_txt, line.strip()))
+						continue
+					tag, option, value = parse.groups()
+					if tag not in boards:
+						boards[tag] = {}
+					if option in boards[tag]:
+						if boards[tag][option] != value:
+							log('%s: duplicate tag %s.%s with different value (%s != %s); using %s' % (boards_txt, tag, option, value, boards[tag][option], boards[tag][option]))
+							continue
+					boards[tag][option] = value
+	for tag in tuple(boards.keys()):
+		if 'name' not in boards[tag]:
+			boards[tag]['name'] = tag
+		if any(x not in boards[tag] for x in ('upload.protocol', 'upload.speed', 'build.mcu', 'upload.maximum_size')):
+			log('skipping %s because hardware information is incomplete (%s)' % (boards[tag]['name'], repr(boards[tag])))
+			del boards[tag]
+			continue
+		if int(boards[tag]['upload.maximum_size']) < 30000:
+			# Not enough memory; don't complain about skipping this board.
+			del boards[tag]
+			continue
+		if fhs.read_data(os.path.join('firmware', boards[tag]['build.mcu'] + os.extsep + 'hex'), opened = False) is None:
+			log('skipping %s because firmware for %s is not installed' % (boards[tag]['name'], boards[tag]['build.mcu']))
+			del boards[tag]
+			continue
+	return boards
+# }}}
+
+def upload_options(port): # {{{
+	ret = []
+	if port in ('/dev/ttyS0', '/dev/ttyO0'):
+		ret += [('bbbmelzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v1)')]
+	elif port in ('/dev/ttyS4', '/dev/ttyO4'):
+		ret += [('bb4melzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v2)')]
+	boards = read_boards()
+	ret += list((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
+	ret.sort(key = lambda x: (boards[x[0]]['build.mcu'] if x[0] in boards else '', x[1]))
+	return ret
 # }}}
 
 def broadcast(target, name, *args): # {{{
@@ -517,6 +545,7 @@ class Printer: # {{{
 		self.call('get_globals', ('admin',), {}, get_vars)
 	# }}}
 	def call(self, name, args, kargs, cb): # {{{
+		log('calling {}'.format(repr((name, args, kargs))))
 		data = json.dumps([self.next_mid, name, args, kargs]) + '\n'
 		#log('calling %s on %d' % (repr(data), self.process.stdin.fileno()))
 		try:
@@ -595,7 +624,7 @@ class Printer: # {{{
 					broadcast(None, 'port_state', port, 0)
 					self.make_orphan()
 					if autodetect:
-						detect(self.port, 'admin')
+						detect(self.port)
 				elif data[1] == 'error':
 					if data[0] is None:
 						# Error on command without id.
@@ -755,8 +784,8 @@ def detect(port): # {{{
 				uuid = ''.join('%02x' % x for x in uuid[:16])
 				uuid = uuid[:8] + '-' + uuid[8:12] + '-' + uuid[12:16] + '-' + uuid[16:20] + '-' + uuid[20:32]
 				id[0] = id[0][1:9]
-				running_printer = [p for p in printers if p.run_id == id[0]]
-				assert len(running_printer < 2)
+				running_printer = [p for p in printers if printers[p].run_id == id[0]]
+				assert len(running_printer) < 2
 				if len(running_printer) > 0:
 					p = running_printer[0]
 					assert p.uuid == uuid
@@ -768,17 +797,17 @@ def detect(port): # {{{
 					def close_port(success, data):
 						log('reconnect complete; closing server port')
 						printer.close()
-					p.call('reconnect', ['admin', port], {}, lambda success, ret: ports[port].call('send_printer', ['admin', None], {}, close_port) if success else close_port)
+					p.call('reconnect', ['admin', port], {}, lambda success, ret: (ports[port].call('send_printer', ['admin', None], {}, close_port) if success else close_port()))
 					broadcast(None, 'port_state', port, 2)
 					return False
 			run_id = nextid()
 			# Find uuid or create new Printer object.
 			if uuid in printers:
-				log('accepting known printer on port %s (uuid %s)' % (port, ''.join('%02x' % x for x in uuid)))
+				log('accepting known printer on port %s (uuid %s)' % (port, uuid))
 				printers[uuid].port = port
 				ports[port] = uuid
 				log('connecting %s to port %s' % (uuid, port))
-				p.call('connect', ['admin', port, run_id], {}, lambda success: None)
+				printers[uuid].call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: None)
 			else:
 				log('accepting unknown printer on port %s' % port)
 				#log('printers: %s' % repr(tuple(printers.keys())))
@@ -789,7 +818,7 @@ def detect(port): # {{{
 					ports[port] = uuid
 					printers[uuid] = new_printer
 					log('connecting new printer %s to port %s' % (uuid, port))
-					p.call('connect', ['admin', port, run_id], {}, lambda success: None)
+					new_printer.call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: None)
 				if uuid is None:
 					new_printer.call('reset_uuid', [], {}, finish)
 				else:
@@ -827,10 +856,11 @@ def disable(uuid, reason): # {{{
 	if uuid not in printers:
 		log('not disabling nonexistent printer %s' % uuid)
 		return
+	p = printers[uuid]
 	if p.port not in ports:
 		log("not disabling printer which isn't enabled")
-	p = printers[uuid]
-	p.call('disable', ('admin', reason))
+		return
+	p.call('disable', ('admin', reason), {}, lambda success, ret: None)
 	port = p.port
 	ports[port] = None
 	p.port = None
@@ -845,7 +875,7 @@ def remove_printer(uuid): # {{{
 	p = printers[uuid]
 	if p.port is not None:
 		disable(uuid, 'printer is removed')
-	p.call('remove' ('admin',), {}, lambda success: None)
+	p.call('remove' ('admin',), {}, lambda success, ret: None)
 # }}}
 
 def add_port(port): # {{{
@@ -856,10 +886,10 @@ def add_port(port): # {{{
 		#log('skipping blacklisted port %s' % port)
 		return
 	ports[port] = None
-	broadcast(None, 'new_port', port)
+	broadcast(None, 'new_port', port, upload_options(port))
 	broadcast(None, 'port_state', port, 0)
 	if autodetect:
-		detect(port, 'admin')
+		detect(port)
 # }}}
 
 def remove_port(port): # {{{
@@ -878,6 +908,14 @@ default_printer = config['printer']
 if config['local'] != '':
 	add_port('-')
 
+def create_printer(uuid = None): # {{{
+	if uuid is None:
+		uuid = protocol.new_uuid()
+	process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+	printers[uuid] = Printer(None, process, None, None)
+	return uuid
+# }}}
+
 # Start known printer drivers.
 for d in fhs.read_data('.', dir = True, opened = False, multiple = True):
 	for uuid in os.listdir(d):
@@ -886,8 +924,7 @@ for d in fhs.read_data('.', dir = True, opened = False, multiple = True):
 		if not os.path.isdir(os.path.join(d, uuid, 'profiles')):
 			continue
 		log('starting printer %s' % uuid)
-		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-		printers[uuid] = Printer(None, process, None, None)
+		create_printer(uuid = uuid)
 
 # Detect serial ports. {{{
 # Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.

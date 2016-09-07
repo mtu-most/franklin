@@ -23,11 +23,13 @@ var ref_code = ['[$(', ')$]'];
 var _active_printer;
 var _update_handle;
 var _updater;
+var _update_running = false;
+var _pending_updates = [];
 var _templates;
 var rpc;
 var printers;
-var _ports;
-var autodetect;
+var all_ports, all_firmwares;
+var is_autodetect;
 var blacklist;
 var audio_list;
 var role;
@@ -41,20 +43,24 @@ var TYPE_FOLLOWER = 4;
 
 // {{{ Events from server.
 function trigger_update(printer, name) {
-	if (window[name] === undefined) {
-		alert('called undefined update function ' + name);
-		return;
+	try {
+		if (window[name] === undefined) {
+			alert('called undefined update function ' + name);
+			return;
+		}
+		if (!(printer in printers)) {
+			if (printer)
+				alert('undefined printer referenced: ' + printer);
+			printer = null;
+		}
+		var args = [printer];
+		for (var a = 2; a < arguments.length; ++a)
+			args.push(arguments[a]);
+		//console.log(name);
+		window[name].apply(null, args);
+	} catch (e) {
+		console.info(e);
 	}
-	if (!(printer in printers)) {
-		if (printer)
-			alert('undefined printer referenced: ' + printer);
-		printer = null;
-	}
-	var args = [printer];
-	for (var a = 2; a < arguments.length; ++a)
-		args.push(arguments[a]);
-	console.info(name, args);
-	window[name].apply(null, args);
 }
 
 function _setup_updater() {
@@ -62,15 +68,17 @@ function _setup_updater() {
 		signal: function(printer, name, arg) {
 			trigger_update(printer, 'signal', name, arg);
 		},
-		new_port: function(port) {
-			if (_ports.indexOf(port) < 0) {
-				_ports.push(port);
+		new_port: function(port, options) {
+			if (all_ports.indexOf(port) < 0) {
+				all_ports.push(port);
+				all_firmwares[port] = options;
 				trigger_update(null, 'new_port', port);
 			}
 		},
 		del_port: function(port) {
 			trigger_update(null, 'del_port', port);
-			_ports.splice(_ports.indexOf(port), 1);
+			all_ports.splice(all_ports.indexOf(port), 1);
+			delete all_firmwares[port];
 		},
 		port_state: function(port, state) {
 			trigger_update(null, 'port_state', port, state);
@@ -85,7 +93,7 @@ function _setup_updater() {
 			trigger_update(printer, 'ask_confirmation', id, message);
 		},
 		autodetect: function(state) {
-			autodetect = state;
+			is_autodetect = state;
 			trigger_update(null, 'autodetect');
 		},
 		blacklist: function(value) {
@@ -107,6 +115,7 @@ function _setup_updater() {
 			if (printers[printer] === undefined) {
 				printers[printer] = {
 					uuid: printer,
+					connected: false,
 					profile: 'default',
 					queue: [],
 					audioqueue: [],
@@ -174,7 +183,7 @@ function _setup_updater() {
 					gpios: []
 				};
 				printers[printer].call = function(name, a, ka, reply) {
-					console.info('calling', name);
+					//console.info('calling', name);
 					var uuid = this.uuid;
 					if (_active_printer != uuid) {
 						rpc.call('set_printer', [uuid], {}, function() { _active_printer = uuid; rpc.call(name, a, ka, reply); });
@@ -202,35 +211,37 @@ function _setup_updater() {
 			trigger_update(printer, 'message', stat);
 		},
 		globals_update: function(printer, values) {
-			printers[printer].profile = values[0];
-			var new_num_temps = values[1];
-			var new_num_gpios = values[2];
-			printers[printer].pin_names = values[3];
-			printers[printer].led_pin = values[4];
-			printers[printer].stop_pin = values[5];
-			printers[printer].probe_pin = values[6];
-			printers[printer].spiss_pin = values[7];
-			printers[printer].probe_dist = values[8];
-			printers[printer].probe_safe_dist = values[9];
-			printers[printer].bed_id = values[10];
-			printers[printer].fan_id = values[11];
-			printers[printer].spindle_id = values[12];
-			printers[printer].unit_name = values[13];
-			printers[printer].timeout = values[14];
-			printers[printer].feedrate = values[15];
-			printers[printer].max_deviation = values[16];
-			printers[printer].max_v = values[17];
-			printers[printer].targetx = values[18];
-			printers[printer].targety = values[19];
-			printers[printer].zoffset = values[20];
-			printers[printer].store_adc = values[21];
-			printers[printer].park_after_print = values[22];
-			printers[printer].sleep_after_print = values[23];
-			printers[printer].cool_after_print = values[24];
-			printers[printer].spi_setup = values[25];
-			printers[printer].temp_scale_min = values[26];
-			printers[printer].temp_scale_max = values[27];
-			printers[printer].status = values[28];
+			printers[printer].name = values[0];
+			printers[printer].profile = values[1];
+			var new_num_temps = values[2];
+			var new_num_gpios = values[3];
+			printers[printer].pin_names = values[4];
+			printers[printer].led_pin = values[5];
+			printers[printer].stop_pin = values[6];
+			printers[printer].probe_pin = values[7];
+			printers[printer].spiss_pin = values[8];
+			printers[printer].probe_dist = values[9];
+			printers[printer].probe_safe_dist = values[10];
+			printers[printer].bed_id = values[11];
+			printers[printer].fan_id = values[12];
+			printers[printer].spindle_id = values[13];
+			printers[printer].unit_name = values[14];
+			printers[printer].timeout = values[15];
+			printers[printer].feedrate = values[16];
+			printers[printer].max_deviation = values[17];
+			printers[printer].max_v = values[18];
+			printers[printer].targetx = values[19];
+			printers[printer].targety = values[20];
+			printers[printer].zoffset = values[21];
+			printers[printer].store_adc = values[22];
+			printers[printer].park_after_print = values[23];
+			printers[printer].sleep_after_print = values[24];
+			printers[printer].cool_after_print = values[25];
+			printers[printer].spi_setup = values[26];
+			printers[printer].temp_scale_min = values[27];
+			printers[printer].temp_scale_max = values[28];
+			printers[printer].connected = values[29];
+			printers[printer].status = values[30];
 			for (var i = printers[printer].num_temps; i < new_num_temps; ++i) {
 				printers[printer].temps.push({
 					name: null,
@@ -366,8 +377,8 @@ function _setup_updater() {
 function _reconnect() {
 	trigger_update(null, 'connect', false);
 	rpc = null;
-	while (_ports.length > 0) {
-		var p = _ports[0];
+	while (all_ports.length > 0) {
+		var p = all_ports[0];
 		if (printers[p] !== undefined)
 			_updater.del_printer(p);
 		_updater.del_port(p);
@@ -387,8 +398,9 @@ function Create(name, className) {
 function setup() {
 	// Make sure the globals have a value of the correct type.
 	printers = new Object;
-	_ports = [];
-	autodetect = true;
+	all_ports = [];
+	all_firmwares = {};
+	is_autodetect = true;
 	blacklist = '';
 	_setup_updater();
 	rpc = Rpc(_updater, _setup_connection, _reconnect);
