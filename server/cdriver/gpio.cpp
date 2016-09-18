@@ -18,7 +18,7 @@
 
 #include "cdriver.h"
 
-void Gpio::load(uint8_t self, int32_t &addr)
+void Gpio::load(int32_t &addr)
 {
 	pin.read(read_16(addr));
 	state = read_8(addr);

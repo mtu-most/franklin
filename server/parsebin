@@ -1,15 +1,51 @@
 #!/usr/bin/python3
 
-import sys
 import struct
+import fhs
+import math
 
-file = open(sys.argv[1], 'rb')
+config = fhs.init({'src': None, 'svg': False, 'z': float('nan')})
+
+file = open(config['src'], 'rb')
 
 n = 0
+if config['svg']:
+	print('<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">')
+	print('<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink">')
+	print('<g fill="none" stroke-width=".1">')
+pos = (float('nan'), float('nan'), 0.0)
 while True:
 	s = file.read(1 + 4 + 8 * 8)
 	if len(s) != 1 + 4 + 8 * 8:
 		break
 	t, T, X, Y, Z, E, f, F, time, dist = struct.unpack('=Bl' + 'd' * 8, s)
-	print('%d\t%d\t%d\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f' % (n, t, T, X, Y, Z, E, f, F, time, dist))
+	if not math.isnan(config['z']) and Z != config['z']:
+		n += 1
+		continue
+	if not config['svg']:
+		print('%d\t%d\t%d\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f' % (n, t, T, X, Y, Z, E, f, F, time, dist))
+	else:
+		print('<!-- %d -->' % n)
+		if t == 2:
+			# Line.
+			if not math.isnan(pos[0]) and not math.isnan(pos[1]):
+				if E != pos[2]:
+					print('<line stroke="green" x1="%f" y1="%f" x2="%f" y2="%f"/>' % (pos[0], pos[1], X, Y))
+				else:
+					print('<line stroke="black" stroke-width=".02" x1="%f" y1="%f" x2="%f" y2="%f"/>' % (pos[0], pos[1], X, Y))
+			pos = (X, Y, E)
+		elif t == 3:
+			# Pre-arc.
+			arc = (X, Y, E, f, F)
+		elif t == 4:
+			# Arc.
+			r = ((X - arc[0]) ** 2 + (Y - arc[1]) ** 2) ** .5
+			sweep = 1 if arc[4] == 1 else 0
+			print('<path stroke="red" d="M%f %fA%f %f 0 %d %d %f %f"/>' % (pos[0], pos[1], r, r, 0, sweep, X, Y)) # Determine large arc flag. (Not needed: code doesn't generate large arcs.)
+			pos = (X, Y, E)
+		else:
+			pass
 	n += 1
+if config['svg']:
+	print('</g>')
+	print('</svg>')

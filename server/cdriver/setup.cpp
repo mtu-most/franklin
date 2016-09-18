@@ -35,7 +35,7 @@ void setup()
 	last_active = millis();
 	last_micros = utime();
 	serialdev[0] = &host_serial;
-	host_serial.begin(115200);
+	host_serial.begin();
 	serialdev[1] = NULL;
 	command_end[1] = 0;
 	arch_setup_start();
@@ -105,6 +105,8 @@ void setup()
 	temps = NULL;
 	num_gpios = 0;
 	gpios = NULL;
+	for (int s = 0; s < NUM_SPACES; ++s)
+		spaces[s].init(s);
 }
 
 void connect_end() {
@@ -118,8 +120,6 @@ void connect_end() {
 	}
 	// Now set things up that need information from the firmware.
 	history = new History[FRAGMENTS_PER_BUFFER];
-	for (int s = 0; s < NUM_SPACES; ++s)
-		spaces[s].init(s);
 	for (int i = 0; i < 2; ++i) {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		history[f].t0 = 0;
@@ -139,8 +139,37 @@ void connect_end() {
 		history[f].queue_end = 0;
 		history[f].queue_full = false;
 	}
+	for (int s = 0; s < NUM_SPACES; ++s) {
+		Space &sp = spaces[s];
+		sp.history = new Space_History[FRAGMENTS_PER_BUFFER];
+		for (int a = 0; a < sp.num_axes; ++a) {
+			delete[] sp.axis[a]->history;
+			sp.axis[a]->history = new Axis_History[FRAGMENTS_PER_BUFFER];
+			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
+				sp.axis[a]->history[f].dist[0] = NAN;
+				sp.axis[a]->history[f].dist[1] = NAN;
+				sp.axis[a]->history[f].main_dist = NAN;
+				sp.axis[a]->history[f].target = NAN;
+				sp.axis[a]->history[f].source = NAN;
+				sp.axis[a]->history[f].current = NAN;
+			}
+		}
+		for (int m = 0; m < sp.num_motors; ++m) {
+			delete[] sp.motor[m]->history;
+			sp.motor[m]->history = new Motor_History[FRAGMENTS_PER_BUFFER];
+			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
+				sp.motor[m]->history[f].last_v = 0;
+				sp.motor[m]->history[f].current_pos = 0;
+				sp.motor[m]->history[f].last_v = 0;
+				sp.motor[m]->history[f].target_v = NAN;
+				sp.motor[m]->history[f].target_dist = NAN;
+				sp.motor[m]->history[f].endpos = NAN;
+			}
+		}
+	}
 	// Update current position.
 	first_fragment = current_fragment;
+	//debug("not blocking host");
 	host_block = false;
 	arch_stop(true);
 	// Update pin names at next globals update.

@@ -54,21 +54,13 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_axes[a]->min_pos = -INFINITY;
 			new_axes[a]->max_pos = INFINITY;
 			new_axes[a]->type_data = NULL;
-			new_axes[a]->history = new Axis_History[FRAGMENTS_PER_BUFFER];
 			new_axes[a]->settings.dist[0] = NAN;
 			new_axes[a]->settings.dist[1] = NAN;
 			new_axes[a]->settings.main_dist = NAN;
 			new_axes[a]->settings.target = NAN;
 			new_axes[a]->settings.source = NAN;
 			new_axes[a]->settings.current = NAN;
-			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
-				new_axes[a]->history[f].dist[0] = NAN;
-				new_axes[a]->history[f].dist[1] = NAN;
-				new_axes[a]->history[f].main_dist = NAN;
-				new_axes[a]->history[f].target = NAN;
-				new_axes[a]->history[f].source = NAN;
-				new_axes[a]->history[f].current = NAN;
-			}
+			new_axes[a]->history = NULL;
 		}
 		for (int a = na; a < old_na; ++a) {
 			space_types[type].afree(this, a);
@@ -98,20 +90,12 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
 			new_motors[m]->active = false;
-			new_motors[m]->history = new Motor_History[FRAGMENTS_PER_BUFFER];
 			new_motors[m]->settings.last_v = 0;
 			new_motors[m]->settings.current_pos = 0;
 			new_motors[m]->settings.target_v = NAN;
 			new_motors[m]->settings.target_dist = NAN;
 			new_motors[m]->settings.endpos = NAN;
-			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
-				new_motors[m]->history[f].last_v = 0;
-				new_motors[m]->history[f].current_pos = 0;
-				new_motors[m]->history[f].last_v = 0;
-				new_motors[m]->history[f].target_v = NAN;
-				new_motors[m]->history[f].target_dist = NAN;
-				new_motors[m]->history[f].endpos = NAN;
-			}
+			new_motors[m]->history = NULL;
 			ARCH_NEW_MOTOR(id, m, new_motors);
 		}
 		for (int m = nm; m < old_nm; ++m) {
@@ -174,7 +158,7 @@ void Space::load_info(int32_t &addr) { // {{{
 	if (t >= NUM_SPACE_TYPES)
 		t = DEFAULT_TYPE;
 	type = read_8(addr);
-	if (type >= NUM_SPACE_TYPES || (id == 1 && type != EXTRUDER_TYPE)) {
+	if (type >= NUM_SPACE_TYPES || (id == 1 && type != EXTRUDER_TYPE) || (id == 2 && type != FOLLOWER_TYPE)) {
 		debug("request for type %d ignored", type);
 		type = t;
 	}
@@ -310,7 +294,7 @@ void Space::init(int space_id) { // {{{
 	num_motors = 0;
 	motor = NULL;
 	axis = NULL;
-	history = new Space_History[FRAGMENTS_PER_BUFFER];
+	history = NULL;
 	space_types[type].init(this);
 } // }}}
 
@@ -407,10 +391,10 @@ static void check_distance(int sp, int mt, Motor *mtr, double distance, double d
 static void move_axes(Space *s, int32_t current_time, double &factor) { // {{{
 	double motors_target[s->num_motors];
 	bool ok = true;
-	space_types[s->type].xyz2motors(s, motors_target, &ok);
+	space_types[s->type].xyz2motors(s, motors_target);
 	// Try again if it didn't work; it should have moved target to a better location.
 	if (!ok) {
-		space_types[s->type].xyz2motors(s, motors_target, &ok);
+		space_types[s->type].xyz2motors(s, motors_target);
 		movedebug("retried move");
 	}
 	//movedebug("ok %d", ok);
@@ -581,7 +565,6 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			if (!settings.single && s == 2)
 				continue;
 			Space &sp = spaces[s];
-			bool new_move = false;
 			if (!isnan(sp.settings.dist[0])) {
 				for (int a = 0; a < sp.num_axes; ++a) {
 					if (!isnan(sp.axis[a]->settings.dist[0])) {

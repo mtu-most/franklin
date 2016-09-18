@@ -20,7 +20,7 @@
 #include "cdriver.h"
 
 //#define DEBUG_DATA
-#define DEBUG_HOST
+//#define DEBUG_HOST
 //#define DEBUG_ALL_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
@@ -42,7 +42,7 @@
 
 struct Queuerecord { // {{{
 	Queuerecord *next;
-	int len;
+	unsigned len;
 	char cmd;
 	int32_t s, m, e;
 	double f;
@@ -53,10 +53,8 @@ static bool sending_to_host = false;
 static Queuerecord *hostqueue_head = NULL;
 static Queuerecord *hostqueue_tail = NULL;
 static bool had_data = false;
-static bool had_stall = false;
 static bool doing_debug = false;
 static uint8_t need_id = 0;
-static char out_buffer[16];
 // }}}
 
 // Parity masks for decoding. {{{
@@ -76,6 +74,7 @@ const SingleByteCommands cmd_stall[4] = { CMD_STALL0, CMD_STALL1, CMD_STALL2, CM
 
 static void send_to_host() { // {{{
 	sending_to_host = true;
+	//debug("sending");
 	Queuerecord *r = hostqueue_head;
 	hostqueue_head = r->next;
 	if (!hostqueue_head)
@@ -136,7 +135,7 @@ static void resend(int amount) { // {{{
 #endif
 
 // There may be serial data available.
-void serial(uint8_t channel) { // {{{
+bool serial(uint8_t channel) { // {{{
 	while (true) { // Loop until all data is handled.
 #ifdef SERIAL // Handle timeouts on serial line. {{{
 		if (channel == 1) {
@@ -164,14 +163,14 @@ void serial(uint8_t channel) { // {{{
 #endif // }}}
 		if (channel == 0) { // Ignore host data while blocking it.
 			if (host_block)
-				break;
+				return false;
 		}
 		if (!serialdev[channel]->available())
-			break;
+			return false;
 		while (command_end[channel] == 0) { // First byte. {{{
 			if (!serialdev[channel]->available()) {
 				//debug("serial %d done", channel);
-				return;
+				return true;
 			}
 			command[channel][0] = serialdev[channel]->read();
 #ifdef DEBUG_SERIAL
@@ -194,7 +193,8 @@ void serial(uint8_t channel) { // {{{
 					if (!need_id) {
 						// Firmware has reset.
 						//arch_reset();
-						if (avr_pong == -1)
+						// avr_* should not be used outside arch_avr.h, but this is just for debugging...
+						if (avr_pong == 255)
 							debug("firmware sent id");
 					}
 					continue;
@@ -303,6 +303,7 @@ void serial(uint8_t channel) { // {{{
 				// Message received.
 				if (command[channel][0] == OK) {
 					if (sending_to_host) {
+						//debug("no longer sending");
 						sending_to_host = false;
 						//debug("received OK; sending next to host (if any)");
 						if (stopping == 1) {
@@ -310,8 +311,10 @@ void serial(uint8_t channel) { // {{{
 							stopping = 0;
 							sending_fragment = 0;
 						}
-						if (hostqueue_head)
+						if (hostqueue_head) {
+							//debug("sending next");
 							send_to_host();
+						}
 					}
 					else {
 						debug("received unexpected OK");
@@ -334,6 +337,9 @@ void serial(uint8_t channel) { // {{{
 			if (len == 0)
 				break;
 			command[channel][1] = serialdev[channel]->read();
+#ifdef DEBUG_SERIAL
+			debug("second byte on %d: %x", channel, command[channel][1]);
+#endif
 			len -= 1;
 			command_end[channel] += 1;
 		}
@@ -396,7 +402,7 @@ void serial(uint8_t channel) { // {{{
 #ifdef DEBUG_SERIAL // {{{
 			debug("%d not done yet; %d of %d received.", channel, command_end[channel], cmd_len);
 #endif // }}}
-			return;
+			return true;
 		}
 #ifdef SERIAL // {{{
 #ifdef DEBUG_DATA
@@ -443,7 +449,7 @@ void serial(uint8_t channel) { // {{{
 						write_nack();
 					else
 						continue;
-					return;
+					return true;
 				}
 				for (uint8_t bit = 0; bit < 5; ++bit)
 				{
@@ -466,7 +472,7 @@ void serial(uint8_t channel) { // {{{
 							write_nack();
 						else
 							continue;
-						return;
+						return true;
 					}
 				}
 			}
@@ -510,6 +516,7 @@ void serial(uint8_t channel) { // {{{
 		}
 #endif // }}}
 	}
+	return true;
 } // }}}
 
 #ifdef SERIAL
@@ -632,7 +639,7 @@ void write_nack() { // {{{
 } // }}}
 #endif
 
-void send_host(char cmd, int s, int m, double f, int e, int len) { // {{{
+void send_host(char cmd, int s, int m, double f, int e, unsigned len) { // {{{
 	//debug("queueing for host cmd %x", cmd);
 	// Use malloc, not mem_alloc, because there are multiple pointers to the same memory and mem_alloc cannot handle that.
 	Queuerecord *record = reinterpret_cast <Queuerecord *>(malloc(sizeof(Queuerecord) + len));
@@ -650,6 +657,10 @@ void send_host(char cmd, int s, int m, double f, int e, int len) { // {{{
 	record->next = NULL;
 	for (unsigned i = 0; i < len; ++i)
 		reinterpret_cast <char *>(record)[sizeof(Queuerecord) + i] = datastore[i];
-	if (!sending_to_host)
+	if (!sending_to_host) {
+		//debug("immediately sending");
 		send_to_host();
+	}
+	//else
+	//	debug("queueing host cmd");
 } // }}}

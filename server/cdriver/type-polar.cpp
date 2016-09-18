@@ -24,7 +24,7 @@ struct Polar_private {
 
 #define PRIVATE(s) (*reinterpret_cast <Polar_private *>(s->type_data))
 
-static void xyz2motors(Space *s, double *motors, bool *ok) {
+static void xyz2motors(Space *s, double *motors) {
 	if (isnan(s->axis[0]->settings.target) || isnan(s->axis[1]->settings.target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 2; ++aa) {
@@ -71,6 +71,7 @@ static void check_position(Space *s, double *data) {
 }
 
 static void load(Space *s, uint8_t old_type, int32_t &addr) {
+	(void)&old_type;
 	if (!s->setup_nums(3, 3)) {
 		debug("Failed to set up polar axes");
 		s->cancel_update();
@@ -95,13 +96,19 @@ static void free(Space *s) {
 }
 
 static void afree(Space *s, int a) {
+	(void)&s;
+	(void)&a;
 }
 
 static double change0(Space *s, int axis, double value) {
+	(void)&s;
+	(void)&axis;
 	return value;
 }
 
 static double unchange0(Space *s, int axis, double value) {
+	(void)&s;
+	(void)&axis;
 	return value;
 }
 
@@ -110,6 +117,8 @@ static double probe_speed(Space *s) {
 }
 
 static int follow(Space *s, int axis) {
+	(void)&s;
+	(void)&axis;
 	return -1;
 }
 

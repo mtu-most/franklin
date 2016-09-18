@@ -491,7 +491,7 @@ function Multipliers(printer) { // {{{
 	var e = ret.AddElement('div').AddText('Feedrate: ');
 	e.Add(Float(printer, [null, 'feedrate'], 0, 1e-2));
 	e.AddText(' %');
-	ret.AddMultiple(printer, 'axis', function(space, axis, obj) {
+	ret.AddMultiple(printer, 'axis', function(printer, space, axis, obj) {
 		if (space != 1)
 			return null;
 		var e = Create('div');

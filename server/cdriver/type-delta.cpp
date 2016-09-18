@@ -61,7 +61,7 @@ static bool check_delta(Space *s, uint8_t a, double *target) {	// {{{
 	return true;
 }	// }}}
 
-static inline double delta_to_axis(Space *s, uint8_t a, bool *ok) {
+static inline double delta_to_axis(Space *s, uint8_t a) {
 	double dx = s->axis[0]->settings.target - APEX(s, a).x;
 	double dy = s->axis[1]->settings.target - APEX(s, a).y;
 	double dz = s->axis[2]->settings.target - APEX(s, a).z;
@@ -72,7 +72,7 @@ static inline double delta_to_axis(Space *s, uint8_t a, bool *ok) {
 	return dest;
 }
 
-static void xyz2motors(Space *s, double *motors, bool *ok) {
+static void xyz2motors(Space *s, double *motors) {
 	if (isnan(s->axis[0]->settings.target) || isnan(s->axis[1]->settings.target) || isnan(s->axis[2]->settings.target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 3; ++aa) {
@@ -82,9 +82,9 @@ static void xyz2motors(Space *s, double *motors, bool *ok) {
 	}
 	for (uint8_t a = 0; a < 3; ++a) {
 		if (motors)
-			motors[a] = delta_to_axis(s, a, ok);
+			motors[a] = delta_to_axis(s, a);
 		else
-			s->motor[a]->settings.endpos = delta_to_axis(s, a, ok);
+			s->motor[a]->settings.endpos = delta_to_axis(s, a);
 	}
 }
 
@@ -130,6 +130,7 @@ static void check_position(Space *s, double *data) {
 }
 
 static void load(Space *s, uint8_t old_type, int32_t &addr) {
+	(void)&old_type;
 	if (!s->setup_nums(3, 3)) {
 		debug("Failed to set up delta axes");
 		s->cancel_update();
@@ -186,13 +187,19 @@ static void free(Space *s) {
 }
 
 static void afree(Space *s, int a) {
+	(void)&s;
+	(void)&a;
 }
 
 static double change0(Space *s, int axis, double value) {
+	(void)&s;
+	(void)&axis;
 	return value;
 }
 
 static double unchange0(Space *s, int axis, double value) {
+	(void)&s;
+	(void)&axis;
 	return value;
 }
 
@@ -205,6 +212,8 @@ static double probe_speed(Space *s) {
 }
 
 static int follow(Space *s, int axis) {
+	(void)&s;
+	(void)&axis;
 	return -1;
 }
 

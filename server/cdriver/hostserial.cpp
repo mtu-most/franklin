@@ -18,7 +18,7 @@
 
 #include "cdriver.h"
 
-void HostSerial::begin(int baud) {
+void HostSerial::begin() {
 	pollfds[1].fd = 0;
 	pollfds[1].events = POLLIN | POLLPRI;
 	pollfds[1].revents = 0;
@@ -65,6 +65,13 @@ int HostSerial::read() {
 		exit(0);
 	}
 	int ret = buffer[start++];
-	//debug("Firmware read byte: %x", ret);
+	//debug("Cdriver read byte from host: %x", ret);
 	return ret;
+}
+
+int HostSerial::available() {
+	if (start == end)
+		refill();
+	//debug("available on host: %d - %d = %d", end, start, end - start);
+	return end - start;
 }

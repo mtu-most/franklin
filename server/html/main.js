@@ -571,11 +571,11 @@ function get_queue(printer) { // {{{
 // }}}
 
 function queue_print(printer) { // {{{
-	var angle = isNaN(printer.targetangle) ? 0 : printer.targetangle;
+	var angle = isNaN(printer.printer.targetangle) ? 0 : printer.printer.targetangle;
 	var sina = Math.sin(angle);
 	var cosa = Math.cos(angle);
 	var action = function(a) {
-		printer.call(a, [get_queue(printer), angle * 180 / Math.PI], {});
+		printer.printer.call(a, [get_queue(printer), angle * 180 / Math.PI], {});
 	};
 	if (get_element(printer, [null, 'probebox']).checked)
 		action('queue_probe');
@@ -688,6 +688,7 @@ function new_printer(printer) { // {{{
 } // }}}
 
 function blocked(printer, reason) { // {{{
+	console.info(printer);
 	var e = get_element(printers[printer].printer, [null, 'block1']);
 	if (reason) {
 		e.ClearAll();
@@ -828,7 +829,6 @@ function globals_update(printer) { // {{{
 	var container = get_element(p, [null, 'container']);
 	if (!container)
 		return;
-	console.info('globals', printer, printers[printer].connected);
 	if (printers[printer].connected) {
 		printers[printer].label.AddClass('isconnected');
 		printers[printer].printer.AddClass('isconnected');
@@ -845,6 +845,7 @@ function globals_update(printer) { // {{{
 	update_str(p, [null, 'name']);
 	update_float(p, [null, 'num_temps']);
 	update_float(p, [null, 'num_gpios']);
+	console.info(printers[printer].probe_pin);
 	update_pin(p, [null, 'led_pin']);
 	update_pin(p, [null, 'stop_pin']);
 	update_pin(p, [null, 'probe_pin']);
@@ -1256,6 +1257,7 @@ function update_state(printer, state) { // {{{
 // Builders. {{{
 function pinrange(printer, type, element) { // {{{
 	var pins = [];
+	var selected = element.options[element.selectedIndex];
 	printer.pinranges.push(pins);
 	pins.element = element;
 	pins.update = function() {
@@ -1272,6 +1274,8 @@ function pinrange(printer, type, element) { // {{{
 			}
 			var node = Create('option').AddText(printer.printer.pin_names[i][1]);
 			node.value = String(i);
+			if (selected && node.value == selected.value)
+				element.selectedIndex = t;
 			if (this[t])
 				this.element.replaceChild(this[t], node);
 			else

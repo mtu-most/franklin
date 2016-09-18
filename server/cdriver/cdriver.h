@@ -59,7 +59,7 @@ static inline int max(int a, int b) {
 struct Pin_t {
 	uint8_t flags;
 	uint8_t pin;
-	bool valid() { return flags & 1; }
+	inline bool valid();
 	bool inverted() { return flags & 2; }
 	uint16_t write() { return flags << 8 | pin; }
 	void init() { flags = 0; pin = 0; }
@@ -279,7 +279,7 @@ struct Motor {
 struct Space;
 
 struct SpaceType {
-	void (*xyz2motors)(Space *s, double *motors, bool *ok);
+	void (*xyz2motors)(Space *s, double *motors);
 	void (*reset_pos)(Space *s);
 	void (*check_position)(Space *s, double *data);
 	void (*load)(Space *s, uint8_t old_type, int32_t &addr);
@@ -338,7 +338,7 @@ struct Gpio {
 	Pin_t pin;
 	uint8_t state, reset;
 	void setup(uint8_t new_state);
-	void load(uint8_t self, int32_t &addr);
+	void load(int32_t &addr);
 	void save(int32_t &addr);
 	void init();
 	void free();
@@ -367,7 +367,7 @@ struct Serial_t {
 struct HostSerial : public Serial_t {
 	char buffer[256];
 	int start, end;
-	void begin(int baud);
+	void begin();
 	void write(char c);
 	void refill();
 	int read();
@@ -377,11 +377,7 @@ struct HostSerial : public Serial_t {
 		return len;
 	}
 	void flush() {}
-	int available() {
-		if (start == end)
-			refill();
-		return end - start;
-	}
+	int available();
 };
 EXTERN HostSerial host_serial;
 
@@ -444,7 +440,7 @@ EXTERN double done_factor;
 EXTERN uint8_t requested_temp;
 EXTERN bool refilling;
 EXTERN int current_fragment, running_fragment;
-EXTERN int current_fragment_pos;
+EXTERN unsigned current_fragment_pos;
 EXTERN int num_active_motors;
 EXTERN int hwtime_step, audio_hwtime_step;
 EXTERN struct pollfd pollfds[3];
@@ -475,12 +471,12 @@ void waittemp(int which, double mintemp, double maxtemp);
 void setpos(int which, int t, double f);
 
 // serial.cpp
-void serial(uint8_t which);	// Handle commands from serial.
+bool serial(uint8_t which);	// Handle commands from serial.
 bool prepare_packet(char *the_packet, int len);
 void send_packet();
 void write_ack();
 void write_nack();
-void send_host(char cmd, int s = 0, int m = 0, double f = 0, int e = 0, int len = 0);
+void send_host(char cmd, int s = 0, int m = 0, double f = 0, int e = 0, unsigned len = 0);
 EXTERN uint8_t ff_in;	// Index of next in-packet that is expected.
 EXTERN uint8_t ff_out;	// Index of next out-packet that will be sent.
 
@@ -601,6 +597,10 @@ void END_DEBUG();
 #endif
 
 
+bool Pin_t::valid() {
+	return pin < NUM_PINS && flags & 1;
+}
+
 void Pin_t::read(uint16_t data) {
 	int new_pin = data & 0xff;
 	int new_flags = data >> 8;
@@ -613,7 +613,7 @@ void Pin_t::read(uint16_t data) {
 	}
 	pin = new_pin;
 	flags = new_flags;
-	if (flags & ~3 || pin >= NUM_PINS) {
+	if (flags & ~3) {
 		flags = 0;
 		pin = 0;
 	}

@@ -19,7 +19,7 @@
 #include "cdriver.h"
 
 // Cartesian functions. {{{
-static void xyz2motors(Space *s, double *motors, bool *ok) { // {{{
+static void xyz2motors(Space *s, double *motors) { // {{{
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
 		if (motors)
 			motors[a] = s->axis[a]->settings.target;
@@ -38,9 +38,12 @@ static void reset_pos(Space *s) { // {{{
 } // }}}
 
 static void check_position(Space *s, double *data) { // {{{
+	(void)&s;
+	(void)&data;
 } // }}}
 
 static void load(Space *s, uint8_t old_type, int32_t &addr) { // {{{
+	(void)&old_type;
 	uint8_t num = read_8(addr);
 	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up cartesian axes");
@@ -53,20 +56,28 @@ static void save(Space *s, int32_t &addr) { // {{{
 } // }}}
 
 static bool init(Space *s) { // {{{
+	(void)&s;
 	return true;
 } // }}}
 
 static void free(Space *s) { // {{{
+	(void)&s;
 } // }}}
 
 static void afree(Space *s, int a) { // {{{
+	(void)&s;
+	(void)&a;
 } // }}}
 
 static double change0(Space *s, int axis, double value) { // {{{
+	(void)&s;
+	(void)&axis;
 	return value;
 } // }}}
 
 static double unchange0(Space *s, int axis, double value) { // {{{
+	(void)&s;
+	(void)&axis;
 	return value;
 } // }}}
 
@@ -77,6 +88,8 @@ static double probe_speed(Space *s) { // {{{
 } // }}}
 
 static int follow(Space *s, int axis) { // {{{
+	(void)&s;
+	(void)&axis;
 	return -1;
 } // }}}
 
@@ -109,6 +122,7 @@ struct ExtruderAxisData { // {{{
 #define EADATA(s, a) (*reinterpret_cast <ExtruderAxisData *>(s->axis[a]->type_data))
 
 static void eload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
+	(void)&old_type;
 	uint8_t num = read_8(addr);
 	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up extruder axes");
@@ -120,8 +134,9 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
 	}
 	for (int a = EDATA(s).num_axes; a < s->num_axes; ++a) {
 		s->axis[a]->type_data = new ExtruderAxisData;
-		for (int i = 0; i < 3; ++i)
+		for (int i = 0; i < 3; ++i) {
 			EADATA(s, a).offset[i] = 0;
+		}
 	}
 	EDATA(s).num_axes = s->num_axes;
 	bool move = false;
@@ -148,8 +163,10 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
 			settings.queue_full = true;
 	}
 	for (int a = 0; a < s->num_axes; ++a) {
-		for (int o = 0; o < 3; ++o)
+		for (int o = 0; o < 3; ++o) {
 			EADATA(s, a).offset[o] = read_float(addr);
+			//debug("load offset %d %d %d = %f", s->id, a, o, EADATA(s, a).offset[o]);
+		}
 	}
 	if (move) {
 		next_move();
@@ -220,6 +237,7 @@ struct FollowerAxisData { // {{{
 #define FADATA(s, a) (*reinterpret_cast <FollowerAxisData *>(s->axis[a]->type_data))
 
 static void fload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
+	(void)&old_type;
 	uint8_t num = read_8(addr);
 	if (!s->setup_nums(num, num)) {
 		debug("Failed to set up follower axes");

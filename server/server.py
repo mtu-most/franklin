@@ -117,7 +117,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'done': '',
 		'local': '',
 		'log': '',
-		'tls': 'True',
+		'tls': 'False',
 	})
 # }}}
 # }}}
@@ -545,7 +545,7 @@ class Printer: # {{{
 		self.call('get_globals', ('admin',), {}, get_vars)
 	# }}}
 	def call(self, name, args, kargs, cb): # {{{
-		log('calling {}'.format(repr((name, args, kargs))))
+		#log('calling {}'.format(repr((name, args, kargs))))
 		data = json.dumps([self.next_mid, name, args, kargs]) + '\n'
 		#log('calling %s on %d' % (repr(data), self.process.stdin.fileno()))
 		try:
@@ -554,8 +554,11 @@ class Printer: # {{{
 		except:
 			log('killing printer handle because of error')
 			#traceback.print_exc()
-			cb(False, None)
-			disable(self.port, 'error from printer')
+			def kill():
+				cb(False, None)
+				disable(self.port, 'error from printer')
+			# Schedule this as a callback, so the generator isn't called recursively.
+			websocketd.add_idle(kill)
 			return
 		self.waiters[0][self.next_mid] = cb
 		self.next_mid += 1

@@ -66,10 +66,18 @@ int main(int argc, char **argv) { // {{{
 	zero.it_value.tv_nsec = 0;
 	int delay = 0;
 	while (true) {
-		int arch = arch_fds();
-		for (int i = 0; i < 2 + arch; ++i)
+		for (int i = 0; i < 2 + arch_fds(); ++i)
 			pollfds[i].revents = 0;
-		poll(host_block ? &pollfds[2] : pollfds, arch + (host_block ? 0 : 2), delay);
+		while (true) {
+			bool action = false;
+			if (!host_block && serialdev[0]->available())
+				action |= serial(0);
+			if (arch_fds() && serialdev[1]->available())
+				action |= serial(1);
+			if (!action)
+				break;
+		}
+		poll(host_block ? &pollfds[2] : pollfds, arch_fds() + (host_block ? 0 : 2), delay);
 		if (pollfds[0].revents) {
 			timerfd_settime(pollfds[0].fd, 0, &zero, NULL);
 			//debug("gcode wait done; stop waiting (was %d)", run_file_wait);

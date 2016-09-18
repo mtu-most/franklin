@@ -71,7 +71,7 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 			return;
 		}
 		probe_file_size = stat.st_size;
-		if (probe_file_size < sizeof(ProbeFile)) {
+		if (probe_file_size < 0 || unsigned(probe_file_size) < sizeof(ProbeFile)) {
 			debug("Probe file too short");
 			close(probe_fd);
 			return;
@@ -98,7 +98,7 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	if (probe_name_len > 0) {
 		probe_file_map = reinterpret_cast<ProbeFile *>(mmap(NULL, probe_file_size, PROT_READ, MAP_SHARED, probe_fd, 0));
 		close(probe_fd);
-		if (((probe_file_map->nx + 1) * (probe_file_map->ny + 1)) * sizeof(double) + sizeof(ProbeFile) != probe_file_size) {
+		if (((probe_file_map->nx + 1) * (probe_file_map->ny + 1)) * sizeof(double) + sizeof(ProbeFile) != unsigned(probe_file_size)) {
 			debug("Invalid probe file size %ld != %ld", probe_file_size, ((probe_file_map->nx + 1) * (probe_file_map->ny + 1)) * sizeof(double) + sizeof(ProbeFile));
 			munmap(probe_file_map, probe_file_size);
 			munmap(run_file_map, run_file_size);
@@ -312,7 +312,7 @@ void run_file_fill_queue() {
 					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
 					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
 					double z = r.Z;
-					//debug("line/arc %f %f %f", x, y, z);
+					debug("line/arc %d: %f %f %f", settings.run_file_current, x, y, z);
 					int num0 = spaces[0].num_axes;
 					if (num0 > 0) {
 						queue[settings.queue_end].data[0] = x;

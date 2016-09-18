@@ -458,6 +458,7 @@ class Printer: # {{{
 					if self.printer not in ret[0]:
 						log('broken packet?')
 						return (None, None)
+			#log('writing ok')
 			self.printer.write(self.single['OK'])
 			cmd, s, m, f, e, data = self._read_data(self.printer_buffer[1:])
 			self.printer_buffer = ''
@@ -544,13 +545,12 @@ class Printer: # {{{
 				if s >= len(self.pin_names):
 					self.pin_names.extend([[0xf, '(Pin %d)' % i] for i in range(len(self.pin_names), s + 1)])
 				self.pin_names[s] = [data[0], data[1:].decode('utf-8', 'replace')] if len(data) >= 1 else [0, '']
-				log('pin name {} = {}'.format(s, self.pin_names[s]))
+				#log('pin name {} = {}'.format(s, self.pin_names[s]))
 				continue
 			elif cmd == protocol.rcommand['CONNECTED']:
 				# Get the printer state.
 				self._write_globals(update = False)
 				for i, s in enumerate(self.spaces):
-					log('writing space info for {}'.format(i))
 					self._send_packet(struct.pack('=BB', protocol.command['WRITE_SPACE_INFO'], i) + s.write_info())
 					for a in range(len(s.axis)):
 						self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_AXIS'], i, a) + s.write_axis(a))
@@ -1106,7 +1106,7 @@ class Printer: # {{{
 				self.home_cb[0] = [(s, k) for s, k in self.home_target.keys()]
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
-				#log("N t %s" % (self.home_target))
+				log("N t %s" % (self.home_target))
 				self.line(mktarget(), f0 = home_v / dist, force = True, single = True)
 				return
 			# Fall through.
@@ -1505,6 +1505,28 @@ class Printer: # {{{
 				time_dist[0] += nums[1]
 			return nums + time_dist
 		with fhs.write_spool(os.path.join(self.uuid, 'gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin'), text = False) as dst:
+			def center(a, b, c):
+				'''Given 3 points, determine center, radius, angles of points on circle, deviation of polygon from circle.'''
+				try:
+					x0, y0, z0 = a
+					x1, y1, z1 = b
+					x2, y2, z2 = c
+					xc = ((y0 - y1) * (y0 ** 2 - y2 ** 2 + x0 ** 2 - x2 ** 2) - (y0 - y2) * (x0 ** 2 - x1 ** 2 + y0 ** 2 - y1 ** 2)) / (2 * (-x0 * y1 - x2 * y0 + x2 * y1 + x1 * y0 + x0 * y2 - x1 * y2))
+					yc = ((x0 - x1) * (x0 ** 2 - x2 ** 2 + y0 ** 2 - y2 ** 2) - (x0 - x2) * (y0 ** 2 - y1 ** 2 + x0 ** 2 - x1 ** 2)) / (2 * (-y0 * x1 - y2 * x0 + y2 * x1 + y1 * x0 + y0 * x2 - y1 * x2))
+					#yc = (x0 ** 2 - x1 ** 2 + y0 ** 2 - y1 ** 2 - 2 * xc * (x0 - x1)) / (2 * (y0 - y1))
+					r = ((xc - x0) ** 2 + (yc - y0) ** 2) ** .5
+				except ZeroDivisionError:
+					log('div by 0: %s' % repr((a, b, c)))
+					return (None, None, None, float('inf'))
+				angles = []
+				for p in a, b, c:
+					angles.append(math.atan2(p[1] - yc, p[0] - xc))
+				mid = [(p2 + p1) / 2 for p1, p2 in zip(a, b)]
+				amid = (angles[0] + angles[1]) / 2
+				cmid = [math.cos(amid) * r + xc, math.sin(amid) * r + yc]
+				diff = sum([(p2 - p1) ** 2 for p1, p2 in zip(mid, cmid)])
+				log('center returns %s' % repr(((xc, yc, z0), r, angles, diff)))
+				return ((xc, yc, z0), r, angles, diff)
 			def add_record(type, nums = None, force = False):
 				if nums is None:
 					nums = []
@@ -1533,29 +1555,8 @@ class Printer: # {{{
 							flush_pending()
 							return
 						return
-					def center(a, b, c):
-						'''Given 3 points, determine center, radius, angles of points on circle, deviation of polygon from circle.'''
-						try:
-							x0, y0, z0 = a
-							x1, y1, z1 = b
-							x2, y2, z2 = c
-							xc = ((y0 - y1) * (y0 ** 2 - y2 ** 2 + x0 ** 2 - x2 ** 2) - (y0 - y2) * (x0 ** 2 - x1 ** 2 + y0 ** 2 - y1 ** 2)) / (2 * (-x0 * y1 - x2 * y0 + x2 * y1 + x1 * y0 + x0 * y2 - x1 * y2))
-							yc = (x0 ** 2 - x1 ** 2 + y0 ** 2 - y1 ** 2 - 2 * xc * (x0 - x1)) / (2 * (y0 - y1))
-							r = ((xc - x0) ** 2 + (yc - y0) ** 2) ** .5
-						except ZeroDivisionError:
-							log('div by 0: %s' % repr((a, b, c)))
-							return (None, None, None, float('inf'))
-						angles = []
-						for p in a, b, c:
-							angles.append(math.atan2(p[1] - yc, p[0] - xc))
-						mid = [(p2 + p1) / 2 for p1, p2 in zip(a, b)]
-						amid = (angles[0] + angles[1]) / 2
-						cmid = [math.cos(amid) * r + xc, math.sin(amid) * r + yc]
-						diff = sum([(p2 - p1) ** 2 for p1, p2 in zip(mid, cmid)])
-						log('center returns %s' % repr(((xc, yc, z0), r, angles, diff)))
-						return ((xc, yc, z0), r, angles, diff)
-					epsilon = .1	# TODO: check if this should be configurable
-					aepsilon = math.radians(10)	# TODO: check if this should be configurable
+					epsilon = .5	# TODO: check if this should be configurable
+					aepsilon = math.radians(36)	# TODO: check if this should be configurable
 					if len(pending) == 3:
 						# If the points are not on a circle with equal angles, or the angle is too large, push pending[1] through to output.
 						# Otherwise, record settings.
@@ -1567,19 +1568,21 @@ class Printer: # {{{
 							return
 						arc[:] = [arc_ctr, arc_r, arc_diff, angles[0], (angles[2] - angles[0]) / 2]
 						return
-					a = arc[3] + arc[4] * (len(pending) - 1)
+					current_angle = arc[4] * (len(pending) - 1)
+					a = arc[3] + current_angle
 					p = [arc[0][0] + math.cos(a) * arc[1], arc[0][1] + math.sin(a) * arc[1]]
 					# If new point doesn't fit on circle, push pending as circle to output.
-					if (p[0] - pending[-1][1]) ** 2 + (p[1] - pending[-1][2]) ** 2 > epsilon ** 2 or pending[0][3] != pending[-1][3]:
+					# It should allow up to 360, but be safe and break those in two; also makes generating svgs easier.
+					if current_angle >= math.radians(180) or (p[0] - pending[-1][1]) ** 2 + (p[1] - pending[-1][2]) ** 2 > epsilon ** 2 or pending[0][3] != pending[-1][3]:
 						log('point not on arc; flushing %s' % repr((p, pending[-1][1:4])))
-						flush_arc()
+						flush_pending()
 					return
 				else:
 					flush_pending()
 				#log(repr((type, nums, add_timedist(type, nums))))
 				dst.write(struct.pack('=Bl' + 'd' * 8, type, *add_timedist(type, nums)))
 			def flush_pending():
-				if len(pending) >= 3:
+				if len(pending) >= 6:
 					flush_arc()
 				tmp = pending[1:]
 				pending[:] = []
@@ -1589,9 +1592,11 @@ class Printer: # {{{
 				start = pending[0]
 				end = pending[-2]
 				tmp = pending[-1]
+				arc_ctr, arc_r, angles, arc_diff = center(start[1:4], pending[len(pending) // 2][1:4], end[1:4])
 				pending[:] = []
-				add_record(protocol.parsed['PRE_ARC'], {'X': arc[0][0], 'Y': arc[0][1], 'Z': start[3], 'E': 0, 'f': 0, 'F': 1 if arc[4] > 0 else -1, 'T': 0}, True)
+				add_record(protocol.parsed['PRE_ARC'], {'X': arc_ctr[0], 'Y': arc_ctr[1], 'Z': start[3], 'E': 0, 'f': 0, 'F': 1 if arc[4] > 0 else -1, 'T': 0}, True)
 				add_record(protocol.parsed['ARC'], {'X': end[1], 'Y': end[2], 'Z': end[3], 'E': pos[1][current_extruder], 'f': -pos[2], 'F': -pos[2], 'T': current_extruder}, True)
+				pending.append(end)
 				pending.append(tmp)
 			def add_string(string):
 				if string is None:
@@ -1959,7 +1964,7 @@ class Printer: # {{{
 	class Space: # {{{
 		def __init__(self, printer, id):
 			self.name = ['position', 'extruders', 'followers'][id]
-			self.type = TYPE_CARTESIAN
+			self.type = [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER][id]
 			self.printer = printer
 			self.id = id
 			self.axis = []
@@ -2346,7 +2351,10 @@ class Printer: # {{{
 				self._globals_update()
 		if len(filenames) > 0:
 			with open(filenames[0]) as f:
+				log('loading profile {}'.format(filenames[0]))
 				self.expert_import_settings(f.read(), update = update)
+		else:
+			log('not loading nonexistent profile')
 	# }}}
 	def admin_save(self, profile = None): # {{{
 		'''Save a profile.
@@ -2725,6 +2733,7 @@ class Printer: # {{{
 					value = self._unmangle_spi(value)
 				elif key.endswith('pin'):
 					value = read_pin(self, value)
+					#log('pin imported as {} for {}'.format(value, key))
 				elif key.startswith('num') or section == 'follower' or key.endswith('_id'):
 					value = int(value)
 				else:

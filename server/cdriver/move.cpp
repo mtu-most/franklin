@@ -34,8 +34,10 @@
 static void change0(int qpos) { // {{{
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
-		for (int a = 0; a < spaces[0].num_axes; ++a)
+		for (int a = 0; a < spaces[0].num_axes; ++a) {
+			//debug("change %d %d %d %f", s, a, sp.type, queue[qpos].data[a]);
 			queue[qpos].data[a] = space_types[sp.type].change0(&sp, a, queue[qpos].data[a]);
+		}
 	}
 } // }}}
 
@@ -49,7 +51,7 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 		else {
 			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next && !isnan(sp.axis[a]->settings.endpos[0]) ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
 #ifdef DEBUG_MOVE
-			debug("setting dist for %d %d queue %f next %d end %f src %f dist %f", s, a, queue[qpos].data[a0 + a], next, sp.axis[a]->settings.endpos[0], sp.axis[a]->settings.source, sp.axis[a]->settings.dist[1]);
+			debug("setting dist for %d %d (+%d) queue (%d) %f next %d end %f src %f dist %f", s, a, a0, qpos, queue[qpos].data[a0 + a], next, sp.axis[a]->settings.endpos[0], sp.axis[a]->settings.source, sp.axis[a]->settings.dist[1]);
 #endif
 		}
 	}
@@ -449,9 +451,8 @@ int next_move() { // {{{
 			debug("Axis %d %d dist %f main dist = %f, next dist = %f currentpos = %f current = %f", s, a, sp.axis[a]->settings.dist[0], sp.axis[a]->settings.main_dist, sp.axis[a]->settings.dist[1], sp.motor[a]->settings.current_pos, sp.axis[a]->settings.current);
 #endif
 		}
-		bool ok = true;
 		// Using NULL as target fills endpos.
-		space_types[sp.type].xyz2motors(&sp, NULL, &ok);
+		space_types[sp.type].xyz2motors(&sp, NULL);
 	}
 	// }}}
 
@@ -519,7 +520,7 @@ void abort_move(int pos) { // {{{
 	//debug("free abort reset");
 	current_fragment_pos = 0;
 	computing_move = true;
-	while (computing_move && current_fragment_pos < pos) {
+	while (computing_move && current_fragment_pos < unsigned(pos)) {
 		//debug("abort reconstruct %d %d", current_fragment_pos, pos);
 		apply_tick();
 	}

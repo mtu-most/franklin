@@ -44,7 +44,7 @@
 #define DATA_TYPE int16_t
 #define ARCH_MOTOR DATA_TYPE *avr_data;
 #define ARCH_SPACE
-#define ARCH_NEW_MOTOR(s, m, base) base[m]->avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT / sizeof(DATA_TYPE)]
+#define ARCH_NEW_MOTOR(s, m, base) base[m]->avr_data = NULL
 #define DATA_DELETE(s, m) delete[] (spaces[s].motor[m]->avr_data)
 #define DATA_CLEAR(s, m) memset((spaces[s].motor[m]->avr_data), 0, BYTES_PER_FRAGMENT)
 #define DATA_SET(s, m, v) spaces[s].motor[m]->avr_data[current_fragment_pos] = v;
@@ -160,7 +160,7 @@ void END_DEBUG();
 struct AVRSerial : public Serial_t { // {{{
 	char buffer[256];
 	int start, end_, fd;
-	void begin(char const *port, int baud);
+	void begin(char const *port);
 	void end() { close(fd); }
 	void write(char c);
 	void refill();
@@ -218,7 +218,6 @@ EXTERN bool avr_uuid_dirty;
 // Serial port communication. {{{
 int hwpacketsize(int len, int *available) { // {{{
 	int const arch_packetsize[16] = { 0, 2, 0, 2, 0, 0, 3, 0, 4, 0, 1, 3, -1, -1, -1, -1 };
-	int num_motors = avr_audio >= 0 ? NUM_MOTORS : avr_active_motors;
 	if (arch_packetsize[command[1][0] & 0xf] > 0)
 		return arch_packetsize[command[1][0] & 0xf];
 	if (len < 2) {
@@ -332,10 +331,11 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 double arch_round_pos(int s, int m, double pos) { // {{{
 	int mi = 0;
 	for (int ts = 0; ts < s; ++ts) mi += spaces[ts].num_motors;
-	return round(pos + avr_pos_offset[mi]) - avr_pos_offset[mi];
+	return round(pos + avr_pos_offset[mi + m]) - avr_pos_offset[mi + m];
 } // }}}
 
 bool hwpacket(int len) { // {{{
+	(void)&len;
 	// Handle data in command[1].
 #if 0
 	if (command[1][0] != HWC_ADC) {
@@ -399,7 +399,7 @@ bool hwpacket(int len) { // {{{
 	{
 		int pin = command[1][1];
 		if (pin < 0 || pin >= NUM_ANALOG_INPUTS) {
-			if (avr_pong == -1)
+			if (avr_pong == 255)
 				debug("invalid adc %d received", pin);
 			avr_write_ack("invalid adc");
 			return false;
@@ -682,7 +682,7 @@ void arch_pin_set_reset(Pin_t _pin, char state) { // {{{
 double arch_get_duty(Pin_t _pin) { // {{{
 	if (!avr_connected)
 		return 1;
-	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
+	if (_pin.pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin for arch_get_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return 1;
 	}
@@ -692,7 +692,7 @@ double arch_get_duty(Pin_t _pin) { // {{{
 void arch_set_duty(Pin_t _pin, double duty) { // {{{
 	if (!avr_connected)
 		return;
-	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
+	if (_pin.pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return;
 	}
@@ -881,7 +881,7 @@ void arch_setup_start() { // {{{
 	avr_filling = false;
 	NUM_PINS = 0;
 	NUM_ANALOG_INPUTS = 0;
-	avr_pong = -2;
+	avr_pong = 254;
 	avr_limiter_space = -1;
 	avr_limiter_motor = 0;
 	avr_active_motors = 0;
@@ -929,6 +929,13 @@ static void avr_connect4() { // {{{
 static void avr_connect3() { // {{{
 	//debug("sending pin %d name", avr_next_pin_name);
 	if (avr_next_pin_name >= NUM_PINS) {
+		for (int s = 0; s < NUM_SPACES; ++s) {
+			Space &sp = spaces[s];
+			for (int m = 0; m < sp.num_motors; ++m) {
+				delete[] sp.motor[m]->avr_data;
+				sp.motor[m]->avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT / sizeof(DATA_TYPE)];
+			}
+		}
 		connect_end();
 		return;
 	}
@@ -956,7 +963,7 @@ void avr_connect2() { // {{{
 	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * 3];
 	avr_in_control_queue = new bool[NUM_DIGITAL_PINS];
 	avr_control_queue_length = 0;
-	avr_pong = -1;	// Choke on reset again.
+	avr_pong = 255;	// Choke on reset again.
 	avr_pins = new Avr_pin_t[NUM_DIGITAL_PINS];
 	for (int i = 0; i < NUM_DIGITAL_PINS; ++i) {
 		avr_pins[i].reset = 3;	// INPUT_NOPULLUP.
@@ -978,7 +985,7 @@ void avr_connect2() { // {{{
 
 void arch_connect(char const *run_id, char const *port) { // {{{
 	avr_connected = true;
-	avr_serial.begin(port, 115200);
+	avr_serial.begin(port);
 	arch_reset();
 	// Get constants.
 	avr_buffer[0] = HWC_BEGIN;
@@ -1074,7 +1081,7 @@ int arch_fds() { // {{{
 
 void arch_reconnect(char *port) { // {{{
 	avr_connected = true;
-	avr_serial.begin(port, 115200);
+	avr_serial.begin(port);
 	for (int i = 0; i < 4; ++i)
 		avr_serial.write(cmd_nack[i]);	// Just to be sure.
 } // }}}
@@ -1103,6 +1110,7 @@ void arch_stop(bool fake) { // {{{
 		stop_pending = true;
 		return;
 	}
+	//debug("blocking host");
 	host_block = true;
 	if (preparing || out_busy >= 3) {
 		//debug("not yet stopping");
@@ -1114,6 +1122,7 @@ void arch_stop(bool fake) { // {{{
 		//debug("not running, so not stopping");
 		current_fragment_pos = 0;
 		computing_move = false;	// Not running, but preparations could have started.
+		//debug("no longer blocking host");
 		host_block = false;
 		return;
 	}
@@ -1133,6 +1142,7 @@ void avr_stop2() { // {{{
 	current_fragment = running_fragment;
 	current_fragment_pos = 0;
 	num_active_motors = 0;
+	//debug("no longer blocking host 2");
 	host_block = false;
 	avr_write_ack("stop");
 	serial(0);	// Handle any data that was refused before.
@@ -1395,7 +1405,7 @@ void END_DEBUG() { // {{{
 // }}}
 
 // AVRSerial methods. {{{
-void AVRSerial::begin(char const *port, int baud) { // {{{
+void AVRSerial::begin(char const *port) { // {{{
 	// Open serial port and prepare pollfd.
 	//debug("opening %s", port);
 	if (port[0] == '!') {
@@ -1442,6 +1452,7 @@ void AVRSerial::write(char c) { // {{{
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
 			debug("write to avr failed: %d %s", ret, strerror(errno));
 			disconnect(true);
+			return;	// This causes protocol errors during reconnect, but they will be handled.
 		}
 	}
 } // }}}

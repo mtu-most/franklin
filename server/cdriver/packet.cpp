@@ -28,7 +28,7 @@ static int get_which()
 static double get_float(int offset)
 {
 	ReadFloat ret;
-	for (int t = 0; t < sizeof(double); ++t)
+	for (unsigned t = 0; t < sizeof(double); ++t)
 		ret.b[t] = command[0][offset + t];
 	return ret.f;
 }
@@ -66,7 +66,6 @@ void settemp(int which, double target) {
 		initialized = true;
 	}
 	if (temps[which].thermistor_pin.valid()) {
-		int i = isnan(temps[which].beta) && temps[which].R0 >= 0 ? 0 : 1;
 		int llh = temps[which].adclimit[0][0];
 		int lhh = temps[which].adclimit[0][1];
 		int llf = temps[which].adclimit[1][0];
@@ -197,7 +196,7 @@ void packet()
 			if (command[0][3 + (ch >> 3)] & (1 << (ch & 0x7)))
 			{
 				ReadFloat f;
-				for (int i = 0; i < sizeof(double); ++i)
+				for (unsigned i = 0; i < sizeof(double); ++i)
 					f.b[i] = command[0][offset + i + t * sizeof(double)];
 				if (ch < 2)
 					queue[settings.queue_end].f[ch] = f.f;
@@ -263,9 +262,9 @@ void packet()
 		debug("CMD_RUN_FILE");
 #endif
 		ReadFloat args[2];
-		for (int i = 0; i < sizeof(double); ++i)
+		for (unsigned i = 0; i < sizeof(double); ++i)
 		{
-			for (int j = 0; j < 2; ++j)
+			for (unsigned j = 0; j < 2; ++j)
 				args[j].b[i] = command[0][4 + i + j * sizeof(double)];
 		}
 		int namelen = (((command[0][0] & 0xff) << 8) | (command[0][1] & 0xff)) - 22 - command[0][21];
@@ -328,7 +327,7 @@ void packet()
 		initialized = true;
 		which = get_which();
 		ReadFloat min_temp, max_temp;
-		for (int i = 0; i < sizeof(double); ++i)
+		for (unsigned i = 0; i < sizeof(double); ++i)
 		{
 			min_temp.b[i] = command[0][4 + i];
 			max_temp.b[i] = command[0][4 + i + sizeof(double)];
@@ -515,7 +514,7 @@ void packet()
 	{
 		which = get_which();
 #ifdef DEBUG_CMD
-		debug("CMD_WRITE_SPACE_INFO");
+		debug("CMD_WRITE_SPACE_INFO %d", which);
 #endif
 		if (which >= NUM_SPACES) {
 			debug("Writing invalid space %d", which);
@@ -629,7 +628,7 @@ void packet()
 			return;
 		}
 		addr = 4;
-		gpios[which].load(which, addr);
+		gpios[which].load(addr);
 		return;
 	}
 	case CMD_QUEUED:
