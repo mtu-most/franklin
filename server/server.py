@@ -83,6 +83,7 @@ called by a connections with at least those permissions.  The prefix must not
 be part of the RPC request.
 '''
 # }}}
+# }}}
 
 # Imports and config. {{{
 import re
@@ -119,7 +120,6 @@ config = fhs.init(packagename = 'franklin', config = {
 		'log': '',
 		'tls': 'False',
 	})
-# }}}
 # }}}
 
 # Global variables. {{{

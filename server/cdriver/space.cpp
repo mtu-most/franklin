@@ -691,6 +691,8 @@ static void handle_motors(unsigned long long current_time) { // {{{
 void store_settings() { // {{{
 	current_fragment_pos = 0;
 	num_active_motors = 0;
+	if (FRAGMENTS_PER_BUFFER == 0)
+		return;
 	history[current_fragment].t0 = settings.t0;
 	history[current_fragment].tp = settings.tp;
 	history[current_fragment].f0 = settings.f0;
@@ -753,6 +755,8 @@ void store_settings() { // {{{
 void restore_settings() { // {{{
 	current_fragment_pos = 0;
 	num_active_motors = 0;
+	if (FRAGMENTS_PER_BUFFER == 0)
+		return;
 	settings.t0 = history[current_fragment].t0;
 	settings.tp = history[current_fragment].tp;
 	settings.f0 = history[current_fragment].f0;
@@ -860,7 +864,7 @@ void apply_tick() { // {{{
 } // }}}
 
 void buffer_refill() { // {{{
-	if (preparing) {
+	if (preparing || FRAGMENTS_PER_BUFFER == 0) {
 		//debug("no refill because prepare");
 		return;
 	}

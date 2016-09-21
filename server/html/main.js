@@ -845,7 +845,6 @@ function globals_update(printer) { // {{{
 	update_str(p, [null, 'name']);
 	update_float(p, [null, 'num_temps']);
 	update_float(p, [null, 'num_gpios']);
-	console.info(printers[printer].probe_pin);
 	update_pin(p, [null, 'led_pin']);
 	update_pin(p, [null, 'stop_pin']);
 	update_pin(p, [null, 'probe_pin']);

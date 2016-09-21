@@ -1516,7 +1516,7 @@ class Printer: # {{{
 					#yc = (x0 ** 2 - x1 ** 2 + y0 ** 2 - y1 ** 2 - 2 * xc * (x0 - x1)) / (2 * (y0 - y1))
 					r = ((xc - x0) ** 2 + (yc - y0) ** 2) ** .5
 				except ZeroDivisionError:
-					log('div by 0: %s' % repr((a, b, c)))
+					#log('div by 0: %s' % repr((a, b, c)))
 					return (None, None, None, float('inf'))
 				angles = []
 				for p in a, b, c:
@@ -1525,7 +1525,7 @@ class Printer: # {{{
 				amid = (angles[0] + angles[1]) / 2
 				cmid = [math.cos(amid) * r + xc, math.sin(amid) * r + yc]
 				diff = sum([(p2 - p1) ** 2 for p1, p2 in zip(mid, cmid)])
-				log('center returns %s' % repr(((xc, yc, z0), r, angles, diff)))
+				#log('center returns %s' % repr(((xc, yc, z0), r, angles, diff)))
 				return ((xc, yc, z0), r, angles, diff)
 			def add_record(type, nums = None, force = False):
 				if nums is None:
@@ -1551,7 +1551,7 @@ class Printer: # {{{
 					pending.append(nums)
 					if len(pending) == 2:
 						if pending[0][3] != pending[1][3]:
-							log('non equal z')
+							#log('non equal z')
 							flush_pending()
 							return
 						return
@@ -1562,7 +1562,7 @@ class Printer: # {{{
 						# Otherwise, record settings.
 						arc_ctr, arc_r, angles, arc_diff = center(pending[0][1:4], pending[1][1:4], pending[2][1:4])
 						if arc_diff > epsilon or abs(angles[1] - angles[0] - angles[2] + angles[1]) > aepsilon:
-							log('not arc: %s' % repr((arc_ctr, arc_r, angles, arc_diff)))
+							#log('not arc: %s' % repr((arc_ctr, arc_r, angles, arc_diff)))
 							dst.write(struct.pack('=Bl' + 'd' * 8, protocol.parsed['LINE'], *add_timedist(type, pending[1])))
 							pending.pop(0)
 							return
@@ -1574,7 +1574,7 @@ class Printer: # {{{
 					# If new point doesn't fit on circle, push pending as circle to output.
 					# It should allow up to 360, but be safe and break those in two; also makes generating svgs easier.
 					if current_angle >= math.radians(180) or (p[0] - pending[-1][1]) ** 2 + (p[1] - pending[-1][2]) ** 2 > epsilon ** 2 or pending[0][3] != pending[-1][3]:
-						log('point not on arc; flushing %s' % repr((p, pending[-1][1:4])))
+						#log('point not on arc; flushing %s' % repr((p, pending[-1][1:4])))
 						flush_pending()
 					return
 				else:

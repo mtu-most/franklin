@@ -329,8 +329,12 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 } // }}}
 
 double arch_round_pos(int s, int m, double pos) { // {{{
+	if (s >= NUM_SPACES)
+		return pos;
 	int mi = 0;
 	for (int ts = 0; ts < s; ++ts) mi += spaces[ts].num_motors;
+	if (mi + m >= NUM_MOTORS)
+		return pos;
 	return round(pos + avr_pos_offset[mi + m]) - avr_pos_offset[mi + m];
 } // }}}
 
@@ -1097,9 +1101,13 @@ int arch_tick() { // {{{
 } // }}}
 
 void arch_addpos(int s, int m, double diff) { // {{{
+	if (s >= NUM_SPACES)
+		return;
 	int mi = m;
 	for (uint8_t st = 0; st < s; ++st)
 		mi += spaces[st].num_motors;
+	if (mi + m >= NUM_MOTORS)
+		return;
 	avr_pos_offset[mi] -= diff;
 	//debug("addpos %d %d %f -> %f", s, m, diff, avr_pos_offset[mi]);
 	cpdebug(s, m, "arch addpos diff %f offset %f raw %f pos %f", diff, avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
