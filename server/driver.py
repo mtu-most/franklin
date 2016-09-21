@@ -2125,7 +2125,6 @@ class Printer: # {{{
 				if self.id != 1:
 					ret += ''.join(['%s = %s\r\n' % (x, write_pin(m[x])) for x in ('limit_min_pin', 'limit_max_pin')])
 					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('home_pos',)])
-				if self.id == 0:
 					ret += ''.join(['%s = %d\r\n' % (x, m[x]) for x in ('home_order',)])
 				if self.id != 2:
 					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'limit_v', 'limit_a')])
@@ -2741,7 +2740,7 @@ class Printer: # {{{
 			except ValueError:
 				errors.append((l, 'invalid value for %s' % key))
 				continue
-			if key not in keys[section] or (section == 'motor' and ((key in ('home_pos', 'home_order') and index[0] == 1) or (key in ('steps_per_unit', 'home_order', 'limit_v', 'limit_a') and index[0] == 2))):
+			if key not in keys[section] or (section == 'motor' and ((key in ('home_pos', 'home_order') and index[0] == 1) or (key in ('steps_per_unit', 'limit_v', 'limit_a') and index[0] == 2))):
 				errors.append((l, 'invalid key for section %s' % section))
 				continue
 			# If something critical is changed, update instantly.
@@ -3110,10 +3109,8 @@ class Printer: # {{{
 		for key in ('step_pin', 'dir_pin', 'enable_pin'):
 			ret[key] = self.spaces[space].motor[motor][key]
 		if space != 1:
-			for key in ('limit_min_pin', 'limit_max_pin', 'home_pos'):
+			for key in ('limit_min_pin', 'limit_max_pin', 'home_pos', 'home_order'):
 				ret[key] = self.spaces[space].motor[motor][key]
-		if space == 0:
-			ret['home_order'] = self.spaces[space].motor[motor]['home_order']
 		if space != 2:
 			for key in ('steps_per_unit', 'limit_v', 'limit_a'):
 				ret[key] = self.spaces[space].motor[motor][key]
@@ -3200,7 +3197,7 @@ class Printer: # {{{
 		for key in ('home_pos', 'limit_min_pin', 'limit_max_pin'):
 			if space != 1 and key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
-		if space == 0 and 'home_order' in ka:
+		if space != 1 and 'home_order' in ka:
 			self.spaces[space].motor[motor]['home_order'] = ka.pop('home_order')
 		for key in ('steps_per_unit', 'limit_v', 'limit_a'):
 			if space != 2 and key in ka:
