@@ -1973,6 +1973,7 @@ class Printer: # {{{
 			self.delta_angle = 0
 			self.polar_max_r = float('inf')
 			self.extruder = []
+			self.follower = []
 		def read(self, data):
 			axes, motors = data
 			if self.id == 1:
