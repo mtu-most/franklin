@@ -666,7 +666,7 @@ function Printer(printer) {	// {{{
 	var button = e.AddElement('button').AddText('Set');
 	button.type = 'button';
 	button.obj = select;
-	button.printer = printer;
+	button.printer = ret;
 	button.AddEvent('click', function() { set_value(this.printer, [['space', 0], 'type'], this.obj.selectedIndex); });
 	e.AddElement('span').id = make_id(ret, [['space', 0], 'type']);
 	e = setup.AddElement('div').AddText('Temps:').Add(Float(ret, [null, 'num_temps'], 0));
