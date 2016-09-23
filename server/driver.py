@@ -2043,7 +2043,7 @@ class Printer: # {{{
 				return struct.pack('=dBdd', float('nan'), 0, float('-inf'), float('inf'))
 		def write_motor(self, motor):
 			if self.id == 2:
-				if self.folower[motor]['space'] >= len(self.printer.spaces) or self.follower[motor]['motor'] >= len(self.printer.spaces[self.follower[motor]['space']]):
+				if self.follower[motor]['space'] >= len(self.printer.spaces) or self.follower[motor]['motor'] >= len(self.printer.spaces[self.follower[motor]['space']]):
 					log('write motor for follower %d with fake base' % (motor, self.printer.spaces[0].motor))
 					base = {'steps_per_unit': 1, 'limit_v': float('inf'), 'limit_a': float('inf')}
 				else:
