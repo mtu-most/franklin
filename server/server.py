@@ -299,9 +299,16 @@ class Connection: # {{{
 	def get_default_printer(self): # {{{
 		return default_printer
 	# }}}
-	def disable(self, port, reason = 'disabled by user'): # {{{
+	def disable(self, printer, reason = 'disabled by user'): # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
-		return disable(port, reason)
+		assert printer in printers
+		assert printers[printer].port
+		return disable(printer, reason)
+	# }}}
+	def remove_printer(self, printer): # {{{
+		assert self.socket.data['role'] in ('benjamin', 'admin')
+		assert printer in printers
+		printers[printer].remove_printer()
 	# }}}
 	def _get_command(self, board, port): # {{{
 		if board == 'bbbmelzi ':
@@ -319,7 +326,9 @@ class Connection: # {{{
 	def upload(self, port, board): # {{{
 		wake = (yield)
 		assert self.socket.data['role'] in ('benjamin', 'admin')
-		disable(port, 'disabled for upload')
+		assert port in ports
+		if ports[port]:
+			disable(ports[port], 'disabled for upload')
 		def cancel():
 			# Waking the generator kills the process.
 			wake('Aborted')
@@ -556,7 +565,7 @@ class Printer: # {{{
 			#traceback.print_exc()
 			def kill():
 				cb(False, None)
-				disable(self.port, 'error from printer')
+				disable(self.uuid, 'error from printer')
 			# Schedule this as a callback, so the generator isn't called recursively.
 			websocketd.add_idle(kill)
 			return
@@ -578,7 +587,8 @@ class Printer: # {{{
 		return False
 	# }}}
 	def die(self, reason = 'at request'): # {{{
-		log('{} died {}.'.format(self.name, reason))
+		log('{} died {}.'.format(self.uuid, reason))
+		websocketd.remove_read(self.input_handle)
 		try:
 			self.process.kill()
 		except:
@@ -587,9 +597,12 @@ class Printer: # {{{
 			self.process.communicate()
 		except:
 			pass
+		self.process = None
 		for t in range(3):
 			for w in self.waiters[t]:
-				self.waiters[t][w](False, 'Printer {} died {}'.format(self.name, reason))
+				self.waiters[t][w](False, 'Printer {} died {}'.format(self.uuid, reason))
+		if self.uuid in printers:
+			del printers[self.uuid]
 	# }}}
 	def printer_input(self): # {{{
 		while self.process is not None:
@@ -600,15 +613,7 @@ class Printer: # {{{
 				return True
 			if data == b'':
 				# Connection closed.
-				log('%s died.' % self.name)
-				try:
-					self.process.communicate()	# Clean up the zombie.
-				except:
-					pass
-				for t in range(3):
-					for w in self.waiters[t]:
-						self.waiters[t][w](False, 'Printer died')
-				disable(self.port, 'printer closed connection')
+				self.die('because there was an error')
 				return False
 			self.buffer += data
 			#log('printer input:' + repr(data))
@@ -625,7 +630,7 @@ class Printer: # {{{
 					port = self.port
 					ports[self.port] = None
 					broadcast(None, 'port_state', port, 0)
-					self.make_orphan()
+					self.remove_printer()
 					if autodetect:
 						detect(self.port)
 				elif data[1] == 'error':
@@ -643,17 +648,16 @@ class Printer: # {{{
 				else:
 					raise AssertionError('invalid reply from printer process: %s' % repr(data))
 	# }}}
-	def make_orphan(self): # {{{
-		if ports[self.port]:
-			self.call('disconnect', ['admin'], {}, lambda cd, arg: None)
-		# If there already is an orphan with the same uuid, kill the old orphan.
-		for o in [x for x in printers if printers[x].uuid == self.uuid]:
-			# This for loop always runs 0 or 1 times, never more.
-			log('killing duplicate orphan')
-			printers[o].call('die', ('admin', 'replaced by connection with same uuid',), {}, lambda success, ret: None)
-			del printers[o]
-		printers[self.run_id] = self
-		broadcast(None, 'del_printer', self.port)
+	def remove_printer(self): # {{{
+		def finish():
+			broadcast(None, 'del_printer', self.uuid)
+			del printers[self.uuid]
+			self.call('die', ['admin', 'Printer is removed'], {}, lambda success, ret: self.die('because it was removed'))
+		if self.port and ports[self.port]:
+			assert ports[self.port] == self.uuid
+			self.call('disconnect', ['admin'], {}, lambda success, ret: finish())
+		else:
+			finish()
 	# }}}
 # }}}
 
@@ -698,10 +702,8 @@ def detect(port): # {{{
 		return
 	if ports[port] != None:
 		# Abort detection in progress.
-		if isinstance(ports[port], str):
+		if ports[port]:
 			disable(ports[port], 'disabled to prepare for detection')
-		else:
-			ports[port]()
 		if ports[port] != None:
 			# This should never happen.
 			log('BUG: port is not in detectable state. Please report this.')
@@ -868,17 +870,6 @@ def disable(uuid, reason): # {{{
 	ports[port] = None
 	p.port = None
 	broadcast(None, 'port_state', port, 0)
-# }}}
-
-def remove_printer(uuid): # {{{
-	if uuid not in printers:
-		log('not removing non-existent printer %s' % uuid)
-		return
-	log('removing printer %s' % uuid)
-	p = printers[uuid]
-	if p.port is not None:
-		disable(uuid, 'printer is removed')
-	p.call('remove' ('admin',), {}, lambda success, ret: None)
 # }}}
 
 def add_port(port): # {{{

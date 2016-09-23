@@ -57,6 +57,7 @@ import protocol
 import mmap
 import random
 import errno
+import shutil
 # }}}
 
 config = fhs.init(packagename = 'franklin', config = { # {{{
@@ -269,6 +270,7 @@ class Printer: # {{{
 		if self.profile not in profiles and len(profiles) > 0:
 			log('Default profile does not exist; using %s instead' % self.profile)
 			self.profile = profiles[0]
+		self.default_profile = self.profile
 		# Globals.
 		self.queue_length = 0
 		self.num_pins = 0
@@ -2198,9 +2200,22 @@ class Printer: # {{{
 		return self.uuid
 	# }}}
 	def expert_die(self, reason): # {{{
-		'''Terminate the driver process.
+		'''Kill this printer, including all files on disk.
 		'''
 		log('%s dying as requested by host (%s).' % (self.uuid, reason))
+		# Clean up spool.
+		dirname = fhs.write_spool(self.uuid, dir = True, opened = False)
+		if os.path.isdir(dirname):
+			try:
+				shutil.rmtree(dirname, ignore_errors = False)
+			except:
+				log('Could not remove %d' % dirname)
+		# Clean up profiles.
+		for dirname in fhs.read_data(self.uuid, dir = True, multiple = True, opened = False):
+			try:
+				shutil.rmtree(dirname, ignore_errors = False)
+			except:
+				log('Could not remove %d' % dirname)
 		return (WAIT, WAIT)
 	# }}}
 	@delayed
@@ -2392,6 +2407,7 @@ class Printer: # {{{
 	def admin_set_default_profile(self, profile): # {{{
 		'''Set a profile as default.
 		'''
+		self.default_profile = profile
 		with fhs.write_data(os.path.join(self.uuid, 'info' + os.extsep + 'txt')) as f:
 			f.write(self.name + '\n')
 			f.write(profile + '\n')
@@ -3024,7 +3040,12 @@ class Printer: # {{{
 		ng = ka.pop('num_gpios') if 'num_gpios' in ka else None
 		if 'store_adc' in ka:
 			self.store_adc = bool(ka.pop('store_adc'))
-		for key in ('unit_name', 'name', 'pin_names'):
+		if 'name' in ka:
+			name = ka.pop('name')
+			if name != self.name:
+				self.name = name
+				self.admin_set_default_profile(self.default_profile)
+		for key in ('unit_name', 'pin_names'):
 			if key in ka:
 				setattr(self, key, ka.pop(key))
 		if 'spi_setup' in ka:

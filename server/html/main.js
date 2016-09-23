@@ -878,7 +878,7 @@ function globals_update(printer) { // {{{
 	update_state(printer, get_value(p, [null, 'status']));
 	// Pin ranges.
 	for (var r = 0; r < p.pinranges.length; ++r)
-		p.pinranges[r].update()
+		p.pinranges[r].update();
 	var m = p.multiples;
 	for (var t = 0; t < m.space.length; ++t) {
 		// Add table rows.
@@ -1286,7 +1286,7 @@ function pinrange(printer, type, element) { // {{{
 		for (; t < this.length; ++t)
 			this.element.removeChild(this[t]);
 		this.length = new_length;
-	}
+	};
 	pins.update();
 } // }}}
 

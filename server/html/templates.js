@@ -143,9 +143,15 @@ function Str(printer, obj) { // {{{
 	var ret = Create('span');
 	var input = ret.AddElement('input');
 	input.type = 'text';
+	input.AddEvent('keydown', function(event) {
+		if (event.keyCode == 13) {
+			set_value(ret.printer, ret.obj, input.value);
+			event.preventDefault();
+		}
+	});
 	ret.obj = obj;
 	ret.printer = printer;
-	var e = ret.AddElement('button');
+	/*var e = ret.AddElement('button');
 	e.type = 'button';
 	e.AddText('Set');
 	e.AddEvent('click', function(event) {
@@ -154,6 +160,7 @@ function Str(printer, obj) { // {{{
 	});
 	e = ret.AddElement('span');
 	e.id = make_id(printer, obj);
+	*/
 	return ret;
 } // }}}
 
@@ -578,13 +585,17 @@ function Printer(printer) {	// {{{
 	var setup = ret.AddElement('div', 'setup expert');
 	var e = setup.AddElement('div').AddText('Printer UUID:');
 	ret.uuid = e.AddElement('span');
-	var e = setup.AddElement('div').AddText('Printer name:');
+	var e = setup.AddElement('div', 'admin').AddText('Printer name:');
 	e.Add(Str(ret, [null, 'name']));
 	var connected = setup.AddElement('div', 'connected');
 	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Printer');
 	disable.printer = printer;
 	disable.type = 'button';
 	disable.AddEvent('click', function() { this.printer.disabling = true; rpc.call('disable', [this.printer.uuid], {}); });
+	var remove = setup.AddElement('div', 'admin').AddElement('button').AddText('Remove Printer');
+	remove.printer = printer;
+	remove.type = 'button';
+	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + printer.name + '?')) { remove.printer.disabling = true; rpc.call('remove_printer', [remove.printer.uuid], {}); }});
 	var notconnected = setup.AddElement('div', 'notconnected');
 	var ports = notconnected.AddElement('select');
 	ports.id = make_id(ret, [null, 'ports']);
