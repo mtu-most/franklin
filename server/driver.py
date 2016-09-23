@@ -2044,7 +2044,7 @@ class Printer: # {{{
 		def write_motor(self, motor):
 			if self.id == 2:
 				if self.follower[motor]['space'] >= len(self.printer.spaces) or self.follower[motor]['motor'] >= len(self.printer.spaces[self.follower[motor]['space']]):
-					log('write motor for follower %d with fake base' % (motor, self.printer.spaces[0].motor))
+					log('write motor for follower %d with fake base' % motor)
 					base = {'steps_per_unit': 1, 'limit_v': float('inf'), 'limit_a': float('inf')}
 				else:
 					log('write motor for follower %d with base %s' % (motor, self.printer.spaces[0].motor))
