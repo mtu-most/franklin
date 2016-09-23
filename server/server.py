@@ -497,7 +497,7 @@ def broadcast(target, name, *args): # {{{
 	if target is not None:
 		#log('broadcasting to target %d' % target)
 		if target not in Connection.connections:
-			log('ignoring targeted broadcast of %s to missing connection %d' % (repr((name, args)), target))
+			log('ignoring targeted broadcast of %s to missing connection %s' % (repr((name, args)), target))
 			return
 		target = Connection.connections[target].socket
 		if target.monitor:

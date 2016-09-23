@@ -2043,11 +2043,15 @@ class Printer: # {{{
 				return struct.pack('=dBdd', float('nan'), 0, float('-inf'), float('inf'))
 		def write_motor(self, motor):
 			if self.id == 2:
-				log('write motor for follower %d with base %s' % (motor, self.printer.spaces[0].motor))
-				base = self.printer.spaces[self.follower[motor]['space']].motor[self.follower[motor]['motor']]
+				if self.folower[motor]['space'] >= len(self.printer.spaces) or self.follower[motor]['motor'] >= len(self.printer.spaces[self.follower[motor]['space']]):
+					log('write motor for follower %d with fake base' % (motor, self.printer.spaces[0].motor))
+					base = {'steps_per_unit': 1, 'limit_v': float('inf'), 'limit_a': float('inf')}
+				else:
+					log('write motor for follower %d with base %s' % (motor, self.printer.spaces[0].motor))
+					base = self.printer.spaces[self.follower[motor]['space']].motor[self.follower[motor]['motor']]
 			else:
 				base = self.motor[motor]
-			return struct.pack('=HHHHHddddB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], base['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['home_pos'], base['limit_v'], base['limit_a'], int(base['home_order']))
+			return struct.pack('=HHHHHddddB', self.motor[motor]['step_pin'], self.motor[motor]['dir_pin'], self.motor[motor]['enable_pin'], self.motor[motor]['limit_min_pin'], self.motor[motor]['limit_max_pin'], base['steps_per_unit'] * (1. if self.id != 1 or motor >= len(self.printer.multipliers) else self.printer.multipliers[motor]), self.motor[motor]['home_pos'], base['limit_v'], base['limit_a'], int(self.motor[motor]['home_order']))
 		def set_current_pos(self, axis, pos):
 			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
 			self.printer._send_packet(struct.pack('=BBBd', protocol.command['SETPOS'], self.id, axis, pos))
