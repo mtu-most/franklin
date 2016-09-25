@@ -196,7 +196,7 @@ AddEvent('load', function() { // {{{
 					var e = get_element(printer, [['temp', num], 'temp']);
 					// Only update if printer still exists.
 					if (e)
-						e.ClearAll().AddText(t.toFixed(1));
+						e.ClearAll().AddText(isNaN(t) ? t : t.toFixed(1));
 				}
 				read(printer, num + 1);
 			});

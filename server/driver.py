@@ -1108,7 +1108,7 @@ class Printer: # {{{
 				self.home_cb[0] = [(s, k) for s, k in self.home_target.keys()]
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
-				log("N t %s" % (self.home_target))
+				#log("N t %s" % (self.home_target))
 				self.line(mktarget(), f0 = home_v / dist, force = True, single = True)
 				return
 			# Fall through.
@@ -1507,6 +1507,9 @@ class Printer: # {{{
 				time_dist[0] += nums[1]
 			return nums + time_dist
 		with fhs.write_spool(os.path.join(self.uuid, 'gcode', os.path.splitext(name)[0] + os.path.extsep + 'bin'), text = False) as dst:
+			epsilon = .5	# TODO: check if this should be configurable
+			aepsilon = math.radians(36)	# TODO: check if this should be configurable
+			rlimit = 500	# TODO: check if this should be configurable
 			def center(a, b, c):
 				'''Given 3 points, determine center, radius, angles of points on circle, deviation of polygon from circle.'''
 				try:
@@ -1521,8 +1524,10 @@ class Printer: # {{{
 					#log('div by 0: %s' % repr((a, b, c)))
 					return (None, None, None, float('inf'))
 				angles = []
+				ref = math.atan2(b[1] - yc, b[0] - xc)
 				for p in a, b, c:
-					angles.append(math.atan2(p[1] - yc, p[0] - xc))
+					angle = math.atan2(p[1] - yc, p[0] - xc)
+					angles.append((angle - ref) % (2 * math.pi) + ref)
 				mid = [(p2 + p1) / 2 for p1, p2 in zip(a, b)]
 				amid = (angles[0] + angles[1]) / 2
 				cmid = [math.cos(amid) * r + xc, math.sin(amid) * r + yc]
@@ -1557,13 +1562,11 @@ class Printer: # {{{
 							flush_pending()
 							return
 						return
-					epsilon = .5	# TODO: check if this should be configurable
-					aepsilon = math.radians(36)	# TODO: check if this should be configurable
 					if len(pending) == 3:
-						# If the points are not on a circle with equal angles, or the angle is too large, push pending[1] through to output.
+						# If the points are not on a circle with equal angles, or the angle is too large, or the radius is too large, push pending[1] through to output.
 						# Otherwise, record settings.
 						arc_ctr, arc_r, angles, arc_diff = center(pending[0][1:4], pending[1][1:4], pending[2][1:4])
-						if arc_diff > epsilon or abs(angles[1] - angles[0] - angles[2] + angles[1]) > aepsilon:
+						if arc_diff > epsilon or abs(angles[1] - angles[0] - angles[2] + angles[1]) > aepsilon or arc_r > rlimit:
 							#log('not arc: %s' % repr((arc_ctr, arc_r, angles, arc_diff)))
 							dst.write(struct.pack('=Bl' + 'd' * 8, protocol.parsed['LINE'], *add_timedist(type, pending[1])))
 							pending.pop(0)
@@ -1595,6 +1598,9 @@ class Printer: # {{{
 				end = pending[-2]
 				tmp = pending[-1]
 				arc_ctr, arc_r, angles, arc_diff = center(start[1:4], pending[len(pending) // 2][1:4], end[1:4])
+				if arc_diff < 2 * epsilon:
+					# This is really a line; don't turn it into an arc.
+					return
 				pending[:] = []
 				add_record(protocol.parsed['PRE_ARC'], {'X': arc_ctr[0], 'Y': arc_ctr[1], 'Z': start[3], 'E': 0, 'f': 0, 'F': 1 if arc[4] > 0 else -1, 'T': 0}, True)
 				add_record(protocol.parsed['ARC'], {'X': end[1], 'Y': end[2], 'Z': end[3], 'E': pos[1][current_extruder], 'f': -pos[2], 'F': -pos[2], 'T': current_extruder}, True)
@@ -2044,10 +2050,10 @@ class Printer: # {{{
 		def write_motor(self, motor):
 			if self.id == 2:
 				if self.follower[motor]['space'] >= len(self.printer.spaces) or self.follower[motor]['motor'] >= len(self.printer.spaces[self.follower[motor]['space']].motor):
-					log('write motor for follower %d with fake base' % motor)
+					#log('write motor for follower %d with fake base' % motor)
 					base = {'steps_per_unit': 1, 'limit_v': float('inf'), 'limit_a': float('inf')}
 				else:
-					log('write motor for follower %d with base %s' % (motor, self.printer.spaces[0].motor))
+					#log('write motor for follower %d with base %s' % (motor, self.printer.spaces[0].motor))
 					base = self.printer.spaces[self.follower[motor]['space']].motor[self.follower[motor]['motor']]
 			else:
 				base = self.motor[motor]
@@ -3024,7 +3030,7 @@ class Printer: # {{{
 		if self.confirmer is not None:
 			self._broadcast(target, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}
-	def admin_disconnect(self): # {{{
+	def admin_disconnect(self, reason = None): # {{{
 		self._send_packet(struct.pack('=B', protocol.command['FORCE_DISCONNECT']))
 		self._close(False)
 	# }}}

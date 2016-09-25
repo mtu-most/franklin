@@ -60,7 +60,7 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_axes[a]->settings.target = NAN;
 			new_axes[a]->settings.source = NAN;
 			new_axes[a]->settings.current = NAN;
-			new_axes[a]->history = NULL;
+			new_axes[a]->history = setup_axis_history();
 		}
 		for (int a = na; a < old_na; ++a) {
 			space_types[type].afree(this, a);
@@ -95,7 +95,7 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_motors[m]->settings.target_v = NAN;
 			new_motors[m]->settings.target_dist = NAN;
 			new_motors[m]->settings.endpos = NAN;
-			new_motors[m]->history = NULL;
+			new_motors[m]->history = setup_motor_history();
 			ARCH_NEW_MOTOR(id, m, new_motors);
 		}
 		for (int m = nm; m < old_nm; ++m) {
@@ -480,6 +480,7 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 #endif
 	// Move the motors.
 	//debug("start move");
+	have_steps = false;
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		if (!settings.single && s == 2)
 			continue;
@@ -639,6 +640,8 @@ static void handle_motors(unsigned long long current_time) { // {{{
 					cbs_after_current_move = 0;
 				}
 			}
+			//else
+				//debug("queue not done yet: %f", factor);
 		}
 		return;
 	} // }}}

@@ -626,11 +626,9 @@ class Printer: # {{{
 				if data[1] == 'broadcast':
 					broadcast(data[2], data[3], self.uuid, *(data[4:]))
 				elif data[1] == 'disconnect':
-					# Don't remember a printer that hasn't sent its name yet.
 					port = self.port
 					ports[self.port] = None
 					broadcast(None, 'port_state', port, 0)
-					self.remove_printer()
 					if autodetect:
 						detect(self.port)
 				elif data[1] == 'error':
@@ -865,7 +863,7 @@ def disable(uuid, reason): # {{{
 	if p.port not in ports:
 		log("not disabling printer which isn't enabled")
 		return
-	p.call('disable', ('admin', reason), {}, lambda success, ret: None)
+	p.call('disconnect', ('admin', reason), {}, lambda success, ret: None)
 	port = p.port
 	ports[port] = None
 	p.port = None

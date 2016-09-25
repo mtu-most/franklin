@@ -79,7 +79,7 @@ static void handle_adc() {
 			//debug("adc test diff %d hold %d current %d %d higher %d invert %d", int(now - adc[adc_current].last_change), adc[adc_current].hold_time, adc_current, n, higher, invert);
 			if (invert ^ higher) {
 				if (adc[adc_current].is_on[n]) {
-					debug("switch off");
+					//debug("switch off");
 					adc[adc_current].last_change = now;
 					if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS)
 						RESET(adc[adc_current].linked[n]);
@@ -94,7 +94,7 @@ static void handle_adc() {
 			else {
 				//debug("adc set %d %d %d", n, value, adc[adc_current].value[n]);
 				if (!adc[adc_current].is_on[n]) {
-					debug("switch on");
+					//debug("switch on");
 					if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS)
 						SET(adc[adc_current].linked[n]);
 					adc[adc_current].last_change = now;

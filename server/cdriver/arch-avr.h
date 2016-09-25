@@ -44,7 +44,7 @@
 #define DATA_TYPE int16_t
 #define ARCH_MOTOR DATA_TYPE *avr_data;
 #define ARCH_SPACE
-#define ARCH_NEW_MOTOR(s, m, base) base[m]->avr_data = NULL
+#define ARCH_NEW_MOTOR(s, m, base) base[m]->avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT / sizeof(DATA_TYPE)];
 #define DATA_DELETE(s, m) delete[] (spaces[s].motor[m]->avr_data)
 #define DATA_CLEAR(s, m) memset((spaces[s].motor[m]->avr_data), 0, BYTES_PER_FRAGMENT)
 #define DATA_SET(s, m, v) spaces[s].motor[m]->avr_data[current_fragment_pos] = v;

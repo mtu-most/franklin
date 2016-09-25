@@ -144,27 +144,11 @@ void connect_end() {
 		sp.history = new Space_History[FRAGMENTS_PER_BUFFER];
 		for (int a = 0; a < sp.num_axes; ++a) {
 			delete[] sp.axis[a]->history;
-			sp.axis[a]->history = new Axis_History[FRAGMENTS_PER_BUFFER];
-			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
-				sp.axis[a]->history[f].dist[0] = NAN;
-				sp.axis[a]->history[f].dist[1] = NAN;
-				sp.axis[a]->history[f].main_dist = NAN;
-				sp.axis[a]->history[f].target = NAN;
-				sp.axis[a]->history[f].source = NAN;
-				sp.axis[a]->history[f].current = NAN;
-			}
+			sp.axis[a]->history = setup_axis_history();
 		}
 		for (int m = 0; m < sp.num_motors; ++m) {
 			delete[] sp.motor[m]->history;
-			sp.motor[m]->history = new Motor_History[FRAGMENTS_PER_BUFFER];
-			for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
-				sp.motor[m]->history[f].last_v = 0;
-				sp.motor[m]->history[f].current_pos = 0;
-				sp.motor[m]->history[f].last_v = 0;
-				sp.motor[m]->history[f].target_v = NAN;
-				sp.motor[m]->history[f].target_dist = NAN;
-				sp.motor[m]->history[f].endpos = NAN;
-			}
+			sp.motor[m]->history = setup_motor_history();
 		}
 	}
 	// Update current position.
@@ -175,4 +159,30 @@ void connect_end() {
 	// Update pin names at next globals update.
 	sent_names = false;
 	send_host(CMD_CONNECTED);
+}
+
+Axis_History *setup_axis_history() {
+	Axis_History *ret = new Axis_History[FRAGMENTS_PER_BUFFER];
+	for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
+		ret[f].dist[0] = NAN;
+		ret[f].dist[1] = NAN;
+		ret[f].main_dist = NAN;
+		ret[f].target = NAN;
+		ret[f].source = NAN;
+		ret[f].current = NAN;
+	}
+	return ret;
+}
+
+Motor_History *setup_motor_history() {
+	Motor_History *ret = new Motor_History[FRAGMENTS_PER_BUFFER];
+	for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
+		ret[f].last_v = 0;
+		ret[f].current_pos = 0;
+		ret[f].last_v = 0;
+		ret[f].target_v = NAN;
+		ret[f].target_dist = NAN;
+		ret[f].endpos = NAN;
+	}
+	return ret;
 }

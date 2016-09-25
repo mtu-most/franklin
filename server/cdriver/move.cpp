@@ -245,7 +245,7 @@ int next_move() { // {{{
 				}
 			}
 			if ((!isnan(queue[settings.queue_start].data[a0 + a]) || (n != settings.queue_end && !isnan(queue[n].data[a0 + a]))) && isnan(sp.axis[a]->settings.source)) {
-				debug("Motor positions are not known, so move cannot take place; aborting move and removing it from the queue: %f %f %f", queue[settings.queue_start].data[a0 + a], queue[n].data[a0 + a], sp.axis[a]->settings.source);
+				debug("Motor position for %d %d is not known, so move cannot take place; aborting move and removing it from the queue: q1=%f q2=%f src=%f", s, a, queue[settings.queue_start].data[a0 + a], queue[n].data[a0 + a], sp.axis[a]->settings.source);
 				// This possibly removes one move too many, but it shouldn't happen anyway.
 				if (queue[settings.queue_start].cb)
 					++num_cbs;

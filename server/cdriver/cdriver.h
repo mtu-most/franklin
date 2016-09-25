@@ -524,6 +524,8 @@ EXTERN int run_file_audio;
 void setup();
 void connect(char const *port, char const *run_id);
 void connect_end();
+Axis_History *setup_axis_history();
+Motor_History *setup_motor_history();
 EXTERN bool host_block;
 EXTERN bool sent_names;
 
