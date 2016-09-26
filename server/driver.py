@@ -1598,8 +1598,8 @@ class Printer: # {{{
 				end = pending[-2]
 				tmp = pending[-1]
 				arc_ctr, arc_r, angles, arc_diff = center(start[1:4], pending[len(pending) // 2][1:4], end[1:4])
-				if arc_diff < 2 * epsilon:
-					# This is really a line; don't turn it into an arc.
+				if arc_diff < 2 * epsilon or arc_ctr is None:
+					# This is really a line, or it is not detected as an arc; don't turn it into an arc.
 					return
 				pending[:] = []
 				add_record(protocol.parsed['PRE_ARC'], {'X': arc_ctr[0], 'Y': arc_ctr[1], 'Z': start[3], 'E': 0, 'f': 0, 'F': 1 if arc[4] > 0 else -1, 'T': 0}, True)
