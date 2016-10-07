@@ -1527,10 +1527,11 @@ class Printer: # {{{
 				ref = math.atan2(b[1] - yc, b[0] - xc)
 				for p in a, b, c:
 					angle = math.atan2(p[1] - yc, p[0] - xc)
-					angles.append((angle - ref) % (2 * math.pi) + ref)
-				mid = [(p2 + p1) / 2 for p1, p2 in zip(a, b)]
-				amid = (angles[0] + angles[1]) / 2
+					angles.append((angle - ref + math.pi) % (2 * math.pi) + ref - math.pi)
+				mid = [(p2 + p1) / 2 for p1, p2 in zip(a, c)]
+				amid = (angles[0] + angles[2]) / 2
 				cmid = [math.cos(amid) * r + xc, math.sin(amid) * r + yc]
+				#log('for diff center (%f %f) mids %s %s amid %f angles %s' % (xc, yc, mid, cmid, amid, angles))
 				diff = sum([(p2 - p1) ** 2 for p1, p2 in zip(mid, cmid)])
 				#log('center returns %s' % repr(((xc, yc, z0), r, angles, diff)))
 				return ((xc, yc, z0), r, angles, diff)
@@ -1565,6 +1566,7 @@ class Printer: # {{{
 					if len(pending) == 3:
 						# If the points are not on a circle with equal angles, or the angle is too large, or the radius is too large, push pending[1] through to output.
 						# Otherwise, record settings.
+						#log('center for arc start')
 						arc_ctr, arc_r, angles, arc_diff = center(pending[0][1:4], pending[1][1:4], pending[2][1:4])
 						if arc_diff > epsilon or abs(angles[1] - angles[0] - angles[2] + angles[1]) > aepsilon or arc_r > rlimit:
 							#log('not arc: %s' % repr((arc_ctr, arc_r, angles, arc_diff)))
@@ -1578,17 +1580,27 @@ class Printer: # {{{
 					p = [arc[0][0] + math.cos(a) * arc[1], arc[0][1] + math.sin(a) * arc[1]]
 					# If new point doesn't fit on circle, push pending as circle to output.
 					# It should allow up to 360, but be safe and break those in two; also makes generating svgs easier.
-					if current_angle >= math.radians(180) or (p[0] - pending[-1][1]) ** 2 + (p[1] - pending[-1][2]) ** 2 > epsilon ** 2 or pending[0][3] != pending[-1][3]:
-						#log('point not on arc; flushing %s' % repr((p, pending[-1][1:4])))
+					if current_angle >= math.radians(180):
+						#log('flush: more than 180 degrees')
+						flush_pending()
+					elif (p[0] - pending[-1][1]) ** 2 + (p[1] - pending[-1][2]) ** 2 > epsilon ** 2:
+						#log('flush: point too far from prediction (%s %s)' % (p, pending[-1][1:3]))
+						flush_pending()
+					elif pending[0][3] != pending[-1][3]:
+						#log('flush: non equal z')
 						flush_pending()
 					return
-				else:
-					flush_pending()
-				#log(repr((type, nums, add_timedist(type, nums))))
+				#if not force:
+					#log('non-line %s' % type)
+				flush_pending()
+				#log('force or other ' + repr((type, nums, add_timedist(type, nums))))
 				dst.write(struct.pack('=Bl' + 'd' * 8, type, *add_timedist(type, nums)))
 			def flush_pending():
 				if len(pending) >= 6:
+					#log('arc')
 					flush_arc()
+				#else:
+					#log('no arc %d' % len(pending))
 				tmp = pending[1:]
 				pending[:] = []
 				for p in tmp:
@@ -1597,8 +1609,10 @@ class Printer: # {{{
 				start = pending[0]
 				end = pending[-2]
 				tmp = pending[-1]
+				#log('center for flush')
 				arc_ctr, arc_r, angles, arc_diff = center(start[1:4], pending[len(pending) // 2][1:4], end[1:4])
 				if arc_diff < 2 * epsilon or arc_ctr is None:
+					#log('refuse arc: %s' % repr((arc_ctr, arc_diff, epsilon, arc_r, angles)))
 					# This is really a line, or it is not detected as an arc; don't turn it into an arc.
 					return
 				pending[:] = []

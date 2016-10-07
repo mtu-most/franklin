@@ -4,7 +4,7 @@ import struct
 import fhs
 import math
 
-config = fhs.init({'src': None, 'svg': False, 'z': float('nan')})
+config = fhs.init({'src': None, 'svg': False, 'z': float('nan'), 'offset': 0.0})
 
 file = open(config['src'], 'rb')
 
@@ -25,6 +25,7 @@ while True:
 	if not config['svg']:
 		print('%d\t%d\t%d\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f\t%7.3f' % (n, t, T, X, Y, Z, E, f, F, time, dist))
 	else:
+		Y += Z * config['offset']
 		print('<!-- %d -->' % n)
 		if t == 2:
 			# Line.
