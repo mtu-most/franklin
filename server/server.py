@@ -823,7 +823,7 @@ def detect(port): # {{{
 					log('connecting new printer %s to port %s' % (uuid, port))
 					new_printer.call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: None)
 				if uuid is None:
-					new_printer.call('reset_uuid', [], {}, finish)
+					new_printer.call('reset_uuid', ['admin'], {}, finish)
 				else:
 					finish(True, uuid)
 			return False
