@@ -630,7 +630,7 @@ class Printer: # {{{
 					ports[self.port] = None
 					broadcast(None, 'port_state', port, 0)
 					if autodetect:
-						detect(self.port)
+						detect(port)
 				elif data[1] == 'error':
 					if data[0] is None:
 						# Error on command without id.
