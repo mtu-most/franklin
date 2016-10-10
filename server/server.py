@@ -781,7 +781,7 @@ def detect(port): # {{{
 			uuid = id[0][9:9 + 16]
 			if (uuid[7] & 0xf0) != 0x40 or (uuid[9] & 0xc0) != 0x80:
 				# Broken uuid; create a new one and set it.
-				log('broken uuid: ' + repr(self.uuid))
+				log('broken uuid: ' + repr(uuid))
 				uuid = None
 			else:
 				uuid = ''.join('%02x' % x for x in uuid[:16])
