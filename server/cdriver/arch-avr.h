@@ -1435,6 +1435,10 @@ void AVRSerial::begin(char const *port) { // {{{
 	}
 	else {
 		fd = open(port, O_RDWR);
+		if (fd < 0) {
+			debug("failed to open port %s: %s", port, strerror(errno));
+			abort();
+		}
 	}
 	pollfds[2].fd = fd;
 	pollfds[2].events = POLLIN | POLLPRI;
