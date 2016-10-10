@@ -432,8 +432,9 @@ class Connection: # {{{
 				log('printer errors')
 				wake(None)
 				#disable(self.printer, 'printer replied with error to wake up')
-		printers[self.printer].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
-		return (yield)
+		if self.printer in printers:
+			printers[self.printer].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
+			return (yield)
 	# }}}
 	def __getattr__ (self, attr): # {{{
 		return lambda *a, **ka: self._call(attr, a, ka)
@@ -895,6 +896,16 @@ def remove_port(port): # {{{
 # }}}
 # }}}
 
+# Main loop. {{{
+def _disconnect(socket, data):
+	del Connection.connections[socket.connection.id]
+try:
+	httpd = Server(config['port'], Connection, disconnect_cb = _disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = tls)
+except OSError:
+	log('failed to start server: %s' % sys.exc_info()[1])
+	sys.exit(1)
+# }}}
+
 # Initialization. {{{
 default_printer = config['printer']
 if config['local'] != '':
@@ -936,14 +947,8 @@ except:
 # }}}
 # }}}
 
-# Main loop. {{{
-def _disconnect(socket, data):
-	del Connection.connections[socket.connection.id]
-httpd = Server(config['port'], Connection, disconnect_cb = _disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = tls)
-
 log('Franklin server is running')
 websocketd.fgloop()
-# }}}
 
 
 '''
