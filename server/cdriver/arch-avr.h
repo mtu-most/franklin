@@ -990,6 +990,8 @@ void avr_connect2() { // {{{
 void arch_connect(char const *run_id, char const *port) { // {{{
 	avr_connected = true;
 	avr_serial.begin(port);
+	if (!avr_connected)
+		return;
 	arch_reset();
 	// Get constants.
 	avr_buffer[0] = HWC_BEGIN;
@@ -1086,6 +1088,8 @@ int arch_fds() { // {{{
 void arch_reconnect(char *port) { // {{{
 	avr_connected = true;
 	avr_serial.begin(port);
+	if (!avr_connected)
+		return;
 	for (int i = 0; i < 4; ++i)
 		avr_serial.write(cmd_nack[i]);	// Just to be sure.
 } // }}}
@@ -1437,7 +1441,8 @@ void AVRSerial::begin(char const *port) { // {{{
 		fd = open(port, O_RDWR);
 		if (fd < 0) {
 			debug("failed to open port %s: %s", port, strerror(errno));
-			abort();
+			disconnect(true);
+			return;
 		}
 	}
 	pollfds[2].fd = fd;
