@@ -394,7 +394,7 @@ function upload_buttons(port, ul, buttons) { // {{{
 // }}}
 
 function floatkey(event, element) { // {{{
-	if (event.ctrlKey || event.altKey)
+	if (event.ctrlKey || event.altKey || element.value == '')
 		return;
 	var amount;
 	var set = false;

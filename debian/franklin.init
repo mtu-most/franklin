@@ -25,7 +25,7 @@ RUN=1
 #ADDRESS=
 
 # Use SSL connections.
-#TLS=True
+#TLS=False
 
 # Location of log file or directory.  Set to /var/log/franklin to enable logging in the default location.
 #LOG=

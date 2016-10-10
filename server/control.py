@@ -21,7 +21,7 @@ import os
 import sys
 
 port = 8000
-tls = True
+tls = False
 user = None
 password = None
 current_level = 0
@@ -47,7 +47,7 @@ with open('/etc/default/franklin') as f:
 			# Leave it as a string because it need not be numerical.
 			port = value.strip()
 		if key == 'TLS':
-			tls = value.lower().strip() == 'true'
+			tls = value.lower().strip() in ('1', 'true')
 		if key == 'USER':
 			credentials(0, value.strip())
 		if key == 'EXPERT':

@@ -1518,7 +1518,6 @@ class Printer: # {{{
 					x2, y2, z2 = c
 					xc = ((y0 - y1) * (y0 ** 2 - y2 ** 2 + x0 ** 2 - x2 ** 2) - (y0 - y2) * (x0 ** 2 - x1 ** 2 + y0 ** 2 - y1 ** 2)) / (2 * (-x0 * y1 - x2 * y0 + x2 * y1 + x1 * y0 + x0 * y2 - x1 * y2))
 					yc = ((x0 - x1) * (x0 ** 2 - x2 ** 2 + y0 ** 2 - y2 ** 2) - (x0 - x2) * (y0 ** 2 - y1 ** 2 + x0 ** 2 - x1 ** 2)) / (2 * (-y0 * x1 - y2 * x0 + y2 * x1 + y1 * x0 + y0 * x2 - y1 * x2))
-					#yc = (x0 ** 2 - x1 ** 2 + y0 ** 2 - y1 ** 2 - 2 * xc * (x0 - x1)) / (2 * (y0 - y1))
 					r = ((xc - x0) ** 2 + (yc - y0) ** 2) ** .5
 				except ZeroDivisionError:
 					#log('div by 0: %s' % repr((a, b, c)))
