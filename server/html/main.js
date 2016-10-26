@@ -394,12 +394,14 @@ function upload_buttons(port, ul, buttons) { // {{{
 // }}}
 
 function floatkey(event, element) { // {{{
-	if (event.ctrlKey || event.altKey || element.value == '')
+	if (event.ctrlKey || event.altKey)
 		return;
 	var amount;
 	var set = false;
 	if (event.keyCode == 13) { // Enter
 		var v = element.value;
+		if (v == '')
+			return;
 		if (v[0] == '+')
 			amount = Number(v.substr(1));
 		else {
