@@ -63,10 +63,12 @@ def init(config = {}):
 	cfg = fhs.init(configdata)
 	dead = float(cfg['dead'])
 	printer = websocketd.RPC(cfg['printer'], tls = False)
-	fd = os.open(cfg['js'], os.O_RDWR)
-	if fd < 0:
+	try:
+		fd = os.open(cfg['js'], os.O_RDWR)
+	except FileNotFoundError:
 		sys.stderr.write('Cannot open joystick file')
-		sys.exit(1)
+		# Raise OSError, because that is handled by the outer loop.
+		raise OSError('Cannot open joystick file')
 
 	version = ioctl(js.gversion, ctypes.c_uint32)
 	if version != js.version:
@@ -138,7 +140,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 			#print('ignoring mod %d %s' % (num, repr(button_state)))
 			return
 		for i, m in enumerate(modifiers):
-			if button_state[m]:
+			if m < num_buttons and button_state[m]:
 				num += num_buttons << i
 		if num not in button_action or button_action[num] is None:
 			#print('ignoring no action %d %s' % (num, repr(button_state)))
@@ -163,7 +165,8 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 					n[c] += 1
 					move[c] += v * axis_state[a] / (1 << 15)
 		for i, nn in enumerate(n):
-			move[i] /= nn
+			if nn > 0:
+				move[i] /= nn
 		for stick in (0, 3):
 			d = (move[stick + 0] ** 2 + move[stick + 1] ** 2) ** .5
 			if d <= dead:
@@ -220,4 +223,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 
 if __name__ == '__main__':
 	while True:
-		main()
+		try:
+			main()
+		except OSError:
+			time.sleep(60)
