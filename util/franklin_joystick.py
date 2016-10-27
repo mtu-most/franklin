@@ -63,12 +63,7 @@ def init(config = {}):
 	cfg = fhs.init(configdata)
 	dead = float(cfg['dead'])
 	printer = websocketd.RPC(cfg['printer'], tls = False)
-	try:
-		fd = os.open(cfg['js'], os.O_RDWR)
-	except FileNotFoundError:
-		sys.stderr.write('Cannot open joystick file')
-		# Raise OSError, because that is handled by the outer loop.
-		raise OSError('Cannot open joystick file')
+	fd = os.open(cfg['js'], os.O_RDWR)
 
 	version = ioctl(js.gversion, ctypes.c_uint32)
 	if version != js.version:
@@ -223,7 +218,4 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 
 if __name__ == '__main__':
 	while True:
-		try:
-			main()
-		except OSError:
-			time.sleep(60)
+		main()
