@@ -1,5 +1,6 @@
 /* cdriver.h - declarations for Franklin
- * Copyright 2014 Michigan Technological University
+ * Copyright 2014-2016 Michigan Technological University
+ * Copyright 2016 Bas Wijnen <wijnen@debian.org>
  * Author: Bas Wijnen <wijnen@debian.org>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -138,6 +139,9 @@ enum Command {
 	CMD_GETTIME,
 	CMD_SPI,
 	CMD_ADJUSTPROBE,	// 3 doubles: probe position.
+	CMD_TP_GETPOS,
+	CMD_TP_SETPOS,	// 1 double: new toolpath position.
+	CMD_TP_FINDPOS,	// 3 doubles: search position or NaN.
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_UUID = 0x40,	// 16 byte uuid.
@@ -149,6 +153,7 @@ enum Command {
 	CMD_QUEUE,	// 1 byte: current number of records in queue.
 	CMD_HOMED,	// 0
 	CMD_TIME,
+	CMD_TP_POS,	// double: current or found position in toolpath.
 		// asynchronous events.
 	CMD_MOVECB,	// 1 byte: number of movecb events.
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
@@ -166,6 +171,21 @@ enum Command {
 	CMD_CONNECTED,
 		// Pin names; broadcast during setup.
 	CMD_PINNAME,
+};
+
+enum RunType {
+	RUN_SYSTEM,
+	RUN_PRE_LINE,
+	RUN_LINE,
+	RUN_PRE_ARC,
+	RUN_ARC,
+	RUN_GPIO,
+	RUN_SETTEMP,
+	RUN_WAITTEMP,
+	RUN_SETPOS,
+	RUN_WAIT,
+	RUN_CONFIRM,
+	RUN_PARK,
 };
 
 // All temperatures are stored in Kelvin, but communicated in °C.
@@ -500,6 +520,7 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 void abort_run_file();
 void run_file_fill_queue();
 void run_adjust_probe(double x, double y, double z);
+double run_find_pos(double pos[3]);
 EXTERN char probe_file_name[256];
 EXTERN off_t probe_file_size;
 EXTERN ProbeFile *probe_file_map;

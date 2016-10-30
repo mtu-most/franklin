@@ -1,7 +1,7 @@
 #! /usr/bin/python3
 # vim: set foldmethod=marker fileencoding=utf8 :
-# driver.py - high level driver implementation for Franklin {{{
-# Copyright 2014 Michigan Technological University
+# Copyright 2014-2016 Michigan Technological University
+# Copyright 2016 Bas Wijnen <wijnen@debian.org>
 # Author: Bas Wijnen <wijnen@debian.org>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -31,6 +31,7 @@ TYPE_DELTA = 1
 TYPE_POLAR = 2
 TYPE_EXTRUDER = 3
 TYPE_FOLLOWER = 4
+record_format = '=Bidddddddd' # type, tool, X, Y, Z, E, f, F, time, dist
 # }}}
 
 # Imports.  {{{
@@ -1121,6 +1122,7 @@ class Printer: # {{{
 						#log('found limit %d %d' % (s, a))
 						self.home_target.pop((s, a))
 						found_limits = True
+						# Make sure no attempt is made to move through the limit switch (not even by rounding errors).
 						sp.set_current_pos(a, sp.get_current_pos(a))
 			# Repeat until move is done, or all limits are hit.
 			if (not done or found_limits) and len(self.home_target) > 0:
@@ -1166,18 +1168,27 @@ class Printer: # {{{
 			# Fall through.
 		if self.home_phase == 3:
 			# Move followers and delta into alignment.
+			self.home_return = []
 			for s, sp in enumerate(self.spaces):
+				self.home_return.append([])
 				for i, m in enumerate(sp.motor):
 					if i in self.limits[s]:
 						if not math.isnan(m['home_pos']):
 							#log('set %d %d %f' % (s, i, m['home_pos']))
+							self.home_return[-1].append(m['home_pos'] - sp.get_current_pos(i))
 							sp.set_current_pos(i, m['home_pos'])
+						else:
+							#log('limited zeroset %d %d' % (s, i))
+							self.home_return[-1].append(-sp.get_current_pos(i))
+							sp.set_current_pos(i, 0)
 					else:
 						if (self._pin_valid(m['limit_min_pin']) or self._pin_valid(m['limit_max_pin'])) and not math.isnan(m['home_pos']):
 							#log('defset %d %d %f' % (s, i, m['home_pos']))
+							self.home_return[-1].append(m['home_pos'] - sp.get_current_pos(i))
 							sp.set_current_pos(i, m['home_pos'])
 						else:
-							#log('zeroset %d %d' % (s, i))
+							#log('unlimited zeroset %d %d' % (s, i))
+							self.home_return[-1].append(-sp.get_current_pos(i))
 							sp.set_current_pos(i, 0)
 			# Pre-insert delta axes as followers to align.
 			groups = ([], [], [])	# min limits; max limits; just move.
@@ -1244,17 +1255,10 @@ class Printer: # {{{
 				return
 			# Fall through.
 		if self.home_phase == 4:
-			# Set current position, reset space type and move to pos2.
-			for s, sp in enumerate(self.spaces):
-				for i, m in enumerate(sp.motor):
-					if not self._pin_valid(m['limit_min_pin']) and not self._pin_valid(m['limit_max_pin']):
-						if self.home_orig_type != TYPE_DELTA or s != 0:
-							#log('set %d %d to 0' % (s, i))
-							sp.set_current_pos(i, 0 if s == 1 else m['home_pos'])
+			# Reset space type and move to pos2.
 			self.expert_set_space(0, type = self.home_orig_type)
 			for a, ax in enumerate(self.spaces[0].axis):
 				self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1])
-			# Move within bounds.
 			target = {}
 			for s, sp in enumerate(self.spaces[:2]):
 				for i, a in enumerate(sp.axis):
@@ -1272,6 +1276,7 @@ class Printer: # {{{
 					return
 			# Fall through.
 		if self.home_phase == 5:
+			# Move within bounds.
 			target = {}
 			for s, sp in enumerate(self.spaces[:2]):
 				for i, a in enumerate(sp.axis):
@@ -1298,7 +1303,7 @@ class Printer: # {{{
 			self.home_phase = None
 			self.position_valid = True
 			if self.home_id is not None:
-				self._send(self.home_id, 'return', None)
+				self._send(self.home_id, 'return', self.home_return)
 			if self.home_done_cb is not None:
 				call_queue.append((self.home_done_cb, []))
 				self.home_done_cb = None
@@ -1448,6 +1453,21 @@ class Printer: # {{{
 				self.set_axis_pos(1, e, 0)
 		filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', src + os.extsep + 'bin'), text = False, opened = False)
 		self.total_time = self.jobqueue[src][-2:]
+		self.gcode_fd = os.open(filename, os.O_RDONLY)
+		self.gcode_map = mmap.mmap(self.gcode_fd, 0, prot = mmap.PROT_READ)
+		filesize = os.fstat(self.gcode_fd).st_size
+		bboxsize = 8 * struct.calcsize('=d')
+		def unpack(format, pos):
+			return struct.unpack(format, self.gcode_map[pos:pos + struct.calcsize(format)])
+		num_strings = unpack('=I', filesize - bboxsize - struct.calcsize('=I'))[0]
+		self.gcode_strings = []
+		sizes = [unpack('=I', filesize - bboxsize - struct.calcsize('=I') * (num_strings + 1 - x))[0] for x in range(num_strings)]
+		first_string = filesize - bboxsize - struct.calcsize('=I') * (num_strings + 1) - sum(sizes)
+		pos = 0
+		for x in range(num_strings):
+			self.gcode_strings.append(self.gcode_map[first_string + pos:first_string + pos + sizes[x]].decode('utf-8', 'replace'))
+			pos += sizes[x]
+		self.gcode_num_records = first_string / struct.calcsize(record_format)
 		if self.probemap is not None:
 			self.gcode_file = True
 			self._globals_update()
@@ -3009,12 +3029,14 @@ class Printer: # {{{
 		These are generally too low, because they don't account for
 		acceleration and velocity limits.
 		'''
+		pos = self.tp_get_position()
+		context = self.tp_get_context(position = pos[0])
 		if self.paused:
 			state = 'Paused'
 		elif self.gcode_map is not None or self.gcode_file:
 			state = 'Printing'
 		else:
-			return 'Idle', float('nan'), float('nan')
+			return 'Idle', float('nan'), float('nan'), pos[0], pos[1], context
 		if self.gcode_map:
 			f = (self.probe_time_dist[0] + (0 if len(self.spaces) > 0 else self.probe_time_dist[1] / self.max_v)) / self.feedrate
 		else:
@@ -3022,8 +3044,8 @@ class Printer: # {{{
 			cmd, s, m, f, e, data = self._get_reply()
 			if cmd != protocol.rcommand['TIME']:
 				log('invalid reply to gettime command')
-				return 'Error', float('nan'), float('nan')
-		return state, f, (self.total_time[0] + (0 if len(self.spaces) < 1 else self.total_time[1] / self.max_v)) / self.feedrate
+				return 'Error', float('nan'), float('nan'), pos[0], pos[1], context
+		return state, f, (self.total_time[0] + (0 if len(self.spaces) < 1 else self.total_time[1] / self.max_v)) / self.feedrate, pos[0], pos[1], context
 	# }}}
 	def send_printer(self, target): # {{{
 		'''Return all settings about a machine.
@@ -3046,6 +3068,64 @@ class Printer: # {{{
 	def admin_disconnect(self, reason = None): # {{{
 		self._send_packet(struct.pack('=B', protocol.command['FORCE_DISCONNECT']))
 		self._close(False)
+	# }}}
+	# Commands for handling the toolpath.
+	def tp_get_position(self): # {{{
+		'''Get current toolpath position.
+		@return position, total toolpath length.'''
+		if self.gcode_map is None:
+			return 0, 0
+		self._send_packet(struct.pack('=B', protocol.command['TP_GETPOS']))
+		cmd, s, m, f, e, data = self._get_reply()
+		assert cmd == protocol.rcommand['TP_POS']
+		return f, self.gcode_num_records
+	# }}}
+	def tp_set_position(self, position): # {{{
+		'''Set current toolpath position.
+		It is an error to call this function while not paused.
+		@param position: new toolpath position.
+		@return None.'''
+		assert self.gcode_map is not None
+		assert 0 <= position < self.gcode_num_records
+		assert self.paused
+		self._send_packet(struct.pack('=Bd', protocol.command['TP_SETPOS'], position))
+	# }}}
+	def tp_get_context(self, num = None, position = None): # {{{
+		'''Get context around a position.
+		@param num: number of lines context on each side.
+		@param position: center of the returned region, or None for current position.
+		@return first position of returned region (normally position - num), list of lines+arcs+specials'''
+		if self.gcode_map is None:
+			return 0, []
+		if num is None:
+			num = 100;	# TODO: make configurable.
+		if position is None:
+			position = self.tp_get_position()[0]
+		position = int(position)
+		def parse_record(num):
+			s = struct.calcsize(record_format)
+			type, tool, X, Y, Z, E, f, F, time, dist = struct.unpack(record_format, self.gcode_map[num * s:(num + 1) * s])
+			return tuple(protocol.parsed.keys())[tuple(protocol.parsed.values()).index(type)], tool, X, Y, Z, E, f, F, time, dist
+		return max(0, position - num), [parse_record(x) for x in range(position - num, position + num + 1) if 0 <= x < self.gcode_num_records]
+	# }}}
+	def tp_get_string(self, num): # {{{
+		'''Get string from toolpath.
+		@param num: index of the string.
+		@return the string.'''
+		return self.gcode_strings[num]
+	# }}}
+	def tp_find_position(self, x = None, y = None, z = None): # {{{
+		'''Find toolpath position closest to coordinate.
+		Inputs may be None, in that case that coordinate is ignored.
+		@param x: X coordinate of target or None.
+		@param y: Y coordinate of target or None.
+		@param z: Z coordinate of target or None.
+		@return toolpath position.'''
+		assert self.gcode_map is not None
+		self._send_packet(struct.pack('=Bddd', protocol.command['TP_FINDPOS'], *(a if a is not None else float('nan') for a in (x, y, z))))
+		cmd, s, m, f, e, data = self._get_reply()
+		assert cmd == protocol.rcommand['TP_POS']
+		return f
 	# }}}
 	# }}}
 	# Accessor functions. {{{

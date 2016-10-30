@@ -1575,6 +1575,10 @@ function update_canvas_and_spans(printer, space) { // {{{
 		else
 			e.AddText('State: ' + state[0] + ' - Time: ' + display_time(state[1]) + '/' + display_time(state[2]) + ' - Remaining: ' + display_time(state[2] - state[1]));
 		update_float(printer, [null, 'targetangle']);
+		printer.printer.tppos = state[3];
+		printer.tp_context = state[5];
+		update_float(printer, [null, 'tppos']);
+		get_element(printer, [null, 'tpmax']).ClearAll().AddText(state[4]);
 		redraw_canvas(printer);
 	});
 }
@@ -1591,7 +1595,7 @@ function redraw_canvas(printer) { // {{{
 		var printerwidth;
 		var printerheight;
 		var outline, center;
-		switch (printer.printer.spaces[0].type) {
+		switch (printer.printer.spaces[0].type) { // Define geometry-specific options, including outline. {{{
 		case TYPE_CARTESIAN:
 			var xaxis = printer.printer.spaces[0].axis[0];
 			var yaxis = printer.printer.spaces[0].axis[1];
@@ -1680,7 +1684,8 @@ function redraw_canvas(printer) { // {{{
 				c.stroke();
 			};
 			break;
-		}
+		} // }}}
+		// Prepare canvas. {{{
 		//var factor = Math.sqrt(printerwidth * printerwidth + printerheight * printerheight);
 		var factor = Math.max(printerwidth, printerheight);
 		canvas.style.height = canvas.clientWidth + 'px';
@@ -1698,21 +1703,23 @@ function redraw_canvas(printer) { // {{{
 		c.scale(canvas.width / factor, -canvas.width / factor);
 		c.lineWidth = 1.5 * factor / canvas.width;
 		c.translate(-center[0], -center[1]);
+		// }}}
 
-		get_pointer_pos_xy = function(printer, e) {
+		get_pointer_pos_xy = function(printer, e) { // {{{
 			var rect = canvas.getBoundingClientRect();
 			var x = e.clientX - rect.left - canvas.width / 2;
 			var y = e.clientY - rect.top - canvas.width / 2;
 			x /= canvas.width / factor;
 			y /= -canvas.width / factor;
 			return [x, y];
-		};
+		}; // }}}
 
-		// Draw outline.
+		// Draw outline. {{{
 		c.strokeStyle = '#888';
 		c.fillStyle = '#888';
 		outline(printer, c);
-		// Draw limits.
+		// }}}
+		// Draw limits. {{{
 		c.beginPath();
 		var a = printer.printer.spaces[0].axis;
 		c.moveTo(a[0].min, a[1].min);
@@ -1721,14 +1728,46 @@ function redraw_canvas(printer) { // {{{
 		c.lineTo(a[0].min, a[1].max);
 		c.closePath();
 		c.stroke();
-		// Draw center.
+		// }}}
+		// Draw center. {{{
 		c.beginPath();
 		c.moveTo(1, 0);
 		c.arc(0, 0, 1, 0, 2 * Math.PI);
 		c.fillStyle = '#888';
 		c.fill();
+		// }}}
 
-		// Draw current location.
+		// Draw context. {{{
+		var current_pos = null;
+		var center = null;
+		var normal = null;
+		for (var i = 0; i < printer.tp_context[1].length; ++i) {
+			r = printer.tp_context[1][i];
+			switch (r[0]) {
+				case 'PREARC':
+					center = [r[2], r[3], r[4]];
+					normal = [r[5], r[6], r[7]];
+					continue;
+				case 'ARC':
+					if (current_pos === null)
+						break;
+					if (center === null)
+						break;
+					// TODO: implement this.  Workaround: fall through.
+				case 'LINE':
+					if (current_pos === null)
+						break;
+					c.beginPath();
+					c.moveTo(current_pos[0], current_pos[1]);
+					c.lineTo(r[2], r[3]);
+					c.strokeStyle = i + printer.tp_context[0] >= printer.printer.tppos ? '#00f' : '#f00';
+					c.stroke();
+			}
+			current_pos = [r[2], r[3], r[4]];
+		}
+		// }}}
+
+		// Draw current location. {{{
 		c.beginPath();
 		c.fillStyle = '#44f';
 		c.moveTo(true_pos[0] + 3, true_pos[1]);
@@ -1738,13 +1777,15 @@ function redraw_canvas(printer) { // {{{
 		c.save();
 		c.translate(printer.targetx, printer.targety);
 		c.rotate(printer.targetangle);
+		// }}}
 
 		c.beginPath();
 		if (b[0] != b[1] && b[2] != b[3]) {
-			// Draw print bounding box.
+			// Draw print bounding box. {{{
 			c.rect(b[0], b[2], b[1] - b[0], b[3] - b[2]);
+			// }}}
 
-			// Draw tick marks.
+			// Draw tick marks. {{{
 			c.moveTo((b[1] + b[0]) / 2, b[2]);
 			c.lineTo((b[1] + b[0]) / 2, b[2] + 5);
 
@@ -1756,17 +1797,20 @@ function redraw_canvas(printer) { // {{{
 
 			c.moveTo(b[1], (b[3] + b[2]) / 2);
 			c.lineTo(b[1] - 5, (b[3] + b[2]) / 2);
+			// }}}
 
-			// Draw central cross.
+			// Draw central cross. {{{
 			c.moveTo((b[1] + b[0]) / 2 - 5, (b[3] + b[2]) / 2);
 			c.lineTo((b[1] + b[0]) / 2 + 5, (b[3] + b[2]) / 2);
 			c.moveTo((b[1] + b[0]) / 2, (b[3] + b[2]) / 2 + 5);
 			c.lineTo((b[1] + b[0]) / 2, (b[3] + b[2]) / 2 - 5);
+			// }}}
 		}
 
-		// Draw zero.
+		// Draw zero. {{{
 		c.moveTo(3, 0);
 		c.arc(0, 0, 3, 0, 2 * Math.PI);
+		// }}}
 
 		// Update it on screen.
 		c.strokeStyle = '#000';

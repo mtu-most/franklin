@@ -1,5 +1,6 @@
 # protocol.py - Module for the communication protocol for Franklin
-# Copyright 2014 Michigan Technological University
+# Copyright 2014-2016 Michigan Technological University
+# Copyright 2016 Bas Wijnen <wijnen@debian.org>
 # Author: Bas Wijnen <wijnen@debian.org>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -73,6 +74,9 @@ command = {
 	'GETTIME': 0x20,
 	'SPI': 0x21,
 	'ADJUSTPROBE': 0x22,
+	'TP_GETPOS': 0x23,
+	'TP_SETPOS': 0x24,
+	'TP_FINDPOS': 0x25,
 	}
 
 rcommand = {
@@ -85,20 +89,21 @@ rcommand = {
 	'QUEUE': 0x46,
 	'HOMED': 0x47,
 	'TIME': 0x48,
-	'MOVECB': 0x49,
-	'TEMPCB': 0x4a,
-	'CONTINUE': 0x4b,
-	'LIMIT': 0x4c,
-	'TIMEOUT': 0x4d,
-	'DISCONNECT': 0x4e,
-	'PINCHANGE': 0x4f,
-	'UPDATE_TEMP': 0x50,
-	'UPDATE_PIN': 0x51,
-	'CONFIRM': 0x52,
-	'FILE_DONE': 0x53,
-	'PARKWAIT': 0x54,
-	'CONNECTED': 0x55,
-	'PINNAME': 0x56,
+	'TP_POS': 0x49,
+	'MOVECB': 0x4a,
+	'TEMPCB': 0x4b,
+	'CONTINUE': 0x4c,
+	'LIMIT': 0x4d,
+	'TIMEOUT': 0x4e,
+	'DISCONNECT': 0x4f,
+	'PINCHANGE': 0x50,
+	'UPDATE_TEMP': 0x51,
+	'UPDATE_PIN': 0x52,
+	'CONFIRM': 0x53,
+	'FILE_DONE': 0x54,
+	'PARKWAIT': 0x55,
+	'CONNECTED': 0x56,
+	'PINNAME': 0x57,
 	}
 
 parsed = {

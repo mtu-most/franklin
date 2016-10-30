@@ -1,5 +1,6 @@
 /* run.cpp - parsed gcode execution handling for Franklin
  * Copyright 2014-2016 Michigan Technological University
+ * Copyright 2016 Bas Wijnen <wijnen@debian.org>
  * Author: Bas Wijnen <wijnen@debian.org>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -164,21 +165,6 @@ void abort_run_file() {
 	strings = NULL;
 	arch_stop_audio();
 }
-
-enum {
-	RUN_SYSTEM,
-	RUN_PRE_LINE,
-	RUN_LINE,
-	RUN_PRE_ARC,
-	RUN_ARC,
-	RUN_GPIO,
-	RUN_SETTEMP,
-	RUN_WAITTEMP,
-	RUN_SETPOS,
-	RUN_WAIT,
-	RUN_CONFIRM,
-	RUN_PARK,
-};
 
 static double handle_probe(double ox, double oy, double z) {
 	ProbeFile *&p = probe_file_map;
@@ -479,4 +465,84 @@ void run_adjust_probe(double x, double y, double z) {
 	probe_adjust = 0;
 	double probe_z = handle_probe(x, y, 0);
 	probe_adjust = z - probe_z;
+}
+
+double run_find_pos(double pos[3]) {
+	// Find position in toolpath that is closest to requested position.
+	if (!run_file_map)
+		return NAN;
+	double dist = INFINITY;
+	double current[3] = {NAN, NAN, NAN};
+	double center[3];
+	double normal[3];
+	double record;
+	// These are not used yet.
+	(void)&center;
+	(void)&normal;
+	for (int i = 0; i < run_file_num_records; ++i) {
+		switch (run_file_map[i].type) {
+			case RUN_SYSTEM:
+			case RUN_PRE_LINE:
+			case RUN_GPIO:
+			case RUN_SETTEMP:
+			case RUN_WAITTEMP:
+			case RUN_SETPOS:
+			case RUN_WAIT:
+			case RUN_CONFIRM:
+			case RUN_PARK:
+				continue;
+			case RUN_PRE_ARC:
+				center[0] = run_file_map[i].X;
+				center[1] = run_file_map[i].Y;
+				center[2] = run_file_map[i].Z;
+				normal[0] = run_file_map[i].E;
+				normal[1] = run_file_map[i].f;
+				normal[2] = run_file_map[i].F;
+				continue;
+			case RUN_ARC:
+				// TODO: handle arc; workaround: fall through, handle as line.
+			case RUN_LINE:
+				double target[3] = {run_file_map[i].X, run_file_map[i].Y, run_file_map[i].Z};
+				int k;
+				double pt = 0, tt = 0;
+				for (k = 0; k < 3; ++k) {
+					if (isnan(pos[k]))
+						continue;
+					if (isnan(target[k])) {
+						target[k] = current[k];
+						if (isnan(target[k]))
+							break;
+					}
+					/* ((pos-O).(target-O))/((target-O).(target-O))*(target-O) = projection-O
+					   */
+					pt += (pos[k] - current[k]) * (target[k] - current[k]);
+					tt += (target[k] - current[k]) * (target[k] - current[k]);
+				}
+				if (k < 3) {
+					// Target position was NaN, pos was not.
+					continue;
+				}
+				double fraction = pt / tt;
+				if (fraction < 0)
+					fraction = 0;
+				if (fraction > 1)
+					fraction = 1;
+				double d = 0;
+				for (k = 0; k < 3; ++k) {
+					if (isnan(pos[k]))
+						continue;
+					double dd = pos[k] - ((target[k] - current[k]) * fraction + current[k]);
+					d += dd * dd;
+				}
+				if (d < dist) {
+					dist = d;
+					record = i + fraction;
+				}
+				for (k = 0; k < 3; ++k) {
+					if (!isnan(target[k]))
+						current[k] = target[k];
+				}
+		}
+	}
+	return record;
 }

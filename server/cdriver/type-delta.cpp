@@ -1,5 +1,6 @@
 /* type-delta.cpp - Delta geometry handling for Franklin
- * Copyright 2014 Michigan Technological University
+ * Copyright 2014-2016 Michigan Technological University
+ * Copyright 2016 Bas Wijnen <wijnen@debian.org>
  * Author: Bas Wijnen <wijnen@debian.org>
  *
  * This program is free software: you can redistribute it and/or modify

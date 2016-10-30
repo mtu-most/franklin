@@ -1,5 +1,6 @@
 /* packet.cpp - command packet handling for Franklin
- * Copyright 2014 Michigan Technological University
+ * Copyright 2014-2016 Michigan Technological University
+ * Copyright 2016 Bas Wijnen <wijnen@debian.org>
  * Author: Bas Wijnen <wijnen@debian.org>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -747,6 +748,47 @@ void packet()
 			pos[i] = get_float(3 + i * sizeof(double));
 		}
 		run_adjust_probe(pos[0], pos[1], pos[2]);
+		return;
+	}
+	case CMD_TP_GETPOS:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_TP_GETPOS");
+#endif
+		// TODO: Send actual current position, not next queued.  Include fraction.
+		send_host(CMD_TP_POS, 0, 0, history[running_fragment].run_file_current);
+		return;
+	}
+	case CMD_TP_SETPOS:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_TP_SETPOS");
+#endif
+		double pos = get_float(3);
+		int ipos = int(pos);
+		if (ipos > 0 && ipos < run_file_num_records && (run_file_map[ipos - 1].type == RUN_PRE_ARC || run_file_map[ipos - 1].type == RUN_PRE_LINE))
+			ipos -= 1;
+		discarding = true;
+		arch_discard();
+		settings.run_file_current = int(pos);
+		// Hack to force TP_GETPOS to return the same value; this is only called when paused, so it does no harm.
+		history[running_fragment].run_file_current = int(pos);
+		settings.run_file_current = int(pos);
+		// TODO: Use fraction.
+		discarding = false;
+		buffer_refill();
+		return;
+	}
+	case CMD_TP_FINDPOS:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_TP_FINDPOS");
+#endif
+		double pos[3];
+		for (int i = 0; i < 3; ++i) {
+			pos[i] = get_float(3 + i * sizeof(double));
+		}
+		send_host(CMD_TP_POS, 0, 0, run_find_pos(pos));
 		return;
 	}
 	default:

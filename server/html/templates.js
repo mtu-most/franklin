@@ -107,7 +107,7 @@ function Float(printer, obj, digits, factor, className, set) { // {{{
 	input.set = set;
 	input.printer = printer;
 	input.AddEvent('keydown', function(event) { floatkey(event, this); });
-	return [input, /*button,*/ span];
+	return [input, span];
 } // }}}
 
 function File(printer, obj, action, buttontext, types, cb) { // {{{
@@ -470,6 +470,24 @@ function Map(printer) { // {{{
 }
 // }}}
 
+function Toolpath(printer) { // {{{
+	var ret = Create('div', 'toolpath');
+	var index = ret.AddText('Toolpath index:').Add(Float(printer, [null, 'tppos'], 0, 1, '', function(value) {
+		printer.printer.call('tp_set_position', [value]);
+	}));
+	var span = ret.AddText('/').AddElement('span');
+	span.id = make_id(printer, [null, 'tpmax']);
+	var b = ret.AddElement('button').AddText('Find Closest').AddEvent('click', function() {
+		printer.printer.call('get_axis_pos', [0], {}, function(pos) {
+			printer.printer.call('tp_find_position', [pos[0], pos[1], pos[2]], {}, function(tppos) {
+				printer.printer.call('tp_set_position', [tppos], {}, function() { update_canvas_and_spans(printer); });
+			});
+		});
+	});
+	return ret;
+}
+// }}}
+
 function Temps(printer) { // {{{
 	var ret = Create('div', 'temp');
 	ret.Add(make_table(printer).AddMultipleTitles([
@@ -560,6 +578,8 @@ function Printer(printer) {	// {{{
 	ret.temptargets = [];
 	ret.hidetypes = [];
 	ret.tables = [];
+	ret.tp_pos = 0;
+	ret.tp_context = [0, []];
 	ret.idgroups = {bed: [], fan: [], spindle: []};
 	ret.multiples = {space: [], temp: [], gpio: [], axis: [], motor: []};
 	// Blocker bar. {{{
@@ -577,10 +597,6 @@ function Printer(printer) {	// {{{
 	selector.printer = ret;
 	selector.id = make_id(ret, [null, 'profiles']);
 	update_profiles(ret);
-	/*var span = ret.AddElement('span', 'port setup').AddText('@' + port);
-	span.AddElement('span', 'ifflash').AddText('[!]');
-	span.AddElement('span', 'ifdetect').AddText('[?]');
-	*/
 	// Setup. {{{
 	var setup = ret.AddElement('div', 'setup expert');
 	var e = setup.AddElement('div').AddText('Printer UUID:');
@@ -929,6 +945,7 @@ function Printer(printer) {	// {{{
 	ret.Add(Gpios(ret));
 	ret.Add(Multipliers(ret));
 	ret.Add(Temps(ret));
+	ret.Add(Toolpath(ret));
 	ret.AddElement('div', 'bottom');
 	return ret;
 }

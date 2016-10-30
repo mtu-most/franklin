@@ -308,8 +308,8 @@ button.abort {
 	width: 100%
 }
 
-.map {
-	clear: both;
+.map, .toolpath {
+	clear: left;
 	float: left;
 	width: 50%;
 }
