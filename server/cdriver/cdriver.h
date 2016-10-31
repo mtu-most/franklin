@@ -58,8 +58,8 @@ static inline int max(int a, int b) {
 }
 
 struct Pin_t {
-	uint8_t flags;
-	uint8_t pin;
+	int flags;
+	int pin;
 	inline bool valid();
 	bool inverted() { return flags & 2; }
 	uint16_t write() { return flags << 8 | pin; }
@@ -602,6 +602,8 @@ void arch_addpos(int s, int m, double diff);
 void arch_stop(bool fake = false);
 void arch_home();
 bool arch_running();
+double arch_round_pos(int s, int m, double pos);
+void arch_stop_audio();
 //void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit_l = ~0, int heater_limit_h = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit_l = ~0, int fan_limit_h = ~0, double hold_time = 0);
 void arch_start_move(int extra);
 bool arch_send_fragment();

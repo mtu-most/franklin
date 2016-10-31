@@ -1,4 +1,4 @@
-/* arch-bbb.cpp - bbb specific parts for Franklin
+/* arch-bbb.cpp - bbb specific parts for Franklin {{{
  * vim: set foldmethod=marker :
  * Copyright 2014-2016 Michigan Technological University
  * Copyright 2016 Bas Wijnen <wijnen@debian.org>
@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+// }}}
 
 #ifndef ADCBITS
 
@@ -104,9 +105,11 @@ struct bbb_Temp { // {{{
 	int id;
 	FILE *file;	// For reading the ADC.
 	bool active;
-	int power_pin, fan_pin;
-	bool power_inverted, fan_inverted;
-	int power_target, fan_target;
+	int heater_pin, fan_pin;
+	bool heater_inverted, fan_inverted;
+	int heater_adctemp, fan_adctemp;
+	int heater_limit_l, heater_limit_h, fan_limit_l, fan_limit_h;
+	double hold_time;
 }; // }}}
 
 struct bbb_Pru { // {{{
@@ -123,7 +126,7 @@ void SET_INPUT_NOPULLUP(Pin_t _pin);
 void SET(Pin_t _pin);
 void RESET(Pin_t _pin);
 void GET(Pin_t _pin, bool _default, void(*cb)(bool));
-void arch_setup_start(char const *port);
+void arch_setup_start();
 void arch_connect(char const *run_id, char const *port);
 void arch_request_temp(int which);
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit_l = ~0, int heater_limit_h = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit_l = ~0, int fan_limit_h = ~0, double hold_time = 0);
@@ -149,10 +152,10 @@ void DATA_SET(int s, int m, int value);
 // Variables. {{{
 #if PRU == 0
 static int bbb_pru_pad[16] = { 110, 111, 112, 113, 114, 115, 116, 117, 90, 91, 92, 93, 94, 95, 44, 45 };
-//int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6 };
+int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6 };
 #else
 static int bbb_pru_pad[16] = { 70, 71, 72, 73, 74, 75, 76, 77, 86, 87, 88, 89, 62, 63, 42, 43 };
-//int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5 };
+int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5 };
 #endif
 
 static char const *bbb_apin_name[8] = {"P9_39", "P9_40", "P9_37", "P9_38", "P9_33", "P9_36", "P9_35", "1.65V"};
@@ -162,14 +165,14 @@ static int bbb_devmem;
 static int bbb_active_temp;
 static bbb_Temp bbb_temp[NUM_ANALOG_INPUTS];
 static bbb_Pru *bbb_pru;
+static volatile uint32_t *bbb_gpio_pad[4];
 #define USABLE(x) (x)
 #define HDMI(x) (x)
 #define FLASH(x) ""
 #define INTERNAL ""
 #define UNUSABLE ""
 static int bbb_gpio_state[NUM_GPIO_PINS];
-static std::string bbb_muxpath[NUM_GPIO_PINS];
-static char const *bbb_muxname[NUM_GPIO_PINS] = {
+static char const *bbb_muxname[NUM_GPIO_PINS] = { // {{{
 	UNUSABLE, UNUSABLE, USABLE("P9_22"), USABLE("P9_21"), USABLE("P9_18"), USABLE("P9_17"), INTERNAL, USABLE("P9_42"),
 	HDMI("P8_35"), HDMI("P8_33"), HDMI("P8_31"), HDMI("P8_32"), UNUSABLE, UNUSABLE, USABLE("P9_26"), USABLE("P9_24"),
 	UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, USABLE("P9_41"), UNUSABLE, USABLE("P8_19"), USABLE("P8_13"),
@@ -189,14 +192,18 @@ static char const *bbb_muxname[NUM_GPIO_PINS] = {
 	UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, HDMI("P9_31"), HDMI("P9_29"),
 	USABLE("P9_30"), HDMI("P9_28"), USABLE("P9_42"), USABLE("P9_27"), USABLE("P9_41"), HDMI("P9_25"), UNUSABLE, UNUSABLE,
 	UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE
-};
+}; // }}}
+int bbb_hack_pipe[2];
 // }}}
 
 // Pin setting. {{{
-static void bbb_setmux(Pin_t _pin, BBB_State mode) {
+static void bbb_setmux(Pin_t _pin, BBB_State mode) { // {{{
 	int pin = _pin.pin;
-	if (pin >= NUM_GPIO_PINS)
-		pin = bbb_pru_pad[pin - NUM_GPIO_PINS];
+	int prupin = 0; // Is only used when initialized, but the compiler doesn't know.
+	if (pin >= NUM_GPIO_PINS) {
+		prupin = pin - NUM_GPIO_PINS;
+		pin = bbb_pru_pad[prupin];
+	}
 	if (bbb_gpio_state[pin] == mode)
 		return;
 	if (bbb_muxname[pin][0] == '\0') {
@@ -204,13 +211,14 @@ static void bbb_setmux(Pin_t _pin, BBB_State mode) {
 			debug("trying to set up unusable gpio %d", pin);
 		return;
 	}
-	std::ofstream f(bbb_muxpath[pin].c_str());
-	char const *codes[4] = { "gpio\n", "gpio_pu\n", "gpio\n", "pruout\n" };
-	f << codes[mode];
-	f.close();
-};
+	int modes[4] = { 0x1f, 0x37, 0x1f, bbb_pru_mode[prupin] };
+	if (write(bbb_hack_pipe[1], &modes[mode], 4) != 4)
+		debug("warning: short write to modechange pipe hack");
+	if (read(bbb_hack_pipe[0], (char *)bbb_gpio_pad[pin], 4) != 4)
+		debug("warning: short read from modechange pipe hack");
+}; // }}}
 
-void SET_OUTPUT(Pin_t _pin) {
+void SET_OUTPUT(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS) {
 			bbb_gpio[_pin.pin >> 5]->oe &= ~(1 << (_pin.pin & 0x1f));
@@ -219,9 +227,9 @@ void SET_OUTPUT(Pin_t _pin) {
 		else
 			bbb_setmux(_pin, MUX_PRU);
 	}
-}
+} // }}}
 
-void SET_INPUT(Pin_t _pin) {
+void SET_INPUT(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS)
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
@@ -229,19 +237,19 @@ void SET_INPUT(Pin_t _pin) {
 			debug("warning: trying to set pru pin to input");
 		bbb_setmux(_pin, MUX_INPUT);
 	}
-}
+} // }}}
 
-void SET_INPUT_NOPULLUP(Pin_t _pin) {
+void SET_INPUT_NOPULLUP(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS)
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
 		bbb_setmux(_pin, MUX_DISABLED);
 	}
-}
+} // }}}
 
 #define RAWSET(_p) bbb_gpio[(_p) >> 5]->setdataout = 1 << ((_p) & 0x1f)
 #define RAWRESET(_p) bbb_gpio[(_p) >> 5]->cleardataout = 1 << ((_p) & 0x1f)
-void SET(Pin_t _pin) {
+void SET(Pin_t _pin) { // {{{
 	SET_OUTPUT(_pin);
 	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		if (_pin.inverted())
@@ -249,9 +257,9 @@ void SET(Pin_t _pin) {
 		else
 			RAWSET(_pin.pin);
 	}
-}
+} // }}}
 
-void RESET(Pin_t _pin) {
+void RESET(Pin_t _pin) { // {{{
 	SET_OUTPUT(_pin);
 	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		if (_pin.inverted())
@@ -259,10 +267,10 @@ void RESET(Pin_t _pin) {
 		else
 			RAWRESET(_pin.pin);
 	}
-}
+} // }}}
 
 #define RAWGET(_p) (bool(bbb_gpio[(_p) >> 5]->datain & (1 << ((_p) & 0x1f))))
-void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
+void GET(Pin_t _pin, bool _default, void(*cb)(bool)) { // {{{
 	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		if (RAWGET(_pin.pin))
 			cb(!_pin.inverted());
@@ -271,63 +279,36 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) {
 	}
 	else
 		cb(_default);
-}
+} // }}}
 // }}}
 
 // Setup helpers. {{{
-static std::string find_base(std::string const &base, std::string const &prefix) {
-	DIR *d = opendir(base.c_str());
-	if (!d) {
-		debug("unable to open base dir %s", base.c_str());
+void arch_setup_start() { // {{{
+	if (pipe(bbb_hack_pipe)) {
+		debug("unable to create pipe for pinmux hack: %s", strerror(errno));
 		abort();
 	}
-	struct dirent *de;
-	std::string name;
-	while ((de = readdir(d))) {
-		name = de->d_name;
-		if (name.substr(0, prefix.size()) == prefix)
-			return base + '/' + name;
-	}
-	debug("base dir %s has no file with prefix %s in it", base.c_str(), prefix.c_str());
-	return std::string();
-}
-
-void arch_setup_start(char const *port) {
-	std::string base = find_base("/sys/devices", "bone_capemgr.");
-	std::string name = base + "/slots";
-	std::ofstream f(name.c_str());
-	f << "cape-universal\n";
-	f.close();
-	f.open(name.c_str());
-	f << "cape-univ-hdmi\n";
-	f.close();
-	f.open(name.c_str());
+	std::ofstream f("/sys/devices/platform/bone_capemgr/slots");
 	f << "BB-ADC\n";
 	f.close();
-	base = find_base("/sys/devices", "ocp.");
-	base = find_base(base, "helper.");
+	f.open("/sys/devices/platform/bone_capemgr/slots");
+	f << "uio-pruss-enable\n";
+	f.close();
+	std::string base("/sys/devices/platform/ocp/44e0d000.tscadc/TI-am335x-adc/iio:device0/");
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
 		char num[2] = "0";
 		num[0] += i;
-		name = base + "/AIN" + num;
+		std::string name = base + "in_voltage" + num + "_raw";
 		bbb_temp[i].file = fopen(name.c_str(), "r");
 		if (!bbb_temp[i].file)
 			fprintf(stderr, "unable to open analog input %d: %s", i, strerror(errno));
 		bbb_temp[i].active = false;
 	}
-	base = find_base("/sys/devices", "ocp.");
-	for (int i = 0; i < NUM_GPIO_PINS; ++i) {
-		if (bbb_muxname[i][0] == '\0')
-			continue;
-		bbb_muxpath[i] = find_base(base, std::string(bbb_muxname[i]) + "_pinmux.") + "/state";
-	}
 	bbb_devmem = open("/dev/mem", O_RDWR);
-	unsigned gpio_base[4] = { 0x44E07000, 0x4804C000, 0x481AC000, 0x481AE000 };
+	unsigned gpio_base[4] = { 0x44e07000, 0x4804c000, 0x481ac000, 0x481ae000 };
 	unsigned pad_control_base = 0x44e10000;
 	for (int i = 0; i < 4; ++i)
 		bbb_gpio[i] = (volatile bbb_Gpio *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, gpio_base[i]);
-	/*
-	   The CPU does not allow user mode access to these memory addresses, even through /dev/mem. :-(
 	int pad_offset[32 * 4] = {
 		0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0xd0, 0xd4, 0xd8, 0xdc, 0x178, 0x17c, 0x180, 0x184,
 		0x11c, 0x120, 0x21c, 0x1b0, 0x1b4, 0x124, 0x20, 0x24, -1, -1, 0x28, 0x2c, 0x128, 0x144, 0x70, 0x74,
@@ -341,10 +322,9 @@ void arch_setup_start(char const *port) {
 		0x108, 0x10c, 0x110, 0x114, 0x118, 0x188, 0x18c, 0x1e4, 0x1e8, 0x12c, 0x130, -1, -1, 0x234, 0x190, 0x194,
 		0x198, 0x19c, 0x1a0, 0x1a4, 0x1a8, 0x1ac, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
 	};
-	bbb_padmap = (volatile uint32_t *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, pad_control_base);
+	volatile uint32_t *bbb_padmap = (volatile uint32_t *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, pad_control_base);
 	for (int i = 0; i < 32 * 4; ++i)
 		bbb_gpio_pad[i] = pad_offset[i] >= 0 ? &bbb_padmap[(0x800 + pad_offset[i]) / 4] : NULL;
-	*/
 	bbb_active_temp = -1;
 	tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
 	debug("pru init %d", prussdrv_init());
@@ -362,17 +342,16 @@ void arch_setup_start(char const *port) {
 	bbb_pru->next_fragment = 0;
 	bbb_pru->state = 1;
 	debug("pru exec %d", prussdrv_exec_program(PRU, "/usr/lib/franklin/bbb_pru.bin"));
-}
-
-void arch_connect(char const *run_id, char const *port) {
 	// Override hwtime_step.
 	hwtime_step = 40;
 	// Claim that firmware has correct version.
 	protocol_version = PROTOCOL_VERSION;
+	for (int i = 0; i < NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS; ++i)
+		arch_send_pin_name(i);
 	connect_end();
-}
+} // }}}
 
-static void bbb_next_adc() {
+static void bbb_next_adc() { // {{{
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
 		int n = (bbb_active_temp + 1 + i) % NUM_ANALOG_INPUTS;
 		if (bbb_temp[n].active) {
@@ -381,41 +360,46 @@ static void bbb_next_adc() {
 		}
 	}
 	bbb_active_temp = -1;
-}
+} // }}}
 
-void arch_request_temp(int which) {
+void arch_request_temp(int which) { // {{{
 	if (which >= 0 && which < num_temps && temps[which].thermistor_pin.pin >= NUM_DIGITAL_PINS && temps[which].thermistor_pin.pin < NUM_PINS) {
 		requested_temp = which;
 		return;
 	}
 	requested_temp = ~0;
-}
+} // }}}
 
-void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit_l = ~0, int heater_limit_h = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit_l = ~0, int fan_limit_h = ~0, double hold_time = 0) {
+void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit_l, int heater_limit_h, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit_l, int fan_limit_h, double hold_time) { // {{{
 	if (thermistor_pin < NUM_DIGITAL_PINS || thermistor_pin >= NUM_PINS) {
 		debug("setup for invalid adc %d requested", thermistor_pin);
 		return;
 	}
 	thermistor_pin -= NUM_DIGITAL_PINS;
 	bbb_temp[thermistor_pin].active = active;
-	bbb_temp[thermistor_pin].id = which;
-	bbb_temp[thermistor_pin].power_pin = power_pin;
-	bbb_temp[thermistor_pin].power_inverted = power_inverted;
-	bbb_temp[thermistor_pin].power_target = power_target;
+	bbb_temp[thermistor_pin].id = id;
+	bbb_temp[thermistor_pin].heater_pin = heater_pin;
+	bbb_temp[thermistor_pin].heater_inverted = heater_invert;
+	bbb_temp[thermistor_pin].heater_adctemp = heater_adctemp;
+	bbb_temp[thermistor_pin].heater_limit_l = heater_limit_l;
+	bbb_temp[thermistor_pin].heater_limit_h = heater_limit_h;
 	bbb_temp[thermistor_pin].fan_pin = fan_pin;
-	bbb_temp[thermistor_pin].fan_inverted = fan_inverted;
-	bbb_temp[thermistor_pin].fan_target = fan_target;
+	bbb_temp[thermistor_pin].fan_inverted = fan_invert;
+	bbb_temp[thermistor_pin].fan_adctemp = fan_adctemp;
+	bbb_temp[thermistor_pin].fan_limit_l = fan_limit_l;
+	bbb_temp[thermistor_pin].fan_limit_h = fan_limit_h;
+	bbb_temp[thermistor_pin].hold_time = hold_time;
 	if (bbb_active_temp < 0)
 		bbb_next_adc();
 	// TODO: use hold_time.
-}
+} // }}}
 
 // Pin bit capabilities:
 // Bit 0: step+dir
 // Bit 1: other output
 // Bit 2: digital input
 // Bit 3: analog input
-void arch_send_pin_name(int pin) {
+void arch_send_pin_name(int pin) { // {{{
 	int len;
 	if (pin < NUM_GPIO_PINS) {
 		if (bbb_muxname[pin][0] == '\0')
@@ -434,7 +418,7 @@ void arch_send_pin_name(int pin) {
 		len = sprintf(datastore, "%c%s (A%d)", 8, bbb_apin_name[pin - NUM_DIGITAL_PINS], pin - NUM_DIGITAL_PINS);
 	}
 	send_host(CMD_PINNAME, pin, 0, 0, 0, len);
-}
+} // }}}
 // }}}
 
 // Runtime helpers. {{{
@@ -450,8 +434,8 @@ void arch_send_pin_name(int pin) {
 // state: 2: Doing single step; pru can set to 0; cpu can set to 4 (and expect pru to set it to 0 or 1).
 // state: 3: Free running; cpu can set to 4.
 // state: 4: cpu requested stop; pru must set to 1.
-int arch_tick() {
-	debug("running fragment %d", running_fragment);
+int arch_tick() { // {{{
+	//debug("running fragment %d", running_fragment);
 	int cf = bbb_pru->current_fragment;
 	if (cf != running_fragment) {
 		int cbs = 0;
@@ -488,14 +472,14 @@ int arch_tick() {
 		}
 		if (a >= 0 && bbb_temp[a].active) {
 			int t = atoi(data);
-			if (bbb_temp[a].power_pin >= 0) {
-				if ((bbb_temp[a].power_target < t) ^ bbb_temp[a].power_inverted)
-					RAWSET(bbb_temp[a].power_pin);
+			if (bbb_temp[a].heater_pin >= 0) {
+				if ((bbb_temp[a].heater_adctemp < t) ^ bbb_temp[a].heater_inverted)
+					RAWSET(bbb_temp[a].heater_pin);
 				else
-					RAWRESET(bbb_temp[a].power_pin);
+					RAWRESET(bbb_temp[a].heater_pin);
 			}
 			if (bbb_temp[a].fan_pin >= 0) {
-				if ((bbb_temp[a].fan_target < t) ^ bbb_temp[a].fan_inverted)
+				if ((bbb_temp[a].fan_adctemp < t) ^ bbb_temp[a].fan_inverted)
 					RAWSET(bbb_temp[a].fan_pin);
 				else
 					RAWRESET(bbb_temp[a].fan_pin);
@@ -560,9 +544,9 @@ int arch_tick() {
 		// TODO: Timeout.
 	}
 	return state == 3 ? 100 : state == 2 ? 10 : 200;
-}
+} // }}}
 
-void arch_motors_change() {
+void arch_motors_change() { // {{{
 	bbb_pru->base = 0;
 	bbb_pru->dirs = 0;
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -588,13 +572,17 @@ void arch_motors_change() {
 	// probe pin
 	// timeout
 	// motor pins
-}
+} // }}}
 
-void arch_addpos(int s, int m, double diff) {
+void arch_addpos(int s, int m, double diff) { // {{{
+	(void)&s;
+	(void)&m;
+	(void)&diff;
 	// Nothing to do.
-}
+} // }}}
 
-void arch_stop(bool fake) {
+void arch_stop(bool fake) { // {{{
+	(void)&fake;
 	// Stop moving, update current_pos.
 	int state = bbb_pru->state;
 	switch (state) {
@@ -613,18 +601,19 @@ void arch_stop(bool fake) {
 	// Update current_pos.
 	abort_move(bbb_pru->current_sample);
 	current_fragment_pos = 0;
-}
+} // }}}
 
 void arch_home() { // TODO
 	// Start homing.
 }
 
-bool arch_running() {
+bool arch_running() { // {{{
 	// True if an underrun will follow.
 	return bbb_pru->state != 1;
-}
+} // }}}
 
-void arch_start_move(int extra) {
+void arch_start_move(int extra) { // {{{
+	(void)&extra;
 	// Start moving with sent buffers.
 	int state = bbb_pru->state;
 	if (state != 1) {
@@ -632,18 +621,18 @@ void arch_start_move(int extra) {
 		return;
 	}
 	bbb_pru->state = 0;
-}
+} // }}}
 
-bool arch_send_fragment() {
+bool arch_send_fragment() { // {{{
 	if (stopping)
 		return false;
 	bbb_pru->next_fragment = (bbb_pru->next_fragment + 1) & BBB_PRU_FRAGMENT_MASK;
 	return true;
-}
+} // }}}
 
-int arch_fds() {
+int arch_fds() { // {{{
 	return 0;
-}
+} // }}}
 
 double arch_get_duty(Pin_t _pin) { // TODO
 	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
@@ -658,34 +647,44 @@ void arch_set_duty(Pin_t _pin, double duty) { // TODO
 		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return;
 	}
+	(void)&duty;
 }
 
-void arch_discard() {
+void arch_discard() { // {{{
 	int fragments = (current_fragment - bbb_pru->current_fragment) & BBB_PRU_FRAGMENT_MASK;
 	if (fragments <= 2)
 		return;
 	current_fragment = (current_fragment - (fragments - 2)) & BBB_PRU_FRAGMENT_MASK;
 	bbb_pru->next_fragment = current_fragment;
 	restore_settings();
-}
+} // }}}
 
-void arch_send_spi(int bits, uint8_t *data) {
+void arch_send_spi(int bits, uint8_t *data) { // {{{
 	debug("send spi request ignored");
-}
+	(void)&bits;
+	(void)&data;
+} // }}}
 
-off_t arch_send_audio(uint8_t *data, off_t sample, off_t num_records, int motor) {
+off_t arch_send_audio(uint8_t *data, off_t sample, off_t num_records, int motor) { // {{{
 	// TODO.
-}
+	(void)&data;
+	(void)&sample;
+	(void)&motor;
+	return num_records;
+} // }}}
 
-static void bbb_set_pru(int which, int s, int m) {
+void arch_stop_audio() { // {{{
+	// TODO.
+} // }}}
+
+static void bbb_set_pru(int which, int s, int m) { // {{{
 	int pin = spaces[s].motor[m]->step_pin.pin - NUM_GPIO_PINS;
 	if (spaces[s].motor[m]->step_pin.valid() && pin >= 0) {
 		bbb_pru->buffer[current_fragment][current_fragment_pos][which] |= 1 << pin;
 	}
-}
+} // }}}
 
-void DATA_SET(int s, int m, int value) {
-	int id = spaces[s].motor[m]->bbb_id;
+void DATA_SET(int s, int m, int value) { // {{{
 	if (value) {
 		if (value < -1 || value > 1) {
 			debug("invalid sample %d for %d %d", value, s, m);
@@ -697,7 +696,13 @@ void DATA_SET(int s, int m, int value) {
 		else
 			bbb_set_pru(1, s, m);
 	}
-}
+} // }}}
+
+double arch_round_pos(int space, int motor, double src) { // {{{
+	(void)&space;
+	(void)&motor;
+	return src;
+} // }}}
 // }}}
 #endif
 

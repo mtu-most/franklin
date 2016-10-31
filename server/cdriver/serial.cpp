@@ -53,9 +53,11 @@ struct Queuerecord { // {{{
 static bool sending_to_host = false;
 static Queuerecord *hostqueue_head = NULL;
 static Queuerecord *hostqueue_tail = NULL;
+#ifdef SERIAL
 static bool had_data = false;
 static bool doing_debug = false;
 static uint8_t need_id = 0;
+#endif
 // }}}
 
 // Parity masks for decoding. {{{
@@ -428,8 +430,8 @@ bool serial(uint8_t channel) { // {{{
 			}
 		}
 #endif // }}}
-		int end = command_end[channel];
 #ifdef SERIAL // {{{
+		int end = command_end[channel];
 		// Check packet integrity.
 		if (channel == 1) {
 			// Checksum must be good.
