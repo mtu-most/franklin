@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <dirent.h>
@@ -62,6 +63,8 @@
 #define DATA_CLEAR(s, m) do {} while (0)
 #define ARCH_NEW_MOTOR(s, m, base) do {} while (0)
 #define DATA_DELETE(s, m) do {} while (0)
+
+#define ARCH_MAX_FDS NUM_GPIO_PINS	// Maximum number of fds for arch-specific purposes.
 // }}}
 
 #else
@@ -218,9 +221,31 @@ static void bbb_setmux(Pin_t _pin, BBB_State mode) { // {{{
 		debug("warning: short read from modechange pipe hack");
 }; // }}}
 
+static void set_interrupt(Pin_t _pin, bool enabled) { // {{{
+	if (pollfds[BASE_FDS + _pin.pin].fd == -1)
+		return;
+	if (pollfds[BASE_FDS + _pin.pin].fd < 0) {
+		if (!enabled)
+			return;
+		pollfds[BASE_FDS + _pin.pin].fd += NUM_GPIO_PINS + 1;
+	}
+	else {
+		if (enabled)
+			return;
+		pollfds[BASE_FDS + _pin.pin].fd -= NUM_GPIO_PINS + 1;
+	}
+	std::ostringstream s;
+	s << "/sys/class/gpio/gpio" << _pin.pin << "/edge";
+	std::string filename = s.str();
+	std::ofstream f(filename.c_str());
+	f << (enabled ? "both" : "none") << std::endl;
+	f.close();
+} // }}}
+
 void SET_OUTPUT(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS) {
+			set_interrupt(_pin, false);
 			bbb_gpio[_pin.pin >> 5]->oe &= ~(1 << (_pin.pin & 0x1f));
 			bbb_setmux(_pin, MUX_OUTPUT);
 		}
@@ -231,8 +256,10 @@ void SET_OUTPUT(Pin_t _pin) { // {{{
 
 void SET_INPUT(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
-		if (_pin.pin < NUM_GPIO_PINS)
+		if (_pin.pin < NUM_GPIO_PINS) {
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
+			set_interrupt(_pin, true);
+		}
 		else
 			debug("warning: trying to set pru pin to input");
 		bbb_setmux(_pin, MUX_INPUT);
@@ -241,8 +268,10 @@ void SET_INPUT(Pin_t _pin) { // {{{
 
 void SET_INPUT_NOPULLUP(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
-		if (_pin.pin < NUM_GPIO_PINS)
+		if (_pin.pin < NUM_GPIO_PINS) {
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
+			set_interrupt(_pin, true);
+		}
 		bbb_setmux(_pin, MUX_DISABLED);
 	}
 } // }}}
@@ -288,10 +317,11 @@ void arch_setup_start() { // {{{
 		debug("unable to create pipe for pinmux hack: %s", strerror(errno));
 		abort();
 	}
-	std::ofstream f("/sys/devices/platform/bone_capemgr/slots");
+#define SLOTS "/sys/devices/platform/bone_capemgr/slots"
+	std::ofstream f(SLOTS);
 	f << "BB-ADC\n";
 	f.close();
-	f.open("/sys/devices/platform/bone_capemgr/slots");
+	f.open(SLOTS);
 	f << "uio-pruss-enable\n";
 	f.close();
 	std::string base("/sys/devices/platform/ocp/44e0d000.tscadc/TI-am335x-adc/iio:device0/");
@@ -346,8 +376,27 @@ void arch_setup_start() { // {{{
 	hwtime_step = 40;
 	// Claim that firmware has correct version.
 	protocol_version = PROTOCOL_VERSION;
-	for (int i = 0; i < NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS; ++i)
+	for (int i = 0; i < NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS; ++i) {
 		arch_send_pin_name(i);
+		if (i < NUM_GPIO_PINS) {
+			if (bbb_muxname[i][0] == '\0') {
+				pollfds[BASE_FDS + i].fd = -1;
+				continue;
+			}
+			std::ofstream e("/sys/class/gpio/export");
+			e << i << std::endl;
+			e.close();
+			std::ostringstream fs;
+			fs << "/sys/class/gpio/gpio" << i << "value";
+			std::string filename(fs.str());
+			pollfds[BASE_FDS + i].fd = open(filename.c_str(), O_RDONLY | O_NONBLOCK);
+			if (pollfds[BASE_FDS + i].fd < 0) {
+				debug("error opening interrupt file: %s", strerror(errno));
+				abort();
+			}
+			pollfds[BASE_FDS + i].fd -= NUM_GPIO_PINS + 1;
+		}
+	}
 	connect_end();
 } // }}}
 
@@ -415,7 +464,7 @@ void arch_send_pin_name(int pin) { // {{{
 			len = sprintf(datastore, "%cPRU %d (%s)", 3, pin - NUM_GPIO_PINS, s);
 	}
 	else {
-		len = sprintf(datastore, "%c%s (A%d)", 8, bbb_apin_name[pin - NUM_DIGITAL_PINS], pin - NUM_DIGITAL_PINS);
+		len = sprintf(datastore, "%c%s (A%d)", bbb_temp[pin - NUM_DIGITAL_PINS].file ? 8 : 0, bbb_apin_name[pin - NUM_DIGITAL_PINS], pin - NUM_DIGITAL_PINS);
 	}
 	send_host(CMD_PINNAME, pin, 0, 0, 0, len);
 } // }}}
@@ -435,7 +484,9 @@ void arch_send_pin_name(int pin) { // {{{
 // state: 3: Free running; cpu can set to 4.
 // state: 4: cpu requested stop; pru must set to 1.
 int arch_tick() { // {{{
+	// This is called when the timeout expires, but also when an interrupt is detected on an input pin.
 	//debug("running fragment %d", running_fragment);
+	// Fill buffer for pru.
 	int cf = bbb_pru->current_fragment;
 	if (cf != running_fragment) {
 		int cbs = 0;
@@ -453,7 +504,7 @@ int arch_tick() { // {{{
 			abort_run_file();
 		}
 	}
-	// Handle temps and check limit switches.
+	// Handle temps and check temp limits.
 	if (bbb_active_temp >= 0) {
 		// New temperature ready to read.
 		int a = bbb_active_temp;
@@ -490,6 +541,7 @@ int arch_tick() { // {{{
 	else
 		bbb_next_adc();
 	// TODO: Pwm.
+	// Check limit switches.
 	int state = bbb_pru->state;
 	//debug("pru state: %d %d %d", state, bbb_pru->current_fragment, bbb_pru->current_sample);
 	if (state != 2 && state != 1) {
@@ -539,10 +591,18 @@ int arch_tick() { // {{{
 			state = settings.probing ? 2 : 3; // TODO: homing.
 			bbb_pru->state = state;
 		}
-		// TODO: Pin state monitoring.
-		// TODO: LED.
-		// TODO: Timeout.
 	}
+	// Pin state monitoring.
+	for (int i = 0; i < NUM_GPIO_PINS; ++i) {
+		if (pollfds[BASE_FDS + i].revents & POLLPRI) {
+			for (int g = 0; g < num_gpios; ++g) {
+				if (gpios[g].pin.valid() && gpios[g].pin.pin == i)
+					send_host(CMD_PINCHANGE, g, RAWGET(i) ^ gpios[g].pin.inverted());
+			}
+		}
+	}
+	// TODO: LED.
+	// TODO: Timeout.
 	return state == 3 ? 100 : state == 2 ? 10 : 200;
 } // }}}
 
@@ -631,7 +691,7 @@ bool arch_send_fragment() { // {{{
 } // }}}
 
 int arch_fds() { // {{{
-	return 0;
+	return ARCH_MAX_FDS;
 } // }}}
 
 double arch_get_duty(Pin_t _pin) { // TODO

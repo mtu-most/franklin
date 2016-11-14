@@ -32,6 +32,7 @@
 #define PROTOCOL_VERSION ((uint32_t)3)	// Required version response in BEGIN.
 #define ID_SIZE 8
 #define UUID_SIZE 16
+#define BASE_FDS 2
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
 #define MAXINT MAXLONG
@@ -463,7 +464,7 @@ EXTERN int current_fragment, running_fragment;
 EXTERN unsigned current_fragment_pos;
 EXTERN int num_active_motors;
 EXTERN int hwtime_step, audio_hwtime_step;
-EXTERN struct pollfd pollfds[3];
+EXTERN struct pollfd pollfds[BASE_FDS + ARCH_MAX_FDS];
 EXTERN void (*wait_for_reply[4])();
 EXTERN int expected_replies;
 

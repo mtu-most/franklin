@@ -50,6 +50,7 @@
 #define DATA_CLEAR(s, m) memset((spaces[s].motor[m]->avr_data), 0, BYTES_PER_FRAGMENT)
 #define DATA_SET(s, m, v) spaces[s].motor[m]->avr_data[current_fragment_pos] = v;
 #define SAMPLES_PER_FRAGMENT (BYTES_PER_FRAGMENT / sizeof(DATA_TYPE))
+#define ARCH_MAX_FDS 1	// Maximum number of fds for arch-specific purposes.
 
 #else
 
@@ -270,7 +271,7 @@ void avr_send() { // {{{
 	}
 	while (out_busy >= 3) {
 		//debug("avr send");
-		poll(&pollfds[2], 1, -1);
+		poll(&pollfds[BASE_FDS], 1, -1);
 		serial(1);
 	}
 	serial_cb[out_busy] = avr_cb;
@@ -744,8 +745,8 @@ void arch_reset() { // {{{
 	int32_t before = millis();
 	while (avr_pong != 7 && millis() - before < 2000) {
 		//debug("avr pongwait %d", avr_pong);
-		pollfds[2].revents = 0;
-		poll(&pollfds[2], 1, 1);
+		pollfds[BASE_FDS].revents = 0;
+		poll(&pollfds[BASE_FDS], 1, 1);
 		serial(1);
 	}
 	if (avr_pong != 7) {
@@ -1022,7 +1023,7 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bo
 	try_send_control();
 	while (out_busy >= 3) {
 		//debug("avr send");
-		poll(&pollfds[2], 1, -1);
+		poll(&pollfds[BASE_FDS], 1, -1);
 		serial(1);
 		try_send_control();
 	}
@@ -1177,7 +1178,7 @@ bool arch_send_fragment() { // {{{
 		return false;
 	}
 	while (out_busy >= 3) {
-		poll(&pollfds[2], 1, -1);
+		poll(&pollfds[BASE_FDS], 1, -1);
 		serial(1);
 	}
 	if (stop_pending || discard_pending)
@@ -1201,7 +1202,7 @@ bool arch_send_fragment() { // {{{
 				cpdebug(s, m, "sending %d %d", current_fragment, current_fragment_pos);
 				//debug("sending %d %d cf %d cp 0x%x", s, m, current_fragment, current_fragment_pos);
 				while (out_busy >= 3) {
-					poll(&pollfds[2], 1, -1);
+					poll(&pollfds[BASE_FDS], 1, -1);
 					serial(1);
 				}
 				if (stop_pending || discard_pending)
@@ -1245,7 +1246,7 @@ void arch_start_move(int extra) { // {{{
 	}
 	//debug("start move %d %d %d %d", current_fragment, running_fragment, sending_fragment, extra);
 	while (out_busy >= 3) {
-		poll(&pollfds[2], 1, -1);
+		poll(&pollfds[BASE_FDS], 1, -1);
 		serial(1);
 	}
 	start_pending = false;
@@ -1264,7 +1265,7 @@ void arch_home() { // {{{
 		return;
 	avr_homing = true;
 	while (out_busy >= 3) {
-		poll(&pollfds[2], 1, -1);
+		poll(&pollfds[BASE_FDS], 1, -1);
 		serial(1);
 	}
 	avr_buffer[0] = HWC_HOME;
@@ -1309,7 +1310,7 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{
 	if (len <= 0)
 		return max;
 	while (out_busy >= 3) {
-		poll(&pollfds[2], 1, -1);
+		poll(&pollfds[BASE_FDS], 1, -1);
 		serial(1);
 	}
 	avr_buffer[0] = HWC_START_MOVE;
@@ -1325,7 +1326,7 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{
 	avr_filling = true;
 	for (int m = 0; m < NUM_MOTORS; ++m) {
 		while (out_busy >= 3) {
-			poll(&pollfds[2], 1, -1);
+			poll(&pollfds[BASE_FDS], 1, -1);
 			serial(1);
 		}
 		avr_buffer[0] = HWC_MOVE_SINGLE;
@@ -1346,7 +1347,7 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{
 void arch_do_discard() { // {{{
 	int cbs = 0;
 	while (out_busy >= 3) {
-		poll(&pollfds[2], 1, -1);
+		poll(&pollfds[BASE_FDS], 1, -1);
 		serial(1);
 	}
 	if (!discard_pending)
@@ -1385,7 +1386,7 @@ void arch_send_spi(int bits, uint8_t *data) { // {{{
 	if (!avr_connected)
 		return;
 	while (out_busy >= 3) {
-		poll(&pollfds[2], 1, -1);
+		poll(&pollfds[BASE_FDS], 1, -1);
 		serial(1);
 	}
 	avr_buffer[0] = HWC_SPI;
@@ -1444,9 +1445,9 @@ void AVRSerial::begin(char const *port) { // {{{
 			return;
 		}
 	}
-	pollfds[2].fd = fd;
-	pollfds[2].events = POLLIN | POLLPRI;
-	pollfds[2].revents = 0;
+	pollfds[BASE_FDS].fd = fd;
+	pollfds[BASE_FDS].events = POLLIN | POLLPRI;
+	pollfds[BASE_FDS].revents = 0;
 	start = 0;
 	end_ = 0;
 	fcntl(fd, F_SETFL, O_NONBLOCK);
@@ -1483,11 +1484,11 @@ void AVRSerial::refill() { // {{{
 			debug("read returned error: %s", strerror(errno));
 		end_ = 0;
 	}
-	if (end_ == 0 && pollfds[2].revents) {
+	if (end_ == 0 && pollfds[BASE_FDS].revents) {
 		debug("EOF detected on serial port; waiting for reconnect.");
 		disconnect(true);
 	}
-	pollfds[2].revents = 0;
+	pollfds[BASE_FDS].revents = 0;
 } // }}}
 
 int AVRSerial::read() { // {{{
