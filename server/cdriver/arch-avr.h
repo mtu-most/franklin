@@ -288,6 +288,16 @@ void avr_call1(uint8_t cmd, uint8_t arg) { // {{{
 	avr_send();
 } // }}}
 
+double arch_round_pos(int s, int m, double pos) { // {{{
+	if (s >= NUM_SPACES)
+		return pos;
+	int mi = 0;
+	for (int ts = 0; ts < s; ++ts) mi += spaces[ts].num_motors;
+	if (mi + m >= NUM_MOTORS)
+		return pos;
+	return round(pos + avr_pos_offset[mi + m]) - avr_pos_offset[mi + m];
+} // }}}
+
 void avr_get_current_pos(int offset, bool check) { // {{{
 	int mi = 0;
 	for (int ts = 0; ts < NUM_SPACES; mi += spaces[ts++].num_motors) {
@@ -326,16 +336,6 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 			}
 		}
 	}
-} // }}}
-
-double arch_round_pos(int s, int m, double pos) { // {{{
-	if (s >= NUM_SPACES)
-		return pos;
-	int mi = 0;
-	for (int ts = 0; ts < s; ++ts) mi += spaces[ts].num_motors;
-	if (mi + m >= NUM_MOTORS)
-		return pos;
-	return round(pos + avr_pos_offset[mi + m]) - avr_pos_offset[mi + m];
 } // }}}
 
 bool hwpacket(int len) { // {{{
