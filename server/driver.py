@@ -551,28 +551,30 @@ class Printer: # {{{
 				#log('pin name {} = {}'.format(s, self.pin_names[s]))
 				continue
 			elif cmd == protocol.rcommand['CONNECTED']:
-				# Get the printer state.
-				self._write_globals(update = False)
-				for i, s in enumerate(self.spaces):
-					self._send_packet(struct.pack('=BB', protocol.command['WRITE_SPACE_INFO'], i) + s.write_info())
-					for a in range(len(s.axis)):
-						self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_AXIS'], i, a) + s.write_axis(a))
-					for m in range(len(s.motor)):
-						self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_MOTOR'], i, m) + s.write_motor(m))
-				for i, t in enumerate(self.temps):
-					self._send_packet(struct.pack('=BB', protocol.command['WRITE_TEMP'], i) + t.write())
-					# Disable heater.
-					self.settemp(i, float('nan'), update = False)
-					# Disable heater alarm.
-					self.waittemp(i, None, None)
-				for i, g in enumerate(self.gpios):
-					self._send_packet(struct.pack('=BB', protocol.command['WRITE_GPIO'], i) + g.write())
-				# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
-				self.pause(True, False, update = False)
-				if self.spi_setup:
-					self._spi_send(self.spi_setup)
-				self.connected = True
-				self._globals_update()
+				def sync():
+					# Get the printer state.
+					self._write_globals(update = False)
+					for i, s in enumerate(self.spaces):
+						self._send_packet(struct.pack('=BB', protocol.command['WRITE_SPACE_INFO'], i) + s.write_info())
+						for a in range(len(s.axis)):
+							self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_AXIS'], i, a) + s.write_axis(a))
+						for m in range(len(s.motor)):
+							self._send_packet(struct.pack('=BBB', protocol.command['WRITE_SPACE_MOTOR'], i, m) + s.write_motor(m))
+					for i, t in enumerate(self.temps):
+						self._send_packet(struct.pack('=BB', protocol.command['WRITE_TEMP'], i) + t.write())
+						# Disable heater.
+						self.settemp(i, float('nan'), update = False)
+						# Disable heater alarm.
+						self.waittemp(i, None, None)
+					for i, g in enumerate(self.gpios):
+						self._send_packet(struct.pack('=BB', protocol.command['WRITE_GPIO'], i) + g.write())
+					# The printer may still be doing things.  Pause it and send a move; this will discard the queue.
+					self.pause(True, False, update = False)
+					if self.spi_setup:
+						self._spi_send(self.spi_setup)
+					self.connected = True
+					self._globals_update()
+				call_queue.append((sync, ()))
 				continue
 			if reply:
 				return ('packet', (cmd, s, m, f, e, data))
