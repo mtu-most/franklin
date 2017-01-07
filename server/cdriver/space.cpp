@@ -411,6 +411,15 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 	//debug("steps");
 	if (factor <= 0) {
 		movedebug("end move");
+		// Callers expect a new value to be inserted in the buffers.
+		for (int s = 0; s < NUM_SPACES; ++s) {
+			if (!settings.single && s == 2)
+				continue;
+			Space &sp = spaces[s];
+			for (int m = 0; m < sp.num_motors; ++m)
+				DATA_SET(s, m, 0);
+		}
+		current_fragment_pos += 1;
 		return false;
 	}
 	// Check if more steps should be done, to detect end of move.
@@ -504,6 +513,7 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 					num_active_motors += 1;
 				}
 				int diff = arch_round_pos(s, m, new_cp) - arch_round_pos(s, m, mtr.settings.current_pos);
+				movedebug("sending %d %d steps %d", s, m, diff);
 				DATA_SET(s, m, diff);
 			}
 			//debug("new cp: %d %d %f %d", s, m, new_cp, current_fragment_pos);
@@ -526,6 +536,7 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 		}
 	}
 	current_fragment_pos += 1;
+	//debug("have steps: %d", have_steps);
 	return have_steps;
 } // }}}
 
@@ -588,11 +599,13 @@ static void handle_motors(unsigned long long current_time) { // {{{
 		// Start time may have changed; recalculate t.
 		t = (current_time - settings.start_time) / 1e6;
 		if (t / (settings.t0 + settings.tp) >= done_factor) {
+			movedebug("Done with this move");
 			int had_cbs = cbs_after_current_move;
 			//debug("clearing %d cbs after current move for later inserting into history", cbs_after_current_move);
 			cbs_after_current_move = 0;
 			run_file_fill_queue();
 			if (settings.queue_start != settings.queue_end || settings.queue_full) {
+				movedebug("queue is not empty");
 				had_cbs += next_move();
 				if (!aborting && had_cbs > 0) {
 					int fragment;
@@ -605,12 +618,14 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				}
 				return;
 			}
+			else
+				movedebug("queue is empty");
 			cbs_after_current_move += had_cbs;
 			//debug("adding %d to cbs after current move making it %d", had_cbs, cbs_after_current_move);
 			if (factor == 1) {
 				//debug("queue done");
 				if (!did_steps) {
-					//debug("done move");
+					movedebug("really done move");
 					computing_move = false;
 					// Cut off final sample, which was no steps anyway.
 					current_fragment_pos -= 1;
@@ -849,13 +864,15 @@ void send_fragment() { // {{{
 			debug("sending fragment for 0 motors at position %d", current_fragment_pos);
 		//abort();
 	}
-	//debug("sending %d prevcbs %d", current_fragment, settings[(current_fragment - 1) % FRAGMENTS_PER_BUFFER].cbs);
+	debug("sending %d prevcbs %d", current_fragment, history[(current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER].cbs);
 	if (arch_send_fragment()) {
 		current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
+		//debug("current_fragment = (current_fragment + 1) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
 		//debug("current send -> %x", current_fragment);
 		store_settings();
-		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping)
+		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping) {
 			arch_start_move(0);
+		}
 	}
 } // }}}
 

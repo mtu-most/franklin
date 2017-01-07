@@ -503,6 +503,7 @@ void abort_move(int pos) { // {{{
 	//debug("abort; cf %d rf %d first %d computing_move %d fragments, regenerating %d ticks", current_fragment, running_fragment, first_fragment, computing_move, pos);
 	//debug("try aborting move");
 	current_fragment = running_fragment;
+	//debug("current_fragment = running_fragment; %d", current_fragment);
 	//debug("current abort -> %x", current_fragment);
 	while (pos < 0) {
 		if (current_fragment == first_fragment) {
@@ -510,6 +511,7 @@ void abort_move(int pos) { // {{{
 		}
 		else {
 			current_fragment = (current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER;
+			//debug("current_fragment = (current_fragment + FRAGMENTS_PER_BUFFER - 1) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
 			pos += SAMPLES_PER_FRAGMENT;
 			running_fragment = current_fragment;
 		}

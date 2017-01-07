@@ -71,6 +71,7 @@ void setup()
 	refilling = false;
 	running_fragment = 0;
 	current_fragment = running_fragment;
+	//debug("current_fragment = running_fragment; %d %p", current_fragment, &current_fragment);
 	current_fragment_pos = 0;
 	num_active_motors = 0;
 	hwtime_step = 10000; // Note: When changing this, also change max in cdriver/space.cpp
@@ -108,6 +109,7 @@ void setup()
 	gpios = NULL;
 	for (int s = 0; s < NUM_SPACES; ++s)
 		spaces[s].init(s);
+	arch_setup_end();
 }
 
 void connect_end() {
@@ -159,7 +161,8 @@ void connect_end() {
 	arch_stop(true);
 	// Update pin names at next globals update.
 	sent_names = false;
-	send_host(CMD_CONNECTED);
+	if (arch_fds() > 0)
+		send_host(CMD_CONNECTED);
 }
 
 Axis_History *setup_axis_history() {

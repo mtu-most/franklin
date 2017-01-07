@@ -232,6 +232,7 @@ void run_file_fill_queue() {
 				break;
 			settings.run_file_current = arch_send_audio(&reinterpret_cast <uint8_t *>(run_file_map)[sizeof(double)], settings.run_file_current, run_file_num_records, run_file_audio);
 			current_fragment = next;
+			//debug("current_fragment = next; %d", current_fragment);
 			store_settings();
 			if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping)
 				arch_start_move(0);

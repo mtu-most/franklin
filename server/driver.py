@@ -464,6 +464,7 @@ class Printer: # {{{
 			#log('writing ok')
 			self.printer.write(self.single['OK'])
 			cmd, s, m, f, e, data = self._read_data(self.printer_buffer[1:])
+			#log('received command: %s' % repr((cmd, s, m, f, e, data)))
 			self.printer_buffer = ''
 			# Handle the asynchronous events.
 			if cmd == protocol.rcommand['MOVECB']:
@@ -619,6 +620,7 @@ class Printer: # {{{
 					#traceback.print_stack()
 					continue
 			ret = self._printer_input(reply = True)
+			#log('reply input is %s' % repr(ret))
 			if ret[0] == 'packet' or (cb and ret[0] == 'no data'):
 				return ret[1]
 			#log('no response yet waiting for reply')
@@ -1111,7 +1113,7 @@ class Printer: # {{{
 				self.home_cb[0] = [(s, k) for s, k in self.home_target.keys()]
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
-				#log("N t %s" % (self.home_target))
+				#log("home phase %d target %s" % (self.home_phase, self.home_target))
 				self.line(mktarget(), f0 = home_v / dist, force = True, single = True)
 				return
 			# Fall through.
@@ -1135,6 +1137,7 @@ class Printer: # {{{
 				k = tuple(self.home_target.keys())[0]
 				dist = abs(self.home_target[k] - self.spaces[k[0]].get_current_pos(k[1]))
 				if dist > 0:
+					#log("home phase %d target %s" % (self.home_phase, self.home_target))
 					self.line(mktarget(), f0 = home_v / dist, force = True, single = True)
 					return
 				# Fall through.
@@ -1253,6 +1256,7 @@ class Printer: # {{{
 				self.home_cb[0] = False
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
+				#log("home phase %d target %s" % (self.home_phase, self.home_target))
 				self.line(mktarget(), force = True, single = True)
 				return
 			# Fall through.
@@ -1274,6 +1278,7 @@ class Printer: # {{{
 				self.home_cb[0] = False
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
+					#log("home phase %d target %s" % (self.home_phase, target))
 					self.line(target, force = True)
 					return
 			# Fall through.
@@ -1297,6 +1302,7 @@ class Printer: # {{{
 				self.home_cb[0] = False
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
+				#log("home phase %d target %s" % (self.home_phase, target))
 				self.line(target, force = True)
 				#log('movecb: ' + repr(self.movecb))
 				return
@@ -1306,6 +1312,7 @@ class Printer: # {{{
 			self.position_valid = True
 			if self.home_id is not None:
 				self._send(self.home_id, 'return', self.home_return)
+				self.home_return = None
 			if self.home_done_cb is not None:
 				call_queue.append((self.home_done_cb, []))
 				self.home_done_cb = None
@@ -2558,6 +2565,7 @@ class Printer: # {{{
 			self._print_done(False, 'aborted by homing')
 		self.home_phase = 0
 		self.home_id = id
+		self.home_return = None
 		self.home_speed = speed
 		self.home_done_cb = cb
 		for i, e in enumerate(self.spaces[1].axis):

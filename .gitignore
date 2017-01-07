@@ -1,6 +1,7 @@
-*.pyc
+__pycache__/
 firmware/build-*
 server/cdriver/franklin-cdriver
+server/cdriver/bbb_pru.bin
 server/cdriver/build
 server/bb/setpin
 util/joystick.py

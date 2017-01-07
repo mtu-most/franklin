@@ -131,6 +131,7 @@ void arch_change(bool motors);
 void arch_motors_change();
 void arch_globals_change();
 void arch_setup_start();
+void arch_setup_end();
 void arch_set_uuid();
 void arch_connect(char const *run_id, char const *port);
 void arch_send_pin_name(int pin);
@@ -896,6 +897,10 @@ void arch_setup_start() { // {{{
 	serialdev[1] = &avr_serial;
 } // }}}
 
+void arch_setup_end() {
+	// Nothing to do.
+}
+
 void arch_set_uuid() { // {{{
 	if (!avr_connected) {
 		avr_uuid_dirty = true;
@@ -1152,6 +1157,7 @@ void avr_stop2() { // {{{
 		abort_move(command[1][2] / 2);
 	avr_get_current_pos(3, false);
 	current_fragment = running_fragment;
+	//debug("current_fragment = running_fragment; %d", current_fragment);
 	current_fragment_pos = 0;
 	num_active_motors = 0;
 	//debug("no longer blocking host 2");
@@ -1358,6 +1364,7 @@ void arch_do_discard() { // {{{
 		return;
 	for (int i = 0; i < fragments - 2; ++i) {
 		current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		//debug("current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
 		//debug("restoring %d %d", current_fragment, history[current_fragment].cbs);
 		cbs += history[current_fragment].cbs;
 	}

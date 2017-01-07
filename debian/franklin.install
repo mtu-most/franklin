@@ -15,6 +15,7 @@ server/bb/avrdude.conf /usr/lib/franklin/bb
 server/bb/flash-bb-0 /usr/lib/franklin/bb
 server/bb/flash-bb-4 /usr/lib/franklin/bb
 server/bb/setpin /usr/lib/franklin/bb
+#server/bb/bbb_pru.bin /usr/lib/franklin/bb
 
 # Web interface.
 server/html/server.js /usr/lib/franklin/html

@@ -91,6 +91,7 @@ void waittemp(int which, double mintemp, double maxtemp) {
 void setpos(int which, int t, double f) {
 	if (!motors_busy)
 	{
+		debug("Error: Setting position while motors are not busy!");
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			for (int m = 0; m < spaces[s].num_motors; ++m)
 				SET(spaces[s].motor[m]->enable_pin);

@@ -73,7 +73,7 @@ int main(int argc, char **argv) { // {{{
 			bool action = false;
 			if (!host_block && serialdev[0]->available())
 				action |= serial(0);
-			if (arch_fds() && serialdev[1]->available())
+			if (arch_fds() && serialdev[1] && serialdev[1]->available())
 				action |= serial(1);
 			if (!action)
 				break;

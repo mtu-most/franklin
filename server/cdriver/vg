@@ -19,5 +19,5 @@
 
 ulimit -c unlimited
 echo >&2 PID:$$
-exec valgrind "`dirname $0`"/cdriver/franklin-cdriver "$@"
-#exec "`dirname $0`"/cdriver/franklin-cdriver "$@"
+#exec valgrind "`dirname $0`"/cdriver/franklin-cdriver "$@"
+exec "`dirname $0`"/cdriver/franklin-cdriver "$@"

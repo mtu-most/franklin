@@ -48,7 +48,7 @@
 #if !defined(PRU) || (PRU != 0 && PRU != 1)
 #error PRU must be defined as 0 or 1.
 #endif
-#define NUM_ANALOG_INPUTS 8
+#define NUM_ANALOG_INPUTS 7
 #define NUM_GPIO_PINS (4 * 32)
 #define NUM_DIGITAL_PINS (NUM_GPIO_PINS + 16)
 #define NUM_PINS (NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS)
@@ -240,6 +240,7 @@ static void set_interrupt(Pin_t _pin, bool enabled) { // {{{
 	std::ofstream f(filename.c_str());
 	f << (enabled ? "both" : "none") << std::endl;
 	f.close();
+	debug("interrupt %d set to %d; %d", _pin.pin, pollfds[BASE_FDS + _pin.pin].fd, enabled);
 } // }}}
 
 void SET_OUTPUT(Pin_t _pin) { // {{{
@@ -331,7 +332,7 @@ void arch_setup_start() { // {{{
 		std::string name = base + "in_voltage" + num + "_raw";
 		bbb_temp[i].file = fopen(name.c_str(), "r");
 		if (!bbb_temp[i].file)
-			fprintf(stderr, "unable to open analog input %d: %s", i, strerror(errno));
+			debug("unable to open analog input %d: %s", i, strerror(errno));
 		bbb_temp[i].active = false;
 	}
 	bbb_devmem = open("/dev/mem", O_RDWR);
@@ -368,10 +369,11 @@ void arch_setup_start() { // {{{
 	bbb_pru->base = 0;
 	bbb_pru->dirs = 0;
 	bbb_pru->current_fragment = 0;
+	//debug("bbb_pru->current_fragment = 0; %d", current_fragment);
 	bbb_pru->current_sample = 0;
 	bbb_pru->next_fragment = 0;
 	bbb_pru->state = 1;
-	debug("pru exec %d", prussdrv_exec_program(PRU, "/usr/lib/franklin/bbb_pru.bin"));
+	debug("pru exec %d", prussdrv_exec_program(PRU, "/usr/lib/franklin/bb/bbb_pru.bin"));
 	// Override hwtime_step.
 	hwtime_step = 40;
 	// Claim that firmware has correct version.
@@ -387,16 +389,20 @@ void arch_setup_start() { // {{{
 			e << i << std::endl;
 			e.close();
 			std::ostringstream fs;
-			fs << "/sys/class/gpio/gpio" << i << "value";
+			fs << "/sys/class/gpio/gpio" << i << "/value";
 			std::string filename(fs.str());
 			pollfds[BASE_FDS + i].fd = open(filename.c_str(), O_RDONLY | O_NONBLOCK);
+			pollfds[BASE_FDS + i].events = POLLPRI;
 			if (pollfds[BASE_FDS + i].fd < 0) {
-				debug("error opening interrupt file: %s", strerror(errno));
+				debug("error opening interrupt file %s: %s", filename.c_str(), strerror(errno));
 				abort();
 			}
 			pollfds[BASE_FDS + i].fd -= NUM_GPIO_PINS + 1;
 		}
 	}
+} // }}}
+
+void arch_setup_end() { // {{{
 	connect_end();
 } // }}}
 
@@ -489,6 +495,7 @@ int arch_tick() { // {{{
 	// Fill buffer for pru.
 	int cf = bbb_pru->current_fragment;
 	if (cf != running_fragment) {
+		debug("cf=%d, runn=%d", cf, running_fragment);
 		int cbs = 0;
 		while (cf != running_fragment) {
 			cbs += history[running_fragment].cbs;
@@ -595,6 +602,10 @@ int arch_tick() { // {{{
 	// Pin state monitoring.
 	for (int i = 0; i < NUM_GPIO_PINS; ++i) {
 		if (pollfds[BASE_FDS + i].revents & POLLPRI) {
+			debug("interrupt on pin %d", i);
+			lseek(pollfds[BASE_FDS + i].fd, 0, SEEK_SET);
+			char buffer[10];
+			read(pollfds[BASE_FDS + i].fd, buffer, sizeof(buffer));
 			for (int g = 0; g < num_gpios; ++g) {
 				if (gpios[g].pin.valid() && gpios[g].pin.pin == i)
 					send_host(CMD_PINCHANGE, g, RAWGET(i) ^ gpios[g].pin.inverted());
@@ -677,7 +688,7 @@ void arch_start_move(int extra) { // {{{
 	// Start moving with sent buffers.
 	int state = bbb_pru->state;
 	if (state != 1) {
-		debug("arch_start_move called with non-1 state %d", state);
+		//debug("info: arch_start_move called with non-1 state %d", state);
 		return;
 	}
 	bbb_pru->state = 0;
@@ -715,6 +726,7 @@ void arch_discard() { // {{{
 	if (fragments <= 2)
 		return;
 	current_fragment = (current_fragment - (fragments - 2)) & BBB_PRU_FRAGMENT_MASK;
+	//debug("current_fragment = (current_fragment - (fragments - 2)) & BBB_PRU_FRAGMENT_MASK; %d", current_fragment);
 	bbb_pru->next_fragment = current_fragment;
 	restore_settings();
 } // }}}

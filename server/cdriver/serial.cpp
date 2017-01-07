@@ -248,8 +248,9 @@ bool serial(uint8_t channel) { // {{{
 					}
 					if (out_busy < 3 && change_pending)
 						arch_motors_change();
-					if (out_busy < 3 && start_pending)
+					if (out_busy < 3 && start_pending) {
 						arch_start_move(0);
+					}
 					if (out_busy < 3 && stop_pending) {
 						//debug("do pending stop");
 						arch_stop();

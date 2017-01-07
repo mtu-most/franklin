@@ -1,0 +1,3 @@
+#!/bin/sh
+
+grep uio_pruss_enable -q /sys/devices/platform/bone_capemgr/slots || echo uio_pruss_enable > /sys/devices/platform/bone_capemgr/slots
