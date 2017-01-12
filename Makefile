@@ -57,7 +57,7 @@ install:
 	# Fake target to make debhelper happy.
 	:
 
-build: mkdeb $(addprefix module-,$(MODULES))
+build: basedeps mkdeb $(addprefix module-,$(MODULES))
 	git pull
 	git submodule foreach git pull
 	git submodule foreach ../mkdeb $(MKDEB_ARG)
@@ -85,4 +85,7 @@ clean: $(addprefix clean-,$(MODULES))
 	rm -rf zipdir
 	rm -f $(addprefix module-,$(MODULES))
 
-.PHONY: install build clean zip bb
+basedeps:
+	dpkg-checkbuilddeps -d 'devscripts, git, wget, sudo'
+
+.PHONY: install build clean zip bb basedeps
