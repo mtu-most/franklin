@@ -774,7 +774,6 @@ void packet()
 		settings.run_file_current = int(pos);
 		// Hack to force TP_GETPOS to return the same value; this is only called when paused, so it does no harm.
 		history[running_fragment].run_file_current = int(pos);
-		settings.run_file_current = int(pos);
 		// TODO: Use fraction.
 		discarding = false;
 		buffer_refill();
