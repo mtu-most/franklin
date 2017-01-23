@@ -110,7 +110,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'printer': '',
 		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(GS)?\\d*))$',
 		'add-blacklist': '$',
-		'autodetect': 'True',
+		'autodetect': True,
 		'predetect': 'stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',
 		'allow-system': '^$',
 		'admin': '',
@@ -120,6 +120,7 @@ config = fhs.init(packagename = 'franklin', config = {
 		'local': '',
 		'log': '',
 		'tls': 'False',
+		'arc': True,
 	})
 # }}}
 
@@ -127,7 +128,7 @@ config = fhs.init(packagename = 'franklin', config = {
 httpd = None
 default_printer = (None, None)
 ports = {}
-autodetect = config['autodetect'].lower() == 'true'
+autodetect = config['autodetect']
 tls = config['tls'].lower() == 'true'
 printers = {}
 # }}}
@@ -711,7 +712,7 @@ def detect(port): # {{{
 	broadcast(None, 'port_state', port, 1)
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
-		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', '-', '--cdriver', config['local'] or fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', '-', '--cdriver', config['local'] or fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		printers[port] = Printer(port, process, None, run_id)
 		ports[port] = port
 		return False
@@ -816,7 +817,7 @@ def detect(port): # {{{
 			else:
 				log('accepting unknown printer on port %s' % port)
 				#log('printers: %s' % repr(tuple(printers.keys())))
-				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--uuid', uuid if uuid is not None else '', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--uuid', uuid if uuid is not None else '', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 				new_printer = Printer(port, process, printer, run_id)
 				def finish(success, uuid):
 					assert success
@@ -915,7 +916,7 @@ if config['local'] != '':
 def create_printer(uuid = None): # {{{
 	if uuid is None:
 		uuid = protocol.new_uuid()
-	process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+	process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 	printers[uuid] = Printer(None, process, None, None)
 	return uuid
 # }}}

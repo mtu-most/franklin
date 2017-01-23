@@ -885,6 +885,7 @@ void apply_tick() { // {{{
 } // }}}
 
 void buffer_refill() { // {{{
+	//debug("refill");
 	if (preparing || FRAGMENTS_PER_BUFFER == 0) {
 		//debug("no refill because prepare");
 		return;

@@ -78,7 +78,9 @@ int main(int argc, char **argv) { // {{{
 			if (!action)
 				break;
 		}
+		//debug("polling %d %d %d", host_block, arch_fds(), delay);
 		poll(host_block ? &pollfds[2] : pollfds, arch_fds() + (host_block ? 0 : 2), delay);
+		//debug("return %d %d %d", pollfds[0].revents, pollfds[1].revents, pollfds[2].revents);
 		if (pollfds[0].revents) {
 			timerfd_settime(pollfds[0].fd, 0, &zero, NULL);
 			//debug("gcode wait done; stop waiting (was %d)", run_file_wait);

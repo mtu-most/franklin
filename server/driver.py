@@ -65,7 +65,8 @@ config = fhs.init(packagename = 'franklin', config = { # {{{
 	'cdriver': None,
 	'allow-system': None,
 	'uuid': None,
-	'local': False
+	'local': False,
+	'arc': True
 	})
 # }}}
 
@@ -1586,7 +1587,7 @@ class Printer: # {{{
 						pending.append([0, pos[0][0], pos[0][1], pos[0][2], pos[1][nums[0]], pos[2], pos[2]])
 					pending.append(nums)
 					if len(pending) == 2:
-						if pending[0][3] != pending[1][3]:
+						if not config['arc'] or pending[0][3] != pending[1][3]:
 							#log('non equal z')
 							flush_pending()
 							return

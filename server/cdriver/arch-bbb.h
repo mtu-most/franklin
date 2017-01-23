@@ -38,8 +38,10 @@
 #include <errno.h>
 #include <math.h>
 #include <sys/mman.h>
+#ifndef FAKE
 #include <prussdrv.h>
 #include <pruss_intc_mapping.h>
+#endif
 // }}}
 
 // Defines. {{{
@@ -162,19 +164,20 @@ int bbb_pru_mode[16] = { 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 5, 5, 5, 5 };
 #endif
 
 static char const *bbb_apin_name[8] = {"P9_39", "P9_40", "P9_37", "P9_38", "P9_33", "P9_36", "P9_35", "1.65V"};
+#ifndef FAKE
 static volatile bbb_Gpio *bbb_gpio[4];
-enum BBB_State { MUX_DISABLED, MUX_INPUT, MUX_OUTPUT, MUX_PRU };
 static int bbb_devmem;
+#endif
+enum BBB_State { MUX_DISABLED, MUX_INPUT, MUX_OUTPUT, MUX_PRU };
 static int bbb_active_temp;
 static bbb_Temp bbb_temp[NUM_ANALOG_INPUTS];
+static int bbb_gpio_state[NUM_GPIO_PINS];
 static bbb_Pru *bbb_pru;
-static volatile uint32_t *bbb_gpio_pad[4];
 #define USABLE(x) (x)
 #define HDMI(x) (x)
 #define FLASH(x) ""
 #define INTERNAL ""
 #define UNUSABLE ""
-static int bbb_gpio_state[NUM_GPIO_PINS];
 static char const *bbb_muxname[NUM_GPIO_PINS] = { // {{{
 	UNUSABLE, UNUSABLE, USABLE("P9_22"), USABLE("P9_21"), USABLE("P9_18"), USABLE("P9_17"), INTERNAL, USABLE("P9_42"),
 	HDMI("P8_35"), HDMI("P8_33"), HDMI("P8_31"), HDMI("P8_32"), UNUSABLE, UNUSABLE, USABLE("P9_26"), USABLE("P9_24"),
@@ -196,7 +199,10 @@ static char const *bbb_muxname[NUM_GPIO_PINS] = { // {{{
 	USABLE("P9_30"), HDMI("P9_28"), USABLE("P9_42"), USABLE("P9_27"), USABLE("P9_41"), HDMI("P9_25"), UNUSABLE, UNUSABLE,
 	UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE, UNUSABLE
 }; // }}}
+#ifndef FAKE
+static volatile uint32_t *bbb_gpio_pad[4];
 int bbb_hack_pipe[2];
+#endif
 // }}}
 
 // Pin setting. {{{
@@ -215,10 +221,14 @@ static void bbb_setmux(Pin_t _pin, BBB_State mode) { // {{{
 		return;
 	}
 	int modes[4] = { 0x1f, 0x37, 0x1f, bbb_pru_mode[prupin] };
+#ifndef FAKE
 	if (write(bbb_hack_pipe[1], &modes[mode], 4) != 4)
 		debug("warning: short write to modechange pipe hack");
 	if (read(bbb_hack_pipe[0], (char *)bbb_gpio_pad[pin], 4) != 4)
 		debug("warning: short read from modechange pipe hack");
+#else
+	debug("set mode %x %x", pin, modes[mode]);
+#endif
 }; // }}}
 
 static void set_interrupt(Pin_t _pin, bool enabled) { // {{{
@@ -247,7 +257,11 @@ void SET_OUTPUT(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS) {
 			set_interrupt(_pin, false);
+#ifdef FAKE
+			debug("gpio set output pin %d", _pin.pin);
+#else
 			bbb_gpio[_pin.pin >> 5]->oe &= ~(1 << (_pin.pin & 0x1f));
+#endif
 			bbb_setmux(_pin, MUX_OUTPUT);
 		}
 		else
@@ -258,7 +272,11 @@ void SET_OUTPUT(Pin_t _pin) { // {{{
 void SET_INPUT(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS) {
+#ifdef FAKE
+			debug("gpio set input pin %d", _pin.pin);
+#else
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
+#endif
 			set_interrupt(_pin, true);
 		}
 		else
@@ -270,15 +288,26 @@ void SET_INPUT(Pin_t _pin) { // {{{
 void SET_INPUT_NOPULLUP(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
 		if (_pin.pin < NUM_GPIO_PINS) {
+#ifdef FAKE
+			debug("gpio set input pin %d", _pin.pin);
+#else
 			bbb_gpio[_pin.pin >> 5]->oe |= 1 << (_pin.pin & 0x1f);
+#endif
 			set_interrupt(_pin, true);
 		}
 		bbb_setmux(_pin, MUX_DISABLED);
 	}
 } // }}}
 
+#ifdef FAKE
+#define RAWSET(_p) debug("Set pin %d", _p)
+#define RAWRESET(_p) debug("Unset pin %d", _p)
+#define RAWGET(_p) false
+#else
 #define RAWSET(_p) bbb_gpio[(_p) >> 5]->setdataout = 1 << ((_p) & 0x1f)
 #define RAWRESET(_p) bbb_gpio[(_p) >> 5]->cleardataout = 1 << ((_p) & 0x1f)
+#define RAWGET(_p) (bool(bbb_gpio[(_p) >> 5]->datain & (1 << ((_p) & 0x1f))))
+#endif
 void SET(Pin_t _pin) { // {{{
 	SET_OUTPUT(_pin);
 	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
@@ -299,7 +328,6 @@ void RESET(Pin_t _pin) { // {{{
 	}
 } // }}}
 
-#define RAWGET(_p) (bool(bbb_gpio[(_p) >> 5]->datain & (1 << ((_p) & 0x1f))))
 void GET(Pin_t _pin, bool _default, void(*cb)(bool)) { // {{{
 	if (_pin.valid() && _pin.pin < NUM_GPIO_PINS) {
 		if (RAWGET(_pin.pin))
@@ -314,10 +342,13 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) { // {{{
 
 // Setup helpers. {{{
 void arch_setup_start() { // {{{
+#ifndef FAKE
+	// Prepare for pinmux hack.
 	if (pipe(bbb_hack_pipe)) {
 		debug("unable to create pipe for pinmux hack: %s", strerror(errno));
 		abort();
 	}
+	// Prepare system for using ADC and pruss.
 #define SLOTS "/sys/devices/platform/bone_capemgr/slots"
 	std::ofstream f(SLOTS);
 	f << "BB-ADC\n";
@@ -325,7 +356,13 @@ void arch_setup_start() { // {{{
 	f.open(SLOTS);
 	f << "uio-pruss-enable\n";
 	f.close();
+#endif
+	// Set up analog inputs.
+#ifdef FAKE
+	std::string base("");
+#else
 	std::string base("/sys/devices/platform/ocp/44e0d000.tscadc/TI-am335x-adc/iio:device0/");
+#endif
 	for (int i = 0; i < NUM_ANALOG_INPUTS; ++i) {
 		char num[2] = "0";
 		num[0] += i;
@@ -335,11 +372,11 @@ void arch_setup_start() { // {{{
 			debug("unable to open analog input %d: %s", i, strerror(errno));
 		bbb_temp[i].active = false;
 	}
-	bbb_devmem = open("/dev/mem", O_RDWR);
+	bbb_active_temp = -1;
+	// Prepare gpios.
+#ifndef FAKE
 	unsigned gpio_base[4] = { 0x44e07000, 0x4804c000, 0x481ac000, 0x481ae000 };
 	unsigned pad_control_base = 0x44e10000;
-	for (int i = 0; i < 4; ++i)
-		bbb_gpio[i] = (volatile bbb_Gpio *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, gpio_base[i]);
 	int pad_offset[32 * 4] = {
 		0x148, 0x14c, 0x150, 0x154, 0x158, 0x15c, 0x160, 0x164, 0xd0, 0xd4, 0xd8, 0xdc, 0x178, 0x17c, 0x180, 0x184,
 		0x11c, 0x120, 0x21c, 0x1b0, 0x1b4, 0x124, 0x20, 0x24, -1, -1, 0x28, 0x2c, 0x128, 0x144, 0x70, 0x74,
@@ -353,10 +390,13 @@ void arch_setup_start() { // {{{
 		0x108, 0x10c, 0x110, 0x114, 0x118, 0x188, 0x18c, 0x1e4, 0x1e8, 0x12c, 0x130, -1, -1, 0x234, 0x190, 0x194,
 		0x198, 0x19c, 0x1a0, 0x1a4, 0x1a8, 0x1ac, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1
 	};
+	bbb_devmem = open("/dev/mem", O_RDWR);
+	for (int i = 0; i < 4; ++i)
+		bbb_gpio[i] = (volatile bbb_Gpio *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, gpio_base[i]);
 	volatile uint32_t *bbb_padmap = (volatile uint32_t *)mmap(0, 0x2000, PROT_READ | PROT_WRITE, MAP_SHARED, bbb_devmem, pad_control_base);
 	for (int i = 0; i < 32 * 4; ++i)
 		bbb_gpio_pad[i] = pad_offset[i] >= 0 ? &bbb_padmap[(0x800 + pad_offset[i]) / 4] : NULL;
-	bbb_active_temp = -1;
+	// Run pru program.
 	tpruss_intc_initdata pruss_intc_initdata = PRUSS_INTC_INITDATA;
 	debug("pru init %d", prussdrv_init());
 	int ret = prussdrv_open(PRU_EVTOUT_0);
@@ -366,6 +406,9 @@ void arch_setup_start() { // {{{
 	}
 	debug("init intc %d", prussdrv_pruintc_init(&pruss_intc_initdata));
 	debug("pru mmap %d", prussdrv_map_prumem(PRU_DATARAM, (void **)&bbb_pru));
+#else
+	bbb_pru = new bbb_Pru;
+#endif
 	bbb_pru->base = 0;
 	bbb_pru->dirs = 0;
 	bbb_pru->current_fragment = 0;
@@ -373,13 +416,18 @@ void arch_setup_start() { // {{{
 	bbb_pru->current_sample = 0;
 	bbb_pru->next_fragment = 0;
 	bbb_pru->state = 1;
+#ifndef FAKE
 	debug("pru exec %d", prussdrv_exec_program(PRU, "/usr/lib/franklin/bb/bbb_pru.bin"));
+#endif
 	// Override hwtime_step.
 	hwtime_step = 40;
 	// Claim that firmware has correct version.
 	protocol_version = PROTOCOL_VERSION;
 	for (int i = 0; i < NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS; ++i) {
 		arch_send_pin_name(i);
+#ifdef FAKE
+		pollfds[BASE_FDS + i].fd = -1;
+#else
 		if (i < NUM_GPIO_PINS) {
 			if (bbb_muxname[i][0] == '\0') {
 				pollfds[BASE_FDS + i].fd = -1;
@@ -399,6 +447,7 @@ void arch_setup_start() { // {{{
 			}
 			pollfds[BASE_FDS + i].fd -= NUM_GPIO_PINS + 1;
 		}
+#endif
 	}
 } // }}}
 
@@ -665,7 +714,9 @@ void arch_stop(bool fake) { // {{{
 	case 3:
 		bbb_pru->state = 4;
 		// Wait for pru to ack.
+#ifndef FAKE
 		while (bbb_pru->state == 4) {}
+#endif
 		break;
 	}
 	bbb_pru->state = 1;

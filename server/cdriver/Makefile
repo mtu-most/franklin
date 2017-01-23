@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#TARGET ?= bbb
+#TARGET ?= bbb-fake
 
 PROFILE = #-pg
 
@@ -34,7 +34,12 @@ LIBS += -lprussdrv
 
 franklin-cdriver: bbb_pru.bin
 else
+ifeq (${TARGET}, bbb-fake)
+ARCH_HEADER = arch-bbb.h
+CPPFLAGS += -DFAKE
+else
 ARCH_HEADER = arch-avr.h
+endif
 endif
 
 SOURCES = \

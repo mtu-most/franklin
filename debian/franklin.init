@@ -33,6 +33,9 @@ RUN=1
 # Regular expression of default printer; normally empty.
 #PRINTER=''
 
+# Enable or disable arc detection in G-Code.
+#ARC=True
+
 # The server keeps a list of serial ports on the system.  If this is set to
 # yes, it tries to connect to a printer on any new port (and at startup, on any
 # port).
@@ -79,6 +82,7 @@ DAEMON=/usr/bin/franklin
 ARGS=(--quiet --make-pidfile --pidfile "$PIDFILE" --chuid franklin3d:franklin3d)
 START_ARGS=("${ARGS[@]}" --background --oknodo --start --startas "$DAEMON" -- --system)
 if [ -v AUTODETECT ] ; then	START_ARGS+=(--autodetect="$AUTODETECT") ; fi
+if [ -v ARC ] ; then		START_ARGS+=(--arc="$ARC") ; fi
 if [ -v PREDETECT ] ; then	START_ARGS+=(--predetect="$PREDETECT") ; fi
 if [ -v PORT ] ; then		START_ARGS+=(--port="$PORT") ; fi
 if [ -v ADDRESS ] ; then	START_ARGS+=(--address="$ADDRESS") ; fi
