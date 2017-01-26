@@ -1117,7 +1117,10 @@ void arch_addpos(int s, int m, double diff) { // {{{
 		mi += spaces[st].num_motors;
 	if (mi + m >= NUM_MOTORS)
 		return;
-	avr_pos_offset[mi] -= diff;
+	if (!isnan(diff))
+		avr_pos_offset[mi] -= diff;
+	else
+		abort();
 	//debug("addpos %d %d %f -> %f", s, m, diff, avr_pos_offset[mi]);
 	cpdebug(s, m, "arch addpos diff %f offset %f raw %f pos %f", diff, avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
 } // }}}

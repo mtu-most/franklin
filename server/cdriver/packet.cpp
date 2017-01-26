@@ -98,6 +98,10 @@ void setpos(int which, int t, double f) {
 		}
 		motors_busy = true;
 	}
+	if (isnan(spaces[which].motor[t]->steps_per_unit)) {
+		debug("Error: NaN steps per unit");
+		abort();
+	}
 	for (int a = 0; a < spaces[which].num_axes; ++a) {
 		spaces[which].axis[a]->settings.source = NAN;
 		spaces[which].axis[a]->settings.current = NAN;
@@ -774,6 +778,12 @@ void packet()
 		settings.run_file_current = int(pos);
 		// Hack to force TP_GETPOS to return the same value; this is only called when paused, so it does no harm.
 		history[running_fragment].run_file_current = int(pos);
+		for (int s = 0; s < NUM_SPACES; ++s) {
+			Space &sp = spaces[s];
+			for (int a = 0; a < sp.num_axes; ++a)
+				sp.axis[a]->settings.source = NAN;
+		}
+		history[running_fragment].source = NAN;
 		// TODO: Use fraction.
 		discarding = false;
 		buffer_refill();

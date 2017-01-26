@@ -3048,14 +3048,11 @@ class Printer: # {{{
 			state = 'Printing'
 		else:
 			return 'Idle', float('nan'), float('nan'), pos[0], pos[1], context
-		if self.gcode_map:
-			f = (self.probe_time_dist[0] + (0 if len(self.spaces) > 0 else self.probe_time_dist[1] / self.max_v)) / self.feedrate
-		else:
-			self._send_packet(struct.pack('=B', protocol.command['GETTIME']))
-			cmd, s, m, f, e, data = self._get_reply()
-			if cmd != protocol.rcommand['TIME']:
-				log('invalid reply to gettime command')
-				return 'Error', float('nan'), float('nan'), pos[0], pos[1], context
+		self._send_packet(struct.pack('=B', protocol.command['GETTIME']))
+		cmd, s, m, f, e, data = self._get_reply()
+		if cmd != protocol.rcommand['TIME']:
+			log('invalid reply to gettime command')
+			return 'Error', float('nan'), float('nan'), pos[0], pos[1], context
 		return state, f, (self.total_time[0] + (0 if len(self.spaces) < 1 else self.total_time[1] / self.max_v)) / self.feedrate, pos[0], pos[1], context
 	# }}}
 	def send_printer(self, target): # {{{
@@ -3099,6 +3096,7 @@ class Printer: # {{{
 		assert self.gcode_map is not None
 		assert 0 <= position < self.gcode_num_records
 		assert self.paused
+		self.queue_info[1] = []	# Don't restore extruder position on resume.
 		self._send_packet(struct.pack('=Bd', protocol.command['TP_SETPOS'], position))
 	# }}}
 	def tp_get_context(self, num = None, position = None): # {{{

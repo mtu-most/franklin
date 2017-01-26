@@ -83,7 +83,7 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_motors[m]->enable_pin.init();
 			new_motors[m]->limit_min_pin.init();
 			new_motors[m]->limit_max_pin.init();
-			new_motors[m]->steps_per_unit = NAN;
+			new_motors[m]->steps_per_unit = 100;
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
 			new_motors[m]->home_pos = NAN;
@@ -213,6 +213,10 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 	motor[m]->limit_min_pin.read(read_16(addr));
 	motor[m]->limit_max_pin.read(read_16(addr));
 	motor[m]->steps_per_unit = read_float(addr);
+	if (isnan(motor[m]->steps_per_unit)) {
+		debug("Trying to set NaN steps per unit for motor %d %d", id, m);
+		motor[m]->steps_per_unit = old_steps_per_unit;
+	}
 	motor[m]->home_pos = read_float(addr);
 	motor[m]->limit_v = read_float(addr);
 	motor[m]->limit_a = read_float(addr);

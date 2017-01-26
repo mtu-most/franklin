@@ -42,10 +42,18 @@ static void change0(int qpos) { // {{{
 	}
 } // }}}
 
-static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
+static void set_from_queue(int s, int qpos, int a0, bool next, bool allow_arc) { // {{{
 	Space &sp = spaces[s];
 	for (int a = 0; a < sp.num_axes; ++a) {
 		sp.axis[a]->settings.endpos[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0);
+		if (isnan(sp.axis[a]->settings.source)) {
+			// This can only happen for extruders.
+			if (s != 1) {
+				debug("BUG: NaN source for non-extruder %d %d; please report.", s, a);
+				abort();
+			}
+			sp.axis[a]->settings.source = sp.axis[a]->settings.endpos[1];
+		}
 		if (isnan(queue[qpos].data[a0 + a])) {
 			sp.axis[a]->settings.dist[1] = 0;
 		}
@@ -56,7 +64,7 @@ static void set_from_queue(int s, int qpos, int a0, bool next) { // {{{
 #endif
 		}
 	}
-	if (s == 0 && queue[qpos].arc) { // {{{
+	if (s == 0 && queue[qpos].arc && allow_arc) { // {{{
 		sp.settings.arc[1] = true;
 		double src = 0, normal = 0, dst = 0;
 		double target[3];
@@ -161,6 +169,7 @@ static void copy_next(int s) { // {{{
 
 // Used from previous segment (if prepared): tp, vq.
 int next_move() { // {{{
+	bool allow_arc = true;
 	settings.probing = false;
 	settings.single = false;
 	moving_to_current = 0;
@@ -183,9 +192,14 @@ int next_move() { // {{{
 	//for (int a = 0; a < num_axes; ++a)
 	//	debug("target %d %f", a, queue[settings.queue_start].data[a]);
 	for (int s = 0; s < NUM_SPACES; ++s) {
+		if (s == 1) {
+			// Extruders are handled later.
+			continue;
+		}
 		Space &sp = spaces[s];
 		for (int a = 0; a < sp.num_axes; ++a) {
 			if (isnan(sp.axis[a]->settings.source)) {
+				allow_arc = false;
 				if (!isnan(sp.axis[a]->settings.current)) {
 					sp.axis[a]->settings.source = sp.axis[a]->settings.current;
 					continue;
@@ -220,7 +234,7 @@ int next_move() { // {{{
 				sp.axis[a]->settings.dist[0] = 0;
 				sp.axis[a]->settings.endpos[0] = sp.axis[a]->settings.source;
 			}
-			set_from_queue(s, settings.queue_start, a0, false);
+			set_from_queue(s, settings.queue_start, a0, false, allow_arc);
 			a0 += sp.num_axes;
 		}
 	}
@@ -289,7 +303,7 @@ int next_move() { // {{{
 			Space &sp = spaces[s];
 			space_types[sp.type].check_position(&sp, &queue[n].data[a0]);
 			copy_next(s);
-			set_from_queue(s, n, a0, true);
+			set_from_queue(s, n, a0, true, allow_arc);
 			if (sp.settings.dist[1] != 0 || sp.settings.dist[0] != 0)
 				action = true;
 			a0 += sp.num_axes;
