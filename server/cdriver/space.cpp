@@ -868,7 +868,7 @@ void send_fragment() { // {{{
 			debug("sending fragment for 0 motors at position %d", current_fragment_pos);
 		//abort();
 	}
-	debug("sending %d prevcbs %d", current_fragment, history[(current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER].cbs);
+	//debug("sending %d prevcbs %d", current_fragment, history[(current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER].cbs);
 	if (arch_send_fragment()) {
 		current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		//debug("current_fragment = (current_fragment + 1) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);

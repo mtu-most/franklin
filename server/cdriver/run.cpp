@@ -299,7 +299,7 @@ void run_file_fill_queue() {
 					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
 					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
 					double z = r.Z;
-					debug("line/arc %d: %f %f %f", settings.run_file_current, x, y, z);
+					//debug("line/arc %d: %f %f %f", settings.run_file_current, x, y, z);
 					int num0 = spaces[0].num_axes;
 					if (num0 > 0) {
 						queue[settings.queue_end].data[0] = x;

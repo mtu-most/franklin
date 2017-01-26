@@ -783,7 +783,6 @@ void packet()
 			for (int a = 0; a < sp.num_axes; ++a)
 				sp.axis[a]->settings.source = NAN;
 		}
-		history[running_fragment].source = NAN;
 		// TODO: Use fraction.
 		discarding = false;
 		buffer_refill();

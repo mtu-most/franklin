@@ -784,7 +784,7 @@ function queue(printer) { // {{{
 		e.removeChild(rm[item]);
 	for (var i = 0; i < q.length; ++i) {
 		var option = e.AddElement('option');
-		option.AddText(q[i][0] + ' - ' + display_time(q[i][1]));
+		option.AddText(q[i][0] + ' - ' + display_time(q[i][1][6] + q[i][1][7] / printers[printer].max_v));
 		option.value = q[i][0];
 		if (i == 0 || !no_select)
 			option.selected = true;
