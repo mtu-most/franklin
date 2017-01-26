@@ -762,12 +762,12 @@ function queue(printer) { // {{{
 	var must_deselect = printers[printer].queue.length > e.options.length;
 	var no_select = e.options.length == 0;
 	for (var i = 0; i < printers[printer].queue.length; ++i)
-		q.push(printers[printer].queue[i][0]);
+		q.push(printers[printer].queue[i]);
 	var rm = [];
 	for (var item = 0; item < e.options.length; ++item) {
 		var i;
 		for (i = 0; i < q.length; ++i) {
-			if (q[i] == e.options[item].value) {
+			if (q[i][0] == e.options[item].value) {
 				if (must_deselect)
 					e.options[item].selected = false;
 				q.splice(i, 1);
@@ -784,8 +784,8 @@ function queue(printer) { // {{{
 		e.removeChild(rm[item]);
 	for (var i = 0; i < q.length; ++i) {
 		var option = e.AddElement('option');
-		option.AddText(q[i]);
-		option.value = q[i];
+		option.AddText(q[i][0] + ' - ' + display_time(q[i][1]));
+		option.value = q[i][0];
 		if (i == 0 || !no_select)
 			option.selected = true;
 	}
