@@ -207,7 +207,7 @@ static inline void arch_claim_serial() { // {{{
 		"\t"	"andi 30, %[statusmask]"		"\n"	/* 1	21 */ \
 		"\t"	"brne 5f"				"\n"	/* 1	22 */ \
 		"\t"	"ldi 30, " #which			"\n"	/* 1	23 */ \
-		"\t"	"sts avr_last_serial, 30"		"\n"	/* 2	25 */ \
+		"\t"	"sts %[avr_last_serial], 30"		"\n"	/* 2	25 */ \
 		"\t"	"lds 30, serial_buffer_head"		"\n"	/* 2	27 */ \
 		"\t"	"lds 31, serial_buffer_head + 1"	"\n"	/* 2	29 */ \
 		"\t"	"st z, 29"				"\n"	/* 2	31 */ \
@@ -249,6 +249,7 @@ static inline void arch_claim_serial() { // {{{
 		"\t"	"brne 6b"				"\n" \
 		"\t"	"rjmp 5b"				"\n" \
 		:: \
+			[avr_last_serial] "" (&avr_last_serial), \
 			[ucsra] "" (_SFR_MEM_ADDR(status)), \
 			[udr] "" (_SFR_MEM_ADDR(data)), \
 			[statusmask] "M" ((1 << FE0) | (1 << DOR0)), \
@@ -517,12 +518,12 @@ static inline void arch_setup_start() { // {{{
 	ADCSRA = AVR_ADCSRA_BASE;
 	// Enable interrupts.
 	sei();
-	// printerid will be filled by CMD_BEGIN.  Initialize it to 0.
+	// machineid will be filled by CMD_BEGIN.  Initialize it to 0.
 	for (uint8_t i = 0; i < ID_SIZE; ++i)
-		printerid[1 + i] = 0;
+		machineid[1 + i] = 0;
 	// Initialize uuid from EEPROM.
 	for (uint8_t i = 0; i < UUID_SIZE; ++i)
-		printerid[1 + ID_SIZE + i] = EEPROM.read(i);
+		machineid[1 + ID_SIZE + i] = EEPROM.read(i);
 } // }}}
 
 static inline void arch_setup_end() { // {{{
@@ -681,8 +682,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	// x: pin pointer for varying pins.	x.h is 0 a lot (but not always).
 	// y: motor pointer.
 	// z: buffer pointer (pointing at current_sample).
-		"\t"	"lds 30, current_buffer"	"\n"
-		"\t"	"lds 31, current_buffer + 1"	"\n"
+		"\t"	"lds 30, %[current_buffer]"	"\n"
+		"\t"	"lds 31, %[current_buffer] + 1"	"\n"
 		"\t"	"lds 18, current_sample"	"\n"
 		"\t"	"add 30, 18"			"\n"
 		"\t"	"adc 31, 27"			"\n"
@@ -721,7 +722,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		/* Compute steps.  <24+25(abs numsteps) <17(move_phase) <y(motor) >0(steps) X1 {{{ */
 		/* steps target = b.sample * move_phase / full_phase - m.steps_current; */
 		"\t"	"mul 24, 17"			"\n"	// r0:r1 = r24*r17
-		"\t"	"lds 19, full_phase_bits"	"\n"
+		"\t"	"lds 19, %[full_phase_bits]"	"\n"
 		"\t"	"ldi 18, 8"			"\n"
 		"\t"	"sub 18, 19"			"\n"	// r18 = 8 - fpb
 		"\t"	"tst 19"			"\n"
@@ -878,12 +879,12 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"ldi 30, lo8(buffer)"		"\n" \
 		"\t"	"ldi 31, hi8(buffer)"		"\n" \
 		"\t"	"rjmp 2f"			"\n" \
-	"1:\t"		"lds 30, current_buffer"	"\n" \
-		"\t"	"lds 31, current_buffer + 1"	"\n" \
+	"1:\t"		"lds 30, %[current_buffer]"	"\n" \
+		"\t"	"lds 31, %[current_buffer] + 1"	"\n" \
 		"\t"	"subi 30, -%[buffer_size] & 0xff"	"\n" \
 		"\t"	"sbci 31, (-%[buffer_size] >> 8) & 0xff"	"\n" \
-	"2:\t"		"sts current_buffer, 30"	"\n" \
-		"\t"	"sts current_buffer + 1, 31"	"\n" \
+	"2:\t"		"sts %[current_buffer], 30"	"\n" \
+		"\t"	"sts %[current_buffer] + 1, 31"	"\n" \
 		"\t"	"sts current_fragment, 16"	"\n" \
 		/* Check for underrun. */ \
 		"\t"	"lds 17, last_fragment"		"\n" \
@@ -966,8 +967,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"push 30"			"\n"
 		"\t"	"push 31"			"\n"
 
-		"\t"	"lds 30, current_buffer"	"\n"
-		"\t"	"lds 31, current_buffer + 1"	"\n"
+		"\t"	"lds 30, %[current_buffer]"	"\n"
+		"\t"	"lds 31, %[current_buffer] + 1"	"\n"
 		"\t"	"lds 17, move_phase"		"\n"
 		"\t"	"tst 17"			"\n"
 		"\t"	"breq 2f"			"\n"
@@ -981,7 +982,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"brcc 1f"			"\n"
 		"\t"	"inc 31"			"\n"
 	"1:"						"\n"
-		"\t"	"lds 17, audio_bit"		"\n"
+		"\t"	"lds 17, %[audio_bit]"		"\n"
 		"\t"	"ld 27, z"			"\n"
 		"\t"	"and 27, 17"			"\n"
 		"\t"	"breq 1f"			"\n"
@@ -1037,7 +1038,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"st y, 17"			"\n"
 
 	"isr_audio_end:\t"				"\n"
-		"\t"	"lds 16, audio_bit"		"\n"
+		"\t"	"lds 16, %[audio_bit]"		"\n"
 		"\t"	"lsl 16"			"\n"
 		"\t"	"brne 4f"			"\n"
 		// Byte is done.
@@ -1067,7 +1068,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	"7:\t"						"\n"
 		"\t"	"ldi 16, 1"			"\n"
 	"4:\t"						"\n"
-		"\t"	"sts audio_bit, 16"		"\n"
+		"\t"	"sts %[audio_bit], 16"		"\n"
 	"5:\t"						"\n"
 		"\t"	"pop 31"			"\n"
 		"\t"	"pop 30"			"\n"
@@ -1082,6 +1083,9 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 
 	"isr_end_nonaked:"				"\n"
 		::
+			[current_buffer] "" (&current_buffer),
+			[full_phase_bits] "" (&full_phase_bits),
+			[audio_bit] "" (&audio_bit),
 			[current_pos] "I" (offsetof(Motor, current_pos)),
 			[step_port] "I" (offsetof(Motor, step_port)),
 			[step_bitmask] "I" (offsetof(Motor, step_bitmask)),

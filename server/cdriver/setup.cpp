@@ -114,11 +114,11 @@ void setup()
 
 void connect_end() {
 	if (protocol_version < PROTOCOL_VERSION) {
-		debug("Printer has older Franklin version %d than host which has %d; please flash newer firmware.", protocol_version, PROTOCOL_VERSION);
+		debug("Machine has older Franklin version %d than host which has %d; please flash newer firmware.", protocol_version, PROTOCOL_VERSION);
 		exit(1);
 	}
 	else if (protocol_version > PROTOCOL_VERSION) {
-		debug("Printer has newer Franklin version %d than host which has %d; please upgrade your host software.", protocol_version, PROTOCOL_VERSION);
+		debug("Machine has newer Franklin version %d than host which has %d; please upgrade your host software.", protocol_version, PROTOCOL_VERSION);
 		exit(1);
 	}
 	// Now set things up that need information from the firmware.

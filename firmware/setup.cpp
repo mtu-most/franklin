@@ -83,7 +83,7 @@ void setup()
 	spiss_pin = ~0;
 	audio = 0;
 	audio_motor = 0;
-	// Do arch-specific things.  This fills printerid and uuid.
+	// Do arch-specific things.  This fills machineid and uuid.
 	arch_setup_end();
 	// Inform host of reset.
 	send_id(CMD_STARTUP);

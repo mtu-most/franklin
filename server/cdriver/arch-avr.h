@@ -39,7 +39,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-// Enable all the parts for a serial connection (which can fail) to the printer.
+// Enable all the parts for a serial connection (which can fail) to the machine.
 #define SERIAL
 #define ADCBITS 10
 #define DATA_TYPE int16_t

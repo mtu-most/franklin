@@ -27,7 +27,7 @@ struct Apex {
 
 struct Delta_private {
 	Apex apex[3];
-	double angle;			// Adjust the front of the printer.
+	double angle;			// Adjust the front of the machine.
 };
 
 #define PRIVATE(s) (*reinterpret_cast <Delta_private *>(s->type_data))

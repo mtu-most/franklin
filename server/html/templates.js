@@ -1,4 +1,4 @@
-/* templates.js - widgets for printer components for Franklin
+/* templates.js - widgets for machine components for Franklin
  * vim: set foldmethod=marker :
  * Copyright 2014 Michigan Technological University
  * Author: Bas Wijnen <wijnen@debian.org>
@@ -18,68 +18,64 @@
  */
 
 // Primitives. {{{
-function Button(printer, title, action, className) { // {{{
+function Button(ui, title, action, className) { // {{{
 	var ret = Create('button', 'wide title');
 	ret.AddClass(className);
 	ret.AddText(title);
-	ret.AddEvent('click', function() { this.printer.call(action, [], {}) });
+	ret.AddEvent('click', function() { ui.machine.call(action, [], {}) });
 	ret.type = 'button';
-	ret.printer = printer.printer;
 	return ret;
 } // }}}
 
-function Text(printer, title, obj, className) { // {{{
+function Text(ui, title, obj, className) { // {{{
 	var span = Create('span', 'blocktitle').AddClass(className);
 	span.AddText(title);
 	var input = Create('input', 'text').AddClass(className);
 	input.type = 'text';
-	input.printer = printer;
 	input.AddEvent('keydown', function(event) {
 		if (event.keyCode == 13) {
-			set_value(this.printer, obj, this.value);
+			set_value(ui.machine, obj, this.value);
 			event.preventDefault();
 		}
 	});
 	return [span, input];
 } // }}}
 
-function Name(printer, type, num) { // {{{
+function Name(ui, type, num) { // {{{
 	if (num === null || (typeof num != 'number' && num.length >= 2 && num[1] === null))
 		return '';
 	var ret = Create('input', 'editname');
 	ret.type = 'text';
-	ret.printer = printer;
 	ret.AddEvent('keydown', function(event) {
 		if (event.keyCode == 13) {
 			if (typeof num != 'number' && num.length == 0)
-				set_value(this.printer, [null, type + '_name'], this.value);
+				set_value(ui.machine, [null, type + '_name'], this.value);
 			else
-				set_value(this.printer, [[type, num], 'name'], this.value);
+				set_value(ui.machine, [[type, num], 'name'], this.value);
 			event.preventDefault();
 		}
 	});
 	return ret;
 } // }}}
 
-function Pin(printer, title, obj, type) { // {{{
+function Pin(ui, title, obj, type) { // {{{
 	var pinselect = Create('select', 'pinselect');
-	pinselect.id = make_id(printer, obj);
+	pinselect.id = make_id(ui, obj);
 	pinselect.obj = obj;
-	pinselect.printer = printer;
-	pinrange(printer, type, pinselect);
+	pinrange(ui, type, pinselect);
 	pinselect.can_invert = Boolean(type & 7);
 	var validlabel = Create('label');
 	var validinput = validlabel.AddElement('input');
 	validlabel.AddText('Valid');
 	validinput.type = 'checkbox';
-	validinput.id = make_id(printer, obj, 'valid');
+	validinput.id = make_id(ui, obj, 'valid');
 	var inverts;
 	if (pinselect.can_invert) {
 		var invertedlabel = Create('label');
 		var invertedinput = invertedlabel.AddElement('input');
 		invertedlabel.AddText('Inverted');
 		invertedinput.type = 'checkbox';
-		invertedinput.id = make_id(printer, obj, 'inverted');
+		invertedinput.id = make_id(ui, obj, 'inverted');
 		inverts = [invertedlabel];
 	}
 	else
@@ -87,12 +83,11 @@ function Pin(printer, title, obj, type) { // {{{
 	var button = Create('button', 'button');
 	button.type = 'button';
 	button.AddText('Set');
-	button.printer = printer;
-	button.AddEvent('click', function() { set_pin(this.printer, obj); });
-	return make_tablerow(printer, title, [[pinselect], [validlabel], inverts, [button]], ['pintitle', ['pinvalue', 'pinvalue', 'pinvalue', 'pinvalue']]);
+	button.AddEvent('click', function() { set_pin(ui, obj); });
+	return make_tablerow(ui, title, [[pinselect], [validlabel], inverts, [button]], ['pintitle', ['pinvalue', 'pinvalue', 'pinvalue', 'pinvalue']]);
 } // }}}
 
-function Float(printer, obj, digits, factor, className, set) { // {{{
+function Float(ui, obj, digits, factor, className, set) { // {{{
 	var input = Create('input', className);
 	var span = Create('span', className);
 	input.obj = obj;
@@ -100,79 +95,75 @@ function Float(printer, obj, digits, factor, className, set) { // {{{
 		factor = 1;
 	input.factor = factor;
 	span.factor = factor;
-	input.id = make_id(printer, obj, 'new');
-	span.id = make_id(printer, obj);
+	input.id = make_id(ui, obj, 'new');
+	span.id = make_id(ui, obj);
 	span.digits = digits;
 	input.type = 'text';
 	input.set = set;
-	input.printer = printer;
+	input.ui = ui;
 	input.AddEvent('keydown', function(event) { floatkey(event, this); });
 	return [input, span];
 } // }}}
 
-function File(printer, obj, action, buttontext, types, cb) { // {{{
+function File(ui, obj, action, buttontext, types, cb) { // {{{
 	var input = Create('input');
 	input.type = 'file';
 	input.accept = types;
-	input.id = make_id(printer, obj);
+	input.id = make_id(ui, obj);
 	var button = Create('button', 'button').AddText(buttontext);
 	button.type = 'button';
 	button.source = obj;
 	button.action = action;
 	button.extra = cb;
-	button.printer = printer;
-	button.AddEvent('click', function() { set_file(this.printer, this.source, this.action); if (this.extra !== undefined) this.extra(); });
+	button.AddEvent('click', function() { set_file(ui, this.source, this.action); if (this.extra !== undefined) this.extra(); });
 	return [input, button];
 } // }}}
 
-function Checkbox(printer, obj) { // {{{
+function Checkbox(ui, obj) { // {{{
 	var ret = Create('input');
 	ret.type = 'checkbox';
-	ret.id = make_id(printer, obj);
+	ret.id = make_id(ui, obj);
 	ret.obj = obj;
-	ret.printer = printer;
 	ret.AddEvent('click', function(e) {
 		e.preventDefault();
-		set_value(this.printer, this.obj, this.checked);
+		set_value(ui, this.obj, this.checked);
 		return false;
 	});
 	return ret;
 } // }}}
 
-function Str(printer, obj) { // {{{
+function Str(ui, obj) { // {{{
 	var ret = Create('span');
 	var input = ret.AddElement('input');
 	input.type = 'text';
 	input.AddEvent('keydown', function(event) {
 		if (event.keyCode == 13) {
-			set_value(ret.printer, ret.obj, input.value);
+			set_value(ret.machine, ret.obj, input.value);
 			event.preventDefault();
 		}
 	});
 	ret.obj = obj;
-	ret.printer = printer;
 	/*var e = ret.AddElement('button');
 	e.type = 'button';
 	e.AddText('Set');
 	e.AddEvent('click', function(event) {
-		set_value(ret.printer, ret.obj, input.value);
+		set_value(ret.machine, ret.obj, input.value);
 		return false;
 	});
 	e = ret.AddElement('span');
-	e.id = make_id(printer, obj);
+	e.id = make_id(ui, obj);
 	*/
 	return ret;
 } // }}}
 
-function Id(printer, obj) { // {{{
+function Id(ui, obj) { // {{{
 	if (obj[0][1] === null)
 		return '';
 	var ret = Create('input');
 	ret.type = 'checkbox';
-	ret.id = make_id(printer, obj);
+	ret.id = make_id(ui, obj);
 	ret.obj = obj;
-	ret.printer = printer;
-	printer.idgroups[ret.obj[1]].push(ret);
+	ui.idgroups[ret.obj[1]].push(ret);
 	ret.AddEvent('click', function(e) {
 		e.preventDefault();
 		if (!ret.checked)
@@ -182,7 +173,7 @@ function Id(printer, obj) { // {{{
 		return false;
 	});
 	ret.set_id = function(num) {
-		set_value(this.printer, [null, this.obj[1] + '_id'], num);
+		set_value(ui, [null, this.obj[1] + '_id'], num);
 	};
 	return ret;
 } // }}}
@@ -190,297 +181,283 @@ function Id(printer, obj) { // {{{
 
 
 // Space. {{{
-function Extruder(printer, space, axis) {
+function Extruder(ui, space, axis) {
 	var e = ['extruder_dx', 'extruder_dy', 'extruder_dz'];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float(printer, [['axis', [space, axis]], e[i]], 1, 1e-3));
+		div.Add(Float(ui, [['axis', [space, axis]], e[i]], 1, 1e-3));
 		e[i] = div;
 	}
-	return make_tablerow(printer, axis_name(printer, space, axis), e, ['rowtitle3'], undefined, TYPE_EXTRUDER, space);
+	return make_tablerow(ui, axis_name(ui, space, axis), e, ['rowtitle3'], undefined, TYPE_EXTRUDER, space);
 }
 
-function Follower(printer, space, motor) {
+function Follower(ui, space, motor) {
 	var f = ['follower_space', 'follower_motor'];
 	for (var i = 0; i < f.length; ++i) {
 		var div = Create('div');
-		div.Add(Float(printer, [['motor', [space, motor]], f[i]], 0));
+		div.Add(Float(ui, [['motor', [space, motor]], f[i]], 0));
 		f[i] = div;
 	}
-	return make_tablerow(printer, motor_name(printer, space, motor), f, ['rowtitle2'], undefined, TYPE_FOLLOWER, space);
+	return make_tablerow(ui, motor_name(ui, space, motor), f, ['rowtitle2'], undefined, TYPE_FOLLOWER, space);
 }
 
-function Cartesian(printer, num) {
-	return make_tablerow(printer, space_name(printer, num), [Float(printer, [['space', num], 'num_axes'], 0, 1)], ['rowtitle1'], undefined, [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER], num);
+function Cartesian(ui, num) {
+	return make_tablerow(ui, space_name(ui, num), [Float(ui, [['space', num], 'num_axes'], 0, 1)], ['rowtitle1'], undefined, [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER], num);
 }
 
-function Delta(printer, space, motor) {
+function Delta(ui, space, motor) {
 	var e = [['delta_axis_min', 1], ['delta_axis_max', 1], ['delta_rodlength', 3], ['delta_radius', 3]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float(printer, [['motor', [space, motor]], e[i][0]], e[i][1], 1));
+		div.Add(Float(ui, [['motor', [space, motor]], e[i][0]], e[i][1], 1));
 		e[i] = div;
 	}
-	return make_tablerow(printer, motor_name(printer, space, motor), e, ['rowtitle4'], undefined, TYPE_DELTA, space);
+	return make_tablerow(ui, motor_name(ui, space, motor), e, ['rowtitle4'], undefined, TYPE_DELTA, space);
 }
 
-function Delta_space(printer, num) {
+function Delta_space(ui, num) {
 	var div = Create('div');
-	div.Add(Float(printer, [['space', num], 'delta_angle'], 2, Math.PI / 180));
-	return make_tablerow(printer, space_name(printer, num), [div], ['rowtitle1'], undefined, TYPE_DELTA, num);
+	div.Add(Float(ui, [['space', num], 'delta_angle'], 2, Math.PI / 180));
+	return make_tablerow(ui, space_name(ui, num), [div], ['rowtitle1'], undefined, TYPE_DELTA, num);
 }
 
-function Polar_space(printer, num) {
+function Polar_space(ui, num) {
 	var div = Create('div');
-	div.Add(Float(printer, [['space', num], 'polar_max_r'], 1, 1));
-	return make_tablerow(printer, space_name(printer, num), [div], ['rowtitle1'], undefined, TYPE_POLAR, num);
+	div.Add(Float(ui, [['space', num], 'polar_max_r'], 1, 1));
+	return make_tablerow(ui, space_name(ui, num), [div], ['rowtitle1'], undefined, TYPE_POLAR, num);
 }
 
-function Axis(printer, space, axis) {
-	var e = [Name(printer, 'axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['min', 1, 1], ['max', 1, 1], ['home_pos2', 1, 1]];
+function Axis(ui, space, axis) {
+	var e = [Name(ui, 'axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['min', 1, 1], ['max', 1, 1], ['home_pos2', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		if (space == 0)
-			div.Add(Float(printer, [['axis', [space, axis]], e[i][0]], e[i][1], e[i][2]));
+			div.Add(Float(ui, [['axis', [space, axis]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
-	return make_tablerow(printer, axis_name(printer, space, axis), e, ['rowtitle6']);
+	return make_tablerow(ui, axis_name(ui, space, axis), e, ['rowtitle6']);
 }
 
-function Motor(printer, space, motor) {
+function Motor(ui, space, motor) {
 	var e = [['steps_per_unit', 3, 1], ['home_pos', 3, 1], ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
 		if (space == 0 || (space == 1 && i != 1 && i != 2) || (space == 2 && (i == 1 || i == 2)))
-			div.Add(Float(printer, [['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
+			div.Add(Float(ui, [['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
-	return make_tablerow(printer, motor_name(printer, space, motor), e, ['rowtitle5']);
+	return make_tablerow(ui, motor_name(ui, space, motor), e, ['rowtitle5']);
 }
 
-function Pins_space(printer, space, motor) {
+function Pins_space(ui, space, motor) {
 	var e = [['Step', 'step', 1], ['Dir', 'dir', 1], ['Enable', 'enable', 2], ['Min Limit', 'limit_min', 4], ['Max Limit', 'limit_max', 4]];
 	for (var i = 0; i < e.length; ++i)
-		e[i] = Pin(printer, e[i][0], [['motor', [space, motor]], e[i][1] + '_pin'], e[i][2]);
-	return make_pin_title(printer, motor_name(printer, space, motor), e, ['rowtitle6']);
+		e[i] = Pin(ui, e[i][0], [['motor', [space, motor]], e[i][1] + '_pin'], e[i][2]);
+	return make_pin_title(ui, motor_name(ui, space, motor), e, ['rowtitle6']);
 }
 // }}}
 
 // Temp. {{{
-function Temp_setup(printer, num) {
-	var e = [Name(printer, 'temp', num), ['fan_temp', 0, 1], Id(printer, [['temp', num], 'bed'])];
+function Temp_setup(ui, num) {
+	var e = [Name(ui, 'temp', num), ['fan_temp', 0, 1], Id(ui, [['temp', num], 'bed'])];
 	for (var i = 1; i < e.length - 1; ++i) {
 		var div = Create('div');
-		div.Add(Float(printer, [['temp', num], e[i][0]], e[i][1], e[i][2]));
+		div.Add(Float(ui, [['temp', num], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
-	return make_tablerow(printer, temp_name(printer, num), e, ['rowtitle3']);
+	return make_tablerow(ui, temp_name(ui, num), e, ['rowtitle3']);
 }
 
-function Temp_limits(printer, num) {
+function Temp_limits(ui, num) {
 	var e = [['heater_limit_l', 0, 1], ['heater_limit_h', 0, 1], ['fan_limit_l', 0, 1], ['fan_limit_h', 0, 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float(printer, [['temp', num], e[i][0]], e[i][1], e[i][2]));
+		div.Add(Float(ui, [['temp', num], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
-	return make_tablerow(printer, temp_name(printer, num), e, ['rowtitle4']);
+	return make_tablerow(ui, temp_name(ui, num), e, ['rowtitle4']);
 }
 
-function Temp_hardware(printer, num) {
+function Temp_hardware(ui, num) {
 	var e = [['R0', 1, 1e3], ['R1', 1, 1e3], ['Rc', 1, 1e3], ['Tc', 0, 1], ['beta', 0, 1], ['hold_time', 1, 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float(printer, [['temp', num], e[i][0]], e[i][1], e[i][2]));
+		div.Add(Float(ui, [['temp', num], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
-	return make_tablerow(printer, temp_name(printer, num), e, ['rowtitle5']);
+	return make_tablerow(ui, temp_name(ui, num), e, ['rowtitle5']);
 }
 
-function Temp(printer, num) {
+function Temp(ui, num) {
 	var div = Create(div);
-	div.Add(Float(printer, [['temp', num], 'value', 'settemp'], 0));
+	div.Add(Float(ui, [['temp', num], 'value', 'settemp'], 0));
 	var current = Create('div');
-	current.id = make_id(printer, [['temp', num], 'temp']);
+	current.id = make_id(ui, [['temp', num], 'temp']);
 	if (num !== null)
-		printer.temptargets.push(current.AddElement('span'));
-	var name = temp_name(printer, num);
+		ui.temptargets.push(current.AddElement('span'));
+	var name = temp_name(ui, num);
 	if (num !== null && num < 5)
 		name.AddClass('temp' + num.toFixed(0));
-	return make_tablerow(printer, name, [div, current, Float(printer, [['temp', num], 'fan_duty'], 0, 1e-2)], ['rowtitle2']);
+	return make_tablerow(ui, name, [div, current, Float(ui, [['temp', num], 'fan_duty'], 0, 1e-2)], ['rowtitle2']);
 }
 
-function Pins_temp(printer, num, dummy, table) {
+function Pins_temp(ui, num, dummy, table) {
 	var e = [['Heater', 'heater', 2], ['Fan', 'fan', 2], ['Thermistor', 'thermistor', 8]];
 	for (var i = 0; i < e.length; ++i)
-		e[i] = Pin(printer, e[i][0], [['temp', num], e[i][1] + '_pin'], e[i][2]);
-	return make_pin_title(printer, temp_name(printer, num), e);
+		e[i] = Pin(ui, e[i][0], [['temp', num], e[i][1] + '_pin'], e[i][2]);
+	return make_pin_title(ui, temp_name(ui, num), e);
 }
 // }}}
 
 // Gpio. {{{
-function Gpio(printer, num) {
+function Gpio(ui, num) {
 	var reset = Create('select');
-	reset.id = make_id(printer, [['gpio', num], 'reset']);
+	reset.id = make_id(ui, [['gpio', num], 'reset']);
 	reset.AddElement('option').AddText('Off').Value = 0;
 	reset.AddElement('option').AddText('On').Value = 1;
 	reset.AddElement('option').AddText('Input').Value = 2;
 	reset.AddElement('option').AddText('Disabled').Value = 3;
 	reset.AddEvent('change', function(e) {
 		var value = reset.options[reset.selectedIndex].Value;
-		set_value(printer, [['gpio', num], 'reset'], value);
+		set_value(ui, [['gpio', num], 'reset'], value);
 		if (value >= 2)
-			set_value(printer, [['gpio', num], 'state'], value);
+			set_value(ui, [['gpio', num], 'state'], value);
 		e.preventDefault();
 		return false;
 	});
-	return make_tablerow(printer, gpio_name(printer, num), [Name(printer, 'gpio', num), reset, Float(printer, [['gpio', num], 'duty'], 0, 1e-2), Id(printer, [['gpio', num], 'fan']), Id(printer, [['gpio', num], 'spindle'])], ['rowtitle5']);
+	return make_tablerow(ui, gpio_name(ui, num), [Name(ui, 'gpio', num), reset, Float(ui, [['gpio', num], 'duty'], 0, 1e-2), Id(ui, [['gpio', num], 'fan']), Id(ui, [['gpio', num], 'spindle'])], ['rowtitle5']);
 }
 
-function Pins_gpio(printer, num) {
+function Pins_gpio(ui, num) {
 	var e = [['Pin', 'pin', 6]];
 	for (var i = 0; i < e.length; ++i)
-		e[i] = Pin(printer, e[i][0], [['gpio', num], e[i][1]], e[i][2]);
-	return make_pin_title(printer, gpio_name(printer, num), e);
+		e[i] = Pin(ui, e[i][0], [['gpio', num], e[i][1]], e[i][2]);
+	return make_pin_title(ui, gpio_name(ui, num), e);
 }
 // }}}
 
 
-function Label(printer) {	// {{{
+function Label(machine) {	// {{{
 	var ret = Create('div', 'tab noflash nodetect');
-	if (selected_printer == printer.uuid)
+	if (selected_machine == machine.uuid)
 		ret.AddClass('active');
-	ret.AddEvent('click', function() { select_printer(this.printer.printer); });
-	ret.printer = printer;
-	ret.span = ret.AddElement('span').AddText(printer.uuid);
+	ret.AddEvent('click', function() { select_machine(machine.ui); });
+	ret.span = ret.AddElement('span').AddText(machine.uuid);
 	return ret;
 }
 // }}}
 
-// Printer parts. {{{
-function Top(printer) { // {{{
+// Machine parts. {{{
+function Top(ui) { // {{{
 	var ret = Create('div', 'top');
 	// Up/remove/down. {{{
 	var e = ret.AddElement('div', 'updown');
-	e.AddElement('button', 'queue1').AddEvent('click', function() { queue_up(printer); }).AddText('⬆').type = 'button';
+	e.AddElement('button', 'queue1').AddEvent('click', function() { queue_up(ui); }).AddText('⬆').type = 'button';
 	e.AddElement('br');
-	e.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(printer); }).AddText('×').type = 'button';
+	e.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(ui); }).AddText('×').type = 'button';
 	e.AddElement('br');
-	e.AddElement('button', 'queue1').AddEvent('click', function() {queue_down(printer); }).AddText('⬇').type = 'button';
+	e.AddElement('button', 'queue1').AddEvent('click', function() {queue_down(ui); }).AddText('⬇').type = 'button';
 	// }}}
 	// Jobs. {{{
-	e = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(printer); });
-	e.printer = printer;
+	e = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(ui); });
 	e.multiple = true;
-	e.id = make_id(printer, [null, 'queue']);
+	e.id = make_id(ui, [null, 'queue']);
 	// }}}
 	// Jobbuttons. {{{
 	e = ret.AddElement('div', 'jobbuttons');
-	e.Add(File(printer, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode', function() { return queue_deselect(printer); }));
+	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode', function() { return queue_deselect(ui); }));
 	e.AddElement('br');
-	e.Add(File(printer, [null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav', function() { return queue_deselect(printer); }), 'benjamin');
+	e.Add(File(ui, [null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav', function() { return queue_deselect(ui); }), 'benjamin');
 	e.AddElement('br');
-	var b = e.AddElement('button', 'benjamin').AddText('×').AddEvent('click', function() { audio_del(this.printer); });
+	var b = e.AddElement('button', 'benjamin').AddText('×').AddEvent('click', function() { audio_del(ui); });
 	b.type = 'button';
-	b.printer = printer;
-	e.AddElement('select', 'benjamin').id = make_id(printer, [null, 'audio']);
-	var b = e.AddElement('button', 'benjamin').AddText('Play').AddEvent('click', function() { audio_play(this.printer); });
+	e.AddElement('select', 'benjamin').id = make_id(ui, [null, 'audio']);
+	var b = e.AddElement('button', 'benjamin').AddText('Play').AddEvent('click', function() { audio_play(ui); });
 	b.type = 'button';
-	b.printer = printer;
 	e.AddElement('br');
-	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(this.printer); }).AddText('Print selected');
+	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(ui); }).AddText('Print selected');
 	b.type = 'button';
-	b.printer = printer;
 	var l = e.AddElement('label');
 	b = l.AddElement('input', 'jobbutton');
 	l.AddText('Probe');
-	var id = make_id(printer, [null, 'probebox']);
+	var id = make_id(ui, [null, 'probebox']);
 	b.id = id;
 	b.type = 'checkbox';
 	b.htmlFor = id;
 	// }}}
 	// Stop buttons. {{{
 	e = ret.AddElement('div', 'stop');
-	b = e.AddElement('button', 'abort').AddText('Abort').AddEvent('click', function() { this.printer.printer.call('abort', [], {}); });
+	b = e.AddElement('button', 'abort').AddText('Abort').AddEvent('click', function() { ui.machine.call('abort', [], {}); });
 	b.type = 'button';
-	b.printer = printer;
 	e.AddElement('br');
-	b = e.AddElement('button').AddText('Home').AddEvent('click', function() { this.printer.printer.call('home', [], {}, function() { update_canvas_and_spans(b.printer); }); });
+	b = e.AddElement('button').AddText('Home').AddEvent('click', function() { ui.machine.call('home', [], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
-	b.printer = printer;
-	b = e.AddElement('button').AddText('Pause').AddEvent('click', function() { this.printer.printer.call('pause', [true], {}, function() { update_canvas_and_spans(b.printer); }); });
+	b = e.AddElement('button').AddText('Pause').AddEvent('click', function() { ui.machine.call('pause', [true], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
-	b.printer = printer;
-	b = e.AddElement('button').AddText('Resume').AddEvent('click', function() { this.printer.printer.call('pause', [false], {}); });
+	b = e.AddElement('button').AddText('Resume').AddEvent('click', function() { ui.machine.call('pause', [false], {}); });
 	b.type = 'button';
-	b.printer = printer;
-	b = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { this.printer.printer.call('sleep', [], {}, function() { update_canvas_and_spans(b.printer); }); });
+	b = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { ui.machine.call('sleep', [], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
-	b.printer = printer;
 	// }}}
 	return ret;
 }
 // }}}
 
-function Map(printer) { // {{{
+function Map(ui) { // {{{
 	var ret = Create('div', 'map');
-	ret.id = make_id(printer, [null, 'map']);
+	ret.id = make_id(ui, [null, 'map']);
 	// Current position buttons.
-	var t = ret.Add(make_table(printer).AddMultipleTitles([
+	var t = ret.Add(make_table(ui).AddMultipleTitles([
 		'',
-		[add_name(printer, 'axis', 0, 0), ' (', add_name(printer, 'unit', 0, 0), ')'],
-		[add_name(printer, 'axis', 0, 1), ' (', add_name(printer, 'unit', 0, 0), ')'],
-		[add_name(printer, 'axis', 0, 2), ' (', add_name(printer, 'unit', 0, 0), ')'],
+		[add_name(ui, 'axis', 0, 0), ' (', add_name(ui, 'unit', 0, 0), ')'],
+		[add_name(ui, 'axis', 0, 1), ' (', add_name(ui, 'unit', 0, 0), ')'],
+		[add_name(ui, 'axis', 0, 2), ' (', add_name(ui, 'unit', 0, 0), ')'],
 		'',
 		'',
 		''
 	], ['', '', '', '', '', ''], null), 'maptable');
-	var b = Create('button').AddText('Park').AddEvent('click', function() { this.printer.printer.call('park', [], {}, function() { update_canvas_and_spans(b.printer); }); });
+	var b = Create('button').AddText('Park').AddEvent('click', function() { ui.machine.call('park', [], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
-	b.printer = printer;
-	t.Add(make_tablerow(printer, add_name(printer, 'space', 0, 0), [
-		Float(printer, [['axis', [0, 0]], 'current'], 2, 1, '', function(v) { b.printer.printer.call('line_cb', [[{0: v}]], {}); b.printer.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
-		Float(printer, [['axis', [0, 1]], 'current'], 2, 1, '', function(v) { b.printer.printer.call('line_cb', [[{1: v}]], {}); b.printer.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
-		Float(printer, [['axis', [0, 2]], 'current'], 2, 1, '', function(v) { b.printer.printer.call('line_cb', [[{2: v}]], {}); b.printer.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(b.printer); }); }),
+	t.Add(make_tablerow(ui, add_name(ui, 'space', 0, 0), [
+		Float(ui, [['axis', [0, 0]], 'current'], 2, 1, '', function(v) { ui.machine.call('line_cb', [[{0: v}]], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
+		Float(ui, [['axis', [0, 1]], 'current'], 2, 1, '', function(v) { ui.machine.call('line_cb', [[{1: v}]], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
+		Float(ui, [['axis', [0, 2]], 'current'], 2, 1, '', function(v) { ui.machine.call('line_cb', [[{2: v}]], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
 		b
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
 	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
-		b.printer.printer.call('set_globals', [], {'targetx': b.printer.spaces[0].axis[0].current, 'targety': b.printer.spaces[0].axis[1].current});
+		ui.machine.call('set_globals', [], {'targetx': ui.machine.spaces[0].axis[0].current, 'targety': ui.machine.spaces[0].axis[1].current});
 	});
-	b.printer = printer;
 	b.type = 'button';
-	t.Add(make_tablerow(printer, 'Target:', [
-		Float(printer, [null, 'targetx'], 2, 1),
-		Float(printer, [null, 'targety'], 2, 1),
-		Float(printer, [null, 'zoffset'], 2, 1),
+	t.Add(make_tablerow(ui, 'Target:', [
+		Float(ui, [null, 'targetx'], 2, 1),
+		Float(ui, [null, 'targety'], 2, 1),
+		Float(ui, [null, 'zoffset'], 2, 1),
 		b,
-		['Angle:', Float(printer, [null, 'targetangle'], 1, Math.PI / 180, '', function(v) { update_angle(b.printer, v); }), '°']
+		['Angle:', Float(ui, [null, 'targetangle'], 1, Math.PI / 180, '', function(v) { update_angle(ui, v); }), '°']
 	], ['', '', '', '', '', '']));
 	// Canvas for xy and for z.
 	var c = ret.AddElement('canvas', 'xymap');
-	c.AddEvent('mousemove', function(e) { return xymove(b.printer, e); }).AddEvent('mousedown', function(e) { return xydown(b.printer, e); }).AddEvent('mouseup', function(e) { return xyup(b.printer, e); });
-	c.id = make_id(printer, [null, 'xymap']);
-	c.printer = printer;
+	c.AddEvent('mousemove', function(e) { return xymove(ui, e); }).AddEvent('mousedown', function(e) { return xydown(ui, e); }).AddEvent('mouseup', function(e) { return xyup(ui, e); });
+	c.id = make_id(ui, [null, 'xymap']);
 	c = ret.AddElement('canvas', 'zmap');
-	c.AddEvent('mousemove', function(e) { return zmove(b.printer, e); }).AddEvent('mousedown', function(e) { return zdown(b.printer, e); }).AddEvent('mouseup', function(e) { return zup(b.printer, e); });
-	c.id = make_id(printer, [null, 'zmap']);
-	c.printer = printer;
+	c.AddEvent('mousemove', function(e) { return zmove(ui, e); }).AddEvent('mousedown', function(e) { return zdown(ui, e); }).AddEvent('mouseup', function(e) { return zup(ui, e); });
+	c.id = make_id(ui, [null, 'zmap']);
 	return ret;
 }
 // }}}
 
-function Toolpath(printer) { // {{{
+function Toolpath(ui) { // {{{
 	var ret = Create('div', 'toolpath');
-	var index = ret.AddText('Toolpath index:').Add(Float(printer, [null, 'tppos'], 0, 1, '', function(value) {
-		printer.printer.call('tp_set_position', [value]);
+	var index = ret.AddText('Toolpath index:').Add(Float(ui, [null, 'tppos'], 0, 1, '', function(value) {
+		ui.machine.call('tp_set_position', [value]);
 	}));
 	var span = ret.AddText('/').AddElement('span');
-	span.id = make_id(printer, [null, 'tpmax']);
+	span.id = make_id(ui, [null, 'tpmax']);
 	var b = ret.AddElement('button').AddText('Find Closest').AddEvent('click', function() {
-		printer.printer.call('get_axis_pos', [0], {}, function(pos) {
-			printer.printer.call('tp_find_position', [pos[0], pos[1], pos[2]], {}, function(tppos) {
-				printer.printer.call('tp_set_position', [tppos], {}, function() { update_canvas_and_spans(printer); });
+		ui.machine.call('get_axis_pos', [0], {}, function(pos) {
+			ui.machine.call('tp_find_position', [pos[0], pos[1], pos[2]], {}, function(tppos) {
+				ui.machine.call('tp_set_position', [tppos], {}, function() { update_canvas_and_spans(ui); });
 			});
 		});
 	});
@@ -488,9 +465,9 @@ function Toolpath(printer) { // {{{
 }
 // }}}
 
-function Temps(printer) { // {{{
+function Temps(ui) { // {{{
 	var ret = Create('div', 'temp');
-	ret.Add(make_table(printer).AddMultipleTitles([
+	ret.Add(make_table(ui).AddMultipleTitles([
 		'Temp control',
 		'Target (°C)',
 		'Current (°C)',
@@ -505,59 +482,58 @@ function Temps(printer) { // {{{
 		'Temperature target.  Set to NaN to disable the heater completely.',
 		'Actual temperature from sensor.',
 		'Fraction of time that fan is enabled when on.'
-	]).AddMultiple(printer, 'temp', Temp));
-	ret.AddElement('canvas', 'tempgraph').id = make_id(printer, [null, 'tempgraph']);
+	]).AddMultiple(ui, 'temp', Temp));
+	ret.AddElement('canvas', 'tempgraph').id = make_id(ui, [null, 'tempgraph']);
 	return ret;
 }
 // }}}
 
-function Multipliers(printer) { // {{{
+function Multipliers(ui) { // {{{
 	var ret = Create('div', 'multipliers');
 	var e = ret.AddElement('div').AddText('Feedrate: ');
-	e.Add(Float(printer, [null, 'feedrate'], 0, 1e-2));
+	e.Add(Float(ui, [null, 'feedrate'], 0, 1e-2));
 	e.AddText(' %');
-	ret.AddMultiple(printer, 'axis', function(printer, space, axis, obj) {
+	ret.AddMultiple(ui, 'axis', function(ui, space, axis, obj) {
 		if (space != 1)
 			return null;
 		var e = Create('div');
-		e.Add(axis_name(printer, space, axis));
-		e.printer = printer;
-		e.Add(Float(printer, [['axis', [space, axis]], 'multiplier'], 0, 1e-2));
+		e.Add(axis_name(ui, space, axis));
+		e.Add(Float(ui, [['axis', [space, axis]], 'multiplier'], 0, 1e-2));
 		e.AddText(' %');
-		e.Add(Float(printer, [['axis', [space, axis]], 'current'], 1, 1, '', function(v) {
+		e.Add(Float(ui, [['axis', [space, axis]], 'current'], 1, 1, '', function(v) {
 			var obj = {};
 			obj[space] = {};
 			obj[space][axis] = v;
-			e.printer.printer.call('line_cb', [obj], {}, function() {
-				e.printer.printer.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(e.printer); });
+			ui.machine.call('line_cb', [obj], {}, function() {
+				ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); });
 			});
 		}));
-		e.AddText(' ').Add(add_name(printer, 'unit', 0, 0));
+		e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
 		return e;
 	}, true);
 	e = ret.AddElement('div', 'admin');
-	e.AddElement('Label').AddText('Store adc readings').Add(Checkbox(printer, [null, 'store_adc']));
+	e.AddElement('Label').AddText('Store adc readings').Add(Checkbox(ui, [null, 'store_adc']));
 	e.AddElement('a').AddText('Get stored readings').href = 'adc';
 	return ret;
 }
 // }}}
 
-function Gpios(printer) { // {{{
+function Gpios(ui) { // {{{
 	var ret = Create('div', 'gpios');
-	ret.AddMultiple(printer, 'gpio', function(printer, i) {
+	ret.AddMultiple(ui, 'gpio', function(ui, i) {
 		var ret = Create('span');
-		ret.id = make_id(printer, [['gpio', i], 'statespan']);
+		ret.id = make_id(ui, [['gpio', i], 'statespan']);
 		var label = ret.AddElement('label');
 		var input = label.AddElement('input');
-		label.Add(gpio_name(printer, i));
+		label.Add(gpio_name(ui, i));
 		var index = i;
 		input.AddEvent('click', function(e) {
-			set_value(printer, [['gpio', index], 'state'], input.checked ? 1 : 0);
+			set_value(ui, [['gpio', index], 'state'], input.checked ? 1 : 0);
 			e.preventDefault();
 			return false;
 		});
 		input.type = 'checkbox';
-		input.id = make_id(printer, [['gpio', i], 'state']);
+		input.id = make_id(ui, [['gpio', i], 'state']);
 		return ret;
 	}, false);
 	return ret;
@@ -565,9 +541,9 @@ function Gpios(printer) { // {{{
 // }}}
 // }}}
 
-function Printer(printer) {	// {{{
-	var ret = Create('div', 'printer hidden');
-	ret.printer = printer;
+function Machine(machine) {	// {{{
+	var ret = Create('div', 'machine hidden');
+	ret.machine = machine;
 	ret.names = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
 	ret.name_values = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
 	ret.pinranges = [];
@@ -590,28 +566,25 @@ function Printer(printer) {	// {{{
 	ret.AddElement('div', 'message hidden').id = make_id(ret, [null, 'message1']);
 	ret.AddElement('div', 'message').id = make_id(ret, [null, 'printstate']);
 	ret.AddElement('div', 'message hidden').id = make_id(ret, [null, 'confirm']);
-	ret.AddElement('h2', 'notconnected').AddText('This printer is not connected');
+	ret.AddElement('h2', 'notconnected').AddText('This machine is not connected');
 	var selector = ret.AddElement('div').AddText('Profile:').AddElement('select').AddEvent('change', function() {
-		this.printer.call('load', [selector.value], {});
+		machine.call('load', [selector.value], {});
 	});
-	selector.printer = ret;
 	selector.id = make_id(ret, [null, 'profiles']);
 	update_profiles(ret);
 	// Setup. {{{
 	var setup = ret.AddElement('div', 'setup expert');
-	var e = setup.AddElement('div').AddText('Printer UUID:');
+	var e = setup.AddElement('div').AddText('Machine UUID:');
 	ret.uuid = e.AddElement('span');
-	var e = setup.AddElement('div', 'admin').AddText('Printer name:');
+	var e = setup.AddElement('div', 'admin').AddText('Machine name:');
 	e.Add(Str(ret, [null, 'name']));
 	var connected = setup.AddElement('div', 'connected');
-	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Printer');
-	disable.printer = printer;
+	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Machine');
 	disable.type = 'button';
-	disable.AddEvent('click', function() { this.printer.disabling = true; rpc.call('disable', [this.printer.uuid], {}); });
-	var remove = setup.AddElement('div', 'admin').AddElement('button').AddText('Remove Printer');
-	remove.printer = printer;
+	disable.AddEvent('click', function() { machine.disabling = true; rpc.call('disable', [machine.uuid], {}); });
+	var remove = setup.AddElement('div', 'admin').AddElement('button').AddText('Remove Machine');
 	remove.type = 'button';
-	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + printer.name + '?')) { remove.printer.disabling = true; rpc.call('remove_printer', [remove.printer.uuid], {}); }});
+	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + machine.name + '?')) { machine.disabling = true; rpc.call('remove_machine', [machine.uuid], {}); }});
 	var notconnected = setup.AddElement('div', 'notconnected');
 	var ports = notconnected.AddElement('select');
 	ports.id = make_id(ret, [null, 'ports']);
@@ -627,29 +600,25 @@ function Printer(printer) {	// {{{
 	e = setup.AddElement('div', 'admin');
 	e.AddText('Profile');
 	b = e.AddElement('button').AddText('Save (as)').AddEvent('click', function() {
-		this.printer.call('save', [this.saveas.value], {});
+		machine.call('save', [this.saveas.value], {});
 	});
 	b.type = 'button';
-	b.printer = printer;
 	b.saveas = e.AddElement('input');
 	b.saveas.type = 'text';
 	e = setup.AddElement('button', 'admin').AddText('Remove this profile');
 	e.type = 'button';
-	e.printer = printer;
 	e.AddEvent('click', function() {
-		this.printer.call('remove_profile', [this.printer.profile], {});
+		machine.call('remove_profile', [machine.profile], {});
 	});
 	e = setup.AddElement('button', 'admin').AddText('Set as default profile');
 	e.type = 'button';
-	e.printer = printer;
 	e.AddEvent('click', function() {
-		this.printer.call('set_default_profile', [this.printer.profile], {});
+		machine.call('set_default_profile', [machine.profile], {});
 	});
 	e = setup.AddElement('button').AddText('Reload this profile');
 	e.type = 'button';
-	e.printer = printer;
 	e.AddEvent('click', function() {
-		this.printer.call('load', [this.printer.profile], {});
+		machine.call('load', [machine.profile], {});
 	});
 	setup.AddElement('div').Add(File(ret, [null, 'import', 'import_settings'], 'import', 'Import', '.ini'));
 	e = setup.AddElement('a', 'title').AddText('Export settings to file');
@@ -677,13 +646,12 @@ function Printer(printer) {	// {{{
 	e.AddText(' ').Add(add_name(ret, 'unit', 0, 0));
 	e = setup.AddElement('div').AddText('SPI setup:');
 	e.Add(Str(ret, [null, 'spi_setup']));
-	e = setup.AddElement('div').AddText('Printer Type:');
+	e = setup.AddElement('div').AddText('Machine Type:');
 	var select = e.Add(create_space_type_select());
 	var button = e.AddElement('button').AddText('Set');
 	button.type = 'button';
 	button.obj = select;
-	button.printer = ret;
-	button.AddEvent('click', function() { set_value(this.printer, [['space', 0], 'type'], this.obj.selectedIndex); });
+	button.AddEvent('click', function() { set_value(ret, [['space', 0], 'type'], this.obj.selectedIndex); });
 	e.AddElement('span').id = make_id(ret, [['space', 0], 'type']);
 	e = setup.AddElement('div').AddText('Temps:').Add(Float(ret, [null, 'num_temps'], 0));
 	e = setup.AddElement('div').AddText('Gpios:').Add(Float(ret, [null, 'num_gpios'], 0));
@@ -791,7 +759,7 @@ function Printer(printer) {	// {{{
 		'title1'
 	], [
 		null,
-		'Correction angle for the printer. (degrees)'
+		'Correction angle for the machine. (degrees)'
 	]).AddMultiple(ret, 'space', Delta_space, false)]);
 	// }}}
 	// Polar. {{{

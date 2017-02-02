@@ -88,6 +88,7 @@ bool globals_load(int32_t &addr)
 	int ce = read_8(addr);
 	targetx = read_float(addr);
 	targety = read_float(addr);
+	targetangle = read_float(addr);
 	double zo = read_float(addr);
 	if (motors_busy && (current_extruder != ce || zoffset != zo) && settings.queue_start == settings.queue_end && !settings.queue_full && !computing_move) {
 		queue[settings.queue_end].probe = false;
@@ -149,6 +150,7 @@ void globals_save(int32_t &addr)
 	write_8(addr, current_extruder);
 	write_float(addr, targetx);
 	write_float(addr, targety);
+	write_float(addr, targetangle);
 	write_float(addr, zoffset);
 	write_8(addr, store_adc != NULL);
 }

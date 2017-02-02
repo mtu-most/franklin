@@ -187,7 +187,7 @@ int next_move() { // {{{
 	// Set everything up for running queue[settings.queue_start].
 	int n = (settings.queue_start + 1) % QUEUE_LENGTH;
 
-	// Make sure printer state is good. {{{
+	// Make sure machine state is good. {{{
 	// If the source is unknown, determine it from current_pos.
 	//for (int a = 0; a < num_axes; ++a)
 	//	debug("target %d %f", a, queue[settings.queue_start].data[a]);

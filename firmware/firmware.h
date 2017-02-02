@@ -26,7 +26,7 @@
 #include <stdarg.h>
 #include ARCH_INCLUDE
 
-#define ID_SIZE 8	// Number of bytes in printerid; 8.
+#define ID_SIZE 8	// Number of bytes in machineid; 8.
 #define UUID_SIZE 16	// Number of bytes in uuid; 16.
 #define PROTOCOL_VERSION 3
 
@@ -86,8 +86,24 @@ template <typename _A, typename _B> _A max(_A a, _B b) { return a > b ? a : b; }
 template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 #define fabs abs
 
+// Volatile variables which are used by interrupt handlers.
 EXTERN volatile uint16_t debug_value, debug_value1;
-EXTERN uint8_t printerid[1 + ID_SIZE + UUID_SIZE + (1 + ID_SIZE + UUID_SIZE + 2) / 3];
+EXTERN volatile uint8_t move_phase, full_phase, full_phase_bits;
+EXTERN volatile bool serial_overflow;
+EXTERN volatile uint8_t *serial_buffer_head;
+EXTERN volatile uint8_t *serial_buffer_tail;
+EXTERN volatile uint8_t serial_buffer[SERIAL_BUFFER_SIZE] __attribute__ ((aligned (SERIAL_BUFFER_SIZE)));
+EXTERN volatile uint8_t buffer[1 << FRAGMENTS_PER_MOTOR_BITS][NUM_MOTORS][BYTES_PER_FRAGMENT];
+EXTERN volatile uint8_t active_motors;
+EXTERN volatile uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
+EXTERN volatile uint8_t current_sample;		// The sample in the current fragment that is active.
+EXTERN volatile uint8_t current_len;		// Copy of settings[current_fragment].len, for easy access from asm.
+EXTERN volatile uint8_t step_state;		// 0: disabled; 1: Waiting for limit switch check; 2: Waiting for step; 3: free running.
+EXTERN volatile uint8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
+EXTERN volatile uint8_t audio_bit;	// Bitmask for current audio playback.
+EXTERN volatile uint8_t last_fragment;	// Fragment that is currently being filled.
+
+EXTERN uint8_t machineid[1 + ID_SIZE + UUID_SIZE + (1 + ID_SIZE + UUID_SIZE + 2) / 3];
 EXTERN int16_t command_end;
 EXTERN bool had_data;
 EXTERN uint8_t reply[MAX_REPLY_LEN], adcreply[6];
@@ -99,7 +115,6 @@ EXTERN uint8_t ff_in;
 EXTERN uint8_t ff_out;
 EXTERN uint8_t pending_packet[4][REPLY_BUFFER_SIZE];
 EXTERN int16_t pending_len[4];
-EXTERN volatile uint8_t move_phase, full_phase, full_phase_bits;
 EXTERN uint8_t filling;
 EXTERN uint8_t led_fast;
 EXTERN uint16_t led_last, led_phase, time_per_sample;
@@ -108,11 +123,6 @@ EXTERN uint8_t spiss_pin;
 EXTERN uint16_t timeout_time, last_active;
 EXTERN uint8_t enabled_pins;
 EXTERN uint8_t audio;	// Bit 0: state; bit 1: enable.
-
-EXTERN volatile bool serial_overflow;
-EXTERN volatile uint8_t *serial_buffer_head;
-EXTERN volatile uint8_t *serial_buffer_tail;
-EXTERN volatile uint8_t serial_buffer[SERIAL_BUFFER_SIZE] __attribute__ ((aligned (SERIAL_BUFFER_SIZE)));
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
 	CMD_NACK0 = 0xf0,	// Incorrect packet; please resend.
@@ -127,7 +137,7 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values.
 	CMD_STALL1 = 0xe9,	// Packet properly received, but not accepted; don't resend packet unmodified.
 	CMD_STALL2 = 0xda,	// Packet properly received, but not accepted; don't resend packet unmodified.
 	CMD_STALL3 = 0xbb,	// Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_ID = 0xbc,		// Request/reply printer ID code.
+	CMD_ID = 0xbc,		// Request/reply machine ID code.
 	CMD_DEBUG = 0xdd,	// Debug message; a nul-terminated message follows (no checksum; no resend).
 	CMD_STARTUP = 0xee,	// Starting up.
 	CMD_STALLACK = 0x8f	// Clear stall.
@@ -366,10 +376,8 @@ struct Motor
 	}
 };
 
-EXTERN volatile uint8_t buffer[1 << FRAGMENTS_PER_MOTOR_BITS][NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN Motor motor[NUM_MOTORS];
 EXTERN Motor *audio_motor;
-EXTERN volatile uint8_t active_motors;
 EXTERN int stopping;	// number of switch which has been hit, or active_motors for a probe hit and -1 for none.
 EXTERN uint32_t home_step_time;
 EXTERN uint8_t homers;
@@ -382,12 +390,6 @@ struct Settings {
 	};
 };
 
-EXTERN Settings settings[1 << FRAGMENTS_PER_MOTOR_BITS];
-EXTERN uint8_t notified_current_fragment;
-EXTERN volatile uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
-EXTERN volatile uint8_t current_sample;		// The sample in the current fragment that is active.
-EXTERN volatile uint8_t current_len;		// Copy of settings[current_fragment].len, for easy access from asm.
-
 // Step states.  The non-moving states must be first.
 #define STATE_DECAY 2
 enum StepState {
@@ -399,10 +401,9 @@ enum StepState {
 	STEP_STATE_RUN = STATE_DECAY + STEP_STATE_NEXT,		// Running a sample, then move to NEXT.
 };
 #define NUM_NON_MOVING_STATES 3
-EXTERN volatile uint8_t step_state;		// 0: disabled; 1: Waiting for limit switch check; 2: Waiting for step; 3: free running.
-EXTERN volatile uint8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
-EXTERN volatile uint8_t audio_bit;	// Bitmask for current audio playback.
-EXTERN volatile uint8_t last_fragment;	// Fragment that is currently being filled.
+EXTERN Settings settings[1 << FRAGMENTS_PER_MOTOR_BITS];
+EXTERN uint8_t notified_current_fragment;
+
 EXTERN uint8_t limit_fragment_pos;
 EXTERN uint8_t last_len;	// copy of settings[last_fragment].len, for when current_fragment changes during a fill.
 

@@ -45,7 +45,7 @@
 	background: #cc8;
 }
 
-.pins_printer,.pins_axis,.pins_extruder,.pins_temp,.pins_gpio {
+.pins_machine,.pins_axis,.pins_extruder,.pins_temp,.pins_gpio {
 	margin: 1ex 0em;
 }
 
@@ -244,12 +244,12 @@ body.printing {
 	background: #ccc;
 }
 
-.printer {
+.machine {
 	background: #ccc;
 	padding: 1% 1em;
 }
 
-#printers {
+#machines {
 	margin-top: .5ex;
 }
 

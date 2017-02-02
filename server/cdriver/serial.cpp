@@ -37,7 +37,7 @@
 // They have 4 bit data and 3 bit parity: 1pppdddd
 // static const uint8_t MASK1[3] = {0x4b, 0x2d, 0x1e}
 // Codes (low nybble is data): 80 (e1 d2) b3 b4 (d5 e6) 87 (f8) 99 aa (cb cc) ad 9e (ff)
-// Codes which have duplicates in printer id codes are not used.
+// Codes which have duplicates in machine id codes are not used.
 // These are defined in cdriver.h.
 // }}}
 
@@ -279,10 +279,10 @@ bool serial(uint8_t channel) { // {{{
 				}
 				case CMD_ID:
 				case CMD_STARTUP:
-					// Request printer id.  This is called when the host
-					// connects to the printer.  This may be a reconnect,
+					// Request machine id.  This is called when the host
+					// connects to the machine.  This may be a reconnect,
 					// and can happen at any time.
-					// Response to host is to send the printer id; from printer this is handled after receiving the id.
+					// Response to host is to send the machine id; from machine this is handled after receiving the id.
 					if (channel == 0) {
 						debug("ID request from host");
 						continue;

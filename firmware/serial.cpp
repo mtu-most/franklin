@@ -199,10 +199,10 @@ void serial() { // {{{
 			continue;
 		}
 		case CMD_ID:
-			// Request printer id.  This is called when the host
-			// connects to the printer.  This may be a reconnect,
+			// Request machine id.  This is called when the host
+			// connects to the machine.  This may be a reconnect,
 			// and can happen at any time.
-			// Response is to send the printer id, and temporarily disable all temperature readings.
+			// Response is to send the machine id, and temporarily disable all temperature readings.
 			arch_claim_serial();
 			send_id(CMD_ID);
 			inc_tail(1);
@@ -409,10 +409,10 @@ void send_packet()
 // }}}
 
 void send_id(uint8_t cmd) { // {{{
-	printerid[0] = cmd;
-	int16_t len = prepare_packet(ID_SIZE + UUID_SIZE + 1, printerid);
+	machineid[0] = cmd;
+	int16_t len = prepare_packet(ID_SIZE + UUID_SIZE + 1, machineid);
 	for (uint8_t i = 0; i < len; ++i)
-		arch_serial_write(printerid[i]);
+		arch_serial_write(machineid[i]);
 } // }}}
 
 void try_send_next() { // Call send_packet if we can. {{{

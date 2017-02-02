@@ -93,7 +93,7 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values. {
 	CMD_STALL1 = 0xe9,      // Packet properly received, but not accepted; don't resend packet unmodified.
 	CMD_STALL2 = 0xda,      // Packet properly received, but not accepted; don't resend packet unmodified.
 	CMD_STALL3 = 0xbb,      // Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_ID = 0xbc,          // Request/reply printer ID code.
+	CMD_ID = 0xbc,          // Request/reply machine ID code.
 	CMD_DEBUG = 0xdd,       // Debug message; a nul-terminated message follows (no checksum; no resend).
 	CMD_STARTUP = 0xee,     // Starting up.
 	CMD_STALLACK = 0x8f     // Clear stall.
@@ -415,13 +415,13 @@ EXTERN uint8_t num_extruders;
 EXTERN uint8_t num_temps;
 EXTERN uint8_t num_gpios;
 EXTERN uint32_t protocol_version;
-EXTERN uint8_t printer_type;		// 0: cartesian, 1: delta.
+EXTERN uint8_t machine_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, stop_pin, probe_pin, spiss_pin;
 EXTERN uint16_t timeout;
 EXTERN int bed_id, fan_id, spindle_id;
 //EXTERN double room_T;	//[°C]
 EXTERN double feedrate;		// Multiplication factor for f values, used at start of move.
-EXTERN double targetx, targety, zoffset;	// Offset for axis 2 of space 0.
+EXTERN double targetx, targety, targetangle, zoffset;	// Offset for axis 2 of space 0.
 // Other variables.
 EXTERN Serial_t *serialdev[2];
 EXTERN unsigned char *command[2];

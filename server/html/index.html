@@ -30,7 +30,7 @@
 	</head>
 	<body id='container' class='nosetup'>
 		<div id='labels'>
-			<div id='new_label' class='tab' onclick="rpc.call('create_printer', [], {}, function(uuid) {select_printer(uuid);})">+</div>
+			<div id='new_label' class='tab' onclick="rpc.call('create_machine', [], {}, function(uuid) {select_machine(uuid);})">+</div>
 			<div id='setupbutton'>
 				<a href='https://github.com/mtu-most/franklin'>Get Franklin Source</a>
 				<label class='expert'>
@@ -39,7 +39,7 @@
 				</label>
 			</div>
 		</div>
-		<div id='printers'>
+		<div id='machines'>
 		</div>
 		<div id='scripts'></div>
 	</body>

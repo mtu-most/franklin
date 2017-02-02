@@ -46,7 +46,7 @@ void packet()
 		// A server is running; start the watchdog.
 		arch_watchdog_enable();
 		for (uint8_t i = 0; i < ID_SIZE; ++i)
-			printerid[1 + i] = command(2 + i);
+			machineid[1 + i] = command(2 + i);
 		// Because this is a new connection: reset active_motors and all ADC pins.
 		active_motors = 0;
 		for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
@@ -78,8 +78,8 @@ void packet()
 	{
 		cmddebug("CMD_SET_UUID");
 		for (uint8_t i = 0; i < UUID_SIZE; ++i) {
-			printerid[1 + ID_SIZE + i] = command(1 + i);
-			EEPROM.write(i, printerid[1 + ID_SIZE + i]);
+			machineid[1 + ID_SIZE + i] = command(1 + i);
+			EEPROM.write(i, machineid[1 + ID_SIZE + i]);
 		}
 		write_ack();
 		return;
