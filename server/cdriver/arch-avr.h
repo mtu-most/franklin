@@ -1112,13 +1112,13 @@ int arch_tick() { // {{{
 void arch_addpos(int s, int m, double diff) { // {{{
 	if (s >= NUM_SPACES)
 		return;
-	int mi = m;
+	int mi = 0;
 	for (uint8_t st = 0; st < s; ++st)
 		mi += spaces[st].num_motors;
 	if (mi + m >= NUM_MOTORS)
 		return;
 	if (!isnan(diff))
-		avr_pos_offset[mi] -= diff;
+		avr_pos_offset[mi + m] -= diff;
 	else
 		abort();
 	//debug("addpos %d %d %f -> %f", s, m, diff, avr_pos_offset[mi]);
