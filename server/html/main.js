@@ -91,7 +91,7 @@ AddEvent('load', function() { // {{{
 			canvas.width = canvas.clientWidth;
 			var scale = canvas.height / (ui.machine.temp_scale_max - ui.machine.temp_scale_min);
 			c.clearRect(0, 0, canvas.width, canvas.height);
-			c.save();
+			c.save(); // Transform coordinates to proper units. {{{
 			c.translate(0, canvas.height);
 			c.scale(scale, -scale);
 			c.translate(0, -ui.machine.temp_scale_min);
@@ -108,9 +108,10 @@ AddEvent('load', function() { // {{{
 				c.moveTo(0, y);
 				c.lineTo(canvas.width / scale, y);
 			}
-			c.save();
+			c.save(); // Set linewidth. {{{
 			c.lineWidth = 1 / scale;
 			var makedash = function(array) {
+				// If browser doesn't support this, use solid lines.
 				if (c.setLineDash !== undefined) {
 					for (var i = 0; i < array.length; ++i)
 						array[i] /= scale;
@@ -120,16 +121,16 @@ AddEvent('load', function() { // {{{
 			makedash([1, 4]);
 			c.strokeStyle = '#444';
 			c.stroke();
-			c.restore();
+			c.restore(); // }}}
 			// Draw grid scale.
-			c.save();
+			c.save(); // Scale units for the grid. {{{
 			c.scale(1 / scale, -1 / scale);
 			for (var y = step * Math.floor(ui.machine.temp_scale_min / step); y < ui.machine.temp_scale_max; y += step) {
 				c.moveTo(0, y);
 				var text = y.toFixed(0);
 				c.fillText(text, (step / 50) * scale, -(y + step / 50) * scale);
 			}
-			c.restore();
+			c.restore(); // }}}
 			// Draw data.
 			var time = new Date();
 			ui.temphistory.push(time);
@@ -178,14 +179,14 @@ AddEvent('load', function() { // {{{
 				c.moveTo(x(ui.temphistory[0]), y(data[0][1]));
 				for (var i = 1; i < data.length; ++i)
 					c.lineTo(x(ui.temphistory[i]), y(data[i][1]));
-				c.save();
+				c.save(); // Use dached lines. {{{
 				makedash([4, 2]);
 				c.stroke();
-				c.restore();
+				c.restore(); // }}}
 				// Draw values of temp targets.
 				var old = null;
 				c.fillStyle = c.strokeStyle;
-				c.save();
+				c.save(); // Scale the target data. {{{
 				c.scale(1 / scale, -1 / scale);
 				for (var i = 1; i < data.length; ++i) {
 					if (data[i][1] != old && (!isNaN(data[i][1]) || !isNaN(old))) {
@@ -201,14 +202,14 @@ AddEvent('load', function() { // {{{
 						c.fillText(text, (x(ui.temphistory[i])) * scale, -(y(pos) + step / 50) * scale);
 					}
 				}
-				c.restore();
+				c.restore(); // }}}
 			}
-			c.restore();
+			c.restore(); // }}}
 			// Update everything else.
 			update_canvas_and_spans(ui);
 		};
 		read(null, 0);
-	}, 400);
+	}, 4000);
 }); // }}}
 
 function make_id(ui, id, extra) { // {{{
@@ -433,6 +434,7 @@ function floatkey(event, element) { // {{{
 	if (event.shiftKey)
 		amount /= 10;
 	if (element.obj[0] !== null && element.obj[0][1] === null) {
+		// Update a series of elements.
 		for (var n = 0; n < element.ui.machine['num_' + type2plural[element.obj[0][0]]]; ++n) {
 			var obj = [[element.obj[0][0], n], element.obj[1], element.obj[2]];
 			var value;
@@ -449,6 +451,7 @@ function floatkey(event, element) { // {{{
 		return;
 	}
 	if (element.obj[0] !== null && typeof element.obj[0][1] != 'number' && element.obj[0][1][1] === null) {
+		// Update a series of axes or motors.
 		for (var n = 0; n < element.ui.machine.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][0]]]; ++n) {
 			var obj = [[element.obj[0][0], [element.obj[0][1][0], n]], element.obj[1]];
 			var value;
@@ -863,6 +866,7 @@ function globals_update(uuid) { // {{{
 	update_float(p, [null, 'max_v']);
 	update_float(p, [null, 'targetx']);
 	update_float(p, [null, 'targety']);
+	update_float(p, [null, 'targetangle']);
 	update_float(p, [null, 'zoffset']);
 	update_checkbox(p, [null, 'store_adc']);
 	update_checkbox(p, [null, 'park_after_print']);
@@ -1238,7 +1242,7 @@ function update_profiles(ui) { // {{{
 	});
 } // }}}
 
-function update_state(ui, state) { // {{{
+function update_state(ui, state, time) { // {{{
 	var c = document.getElementById('container');
 	var pre;
 	c.RemoveClass('idle printing paused');
@@ -1248,14 +1252,17 @@ function update_state(ui, state) { // {{{
 	}
 	else if (state) {
 		c.AddClass('printing');
-		pre = '# ';
+		if (time !== undefined)
+			pre = '(' + time + ') ';
+		else
+			pre = '(printing) ';
 	}
 	else {
 		c.AddClass('paused');
-		pre = '+ ';
+		pre = '(pause) ';
 	}
 	if (selected_machine !== null && selected_machine == ui.machine.uuid)
-		document.title = pre + selected_machine.profile + ' - Franklin';
+		document.title = pre + ui.machine.profile + ' - Franklin';
 } // }}}
 // }}}
 
@@ -1581,8 +1588,11 @@ function update_canvas_and_spans(ui, space) { // {{{
 		var e = get_element(ui, [null, 'printstate']).ClearAll();
 		if (isNaN(state[1]))
 			e.AddText('State: ' + state[0]);
-		else
-			e.AddText('State: ' + state[0] + ' - Time: ' + display_time(state[1]) + '/' + display_time(state[2]) + ' - Remaining: ' + display_time(state[2] - state[1]));
+		else {
+			var remaining = display_time(state[2] - state[1]);
+			e.AddText('State: ' + state[0] + ' - Time: ' + display_time(state[1]) + '/' + display_time(state[2]) + ' - Remaining: ' + remaining);
+			update_state(ui, get_value(ui, [null, 'status']), remaining);
+		}
 		update_float(ui, [null, 'targetangle']);
 		ui.machine.tppos = state[3];
 		ui.tp_context = state[5];
@@ -1654,7 +1664,7 @@ function redraw_canvas(ui) { // {{{
 				}
 			}
 			outline = function(ui, c) {
-				c.save();
+				c.save(); // Rotate the outline. {{{
 				c.rotate(ui.machine.spaces[0].delta_angle);
 				c.beginPath();
 				c.moveTo(intersects[0][0][0], intersects[0][0][1]);
@@ -1670,14 +1680,14 @@ function redraw_canvas(ui) { // {{{
 					var name = ui.machine.spaces[0].motor[a].name;
 					var w = c.measureText(name).width;
 					c.beginPath();
-					c.save();
+					c.save(); // Print axis name. {{{
 					c.translate(origin[a][0] + dy[a] * 10 - w / 2, origin[a][1] - dx[a] * 10);
 					c.rotate(-ui.machine.spaces[0].delta_angle);
 					c.scale(1, -1);
 					c.fillText(name, 0, 0);
-					c.restore();
+					c.restore(); // }}}
 				}
-				c.restore();
+				c.restore(); // }}}
 			};
 			var extra = c.measureText(ui.machine.spaces[0].motor[0].name).width + .02;
 			machinewidth = 2 * (maxx + extra);
@@ -1700,11 +1710,12 @@ function redraw_canvas(ui) { // {{{
 		canvas.style.height = canvas.clientWidth + 'px';
 		canvas.width = canvas.clientWidth;
 		canvas.height = canvas.clientWidth;
+		// }}}
 
 		var b = ui.bbox;
 		var true_pos = [ui.machine.spaces[0].axis[0].current, ui.machine.spaces[0].axis[1].current];
 
-		c.save();
+		c.save(); // Use machine coordinates for canvas. {{{
 		// Clear canvas.
 		c.clearRect(0, 0, canvas.width, canvas.width);
 
@@ -1746,10 +1757,12 @@ function redraw_canvas(ui) { // {{{
 		c.fill();
 		// }}}
 
-		// Draw context. {{{
+		c.save(); // Draw context. {{{
 		var current_pos = null;
 		var center = null;
 		var normal = null;
+		c.translate(ui.machine.targetx, ui.machine.targety);
+		c.rotate(ui.machine.targetangle);
 		for (var i = 0; i < ui.tp_context[1].length; ++i) {
 			r = ui.tp_context[1][i];
 			switch (r[0]) {
@@ -1764,7 +1777,7 @@ function redraw_canvas(ui) { // {{{
 						break;
 					// TODO: implement this.  Workaround: fall through.
 				case 'LINE':
-					if (current_pos === null)
+					if (current_pos === null || isNaN(current_pos[0]) || isNaN(current_pos[1]))
 						break;
 					c.beginPath();
 					c.moveTo(current_pos[0], current_pos[1]);
@@ -1774,7 +1787,7 @@ function redraw_canvas(ui) { // {{{
 			}
 			current_pos = [r[2], r[3], r[4]];
 		}
-		// }}}
+		c.restore(); // }}}
 
 		// Draw current location. {{{
 		c.beginPath();
@@ -1782,11 +1795,11 @@ function redraw_canvas(ui) { // {{{
 		c.moveTo(true_pos[0] + 3, true_pos[1]);
 		c.arc(true_pos[0], true_pos[1], 3, 0, 2 * Math.PI);
 		c.fill();
+		// }}}
 
-		c.save();
+		c.save(); // Draw bounding box and context at target position. {{{
 		c.translate(ui.machine.targetx, ui.machine.targety);
 		c.rotate(ui.machine.targetangle);
-		// }}}
 
 		c.beginPath();
 		if (b[0] != b[1] && b[2] != b[3]) {
@@ -1825,8 +1838,7 @@ function redraw_canvas(ui) { // {{{
 		c.strokeStyle = '#000';
 		c.stroke();
 
-		c.restore();
-		c.restore();
+		c.restore(); // }}}
 	} // }}}
 
 	if (ui.machine.spaces[0].axis.length != 2) { // Draw Z {{{
@@ -2064,10 +2076,6 @@ function keypress(event) { // {{{
 } // }}}
 
 function update_angle(ui, value) { // {{{
-	if (ui.nextangle !== null) {
-		ui.nextangle = value;
-		return;
-	}
 	ui.machine.call('get_axis_pos', [0], {}, function(pos) {
 		pos[0] -= ui.machine.targetx;
 		pos[1] -= ui.machine.targety;
@@ -2075,15 +2083,9 @@ function update_angle(ui, value) { // {{{
 		var posy = Math.cos(ui.machine.targetangle) * pos[1] - Math.sin(ui.machine.targetangle) * pos[0];
 		pos[0] = Math.cos(value) * posx - Math.sin(value) * posy + ui.machine.targetx;
 		pos[1] = Math.cos(value) * posy + Math.sin(value) * posx + ui.machine.targety;
+		set_value(ui, [null, 'targetangle'], value);
 		ui.machine.call('line_cb', [[[pos[0], pos[1]]]], {}, function() {
-			ui.machine.targetangle = value;
-			if (ui.nextangle !== null) {
-				var a = ui.nextangle;
-				ui.nextangle = null;
-				return update_angle(ui, a);
-			}
-			else
-				update_canvas_and_spans(ui);
+			update_canvas_and_spans(ui);
 		});
 	});
 }

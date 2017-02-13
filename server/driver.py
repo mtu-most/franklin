@@ -1338,7 +1338,7 @@ class Machine: # {{{
 		z_low = self.spaces[0].axis[2]['min']
 		self.line([{2: z_low}], f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)
 	# }}}
-	def _do_probe(self, id, x, y, z, angle, phase = 0, good = True): # {{{
+	def _do_probe(self, id, x, y, z, phase = 0, good = True): # {{{
 		#log('probe %d %s' % (phase, good))
 		# Map = [[x0, y0, x1, y1], [nx, ny], [[...], [...], ...]]
 		if good is None:
@@ -1351,7 +1351,7 @@ class Machine: # {{{
 			return
 		self.probing = True
 		if not self.position_valid:
-			self.home(cb = lambda: self._do_probe(id, x, y, z, angle, phase, True), abort = False)[1](None)
+			self.home(cb = lambda: self._do_probe(id, x, y, z, phase, True), abort = False)[1](None)
 			return
 		p = self.probemap
 		if phase == 0:
@@ -1374,14 +1374,14 @@ class Machine: # {{{
 						self._next_job()
 				return
 			# Goto x,y
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, 1, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 1, good)
 			self.movecb.append(self.probe_cb)
 			px = p[0][0] + p[0][2] * x / p[1][0]
 			py = p[0][1] + p[0][3] * y / p[1][1]
 			self.line([[self.targetx + px * self.gcode_angle[1] - py * self.gcode_angle[0], self.targety + py * self.gcode_angle[1] + px * self.gcode_angle[0]]])
 		elif phase == 1:
 			# Probe
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, 2, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 2, good)
 			if self._pin_valid(self.probe_pin):
 				self.movecb.append(self.probe_cb)
 				z_low = self.spaces[0].axis[2]['min']
@@ -1413,7 +1413,7 @@ class Machine: # {{{
 						x = p[1][0]
 						y += 1
 			z += self.probe_safe_dist
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, angle, 0, good)
+			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 0, good)
 			self.movecb.append(self.probe_cb)
 			# Retract
 			self.line([{2: z}])
@@ -1444,7 +1444,6 @@ class Machine: # {{{
 	def _gcode_run(self, src, abort = True): # {{{
 		if self.parking:
 			return
-		angle = math.radians(angle)
 		self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
 		if self.bed_id < len(self.temps):
 			self.btemp = self.temps[self.bed_id].value
@@ -2301,10 +2300,9 @@ class Machine: # {{{
 			return
 		density = [int(area[t + 2] / self.probe_dist) + 1 for t in range(2)]
 		self.probemap = [area, density, [[[] for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
-		angle = math.radians(angle)
 		self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
 		self.probe_speed = speed
-		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), angle)
+		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2), self.targetangle)
 	# }}}
 	def line(self, moves = (), f0 = None, f1 = None, v0 = None, v1 = None, relative = False, probe = False, single = False, force = False): # {{{
 		'''Move the tool in a straight line.
@@ -2991,7 +2989,7 @@ class Machine: # {{{
 			log('unable to unlink %s' % filename)
 	# }}}
 	@delayed
-	def queue_print(self, id, names, angle = 0, probemap = None): # {{{
+	def queue_print(self, id, names, probemap = None): # {{{
 		'''Run one or more new jobs.
 		'''
 		if len(self.jobs_active) > 0 and not self.paused:
@@ -3002,7 +3000,6 @@ class Machine: # {{{
 		self.job_output = ''
 		#log('set active jobs to %s' % names)
 		self.jobs_active = names
-		self.jobs_angle = angle
 		self.probemap = probemap
 		self.job_current = -1	# next_job will make it start at 0.
 		self.job_id = id
@@ -3010,7 +3007,7 @@ class Machine: # {{{
 			self._next_job()
 	# }}}
 	@delayed
-	def queue_probe(self, id, names, angle = 0, speed = 3): # {{{
+	def queue_probe(self, id, names, speed = 3): # {{{
 		'''Run one or more new jobs after probing the affected area.
 		'''
 		if len(self.jobs_active) > 0 and not self.paused:
@@ -3029,9 +3026,9 @@ class Machine: # {{{
 				bbox[2] = bb[1]
 			if not bbox[3] > bb[3]:
 				bbox[3] = bb[3]
-		self.probe((bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]), angle, speed)[1](None)
+		self.probe((bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]), speed)[1](None)
 		# Pass probemap to make sure it doesn't get overwritten.
-		self.queue_print(names, angle, self.probemap)[1](id)
+		self.queue_print(names, self.probemap)[1](id)
 	# }}}
 	def get_print_state(self): # {{{
 		'''Return current print state.

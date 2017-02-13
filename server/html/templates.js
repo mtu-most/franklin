@@ -549,7 +549,6 @@ function Machine(machine) {	// {{{
 	ret.pinranges = [];
 	ret.temphistory = [];
 	ret.targetangle = 0;
-	ret.nextangle = null;
 	ret.disabling = false;
 	ret.temptargets = [];
 	ret.hidetypes = [];
