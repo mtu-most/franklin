@@ -424,19 +424,22 @@ class Connection: # {{{
 	def _call(self, name, a, ka): # {{{
 		wake = (yield)
 		#log('other: %s %s %s' % (name, repr(a), repr(ka)))
-		if not self.machine:
-			log('No active machine')
-			return ('error', 'No active machine')
+		machine = self.machine
+		if not machine or machine not in machines:
+			if len(machines) == 1:
+				machine = tuple(machines.keys())[0]
+			else:
+				log('No active machine')
+				return ('error', 'No active machine')
 		def reply(success, ret):
 			if success:
 				wake(ret)
 			else:
 				log('machine errors')
 				wake(None)
-				#disable(self.machine, 'machine replied with error to wake up')
-		if self.machine in machines:
-			machines[self.machine].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
-			return (yield)
+				#disable(machine, 'machine replied with error to wake up')
+		machines[machine].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
+		return (yield)
 	# }}}
 	def __getattr__ (self, attr): # {{{
 		return lambda *a, **ka: self._call(attr, a, ka)
