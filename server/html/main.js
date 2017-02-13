@@ -209,7 +209,7 @@ AddEvent('load', function() { // {{{
 			update_canvas_and_spans(ui);
 		};
 		read(null, 0);
-	}, 4000);
+	}, 400);
 }); // }}}
 
 function make_id(ui, id, extra) { // {{{
