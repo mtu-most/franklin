@@ -34,7 +34,7 @@ function Text(ui, title, obj, className) { // {{{
 	input.type = 'text';
 	input.AddEvent('keydown', function(event) {
 		if (event.keyCode == 13) {
-			set_value(ui.machine, obj, this.value);
+			set_value(ui, obj, this.value);
 			event.preventDefault();
 		}
 	});
@@ -49,9 +49,9 @@ function Name(ui, type, num) { // {{{
 	ret.AddEvent('keydown', function(event) {
 		if (event.keyCode == 13) {
 			if (typeof num != 'number' && num.length == 0)
-				set_value(ui.machine, [null, type + '_name'], this.value);
+				set_value(ui, [null, type + '_name'], this.value);
 			else
-				set_value(ui.machine, [[type, num], 'name'], this.value);
+				set_value(ui, [[type, num], 'name'], this.value);
 			event.preventDefault();
 		}
 	});
@@ -138,7 +138,7 @@ function Str(ui, obj) { // {{{
 	input.type = 'text';
 	input.AddEvent('keydown', function(event) {
 		if (event.keyCode == 13) {
-			set_value(ret.machine, ret.obj, input.value);
+			set_value(ui, ret.obj, input.value);
 			event.preventDefault();
 		}
 	});
@@ -147,7 +147,7 @@ function Str(ui, obj) { // {{{
 	e.type = 'button';
 	e.AddText('Set');
 	e.AddEvent('click', function(event) {
-		set_value(ret.machine, ret.obj, input.value);
+		set_value(ui, ret.obj, input.value);
 		return false;
 	});
 	e = ret.AddElement('span');
@@ -375,7 +375,7 @@ function Top(ui) { // {{{
 	var b = e.AddElement('button', 'benjamin').AddText('Play').AddEvent('click', function() { audio_play(ui); });
 	b.type = 'button';
 	e.AddElement('br');
-	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_print(ui); }).AddText('Print selected');
+	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_run(ui); }).AddText('Run selected job');
 	b.type = 'button';
 	var l = e.AddElement('label');
 	b = l.AddElement('input', 'jobbutton');
@@ -461,6 +461,11 @@ function Toolpath(ui) { // {{{
 			});
 		});
 	});
+	var label = ret.AddElement('label');
+	b = label.AddElement('input');
+	b.type = 'checkbox';
+	b.id = make_id(ui, [null, 'start_paused']);
+	label.AddText('Start Jobs as Paused');
 	return ret;
 }
 // }}}
@@ -627,7 +632,7 @@ function Machine(machine) {	// {{{
 	e = setup.AddElement('div').AddText('Timeout:');
 	e.Add(Float(ret, [null, 'timeout'], 0, 60));
 	e.AddText(' min');
-	e = setup.AddElement('div').AddText('After Print:');
+	e = setup.AddElement('div').AddText('After Job Completion:');
 	var l = e.AddElement('label');
 	l.Add(Checkbox(ret, [null, 'park_after_print']));
 	l.AddText('Park');

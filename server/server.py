@@ -693,7 +693,7 @@ def print_done(port, completed, reason): # {{{
 			log('Callback for print completion done; return: %s' % repr(p.wait()))
 			return False
 		def process_error():
-			log('Print completion process returned error.')
+			log('Job completion process returned error.')
 			return False
 		websocketd.add_read(p.stdout, process_done, process_error)
 # }}}

@@ -1,4 +1,4 @@
-franklin(8) -- host software for RepRap style 3-D printers
+franklin(8) -- host software for RepRap style CNC machines
 ==========================================================
 <!--
 franklin.8.ronn - manual page for franklin
@@ -24,37 +24,45 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 `franklin` [--options]
 
 ## DESCRIPTION
-This program connects to 3-D printers that are attached to serial ports
-(usually over USB) and provides a web interface and a python interface to
-control those printers.
+This program connects to 3-D printers or other CNC robots that are attached to
+serial ports (usually over USB) and provides a web interface and a python
+interface to control those machines.
 
 ## OPTIONS
  * `-h`, `--help`:
 	Show usage summary, including all options and their defaults.
  * `--tls`=[cert:key]:
- 	Specify certificate and key to use for the website.  It is recommended to use encryption, especially when restricting access.  This option is required.  To use unencrypted communication, set it to the empty string.
- * `--printer=<default>:
- 	Specify the default printer.  If not specified, an arbitrary connected will be used.  When only one printer is connected, there is no reason to specify this option.
+	Specify certificate and key files to use for the website.  It is recommended to use encryption, especially when restricting access.  The default is to not use encryption however, because it is often more useful to provide the service through a virtual proxy and let the web server, such as Apache, handle the encryption.
+ * `--machine=<default>:
+	Specify the default machine.  If not specified and there is only one machine defined, that will be used.  When only one machine is connected, there is no reason to specify this option.
  * `--done=command`:
 	Shell command to execute whenever a print it done.  In this command, the special codes `[[STATE]]` and `[[REASON]]` are replaced with the state (completed or aborted) and reason for ending the print.
  * --autodetect=False:
-	By default, the server will try to detect a printer on any newly connected device which provides a serial port.  Setting this option to False will prevent this.
- * `--login`=[name:password]
-	Set the credentials for accessing the website.  These are sent in plain text, so if you use this, you really should use the tls option to set up an encrypted link as well.
- * `--passwordfile`=[file]
-	Read names and encrypted passwords from a file.  The file format is the same as for /etc/shadow, so it is possible to use that file directly.  There is no permission system; every logged in user is allowed to do everything the server supports.  Like with login, you should use --tls when using this option.
+	By default, the server will try to detect a machine on any newly connected device which provides a serial port.  Setting this option to False will prevent this.
+ * `--user`=[name:password]
+	Set the credentials for accessing the website.  If not set, no credentials are required.  These are sent in plain text, so if you use this, you really should use the tls option to set up an encrypted link as well.
+ * `--expert`=[name:password]
+	Set the credentials for accessing the website in expert mode.  If not set, the value for user is used.
+ * `--admin`=[name:password]
+	Set the credentials for accessing the website in admin mode.  If not set, the value for expert is used.
+ * `--address`=<address>:
+	Network address to listen on for browser requests.  The default is the empty string, which will make it listen to everything.  Set this to 0.0.0.0 to listen only for IPv4 request; this can be required on a Raspberry Pi, which has broken IPv6 support.
  * `--port`=<port>:
 	Network port to listen on for browser requests.  The default is 8000.
  * `--blacklist`=<regular expression>:
-	Any serial port device that matches this expression is ignored.
- * `--avrdude`=<path>:
-	Location of the avrdude executable for flashing firmware.
- * `--audiodir`=<path>:
- 	Location to store processed audio files.
+	Any serial port device that matches this expression is ignored.  The default is sensible; don't use this option unless you want to replace it.  Use add-blacklist instead.
+ * `--add-blacklist`=<regular expression>:
+	The actual blacklist is the union of blacklist and add-blacklist.  The default of this option is empty, so it can be set to the ports you want to blacklist without clearing the default list.
+ * `--allow-system`=<regular expression>:
+	System commands that are allowed to be run through `SYSTEM:` comments in G-Code.  The default is ^$, meaning nothing is allowed.
+ * `--log`=<log file>:
+	Log output to this file instead of standard error.  This also enables some debugging output.
  * `--saveconfig`[=<path>]:
- 	Save the provided commandline arguments and (if no path is given) use them as defaults in the future.
+	Save the provided commandline arguments and (if no path is given) use them as defaults in the future.
  * `--configfile`=<path>:
 	Use a previously saved file of commandline arguments.
+ * `--system`:
+	Ignore user directories, use only system paths.
 
 ## AUTHOR
-Printer3d is written by `Bas Wijnen <wijnen@debian.org>`
+Franklin is written by `Bas Wijnen <wijnen@debian.org>`

@@ -821,7 +821,7 @@ class Machine: # {{{
 					self._finish_done()
 				else:
 					#log('job part done; moving on')
-					self._next_job()
+					self._next_job(False)
 			else:
 				#log('job aborted')
 				if self.job_id is not None:
@@ -1368,10 +1368,10 @@ class Machine: # {{{
 					if len(self.jobs_active) == 1:
 						def cb():
 							self.request_confirmation("Probing done; prepare for job.")[1](False)
-							self._next_job()
+							self._next_job(False)
 						self.park(cb = cb, abort = False)[1](None)
 					else:
-						self._next_job()
+						self._next_job(False)
 				return
 			# Goto x,y
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 1, good)
@@ -1418,7 +1418,7 @@ class Machine: # {{{
 			# Retract
 			self.line([{2: z}])
 	# }}}
-	def _next_job(self): # {{{
+	def _next_job(self, paused): # {{{
 		# Set all extruders to 0.
 		#log('next job list: %s, current: %d' % (repr(self.jobs_active), self.job_current))
 		for i, e in enumerate(self.spaces[1].axis):
@@ -1434,14 +1434,14 @@ class Machine: # {{{
 				return
 			if len(self.jobs_active) > 1:
 				self.request_confirmation("Prepare for job '%s'." % self.jobs_active[self.job_current])[1](False)
-			self._gcode_run(self.jobs_active[self.job_current], abort = False)
+			self._gcode_run(self.jobs_active[self.job_current], abort = False, paused = paused)
 		if not self.position_valid or len(self.jobs_active) > 1:
 			self.park(cb = cb, abort = False)[1](None)
 		else:
 			cb()
 		self.gcode_id = None
 	# }}}
-	def _gcode_run(self, src, abort = True): # {{{
+	def _gcode_run(self, src, abort = True, paused = False): # {{{
 		if self.parking:
 			return
 		self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
@@ -1456,7 +1456,7 @@ class Machine: # {{{
 		# Disable all alarms.
 		for i in range(len(self.temps)):
 			self.waittemp(i, None, None)
-		self.paused = False
+		self.paused = paused
 		self._globals_update()
 		self.sleep(False)
 		if len(self.spaces) > 1:
@@ -1497,12 +1497,12 @@ class Machine: # {{{
 				for y in range(self.probemap[1][1] + 1):
 					for x in range(self.probemap[1][0] + 1):
 						probemap_file.write(struct.pack('@d', self.probemap[2][y][x]))
-			self._send_packet(struct.pack('=BBddBB', protocol.command['RUN_FILE'], 1 if self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1], 0xff, len(encoded_probemap_filename)) + encoded_filename + encoded_probemap_filename)
+			self._send_packet(struct.pack('=BBddBB', protocol.command['RUN_FILE'], 1 if not paused and self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1], 0xff, len(encoded_probemap_filename)) + encoded_filename + encoded_probemap_filename)
 		else:
 			# Let cdriver do the work.
 			self.gcode_file = True
 			self._globals_update()
-			self._send_packet(struct.pack('=BBddBB', protocol.command['RUN_FILE'], 1 if self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1], 0xff, 0) + filename.encode('utf8'))
+			self._send_packet(struct.pack('=BBddBB', protocol.command['RUN_FILE'], 1 if not paused and self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1], 0xff, 0) + filename.encode('utf8'))
 	# }}}
 	def _gcode_parse(self, src, name): # {{{
 		assert len(self.spaces) > 0
@@ -2875,7 +2875,7 @@ class Machine: # {{{
 		return ', '.join('%s (%s)' % (msg, ln) for ln, msg in self.expert_import_settings(open(filename).read(), name))
 	# }}}
 	@delayed
-	def gcode_run(self, id, code, probemap = None): # {{{
+	def gcode_run(self, id, code, probemap = None, paused = False): # {{{
 		'''Run a string of g-code.
 		'''
 		self.probemap = probemap
@@ -2884,7 +2884,7 @@ class Machine: # {{{
 			f.seek(0)
 			self.gcode_id = id
 			# Break this in two, otherwise tail recursion may destroy f before call is done?
-			ret = self._gcode_run(f.filename)
+			ret = self._gcode_run(f.filename, paused = paused)
 			return ret
 	# }}}
 	@delayed
@@ -2989,7 +2989,7 @@ class Machine: # {{{
 			log('unable to unlink %s' % filename)
 	# }}}
 	@delayed
-	def queue_print(self, id, names, probemap = None): # {{{
+	def queue_run(self, id, names, probemap = None, paused = False): # {{{
 		'''Run one or more new jobs.
 		'''
 		if len(self.jobs_active) > 0 and not self.paused:
@@ -3004,7 +3004,7 @@ class Machine: # {{{
 		self.job_current = -1	# next_job will make it start at 0.
 		self.job_id = id
 		if not self.probing:
-			self._next_job()
+			self._next_job(paused)
 	# }}}
 	@delayed
 	def queue_probe(self, id, names, speed = 3): # {{{
@@ -3028,7 +3028,7 @@ class Machine: # {{{
 				bbox[3] = bb[3]
 		self.probe((bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]), speed)[1](None)
 		# Pass probemap to make sure it doesn't get overwritten.
-		self.queue_print(names, self.probemap)[1](id)
+		self.queue_run(names, self.probemap)[1](id)
 	# }}}
 	def get_print_state(self): # {{{
 		'''Return current print state.
@@ -3095,7 +3095,8 @@ class Machine: # {{{
 		assert self.gcode_map is not None
 		assert 0 <= position < self.gcode_num_records
 		assert self.paused
-		self.queue_info[1] = []	# Don't restore extruder position on resume.
+		if self.queue_info is not None:
+			self.queue_info[1] = []	# Don't restore extruder position on resume.
 		self._send_packet(struct.pack('=Bd', protocol.command['TP_SETPOS'], position))
 	# }}}
 	def tp_get_context(self, num = None, position = None): # {{{

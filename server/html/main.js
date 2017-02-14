@@ -583,13 +583,13 @@ function get_queue(ui) { // {{{
 }
 // }}}
 
-function queue_print(ui) { // {{{
+function queue_run(ui) { // {{{
 	var action;
 	if (get_element(ui, [null, 'probebox']).checked)
 		action = 'queue_probe';
 	else
-		action = 'queue_print';
-	ui.machine.call(action, [get_queue(ui)], {});
+		action = 'queue_run';
+	ui.machine.call(action, [get_queue(ui)], {paused: get_element(ui, [null, 'start_paused']).checked});
 }
 // }}}
 
@@ -1504,7 +1504,6 @@ function set_pin(ui, id) { // {{{
 		inverted = get_element(ui, id, 'inverted').checked;
 	else
 		inverted = false;
-	console.info(id, Number(e.selectedOptions[0].value) + 0x100 * valid + 0x200 * inverted);
 	set_value(ui, id, Number(e.selectedOptions[0].value) + 0x100 * valid + 0x200 * inverted);
 } // }}}
 

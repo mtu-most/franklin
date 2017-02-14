@@ -426,7 +426,7 @@ void packet()
 			send_host(CMD_POS, which, t, NAN);
 			return;
 		}
-		if (isnan(spaces[which].axis[t]->settings.source)) {
+		if (isnan(spaces[which].axis[t]->settings.current)) {
 			//debug("resetting space %d for getpos; %f", which, spaces[0].axis[0]->settings.current);
 			space_types[spaces[which].type].reset_pos(&spaces[which]);
 			for (int a = 0; a < spaces[which].num_axes; ++a)
