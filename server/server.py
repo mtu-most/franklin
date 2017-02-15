@@ -107,7 +107,6 @@ import protocol
 config = fhs.init(packagename = 'franklin', config = {
 		'port': '8000',
 		'address': '',
-		'machine': '',
 		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(GS)?\\d*))$',
 		'add-blacklist': '$',
 		'autodetect': True,
@@ -126,7 +125,6 @@ config = fhs.init(packagename = 'franklin', config = {
 
 # Global variables. {{{
 httpd = None
-default_machine = (None, None)
 ports = {}
 autodetect = config['autodetect']
 tls = config['tls'].lower() == 'true'
@@ -211,24 +209,6 @@ class Server(websocketd.RPChttpd): # {{{
 		return True
 # }}}
 
-'''
-class wrap:
-	def __init__(self, obj):
-		self.obj = obj
-	def __getattr__(self, x):
-		ret = getattr(self.obj, x)
-		if callable(ret):
-			def l(*a, **ka):
-				log('calling {} using {} and {}'.format(x, a, ka))
-				result = ret(*a, **ka)
-				log('result of call to {} is {}'.format(x, result))
-				return result
-			return l
-		else:
-			log('getting {} = {}'.format(x, ret))
-			return ret
-'''
-
 class Connection: # {{{
 	'''Object to handle a single network connection.
 	This class is used with the WebSocket RPC server.  Functions in it can
@@ -246,7 +226,6 @@ class Connection: # {{{
 		socket.monitor = False
 		socket.connection = self
 		self.socket = socket
-		self.machine = default_machine if default_machine in machines else None
 		self.id = Connection.nextid
 		Connection.nextid += 1
 		Connection.connections[self.id] = self
@@ -294,12 +273,8 @@ class Connection: # {{{
 	def get_ports(self): # {{{
 		return tuple(ports.keys())
 	# }}}
-	def set_default_machine(self, name = None, port = None): # {{{
-		global default_machine
-		default_machine = (name, port)
-	# }}}
-	def get_default_machine(self): # {{{
-		return default_machine
+	def get_machines(self): # {{{
+		return tuple(machines.keys())
 	# }}}
 	def disable(self, machine, reason = 'disabled by user'): # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
@@ -388,15 +363,8 @@ class Connection: # {{{
 	def upload_options(self, port): # {{{
 		return upload_options(port)
 	# }}}
-	def set_machine(self, machine): # {{{
-		self.machine = machine if machine in machines else None
-	# }}}
-	def get_machine(self): # {{{
-		return self.machine
-	# }}}
 	def create_machine(self): # {{{
-		machine = create_machine()
-		self.machine = machine
+		create_machine()
 	# }}}
 	def set_monitor(self, value): # {{{
 		if value:
@@ -424,19 +392,26 @@ class Connection: # {{{
 	def _call(self, name, a, ka): # {{{
 		wake = (yield)
 		#log('other: %s %s %s' % (name, repr(a), repr(ka)))
-		machine = self.machine
-		if not machine or machine not in machines:
+		if 'machine' in ka:
+			machine = ka.pop('machine')
+		else:
+			machine = None
+		if machine not in machines:
 			if len(machines) == 1:
 				machine = tuple(machines.keys())[0]
 			else:
-				log('No active machine')
-				return ('error', 'No active machine')
+				options = [m for m in machines if machines[m].port is not None]
+				if len(options) == 1:
+					machine = options[0]
+				else:
+					log('No active machine')
+					return ('error', 'No active machine')
 		def reply(success, ret):
 			if success:
 				wake(ret)
 			else:
 				log('machine errors')
-				wake(None)
+				wake(('error', ret))
 				#disable(machine, 'machine replied with error to wake up')
 		machines[machine].call(name, (self.socket.data['role'],) + tuple(a), ka, reply)
 		return (yield)
@@ -912,7 +887,6 @@ except OSError:
 # }}}
 
 # Initialization. {{{
-default_machine = config['machine']
 if config['local'] != '':
 	add_port('-')
 

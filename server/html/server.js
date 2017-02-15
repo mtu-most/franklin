@@ -20,7 +20,6 @@
 // {{{ Global variables.
 var eval_code = ['[!(', ')!]'];
 var ref_code = ['[$(', ')$]'];
-var _active_machine;
 var _update_handle;
 var _updater;
 var _update_running = false;
@@ -185,19 +184,13 @@ function _setup_updater() {
 				};
 				machines[machine].call = function(name, a, ka, reply) {
 					//console.info('calling', name);
-					var uuid = this.uuid;
-					if (_active_machine != uuid) {
-						rpc.call('set_machine', [uuid], {}, function() { _active_machine = uuid; rpc.call(name, a, ka, reply); });
-					}
-					else
-						rpc.call(name, a, ka, reply);
+					ka.machine = this.uuid;
+					rpc.call(name, a, ka, reply);
 				};
 				trigger_update(machine, 'new_machine');
 			}
 		},
 		del_machine: function(machine) {
-			if (_active_machine == machine)
-				_active_machine = null;
 			trigger_update(machine, 'del_machine');
 			delete machines[machine];
 		},
