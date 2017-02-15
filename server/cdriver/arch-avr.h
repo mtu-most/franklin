@@ -1009,12 +1009,12 @@ void arch_connect(char const *run_id, char const *port) { // {{{
 } // }}}
 
 void arch_request_temp(int which) { // {{{
-	if (which >= 0 && which < num_temps && temps[which].thermistor_pin.pin >= NUM_DIGITAL_PINS && temps[which].thermistor_pin.pin < NUM_PINS) {
+	if (avr_connected && which >= 0 && which < num_temps && temps[which].thermistor_pin.pin >= NUM_DIGITAL_PINS && temps[which].thermistor_pin.pin < NUM_PINS) {
 		requested_temp = which;
 		return;
 	}
 	requested_temp = ~0;
-	send_host(CMD_TEMP);
+	send_host(CMD_TEMP, 0, 0, NAN);
 } // }}}
 
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit_l, int heater_limit_h, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit_l, int fan_limit_h, double hold_time) { // {{{
@@ -1084,6 +1084,10 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bo
 void arch_disconnect() { // {{{
 	avr_connected = false;
 	avr_serial.end();
+	if (requested_temp != uint8_t(~0)) {
+		requested_temp = ~0;
+		send_host(CMD_TEMP, 0, 0, NAN);
+	}
 } // }}}
 
 int arch_fds() { // {{{

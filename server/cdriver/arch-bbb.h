@@ -472,6 +472,7 @@ void arch_request_temp(int which) { // {{{
 		return;
 	}
 	requested_temp = ~0;
+	send_host(CMD_TEMP, 0, 0, NAN);
 } // }}}
 
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit_l, int heater_limit_h, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit_l, int fan_limit_h, double hold_time) { // {{{

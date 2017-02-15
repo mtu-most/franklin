@@ -154,6 +154,9 @@ void connect_end() {
 			sp.motor[m]->history = setup_motor_history();
 		}
 	}
+	// Restore all temps to their current values.
+	for (int t = 0; t < num_temps; ++t)
+		settemp(t, temps[t].target[0]);
 	// Update current position.
 	first_fragment = current_fragment;
 	//debug("not blocking host");

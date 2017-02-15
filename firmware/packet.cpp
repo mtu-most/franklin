@@ -298,7 +298,7 @@ void packet()
 			adc_phase = PREPARING;
 			adc_current = a;
 			adc_next = a;
-			adc_ready(a);
+			adc_start(a);
 		}
 		write_ack();
 		return;
