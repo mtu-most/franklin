@@ -2494,8 +2494,9 @@ class Machine: # {{{
 			if was_paused:
 				# Go back to pausing position.
 				# First reset all axes that don't have a limit switch.
-				self._reset_extruders(self.queue_info[1])
-				self.line(self.queue_info[1])
+				if self.queue_info is not None:
+					self._reset_extruders(self.queue_info[1])
+					self.line(self.queue_info[1])
 				# TODO: adjust extrusion of current segment to shorter path length.
 				#log('resuming')
 				self.resuming = True
