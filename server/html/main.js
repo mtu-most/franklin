@@ -585,11 +585,15 @@ function get_queue(ui) { // {{{
 
 function queue_run(ui) { // {{{
 	var action;
-	if (get_element(ui, [null, 'probebox']).checked)
+	if (get_element(ui, [null, 'probebox']).checked) {
 		action = 'queue_probe';
-	else
+		kwargs = {};	// Probe jobs always pause after probing.
+	}
+	else {
 		action = 'queue_run';
-	ui.machine.call(action, [get_queue(ui)], {paused: get_element(ui, [null, 'start_paused']).checked});
+		kwargs = {paused: get_element(ui, [null, 'start_paused']).checked};
+	}
+	ui.machine.call(action, [get_queue(ui)], kwargs);
 }
 // }}}
 
