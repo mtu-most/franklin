@@ -163,7 +163,7 @@ class Server(websocketd.RPChttpd): # {{{
 				self.reply(connection, 404)
 			else:
 				def export_reply(success, message):
-					self.reply(connection, 200, message.encode('utf-8'), 'text/plain;charset=utf8')
+					self.reply(connection, 200, message.encode('utf-8'), 'text/plain;charset=utf-8')
 					connection.socket.close()
 				machines[machine].call('export_settings', (connection.data['role'],), {}, export_reply)
 				return True
@@ -173,8 +173,8 @@ class Server(websocketd.RPChttpd): # {{{
 				message = open(filename, 'rb').read()
 				os.unlink(filename)
 			else:
-				message = ''
-			self.reply(connection, 200, message, 'text/plain;charset=utf8')
+				message = b''
+			self.reply(connection, 200, message, 'text/plain;charset=utf-8')
 		elif any(connection.address.path.endswith('/' + x) for x in ('benjamin', 'admin', 'expert', 'user')):
 			websocketd.RPChttpd.page(self, connection, path = connection.address.path[:connection.address.path.rfind('/') + 1])
 		else:
@@ -193,7 +193,7 @@ class Server(websocketd.RPChttpd): # {{{
 			return False
 		post = connection.post[1].pop('file')
 		def cb(success, ret):
-			self.reply(connection, 200 if success else 400, b'' if ret is None else ret.encode('utf8'), 'text/plain;charset=utf8')
+			self.reply(connection, 200 if success else 400, b'' if ret is None else ret.encode('utf-8'), 'text/plain;charset=utf-8')
 			os.unlink(post[0])
 			connection.socket.close()
 		if action == 'queue_add':
