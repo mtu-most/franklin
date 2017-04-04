@@ -82,7 +82,14 @@ ifeq (${TARGET}, atmega2560)
 BOARD_TAG = mega2560
 CPPFLAGS += -DNUM_MOTORS=7 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
 else
+ifeq (${TARGET}, atmega1281)
+BOARD_TAG = 1281
+ARDUINO_VAR_PATH = /usr/share/arduino/hardware/MegaCore/variants
+BOARDS_TXT = /usr/share/arduino/hardware/MegaCore/boards.txt
+CPPFLAGS += -DNUM_MOTORS=7 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
+else
 $(error Invalid TARGET)
+endif
 endif
 endif
 endif
