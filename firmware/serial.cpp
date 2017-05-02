@@ -423,21 +423,6 @@ void try_send_next() { // Call send_packet if we can. {{{
 		return;
 	} // }}}
 	while (out_busy < 3) {
-		if (pin_events > 0) { // {{{
-			senddebug("pin");
-			for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
-				if (!pin[p].event())
-					continue;
-				pending_packet[ff_out][0] = CMD_PINCHANGE;
-				pending_packet[ff_out][1] = p;
-				pending_packet[ff_out][2] = pin[p].state & CTRL_VALUE ? 1 : 0;
-				pin[p].clear_event();
-				prepare_packet(3);
-				send_packet();
-				break;
-			}
-			continue;
-		} // }}}
 		if (timeout) { // {{{
 			senddebug("timeout");
 			pending_packet[ff_out][0] = CMD_TIMEOUT;
@@ -538,6 +523,21 @@ void try_send_next() { // Call send_packet if we can. {{{
 					send_packet();
 					break;
 				}
+			}
+			continue;
+		} // }}}
+		if (pin_events > 0) { // {{{
+			senddebug("pin");
+			for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
+				if (!pin[p].event())
+					continue;
+				pending_packet[ff_out][0] = CMD_PINCHANGE;
+				pending_packet[ff_out][1] = p;
+				pending_packet[ff_out][2] = pin[p].state & CTRL_VALUE ? 1 : 0;
+				pin[p].clear_event();
+				prepare_packet(3);
+				send_packet();
+				break;
 			}
 			continue;
 		} // }}}

@@ -155,7 +155,7 @@ bool serial(uint8_t channel) { // {{{
 					//debug("Silence, but handle data first");
 				}
 				else {
-					debug("Too much silence; request packet to be sure");
+					//debug("Too much silence; request packet to be sure");
 					write_nack();
 					resend(out_busy);
 					last_micros = utm;

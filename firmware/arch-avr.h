@@ -27,7 +27,7 @@
 #ifdef FAST_ISR
 #define TIME_PER_ISR 75
 #ifndef STEPS_DELAY // {{{
-#define STEPS_DELAY 0	// Extra delay for steps, in units of 6 clock pulses.
+#define STEPS_DELAY 5	// Extra delay for steps, in units of 6 clock pulses.
 #endif // }}}
 #ifndef ADD_DIR_DELAY // {{{
 #if 1
@@ -119,6 +119,7 @@ static inline void arch_enable_isr() { // {{{
 } // }}}
 
 static inline void arch_set_speed(uint16_t count);
+static inline void arch_serial_write(uint8_t data);
 
 // Everything before this line is used at the start of firmware.h; everything after it at the end.
 #else
@@ -145,23 +146,18 @@ EXTERN volatile int8_t avr_last_serial;
 EXTERN int8_t avr_which_serial;
 extern volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6];
 #ifdef DEFINE_VARIABLES
+#define ONEPORT(p) {&UDR ## p, &UCSR ## p ## A, &UCSR ## p ## B, &UCSR ## p ## C, &UBRR ## p ## H, &UBRR ## p ## L}
 volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6] = {
 #ifdef UDR3
-	{&UDR0, &UCSR0A, &UCSR0B, &UCSR0C, &UBRR0H, &UBRR0L},
-	{&UDR1, &UCSR1A, &UCSR1B, &UCSR1C, &UBRR1H, &UBRR1L},
-	{&UDR2, &UCSR2A, &UCSR2B, &UCSR2C, &UBRR2H, &UBRR2L},
-	{&UDR3, &UCSR3A, &UCSR3B, &UCSR3C, &UBRR3H, &UBRR3L}
+	ONEPORT(0), ONEPORT(1), ONEPORT(2), ONEPORT(3)
 #else
 #ifdef UDR2
-	{&UDR0, &UCSR0A, &UCSR0B, &UCSR0C, &UBRR0H, &UBRR0L},
-	{&UDR1, &UCSR1A, &UCSR1B, &UCSR1C, &UBRR1H, &UBRR1L},
-	{&UDR2, &UCSR2A, &UCSR2B, &UCSR2C, &UBRR2H, &UBRR2L}
+	ONEPORT(0), ONEPORT(1), ONEPORT(2)
 #else
 #ifdef UDR1
-	{&UDR0, &UCSR0A, &UCSR0B, &UCSR0C, &UBRR0H, &UBRR0L},
-	{&UDR1, &UCSR1A, &UCSR1B, &UCSR1C, &UBRR1H, &UBRR1L}
+	ONEPORT(0), ONEPORT(1)
 #else
-	{&UDR0, &UCSR0A, &UCSR0B, &UCSR0C, &UBRR0H, &UBRR0L}
+	ONEPORT(0)
 #endif
 #endif
 #endif

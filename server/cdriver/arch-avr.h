@@ -354,7 +354,7 @@ bool hwpacket(int len) { // {{{
 	case HWC_LIMIT: // {{{
 	{
 		uint8_t which = command[1][2];
-		if (which >= NUM_MOTORS) {
+		if (which > NUM_MOTORS) {
 			if (initialized) {
 				debug("cdriver: Invalid limit for avr motor %d", which);
 				abort();

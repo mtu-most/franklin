@@ -1364,6 +1364,7 @@ class Machine: # {{{
 					for y, c in enumerate(p[2]):
 						for x, o in enumerate(c):
 							log('map %f %f %f' % (p[0][0] + p[0][2] * x / p[1][0], p[0][1] + p[0][3] * y / p[1][1], o))
+						sys.stderr.write('\n')
 					#log('result: %s' % repr(self.probemap))
 					if len(self.jobs_active) == 1:
 						def cb():
@@ -1445,7 +1446,7 @@ class Machine: # {{{
 		if self.parking:
 			return
 		self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
-		if self.bed_id < len(self.temps):
+		if 0 <= self.bed_id < len(self.temps):
 			self.btemp = self.temps[self.bed_id].value
 		else:
 			self.btemp = float('nan')
@@ -2584,7 +2585,7 @@ class Machine: # {{{
 				self._send(id, 'error', 'aborted')
 			return
 		#log('parking with cb %s' % repr(cb))
-		if abort:
+		if abort and self.queue_info is None:
 			self._print_done(False, 'aborted by parking')
 		self.parking = True
 		if not self.position_valid:
