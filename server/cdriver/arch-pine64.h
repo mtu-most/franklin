@@ -48,8 +48,7 @@
 #define NUM_PINS (NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS)
 #define ADCBITS 12
 #define FRAGMENTS_PER_BUFFER 8
-#define PINE_FRAGMENT_MASK (FRAGMENTS_PER_BUFFER - 1)
-#define SAMPLES_PER_FRAGMENT 256
+#define SAMPLES_PER_FRAGMENT 256	// This value is used implicitly as the overflow value of uint8_t.
 
 #define ARCH_MOTOR int pine_id;
 #define ARCH_SPACE int pine_id, pine_m0;
@@ -420,6 +419,16 @@ static void pine_realtime() { // {{{
 		pine_set_pins(pine_shared->base | pine_shared->dirs);
 		while (read(fd, &num_exp, 8) != 8) {}
 		pine_set_pins(pine_shared->base);
+		// Increment pointer position.
+		pine_shared->current_sample += 1;
+		if (pine_shared->current_sample == 0) {
+			pine_shared->current_sample = 0;
+			pine_shared->current_fragment = (pine_shared->current_fragment + 1) % FRAGMENTS_PER_BUFFER;
+			if (pine_shared->current_fragment == pine_shared->next_fragment) {
+				pine_shared->state = 1;
+				continue;
+			}
+		}
 		// Update state.
 		if (pine_shared->state == 2)
 			pine_shared->state = 0;
@@ -434,9 +443,13 @@ void arch_setup_start() { // {{{
 	protocol_version = PROTOCOL_VERSION;
 	// Prepare gpios.
 	int fd = open("/dev/mem", O_RDWR);
+	if (fd < 0) {
+		fprintf(stderr, "unable to open /dev/mem: %s\n", strerror(errno));
+		abort();
+	}
 	pine_gpiomem = reinterpret_cast <uint32_t *>(mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x01C20000));
 	if (pine_gpiomem == MAP_FAILED) {
-		fprintf(stderr, "mmap failed; %s\n", strerror(errno));
+		fprintf(stderr, "mmap on /dev/mem failed: %s\n", strerror(errno));
 		abort();
 	}
 	pine_piomem = pine_gpiomem + (0x800 >> 2);
@@ -451,6 +464,14 @@ void arch_setup_start() { // {{{
 	}
 	// Allocate shared memory.
 	pine_shared = reinterpret_cast <PineShared *> (mmap(NULL, sizeof(PineShared), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0));
+	pine_shared->base = 0;
+	pine_shared->dirs = 0;
+	pine_shared->current_sample = 0;
+	pine_shared->current_fragment = 0;
+	pine_shared->next_fragment = 0;
+	pine_shared->state = 1;
+	for (int i = 0; i < NUM_DIGITAL_PINS; ++i)
+		pine_shared->mode[i] = 4;
 	pid_t pid = fork();
 	if (pid == -1) {
 		std::cerr << "Fork failed; cannot continue: " << strerror(errno) << std::endl;
@@ -460,9 +481,10 @@ void arch_setup_start() { // {{{
 		// Child.
 		// Move process to first processor core.
 		cpu_set_t *mask = CPU_ALLOC(1);
-		CPU_ZERO(mask);
+		size_t size = CPU_ALLOC_SIZE(1);
+		CPU_ZERO_S(size, mask);
 		CPU_SET(0, mask);
-		sched_setaffinity(0, CPU_ALLOC_SIZE(1), mask);
+		sched_setaffinity(0, size, mask);
 		CPU_FREE(mask);
 		// Run the realtime handling function.  This does not return.
 		pine_realtime();
@@ -650,7 +672,8 @@ int arch_tick() { // {{{
 			debug("interrupt on pin %d", i);
 			lseek(pollfds[BASE_FDS + i].fd, 0, SEEK_SET);
 			char buffer[10];
-			read(pollfds[BASE_FDS + i].fd, buffer, sizeof(buffer));
+			if (read(pollfds[BASE_FDS + i].fd, buffer, sizeof(buffer)) <= 0)
+				std::cerr << "Warning: read from gpio file after interrupt failed." << std::endl;
 			for (int g = 0; g < num_gpios; ++g) {
 				if (gpios[g].pin.valid() && gpios[g].pin.pin == i)
 					send_host(CMD_PINCHANGE, g, RAWGET(i) ^ gpios[g].pin.inverted());
@@ -740,7 +763,7 @@ void arch_start_move(int extra) { // {{{
 bool arch_send_fragment() { // {{{
 	if (stopping)
 		return false;
-	pine_shared->next_fragment = (pine_shared->next_fragment + 1) & PINE_FRAGMENT_MASK;
+	pine_shared->next_fragment = (pine_shared->next_fragment + 1) % FRAGMENTS_PER_BUFFER;
 	return true;
 } // }}}
 
@@ -765,11 +788,11 @@ void arch_set_duty(Pin_t _pin, double duty) { // TODO {{{
 } // }}}
 
 void arch_discard() { // {{{
-	int fragments = (current_fragment - pine_shared->current_fragment) & PINE_FRAGMENT_MASK;
+	int fragments = (current_fragment - pine_shared->current_fragment) % FRAGMENTS_PER_BUFFER;
 	if (fragments <= 2)
 		return;
-	current_fragment = (current_fragment - (fragments - 2)) & PINE_FRAGMENT_MASK;
-	//debug("current_fragment = (current_fragment - (fragments - 2)) & PINE_FRAGMENT_MASK; %d", current_fragment);
+	current_fragment = (current_fragment - (fragments - 2)) % FRAGMENTS_PER_BUFFER;
+	//debug("current_fragment = (current_fragment - (fragments - 2)) % FRAGMENTS_PER_BUFFER; %d", current_fragment);
 	pine_shared->next_fragment = current_fragment;
 	restore_settings();
 } // }}}
@@ -803,7 +826,7 @@ void DATA_SET(int s, int m, int value) { // {{{
 	if (value) {
 		if (value < -1 || value > 1) {
 			debug("invalid sample %d for %d %d", value, s, m);
-			abort();
+			//abort();
 		}
 		// The invert flag of the dir pin is used even if the pin is invalid (which it should never be).
 		if ((value < 0) ^ spaces[s].motor[m]->dir_pin.inverted())
