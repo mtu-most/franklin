@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#TARGET ?= bbb-fake
+#TARGET ?= pine64
 
 PROFILE = #-pg
 
@@ -25,21 +25,10 @@ LDFLAGS ?= $(PROFILE)
 
 all: franklin-cdriver
 
-ifeq (${TARGET}, bbb)
-ARCH_HEADER = arch-bbb.h
-LIBS += -lprussdrv
-
-%.bin: %.asm Makefile
-	pasm -V2 -b $<
-
-franklin-cdriver: bbb_pru.bin
-else
-ifeq (${TARGET}, bbb-fake)
-ARCH_HEADER = arch-bbb.h
-CPPFLAGS += -DFAKE
+ifeq (${TARGET}, pine64)
+ARCH_HEADER = arch-pine64.h
 else
 ARCH_HEADER = arch-avr.h
-endif
 endif
 
 SOURCES = \
@@ -65,7 +54,7 @@ HEADERS = \
 	cdriver.h \
 	${ARCH_HEADER}
 
-CPPFLAGS += -DARCH_INCLUDE=\"${ARCH_HEADER}\"
+CPPFLAGS += -DARCH_INCLUDE=\"${ARCH_HEADER}\" -std=c++0x
 
 OBJECTS = $(addprefix build/,$(patsubst %.cpp,%.o,$(SOURCES)))
 

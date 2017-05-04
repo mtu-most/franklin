@@ -105,21 +105,21 @@ import fcntl
 import protocol
 
 config = fhs.init(packagename = 'franklin', config = {
-		'port': '8000',
-		'address': '',
-		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(GS)?\\d*))$',
-		'add-blacklist': '$',
-		'autodetect': True,
-		'predetect': 'stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',
-		'allow-system': '^$',
-		'admin': '',
-		'expert': '',
-		'user': '',
-		'done': '',
-		'local': '',
-		'log': '',
-		'tls': 'False',
-		'arc': True,
+		'port': '8000',	# Port to listen on.
+		'address': '',	# Address to listen on.  Mainly intended for RPi, which cannot handle IPv6 and needs 0.0.0.0 here to force IPv4.
+		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(GS)?\\d*))$', # Which serial ports to refuse detecting on.
+		'add-blacklist': '$',	# Which serial ports to additionally refuse detecting on.  Used to add ports to the list without losing the defaults.
+		'autodetect': True,	# Whether new machines are autodetected on new ports, and after flashing.
+		'predetect': 'stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',	# What to do to a port before detecting a machine.
+		'allow-system': '^$',	# Which commands are allowed through system comments in G-Code.
+		'admin': '',	# Admin password; defaults to expert password.
+		'expert': '',	# Expert password; defaults to user password.
+		'user': '',	# User password; defaults to no password.
+		'done': '',	# Program to run when a job is done.
+		'local': '',	# alternate cdriver executable for local machine.
+		'log': '',	# Enable logging to a given logfile.
+		'tls': 'False',	# Whether TLS is used on the network connection.  If using Apache's virtual proxy method, this must be False, because Apache handles the encryption.
+		'arc': False,	# Whether arc detection in G-Code is enabled.  This is False by default, because it is broken.
 	})
 # }}}
 
