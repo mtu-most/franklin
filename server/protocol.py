@@ -77,6 +77,7 @@ command = {
 	'TP_GETPOS': 0x23,
 	'TP_SETPOS': 0x24,
 	'TP_FINDPOS': 0x25,
+	'MOTORS2XYZ': 0x26,
 	}
 
 rcommand = {
@@ -90,20 +91,21 @@ rcommand = {
 	'HOMED': 0x47,
 	'TIME': 0x48,
 	'TP_POS': 0x49,
-	'MOVECB': 0x4a,
-	'TEMPCB': 0x4b,
-	'CONTINUE': 0x4c,
-	'LIMIT': 0x4d,
-	'TIMEOUT': 0x4e,
-	'DISCONNECT': 0x4f,
-	'PINCHANGE': 0x50,
-	'UPDATE_TEMP': 0x51,
-	'UPDATE_PIN': 0x52,
-	'CONFIRM': 0x53,
-	'FILE_DONE': 0x54,
-	'PARKWAIT': 0x55,
-	'CONNECTED': 0x56,
-	'PINNAME': 0x57,
+	'XYZ': 0x4a,
+	'MOVECB': 0x4b,
+	'TEMPCB': 0x4c,
+	'CONTINUE': 0x4d,
+	'LIMIT': 0x4e,
+	'TIMEOUT': 0x4f,
+	'DISCONNECT': 0x50,
+	'PINCHANGE': 0x51,
+	'UPDATE_TEMP': 0x52,
+	'UPDATE_PIN': 0x53,
+	'CONFIRM': 0x54,
+	'FILE_DONE': 0x55,
+	'PARKWAIT': 0x56,
+	'CONNECTED': 0x57,
+	'PINNAME': 0x58,
 	}
 
 parsed = {

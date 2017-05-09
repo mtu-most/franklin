@@ -143,6 +143,7 @@ enum Command {
 	CMD_TP_GETPOS,
 	CMD_TP_SETPOS,	// 1 double: new toolpath position.
 	CMD_TP_FINDPOS,	// 3 doubles: search position or NaN.
+	CMD_MOTORS2XYZ,	// 1 byte: which space, n doubles: motor positions.  Reply: m times XYZ.
 	// to host
 		// responses to host requests; only one active at a time.
 	CMD_UUID = 0x40,	// 16 byte uuid.
@@ -155,6 +156,7 @@ enum Command {
 	CMD_HOMED,	// 0
 	CMD_TIME,
 	CMD_TP_POS,	// double: current or found position in toolpath.
+	CMD_XYZ,	// double: axis position.
 		// asynchronous events.
 	CMD_MOVECB,	// 1 byte: number of movecb events.
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
@@ -301,7 +303,6 @@ struct Space;
 
 struct SpaceType {
 	void (*xyz2motors)(Space *s, double *motors);
-	void (*reset_pos)(Space *s);
 	void (*check_position)(Space *s, double *data);
 	void (*load)(Space *s, uint8_t old_type, int32_t &addr);
 	void (*save)(Space *s, int32_t &addr);
@@ -312,6 +313,7 @@ struct SpaceType {
 	double (*unchange0)(Space *s, int axis, double value);
 	double (*probe_speed)(Space *s);
 	int (*follow)(Space *s, int axis);
+	void (*motors2xyz)(Space *s, double *motors, double *xyz);
 };
 
 struct Space {
@@ -569,6 +571,7 @@ void restore_settings();
 void apply_tick();
 void send_fragment();
 void move_to_current();
+void reset_pos(Space *s);
 EXTERN int moving_to_current;
 
 // globals.cpp

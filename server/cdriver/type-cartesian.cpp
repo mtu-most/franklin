@@ -29,13 +29,9 @@ static void xyz2motors(Space *s, double *motors) { // {{{
 	}
 } // }}}
 
-static void reset_pos(Space *s) { // {{{
-	// If positions are unknown, pretend that they are 0.
-	// This is mostly useful for extruders.
-	for (uint8_t a = 0; a < s->num_axes; ++a) {
-		s->axis[a]->settings.source = s->motor[a]->settings.current_pos / s->motor[a]->steps_per_unit;
-		//debug("set pos for %d to %f / %f = %f", a, s->motor[a]->settings.current_pos, s->motor[a]->steps_per_unit, s->axis[a]->settings.source);
-	}
+static void motors2xyz(Space *s, double *motors, double *xyz) { // {{{
+	for (uint8_t a = 0; a < s->num_axes; ++a)
+		xyz[a] = motors[a];
 } // }}}
 
 static void check_position(Space *s, double *data) { // {{{
@@ -96,7 +92,6 @@ static int follow(Space *s, int axis) { // {{{
 
 void Cartesian_init(int num) { // {{{
 	space_types[num].xyz2motors = xyz2motors;
-	space_types[num].reset_pos = reset_pos;
 	space_types[num].check_position = check_position;
 	space_types[num].load = load;
 	space_types[num].save = save;
@@ -107,6 +102,7 @@ void Cartesian_init(int num) { // {{{
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;
 	space_types[num].follow = follow;
+	space_types[num].motors2xyz = motors2xyz;
 } // }}}
 // }}}
 
@@ -211,7 +207,6 @@ static double eunchange0(Space *s, int axis, double value) { // {{{
 
 void Extruder_init(int num) { // {{{
 	space_types[num].xyz2motors = xyz2motors;
-	space_types[num].reset_pos = reset_pos;
 	space_types[num].check_position = check_position;
 	space_types[num].load = eload;
 	space_types[num].save = esave;
@@ -222,6 +217,7 @@ void Extruder_init(int num) { // {{{
 	space_types[num].unchange0 = eunchange0;
 	space_types[num].probe_speed = probe_speed;
 	space_types[num].follow = follow;
+	space_types[num].motors2xyz = motors2xyz;
 } // }}}
 // }}}
 
@@ -297,7 +293,6 @@ static int ffollow(Space *s, int axis) { // {{{
 
 void Follower_init(int num) { // {{{
 	space_types[num].xyz2motors = xyz2motors;
-	space_types[num].reset_pos = reset_pos;
 	space_types[num].check_position = check_position;
 	space_types[num].load = fload;
 	space_types[num].save = fsave;
@@ -308,5 +303,6 @@ void Follower_init(int num) { // {{{
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;
 	space_types[num].follow = ffollow;
+	space_types[num].motors2xyz = motors2xyz;
 } // }}}
 // }}}

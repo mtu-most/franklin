@@ -204,7 +204,7 @@ int next_move() { // {{{
 					sp.axis[a]->settings.source = sp.axis[a]->settings.current;
 					continue;
 				}
-				space_types[sp.type].reset_pos(&sp);
+				reset_pos(&sp);
 				for (int aa = 0; aa < sp.num_axes; ++aa)
 					sp.axis[aa]->settings.current = sp.axis[aa]->settings.source;
 				break;

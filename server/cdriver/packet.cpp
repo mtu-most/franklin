@@ -126,14 +126,14 @@ void setpos(int which, int t, double f) {
 			spaces[which].motor[t]->history[fragment].current_pos = diff;
 	}
 	if (isnan(spaces[which].axis[t]->settings.current)) {
-		space_types[spaces[which].type].reset_pos(&spaces[which]);
+		reset_pos(&spaces[which]);
 		for (int a = 0; a < spaces[which].num_axes; ++a)
 			spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
 	}
 	arch_addpos(which, t, diff);
 	cpdebug(which, t, "setpos diff %d", diff);
 	//arch_stop();
-	space_types[spaces[which].type].reset_pos(&spaces[which]);
+	reset_pos(&spaces[which]);
 	for (int a = 0; a < spaces[which].num_axes; ++a)
 		spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
 	/*for (int a = 0; a < spaces[which].num_axes; ++a)
@@ -428,7 +428,7 @@ void packet()
 		}
 		if (isnan(spaces[which].axis[t]->settings.current)) {
 			//debug("resetting space %d for getpos; %f", which, spaces[0].axis[0]->settings.current);
-			space_types[spaces[which].type].reset_pos(&spaces[which]);
+			reset_pos(&spaces[which]);
 			for (int a = 0; a < spaces[which].num_axes; ++a)
 				spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
 		}
@@ -798,6 +798,21 @@ void packet()
 			pos[i] = get_float(3 + i * sizeof(double));
 		}
 		send_host(CMD_TP_POS, 0, 0, run_find_pos(pos));
+		return;
+	}
+	case CMD_MOTORS2XYZ:
+	{
+#ifdef DEBUG_CMD
+		debug("CMD_MOTORS2XYZ");
+#endif
+		which = get_which();
+		double motors[spaces[which].num_motors];
+		double xyz[spaces[which].num_axes];
+		for (int m = 0; m < spaces[which].num_motors; ++m)
+			motors[m] = get_float(4 + m * sizeof(double));
+		space_types[spaces[which].type].motors2xyz(&spaces[which], motors, xyz);
+		for (int a = 0; a < spaces[which].num_axes; ++a)
+			send_host(CMD_XYZ, which, a, xyz[a]);
 		return;
 	}
 	default:

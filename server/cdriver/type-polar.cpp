@@ -54,13 +54,11 @@ static void xyz2motors(Space *s, double *motors) {
 	}
 }
 
-static void reset_pos (Space *s) {
-	double r = s->motor[0]->settings.current_pos / s->motor[0]->steps_per_unit;
-	double theta = s->motor[1]->settings.current_pos / s->motor[1]->steps_per_unit;
-	double z = s->motor[2]->settings.current_pos / s->motor[2]->steps_per_unit;
-	s->axis[0]->settings.source = r * cos(theta);
-	s->axis[1]->settings.source = r * sin(theta);
-	s->axis[2]->settings.source = z;
+static void motors2xyz(Space *s, double motors[3], double xyz[3]) {
+	(void)&s;
+	xyz[0] = motors[0] * cos(motors[1]);
+	xyz[1] = motors[0] * sin(motors[1]);
+	xyz[2] = motors[2];
 }
 
 static void check_position(Space *s, double *data) {
@@ -125,7 +123,6 @@ static int follow(Space *s, int axis) {
 
 void Polar_init(int num) {
 	space_types[num].xyz2motors = xyz2motors;
-	space_types[num].reset_pos = reset_pos;
 	space_types[num].check_position = check_position;
 	space_types[num].load = load;
 	space_types[num].save = save;
@@ -136,4 +133,5 @@ void Polar_init(int num) {
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;
 	space_types[num].follow = follow;
+	space_types[num].motors2xyz = motors2xyz;
 }

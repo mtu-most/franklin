@@ -111,48 +111,6 @@ bool Space::setup_nums(int na, int nm) { // {{{
 	return true;
 } // }}}
 
-void move_to_current() { // {{{
-	if (computing_move || !motors_busy) {
-		if (moving_to_current == 0)
-			moving_to_current = 1;
-		return;
-	}
-	moving_to_current = 0;
-	//debug("move to current");
-	settings.f0 = 0;
-	settings.fmain = 1;
-	settings.fp = 0;
-	settings.fq = 0;
-	settings.t0 = 0;
-	settings.tp = 0;
-	//debug("clearing %d cbs after current move for move to current", cbs_after_current_move);
-	cbs_after_current_move = 0;
-	current_fragment_pos = 0;
-	first_fragment = current_fragment;
-	computing_move = true;
-	settings.cbs = 0;
-	settings.hwtime = 0;
-	settings.start_time = 0;
-	settings.last_time = 0;
-	settings.last_current_time = 0;
-	for (int s = 0; s < NUM_SPACES; ++s) {
-		Space &sp = spaces[s];
-		sp.settings.dist[0] = 0;
-		sp.settings.dist[1] = 0;
-		for (int a = 0; a < sp.num_axes; ++a) {
-			cpdebug(s, a, "using current %f", sp.axis[a]->settings.current);
-			sp.axis[a]->settings.source = sp.axis[a]->settings.current;
-			sp.axis[a]->settings.target = sp.axis[a]->settings.current;
-			sp.axis[a]->settings.dist[0] = 0;
-			sp.axis[a]->settings.dist[1] = 0;
-			sp.axis[a]->settings.main_dist = 0;
-		}
-		for (int m = 0; m < sp.num_motors; ++m)
-			sp.motor[m]->settings.last_v = 0;
-	}
-	buffer_refill();
-} // }}}
-
 void Space::load_info(int32_t &addr) { // {{{
 	loaddebug("loading space %d", id);
 	int t = type;
@@ -163,36 +121,34 @@ void Space::load_info(int32_t &addr) { // {{{
 		debug("request for type %d ignored", type);
 		type = t;
 	}
-	bool ok;
 	if (t != type) {
 		loaddebug("setting type to %d", type);
 		space_types[t].free(this);
 		if (!space_types[type].init(this)) {
 			type = DEFAULT_TYPE;
-			space_types[type].reset_pos(this);
+			reset_pos(this);
 			for (int a = 0; a < num_axes; ++a)
 				axis[a]->settings.current = axis[a]->settings.source;
 			return;	// The rest of the package is not meant for DEFAULT_TYPE, so ignore it.
 		}
-		ok = false;
-	}
-	else {
-		if (computing_move || !motors_busy)
-			ok = false;
-		else
-			ok = true;
 	}
 	space_types[type].load(this, t, addr);
-	if (t != type) {
-		space_types[type].reset_pos(this);
-		loaddebug("resetting current for load space %d", id);
-		for (int a = 0; a < num_axes; ++a)
-			axis[a]->settings.current = axis[a]->settings.source;
-	}
-	if (ok)
-		move_to_current();
+	reset_pos(this);
 	loaddebug("done loading space");
 } // }}}
+
+void reset_pos(Space *s) {
+	double motors[s->num_motors];
+	double xyz[s->num_axes];
+	for (int m = 0; m < s->num_motors; ++m)
+		motors[m] = s->motor[m]->settings.current_pos / s->motor[m]->steps_per_unit;
+	space_types[s->type].motors2xyz(s, motors, xyz);
+	for (int a = 0; a < s->num_axes; ++a) {
+		s->axis[a]->settings.current = xyz[a];
+		if (!computing_move)
+			s->axis[a]->settings.source = xyz[a];
+	}
+}
 
 void Space::load_axis(int a, int32_t &addr) { // {{{
 	loaddebug("loading axis %d", a);
@@ -233,7 +189,6 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 	RESET(motor[m]->step_pin);
 	SET_INPUT(motor[m]->limit_min_pin);
 	SET_INPUT(motor[m]->limit_max_pin);
-	bool must_move = false;
 	if (!isnan(motor[m]->home_pos)) {
 		// Axes with a limit switch.
 		if (motors_busy && (old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !isnan(old_home_pos)) {
@@ -243,7 +198,6 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 			motor[m]->settings.current_pos += diff;
 			//debug("load motor %d %d new home %f add %f", id, m, motor[m]->home_pos, diff);
 			arch_addpos(id, m, diff);
-			must_move = true;
 		}
 	}
 	else {
@@ -262,8 +216,7 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 			}
 		}
 	}
-	if (must_move)
-		move_to_current();
+	reset_pos(this);
 } // }}}
 
 void Space::save_info(int32_t &addr) { // {{{
@@ -894,8 +847,6 @@ void buffer_refill() { // {{{
 		//debug("no refill because prepare");
 		return;
 	}
-	if (moving_to_current == 2)
-		move_to_current();
 	if (!computing_move || refilling || stopping || discard_pending || discarding) {
 		//debug("refill block %d %d %d %d %d", computing_move, refilling, stopping, discard_pending, discarding);
 		return;

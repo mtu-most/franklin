@@ -89,27 +89,6 @@ static void xyz2motors(Space *s, double *motors) {
 	}
 }
 
-static void reset_pos (Space *s) {
-	// All axes' current_pos must be valid and equal, in other words, x=y=0.
-	double p[3];
-	// Epsilon is average step length.
-	double epsilon = 3 / (s->motor[0]->steps_per_unit + s->motor[1]->steps_per_unit + s->motor[2]->steps_per_unit);
-	for (uint8_t i = 0; i < 3; ++i)
-		p[i] = s->motor[i]->settings.current_pos / s->motor[i]->steps_per_unit;
-	if (fabs(p[0] - p[1]) > epsilon || fabs(p[0] - p[2]) > epsilon) {
-		//debug("resetpos fails");
-		s->axis[0]->settings.source = NAN;
-		s->axis[1]->settings.source = NAN;
-		s->axis[2]->settings.source = NAN;
-	}
-	else {
-		//debug("resetpos %f", p[0]);
-		s->axis[0]->settings.source = 0;
-		s->axis[1]->settings.source = 0;
-		s->axis[2]->settings.source = (p[0] + p[1] + p[2]) / 3;
-	}
-}
-
 static void check_position(Space *s, double *data) {
 	if (isnan(data[0]) || isnan(data[1])) {
 		if (!isnan(data[0]))
@@ -218,9 +197,66 @@ static int follow(Space *s, int axis) {
 	return -1;
 }
 
+static double inner(double a[3], double b[3]) {
+	double ret = 0;
+	for (int i = 0; i < 3; ++i)
+		ret += a[i] * b[i];
+	return ret;
+}
+
+static double length(double a[3]) {
+	return sqrt(inner(a, a));
+}
+
+static void outer(double result[3], double a[3], double b[3]) {
+	for (int i = 0; i < 3; ++i) {
+		result[i] = a[(i + 1) % 3] * b[(i + 2) % 3] - a[(i + 2) % 3] * b[(i + 1) % 3];
+	}
+}
+
+static void motors2xyz(Space *s, double motors[3], double xyz[3]) {
+	// Find intersecting circle of spheres 0 and 1.
+	double x0x1[3], pos[3][3];
+	for (int i = 0; i < 3; ++i) {
+		pos[i][0] = APEX(s, i).x;
+		pos[i][1] = APEX(s, i).y;
+		pos[i][2] = APEX(s, i).z + motors[i];
+	}
+	for (int i = 0; i < 3; ++i)
+		x0x1[i] = pos[1][i] - pos[0][i];
+	double x1 = length(x0x1);
+	double len01 = x1 / 2 + (APEX(s, 0).rodlength * APEX(s, 0).rodlength - APEX(s, 1).rodlength * APEX(s, 1).rodlength) / (2 * x1);
+	double r01_squared = APEX(s, 0).rodlength * APEX(s, 0).rodlength - len01 * len01;
+	double p[3], pq[3];
+	// Make x0x1 a unit vector and compute p and pq.
+	for (int i = 0; i < 3; ++i) {
+		x0x1[i] /= x1;
+		p[i] = pos[0][i] + x0x1[i] * len01;
+		pq[i] = pos[2][i] - p[i];
+	}
+	// Compute the projection of pq on x0x1, and the rest of pq.
+	double projected_factor = inner(pq, x0x1) / inner(pq, pq);
+	double projected[3], rest[3], center[3], qcenter[3];
+	for (int i = 0; i < 3; ++i) {
+		projected[i] = projected_factor * x0x1[i];
+		rest[i] = pq[i] - projected[i];
+		center[i] = p[i] + rest[i];
+		qcenter[i] = pos[2][i] - center[i];
+	}
+	double r2 = cos(asin(length(qcenter) / APEX(s, 2).rodlength)) * APEX(s, 2).rodlength;
+	double x2 = length(rest);
+	double len012 = x2 / 2 + (r01_squared - r2 * r2) / (2 * x2);
+	double r012 = sqrt(r01_squared - len012 * len012);
+	double updown[3];
+	outer(updown, x0x1, pq);
+	double lenud = length(updown);
+	for (int i = 0; i < 3; ++i) {
+		xyz[i] = p[i] + len012 * rest[i] / x2 - r012 * updown[i] / lenud;
+	}
+}
+
 void Delta_init(int num) {
 	space_types[num].xyz2motors = xyz2motors;
-	space_types[num].reset_pos = reset_pos;
 	space_types[num].check_position = check_position;
 	space_types[num].load = load;
 	space_types[num].save = save;
@@ -231,4 +267,5 @@ void Delta_init(int num) {
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;
 	space_types[num].follow = follow;
+	space_types[num].motors2xyz = motors2xyz;
 }
