@@ -3257,7 +3257,7 @@ class Machine: # {{{
 		old_type = self.spaces[space].type
 		if space == 0 and 'type' in ka:
 			self.spaces[space].type = int(ka.pop('type'))
-		current_pos = None if self.spaces[space].type == old_type else self.get_axis_pos(space)
+		current_pos = None if self.spaces[space].type != old_type else self.get_axis_pos(space)
 		if self.spaces[space].type == TYPE_EXTRUDER:
 			if 'extruder' in ka:
 				e = ka.pop('extruder')
@@ -3308,8 +3308,10 @@ class Machine: # {{{
 				self._space_update(space)
 		if len(ka) != 0:
 			log('invalid input ignored: %s' % repr(ka))
-		if current_pos is not None and (self.paused or (self.home_phase is None and self.gcode_file is None and self.gcode_map is None)):
-			self.line({space.id: current_pos})
+		if current_pos is not None and not all(math.isnan(x) for x in current_pos) and (self.paused or (self.home_phase is None and not self.gcode_file and self.gcode_map is None)):
+			self.line({space: current_pos})
+		#else:
+		#	log(repr(('not going to pos:', current_pos, self.paused, self.home_phase, self.gcode_file, self.gcode_map)))
 	# }}}
 	def expert_set_axis(self, spaceaxis, readback = True, update = True, **ka): # {{{
 		space, axis = spaceaxis
@@ -3361,8 +3363,8 @@ class Machine: # {{{
 				if update:
 					self._space_update(2)
 		assert len(ka) == 0
-		if self.paused or (self.home_phase is None and self.gcode_file is None and self.gcode_map is None):
-			self.line({space.id: current_pos})
+		if not all(math.isnan(x) for x in current_pos) and (self.paused or (self.home_phase is None and not self.gcode_file and self.gcode_map is None)):
+			self.line({space: current_pos})
 	# }}}
 	# }}}
 	# Temp {{{
