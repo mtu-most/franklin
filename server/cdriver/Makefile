@@ -20,7 +20,7 @@
 
 PROFILE = #-pg
 
-CPPFLAGS ?= -g -Wall -Wextra -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow $(PROFILE)
+CPPFLAGS ?= -ggdb3 -O3 -Wall -Wextra -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow $(PROFILE)
 LDFLAGS ?= $(PROFILE)
 
 all: franklin-cdriver

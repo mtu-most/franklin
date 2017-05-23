@@ -50,14 +50,13 @@
 #define FRAGMENTS_PER_BUFFER 8
 #define SAMPLES_PER_FRAGMENT 256	// This value is used implicitly as the overflow value of uint8_t.
 
-#define ARCH_MOTOR int pine_id;
-#define ARCH_SPACE int pine_id, pine_m0;
+#define ARCH_MOTOR int pine_homer;
+#define ARCH_SPACE
 
-#define DATA_CLEAR(s, m) do {} while (0)
+#define DATA_CLEAR() memset((void *)(pine_shared->buffer[pine_shared->next_fragment]), 0, sizeof(pine_shared->buffer[0]))
 #define ARCH_NEW_MOTOR(s, m, base) do {} while (0)
 #define DATA_DELETE(s, m) do {} while (0)
-
-#define ARCH_MAX_FDS NUM_GPIO_PINS	// Maximum number of fds for arch-specific purposes.
+#define ARCH_MAX_FDS 0
 // }}}
 
 #else
@@ -72,13 +71,19 @@ struct PineTemp { // {{{
 	double hold_time;
 }; // }}}
 
+enum PinePort { B, C, D, E, F, G, H, NUM_PORTS };
 struct PineShared { // {{{
 	volatile uint64_t base, dirs;
-	volatile uint64_t buffer[FRAGMENTS_PER_BUFFER][SAMPLES_PER_FRAGMENT][2];
+	volatile uint64_t buffer[FRAGMENTS_PER_BUFFER][SAMPLES_PER_FRAGMENT][2], homers[2];
 	// These must be bytes, to be sure that read and write are atomic even with races between different cores.
 	volatile uint8_t current_sample, current_fragment, next_fragment, state;
 	volatile uint8_t mode[NUM_GPIO_PINS];	// Current mode for all pins.
+	volatile uint32_t config[NUM_PORTS][4];
+	volatile uint32_t data[NUM_PORTS];
+	volatile uint32_t pull[NUM_PORTS][2];
+	volatile int num_homers;
 }; // }}}
+EXTERN PineShared *pine_shared;
 
 // Function declarations. {{{
 void SET_OUTPUT(Pin_t _pin);
@@ -113,15 +118,13 @@ void DATA_SET(int s, int m, int value);
 // Variables. {{{
 static int pine_active_temp;
 static PineTemp pine_temp[NUM_ANALOG_INPUTS];
-static PineShared *pine_shared;
-enum Port { B, C, D, E, F, G, H, NUM_PORTS };
 enum State { GPIO_INPUT = 0, GPIO_OUTPUT = 1, GPIO_OFF = 7, };
 enum Pull { NOPULL, PULLUP, PULLDOWN };
 struct state_demux {
 	int state;
-	int pine_pinpull;
+	int pull;
 	int value;
-	state_demux(int s, int p, int v) : state(s), pine_pinpull(p), value(v) {}
+	state_demux(int s, int p, int v) : state(s), pull(p), value(v) {}
 };
 static state_demux const states[5] = {
 	state_demux(GPIO_OUTPUT, NOPULL, 0),
@@ -131,45 +134,55 @@ static state_demux const states[5] = {
 	state_demux(GPIO_OFF, NOPULL, 0)
 };
 
-static uint32_t *pine_gpiomem;
-static uint32_t *pine_piomem;
-static uint32_t pine_pinconfig[NUM_PORTS][4];
-static uint32_t pine_pindata[NUM_PORTS];
-static uint32_t pine_pinpull[NUM_PORTS][2];
+static volatile uint32_t *pine_piomem;
+static struct timespec pine_pwm_time;
+static double pine_duty[NUM_DIGITAL_PINS];
+static bool pine_pwm_on[NUM_DIGITAL_PINS];
+static double pine_pwm_target[NUM_DIGITAL_PINS];
+bool pine_pin_state[NUM_DIGITAL_PINS];
+// }}}
 
+// Pin setting. {{{
 // Set the direction of a single pin.
-static void gpio_setdir(int port, int pin, int state) {
-	int unit = pin >> 3;
-	pin &= 0x7;
-	uint32_t value = pine_pinconfig[port][unit] & ~(7 << (pin * 4));
+static void gpio_setdir(int port, int pin, int state) { // {{{
+	//debug("setdir %x %x %x", port, pin, state);
+	int unit = pin / 8;
+	pin %= 8;
+	uint32_t addr = (0x24 + 0x24 * port + 4 * unit) >> 2;
+	uint32_t value = pine_shared->config[port][unit] & ~(7 << (pin * 4));
 	value |= state << (pin * 4);
-	pine_piomem[(0x24 + 0x24 * port + 4 * unit) >> 2] = value;
-	pine_pinconfig[port][unit] = value;
-}
+	pine_piomem[addr] = value;
+	pine_shared->config[port][unit] = value;
+} // }}}
 
 // Set the pull direction of a pin.
-static void gpio_setpull(int port, int pin, int pullstate) {
-	int unit = pin >> 2;
-	pin &= 0x3;
-	uint32_t value = pine_pinpull[port][unit] & ~(3 << (pin * 2));
+static void gpio_setpull(int port, int pin, int pullstate) { // {{{
+	//debug("setpull %x %x %x", port, pin, pullstate);
+	int unit = pin / 16;
+	pin %= 16;
+	uint32_t addr = (0x40 + 0x24 * port + 4 * unit) >> 2;
+	uint32_t value = pine_shared->pull[port][unit] & ~(3 << (pin * 2));
 	value |= pullstate << (pin * 2);
-	pine_piomem[(0x40 + 0x24 * port + unit) >> 2] = value;
-	pine_pinpull[port][unit] = value;
-}
+	pine_piomem[addr] = value;
+	pine_shared->pull[port][unit] = value;
+} // }}}
 
 // Set the value of an output pin.
-static void gpio_setpin(int port, int pin, bool is_on) {
-	uint32_t value = pine_pindata[port] & ~(1 << pin);
+static void gpio_setpin(int port, int pin, bool is_on) { // {{{
+	//debug("setpin %x %x %x", port, pin, is_on);
+	uint32_t addr = (0x34 + 0x24 * port) >> 2;
+	uint32_t value = pine_shared->data[port] & ~(1 << pin);
 	value |= is_on << pin;
-	pine_piomem[(0x34 + 0x24 * port) >> 2] = value;
-	pine_pindata[port] = value;
-}
+	pine_piomem[addr] = value;
+	pine_shared->data[port] = value;
+} // }}}
 
 // Get the value of an input pin.
-static bool gpio_getpin(int port, int pin) {
+static bool gpio_getpin(int port, int pin) { // {{{
 	return (pine_piomem[(0x34 + 0x24 * port) >> 2] >> pin) & 1;
-}
+} // }}}
 
+// Documentation on pin definitions. {{{
 //int num_pins = 32 * NUM_PORTS;
 //#define NONE "\x00N/A"
 //#define PIN(x) "\x07" x
@@ -214,16 +227,17 @@ static bool gpio_getpin(int port, int pin) {
 	PIN("PH8 (E-10)"), PIN("PH9 (Pi-13)"), PIN("PH10"), PIN("PH11"), NONE, NONE, NONE, NONE,
 	NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE,
 	NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE
-};*/
+}; */
 // Number of PINs: 36
-// Number of NOPINs: 67
+// Number of NOPINs: 67 }}}
 struct PinePin {
 	int port;
 	int pin;
 	char const *name;
 };
 
-static PinePin pine_pins[] = {
+static PinePin pine_pins[] = { // {{{
+	{ H, 8, "\x07" "E-10 (H8)" },
 	{ B, 3, "\x07" "E-11 (B3)" },
 	{ B, 4, "\x07" "E-12 (B4)" },
 	{ B, 5, "\x07" "E-13 (B5)" },
@@ -238,7 +252,6 @@ static PinePin pine_pins[] = {
 	{ D, 7, "\x07" "E-28 (D7)" },
 	{ B, 8, "\x07" "E-29 (B8)" },
 	{ B, 9, "\x07" "E-30 (B9)" },
-	{ H, 8, "\x07" "Pi-10 (H8)" },
 	{ C, 7, "\x07" "Pi-11 (C7)" },
 	{ C, 8, "\x07" "Pi-12 (C8)" },
 	{ H, 9, "\x07" "Pi-13 (H9)" },
@@ -260,44 +273,14 @@ static PinePin pine_pins[] = {
 	{ C, 16, "\x07" "Pi-37 (C16)" },
 	{ C, 10, "\x07" "Pi-38 (C10)" },
 	{ C, 11, "\x07" "Pi-40 (C11)" },
-};
-
-static int pine_setup_one_interrupt(int port, int pin) {
-	std::ofstream f("/sys/class/gpio/export");
-	int num = (port + 1) * 32 + pin;
-	f << num << std::endl;
-	f.close();
-	std::string filename = "/sys/class/gpio/gpio" + std::to_string(num) + "/value";
-	int fd = open(filename.c_str(), O_RDONLY);
-	return fd;
-}
-// }}}
-
-// Pin setting. {{{
-static void set_interrupt(Pin_t _pin, bool enabled) { // {{{
-	if (!_pin.valid())
-		return;
-	if (enabled) {
-		if (pollfds[BASE_FDS + _pin.pin].fd >= 0)
-			return;
-	}
-	else {
-		if (pollfds[BASE_FDS + _pin.pin].fd < 0)
-			return;
-	}
-	pollfds[BASE_FDS + _pin.pin].fd = -pollfds[BASE_FDS + _pin.pin].fd - 1;
-	std::string filename = "/sys/class/gpio/gpio" + std::to_string(_pin.pin) + "/edge";
-	std::ofstream f(filename.c_str());
-	f << (enabled ? "both" : "none") << std::endl;
-	f.close();
-	debug("interrupt %d set to %d; %d", _pin.pin, pollfds[BASE_FDS + _pin.pin].fd, enabled);
-} // }}}
+}; // }}}
 
 void SET_OUTPUT(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
+		debug("set output %d", _pin.pin);
+		pine_pwm_target[_pin.pin] = 0;
 		if (pine_shared->mode[_pin.pin] < 2)
 			return;
-		set_interrupt(_pin, false);
 		gpio_setdir(pine_pins[_pin.pin].port, pine_pins[_pin.pin].pin, GPIO_OUTPUT);
 		gpio_setpull(pine_pins[_pin.pin].port, pine_pins[_pin.pin].pin, NOPULL);
 		gpio_setpin(pine_pins[_pin.pin].port, pine_pins[_pin.pin].pin, _pin.inverted() ? true : false);
@@ -307,22 +290,26 @@ void SET_OUTPUT(Pin_t _pin) { // {{{
 
 void SET_INPUT(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
+		//debug("set input %d", _pin.pin);
 		if (pine_shared->mode[_pin.pin] == 2)
 			return;
 		gpio_setpull(pine_pins[_pin.pin].port, pine_pins[_pin.pin].pin, PULLUP);
 		gpio_setdir(pine_pins[_pin.pin].port, pine_pins[_pin.pin].pin, GPIO_INPUT);
-		set_interrupt(_pin, true);
+		// Set state to wrong value, so it will send an update event.
+		pine_pin_state[_pin.pin] = !gpio_getpin(pine_pins[_pin.pin].port, pine_pins[_pin.pin].pin);
 		pine_shared->mode[_pin.pin] = 2;
 	}
 } // }}}
 
 void SET_INPUT_NOPULLUP(Pin_t _pin) { // {{{
 	if (_pin.valid()) {
+		//debug("set nopull %d", _pin.pin);
 		if (pine_shared->mode[_pin.pin] == 3)
 			return;
 		gpio_setpull(pine_pins[_pin.pin].port, pine_pins[_pin.pin].pin, NOPULL);
 		gpio_setdir(pine_pins[_pin.pin].port, pine_pins[_pin.pin].pin, GPIO_INPUT);
-		set_interrupt(_pin, true);
+		// Set state to wrong value, so it will send an update event.
+		pine_pin_state[_pin.pin] = !gpio_getpin(pine_pins[_pin.pin].port, pine_pins[_pin.pin].pin);
 		pine_shared->mode[_pin.pin] = 3;
 	}
 } // }}}
@@ -363,13 +350,13 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool)) { // {{{
 // }}}
 
 // Setup helpers. {{{
-static void pine_set_pins(uint64_t mask) {
+static void pine_set_pins(uint64_t mask) { // {{{
 	for (int i = 0; i < NUM_GPIO_PINS; ++i) {
 		if (pine_shared->mode[i] >= 2) {
 			// Refuse to change a pin that isn't set to output.
 			continue;
 		}
-		uint64_t target = (mask >> i) & 1;
+		uint8_t target = (mask >> i) & 1;
 		if (target == pine_shared->mode[i]) {
 			// Skip pins that are already in the correct state.
 			continue;
@@ -377,52 +364,70 @@ static void pine_set_pins(uint64_t mask) {
 		gpio_setpin(pine_pins[i].port, pine_pins[i].pin, target);
 		pine_shared->mode[i] = target;
 	}
-}
+} // }}}
 
 // This function is called in a separate thread, and moved to an isolated cpu core.  It handles the realtime operations.
 static void pine_realtime() { // {{{
-	uint64_t period = (hwtime_step * 1000) / 6;
+	uint64_t period = (hwtime_step * 1000) / 4;
 	int fd = timerfd_create(CLOCK_MONOTONIC, 0);
 	struct itimerspec it;
-	time_t sec = period / 1000000;
-	long nsec = period - sec * 1000000;
+	time_t sec = period / 1000000000;
+	long nsec = period - sec * 1000000000;
 	it.it_value.tv_sec = sec;
 	it.it_value.tv_nsec = nsec;
 	it.it_interval.tv_sec = sec;
 	it.it_interval.tv_nsec = nsec;
 	timerfd_settime(fd, 0, &it, NULL);
 	uint64_t num_exp;
+	bool ignore_expiry = false;
+	int home_delay = 0;
 	while (true) {
 		while (read(fd, &num_exp, 8) != 8) {}
+		if (num_exp != 1 && !ignore_expiry) {
+			debug("clock expired: %ld", num_exp);
+			ignore_expiry = true;
+		}
+		else
+			ignore_expiry = false;
+		if (home_delay > 0) {
+			home_delay -= 1;
+			continue;
+		}
 		// state = 0: waiting for limit check; main can set to 1, 2, or 3.
 		// state = 1: not running; main can set to 0.
 		// state = 2: Doing single step; rt can set to 0 or 1; main can set to 4 (and expect rt to set it to 0 or 1).
 		// state = 3: Free running; main can set to 4.
 		// state = 4: main requested stop; rt must set to 1.
 		if (pine_shared->state == 4) {
+			//debug("Request to stop.");
 			pine_shared->state = 1;
 			continue;
 		}
 		if (pine_shared->state < 2)
 			continue;
 		// Do a step.
+		//debug("Step base %lx dirs %lx buffers %lx %lx sample %x", pine_shared->base, pine_shared->dirs, pine_shared->buffer[pine_shared->current_fragment][pine_shared->current_sample][0], pine_shared->buffer[pine_shared->current_fragment][pine_shared->current_sample][1], pine_shared->current_sample);
 		pine_set_pins(pine_shared->base);
-		while (read(fd, &num_exp, 8) != 8) {}
-		pine_set_pins(pine_shared->base | pine_shared->buffer[pine_shared->current_fragment][pine_shared->current_sample][0]);
+		volatile uint64_t *data;
+		if (pine_shared->num_homers > 0) {
+			home_delay = 1000;
+			data = pine_shared->homers;
+		}
+		else
+			data = pine_shared->buffer[pine_shared->current_fragment][pine_shared->current_sample];
+		pine_set_pins(pine_shared->base | data[0]);
 		while (read(fd, &num_exp, 8) != 8) {}
 		pine_set_pins(pine_shared->base);
-		while (read(fd, &num_exp, 8) != 8) {}
 		pine_set_pins(pine_shared->base | pine_shared->dirs);
 		while (read(fd, &num_exp, 8) != 8) {}
-		pine_set_pins(pine_shared->base | pine_shared->dirs | pine_shared->buffer[pine_shared->current_fragment][pine_shared->current_sample][1]);
+		pine_set_pins(pine_shared->base | pine_shared->dirs | data[1]);
 		while (read(fd, &num_exp, 8) != 8) {}
 		pine_set_pins(pine_shared->base | pine_shared->dirs);
-		while (read(fd, &num_exp, 8) != 8) {}
 		pine_set_pins(pine_shared->base);
 		// Increment pointer position.
 		pine_shared->current_sample += 1;
 		if (pine_shared->current_sample == 0) {
-			pine_shared->current_sample = 0;
+			//pine_shared->current_sample = 0;
 			pine_shared->current_fragment = (pine_shared->current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 			if (pine_shared->current_fragment == pine_shared->next_fragment) {
 				pine_shared->state = 1;
@@ -438,7 +443,7 @@ static void pine_realtime() { // {{{
 void arch_setup_start() { // {{{
 	// TODO Set up analog inputs.
 	// Override hwtime_step.
-	hwtime_step = 40;
+	hwtime_step = 200;
 	// Claim that firmware has correct version.
 	protocol_version = PROTOCOL_VERSION;
 	// Prepare gpios.
@@ -447,21 +452,16 @@ void arch_setup_start() { // {{{
 		fprintf(stderr, "unable to open /dev/mem: %s\n", strerror(errno));
 		abort();
 	}
-	pine_gpiomem = reinterpret_cast <uint32_t *>(mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x01C20000));
-	if (pine_gpiomem == MAP_FAILED) {
+	volatile uint32_t *gpiomem;
+	gpiomem = reinterpret_cast <volatile uint32_t *>(mmap(NULL, 0x1000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0x01C20000));
+	if (gpiomem == MAP_FAILED) {
 		fprintf(stderr, "mmap on /dev/mem failed: %s\n", strerror(errno));
 		abort();
 	}
-	pine_piomem = pine_gpiomem + (0x800 >> 2);
-	for (int i = 0; i < NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS; ++i) {
+	pine_piomem = gpiomem + (0x800 >> 2);
+	for (int i = 0; i < NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS; ++i)
 		arch_send_pin_name(i);
-		if (i < NUM_DIGITAL_PINS) {
-			// Initially make it negative, so the interrupt is disabled.
-			pollfds[BASE_FDS + i].fd = -1 - pine_setup_one_interrupt(pine_pins[i].port, pine_pins[i].pin);
-			pollfds[BASE_FDS + i].events = POLLPRI;
-			pollfds[BASE_FDS + i].revents = 0;
-		}
-	}
+	clock_gettime(CLOCK_MONOTONIC, &pine_pwm_time);
 	// Allocate shared memory.
 	pine_shared = reinterpret_cast <PineShared *> (mmap(NULL, sizeof(PineShared), PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0));
 	pine_shared->base = 0;
@@ -470,25 +470,35 @@ void arch_setup_start() { // {{{
 	pine_shared->current_fragment = 0;
 	pine_shared->next_fragment = 0;
 	pine_shared->state = 1;
+	pine_shared->num_homers = 0;
 	for (int i = 0; i < NUM_DIGITAL_PINS; ++i)
 		pine_shared->mode[i] = 4;
+	for (int port = 0; port < NUM_PORTS; ++port) {
+		for (int unit = 0; unit < 4; ++unit)
+			pine_shared->config[port][unit] = pine_piomem[(0x24 + 0x24 * port + 4 * unit) >> 2];
+		pine_shared->data[port] = pine_piomem[(0x34 + 0x24 * port) >> 2];
+		for (int unit = 0; unit < 2; ++unit)
+			pine_shared->pull[port][unit] = pine_piomem[(0x40 + 0x24 * port + 4 * unit) >> 2];
+	}
 	pid_t pid = fork();
 	if (pid == -1) {
-		std::cerr << "Fork failed; cannot continue: " << strerror(errno) << std::endl;
+		debug("Fork failed; cannot continue: %s", strerror(errno));
 		abort();
 	}
 	if (pid == 0) {
 		// Child.
-		// Move process to first processor core.
-		cpu_set_t *mask = CPU_ALLOC(1);
-		size_t size = CPU_ALLOC_SIZE(1);
+		// Move process to second processor core.
+		// This core should have been isolated using isolcpus=1 on the kernel commandline.
+		cpu_set_t *mask = CPU_ALLOC(2);
+		size_t size = CPU_ALLOC_SIZE(2);
 		CPU_ZERO_S(size, mask);
-		CPU_SET(0, mask);
+		CPU_SET(1, mask);
 		sched_setaffinity(0, size, mask);
 		CPU_FREE(mask);
 		// Run the realtime handling function.  This does not return.
 		pine_realtime();
 	}
+	connected = true;
 } // }}}
 
 void arch_setup_end() { // {{{
@@ -568,12 +578,12 @@ void arch_send_pin_name(int pin) { // {{{
 // state = 3: Free running; main can set to 4.
 // state = 4: main requested stop; rt must set to 1.
 int arch_tick() { // {{{
-	// This is called when the timeout expires, but also when an interrupt is detected on an input pin.
+	// This is called when the timeout expires.
 	//debug("running fragment %d", running_fragment);
-	// Fill buffer for pru.
+	// Fill buffer for realtime thread.
 	int cf = pine_shared->current_fragment;
 	if (cf != running_fragment) {
-		debug("cf=%d, runn=%d", cf, running_fragment);
+		//debug("cf=%d, runn=%d", cf, running_fragment);
 		int cbs = 0;
 		while (cf != running_fragment) {
 			cbs += history[running_fragment].cbs;
@@ -614,7 +624,30 @@ int arch_tick() { // {{{
 	}
 	else
 		pine_next_adc();
-	// TODO: Pwm.
+	// Pwm.
+	struct timespec now;
+	clock_gettime(CLOCK_MONOTONIC, &now);
+	double diff = now.tv_sec - pine_pwm_time.tv_sec + (now.tv_nsec - pine_pwm_time.tv_nsec) / 1e9;
+	for (int pin = 0; pin < NUM_DIGITAL_PINS; ++pin) {
+		if (pine_shared->mode[pin] != 1 || pine_duty[pin] == 1)
+			continue;
+		if (pine_pwm_on[pin])
+			pine_pwm_target[pin] -= diff;
+		pine_pwm_target[pin] += diff * pine_duty[pin];
+		if (pine_pwm_target[pin] < 0) {
+			// Disable pin.
+			gpio_setpin(pine_pins[pin].port, pine_pins[pin].pin, false);
+			pine_pwm_on[pin] = false;
+		}
+		else {
+			// Enable pin.
+			gpio_setpin(pine_pins[pin].port, pine_pins[pin].pin, true);
+			pine_pwm_on[pin] = true;
+		}
+		//debug("pwm pin %d target %f on %d", pin, pine_pwm_target[pin], pine_pwm_on[pin]);
+	}
+	pine_pwm_time.tv_sec = now.tv_sec;
+	pine_pwm_time.tv_nsec = now.tv_nsec;
 	// Check limit switches.
 	int state = pine_shared->state;
 	//debug("state: %d %d %d", state, pine_shared->current_fragment, pine_shared->current_sample);
@@ -623,6 +656,7 @@ int arch_tick() { // {{{
 		if (settings.probing && probe_pin.valid()) {
 			if (RAWGET(probe_pin.pin) ^ probe_pin.inverted()) {
 				// Probe hit.
+				abort_move(0);
 				sending_fragment = 0;
 				stopping = 2;
 				send_host(CMD_LIMIT, -1, -1, NAN);
@@ -630,7 +664,6 @@ int arch_tick() { // {{{
 				cbs_after_current_move = 0;
 			}
 		}
-		int m0 = 0;
 		// Avoid race condition by reading cf twice (first was done at start of function).
 		int cs;
 		while (true) {
@@ -640,49 +673,87 @@ int arch_tick() { // {{{
 				break;
 			cf = cf2;
 		}
+		bool homing = false;
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			for (int m = 0; m < spaces[s].num_motors; ++m) {
-				if (!spaces[s].motor[m]->active || !spaces[s].motor[m]->step_pin.valid() || (!spaces[s].motor[m]->limit_max_pin.valid() && !spaces[s].motor[m]->limit_min_pin.valid()))
+				if (!spaces[s].motor[m]->step_pin.valid() || (!spaces[s].motor[m]->limit_max_pin.valid() && !spaces[s].motor[m]->limit_min_pin.valid())) {
+					debug("no limit check for motor %d %d, info %d %d %d", s, m, spaces[s].motor[m]->step_pin.valid(), spaces[s].motor[m]->limit_max_pin.valid(), spaces[s].motor[m]->limit_min_pin.valid());
 					continue;
+				}
 				int pin = spaces[s].motor[m]->step_pin.pin;
-				bool negative = bool(pine_shared->buffer[cf][cs][0] & (1 << pin)) ^ spaces[s].motor[m]->dir_pin.inverted();
-				Pin_t *p = negative ? &spaces[s].motor[m]->limit_max_pin : &spaces[s].motor[m]->limit_min_pin;
-				if (!p->valid())
-					continue;
-				if (RAWGET(p->pin) ^ p->inverted()) {
-					// Limit hit.
-					sending_fragment = 0;
-					stopping = 2;
-					send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit);
-					//debug("cbs after current cleared %d after sending limit", cbs_after_current_move);
-					cbs_after_current_move = 0;
+				if (pine_shared->num_homers == 0) {
+					bool negative;
+					if (pine_shared->buffer[cf][cs][0] & (1 << pin))
+						negative = false;
+					else if (pine_shared->buffer[cf][cs][1] & (1 << pin))
+						negative = true;
+					else
+						continue;
+					negative ^= spaces[s].motor[m]->dir_pin.inverted();
+					Pin_t *p = negative ? &spaces[s].motor[m]->limit_max_pin : &spaces[s].motor[m]->limit_min_pin;
+					if (!p->valid()) {
+						debug("no limit check for motor %d %d, pin %d", s, m, p->pin);
+						continue;
+					}
+					debug("limit check for motor %d %d, pin %d", s, m, p->pin);
+					if (RAWGET(p->pin) ^ p->inverted()) {
+						debug("limit hit.");
+						// Limit hit.
+						abort_move(0);
+						sending_fragment = 0;
+						stopping = 2;
+						send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit);
+						//debug("cbs after current cleared %d after sending limit", cbs_after_current_move);
+						cbs_after_current_move = 0;
+					}
+				}
+				// Check switches during homing.
+				if (spaces[s].motor[m]->pine_homer != 0) {
+					homing = true;
+					// Check "wrong" limit switch.
+					bool negative = spaces[s].motor[m]->pine_homer < 0;
+					negative ^= spaces[s].motor[m]->dir_pin.inverted();
+					Pin_t *p = negative ? &spaces[s].motor[m]->limit_max_pin : &spaces[s].motor[m]->limit_min_pin;
+					if (!p->valid() || !spaces[s].motor[m]->step_pin.valid())
+						continue;
+					if (!(RAWGET(p->pin) ^ p->inverted())) {
+						debug("home limit lost");
+						// Limit no longer hit.
+						spaces[s].motor[m]->pine_homer = 0;
+						pine_shared->homers[negative] &= ~(1 << spaces[s].motor[m]->step_pin.pin);
+						pine_shared->num_homers -= 1;
+						if (pine_shared->num_homers == 0) {
+							// Done homing.
+							pine_shared->state = 1;
+							homing = false;
+							send_host(CMD_HOMED);
+						}
+					}
 				}
 			}
-			m0 += spaces[s].num_motors;
 		}
-		// TODO: homing.
 		if (state == 0) {
-			state = settings.probing ? 2 : 3; // TODO: homing.
+			state = (settings.probing || homing) ? 2 : 3;
 			pine_shared->state = state;
 		}
 	}
 	// Pin state monitoring.
 	for (int i = 0; i < NUM_GPIO_PINS; ++i) {
-		if (pollfds[BASE_FDS + i].revents & POLLPRI) {
-			debug("interrupt on pin %d", i);
-			lseek(pollfds[BASE_FDS + i].fd, 0, SEEK_SET);
-			char buffer[10];
-			if (read(pollfds[BASE_FDS + i].fd, buffer, sizeof(buffer)) <= 0)
-				std::cerr << "Warning: read from gpio file after interrupt failed." << std::endl;
-			for (int g = 0; g < num_gpios; ++g) {
-				if (gpios[g].pin.valid() && gpios[g].pin.pin == i)
-					send_host(CMD_PINCHANGE, g, RAWGET(i) ^ gpios[g].pin.inverted());
-			}
+		if (pine_shared->mode[i] < 2 || pine_shared->mode[i] > 3)
+			continue;
+		bool pin_state = RAWGET(i);
+		if (pine_pin_state[i] == pin_state)
+			continue;
+		debug("interrupt on pin %d", i);
+		for (int g = 0; g < num_gpios; ++g) {
+			if (gpios[g].pin.valid() && gpios[g].pin.pin == i)
+				send_host(CMD_PINCHANGE, g, pin_state ^ gpios[g].pin.inverted());
 		}
+		pine_pin_state[i] = pin_state;
 	}
 	// TODO: LED.
 	// TODO: Timeout.
-	return state == 3 ? 100 : state == 2 ? 10 : 200;
+	return 10;
 } // }}}
 
 void arch_motors_change() { // {{{
@@ -730,18 +801,54 @@ void arch_stop(bool fake) { // {{{
 	case 2:
 	case 3:
 		pine_shared->state = 4;
-		// Wait for pru to ack.
+		// Wait for realtime thread to ack.
 		while (pine_shared->state == 4) {}
 		break;
 	}
 	pine_shared->state = 1;
+	if (pine_shared->num_homers > 0) {
+		for (int s = 0; s < NUM_SPACES; ++s) {
+			for (int m = 0; m < spaces[s].num_motors; ++m)
+				spaces[s].motor[m]->pine_homer = 0;
+		}
+		pine_shared->num_homers = 0;
+		pine_shared->homers[0] = 0;
+		pine_shared->homers[1] = 0;
+	}
 	// Update current_pos.
 	abort_move(pine_shared->current_sample);
 	current_fragment_pos = 0;
 } // }}}
 
-void arch_home() { // TODO {{{
+void arch_home() { // {{{
 	// Start homing.
+	int mi = 0;
+	for (int s = 0; s < NUM_SPACES; ++s) {
+		for (int m = 0; m < spaces[s].num_motors; ++m) {
+			switch (command[0][3 + mi + m]) {
+			case '\x00':
+				continue;
+			case '\x01':
+				pine_shared->num_homers += 1;
+				spaces[s].motor[m]->pine_homer = 1;
+				pine_shared->homers[1] |= 1 << spaces[s].motor[m]->step_pin.pin;
+				continue;
+			case '\xff':
+				pine_shared->num_homers += 1;
+				spaces[s].motor[m]->pine_homer = -1;
+				pine_shared->homers[0] |= 1 << spaces[s].motor[m]->step_pin.pin;
+				continue;
+			default:
+				debug("Invalid home state: %d for motor %d %d", command[0][3 + mi + m], s, m);
+				abort();
+			}
+		}
+		mi += spaces[s].num_motors;
+	}
+	if (pine_shared->num_homers == 0) {
+		debug("no homers");
+		send_host(CMD_HOMED);
+	}
 } // }}}
 
 bool arch_running() { // {{{
@@ -754,7 +861,7 @@ void arch_start_move(int extra) { // {{{
 	// Start moving with sent buffers.
 	int state = pine_shared->state;
 	if (state != 1) {
-		debug("info: arch_start_move called with non-1 state %d", state);
+		//debug("info: arch_start_move called with non-1 state %d", state);
 		return;
 	}
 	pine_shared->state = 0;
@@ -764,27 +871,31 @@ bool arch_send_fragment() { // {{{
 	if (stopping)
 		return false;
 	pine_shared->next_fragment = (pine_shared->next_fragment + 1) % FRAGMENTS_PER_BUFFER;
+	for (int i = 0; i < SAMPLES_PER_FRAGMENT; ++i) {
+		pine_shared->buffer[pine_shared->next_fragment][i][0] = 0;
+		pine_shared->buffer[pine_shared->next_fragment][i][1] = 0;
+	}
 	return true;
 } // }}}
 
 int arch_fds() { // {{{
-	return ARCH_MAX_FDS;
+	return 0;
 } // }}}
 
-double arch_get_duty(Pin_t _pin) { // TODO {{{
+double arch_get_duty(Pin_t _pin) { // {{{
 	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin for arch_get_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return 1;
 	}
-	return 1;
+	return pine_duty[_pin.pin];
 } // }}}
 
-void arch_set_duty(Pin_t _pin, double duty) { // TODO {{{
+void arch_set_duty(Pin_t _pin, double duty) { // {{{
 	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return;
 	}
-	(void)&duty;
+	pine_duty[_pin.pin] = duty;
 } // }}}
 
 void arch_discard() { // {{{
@@ -839,7 +950,7 @@ void DATA_SET(int s, int m, int value) { // {{{
 double arch_round_pos(int space, int motor, double src) { // {{{
 	(void)&space;
 	(void)&motor;
-	return src;
+	return round(src);
 } // }}}
 // }}}
 #endif

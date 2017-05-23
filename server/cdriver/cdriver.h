@@ -48,7 +48,7 @@
 
 #include ARCH_INCLUDE
 
-#define debug(...) do { buffered_debug_flush(); fprintf(stderr, "#"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); } while (0)
+#define debug(...) do { buffered_debug_flush(); fprintf(stderr, "#"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); fflush(stderr); } while (0)
 
 static inline int min(int a, int b) {
 	return a < b ? a : b;
@@ -552,6 +552,7 @@ Axis_History *setup_axis_history();
 Motor_History *setup_motor_history();
 EXTERN bool host_block;
 EXTERN bool sent_names;
+EXTERN bool connected;
 
 // storage.cpp
 uint8_t read_8(int32_t &address);

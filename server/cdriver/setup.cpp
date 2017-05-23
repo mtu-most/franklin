@@ -30,6 +30,7 @@ void setup()
 #ifdef SERIAL
 	command[1] = serial_command;
 #endif
+	connected = false;
 	preparing = false;
 	host_block = false;
 	sent_names = false;
@@ -164,7 +165,7 @@ void connect_end() {
 	arch_stop(true);
 	// Update pin names at next globals update.
 	sent_names = false;
-	if (arch_fds() > 0)
+	if (connected)
 		send_host(CMD_CONNECTED);
 }
 

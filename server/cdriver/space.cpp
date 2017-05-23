@@ -187,6 +187,7 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 		}
 	}
 	RESET(motor[m]->step_pin);
+	RESET(motor[m]->dir_pin);
 	SET_INPUT(motor[m]->limit_min_pin);
 	SET_INPUT(motor[m]->limit_max_pin);
 	if (!isnan(motor[m]->home_pos)) {
@@ -365,6 +366,8 @@ static void move_axes(Space *s, int32_t current_time, double &factor) { // {{{
 } // }}}
 
 static bool do_steps(double &factor, int32_t current_time) { // {{{
+	// Do the steps to arrive at the correct position.
+	// Factor is the fraction of the distance that still needs to be done.  If it is 1, the move is complete after these steps.
 	//debug("steps");
 	if (factor <= 0) {
 		movedebug("end move");
@@ -707,7 +710,6 @@ void store_settings() { // {{{
 		}
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->active = false;
-			DATA_CLEAR(s, m);
 			sp.motor[m]->history[current_fragment].last_v = sp.motor[m]->settings.last_v;
 			sp.motor[m]->history[current_fragment].target_v = sp.motor[m]->settings.target_v;
 			sp.motor[m]->history[current_fragment].target_dist = sp.motor[m]->settings.target_dist;
@@ -726,6 +728,7 @@ void store_settings() { // {{{
 			sp.axis[a]->history[current_fragment].endpos[1] = sp.axis[a]->settings.endpos[1];
 		}
 	}
+	DATA_CLEAR();
 } // }}}
 
 void restore_settings() { // {{{
@@ -771,7 +774,6 @@ void restore_settings() { // {{{
 		}
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->active = false;
-			DATA_CLEAR(s, m);
 			sp.motor[m]->settings.last_v = sp.motor[m]->history[current_fragment].last_v;
 			sp.motor[m]->settings.target_v = sp.motor[m]->history[current_fragment].target_v;
 			sp.motor[m]->settings.target_dist = sp.motor[m]->history[current_fragment].target_dist;
@@ -790,6 +792,7 @@ void restore_settings() { // {{{
 			sp.axis[a]->settings.endpos[1] = sp.axis[a]->history[current_fragment].endpos[1];
 		}
 	}
+	DATA_CLEAR();
 } // }}}
 
 void send_fragment() { // {{{

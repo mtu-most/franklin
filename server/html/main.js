@@ -886,7 +886,7 @@ function globals_update(uuid) { // {{{
 		var group = p.idgroups[ids[i]];
 		for (var e = 0; e < group.length; ++e) {
 			var obj = group[e];
-			obj.checked = obj.obj[0][1] == p[ids[i] + '_id'];
+			obj.checked = obj.obj[0][1] == p.machine[ids[i] + '_id'];
 		}
 	}
 	update_state(machines[uuid].ui, get_value(p, [null, 'status']));

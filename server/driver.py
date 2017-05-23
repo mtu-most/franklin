@@ -2243,7 +2243,7 @@ class Machine: # {{{
 			ret += 'name = %s\r\n' % self.name
 			ret += 'pin = %s\r\n' % write_pin(self.pin)
 			ret += 'reset = %d\r\n' % self.reset
-			ret += 'duty = %d\r\n' % self.duty
+			ret += 'duty = %f\r\n' % self.duty
 			return ret
 	# }}}
 	# }}}

@@ -58,7 +58,7 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	settings.run_time = 0;
 	settings.run_dist = 0;
 	settings.run_file_current = 0;
-	int probe_fd;
+	int probe_fd = -1;
 	if (probe_name_len > 0) {
 		probe_fd = open(probe_file_name, O_RDONLY);
 		if (probe_fd < 0) {
@@ -476,7 +476,7 @@ double run_find_pos(double pos[3]) {
 	double current[3] = {NAN, NAN, NAN};
 	double center[3];
 	double normal[3];
-	double record;
+	double record = NAN;
 	// These are not used yet.
 	(void)&center;
 	(void)&normal;
