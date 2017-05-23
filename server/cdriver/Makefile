@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#TARGET ?= pine64
+#TARGET ?= orangepizero
 
 PROFILE = #-pg
 
@@ -25,10 +25,16 @@ LDFLAGS ?= $(PROFILE)
 
 all: franklin-cdriver
 
+ifeq (${TARGET}, orangepizero)
+ARCH_HEADER = arch-multicore.h
+CPPFLAGS += -DORANGEPIZERO
+else
 ifeq (${TARGET}, pine64)
-ARCH_HEADER = arch-pine64.h
+ARCH_HEADER = arch-multicore.h
+CPPFLAGS += -DPINE64
 else
 ARCH_HEADER = arch-avr.h
+endif
 endif
 
 SOURCES = \
