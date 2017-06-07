@@ -1330,8 +1330,7 @@ class Machine: # {{{
 			if y > p[1][1]:
 				# Done.
 				self.probing = False
-				self._store_probemap()
-				self._globals_update()
+				self._check_probemap()
 				if id is not None:
 					self._send(id, 'return', p)
 				for y, c in enumerate(p[2]):
@@ -1384,7 +1383,41 @@ class Machine: # {{{
 			# Retract
 			self.line([{2: z}])
 	# }}}
-	def _store_probemap(self): # {{{
+	def _check_probemap(self): # {{{
+		'''Check the probemap, and save it if it is valid; discard it otherwise.
+		@returns: True if the probemap is valid, False otherwise.'''
+		if not isinstance(self.probemap, (list, tuple)) or len(self.probemap) != 3:
+			log('probemap check failed: not a list of length 3')
+			self.probemap = None
+			self._globals_update()
+			return False
+		limits, nums, probes = self.probemap
+		if not isinstance(limits, (list, tuple)) or not isinstance(nums, (list, tuple)) or len(limits) != 4 or len(nums) != 3:
+			log('probemap check failed: first lists are not length 4 and 3')
+			self.probemap = None
+			self._globals_update()
+			return False
+		if not all(isinstance(e, (float, int)) and not math.isnan(e) for e in limits):
+			log('probemap check failed: limits must be numbers')
+			self.probemap = None
+			self._globals_update()
+			return False
+		if not all(isinstance(e, t) and not math.isnan(e) for e, t in zip(nums, (int, int, (float, int)))):
+			log('probemap check failed: nums and angle must be numbers')
+			self.probemap = None
+			self._globals_update()
+			return False
+		nx, ny, angle = nums
+		if len(probes) != ny + 1 or not all(isinstance(e, (list, tuple)) and len(e) == nx + 1 for e in probes):
+			log('probemap check failed: probe map is incorrect size')
+			self.probemap = None
+			self._globals_update()
+			return False
+		if not all(all(isinstance(e, (float, int)) and not math.isnan(e) for e in f) for f in probes):
+			log('probemap check failed: probe points must all be numbers')
+			self.probemap = None
+			self._globals_update()
+			return False
 		with fhs.write_spool(os.path.join(self.uuid, 'probe' + os.extsep + 'bin'), text = False) as probemap_file:
 			# Map = [[x, y, w, h], [nx, ny], [[...], [...], ...]]
 			sina, cosa = self.gcode_angle
@@ -1398,6 +1431,8 @@ class Machine: # {{{
 			for y in range(self.probemap[1][1] + 1):
 				for x in range(self.probemap[1][0] + 1):
 					probemap_file.write(struct.pack('@d', self.probemap[2][y][x]))
+		self._globals_update()
+		return True
 	# }}}
 	def _start_job(self, paused): # {{{
 		# Set all extruders to 0.
@@ -2586,7 +2621,7 @@ class Machine: # {{{
 		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
 		self._send_packet(struct.pack('=BBddBB', protocol.command['RUN_FILE'], 1, 0, 0, motor, 0) + filename.encode('utf8'))
 	# }}}
-	def benjamin_audio_add_file(self, filename, name): # {{{
+	def benjamin_audio_add_POST(self, filename, name): # {{{
 		with open(filename, 'rb') as f:
 			self._audio_add(f, name)
 	# }}}
@@ -2837,10 +2872,10 @@ class Machine: # {{{
 		self._broadcast(None, 'blocked', None)
 		return errors
 	# }}}
-	def expert_import_file(self, filename, name): # {{{
+	def expert_import_POST(self, filename, name): # {{{
 		'''Import settings using a POST request.
 		Note that this function can only be called using POST; not with the regular websockets system.
-		'''	# FIXME: At the moment there is no protection against calling it from the websocket.  This is a security risk.
+		'''
 		return ', '.join('%s (%s)' % (msg, ln) for ln, msg in self.expert_import_settings(open(filename).read(), name))
 	# }}}
 	@delayed
@@ -2931,12 +2966,20 @@ class Machine: # {{{
 			f.seek(0)
 			return self._queue_add(f, name)
 	# }}}
-	def queue_add_file(self, filename, name): # {{{
+	def queue_add_POST(self, filename, name): # {{{
 		'''Add g-code to queue using a POST request.
 		Note that this function can only be called using POST; not with the regular websockets system.
-		'''	# FIXME: At the moment there is no protection against calling it from the websocket.  This is a security risk.
+		'''
 		with open(filename) as f:
 			return ', '.join(self._queue_add(f, name))
+	# }}}
+	def probe_add_POST(self, filename, name): # {{{
+		'''Set probe map using a POST request.
+		Note that this function can only be called using POST; not with the regular websockets system.
+		'''
+		with open(filename) as f:
+			self.probemap = json.loads(f.read().strip())
+		return '' if self._check_probemap() else 'Invalid probemap'
 	# }}}
 	def queue_remove(self, name, audio = False): # {{{
 		'''Remove an entry from the queue.
@@ -3103,7 +3146,7 @@ class Machine: # {{{
 				self.admin_set_default_profile(self.default_profile)
 		if 'probemap' in ka:
 			self.probemap = ka.pop('probemap')
-			self._store_probemap()
+			self._check_probemap()
 		for key in ('unit_name', 'pin_names'):
 			if key in ka:
 				setattr(self, key, ka.pop(key))

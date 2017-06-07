@@ -535,6 +535,16 @@ function probe(ui) { // {{{
 function del_probe(ui) { // {{{
 	ui.machine.call('probe', [null], {});
 } // }}}
+
+function download_probemap(ui) { // {{{
+	var data = JSON.stringify(ui.machine.probemap);
+	var a = Create('a');
+	a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(data);
+	a.download = 'probe.map';
+	var event = document.createEvent('MouseEvents');
+	event.initEvent('click', true, true);
+	a.dispatchEvent(event);
+} // }}}
 // }}}
 
 // Queue functions.  {{{

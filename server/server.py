@@ -197,11 +197,13 @@ class Server(websocketd.RPChttpd): # {{{
 			os.unlink(post[0])
 			connection.socket.close()
 		if action == 'queue_add':
-			machines[machine].call('queue_add_file', [connection.data['role'], post[0], post[1]], {}, cb)
+			machines[machine].call('queue_add_POST', [connection.data['role'], post[0], post[1]], {}, cb)
+		elif action == 'probe_add':
+			machines[machine].call('probe_add_POST', [connection.data['role'], post[0], post[1]], {}, cb)
 		elif action == 'audio_add':
-			machines[machine].call('audio_add_file', [connection.data['role'], post[0], post[1]], {}, cb)
+			machines[machine].call('audio_add_POST', [connection.data['role'], post[0], post[1]], {}, cb)
 		elif action == 'import':
-			machines[machine].call('import_file', [connection.data['role'], post[0], post[1]], {}, cb)
+			machines[machine].call('import_POST', [connection.data['role'], post[0], post[1]], {}, cb)
 		else:
 			os.unlink(post[0])
 			self.reply(connection, 400)
@@ -406,6 +408,9 @@ class Connection: # {{{
 				else:
 					log('No active machine')
 					return ('error', 'No active machine')
+		if name.endswith('_POST'):
+			log('refusing to call function only meant for POST')
+			return ('error', 'Invalid function name')
 		def reply(success, ret):
 			if success:
 				wake(ret)

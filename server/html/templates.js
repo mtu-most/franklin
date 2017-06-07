@@ -358,6 +358,8 @@ function Top(ui) { // {{{
 	// Jobbuttons. {{{
 	e = ret.AddElement('div', 'jobbuttons');
 	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode', function() { return queue_deselect(ui); }));
+	e.AddElement('br');
+	e.Add(File(ui, [null, 'probe_add', 'probe_add'], 'probe_add', 'Add Probemap', '.map'));
 	e.AddElement('br', 'benjamin');
 	e.Add(File(ui, [null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav', function() { return queue_deselect(ui); }), 'benjamin');
 	e.AddElement('br', 'benjamin');
@@ -374,6 +376,8 @@ function Top(ui) { // {{{
 	b.type = 'button';
 	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { del_probe(ui); }).AddText('Delete Probemap');
 	b.id = make_id(ui, [null, 'delprobe']);
+	b.type = 'button';
+	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { download_probemap(ui); }).AddText('Download Probemap');
 	b.type = 'button';
 	// }}}
 	// Stop buttons. {{{
