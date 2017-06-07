@@ -448,7 +448,7 @@ def read_boards(): # {{{
 		if 'name' not in boards[tag]:
 			boards[tag]['name'] = tag
 		if any(x not in boards[tag] for x in ('upload.protocol', 'upload.speed', 'build.mcu', 'upload.maximum_size')):
-			log('skipping %s because hardware information is incomplete (%s)' % (boards[tag]['name'], repr(boards[tag])))
+			#log('skipping %s because hardware information is incomplete (%s)' % (boards[tag]['name'], repr(boards[tag])))
 			del boards[tag]
 			continue
 		if int(boards[tag]['upload.maximum_size']) < 30000:

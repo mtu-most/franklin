@@ -115,6 +115,7 @@ function _setup_updater() {
 				machines[machine] = {
 					uuid: machine,
 					connected: false,
+					probemap: null,
 					profile: 'default',
 					queue: [],
 					audioqueue: [],
@@ -235,8 +236,9 @@ function _setup_updater() {
 			machines[machine].spi_setup = values[27];
 			machines[machine].temp_scale_min = values[28];
 			machines[machine].temp_scale_max = values[29];
-			machines[machine].connected = values[30];
-			machines[machine].status = values[31];
+			machines[machine].probemap = values[30];
+			machines[machine].connected = values[31];
+			machines[machine].status = values[32];
 			for (var i = machines[machine].num_temps; i < new_num_temps; ++i) {
 				machines[machine].temps.push({
 					name: null,

@@ -525,6 +525,16 @@ function upload(ports, firmwares) { // {{{
 	var firmware = firmwares.options[firmwares.selectedIndex].value;
 	rpc.call('upload', [port, firmware], {}, function(ret) { alert('upload done: ' + ret);});
 } // }}}
+
+function probe(ui) { // {{{
+	var bbox = get_queue(ui)[1];
+	console.log(bbox);
+	ui.machine.call('probe', [[bbox[0], bbox[2], bbox[1] - bbox[0], bbox[3] - bbox[2]]], {});
+} // }}}
+
+function del_probe(ui) { // {{{
+	ui.machine.call('probe', [null], {});
+} // }}}
 // }}}
 
 // Queue functions.  {{{
@@ -568,32 +578,17 @@ function queue_del(ui) { // {{{
 			rm.push(e.options[i]);
 	}
 	for (var i = 0; i < rm.length; ++i)
-		rpc.call('queue_remove', [rm[i].value], {});
+		ui.machine.call('queue_remove', [rm[i].value], {});
 }
 // }}}
 
 function get_queue(ui) { // {{{
-	var toprint = [];
-	var e = get_element(ui, [null, 'queue']);
-	for (var i = 0; i < e.options.length; ++i) {
-		if (e.options[i].selected)
-			toprint.push(e.options[i].value);
-	}
-	return toprint;
+	return ui.machine.queue[get_element(ui, [null, 'queue']).selectedOptions[0].index];
 }
 // }}}
 
 function queue_run(ui) { // {{{
-	var action;
-	if (get_element(ui, [null, 'probebox']).checked) {
-		action = 'queue_probe';
-		kwargs = {};	// Probe jobs always pause after probing.
-	}
-	else {
-		action = 'queue_run';
-		kwargs = {paused: get_element(ui, [null, 'start_paused']).checked};
-	}
-	ui.machine.call(action, [get_queue(ui)], kwargs);
+	ui.machine.call('queue_run', [get_queue(ui)[0]], kwargs = {paused: get_element(ui, [null, 'start_paused']).checked});
 }
 // }}}
 
@@ -602,7 +597,7 @@ function audio_play(ui) { // {{{
 	var o = e.options[e.selectedIndex];
 	if (o === undefined)
 		return;
-	ui.call('audio_play', [o.value]);
+	ui.machine.call('audio_play', [o.value]);
 }
 
 // }}}
@@ -611,7 +606,7 @@ function audio_del(ui) { // {{{
 	var o = e.options[e.selectedIndex];
 	if (o === undefined)
 		return;
-	ui.call('audio_del', [o.value]);
+	ui.machine.call('audio_del', [o.value]);
 }
 // }}}
 // }}}
@@ -678,7 +673,7 @@ function port_state(ui, port, state) { // {{{
 
 function new_machine(uuid) { // {{{
 	machines[uuid].label = Label(machines[uuid]);
-	machines[uuid].ui = Machine(machines[uuid]);
+	machines[uuid].ui = UI(machines[uuid]);
 	var p = machines[uuid].ui;
 	labels_element.insertBefore(machines[uuid].label, new_tab);
 	machines_element.Add(p);
@@ -1758,6 +1753,31 @@ function redraw_canvas(ui) { // {{{
 		c.arc(0, 0, 1, 0, 2 * Math.PI);
 		c.fillStyle = '#888';
 		c.fill();
+		// }}}
+		// Draw probe map. {{{
+		if (ui.machine.probemap !== null) {
+			var limits = ui.machine.probemap[0];
+			var nums = ui.machine.probemap[1];
+			var map = ui.machine.probemap[2];
+			var dx = limits[2] / nums[0]
+			var dy = limits[3] / nums[1]
+			var sina = Math.sin(nums[2]);
+			var cosa = Math.cos(nums[2]);
+			var size = (dx > dy ? dy : dx) / 4;
+			c.beginPath();
+			for (var y = 0; y <= nums[1]; ++y) {
+				for (var x = 0; x <= nums[0]; ++x) {
+					var px = limits[0] + dx * x * cosa - dy * y * sina;
+					var py = limits[1] + dy * y * cosa + dx * x * sina;
+					c.moveTo(px - size, py - size);
+					c.lineTo(px + size, py + size);
+					c.moveTo(px - size, py + size);
+					c.lineTo(px + size, py - size);
+				}
+			}
+			c.strokeStyle = '#aaa';
+			c.stroke();
+		}
 		// }}}
 
 		c.save(); // Draw context. {{{

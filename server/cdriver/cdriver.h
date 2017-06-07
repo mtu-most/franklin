@@ -517,6 +517,7 @@ struct Run_Record {
 struct ProbeFile {
 	double x, y, w, h, sina, cosa;
 	unsigned long nx, ny;
+	double angle;
 	double sample[0];
 } __attribute__((__packed__));
 void run_file(int name_len, char const *name, int probe_name_len, char const *probe_name, bool start, double sina, double cosa, int audio);

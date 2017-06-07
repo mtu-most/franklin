@@ -368,7 +368,7 @@ bool hwpacket(int len) { // {{{
 		if (spaces[0].num_axes > 0)
 			cpdebug(0, 0, "ending hwpos %f", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 		double pos;
-		int s, m;
+		int s, m = -1;
 		if (which >= avr_active_motors) {
 			s = -1;
 			m = -1;

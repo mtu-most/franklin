@@ -350,25 +350,17 @@ function Label(machine) {	// {{{
 // Machine parts. {{{
 function Top(ui) { // {{{
 	var ret = Create('div', 'top');
-	// Up/remove/down. {{{
-	var e = ret.AddElement('div', 'updown');
-	e.AddElement('button', 'queue1').AddEvent('click', function() { queue_up(ui); }).AddText('⬆').type = 'button';
-	e.AddElement('br');
-	e.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(ui); }).AddText('×').type = 'button';
-	e.AddElement('br');
-	e.AddElement('button', 'queue1').AddEvent('click', function() {queue_down(ui); }).AddText('⬇').type = 'button';
-	// }}}
+	ret.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(ui); }).AddText('×').type = 'button';
 	// Jobs. {{{
 	e = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(ui); });
-	e.multiple = true;
 	e.id = make_id(ui, [null, 'queue']);
 	// }}}
 	// Jobbuttons. {{{
 	e = ret.AddElement('div', 'jobbuttons');
 	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode', function() { return queue_deselect(ui); }));
-	e.AddElement('br');
+	e.AddElement('br', 'benjamin');
 	e.Add(File(ui, [null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav', function() { return queue_deselect(ui); }), 'benjamin');
-	e.AddElement('br');
+	e.AddElement('br', 'benjamin');
 	var b = e.AddElement('button', 'benjamin').AddText('×').AddEvent('click', function() { audio_del(ui); });
 	b.type = 'button';
 	e.AddElement('select', 'benjamin').id = make_id(ui, [null, 'audio']);
@@ -377,13 +369,12 @@ function Top(ui) { // {{{
 	e.AddElement('br');
 	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_run(ui); }).AddText('Run selected job');
 	b.type = 'button';
-	var l = e.AddElement('label');
-	b = l.AddElement('input', 'jobbutton');
-	l.AddText('Probe');
-	var id = make_id(ui, [null, 'probebox']);
-	b.id = id;
-	b.type = 'checkbox';
-	b.htmlFor = id;
+	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { probe(ui); }).AddText('Probe');
+	b.id = make_id(ui, [null, 'probe']);
+	b.type = 'button';
+	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { del_probe(ui); }).AddText('Delete Probemap');
+	b.id = make_id(ui, [null, 'delprobe']);
+	b.type = 'button';
 	// }}}
 	// Stop buttons. {{{
 	e = ret.AddElement('div', 'stop');
@@ -546,7 +537,7 @@ function Gpios(ui) { // {{{
 // }}}
 // }}}
 
-function Machine(machine) {	// {{{
+function UI(machine) {	// {{{
 	var ret = Create('div', 'machine hidden');
 	ret.machine = machine;
 	ret.names = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
@@ -558,7 +549,6 @@ function Machine(machine) {	// {{{
 	ret.temptargets = [];
 	ret.hidetypes = [];
 	ret.tables = [];
-	ret.tp_pos = 0;
 	ret.tp_context = [0, []];
 	ret.idgroups = {bed: [], fan: [], spindle: []};
 	ret.multiples = {space: [], temp: [], gpio: [], axis: [], motor: []};
