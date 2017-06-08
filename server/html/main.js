@@ -1769,8 +1769,8 @@ function redraw_canvas(ui) { // {{{
 			var limits = ui.machine.probemap[0];
 			var nums = ui.machine.probemap[1];
 			var map = ui.machine.probemap[2];
-			var dx = limits[2] / nums[0]
-			var dy = limits[3] / nums[1]
+			var dx = limits[2] / nums[0];
+			var dy = limits[3] / nums[1];
 			var sina = Math.sin(nums[2]);
 			var cosa = Math.cos(nums[2]);
 			var size = (dx > dy ? dy : dx) / 4;
@@ -2073,9 +2073,9 @@ function zmove(ui, e) { // {{{
 // }}}
 
 function keypress(event) { // {{{
-	var ui = selected_machine;
-	if (!ui)
+	if (selected_machine === null)
 		return;
+	var ui = machines[selected_machine].ui;
 	if (event.keyCode >= 37 && event.keyCode <= 40 && (event.ctrlKey || event.altKey)) {
 		var amount = 10;	// TODO: make this a setting.
 		if (event.shiftKey)
