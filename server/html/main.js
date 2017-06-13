@@ -217,8 +217,6 @@ function make_id(ui, id, extra) { // {{{
 	// [['space', 1], 'num_axes']
 	// [['axis', [0, 1]], 'offset']
 	// [['motor', [0, 1]], 'delta_radius']
-	//console.log(ui);
-	//console.error(id);
 	if (!(ui instanceof Element))
 		console.error(ui);
 	var ret = ui ? ui.machine.uuid.replace(/[^a-zA-Z0-9_]/g, '') : '';
@@ -442,10 +440,8 @@ function floatkey(event, element) { // {{{
 				value = amount;
 			else if (element.obj.length == 2)
 				value = get_value(element.ui, obj) / element.factor + amount;
-			else {
-				console.info('skip', element.obj);
+			else
 				continue;
-			}
 			set_value(element.ui, obj, element.factor * value);
 		}
 		return;
@@ -528,8 +524,7 @@ function upload(ports, firmwares) { // {{{
 
 function probe(ui) { // {{{
 	var bbox = get_queue(ui)[1];
-	console.log(bbox);
-	ui.machine.call('probe', [[bbox[0], bbox[2], bbox[1] - bbox[0], bbox[3] - bbox[2]]], {});
+	ui.machine.call('probe', [[ui.machine.targetx, ui.machine.targety, bbox[0], bbox[2], bbox[1] - bbox[0], bbox[3] - bbox[2]]], {});
 } // }}}
 
 function del_probe(ui) { // {{{
@@ -706,7 +701,6 @@ function new_machine(uuid) { // {{{
 } // }}}
 
 function blocked(uuid, reason) { // {{{
-	console.info(uuid);
 	var e = get_element(machines[uuid].ui, [null, 'block1']);
 	if (reason) {
 		e.ClearAll();
@@ -1769,16 +1763,16 @@ function redraw_canvas(ui) { // {{{
 			var limits = ui.machine.probemap[0];
 			var nums = ui.machine.probemap[1];
 			var map = ui.machine.probemap[2];
-			var dx = limits[2] / nums[0];
-			var dy = limits[3] / nums[1];
+			var dx = limits[4] / nums[0];
+			var dy = limits[5] / nums[1];
 			var sina = Math.sin(nums[2]);
 			var cosa = Math.cos(nums[2]);
 			var size = (dx > dy ? dy : dx) / 4;
 			c.beginPath();
 			for (var y = 0; y <= nums[1]; ++y) {
 				for (var x = 0; x <= nums[0]; ++x) {
-					var px = limits[0] + dx * x * cosa - dy * y * sina;
-					var py = limits[1] + dy * y * cosa + dx * x * sina;
+					var px = limits[0] + (dx * x + limits[2]) * cosa - (dy * y + limits[3]) * sina;
+					var py = limits[1] + (dy * y + limits[3]) * cosa + (dx * x + limits[2]) * sina;
 					c.moveTo(px - size, py - size);
 					c.lineTo(px + size, py + size);
 					c.moveTo(px - size, py + size);

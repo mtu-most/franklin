@@ -172,15 +172,18 @@ static double handle_probe(double ox, double oy, double z) {
 		return z + probe_adjust;
 	if (isnan(ox) || isnan(oy) || isnan(z))
 		return NAN;
+	ox -= p->targetx;
+	oy -= p->targety;
 	double x = ox * p->cosa + oy * p->sina;
 	double y = oy * p->cosa - ox * p->sina;
+	x -= p->x0;
+	y -= p->y0;
 	int ix, iy;
 	if (p->w == 0 || p->nx == 0) {
 		x = 0;
 		ix = 0;
 	}
 	else {
-		x -= p->x;
 		x /= p->w / p->nx;
 		if (x < 0)
 			x = 0;
@@ -195,7 +198,6 @@ static double handle_probe(double ox, double oy, double z) {
 		iy = 0;
 	}
 	else {
-		y -= p->y;
 		y /= p->h / p->ny;
 		if (y < 0)
 			y = 0;

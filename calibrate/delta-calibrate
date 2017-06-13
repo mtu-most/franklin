@@ -1,274 +1,114 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 '''
-Delta calibration.  The user must move the extruder to specific positions and
-the printer will be calibrated by this program.
+Delta calibration.
 
-For each axis, the user must:
-	First move the other two (together/delta) to make the axis vertical.
-	Then move it straight down to position the calibration sheet under the nozzle.
-	Then for each circle, move it above the circle.
-	The calibration sheet is removed, and for each position the bed must be touched.
-	At this point, the rod length for the axis is computed.
-With the rod lengths known, a carriage position can be converted to a distance from the tower.
-This is used to compute the distances between the towers from the vertical position measurements.
-With these numbers, the real center point is computed, and the radii for all axes.
-The user is requested to move the nozzle to the bed at the center point.
-This is used to recompute (and check) the computed radii.  The new values are used.
+This program will fit the parameters of the printer to a probemap.
+
+Input:
+* A probemap
+* All parameter values that were used while probing.  Those must be equal for all apexes.
+
+Output:
+* New parameter values based on the assumption that the probed surface was flat and horizontal.
 '''
 
-import sys
-import gtk
-import network
+import numpy
 import scipy.optimize
+import fhs
+import json
+import sys
+import math
 
-class App (gtk.EventBox):
-	xs = [99.5, 199.0]	# Distances from center of calibration circles.
-	txt_make_vertical = 'Make the axis vertical'
-	txt_set_reference = 'Position the center marker under the reference point'
-	txt_move_to_next_point = 'Move the reference point above the next position'
-	txt_move_to_bed = 'Move the reference point to the reference plane'
-	def __init__ (self):
-		super (App, self).__init__ ()
-		self.control = False
-		self.shift = False
-		self.axis = 0
-		self.phase = 1
-		self.point = 0
-		self.z = 0.
-		self.zs = []
-		self.other = 0.
-		self.skew = 0.
-		self.axisinfo = []
-		self.add_events (gtk.gdk.KEY_PRESS_MASK | gtk.gdk.KEY_RELEASE_MASK)
-		self.connect ('key_press_event', self.press)
-		self.connect ('key_release_event', self.release)
-		self.set_can_focus (True)
-		self.label = gtk.Label ()
-		self.set_text (self.txt_make_vertical)
-		self.amountlabel = gtk.Label ()
-		self.set_amountlabel ()
-		self.set_size_request (600, 400)
-		box = gtk.VBox ()
-		box.add (self.label)
-		box.add (self.amountlabel)
-		self.add (box)
-		self.label.show ()
-		self.amountlabel.show ()
-		box.show ()
-	def start (self):
-		self.printer = network.RPCSocket ('reprap|')
-		self.printer.set_motor_limit (0)
-		self.printer.set_printer_type (0)
-		self.home ()
-		for i in range (3):
-			self.printer.axis_motor_set_max_v_neg (i, self.printer.axis_motor_get_max_v_neg (i) / 2)
-			self.printer.axis_motor_set_max_v_pos (i, self.printer.axis_motor_get_max_v_pos (i) / 2)
-	def home (self):
-		self.printer.clear_limits ()
-		s = 1 if self.printer.axis_get_limit_max_pin (0) < 255 else -1
-		for i in range (3):
-			self.printer.run_axis (i, s * 50)
-		self.printer.wait_for_limits (3)
-		self.printer.clear_limits ()
-		for i in range (3):
-			self.printer.axis_set_current_pos (i, 0)
-		self.printer.goto (axes = {0: s * -10, 1: s * -10, 2: s * -10}, cb = True)
-		self.printer.wait_for_cb ()
-		for i in range (3):
-			self.printer.run_axis (i, s * 10)
-		self.printer.wait_for_limits (3)
-		self.printer.clear_limits ()
-		for i in range (3):
-			self.printer.axis_set_current_pos (i, 0)
-	def get_amount (self):
-		if self.control:
-			return .1
-		if self.shift:
-			return 10
-		return 1
-	def move (self, dz, dother, dskew):
-		if self.phase > 1 or self.point == 1:
-			dz = 0
-		if self.point != 0:
-			dskew = 0
-		self.z += dz
-		self.other += dother
-		self.skew += dskew
-		axes = {0: self.other, 1: self.other, 2: self.other}
-		if self.axis >= 0:
-			axes[self.axis] += self.z
-			axes[(self.axis + 1) % 3] += self.skew
-			axes[(self.axis + 2) % 3] -= self.skew
-		if startphase > 0:
-			self.printer.goto (axes = axes, cb = True)
-			self.printer.wait_for_cb ()
-	def topoint (self):
-		c = self.zs[self.point]
-		phase = self.phase
-		point = self.point
-		self.phase = 1
-		self.point = 2
-		self.move (0, 30, 0)
-		if c[1] + 30 > self.other:
-			self.move (0, c[1] + 30 - self.other, 0)
-			self.move (c[0] - self.z, 0, 0)
-		else:
-			self.move (c[0] - self.z, 0, 0)
-			self.move (0, c[1] + 30 - self.other, 0)
-		self.point = point
-		self.phase = phase
-	def press (self, widget, event):
-		if event.keyval == gtk.keysyms.Up:
-			if self.point != 0:
-				self.move (0, self.get_amount (), 0)
-			else:
-				self.move (-self.get_amount (), self.get_amount (), 0)
-		elif event.keyval == gtk.keysyms.Down:
-			if self.point != 0:
-				self.move (0, -self.get_amount (), 0)
-			else:
-				self.move (self.get_amount (), -self.get_amount (), 0)
-		elif event.keyval == gtk.keysyms.Left:
-			if self.point != 0:
-				self.move (self.get_amount (), 0, 0)
-			else:
-				self.move (0, 0, self.get_amount ())
-		elif event.keyval == gtk.keysyms.Right:
-			if self.point != 0:
-				self.move (-self.get_amount (), 0, 0)
-			else:
-				self.move (0, 0, -self.get_amount ())
-		elif event.keyval in (gtk.keysyms.Shift_L, gtk.keysyms.Shift_R):
-			self.shift = not self.shift
-			self.set_amountlabel ()
-		elif event.keyval in (gtk.keysyms.Control_L, gtk.keysyms.Control_R):
-			self.control = not self.control
-			self.set_amountlabel ()
-		elif event.keyval == gtk.keysyms.Return:
-			print ('%d %5.1f %5.1f %3.1f' % (self.axis, self.z, self.other, self.skew))
-			self.handle_data ()
-	def release (self, widget, event):
-		return
-		if event.keyval == gtk.keysyms.ISO_Prev_Group:
-			self.shift = False
-			self.set_amountlabel ()
-		elif event.keyval == gtk.keysyms.Control_L:
-			self.control = False
-			self.set_amountlabel ()
-	def quit (self, x):
-		self.printer.set_motor_limit (10000)
-		gtk.main_quit ()
-	def set_text (self, text):
-		self.label.set_text (text)
-	def set_amountlabel (self):
-		self.amountlabel.set_text ('Steps of %f mm' % self.get_amount ())
-	def handle_data (self):
-		self.point += 1
-		if self.phase == 1:
-			self.zs.append ((self.z, self.other))
-			if len (self.zs) == len (self.xs) + 2:
-				self.point = 1
-				self.phase = 2
-				self.topoint ()
-				self.set_text (self.txt_move_to_bed)
-			elif self.point == 1:
-				self.set_text (self.txt_set_reference)
-			else:
-				self.set_text (self.txt_move_to_next_point)
-			return
-		if self.point < len (self.zs):
-			self.topoint ()
-			return
-		z0 = self.zs[1][0] + self.zs[1][1]
-		avg_l = 0
-		for t, x in enumerate (self.xs):
-			z = self.zs[t + 2][0] + self.zs[t + 2][1] - z0
-			l = -z / 2 - x ** 2 / 2 / z
-			print ('l = %f' % l)
-			avg_l += l
-		avg_l /= len (self.xs)
-		print ('average l = %f' % avg_l)
-		self.axisinfo.append ((z0, avg_l, self.zs[1][1] + self.skew, self.zs[1][1] - self.skew))
-		self.zs = []
-		self.point = 0
-		self.phase = 1
-		self.move (0, 10, 0)
-		if self.z > self.other:
-			self.move (0, -self.other / 2, 0)
-			self.move (-self.z, 0, -self.skew)
-		else:
-			self.move (-self.z, 0, 0)
-			self.move (0, -self.other / 2, -self.skew)
-		self.axis += 1
-		self.set_text (self.txt_make_vertical)
-		if self.axis >= 3:
-			def axislen (a, t):
-				# Compute length from axis a to axis (a + t + 1) % 3
-				b = (a + t + 1) % 3
-				z = self.axisinfo[b][2 + t] - self.axisinfo[a][0]
-				l = self.axisinfo[a][1]
-				ret = (-z ** 2 - 2 * l * z) ** .5
-				print ('distance from axis %d to axis %d is %f' % (a, b, ret))
-				return ret
-			d = [[axislen (a, t) for t in range (2)] for a in range (3)]
-			ad = [(d[t][0] + d[(t + 1) % 3][1]) / 2 for t in range (3)]
-			print ('ad = %s' % ad)
-			def cosrule (a, b, c):
-				return b ** 2 + c ** 2 + b * c - a ** 2 # cos(120) == -.5
-			def errfunc (p):
-				return [cosrule (ad[0], p[0], p[1]), cosrule (ad[1], p[1], p[2]), cosrule (ad[2], p[2], p[0])]
-			# These values are correct for an equidistant triangle (and ad[*] are all equal there), which should be pretty close.
-			p0 = [ad[0] * .5 * 3 ** .5, ad[1] * .5 * 3 ** .5, ad[2] * .5 * 3 ** .5]
-			p1, success = scipy.optimize.leastsq (errfunc, p0[:])
-			print ('Radii: %5.1f %5.1f %5.1f' % tuple (p1))
-			zeropos = [self.axisinfo[a][0] + (self.axisinfo[a][1] ** 2 - p1[a] ** 2) ** .5 - self.axisinfo[a][1] for a in range (3)]
-			print ('Zero positions: %s' % ', '.join (['%5.1f' % x for x in zeropos]))
-			global startphase
-			if startphase > 0:
-				for i in range (3):
-					self.printer.axis_set_limit_max_pos (i, -zeropos[i])
-					self.printer.axis_set_delta_length (i, self.axisinfo[i][1])
-					self.printer.axis_set_delta_radius (i, p1[i])
-					self.printer.axis_motor_set_max_v_neg (i, self.printer.axis_motor_get_max_v_neg (i) * 2)
-					self.printer.axis_motor_set_max_v_pos (i, self.printer.axis_motor_get_max_v_pos (i) * 2)
-					self.printer.save_axis (i)
-				self.printer.set_printer_type (1)
-				self.printer.save_variables ()
-				if startphase == 2:
-					gtk.main_quit ()
-				startphase = 3
-			else:
-				startphase = 4
+config = fhs.init({'rodlength': 250, 'radius': 125, 'angle': 0})
+limits, nums, probes = json.loads(sys.stdin.read().strip())
 
-w = gtk.Window ()
-a = App ()
-w.add (a)
-w.connect ('destroy', a.quit)
-a.show ()
-w.show ()
-# 0: gtk not initialized
-# 1: window shown from input; connected to printer; loop not running
-# 2: loop running
-# 3: loop done
-# 4: loop not running; analysis done
-startphase = 0
-started = False
-if len (sys.argv) > 1:
-	with open (sys.argv[1]) as f:
-		for ln in f.readlines ():
-			if ln.strip () == '':
-				if startphase == 0:
-					startphase = 1
-					a.start ()
-				continue
-			axis, a.z, a.other, a.skew = [float (x) for x in ln.split ()]
-			a.handle_data ()
-if startphase != 4:
-	if startphase == 0:
-		a.start ()
-	if startphase < 3:
-		startphase = 2
-		gtk.main ()
-	for i in range (3):
-		a.printer.sleep_axis (i)
+a120 = math.radians(120)
+a = math.radians(config['angle'])
+
+x, y, w, h = limits
+nx, ny, angle = nums
+dx = w / nx
+dy = h / ny
+sina, cosa = math.sin(angle), math.cos(angle)
+param = [config['rodlength']] * 3 + [config['radius']] * 3 + [0.] * 3
+rod = param[0:3]
+radius = param[3:6]
+limit = param[6:9]
+pos = numpy.array(((radius[0] * math.cos(a), radius[0] * math.sin(a), (rod[0] ** 2 - radius[0] ** 2) ** .5),
+	(radius[1] * math.cos(a + a120), radius[1] * math.sin(a + a120), (rod[0] ** 2 - radius[0] ** 2) ** .5),
+	(radius[2] * math.cos(a - a120), radius[2] * math.sin(a - a120), (rod[0] ** 2 - radius[0] ** 2) ** .5)))
+
+data = []
+
+for ty in range(ny + 1):
+	for tx in range(nx + 1):
+		px = x + tx * dx * cosa - ty * dy * sina
+		py = y + tx * dx * sina + ty * dy * cosa
+		pz = probes[ty][tx]
+		p = numpy.array((px, py, pz))
+		# Compute motor positions.
+		target = []
+		for c in range(3):
+			v = p - pos[c]
+			r2 = v[0] ** 2 + v[1] ** 2
+			l2 = rod[c] ** 2
+			target.append((l2 - r2) ** .5 + v[2])
+		data.append(target)
+print(data)
+
+def undelta(param, data):
+	rod = param[0:3]
+	radius = param[3:6]
+	limit = param[6:9]
+
+	# Pos is 3 vectors.
+	pos = numpy.array(((radius[0] * math.cos(a), radius[0] * math.sin(a), (rod[0] ** 2 - radius[0] ** 2) ** .5 + data[0] - limit[0]),
+		(radius[1] * math.cos(a + a120), radius[1] * math.sin(a + a120), (rod[0] ** 2 - radius[0] ** 2) ** .5 + data[1] - limit[1]),
+		(radius[2] * math.cos(a - a120), radius[2] * math.sin(a - a120), (rod[0] ** 2 - radius[0] ** 2) ** .5 + data[2] - limit[2])))
+
+	# x0x1 is a vector.
+	x0x1 = pos[1] - pos[0]
+	# x1 is a scalar.
+	x1 = numpy.inner(x0x1, x0x1) ** .5
+	# len01 is a scalar.
+	len01 = x1 / 2 + (rod[0] ** 2 - rod[1] ** 2) / (2 * x1)
+	# r01_sqared is a scalar
+	r01_squared = rod[0] ** 2 - len01 ** 2
+	x0x1 /= x1
+	# p is a vector.
+	p = pos[0] + x0x1 * len01
+	# pq is a vector.
+	pq = pos[2] - p
+	# projected_factor is a scalar.
+	projected_factor = numpy.inner(pq, x0x1) / numpy.inner(pq, pq)
+	# projected is a vector.
+	projected = projected_factor * x0x1
+	# rest is a vector.
+	rest = pq - projected
+	# center is a vector.
+	center = p + rest
+	# qcenter is a vector.
+	qcenter = pos[2] - center
+	# r2 is a scalar.
+	r2 = math.cos(math.asin(numpy.inner(qcenter, qcenter) ** .5 / rod[2])) * rod[2]
+	# x2 is a scalar.
+	x2 = numpy.inner(rest, rest) ** .5
+	# len012 is a scalar.
+	len012 = x2 / 2 + (r01_squared - r2 ** 2) / (2 * x2)
+	# r012 is a scalar.
+	r012 = (r01_squared - len012 ** 2) ** .5
+	# updown is a vector.
+	updown = numpy.cross(x0x1, pq)
+	# lenud is a scalar.
+	lenud = numpy.inner(updown, updown) ** .5
+	# xyz is a vector.
+	xyz = p + len012 * rest / x2 - r012 * updown / lenud
+	return xyz[2]
+
+def error(param):
+	return [undelta(param, d) for d in data]
+
+ret = scipy.optimize.leastsq(error, param)
+
+print(ret)

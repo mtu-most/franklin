@@ -359,7 +359,7 @@ function Top(ui) { // {{{
 	e = ret.AddElement('div', 'jobbuttons');
 	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode', function() { return queue_deselect(ui); }));
 	e.AddElement('br');
-	e.Add(File(ui, [null, 'probe_add', 'probe_add'], 'probe_add', 'Add Probemap', '.map'));
+	e.Add(File(ui, [null, 'probe_add', 'probe_add'], 'probe_add', 'Upload Probemap', '.map'));
 	e.AddElement('br', 'benjamin');
 	e.Add(File(ui, [null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav', function() { return queue_deselect(ui); }), 'benjamin');
 	e.AddElement('br', 'benjamin');
@@ -445,7 +445,7 @@ function Map(ui) { // {{{
 function Toolpath(ui) { // {{{
 	var ret = Create('div', 'toolpath');
 	var index = ret.AddText('Toolpath index:').Add(Float(ui, [null, 'tppos'], 0, 1, '', function(value) {
-		ui.machine.call('tp_set_position', [value]);
+		ui.machine.call('tp_set_position', [value], {});
 	}));
 	var span = ret.AddText('/').AddElement('span');
 	span.id = make_id(ui, [null, 'tpmax']);

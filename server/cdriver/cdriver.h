@@ -515,7 +515,7 @@ struct Run_Record {
 	double time, dist;
 } __attribute__((__packed__));
 struct ProbeFile {
-	double x, y, w, h, sina, cosa;
+	double targetx, targety, x0, y0, w, h, sina, cosa;
 	unsigned long nx, ny;
 	double angle;
 	double sample[0];

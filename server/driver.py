@@ -302,18 +302,21 @@ class Machine: # {{{
 				audio = os.path.join(spool, 'audio')
 				probe = fhs.read_spool(os.path.join(self.uuid, 'probe' + os.extsep + 'bin'), text = False)
 				if probe is not None:
-					# Map = [[x, y, w, h], [nx, ny], [[...], [...], ...]]
-					size = struct.calcsize('@ddddddLLd')
-					x, y, w, h, sina, cosa, nx, ny, self.targetangle = struct.unpack('@ddddddLLd', probe.read(size))
-					self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
-					sina, cosa = self.gcode_angle
-					limits = [x, y, w, h]
-					nums = [nx, ny, self.targetangle]
-					probes = [[None for x in range(nx + 1)] for y in range(ny + 1)]
-					for y in range(ny + 1):
-						for x in range(nx + 1):
-							probes[y][x] = struct.unpack('@d', probe.read(struct.calcsize('@d')))[0]
-					self.probemap = [limits, nums, probes]
+					try:
+						# Map = [[targetx, targety, x0, y0, w, h], [nx, ny], [[...], [...], ...]]
+						size = struct.calcsize('@ddddddddLLd')
+						targetx, targety, x0, y0, w, h, sina, cosa, nx, ny, self.targetangle = struct.unpack('@ddddddddLLd', probe.read(size))
+						self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
+						sina, cosa = self.gcode_angle
+						limits = [targetx, targety, x0, y0, w, h]
+						nums = [nx, ny, self.targetangle]
+						probes = [[None for x in range(nx + 1)] for y in range(ny + 1)]
+						for y in range(ny + 1):
+							for x in range(nx + 1):
+								probes[y][x] = struct.unpack('@d', probe.read(struct.calcsize('@d')))[0]
+						self.probemap = [limits, nums, probes]
+					except:
+						log('Failed to load probe map')
 				if os.path.isdir(gcode):
 					for filename in os.listdir(gcode):
 						name, ext = os.path.splitext(filename)
@@ -1341,9 +1344,10 @@ class Machine: # {{{
 			# Goto x,y
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 1, good)
 			self.movecb.append(self.probe_cb)
-			px = p[0][0] + p[0][2] * x / p[1][0]
-			py = p[0][1] + p[0][3] * y / p[1][1]
-			self.line([[self.targetx + px * self.gcode_angle[1] - py * self.gcode_angle[0], self.targety + py * self.gcode_angle[1] + px * self.gcode_angle[0]]])
+			px = p[0][2] + p[0][4] * x / p[1][0]
+			py = p[0][3] + p[0][5] * y / p[1][1]
+			log(repr((p, px, py, x, y, self.gcode_angle)))
+			self.line([[p[0][0] + px * self.gcode_angle[1] - py * self.gcode_angle[0], p[0][1] + py * self.gcode_angle[1] + px * self.gcode_angle[0]]])
 		elif phase == 1:
 			# Probe
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 2, good)
@@ -1392,8 +1396,8 @@ class Machine: # {{{
 			self._globals_update()
 			return False
 		limits, nums, probes = self.probemap
-		if not isinstance(limits, (list, tuple)) or not isinstance(nums, (list, tuple)) or len(limits) != 4 or len(nums) != 3:
-			log('probemap check failed: first lists are not length 4 and 3')
+		if not isinstance(limits, (list, tuple)) or not isinstance(nums, (list, tuple)) or len(limits) != 6 or len(nums) != 3:
+			log('probemap check failed: first lists are not length 6 and 3')
 			self.probemap = None
 			self._globals_update()
 			return False
@@ -1421,13 +1425,8 @@ class Machine: # {{{
 		with fhs.write_spool(os.path.join(self.uuid, 'probe' + os.extsep + 'bin'), text = False) as probemap_file:
 			# Map = [[x, y, w, h], [nx, ny], [[...], [...], ...]]
 			sina, cosa = self.gcode_angle
-			x, y, w, h = self.probemap[0]
-			# Transform origin because only rotation is done by cdriver.
-			x, y = cosa * x - sina * y, cosa * y + sina * x
-			x += self.targetx
-			y += self.targety
-			x, y = cosa * x + sina * y, cosa * y - sina * x
-			probemap_file.write(struct.pack('@ddddddLLd', x, y, w, h, sina, cosa, *self.probemap[1]))
+			targetx, targety, x0, y0, w, h = self.probemap[0]
+			probemap_file.write(struct.pack('@ddddddddLLd', targetx, targety, x0, y0, w, h, sina, cosa, *self.probemap[1]))
 			for y in range(self.probemap[1][1] + 1):
 				for x in range(self.probemap[1][0] + 1):
 					probemap_file.write(struct.pack('@d', self.probemap[2][y][x]))
@@ -2299,7 +2298,7 @@ class Machine: # {{{
 				self._send(id, 'return', None)
 			return
 		log(repr(area))
-		density = [int(area[t + 2] / self.probe_dist) + 1 for t in range(2)] + [self.targetangle]
+		density = [int(area[t + 4] / self.probe_dist) + 1 for t in range(2)] + [self.targetangle]
 		self.probemap = [area, density, [[[] for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
 		self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
 		self.probe_speed = speed
@@ -2708,7 +2707,6 @@ class Machine: # {{{
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin')])
 		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'timeout')])
 		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_safe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v')])
-		# TODO: Store probemap
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings()
 		for i, t in enumerate(self.temps):
@@ -2735,7 +2733,6 @@ class Machine: # {{{
 		#5: (\d+)								5 only or component index
 		#6: (\w+)								6 identifier
 		#7: (.*?)								7 value
-		# TODO: import probemap
 		errors = []
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set(), 'follower': set()}

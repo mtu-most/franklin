@@ -921,6 +921,10 @@ void arch_send_pin_name(int pin) { // {{{
 } // }}}
 
 static void avr_connect4() { // {{{
+	while (out_busy >= 3) {
+		poll(&pollfds[2], 1, -1);
+		serial(1);
+	}
 	avr_pin_name_len[avr_next_pin_name] = command[1][1] + 1;
 	avr_pin_name[avr_next_pin_name] = new char[command[1][1] + 1];
 	memcpy(&avr_pin_name[avr_next_pin_name][1], &command[1][2], command[1][1]);
