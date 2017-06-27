@@ -1301,7 +1301,7 @@ class Machine: # {{{
 		if good is None:
 			return
 		pos = self.get_axis_pos(0)
-		self._send_packet(struct.pack('=Bddd', protocol.command['ADJUSTPROBE'], pos[0], pos[1], pos[2]))
+		self._send_packet(struct.pack('=Bddd', protocol.command['ADJUSTPROBE'], pos[0], pos[1], pos[2] + self.zoffset))
 		self.probe_cb[1] = lambda good: self.request_confirmation("Continue?")[1](False) if good is not None else None
 		self.movecb.append(self.probe_cb)
 		self.line([{2: self.probe_safe_dist}], relative = True)
