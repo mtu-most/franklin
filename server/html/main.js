@@ -524,7 +524,7 @@ function upload(ports, firmwares) { // {{{
 
 function probe(ui) { // {{{
 	var bbox = get_queue(ui)[1];
-	ui.machine.call('probe', [[ui.machine.targetx, ui.machine.targety, bbox[0], bbox[2], bbox[1] - bbox[0], bbox[3] - bbox[2]]], {});
+	ui.machine.call('probe', [[ui.machine.targetx, ui.machine.targety, bbox[0] - ui.machine.probe_offset, bbox[2] - ui.machine.probe_offset, bbox[1] - bbox[0] + 2 * ui.machine.probe_offset, bbox[3] - bbox[2] + 2 * ui.machine.probe_offset]], {});
 } // }}}
 
 function del_probe(ui) { // {{{
@@ -862,6 +862,7 @@ function globals_update(uuid) { // {{{
 	update_pin(p, [null, 'probe_pin']);
 	update_pin(p, [null, 'spiss_pin']);
 	update_float(p, [null, 'probe_dist']);
+	update_float(p, [null, 'probe_offset']);
 	update_float(p, [null, 'probe_safe_dist']);
 	update_float(p, [null, 'timeout']);
 	update_float(p, [null, 'feedrate']);

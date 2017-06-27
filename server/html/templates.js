@@ -638,6 +638,8 @@ function UI(machine) {	// {{{
 	l.AddText('Cool');
 	e = setup.AddElement('div').AddText('Max Probe Distance:');
 	e.Add(Float(ret, [null, 'probe_dist'], 0, 1));
+	e = setup.AddElement('div').AddText('Probe Border Offset:');
+	e.Add(Float(ret, [null, 'probe_offset'], 0, 1));
 	e.AddText(' ').Add(add_name(ret, 'unit', 0, 0));
 	e = setup.AddElement('div').AddText('Probe Safe Retract Distance:');
 	e.Add(Float(ret, [null, 'probe_safe_dist'], 0, 1));

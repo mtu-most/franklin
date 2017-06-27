@@ -128,6 +128,7 @@ function _setup_updater() {
 					probe_pin: 0,
 					spiss_pin: 0,
 					probe_dist: Infinity,
+					probe_offset: 0,
 					probe_safe_dist: Infinity,
 					bed_id: 255,
 					fan_id: 255,
@@ -216,29 +217,30 @@ function _setup_updater() {
 			machines[machine].probe_pin = values[7];
 			machines[machine].spiss_pin = values[8];
 			machines[machine].probe_dist = values[9];
-			machines[machine].probe_safe_dist = values[10];
-			machines[machine].bed_id = values[11];
-			machines[machine].fan_id = values[12];
-			machines[machine].spindle_id = values[13];
-			machines[machine].unit_name = values[14];
-			machines[machine].timeout = values[15];
-			machines[machine].feedrate = values[16];
-			machines[machine].max_deviation = values[17];
-			machines[machine].max_v = values[18];
-			machines[machine].targetx = values[19];
-			machines[machine].targety = values[20];
-			machines[machine].targetangle = values[21];
-			machines[machine].zoffset = values[22];
-			machines[machine].store_adc = values[23];
-			machines[machine].park_after_print = values[24];
-			machines[machine].sleep_after_print = values[25];
-			machines[machine].cool_after_print = values[26];
-			machines[machine].spi_setup = values[27];
-			machines[machine].temp_scale_min = values[28];
-			machines[machine].temp_scale_max = values[29];
-			machines[machine].probemap = values[30];
-			machines[machine].connected = values[31];
-			machines[machine].status = values[32];
+			machines[machine].probe_offset = values[10];
+			machines[machine].probe_safe_dist = values[11];
+			machines[machine].bed_id = values[12];
+			machines[machine].fan_id = values[13];
+			machines[machine].spindle_id = values[14];
+			machines[machine].unit_name = values[15];
+			machines[machine].timeout = values[16];
+			machines[machine].feedrate = values[17];
+			machines[machine].max_deviation = values[18];
+			machines[machine].max_v = values[19];
+			machines[machine].targetx = values[20];
+			machines[machine].targety = values[21];
+			machines[machine].targetangle = values[22];
+			machines[machine].zoffset = values[23];
+			machines[machine].store_adc = values[24];
+			machines[machine].park_after_print = values[25];
+			machines[machine].sleep_after_print = values[26];
+			machines[machine].cool_after_print = values[27];
+			machines[machine].spi_setup = values[28];
+			machines[machine].temp_scale_min = values[29];
+			machines[machine].temp_scale_max = values[30];
+			machines[machine].probemap = values[31];
+			machines[machine].connected = values[32];
+			machines[machine].status = values[33];
 			for (var i = machines[machine].num_temps; i < new_num_temps; ++i) {
 				machines[machine].temps.push({
 					name: null,
