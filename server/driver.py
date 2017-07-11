@@ -1900,7 +1900,7 @@ class Machine: # {{{
 						add_record(protocol.parsed['PRE_ARC'], {'X': center[0], 'Y': center[1], 'Z': center[2], 'E': s * arc_normal[0], 'f': s * arc_normal[1], 'F': s * arc_normal[2], 'T': 0})
 						add_record(protocol.parsed['ARC'], {'X': pos[0][0], 'Y': pos[0][1], 'Z': pos[0][2], 'E': pos[1][current_extruder], 'f': -f0, 'F': -pos[2], 'T': current_extruder})
 					elif cmd == ('G', 4):
-						add_record(protocol.parsed['WAIT'], [0, float(args['P']) / 1000 if 'P' in args else 0])
+						add_record(protocol.parsed['WAIT'], [0, float(args['S']) if 'S' in args else float(args['P']) / 1000 if 'P' in args else 0])
 					elif cmd == ('G', 92):
 						add_record(protocol.parsed['SETPOS'], [current_extruder, args['E']])
 					elif cmd == ('G', 94):
