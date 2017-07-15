@@ -43,7 +43,13 @@
 
 // Defines. {{{
 #define NUM_ANALOG_INPUTS 0
+#ifdef PINE64
 #define NUM_GPIO_PINS 36
+#else
+#ifdef ORANGEPIZERO
+#define NUM_GPIO_PINS 15
+#endif
+#endif
 #define NUM_DIGITAL_PINS NUM_GPIO_PINS
 #define NUM_PINS (NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS)
 #define ADCBITS 12
@@ -279,20 +285,20 @@ static MCPin mc_pins[] = { // {{{
 #ifdef ORANGEPIZERO
 static MCPin mc_pins[] = { // {{{
 	{ A, 6, "\x07" "7 (A6)" },
-	{ A, 1, "\x07" " (A1)" },
-	{ A, 0, "\x07" " (A0)" },
-	{ A, 3, "\x07" " (A3)" },
-	{ A, 15, "\x07" " (A15)" },
-	{ A, 16, "\x07" " (A16)" },
-	{ A, 14, "\x07" " (A14)" },
-	{ G, 6, "\x07" " (G6)" },
-	{ G, 7, "\x07" " (G7)" },
-	{ A, 7, "\x07" " (A7)" },
-	{ A, 19, "\x07" " (A19)" },
-	{ A, 20, "\x07" " (A20)" },
-	{ A, 2, "\x07" " (A2)" },
-	{ A, 13, "\x07" " (A13)" },
-	{ A, 10, "\x07" " (A10)" },
+	{ G, 6, "\x07" "8 (G6)" },
+	{ G, 7, "\x07" "10 (G7)" },
+	{ A, 1, "\x07" "11 (A1)" },
+	{ A, 7, "\x07" "12 (A7)" },
+	{ A, 0, "\x07" "13 (A0)" },
+	{ A, 3, "\x07" "15 (A3)" },
+	{ A, 19, "\x07" "16 (A19)" },
+	{ A, 18, "\x07" "18 (A18)" },
+	{ A, 15, "\x07" "19 (A15)" },
+	{ A, 16, "\x07" "21 (A16)" },
+	{ A, 2, "\x07" "22 (A2)" },
+	{ A, 14, "\x07" "23 (A14)" },
+	{ A, 13, "\x07" "24 (A13)" },
+	{ A, 10, "\x07" "26 (A10)" },
 }; // }}}
 #else
 #error "Unknown board"
@@ -408,7 +414,7 @@ static void mc_realtime() { // {{{
 	while (true) {
 		while (read(fd, &num_exp, 8) != 8) {}
 		if (num_exp != 1 && !ignore_expiry) {
-			debug("clock expired: %ld", num_exp);
+			debug("clock expired: %ld", (long)num_exp);
 			ignore_expiry = true;
 		}
 		else
