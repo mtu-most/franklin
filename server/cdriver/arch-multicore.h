@@ -39,15 +39,18 @@
 #include <math.h>
 #include <sys/mman.h>
 #include <sched.h>
+#include <sys/ioctl.h>
+#include <linux/i2c-dev.h>
 // }}}
 
 // Defines. {{{
-#define NUM_ANALOG_INPUTS 0
 #ifdef PINE64
 #define NUM_GPIO_PINS 36
+#define NUM_ANALOG_INPUTS 0
 #else
 #ifdef ORANGEPIZERO
 #define NUM_GPIO_PINS 15
+#define NUM_ANALOG_INPUTS 1
 #endif
 #endif
 #define NUM_DIGITAL_PINS NUM_GPIO_PINS
@@ -146,6 +149,7 @@ static double mc_duty[NUM_DIGITAL_PINS];
 static bool mc_pwm_on[NUM_DIGITAL_PINS];
 static double mc_pwm_target[NUM_DIGITAL_PINS];
 bool mc_pin_state[NUM_DIGITAL_PINS];
+int adc_fd;
 // }}}
 
 // Pin setting. {{{
@@ -471,9 +475,8 @@ static void mc_realtime() { // {{{
 } // }}}
 
 void arch_setup_start() { // {{{
-	// TODO Set up analog inputs.
 	// Override hwtime_step.
-	hwtime_step = 200;
+	hwtime_step = 800;
 	// Claim that firmware has correct version.
 	protocol_version = PROTOCOL_VERSION;
 	// Prepare gpios.
@@ -489,6 +492,17 @@ void arch_setup_start() { // {{{
 		abort();
 	}
 	mc_piomem = gpiomem + (0x800 >> 2);
+	// Prepare i2c handle for analog input.
+	adc_fd = open("/dev/i2c-0", O_RDWR);
+	if (adc_fd < 0) {
+		fprintf(stderr, "unable to open /dev/i2c-0: %s\n", strerror(errno));
+		abort();
+	}
+	if (ioctl(adc_fd, I2C_SLAVE, 0x4d) < 0) {
+		fprintf(stderr, "unable to claim i2c device 0x4d: %s\n", strerror(errno));
+		abort();
+	}
+	// Send pin names.
 	for (int i = 0; i < NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS; ++i)
 		arch_send_pin_name(i);
 	clock_gettime(CLOCK_MONOTONIC, &mc_pwm_time);
@@ -587,7 +601,11 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bo
 // Bit 2: digital input
 // Bit 3: analog input
 void arch_send_pin_name(int pin) { // {{{
-	char const *name = mc_pins[pin].name;
+	char const *name;
+	if (pin < NUM_DIGITAL_PINS)
+		name = mc_pins[pin].name;
+	else
+		name = "\x08" "i²c-0:0x4d";
 	int len = strlen(name);
 	strcpy(datastore, name);
 	send_host(CMD_PINNAME, pin, 0, 0, 0, len);
@@ -634,9 +652,15 @@ int arch_tick() { // {{{
 		// New temperature ready to read.
 		int a = mc_active_temp;
 		mc_next_adc();
-		a = -1;	// TODO: read ADC.
 		if (a >= 0 && mc_temp[a].active) {
-			int t = 0; // TODO.
+			char result[2];
+			int t;
+			if (read(adc_fd, result, 2) != 2) {
+				debug("error reading adc: %s", strerror(errno));
+				t = 0xffff;
+			}
+			else
+				t = ((result[0] & 0xff) << 8) | (result[1] & 0xff);
 			if (mc_temp[a].heater_pin >= 0) {
 				if ((mc_temp[a].heater_adctemp < t) ^ mc_temp[a].heater_inverted)
 					RAWSET(mc_temp[a].heater_pin);

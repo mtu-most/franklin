@@ -2798,6 +2798,9 @@ class Machine: # {{{
 			value = r.group(7)
 			try:
 				if key == 'pin_names':
+					if len(self.pin_names) > 0:
+						# Don't override hardware-provided names.
+						continue
 					value = [[int(x[0]), x[1:]] for x in value.split(',')]
 				elif 'name' in key:
 					pass

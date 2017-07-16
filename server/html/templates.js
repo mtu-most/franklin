@@ -541,6 +541,357 @@ function Gpios(ui) { // {{{
 // }}}
 // }}}
 
+function franklin(desc, pos, data) {
+	var ret = Create('div');
+	// Setup. {{{
+	var setup = ret.AddElement('div', 'setup expert');
+	var e = setup.AddElement('div').AddText('Machine UUID:');
+	data.uuid = e.AddElement('span');
+	var e = setup.AddElement('div', 'admin').AddText('Machine name:');
+	e.Add(Str(data, [null, 'name']));
+	var connected = setup.AddElement('div', 'connected');
+	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Machine');
+	disable.type = 'button';
+	disable.AddEvent('click', function() { machine.disabling = true; rpc.call('disable', [machine.uuid], {}); });
+	var remove = setup.AddElement('div', 'admin').AddElement('button').AddText('Remove Machine');
+	remove.type = 'button';
+	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + machine.name + '?')) { machine.disabling = true; rpc.call('remove_machine', [machine.uuid], {}); }});
+	var notconnected = setup.AddElement('div', 'notconnected');
+	var ports = notconnected.AddElement('select');
+	ports.id = make_id(data, [null, 'ports']);
+	ports.AddEvent('changed', function() { update_firmwares(ports, data.firmwares); });
+	var b = notconnected.AddElement('button').AddText('Detect');
+	b.type = 'button';
+	b.AddEvent('click', function() { detect(ports); });
+	data.firmwares = notconnected.AddElement('select');
+	b = notconnected.AddElement('button').AddText('Upload');
+	b.type = 'button';
+	b.AddEvent('click', function() { upload(ports, data.firmwares); });
+	// Save and restore. {{{
+	e = setup.AddElement('div', 'admin');
+	e.AddText('Profile');
+	b = e.AddElement('button').AddText('Save (as)').AddEvent('click', function() {
+		machine.call('save', [this.saveas.value], {});
+	});
+	b.type = 'button';
+	b.saveas = e.AddElement('input');
+	b.saveas.type = 'text';
+	e = setup.AddElement('button', 'admin').AddText('Remove this profile');
+	e.type = 'button';
+	e.AddEvent('click', function() {
+		machine.call('remove_profile', [machine.profile], {});
+	});
+	e = setup.AddElement('button', 'admin').AddText('Set as default profile');
+	e.type = 'button';
+	e.AddEvent('click', function() {
+		machine.call('set_default_profile', [machine.profile], {});
+	});
+	e = setup.AddElement('button').AddText('Reload this profile');
+	e.type = 'button';
+	e.AddEvent('click', function() {
+		machine.call('load', [machine.profile], {});
+	});
+	setup.AddElement('div').Add(File(data, [null, 'import', 'import_settings'], 'import', 'Import', '.ini'));
+	e = setup.AddElement('a', 'title').AddText('Export settings to file');
+	e.id = make_id(data, [null, 'export']);
+	e.title = 'Save settings to disk.';
+	// }}}
+	e = setup.AddElement('div').AddText('Timeout:');
+	e.Add(Float(data, [null, 'timeout'], 0, 60));
+	e.AddText(' min');
+	e = setup.AddElement('div').AddText('After Job Completion:');
+	var l = e.AddElement('label');
+	l.Add(Checkbox(data, [null, 'park_after_print']));
+	l.AddText('Park');
+	l = e.AddElement('label');
+	l.Add(Checkbox(data, [null, 'sleep_after_print']));
+	l.AddText('Sleep');
+	l = e.AddElement('label');
+	l.Add(Checkbox(data, [null, 'cool_after_print']));
+	l.AddText('Cool');
+	e = setup.AddElement('div').AddText('Max Probe Distance:');
+	e.Add(Float(data, [null, 'probe_dist'], 0, 1));
+	e = setup.AddElement('div').AddText('Probe Border Offset:');
+	e.Add(Float(data, [null, 'probe_offset'], 0, 1));
+	e.AddText(' ').Add(add_name(data, 'unit', 0, 0));
+	e = setup.AddElement('div').AddText('Probe Safe Retract Distance:');
+	e.Add(Float(data, [null, 'probe_safe_dist'], 0, 1));
+	e.AddText(' ').Add(add_name(data, 'unit', 0, 0));
+	e = setup.AddElement('div').AddText('SPI setup:');
+	e.Add(Str(data, [null, 'spi_setup']));
+	e = setup.AddElement('div').AddText('Machine Type:');
+	var select = e.Add(create_space_type_select());
+	var button = e.AddElement('button').AddText('Set');
+	button.type = 'button';
+	button.obj = select;
+	button.AddEvent('click', function() { set_value(data, [['space', 0], 'type'], this.obj.selectedIndex); });
+	e.AddElement('span').id = make_id(data, [['space', 0], 'type']);
+	e = setup.AddElement('div').AddText('Temps:').Add(Float(data, [null, 'num_temps'], 0));
+	e = setup.AddElement('div').AddText('Gpios:').Add(Float(data, [null, 'num_gpios'], 0));
+	e = setup.AddElement('div').AddText('Temp Scale Minimum:');
+	e.Add(Float(data, [null, 'temp_scale_min'], 0, 1));
+	e.AddText('°C');
+	e = setup.AddElement('div').AddText('Temp Scale Maximum:');
+	e.Add(Float(data, [null, 'temp_scale_max'], 0, 1));
+	e.AddText('°C');
+	e = setup.AddElement('div').AddText('Max Deviation:');
+	e.Add(Float(data, [null, 'max_deviation'], 2, 1));
+	e.AddText(' ').Add(add_name(data, 'unit', 0, 0));
+	e = setup.AddElement('div').AddText('Max v');
+	e.Add(Float(data, [null, 'max_v'], 2, 1));
+	e.AddText(' ').Add(add_name(data, 'unit', 0, 0));
+	e.AddText('/s');
+	// Cartesian. {{{
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Cartesian/Other',
+		'Number of Axes'
+	], [
+		'htitle1',
+		'title1'
+	], [
+		null,
+		'Number of axes'
+	]).AddMultiple(data, 'space', Cartesian, false)]);
+	// }}}
+	// Axis. {{{
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Axes',
+		'Name',
+		UnitTitle(data, 'Park Pos'),
+		'Park Order',
+		UnitTitle(data, 'Min'),
+		UnitTitle(data, 'Max'),
+		UnitTitle(data, '2nd Home Pos')
+	], [
+		'htitle6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6'
+	], [
+		null,
+		'Name of the axis',
+		'Park position of the nozzle.  This is where the nozzle is sent when it is requested to get out of the way through a park command.',
+		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
+		'Minimum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to -Infinity for x and y.',
+		'Maximum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to Infinity for x and y.',
+		'Position to move to after hitting limit switches, before moving in range of limits.'
+	]).AddMultiple(data, 'axis', Axis)]);
+	// }}}
+	// Motor. {{{
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Motor Settings',
+		UnitTitle(data, 'Coupling', null, 'steps/'),
+		UnitTitle(data, 'Switch Pos'),
+		'Home Order',
+		UnitTitle(data, 'Limit v', '/s'),
+		UnitTitle(data, 'Limit a', '/s²')
+	], [
+		'htitle5',
+		'title5',
+		'title5',
+		'title5',
+		'title5',
+		'title5'
+	], [
+		null,
+		'Number of (micro)steps that the motor needs to do to move the hardware by one unit.',
+		'Position of the home switch.',
+		'Order when homing.  Equal order homes simultaneously; lower order homes first.',
+		'Maximum speed of the motor.',
+		'Maximum acceleration of the motor.  4000 is a normal value.'
+	]).AddMultiple(data, 'motor', Motor)]);
+	// }}} -->
+	// Delta. {{{
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Delta',
+		UnitTitle(data, 'Min Distance'),
+		UnitTitle(data, 'Max Distance'),
+		UnitTitle(data, 'Rod Length'),
+		UnitTitle(data, 'Radius')
+	], [
+		'htitle4',
+		'title4',
+		'title4',
+		'title4',
+		'title4'
+	], [
+		null,
+		'Minimum horizontal distance between tie rod pivot points.  Usually 0.',
+		'Maximum horizontal distance between tie rod pivot points.  Usually Infinity.',
+		'Length of the tie rods between pivot points.  Measure this with as high precision as possible.',
+		'Horizontal distance between tie rod pivot points when the end effector is at (0, 0, 0).'
+	]).AddMultiple(data, 'motor', Delta)]);
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Delta',
+		'Angle'
+	], [
+		'htitle1',
+		'title1'
+	], [
+		null,
+		'Correction angle for the machine. (degrees)'
+	]).AddMultiple(data, 'space', Delta_space, false)]);
+	// }}}
+	// Polar. {{{
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Polar',
+		UnitTitle(data, 'Radius')
+	], [
+		'htitle1',
+		'title1'
+	], [
+		null,
+		'Maximum value for the r motor.'
+	]).AddMultiple(data, 'space', Polar_space, false)]);
+	// }}}
+	// Extruder. {{{
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Extruder',
+		'Offset X',
+		'Offset Y',
+		'Offset Z'
+	], [
+		'htitle3',
+		'title3',
+		'title3',
+		'title3'
+	], [
+		null,
+		'Offset in X direction when this extruder is in use.  Set to 0 for the first extruder.',
+		'Offset in Y direction when this extruder is in use.  Set to 0 for the first extruder.',
+		'Offset in Z direction when this extruder is in use.  Set to 0 for the first extruder.'
+	]).AddMultiple(data, 'axis', Extruder, false)]);
+	// }}}
+	// Follower. {{{
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Follower',
+		'Space',
+		'Motor'
+	], [
+		'htitle2',
+		'title2',
+		'title2',
+		'title2'
+	], [
+		null,
+		'Space of motor to follow.',
+		'Motor to follow.'
+	]).AddMultiple(data, 'motor', Follower, false)]);
+	// }}}
+	// Temp. {{{
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Temp Settings',
+		'Name',
+		'Fan Temp (°C)',
+		'Bed'
+	], [
+		'htitle3',
+		'title3',
+		'title3',
+		'title3'
+	], [
+		null,
+		'Name of the temperature control',
+		'Temerature above which the cooling is turned on.',
+		'Whether this Temp is the heated bed, used by G-code commands M140 and M190.'
+	]).AddMultiple(data, 'temp', Temp_setup)]);
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Temp Limits',
+		'Heater Low Limit (°C)',
+		'Heater High Limit (°C)',
+		'Fan Low Limit (°C)',
+		'Fan High Limit (°C)'
+	], [
+		'htitle4',
+		'title4',
+		'title4',
+		'title4',
+		'title4'
+	], [
+		null,
+		'Temerature below which the heater is never turned on.  Set to NaN to disable limit.',
+		'Temerature above which the heater is never turned on.  Set to NaN to disable limit.',
+		'Temerature below which the cooling is never turned on.  Set to NaN to disable limit.',
+		'Temerature above which the cooling is never turned on.  Set to NaN to disable limit.'
+	]).AddMultiple(data, 'temp', Temp_limits)]);
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Temp Hardware',
+		'R0 (kΩ) or a',
+		'R1 (kΩ) or b',
+		'Rc (kΩ) or Scale (%)',
+		'Tc (°C) or Offset',
+		'β (1) or NaN',
+		'Hold Time (s)'
+	], [
+		'htitle6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6',
+		'title6'
+	], [
+		null,
+		'Resistance on the board in series with the thermistor.  Normally 4.7 or 10.  Or, if β is NaN, the value of this sensor is ax+b with x the measured ADC value; this value is a.',
+		'Resistance on the board in parallel with the thermistor.  Normally Infinity.  Or, if β is NaN, the value of this sensor is ax+b with x the measured ADC value; this value is b.',
+		'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.  Or, if β is NaN, the scale for plotting the value on the temperature graph.',
+		'Temperature at which the thermistor has value Rc.  Normally 20.  Or, if β is NaN, the offset for plotting the value on the temperature graph.',
+		"Temperature dependence of the thermistor.  Normally around 4000.  It can be found in the thermistor's data sheet.  Or, if NaN, the value of this sensor is ax+b with x the measured ADC value.",
+		'Minimum time to keep the heater and fan pins at their values after a change.'
+	]).AddMultiple(data, 'temp', Temp_hardware)]);
+	// }}}
+	// Gpio. {{{
+	setup.Add([make_table(data).AddMultipleTitles([
+		'Gpio',
+		'Name',
+		'Reset State',
+		'Power (%)',
+		'Fan',
+		'Spindle'
+	], [
+		'htitle5',
+		'title5',
+		'title5',
+		'title5',
+		'title5',
+		'title5'
+	], [
+		null,
+		'Name of the Gpio.',
+		'Initial state and reset state of the Gpio.  There is a checkbox for the pin if this is not disabled.  If it is input, the checkbox shows the current value.  Otherwise it can be used to change the value.',
+		'Fraction of the time that the pin is enabled when on.  Note that this value can only be set up when the corresponding pin is valid.',
+		'Whether this Gpio is the fan pin, used by G-code commands M106 and M107.',
+		'Whether this Gpio is the spindle pin, used by G-code commands M3, M4 and M5.'
+	]).AddMultiple(data, 'gpio', Gpio)]);
+	// }}}
+	// Pins. {{{
+	var pins = setup.Add(make_table(data));
+	var globalpins = pins.AddElement('tbody');
+	globalpins.Add(Pin(data, 'LED', [null, 'led_pin'], 2));
+	globalpins.Add(Pin(data, 'Stop', [null, 'stop_pin'], 4));
+	globalpins.Add(Pin(data, 'Probe', [null, 'probe_pin'], 4));
+	globalpins.Add(Pin(data, 'SPI SS', [null, 'spiss_pin'], 2));
+	pins.AddMultiple(data, 'motor', Pins_space, false);
+	pins.AddMultiple(data, 'temp', Pins_temp, false);
+	pins.AddMultiple(data, 'gpio', Pins_gpio, false);
+	// }}}
+	// }}}
+
+	ret.Add(Top(data));
+	ret.AddElement('div', 'spacer');
+	ret.Add(Map(data));
+	ret.Add(Gpios(data));
+	ret.Add(Multipliers(data));
+	ret.Add(Temps(data));
+	ret.Add(Toolpath(data));
+	return [ret, pos];
+}
+
+ui_modules = {franklin: franklin};
+
 function UI(machine) {	// {{{
 	var ret = Create('div', 'machine hidden');
 	ret.machine = machine;
@@ -570,350 +921,9 @@ function UI(machine) {	// {{{
 	});
 	selector.id = make_id(ret, [null, 'profiles']);
 	update_profiles(ret);
-	// Setup. {{{
-	var setup = ret.AddElement('div', 'setup expert');
-	var e = setup.AddElement('div').AddText('Machine UUID:');
-	ret.uuid = e.AddElement('span');
-	var e = setup.AddElement('div', 'admin').AddText('Machine name:');
-	e.Add(Str(ret, [null, 'name']));
-	var connected = setup.AddElement('div', 'connected');
-	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Machine');
-	disable.type = 'button';
-	disable.AddEvent('click', function() { machine.disabling = true; rpc.call('disable', [machine.uuid], {}); });
-	var remove = setup.AddElement('div', 'admin').AddElement('button').AddText('Remove Machine');
-	remove.type = 'button';
-	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + machine.name + '?')) { machine.disabling = true; rpc.call('remove_machine', [machine.uuid], {}); }});
-	var notconnected = setup.AddElement('div', 'notconnected');
-	var ports = notconnected.AddElement('select');
-	ports.id = make_id(ret, [null, 'ports']);
-	ports.AddEvent('changed', function() { update_firmwares(ports, ret.firmwares); });
-	var b = notconnected.AddElement('button').AddText('Detect');
-	b.type = 'button';
-	b.AddEvent('click', function() { detect(ports); });
-	ret.firmwares = notconnected.AddElement('select');
-	b = notconnected.AddElement('button').AddText('Upload');
-	b.type = 'button';
-	b.AddEvent('click', function() { upload(ports, ret.firmwares); });
-	// Save and restore. {{{
-	e = setup.AddElement('div', 'admin');
-	e.AddText('Profile');
-	b = e.AddElement('button').AddText('Save (as)').AddEvent('click', function() {
-		machine.call('save', [this.saveas.value], {});
-	});
-	b.type = 'button';
-	b.saveas = e.AddElement('input');
-	b.saveas.type = 'text';
-	e = setup.AddElement('button', 'admin').AddText('Remove this profile');
-	e.type = 'button';
-	e.AddEvent('click', function() {
-		machine.call('remove_profile', [machine.profile], {});
-	});
-	e = setup.AddElement('button', 'admin').AddText('Set as default profile');
-	e.type = 'button';
-	e.AddEvent('click', function() {
-		machine.call('set_default_profile', [machine.profile], {});
-	});
-	e = setup.AddElement('button').AddText('Reload this profile');
-	e.type = 'button';
-	e.AddEvent('click', function() {
-		machine.call('load', [machine.profile], {});
-	});
-	setup.AddElement('div').Add(File(ret, [null, 'import', 'import_settings'], 'import', 'Import', '.ini'));
-	e = setup.AddElement('a', 'title').AddText('Export settings to file');
-	e.id = make_id(ret, [null, 'export']);
-	e.title = 'Save settings to disk.';
-	// }}}
-	e = setup.AddElement('div').AddText('Timeout:');
-	e.Add(Float(ret, [null, 'timeout'], 0, 60));
-	e.AddText(' min');
-	e = setup.AddElement('div').AddText('After Job Completion:');
-	var l = e.AddElement('label');
-	l.Add(Checkbox(ret, [null, 'park_after_print']));
-	l.AddText('Park');
-	l = e.AddElement('label');
-	l.Add(Checkbox(ret, [null, 'sleep_after_print']));
-	l.AddText('Sleep');
-	l = e.AddElement('label');
-	l.Add(Checkbox(ret, [null, 'cool_after_print']));
-	l.AddText('Cool');
-	e = setup.AddElement('div').AddText('Max Probe Distance:');
-	e.Add(Float(ret, [null, 'probe_dist'], 0, 1));
-	e = setup.AddElement('div').AddText('Probe Border Offset:');
-	e.Add(Float(ret, [null, 'probe_offset'], 0, 1));
-	e.AddText(' ').Add(add_name(ret, 'unit', 0, 0));
-	e = setup.AddElement('div').AddText('Probe Safe Retract Distance:');
-	e.Add(Float(ret, [null, 'probe_safe_dist'], 0, 1));
-	e.AddText(' ').Add(add_name(ret, 'unit', 0, 0));
-	e = setup.AddElement('div').AddText('SPI setup:');
-	e.Add(Str(ret, [null, 'spi_setup']));
-	e = setup.AddElement('div').AddText('Machine Type:');
-	var select = e.Add(create_space_type_select());
-	var button = e.AddElement('button').AddText('Set');
-	button.type = 'button';
-	button.obj = select;
-	button.AddEvent('click', function() { set_value(ret, [['space', 0], 'type'], this.obj.selectedIndex); });
-	e.AddElement('span').id = make_id(ret, [['space', 0], 'type']);
-	e = setup.AddElement('div').AddText('Temps:').Add(Float(ret, [null, 'num_temps'], 0));
-	e = setup.AddElement('div').AddText('Gpios:').Add(Float(ret, [null, 'num_gpios'], 0));
-	e = setup.AddElement('div').AddText('Temp Scale Minimum:');
-	e.Add(Float(ret, [null, 'temp_scale_min'], 0, 1));
-	e.AddText('°C');
-	e = setup.AddElement('div').AddText('Temp Scale Maximum:');
-	e.Add(Float(ret, [null, 'temp_scale_max'], 0, 1));
-	e.AddText('°C');
-	e = setup.AddElement('div').AddText('Max Deviation:');
-	e.Add(Float(ret, [null, 'max_deviation'], 2, 1));
-	e.AddText(' ').Add(add_name(ret, 'unit', 0, 0));
-	e = setup.AddElement('div').AddText('Max v');
-	e.Add(Float(ret, [null, 'max_v'], 2, 1));
-	e.AddText(' ').Add(add_name(ret, 'unit', 0, 0));
-	e.AddText('/s');
-	// Cartesian. {{{
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Cartesian/Other',
-		'Number of Axes'
-	], [
-		'htitle1',
-		'title1'
-	], [
-		null,
-		'Number of axes'
-	]).AddMultiple(ret, 'space', Cartesian, false)]);
-	// }}}
-	// Axis. {{{
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Axes',
-		'Name',
-		UnitTitle(ret, 'Park Pos'),
-		'Park Order',
-		UnitTitle(ret, 'Min'),
-		UnitTitle(ret, 'Max'),
-		UnitTitle(ret, '2nd Home Pos')
-	], [
-		'htitle6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6'
-	], [
-		null,
-		'Name of the axis',
-		'Park position of the nozzle.  This is where the nozzle is sent when it is requested to get out of the way through a park command.',
-		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
-		'Minimum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to -Infinity for x and y.',
-		'Maximum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to Infinity for x and y.',
-		'Position to move to after hitting limit switches, before moving in range of limits.'
-	]).AddMultiple(ret, 'axis', Axis)]);
-	// }}}
-	// Motor. {{{
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Motor Settings',
-		UnitTitle(ret, 'Coupling', null, 'steps/'),
-		UnitTitle(ret, 'Switch Pos'),
-		'Home Order',
-		UnitTitle(ret, 'Limit v', '/s'),
-		UnitTitle(ret, 'Limit a', '/s²')
-	], [
-		'htitle5',
-		'title5',
-		'title5',
-		'title5',
-		'title5',
-		'title5'
-	], [
-		null,
-		'Number of (micro)steps that the motor needs to do to move the hardware by one unit.',
-		'Position of the home switch.',
-		'Order when homing.  Equal order homes simultaneously; lower order homes first.',
-		'Maximum speed of the motor.',
-		'Maximum acceleration of the motor.  4000 is a normal value.'
-	]).AddMultiple(ret, 'motor', Motor)]);
-	// }}} -->
-	// Delta. {{{
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Delta',
-		UnitTitle(ret, 'Min Distance'),
-		UnitTitle(ret, 'Max Distance'),
-		UnitTitle(ret, 'Rod Length'),
-		UnitTitle(ret, 'Radius')
-	], [
-		'htitle4',
-		'title4',
-		'title4',
-		'title4',
-		'title4'
-	], [
-		null,
-		'Minimum horizontal distance between tie rod pivot points.  Usually 0.',
-		'Maximum horizontal distance between tie rod pivot points.  Usually Infinity.',
-		'Length of the tie rods between pivot points.  Measure this with as high precision as possible.',
-		'Horizontal distance between tie rod pivot points when the end effector is at (0, 0, 0).'
-	]).AddMultiple(ret, 'motor', Delta)]);
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Delta',
-		'Angle'
-	], [
-		'htitle1',
-		'title1'
-	], [
-		null,
-		'Correction angle for the machine. (degrees)'
-	]).AddMultiple(ret, 'space', Delta_space, false)]);
-	// }}}
-	// Polar. {{{
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Polar',
-		UnitTitle(ret, 'Radius')
-	], [
-		'htitle1',
-		'title1'
-	], [
-		null,
-		'Maximum value for the r motor.'
-	]).AddMultiple(ret, 'space', Polar_space, false)]);
-	// }}}
-	// Extruder. {{{
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Extruder',
-		'Offset X',
-		'Offset Y',
-		'Offset Z'
-	], [
-		'htitle3',
-		'title3',
-		'title3',
-		'title3'
-	], [
-		null,
-		'Offset in X direction when this extruder is in use.  Set to 0 for the first extruder.',
-		'Offset in Y direction when this extruder is in use.  Set to 0 for the first extruder.',
-		'Offset in Z direction when this extruder is in use.  Set to 0 for the first extruder.'
-	]).AddMultiple(ret, 'axis', Extruder, false)]);
-	// }}}
-	// Follower. {{{
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Follower',
-		'Space',
-		'Motor'
-	], [
-		'htitle2',
-		'title2',
-		'title2',
-		'title2'
-	], [
-		null,
-		'Space of motor to follow.',
-		'Motor to follow.'
-	]).AddMultiple(ret, 'motor', Follower, false)]);
-	// }}}
-	// Temp. {{{
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Temp Settings',
-		'Name',
-		'Fan Temp (°C)',
-		'Bed'
-	], [
-		'htitle3',
-		'title3',
-		'title3',
-		'title3'
-	], [
-		null,
-		'Name of the temperature control',
-		'Temerature above which the cooling is turned on.',
-		'Whether this Temp is the heated bed, used by G-code commands M140 and M190.'
-	]).AddMultiple(ret, 'temp', Temp_setup)]);
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Temp Limits',
-		'Heater Low Limit (°C)',
-		'Heater High Limit (°C)',
-		'Fan Low Limit (°C)',
-		'Fan High Limit (°C)'
-	], [
-		'htitle4',
-		'title4',
-		'title4',
-		'title4',
-		'title4'
-	], [
-		null,
-		'Temerature below which the heater is never turned on.  Set to NaN to disable limit.',
-		'Temerature above which the heater is never turned on.  Set to NaN to disable limit.',
-		'Temerature below which the cooling is never turned on.  Set to NaN to disable limit.',
-		'Temerature above which the cooling is never turned on.  Set to NaN to disable limit.'
-	]).AddMultiple(ret, 'temp', Temp_limits)]);
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Temp Hardware',
-		'R0 (kΩ) or a',
-		'R1 (kΩ) or b',
-		'Rc (kΩ) or Scale (%)',
-		'Tc (°C) or Offset',
-		'β (1) or NaN',
-		'Hold Time (s)'
-	], [
-		'htitle6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6'
-	], [
-		null,
-		'Resistance on the board in series with the thermistor.  Normally 4.7 or 10.  Or, if β is NaN, the value of this sensor is ax+b with x the measured ADC value; this value is a.',
-		'Resistance on the board in parallel with the thermistor.  Normally Infinity.  Or, if β is NaN, the value of this sensor is ax+b with x the measured ADC value; this value is b.',
-		'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.  Or, if β is NaN, the scale for plotting the value on the temperature graph.',
-		'Temperature at which the thermistor has value Rc.  Normally 20.  Or, if β is NaN, the offset for plotting the value on the temperature graph.',
-		"Temperature dependence of the thermistor.  Normally around 4000.  It can be found in the thermistor's data sheet.  Or, if NaN, the value of this sensor is ax+b with x the measured ADC value.",
-		'Minimum time to keep the heater and fan pins at their values after a change.'
-	]).AddMultiple(ret, 'temp', Temp_hardware)]);
-	// }}}
-	// Gpio. {{{
-	setup.Add([make_table(ret).AddMultipleTitles([
-		'Gpio',
-		'Name',
-		'Reset State',
-		'Power (%)',
-		'Fan',
-		'Spindle'
-	], [
-		'htitle5',
-		'title5',
-		'title5',
-		'title5',
-		'title5',
-		'title5'
-	], [
-		null,
-		'Name of the Gpio.',
-		'Initial state and reset state of the Gpio.  There is a checkbox for the pin if this is not disabled.  If it is input, the checkbox shows the current value.  Otherwise it can be used to change the value.',
-		'Fraction of the time that the pin is enabled when on.  Note that this value can only be set up when the corresponding pin is valid.',
-		'Whether this Gpio is the fan pin, used by G-code commands M106 and M107.',
-		'Whether this Gpio is the spindle pin, used by G-code commands M3, M4 and M5.'
-	]).AddMultiple(ret, 'gpio', Gpio)]);
-	// }}}
-	// Pins. {{{
-	var pins = setup.Add(make_table(ret));
-	var globalpins = pins.AddElement('tbody');
-	globalpins.Add(Pin(ret, 'LED', [null, 'led_pin'], 2));
-	globalpins.Add(Pin(ret, 'Stop', [null, 'stop_pin'], 4));
-	globalpins.Add(Pin(ret, 'Probe', [null, 'probe_pin'], 4));
-	globalpins.Add(Pin(ret, 'SPI SS', [null, 'spiss_pin'], 2));
-	pins.AddMultiple(ret, 'motor', Pins_space, false);
-	pins.AddMultiple(ret, 'temp', Pins_temp, false);
-	pins.AddMultiple(ret, 'gpio', Pins_gpio, false);
-	// }}}
-	// }}}
-
-	ret.Add(Top(ret));
-	ret.AddElement('div', 'spacer');
-	ret.Add(Map(ret));
-	ret.Add(Gpios(ret));
-	ret.Add(Multipliers(ret));
-	ret.Add(Temps(ret));
-	ret.Add(Toolpath(ret));
+	var bin = ret.Add(new Bin());
+	var ui = ui_build(ret.machine.ui || '(franklin:)', ret);
+	bin.set_content(ui);
 	ret.AddElement('div', 'bottom');
 	return ret;
 }

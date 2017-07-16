@@ -245,6 +245,10 @@ body.printing {
 }
 
 .machine {
+	position: fixed;
+	width: 100%;
+	bottom: 0px;
+	height: 80vh;
 	background: #ccc;
 	padding: 1% 1em;
 }
