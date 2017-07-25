@@ -60,7 +60,7 @@ function Name(ui, type, num) { // {{{
 
 function Pin(ui, title, obj, type) { // {{{
 	var pinselect = Create('select', 'pinselect');
-	pinselect.id = make_id(ui, obj);
+	pinselect.AddClass(make_id(ui, obj));
 	pinselect.obj = obj;
 	pinrange(ui, type, pinselect);
 	pinselect.can_invert = Boolean(type & 7);
@@ -68,14 +68,14 @@ function Pin(ui, title, obj, type) { // {{{
 	var validinput = validlabel.AddElement('input');
 	validlabel.AddText('Valid');
 	validinput.type = 'checkbox';
-	validinput.id = make_id(ui, obj, 'valid');
+	validinput.AddClass(make_id(ui, obj, 'valid'));
 	var inverts;
 	if (pinselect.can_invert) {
 		var invertedlabel = Create('label');
 		var invertedinput = invertedlabel.AddElement('input');
 		invertedlabel.AddText('Inverted');
 		invertedinput.type = 'checkbox';
-		invertedinput.id = make_id(ui, obj, 'inverted');
+		invertedinput.AddClass(make_id(ui, obj, 'inverted'));
 		inverts = [invertedlabel];
 	}
 	else
@@ -83,7 +83,7 @@ function Pin(ui, title, obj, type) { // {{{
 	var button = Create('button', 'button');
 	button.type = 'button';
 	button.AddText('Set');
-	button.AddEvent('click', function() { set_pin(ui, obj); });
+	button.AddEvent('click', function() { set_pin(ui, obj, pinselect, validinput.checked, pinselect.can_invert ? invertedinput.checked : false); });
 	return make_tablerow(ui, title, [[pinselect], [validlabel], inverts, [button]], ['pintitle', ['pinvalue', 'pinvalue', 'pinvalue', 'pinvalue']]);
 } // }}}
 
@@ -95,8 +95,8 @@ function Float(ui, obj, digits, factor, className, set) { // {{{
 		factor = 1;
 	input.factor = factor;
 	span.factor = factor;
-	input.id = make_id(ui, obj, 'new');
-	span.id = make_id(ui, obj);
+	input.AddClass(make_id(ui, obj, 'new'));
+	span.AddClass(make_id(ui, obj));
 	span.digits = digits;
 	input.type = 'text';
 	input.set = set;
@@ -109,20 +109,20 @@ function File(ui, obj, action, buttontext, types, cb) { // {{{
 	var input = Create('input');
 	input.type = 'file';
 	input.accept = types;
-	input.id = make_id(ui, obj);
+	input.AddClass(make_id(ui, obj));
 	var button = Create('button', 'button').AddText(buttontext);
 	button.type = 'button';
 	button.source = obj;
 	button.action = action;
 	button.extra = cb;
-	button.AddEvent('click', function() { set_file(ui, this.source, this.action); if (this.extra !== undefined) this.extra(); });
+	button.AddEvent('click', function() { set_file(ui, input, this.source, this.action); if (this.extra !== undefined) this.extra(); });
 	return [input, button];
 } // }}}
 
 function Checkbox(ui, obj) { // {{{
 	var ret = Create('input');
 	ret.type = 'checkbox';
-	ret.id = make_id(ui, obj);
+	ret.AddClass(make_id(ui, obj));
 	ret.obj = obj;
 	ret.AddEvent('click', function(e) {
 		e.preventDefault();
@@ -151,7 +151,7 @@ function Str(ui, obj) { // {{{
 		return false;
 	});
 	e = ret.AddElement('span');
-	e.id = make_id(ui, obj);
+	e.AddClass(make_id(ui, obj));
 	*/
 	return ret;
 } // }}}
@@ -161,7 +161,7 @@ function Id(ui, obj) { // {{{
 		return '';
 	var ret = Create('input');
 	ret.type = 'checkbox';
-	ret.id = make_id(ui, obj);
+	ret.AddClass(make_id(ui, obj));
 	ret.obj = obj;
 	ui.idgroups[ret.obj[1]].push(ret);
 	ret.AddEvent('click', function(e) {
@@ -292,7 +292,7 @@ function Temp(ui, num) {
 	var div = Create(div);
 	div.Add(Float(ui, [['temp', num], 'value', 'settemp'], 0));
 	var current = Create('div');
-	current.id = make_id(ui, [['temp', num], 'temp']);
+	current.AddClass(make_id(ui, [['temp', num], 'temp']));
 	if (num !== null)
 		ui.temptargets.push(current.AddElement('span'));
 	var name = temp_name(ui, num);
@@ -312,7 +312,7 @@ function Pins_temp(ui, num, dummy, table) {
 // Gpio. {{{
 function Gpio(ui, num) {
 	var reset = Create('select');
-	reset.id = make_id(ui, [['gpio', num], 'reset']);
+	reset.AddClass(make_id(ui, [['gpio', num], 'reset']));
 	reset.AddElement('option').AddText('Off').Value = 0;
 	reset.AddElement('option').AddText('On').Value = 1;
 	reset.AddElement('option').AddText('Input').Value = 2;
@@ -348,12 +348,12 @@ function Label(machine) {	// {{{
 // }}}
 
 // Machine parts. {{{
-function Top(ui) { // {{{
+function Top(desc, pos, ui) { // {{{
 	var ret = Create('div', 'top');
 	ret.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(ui); }).AddText('×').type = 'button';
 	// Jobs. {{{
 	e = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(ui); });
-	e.id = make_id(ui, [null, 'queue']);
+	e.AddClass(make_id(ui, [null, 'queue']));
 	// }}}
 	// Jobbuttons. {{{
 	e = ret.AddElement('div', 'jobbuttons');
@@ -365,17 +365,17 @@ function Top(ui) { // {{{
 	e.AddElement('br', 'benjamin');
 	var b = e.AddElement('button', 'benjamin').AddText('×').AddEvent('click', function() { audio_del(ui); });
 	b.type = 'button';
-	e.AddElement('select', 'benjamin').id = make_id(ui, [null, 'audio']);
+	e.AddElement('select', 'benjamin').AddClass(make_id(ui, [null, 'audio']));
 	var b = e.AddElement('button', 'benjamin').AddText('Play').AddEvent('click', function() { audio_play(ui); });
 	b.type = 'button';
 	e.AddElement('br');
 	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_run(ui); }).AddText('Run selected job');
 	b.type = 'button';
 	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { probe(ui); }).AddText('Probe');
-	b.id = make_id(ui, [null, 'probe']);
+	b.AddClass(make_id(ui, [null, 'probe']));
 	b.type = 'button';
 	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { del_probe(ui); }).AddText('Delete Probemap');
-	b.id = make_id(ui, [null, 'delprobe']);
+	b.AddClass(make_id(ui, [null, 'delprobe']));
 	b.type = 'button';
 	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { download_probemap(ui); }).AddText('Download Probemap');
 	b.type = 'button';
@@ -394,13 +394,13 @@ function Top(ui) { // {{{
 	b = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { ui.machine.call('sleep', [], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
 	// }}}
-	return ret;
+	return [ret, pos];
 }
 // }}}
 
-function Map(ui) { // {{{
+function Map(desc, pos, ui) { // {{{
 	var ret = Create('div', 'map');
-	ret.id = make_id(ui, [null, 'map']);
+	ret.AddClass(make_id(ui, [null, 'map']));
 	// Current position buttons.
 	var t = ret.Add(make_table(ui).AddMultipleTitles([
 		'',
@@ -434,21 +434,21 @@ function Map(ui) { // {{{
 	// Canvas for xy and for z.
 	var c = ret.AddElement('canvas', 'xymap');
 	c.AddEvent('mousemove', function(e) { return xymove(ui, e); }).AddEvent('mousedown', function(e) { return xydown(ui, e); }).AddEvent('mouseup', function(e) { return xyup(ui, e); });
-	c.id = make_id(ui, [null, 'xymap']);
+	c.AddClass(make_id(ui, [null, 'xymap']));
 	c = ret.AddElement('canvas', 'zmap');
 	c.AddEvent('mousemove', function(e) { return zmove(ui, e); }).AddEvent('mousedown', function(e) { return zdown(ui, e); }).AddEvent('mouseup', function(e) { return zup(ui, e); });
-	c.id = make_id(ui, [null, 'zmap']);
-	return ret;
+	c.AddClass(make_id(ui, [null, 'zmap']));
+	return [ret, pos];
 }
 // }}}
 
-function Toolpath(ui) { // {{{
+function Toolpath(desc, pos, ui) { // {{{
 	var ret = Create('div', 'toolpath');
 	var index = ret.AddText('Toolpath index:').Add(Float(ui, [null, 'tppos'], 0, 1, '', function(value) {
 		ui.machine.call('tp_set_position', [value], {});
 	}));
 	var span = ret.AddText('/').AddElement('span');
-	span.id = make_id(ui, [null, 'tpmax']);
+	span.AddClass(make_id(ui, [null, 'tpmax']));
 	var b = ret.AddElement('button').AddText('Find Closest').AddEvent('click', function() {
 		ui.machine.call('get_axis_pos', [0], {}, function(pos) {
 			ui.machine.call('tp_find_position', [pos[0], pos[1], pos[2]], {}, function(tppos) {
@@ -459,13 +459,13 @@ function Toolpath(ui) { // {{{
 	var label = ret.AddElement('label');
 	b = label.AddElement('input');
 	b.type = 'checkbox';
-	b.id = make_id(ui, [null, 'start_paused']);
+	b.AddClass(make_id(ui, [null, 'start_paused']));
 	label.AddText('Start Jobs as Paused');
-	return ret;
+	return [ret, pos];
 }
 // }}}
 
-function Temps(ui) { // {{{
+function Temps(desc, pos, ui) { // {{{
 	var ret = Create('div', 'temp');
 	ret.Add(make_table(ui).AddMultipleTitles([
 		'Temp control',
@@ -483,12 +483,18 @@ function Temps(ui) { // {{{
 		'Actual temperature from sensor.',
 		'Fraction of time that fan is enabled when on.'
 	]).AddMultiple(ui, 'temp', Temp));
-	ret.AddElement('canvas', 'tempgraph').id = make_id(ui, [null, 'tempgraph']);
-	return ret;
+	return [ret, pos];
 }
 // }}}
 
-function Multipliers(ui) { // {{{
+function Tempgraph(desc, pos, ui) { // {{{
+	// TODO: Make updates work. (It needs to use ui to get them.)
+	var ret = Create('canvas', 'tempgraph').AddClass(make_id(ui, [null, 'tempgraph']));
+	return [ret, pos];
+}
+// }}}
+
+function Multipliers(desc, pos, ui) { // {{{
 	var ret = Create('div', 'multipliers');
 	var e = ret.AddElement('div').AddText('Feedrate: ');
 	e.Add(Float(ui, [null, 'feedrate'], 0, 1e-2));
@@ -514,15 +520,15 @@ function Multipliers(ui) { // {{{
 	e = ret.AddElement('div', 'admin');
 	e.AddElement('Label').AddText('Store adc readings').Add(Checkbox(ui, [null, 'store_adc']));
 	e.AddElement('a').AddText('Get stored readings').href = 'adc';
-	return ret;
+	return [ret, pos];
 }
 // }}}
 
-function Gpios(ui) { // {{{
+function Gpios(desc, pos, ui) { // {{{
 	var ret = Create('div', 'gpios');
 	ret.AddMultiple(ui, 'gpio', function(ui, i) {
 		var ret = Create('span');
-		ret.id = make_id(ui, [['gpio', i], 'statespan']);
+		ret.AddClass(make_id(ui, [['gpio', i], 'statespan']));
 		var label = ret.AddElement('label');
 		var input = label.AddElement('input');
 		label.Add(gpio_name(ui, i));
@@ -533,42 +539,28 @@ function Gpios(ui) { // {{{
 			return false;
 		});
 		input.type = 'checkbox';
-		input.id = make_id(ui, [['gpio', i], 'state']);
+		input.AddClass(make_id(ui, [['gpio', i], 'state']));
 		return ret;
 	}, false);
-	return ret;
+	return [ret, pos];
 }
 // }}}
 // }}}
 
-function franklin(desc, pos, data) {
-	var ret = Create('div');
-	// Setup. {{{
-	var setup = ret.AddElement('div', 'setup expert');
-	var e = setup.AddElement('div').AddText('Machine UUID:');
-	data.uuid = e.AddElement('span');
-	var e = setup.AddElement('div', 'admin').AddText('Machine name:');
-	e.Add(Str(data, [null, 'name']));
-	var connected = setup.AddElement('div', 'connected');
-	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Machine');
-	disable.type = 'button';
-	disable.AddEvent('click', function() { machine.disabling = true; rpc.call('disable', [machine.uuid], {}); });
-	var remove = setup.AddElement('div', 'admin').AddElement('button').AddText('Remove Machine');
-	remove.type = 'button';
-	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + machine.name + '?')) { machine.disabling = true; rpc.call('remove_machine', [machine.uuid], {}); }});
-	var notconnected = setup.AddElement('div', 'notconnected');
-	var ports = notconnected.AddElement('select');
-	ports.id = make_id(data, [null, 'ports']);
+function setup_globals(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	var ports = data.notconnected.AddElement('select');
+	ports.AddClass(make_id(data, [null, 'ports']));
 	ports.AddEvent('changed', function() { update_firmwares(ports, data.firmwares); });
-	var b = notconnected.AddElement('button').AddText('Detect');
+	var b = data.notconnected.AddElement('button').AddText('Detect');
 	b.type = 'button';
 	b.AddEvent('click', function() { detect(ports); });
-	data.firmwares = notconnected.AddElement('select');
-	b = notconnected.AddElement('button').AddText('Upload');
+	data.firmwares = data.notconnected.AddElement('select');
+	b = data.notconnected.AddElement('button').AddText('Upload');
 	b.type = 'button';
 	b.AddEvent('click', function() { upload(ports, data.firmwares); });
 	// Save and restore. {{{
-	e = setup.AddElement('div', 'admin');
+	e = ret.AddElement('div', 'admin');
 	e.AddText('Profile');
 	b = e.AddElement('button').AddText('Save (as)').AddEvent('click', function() {
 		machine.call('save', [this.saveas.value], {});
@@ -576,30 +568,30 @@ function franklin(desc, pos, data) {
 	b.type = 'button';
 	b.saveas = e.AddElement('input');
 	b.saveas.type = 'text';
-	e = setup.AddElement('button', 'admin').AddText('Remove this profile');
+	e = ret.AddElement('button', 'admin').AddText('Remove this profile');
 	e.type = 'button';
 	e.AddEvent('click', function() {
 		machine.call('remove_profile', [machine.profile], {});
 	});
-	e = setup.AddElement('button', 'admin').AddText('Set as default profile');
+	e = ret.AddElement('button', 'admin').AddText('Set as default profile');
 	e.type = 'button';
 	e.AddEvent('click', function() {
 		machine.call('set_default_profile', [machine.profile], {});
 	});
-	e = setup.AddElement('button').AddText('Reload this profile');
+	e = ret.AddElement('button').AddText('Reload this profile');
 	e.type = 'button';
 	e.AddEvent('click', function() {
 		machine.call('load', [machine.profile], {});
 	});
-	setup.AddElement('div').Add(File(data, [null, 'import', 'import_settings'], 'import', 'Import', '.ini'));
-	e = setup.AddElement('a', 'title').AddText('Export settings to file');
-	e.id = make_id(data, [null, 'export']);
+	ret.AddElement('div').Add(File(data, [null, 'import', 'import_settings'], 'import', 'Import', '.ini'));
+	e = ret.AddElement('a', 'title').AddText('Export settings to file');
+	e.AddClass(make_id(data, [null, 'export']));
 	e.title = 'Save settings to disk.';
 	// }}}
-	e = setup.AddElement('div').AddText('Timeout:');
+	e = ret.AddElement('div').AddText('Timeout:');
 	e.Add(Float(data, [null, 'timeout'], 0, 60));
 	e.AddText(' min');
-	e = setup.AddElement('div').AddText('After Job Completion:');
+	e = ret.AddElement('div').AddText('After Job Completion:');
 	var l = e.AddElement('label');
 	l.Add(Checkbox(data, [null, 'park_after_print']));
 	l.AddText('Park');
@@ -609,40 +601,43 @@ function franklin(desc, pos, data) {
 	l = e.AddElement('label');
 	l.Add(Checkbox(data, [null, 'cool_after_print']));
 	l.AddText('Cool');
-	e = setup.AddElement('div').AddText('Max Probe Distance:');
+	e = ret.AddElement('div').AddText('Max Probe Distance:');
 	e.Add(Float(data, [null, 'probe_dist'], 0, 1));
-	e = setup.AddElement('div').AddText('Probe Border Offset:');
+	e = ret.AddElement('div').AddText('Probe Border Offset:');
 	e.Add(Float(data, [null, 'probe_offset'], 0, 1));
 	e.AddText(' ').Add(add_name(data, 'unit', 0, 0));
-	e = setup.AddElement('div').AddText('Probe Safe Retract Distance:');
+	e = ret.AddElement('div').AddText('Probe Safe Retract Distance:');
 	e.Add(Float(data, [null, 'probe_safe_dist'], 0, 1));
 	e.AddText(' ').Add(add_name(data, 'unit', 0, 0));
-	e = setup.AddElement('div').AddText('SPI setup:');
+	e = ret.AddElement('div').AddText('SPI setup:');
 	e.Add(Str(data, [null, 'spi_setup']));
-	e = setup.AddElement('div').AddText('Machine Type:');
+	e = ret.AddElement('div').AddText('Machine Type:');
 	var select = e.Add(create_space_type_select());
 	var button = e.AddElement('button').AddText('Set');
 	button.type = 'button';
 	button.obj = select;
 	button.AddEvent('click', function() { set_value(data, [['space', 0], 'type'], this.obj.selectedIndex); });
-	e.AddElement('span').id = make_id(data, [['space', 0], 'type']);
-	e = setup.AddElement('div').AddText('Temps:').Add(Float(data, [null, 'num_temps'], 0));
-	e = setup.AddElement('div').AddText('Gpios:').Add(Float(data, [null, 'num_gpios'], 0));
-	e = setup.AddElement('div').AddText('Temp Scale Minimum:');
+	e.AddElement('span').AddClass(make_id(data, [['space', 0], 'type']));
+	e = ret.AddElement('div').AddText('Temps:').Add(Float(data, [null, 'num_temps'], 0));
+	e = ret.AddElement('div').AddText('Gpios:').Add(Float(data, [null, 'num_gpios'], 0));
+	e = ret.AddElement('div').AddText('Temp Scale Minimum:');
 	e.Add(Float(data, [null, 'temp_scale_min'], 0, 1));
 	e.AddText('°C');
-	e = setup.AddElement('div').AddText('Temp Scale Maximum:');
+	e = ret.AddElement('div').AddText('Temp Scale Maximum:');
 	e.Add(Float(data, [null, 'temp_scale_max'], 0, 1));
 	e.AddText('°C');
-	e = setup.AddElement('div').AddText('Max Deviation:');
+	e = ret.AddElement('div').AddText('Max Deviation:');
 	e.Add(Float(data, [null, 'max_deviation'], 2, 1));
 	e.AddText(' ').Add(add_name(data, 'unit', 0, 0));
-	e = setup.AddElement('div').AddText('Max v');
+	e = ret.AddElement('div').AddText('Max v');
 	e.Add(Float(data, [null, 'max_v'], 2, 1));
 	e.AddText(' ').Add(add_name(data, 'unit', 0, 0));
 	e.AddText('/s');
-	// Cartesian. {{{
-	setup.Add([make_table(data).AddMultipleTitles([
+	return [ret, pos];
+} // }}}
+function setup_cartesian(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Cartesian/Other',
 		'Number of Axes'
 	], [
@@ -652,9 +647,11 @@ function franklin(desc, pos, data) {
 		null,
 		'Number of axes'
 	]).AddMultiple(data, 'space', Cartesian, false)]);
-	// }}}
-	// Axis. {{{
-	setup.Add([make_table(data).AddMultipleTitles([
+	return [ret, pos];
+} // }}}
+function setup_axis(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Axes',
 		'Name',
 		UnitTitle(data, 'Park Pos'),
@@ -679,9 +676,11 @@ function franklin(desc, pos, data) {
 		'Maximum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to Infinity for x and y.',
 		'Position to move to after hitting limit switches, before moving in range of limits.'
 	]).AddMultiple(data, 'axis', Axis)]);
-	// }}}
-	// Motor. {{{
-	setup.Add([make_table(data).AddMultipleTitles([
+	return [ret, pos];
+} // }}}
+function setup_motor(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Motor Settings',
 		UnitTitle(data, 'Coupling', null, 'steps/'),
 		UnitTitle(data, 'Switch Pos'),
@@ -703,9 +702,11 @@ function franklin(desc, pos, data) {
 		'Maximum speed of the motor.',
 		'Maximum acceleration of the motor.  4000 is a normal value.'
 	]).AddMultiple(data, 'motor', Motor)]);
-	// }}} -->
-	// Delta. {{{
-	setup.Add([make_table(data).AddMultipleTitles([
+	return [ret, pos];
+} // }}}
+function setup_delta(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Delta',
 		UnitTitle(data, 'Min Distance'),
 		UnitTitle(data, 'Max Distance'),
@@ -724,7 +725,7 @@ function franklin(desc, pos, data) {
 		'Length of the tie rods between pivot points.  Measure this with as high precision as possible.',
 		'Horizontal distance between tie rod pivot points when the end effector is at (0, 0, 0).'
 	]).AddMultiple(data, 'motor', Delta)]);
-	setup.Add([make_table(data).AddMultipleTitles([
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Delta',
 		'Angle'
 	], [
@@ -734,9 +735,11 @@ function franklin(desc, pos, data) {
 		null,
 		'Correction angle for the machine. (degrees)'
 	]).AddMultiple(data, 'space', Delta_space, false)]);
-	// }}}
-	// Polar. {{{
-	setup.Add([make_table(data).AddMultipleTitles([
+	return [ret, pos];
+} // }}}
+function setup_polar(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Polar',
 		UnitTitle(data, 'Radius')
 	], [
@@ -746,9 +749,11 @@ function franklin(desc, pos, data) {
 		null,
 		'Maximum value for the r motor.'
 	]).AddMultiple(data, 'space', Polar_space, false)]);
-	// }}}
-	// Extruder. {{{
-	setup.Add([make_table(data).AddMultipleTitles([
+	return [ret, pos];
+} // }}}
+function setup_extruder(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Extruder',
 		'Offset X',
 		'Offset Y',
@@ -764,9 +769,11 @@ function franklin(desc, pos, data) {
 		'Offset in Y direction when this extruder is in use.  Set to 0 for the first extruder.',
 		'Offset in Z direction when this extruder is in use.  Set to 0 for the first extruder.'
 	]).AddMultiple(data, 'axis', Extruder, false)]);
-	// }}}
-	// Follower. {{{
-	setup.Add([make_table(data).AddMultipleTitles([
+	return [ret, pos];
+} // }}}
+function setup_follower(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Follower',
 		'Space',
 		'Motor'
@@ -780,9 +787,11 @@ function franklin(desc, pos, data) {
 		'Space of motor to follow.',
 		'Motor to follow.'
 	]).AddMultiple(data, 'motor', Follower, false)]);
-	// }}}
-	// Temp. {{{
-	setup.Add([make_table(data).AddMultipleTitles([
+	return [ret, pos];
+} // }}}
+function setup_temp(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Temp Settings',
 		'Name',
 		'Fan Temp (°C)',
@@ -798,7 +807,7 @@ function franklin(desc, pos, data) {
 		'Temerature above which the cooling is turned on.',
 		'Whether this Temp is the heated bed, used by G-code commands M140 and M190.'
 	]).AddMultiple(data, 'temp', Temp_setup)]);
-	setup.Add([make_table(data).AddMultipleTitles([
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Temp Limits',
 		'Heater Low Limit (°C)',
 		'Heater High Limit (°C)',
@@ -817,7 +826,7 @@ function franklin(desc, pos, data) {
 		'Temerature below which the cooling is never turned on.  Set to NaN to disable limit.',
 		'Temerature above which the cooling is never turned on.  Set to NaN to disable limit.'
 	]).AddMultiple(data, 'temp', Temp_limits)]);
-	setup.Add([make_table(data).AddMultipleTitles([
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Temp Hardware',
 		'R0 (kΩ) or a',
 		'R1 (kΩ) or b',
@@ -842,9 +851,11 @@ function franklin(desc, pos, data) {
 		"Temperature dependence of the thermistor.  Normally around 4000.  It can be found in the thermistor's data sheet.  Or, if NaN, the value of this sensor is ax+b with x the measured ADC value.",
 		'Minimum time to keep the heater and fan pins at their values after a change.'
 	]).AddMultiple(data, 'temp', Temp_hardware)]);
-	// }}}
-	// Gpio. {{{
-	setup.Add([make_table(data).AddMultipleTitles([
+	return [ret, pos];
+} // }}}
+function setup_gpio(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.Add([make_table(data).AddMultipleTitles([
 		'Gpio',
 		'Name',
 		'Reset State',
@@ -866,9 +877,11 @@ function franklin(desc, pos, data) {
 		'Whether this Gpio is the fan pin, used by G-code commands M106 and M107.',
 		'Whether this Gpio is the spindle pin, used by G-code commands M3, M4 and M5.'
 	]).AddMultiple(data, 'gpio', Gpio)]);
-	// }}}
-	// Pins. {{{
-	var pins = setup.Add(make_table(data));
+	return [ret, pos];
+} // }}}
+function setup_pins(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	var pins = ret.Add(make_table(data));
 	var globalpins = pins.AddElement('tbody');
 	globalpins.Add(Pin(data, 'LED', [null, 'led_pin'], 2));
 	globalpins.Add(Pin(data, 'Stop', [null, 'stop_pin'], 4));
@@ -877,23 +890,46 @@ function franklin(desc, pos, data) {
 	pins.AddMultiple(data, 'motor', Pins_space, false);
 	pins.AddMultiple(data, 'temp', Pins_temp, false);
 	pins.AddMultiple(data, 'gpio', Pins_gpio, false);
-	// }}}
-	// }}}
-
-	ret.Add(Top(data));
-	ret.AddElement('div', 'spacer');
-	ret.Add(Map(data));
-	ret.Add(Gpios(data));
-	ret.Add(Multipliers(data));
-	ret.Add(Temps(data));
-	ret.Add(Toolpath(data));
 	return [ret, pos];
-}
+} // }}}
 
-ui_modules = {franklin: franklin};
+ui_modules = {
+	Setup: setup,
+	Top: Top,
+	Map: Map,
+	Toolpath: Toolpath,
+	Temps: Temps,
+	'Temp Graph': Tempgraph,
+	Multipliers: Multipliers,
+	Gpios: Gpios,
+	'Globals Setup': setup_globals,
+	'Cartesian Setup': setup_cartesian,
+	'Axis Setup': setup_axis,
+	'Motor Setup': setup_motor,
+	'Delta Setup': setup_delta,
+	'Polar Setup': setup_polar,
+	'Extruder Setup': setup_extruder,
+	'Follower Setup': setup_follower,
+	'Temp Setup': setup_temp,
+	'Gpio Setup': setup_gpio,
+	'Pin Setup': setup_pins,
+};
 
 function UI(machine) {	// {{{
 	var ret = Create('div', 'machine hidden');
+	var setup = ret.AddElement('div', 'setup');
+	var e = setup.AddElement('div').AddText('Machine UUID:');
+	ret.uuid = e.AddElement('span');
+	var e = setup.AddElement('div', 'admin').AddText('Machine name:');
+	e.Add(Str(ret, [null, 'name']));
+	var connected = setup.AddElement('div', 'connected');
+	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Machine');
+	disable.type = 'button';
+	disable.AddEvent('click', function() { machine.disabling = true; rpc.call('disable', [machine.uuid], {}); });
+	var remove = setup.AddElement('div', 'admin').AddElement('button').AddText('Remove Machine');
+	remove.type = 'button';
+	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + machine.name + '?')) { machine.disabling = true; rpc.call('remove_machine', [machine.uuid], {}); }});
+	ret.notconnected = setup.AddElement('div', 'notconnected');
 	ret.machine = machine;
 	ret.names = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
 	ret.name_values = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
@@ -908,22 +944,22 @@ function UI(machine) {	// {{{
 	ret.idgroups = {bed: [], fan: [], spindle: []};
 	ret.multiples = {space: [], temp: [], gpio: [], axis: [], motor: []};
 	// Blocker bar. {{{
-	ret.id = make_id(ret, [null, 'container']);
+	ret.AddClass(make_id(ret, [null, 'container']));
 	var blocker = ret.AddElement('div', 'hidden blocker');
-	blocker.id = make_id(ret, [null, 'block1']);
+	blocker.AddClass(make_id(ret, [null, 'block1']));
 	// }}}
-	ret.AddElement('div', 'message hidden').id = make_id(ret, [null, 'message1']);
-	ret.AddElement('div', 'message').id = make_id(ret, [null, 'printstate']);
-	ret.AddElement('div', 'message hidden').id = make_id(ret, [null, 'confirm']);
+	ret.AddElement('div', 'message hidden').AddClass(make_id(ret, [null, 'message1']));
+	ret.AddElement('div', 'message').AddClass(make_id(ret, [null, 'printstate']));
+	ret.AddElement('div', 'message hidden').AddClass(make_id(ret, [null, 'confirm']));
 	ret.AddElement('h2', 'notconnected').AddText('This machine is not connected');
 	var selector = ret.AddElement('div').AddText('Profile:').AddElement('select').AddEvent('change', function() {
 		machine.call('load', [selector.value], {});
 	});
-	selector.id = make_id(ret, [null, 'profiles']);
+	selector.AddClass(make_id(ret, [null, 'profiles']));
 	update_profiles(ret);
-	var bin = ret.Add(new Bin());
-	var ui = ui_build(ret.machine.ui || '(franklin:)', ret);
-	bin.set_content(ui);
+	ret.bin = ret.Add(new Bin(ret));
+	var ui = ui_build(ret.machine.user_interface || '(Top:)', ret);
+	ret.bin.set_content(ui);
 	ret.AddElement('div', 'bottom');
 	return ret;
 }

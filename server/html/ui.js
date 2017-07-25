@@ -31,7 +31,7 @@ class Split(Content):
 	div controls
 	swap()
 
-class Notebook(Content):
+class Tabs(Content):
 	div tabs
 	Bin pages[]
 	div controls
@@ -39,7 +39,7 @@ class Notebook(Content):
 
 DOM:
 <div class='Bin'>
-	<div class='Notebook'>
+	<div class='Tabs'>
 		<div class='Bin Tab'>
 			<div class='Split'>
 				<div class='Bin Left'>...</div>
@@ -59,7 +59,7 @@ function ui_build(string, data, pos) {
 	if (string[pos] == '{') {
 		// Split: {AB[dD][hv][0-9.]+[p%]}
 		pos += 1;
-		ret = new Split(data);
+		ret = new Split(data, false);
 		// Settings.
 		if (string[pos++] == 'd')
 			ret.dominant_first = false;
@@ -77,14 +77,14 @@ function ui_build(string, data, pos) {
 		// Second child.
 		sub = ui_build(string, data, pos);
 		ret.second.set_content(sub[0]);
-		pos = sub[1]
+		pos = sub[1];
 		if (string[pos++] != '}')
 			console.error('invalid final character for Split building', string, pos);
 		return [ret, pos];
 	}
 	if (string[pos] == '[') {
 		pos += 1;
-		ret = new Notebook();
+		ret = new Tabs();
 		// TODO.
 	}
 	// Other things.
@@ -96,7 +96,7 @@ function ui_build(string, data, pos) {
 		if (string.substr(pos, n.length + 1) != n + ':')
 			continue;
 		pos += n.length + 1;
-		sub = ui_modules[n](string, pos, data);
+		sub = ui_modules[n](string, pos, data, false);
 		sub[0].name = n;
 		pos = sub[1];
 		if (string[pos++] != ')')
@@ -107,7 +107,8 @@ function ui_build(string, data, pos) {
 	return [null, pos];
 }
 
-function Bin(data) {
+// A Bin is a container that can hold any type of content.
+function Bin(data, configuring) {
 	var self = Create('div', 'Bin');
 	self.data = data;
 	self.style.position = 'absolute';
@@ -116,6 +117,8 @@ function Bin(data) {
 	self.style.top = '0px';
 	self.style.bottom = '0px';
 	self.control = self.AddElement('div');
+	self.configuring = configuring ? true : false;	// This turns undefined into false.
+	self.control.style.display = configuring ? 'block' : 'none';
 	self.control.style.position = 'absolute';
 	self.control.style.width = '100%';
 	self.control.style.bottom = '0px';
@@ -124,18 +127,18 @@ function Bin(data) {
 	for (var m in ui_modules)
 		self.content_selector.AddElement('option').AddText(m).value = m;
 	self.content_selector.AddElement('option').AddText('Add Split').value = 'Split';
-	self.content_selector.AddElement('option').AddText('Add Notebook').value = 'Notebook';
+	//self.content_selector.AddElement('option').AddText('Add Tabs').value = 'Tabs'; // Not Implemented Yet.
 	self.content_selector.AddEvent('change', function() {
 		var target = self.content_selector.selectedOptions[0].value;
 		if (target == 'Split')
 			self.add_split();
-		else if (target == 'Notebook')
+		else if (target == 'Tabs')
 			self.add_notebook();
 		else {
 			self.destroy();
-			var c = ui_modules[target]('', 0, self.data);
+			var c = ui_modules[target]('', 0, self.data, self.configuring)[0];
 			c.name = target;
-			self.set_content(c)
+			self.set_content(c);
 		}
 	});
 	self.set_content = function(element) {
@@ -143,6 +146,7 @@ function Bin(data) {
 		this.Add(self.control);
 		this.content = this.Add(element);
 		element.parent_bin = this;
+		element.hide = function(hidden) { return this.parent_bin.hide(hidden); };
 		this.update();
 	};
 	self.destroy = function() {
@@ -152,7 +156,7 @@ function Bin(data) {
 	self.update = function() {
 		if (!this.content)
 			return;
-		if (this.content.name == 'Split' || this.content.name == 'Notebook') {
+		if (!this.configuring || this.content.name == 'Split' || this.content.name == 'Tabs') {
 			this.control.style.display = 'none';
 		}
 		else {
@@ -165,18 +169,27 @@ function Bin(data) {
 		if (this.content.update)
 			this.content.update();
 	};
+	self.config = function(configuring) {
+		this.configuring = configuring;
+		if (configuring)
+			this.update();
+		else
+			this.control.style.display = 'none';
+		if (this.content.config)
+			this.content.config(configuring);
+	};
 	self.add_split = function() {
 		var content = this.content;
 		var copy = this.copy();
 		this.removeChild(content);
-		this.set_content(new Split(this.data));
+		this.set_content(new Split(this.data, this.configuring));
 		this.content.first.set_content(content);
 		this.content.second.set_content(copy);
 		this.update();
 	};
 	self.add_notebook = function() {
 		var content = this.content;
-		this.content = new Notebook();
+		this.content = new Tabs();
 		this.content.add_tab(content);
 		this.update();
 	};
@@ -188,21 +201,24 @@ function Bin(data) {
 	self.copy = function() {
 		if (this.content.copy)
 			return this.content.copy();
-		var ret = ui_modules[this.content.name](this.serialize(), 0, this.data)[0];
+		var ret = ui_modules[this.content.name](this.serialize(), 0, this.data, this.configuring)[0];
 		ret.name = this.content.name;
 		return ret;
 	};
+	self.hide = function(hidden) {}; // This function is implemented by Split and Tabs.
 	return self;
 }
 
+// A Split is a special content type that holds two bins, and provides a split view at both.
 var _Split_id = 0;
-function Split(data) {
+function Split(data, configuring) {
 	var self = Create('div', 'Split');
 	self.name = 'Split';
 	self.data = data;
+	self.configuring = configuring ? true : false; // Treat undefined as false.
 	self.control = self.AddElement('div', 'Control'); // {
 	self.control.style.zIndex = 10;
-	self.control.style.display = 'block';
+	self.control.style.display = configuring ? 'block' : 'none';
 	self.control.style.position = 'absolute';
 	self.control.style.top = '0px';
 	self.control.style.left = '0px';
@@ -218,25 +234,21 @@ function Split(data) {
 	self.x = NaN;
 	self.y = NaN;
 	d.AddEvent('mousedown', function(event) {
-		console.info('down');
 		self.x = event.pageX;
 		self.y = event.pageY;
 		self.pos = [self.control_x, self.control_y];
 		event.preventDefault();
 	});
 	d.AddEvent('mouseup', function(event) {
-		console.info('stop');
 		self.x = NaN;
 		self.pos = [self.control.style.left, self.control.style.top];
 		event.preventDefault();
 	});
 	d.AddEvent('mousemove', function(event) {
 		if (isNaN(self.x) || !(event.buttons & 1)) {
-			console.info('no');
 			self.x = NaN;
 			return;
 		}
-		console.info('move', self.x, self.pos[0], event.pageX);
 		self.control_x = self.pos[0] + event.pageX - self.x;
 		self.control_y = self.pos[1] + event.pageY - self.y;
 		self.control.style.left = self.control_x + 'px';
@@ -312,11 +324,26 @@ function Split(data) {
 	self.horizontal = true;
 	self.pixels = false;
 	self.value = 50;
-	self.first = self.Add(new Bin(data));
-	self.second = self.Add(new Bin(data));
-	self.update = function () {
-		this.input_value.value = this.value;
-		this.type_select.selectedIndex = this.pixels ? 0 : 1;
+	self.first = self.Add(new Bin(data, self.configuring));
+	self.second = self.Add(new Bin(data, self.configuring));
+	self.hide_first = false;
+	self.hide_second = false;
+	var hide = function(hidden) {
+		if (this == self.first)
+			self.hide_first = hidden;
+		else
+			self.hide_second = hidden;
+		self.parent_bin.hide(self.hide_first && self.hide_second);
+		self.update();
+	};
+	self.first.hide = hide;
+	self.second.hide = hide;
+	self.update = function() {
+		if (this.hide_first && this.hide_second) {
+			this.control.style.display = 'none';
+			return;
+		}
+		this.control.style.display = this.configuring ? 'block' : 'none';
 		var clear = function(target) {
 			target.style.position = 'absolute';
 			target.style.left = '0px';
@@ -325,9 +352,23 @@ function Split(data) {
 			target.style.bottom = '0px';
 			target.style.width = '';
 			target.style.height = '';
-		}
+		};
 		clear(this.first);
 		clear(this.second);
+		if (this.hide_first) {
+			this.first.style.display = 'none';
+			this.second.style.display = 'block';
+			return;
+		}
+		if (this.hide_second) {
+			this.first.style.display = 'block';
+			this.second.style.display = 'none';
+			return;
+		}
+		this.first.style.display = 'block';
+		this.second.style.display = 'block';
+		this.input_value.value = this.value;
+		this.type_select.selectedIndex = this.pixels ? 0 : 1;
 		var attr = this.horizontal ? ['left', 'right', 'width'] : ['top', 'bottom', 'height'];
 		var unit = this.pixels ? 'px' : '%';
 		if (this.dominant_first) {
@@ -365,21 +406,32 @@ function Split(data) {
 			'}';
 	};
 	self.copy = function() {
-		var ret = new Split(this.data);
+		var ret = new Split(this.data, this.configuring);
 		ret.first.set_content(this.first.copy());
 		ret.second.set_content(this.second.copy());
 		return ret;
+	};
+	self.config = function(configuring) {
+		this.configuring = configuring;
+		this.control.style.display = this.configuring ? 'block' : 'none';
+		this.first.config(configuring);
+		this.second.config(configuring);
 	};
 	return self;
 }
 
 /*
+Example dummy use.
+
+// Content module.
 function Dummy(setup, pos) {
 	return [Create('div').AddText('dummy'), pos];
 }
 
+// Definition of all modules.
 var ui_modules = {'dummy': Dummy};
 
+// Create a bin and fill it with the content module.
 window.AddEvent('load', function() {
 	var r = ui_build('{dh25%(dummy:){Dv25%(dummy:)(dummy:)}}');
 	document.getElementById('ui').Add(new Bin()).set_content(r);

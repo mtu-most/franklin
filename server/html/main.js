@@ -70,10 +70,9 @@ AddEvent('load', function() { // {{{
 				ui.machine.call('readtemp', [num], {}, function(t) {
 					if (num < ui.machine.temps.length) {
 						ui.machine.temps[num].temp = t;
-						var e = get_element(ui, [['temp', num], 'temp']);
-						// Only update if machine still exists.
-						if (e)
-							e.ClearAll().AddText(isNaN(t) ? t : t.toFixed(1));
+						var e = get_elements(ui, [['temp', num], 'temp']);
+						for (var i = 0; i < e.length; ++i)
+							e[i].ClearAll().AddText(isNaN(t) ? t : t.toFixed(1));
 					}
 					read(ui, num + 1);
 				});
@@ -81,130 +80,132 @@ AddEvent('load', function() { // {{{
 			}
 			reading_temps = false;
 			// Update temperature graph.
-			var canvas = get_element(ui, [null, 'tempgraph']);
-			if (!canvas) {
+			var canvas = get_elements(ui, [null, 'tempgraph']);
+			if (canvas.length == 0) {
 				reading_temps = false;
 				return;
 			}
-			var c = canvas.getContext('2d');
-			canvas.height = canvas.clientHeight;
-			canvas.width = canvas.clientWidth;
-			var scale = canvas.height / (ui.machine.temp_scale_max - ui.machine.temp_scale_min);
-			c.clearRect(0, 0, canvas.width, canvas.height);
-			c.save(); // Transform coordinates to proper units. {{{
-			c.translate(0, canvas.height);
-			c.scale(scale, -scale);
-			c.translate(0, -ui.machine.temp_scale_min);
-			// Draw grid.
-			c.beginPath();
-			var step = 15;
-			for (var t = step; t < 120; t += step) {
-				var x = (t / (2 * 60) * canvas.width) / scale;
-				c.moveTo(x, ui.machine.temp_scale_min);
-				c.lineTo(x, ui.machine.temp_scale_max);
-			}
-			step = Math.pow(10, Math.floor(Math.log(ui.machine.temp_scale_max - ui.machine.temp_scale_min) / Math.log(10)));
-			for (var y = step * Math.floor(ui.machine.temp_scale_min / step); y < ui.machine.temp_scale_max; y += step) {
-				c.moveTo(0, y);
-				c.lineTo(canvas.width / scale, y);
-			}
-			c.save(); // Set linewidth. {{{
-			c.lineWidth = 1 / scale;
-			var makedash = function(array) {
-				// If browser doesn't support this, use solid lines.
-				if (c.setLineDash !== undefined) {
-					for (var i = 0; i < array.length; ++i)
-						array[i] /= scale;
-					c.setLineDash(array);
-				}
-			};
-			makedash([1, 4]);
-			c.strokeStyle = '#444';
-			c.stroke();
-			c.restore(); // }}}
-			// Draw grid scale.
-			c.save(); // Scale units for the grid. {{{
-			c.scale(1 / scale, -1 / scale);
-			for (var y = step * Math.floor(ui.machine.temp_scale_min / step); y < ui.machine.temp_scale_max; y += step) {
-				c.moveTo(0, y);
-				var text = y.toFixed(0);
-				c.fillText(text, (step / 50) * scale, -(y + step / 50) * scale);
-			}
-			c.restore(); // }}}
-			// Draw data.
-			var time = new Date();
-			ui.temphistory.push(time);
-			for (var t = 0; t < ui.machine.temps.length; ++t)
-				ui.machine.temps[t].history.push([ui.machine.temps[t].temp, ui.machine.temps[t].value]);
-			var cutoff = time - 2 * 60 * 1000;
-			while (ui.temphistory.length > 1 && ui.temphistory[0] < cutoff)
-				ui.temphistory.shift();
-			for (var t = 0; t < ui.machine.temps.length; ++t) {
-				while (ui.machine.temps[t].history.length > ui.temphistory.length)
-					ui.machine.temps[t].history.shift();
-			}
-			var x = function(t) {
-				return ((t - cutoff) / (2 * 60 * 1000) * canvas.width) / scale;
-			};
-			var y = function(d) {
-				if (isNaN(d))
-					return ui.machine.temp_scale_min - 2 / scale;
-				if (!isFinite(d))
-					return ui.machine.temp_scale_max + 2 / scale;
-				return d;
-			};
-			for (var t = 0; t < ui.machine.temps.length; ++t) {
-				// Draw measured data.
-				var value;
-				var data = ui.machine.temps[t].history;
+			for (var i = 0; i < canvas.length; ++i) {
+				var c = canvas[i].getContext('2d');
+				canvas[i].height = canvas[i].clientHeight;
+				canvas[i].width = canvas[i].clientWidth;
+				var scale = canvas[i].height / (ui.machine.temp_scale_max - ui.machine.temp_scale_min);
+				c.clearRect(0, 0, canvas[i].width, canvas[i].height);
+				c.save(); // Transform coordinates to proper units. {{{
+				c.translate(0, canvas[i].height);
+				c.scale(scale, -scale);
+				c.translate(0, -ui.machine.temp_scale_min);
+				// Draw grid.
 				c.beginPath();
-				value = data[0][0];
-				if (isNaN(ui.machine.temps[t].beta)) {
-					value *= ui.machine.temps[t].Rc / 100000;
-					value += ui.machine.temps[t].Tc;
+				var step = 15;
+				for (var t = step; t < 120; t += step) {
+					var x = (t / (2 * 60) * canvas[i].width) / scale;
+					c.moveTo(x, ui.machine.temp_scale_min);
+					c.lineTo(x, ui.machine.temp_scale_max);
 				}
-				c.moveTo(x(ui.temphistory[0]), y(value));
-				for (var i = 1; i < data.length; ++i) {
-					value = data[i][0];
+				step = Math.pow(10, Math.floor(Math.log(ui.machine.temp_scale_max - ui.machine.temp_scale_min) / Math.log(10)));
+				for (var y = step * Math.floor(ui.machine.temp_scale_min / step); y < ui.machine.temp_scale_max; y += step) {
+					c.moveTo(0, y);
+					c.lineTo(canvas[i].width / scale, y);
+				}
+				c.save(); // Set linewidth. {{{
+				c.lineWidth = 1 / scale;
+				var makedash = function(array) {
+					// If browser doesn't support this, use solid lines.
+					if (c.setLineDash !== undefined) {
+						for (var i = 0; i < array.length; ++i)
+							array[i] /= scale;
+						c.setLineDash(array);
+					}
+				};
+				makedash([1, 4]);
+				c.strokeStyle = '#444';
+				c.stroke();
+				c.restore(); // }}}
+				// Draw grid scale.
+				c.save(); // Scale units for the grid. {{{
+				c.scale(1 / scale, -1 / scale);
+				for (var y = step * Math.floor(ui.machine.temp_scale_min / step); y < ui.machine.temp_scale_max; y += step) {
+					c.moveTo(0, y);
+					var text = y.toFixed(0);
+					c.fillText(text, (step / 50) * scale, -(y + step / 50) * scale);
+				}
+				c.restore(); // }}}
+				// Draw data.
+				var time = new Date();
+				ui.temphistory.push(time);
+				for (var t = 0; t < ui.machine.temps.length; ++t)
+					ui.machine.temps[t].history.push([ui.machine.temps[t].temp, ui.machine.temps[t].value]);
+				var cutoff = time - 2 * 60 * 1000;
+				while (ui.temphistory.length > 1 && ui.temphistory[0] < cutoff)
+					ui.temphistory.shift();
+				for (var t = 0; t < ui.machine.temps.length; ++t) {
+					while (ui.machine.temps[t].history.length > ui.temphistory.length)
+						ui.machine.temps[t].history.shift();
+				}
+				var x = function(t) {
+					return ((t - cutoff) / (2 * 60 * 1000) * canvas[i].width) / scale;
+				};
+				var y = function(d) {
+					if (isNaN(d))
+						return ui.machine.temp_scale_min - 2 / scale;
+					if (!isFinite(d))
+						return ui.machine.temp_scale_max + 2 / scale;
+					return d;
+				};
+				for (var t = 0; t < ui.machine.temps.length; ++t) {
+					// Draw measured data.
+					var value;
+					var data = ui.machine.temps[t].history;
+					c.beginPath();
+					value = data[0][0];
 					if (isNaN(ui.machine.temps[t].beta)) {
 						value *= ui.machine.temps[t].Rc / 100000;
 						value += ui.machine.temps[t].Tc;
 					}
-					c.lineTo(x(ui.temphistory[i]), y(value));
-				}
-				c.strokeStyle = ['#f00', '#00f', '#0f0', '#ff0', '#000'][t < 5 ? t : 4];
-				c.lineWidth = 1 / scale;
-				c.stroke();
-				// Draw temp targets.
-				c.moveTo(x(ui.temphistory[0]), y(data[0][1]));
-				for (var i = 1; i < data.length; ++i)
-					c.lineTo(x(ui.temphistory[i]), y(data[i][1]));
-				c.save(); // Use dached lines. {{{
-				makedash([4, 2]);
-				c.stroke();
-				c.restore(); // }}}
-				// Draw values of temp targets.
-				var old = null;
-				c.fillStyle = c.strokeStyle;
-				c.save(); // Scale the target data. {{{
-				c.scale(1 / scale, -1 / scale);
-				for (var i = 1; i < data.length; ++i) {
-					if (data[i][1] != old && (!isNaN(data[i][1]) || !isNaN(old))) {
-						old = data[i][1];
-						var pos;
-						if (isNaN(data[i][1]) || data[i][1] < ui.machine.temp_scale_min)
-							pos = ui.machine.temp_scale_min;
-						else if (data[i][1] / scale >= ui.machine.temp_scale_max / scale - 12)
-							pos = (ui.machine.temp_scale_max / scale - 5) * scale;
-						else
-							pos = data[i][1];
-						var text = data[i][1].toFixed(0);
-						c.fillText(text, (x(ui.temphistory[i])) * scale, -(y(pos) + step / 50) * scale);
+					c.moveTo(x(ui.temphistory[0]), y(value));
+					for (var i = 1; i < data.length; ++i) {
+						value = data[i][0];
+						if (isNaN(ui.machine.temps[t].beta)) {
+							value *= ui.machine.temps[t].Rc / 100000;
+							value += ui.machine.temps[t].Tc;
+						}
+						c.lineTo(x(ui.temphistory[i]), y(value));
 					}
+					c.strokeStyle = ['#f00', '#00f', '#0f0', '#ff0', '#000'][t < 5 ? t : 4];
+					c.lineWidth = 1 / scale;
+					c.stroke();
+					// Draw temp targets.
+					c.moveTo(x(ui.temphistory[0]), y(data[0][1]));
+					for (var i = 1; i < data.length; ++i)
+						c.lineTo(x(ui.temphistory[i]), y(data[i][1]));
+					c.save(); // Use dached lines. {{{
+					makedash([4, 2]);
+					c.stroke();
+					c.restore(); // }}}
+					// Draw values of temp targets.
+					var old = null;
+					c.fillStyle = c.strokeStyle;
+					c.save(); // Scale the target data. {{{
+					c.scale(1 / scale, -1 / scale);
+					for (var i = 1; i < data.length; ++i) {
+						if (data[i][1] != old && (!isNaN(data[i][1]) || !isNaN(old))) {
+							old = data[i][1];
+							var pos;
+							if (isNaN(data[i][1]) || data[i][1] < ui.machine.temp_scale_min)
+								pos = ui.machine.temp_scale_min;
+							else if (data[i][1] / scale >= ui.machine.temp_scale_max / scale - 12)
+								pos = (ui.machine.temp_scale_max / scale - 5) * scale;
+							else
+								pos = data[i][1];
+							var text = data[i][1].toFixed(0);
+							c.fillText(text, (x(ui.temphistory[i])) * scale, -(y(pos) + step / 50) * scale);
+						}
+					}
+					c.restore(); // }}}
 				}
 				c.restore(); // }}}
 			}
-			c.restore(); // }}}
 			// Update everything else.
 			update_canvas_and_spans(ui);
 		};
@@ -355,8 +356,8 @@ function get_value(ui, id) { // {{{
 	}
 } // }}}
 
-function get_element(ui, id, extra) { // {{{
-	return document.getElementById(make_id(ui, id, extra));
+function get_elements(ui, id, extra) { // {{{
+	return document.getElementsByClassName(make_id(ui, id, extra));
 } // }}}
 
 function select_machine(ui) { // {{{
@@ -475,7 +476,7 @@ function floatkey(event, element) { // {{{
 }
 // }}}
 
-function add_name(ui, type, index1, index2) { // {{{
+function prepare_name(ui, type, index1, index2) { // {{{
 	while (ui.names[type].length <= index1) {
 		ui.names[type].push([]);
 		ui.name_values[type].push([]);
@@ -484,12 +485,17 @@ function add_name(ui, type, index1, index2) { // {{{
 		ui.names[type][index1].push([]);
 		ui.name_values[type][index1].push('');
 	}
+} // }}}
+
+function add_name(ui, type, index1, index2) { // {{{
+	prepare_name(ui, type, index1, index2);
 	var ret = Create('span', 'name').AddText(ui.name_values[type][index1][index2]);
 	ui.names[type][index1][index2].push(ret);
 	return ret;
 } // }}}
 
 function set_name(ui, type, index1, index2, name) { // {{{
+	prepare_name(ui, type, index1, index2);
 	ui.name_values[type][index1][index2] = name;
 	for (var i = 0; i < ui.names[type][index1][index2].length; ++i)
 		ui.names[type][index1][index2][i].ClearAll().AddText(name);
@@ -502,6 +508,12 @@ function toggle_setup() { // {{{
 		c.RemoveClass('nosetup');
 	else
 		c.AddClass('nosetup');
+} // }}}
+
+function toggle_uiconfig() { // {{{
+	var e = document.getElementById('uiconfig');
+	for (var m in machines)
+		machines[m].ui.bin.config(e.checked);
 } // }}}
 
 function update_firmwares(ports, firmwares) { // {{{
@@ -543,75 +555,35 @@ function download_probemap(ui) { // {{{
 // }}}
 
 // Queue functions.  {{{
-function queue_deselect(ui) { // {{{
-	var e = get_element(ui, [null, 'queue']);
-	for (var i = 1; i < e.options.length; ++i) {
-		e.options[i].selected = false;
-	}
+function get_queue(ui, select) { // {{{
+	if (select.selectedOptions.length > 0)
+		return ui.machine.queue[select.selectedOptions[0].index];
+	else
+		return [null, [NaN, NaN, NaN, NaN, NaN, NaN]];
 }
 // }}}
 
-function queue_up(ui) { // {{{
-	var e = get_element(ui, [null, 'queue']);
-	for (var i = 1; i < e.options.length; ++i) {
-		if (e.options[i].selected) {
-			var cur = e.options[i];
-			var prev = e.options[i - 1];
-			e.insertBefore(e.removeChild(cur), prev);
-		}
-	}
+function queue_del(ui, select) { // {{{
+	ui.machine.call('queue_remove', [get_queue(ui, select)[0]], {});
 }
 // }}}
 
-function queue_down(ui) { // {{{
-	var e = get_element(ui, [null, 'queue']);
-	for (var i = e.options.length - 2; i >= 0; --i) {
-		if (e.options[i].selected) {
-			var cur = e.options[i];
-			var next = e.options[i + 1];
-			e.insertBefore(e.removeChild(next), cur);
-		}
-	}
+function queue_run(ui, select) { // {{{
+	ui.machine.call('queue_run', [get_queue(ui, select)[0]], kwargs = {paused: false});	// TODO: implement "start paused" again.
 }
 // }}}
 
-function queue_del(ui) { // {{{
-	var e = get_element(ui, [null, 'queue']);
-	var rm = [];
-	for (var i = 0; i < e.options.length; ++i) {
-		if (e.options[i].selected)
-			rm.push(e.options[i]);
-	}
-	for (var i = 0; i < rm.length; ++i)
-		ui.machine.call('queue_remove', [rm[i].value], {});
-}
-// }}}
-
-function get_queue(ui) { // {{{
-	return ui.machine.queue[get_element(ui, [null, 'queue']).selectedOptions[0].index];
-}
-// }}}
-
-function queue_run(ui) { // {{{
-	ui.machine.call('queue_run', [get_queue(ui)[0]], kwargs = {paused: get_element(ui, [null, 'start_paused']).checked});
-}
-// }}}
-
-function audio_play(ui) { // {{{
-	var e = get_element(ui, [null, 'audio']);
-	var o = e.options[e.selectedIndex];
-	if (o === undefined)
-		return;
-	ui.machine.call('audio_play', [o.value]);
+function audio_play(ui, select) { // {{{
+	var o = select.selectedOptions[0];
+	if (o)
+		ui.machine.call('audio_play', [o.value]);
 }
 
 // }}}
-function audio_del(ui) { // {{{
-	var e = get_element(ui, [null, 'audio']);
-	var o = e.options[e.selectedIndex];
-	if (o === undefined)
-		return;
-	ui.machine.call('audio_del', [o.value]);
+function audio_del(ui, select) { // {{{
+	var o = select.selectedOptions[0];
+	if (o)
+		ui.machine.call('audio_del', [o.value]);
 }
 // }}}
 // }}}
@@ -626,10 +598,12 @@ function autodetect() { // {{{
 
 function new_port(ui, port) { // {{{
 	for (var p in machines) {
-		var ports = get_element(machines[p].ui, [null, 'ports']);
-		ports.ClearAll();
-		var new_port = ports.AddElement('option').AddText(port);
-		new_port.value = port;
+		var ports = get_elements(machines[p].ui, [null, 'ports']);
+		for (var i = 0; i < ports.length; ++i) {
+			ports[i].ClearAll();
+			var new_port = ports[i].AddElement('option').AddText(port);
+			new_port.value = port;
+		}
 	}
 } // }}}
 
@@ -687,13 +661,15 @@ function new_machine(uuid) { // {{{
 	machines[uuid].label.AddClass('notconnected');
 	machines[uuid].ui.AddClass('notconnected');
 	globals_update(uuid);
-	var ports_button = get_element(machines[uuid].ui, [null, 'ports']);
-	ports_button.ClearAll();
-	for (var port = 0; port < all_ports.length; ++port) {
-		var new_port = ports_button.AddElement('option').AddText(all_ports[port]);
-		new_port.value = all_ports[port];
-		for (var o = 0; o < all_firmwares[new_port.value].length; ++o) {
-			machines[uuid].ui.firmwares.AddElement('option').AddText(all_firmwares[new_port.value][o][1]).value = all_firmwares[new_port.value][o][0];
+	var ports_button = get_elements(machines[uuid].ui, [null, 'ports']);
+	for (var i = 0; i < ports_button.length; ++i) {
+		ports_button[i].ClearAll();
+		for (var port = 0; port < all_ports.length; ++port) {
+			var new_port = ports_button[i].AddElement('option').AddText(all_ports[port]);
+			new_port.value = all_ports[port];
+			for (var o = 0; o < all_firmwares[new_port.value].length; ++o) {
+				machines[uuid].ui.firmwares.AddElement('option').AddText(all_firmwares[new_port.value][o][1]).value = all_firmwares[new_port.value][o][0];
+			}
 		}
 	}
 	if (selected_machine === null)
@@ -701,20 +677,25 @@ function new_machine(uuid) { // {{{
 } // }}}
 
 function blocked(uuid, reason) { // {{{
-	var e = get_element(machines[uuid].ui, [null, 'block1']);
-	if (reason) {
-		e.ClearAll();
-		e.AddText(reason);
-		e.RemoveClass('hidden');
+	var e = get_elements(machines[uuid].ui, [null, 'block1']);
+	for (var i = 0; i < e.length; ++i) {
+		if (reason)
+			e[i].ClearAll().AddText(reason).RemoveClass('hidden');
+		else
+			e[i].AddClass('hidden');
 	}
-	else
-		e.AddClass('hidden');
+	machines[uuid].ui.update();	// Hide interface parts if applicable.
 } // }}}
 
 function message(uuid, msg) { // {{{
-	var e = get_element(machines[uuid].ui, [null, 'message1']);
-	e.ClearAll();
-	e.AddText(msg);
+	var e = get_elements(machines[uuid].ui, [null, 'message1']);
+	for (var i = 0; i < e.length; ++i) {
+		if (msg)
+			e[i].ClearAll().AddText(msg).RemoveClass('hidden');
+		else
+			e[i].AddClass('hidden');
+	}
+	machines[uuid].ui.update();	// Hide interface parts if applicable.
 } // }}}
 
 function del_machine(uuid) { // {{{
@@ -725,84 +706,81 @@ function del_machine(uuid) { // {{{
 
 function del_port(uuid, port) { // {{{
 	for (var p in machines) {
-		var ports = get_element(machines[p].ui, [null, 'ports']);
-		for (var o = 0; o < ports.options.length; ++o) {
-			if (ports.options[o].value == port)
-				ports.removeChild(ports.options[o]);
+		var ports = get_elements(machines[p].ui, [null, 'ports']);
+		for (var p = 0; p < ports.length; ++p) {
+			for (var o = 0; o < ports[p].options.length; ++o) {
+				if (ports[p].options[o].value == port)
+					ports[p].removeChild(ports.options[o]);
+			}
 		}
 	}
 } // }}}
 
 function ask_confirmation(uuid, id, message) { // {{{
 	update_canvas_and_spans(machines[uuid].ui);
-	var e = get_element(machines[uuid].ui, [null, 'confirm']);
-	e.ClearAll();
-	if (id === null) {
-		e.AddClass('hidden');
-		return;
+	var e = get_elements(machines[uuid].ui, [null, 'confirm']);
+	for (var i = 0; i < e.length; ++i) {
+		e[i].ClearAll();
+		if (id === null) {
+			e[i].AddClass('hidden');
+			continue;
+		}
+		e[i].RemoveClass('hidden');
+		// Cancel button.
+		var button = e[i].AddElement('button', 'confirmabort').AddText('Abort').AddEvent('click', function() {
+			this.ClearAll();
+			this.AddClass('hidden');
+			this.ui.machine.call('confirm', [this.confirm_id, false], {});
+		});
+		button.type = 'button';
+		button.ui = machines[uuid].ui;
+		button.confirm_id = id;
+		// Message
+		e[i].AddText(message);
+		// Ok button.
+		button = e[i].AddElement('button', 'confirmok').AddText('Ok').AddEvent('click', function() {
+			this.ClearAll();
+			this.AddClass('hidden');
+			this.ui.machine.call('confirm', [this.confirm_id, true], {});
+		});
+		button.type = 'button';
+		button.ui = machines[uuid].ui;
+		button.confirm_id = id;
 	}
-	e.RemoveClass('hidden');
-	// Cancel button.
-	var button = e.AddElement('button', 'confirmabort').AddText('Abort').AddEvent('click', function() {
-		var e = get_element(this.ui, [null, 'confirm']);
-		e.ClearAll();
-		e.AddClass('hidden');
-		this.ui.machine.call('confirm', [this.confirm_id, false], {});
-	});
-	button.type = 'button';
-	button.ui = machines[uuid].ui;
-	button.confirm_id = id;
-	// Message
-	e.AddText(message);
-	// Ok button.
-	button = e.AddElement('button', 'confirmok').AddText('Ok').AddEvent('click', function() {
-		var e = get_element(this.ui, [null, 'confirm']);
-		e.ClearAll();
-		e.AddClass('hidden');
-		this.ui.machine.call('confirm', [this.confirm_id, true], {});
-	});
-	button.type = 'button';
-	button.ui = machines[uuid].ui;
-	button.confirm_id = id;
+	machines[uuid].ui.update();	// Hide interface parts if applicable.
 } // }}}
 
 function queue(uuid) { // {{{
-	var e = get_element(machines[uuid].ui, [null, 'queue']);
-	var q = [];
-	var must_deselect = machines[uuid].queue.length > e.options.length;
-	var no_select = e.options.length == 0;
-	for (var i = 0; i < machines[uuid].queue.length; ++i)
-		q.push(machines[uuid].queue[i]);
-	var rm = [];
-	for (var item = 0; item < e.options.length; ++item) {
-		var i;
-		for (i = 0; i < q.length; ++i) {
-			if (q[i][0] == e.options[item].value) {
-				if (must_deselect)
-					e.options[item].selected = false;
-				q.splice(i, 1);
-				i = -1;
-				break;
+	var e = get_elements(machines[uuid].ui, [null, 'queue']);
+	for (var j = 0; j < e.length; ++j) {
+		var old = get_queue(machines[uuid].ui, e[j]);
+		var q = [];
+		for (var i = 0; i < e[j].options.length; ++i)
+			q.push(e[j].options[i].value);
+		e[j].ClearAll();
+		for (var i = 0; i < machines[uuid].queue.length; ++i) {
+			var item = machines[uuid].queue;
+			var o = e[j].AddElement('option');
+			o.AddText(item[0] + ' - ' + display_time(item[1][6] + item[1][7] / machines[uuid].max_v));
+			o.value = item[0];
+			if (item[0] == old)
+				o.selected = true;
+		}
+		outer: for (var i = 0; i < e[j].options.length; ++i) {
+			for (var k = 0; k < q.length; ++k) {
+				if (e[j].options[i].value == q[k])
+					continue outer;
 			}
+			e[j].options[i].selected = true;
 		}
-		if (i < 0) {
-			continue;
-		}
-		rm.push(e.options[item]);
-	}
-	for (var item = 0; item < rm.length; ++rm)
-		e.removeChild(rm[item]);
-	for (var i = 0; i < q.length; ++i) {
-		var option = e.AddElement('option');
-		option.AddText(q[i][0] + ' - ' + display_time(q[i][1][6] + q[i][1][7] / machines[uuid].max_v));
-		option.value = q[i][0];
-		if (i == 0 || !no_select)
-			option.selected = true;
 	}
 	start_move(machines[uuid].ui);
 } // }}}
 
 function audioqueue(uuid) { // {{{
+	// FIXME
+	return;
+	/*
 	var e = get_element(machines[uuid].ui, [null, 'audio']);
 	var q = [];
 	for (var i = 0; i < machines[uuid].audioqueue.length; ++i)
@@ -831,6 +809,7 @@ function audioqueue(uuid) { // {{{
 		option.selected = true;
 	}
 	start_move(machines[uuid].ui);
+	*/
 } // }}}
 // }}}
 
@@ -838,9 +817,6 @@ function audioqueue(uuid) { // {{{
 function globals_update(uuid) { // {{{
 	var p = machines[uuid].ui;
 	p.uuid.ClearAll().AddText(uuid);
-	var container = get_element(p, [null, 'container']);
-	if (!container)
-		return;
 	if (machines[uuid].connected) {
 		machines[uuid].label.AddClass('isconnected');
 		machines[uuid].ui.AddClass('isconnected');
@@ -852,7 +828,9 @@ function globals_update(uuid) { // {{{
 		machines[uuid].label.AddClass('isnotconnected');
 		machines[uuid].ui.AddClass('isnotconnected');
 	}
-	get_element(p, [null, 'export']).href = encodeURIComponent(machines[uuid].name + '-' + machines[uuid].profile) + '.ini?machine=' + encodeURIComponent(uuid);
+	var e = get_elements(p, [null, 'export']);
+	for (var i = 0; i < e.length; ++i)
+		e[i].href = encodeURIComponent(machines[uuid].name + '-' + machines[uuid].profile) + '.ini?machine=' + encodeURIComponent(uuid);
 	machines[uuid].label.span.ClearAll().AddText(machines[uuid].name);
 	update_str(p, [null, 'name']);
 	update_float(p, [null, 'num_temps']);
@@ -970,13 +948,11 @@ function globals_update(uuid) { // {{{
 
 function space_update(uuid, index) { // {{{
 	var p = machines[uuid].ui;
-	if (!get_element(p, [null, 'container']))
-		return;
 	set_name(p, 'space', index, 0, p.machine.spaces[index].name);
 	if (index == 0) {
-		var e = get_element(p, [['space', 0], 'type']);
-		e.ClearAll();
-		e.AddText(space_types[p.machine.spaces[index].type]);
+		var e = get_elements(p, [['space', 0], 'type']);
+		for (var i = 0; i < e.length; ++i)
+			e[i].ClearAll().AddText(space_types[p.machine.spaces[index].type]);
 	}
 	update_float(p, [['space', index], 'num_axes']);
 	var m = p.multiples;
@@ -1092,8 +1068,6 @@ function space_update(uuid, index) { // {{{
 
 function temp_update(uuid, index) { // {{{
 	var p = machines[uuid].ui;
-	if (!get_element(p, [null, 'container']))
-		return;
 	set_name(p, 'temp', index, 0, p.machine.temps[index].name);
 	update_pin(p, [['temp', index], 'heater_pin']);
 	update_pin(p, [['temp', index], 'fan_pin']);
@@ -1120,16 +1094,21 @@ function temp_update(uuid, index) { // {{{
 
 function gpio_update(uuid, index) { // {{{
 	var p = machines[uuid].ui;
-	if (!get_element(p, [null, 'container']))
-		return;
 	set_name(p, 'gpio', index, 0, machines[uuid].gpios[index].name);
 	update_pin(p, [['gpio', index], 'pin']);
-	if (machines[uuid].gpios[index].reset < 2)
-		get_element(p, [['gpio', index], 'statespan']).RemoveClass('input');
-	else
-		get_element(p, [['gpio', index], 'statespan']).AddClass('input');
-	get_element(p, [['gpio', index], 'state']).checked = machines[uuid].gpios[index].value;
-	get_element(p, [['gpio', index], 'reset']).selectedIndex = machines[uuid].gpios[index].reset;
+	var e = get_elements(p, [['gpio', index], 'statespan']);
+	for (var i = 0; i < e.length; ++i) {
+		if (machines[uuid].gpios[index].reset < 2)
+			e[i].RemoveClass('input');
+		else
+			e[i].AddClass('input');
+	}
+	e = get_elements(p, [['gpio', index], 'state']);
+	for (var i = 0; i < e.length; ++i)
+		e[i].checked = machines[uuid].gpios[index].value;
+	e = get_elements(p, [['gpio', index], 'reset']);
+	for (var i = 0; i < e.length; ++i)
+		e[i].selectedIndex = machines[uuid].gpios[index].reset;
 	update_float(p, [['gpio', index], 'duty']);
 } // }}}
 // }}}
@@ -1154,94 +1133,83 @@ function update_table_visibility(ui) { // {{{
 	}
 } // }}}
 
-function update_choice(ui, id) { // {{{
-	var value = get_value(ui, id);
-	var list = choices[make_id(ui, id)][1];
-	var container = get_element(ui, [null, 'container']);
-	for (var i = 0; i < list.length; ++i) {
-		if (list[i].containerclass && i != value)
-			container.RemoveClass(list[i].containerclass);
-	}
-	if (value < list.length) {
-		list[value].checked = true;
-		if (list[value].containerclass)
-			container.AddClass(list[value].containerclass);
-	}
-	else {
-		for (var i = 0; i < list.length; ++i)
-			list[i].checked = false;
-	}
-} // }}}
-
 function update_toggle(ui, id) { // {{{
 	var v = get_value(ui, id);
-	var e = get_element(ui, id);
-	e.ClearAll();
-	e.AddText(e.value[Number(v)]);
+	var e = get_elements(ui, id);
+	for (var i = 0; i < e.length; ++i)
+		e[i].ClearAll().AddText(e.value[Number(v)]);
 } // }}}
 
 function update_pin(ui, id) { // {{{
-	var e = get_element(ui, id);
+	var e = get_elements(ui, id);
 	var value = get_value(ui, id);
 	var pin = value & 0xff;
-	for (var i = 0; i < e.options.length; ++i) {
-		if (Number(e.options[i].value) == pin) {
-			e.selectedIndex = i;
-			break;
+	var can_invert = false;
+	for (var j = 0; j < e.length; ++j) {
+		if (e[j].can_invert)
+			can_invert = true;
+		for (var i = 0; i < e[j].options.length; ++i) {
+			if (Number(e[j].options[i].value) == pin) {
+				e[j].selectedIndex = i;
+				break;
+			}
 		}
 	}
-	get_element(ui, id, 'valid').checked = Boolean(value & 0x100);
-	if (e.can_invert)
-		get_element(ui, id, 'inverted').checked = Boolean(value & 0x200);
+	var c = get_elements(ui, id, 'valid');
+	for (var i = 0; i < c.length; ++i)
+		c[i].checked = Boolean(value & 0x100);
+	if (can_invert) {
+		c = get_elements(ui, id, 'inverted');
+		for (var i = 0; i < c.length; ++i)
+			c[i].checked = Boolean(value & 0x200);
+	}
 } // }}}
 
 function update_float(ui, id) { // {{{
-	var e = get_element(ui, id);
-	if (e !== null) {
-		e.ClearAll();
-		e.AddText((get_value(ui, id) / e.factor).toFixed(e.digits));
-	}
+	var e = get_elements(ui, id);
+	for (var i = 0; i < e.length; ++i)
+		e[i].ClearAll().AddText((get_value(ui, id) / e.factor).toFixed(e.digits));
 } // }}}
 
 function update_checkbox(ui, id) { // {{{
-	var e = get_element(ui, id);
-	if (e !== null)
-		e.checked = get_value(ui, id);
+	var e = get_elements(ui, id);
+	for (var i = 0; i < e.length; ++i)
+		e[i].checked = get_value(ui, id);
 } // }}}
 
 function update_str(ui, id) { // {{{
-	var e = get_element(ui, id);
-	if (e !== null) {
-		var value = get_value(ui, id);
-		e.ClearAll().AddText(value);
-	}
+	var e = get_elements(ui, id);
+	for (var i = 0; i < e.length; ++i)
+		e[i].ClearAll().AddText(get_value(ui, id));
 } // }}}
 
 function update_floats(ui, id) { // {{{
 	var value = get_value(ui, id);
 	for (var i = 0; i < value.length; ++i) {
-		var e = get_element(ui, id.concat([i]));
-		if (e !== null)
-			e.value = String(value[i]);
+		var e = get_elements(ui, id.concat([i]));
+		for (var j = 0; j < e.length; ++j)
+			e[j].value = String(value[i]);
 	}
 } // }}}
 
 function update_temprange(ui, id) { // {{{
 	var value = get_value(ui, id);
-	get_element(ui, id).selectedIndex = value != 255 ? 1 + value : 0;
+	var e = get_elements(ui, id);
+	for (var i = 0; i < e.length; ++i)
+		e[i].selectedIndex = value != 255 ? 1 + value : 0;
 	return value;
 } // }}}
 
 function update_profiles(ui) { // {{{
 	ui.machine.call('list_profiles', [], {}, function(profiles) {
-		var selector = get_element(ui, [null, 'profiles']);
-		if (!selector)
-			return;
-		selector.ClearAll();
-		for (var i = 0; i < profiles.length; ++i) {
-			selector.AddElement('option').AddText(profiles[i]).value = profiles[i];
-			if (ui.profile == profiles[i])
-				selector.selectedIndex = i;
+		var selector = get_elements(ui, [null, 'profiles']);
+		for (var j = 0; j < selector.length; ++j) {
+			selector[j].ClearAll();
+			for (var i = 0; i < profiles.length; ++i) {
+				selector[j].AddElement('option').AddText(profiles[i]).value = profiles[i];
+				if (ui.profile == profiles[i])
+					selector[j].selectedIndex = i;
+			}
 		}
 	});
 } // }}}
@@ -1346,7 +1314,7 @@ function Choice(ui, obj, options, classes, containerclasses) { // {{{
 		}
 		choices[id][1].push(e);
 		e.name = id;
-		e.id = make_id(ui, obj, String(i));
+		e.AddClass(make_id(ui, obj, String(i)));
 		if (containerclasses)
 			e.containerclass = containerclasses[i];
 		e.value = String(i);
@@ -1472,7 +1440,7 @@ function make_table(ui) { // {{{
 function make_tablerow(ui, title, cells, classes, id, onlytype, index) { // {{{
 	var ret = document.createElement('tr');
 	if (id)
-		ret.id = make_id(ui, id);
+		ret.AddClass(make_id(ui, id));
 	ret.AddElement('th', classes[0]).Add(title);
 	for (var cell = 0; cell < cells.length; ++cell) {
 		var current_cell;
@@ -1483,7 +1451,7 @@ function make_tablerow(ui, title, cells, classes, id, onlytype, index) { // {{{
 		else
 			current_cell = ret.AddElement('td', classes[1][cell]);
 		if (id)
-			current_cell.id = make_id(ui, id, cell);
+			current_cell.AddClass(make_id(ui, id, cell));
 		if (cells[cell] instanceof Element) {
 			current_cell.Add(cells[cell]);
 		}
@@ -1500,19 +1468,11 @@ function make_tablerow(ui, title, cells, classes, id, onlytype, index) { // {{{
 // }}}
 
 // Set helpers (to server). {{{
-function set_pin(ui, id) { // {{{
-	var e = get_element(ui, id);
-	var valid = get_element(ui, id, 'valid').checked;
-	var inverted;
-	if (e.can_invert)
-		inverted = get_element(ui, id, 'inverted').checked;
-	else
-		inverted = false;
+function set_pin(ui, id, select, valid, inverted) { // {{{
 	set_value(ui, id, Number(e.selectedOptions[0].value) + 0x100 * valid + 0x200 * inverted);
 } // }}}
 
-function set_file(ui, id, action) { // {{{
-	var element = get_element(ui, id);
+function set_file(ui, id, element, action) { // {{{
 	if (element.files.length < 1) {
 		alert('please select a file');
 		return;
@@ -1588,19 +1548,24 @@ function update_canvas_and_spans(ui, space) { // {{{
 	ui.machine.call('get_print_state', [], {}, function(state) {
 		if (!machines[ui.machine.uuid])
 			return;
-		var e = get_element(ui, [null, 'printstate']).ClearAll();
-		if (isNaN(state[1]))
-			e.AddText('State: ' + state[0]);
+		var e = get_elements(ui, [null, 'printstate']);
+		if (isNaN(state[1])) {
+			for (var i = 0; i < e.length; ++i)
+				e[i].ClearAll().AddText('State: ' + state[0]);
+		}
 		else {
 			var remaining = display_time(state[2] - state[1]);
-			e.AddText('State: ' + state[0] + ' - Time: ' + display_time(state[1]) + '/' + display_time(state[2]) + ' - Remaining: ' + remaining);
+			for (var i = 0; i < e.length; ++i)
+				e[i].ClearAll().AddText('State: ' + state[0] + ' - Time: ' + display_time(state[1]) + '/' + display_time(state[2]) + ' - Remaining: ' + remaining);
 			update_state(ui, get_value(ui, [null, 'status']), remaining);
 		}
 		update_float(ui, [null, 'targetangle']);
 		ui.machine.tppos = state[3];
 		ui.tp_context = state[5];
 		update_float(ui, [null, 'tppos']);
-		get_element(ui, [null, 'tpmax']).ClearAll().AddText(state[4]);
+		e = get_elements(ui, [null, 'tpmax']);
+		for (var i = 0; i < e.length; ++i)
+			e[i].ClearAll().AddText(state[4]);
 		redraw_canvas(ui);
 	});
 }
@@ -1609,265 +1574,269 @@ function update_canvas_and_spans(ui, space) { // {{{
 function redraw_canvas(ui) { // {{{
 	if (ui.machine.spaces.length < 1 || ui.machine.spaces[0].axis.length < 1)
 		return;
-	var canvas = document.getElementById(make_id(ui, [null, 'xymap']));
-	if (ui.machine.spaces[0].axis.length >= 2) { // Draw XY {{{
-		var c = canvas.getContext('2d');
-		var box = document.getElementById(make_id(ui, [null, 'map']));
-		var extra_height = box.clientHeight - canvas.clientHeight;
-		var machinewidth;
-		var machineheight;
-		var outline, center;
-		switch (ui.machine.spaces[0].type) { // Define geometry-specific options, including outline. {{{
-		case TYPE_CARTESIAN:
-			var xaxis = ui.machine.spaces[0].axis[0];
-			var yaxis = ui.machine.spaces[0].axis[1];
-			machinewidth = xaxis.max - xaxis.min + .010;
-			machineheight = yaxis.max - yaxis.min + .010;
-			center = [(xaxis.min + xaxis.max) / 2, (yaxis.min + yaxis.max) / 2];
-			outline = function(ui, c) {
-				// Rectangle is always drawn; nothing else to do here.
-			};
-			break;
-		case TYPE_DELTA:
-			var radius = [];
-			var length = [];
-			for (var a = 0; a < 3; ++a) {
-				radius.push(ui.machine.spaces[0].motor[a].delta_radius);
-				length.push(ui.machine.spaces[0].motor[a].delta_rodlength);
-			}
-			//var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
-			//var dx = [0, -.8660254037844387, .8660254037844387];
-			//var dy = [1, -.5, -.5];
-			var origin = [[radius[0] * -.8660254037844387, radius[0] * -.5], [radius[1] * .8660254037844387, radius[1] * -.5], [0, radius[2]]];
-			center = [0, 0];
-			var dx = [.5, .5, -1];
-			var dy = [-.8660254037844387, .8660254037844387, 0];
-			var intersects = [];
-			var intersect = function(x0, y0, r, x1, y1, dx1, dy1, positive) {
-				// Find intersection of circle(x-x0)^2+(y-y0)^2==r^2 and line l=(x1,y1)+t(dx1,dy1); use positive or negative solution for t.
-				// Return coordinate.
-				var s = positive ? 1 : -1;
-				var k = (dx1 * (x1 - x0) + dy1 * (y1 - y0)) / (dx1 * dx1 + dy1 * dy1);
-				var t = s * Math.sqrt(r * r - (x1 - x0) * (x1 - x0) - (y1 - y0) * (y1 - y0) + k * k) - k;
-				return [x1 + t * dx1, y1 + t * dy1];
-			};
-			var angles = [[null, null], [null, null], [null, null]];
-			var maxx = 0, maxy = 0;
-			for (var a = 0; a < 3; ++a) {
-				intersects.push([]);
-				for (var aa = 0; aa < 2; ++aa) {
-					var A = (a + aa + 1) % 3;
-					var point = intersect(origin[A][0], origin[A][1], length[A], origin[a][0], origin[a][1], dx[a], dy[a], aa);
-					intersects[a].push(point);
-					if (Math.abs(point[0]) > maxx)
-						maxx = Math.abs(point[0]);
-					if (Math.abs(point[1]) > maxy)
-						maxy = Math.abs(point[1]);
-					angles[A][aa] = Math.atan2(point[1] - origin[A][1], point[0] - origin[A][0]);
-				}
-			}
-			outline = function(ui, c) {
-				c.save(); // Rotate the outline. {{{
-				c.rotate(ui.machine.spaces[0].delta_angle);
-				c.beginPath();
-				c.moveTo(intersects[0][0][0], intersects[0][0][1]);
+	var canvases = get_elements(ui, [null, 'xymap']);
+	var canvas_nr;
+	for (canvas_nr = 0; canvas_nr < canvases.length; ++canvas_nr) {
+		var canvas = canvases[canvas_nr];
+		if (ui.machine.spaces[0].axis.length >= 2) { // Draw XY {{{
+			var c = canvas.getContext('2d');
+			var machinewidth;
+			var machineheight;
+			var outline, center;
+			switch (ui.machine.spaces[0].type) { // Define geometry-specific options, including outline. {{{
+			case TYPE_CARTESIAN:
+				var xaxis = ui.machine.spaces[0].axis[0];
+				var yaxis = ui.machine.spaces[0].axis[1];
+				machinewidth = xaxis.max - xaxis.min + .010;
+				machineheight = yaxis.max - yaxis.min + .010;
+				center = [(xaxis.min + xaxis.max) / 2, (yaxis.min + yaxis.max) / 2];
+				outline = function(ui, c) {
+					// Rectangle is always drawn; nothing else to do here.
+				};
+				break;
+			case TYPE_DELTA:
+				var radius = [];
+				var length = [];
 				for (var a = 0; a < 3; ++a) {
-					var A = (a + 1) % 3;
-					var B = (a + 2) % 3;
-					c.lineTo(intersects[a][1][0], intersects[a][1][1]);
-					c.arc(origin[B][0], origin[B][1], length[B], angles[B][1], angles[B][0], false);
+					radius.push(ui.machine.spaces[0].motor[a].delta_radius);
+					length.push(ui.machine.spaces[0].motor[a].delta_rodlength);
 				}
-				c.closePath();
-				c.stroke();
+				//var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
+				//var dx = [0, -.8660254037844387, .8660254037844387];
+				//var dy = [1, -.5, -.5];
+				var origin = [[radius[0] * -.8660254037844387, radius[0] * -.5], [radius[1] * .8660254037844387, radius[1] * -.5], [0, radius[2]]];
+				center = [0, 0];
+				var dx = [.5, .5, -1];
+				var dy = [-.8660254037844387, .8660254037844387, 0];
+				var intersects = [];
+				var intersect = function(x0, y0, r, x1, y1, dx1, dy1, positive) {
+					// Find intersection of circle(x-x0)^2+(y-y0)^2==r^2 and line l=(x1,y1)+t(dx1,dy1); use positive or negative solution for t.
+					// Return coordinate.
+					var s = positive ? 1 : -1;
+					var k = (dx1 * (x1 - x0) + dy1 * (y1 - y0)) / (dx1 * dx1 + dy1 * dy1);
+					var t = s * Math.sqrt(r * r - (x1 - x0) * (x1 - x0) - (y1 - y0) * (y1 - y0) + k * k) - k;
+					return [x1 + t * dx1, y1 + t * dy1];
+				};
+				var angles = [[null, null], [null, null], [null, null]];
+				var maxx = 0, maxy = 0;
 				for (var a = 0; a < 3; ++a) {
-					var name = ui.machine.spaces[0].motor[a].name;
-					var w = c.measureText(name).width;
-					c.beginPath();
-					c.save(); // Print axis name. {{{
-					c.translate(origin[a][0] + dy[a] * 10 - w / 2, origin[a][1] - dx[a] * 10);
-					c.rotate(-ui.machine.spaces[0].delta_angle);
-					c.scale(1, -1);
-					c.fillText(name, 0, 0);
-					c.restore(); // }}}
+					intersects.push([]);
+					for (var aa = 0; aa < 2; ++aa) {
+						var A = (a + aa + 1) % 3;
+						var point = intersect(origin[A][0], origin[A][1], length[A], origin[a][0], origin[a][1], dx[a], dy[a], aa);
+						intersects[a].push(point);
+						if (Math.abs(point[0]) > maxx)
+							maxx = Math.abs(point[0]);
+						if (Math.abs(point[1]) > maxy)
+							maxy = Math.abs(point[1]);
+						angles[A][aa] = Math.atan2(point[1] - origin[A][1], point[0] - origin[A][0]);
+					}
 				}
-				c.restore(); // }}}
-			};
-			var extra = c.measureText(ui.machine.spaces[0].motor[0].name).width + .02;
-			machinewidth = 2 * (maxx + extra);
-			machineheight = 2 * (maxy + extra);
-			break;
-		case TYPE_POLAR:
-			machinewidth = 2 * ui.machine.spaces[0].polar_max_r + 2;
-			machineheight = 2 * ui.machine.spaces[0].polar_max_r + 2;
-			center = [0, 0];
-			outline = function(ui, c) {
-				c.beginPath();
-				c.arc(0, 0, ui.machine.spaces[0].polar_max_r, 0, 2 * Math.PI, false);
-				c.stroke();
-			};
-			break;
-		} // }}}
-		// Prepare canvas. {{{
-		//var factor = Math.sqrt(machinewidth * machinewidth + machineheight * machineheight);
-		var factor = Math.max(machinewidth, machineheight);
-		canvas.style.height = canvas.clientWidth + 'px';
-		canvas.width = canvas.clientWidth;
-		canvas.height = canvas.clientWidth;
-		// }}}
-
-		var b = ui.bbox;
-		var true_pos = [ui.machine.spaces[0].axis[0].current, ui.machine.spaces[0].axis[1].current];
-
-		c.save(); // Use machine coordinates for canvas. {{{
-		// Clear canvas.
-		c.clearRect(0, 0, canvas.width, canvas.width);
-
-		c.translate(canvas.width / 2, canvas.width / 2);
-		c.scale(canvas.width / factor, -canvas.width / factor);
-		c.lineWidth = 1.5 * factor / canvas.width;
-		c.translate(-center[0], -center[1]);
-		// }}}
-
-		get_pointer_pos_xy = function(ui, e) { // {{{
-			var rect = canvas.getBoundingClientRect();
-			var x = e.clientX - rect.left - canvas.width / 2;
-			var y = e.clientY - rect.top - canvas.width / 2;
-			x /= canvas.width / factor;
-			y /= -canvas.width / factor;
-			return [x, y];
-		}; // }}}
-
-		// Draw outline. {{{
-		c.strokeStyle = '#888';
-		c.fillStyle = '#888';
-		outline(ui, c);
-		// }}}
-		// Draw limits. {{{
-		c.beginPath();
-		var a = ui.machine.spaces[0].axis;
-		c.moveTo(a[0].min, a[1].min);
-		c.lineTo(a[0].max, a[1].min);
-		c.lineTo(a[0].max, a[1].max);
-		c.lineTo(a[0].min, a[1].max);
-		c.closePath();
-		c.stroke();
-		// }}}
-		// Draw center. {{{
-		c.beginPath();
-		c.moveTo(1, 0);
-		c.arc(0, 0, 1, 0, 2 * Math.PI);
-		c.fillStyle = '#888';
-		c.fill();
-		// }}}
-		// Draw probe map. {{{
-		if (ui.machine.probemap !== null) {
-			var limits = ui.machine.probemap[0];
-			var nums = ui.machine.probemap[1];
-			var map = ui.machine.probemap[2];
-			var dx = limits[4] / nums[0];
-			var dy = limits[5] / nums[1];
-			var sina = Math.sin(nums[2]);
-			var cosa = Math.cos(nums[2]);
-			var size = (dx > dy ? dy : dx) / 4;
-			c.beginPath();
-			for (var y = 0; y <= nums[1]; ++y) {
-				for (var x = 0; x <= nums[0]; ++x) {
-					var px = limits[0] + (dx * x + limits[2]) * cosa - (dy * y + limits[3]) * sina;
-					var py = limits[1] + (dy * y + limits[3]) * cosa + (dx * x + limits[2]) * sina;
-					c.moveTo(px - size, py - size);
-					c.lineTo(px + size, py + size);
-					c.moveTo(px - size, py + size);
-					c.lineTo(px + size, py - size);
-				}
-			}
-			c.strokeStyle = '#aaa';
-			c.stroke();
-		}
-		// }}}
-
-		c.save(); // Draw context. {{{
-		var current_pos = null;
-		var center = null;
-		var normal = null;
-		c.translate(ui.machine.targetx, ui.machine.targety);
-		c.rotate(ui.machine.targetangle);
-		for (var i = 0; i < ui.tp_context[1].length; ++i) {
-			r = ui.tp_context[1][i];
-			switch (r[0]) {
-				case 'PREARC':
-					center = [r[2], r[3], r[4]];
-					normal = [r[5], r[6], r[7]];
-					continue;
-				case 'ARC':
-					if (current_pos === null)
-						break;
-					if (center === null)
-						break;
-					// TODO: implement this.  Workaround: fall through.
-				case 'LINE':
-					if (current_pos === null || isNaN(current_pos[0]) || isNaN(current_pos[1]))
-						break;
+				outline = function(ui, c) {
+					c.save(); // Rotate the outline. {{{
+					c.rotate(ui.machine.spaces[0].delta_angle);
 					c.beginPath();
-					c.moveTo(current_pos[0], current_pos[1]);
-					c.lineTo(r[2], r[3]);
-					c.strokeStyle = i + ui.tp_context[0] >= ui.machine.tppos ? '#00f' : '#f00';
+					c.moveTo(intersects[0][0][0], intersects[0][0][1]);
+					for (var a = 0; a < 3; ++a) {
+						var A = (a + 1) % 3;
+						var B = (a + 2) % 3;
+						c.lineTo(intersects[a][1][0], intersects[a][1][1]);
+						c.arc(origin[B][0], origin[B][1], length[B], angles[B][1], angles[B][0], false);
+					}
+					c.closePath();
 					c.stroke();
+					for (var a = 0; a < 3; ++a) {
+						var name = ui.machine.spaces[0].motor[a].name;
+						var w = c.measureText(name).width;
+						c.beginPath();
+						c.save(); // Print axis name. {{{
+						c.translate(origin[a][0] + dy[a] * 10 - w / 2, origin[a][1] - dx[a] * 10);
+						c.rotate(-ui.machine.spaces[0].delta_angle);
+						c.scale(1, -1);
+						c.fillText(name, 0, 0);
+						c.restore(); // }}}
+					}
+					c.restore(); // }}}
+				};
+				var extra = c.measureText(ui.machine.spaces[0].motor[0].name).width + .02;
+				machinewidth = 2 * (maxx + extra);
+				machineheight = 2 * (maxy + extra);
+				break;
+			case TYPE_POLAR:
+				machinewidth = 2 * ui.machine.spaces[0].polar_max_r + 2;
+				machineheight = 2 * ui.machine.spaces[0].polar_max_r + 2;
+				center = [0, 0];
+				outline = function(ui, c) {
+					c.beginPath();
+					c.arc(0, 0, ui.machine.spaces[0].polar_max_r, 0, 2 * Math.PI, false);
+					c.stroke();
+				};
+				break;
+			} // }}}
+			// Prepare canvas. {{{
+			//var factor = Math.sqrt(machinewidth * machinewidth + machineheight * machineheight);
+			var factor = Math.max(machinewidth, machineheight);
+			canvas.style.height = canvas.clientWidth + 'px';
+			canvas.width = canvas.clientWidth;
+			canvas.height = canvas.clientWidth;
+			// }}}
+
+			var b = ui.bbox;
+			var true_pos = [ui.machine.spaces[0].axis[0].current, ui.machine.spaces[0].axis[1].current];
+
+			c.save(); // Use machine coordinates for canvas. {{{
+			// Clear canvas.
+			c.clearRect(0, 0, canvas.width, canvas.width);
+
+			c.translate(canvas.width / 2, canvas.width / 2);
+			c.scale(canvas.width / factor, -canvas.width / factor);
+			c.lineWidth = 1.5 * factor / canvas.width;
+			c.translate(-center[0], -center[1]);
+			// }}}
+
+			get_pointer_pos_xy = function(ui, e) { // {{{
+				var rect = canvas.getBoundingClientRect();
+				var x = e.clientX - rect.left - canvas.width / 2;
+				var y = e.clientY - rect.top - canvas.width / 2;
+				x /= canvas.width / factor;
+				y /= -canvas.width / factor;
+				return [x, y];
+			}; // }}}
+
+			// Draw outline. {{{
+			c.strokeStyle = '#888';
+			c.fillStyle = '#888';
+			outline(ui, c);
+			// }}}
+			// Draw limits. {{{
+			c.beginPath();
+			var a = ui.machine.spaces[0].axis;
+			c.moveTo(a[0].min, a[1].min);
+			c.lineTo(a[0].max, a[1].min);
+			c.lineTo(a[0].max, a[1].max);
+			c.lineTo(a[0].min, a[1].max);
+			c.closePath();
+			c.stroke();
+			// }}}
+			// Draw center. {{{
+			c.beginPath();
+			c.moveTo(1, 0);
+			c.arc(0, 0, 1, 0, 2 * Math.PI);
+			c.fillStyle = '#888';
+			c.fill();
+			// }}}
+			// Draw probe map. {{{
+			if (ui.machine.probemap !== null) {
+				var limits = ui.machine.probemap[0];
+				var nums = ui.machine.probemap[1];
+				var map = ui.machine.probemap[2];
+				var dx = limits[4] / nums[0];
+				var dy = limits[5] / nums[1];
+				var sina = Math.sin(nums[2]);
+				var cosa = Math.cos(nums[2]);
+				var size = (dx > dy ? dy : dx) / 4;
+				c.beginPath();
+				for (var y = 0; y <= nums[1]; ++y) {
+					for (var x = 0; x <= nums[0]; ++x) {
+						var px = limits[0] + (dx * x + limits[2]) * cosa - (dy * y + limits[3]) * sina;
+						var py = limits[1] + (dy * y + limits[3]) * cosa + (dx * x + limits[2]) * sina;
+						c.moveTo(px - size, py - size);
+						c.lineTo(px + size, py + size);
+						c.moveTo(px - size, py + size);
+						c.lineTo(px + size, py - size);
+					}
+				}
+				c.strokeStyle = '#aaa';
+				c.stroke();
 			}
-			current_pos = [r[2], r[3], r[4]];
-		}
-		c.restore(); // }}}
-
-		// Draw current location. {{{
-		c.beginPath();
-		c.fillStyle = '#44f';
-		c.moveTo(true_pos[0] + 3, true_pos[1]);
-		c.arc(true_pos[0], true_pos[1], 3, 0, 2 * Math.PI);
-		c.fill();
-		// }}}
-
-		c.save(); // Draw bounding box and context at target position. {{{
-		c.translate(ui.machine.targetx, ui.machine.targety);
-		c.rotate(ui.machine.targetangle);
-
-		c.beginPath();
-		if (b[0] != b[1] && b[2] != b[3]) {
-			// Draw print bounding box. {{{
-			c.rect(b[0], b[2], b[1] - b[0], b[3] - b[2]);
 			// }}}
 
-			// Draw tick marks. {{{
-			c.moveTo((b[1] + b[0]) / 2, b[2]);
-			c.lineTo((b[1] + b[0]) / 2, b[2] + 5);
+			c.save(); // Draw context. {{{
+			var current_pos = null;
+			var center = null;
+			var normal = null;
+			c.translate(ui.machine.targetx, ui.machine.targety);
+			c.rotate(ui.machine.targetangle);
+			for (var i = 0; i < ui.tp_context[1].length; ++i) {
+				r = ui.tp_context[1][i];
+				switch (r[0]) {
+					case 'PREARC':
+						center = [r[2], r[3], r[4]];
+						normal = [r[5], r[6], r[7]];
+						continue;
+					case 'ARC':
+						if (current_pos === null)
+							break;
+						if (center === null)
+							break;
+						// TODO: implement this.  Workaround: fall through.
+					case 'LINE':
+						if (current_pos === null || isNaN(current_pos[0]) || isNaN(current_pos[1]))
+							break;
+						c.beginPath();
+						c.moveTo(current_pos[0], current_pos[1]);
+						c.lineTo(r[2], r[3]);
+						c.strokeStyle = i + ui.tp_context[0] >= ui.machine.tppos ? '#00f' : '#f00';
+						c.stroke();
+				}
+				current_pos = [r[2], r[3], r[4]];
+			}
+			c.restore(); // }}}
 
-			c.moveTo((b[1] + b[0]) / 2, b[3]);
-			c.lineTo((b[1] + b[0]) / 2, b[3] - 5);
-
-			c.moveTo(b[0], (b[3] + b[2]) / 2);
-			c.lineTo(b[0] + 5, (b[3] + b[2]) / 2);
-
-			c.moveTo(b[1], (b[3] + b[2]) / 2);
-			c.lineTo(b[1] - 5, (b[3] + b[2]) / 2);
+			// Draw current location. {{{
+			c.beginPath();
+			c.fillStyle = '#44f';
+			c.moveTo(true_pos[0] + 3, true_pos[1]);
+			c.arc(true_pos[0], true_pos[1], 3, 0, 2 * Math.PI);
+			c.fill();
 			// }}}
 
-			// Draw central cross. {{{
-			c.moveTo((b[1] + b[0]) / 2 - 5, (b[3] + b[2]) / 2);
-			c.lineTo((b[1] + b[0]) / 2 + 5, (b[3] + b[2]) / 2);
-			c.moveTo((b[1] + b[0]) / 2, (b[3] + b[2]) / 2 + 5);
-			c.lineTo((b[1] + b[0]) / 2, (b[3] + b[2]) / 2 - 5);
+			c.save(); // Draw bounding box and context at target position. {{{
+			c.translate(ui.machine.targetx, ui.machine.targety);
+			c.rotate(ui.machine.targetangle);
+
+			c.beginPath();
+			for (var i = 0; i < b.length; ++i) {
+				if (b[i][0] != b[i][1] && b[i][2] != b[i][3]) {
+					// Draw job bounding box. {{{
+					c.rect(b[i][0], b[i][2], b[i][1] - b[i][0], b[i][3] - b[i][2]);
+					// }}}
+
+					// Draw tick marks. {{{
+					c.moveTo((b[i][1] + b[i][0]) / 2, b[i][2]);
+					c.lineTo((b[i][1] + b[i][0]) / 2, b[i][2] + 5);
+
+					c.moveTo((b[i][1] + b[i][0]) / 2, b[i][3]);
+					c.lineTo((b[i][1] + b[i][0]) / 2, b[i][3] - 5);
+
+					c.moveTo(b[i][0], (b[i][3] + b[i][2]) / 2);
+					c.lineTo(b[i][0] + 5, (b[i][3] + b[i][2]) / 2);
+
+					c.moveTo(b[i][1], (b[i][3] + b[i][2]) / 2);
+					c.lineTo(b[i][1] - 5, (b[i][3] + b[i][2]) / 2);
+					// }}}
+
+					// Draw central cross. {{{
+					c.moveTo((b[i][1] + b[i][0]) / 2 - 5, (b[i][3] + b[i][2]) / 2);
+					c.lineTo((b[i][1] + b[i][0]) / 2 + 5, (b[i][3] + b[i][2]) / 2);
+					c.moveTo((b[i][1] + b[i][0]) / 2, (b[i][3] + b[i][2]) / 2 + 5);
+					c.lineTo((b[i][1] + b[i][0]) / 2, (b[i][3] + b[i][2]) / 2 - 5);
+					// }}}
+				}
+			}
+
+			// Draw zero. {{{
+			c.moveTo(3, 0);
+			c.arc(0, 0, 3, 0, 2 * Math.PI);
 			// }}}
-		}
 
-		// Draw zero. {{{
-		c.moveTo(3, 0);
-		c.arc(0, 0, 3, 0, 2 * Math.PI);
-		// }}}
+			// Update it on screen.
+			c.strokeStyle = '#000';
+			c.stroke();
 
-		// Update it on screen.
-		c.strokeStyle = '#000';
-		c.stroke();
-
-		c.restore(); // }}}
-	} // }}}
+			c.restore(); // }}}
+		} // }}}
+	}
 
 	if (ui.machine.spaces[0].axis.length != 2) { // Draw Z {{{
 		var zaxis, zoffset;
@@ -1879,72 +1848,79 @@ function redraw_canvas(ui) { // {{{
 			zaxis = ui.machine.spaces[0].axis[0];
 			zoffset = 0;
 		}
-		var zcanvas = document.getElementById(make_id(ui, [null, 'zmap']));
-		var zc = zcanvas.getContext('2d');
-		zcanvas.style.height = canvas.clientWidth + 'px';
-		var zratio = .15 / .85;
-		zcanvas.width = canvas.clientWidth * zratio;
-		zcanvas.height = canvas.clientWidth;
-		// Z graph.
-		zc.clearRect(0, 0, zcanvas.width, zcanvas.height);
-		var d = (zaxis.max - zaxis.min) * .03;
-		var zfactor = zcanvas.height / (zaxis.max - zaxis.min) * .9;
-		zc.translate(zcanvas.width * .8, zcanvas.height * .05);
-		zc.scale(zfactor, -zfactor);
-		zc.translate(0, -zaxis.max);
+		var zcanvasses = get_elements(ui, [null, 'zmap']);
+		for (canvas_nr = 0; canvas_nr < zcanvasses.length; ++canvas_nr) {
+			zcanvas = zcanvasses[canvas_nr];
+			var zc = zcanvas.getContext('2d');
+			zcanvas.style.height = zcanvas.clientWidth + 'px';
+			var zratio = .15 / .85;
+			zcanvas.width = zcanvas.clientWidth * zratio;
+			zcanvas.height = zcanvas.clientWidth;
+			// Z graph.
+			zc.clearRect(0, 0, zcanvas.width, zcanvas.height);
+			var d = (zaxis.max - zaxis.min) * .03;
+			var zfactor = zcanvas.height / (zaxis.max - zaxis.min) * .9;
+			zc.translate(zcanvas.width * .8, zcanvas.height * .05);
+			zc.scale(zfactor, -zfactor);
+			zc.translate(0, -zaxis.max);
 
-		get_pointer_pos_z = function(ui, e) {
-			var rect = zcanvas.getBoundingClientRect();
-			var z = e.clientY - rect.top + zcanvas.height * .05;
-			z /= -zfactor;
-			z += zaxis.max;
-			return z;
-		};
+			get_pointer_pos_z = function(ui, e) {
+				var rect = zcanvas.getBoundingClientRect();
+				var z = e.clientY - rect.top + zcanvas.height * .05;
+				z /= -zfactor;
+				z += zaxis.max;
+				return z;
+			};
 
-		// Draw current position.
-		zc.beginPath();
-		zc.moveTo(0, zaxis.current + zoffset);
-		zc.lineTo(-d, zaxis.current - d + zoffset);
-		zc.lineTo(-d, zaxis.current + d + zoffset);
-		zc.closePath();
-		zc.fillStyle = '#44f';
-		zc.fill();
+			// Draw current position.
+			zc.beginPath();
+			zc.moveTo(0, zaxis.current + zoffset);
+			zc.lineTo(-d, zaxis.current - d + zoffset);
+			zc.lineTo(-d, zaxis.current + d + zoffset);
+			zc.closePath();
+			zc.fillStyle = '#44f';
+			zc.fill();
 
-		// Draw Axes.
-		zc.beginPath();
-		zc.moveTo(0, zaxis.min);
-		zc.lineTo(0, zaxis.max);
-		zc.moveTo(0, 0);
-		zc.lineTo(-d * 2, 0);
-		zc.strokeStyle = '#888';
-		zc.lineWidth = 1.2 / zfactor;
-		zc.stroke();
+			// Draw Axes.
+			zc.beginPath();
+			zc.moveTo(0, zaxis.min);
+			zc.lineTo(0, zaxis.max);
+			zc.moveTo(0, 0);
+			zc.lineTo(-d * 2, 0);
+			zc.strokeStyle = '#888';
+			zc.lineWidth = 1.2 / zfactor;
+			zc.stroke();
+		}
 	} // }}}
 }
 // }}}
 
 function start_move(ui) { // {{{
 	// Update bbox.
-	var q = get_element(ui, [null, 'queue']);
-	ui.bbox = [null, null, null, null];
-	for (var e = 0; e < q.options.length; ++e) {
-		if (!q.options[e].selected)
-			continue;
-		var name = q.options[e].value;
-		var item;
-		for (item = 0; item < ui.machine.queue.length; ++item)
-			if (ui.machine.queue[item][0] == name)
-				break;
-		if (item >= ui.machine.queue.length)
-			continue;
-		if (ui.bbox[0] == null || ui.machine.queue[item][1][0] < ui.bbox[0])
-			ui.bbox[0] = ui.machine.queue[item][1][0];
-		if (ui.bbox[1] == null || ui.machine.queue[item][1][1] > ui.bbox[1])
-			ui.bbox[1] = ui.machine.queue[item][1][1];
-		if (ui.bbox[2] == null || ui.machine.queue[item][1][2] < ui.bbox[2])
-			ui.bbox[2] = ui.machine.queue[item][1][2];
-		if (ui.bbox[3] == null || ui.machine.queue[item][1][3] > ui.bbox[3])
-			ui.bbox[3] = ui.machine.queue[item][1][3];
+	var q = get_elements(ui, [null, 'queue']);
+	ui.bbox = [];
+	for (var i = 0; i < q.length; ++i) {
+		var bbox = [null, null, null, null];
+		ui.bbox.push(bbox);
+		for (var e = 0; e < q[i].options.length; ++e) {
+			if (!q[i].options[e].selected)
+				continue;
+			var name = q[i].options[e].value;
+			var item;
+			for (item = 0; item < ui.machine.queue.length; ++item)
+				if (ui.machine.queue[item][0] == name)
+					break;
+			if (item >= ui.machine.queue.length)
+				continue;
+			if (bbox[0] == null || ui.machine.queue[item][1][0] < bbox[0])
+				bbox[0] = ui.machine.queue[item][1][0];
+			if (bbox[1] == null || ui.machine.queue[item][1][1] > bbox[1])
+				bbox[1] = ui.machine.queue[item][1][1];
+			if (bbox[2] == null || ui.machine.queue[item][1][2] < bbox[2])
+				bbox[2] = ui.machine.queue[item][1][2];
+			if (bbox[3] == null || ui.machine.queue[item][1][3] > bbox[3])
+				bbox[3] = ui.machine.queue[item][1][3];
+		}
 	}
 	update_canvas_and_spans(ui);
 } // }}}

@@ -16,4 +16,4 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 check:
-	! which gjslint || gjslint --disable 5,110,220 server.js main.js templates.js
+	! which gjslint || gjslint --disable 5,110,220 server.js main.js templates.js ui.js

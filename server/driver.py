@@ -76,7 +76,7 @@ if False:
 	def trace(frame, why, arg):
 		if why == 'call':
 			code = frame.f_code
-			log('call: %s' % code.co_name)
+			log('call: %d %s' % (code.co_firstlineno, code.co_name))
 	sys.settrace(trace)
 # }}}
 
@@ -311,6 +311,8 @@ class Machine: # {{{
 						sina, cosa = self.gcode_angle
 						limits = [targetx, targety, x0, y0, w, h]
 						nums = [nx, ny, self.targetangle]
+						if not (0 < nx < 1000 and 0 < ny < 1000):
+							raise ValueError('probe map too large; probably invalid')
 						probes = [[None for x in range(nx + 1)] for y in range(ny + 1)]
 						for y in range(ny + 1):
 							for x in range(nx + 1):
