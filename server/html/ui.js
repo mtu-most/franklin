@@ -12,26 +12,20 @@ During setup, extra elements are visible:
 
 Interface: {
 
-class Content:
-	destroy()
-	copy()
-	serialize()
-	build(string)
-
 class Bin:
-	Content content
+	Content content	  # this is any html element.
 	destroy()
 	update(bool)
 	div selector
 	add_split()
 	add_notebook()
 
-class Split(Content):
+class Split:
 	Bin first, second
 	div controls
 	swap()
 
-class Tabs(Content):
+class Tabs:
 	div tabs
 	Bin pages[]
 	div controls

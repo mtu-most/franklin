@@ -89,6 +89,7 @@ function _setup_updater() {
 			trigger_update(machine, 'stall');
 		},
 		confirm: function(machine, id, message) {
+			machines[machine].confirmation = [id, message];
 			trigger_update(machine, 'ask_confirmation', id, message);
 		},
 		autodetect: function(state) {
@@ -151,6 +152,7 @@ function _setup_updater() {
 					temp_scale_min: 0,
 					temp_scale_max: 0,
 					message: null,
+					confirmation: [null, ''],
 					spaces: [{
 							name: null,
 							type: TYPE_CARTESIAN,
@@ -204,6 +206,7 @@ function _setup_updater() {
 			trigger_update(machine, 'blocked', reason);
 		},
 		message: function(machine, stat) {
+			machines[machine].message = stat;
 			trigger_update(machine, 'message', stat);
 		},
 		globals_update: function(machine, values) {

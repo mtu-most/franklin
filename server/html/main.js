@@ -688,14 +688,7 @@ function blocked(uuid, reason) { // {{{
 } // }}}
 
 function message(uuid, msg) { // {{{
-	var e = get_elements(machines[uuid].ui, [null, 'message1']);
-	for (var i = 0; i < e.length; ++i) {
-		if (msg)
-			e[i].ClearAll().AddText(msg).RemoveClass('hidden');
-		else
-			e[i].AddClass('hidden');
-	}
-	machines[uuid].ui.update();	// Hide interface parts if applicable.
+	machines[uuid].ui.update();
 } // }}}
 
 function del_machine(uuid) { // {{{
@@ -718,36 +711,7 @@ function del_port(uuid, port) { // {{{
 
 function ask_confirmation(uuid, id, message) { // {{{
 	update_canvas_and_spans(machines[uuid].ui);
-	var e = get_elements(machines[uuid].ui, [null, 'confirm']);
-	for (var i = 0; i < e.length; ++i) {
-		e[i].ClearAll();
-		if (id === null) {
-			e[i].AddClass('hidden');
-			continue;
-		}
-		e[i].RemoveClass('hidden');
-		// Cancel button.
-		var button = e[i].AddElement('button', 'confirmabort').AddText('Abort').AddEvent('click', function() {
-			this.ClearAll();
-			this.AddClass('hidden');
-			this.ui.machine.call('confirm', [this.confirm_id, false], {});
-		});
-		button.type = 'button';
-		button.ui = machines[uuid].ui;
-		button.confirm_id = id;
-		// Message
-		e[i].AddText(message);
-		// Ok button.
-		button = e[i].AddElement('button', 'confirmok').AddText('Ok').AddEvent('click', function() {
-			this.ClearAll();
-			this.AddClass('hidden');
-			this.ui.machine.call('confirm', [this.confirm_id, true], {});
-		});
-		button.type = 'button';
-		button.ui = machines[uuid].ui;
-		button.confirm_id = id;
-	}
-	machines[uuid].ui.update();	// Hide interface parts if applicable.
+	machines[uuid].ui.update();
 } // }}}
 
 function queue(uuid) { // {{{
@@ -1399,21 +1363,22 @@ Object.defineProperty(Object.prototype, 'AddMultiple', { // {{{
 				ret.AddClass('all hidden');
 			return ret;
 		};
-		var me = this;
+		var self = this;
 		var last;
 		if (all !== false && type != 'axis' && type != 'motor')
-			last = one(me, template, null);
+			last = one(this, template, null);
 		else
 			last = document.createComment('');
 		if (type != 'axis' && type != 'motor') {
-			me.appendChild(last);
-			ui.multiples[type].push({table: me, tr: [], after: last, create: function(i) { return one(me, template, i) || document.createComment(''); }});
+			this.appendChild(last);
+			ui.multiples[type].push({table: this, tr: [], after: last, create: function(i) { return one(self, template, i) || document.createComment(''); }});
 		}
 		else {
-			me.appendChild(last);
-			ui.multiples[type].push({table: me, space: [], after: last, all: all != false, create: function(i, arg) { return (i != forbidden && one(me, template, i, arg)) || document.createComment(''); }});
+			this.appendChild(last);
+			ui.multiples[type].push({table: this, space: [], after: last, all: all != false, create: function(i, arg) { return (i != forbidden && one(self, template, i, arg)) || document.createComment(''); }});
 		}
-		return me;
+		globals_update(ui.machine.uuid);
+		return this;
 	}
 }); // }}}
 

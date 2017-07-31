@@ -547,16 +547,87 @@ function Gpios(desc, pos, ui) { // {{{
 // }}}
 // }}}
 
+function state(desc, pos, data) { // {{{
+	var ret = Create('div', 'message');
+	ret.AddClass(make_id(ret, [null, 'printstate']));
+	ret.update = function() {
+		this.hide(!data.machine.connected);
+	};
+	return ret;
+} // }}}
+
+function message(desc, pos, data) { // {{{
+	var ret = Create('div', 'message');
+	ret.update = function() {
+		this.ClearAll().AddText(data.machine.message);
+		this.hide(!data.machine.message);
+	};
+	return ret;
+} // }}}
+
+function noconnect_bar(desc, pos, data) { // {{{
+	var ret = Create('h2').AddText('This machine is not connected');
+	ret.update = function() {
+		this.hide(data.machine.connected);
+	};
+	return ret;
+} // }}}
+
+function confirmation(desc, pos, data) { // {{{
+	var self = Create('div', 'message').AddClass(make_id(ret, [null, 'confirm']));
+	self.update = function() {
+		this.ClearAll();
+		if (data.machine.confirmation[0] === null) {
+			this.hide(true);
+			return;
+		}
+		// Cancel button.
+		var button = this.AddElement('button', 'confirmabort').AddText('Abort').AddEvent('click', function() {
+			self.ClearAll();
+			self.hide(true);
+			data.machine.call('confirm', [data.machine.confirmation[0], false], {});
+		});
+		button.type = 'button';
+		// Message
+		this.AddText(data.machine.confirmation[1]);
+		// Ok button.
+		button = this.AddElement('button', 'confirmok').AddText('Ok').AddEvent('click', function() {
+			self.ClearAll();
+			self.hide(true);
+			data.machine.call('confirm', [data.machine.confirmation[0], true], {});
+		});
+		button.type = 'button';
+	};
+	return ret;
+} // }}}
+
 function setup_globals(desc, pos, data) { // {{{
 	var ret = Create('div', 'setup expert');
-	var ports = data.notconnected.AddElement('select');
+	var e = ret.AddElement('div').AddText('Machine UUID:');
+	data.uuid = e.AddElement('span');
+	var e = ret.AddElement('div', 'admin').AddText('Machine name:');
+	e.Add(Str(data, [null, 'name']));
+	var notconnected = ret.AddElement('div', 'notconnected');
+	// Blocker bar. {{{
+	ret.AddClass(make_id(ret, [null, 'container']));
+	var blocker = ret.AddElement('div', 'hidden blocker');
+	blocker.AddClass(make_id(ret, [null, 'block1']));
+	// }}}
+	var connected = ret.AddElement('div', 'connected');
+	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Machine');
+	disable.type = 'button';
+	disable.AddEvent('click', function() { machine.disabling = true; rpc.call('disable', [machine.uuid], {}); });
+	var remove = ret.AddElement('div', 'admin').AddElement('button').AddText('Remove Machine');
+	remove.type = 'button';
+	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + machine.name + '?')) { machine.disabling = true; rpc.call('remove_machine', [machine.uuid], {}); }});
+	var ports = notconnected.AddElement('select');
 	ports.AddClass(make_id(data, [null, 'ports']));
 	ports.AddEvent('changed', function() { update_firmwares(ports, data.firmwares); });
-	var b = data.notconnected.AddElement('button').AddText('Detect');
+	var b = notconnected.AddElement('button').AddText('Detect');
 	b.type = 'button';
 	b.AddEvent('click', function() { detect(ports); });
-	data.firmwares = data.notconnected.AddElement('select');
-	b = data.notconnected.AddElement('button').AddText('Upload');
+	data.firmwares = notconnected.AddElement('select');
+	b = notconnected.AddElement('button').AddText('Upload');
 	b.type = 'button';
 	b.AddEvent('click', function() { upload(ports, data.firmwares); });
 	// Save and restore. {{{
@@ -894,7 +965,6 @@ function setup_pins(desc, pos, data) { // {{{
 } // }}}
 
 ui_modules = {
-	Setup: setup,
 	Top: Top,
 	Map: Map,
 	Toolpath: Toolpath,
@@ -917,19 +987,6 @@ ui_modules = {
 
 function UI(machine) {	// {{{
 	var ret = Create('div', 'machine hidden');
-	var setup = ret.AddElement('div', 'setup');
-	var e = setup.AddElement('div').AddText('Machine UUID:');
-	ret.uuid = e.AddElement('span');
-	var e = setup.AddElement('div', 'admin').AddText('Machine name:');
-	e.Add(Str(ret, [null, 'name']));
-	var connected = setup.AddElement('div', 'connected');
-	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Machine');
-	disable.type = 'button';
-	disable.AddEvent('click', function() { machine.disabling = true; rpc.call('disable', [machine.uuid], {}); });
-	var remove = setup.AddElement('div', 'admin').AddElement('button').AddText('Remove Machine');
-	remove.type = 'button';
-	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + machine.name + '?')) { machine.disabling = true; rpc.call('remove_machine', [machine.uuid], {}); }});
-	ret.notconnected = setup.AddElement('div', 'notconnected');
 	ret.machine = machine;
 	ret.names = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
 	ret.name_values = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
@@ -943,21 +1000,12 @@ function UI(machine) {	// {{{
 	ret.tp_context = [0, []];
 	ret.idgroups = {bed: [], fan: [], spindle: []};
 	ret.multiples = {space: [], temp: [], gpio: [], axis: [], motor: []};
-	// Blocker bar. {{{
-	ret.AddClass(make_id(ret, [null, 'container']));
-	var blocker = ret.AddElement('div', 'hidden blocker');
-	blocker.AddClass(make_id(ret, [null, 'block1']));
-	// }}}
-	ret.AddElement('div', 'message hidden').AddClass(make_id(ret, [null, 'message1']));
-	ret.AddElement('div', 'message').AddClass(make_id(ret, [null, 'printstate']));
-	ret.AddElement('div', 'message hidden').AddClass(make_id(ret, [null, 'confirm']));
-	ret.AddElement('h2', 'notconnected').AddText('This machine is not connected');
 	var selector = ret.AddElement('div').AddText('Profile:').AddElement('select').AddEvent('change', function() {
 		machine.call('load', [selector.value], {});
 	});
 	selector.AddClass(make_id(ret, [null, 'profiles']));
 	update_profiles(ret);
-	ret.bin = ret.Add(new Bin(ret));
+	ret.bin = ret.Add(new Bin(ret, document.getElementById('uiconfig').checked));
 	var ui = ui_build(ret.machine.user_interface || '(Top:)', ret);
 	ret.bin.set_content(ui);
 	ret.AddElement('div', 'bottom');
