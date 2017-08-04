@@ -17,44 +17,18 @@
  */
 
 .hidden,
-.empty *,
-
-.nosetup .setup,
-
 .isconnected .notconnected,
 .isnotconnected .connected,
-.nodelta .delta,
-
 .role_user .expert,
 .role_user .admin,
 .role_user .benjamin,
 .role_expert .admin,
 .role_expert .benjamin,
 .role_admin .benjamin,
-
 .noflash .ifflash,
-.nodetect .ifdetect,
-
-.nomover .movediv
+.nodetect .ifdetect
 {
 	display: none;
-}
-
-.axis,.extruder,.temp,.gpio {
-	margin: 1ex 0em;
-	background: #cc8;
-}
-
-.pins_machine,.pins_axis,.pins_extruder,.pins_temp,.pins_gpio {
-	margin: 1ex 0em;
-}
-
-.pintitle {
-	background: #ffc;
-}
-
-.pinvalue {
-	background: #ffc;
 }
 
 .title {
@@ -79,56 +53,27 @@
 .rowtitle {
 	background: #cfc;
 }
-#labels,#scripts {
-	clear: both;
-}
 .checked {
 	background: #0f0;
 }
 
-.movediv {
-	float: right;
-	background: #666;
-	z-index: 1;
-	width: 30%;
-}
-
-.movebox {
-	background: #ee6;
-	width: 80%;
-	margin: auto auto;
-}
-.move_viewbox {
-	margin: auto auto;
-	text-align: center;
-}
 .blocker {
 	background: #f44;
-	padding: 1em 1em 1em 1em;
-	position: fixed;
-	top: 0px;
-	left: 0px;
-	width: 100%;
 }
+
 .message {
 	background: #ff8;
 	padding: 1em 1em 1em 1em;
 	white-space: pre-line;
-	position: fixed;
-	bottom: 0px;
-	left: 0px;
-	right: 0px;
 	text-align: center;
 }
+
 .message button.confirmabort {
 	float: left;
 }
+
 .message button.confirmok {
 	float: right;
-}
-body {
-	margin-top: 3em;
-	margin-bottom: 6em;
 }
 
 .htitle1 {
@@ -210,15 +155,10 @@ table {
 	width: 100%;
 }
 
-table.left {
-	width: 70%;
-}
-
 .all {
 	background: #844;
 }
 
-/* New stuff; everything above this line may be obsolete. */
 body.idle {
 	background: #2e2;
 }
@@ -231,34 +171,56 @@ body.printing {
 	background: #e22;
 }
 
+#labels {
+	clear: both;
+	position: fixed;
+	top: 0px;
+	height: 1.7em;
+	width: 100%;
+	left: 0px;
+	line-height: 2em;
+}
+
 .tab {
 	display: inline;
-	margin: 2ex;
+	margin: 0px 2ex;
 	padding: .5ex 2ex;
 	background: #444;
 	border-top-left-radius: 1ex;
 	border-top-right-radius: 1ex;
+	vertical-align: bottom;
 }
 
 .tab.active {
 	background: #ccc;
 }
 
-.machine {
-	position: fixed;
-	width: 100%;
+#machines {
+	position: absolute;
+	top: 2em;
 	bottom: 0px;
-	height: 80vh;
-	background: #ccc;
-	padding: 1% 1em;
+	left: 0px;
+	right: 0px;
 }
 
-#machines {
-	margin-top: .5ex;
+.machine {
+	position: absolute;
+	background: #ccc;
+	padding: 0px 1em;
+	height: 100%;
+	left: 0px;
+	right: 0px;
 }
 
 .stop {
+	float: right;
+	width: 30%;
 	height: 6em;
+}
+
+.stop button {
+	height: 2em;
+	width: 25%;
 }
 
 .jobbuttons {
@@ -269,19 +231,9 @@ body.printing {
 	float: left;
 }
 
-.stop {
-	float: right;
-	width: 30%;
-}
-
 .spacer {
 	clear: both;
 	height: 1em;
-}
-
-.stop button {
-	height: 2em;
-	width: 25%;
 }
 
 button.abort {
@@ -298,36 +250,36 @@ button.abort {
 .multipliers, .gpios, .temp {
 	clear: right;
 	float: right;
-	width: 49%;
 }
 
 .xymap {
 	background: #ddd;
-	width: 85%;
+	width: 100%;
+	height: 100%;
 }
 
 .zmap {
 	background: #ddd;
-	width: 15%;
-}
-
-.temp {
-	height: 20em;
+	width: 100%;
+	height: 100%;
 }
 
 .tempgraph {
 	background: #ddd;
 	width: 100%;
-	height: 150%;
-}
-
-.bottom {
-	clear: both;
-	height: 1px;
+	height: 100%;
 }
 
 input[type="text"] {
 	width: 3em;
+}
+
+input.tabinput {
+	width: auto;
+}
+
+.tab span {
+	line-height: 2em;
 }
 
 .temp0 {
@@ -354,7 +306,7 @@ input[type="text"] {
 	color: #666;
 }
 
-#setupbutton {
+.setupbutton {
 	float: right;
 }
 

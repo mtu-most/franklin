@@ -18,7 +18,7 @@ class Bin:
 	update(bool)
 	div selector
 	add_split()
-	add_notebook()
+	add_tabs()
 
 class Split:
 	Bin first, second
@@ -47,8 +47,9 @@ DOM:
 */
 
 function ui_build(string, data, pos) {
-	if (pos === undefined)
+	if (pos === undefined) {
 		return ui_build(string, data, 0)[0];
+	}
 	var ret, sub;
 	if (string[pos] == '{') {
 		// Split: {AB[dD][hv][0-9.]+[p%]}
@@ -78,12 +79,36 @@ function ui_build(string, data, pos) {
 	}
 	if (string[pos] == '[') {
 		pos += 1;
-		ret = new Tabs();
-		// TODO.
+		ret = new Tabs(data, false);
+		var t = 0;
+		var selectedpos = string.indexOf(':', pos);
+		var selected = Number(string.substr(pos, selectedpos - pos));
+		pos = selectedpos + 1;
+		while (string[pos] != ']') {
+			if (string[pos] === undefined) {
+				console.info('string ended too soon for Tabs building', string, pos);
+				return [ret, pos];
+			}
+			if (string[pos] == '*') {
+				pos += 1;
+				ret.selected = t;
+			}
+			var namepos = string.indexOf(':', pos);
+			var tabname = string.substr(pos, namepos - pos);
+			pos = namepos + 1;
+			sub = ui_build(string, data, pos);
+			ret.add_tab(sub[0]);
+			ret.tabs[t].tabname = decodeURIComponent(tabname);
+			pos = sub[1];
+			t += 1;
+		}
+		pos += 1;
+		ret.select(selected);
+		return [ret, pos];
 	}
 	// Other things.
 	if (string[pos++] != '(') {
-		console.error('invalid initial character for build', string, pos);
+		console.info('invalid initial character for build "' + string + '"[' + pos + ']');
 		return [null, pos];
 	}
 	for (var n in ui_modules) {
@@ -105,6 +130,8 @@ function ui_build(string, data, pos) {
 function Bin(data, configuring) {
 	var self = Create('div', 'Bin');
 	self.data = data;
+	if (!data)
+		console.error(1);
 	self.style.position = 'absolute';
 	self.style.left = '0px';
 	self.style.right = '0px';
@@ -112,7 +139,7 @@ function Bin(data, configuring) {
 	self.style.bottom = '0px';
 	self.control = self.AddElement('div');
 	self.configuring = configuring ? true : false;	// This turns undefined into false.
-	self.control.style.display = configuring ? 'block' : 'none';
+	self.control.style.display = configuring ? '' : 'none';
 	self.control.style.position = 'absolute';
 	self.control.style.width = '100%';
 	self.control.style.bottom = '0px';
@@ -121,13 +148,13 @@ function Bin(data, configuring) {
 	for (var m in ui_modules)
 		self.content_selector.AddElement('option').AddText(m).value = m;
 	self.content_selector.AddElement('option').AddText('Add Split').value = 'Split';
-	//self.content_selector.AddElement('option').AddText('Add Tabs').value = 'Tabs'; // Not Implemented Yet.
+	self.content_selector.AddElement('option').AddText('Add Tabs').value = 'Tabs';
 	self.content_selector.AddEvent('change', function() {
 		var target = self.content_selector.selectedOptions[0].value;
 		if (target == 'Split')
 			self.add_split();
 		else if (target == 'Tabs')
-			self.add_notebook();
+			self.add_tabs();
 		else {
 			self.destroy();
 			var c = ui_modules[target]('', 0, self.data, self.configuring)[0];
@@ -141,10 +168,11 @@ function Bin(data, configuring) {
 		this.content = this.Add(element);
 		element.parent_bin = this;
 		element.hide = function(hidden) { return this.parent_bin.hide(hidden); };
+		this.config(this.configuring);
 		this.update();
 	};
 	self.destroy = function() {
-		if (this.content.destroy)
+		if (this.content && this.content.destroy)
 			this.content.destroy();
 	};
 	self.update = function() {
@@ -154,7 +182,7 @@ function Bin(data, configuring) {
 			this.control.style.display = 'none';
 		}
 		else {
-			this.control.style.display = 'block';
+			this.control.style.display = '';
 			for (var i = 0; i < this.content_selector.options.length; ++i) {
 				if (this.content_selector[i].value == this.content.name)
 					this.content_selector.selectedIndex = i;
@@ -169,8 +197,9 @@ function Bin(data, configuring) {
 			this.update();
 		else
 			this.control.style.display = 'none';
-		if (this.content.config)
+		if (this.content && this.content.config)
 			this.content.config(configuring);
+		this.update();
 	};
 	self.add_split = function() {
 		var content = this.content;
@@ -181,15 +210,16 @@ function Bin(data, configuring) {
 		this.content.second.set_content(copy);
 		this.update();
 	};
-	self.add_notebook = function() {
+	self.add_tabs = function() {
 		var content = this.content;
-		this.content = new Tabs();
+		this.removeChild(content);
+		this.set_content(new Tabs(this.data, this.configuring));
 		this.content.add_tab(content);
 		this.update();
 	};
 	self.serialize = function() {
 		if (!this.content.serialize)
-			return '';
+			return '(' + this.content.name + ':' + ')';
 		return this.content.serialize();
 	};
 	self.copy = function() {
@@ -212,7 +242,7 @@ function Split(data, configuring) {
 	self.configuring = configuring ? true : false; // Treat undefined as false.
 	self.control = self.AddElement('div', 'Control'); // {
 	self.control.style.zIndex = 10;
-	self.control.style.display = configuring ? 'block' : 'none';
+	self.control.style.display = configuring ? '' : 'none';
 	self.control.style.position = 'absolute';
 	self.control.style.top = '0px';
 	self.control.style.left = '0px';
@@ -323,21 +353,30 @@ function Split(data, configuring) {
 	self.hide_first = false;
 	self.hide_second = false;
 	var hide = function(hidden) {
-		if (this == self.first)
+		if (this == self.first) {
+			if (self.hide_first == hidden)
+				return;
 			self.hide_first = hidden;
-		else
+		}
+		else {
+			if (self.hide_second == hidden)
+				return;
 			self.hide_second = hidden;
-		self.parent_bin.hide(self.hide_first && self.hide_second);
+		}
+		if (self.parent_bin)
+			self.parent_bin.hide(self.hide_first && self.hide_second);
 		self.update();
 	};
 	self.first.hide = hide;
 	self.second.hide = hide;
 	self.update = function() {
-		if (this.hide_first && this.hide_second) {
+		this.first.update();
+		this.second.update();
+		if (!this.configuring && this.hide_first && this.hide_second) {
 			this.control.style.display = 'none';
 			return;
 		}
-		this.control.style.display = this.configuring ? 'block' : 'none';
+		this.control.style.display = this.configuring ? '' : 'none';
 		var clear = function(target) {
 			target.style.position = 'absolute';
 			target.style.left = '0px';
@@ -349,18 +388,18 @@ function Split(data, configuring) {
 		};
 		clear(this.first);
 		clear(this.second);
-		if (this.hide_first) {
+		if (!this.configuring && this.hide_first) {
 			this.first.style.display = 'none';
-			this.second.style.display = 'block';
+			this.second.style.display = '';
 			return;
 		}
-		if (this.hide_second) {
-			this.first.style.display = 'block';
+		if (!this.configuring && this.hide_second) {
+			this.first.style.display = '';
 			this.second.style.display = 'none';
 			return;
 		}
-		this.first.style.display = 'block';
-		this.second.style.display = 'block';
+		this.first.style.display = '';
+		this.second.style.display = '';
 		this.input_value.value = this.value;
 		this.type_select.selectedIndex = this.pixels ? 0 : 1;
 		var attr = this.horizontal ? ['left', 'right', 'width'] : ['top', 'bottom', 'height'];
@@ -383,8 +422,6 @@ function Split(data, configuring) {
 			this.second.style[attr[2]] = this.value + unit;
 			this.second.style[attr[0]] = '';
 		}
-		this.first.update();
-		this.second.update();
 	};
 	self.destroy = function() {
 		this.first.destroy();
@@ -407,9 +444,132 @@ function Split(data, configuring) {
 	};
 	self.config = function(configuring) {
 		this.configuring = configuring;
-		this.control.style.display = this.configuring ? 'block' : 'none';
+		this.control.style.display = this.configuring ? '' : 'none';
 		this.first.config(configuring);
 		this.second.config(configuring);
+	};
+	return self;
+}
+
+function Tabs(data, configuring) {
+	var self = Create('div', 'Tabs');
+	self.name = 'Tabs';
+	self.data = data;
+	self.configuring = configuring ? true : false; // Treat undefined as false.
+	self.bar = self.AddElement('div');
+	self.bar.style.position = 'absolute';
+	self.bar.style.top = '0px';
+	self.bar.style.width = '100%';
+	self.bar.style.height = '2em';
+	self.bar.style.background = '#cfc';
+	self.plus = self.bar.AddElement('div', 'tab').AddText('+').AddEvent('click', function() {
+		self.add_tab(self.tabs[self.selected].copy());
+	});
+	self.plus.style.float = 'right';
+	self.tabs = [];
+	self.selected = -1;
+	self.add_tab = function(content) {
+		var tab = this.Add(new Bin(this.data, this.configuring));
+		tab.style.position = 'absolute';
+		tab.style.width = '100%';
+		tab.style.bottom = '0px';
+		tab.style.top = '2em';
+		tab.tabname = 'New Tab';
+		tab.titlebox = this.bar.AddElement('div', 'tab');
+		tab.titlebox.AddEvent('click', function() {
+			self.select(self.tabs.indexOf(tab));
+		});
+		tab.titlespan = tab.titlebox.AddElement('span');
+		tab.killbutton = tab.titlebox.AddElement('button').AddText('×').AddEvent('click', function() {
+			tab.destroy();
+			self.bar.removeChild(tab.titlebox);
+			self.removeChild(tab);
+			self.tabs.splice(self.tabs.indexOf(tab), 1);
+			// Removing the last tab removes the parent Tabs object instead.
+			if (self.tabs.length == 0) {
+				self.destroy();
+				self.parent_bin.removeChild(self);
+				tab.style.top = '0px';
+				self.parent_bin.set_content(tab);
+			}
+		});
+		tab.killbutton.type = 'button';
+		tab.killbutton.style.display = this.configuring ? 'inline' : 'none';
+		this.tabs.push(tab);
+		tab.set_content(content);
+		this.select(this.tabs.length - 1);
+		this.config(this.configuring);
+		return tab;
+	};
+	self.select = function(index) {
+		this.selected = index;
+		this.update();
+	};
+	self.update = function() {
+		for (var t = 0; t < this.tabs.length; ++t)
+			this.tabs[t].update();
+		while (this.selected >= 0 && this.tabs[this.selected].hidden && !this.configuring)
+			this.selected -= 1;
+		if (this.selected < 0) {
+			this.selected = this.tabs.length - 1;
+			while (this.selected >= 0 && this.tabs[this.selected].hidden && !this.configuring)
+				this.selected -= 1;
+			if (this.selected < 0) {
+				this.hide(true);
+				return;
+			}
+		}
+		for (var t = 0; t < this.tabs.length; ++t) {
+			if (t == this.selected) {
+				this.tabs[t].titlebox.AddClass('active');
+				this.tabs[t].style.display = '';
+			}
+			else {
+				this.tabs[t].titlebox.RemoveClass('active');
+				this.tabs[t].style.display = 'none';
+			}
+		}
+	};
+	self.destroy = function() {
+		for (var t = 0; t < this.tabs.length; ++t)
+			this.tabs[t].destroy();
+	};
+	self.serialize = function() {
+		var ret = '[' + this.selected + ':';
+		for (var t = 0; t < this.tabs.length; ++t) {
+			if (t == this.selected)
+				ret += '*';
+			ret += encodeURIComponent(this.tabs[t].tabname) + ':' + this.tabs[t].serialize();
+		}
+		return ret + ']';
+	};
+	self.copy = function() {
+		var ret = new Tabs(this.data, this.configuring);
+		for (var t = 0; t < this.tabs.length; ++t)
+			ret.add_tab(this.tabs[t].copy());
+		return ret;
+	};
+	self.config = function(configuring) {
+		var tabselement = this;
+		this.configuring = configuring;
+		this.plus.style.display = this.configuring ? '' : 'none';
+		for (var t = 0; t < this.tabs.length; ++t) {
+			if (this.configuring) {
+				this.tabs[t].killbutton.style.display = '';
+				var tabinput = this.tabs[t].titlespan.ClearAll().AddElement('input', 'tabinput');
+				tabinput.type = 'text';
+				tabinput.value = this.tabs[t].tabname;
+				tabinput.tab = this.tabs[t];
+				tabinput.AddEvent('change', function() {
+					this.tab.tabname = this.value;
+				});
+			}
+			else {
+				this.tabs[t].killbutton.style.display = 'none';
+				this.tabs[t].titlespan.ClearAll().AddText(this.tabs[t].tabname);
+			}
+			this.tabs[t].config(configuring);
+		}
 	};
 	return self;
 }

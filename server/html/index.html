@@ -34,18 +34,9 @@
 			<div id='new_label' class='tab' onclick="rpc.call('create_machine', [], {}, function(uuid) {select_machine(uuid);})">+</div>
 			<div id='setupbutton'>
 				<a href='https://github.com/mtu-most/franklin'>Get Franklin Source</a>
-				<label class='expert'>
-					<input type='checkbox' id='uiconfig' onchange='toggle_uiconfig()'/>
-					Configure UI
-				</label>
-				<label class='expert'>
-					<input type='checkbox' id='setupbox' onchange='toggle_setup()'/>
-					Show setup
-				</label>
 			</div>
 		</div>
 		<div id='machines'>
 		</div>
-		<div id='scripts'></div>
 	</body>
 </html>

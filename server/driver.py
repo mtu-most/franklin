@@ -189,6 +189,7 @@ class Machine: # {{{
 		self.initialized = False
 		self.connected = False
 		self.uuid = config['uuid']
+		self.user_interface = ''
 		self.pin_names = []
 		self.machine = Driver()
 		self.allow_system = allow_system
@@ -751,7 +752,7 @@ class Machine: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		self._broadcast(target, 'globals_update', [self.name, self.profile, len(self.temps), len(self.gpios), self.pin_names, self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.probe_dist, self.probe_offset, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.max_deviation, self.max_v, self.targetx, self.targety, self.targetangle, self.zoffset, self.store_adc, self.park_after_print, self.sleep_after_print, self.cool_after_print, self._mangle_spi(), self.temp_scale_min, self.temp_scale_max, self.probemap, self.connected, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
+		self._broadcast(target, 'globals_update', [self.name, self.profile, len(self.temps), len(self.gpios), self.user_interface, self.pin_names, self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.probe_dist, self.probe_offset, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.max_deviation, self.max_v, self.targetx, self.targety, self.targetangle, self.zoffset, self.store_adc, self.park_after_print, self.sleep_after_print, self.cool_after_print, self._mangle_spi(), self.temp_scale_min, self.temp_scale_max, self.probemap, self.connected, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		if not self.initialized:
@@ -2704,9 +2705,9 @@ class Machine: # {{{
 		message = '[general]\r\n'
 		for t in ('temps', 'gpios'):
 			message += 'num_%s = %d\r\n' % (t, len(getattr(self, t)))
-		message += 'pin_names=%s\r\n' % ','.join(('%d' % p[0]) + p[1] for p in self.pin_names)
-		message += 'unit_name=%s\r\n' % self.unit_name
-		message += 'spi_setup=%s\r\n' % self._mangle_spi()
+		message += 'pin_names = %s\r\n' % ','.join(('%d' % p[0]) + p[1] for p in self.pin_names)
+		message += 'unit_name = %s\r\n' % self.unit_name
+		message += 'spi_setup = %s\r\n' % self._mangle_spi()
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin')])
 		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'timeout')])
 		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v')])
@@ -2716,6 +2717,7 @@ class Machine: # {{{
 			message += t.export_settings()
 		for i, g in enumerate(self.gpios):
 			message += g.export_settings()
+		message += 'user_interface = %s\r\n' % self.user_interface	# Put this last, to keep the file readable.
 		return message
 	# }}}
 	def expert_import_settings(self, settings, filename = None, update = True): # {{{
@@ -2740,7 +2742,7 @@ class Machine: # {{{
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set(), 'follower': set()}
 		keys = {
-				'general': {'num_temps', 'num_gpios', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'},
+				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'},
 				'space': {'type', 'num_axes', 'delta_angle', 'polar_max_r'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
@@ -2804,8 +2806,8 @@ class Machine: # {{{
 						# Don't override hardware-provided names.
 						continue
 					value = [[int(x[0]), x[1:]] for x in value.split(',')]
-				elif 'name' in key:
-					pass
+				elif 'name' in key or key == 'user_interface':
+					pass	# Keep strings as they are.
 				elif key == 'spi_setup':
 					value = self._unmangle_spi(value)
 				elif key.endswith('pin'):
@@ -3132,7 +3134,7 @@ class Machine: # {{{
 	def get_globals(self): # {{{
 		#log('getting globals')
 		ret = {'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('name', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probemap', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'):
+		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probemap', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'):
 			ret[key] = getattr(self, key)
 		return ret
 	# }}}
@@ -3150,7 +3152,7 @@ class Machine: # {{{
 		if 'probemap' in ka:
 			self.probemap = ka.pop('probemap')
 			self._check_probemap()
-		for key in ('unit_name', 'pin_names'):
+		for key in ('unit_name', 'user_interface', 'pin_names'):
 			if key in ka:
 				setattr(self, key, ka.pop(key))
 		if 'spi_setup' in ka:

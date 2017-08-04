@@ -35,24 +35,6 @@ AddEvent('load', function() { // {{{
 	new_tab = document.getElementById('new_label');
 	selected_machine = null;
 	setup();
-	var setupbox = document.getElementById('setupbox');
-	if (document.location.search.length > 0 && document.location.search[0] == '?') {
-		var things = document.location.search.split('&');
-		for (var t = 0; t < things.length; ++t) {
-			var items = things[t].substring(1).split('=');
-			if (items[0] == 'setup') {
-				if (items[1] != '0')
-					setupbox.checked = true;
-				else
-					setupbox.checked = false;
-			}
-		}
-	}
-	var container = document.getElementById('container');
-	if (setupbox.checked)
-		container.RemoveClass('nosetup');
-	else
-		container.AddClass('nosetup');
 	var reading_temps = false;
 	window.AddEvent('keypress', keypress);
 	setInterval(function() {
@@ -501,19 +483,12 @@ function set_name(ui, type, index1, index2, name) { // {{{
 		ui.names[type][index1][index2][i].ClearAll().AddText(name);
 } // }}}
 
-function toggle_setup() { // {{{
-	var e = document.getElementById('setupbox');
-	var c = document.getElementById('container');
-	if (e.checked)
-		c.RemoveClass('nosetup');
-	else
-		c.AddClass('nosetup');
-} // }}}
-
-function toggle_uiconfig() { // {{{
-	var e = document.getElementById('uiconfig');
-	for (var m in machines)
-		machines[m].ui.bin.config(e.checked);
+function toggle_uiconfig(ui) { // {{{
+	// There is only one of those.
+	var c = get_elements(ui, [null, 'uiconfig'])[0].checked;
+	ui.bin.config(c);
+	if (!c)
+		set_value(ui, [null, 'user_interface'], ui.bin.serialize());
 } // }}}
 
 function update_firmwares(ports, firmwares) { // {{{
@@ -684,11 +659,11 @@ function blocked(uuid, reason) { // {{{
 		else
 			e[i].AddClass('hidden');
 	}
-	machines[uuid].ui.update();	// Hide interface parts if applicable.
+	machines[uuid].ui.bin.update();	// Hide interface parts if applicable.
 } // }}}
 
 function message(uuid, msg) { // {{{
-	machines[uuid].ui.update();
+	machines[uuid].ui.bin.update();
 } // }}}
 
 function del_machine(uuid) { // {{{
@@ -711,7 +686,7 @@ function del_port(uuid, port) { // {{{
 
 function ask_confirmation(uuid, id, message) { // {{{
 	update_canvas_and_spans(machines[uuid].ui);
-	machines[uuid].ui.update();
+	machines[uuid].ui.bin.update();
 } // }}}
 
 function queue(uuid) { // {{{
@@ -780,7 +755,13 @@ function audioqueue(uuid) { // {{{
 // Update events(from server). {{{
 function globals_update(uuid) { // {{{
 	var p = machines[uuid].ui;
-	p.uuid.ClearAll().AddText(uuid);
+	p.bin.destroy();
+	var content = ui_build(machines[uuid].user_interface, p);
+	if (content != null)
+		p.bin.set_content(content);
+	var e = get_elements(p, [null, 'uuid']);
+	for (var i = 0; i < e.length; ++i)
+		e[i].ClearAll().AddText(uuid);
 	if (machines[uuid].connected) {
 		machines[uuid].label.AddClass('isconnected');
 		machines[uuid].ui.AddClass('isconnected');
