@@ -495,6 +495,12 @@ function Tabs(data, configuring) {
 		});
 		tab.killbutton.type = 'button';
 		tab.killbutton.style.display = this.configuring ? 'inline' : 'none';
+		tab.hide = function(hidden) {
+			if (this.hidden == hidden)
+				return;
+			this.hidden = hidden;
+			self.update();
+		};
 		this.tabs.push(tab);
 		tab.set_content(content);
 		this.select(this.tabs.length - 1);
@@ -504,6 +510,13 @@ function Tabs(data, configuring) {
 	self.select = function(index) {
 		this.selected = index;
 		this.update();
+	};
+	self.hide = function(hidden) {
+		if (self.hidden == hidden)
+			return;
+		self.hidden = hidden;
+		if (self.parent_bin)
+			self.parent_bin.hide(hidden);
 	};
 	self.update = function() {
 		for (var t = 0; t < this.tabs.length; ++t)
@@ -523,11 +536,27 @@ function Tabs(data, configuring) {
 			if (t == this.selected) {
 				this.tabs[t].titlebox.AddClass('active');
 				this.tabs[t].style.display = '';
+				if (this.configuring) {
+					if (this.selected != this.last_selected) {
+						this.tabs[t].killbutton.style.display = '';
+						var tabinput = this.tabs[t].titlespan.ClearAll().AddElement('input', 'tabinput');
+						tabinput.type = 'text';
+						tabinput.value = this.tabs[t].tabname;
+						tabinput.tab = this.tabs[t];
+						tabinput.AddEvent('change', function() {
+							this.tab.tabname = this.value;
+						});
+						this.last_selected = this.selected;
+					}
+					continue;
+				}
 			}
 			else {
 				this.tabs[t].titlebox.RemoveClass('active');
 				this.tabs[t].style.display = 'none';
 			}
+			this.tabs[t].killbutton.style.display = 'none';
+			this.tabs[t].titlespan.ClearAll().AddText(this.tabs[t].tabname);
 		}
 	};
 	self.destroy = function() {
@@ -553,23 +582,9 @@ function Tabs(data, configuring) {
 		var tabselement = this;
 		this.configuring = configuring;
 		this.plus.style.display = this.configuring ? '' : 'none';
-		for (var t = 0; t < this.tabs.length; ++t) {
-			if (this.configuring) {
-				this.tabs[t].killbutton.style.display = '';
-				var tabinput = this.tabs[t].titlespan.ClearAll().AddElement('input', 'tabinput');
-				tabinput.type = 'text';
-				tabinput.value = this.tabs[t].tabname;
-				tabinput.tab = this.tabs[t];
-				tabinput.AddEvent('change', function() {
-					this.tab.tabname = this.value;
-				});
-			}
-			else {
-				this.tabs[t].killbutton.style.display = 'none';
-				this.tabs[t].titlespan.ClearAll().AddText(this.tabs[t].tabname);
-			}
+		for (var t = 0; t < this.tabs.length; ++t)
 			this.tabs[t].config(configuring);
-		}
+		this.update();
 	};
 	return self;
 }

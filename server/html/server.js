@@ -215,6 +215,7 @@ function _setup_updater() {
 			machines[machine].profile = values[1];
 			var new_num_temps = values[2];
 			var new_num_gpios = values[3];
+			var ui_update = machines[machine].user_interface == values[4];
 			machines[machine].user_interface = values[4];
 			machines[machine].pin_names = values[5];
 			machines[machine].led_pin = values[6];
@@ -275,7 +276,7 @@ function _setup_updater() {
 			}
 			machines[machine].gpios.length = new_num_gpios;
 			machines[machine].num_gpios = new_num_gpios;
-			trigger_update(machine, 'globals_update');
+			trigger_update(machine, 'globals_update', ui_update);
 		},
 		space_update: function(machine, index, values) {
 			machines[machine].spaces[index].name = values[0];

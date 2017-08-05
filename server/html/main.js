@@ -125,8 +125,9 @@ AddEvent('load', function() { // {{{
 					while (ui.machine.temps[t].history.length > ui.temphistory.length)
 						ui.machine.temps[t].history.shift();
 				}
+				var width = canvas[i].width;
 				var x = function(t) {
-					return ((t - cutoff) / (2 * 60 * 1000) * canvas[i].width) / scale;
+					return ((t - cutoff) / (2 * 60 * 1000) * width) / scale;
 				};
 				var y = function(d) {
 					if (isNaN(d))
@@ -635,7 +636,7 @@ function new_machine(uuid) { // {{{
 	machines[uuid].ui.RemoveClass('connected');
 	machines[uuid].label.AddClass('notconnected');
 	machines[uuid].ui.AddClass('notconnected');
-	globals_update(uuid);
+	globals_update(uuid, false);
 	var ports_button = get_elements(machines[uuid].ui, [null, 'ports']);
 	for (var i = 0; i < ports_button.length; ++i) {
 		ports_button[i].ClearAll();
@@ -753,12 +754,14 @@ function audioqueue(uuid) { // {{{
 // }}}
 
 // Update events(from server). {{{
-function globals_update(uuid) { // {{{
+function globals_update(uuid, ui_configure) { // {{{
 	var p = machines[uuid].ui;
-	p.bin.destroy();
-	var content = ui_build(machines[uuid].user_interface, p);
-	if (content != null)
-		p.bin.set_content(content);
+	if (ui_configure && !p.bin.configuring) {
+		p.bin.destroy();
+		var content = ui_build(machines[uuid].user_interface, p);
+		if (content != null)
+			p.bin.set_content(content);
+	}
 	var e = get_elements(p, [null, 'uuid']);
 	for (var i = 0; i < e.length; ++i)
 		e[i].ClearAll().AddText(uuid);
@@ -1358,7 +1361,7 @@ Object.defineProperty(Object.prototype, 'AddMultiple', { // {{{
 			this.appendChild(last);
 			ui.multiples[type].push({table: this, space: [], after: last, all: all != false, create: function(i, arg) { return (i != forbidden && one(self, template, i, arg)) || document.createComment(''); }});
 		}
-		globals_update(ui.machine.uuid);
+		globals_update(ui.machine.uuid, false);
 		return this;
 	}
 }); // }}}

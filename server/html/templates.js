@@ -348,7 +348,7 @@ function Label(machine) {	// {{{
 // }}}
 
 // Machine parts. {{{
-function Top(desc, pos, ui) { // {{{
+function JobControl(desc, pos, ui) { // {{{
 	var ret = Create('div', 'top');
 	ret.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(ui); }).AddText('×').type = 'button';
 	// Jobs. {{{
@@ -380,12 +380,20 @@ function Top(desc, pos, ui) { // {{{
 	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { download_probemap(ui); }).AddText('Download Probemap');
 	b.type = 'button';
 	// }}}
-	// Stop buttons. {{{
-	e = ret.AddElement('div', 'stop');
-	b = e.AddElement('button', 'abort').AddText('Abort').AddEvent('click', function() { ui.machine.call('abort', [], {}); });
+	return [ret, pos];
+}
+// }}}
+
+function Abort(desc, pos, ui) { // {{{
+	var b = e.AddElement('button', 'abort').AddText('Abort').AddEvent('click', function() { ui.machine.call('abort', [], {}); });
 	b.type = 'button';
-	e.AddElement('br');
-	b = e.AddElement('button').AddText('Home').AddEvent('click', function() { ui.machine.call('home', [], {}, function() { update_canvas_and_spans(ui); }); });
+	return [b, pos];
+} // }}}
+
+function Buttons(desc, pos, ui) { // {{{
+	var ret = Create('div', 'top');
+	var e = ret.AddElement('div', 'stop');
+	var b = e.AddElement('button').AddText('Home').AddEvent('click', function() { ui.machine.call('home', [], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
 	b = e.AddElement('button').AddText('Pause').AddEvent('click', function() { ui.machine.call('pause', [true], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
@@ -393,14 +401,30 @@ function Top(desc, pos, ui) { // {{{
 	b.type = 'button';
 	b = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { ui.machine.call('sleep', [], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
-	// }}}
-	return [ret, pos];
-}
-// }}}
+}	// }}}
 
-function Map(desc, pos, ui) { // {{{
+function XYMap(desc, pos, ui) { // {{{
 	var ret = Create('div', 'map');
 	ret.AddClass(make_id(ui, [null, 'map']));
+	// Canvas for xy and for z.
+	var c = ret.AddElement('canvas', 'xymap');
+	c.AddEvent('mousemove', function(e) { return xymove(ui, e); }).AddEvent('mousedown', function(e) { return xydown(ui, e); }).AddEvent('mouseup', function(e) { return xyup(ui, e); });
+	c.AddClass(make_id(ui, [null, 'xymap']));
+	return [ret, pos];
+} // }}}
+
+function ZMap(desc, pos, ui) { // {{{
+	var ret = Create('div', 'map');
+	ret.AddClass(make_id(ui, [null, 'map']));
+	// Canvas for z.
+	var c = ret.AddElement('canvas', 'zmap');
+	c.AddEvent('mousemove', function(e) { return zmove(ui, e); }).AddEvent('mousedown', function(e) { return zdown(ui, e); }).AddEvent('mouseup', function(e) { return zup(ui, e); });
+	c.AddClass(make_id(ui, [null, 'zmap']));
+	return [ret, pos];
+} // }}}
+
+function Position(desc, pos, ui) { // {{{
+	var ret = Create('div');
 	// Current position buttons.
 	var t = ret.Add(make_table(ui).AddMultipleTitles([
 		'',
@@ -431,16 +455,8 @@ function Map(desc, pos, ui) { // {{{
 		b,
 		['Angle:', Float(ui, [null, 'targetangle'], 1, Math.PI / 180, '', function(v) { update_angle(ui, v); }), '°']
 	], ['', '', '', '', '', '']));
-	// Canvas for xy and for z.
-	var c = ret.AddElement('canvas', 'xymap');
-	c.AddEvent('mousemove', function(e) { return xymove(ui, e); }).AddEvent('mousedown', function(e) { return xydown(ui, e); }).AddEvent('mouseup', function(e) { return xyup(ui, e); });
-	c.AddClass(make_id(ui, [null, 'xymap']));
-	c = ret.AddElement('canvas', 'zmap');
-	c.AddEvent('mousemove', function(e) { return zmove(ui, e); }).AddEvent('mousedown', function(e) { return zdown(ui, e); }).AddEvent('mouseup', function(e) { return zup(ui, e); });
-	c.AddClass(make_id(ui, [null, 'zmap']));
 	return [ret, pos];
-}
-// }}}
+} // }}}
 
 function Toolpath(desc, pos, ui) { // {{{
 	var ret = Create('div', 'toolpath');
@@ -549,7 +565,7 @@ function Gpios(desc, pos, ui) { // {{{
 
 function state(desc, pos, data) { // {{{
 	var ret = Create('div', 'message');
-	ret.AddClass(make_id(ret, [null, 'printstate']));
+	ret.AddClass(make_id(data, [null, 'printstate']));
 	ret.update = function() {
 		this.hide(!data.machine.connected);
 	};
@@ -574,12 +590,12 @@ function noconnect_bar(desc, pos, data) { // {{{
 } // }}}
 
 function confirmation(desc, pos, data) { // {{{
-	var self = Create('div', 'message').AddClass(make_id(ret, [null, 'confirm']));
+	var self = Create('div', 'message').AddClass(make_id(data, [null, 'confirm']));
 	self.update = function() {
 		this.ClearAll();
 		if (data.machine.confirmation[0] === null) {
 			this.hide(true);
-			return;
+			return [null, pos];
 		}
 		// Cancel button.
 		var button = this.AddElement('button', 'confirmabort').AddText('Abort').AddEvent('click', function() {
@@ -598,10 +614,10 @@ function confirmation(desc, pos, data) { // {{{
 		});
 		button.type = 'button';
 	};
-	return [ret, pos];
+	return [self, pos];
 } // }}}
 
-function setup_globals(desc, pos, data) { // {{{
+function setup_profile(desc, pos, data) { // {{{
 	var ret = Create('div', 'setup expert');
 	ret.update = function() { this.hide(!get_elements(data, [null, 'setupbox'])[0].checked); };
 	var e = ret.AddElement('div').AddText('Machine UUID:');
@@ -662,20 +678,13 @@ function setup_globals(desc, pos, data) { // {{{
 	e.href = encodeURIComponent(data.machine.name + '-' + data.machine.profile) + '.ini?machine=' + encodeURIComponent(data.machine.uuid);
 	e.title = 'Save settings to disk.';
 	// }}}
-	e = ret.AddElement('div').AddText('Timeout:');
-	e.Add(Float(data, [null, 'timeout'], 0, 60));
-	e.AddText(' min');
-	e = ret.AddElement('div').AddText('After Job Completion:');
-	var l = e.AddElement('label');
-	l.Add(Checkbox(data, [null, 'park_after_print']));
-	l.AddText('Park');
-	l = e.AddElement('label');
-	l.Add(Checkbox(data, [null, 'sleep_after_print']));
-	l.AddText('Sleep');
-	l = e.AddElement('label');
-	l.Add(Checkbox(data, [null, 'cool_after_print']));
-	l.AddText('Cool');
-	e = ret.AddElement('div').AddText('Max Probe Distance:');
+	return [ret, pos];
+} // }}}
+
+function setup_probe(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.update = function() { this.hide(!get_elements(data, [null, 'setupbox'])[0].checked); };
+	var e = ret.AddElement('div').AddText('Max Probe Distance:');
 	e.Add(Float(data, [null, 'probe_dist'], 0, 1));
 	e = ret.AddElement('div').AddText('Probe Border Offset:');
 	e.Add(Float(data, [null, 'probe_offset'], 0, 1));
@@ -683,9 +692,13 @@ function setup_globals(desc, pos, data) { // {{{
 	e = ret.AddElement('div').AddText('Probe Safe Retract Distance:');
 	e.Add(Float(data, [null, 'probe_safe_dist'], 0, 1));
 	e.AddText(' ').Add(add_name(data, 'unit', 0, 0));
-	e = ret.AddElement('div').AddText('SPI setup:');
-	e.Add(Str(data, [null, 'spi_setup']));
-	e = ret.AddElement('div').AddText('Machine Type:');
+	return [ret, pos];
+} // }}}
+
+function setup_hardware(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.update = function() { this.hide(!get_elements(data, [null, 'setupbox'])[0].checked); };
+	var e = ret.AddElement('div').AddText('Machine Type:');
 	var select = e.Add(create_space_type_select());
 	var button = e.AddElement('button').AddText('Set');
 	button.type = 'button';
@@ -707,6 +720,27 @@ function setup_globals(desc, pos, data) { // {{{
 	e.Add(Float(data, [null, 'max_v'], 2, 1));
 	e.AddText(' ').Add(add_name(data, 'unit', 0, 0));
 	e.AddText('/s');
+	return [ret, pos];
+} // }}}
+
+function setup_globals(desc, pos, data) { // {{{
+	var ret = Create('div', 'setup expert');
+	ret.update = function() { this.hide(!get_elements(data, [null, 'setupbox'])[0].checked); };
+	var e = ret.AddElement('div').AddText('Timeout:');
+	e.Add(Float(data, [null, 'timeout'], 0, 60));
+	e.AddText(' min');
+	e = ret.AddElement('div').AddText('After Job Completion:');
+	var l = e.AddElement('label');
+	l.Add(Checkbox(data, [null, 'park_after_print']));
+	l.AddText('Park');
+	l = e.AddElement('label');
+	l.Add(Checkbox(data, [null, 'sleep_after_print']));
+	l.AddText('Sleep');
+	l = e.AddElement('label');
+	l.Add(Checkbox(data, [null, 'cool_after_print']));
+	l.AddText('Cool');
+	e = ret.AddElement('div').AddText('SPI setup:');
+	e.Add(Str(data, [null, 'spi_setup']));
 	return [ret, pos];
 } // }}}
 function setup_cartesian(desc, pos, data) { // {{{
@@ -978,14 +1012,21 @@ function setup_pins(desc, pos, data) { // {{{
 } // }}}
 
 ui_modules = { // {{{
-	Top: Top,
-	Map: Map,
+	Abort: Abort,
+	Buttons: Buttons,
+	'Job Control': JobControl,
+	'XY Map': XYMap,
+	'Z Map': ZMap,
+	Position: Position,
 	Toolpath: Toolpath,
 	Temps: Temps,
 	'Temp Graph': Tempgraph,
 	Multipliers: Multipliers,
 	Gpios: Gpios,
 	'Globals Setup': setup_globals,
+	'Profile Setup': setup_profile,
+	'Probe Setup': setup_probe,
+	'Hardware Setup': setup_hardware,
 	'Cartesian Setup': setup_cartesian,
 	'Axis Setup': setup_axis,
 	'Motor Setup': setup_motor,
@@ -1043,8 +1084,10 @@ function UI(machine) {	// {{{
 	// Content.
 	ret.bin = ret.Add(new Bin(ret, false));
 	ret.bin.style.top = '2em';
-	var ui = ui_build(ret.machine.user_interface || '(Top:)', ret);
-	ret.bin.set_content(ui);
+	setTimeout(function() {
+		var ui = ui_build(ret.machine.user_interface || '(Profile Setup:)', ret);
+		ret.bin.set_content(ui);
+	}, 0);
 
 	return ret;
 }
