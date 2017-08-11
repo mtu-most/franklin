@@ -758,7 +758,7 @@ function globals_update(uuid, ui_configure) { // {{{
 	var p = machines[uuid].ui;
 	if (ui_configure && !p.bin.configuring) {
 		p.bin.destroy();
-		var content = ui_build(machines[uuid].user_interface, p);
+		var content = ui_build(machines[uuid].user_interface, p.bin);
 		if (content != null)
 			p.bin.set_content(content);
 	}
@@ -1623,11 +1623,10 @@ function redraw_canvas(ui) { // {{{
 				break;
 			} // }}}
 			// Prepare canvas. {{{
-			//var factor = Math.sqrt(machinewidth * machinewidth + machineheight * machineheight);
 			var factor = Math.max(machinewidth, machineheight);
-			canvas.style.height = canvas.clientWidth + 'px';
+			var sizebase = Math.min(canvas.clientWidth, canvas.clientHeight);
 			canvas.width = canvas.clientWidth;
-			canvas.height = canvas.clientWidth;
+			canvas.height = canvas.clientHeight;
 			// }}}
 
 			var b = ui.bbox;
@@ -1637,9 +1636,9 @@ function redraw_canvas(ui) { // {{{
 			// Clear canvas.
 			c.clearRect(0, 0, canvas.width, canvas.width);
 
-			c.translate(canvas.width / 2, canvas.width / 2);
-			c.scale(canvas.width / factor, -canvas.width / factor);
-			c.lineWidth = 1.5 * factor / canvas.width;
+			c.translate(canvas.width / 2, canvas.height / 2);
+			c.scale(sizebase / factor, -sizebase / factor);
+			c.lineWidth = 1.5 * factor / sizebase;
 			c.translate(-center[0], -center[1]);
 			// }}}
 
@@ -1801,10 +1800,9 @@ function redraw_canvas(ui) { // {{{
 		for (canvas_nr = 0; canvas_nr < zcanvasses.length; ++canvas_nr) {
 			zcanvas = zcanvasses[canvas_nr];
 			var zc = zcanvas.getContext('2d');
-			zcanvas.style.height = zcanvas.clientWidth + 'px';
 			var zratio = .15 / .85;
-			zcanvas.width = zcanvas.clientWidth * zratio;
-			zcanvas.height = zcanvas.clientWidth;
+			zcanvas.width = zcanvas.clientWidth;
+			zcanvas.height = zcanvas.clientHeight;
 			// Z graph.
 			zc.clearRect(0, 0, zcanvas.width, zcanvas.height);
 			var d = (zaxis.max - zaxis.min) * .03;

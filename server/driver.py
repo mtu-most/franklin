@@ -189,7 +189,7 @@ class Machine: # {{{
 		self.initialized = False
 		self.connected = False
 		self.uuid = config['uuid']
-		self.user_interface = '{Dv23p(No Connection:){dv50p{dv50p{dv50p{Dv28%[2:Profile:(Profile Setup:)Hardware:(Hardware Setup:)*Probe:(Probe Setup:)Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dh50%(Cartesian Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)Pins:(Pin Setup:)]{Dh50%{Dv97p(Position:){Dh50%(XY Map:)(Z Map:)}}{Dv288p{Dv158p(Temps:)(Multipliers:)}(Temp Graph:)}}}(Confirmation:)}(Message:)}(State:)}}'
+		self.user_interface = '{Dv23p(No Connection:){dv50p{dv50p{dv50p[0:Controls:{Dh50%{Dv97p(Position:){Dh50%(XY Map:)(Z Map:)}}{Dv288p{Dv158p(Temps:)(Multipliers:)}(Temp Graph:)}}Setup:[2:Profile:(Profile Setup:)Hardware:(Hardware Setup:)*Probe:(Probe Setup:)Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dh50%(Cartesian Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)Pins:(Pin Setup:)]](Confirmation:)}(Message:)}(State:)}}'
 		self.pin_names = []
 		self.machine = Driver()
 		self.allow_system = allow_system

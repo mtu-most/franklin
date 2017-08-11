@@ -46,15 +46,15 @@ DOM:
 }
 */
 
-function ui_build(string, data, pos) {
+function ui_build(string, top, pos) {
 	if (pos === undefined) {
-		return ui_build(string, data, 0)[0];
+		return ui_build(string, top, 0)[0];
 	}
 	var ret, sub;
 	if (string[pos] == '{') {
 		// Split: {AB[dD][hv][0-9.]+[p%]}
 		pos += 1;
-		ret = new Split(data, false);
+		ret = new Split(top, false);
 		// Settings.
 		if (string[pos++] == 'd')
 			ret.dominant_first = false;
@@ -66,11 +66,11 @@ function ui_build(string, data, pos) {
 		if (string[pos++] == 'p')
 			ret.pixels = true;
 		// First child.
-		sub = ui_build(string, data, pos);
+		sub = ui_build(string, top, pos);
 		ret.first.set_content(sub[0]);
 		pos = sub[1];
 		// Second child.
-		sub = ui_build(string, data, pos);
+		sub = ui_build(string, top, pos);
 		ret.second.set_content(sub[0]);
 		pos = sub[1];
 		if (string[pos++] != '}')
@@ -79,7 +79,7 @@ function ui_build(string, data, pos) {
 	}
 	if (string[pos] == '[') {
 		pos += 1;
-		ret = new Tabs(data, false);
+		ret = new Tabs(top, false);
 		var t = 0;
 		var selectedpos = string.indexOf(':', pos);
 		var selected = Number(string.substr(pos, selectedpos - pos));
@@ -96,7 +96,7 @@ function ui_build(string, data, pos) {
 			var namepos = string.indexOf(':', pos);
 			var tabname = string.substr(pos, namepos - pos);
 			pos = namepos + 1;
-			sub = ui_build(string, data, pos);
+			sub = ui_build(string, top, pos);
 			ret.add_tab(sub[0]);
 			ret.tabs[t].tabname = decodeURIComponent(tabname);
 			pos = sub[1];
@@ -115,7 +115,7 @@ function ui_build(string, data, pos) {
 		if (string.substr(pos, n.length + 1) != n + ':')
 			continue;
 		pos += n.length + 1;
-		sub = ui_modules[n](string, pos, data, false);
+		sub = ui_modules[n](string, pos, top, false);
 		sub[0].name = n;
 		pos = sub[1];
 		if (string[pos++] != ')')
@@ -127,11 +127,9 @@ function ui_build(string, data, pos) {
 }
 
 // A Bin is a container that can hold any type of content.
-function Bin(data, configuring) {
+function Bin(top, configuring) {
 	var self = Create('div', 'Bin');
-	self.data = data;
-	if (!data)
-		console.error(1);
+	self.top = top;
 	self.style.position = 'absolute';
 	self.style.left = '0px';
 	self.style.right = '0px';
@@ -157,7 +155,7 @@ function Bin(data, configuring) {
 			self.add_tabs();
 		else {
 			self.destroy();
-			var c = ui_modules[target]('', 0, self.data, self.configuring)[0];
+			var c = ui_modules[target]('', 0, self.top, self.configuring)[0];
 			c.name = target;
 			self.set_content(c);
 		}
@@ -193,10 +191,16 @@ function Bin(data, configuring) {
 	};
 	self.config = function(configuring) {
 		this.configuring = configuring;
-		if (configuring)
+		if (configuring) {
 			this.update();
-		else
+			if (this === this.top)
+				this.splitcontrol.style.display = '';
+		}
+		else {
 			this.control.style.display = 'none';
+			if (this === this.top && this.splitcontrol)
+				this.splitcontrol.style.display = 'none';
+		}
 		if (this.content && this.content.config)
 			this.content.config(configuring);
 		this.update();
@@ -205,7 +209,7 @@ function Bin(data, configuring) {
 		var content = this.content;
 		var copy = this.copy();
 		this.removeChild(content);
-		this.set_content(new Split(this.data, this.configuring));
+		this.set_content(new Split(this.top, this.configuring));
 		this.content.first.set_content(content);
 		this.content.second.set_content(copy);
 		this.update();
@@ -213,7 +217,7 @@ function Bin(data, configuring) {
 	self.add_tabs = function() {
 		var content = this.content;
 		this.removeChild(content);
-		this.set_content(new Tabs(this.data, this.configuring));
+		this.set_content(new Tabs(this.top, this.configuring));
 		this.content.add_tab(content);
 		this.update();
 	};
@@ -225,7 +229,7 @@ function Bin(data, configuring) {
 	self.copy = function() {
 		if (this.content.copy)
 			return this.content.copy();
-		var ret = ui_modules[this.content.name](this.serialize(), 0, this.data, this.configuring)[0];
+		var ret = ui_modules[this.content.name](this.serialize(), 0, this.top, this.configuring)[0];
 		ret.name = this.content.name;
 		return ret;
 	};
@@ -234,122 +238,26 @@ function Bin(data, configuring) {
 }
 
 // A Split is a special content type that holds two bins, and provides a split view at both.
-var _Split_id = 0;
-function Split(data, configuring) {
+function Split(top, configuring) {
 	var self = Create('div', 'Split');
 	self.name = 'Split';
-	self.data = data;
+	self.top = top;
 	self.configuring = configuring ? true : false; // Treat undefined as false.
-	self.control = self.AddElement('div', 'Control'); // {
-	self.control.style.zIndex = 10;
-	self.control.style.display = configuring ? '' : 'none';
-	self.control.style.position = 'absolute';
-	self.control.style.top = '0px';
-	self.control.style.left = '0px';
-	self.control_x = 0;
-	self.control_y = 0;
-	self.control.style.background = 'yellow';
-	self.control.style.border = '2px solid black';
-	var d = self.control.AddElement('div').AddText('Split Controls');
-	d.style.textAlign = 'center';
-	d.style.background = '#cc0';
-	d = self.control.AddElement('div');
-	d.style.textAlign = 'center';
-	self.x = NaN;
-	self.y = NaN;
-	d.AddEvent('mousedown', function(event) {
-		self.x = event.pageX;
-		self.y = event.pageY;
-		self.pos = [self.control_x, self.control_y];
-		event.preventDefault();
-	});
-	d.AddEvent('mouseup', function(event) {
-		self.x = NaN;
-		self.pos = [self.control.style.left, self.control.style.top];
-		event.preventDefault();
-	});
-	d.AddEvent('mousemove', function(event) {
-		if (isNaN(self.x) || !(event.buttons & 1)) {
-			self.x = NaN;
-			return;
-		}
-		self.control_x = self.pos[0] + event.pageX - self.x;
-		self.control_y = self.pos[1] + event.pageY - self.y;
-		self.control.style.left = self.control_x + 'px';
-		self.control.style.top = self.control_y + 'px';
-		event.preventDefault();
-	});
-	self.radio_v_first = d.AddElement('input');
-	self.radio_v_first.type = 'radio';
-	self.radio_v_first.name = 'Split' + _Split_id;
-	self.radio_v_first.AddEvent('click', function() {
-		self.horizontal = false;
-		self.dominant_first = true;
-		self.update();
-	});
-	self.radio_h_first = self.control.AddElement('input');
-	self.radio_h_first.type = 'radio';
-	self.radio_h_first.style.float = 'left';
-	self.radio_h_first.name = 'Split' + _Split_id;
-	self.radio_h_first.AddEvent('click', function() {
-		self.horizontal = true;
-		self.dominant_first = true;
-		self.update();
-	});
-	self.radio_h_second = self.control.AddElement('input');
-	self.radio_h_second.type = 'radio';
-	self.radio_h_second.style.float = 'right';
-	self.radio_h_second.name = 'Split' + _Split_id;
-	self.radio_h_second.AddEvent('click', function() {
-		self.horizontal = true;
-		self.dominant_first = false;
-		self.update();
-	});
-	d = self.control.AddElement('div');
-	d.style.textAlign = 'center';
-	d.style.clear = 'both';
-	self.radio_v_second = d.AddElement('input');
-	self.radio_v_second.type = 'radio';
-	self.radio_v_second.name = 'Split' + _Split_id;
-	self.radio_v_second.AddEvent('click', function() {
-		self.horizontal = false;
-		self.dominant_first = false;
-		self.update();
-	});
-	d = self.control.AddElement('div');
-	self.input_value = d.AddElement('input');
-	self.input_value.style.width = '5em';
-	self.input_value.type = 'number';
-	self.input_value.min = 0;
-	self.input_value.AddEvent('change', function() {
-		self.value = Number(this.value);
-		self.update();
-	});
-	self.type_select = d.AddElement('select');
-	self.type_select.AddElement('option').AddText('px').value = 'p';
-	self.type_select.AddElement('option').AddText('%').value = '%';
-	self.type_select.AddEvent('change', function() {
-		self.pixels = this.value != '%';
-		self.update();
-	});
-	var button = self.control.AddElement('button').AddText('Remove Split').AddEvent('click', function() {
-		var content = self.first.content;
-		self.first.content = {};
-		self.first.removeChild(content);
-		self.destroy();
-		self.parent_bin.set_content(content);
-		self.parent_bin.update();
-	});
-	button.type = 'button';
-	button.style.width = '100%';
-	_Split_id += 1;
-	// }
 	self.dominant_first = true;
 	self.horizontal = true;
 	self.pixels = false;
 	self.value = 50;
-	self.first = self.Add(new Bin(data, self.configuring));
-	self.second = self.Add(new Bin(data, self.configuring));
+	self.first = self.Add(new Bin(top, self.configuring));
+	self.second = self.Add(new Bin(top, self.configuring));
+	self.controldiv = self.AddElement('div');
+	self.control = self.controldiv.AddElement('input');
+	self.controldiv.style.position = 'absolute';
+	self.control.type = 'radio';
+	self.control.name = 'ActiveSplit' + top.object_id;
+	self.control.AddEvent('click', function() {
+		top.active_split = self;
+		self.update();
+	});
 	self.hide_first = false;
 	self.hide_second = false;
 	var hide = function(hidden) {
@@ -373,10 +281,9 @@ function Split(data, configuring) {
 		this.first.update();
 		this.second.update();
 		if (!this.configuring && this.hide_first && this.hide_second) {
-			this.control.style.display = 'none';
+			this.controldiv.style.display = 'none';
 			return;
 		}
-		this.control.style.display = this.configuring ? '' : 'none';
 		var clear = function(target) {
 			target.style.position = 'absolute';
 			target.style.left = '0px';
@@ -400,32 +307,59 @@ function Split(data, configuring) {
 		}
 		this.first.style.display = '';
 		this.second.style.display = '';
-		this.input_value.value = this.value;
-		this.type_select.selectedIndex = this.pixels ? 0 : 1;
+		if (top.active_split === this) {
+			top.split_input.value = this.value;
+			top.split_type_select.selectedIndex = this.pixels ? 0 : 1;
+		}
 		var attr = this.horizontal ? ['left', 'right', 'width'] : ['top', 'bottom', 'height'];
 		var unit = this.pixels ? 'px' : '%';
 		if (this.dominant_first) {
-			if (this.horizontal)
-				this.radio_h_first.checked = true;
-			else
-				this.radio_v_first.checked = true;
+			if (top.active_split === this) {
+				if (this.horizontal)
+					top.radio_h_first.checked = true;
+				else
+					top.radio_v_first.checked = true;
+			}
 			this.first.style[attr[2]] = this.value + unit;
 			this.first.style[attr[1]] = '';
 			this.second.style[attr[0]] = this.value + unit;
 		}
 		else {
-			if (this.horizontal)
-				this.radio_h_second.checked = true;
-			else
-				this.radio_v_second.checked = true;
+			if (top.active_split === this) {
+				if (this.horizontal)
+					top.radio_h_second.checked = true;
+				else
+					top.radio_v_second.checked = true;
+			}
 			this.first.style[attr[1]] = this.value + unit;
 			this.second.style[attr[2]] = this.value + unit;
 			this.second.style[attr[0]] = '';
+		}
+		if (this.configuring) {
+			this.controldiv.style.display = '';
+			var nonzero = function(value) { return value == '0px' ? '' : value; };
+			if (this.horizontal) {
+				this.controldiv.style.top = '50%';
+				this.controldiv.style.bottom = '';
+				this.controldiv.style.left = nonzero(this.second.style.left);
+				this.controldiv.style.right = nonzero(this.second.style.right);
+			}
+			else {
+				this.controldiv.style.top = nonzero(this.second.style.top);
+				this.controldiv.style.bottom = nonzero(this.second.style.bottom);
+				this.controldiv.style.left = '50%';
+				this.controldiv.style.right = '';
+			}
+		}
+		else {
+			this.controldiv.style.display = 'none';
 		}
 	};
 	self.destroy = function() {
 		this.first.destroy();
 		this.second.destroy();
+		if (top.active_split === this)
+			top.active_split = null;
 	};
 	self.serialize = function() {
 		return '{' +
@@ -437,7 +371,7 @@ function Split(data, configuring) {
 			'}';
 	};
 	self.copy = function() {
-		var ret = new Split(this.data, this.configuring);
+		var ret = new Split(this.top, this.configuring);
 		ret.first.set_content(this.first.copy());
 		ret.second.set_content(this.second.copy());
 		return ret;
@@ -451,10 +385,10 @@ function Split(data, configuring) {
 	return self;
 }
 
-function Tabs(data, configuring) {
+function Tabs(top, configuring) {
 	var self = Create('div', 'Tabs');
 	self.name = 'Tabs';
-	self.data = data;
+	self.top = top;
 	self.configuring = configuring ? true : false; // Treat undefined as false.
 	self.bar = self.AddElement('div');
 	self.bar.style.position = 'absolute';
@@ -469,7 +403,7 @@ function Tabs(data, configuring) {
 	self.tabs = [];
 	self.selected = -1;
 	self.add_tab = function(content) {
-		var tab = this.Add(new Bin(this.data, this.configuring));
+		var tab = this.Add(new Bin(this.top, this.configuring));
 		tab.style.position = 'absolute';
 		tab.style.width = '100%';
 		tab.style.bottom = '0px';
@@ -512,6 +446,7 @@ function Tabs(data, configuring) {
 		this.update();
 	};
 	self.hide = function(hidden) {
+		console.error('hide tabs', hidden);
 		if (self.hidden == hidden)
 			return;
 		self.hidden = hidden;
@@ -573,7 +508,7 @@ function Tabs(data, configuring) {
 		return ret + ']';
 	};
 	self.copy = function() {
-		var ret = new Tabs(this.data, this.configuring);
+		var ret = new Tabs(this.top, this.configuring);
 		for (var t = 0; t < this.tabs.length; ++t)
 			ret.add_tab(this.tabs[t].copy());
 		return ret;
@@ -587,6 +522,139 @@ function Tabs(data, configuring) {
 		this.update();
 	};
 	return self;
+}
+
+var _UI_id = 0;
+function UI_setup(bin_parent, content, data) {
+	var bin = bin_parent.Add(new Bin(null, false));
+	bin.top = bin;
+	bin.data = data;
+	bin.object_id = _UI_id;
+	_UI_id += 1;
+	if (typeof content == 'string')
+		content = ui_build(content, bin);
+	bin.set_content(content);
+	bin.active_split = null;
+	bin.splitcontrol = bin.AddElement('div', 'SplitControl'); // {
+	bin.splitcontrol.style.zIndex = 10;
+	bin.splitcontrol.style.display = 'none';
+	bin.splitcontrol.style.position = 'absolute';
+	bin.splitcontrol.style.top = '0px';
+	bin.splitcontrol.style.left = '0px';
+	bin.splitcontrol.control_x = 0;
+	bin.splitcontrol.control_y = 0;
+	bin.splitcontrol.style.background = 'yellow';
+	bin.splitcontrol.style.border = '2px solid black';
+	var d = bin.splitcontrol.AddElement('div').AddText('Split Controls');
+	d.style.textAlign = 'center';
+	d.style.background = '#cc0';
+	d = bin.splitcontrol.AddElement('div');
+	d.style.textAlign = 'center';
+	bin.splitcontrol.x = NaN;
+	bin.splitcontrol.y = NaN;
+	d.AddEvent('mousedown', function(event) {
+		bin.splitcontrol.x = event.pageX;
+		bin.splitcontrol.y = event.pageY;
+		bin.splitcontrol.pos = [bin.splitcontrol.control_x, bin.splitcontrol.control_y];
+		event.preventDefault();
+	});
+	bin.AddEvent('mouseup', function(event) {
+		if (isNaN(bin.splitcontrol.x))
+			return;
+		bin.splitcontrol.x = NaN;
+		bin.splitcontrol.pos = [bin.splitcontrol.style.left, bin.splitcontrol.style.top];
+		event.preventDefault();
+	});
+	bin.AddEvent('mousemove', function(event) {
+		if (isNaN(bin.splitcontrol.x) || !(event.buttons & 1)) {
+			bin.splitcontrol.x = NaN;
+			return;
+		}
+		bin.splitcontrol.control_x = bin.splitcontrol.pos[0] + event.pageX - bin.splitcontrol.x;
+		bin.splitcontrol.control_y = bin.splitcontrol.pos[1] + event.pageY - bin.splitcontrol.y;
+		bin.splitcontrol.style.left = bin.splitcontrol.control_x + 'px';
+		bin.splitcontrol.style.top = bin.splitcontrol.control_y + 'px';
+		event.preventDefault();
+	});
+	bin.radio_v_first = d.AddElement('input');
+	bin.radio_v_first.type = 'radio';
+	bin.radio_v_first.name = 'SplitControl' + bin.object_id;
+	bin.radio_v_first.AddEvent('click', function() {
+		if (bin.active_split === null)
+			return;
+		bin.active_split.horizontal = false;
+		bin.active_split.dominant_first = true;
+		bin.active_split.update();
+	});
+	bin.radio_h_first = bin.splitcontrol.AddElement('input');
+	bin.radio_h_first.type = 'radio';
+	bin.radio_h_first.style.float = 'left';
+	bin.radio_h_first.name = 'SplitControl' + bin.object_id;
+	bin.radio_h_first.AddEvent('click', function() {
+		if (bin.active_split === null)
+			return;
+		bin.active_split.horizontal = true;
+		bin.active_split.dominant_first = true;
+		bin.active_split.update();
+	});
+	bin.radio_h_second = bin.splitcontrol.AddElement('input');
+	bin.radio_h_second.type = 'radio';
+	bin.radio_h_second.style.float = 'right';
+	bin.radio_h_second.name = 'SplitControl' + bin.object_id;
+	bin.radio_h_second.AddEvent('click', function() {
+		if (bin.active_split === null)
+			return;
+		bin.active_split.horizontal = true;
+		bin.active_split.dominant_first = false;
+		bin.active_split.update();
+	});
+	d = bin.splitcontrol.AddElement('div');
+	d.style.textAlign = 'center';
+	d.style.clear = 'both';
+	bin.radio_v_second = d.AddElement('input');
+	bin.radio_v_second.type = 'radio';
+	bin.radio_v_second.name = 'SplitControl' + bin.object_id;
+	bin.radio_v_second.AddEvent('click', function() {
+		if (bin.active_split === null)
+			return;
+		bin.active_split.horizontal = false;
+		bin.active_split.dominant_first = false;
+		bin.active_split.update();
+	});
+	d = bin.splitcontrol.AddElement('div');
+	bin.split_input = d.AddElement('input');
+	bin.split_input.style.width = '5em';
+	bin.split_input.type = 'number';
+	bin.split_input.min = 0;
+	bin.split_input.AddEvent('change', function() {
+		if (bin.active_split === null)
+			return;
+		bin.active_split.value = Number(this.value);
+		bin.active_split.update();
+	});
+	bin.split_type_select = d.AddElement('select');
+	bin.split_type_select.AddElement('option').AddText('px').value = 'p';
+	bin.split_type_select.AddElement('option').AddText('%').value = '%';
+	bin.split_type_select.AddEvent('change', function() {
+		if (bin.active_split === null)
+			return;
+		bin.active_split.pixels = this.value != '%';
+		bin.active_split.update();
+	});
+	var button = bin.splitcontrol.AddElement('button').AddText('Remove Split').AddEvent('click', function() {
+		if (bin.active_split === null)
+			return;
+		var content = bin.active_split.first.content;
+		bin.active_split.first.content = {};
+		bin.active_split.first.removeChild(content);
+		bin.active_split.destroy();
+		bin.active_split.parent_bin.set_content(content);
+		bin.active_split.parent_bin.update();
+	});
+	button.type = 'button';
+	button.style.width = '100%';
+	// }
+	return bin;
 }
 
 /*

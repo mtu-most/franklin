@@ -224,7 +224,7 @@ body.printing {
 }
 
 .jobbuttons {
-	width: 30%;
+	width: 100%;
 }
 
 .jobs, .jobbuttons, .queue1 {
@@ -242,14 +242,12 @@ button.abort {
 }
 
 .map, .toolpath {
-	clear: left;
-	float: left;
-	width: 50%;
+	width: 100%;
+	height: 100%;
 }
 
 .multipliers, .gpios, .temp {
-	clear: right;
-	float: right;
+	width: 100%;
 }
 
 .xymap {
