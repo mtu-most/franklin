@@ -1099,7 +1099,7 @@ ui_modules = { // {{{
 	Message: message,
 	'No Connection': noconnect_bar,
 	Confirmation: confirmation,
-	'ADC reading': ADCread,
+	'ADC reading': ADCread
 }; // }}}
 
 function UI(machine) {	// {{{
