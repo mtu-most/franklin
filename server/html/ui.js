@@ -143,8 +143,12 @@ function Bin(top, configuring) {
 	self.control.style.bottom = '0px';
 	self.control.style.background = 'yellow';
 	self.content_selector = self.control.AddElement('select');
+	var sorted_names = [];
 	for (var m in ui_modules)
-		self.content_selector.AddElement('option').AddText(m).value = m;
+		sorted_names.push(m);
+	sorted_names.sort();
+	for (var m = 0; m < sorted_names.length; ++m)
+		self.content_selector.AddElement('option').AddText(sorted_names[m]).value = sorted_names[m];
 	self.content_selector.AddElement('option').AddText('Add Split').value = 'Split';
 	self.content_selector.AddElement('option').AddText('Add Tabs').value = 'Tabs';
 	self.content_selector.AddEvent('change', function() {
@@ -531,11 +535,8 @@ function UI_setup(bin_parent, content, data) {
 	bin.data = data;
 	bin.object_id = _UI_id;
 	_UI_id += 1;
-	if (typeof content == 'string')
-		content = ui_build(content, bin);
-	bin.set_content(content);
 	bin.active_split = null;
-	bin.splitcontrol = bin.AddElement('div', 'SplitControl'); // {
+	bin.splitcontrol = Create('div', 'SplitControl'); // {
 	bin.splitcontrol.style.zIndex = 10;
 	bin.splitcontrol.style.display = 'none';
 	bin.splitcontrol.style.position = 'absolute';
@@ -644,16 +645,28 @@ function UI_setup(bin_parent, content, data) {
 	var button = bin.splitcontrol.AddElement('button').AddText('Remove Split').AddEvent('click', function() {
 		if (bin.active_split === null)
 			return;
-		var content = bin.active_split.first.content;
-		bin.active_split.first.content = {};
-		bin.active_split.first.removeChild(content);
-		bin.active_split.destroy();
-		bin.active_split.parent_bin.set_content(content);
-		bin.active_split.parent_bin.update();
+		var active = bin.active_split;
+		var content = active.first.content;
+		active.first.content = {};
+		active.first.removeChild(content);
+		active.destroy();
+		active.parent_bin.set_content(content);
+		active.parent_bin.update();
+	});
+	button.type = 'button';
+	button.style.width = '100%';
+	button = bin.splitcontrol.AddElement('button').AddText('Add Split').AddEvent('click', function() {
+		if (bin.active_split === null)
+			return;
+		bin.active_split.parent_bin.add_split();
 	});
 	button.type = 'button';
 	button.style.width = '100%';
 	// }
+	if (typeof content == 'string')
+		content = ui_build(content, bin);
+	bin.set_content(content);
+	bin.Add(bin.splitcontrol);
 	return bin;
 }
 

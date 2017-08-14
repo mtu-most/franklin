@@ -59,16 +59,20 @@ function Name(ui, type, num) { // {{{
 } // }}}
 
 function Pin(ui, title, obj, type) { // {{{
+	var value = get_value(ui, obj);
+	var pin = value & 0xff;
 	var pinselect = Create('select', 'pinselect');
 	pinselect.AddClass(make_id(ui, obj));
 	pinselect.obj = obj;
-	pinrange(ui, type, pinselect);
+	pinrange(ui, type, pinselect, pin);
 	pinselect.can_invert = Boolean(type & 7);
 	var validlabel = Create('label');
 	var validinput = validlabel.AddElement('input');
 	validlabel.AddText('Valid');
 	validinput.type = 'checkbox';
 	validinput.AddClass(make_id(ui, obj, 'valid'));
+	if (value & 0x100)
+		validinput.checked = true;
 	var inverts;
 	if (pinselect.can_invert) {
 		var invertedlabel = Create('label');
@@ -77,6 +81,8 @@ function Pin(ui, title, obj, type) { // {{{
 		invertedinput.type = 'checkbox';
 		invertedinput.AddClass(make_id(ui, obj, 'inverted'));
 		inverts = [invertedlabel];
+		if (value & 0x200)
+			invertedinput.checked = true;
 	}
 	else
 		inverts = [];
@@ -102,6 +108,12 @@ function Float(ui, obj, digits, factor, className, set) { // {{{
 	input.set = set;
 	input.ui = ui;
 	input.AddEvent('keydown', function(event) { floatkey(event, this); });
+	try {
+		span.ClearAll().AddText((get_value(ui, obj) / span.factor).toFixed(span.digits));
+	}
+	catch (e) {
+		// Ignore errors.
+	}
 	return [input, span];
 } // }}}
 
@@ -182,6 +194,8 @@ function Id(ui, obj) { // {{{
 
 // Space. {{{
 function Extruder(ui, space, axis) {
+	if (space != 1)
+		return null;
 	var e = ['extruder_dx', 'extruder_dy', 'extruder_dz'];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
@@ -192,6 +206,8 @@ function Extruder(ui, space, axis) {
 }
 
 function Follower(ui, space, motor) {
+	if (space != 2)
+		return null;
 	var f = ['follower_space', 'follower_motor'];
 	for (var i = 0; i < f.length; ++i) {
 		var div = Create('div');
@@ -206,6 +222,8 @@ function Cartesian(ui, num) {
 }
 
 function Delta(ui, space, motor) {
+	if (space != 0)
+		return null;
 	var e = [['delta_axis_min', 1], ['delta_axis_max', 1], ['delta_rodlength', 3], ['delta_radius', 3]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
@@ -216,18 +234,24 @@ function Delta(ui, space, motor) {
 }
 
 function Delta_space(ui, num) {
+	if (num != 0)
+		return null;
 	var div = Create('div');
 	div.Add(Float(ui, [['space', num], 'delta_angle'], 2, Math.PI / 180));
 	return make_tablerow(ui, space_name(ui, num), [div], ['rowtitle1'], undefined, TYPE_DELTA, num);
 }
 
 function Polar_space(ui, num) {
+	if (num != 0)
+		return null;
 	var div = Create('div');
 	div.Add(Float(ui, [['space', num], 'polar_max_r'], 1, 1));
 	return make_tablerow(ui, space_name(ui, num), [div], ['rowtitle1'], undefined, TYPE_POLAR, num);
 }
 
 function Axis(ui, space, axis) {
+	if (space != 0 && axis === null)
+		return null;
 	var e = [Name(ui, 'axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['min', 1, 1], ['max', 1, 1], ['home_pos2', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
@@ -352,15 +376,10 @@ function JobControl(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'top');
 	ret.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(ui); }).AddText('×').type = 'button';
-	// Jobs. {{{
 	e = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(ui); });
 	e.AddClass(make_id(ui, [null, 'queue']));
-	// }}}
-	// Jobbuttons. {{{
 	e = ret.AddElement('div', 'jobbuttons');
 	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode', function() { return queue_deselect(ui); }));
-	e.AddElement('br');
-	e.Add(File(ui, [null, 'probe_add', 'probe_add'], 'probe_add', 'Upload Probemap', '.map'));
 	e.AddElement('br', 'benjamin');
 	e.Add(File(ui, [null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav', function() { return queue_deselect(ui); }), 'benjamin');
 	e.AddElement('br', 'benjamin');
@@ -372,15 +391,22 @@ function JobControl(desc, pos, top) { // {{{
 	e.AddElement('br');
 	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_run(ui); }).AddText('Run selected job');
 	b.type = 'button';
-	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { probe(ui); }).AddText('Probe');
+	return [ret, pos];
+}
+// }}}
+
+function ProbeControl(desc, pos, top) { // {{{
+	var ui = top.data;
+	var ret = Create('div', 'top');
+	ret.Add(File(ui, [null, 'probe_add', 'probe_add'], 'probe_add', 'Upload Probemap', '.map'));
+	b = ret.AddElement('button', 'jobbutton').AddEvent('click', function() { probe(ui); }).AddText('Probe');
 	b.AddClass(make_id(ui, [null, 'probe']));
 	b.type = 'button';
-	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { del_probe(ui); }).AddText('Delete Probemap');
+	b = ret.AddElement('button', 'jobbutton').AddEvent('click', function() { del_probe(ui); }).AddText('Delete Probemap');
 	b.AddClass(make_id(ui, [null, 'delprobe']));
 	b.type = 'button';
-	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { download_probemap(ui); }).AddText('Download Probemap');
+	b = ret.AddElement('button', 'jobbutton').AddEvent('click', function() { download_probemap(ui); }).AddText('Download Probemap');
 	b.type = 'button';
-	// }}}
 	return [ret, pos];
 }
 // }}}
@@ -394,16 +420,16 @@ function Abort(desc, pos, top) { // {{{
 
 function Buttons(desc, pos, top) { // {{{
 	var ui = top.data;
-	var ret = Create('div', 'top');
-	var e = ret.AddElement('div', 'stop');
-	var b = e.AddElement('button').AddText('Home').AddEvent('click', function() { ui.machine.call('home', [], {}, function() { update_canvas_and_spans(ui); }); });
+	var ret = Create('div', 'buttons');
+	var b = ret.AddElement('button').AddText('Home').AddEvent('click', function() { ui.machine.call('home', [], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
-	b = e.AddElement('button').AddText('Pause').AddEvent('click', function() { ui.machine.call('pause', [true], {}, function() { update_canvas_and_spans(ui); }); });
+	b = ret.AddElement('button').AddText('Sleep').AddEvent('click', function() { ui.machine.call('sleep', [], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
-	b = e.AddElement('button').AddText('Resume').AddEvent('click', function() { ui.machine.call('pause', [false], {}); });
+	b = ret.AddElement('button').AddText('Pause').AddEvent('click', function() { ui.machine.call('pause', [true], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
-	b = e.AddElement('button').AddText('Sleep').AddEvent('click', function() { ui.machine.call('sleep', [], {}, function() { update_canvas_and_spans(ui); }); });
+	b = ret.AddElement('button').AddText('Resume').AddEvent('click', function() { ui.machine.call('pause', [false], {}); });
 	b.type = 'button';
+	return [ret, pos];
 }	// }}}
 
 function XYMap(desc, pos, top) { // {{{
@@ -719,13 +745,6 @@ function setup_probe(desc, pos, top) { // {{{
 function setup_hardware(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
-	var e = ret.AddElement('div').AddText('Machine Type:');
-	var select = e.Add(create_space_type_select());
-	var button = e.AddElement('button').AddText('Set');
-	button.type = 'button';
-	button.obj = select;
-	button.AddEvent('click', function() { set_value(ui, [['space', 0], 'type'], this.obj.selectedIndex); });
-	e.AddElement('span').AddClass(make_id(ui, [['space', 0], 'type']));
 	e = ret.AddElement('div').AddText('Temps:').Add(Float(ui, [null, 'num_temps'], 0));
 	e = ret.AddElement('div').AddText('Gpios:').Add(Float(ui, [null, 'num_gpios'], 0));
 	e = ret.AddElement('div').AddText('Temp Scale Minimum:');
@@ -741,6 +760,18 @@ function setup_hardware(desc, pos, top) { // {{{
 	e.Add(Float(ui, [null, 'max_v'], 2, 1));
 	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
 	e.AddText('/s');
+	return [ret, pos];
+} // }}}
+
+function setup_type(desc, pos, top) { // {{{
+	var ui = top.data;
+	var ret = Create('div', 'setup expert').AddText('Machine Type:');
+	var select = ret.Add(create_space_type_select());
+	var button = ret.AddElement('button').AddText('Set');
+	button.type = 'button';
+	button.obj = select;
+	button.AddEvent('click', function() { set_value(ui, [['space', 0], 'type'], this.obj.selectedIndex); });
+	ret.AddElement('span').AddClass(make_id(ui, [['space', 0], 'type']));
 	return [ret, pos];
 } // }}}
 
@@ -1036,6 +1067,7 @@ ui_modules = { // {{{
 	Abort: Abort,
 	Buttons: Buttons,
 	'Job Control': JobControl,
+	'Probe Control': ProbeControl,
 	'XY Map': XYMap,
 	'Z Map': ZMap,
 	Position: Position,
@@ -1058,6 +1090,7 @@ ui_modules = { // {{{
 	'Temp Setup': setup_temp,
 	'Gpio Setup': setup_gpio,
 	'Pin Setup': setup_pins,
+	'Type Setup': setup_type,
 	State: state,
 	Message: message,
 	'No Connection': noconnect_bar,

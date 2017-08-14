@@ -1187,12 +1187,16 @@ function update_state(ui, state, time) { // {{{
 // }}}
 
 // Builders. {{{
-function pinrange(ui, type, element) { // {{{
+function pinrange(ui, type, element, initial_selected) { // {{{
 	var pins = [];
-	var selected = element.options[element.selectedIndex];
 	ui.pinranges.push(pins);
-	pins.element = element;
-	pins.update = function() {
+	pins.update = function(selected) {
+		// This is called when the pin names (may) have changed.
+		if (selected === undefined) {
+			selected = element.selectedOptions[0];
+			if (selected)
+				selected = selected.value;
+		}
 		var t = 0;
 		for (var i = 0; i < ui.machine.pin_names.length; ++i) {
 			if (~ui.machine.pin_names[i][0] & type)
@@ -1206,21 +1210,21 @@ function pinrange(ui, type, element) { // {{{
 			}
 			var node = Create('option').AddText(ui.machine.pin_names[i][1]);
 			node.value = String(i);
-			if (selected && node.value == selected.value)
-				element.selectedIndex = t;
 			if (this[t])
-				this.element.replaceChild(this[t], node);
+				element.replaceChild(this[t], node);
 			else
-				this.element.Add(node);
+				element.Add(node);
 			this[t] = node;
+			if (node.value == selected)
+				element.selectedIndex = t;
 			t += 1;
 		}
 		var new_length = t;
 		for (; t < this.length; ++t)
-			this.element.removeChild(this[t]);
+			element.removeChild(this[t]);
 		this.length = new_length;
 	};
-	pins.update();
+	pins.update(initial_selected);
 } // }}}
 
 function temprange(ui) { // {{{
@@ -1418,7 +1422,7 @@ function make_tablerow(ui, title, cells, classes, id, onlytype, index) { // {{{
 
 // Set helpers (to server). {{{
 function set_pin(ui, id, select, valid, inverted) { // {{{
-	set_value(ui, id, Number(e.selectedOptions[0].value) + 0x100 * valid + 0x200 * inverted);
+	set_value(ui, id, Number(select.selectedOptions[0].value) + 0x100 * valid + 0x200 * inverted);
 } // }}}
 
 function set_file(ui, id, element, action) { // {{{

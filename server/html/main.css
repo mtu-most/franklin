@@ -212,15 +212,9 @@ body.printing {
 	right: 0px;
 }
 
-.stop {
-	float: right;
-	width: 30%;
-	height: 6em;
-}
-
-.stop button {
+.buttons button {
 	height: 2em;
-	width: 25%;
+	width: 50%;
 }
 
 .jobbuttons {
