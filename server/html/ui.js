@@ -536,7 +536,7 @@ function UI_setup(bin_parent, content, data) {
 	bin.object_id = _UI_id;
 	_UI_id += 1;
 	bin.active_split = null;
-	bin.splitcontrol = Create('div', 'SplitControl'); // {
+	bin.splitcontrol = bin_parent.AddElement('div', 'SplitControl'); // {
 	bin.splitcontrol.style.zIndex = 10;
 	bin.splitcontrol.style.display = 'none';
 	bin.splitcontrol.style.position = 'absolute';
@@ -666,7 +666,6 @@ function UI_setup(bin_parent, content, data) {
 	if (typeof content == 'string')
 		content = ui_build(content, bin);
 	bin.set_content(content);
-	bin.Add(bin.splitcontrol);
 	return bin;
 }
 

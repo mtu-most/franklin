@@ -127,7 +127,7 @@ function File(ui, obj, action, buttontext, types, cb) { // {{{
 	button.source = obj;
 	button.action = action;
 	button.extra = cb;
-	button.AddEvent('click', function() { set_file(ui, input, this.source, this.action); if (this.extra !== undefined) this.extra(); });
+	button.AddEvent('click', function() { set_file(ui, this.source, input, this.action); if (this.extra !== undefined) this.extra(); });
 	return [input, button];
 } // }}}
 
@@ -1133,10 +1133,11 @@ function UI(machine) {	// {{{
 	i.AddClass(make_id(ret, [null, 'uiconfig']));
 	l.AddText('Configure UI');
 
-	// Content.
+	// Content.  Set it with a 0 timeout to ensure this function has returned and the objects are ready.
 	setTimeout(function() {
 		ret.bin = UI_setup(ret, ret.machine.user_interface || '(Profile Setup:)', ret);
 		ret.bin.style.top = '2em';
+		ret.bin.update();
 	}, 0);
 
 	return ret;
