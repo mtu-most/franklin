@@ -672,29 +672,6 @@ function setup_profile(desc, pos, top) { // {{{
 	ret.uuid.AddClass(make_id(ui, [null, 'uuid']));
 	var e = ret.AddElement('div', 'admin').AddText('Machine name:');
 	e.Add(Str(ui, [null, 'name']));
-	var notconnected = ret.AddElement('div', 'notconnected');
-	// Blocker bar. {{{
-	ret.AddClass(make_id(ui, [null, 'container']));
-	var blocker = ret.AddElement('div', 'hidden blocker');
-	blocker.AddClass(make_id(ui, [null, 'block1']));
-	// }}}
-	var connected = ret.AddElement('div', 'connected');
-	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Machine');
-	disable.type = 'button';
-	disable.AddEvent('click', function() { ui.machine.disabling = true; rpc.call('disable', [ui.machine.uuid], {}); });
-	var remove = ret.AddElement('div', 'admin').AddElement('button').AddText('Remove Machine');
-	remove.type = 'button';
-	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + ui.machine.name + '?')) { ui.machine.disabling = true; rpc.call('remove_machine', [ui.machine.uuid], {}); }});
-	var ports = notconnected.AddElement('select');
-	ports.AddClass(make_id(ui, [null, 'ports']));
-	ports.AddEvent('changed', function() { update_firmwares(ports, ui.firmwares); });
-	var b = notconnected.AddElement('button').AddText('Detect');
-	b.type = 'button';
-	b.AddEvent('click', function() { detect(ports); });
-	ui.firmwares = notconnected.AddElement('select');
-	b = notconnected.AddElement('button').AddText('Upload');
-	b.type = 'button';
-	b.AddEvent('click', function() { upload(ports, ui.firmwares); });
 	// Save and restore. {{{
 	e = ret.AddElement('div', 'admin');
 	e.AddText('Profile');
@@ -745,6 +722,29 @@ function setup_probe(desc, pos, top) { // {{{
 function setup_hardware(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
+	var notconnected = ret.AddElement('div', 'notconnected');
+	// Blocker bar. {{{
+	ret.AddClass(make_id(ui, [null, 'container']));
+	var blocker = ret.AddElement('div', 'hidden blocker');
+	blocker.AddClass(make_id(ui, [null, 'block1']));
+	// }}}
+	var connected = ret.AddElement('div', 'connected');
+	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Machine');
+	disable.type = 'button';
+	disable.AddEvent('click', function() { ui.machine.disabling = true; rpc.call('disable', [ui.machine.uuid], {}); });
+	var remove = ret.AddElement('div', 'admin').AddElement('button').AddText('Remove Machine');
+	remove.type = 'button';
+	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + ui.machine.name + '?')) { ui.machine.disabling = true; rpc.call('remove_machine', [ui.machine.uuid], {}); }});
+	var ports = notconnected.AddElement('select');
+	ports.AddClass(make_id(ui, [null, 'ports']));
+	ports.AddEvent('changed', function() { update_firmwares(ports, ui.firmwares); });
+	var b = notconnected.AddElement('button').AddText('Detect');
+	b.type = 'button';
+	b.AddEvent('click', function() { detect(ports); });
+	ui.firmwares = notconnected.AddElement('select');
+	b = notconnected.AddElement('button').AddText('Upload');
+	b.type = 'button';
+	b.AddEvent('click', function() { upload(ports, ui.firmwares); });
 	e = ret.AddElement('div').AddText('Temps:').Add(Float(ui, [null, 'num_temps'], 0));
 	e = ret.AddElement('div').AddText('Gpios:').Add(Float(ui, [null, 'num_gpios'], 0));
 	e = ret.AddElement('div').AddText('Temp Scale Minimum:');
@@ -870,6 +870,7 @@ function setup_motor(desc, pos, top) { // {{{
 function setup_delta(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
+	ret.update = function() { this.hide(ui.machine.spaces[0].type != TYPE_DELTA); };
 	ret.Add([make_table(ui).AddMultipleTitles([
 		'Delta',
 		UnitTitle(ui, 'Min Distance'),
@@ -904,6 +905,7 @@ function setup_delta(desc, pos, top) { // {{{
 function setup_polar(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
+	ret.update = function() { this.hide(ui.machine.spaces[0].type != TYPE_POLAR); };
 	ret.Add([make_table(ui).AddMultipleTitles([
 		'Polar',
 		UnitTitle(ui, 'Radius')
@@ -919,6 +921,7 @@ function setup_polar(desc, pos, top) { // {{{
 function setup_extruder(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
+	ret.update = function() { this.hide(ui.machine.spaces[1].axis.length == 0); };
 	ret.Add([make_table(ui).AddMultipleTitles([
 		'Extruder',
 		'Offset X',
@@ -940,6 +943,7 @@ function setup_extruder(desc, pos, top) { // {{{
 function setup_follower(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
+	ret.update = function() { this.hide(ui.machine.spaces[2].axis.length == 0); };
 	ret.Add([make_table(ui).AddMultipleTitles([
 		'Follower',
 		'Space',
