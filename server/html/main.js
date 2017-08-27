@@ -699,7 +699,7 @@ function queue(uuid) { // {{{
 			q.push(e[j].options[i].value);
 		e[j].ClearAll();
 		for (var i = 0; i < machines[uuid].queue.length; ++i) {
-			var item = machines[uuid].queue;
+			var item = machines[uuid].queue[i];
 			var o = e[j].AddElement('option');
 			o.AddText(item[0] + ' - ' + display_time(item[1][6] + item[1][7] / machines[uuid].max_v));
 			o.value = item[0];

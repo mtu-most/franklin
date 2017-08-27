@@ -215,7 +215,7 @@ function _setup_updater() {
 			machines[machine].profile = values[1];
 			var new_num_temps = values[2];
 			var new_num_gpios = values[3];
-			var ui_update = machines[machine].user_interface == values[4];
+			var ui_update = machines[machine].user_interface != values[4];
 			machines[machine].user_interface = values[4];
 			machines[machine].pin_names = values[5];
 			machines[machine].led_pin = values[6];
