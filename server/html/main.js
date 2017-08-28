@@ -511,7 +511,19 @@ function upload(ports, firmwares) { // {{{
 } // }}}
 
 function probe(ui) { // {{{
-	var bbox = get_queue(ui)[1];
+	var bbox = [NaN, NaN, NaN, NaN];
+	var queues = get_elements(ui, [null, 'queue']);
+	for (var q = 0; q < queues.length; ++q) {
+		var one = get_queue(ui, queues[q])[1];
+		if (!(bbox[0] < one[0]))
+			bbox[0] = one[0];
+		if (!(bbox[1] > one[1]))
+			bbox[1] = one[1];
+		if (!(bbox[2] < one[2]))
+			bbox[2] = one[2];
+		if (!(bbox[3] > one[3]))
+			bbox[3] = one[3];
+	}
 	ui.machine.call('probe', [[ui.machine.targetx, ui.machine.targety, bbox[0] - ui.machine.probe_offset, bbox[2] - ui.machine.probe_offset, bbox[1] - bbox[0] + 2 * ui.machine.probe_offset, bbox[3] - bbox[2] + 2 * ui.machine.probe_offset]], {});
 } // }}}
 
@@ -1481,9 +1493,8 @@ function update_canvas_and_spans(ui, space) { // {{{
 	// The machine may have disappeared.
 	if (!machines[ui.machine.uuid])
 		return;
-	if (space === undefined) {
+	if (space === undefined)
 		space = 0;
-	}
 	if (space < 2) {	// Ignore follower positions.
 		ui.machine.call('get_axis_pos', [space], {}, function(x) {
 			//dbg('update ' + space + ',' + axis + ':' + x);

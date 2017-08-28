@@ -376,8 +376,8 @@ function JobControl(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'top');
 	ret.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(ui); }).AddText('×').type = 'button';
-	e = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(ui); });
-	e.AddClass(make_id(ui, [null, 'queue']));
+	var select = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(ui); });
+	select.AddClass(make_id(ui, [null, 'queue']));
 	e = ret.AddElement('div', 'jobbuttons');
 	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode', function() { return queue_deselect(ui); }));
 	e.AddElement('br', 'benjamin');
@@ -389,7 +389,7 @@ function JobControl(desc, pos, top) { // {{{
 	var b = e.AddElement('button', 'benjamin').AddText('Play').AddEvent('click', function() { audio_play(ui); });
 	b.type = 'button';
 	e.AddElement('br');
-	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_run(ui); }).AddText('Run selected job');
+	b = e.AddElement('button', 'jobbutton').AddEvent('click', function() { queue_run(ui, select); }).AddText('Run selected job');
 	b.type = 'button';
 	return [ret, pos];
 }
@@ -660,6 +660,7 @@ function confirmation(desc, pos, top) { // {{{
 			ui.machine.call('confirm', [ui.machine.confirmation[0], true], {});
 		});
 		button.type = 'button';
+		this.hide(false);
 	};
 	return [self, pos];
 } // }}}
@@ -1137,7 +1138,7 @@ function UI(machine) {	// {{{
 	setTimeout(function() {
 		ret.bin = UI_setup(ret, ret.machine.user_interface || '(Profile Setup:)', ret);
 		ret.bin.style.top = '2em';
-		ret.bin.update();
+		globals_update(ret.machine.uuid, true);
 	}, 0);
 
 	return ret;
