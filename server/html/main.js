@@ -1115,8 +1115,9 @@ function update_pin(ui, id) { // {{{
 
 function update_float(ui, id) { // {{{
 	var e = get_elements(ui, id);
+	var value = get_value(ui, id);
 	for (var i = 0; i < e.length; ++i)
-		e[i].ClearAll().AddText((get_value(ui, id) / e.factor).toFixed(e.digits));
+		e[i].ClearAll().AddText((value / e[i].factor).toFixed(e[i].digits));
 } // }}}
 
 function update_checkbox(ui, id) { // {{{
