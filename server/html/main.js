@@ -29,171 +29,177 @@ var new_tab;
 // }}}
 
 // General supporting functions. {{{
+var reading_temps = false;
+function timed_update() {
+	if (reading_temps || selected_machine === null || selected_machine === undefined || machines[selected_machine].ui.disabling)
+		return;
+	reading_temps = true;
+	var read = function(ui, num) {
+		if (selected_machine === null || selected_machine === undefined || !machines[selected_machine] || machines[selected_machine].ui.disabling) {
+			reading_temps = false;
+			return;
+		}
+		if (ui === null)
+			ui = machines[selected_machine].ui;
+		if (ui !== machines[selected_machine].ui) {
+			reading_temps = false;
+			return;
+		}
+		if (num < ui.machine.temps.length) {
+			ui.machine.call('readtemp', [num], {}, function(t) {
+				if (num < ui.machine.temps.length) {
+					ui.machine.temps[num].temp = t;
+					var e = get_elements(ui, [['temp', num], 'temp']);
+					for (var i = 0; i < e.length; ++i)
+						e[i].ClearAll().AddText(isNaN(t) ? t : t.toFixed(1));
+				}
+				read(ui, num + 1);
+			});
+			return;
+		}
+		reading_temps = false;
+		// Update temperature graph.
+		var canvas = get_elements(ui, [null, 'tempgraph']);
+		if (canvas.length == 0) {
+			reading_temps = false;
+			return;
+		}
+		for (var i = 0; i < canvas.length; ++i) {
+			var c = canvas[i].getContext('2d');
+			canvas[i].height = canvas[i].clientHeight;
+			canvas[i].width = canvas[i].clientWidth;
+			var scale = canvas[i].height / (ui.machine.temp_scale_max - ui.machine.temp_scale_min);
+			c.clearRect(0, 0, canvas[i].width, canvas[i].height);
+			c.save(); // Transform coordinates to proper units. {{{
+			c.translate(0, canvas[i].height);
+			c.scale(scale, -scale);
+			c.translate(0, -ui.machine.temp_scale_min);
+			// Draw grid.
+			c.beginPath();
+			var step = 15;
+			for (var t = step; t < 120; t += step) {
+				var x = (t / (2 * 60) * canvas[i].width) / scale;
+				c.moveTo(x, ui.machine.temp_scale_min);
+				c.lineTo(x, ui.machine.temp_scale_max);
+			}
+			step = Math.pow(10, Math.floor(Math.log(ui.machine.temp_scale_max - ui.machine.temp_scale_min) / Math.log(10)));
+			for (var y = step * Math.floor(ui.machine.temp_scale_min / step); y < ui.machine.temp_scale_max; y += step) {
+				c.moveTo(0, y);
+				c.lineTo(canvas[i].width / scale, y);
+			}
+			c.save(); // Set linewidth. {{{
+			c.lineWidth = 1 / scale;
+			var makedash = function(array) {
+				// If browser doesn't support this, use solid lines.
+				if (c.setLineDash !== undefined) {
+					for (var i = 0; i < array.length; ++i)
+						array[i] /= scale;
+					c.setLineDash(array);
+				}
+			};
+			makedash([1, 4]);
+			c.strokeStyle = '#444';
+			c.stroke();
+			c.restore(); // }}}
+			// Draw grid scale.
+			c.save(); // Scale units for the grid. {{{
+			c.scale(1 / scale, -1 / scale);
+			for (var y = step * Math.floor(ui.machine.temp_scale_min / step); y < ui.machine.temp_scale_max; y += step) {
+				c.moveTo(0, y);
+				var text = y.toFixed(0);
+				c.fillText(text, (step / 50) * scale, -(y + step / 50) * scale);
+			}
+			c.restore(); // }}}
+			// Draw data.
+			var time = new Date();
+			ui.temphistory.push(time);
+			for (var t = 0; t < ui.machine.temps.length; ++t)
+				ui.machine.temps[t].history.push([ui.machine.temps[t].temp, ui.machine.temps[t].value]);
+			var cutoff = time - 2 * 60 * 1000;
+			while (ui.temphistory.length > 1 && ui.temphistory[0] < cutoff)
+				ui.temphistory.shift();
+			for (var t = 0; t < ui.machine.temps.length; ++t) {
+				while (ui.machine.temps[t].history.length > ui.temphistory.length)
+					ui.machine.temps[t].history.shift();
+			}
+			var width = canvas[i].width;
+			var x = function(t) {
+				return ((t - cutoff) / (2 * 60 * 1000) * width) / scale;
+			};
+			var y = function(d) {
+				if (isNaN(d))
+					return ui.machine.temp_scale_min - 2 / scale;
+				if (!isFinite(d))
+					return ui.machine.temp_scale_max + 2 / scale;
+				return d;
+			};
+			for (var t = 0; t < ui.machine.temps.length; ++t) {
+				// Draw measured data.
+				var value;
+				var data = ui.machine.temps[t].history;
+				c.beginPath();
+				value = data[0][0];
+				if (isNaN(ui.machine.temps[t].beta)) {
+					value *= ui.machine.temps[t].Rc / 100000;
+					value += ui.machine.temps[t].Tc;
+				}
+				c.moveTo(x(ui.temphistory[0]), y(value));
+				for (var i = 1; i < data.length; ++i) {
+					value = data[i][0];
+					if (isNaN(ui.machine.temps[t].beta)) {
+						value *= ui.machine.temps[t].Rc / 100000;
+						value += ui.machine.temps[t].Tc;
+					}
+					c.lineTo(x(ui.temphistory[i]), y(value));
+				}
+				c.strokeStyle = ['#f00', '#00f', '#0f0', '#ff0', '#000'][t < 5 ? t : 4];
+				c.lineWidth = 1 / scale;
+				c.stroke();
+				// Draw temp targets.
+				c.moveTo(x(ui.temphistory[0]), y(data[0][1]));
+				for (var i = 1; i < data.length; ++i)
+					c.lineTo(x(ui.temphistory[i]), y(data[i][1]));
+				c.save(); // Use dached lines. {{{
+				makedash([4, 2]);
+				c.stroke();
+				c.restore(); // }}}
+				// Draw values of temp targets.
+				var old = null;
+				c.fillStyle = c.strokeStyle;
+				c.save(); // Scale the target data. {{{
+				c.scale(1 / scale, -1 / scale);
+				for (var i = 1; i < data.length; ++i) {
+					if (data[i][1] != old && (!isNaN(data[i][1]) || !isNaN(old))) {
+						old = data[i][1];
+						var pos;
+						if (isNaN(data[i][1]) || data[i][1] < ui.machine.temp_scale_min)
+							pos = ui.machine.temp_scale_min;
+						else if (data[i][1] / scale >= ui.machine.temp_scale_max / scale - 12)
+							pos = (ui.machine.temp_scale_max / scale - 5) * scale;
+						else
+							pos = data[i][1];
+						var text = data[i][1].toFixed(0);
+						c.fillText(text, (x(ui.temphistory[i])) * scale, -(y(pos) + step / 50) * scale);
+					}
+				}
+				c.restore(); // }}}
+			}
+			c.restore(); // }}}
+		}
+		// Update everything else.
+		update_canvas_and_spans(ui);
+	};
+	read(null, 0);
+}
+
 AddEvent('load', function() { // {{{
 	labels_element = document.getElementById('labels');
 	machines_element = document.getElementById('machines');
 	new_tab = document.getElementById('new_label');
 	selected_machine = null;
 	setup();
-	var reading_temps = false;
 	window.AddEvent('keypress', keypress);
-	setInterval(function() {
-		if (reading_temps || !selected_machine || machines[selected_machine].ui.disabling)
-			return;
-		reading_temps = true;
-		var read = function(ui, num) {
-			if (!selected_machine || !machines[selected_machine] || machines[selected_machine].ui.disabling)
-				return;
-			if (ui === null)
-				ui = machines[selected_machine].ui;
-			if (ui !== machines[selected_machine].ui)
-				return;
-			if (num < ui.machine.temps.length) {
-				ui.machine.call('readtemp', [num], {}, function(t) {
-					if (num < ui.machine.temps.length) {
-						ui.machine.temps[num].temp = t;
-						var e = get_elements(ui, [['temp', num], 'temp']);
-						for (var i = 0; i < e.length; ++i)
-							e[i].ClearAll().AddText(isNaN(t) ? t : t.toFixed(1));
-					}
-					read(ui, num + 1);
-				});
-				return;
-			}
-			reading_temps = false;
-			// Update temperature graph.
-			var canvas = get_elements(ui, [null, 'tempgraph']);
-			if (canvas.length == 0) {
-				reading_temps = false;
-				return;
-			}
-			for (var i = 0; i < canvas.length; ++i) {
-				var c = canvas[i].getContext('2d');
-				canvas[i].height = canvas[i].clientHeight;
-				canvas[i].width = canvas[i].clientWidth;
-				var scale = canvas[i].height / (ui.machine.temp_scale_max - ui.machine.temp_scale_min);
-				c.clearRect(0, 0, canvas[i].width, canvas[i].height);
-				c.save(); // Transform coordinates to proper units. {{{
-				c.translate(0, canvas[i].height);
-				c.scale(scale, -scale);
-				c.translate(0, -ui.machine.temp_scale_min);
-				// Draw grid.
-				c.beginPath();
-				var step = 15;
-				for (var t = step; t < 120; t += step) {
-					var x = (t / (2 * 60) * canvas[i].width) / scale;
-					c.moveTo(x, ui.machine.temp_scale_min);
-					c.lineTo(x, ui.machine.temp_scale_max);
-				}
-				step = Math.pow(10, Math.floor(Math.log(ui.machine.temp_scale_max - ui.machine.temp_scale_min) / Math.log(10)));
-				for (var y = step * Math.floor(ui.machine.temp_scale_min / step); y < ui.machine.temp_scale_max; y += step) {
-					c.moveTo(0, y);
-					c.lineTo(canvas[i].width / scale, y);
-				}
-				c.save(); // Set linewidth. {{{
-				c.lineWidth = 1 / scale;
-				var makedash = function(array) {
-					// If browser doesn't support this, use solid lines.
-					if (c.setLineDash !== undefined) {
-						for (var i = 0; i < array.length; ++i)
-							array[i] /= scale;
-						c.setLineDash(array);
-					}
-				};
-				makedash([1, 4]);
-				c.strokeStyle = '#444';
-				c.stroke();
-				c.restore(); // }}}
-				// Draw grid scale.
-				c.save(); // Scale units for the grid. {{{
-				c.scale(1 / scale, -1 / scale);
-				for (var y = step * Math.floor(ui.machine.temp_scale_min / step); y < ui.machine.temp_scale_max; y += step) {
-					c.moveTo(0, y);
-					var text = y.toFixed(0);
-					c.fillText(text, (step / 50) * scale, -(y + step / 50) * scale);
-				}
-				c.restore(); // }}}
-				// Draw data.
-				var time = new Date();
-				ui.temphistory.push(time);
-				for (var t = 0; t < ui.machine.temps.length; ++t)
-					ui.machine.temps[t].history.push([ui.machine.temps[t].temp, ui.machine.temps[t].value]);
-				var cutoff = time - 2 * 60 * 1000;
-				while (ui.temphistory.length > 1 && ui.temphistory[0] < cutoff)
-					ui.temphistory.shift();
-				for (var t = 0; t < ui.machine.temps.length; ++t) {
-					while (ui.machine.temps[t].history.length > ui.temphistory.length)
-						ui.machine.temps[t].history.shift();
-				}
-				var width = canvas[i].width;
-				var x = function(t) {
-					return ((t - cutoff) / (2 * 60 * 1000) * width) / scale;
-				};
-				var y = function(d) {
-					if (isNaN(d))
-						return ui.machine.temp_scale_min - 2 / scale;
-					if (!isFinite(d))
-						return ui.machine.temp_scale_max + 2 / scale;
-					return d;
-				};
-				for (var t = 0; t < ui.machine.temps.length; ++t) {
-					// Draw measured data.
-					var value;
-					var data = ui.machine.temps[t].history;
-					c.beginPath();
-					value = data[0][0];
-					if (isNaN(ui.machine.temps[t].beta)) {
-						value *= ui.machine.temps[t].Rc / 100000;
-						value += ui.machine.temps[t].Tc;
-					}
-					c.moveTo(x(ui.temphistory[0]), y(value));
-					for (var i = 1; i < data.length; ++i) {
-						value = data[i][0];
-						if (isNaN(ui.machine.temps[t].beta)) {
-							value *= ui.machine.temps[t].Rc / 100000;
-							value += ui.machine.temps[t].Tc;
-						}
-						c.lineTo(x(ui.temphistory[i]), y(value));
-					}
-					c.strokeStyle = ['#f00', '#00f', '#0f0', '#ff0', '#000'][t < 5 ? t : 4];
-					c.lineWidth = 1 / scale;
-					c.stroke();
-					// Draw temp targets.
-					c.moveTo(x(ui.temphistory[0]), y(data[0][1]));
-					for (var i = 1; i < data.length; ++i)
-						c.lineTo(x(ui.temphistory[i]), y(data[i][1]));
-					c.save(); // Use dached lines. {{{
-					makedash([4, 2]);
-					c.stroke();
-					c.restore(); // }}}
-					// Draw values of temp targets.
-					var old = null;
-					c.fillStyle = c.strokeStyle;
-					c.save(); // Scale the target data. {{{
-					c.scale(1 / scale, -1 / scale);
-					for (var i = 1; i < data.length; ++i) {
-						if (data[i][1] != old && (!isNaN(data[i][1]) || !isNaN(old))) {
-							old = data[i][1];
-							var pos;
-							if (isNaN(data[i][1]) || data[i][1] < ui.machine.temp_scale_min)
-								pos = ui.machine.temp_scale_min;
-							else if (data[i][1] / scale >= ui.machine.temp_scale_max / scale - 12)
-								pos = (ui.machine.temp_scale_max / scale - 5) * scale;
-							else
-								pos = data[i][1];
-							var text = data[i][1].toFixed(0);
-							c.fillText(text, (x(ui.temphistory[i])) * scale, -(y(pos) + step / 50) * scale);
-						}
-					}
-					c.restore(); // }}}
-				}
-				c.restore(); // }}}
-			}
-			// Update everything else.
-			update_canvas_and_spans(ui);
-		};
-		read(null, 0);
-	}, 400);
+	setInterval(timed_update, 400);
 }); // }}}
 
 function make_id(ui, id, extra) { // {{{
@@ -768,7 +774,7 @@ function audioqueue(uuid) { // {{{
 // Update events(from server). {{{
 function globals_update(uuid, ui_configure) { // {{{
 	var p = machines[uuid].ui;
-	if (ui_configure && !p.bin.configuring) {
+	if (ui_configure && p.bin && !p.bin.configuring) {
 		p.bin.destroy();
 		var content = ui_build(machines[uuid].user_interface, p.bin);
 		if (content != null)

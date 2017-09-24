@@ -88,7 +88,14 @@ ARDUINO_VAR_PATH = /usr/share/arduino/hardware/MegaCore/variants
 BOARDS_TXT = /usr/share/arduino/hardware/MegaCore/boards.txt
 CPPFLAGS += -DNUM_MOTORS=7 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
 else
+ifeq (${TARGET}, atmega644p)
+BOARD_TAG = atmega644p
+ARDUINO_VAR_PATH = /usr/share/arduino/hardware/sanguino/variants
+BOARDS_TXT = /usr/share/arduino/hardware/sanguino/boards.txt
+CPPFLAGS += -DNUM_MOTORS=4 -DFRAGMENTS_PER_MOTOR_BITS=3 -DBYTES_PER_FRAGMENT=8 -DSERIAL_SIZE_BITS=9 -DNO_DEBUG
+else
 $(error Invalid TARGET)
+endif
 endif
 endif
 endif

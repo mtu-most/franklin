@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#ulimit -c unlimited
+ulimit -c unlimited
 echo >&2 PID:$$
-#exec valgrind "`dirname $0`"/cdriver/franklin-cdriver "$@"
-exec "`dirname $0`"/cdriver/franklin-cdriver "$@"
+exec valgrind "`dirname $0`"/cdriver/franklin-cdriver "$@"
+#exec "`dirname $0`"/cdriver/franklin-cdriver "$@"

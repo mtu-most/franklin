@@ -982,6 +982,7 @@ class Machine: # {{{
 							if axis < sp.axis[ij]['min'] - (0 if i != 0 or ij != 2 else self.zoffset):
 								log('limiting %d %d to %f because it exceeds min' % (i, ij, axis))
 								axis = sp.axis[ij]['min'] - (0 if i != 0 or ij != 2 else self.zoffset)
+								log('new value: %f' % axis)
 							a[a0 + ij] = axis
 				a0 += len(sp.axis)
 			targets = [0] * (((2 + a0 - 1) >> 3) + 1)
@@ -1770,10 +1771,10 @@ class Machine: # {{{
 						args['E'] = int(args['T']) if 'T' in args else current_extruder
 					if cmd == ('M', 140):
 						cmd = ('M', 104)
-						args['E'] = -2
+						args['E'] = -1
 					elif cmd == ('M', 190):
 						cmd = ('M', 109)
-						args['E'] = -2
+						args['E'] = -1
 					elif cmd == ('M', 6):
 						# Tool change: park and remember to probe.
 						cmd = ('G', 28)

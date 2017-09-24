@@ -375,13 +375,14 @@ function Label(machine) {	// {{{
 function JobControl(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'top');
-	ret.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(ui); }).AddText('×').type = 'button';
-	var select = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(ui); });
+	var select;
+	ret.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(ui, select); }).AddText('×').type = 'button';
+	select = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(ui); });
 	select.AddClass(make_id(ui, [null, 'queue']));
 	e = ret.AddElement('div', 'jobbuttons');
-	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode', function() { return queue_deselect(ui); }));
+	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode'));
 	e.AddElement('br', 'benjamin');
-	e.Add(File(ui, [null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav', function() { return queue_deselect(ui); }), 'benjamin');
+	e.Add(File(ui, [null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav'), 'benjamin');
 	e.AddElement('br', 'benjamin');
 	var b = e.AddElement('button', 'benjamin').AddText('×').AddEvent('click', function() { audio_del(ui); });
 	b.type = 'button';

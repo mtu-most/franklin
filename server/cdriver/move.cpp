@@ -50,7 +50,7 @@ static void set_from_queue(int s, int qpos, int a0, bool next, bool allow_arc) {
 			// This can only happen for extruders.
 			if (s != 1) {
 				debug("BUG: NaN source for non-extruder %d %d; please report.", s, a);
-				abort();
+				//abort();
 			}
 			sp.axis[a]->settings.source = sp.axis[a]->settings.endpos[1];
 		}
@@ -497,8 +497,10 @@ int next_move() { // {{{
 		//debug("current %d running %d", current_fragment, running_fragment);
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
-			for (int a = 0; a < sp.num_axes; ++a)
-				sp.axis[a]->settings.source = sp.axis[a]->settings.current;
+			for (int a = 0; a < sp.num_axes; ++a) {
+				if (!isnan(sp.axis[a]->settings.current))
+					sp.axis[a]->settings.source = sp.axis[a]->settings.current;
+			}
 		}
 		store_settings();
 #ifdef DEBUG_PATH
@@ -554,7 +556,8 @@ void abort_move(int pos) { // {{{
 		sp.settings.dist[1] = 0;
 		for (int a = 0; a < sp.num_axes; ++a) {
 			//debug("setting axis %d source to %f", a, sp.axis[a]->settings.current);
-			sp.axis[a]->settings.source = sp.axis[a]->settings.current;
+			if (!isnan(sp.axis[a]->settings.current))
+				sp.axis[a]->settings.source = sp.axis[a]->settings.current;
 			sp.axis[a]->settings.dist[0] = NAN;
 			sp.axis[a]->settings.dist[1] = NAN;
 		}

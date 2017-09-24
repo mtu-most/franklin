@@ -100,7 +100,7 @@ bool globals_load(int32_t &addr)
 			for (int s = 0; s < NUM_SPACES; ++s)
 				queue[settings.queue_end].data[i] = space_types[spaces[s].type].unchange0(&spaces[s], i, queue[settings.queue_end].data[i]);
 		}
-		for (int i = spaces[0].num_axes; i < QUEUE_LENGTH; ++i) {
+		for (int i = spaces[0].num_axes; i < 10; ++i) { // TODO: Make 10 a dynamic size.
 			queue[settings.queue_end].data[i] = NAN;
 		}
 		settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;

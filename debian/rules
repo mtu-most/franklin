@@ -20,7 +20,6 @@ override_dh_auto_build:
 	${MAKE} -C firmware TARGET=atmega1284p
 	${MAKE} -C firmware TARGET=atmega2560
 	${MAKE} -C firmware TARGET=atmega1280
-	${MAKE} -C firmware TARGET=atmega328p
 	${MAKE} -C util
 
 override_dh_auto_install:
