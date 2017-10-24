@@ -2,6 +2,7 @@
 # vim: set foldmethod=marker :
 # Copyright 2014-2016 Michigan Technological University
 # Copyright 2016 Bas Wijnen <wijnen@debian.org>
+# Copyright 2017 Lorin Edwin Parker <lorin.parker@hive13.org>
 # Author: Bas Wijnen <wijnen@debian.org>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -43,6 +44,7 @@ else
 OPTIMIZATION_LEVEL = 1
 CPPFLAGS += -DARCH_INCLUDE=\"arch-avr.h\" -DWATCHDOG
 ARDUINO_LIBS = EEPROM
+AVRDUDE_CONF = /etc/avrdude.conf
 
 # To avoid loading HardwareSerial.cpp, disable the core.
 NO_CORE = true
@@ -67,32 +69,44 @@ ifeq (${TARGET}, atmega328p)
 BOARD_TAG = uno
 CPPFLAGS += -DNUM_MOTORS=3 -DFRAGMENTS_PER_MOTOR_BITS=3 -DBYTES_PER_FRAGMENT=8 -DSERIAL_SIZE_BITS=9
 CPPFLAGS += -DUSART0_RX_vect=USART_RX_vect -DNO_DEBUG
+AVRDUDE_OPTS = -q -q -D
+
 else
 ifeq (${TARGET}, atmega1284p)
 BOARD_TAG = mighty_opt
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
 BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
 CPPFLAGS += -DNUM_MOTORS=10 -DFRAGMENTS_PER_MOTOR_BITS=5 -DBYTES_PER_FRAGMENT=32 -DSERIAL_SIZE_BITS=10
+AVRDUDE_OPTS = -q -q -D
+
 else
 ifeq (${TARGET}, atmega1280)
 BOARD_TAG = mega
 CPPFLAGS += -DNUM_MOTORS=10 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
+AVRDUDE_OPTS = -q -q -D
+
 else
 ifeq (${TARGET}, atmega2560)
 BOARD_TAG = mega2560
 CPPFLAGS += -DNUM_MOTORS=7 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
+AVRDUDE_OPTS = -q -q -D
+
 else
 ifeq (${TARGET}, atmega1281)
 BOARD_TAG = 1281
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/MegaCore/variants
 BOARDS_TXT = /usr/share/arduino/hardware/MegaCore/boards.txt
 CPPFLAGS += -DNUM_MOTORS=7 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
+AVRDUDE_OPTS = -q -q -D
+
 else
 ifeq (${TARGET}, atmega644p)
 BOARD_TAG = atmega644p
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/sanguino/variants
 BOARDS_TXT = /usr/share/arduino/hardware/sanguino/boards.txt
 CPPFLAGS += -DNUM_MOTORS=4 -DFRAGMENTS_PER_MOTOR_BITS=3 -DBYTES_PER_FRAGMENT=8 -DSERIAL_SIZE_BITS=9 -DNO_DEBUG
+AVRDUDE_OPTS = -q -q -D
+
 else
 $(error Invalid TARGET)
 endif

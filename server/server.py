@@ -4,6 +4,7 @@
 # server.py - machine multiplexing for Franklin {{{
 # Copyright 2014-2016 Michigan Technological University
 # Copyright 2016 Bas Wijnen <wijnen@debian.org>
+# Copyright 2017 Lorin Edwin Parker <lorin.parker@hive13.org>
 # Author: Bas Wijnen <wijnen@debian.org>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -300,7 +301,7 @@ class Connection: # {{{
 		filename = fhs.read_data(os.path.join('firmware', boards[board]['build.mcu'] + os.extsep + 'hex'), opened = False)
 		if filename is None:
 			raise NotImplementedError('Firmware is not available')
-		return ('avrdude', '-q', '-q', '-p', boards[board]['build.mcu'], '-b', boards[board]['upload.speed'], '-c', boards[board]['upload.protocol'], '-P', port, '-U', 'flash:w:' + filename + ':i')
+		return ('avrdude', '-D', '-q', '-q', '-p', boards[board]['build.mcu'], '-C /etc/avrdude.conf', '-b', boards[board]['upload.speed'], '-c', boards[board]['upload.protocol'], '-P', port, '-U', 'flash:w:' + filename + ':i')
 	# }}}
 	def upload(self, port, board): # {{{
 		wake = (yield)
