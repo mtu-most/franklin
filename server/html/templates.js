@@ -379,6 +379,7 @@ function JobControl(desc, pos, top) { // {{{
 	ret.AddElement('button', 'queue1').AddEvent('click', function() { queue_del(ui, select); }).AddText('×').type = 'button';
 	select = ret.AddElement('div', 'jobs').AddElement('select').AddEvent('change', function() { start_move(ui); });
 	select.AddClass(make_id(ui, [null, 'queue']));
+	update_queue(ui, select);
 	e = ret.AddElement('div', 'jobbuttons');
 	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode'));
 	e.AddElement('br', 'benjamin');

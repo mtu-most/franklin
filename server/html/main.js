@@ -708,30 +708,33 @@ function ask_confirmation(uuid, id, message) { // {{{
 	machines[uuid].ui.bin.update();
 } // }}}
 
+function update_queue(ui, element) {
+	var old = get_queue(ui, element);
+	var q = [];
+	for (var i = 0; i < element.options.length; ++i)
+		q.push(element.options[i].value);
+	element.ClearAll();
+	for (var i = 0; i < ui.machine.queue.length; ++i) {
+		var item = ui.machine.queue[i];
+		var o = element.AddElement('option');
+		o.AddText(item[0] + ' - ' + display_time(item[1][6] + item[1][7] / ui.machine.max_v));
+		o.value = item[0];
+		if (item[0] == old)
+			o.selected = true;
+	}
+	outer: for (var i = 0; i < element.options.length; ++i) {
+		for (var k = 0; k < q.length; ++k) {
+			if (element.options[i].value == q[k])
+				continue outer;
+		}
+		element.options[i].selected = true;
+	}
+}
+
 function queue(uuid) { // {{{
 	var e = get_elements(machines[uuid].ui, [null, 'queue']);
-	for (var j = 0; j < e.length; ++j) {
-		var old = get_queue(machines[uuid].ui, e[j]);
-		var q = [];
-		for (var i = 0; i < e[j].options.length; ++i)
-			q.push(e[j].options[i].value);
-		e[j].ClearAll();
-		for (var i = 0; i < machines[uuid].queue.length; ++i) {
-			var item = machines[uuid].queue[i];
-			var o = e[j].AddElement('option');
-			o.AddText(item[0] + ' - ' + display_time(item[1][6] + item[1][7] / machines[uuid].max_v));
-			o.value = item[0];
-			if (item[0] == old)
-				o.selected = true;
-		}
-		outer: for (var i = 0; i < e[j].options.length; ++i) {
-			for (var k = 0; k < q.length; ++k) {
-				if (e[j].options[i].value == q[k])
-					continue outer;
-			}
-			e[j].options[i].selected = true;
-		}
-	}
+	for (var j = 0; j < e.length; ++j)
+		update_queue(machines[uuid].ui, e[j]);
 	start_move(machines[uuid].ui);
 } // }}}
 
@@ -777,8 +780,11 @@ function globals_update(uuid, ui_configure) { // {{{
 	if (ui_configure && p.bin && !p.bin.configuring) {
 		p.bin.destroy();
 		var content = ui_build(machines[uuid].user_interface, p.bin);
-		if (content != null)
+		if (content != null) {
 			p.bin.set_content(content);
+			machines[uuid].ui_update = false;
+			console.info(machines[uuid].user_interface);
+		}
 	}
 	var e = get_elements(p, [null, 'uuid']);
 	for (var i = 0; i < e.length; ++i)
@@ -1478,6 +1484,11 @@ function fill(s) { // {{{
 function display_time(t) { // {{{
 	if (isNaN(t))
 		return '-';
+	var pre = '';
+	if (t < 0) {
+		pre = '-';
+		t = -t;
+	}
 	var s = Math.floor(t);
 	var m = Math.floor(s / 60);
 	var h = Math.floor(m / 60);
@@ -1486,12 +1497,12 @@ function display_time(t) { // {{{
 	m -= h * 60;
 	h -= d * 24;
 	if (d != 0)
-		return d.toFixed(0) + 'd ' + fill(h) + ':' + fill(m) + ':' + fill(s);
+		return pre + d.toFixed(0) + 'd ' + fill(h) + ':' + fill(m) + ':' + fill(s);
 	if (h != 0)
-		return h.toFixed(0) + ':' + fill(m) + ':' + fill(s);
+		return pre + h.toFixed(0) + ':' + fill(m) + ':' + fill(s);
 	if (m != 0)
-		return m.toFixed(0) + ':' + fill(s);
-	return s.toFixed(0) + 's';
+		return pre + m.toFixed(0) + ':' + fill(s);
+	return pre + s.toFixed(0) + 's';
 }
 // }}}
 
