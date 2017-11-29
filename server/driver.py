@@ -233,9 +233,9 @@ class Machine: # {{{
 		self.probe_safe_dist = 10
 		self.num_probes = 1
 		self.unit_name = 'mm'
-		self.park_after_print = True
-		self.sleep_after_print = True
-		self.cool_after_print = True
+		self.park_after_job = True
+		self.sleep_after_job = True
+		self.cool_after_job = True
 		self.spi_setup = []
 		# Set up state.
 		self.spaces = [self.Space(self, i) for i in range(NUM_SPACES)]
@@ -565,7 +565,7 @@ class Machine: # {{{
 				call_queue.append((self.park(cb = cb, abort = False)[1], (None,)))
 				continue
 			elif cmd == protocol.rcommand['FILE_DONE']:
-				call_queue.append((self._print_done, (True, 'completed')))
+				call_queue.append((self._job_done, (True, 'completed')))
 				continue
 			elif cmd == protocol.rcommand['PINNAME']:
 				if s >= len(self.pin_names):
@@ -752,7 +752,7 @@ class Machine: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		self._broadcast(target, 'globals_update', [self.name, self.profile, len(self.temps), len(self.gpios), self.user_interface, self.pin_names, self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.probe_dist, self.probe_offset, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.max_deviation, self.max_v, self.targetx, self.targety, self.targetangle, self.zoffset, self.store_adc, self.park_after_print, self.sleep_after_print, self.cool_after_print, self._mangle_spi(), self.temp_scale_min, self.temp_scale_max, self.probemap, self.connected, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
+		self._broadcast(target, 'globals_update', [self.name, self.profile, len(self.temps), len(self.gpios), self.user_interface, self.pin_names, self.led_pin, self.stop_pin, self.probe_pin, self.spiss_pin, self.probe_dist, self.probe_offset, self.probe_safe_dist, self.bed_id, self.fan_id, self.spindle_id, self.unit_name, self.timeout, self.feedrate, self.max_deviation, self.max_v, self.targetx, self.targety, self.targetangle, self.zoffset, self.store_adc, self.park_after_job, self.sleep_after_job, self.cool_after_job, self._mangle_spi(), self.temp_scale_min, self.temp_scale_max, self.probemap, self.connected, not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)])
 	# }}}
 	def _space_update(self, which, target = None): # {{{
 		if not self.initialized:
@@ -785,7 +785,7 @@ class Machine: # {{{
 		self.gcode_map = None
 		self.gcode_fd = -1
 	# }}}
-	def _print_done(self, complete, reason): # {{{
+	def _job_done(self, complete, reason): # {{{
 		self._send_packet(struct.pack('=BBddBB', protocol.command['RUN_FILE'], 0, 0, 0, 0xff, 0))
 		if self.gcode_map is not None:
 			log(reason)
@@ -831,13 +831,13 @@ class Machine: # {{{
 		self._globals_update()
 	# }}}
 	def _finish_done(self): # {{{
-		if self.cool_after_print:
+		if self.cool_after_job:
 			for t in range(len(self.temps)):
 				self.settemp(t, float('nan'))
 		def maybe_sleep():
-			if self.sleep_after_print:
+			if self.sleep_after_job:
 				self.sleep()
-		if self.park_after_print:
+		if self.park_after_job:
 			self.park(cb = maybe_sleep)[1](None)
 		else:
 			maybe_sleep()
@@ -1327,7 +1327,7 @@ class Machine: # {{{
 			self.probing = False
 			if id is not None:
 				self._send(id, 'error', 'aborted')
-			#self._print_done(False, 'Probe aborted')
+			#self._job_done(False, 'Probe aborted')
 			return
 		self.probing = True
 		if not self.position_valid:
@@ -1461,7 +1461,7 @@ class Machine: # {{{
 			self.btemp = float('nan')
 		if abort:
 			self._unpause()
-			self._print_done(False, 'aborted by starting new print')
+			self._job_done(False, 'aborted by starting new job')
 		self.queue_info = None
 		# Disable all alarms.
 		for i in range(len(self.temps)):
@@ -2478,8 +2478,8 @@ class Machine: # {{{
 		self.pause(store = False)
 		for g, gpio in enumerate(self.gpios):
 			self.set_gpio(g, state = gpio.reset)
-		self._print_done(False, 'aborted by user')
-		# Sleep doesn't work as long as home_phase is non-None, so do it after _print_done.
+		self._job_done(False, 'aborted by user')
+		# Sleep doesn't work as long as home_phase is non-None, so do it after _job_done.
 		self.sleep(force = True);
 	# }}}
 	def pause(self, pausing = True, store = True, update = True): # {{{
@@ -2569,7 +2569,7 @@ class Machine: # {{{
 			return
 		# Abort only if it is requested, and the job is not paused.
 		if abort and self.queue_info is None:
-			self._print_done(False, 'aborted by homing')
+			self._job_done(False, 'aborted by homing')
 		self.home_phase = 0
 		self.home_id = id
 		self.home_return = None
@@ -2590,7 +2590,7 @@ class Machine: # {{{
 			return
 		#log('parking with cb %s' % repr(cb))
 		if abort and self.queue_info is None:
-			self._print_done(False, 'aborted by parking')
+			self._job_done(False, 'aborted by parking')
 		self.parking = True
 		if not self.position_valid:
 			#log('homing')
@@ -2710,7 +2710,7 @@ class Machine: # {{{
 		message += 'unit_name = %s\r\n' % self.unit_name
 		message += 'spi_setup = %s\r\n' % self._mangle_spi()
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin')])
-		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'timeout')])
+		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'timeout')])
 		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v')])
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings()
@@ -2743,7 +2743,7 @@ class Machine: # {{{
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set(), 'follower': set()}
 		keys = {
-				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'},
+				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v'},
 				'space': {'type', 'num_axes', 'delta_angle', 'polar_max_r'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
@@ -2954,7 +2954,7 @@ class Machine: # {{{
 			else:
 				if not success:
 					self.probe_pending = False
-					self._print_done(False, 'aborted by failed confirmation')
+					self._job_done(False, 'aborted by failed confirmation')
 				else:
 					if self.probe_pending and self._pin_valid(self.probe_pin):
 						self.probe_pending = False
@@ -3007,7 +3007,7 @@ class Machine: # {{{
 	# }}}
 	@delayed
 	def queue_run(self, id, name, paused = False): # {{{
-		'''Run one or more new jobs.
+		'''Start a new job.
 		'''
 		if self.probing:
 			log('ignoring run request while probe is in progress')
@@ -3024,8 +3024,8 @@ class Machine: # {{{
 		self.job_id = id
 		self._start_job(paused)
 	# }}}
-	def get_print_state(self): # {{{
-		'''Return current print state.
+	def get_machine_state(self): # {{{
+		'''Return current machine state.
 		Return value is a tuple of a human readable string describing
 		the state, NaN or the elapsed time, NaN or the total time for
 		the current job.
@@ -3135,7 +3135,7 @@ class Machine: # {{{
 	def get_globals(self): # {{{
 		#log('getting globals')
 		ret = {'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probemap', 'paused', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'spi_setup', 'max_deviation', 'max_v'):
+		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probemap', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v'):
 			ret[key] = getattr(self, key)
 		return ret
 	# }}}
@@ -3160,7 +3160,7 @@ class Machine: # {{{
 			self.spi_setup = self._unmangle_spi(ka.pop('spi_setup'))
 			if self.spi_setup:
 				self._spi_send(self.spi_setup)
-		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_print', 'sleep_after_print', 'cool_after_print', 'timeout'):
+		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'timeout'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
 		for key in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v'):

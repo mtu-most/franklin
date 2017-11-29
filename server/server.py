@@ -659,8 +659,8 @@ last_id = random.randrange(1 << 32)
 id_map = [0x40, 0xe1, 0xd2, 0x73, 0x74, 0xd5, 0xe6, 0x47, 0xf8, 0x59, 0x6a, 0xcb, 0xcc, 0x6d, 0x5e, 0xff]
 # }}}
 
-def print_done(port, completed, reason): # {{{
-	broadcast(None, 'printing', port.port, False)
+def job_done(port, completed, reason): # {{{
+	broadcast(None, 'running', port.port, False)
 	if config['done']:
 		cmd = config['done']
 		cmd = cmd.replace('[[STATE]]', 'completed' if completed else 'aborted').replace('[[REASON]]', reason)
@@ -671,7 +671,7 @@ def print_done(port, completed, reason): # {{{
 			if data:
 				log('Data from completion callback: %s' % repr(data))
 				return True
-			log('Callback for print completion done; return: %s' % repr(p.wait()))
+			log('Callback for job completion done; return: %s' % repr(p.wait()))
 			return False
 		def process_error():
 			log('Job completion process returned error.')

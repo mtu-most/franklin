@@ -32,7 +32,7 @@ single = {
 	'STALL1': b'\xe9',      # Packet properly received, but not accepted; don't resend packet unmodified.
 	'STALL2': b'\xda',      # Packet properly received, but not accepted; don't resend packet unmodified.
 	'STALL3': b'\xbb',      # Packet properly received, but not accepted; don't resend packet unmodified.
-	'ID': b'\xbc',          # Request/reply printer ID code.
+	'ID': b'\xbc',          # Request/reply machine ID code.
 	'DEBUG': b'\xdd',       # Debug message; a nul-terminated message follows (no checksum; no resend).
 	'STARTUP': b'\xee',     # Starting up.
 	'STALLACK': b'\x8f'     # Clear stall.

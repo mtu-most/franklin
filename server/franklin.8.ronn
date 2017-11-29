@@ -36,7 +36,7 @@ interface to control those machines.
  * `--machine=<default>:
 	Specify the default machine.  If not specified and there is only one machine defined, that will be used.  When only one machine is connected, there is no reason to specify this option.
  * `--done=command`:
-	Shell command to execute whenever a print it done.  In this command, the special codes `[[STATE]]` and `[[REASON]]` are replaced with the state (completed or aborted) and reason for ending the print.
+	Shell command to execute whenever a job it done.  In this command, the special codes `[[STATE]]` and `[[REASON]]` are replaced with the state (completed or aborted) and reason for ending the job.
  * --autodetect=False:
 	By default, the server will try to detect a machine on any newly connected device which provides a serial port.  Setting this option to False will prevent this.
  * `--user`=[name:password]

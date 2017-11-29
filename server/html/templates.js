@@ -611,7 +611,7 @@ function Gpios(desc, pos, top) { // {{{
 function state(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'message');
-	ret.AddClass(make_id(ui, [null, 'printstate']));
+	ret.AddClass(make_id(ui, [null, 'machinestate']));
 	ret.update = function() {
 		this.hide(!ui.machine.connected);
 	};
@@ -786,13 +786,13 @@ function setup_globals(desc, pos, top) { // {{{
 	e.AddText(' min');
 	e = ret.AddElement('div').AddText('After Job Completion:');
 	var l = e.AddElement('label');
-	l.Add(Checkbox(ui, [null, 'park_after_print']));
+	l.Add(Checkbox(ui, [null, 'park_after_job']));
 	l.AddText('Park');
 	l = e.AddElement('label');
-	l.Add(Checkbox(ui, [null, 'sleep_after_print']));
+	l.Add(Checkbox(ui, [null, 'sleep_after_job']));
 	l.AddText('Sleep');
 	l = e.AddElement('label');
-	l.Add(Checkbox(ui, [null, 'cool_after_print']));
+	l.Add(Checkbox(ui, [null, 'cool_after_job']));
 	l.AddText('Cool');
 	e = ret.AddElement('div').AddText('SPI setup:');
 	e.Add(Str(ui, [null, 'spi_setup']));

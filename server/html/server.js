@@ -137,9 +137,9 @@ function _setup_updater() {
 					fan_id: 255,
 					spindle_id: 255,
 					unit_name: 'mm',
-					park_after_print: true,
-					sleep_after_print: true,
-					cool_after_print: true,
+					park_after_job: true,
+					sleep_after_job: true,
+					cool_after_job: true,
 					spi_setup: '',
 					status: 'Starting',
 					timeout: 0,
@@ -239,9 +239,9 @@ function _setup_updater() {
 			machines[machine].targetangle = values[23];
 			machines[machine].zoffset = values[24];
 			machines[machine].store_adc = values[25];
-			machines[machine].park_after_print = values[26];
-			machines[machine].sleep_after_print = values[27];
-			machines[machine].cool_after_print = values[28];
+			machines[machine].park_after_job = values[26];
+			machines[machine].sleep_after_job = values[27];
+			machines[machine].cool_after_job = values[28];
 			machines[machine].spi_setup = values[29];
 			machines[machine].temp_scale_min = values[30];
 			machines[machine].temp_scale_max = values[31];

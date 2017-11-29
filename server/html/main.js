@@ -823,9 +823,9 @@ function globals_update(uuid, ui_configure) { // {{{
 	update_float(p, [null, 'targetangle']);
 	update_float(p, [null, 'zoffset']);
 	update_checkbox(p, [null, 'store_adc']);
-	update_checkbox(p, [null, 'park_after_print']);
-	update_checkbox(p, [null, 'sleep_after_print']);
-	update_checkbox(p, [null, 'cool_after_print']);
+	update_checkbox(p, [null, 'park_after_job']);
+	update_checkbox(p, [null, 'sleep_after_job']);
+	update_checkbox(p, [null, 'cool_after_job']);
 	update_str(p, [null, 'spi_setup']);
 	update_float(p, [null, 'temp_scale_min']);
 	update_float(p, [null, 'temp_scale_max']);
@@ -1190,17 +1190,17 @@ function update_profiles(ui) { // {{{
 function update_state(ui, state, time) { // {{{
 	var c = document.getElementById('container');
 	var pre;
-	c.RemoveClass('idle printing paused');
+	c.RemoveClass('idle running paused');
 	if (state === null) {
 		c.AddClass('idle');
 		pre = '';
 	}
 	else if (state) {
-		c.AddClass('printing');
+		c.AddClass('running');
 		if (time !== undefined)
 			pre = '(' + time + ') ';
 		else
-			pre = '(printing) ';
+			pre = '(running) ';
 	}
 	else {
 		c.AddClass('paused');
@@ -1527,10 +1527,10 @@ function update_canvas_and_spans(ui, space) { // {{{
 		});
 		return;
 	}
-	ui.machine.call('get_print_state', [], {}, function(state) {
+	ui.machine.call('get_machine_state', [], {}, function(state) {
 		if (!machines[ui.machine.uuid])
 			return;
-		var e = get_elements(ui, [null, 'printstate']);
+		var e = get_elements(ui, [null, 'machinestate']);
 		if (isNaN(state[1])) {
 			for (var i = 0; i < e.length; ++i)
 				e[i].ClearAll().AddText('State: ' + state[0]);
