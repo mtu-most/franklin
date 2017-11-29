@@ -764,7 +764,7 @@ void packet()
 		debug("CMD_TP_GETPOS");
 #endif
 		// TODO: Send actual current position, not next queued.  Include fraction.
-		send_host(CMD_TP_POS, 0, 0, history[running_fragment].run_file_current);
+		send_host(CMD_TP_POS, 0, 0, settings.run_file_current);
 		return;
 	}
 	case CMD_TP_SETPOS:
