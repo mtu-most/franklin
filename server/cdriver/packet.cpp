@@ -351,13 +351,16 @@ void packet()
 		{
 			debug("Reading invalid temp %d", which);
 			//abort();
-			send_host(CMD_TEMP);
+			send_host(CMD_TEMP, 0, 0, NAN);
 			return;
 		}
 		if (!temps[which].thermistor_pin.valid()) {
-			debug("Reading temp %d with invalid thermistor", which);
-			//abort();
-			send_host(CMD_TEMP);
+			// Before first connection, NUM_PINS is 0; don't break on that.
+			if (NUM_PINS > 0) {
+				debug("Reading temp %d with invalid thermistor", which);
+				//abort();
+			}
+			send_host(CMD_TEMP, 0, 0, NAN);
 			return;
 		}
 		arch_request_temp(which);
