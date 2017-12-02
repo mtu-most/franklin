@@ -31,12 +31,19 @@
 	</head>
 	<body id='container' class='nosetup'>
 		<div id='labels'>
-			<div id='new_label' class='tab' onclick="rpc.call('create_machine', [], {}, function(uuid) {select_machine(uuid);})">+</div>
-			<div id='setupbutton'>
+			<div id='new_label' class='tab' onclick="select_machine(null)">+</div>
+			<div class='setupbutton'>
 				<a href='https://github.com/mtu-most/franklin'>Get Franklin Source</a>
 			</div>
 		</div>
 		<div id='machines'>
+			<div id='new_page'>
+				<div id='uploading' class='hidden'></div>
+				<select id='ports' onchange='port_changed()'></select>
+				<button type='button' onclick='detect()'>Detect</button>
+				<select id='firmwares'></select>
+				<button type='button' onclick='upload()'>Upload</button>
+			</div>
 		</div>
 	</body>
 </html>

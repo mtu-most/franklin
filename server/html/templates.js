@@ -725,12 +725,6 @@ function setup_probe(desc, pos, top) { // {{{
 function setup_hardware(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
-	var notconnected = ret.AddElement('div', 'notconnected');
-	// Blocker bar. {{{
-	ret.AddClass(make_id(ui, [null, 'container']));
-	var blocker = ret.AddElement('div', 'hidden blocker');
-	blocker.AddClass(make_id(ui, [null, 'block1']));
-	// }}}
 	var connected = ret.AddElement('div', 'connected');
 	var disable = connected.AddElement('div').AddElement('button').AddText('Disable Machine');
 	disable.type = 'button';
@@ -738,16 +732,6 @@ function setup_hardware(desc, pos, top) { // {{{
 	var remove = ret.AddElement('div', 'admin').AddElement('button').AddText('Remove Machine');
 	remove.type = 'button';
 	remove.AddEvent('click', function() { if (confirm('Do you really want to permanently remove all data about ' + ui.machine.name + '?')) { ui.machine.disabling = true; rpc.call('remove_machine', [ui.machine.uuid], {}); }});
-	var ports = notconnected.AddElement('select');
-	ports.AddClass(make_id(ui, [null, 'ports']));
-	ports.AddEvent('changed', function() { update_firmwares(ports, ui.firmwares); });
-	var b = notconnected.AddElement('button').AddText('Detect');
-	b.type = 'button';
-	b.AddEvent('click', function() { detect(ports); });
-	ui.firmwares = notconnected.AddElement('select');
-	b = notconnected.AddElement('button').AddText('Upload');
-	b.type = 'button';
-	b.AddEvent('click', function() { upload(ports, ui.firmwares); });
 	e = ret.AddElement('div').AddText('Temps:').Add(Float(ui, [null, 'num_temps'], 0));
 	e = ret.AddElement('div').AddText('Gpios:').Add(Float(ui, [null, 'num_gpios'], 0));
 	e = ret.AddElement('div').AddText('Temp Scale Minimum:');
@@ -1107,6 +1091,8 @@ ui_modules = { // {{{
 
 function UI(machine) {	// {{{
 	var ret = Create('div', 'machine hidden');
+	// Prevent updates until all setup is done.
+	ret.updating_globals = true;
 	ret.machine = machine;
 	ret.names = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
 	ret.name_values = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
@@ -1139,8 +1125,10 @@ function UI(machine) {	// {{{
 	// Content.  Set it with a 0 timeout to ensure this function has returned and the objects are ready.
 	setTimeout(function() {
 		ret.bin = UI_setup(ret, ret.machine.user_interface || '(Profile Setup:)', ret);
+		ret.machine.ui_update = false;
+		ret.updating_globals = false;
 		ret.bin.style.top = '2em';
-		globals_update(ret.machine.uuid, true);
+		globals_update(ret.machine.uuid, false);
 	}, 0);
 
 	return ret;

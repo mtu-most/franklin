@@ -25,7 +25,7 @@ var labels_element, machines_element;
 var selected_machine;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
 var space_types = ['Cartesian', 'Delta', 'Polar', 'Extruder', 'Follower'];
-var new_tab;
+var new_tab, new_page;
 // }}}
 
 // General supporting functions. {{{
@@ -196,6 +196,7 @@ AddEvent('load', function() { // {{{
 	labels_element = document.getElementById('labels');
 	machines_element = document.getElementById('machines');
 	new_tab = document.getElementById('new_label');
+	new_page = document.getElementById('new_page');
 	selected_machine = null;
 	setup();
 	window.AddEvent('keypress', keypress);
@@ -365,10 +366,12 @@ function select_machine(ui) { // {{{
 	}
 	if (selected_machine !== null && selected_machine !== undefined) {
 		new_tab.RemoveClass('active');
+		new_page.AddClass('hidden');
 		update_state(ui, get_value(ui, [null, 'status']));
 	}
 	else {
 		new_tab.AddClass('active');
+		new_page.RemoveClass('hidden');
 		update_state(ui, null);
 	}
 } // }}}
@@ -498,8 +501,10 @@ function toggle_uiconfig(ui) { // {{{
 		set_value(ui, [null, 'user_interface'], ui.bin.serialize());
 } // }}}
 
-function update_firmwares(ports, firmwares) { // {{{
+function port_changed() { // {{{
+	var ports = document.getElementById('ports');
 	var port = ports.options[ports.selectedIndex].value;
+	var firmwares = document.getElementById('firmwares');
 	firmwares.ClearAll();
 	for (var o = 0; o < all_firmwares[port].length; ++o)
 		firmwares.AddElement('option').AddText(all_firmwares[port][o][1]).value = all_firmwares[port][o][0];
@@ -511,7 +516,9 @@ function detect(ports) { // {{{
 } // }}}
 
 function upload(ports, firmwares) { // {{{
+	var ports = document.getElementById('ports');
 	var port = ports.options[ports.selectedIndex].value;
+	var firmwares = document.getElementById('firmwares');
 	var firmware = firmwares.options[firmwares.selectedIndex].value;
 	rpc.call('upload', [port, firmware], {}, function(ret) { alert('upload done: ' + ret);});
 } // }}}
@@ -591,14 +598,11 @@ function autodetect() { // {{{
 } // }}}
 
 function new_port(ui, port) { // {{{
-	for (var p in machines) {
-		var ports = get_elements(machines[p].ui, [null, 'ports']);
-		for (var i = 0; i < ports.length; ++i) {
-			ports[i].ClearAll();
-			var new_port = ports[i].AddElement('option').AddText(port);
-			new_port.value = port;
-		}
-	}
+	var ports = document.getElementById('ports');
+	var new_port = ports.AddElement('option').AddText(port);
+	new_port.value = port;
+	if (ports.options.length == 1)
+		port_changed();
 } // }}}
 
 function disable_buttons(state) { // {{{
@@ -655,29 +659,16 @@ function new_machine(uuid) { // {{{
 	machines[uuid].label.AddClass('notconnected');
 	machines[uuid].ui.AddClass('notconnected');
 	globals_update(uuid, false);
-	var ports_button = get_elements(machines[uuid].ui, [null, 'ports']);
-	for (var i = 0; i < ports_button.length; ++i) {
-		ports_button[i].ClearAll();
-		for (var port = 0; port < all_ports.length; ++port) {
-			var new_port = ports_button[i].AddElement('option').AddText(all_ports[port]);
-			new_port.value = all_ports[port];
-			for (var o = 0; o < all_firmwares[new_port.value].length; ++o) {
-				machines[uuid].ui.firmwares.AddElement('option').AddText(all_firmwares[new_port.value][o][1]).value = all_firmwares[new_port.value][o][0];
-			}
-		}
-	}
 	if (selected_machine === null)
 		select_machine(p);
 } // }}}
 
 function blocked(uuid, reason) { // {{{
-	var e = get_elements(machines[uuid].ui, [null, 'block1']);
-	for (var i = 0; i < e.length; ++i) {
-		if (reason)
-			e[i].ClearAll().AddText(reason).RemoveClass('hidden');
-		else
-			e[i].AddClass('hidden');
-	}
+	var e = document.getElementById('uploading');
+	if (reason)
+		e.ClearAll().AddText(reason).RemoveClass('hidden');
+	else
+		e.AddClass('hidden');
 	machines[uuid].ui.bin.update();	// Hide interface parts if applicable.
 } // }}}
 
@@ -777,13 +768,16 @@ function audioqueue(uuid) { // {{{
 // Update events(from server). {{{
 function globals_update(uuid, ui_configure) { // {{{
 	var p = machines[uuid].ui;
+	if (p.updating_globals)
+		return;
+	p.updating_globals = true;
 	if (ui_configure && p.bin && !p.bin.configuring) {
 		p.bin.destroy();
 		var content = ui_build(machines[uuid].user_interface, p.bin);
 		if (content != null) {
 			p.bin.set_content(content);
 			machines[uuid].ui_update = false;
-			console.info(machines[uuid].user_interface);
+			//console.info(machines[uuid].user_interface);
 		}
 	}
 	var e = get_elements(p, [null, 'uuid']);
@@ -916,6 +910,7 @@ function globals_update(uuid, ui_configure) { // {{{
 	for (var i = 0; i < p.machine.gpios.length; ++i)
 		gpio_update(p.machine.uuid, i);
 	update_canvas_and_spans(p);
+	p.updating_globals = false;
 } // }}}
 
 function space_update(uuid, index) { // {{{
@@ -1217,6 +1212,13 @@ function pinrange(ui, type, element, initial_selected) { // {{{
 	ui.pinranges.push(pins);
 	pins.update = function(selected) {
 		// This is called when the pin names (may) have changed.
+		// Because it is slow, first detect if there was a change, and if not, do nothing.
+		// Conversion to a string could theoretically give a false positive, but that is not a practical problem.
+		var new_names = String(ui.machine.pin_names);
+		if (new_names == this.pin_names)
+			return;
+		this.pin_names = new_names;
+		// First find the currently selected pin name, to restore selection later.
 		if (selected === undefined) {
 			selected = element.selectedOptions[0];
 			if (selected)
