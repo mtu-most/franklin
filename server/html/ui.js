@@ -63,7 +63,7 @@ function ui_build(string, top, pos) {
 		var num = /[0-9.]+/.exec(string.substr(pos));
 		pos += num[0].length;
 		ret.value = Number(num[0]);
-		ret.em = string[pos++] == 'm'
+		ret.em = string[pos++] == 'm';
 		// First child.
 		sub = ui_build(string, top, pos);
 		ret.first.set_content(sub[0]);
@@ -216,7 +216,7 @@ function Bin(top, configuring) {
 		}
 		if (this.content && this.content.config)
 			this.content.config(configuring);
-		//this.update();
+		this.update();
 	};
 	self.add_split = function() {
 		var content = this.content;
@@ -527,7 +527,7 @@ function Tabs(top, configuring) {
 		this.plus.style.display = this.configuring ? '' : 'none';
 		for (var t = 0; t < this.tabs.length; ++t)
 			this.tabs[t].config(configuring);
-		//this.update();
+		this.update();
 	};
 	return self;
 }
