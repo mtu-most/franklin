@@ -351,11 +351,11 @@ function Split(top, configuring) {
 				this.controldiv.style.top = '50%';
 				this.controldiv.style.bottom = '';
 				this.controldiv.style.left = nonzero(this.second.style.left);
-				this.controldiv.style.right = nonzero(this.second.style.right);
+				this.controldiv.style.right = nonzero(this.second.style.width);
 			}
 			else {
 				this.controldiv.style.top = nonzero(this.second.style.top);
-				this.controldiv.style.bottom = nonzero(this.second.style.bottom);
+				this.controldiv.style.bottom = nonzero(this.second.style.height);
 				this.controldiv.style.left = '50%';
 				this.controldiv.style.right = '';
 			}
