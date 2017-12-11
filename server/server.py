@@ -301,7 +301,7 @@ class Connection: # {{{
 		filename = fhs.read_data(os.path.join('firmware', boards[board]['build.mcu'] + os.extsep + 'hex'), opened = False)
 		if filename is None:
 			raise NotImplementedError('Firmware is not available')
-		return ('avrdude', '-D', '-q', '-q', '-p', boards[board]['build.mcu'], '-C /etc/avrdude.conf', '-b', boards[board]['upload.speed'], '-c', boards[board]['upload.protocol'], '-P', port, '-U', 'flash:w:' + filename + ':i')
+		return ('avrdude', '-D', '-q', '-q', '-p', boards[board]['build.mcu'], '-C', '/etc/avrdude.conf', '-b', boards[board]['upload.speed'], '-c', boards[board]['upload.protocol'], '-P', port, '-U', 'flash:w:' + filename + ':i')
 	# }}}
 	def upload(self, port, board): # {{{
 		wake = (yield)

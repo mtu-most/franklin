@@ -2712,13 +2712,13 @@ class Machine: # {{{
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin')])
 		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'timeout')])
 		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v')])
+		message += 'user_interface = %s\r\n' % self.user_interface
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings()
 		for i, t in enumerate(self.temps):
 			message += t.export_settings()
 		for i, g in enumerate(self.gpios):
 			message += g.export_settings()
-		message += 'user_interface = %s\r\n' % self.user_interface	# Put this last, to keep the file readable.
 		return message
 	# }}}
 	def expert_import_settings(self, settings, filename = None, update = True): # {{{
