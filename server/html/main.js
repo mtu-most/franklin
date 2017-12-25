@@ -597,7 +597,7 @@ function connect(ui, connected) { // {{{
 function autodetect() { // {{{
 } // }}}
 
-function new_port(ui, port) { // {{{
+function new_port(dummy, port) { // {{{
 	var ports = document.getElementById('ports');
 	var new_port = ports.AddElement('option').AddText(port);
 	new_port.value = port;
@@ -663,13 +663,12 @@ function new_machine(uuid) { // {{{
 		select_machine(p);
 } // }}}
 
-function blocked(uuid, reason) { // {{{
+function uploading(dummy, port, message) { // {{{
 	var e = document.getElementById('uploading');
-	if (reason)
-		e.ClearAll().AddText(reason).RemoveClass('hidden');
+	if (message)
+		e.ClearAll().AddText(message).RemoveClass('hidden');
 	else
 		e.AddClass('hidden');
-	machines[uuid].ui.bin.update();	// Hide interface parts if applicable.
 } // }}}
 
 function message(uuid, msg) { // {{{

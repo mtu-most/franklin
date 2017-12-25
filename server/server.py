@@ -341,7 +341,7 @@ class Connection: # {{{
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
 		websocketd.add_read(process.stdout, output, error)
-		#broadcast(None, 'blocked', port, 'uploading firmware for %s' % board)
+		broadcast(None, 'uploading', port, 'uploading firmware for %s' % board)
 		#broadcast(None, 'message', port, '')
 		d = (yield)
 		try:
@@ -352,7 +352,7 @@ class Connection: # {{{
 			process.communicate()	# Clean up.
 		except:
 			pass
-		#broadcast(None, 'blocked', port, None)
+		broadcast(None, 'uploading', port, None)
 		#broadcast(None, 'message', port, '')
 		broadcast(None, 'port_state', port, 0)
 		ports[port] = None

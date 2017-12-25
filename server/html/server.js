@@ -204,8 +204,8 @@ function _setup_updater() {
 			audio_list = list;
 			trigger_update(null, 'new_audio');
 		},
-		blocked: function(machine, reason) {
-			trigger_update(machine, 'blocked', reason);
+		uploading: function(port, message) {
+			trigger_update(null, 'uploading', port, message);
 		},
 		message: function(machine, stat) {
 			machines[machine].message = stat;

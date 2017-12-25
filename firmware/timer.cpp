@@ -103,7 +103,7 @@ void handle_motors() {
 				int16_t value = *reinterpret_cast <volatile int16_t *>(&buffer[cf][m][cs]);
 				uint8_t limit_pin = (value < 0 ? motor[m].limit_max_pin : motor[m].limit_min_pin);
 				bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
-				if (limit_pin >= NUM_DIGITAL_PINS || GET(limit_pin) ^ inverted) {
+				if (limit_pin < NUM_DIGITAL_PINS && GET(limit_pin) ^ inverted) {
 					// Limit pin still triggered; continue moving.
 					continue;
 				}
