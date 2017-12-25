@@ -154,6 +154,7 @@ function _setup_updater() {
 					temp_scale_min: 0,
 					temp_scale_max: 0,
 					message: null,
+					blocked: '',
 					confirmation: [null, ''],
 					spaces: [{
 							name: null,
@@ -206,6 +207,10 @@ function _setup_updater() {
 		},
 		uploading: function(port, message) {
 			trigger_update(null, 'uploading', port, message);
+		},
+		blocked: function(machine, message) {
+			machines[machine].blocked = message;
+			trigger_update(machine, 'blocked', message);
 		},
 		message: function(machine, stat) {
 			machines[machine].message = stat;

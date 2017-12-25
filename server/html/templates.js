@@ -628,6 +628,16 @@ function message(desc, pos, top) { // {{{
 	return [ret, pos];
 } // }}}
 
+function blocker_bar(desc, pos, top) { // {{{
+	var ui = top.data;
+	var ret = Create('h2');
+	ret.update = function() {
+		this.ClearAll().AddText(ui.machine.blocked);
+		this.hide(!ui.machine.blocked);
+	};
+	return [ret, pos];
+} // }}}
+
 function noconnect_bar(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('h2').AddText('This machine is not connected');
@@ -1085,6 +1095,7 @@ ui_modules = { // {{{
 	State: state,
 	Message: message,
 	'No Connection': noconnect_bar,
+	'Blocker': blocker_bar,
 	Confirmation: confirmation,
 	'ADC reading': ADCread
 }; // }}}

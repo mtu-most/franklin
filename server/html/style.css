@@ -314,7 +314,7 @@ h2 {
 	padding: 0px 1em;
 }
 
-#uploading {
+#uploading, .blocked {
 	position: fixed;
 	top: 0px;
 	width: 100%;

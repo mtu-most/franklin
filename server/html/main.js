@@ -663,6 +663,10 @@ function new_machine(uuid) { // {{{
 		select_machine(p);
 } // }}}
 
+function blocked(uuid, message) { // {{{
+	machines[uuid].ui.bin.update();
+} // }}}
+
 function uploading(dummy, port, message) { // {{{
 	var e = document.getElementById('uploading');
 	if (message)
@@ -698,7 +702,7 @@ function ask_confirmation(uuid, id, message) { // {{{
 	machines[uuid].ui.bin.update();
 } // }}}
 
-function update_queue(ui, element) {
+function update_queue(ui, element) { // {{{
 	var old = get_queue(ui, element);
 	var q = [];
 	for (var i = 0; i < element.options.length; ++i)
@@ -719,7 +723,7 @@ function update_queue(ui, element) {
 		}
 		element.options[i].selected = true;
 	}
-}
+} // }}}
 
 function queue(uuid) { // {{{
 	var e = get_elements(machines[uuid].ui, [null, 'queue']);
