@@ -617,7 +617,6 @@ function state(desc, pos, top) { // {{{
 	};
 	return [ret, pos];
 } // }}}
-
 function message(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'message');
@@ -627,7 +626,6 @@ function message(desc, pos, top) { // {{{
 	};
 	return [ret, pos];
 } // }}}
-
 function blocker_bar(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('h2');
@@ -637,7 +635,6 @@ function blocker_bar(desc, pos, top) { // {{{
 	};
 	return [ret, pos];
 } // }}}
-
 function noconnect_bar(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('h2').AddText('This machine is not connected');
@@ -646,7 +643,6 @@ function noconnect_bar(desc, pos, top) { // {{{
 	};
 	return [ret, pos];
 } // }}}
-
 function confirmation(desc, pos, top) { // {{{
 	var ui = top.data;
 	var self = Create('div', 'message').AddClass(make_id(ui, [null, 'confirm']));
@@ -676,7 +672,15 @@ function confirmation(desc, pos, top) { // {{{
 	};
 	return [self, pos];
 } // }}}
-
+function save_profile(desc, pos, top) { // {{{
+	var ui = top.data;
+	var ret = Create('div', 'setup expert');
+	b = ret.AddElement('button').AddText('Save Current Profile').AddEvent('click', function() {
+		ui.machine.call('save', [''], {});
+	});
+	b.type = 'button';
+	return [ret, pos];
+} // }}}
 function setup_profile(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
@@ -717,7 +721,6 @@ function setup_profile(desc, pos, top) { // {{{
 	// }}}
 	return [ret, pos];
 } // }}}
-
 function setup_probe(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
@@ -731,7 +734,6 @@ function setup_probe(desc, pos, top) { // {{{
 	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
 	return [ret, pos];
 } // }}}
-
 function setup_hardware(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
@@ -759,7 +761,6 @@ function setup_hardware(desc, pos, top) { // {{{
 	e.AddText('/s');
 	return [ret, pos];
 } // }}}
-
 function setup_type(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert').AddText('Machine Type:');
@@ -771,7 +772,6 @@ function setup_type(desc, pos, top) { // {{{
 	ret.AddElement('span').AddClass(make_id(ui, [['space', 0], 'type']));
 	return [ret, pos];
 } // }}}
-
 function setup_globals(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
@@ -1077,6 +1077,7 @@ ui_modules = { // {{{
 	'Temp Graph': Tempgraph,
 	Multipliers: Multipliers,
 	Gpios: Gpios,
+	'Save Profile': save_profile,
 	'Globals Setup': setup_globals,
 	'Profile Setup': setup_profile,
 	'Probe Setup': setup_probe,

@@ -189,7 +189,8 @@ class Machine: # {{{
 		self.initialized = False
 		self.connected = False
 		self.uuid = config['uuid']
-		self.user_interface = '{Dv2m(Blocker:){Dv2m(No Connection:){dv3m{dv3m{dv3m[0:*Controls:{Dh60%{Dv12m{Dv5m{dh11m(Job Control:)(Buttons:)}(Position:)}{Dh85%(XY Map:)(Z Map:)}}{Dv4m(Abort:){Dv6m(Multipliers:){Dv2m(Gpios:){Dv9m(Temps:)(Temp Graph:)}}}}}Setup:[0:*Profile:(Profile Setup:)Hardware:(Hardware Setup:)Probe:(Probe Setup:)Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dv3m(Type Setup:){Dh50%(Cartesian Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)Pins:(Pin Setup:)]](Confirmation:)}(Message:)}(State:)}}}'
+		# Add marker because default user interface has closing marker. {{{
+		self.user_interface = '{Dv2m(Blocker:){Dv2m(No Connection:){dv3m{dv3m{dv3m[0:*Controls:{Dh60%{Dv12m{Dv5m{dh11m(Job Control:)(Buttons:)}(Position:)}{Dh85%(XY Map:)(Z Map:)}}{Dv4m(Abort:){Dv6m(Multipliers:){Dv2m(Gpios:){Dv9m(Temps:)(Temp Graph:)}}}}}Setup:{Dv2m(Save Profile:)[0:*Profile:(Profile Setup:)Hardware:(Hardware Setup:)Probe:(Probe Setup:)Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dv3m(Type Setup:){Dh50%(Cartesian Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)Pins:(Pin Setup:)]}](Confirmation:)}(Message:)}(State:)}}}'
 		self.pin_names = []
 		self.machine = Driver()
 		self.allow_system = allow_system
@@ -865,8 +866,7 @@ class Machine: # {{{
 			name = '%s-%d' % (origname, i)
 			i += 1
 		bbox, errors = self._gcode_parse(f, name)
-		for e in errors:
-			log(e)
+		log(errors)
 		if bbox is None:
 			return errors
 		self.jobqueue[os.path.splitext(name)[0]] = bbox
@@ -1652,6 +1652,7 @@ class Machine: # {{{
 			current_extruder = 0
 			for lineno, origline in enumerate(src):
 				line = origline.strip()
+				origline = line
 				#log('parsing %s' % line)
 				# Get rid of line numbers and checksums.
 				if line.startswith('N'):
@@ -1683,7 +1684,7 @@ class Machine: # {{{
 					message = comment[4:].strip()
 				elif comment.startswith('SYSTEM:'):
 					if not re.match(self.allow_system, comment[7:]):
-						errors.append('Warning: system command %s is forbidden and will not be run' % comment[7:])
+						errors.append('%d:Warning: system command %s is forbidden and will not be run' % (lineno, comment[7:]))
 					add_record(protocol.parsed['SYSTEM'], [add_string(comment[7:])])
 					continue
 				if line == '':
@@ -1935,9 +1936,9 @@ class Machine: # {{{
 							add_record(protocol.parsed['SETPOS'], [e, 0])
 					elif cmd == ('M', 104):
 						if args['E'] >= len(self.temps):
-							errors.append('ignoring M104 for invalid temp %d' % args['E'])
+							errors.append('%d:ignoring M104 for invalid temp %d' % (lineno, args['E']))
 						elif 'S' not in args:
-							errors.append('ignoring M104 without S')
+							errors.append('%d:ignoring M104 without S' % lineno)
 						else:
 							add_record(protocol.parsed['SETTEMP'], [int(args['E']), args['S'] + C0])
 					elif cmd == ('M', 106):
@@ -1979,7 +1980,7 @@ class Machine: # {{{
 						bbox[t] = 0;
 			dst.write(struct.pack('=L' + 'd' * 8, len(strings), *(bbox + time_dist)))
 		self._broadcast(None, 'blocked', None)
-		return ret and ret + time_dist, errors
+		return ret and ret + time_dist, '\n'.join(errors)
 	# }}}
 	def _reset_extruders(self, axes): # {{{
 		for i, sp in enumerate(axes):
@@ -2977,7 +2978,7 @@ class Machine: # {{{
 		Note that this function can only be called using POST; not with the regular websockets system.
 		'''
 		with open(filename) as f:
-			return ', '.join(self._queue_add(f, name))
+			return self._queue_add(f, name)
 	# }}}
 	def probe_add_POST(self, filename, name): # {{{
 		'''Set probe map using a POST request.

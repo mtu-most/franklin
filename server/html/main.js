@@ -376,21 +376,6 @@ function select_machine(ui) { // {{{
 	}
 } // }}}
 
-function upload_buttons(port, ul, buttons) { // {{{
-	for (var b = 0; b < buttons.length; ++b) {
-		var li = ul.AddElement('li');
-		// Add the upload button.
-		var button = li.AddElement('button', 'upload');
-		button.type = 'button';
-		button.target = buttons[b][0];
-		button.onclick = function() {
-			rpc.call('upload', [port, this.target], {}, function(ret) { alert('upload done: ' + ret);});
-		};
-		button.AddText(buttons[b][1]);
-	}
-}
-// }}}
-
 function floatkey(event, element) { // {{{
 	if (event.ctrlKey || event.altKey)
 		return;
