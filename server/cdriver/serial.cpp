@@ -216,10 +216,13 @@ bool serial(uint8_t channel) { // {{{
 					continue;
 				case CMD_STALL3:
 					which += 1;
+					// Fall through.
 				case CMD_STALL2:
 					which += 1;
+					// Fall through.
 				case CMD_STALL1:
 					which += 1;
+					// Fall through.
 				case CMD_STALL0:
 					debug("received stall!");
 					ff_out = which;
@@ -229,10 +232,13 @@ bool serial(uint8_t channel) { // {{{
 					// Fall through.
 				case CMD_ACK3:
 					which += 1;
+					// Fall through.
 				case CMD_ACK2:
 					which += 1;
+					// Fall through.
 				case CMD_ACK1:
 					which += 1;
+					// Fall through.
 				case CMD_ACK0:
 					//debug("ack%d ff %d busy %d", which, ff_out, out_busy);
 					which &= 3;
@@ -266,10 +272,13 @@ bool serial(uint8_t channel) { // {{{
 					continue;
 				case CMD_NACK3:
 					which += 1;
+					// Fall through.
 				case CMD_NACK2:
 					which += 1;
+					// Fall through.
 				case CMD_NACK1:
 					which += 1;
+					// Fall through.
 				case CMD_NACK0:
 				{
 					// Nack: the host didn't properly receive the packet: resend.

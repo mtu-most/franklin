@@ -117,9 +117,10 @@ function Float(ui, obj, digits, factor, className, set) { // {{{
 	return [input, span];
 } // }}}
 
-function File(ui, obj, action, buttontext, types, cb) { // {{{
+function File(ui, obj, action, buttontext, types, multiple, cb) { // {{{
 	var input = Create('input');
 	input.type = 'file';
+	input.multiple = multiple ? true : false;
 	input.accept = types;
 	input.AddClass(make_id(ui, obj));
 	var button = Create('button', 'button').AddText(buttontext);
@@ -381,9 +382,9 @@ function JobControl(desc, pos, top) { // {{{
 	select.AddClass(make_id(ui, [null, 'queue']));
 	update_queue(ui, select);
 	e = ret.AddElement('div', 'jobbuttons');
-	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode'));
+	e.Add(File(ui, [null, 'queue_add', 'queue_add'], 'queue_add', 'Add', '.gcode,.ngc,application/x-gcode', true));
 	e.AddElement('br', 'benjamin');
-	e.Add(File(ui, [null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav'), 'benjamin');
+	e.Add(File(ui, [null, 'audio_add', 'audio_add'], 'audio_add', 'Add Audio', 'audio/x-wav', true), 'benjamin');
 	e.AddElement('br', 'benjamin');
 	var b = e.AddElement('button', 'benjamin').AddText('×').AddEvent('click', function() { audio_del(ui); });
 	b.type = 'button';

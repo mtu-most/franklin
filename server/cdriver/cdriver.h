@@ -28,6 +28,7 @@
 #include <poll.h>
 #include <sys/types.h>
 #include <sys/timerfd.h>
+#include <string>
 
 #define PROTOCOL_VERSION ((uint32_t)3)	// Required version response in BEGIN.
 #define ID_SIZE 8
@@ -110,6 +111,7 @@ enum Command {
 	CMD_LINE,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
 	CMD_SINGLE,	// Same as CMD_LINE.
 	CMD_PROBE,	// Same as CMD_LINE.
+	CMD_PARSE_GCODE,// 2 byte: in filename length, in filename, out filename
 	CMD_RUN_FILE,	// n byte: filename.
 	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
 	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [°C].
@@ -157,6 +159,7 @@ enum Command {
 	CMD_TIME,
 	CMD_TP_POS,	// double: current or found position in toolpath.
 	CMD_XYZ,	// double: axis position.
+	CMD_PARSED_GCODE,	// 0
 		// asynchronous events.
 	CMD_MOVECB,	// 1 byte: number of movecb events.
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
@@ -190,6 +193,7 @@ enum RunType {
 	RUN_CONFIRM,
 	RUN_PARK,
 };
+void parse_gcode(std::string const &infilename, std::string const &outfilename);
 
 // All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp {
@@ -511,7 +515,7 @@ void abort_move(int pos);
 struct Run_Record {
 	uint8_t type;
 	int32_t tool;
-	double X, Y, Z, E, f, F;
+	double X, Y, Z, E, F_start, F_end;
 	double time, dist;
 } __attribute__((__packed__));
 struct ProbeFile {

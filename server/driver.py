@@ -185,11 +185,73 @@ class Machine: # {{{
 		sys.stdout.write(json.dumps(data) + '\n')
 		sys.stdout.flush()
 	# }}}
+	def _refresh_queue(self):
+		if self.uuid is None:
+			return
+		spool = fhs.read_spool(self.uuid, dir = True, opened = False)
+		if spool is None:
+			return
+		gcode = os.path.join(spool, 'gcode')
+		audio = os.path.join(spool, 'audio')
+		probe = fhs.read_spool(os.path.join(self.uuid, 'probe' + os.extsep + 'bin'), text = False)
+		if probe is not None:
+			try:
+				# Map = [[targetx, targety, x0, y0, w, h], [nx, ny], [[...], [...], ...]]
+				size = struct.calcsize('@ddddddddLLd')
+				targetx, targety, x0, y0, w, h, sina, cosa, nx, ny, self.targetangle = struct.unpack('@ddddddddLLd', probe.read(size))
+				self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
+				sina, cosa = self.gcode_angle
+				limits = [targetx, targety, x0, y0, w, h]
+				nums = [nx, ny, self.targetangle]
+				if not (0 < nx < 1000 and 0 < ny < 1000):
+					raise ValueError('probe map too large; probably invalid')
+				probes = [[None for x in range(nx + 1)] for y in range(ny + 1)]
+				for y in range(ny + 1):
+					for x in range(nx + 1):
+						probes[y][x] = struct.unpack('@d', probe.read(struct.calcsize('@d')))[0]
+				self.probemap = [limits, nums, probes]
+			except:
+				log('Failed to load probe map')
+			self._globals_update()
+		if os.path.isdir(gcode):
+			self.jobqueue = {}
+			for filename in os.listdir(gcode):
+				name, ext = os.path.splitext(filename)
+				if ext != os.extsep + 'bin':
+					log('skipping %s' % filename)
+					continue
+				try:
+					#log('opening %s' % filename)
+					with open(os.path.join(gcode, filename), 'rb') as f:
+						f.seek(-8 * 8, os.SEEK_END)
+						self.jobqueue[name] = struct.unpack('=' + 'd' * 8, f.read())
+				except:
+					traceback.print_exc()
+					log('failed to open gcode file %s' % os.path.join(gcode, filename))
+			sortable_queue = [(q, self.jobqueue[q]) for q in self.jobqueue]
+			sortable_queue.sort()
+			self._broadcast(None, 'queue', sortable_queue)
+		if os.path.isdir(audio):
+			self.audioqueue = {}
+			for filename in os.listdir(audio):
+				name, ext = os.path.splitext(filename)
+				if ext != os.extsep + 'bin':
+					log('skipping %s' % filename)
+					continue
+				try:
+					#log('opening audio %s' % filename)
+					self.audioqueue[name] = os.stat(os.path.join(audio, filename)).st_size
+				except:
+					traceback.print_exc()
+					log('failed to stat audio file %s' % os.path.join(audio, filename))
+			sortable_queue = list(self.audioqueue.keys())
+			sortable_queue.sort()
+			self._broadcast(None, 'audioqueue', sortable_queue)
 	def __init__(self, allow_system): # {{{
 		self.initialized = False
 		self.connected = False
 		self.uuid = config['uuid']
-		# Add marker because default user interface has closing marker. {{{
+		# Start a block because the next line has an accidental end marker. {{{
 		self.user_interface = '{Dv2m(Blocker:){Dv2m(No Connection:){dv3m{dv3m{dv3m[0:*Controls:{Dh60%{Dv12m{Dv5m{dh11m(Job Control:)(Buttons:)}(Position:)}{Dh85%(XY Map:)(Z Map:)}}{Dv4m(Abort:){Dv6m(Multipliers:){Dv2m(Gpios:){Dv9m(Temps:)(Temp Graph:)}}}}}Setup:{Dv2m(Save Profile:)[0:*Profile:(Profile Setup:)Hardware:(Hardware Setup:)Probe:(Probe Setup:)Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dv3m(Type Setup:){Dh50%(Cartesian Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)Pins:(Pin Setup:)]}](Confirmation:)}(Message:)}(State:)}}}'
 		self.pin_names = []
 		self.machine = Driver()
@@ -298,61 +360,12 @@ class Machine: # {{{
 		# Fill job queue.
 		self.jobqueue = {}
 		self.audioqueue = {}
-		if self.uuid is not None:
-			spool = fhs.read_spool(self.uuid, dir = True, opened = False)
-			if spool is not None:
-				gcode = os.path.join(spool, 'gcode')
-				audio = os.path.join(spool, 'audio')
-				probe = fhs.read_spool(os.path.join(self.uuid, 'probe' + os.extsep + 'bin'), text = False)
-				if probe is not None:
-					try:
-						# Map = [[targetx, targety, x0, y0, w, h], [nx, ny], [[...], [...], ...]]
-						size = struct.calcsize('@ddddddddLLd')
-						targetx, targety, x0, y0, w, h, sina, cosa, nx, ny, self.targetangle = struct.unpack('@ddddddddLLd', probe.read(size))
-						self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
-						sina, cosa = self.gcode_angle
-						limits = [targetx, targety, x0, y0, w, h]
-						nums = [nx, ny, self.targetangle]
-						if not (0 < nx < 1000 and 0 < ny < 1000):
-							raise ValueError('probe map too large; probably invalid')
-						probes = [[None for x in range(nx + 1)] for y in range(ny + 1)]
-						for y in range(ny + 1):
-							for x in range(nx + 1):
-								probes[y][x] = struct.unpack('@d', probe.read(struct.calcsize('@d')))[0]
-						self.probemap = [limits, nums, probes]
-					except:
-						log('Failed to load probe map')
-				if os.path.isdir(gcode):
-					for filename in os.listdir(gcode):
-						name, ext = os.path.splitext(filename)
-						if ext != os.extsep + 'bin':
-							log('skipping %s' % filename)
-							continue
-						try:
-							#log('opening %s' % filename)
-							with open(os.path.join(gcode, filename), 'rb') as f:
-								f.seek(-8 * 8, os.SEEK_END)
-								self.jobqueue[name] = struct.unpack('=' + 'd' * 8, f.read())
-						except:
-							traceback.print_exc()
-							log('failed to open gcode file %s' % os.path.join(gcode, filename))
-				if os.path.isdir(audio):
-					for filename in os.listdir(audio):
-						name, ext = os.path.splitext(filename)
-						if ext != os.extsep + 'bin':
-							log('skipping %s' % filename)
-							continue
-						try:
-							#log('opening audio %s' % filename)
-							self.audioqueue[name] = os.stat(os.path.join(audio, filename)).st_size
-						except:
-							traceback.print_exc()
-							log('failed to stat audio file %s' % os.path.join(audio, filename))
-			try:
-				self.load(update = False)
-			except:
-				log('Failed to import initial settings')
-				traceback.print_exc()
+		self._refresh_queue()
+		try:
+			self.load(update = False)
+		except:
+			log('Failed to import initial settings')
+			traceback.print_exc()
 		global show_own_debug
 		if show_own_debug is None:
 			show_own_debug = True
@@ -858,20 +871,23 @@ class Machine: # {{{
 		self.paused = False
 		self._globals_update()
 	# }}}
-	def _queue_add(self, f, name): # {{{
-		name = os.path.split(name)[1]
+	def _queue_add(self, filename, name): # {{{
+		name = os.path.splitext(os.path.split(name)[1])[0]
 		origname = name
 		i = 0
 		while name == '' or name in self.jobqueue:
 			name = '%s-%d' % (origname, i)
 			i += 1
-		bbox, errors = self._gcode_parse(f, name)
-		log(errors)
-		if bbox is None:
-			return errors
-		self.jobqueue[os.path.splitext(name)[0]] = bbox
-		self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
-		return errors
+		infilename = filename.encode('utf-8', 'replace')
+		outfiledir = fhs.write_spool(os.path.join(self.uuid, 'gcode'), dir = True)
+		if not os.path.isdir(outfiledir):
+			os.makedirs(outfiledir)
+		outfilename = os.path.join(outfiledir, name + os.path.extsep + 'bin').encode('utf-8', 'replace')
+		self._broadcast(None, 'blocked', 'Parsing g-code')
+		self._send_packet(struct.pack('=BH', protocol.command['PARSE_GCODE'], len(infilename)) + infilename + outfilename)
+		self._get_reply()
+		self._refresh_queue()
+		self._broadcast(None, 'blocked', None)
 	# }}}
 	def _audio_add(self, f, name): # {{{
 		name = os.path.splitext(os.path.split(name)[1])[0]
@@ -2971,14 +2987,13 @@ class Machine: # {{{
 		with fhs.write_temp() as f:
 			f.write(data)
 			f.seek(0)
-			return self._queue_add(f, name)
+			return self._queue_add(f.filename, name)
 	# }}}
 	def queue_add_POST(self, filename, name): # {{{
 		'''Add g-code to queue using a POST request.
 		Note that this function can only be called using POST; not with the regular websockets system.
 		'''
-		with open(filename) as f:
-			return self._queue_add(f, name)
+		return self._queue_add(filename, name)
 	# }}}
 	def probe_add_POST(self, filename, name): # {{{
 		'''Set probe map using a POST request.

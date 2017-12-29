@@ -447,8 +447,8 @@ bool hwpacket(int len) { // {{{
 			}
 			//debug("underrun check %d %d %d", sending_fragment, current_fragment, running_fragment);
 		}
-		// Fall through.
 	} // }}}
+		// Fall through.
 	case HWC_DONE: // {{{
 	{
 		if (host_block) {

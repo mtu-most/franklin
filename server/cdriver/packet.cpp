@@ -262,6 +262,14 @@ void packet()
 		//	debug("waiting with move");
 		break;
 	}
+	case CMD_PARSE_GCODE: // Convert a file of G-Code into a machine readable file.
+	{
+		int fulllen = ((command[0][0] & 0xff) << 8) | (command[0][1] & 0xff);
+		int namelen = *reinterpret_cast <short *>(&command[0][3]);
+		parse_gcode(std::string((char *)&command[0][5], namelen), std::string((char *)&command[0][5 + namelen], fulllen - namelen - 5));
+		send_host(CMD_PARSED_GCODE);
+		break;
+	}
 	case CMD_RUN_FILE: // Run commands from a file.
 	{
 #ifdef DEBUG_CMD

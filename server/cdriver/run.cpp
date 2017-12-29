@@ -118,6 +118,7 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 		// int32_t numstrings
 		// double bbox[8]
 		run_file_num_strings = read_num(run_file_size - sizeof(double) * 8 - sizeof(int32_t));
+		debug("num strings: %d", run_file_num_strings);
 		strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
 		off_t pos = run_file_size - sizeof(double) * 8 - sizeof(int32_t) - sizeof(int32_t) * run_file_num_strings;
 		off_t current = 0;
@@ -219,7 +220,7 @@ void run_file_fill_queue() {
 	if (lock)
 		return;
 	lock = true;
-	rundebug("run queue, current = %d wait = %d tempwait = %d q = %d %d %d finish = %d", settings.run_file_current, run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start, settings.queue_full, run_file_finishing);
+	rundebug("run queue, current = %d/%d wait = %d tempwait = %d q = %d %d %d finish = %d", settings.run_file_current, run_file_num_records, run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start, settings.queue_full, run_file_finishing);
 	if (run_file_audio >= 0) {
 		while (true) {
 			if (!run_file_map || run_file_wait || run_file_finishing)
@@ -277,8 +278,8 @@ void run_file_fill_queue() {
 					queue[settings.queue_end].center[1] = y;
 					queue[settings.queue_end].center[2] = handle_probe(x, y, z);
 					queue[settings.queue_end].normal[0] = r.E;
-					queue[settings.queue_end].normal[1] = r.f;
-					queue[settings.queue_end].normal[2] = r.F;
+					queue[settings.queue_end].normal[1] = r.F_start;
+					queue[settings.queue_end].normal[2] = r.F_end;
 					break;
 				}
 				case RUN_PRE_LINE:
@@ -296,8 +297,8 @@ void run_file_fill_queue() {
 					queue[settings.queue_end].single = false;
 					queue[settings.queue_end].probe = false;
 					queue[settings.queue_end].arc = r.type == RUN_ARC;
-					queue[settings.queue_end].f[0] = r.f;
-					queue[settings.queue_end].f[1] = r.F;
+					queue[settings.queue_end].f[0] = r.F_start;
+					queue[settings.queue_end].f[1] = r.F_end;
 					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
 					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
 					double z = r.Z;
@@ -499,8 +500,8 @@ double run_find_pos(double pos[3]) {
 				center[1] = run_file_map[i].Y;
 				center[2] = run_file_map[i].Z;
 				normal[0] = run_file_map[i].E;
-				normal[1] = run_file_map[i].f;
-				normal[2] = run_file_map[i].F;
+				normal[1] = run_file_map[i].F_start;
+				normal[2] = run_file_map[i].F_end;
 				continue;
 			case RUN_ARC:
 				// TODO: handle arc; workaround: fall through, handle as line.

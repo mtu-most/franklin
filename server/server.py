@@ -192,23 +192,29 @@ class Server(websocketd.RPChttpd): # {{{
 			log('machine not found: %s' % machine)
 			self.reply(connection, 404)
 			return False
-		post = connection.post[1].pop('file')
-		def cb(success, ret):
-			self.reply(connection, 200 if success else 400, b'' if ret is None else ret.encode('utf-8'), 'text/plain;charset=utf-8')
-			os.unlink(post[0])
-			connection.socket.close()
-		if action == 'queue_add':
-			machines[machine].call('queue_add_POST', [connection.data['role'], post[0], post[1]], {}, cb)
-		elif action == 'probe_add':
-			machines[machine].call('probe_add_POST', [connection.data['role'], post[0], post[1]], {}, cb)
-		elif action == 'audio_add':
-			machines[machine].call('audio_add_POST', [connection.data['role'], post[0], post[1]], {}, cb)
-		elif action == 'import':
-			machines[machine].call('import_POST', [connection.data['role'], post[0], post[1]], {}, cb)
-		else:
-			os.unlink(post[0])
-			self.reply(connection, 400)
-			return False
+		# Count files, so we know when the connection should be closed.
+		# Use a list to make it accessible from the callback.
+		num = [len(connection.post[1]['file'])]
+		for post in connection.post[1].pop('file'):
+			def cb(success, ret, filename):
+				self.reply(connection, 200 if success else 400, b'' if ret is None else ret.encode('utf-8'), 'text/plain;charset=utf-8')
+				os.unlink(filename)
+				num[0] -= 1
+				if num[0] == 0:
+					connection.socket.close()
+			def cbwrap(filename):
+				'''This function makes sure that filename gets its own scope and is not changed by the for loop.'''
+				return lambda success, ret: cb(success, ret, filename)
+			if action == 'queue_add':
+				machines[machine].call('queue_add_POST', [connection.data['role'], post[0], post[1]], {}, cbwrap(post[0]))
+			elif action == 'probe_add':
+				machines[machine].call('probe_add_POST', [connection.data['role'], post[0], post[1]], {}, cbwrap(post[0]))
+			elif action == 'audio_add':
+				machines[machine].call('audio_add_POST', [connection.data['role'], post[0], post[1]], {}, cbwrap(post[0]))
+			elif action == 'import':
+				machines[machine].call('import_POST', [connection.data['role'], post[0], post[1]], {}, cbwrap(post[0]))
+			else:
+				cb(false, 'invalid POST action', post[0])
 		return True
 # }}}
 

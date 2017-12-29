@@ -1449,7 +1449,8 @@ function set_file(ui, id, element, action) { // {{{
 	var fd = new FormData();
 	fd.append('machine', ui.machine.uuid);
 	fd.append('action', action);
-	fd.append('file', element.files[0]);
+	for (var f = 0; f < element.files.length; ++f)
+		fd.append('file', element.files[f]);
 	post.open('POST', String(document.location), true);
 	post.AddEvent('readystatechange', function() {
 		if (this.readyState != this.DONE)
