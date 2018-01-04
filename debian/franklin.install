@@ -23,7 +23,7 @@ server/html/templates.js /usr/lib/franklin/html
 server/html/ui.js /usr/lib/franklin/html
 server/html/index.html /usr/lib/franklin/html
 server/html/main.js /usr/lib/franklin/html
-server/html/main.css /usr/lib/franklin/html
+server/html/style.css /usr/lib/franklin/html
 
 # Joystick tools.
 util/joystick.py /usr/lib/franklin
