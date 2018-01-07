@@ -507,7 +507,7 @@ def broadcast(target, name, *args): # {{{
 # }}}
 
 class Machine: # {{{
-	def __init__(self, port, process, detectport, run_id): # {{{
+	def __init__(self, port, process, detectport, run_id, send = True): # {{{
 		'''Create a new Machine object.
 		This can be called for several reasons:
 		- At startup, every saved machine is started.  In this case, port is None.
@@ -527,7 +527,7 @@ class Machine: # {{{
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
 		self.input_handle = websocketd.add_read(process.stdout, self.machine_input, self.machine_error)
-		def get_vars(success, vars):
+		def get_vars(success, vars, cb = None):
 			if not success:
 				log('failed to get vars')
 				if detectport is not None:
@@ -539,12 +539,21 @@ class Machine: # {{{
 				log('Driver started; closing server port')
 				detectport.close()
 			if self.uuid is None:
+				log('new uuid:' + repr(vars['uuid']))
 				self.uuid = vars['uuid']
 			else:
 				assert self.uuid == vars['uuid']
 			self.detecting = False
 			self.call('send_machine', ['admin', None], {}, lambda success, data: broadcast(None, 'port_state', port, 2))
-		self.call('get_globals', ('admin',), {}, get_vars)
+			if cb is not None:
+				cb()
+		if send:
+			self.call('get_globals', ('admin',), {}, get_vars)
+		else:
+			def finish(cb):
+				self.call('get_globals', ('admin',), {}, lambda success, vars: get_vars(success, vars, cb))
+				del self.finish
+			self.finish = finish
 	# }}}
 	def call(self, name, args, kargs, cb): # {{{
 		#log('calling {}'.format(repr((name, args, kargs))))
@@ -808,17 +817,21 @@ def detect(port): # {{{
 				log('accepting unknown machine on port %s' % port)
 				#log('machines: %s' % repr(tuple(machines.keys())))
 				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--uuid', uuid if uuid is not None else '', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-				new_machine = Machine(port, process, machine, run_id)
-				def finish(success, uuid):
-					assert success
-					ports[port] = uuid
-					machines[uuid] = new_machine
-					log('connecting new machine %s to port %s' % (uuid, port))
+				new_machine = Machine(port, process, machine, run_id, send = uuid is not None)
+				def finish():
+					log('finish detect %s' % repr(new_machine.uuid))
+					ports[port] = new_machine.uuid
+					machines[new_machine.uuid] = new_machine
+					log('connecting new machine %s to port %s' % (new_machine.uuid, port))
 					new_machine.call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: None)
 				if uuid is None:
-					new_machine.call('reset_uuid', ['admin'], {}, finish)
+					def prefinish(success, uuid):
+						assert success
+						new_machine.uuid = uuid
+						new_machine.finish(finish)
+					new_machine.call('reset_uuid', ['admin'], {}, prefinish)
 				else:
-					finish(True, uuid)
+					finish()
 			return False
 		def boot_machine_error():
 			log('error during machine detection on port %s.' % port)

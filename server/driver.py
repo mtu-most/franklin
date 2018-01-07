@@ -2261,6 +2261,8 @@ class Machine: # {{{
 		uuid = protocol.new_uuid(string = False)
 		self._send_packet(struct.pack('=B', protocol.command['SET_UUID']) + bytes(uuid))
 		self.uuid = protocol.new_uuid(uuid = uuid, string = True)
+		if not self.name:
+			self.name = self.uuid
 		return self.uuid
 	# }}}
 	def expert_die(self, reason): # {{{

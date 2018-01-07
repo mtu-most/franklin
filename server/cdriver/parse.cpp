@@ -466,7 +466,7 @@ bool Parser::handle_command() { // {{{
 			// Set extruder temperature.
 			flush_pending();
 			{
-				double s;
+				double s = 0;
 				bool have_s = false;
 				for (auto arg: command) {
 					if (arg.type == 'S') {
@@ -498,7 +498,7 @@ bool Parser::handle_command() { // {{{
 			// Set extruder or bed temperature and wait for it to heat up.
 			flush_pending();
 			{
-				double s;
+				double s = 0;
 				bool have_s = false;
 				for (auto arg: command) {
 					if (arg.type == 'S') {
