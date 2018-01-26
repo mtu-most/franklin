@@ -380,6 +380,8 @@ bool Parser::handle_command() { // {{{
 					continue;
 				}
 				epos[current_tool] = arg.num;
+				flush_pending();
+				add_record(RUN_SETPOS, current_tool, arg.num);
 			}
 			break;
 		case 94:
