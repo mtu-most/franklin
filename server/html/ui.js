@@ -157,7 +157,7 @@ function Bin(top, configuring) {
 	self.style.bottom = '0em';
 	self.control = self.AddElement('div');
 	self.configuring = configuring ? true : false;	// This turns undefined into false.
-	self.control.style.display = configuring ? '' : 'none';
+	self.control.style.display = (configuring && top.show_hidden) ? '' : 'none';
 	self.control.style.position = 'absolute';
 	self.control.style.width = '100%';
 	self.control.style.bottom = '0em';
@@ -314,12 +314,12 @@ function Split(top, configuring) {
 		};
 		clear(this.first);
 		clear(this.second);
-		if (!this.configuring && this.hide_first) {
+		if (!(this.configuring && this.top.show_hidden) && this.hide_first) {
 			this.first.style.display = 'none';
 			this.second.style.display = '';
 			return;
 		}
-		if (!this.configuring && this.hide_second) {
+		if (!(this.configuring && this.top.show_hidden) && this.hide_second) {
 			this.first.style.display = '';
 			this.second.style.display = 'none';
 			return;
@@ -427,6 +427,7 @@ function Tabs(top, configuring) {
 		tab.style.width = '100%';
 		tab.style.bottom = '0em';
 		tab.style.top = '2em';
+		tab.style.overflow = 'auto';
 		tab.tabname = 'New Tab';
 		tab.titlebox = this.bar.AddElement('div', 'tab');
 		tab.titlebox.AddEvent('click', function() {
@@ -474,11 +475,11 @@ function Tabs(top, configuring) {
 	self.update = function() {
 		for (var t = 0; t < this.tabs.length; ++t)
 			this.tabs[t].update();
-		while (this.selected >= 0 && this.tabs[this.selected].hidden && !this.configuring)
+		while (this.selected >= 0 && this.tabs[this.selected].hidden && !(this.configuring && this.top.show_hidden))
 			this.selected -= 1;
 		if (this.selected < 0) {
 			this.selected = this.tabs.length - 1;
-			while (this.selected >= 0 && this.tabs[this.selected].hidden && !this.configuring)
+			while (this.selected >= 0 && this.tabs[this.selected].hidden && !(this.configuring && this.top.show_hidden))
 				this.selected -= 1;
 			if (this.selected < 0) {
 				this.hide(true);
@@ -653,6 +654,7 @@ function UI_setup(bin_parent, content, data) {
 	bin.split_input.style.width = '5em';
 	bin.split_input.type = 'number';
 	bin.split_input.min = 0;
+	bin.split_input.step = 0.1;
 	bin.split_input.AddEvent('change', function() {
 		if (bin.active_split === null)
 			return;
@@ -688,6 +690,16 @@ function UI_setup(bin_parent, content, data) {
 	});
 	button.type = 'button';
 	button.style.width = '100%';
+	d = bin.splitcontrol.AddElement('div');
+	var label = d.AddElement('label');
+	var box = label.AddElement('input');
+	box.type = 'checkbox';
+	bin.show_hidden = box.checked;
+	box.AddEvent('change', function() {
+		bin.show_hidden = box.checked;
+		bin.update();
+	});
+	label.AddText('Show Hidden');
 	// }
 	if (typeof content == 'string')
 		content = ui_build(content, bin);
