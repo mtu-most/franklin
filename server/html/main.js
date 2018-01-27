@@ -30,7 +30,7 @@ var new_tab, new_page;
 
 // General supporting functions. {{{
 var reading_temps = false;
-function timed_update() {
+function timed_update() { // {{{
 	if (reading_temps || selected_machine === null || selected_machine === undefined || machines[selected_machine].ui.disabling)
 		return;
 	reading_temps = true;
@@ -190,7 +190,7 @@ function timed_update() {
 		update_canvas_and_spans(ui);
 	};
 	read(null, 0);
-}
+} // }}}
 
 AddEvent('load', function() { // {{{
 	labels_element = document.getElementById('labels');
@@ -576,7 +576,10 @@ function audio_del(ui, select) { // {{{
 
 // Non-update events. {{{
 function connect(ui, connected) { // {{{
-	// TODO
+	if (ui)
+		ui.bin.update();
+	if (connected)
+		select_machine(ui);
 } // }}}
 
 function autodetect() { // {{{
@@ -754,7 +757,7 @@ function audioqueue(uuid) { // {{{
 // }}}
 
 // Update events(from server). {{{
-function globals_update(uuid, ui_configure) { // {{{
+function globals_update(uuid, ui_configure, nums_changed) { // {{{
 	var p = machines[uuid].ui;
 	if (p.updating_globals)
 		return;
@@ -898,10 +901,14 @@ function globals_update(uuid, ui_configure) { // {{{
 	for (var i = 0; i < p.machine.gpios.length; ++i)
 		gpio_update(p.machine.uuid, i);
 	update_canvas_and_spans(p);
+	if (!ui_configure && nums_changed && p.bin !== undefined) {
+		console.info('nums changed in globals');
+		p.bin.update();
+	}
 	p.updating_globals = false;
 } // }}}
 
-function space_update(uuid, index) { // {{{
+function space_update(uuid, index, nums_changed) { // {{{
 	var p = machines[uuid].ui;
 	set_name(p, 'space', index, 0, p.machine.spaces[index].name);
 	if (index == 0) {
@@ -1019,6 +1026,10 @@ function space_update(uuid, index) { // {{{
 	p.hidetypes = newhidetypes;
 	update_table_visibility(p);
 	update_canvas_and_spans(p);
+	if (nums_changed && p.bin !== undefined) {
+		console.info('nums changed in space');
+		p.bin.update();
+	}
 } // }}}
 
 function temp_update(uuid, index) { // {{{
@@ -1073,8 +1084,9 @@ function update_table_visibility(ui) { // {{{
 	for (var t = 0; t < ui.tables.length; ++t) {
 		var show = false;
 		// Start at 1: skip title row.
-		for (var c = 1; c < ui.tables[t].children.length; ++c) {
-			if (!ui.tables[t].children[c].HaveClass('hidden')) {
+		for (var c = 1; c < ui.tables[t].childNodes.length; ++c) {
+			var node = ui.tables[t].childNodes[c];
+			if (node.className !== undefined && !node.HaveClass('hidden')) {
 				show = true;
 				break;
 			}

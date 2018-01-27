@@ -181,6 +181,8 @@ bool Parser::handle_command() { // {{{
 					if (!(current_f[code == 0 ? 0 : 1] > 0))
 						debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
 				}
+				// Slicers don't support acceleration, so set old speed to new speed.
+				old_f = current_f[code == 0 ? 0 : 1];
 				auto oldpos = pos;
 				auto oldepos = epos;
 				double estep, r;
@@ -220,7 +222,7 @@ bool Parser::handle_command() { // {{{
 					dist = sqrt(dist);
 					if (isnan(dist))
 						dist = 0;
-					pending.push_back(Record(false, current_tool, oldpos[0], pos[0], oldpos[1], pos[1], oldpos[2], pos[2], oldpos[3], pos[3], oldpos[4], pos[4], oldpos[5], pos[5], dist > 0 ? old_f / dist : INFINITY, dist > 0 ? current_f[code] / dist : INFINITY, oldepos[current_tool], epos[current_tool]));
+					pending.push_back(Record(false, current_tool, oldpos[0], pos[0], oldpos[1], pos[1], oldpos[2], pos[2], oldpos[3], pos[3], oldpos[4], pos[4], oldpos[5], pos[5], dist > 0 ? old_f / dist : INFINITY, dist > 0 ? current_f[code == 0 ? 0 : 1] / dist : INFINITY, oldepos[current_tool], epos[current_tool]));
 				}
 				else {
 					if (isnan(oldpos[2]))
@@ -299,6 +301,8 @@ bool Parser::handle_command() { // {{{
 					current_f[1] = F * unit / 60;
 					debug("new f1: %f", current_f[code]);
 				}
+				// Slicers don't support acceleration, so set old speed to new speed.
+				old_f = current_f[1];
 				auto oldpos = pos;
 				auto oldepos = epos;
 				double estep;

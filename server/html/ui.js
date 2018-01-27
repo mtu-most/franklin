@@ -66,11 +66,13 @@ function ui_build(string, top, pos) {
 		ret.em = string[pos++] == 'm';
 		// First child.
 		sub = ui_build(string, top, pos);
-		ret.first.set_content(sub[0]);
+		if (sub[0] !== null)
+			ret.first.set_content(sub[0]);
 		pos = sub[1];
 		// Second child.
 		sub = ui_build(string, top, pos);
-		ret.second.set_content(sub[0]);
+		if (sub[0] !== null)
+			ret.second.set_content(sub[0]);
 		pos = sub[1];
 		if (string[pos++] != '}')
 			console.error('invalid final character for Split building', string, pos);
@@ -96,10 +98,12 @@ function ui_build(string, top, pos) {
 			var tabname = string.substr(pos, namepos - pos);
 			pos = namepos + 1;
 			sub = ui_build(string, top, pos);
-			ret.add_tab(sub[0]);
-			ret.tabs[t].tabname = decodeURIComponent(tabname);
+			if (sub[0] !== null) {
+				ret.add_tab(sub[0]);
+				ret.tabs[t].tabname = decodeURIComponent(tabname);
+				t += 1;
+			}
 			pos = sub[1];
-			t += 1;
 		}
 		pos += 1;
 		ret.select(selected);
@@ -121,7 +125,13 @@ function ui_build(string, top, pos) {
 			console.error('invalid final character for custom build', string, pos);
 		return [sub[0], pos];
 	}
-	console.error('No valid module found', string, pos);
+	// Skip over invalid data.
+	var oldpos = pos;
+	while (pos < string.length && string[pos] != ')')
+		pos += 1;
+	if (pos < string.length)
+		pos += 1;
+	console.error('No valid module found', string.substr(oldpos - 1, pos - oldpos + 1));
 	return [null, pos];
 }
 
@@ -475,7 +485,16 @@ function Tabs(top, configuring) {
 				return;
 			}
 		}
+		var numtabs = 0;
 		for (var t = 0; t < this.tabs.length; ++t) {
+			if (this.tabs[t].hidden) {
+				this.tabs[t].titlebox.style.display = 'none';
+				this.tabs[t].style.display = 'none';
+				continue;
+			}
+			this.tabs[t].titlebox.style.display = 'inline';
+			this.tabs[t].style.display = 'block';
+			numtabs += 1;
 			if (t == this.selected) {
 				this.tabs[t].titlebox.AddClass('active');
 				this.tabs[t].style.display = '';
@@ -501,6 +520,7 @@ function Tabs(top, configuring) {
 			this.tabs[t].killbutton.style.display = 'none';
 			this.tabs[t].titlespan.ClearAll().AddText(this.tabs[t].tabname);
 		}
+		this.hide(numtabs == 0);
 	};
 	self.destroy = function() {
 		for (var t = 0; t < this.tabs.length; ++t)

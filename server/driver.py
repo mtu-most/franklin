@@ -252,7 +252,7 @@ class Machine: # {{{
 		self.connected = False
 		self.uuid = config['uuid']
 		# Start a block because the next line has an accidental end marker. {{{
-		self.user_interface = '{Dv2m(Blocker:){Dv2m(No Connection:){dv3m{dv3m{dv3m[0:*Controls:{Dh60%{Dv12m{Dv5m{dh11m(Job Control:)(Buttons:)}(Position:)}{Dh85%(XY Map:)(Z Map:)}}{Dv4m(Abort:){Dv6m(Multipliers:){Dv2m(Gpios:){Dv9m(Temps:)(Temp Graph:)}}}}}Setup:{Dv2m(Save Profile:)[0:*Profile:(Profile Setup:)Hardware:(Hardware Setup:)Probe:(Probe Setup:)Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dv3m(Type Setup:){Dh50%(Cartesian Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)Pins:(Pin Setup:)]}](Confirmation:)}(Message:)}(State:)}}}'
+		self.user_interface = '{Dv2m(Blocker:){Dv2m(No Connection:){dv3m{dv3m{dv3m[0:*Controls:{Dh60%{Dv12m{Dv5m{dh11m(Job Control:)(Buttons:)}(Position:)}{Dh85%(XY Map:)(Z Map:)}}{Dv4m(Abort:){Dv6m(Multipliers:){Dv2m(Gpios:){Dv9m(Temps:)(Temp Graph:)}}}}}Setup:{Dv2m(Save Profile:)[0:*Profile:(Profile Setup:)Probe:(Probe Setup:)Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dv3m(Type Setup:){Dh50%(Cartesian Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)]}](Confirmation:)}(Message:)}(State:)}}}'
 		self.pin_names = []
 		self.machine = Driver()
 		self.allow_system = allow_system

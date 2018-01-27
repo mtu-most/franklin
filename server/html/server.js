@@ -253,6 +253,7 @@ function _setup_updater() {
 			machines[machine].probemap = values[32];
 			machines[machine].connected = values[33];
 			machines[machine].status = values[34];
+			var nums_changed = machines[machine].num_temps != new_num_temps || machines[machine].num_gpios != new_num_gpios;
 			for (var i = machines[machine].num_temps; i < new_num_temps; ++i) {
 				machines[machine].temps.push({
 					name: null,
@@ -282,12 +283,17 @@ function _setup_updater() {
 			}
 			machines[machine].gpios.length = new_num_gpios;
 			machines[machine].num_gpios = new_num_gpios;
-			trigger_update(machine, 'globals_update', machines[machine].ui_update);
+			trigger_update(machine, 'globals_update', machines[machine].ui_update, nums_changed);
 		},
 		space_update: function(machine, index, values) {
+			var nums_changed = false;
 			machines[machine].spaces[index].name = values[0];
 			machines[machine].spaces[index].type = values[1];
+			if (machines[machine].spaces[index].num_axes != values[2].length)
+				nums_changed = true;
 			machines[machine].spaces[index].num_axes = values[2].length;
+			if (machines[machine].spaces[index].num_motors != values[3].length)
+				nums_changed = true;
 			machines[machine].spaces[index].num_motors = values[3].length;
 			var current = [];
 			for (var a = 0; a < machines[machine].spaces[index].num_axes; ++a)
@@ -349,7 +355,7 @@ function _setup_updater() {
 					machines[machine].spaces[index].motor[i].follower_motor = values[5][i][1];
 				}
 			}
-			trigger_update(machine, 'space_update', index);
+			trigger_update(machine, 'space_update', index, nums_changed);
 		},
 		temp_update: function(machine, index, values) {
 			machines[machine].temps[index].name = values[0];
@@ -394,8 +400,13 @@ function _reconnect() {
 			_updater.del_machine(p);
 		_updater.del_port(p);
 	}
-	if (!confirm('The connection to the server was lost.  Reconnect?'))
+	try {
+		if (!confirm('The connection to the server was lost.  Reconnect?'))
+			return;
+	}
+	catch (e) {
 		return;
+	}
 	// Wait a moment before retrying.
 	setTimeout(function() {
 		rpc = Rpc(_updater, _setup_connection, _reconnect);
