@@ -1,0 +1,64 @@
+Pin description of MKS MELZI V2.0
+Available from Aliexpress.
+
+Pin	Function
+0	dir e
+1	step e
+2	dir w
+3	step w
+4	fan
+5	ext2:6	probe
+6	ext2:1
+7	ext2:2
+8	-	rx0
+9	-	tx0
+10	ext2:3
+11	ext2:5
+12	hotend fet
+13	bed fet
+14	enable u v e
+15	step u
+16	ext1:5
+17	ext1:6
+18	limit u
+19	limit v
+20	limit w
+21	dir u
+22	step v
+23	dir v
+24	ext2:4
+25	ext1:4
+26	ext1:8
+27	ext1:3
+28	ext1:7	(led?)
+29	enable w
+30	bed temp
+31	hotend temp
+
+Ext headers; pin 1 has a square solder pad.  Counted as:
+2 4 6 8 10
+1 3 5 7 9
+
+Exp1:
+1	?
+2	A5(D29, enable w)
+3	A3(D27)
+4	A1(D25)
+5	D16     (scl)
+6	D17     (sda)
+7	A4(D28)
+8	A2(D26)
+9	gnd
+10	vcc
+
+Exp2:
+1	D6      (miso)
+2	D7      (sck)
+3	D10     (rx1)
+4	A0(D24)
+5	D11     (tx1)
+6	D5      (mosi)
+7	?
+8	reset
+9	gnd
+10	?

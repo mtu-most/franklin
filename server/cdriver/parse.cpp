@@ -87,7 +87,7 @@ struct Parser { // {{{
 	bool get_chunk(Chunk &ret, std::string &comment);
 	int add_string(std::string const &str);
 	void read_space();
-	int read_int(double *power = NULL);
+	int read_int(double *power = NULL, int *sign = NULL);
 	double read_fraction();
 	void flush_pending();
 	void add_record(RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double e = NAN, double f0 = INFINITY, double f1 = INFINITY);
@@ -118,7 +118,8 @@ bool Parser::get_chunk(Chunk &ret, std::string &comment) { // {{{
 	}
 	read_space();
 	ret.type = std::toupper(t);
-	ret.code = read_int();
+	int sign;
+	ret.code = read_int(NULL, &sign);
 	ret.num = ret.code;
 	// RepRap had made G-Code even worse by defining M117...
 	if (ret.type == 'M' && ret.code == 117) {
@@ -131,7 +132,7 @@ bool Parser::get_chunk(Chunk &ret, std::string &comment) { // {{{
 	if (linepos >= line.size() || line[linepos] != '.')
 		return true;
 	linepos += 1;
-	ret.num += read_fraction();
+	ret.num += sign * read_fraction();
 	return true;
 } // }}}
 
@@ -178,8 +179,8 @@ bool Parser::handle_command() { // {{{
 				double old_f = current_f[code == 0 ? 0 : 1];
 				if (!isnan(F)) {
 					current_f[code == 0 ? 0 : 1] = F * unit / 60;
-					if (!(current_f[code == 0 ? 0 : 1] > 0))
-						debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
+					//if (!(current_f[code == 0 ? 0 : 1] > 0))
+					//	debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
 				}
 				// Slicers don't support acceleration, so set old speed to new speed.
 				old_f = current_f[code == 0 ? 0 : 1];
@@ -299,7 +300,7 @@ bool Parser::handle_command() { // {{{
 				double old_f = current_f[1];
 				if (!isnan(F)) {
 					current_f[1] = F * unit / 60;
-					debug("new f1: %f", current_f[code]);
+					//debug("new f1: %f", current_f[code]);
 				}
 				// Slicers don't support acceleration, so set old speed to new speed.
 				old_f = current_f[1];
@@ -572,7 +573,7 @@ void Parser::read_space() { // {{{
 	}
 } // }}}
 
-int Parser::read_int(double *power) { // {{{
+int Parser::read_int(double *power, int *sign) { // {{{
 	if (linepos >= line.size()) {
 		debug("%d:int requested at end of line", lineno);
 		return 0;
@@ -586,6 +587,8 @@ int Parser::read_int(double *power) { // {{{
 			return 0;
 		}
 	}
+	if (sign)
+		*sign = s;
 	read_space();
 	int ret = 0;
 	while (true) {
@@ -719,6 +722,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 				break;
 	}
 	// Write final data.
+	flush_pending();
 	// Strings.
 	for (auto str: strings)
 		outfile << str;
