@@ -473,19 +473,23 @@ bool Parser::handle_command() { // {{{
 			// Set extruder temperature.
 			flush_pending();
 			{
-				double s = 0;
-				bool have_s = false;
+				double s = 0, t = 0;
+				bool have_s = false, have_t = false;
 				for (auto arg: command) {
 					if (arg.type == 'S') {
 						s = arg.num;
 						have_s = true;
+					}
+					if (arg.type == 'T') {
+						t = arg.num;
+						have_t = true;
 					}
 				}
 				if (!have_s) {
 					debug("%d:M104 needs S argument.", lineno);
 					break;
 				}
-				add_record(RUN_SETTEMP, e, s + C0);
+				add_record(RUN_SETTEMP, have_t ? t : e, s + C0);
 			}
 			break;
 		case 106:
@@ -505,17 +509,23 @@ bool Parser::handle_command() { // {{{
 			// Set extruder or bed temperature and wait for it to heat up.
 			flush_pending();
 			{
-				double s = 0;
-				bool have_s = false;
+				double s = 0, t = 0;
+				bool have_s = false, have_t = false;
 				for (auto arg: command) {
 					if (arg.type == 'S') {
 						s = arg.num;
 						have_s = true;
 					}
+					if (arg.type == 'T') {
+						t = arg.num;
+						have_t = true;
+					}
 				}
+				if (!have_t)
+					t = e;
 				if (have_s)
-					add_record(RUN_SETTEMP, e, s + C0);
-				add_record(RUN_WAITTEMP, e);
+					add_record(RUN_SETTEMP, t, s + C0);
+				add_record(RUN_WAITTEMP, t);
 			}
 			break;
 		case 116:
