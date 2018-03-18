@@ -37,11 +37,11 @@ struct Parser { // {{{
 	struct Record { // {{{
 		bool arc;
 		int tool;
-		double x0, y0, z0, x, y, z, a0, b0, c0, a, b, c, f0, f1, e0, e;
+		double x, y, z, a, b, c, f, e;
 		double center[3];
 		double normal[3];
 		double time, dist;
-		Record(bool arc_, int tl, double x0_, double x_, double y0_, double y_, double z0_, double z_, double a0_, double a_, double b0_, double b_, double c0_, double c_, double f0_, double f1_, double e0_, double e_, double cx = NAN, double cy = NAN, double cz = NAN, double nx = NAN, double ny = NAN, double nz = NAN) : arc(arc_), tool(tl), x0(x0_), y0(y0_), z0(z0_), x(x_), y(y_), z(z_), a0(a0_), b0(b0_), c0(c0_), a(a_), b(b_), c(c_), f0(f0_), f1(f1_), e0(e0_), e(e_) {
+		Record(bool arc_, int tl, double x_, double y_, double z_, double a_, double b_, double c_, double f_, double e_, double cx = NAN, double cy = NAN, double cz = NAN, double nx = NAN, double ny = NAN, double nz = NAN) : arc(arc_), tool(tl), x(x_), y(y_), z(z_), a(a_), b(b_), c(c_), f(f_), e(e_) {
 			center[0] = cx;
 			center[1] = cy;
 			center[2] = cz;
@@ -49,6 +49,13 @@ struct Parser { // {{{
 			normal[1] = ny;
 			normal[2] = nz;
 		}
+		// Helper variables for computing the move.
+		double s[3];	// Vector to this point.
+		double length;	// Length of segment to this point.
+		double l_max;	// Maximum length, based on length of this and next segment.
+		double unit[3];	// Unit vector along s.
+		double n[3];	// Vector normal to e0 and e1.
+		double theta;	// Angle between e0 and e1.
 	}; // }}}
 	// Variables. {{{
 	std::ifstream infile;
@@ -63,7 +70,6 @@ struct Parser { // {{{
 	std::vector <double> bbox;
 	std::vector <std::string> strings;
 	std::list <unsigned> stringmap;
-	unsigned strings_length;
 	double unit;
 	bool rel;
 	bool erel;
@@ -176,16 +182,12 @@ bool Parser::handle_command() { // {{{
 					else
 						debug("%d:ignoring invalid parameter %c: %s", lineno, arg.type, line.c_str());
 				}
-				double old_f = current_f[code == 0 ? 0 : 1];
 				if (!isnan(F)) {
 					current_f[code == 0 ? 0 : 1] = F * unit / 60;
 					//if (!(current_f[code == 0 ? 0 : 1] > 0))
 					//	debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
 				}
-				// Slicers don't support acceleration, so set old speed to new speed.
-				old_f = current_f[code == 0 ? 0 : 1];
 				auto oldpos = pos;
-				auto oldepos = epos;
 				double estep, r;
 				if (code != 81) {
 					r = NAN;
@@ -223,7 +225,7 @@ bool Parser::handle_command() { // {{{
 					dist = sqrt(dist);
 					if (isnan(dist))
 						dist = 0;
-					pending.push_back(Record(false, current_tool, oldpos[0], pos[0], oldpos[1], pos[1], oldpos[2], pos[2], oldpos[3], pos[3], oldpos[4], pos[4], oldpos[5], pos[5], dist > 0 ? old_f / dist : INFINITY, dist > 0 ? current_f[code == 0 ? 0 : 1] / dist : INFINITY, oldepos[current_tool], epos[current_tool]));
+					pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], dist > 0 ? current_f[code == 0 ? 0 : 1] / dist : INFINITY, epos[current_tool]));
 				}
 				else {
 					if (isnan(oldpos[2]))
@@ -297,15 +299,10 @@ bool Parser::handle_command() { // {{{
 					else
 						debug("%d:ignoring invalid arc parameter %c: %s", lineno, arg.type, line.c_str());
 				}
-				double old_f = current_f[1];
 				if (!isnan(F)) {
 					current_f[1] = F * unit / 60;
 					//debug("new f1: %f", current_f[code]);
 				}
-				// Slicers don't support acceleration, so set old speed to new speed.
-				old_f = current_f[1];
-				auto oldpos = pos;
-				auto oldepos = epos;
 				double estep;
 				estep = isnan(E) ? 0 : erel ? E * unit - epos[current_tool] : E * unit;
 				epos[current_tool] += estep;
@@ -323,7 +320,7 @@ bool Parser::handle_command() { // {{{
 				center[1] = pos[1] + (isnan(J) ? 0 : J * unit);
 				center[2] = pos[2] + (isnan(K) ? 0 : K * unit);
 				int s = code == 2 ? -1 : 1;
-				pending.push_back(Record(true, current_tool, oldpos[0], pos[0], oldpos[1], pos[1], oldpos[2], pos[2], oldpos[3], pos[3], oldpos[4], pos[4], oldpos[5], pos[5], -old_f, -current_f[1], oldepos[current_tool], epos[current_tool], center[0], center[1], center[2], s * arc_normal[0], s * arc_normal[1], s * arc_normal[2]));
+				pending.push_back(Record(true, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], -current_f[1], epos[current_tool], center[0], center[1], center[2], s * arc_normal[0], s * arc_normal[1], s * arc_normal[2]));
 			}
 			break;
 		case 4:
@@ -549,7 +546,7 @@ bool Parser::handle_command() { // {{{
 		current_tool = code;
 		// Move to current position for extruder offset correction.
 		flush_pending();
-		pending.push_back(Record(false, current_tool, pos[0], pos[0], pos[1], pos[1], pos[2], pos[2], pos[3], pos[3], pos[4], pos[4], pos[5], pos[5], INFINITY, INFINITY, epos[current_tool], epos[current_tool]));
+		pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, epos[current_tool]));
 	} // }}}
 	else {
 		// Command was not handled: complain.
@@ -566,8 +563,7 @@ int Parser::add_string(std::string const &str) { // {{{
 	if (found != strings.end())
 		return found - strings.begin();
 	strings.push_back(str);
-	stringmap.push_back(strings_length);
-	strings_length += str.size();
+	stringmap.push_back(str.size());
 	return strings.size() - 1;
 } // }}}
 
@@ -645,7 +641,6 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	tool_changed = false;
 	last_time = 0;
 	last_dist = 0;
-	strings_length = 0;
 	arc_normal[0] = 0;
 	arc_normal[1] = 0;
 	arc_normal[2] = 1;
@@ -737,14 +732,9 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	for (auto str: strings)
 		outfile << str;
 	// String lengths.
-	bool first = true;
 	for (auto str: stringmap) {
-		if (!first) {
-			uint32_t bin = str;
-			outfile.write(reinterpret_cast <char *>(&bin), sizeof(bin));
-		}
-		else
-			first = false;
+		uint32_t bin = str;
+		outfile.write(reinterpret_cast <char *>(&bin), sizeof(bin));
 	}
 	// Number of strings.
 	uint32_t strnum = strings.size() - 1;
@@ -752,31 +742,105 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	// Bbox.
 	for (double b: bbox)
 		outfile.write(reinterpret_cast <char *>(&b), sizeof(b));
+	// Time+dist
 	outfile.write(reinterpret_cast <char *>(&last_time), sizeof(last_time));
 	outfile.write(reinterpret_cast <char *>(&last_dist), sizeof(last_dist));
-	// Time+dist
 } // }}}
 
 void Parser::flush_pending() { // {{{
-	// Turn Records into Run_Records and write them out.
-	while (pending.size() > 0) {
-		// TODO: Limit moves.
-		// TODO: Look ahead to prevent overly limiting moves.
+	if (pending.size() == 0)
+		return;
+	pending.push_front(pending.front());
+	pending.push_back(pending.back());
+	// Limit moves.
+	// Look ahead to prevent overly limiting moves.
+	pending.begin()->s[0] = 0;
+	pending.begin()->s[1] = 0;
+	pending.begin()->s[2] = 0;
+	pending.begin()->length = 0;
+	pending.begin()->unit[0] = INFINITY;
+	pending.begin()->unit[1] = INFINITY;
+	pending.begin()->unit[2] = INFINITY;
+	for (auto P0 = pending.begin(), P1 = ++pending.begin(); P1 != pending.end(); ++P0, ++P1) {
+		P1->s[0] = P1->x - P0->x;
+		P1->s[1] = P1->y - P0->y;
+		P1->s[2] = P1->z - P0->z;
+		P1->length = sqrt(P0->s[0] * P0->s[0] + P0->s[1] * P0->s[1] + P0->s[2] * P0->s[2]);
+		P0->l_max = P1->length > P0->length ? P0->length / 2 : P1->length / 2;
+		P1->unit[0] = P1->s[0] / P1->length;
+		P1->unit[1] = P1->s[1] / P1->length;
+		P1->unit[2] = P1->s[2] / P1->length;
+		P0->n[0] = (P1->s[1] - P0->s[2]) * (P1->s[2] - P0->s[1]);
+		P0->n[1] = (P1->s[2] - P0->s[0]) * (P1->s[0] - P0->s[2]);
+		P0->n[2] = (P1->s[0] - P0->s[1]) * (P1->s[1] - P0->s[0]);
+		P0->theta = acos(P0->unit[0] * P1->unit[0] + P0->unit[1] * P1->unit[1] + P0->unit[2] * P1->unit[2]);
+	}
+	(--pending.end())->theta = NAN;
+	auto P0 = pending.begin();
+	auto P1 = ++pending.begin();
+	auto P2 = ++ ++pending.begin();
+	while (P2 != pending.end()) {
+		double orig_v = P0->f;
+		// Set up variables with names used in this part.
+		double &d_max = max_deviation;
+		double v_max = P0->f > P1->f ? P0->f : P1->f;	// This is the highest of the two.
+		if (v_max > max_v)
+			v_max = max_v;
+		double &a = max_a;
+		// theta, d_max -> r_a
+		double r_a = 2 * d_max / (1 - sin(P1->theta / 2)) - d_max;
+		// r_a, d_max -> l_a
+		double l1 = sqrt((r_a + d_max) * (r_a + d_max) - (r_a - d_max) * (r_a - d_max));
+		double l2 = sqrt(r_a * r_a - (r_a - d_max / 2) * (r_a - d_max / 2));
+		double l_a = l1 + 2 * l2;
+		// l_a, l_max, ra -> l_b, r_b
+		double l_b, r_b;
+		if (l_a <= P1->l_max) {
+			l_b = l_a;
+			r_b = r_a;
+		}
+		else {
+			l_b = P1->l_max;
+			r_b = r_a * (l_b / l_a);
+		}
+		// r_b, a -> v_a
+		double v_a = sqrt(a * r_b);
+		// v_a, v_max -> v_b
+		double v_b = v_a > v_max ? v_max : v_a;
+		// v_b, a -> r_c
+		double r_c = v_b * v_b / a;
+		// r_c, theta -> d_a
+		double d_a = 2 * r_c * sin(P1->theta / 2) + r_c;
+		// Adjust target speed.
+		if (P1->f > v_b)
+			P1->f = v_b;
+		if (P0->f > v_b)
+			P0->f = v_b;
+		double length = P1->length + P2->length + r_c * P1->theta - 2 * l_a;
+		// TODO: Finish this.
+		++P0;
+		++P1;
+		++P2;
+	}
+	// Turn Records into Run_Records and write them out.  Ignore fake first and last record.
+	Record old_p = pending.front();
+	pending.pop_front();
+	while (pending.size() > 1) {
 		Record &p = pending.front();
 		if (p.arc) {
 			add_record(RUN_PRE_ARC, p.tool, p.center[0], p.center[1], p.center[2], p.normal[0], p.normal[1], p.normal[2]);
-			add_record(RUN_ARC, p.tool, p.x, p.y, p.z, p.e, p.f0, p.f1);
+			add_record(RUN_ARC, p.tool, p.x, p.y, p.z, p.e, p.f, p.f);
 			// TODO: Update time+dist.
 			// TODO: Update bbox.
 		}
 		else {
 			// Not an arc.
-			if (((!isnan(p.a0) || !isnan(p.a)) && p.a0 != p.a) || ((!isnan(p.b0) || !isnan(p.b)) && p.b0 != p.b) || ((!isnan(p.c0) || !isnan(p.c)) && p.c0 != p.c))
+			if (((!isnan(old_p.a) || !isnan(p.a)) && old_p.a != p.a) || ((!isnan(old_p.b) || !isnan(p.b)) && old_p.b != p.b) || ((!isnan(old_p.c) || !isnan(p.c)) && old_p.c != p.c))
 				add_record(RUN_PRE_LINE, p.tool, p.a, p.b, p.c);
-			add_record(RUN_LINE, p.tool, p.x, p.y, p.z, p.e, p.f0, p.f1);
+			add_record(RUN_LINE, p.tool, p.x, p.y, p.z, p.e, p.f, p.f);
 			// Update time+dist.
 			double dist = 0;
-			double dists[3] = {p.x - p.x0, p.y - p.y0, p.z - p.z0};
+			double dists[3] = {p.x - old_p.x, p.y - old_p.y, p.z - old_p.z};
 			for (int i = 0; i < 3; ++i) {
 				double d = dists[i] * dists[i];
 				if (!isnan(d))
@@ -784,14 +848,14 @@ void Parser::flush_pending() { // {{{
 			}
 			dist = sqrt(dist);
 			if (dist > 0) {
-				if (isinf(p.f0) || isinf(p.f1)) {
+				if (isinf(p.f)) {
 					if (!isnan(dist))
 						last_dist += dist;
 				}
 				else {
-					double t = 2 / (p.f0 + p.f1);
+					double t = 1 / p.f;
 					if (isinf(t))
-						debug("%d:wtf dist %f x %f y %f f0 %f f1 %f", lineno, dist, p.x, p.y, p.f0, p.f1);
+						debug("%d:wtf dist %f x %f y %f f %f", lineno, dist, p.x, p.y, p.f);
 					if (!isnan(t))
 						last_time += t;
 				}
@@ -811,6 +875,7 @@ void Parser::flush_pending() { // {{{
 			if (!(p.z < bbox[5]))
 				bbox[5] = p.z;
 		}
+		old_p = p;
 		pending.pop_front();
 	}
 } // }}}

@@ -3039,8 +3039,11 @@ class Machine: # {{{
 			return
 		#log('set active jobs to %s' % names)
 		self.job_current = name
-		self.job_id = id
-		self._start_job(paused)
+		if self.job_current is not None:
+			self.job_id = id
+			self._start_job(paused)
+		elif id is not None:
+			self._send(id, 'return', None)
 	# }}}
 	def get_machine_state(self): # {{{
 		'''Return current machine state.

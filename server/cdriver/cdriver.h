@@ -415,7 +415,7 @@ static int const FULL_COMMAND_SIZE[2] = {HOST_COMMAND_SIZE, FULL_SERIAL_COMMAND_
 
 // Globals
 EXTERN double max_deviation;
-EXTERN double max_v;
+EXTERN double max_v, max_a;
 EXTERN unsigned char uuid[UUID_SIZE];
 EXTERN uint8_t num_extruders;
 EXTERN uint8_t num_temps;

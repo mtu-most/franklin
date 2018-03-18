@@ -2045,10 +2045,15 @@ function keypress(event) { // {{{
 		event.preventDefault();
 	}
 	else if (event.charCode >= 48 && event.charCode <= 57 && event.ctrlKey) {
-		var minx = ui.bbox[0];
-		var maxx = ui.bbox[1];
-		var miny = ui.bbox[2];
-		var maxy = ui.bbox[3];
+		if (ui.bbox.length != 1) {
+			event.preventDefault();
+			alert('Moving to bounding box positions is only supported with exactly one job selector');
+			return;
+		}
+		var minx = ui.bbox[0][0];
+		var maxx = ui.bbox[0][1];
+		var miny = ui.bbox[0][2];
+		var maxy = ui.bbox[0][3];
 		var pos = [[0, 0],
 			[minx, miny], [(minx + maxx) / 2, miny], [maxx, miny],
 			[minx, (miny + maxy) / 2], [(minx + maxx) / 2, (miny + maxy) / 2], [maxx, (miny + maxy) / 2],
