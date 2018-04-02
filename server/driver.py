@@ -3301,6 +3301,8 @@ class Machine: # {{{
 			num_motors = 3;
 			if 'delta' in ka:
 				d = ka.pop('delta')
+				if isinstance(d, (list, tuple)):
+					d = {i: item for i, item in enumerate(d)}
 				for di, dd in d.items():
 					i = int(di)
 					assert 0 <= i < 3
