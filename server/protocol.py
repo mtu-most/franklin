@@ -35,7 +35,9 @@ single = {
 	'ID': b'\xbc',          # Request/reply machine ID code.
 	'DEBUG': b'\xdd',       # Debug message; a nul-terminated message follows (no checksum; no resend).
 	'STARTUP': b'\xee',     # Starting up.
-	'STALLACK': b'\x8f'     # Clear stall.
+	'STALLACK': b'\x8f',    # Clear stall.
+	# Note: The following code is close to STALLACK; there is no way around this.
+	'CONTROLLER': b'\x87',	# Reply to ID request: this is a controller, not a machine running Franklin.
 	}
 
 command = {

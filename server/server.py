@@ -111,7 +111,8 @@ config = fhs.init(packagename = 'franklin', config = {
 		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(GS)?\\d*))$', # Which serial ports to refuse detecting on.
 		'add-blacklist': '$',	# Which serial ports to additionally refuse detecting on.  Used to add ports to the list without losing the defaults.
 		'autodetect': True,	# Whether new machines are autodetected on new ports, and after flashing.
-		'predetect': 'stty -F #PORT# raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',	# What to do to a port before detecting a machine.
+		'predetect': 'stty -F $PORT raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',	# What to do to a port before detecting a machine.
+		'controller': '/usr/lib/franklin/controller.py --dev "$PORT"',	# How to start a controller subprocess
 		'allow-system': '^$',	# Which commands are allowed through system comments in G-Code.
 		'admin': '',	# Admin password; defaults to expert password.
 		'expert': '',	# Expert password; defaults to user password.
@@ -674,6 +675,7 @@ last_id = random.randrange(1 << 32)
 id_map = [0x40, 0xe1, 0xd2, 0x73, 0x74, 0xd5, 0xe6, 0x47, 0xf8, 0x59, 0x6a, 0xcb, 0xcc, 0x6d, 0x5e, 0xff]
 # }}}
 
+# TODO: see if this should be used again.
 def job_done(port, completed, reason): # {{{
 	broadcast(None, 'running', port.port, False)
 	if config['done']:
@@ -719,7 +721,9 @@ def detect(port): # {{{
 		log("not detecting on %s, because file doesn't exist." % port)
 		return False
 	if config['predetect']:
-		subprocess.call(config['predetect'].replace('#PORT#', port), shell = True)
+		env = os.environ.copy()
+		env['PORT'] = port
+		subprocess.call(config['predetect'], env = env, shell = True)
 	try:
 		machine = serial.Serial(port, baudrate = 115200, timeout = 0)
 	except serial.SerialException as e:
@@ -763,6 +767,16 @@ def detect(port): # {{{
 				id[0] += data
 				#log('incomplete id: ' + id[0])
 				if len(id[0]) < 34:
+					if len(id[0]) > 0 and id[0][0] == protocol.single['CONTROLLER'][0]:
+						# This is a controller. Spawn the process, then cancel this detection.
+						websocketd.remove_timeout(timeout_handle[0])
+						machine.close()
+						ports[port] = None
+						broadcast(None, 'port_state', port, 0)
+						env = os.environ.copy()
+						env['PORT'] = port
+						subprocess.Popen(config['controller'], env = env, shell = True)
+						return False
 					return True
 				if id[0][0] not in ids or not protocol.check(id[0]):
 					log('skip non-id: %s (%s)' % (''.join('%02x' % x for x in id[0]), repr(id[0])))
@@ -850,15 +864,11 @@ def detect(port): # {{{
 			ports[port] = None
 		ports[port] = cancel
 	# Wait at least a second before sending anything, otherwise the bootloader thinks we might be trying to reprogram it.
-	# This is only a problem for RAMPS; don't wait for ports that cannot be RAMPS.
-	if 'ACM' in port:
-		handle = websocketd.add_timeout(time.time() + 1.5, part2)
-		def cancel():
-			websocketd.remove_timeout(handle)
-			ports[port] = None
-		ports[port] = cancel
-	else:
-		part2()
+	handle = websocketd.add_timeout(time.time() + 1.5, part2)
+	def cancel():
+		websocketd.remove_timeout(handle)
+		ports[port] = None
+	ports[port] = cancel
 # }}}
 
 def disable(uuid, reason): # {{{

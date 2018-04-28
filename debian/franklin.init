@@ -42,7 +42,10 @@ RUN=1
 #AUTODETECT=True
 
 # System command to run before trying to detect a printer.
-#PREDETECT='stty -F #PORT# raw 115200'
+#PREDETECT='stty -F "$PORT" raw 115200'
+
+# System command to run when a controller is found.
+#CONTROLLER='/usr/lib/franklin/controller.py --dev "$PORT"'
 
 # Regular expression of serial ports to ignore.
 #BLACKLIST='/dev/(input/.*|ptmx|console|tty(printk|(GS)?\d*))$'
@@ -84,6 +87,7 @@ START_ARGS=("${ARGS[@]}" --background --oknodo --start --startas "$DAEMON" -- --
 if [ -v AUTODETECT ] ; then	START_ARGS+=(--autodetect="$AUTODETECT") ; fi
 if [ -v ARC ] ; then		START_ARGS+=(--arc="$ARC") ; fi
 if [ -v PREDETECT ] ; then	START_ARGS+=(--predetect="$PREDETECT") ; fi
+if [ -v CONTROLLER ] ; then	START_ARGS+=(--controller="$CONTROLLER") ; fi
 if [ -v PORT ] ; then		START_ARGS+=(--port="$PORT") ; fi
 if [ -v ADDRESS ] ; then	START_ARGS+=(--address="$ADDRESS") ; fi
 if [ -v TLS ] ; then		START_ARGS+=(--tls="$TLS") ; fi
