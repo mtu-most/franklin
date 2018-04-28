@@ -36,8 +36,9 @@ single = {
 	'DEBUG': b'\xdd',       # Debug message; a nul-terminated message follows (no checksum; no resend).
 	'STARTUP': b'\xee',     # Starting up.
 	'STALLACK': b'\x8f',    # Clear stall.
-	# Note: The following code is close to STALLACK; there is no way around this.
-	'CONTROLLER': b'\x87',	# Reply to ID request: this is a controller, not a machine running Franklin.
+	# Note: The following code is invalid for a regular single command, because it doesn't have bit 7 set. For controllers, that's a feature, because it's what replies look like.
+	# Also, this means it can be 2 bits different from all of Franklin's single byte commands.
+	'CONTROLLER': b'\x07',	# Reply to ID request: this is a controller, not a machine running Franklin.
 	}
 
 command = {
