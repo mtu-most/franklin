@@ -46,7 +46,7 @@ static void set_from_queue(int s, int qpos, int a0, bool next, bool allow_arc) {
 	Space &sp = spaces[s];
 	for (int a = 0; a < sp.num_axes; ++a) {
 		sp.axis[a]->settings.endpos[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0);
-		if (isnan(sp.axis[a]->settings.source)) {
+		if (std::isnan(sp.axis[a]->settings.source)) {
 			// This can only happen for extruders.
 			if (s != 1) {
 				debug("BUG: NaN source for non-extruder %d %d; please report.", s, a);
@@ -54,11 +54,11 @@ static void set_from_queue(int s, int qpos, int a0, bool next, bool allow_arc) {
 			}
 			sp.axis[a]->settings.source = sp.axis[a]->settings.endpos[1];
 		}
-		if (isnan(queue[qpos].data[a0 + a])) {
+		if (std::isnan(queue[qpos].data[a0 + a])) {
 			sp.axis[a]->settings.dist[1] = 0;
 		}
 		else {
-			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next && !isnan(sp.axis[a]->settings.endpos[0]) ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
+			sp.axis[a]->settings.dist[1] = queue[qpos].data[a0 + a] + (s == 0 && a == 2 ? zoffset : 0) - (next && !std::isnan(sp.axis[a]->settings.endpos[0]) ? sp.axis[a]->settings.endpos[0] : sp.axis[a]->settings.source);
 #ifdef DEBUG_MOVE
 			debug("setting dist for %d %d (+%d) queue (%d) %f next %d end %f src %f dist %f", s, a, a0, qpos, queue[qpos].data[a0 + a], next, sp.axis[a]->settings.endpos[0], sp.axis[a]->settings.source, sp.axis[a]->settings.dist[1]);
 #endif
@@ -132,12 +132,12 @@ static void set_from_queue(int s, int qpos, int a0, bool next, bool allow_arc) {
 		}
 		double d = 0;
 		for (int a = 0; a < min(3, sp.num_axes); ++a) {
-			if (!isnan(sp.axis[a]->settings.dist[1]))
+			if (!std::isnan(sp.axis[a]->settings.dist[1]))
 				d += sp.axis[a]->settings.dist[1] * sp.axis[a]->settings.dist[1];
 		}
 		sp.settings.dist[1] = sqrt(d);
 	} // }}}
-	if (isnan(sp.settings.dist[1]))
+	if (std::isnan(sp.settings.dist[1]))
 		sp.settings.dist[1] = 0;
 } // }}}
 
@@ -198,9 +198,9 @@ int next_move() { // {{{
 		}
 		Space &sp = spaces[s];
 		for (int a = 0; a < sp.num_axes; ++a) {
-			if (isnan(sp.axis[a]->settings.source)) {
+			if (std::isnan(sp.axis[a]->settings.source)) {
 				allow_arc = false;
-				if (!isnan(sp.axis[a]->settings.current)) {
+				if (!std::isnan(sp.axis[a]->settings.current)) {
 					sp.axis[a]->settings.source = sp.axis[a]->settings.current;
 					continue;
 				}
@@ -246,20 +246,20 @@ int next_move() { // {{{
 		for (int a = 0; a < sp.num_axes; ++a) {
 			if (n != settings.queue_end) {
 				// If only one of them is set, set the other one as well to make the rounded corner work.
-				if (!isnan(queue[settings.queue_start].data[a0 + a]) && isnan(queue[n].data[a0 + a])) {
+				if (!std::isnan(queue[settings.queue_start].data[a0 + a]) && std::isnan(queue[n].data[a0 + a])) {
 					queue[n].data[a0 + a] = sp.axis[a]->settings.source + sp.axis[a]->settings.dist[1] - (s == 0 && a == 2 ? zoffset : 0);
 #ifdef DEBUG_MOVE
 					debug("filling next %d with %f", a0 + a, queue[n].data[a0 + a]);
 #endif
 				}
-				if (isnan(queue[settings.queue_start].data[a]) && !isnan(queue[n].data[a])) {
+				if (std::isnan(queue[settings.queue_start].data[a]) && !std::isnan(queue[n].data[a])) {
 					queue[settings.queue_start].data[a0 + a] = sp.axis[a]->settings.source;
 #ifdef DEBUG_MOVE
 					debug("filling %d with %f", a0 + a, queue[settings.queue_start].data[a0 + a]);
 #endif
 				}
 			}
-			if ((!isnan(queue[settings.queue_start].data[a0 + a]) || (n != settings.queue_end && !isnan(queue[n].data[a0 + a]))) && isnan(sp.axis[a]->settings.source)) {
+			if ((!std::isnan(queue[settings.queue_start].data[a0 + a]) || (n != settings.queue_end && !std::isnan(queue[n].data[a0 + a]))) && std::isnan(sp.axis[a]->settings.source)) {
 				debug("Motor position for %d %d is not known, so move cannot take place; aborting move and removing it from the queue: q1=%f q2=%f src=%f", s, a, queue[settings.queue_start].data[a0 + a], queue[n].data[a0 + a], sp.axis[a]->settings.source);
 				// This possibly removes one move too many, but it shouldn't happen anyway.
 				if (queue[settings.queue_start].cb)
@@ -371,7 +371,7 @@ int next_move() { // {{{
 			limit = sp.motor[current_extruder]->limit_v;
 		else
 			continue;
-		if (isnan(limit) || isinf(limit) || limit <= 0)
+		if (std::isnan(limit) || std::isinf(limit) || limit <= 0)
 			continue;
 		// max_mm is the maximum speed in mm/s.
 		double max_mm = settings.probing ? space_types[sp.type].probe_speed(&sp) : limit;
@@ -438,12 +438,12 @@ int next_move() { // {{{
 			if (new_fp < settings.fp)
 				settings.fp = new_fp;
 		}
-		if (isnan(done_factor))
+		if (std::isnan(done_factor))
 			settings.fq = 0;
 		else
 			settings.fq = settings.fp * factor;
 	}
-	if (isnan(done_factor))
+	if (std::isnan(done_factor))
 		done_factor = 1;
 	// }}}
 
@@ -498,7 +498,7 @@ int next_move() { // {{{
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
 			for (int a = 0; a < sp.num_axes; ++a) {
-				if (!isnan(sp.axis[a]->settings.current))
+				if (!std::isnan(sp.axis[a]->settings.current))
 					sp.axis[a]->settings.source = sp.axis[a]->settings.current;
 			}
 		}
@@ -556,7 +556,7 @@ void abort_move(int pos) { // {{{
 		sp.settings.dist[1] = 0;
 		for (int a = 0; a < sp.num_axes; ++a) {
 			//debug("setting axis %d source to %f", a, sp.axis[a]->settings.current);
-			if (!isnan(sp.axis[a]->settings.current))
+			if (!std::isnan(sp.axis[a]->settings.current))
 				sp.axis[a]->settings.source = sp.axis[a]->settings.current;
 			sp.axis[a]->settings.dist[0] = NAN;
 			sp.axis[a]->settings.dist[1] = NAN;

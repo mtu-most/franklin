@@ -2825,6 +2825,9 @@ class Machine: # {{{
 					if len(self.pin_names) > 0:
 						# Don't override hardware-provided names.
 						continue
+					if value.strip() == '':
+						# Avoid errors when empty.
+						continue
 					value = [[int(x[0]), x[1:]] for x in value.split(',')]
 				elif 'name' in key or key == 'user_interface':
 					pass	# Keep strings as they are.
@@ -3073,7 +3076,7 @@ class Machine: # {{{
 		'''Return all settings about a machine.
 		'''
 		self.initialized = True
-		self._broadcast(target, 'new_machine', self.uuid, [self.queue_length])
+		self._broadcast(target, 'new_machine', [self.queue_length])
 		self._globals_update(target)
 		for i, s in enumerate(self.spaces):
 			self._space_update(i, target)

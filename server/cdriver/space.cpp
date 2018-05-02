@@ -169,7 +169,7 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 	motor[m]->limit_min_pin.read(read_16(addr));
 	motor[m]->limit_max_pin.read(read_16(addr));
 	motor[m]->steps_per_unit = read_float(addr);
-	if (isnan(motor[m]->steps_per_unit)) {
+	if (std::isnan(motor[m]->steps_per_unit)) {
 		debug("Trying to set NaN steps per unit for motor %d %d", id, m);
 		motor[m]->steps_per_unit = old_steps_per_unit;
 	}
@@ -190,9 +190,9 @@ void Space::load_motor(int m, int32_t &addr) { // {{{
 	RESET(motor[m]->dir_pin);
 	SET_INPUT(motor[m]->limit_min_pin);
 	SET_INPUT(motor[m]->limit_max_pin);
-	if (!isnan(motor[m]->home_pos)) {
+	if (!std::isnan(motor[m]->home_pos)) {
 		// Axes with a limit switch.
-		if (motors_busy && (old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !isnan(old_home_pos)) {
+		if (motors_busy && (old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !std::isnan(old_home_pos)) {
 			double ohp = old_home_pos * old_steps_per_unit;
 			double hp = motor[m]->home_pos * motor[m]->steps_per_unit;
 			double diff = hp - ohp;
@@ -275,7 +275,7 @@ static void check_distance(int sp, int mt, Motor *mtr, double distance, double d
 		factor = 0;
 		return;
 	}
-	if (isnan(distance) || distance == 0) {
+	if (std::isnan(distance) || distance == 0) {
 		mtr->settings.target_dist = 0;
 		//mtr->last_v = 0;
 		return;
@@ -406,7 +406,7 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 			continue;
 		Space &sp = spaces[s];
 		for (int a = 0; a < sp.num_axes; ++a) {
-			if (!isnan(sp.axis[a]->settings.target)) {
+			if (!std::isnan(sp.axis[a]->settings.target)) {
 				//debug("add %d %d %f -> %f", s, a, (sp.axis[a]->settings.target - sp.axis[a]->settings.current) * factor, sp.axis[a]->settings.current);
 				sp.axis[a]->settings.current += (sp.axis[a]->settings.target - sp.axis[a]->settings.current) * factor;
 			}
@@ -421,7 +421,7 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 				continue;
 			Space &sp = spaces[s];
 			for (int a = 0; a < sp.num_axes; ++a) {
-				if (!isnan(sp.axis[a]->settings.target))
+				if (!std::isnan(sp.axis[a]->settings.target))
 					sp.axis[a]->settings.target = sp.axis[a]->settings.current;
 			}
 			move_axes(&sp, settings.last_time, dummy_factor);
@@ -441,7 +441,7 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 #ifdef DEBUG_PATH
 	fprintf(stderr, "%d", current_time);
 	for (int a = 0; a < spaces[0].num_axes; ++a) {
-		if (isnan(spaces[0].axis[a]->settings.target))
+		if (std::isnan(spaces[0].axis[a]->settings.target))
 			fprintf(stderr, "\t%f", spaces[0].axis[a]->settings.source);
 		else
 			fprintf(stderr, "\t%f", spaces[0].axis[a]->settings.target);
@@ -457,7 +457,7 @@ static bool do_steps(double &factor, int32_t current_time) { // {{{
 		Space &sp = spaces[s];
 		for (int m = 0; m < sp.num_motors; ++m) {
 			Motor &mtr = *sp.motor[m];
-			if (isnan(mtr.settings.target_dist) || mtr.settings.target_dist == 0) {
+			if (std::isnan(mtr.settings.target_dist) || mtr.settings.target_dist == 0) {
 				//debug("no %d %d", s, m);
 				//if (mtr.target_v == 0)
 					//mtr.last_v = 0;
@@ -538,9 +538,9 @@ static void handle_motors(unsigned long long current_time) { // {{{
 			if (!settings.single && s == 2)
 				continue;
 			Space &sp = spaces[s];
-			if (!isnan(sp.settings.dist[0])) {
+			if (!std::isnan(sp.settings.dist[0])) {
 				for (int a = 0; a < sp.num_axes; ++a) {
-					if (!isnan(sp.axis[a]->settings.dist[0])) {
+					if (!std::isnan(sp.axis[a]->settings.dist[0])) {
 						sp.axis[a]->settings.source += sp.axis[a]->settings.dist[0];
 						sp.axis[a]->settings.dist[0] = NAN;
 						//debug("new source %d %f", a, sp.axis[a]->settings.source);
@@ -631,7 +631,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				continue;
 			Space &sp = spaces[s];
 			for (int a = 0; a < sp.num_axes; ++a) {
-				if (isnan(sp.axis[a]->settings.dist[0])) {
+				if (std::isnan(sp.axis[a]->settings.dist[0])) {
 					sp.axis[a]->settings.target = NAN;
 					continue;
 				}
@@ -653,7 +653,7 @@ static void handle_motors(unsigned long long current_time) { // {{{
 				continue;
 			Space &sp = spaces[s];
 			for (int a = 0; a < sp.num_axes; ++a) {
-				if (isnan(sp.axis[a]->settings.dist[0]) && isnan(sp.axis[a]->settings.dist[1])) {
+				if (std::isnan(sp.axis[a]->settings.dist[0]) && std::isnan(sp.axis[a]->settings.dist[1])) {
 					sp.axis[a]->settings.target = NAN;
 					continue;
 				}

@@ -1,0 +1,77 @@
+.ui_bin {
+	position: absolute;
+	left: 0em;
+	right: 0em;
+	top: 0em;
+	bottom: 0em;
+}
+
+.ui_control {
+	position: absolute;
+	width: 100%;
+	bottom: 0em;
+	background: yellow;
+}
+
+.ui_controldiv {
+	position: absolute;
+}
+
+.ui_tabbar {
+	position: absolute;
+	top: 0em;
+	width: 100%;
+	height: 2.5em;
+	background: #cfc;
+	display: flex;
+	align-items: flex-end;
+}
+
+.ui_tab {
+	display: inline;
+	margin: 0px 2ex;
+	padding: .5ex 2ex;
+	background: #444;
+	border-top-left-radius: 1ex;
+	border-top-right-radius: 1ex;
+}
+
+.ui_tab.ui_active {
+	background: #ccc;
+}
+
+.ui_tabplus {
+	float: right;
+}
+
+.ui_splitcontrol {
+	z-index: 10;
+	position: absolute;
+	background: yellow;
+	border: 2px solid black;
+}
+
+.ui_splitcontrol div {
+	text-align: center;
+	background: #cc0;
+}
+
+.ui_splitleft {
+	float: left;
+}
+
+.ui_splitright {
+	float: right;
+}
+
+.ui_splitbottom {
+	clear: both;
+}
+
+.ui_splitinput {
+	width: 5em;
+}
+
+.ui_splitbutton {
+	width: 100%;
+}

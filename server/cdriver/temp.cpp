@@ -47,7 +47,7 @@ void Temp::load(int32_t &addr, int id)
 	for (int i = 0; i < 2; ++i) {
 		limit[i][0] = read_float(addr);
 		limit[i][1] = read_float(addr);
-		int adc_i = isnan(beta) && R0 >= 0 ? 0 : 1;
+		int adc_i = std::isnan(beta) && R0 >= 0 ? 0 : 1;
 		adclimit[i][adc_i] = toadc(limit[i][0], adc_i * MAXINT);
 		adclimit[i][1 - adc_i] = toadc(limit[i][1], (1 - adc_i) * MAXINT);
 		SET_OUTPUT(power_pin[i]);
@@ -95,7 +95,7 @@ void Temp::save(int32_t &addr)
 double Temp::fromadc(int32_t adc) {
 	if (adc >= MAXINT)
 		return NAN;
-	if (isnan(beta)) {
+	if (std::isnan(beta)) {
 		// beta == NAN is used for calibration: return raw value as K.
 		return adc * (R0 / 1000.) + (R1 / 1000.);
 	}
@@ -116,13 +116,13 @@ double Temp::fromadc(int32_t adc) {
 }
 
 int32_t Temp::toadc(double T, int32_t default_) {
-	if (isnan(T))
+	if (std::isnan(T))
 		return default_;
-	if (isnan(beta))
+	if (std::isnan(beta))
 		return (T - (R1 / 1000.)) / (R0 / 1000.);
 	if (T < 0)
 		return default_;
-	if (isinf(T) && T > 0)
+	if (std::isinf(T) && T > 0)
 		return -1;
 	double Rs = K * exp(beta * 1. / T);
 	//debug("K %f Rs %f R0 %f logRc %f Tc %f beta %f", K, Rs, R0, logRc, Tc, beta);

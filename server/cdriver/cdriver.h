@@ -21,10 +21,10 @@
 #define _CDRIVER_H
 
 #include "configuration.h"
-#include <stdio.h>
-#include <math.h>
-#include <stdarg.h>
-#include <stdint.h>
+#include <cstdio>
+#include <cmath>
+#include <cstdarg>
+#include <cstdint>
 #include <poll.h>
 #include <sys/types.h>
 #include <sys/timerfd.h>

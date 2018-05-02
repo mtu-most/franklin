@@ -86,7 +86,7 @@ clean: $(addprefix clean-,$(MODULES))
 	rm -f $(addprefix module-,$(MODULES))
 
 basedeps:
-	dpkg-checkbuilddeps -d 'devscripts, git, wget, sudo'
+	dpkg-checkbuilddeps -d 'devscripts, git, wget, sudo, fakeroot'
 	dpkg-checkbuilddeps
 
 .PHONY: install build clean zip bb basedeps

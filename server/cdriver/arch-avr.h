@@ -722,7 +722,7 @@ void arch_reset() { // {{{
 		return;
 	}
 	// Wait for reset to complete.
-	sleep(2);
+	sleep(12);
 	avr_serial.write(CMD_ACK1);
 	avr_serial.write(CMD_ACK2);
 	avr_serial.write(CMD_ACK3);
@@ -1124,7 +1124,7 @@ void arch_addpos(int s, int m, double diff) { // {{{
 		mi += spaces[st].num_motors;
 	if (mi + m >= NUM_MOTORS)
 		return;
-	if (!isnan(diff))
+	if (!std::isnan(diff))
 		avr_pos_offset[mi + m] -= diff;
 	else
 		abort();

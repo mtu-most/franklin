@@ -171,7 +171,7 @@ static double handle_probe(double ox, double oy, double z) {
 	ProbeFile *&p = probe_file_map;
 	if (!p)
 		return z + probe_adjust;
-	if (isnan(ox) || isnan(oy) || isnan(z))
+	if (std::isnan(ox) || std::isnan(oy) || std::isnan(z))
 		return NAN;
 	ox -= p->targetx;
 	oy -= p->targety;
@@ -510,11 +510,11 @@ double run_find_pos(double pos[3]) {
 				int k;
 				double pt = 0, tt = 0;
 				for (k = 0; k < 3; ++k) {
-					if (isnan(pos[k]))
+					if (std::isnan(pos[k]))
 						continue;
-					if (isnan(target[k])) {
+					if (std::isnan(target[k])) {
 						target[k] = current[k];
-						if (isnan(target[k]))
+						if (std::isnan(target[k]))
 							break;
 					}
 					/* ((pos-O).(target-O))/((target-O).(target-O))*(target-O) = projection-O
@@ -533,7 +533,7 @@ double run_find_pos(double pos[3]) {
 					fraction = 1;
 				double d = 0;
 				for (k = 0; k < 3; ++k) {
-					if (isnan(pos[k]))
+					if (std::isnan(pos[k]))
 						continue;
 					double dd = pos[k] - ((target[k] - current[k]) * fraction + current[k]);
 					d += dd * dd;
@@ -543,7 +543,7 @@ double run_find_pos(double pos[3]) {
 					record = i + fraction;
 				}
 				for (k = 0; k < 3; ++k) {
-					if (!isnan(target[k]))
+					if (!std::isnan(target[k]))
 						current[k] = target[k];
 				}
 		}

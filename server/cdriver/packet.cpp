@@ -98,7 +98,7 @@ void setpos(int which, int t, double f) {
 		}
 		motors_busy = true;
 	}
-	if (isnan(spaces[which].motor[t]->steps_per_unit)) {
+	if (std::isnan(spaces[which].motor[t]->steps_per_unit)) {
 		debug("Error: NaN steps per unit");
 		abort();
 	}
@@ -108,7 +108,7 @@ void setpos(int which, int t, double f) {
 	}
 	//debug("setting pos for %d %d to %f", which, t, f);
 	double diff;
-	if (!isnan(spaces[which].motor[t]->settings.current_pos)) {
+	if (!std::isnan(spaces[which].motor[t]->settings.current_pos)) {
 		diff = f * spaces[which].motor[t]->steps_per_unit - arch_round_pos(which, t, spaces[which].motor[t]->settings.current_pos);
 		spaces[which].motor[t]->settings.current_pos += diff;
 		//debug("non nan %f %f %f", spaces[which].motor[t]->settings.current_pos, diff, f);
@@ -120,12 +120,12 @@ void setpos(int which, int t, double f) {
 		//debug("setpos nan %d %d %f", which, t, diff);
 	}
 	for (int fragment = 0; fragment < FRAGMENTS_PER_BUFFER; ++fragment) {
-		if (!isnan(spaces[which].motor[t]->history[fragment].current_pos))
+		if (!std::isnan(spaces[which].motor[t]->history[fragment].current_pos))
 			spaces[which].motor[t]->history[fragment].current_pos += diff;
 		else
 			spaces[which].motor[t]->history[fragment].current_pos = diff;
 	}
-	if (isnan(spaces[which].axis[t]->settings.current)) {
+	if (std::isnan(spaces[which].axis[t]->settings.current)) {
 		reset_pos(&spaces[which]);
 		for (int a = 0; a < spaces[which].num_axes; ++a)
 			spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
@@ -220,14 +220,14 @@ void packet()
 				//debug("line %d -", ch);
 			}
 		}
-		if (!(command[0][3] & 0x1) || isnan(queue[settings.queue_end].f[0]))
+		if (!(command[0][3] & 0x1) || std::isnan(queue[settings.queue_end].f[0]))
 			queue[settings.queue_end].f[0] = INFINITY;
-		if (!(command[0][3] & 0x2) || isnan(queue[settings.queue_end].f[1]))
+		if (!(command[0][3] & 0x2) || std::isnan(queue[settings.queue_end].f[1]))
 			queue[settings.queue_end].f[1] = queue[settings.queue_end].f[0];
 		// F0 and F1 must be valid.
 		double F0 = queue[settings.queue_end].f[0];
 		double F1 = queue[settings.queue_end].f[1];
-		if (isnan(F0) || isnan(F1) || (F0 == 0 && F1 == 0))
+		if (std::isnan(F0) || std::isnan(F1) || (F0 == 0 && F1 == 0))
 		{
 			debug("Invalid F0 or F1: %f %f", F0, F1);
 			abort();
@@ -437,7 +437,7 @@ void packet()
 			send_host(CMD_POS, which, t, NAN);
 			return;
 		}
-		if (isnan(spaces[which].axis[t]->settings.current)) {
+		if (std::isnan(spaces[which].axis[t]->settings.current)) {
 			//debug("resetting space %d for getpos; %f", which, spaces[0].axis[0]->settings.current);
 			reset_pos(&spaces[which]);
 			for (int a = 0; a < spaces[which].num_axes; ++a)

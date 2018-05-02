@@ -469,7 +469,7 @@ def read_boards(): # {{{
 			del boards[tag]
 			continue
 		if fhs.read_data(os.path.join('firmware', boards[tag]['build.mcu'] + os.extsep + 'hex'), opened = False) is None:
-			log('skipping %s because firmware for %s is not installed' % (boards[tag]['name'], boards[tag]['build.mcu']))
+			#log('skipping %s because firmware for %s is not installed' % (boards[tag]['name'], boards[tag]['build.mcu']))
 			del boards[tag]
 			continue
 	return boards
@@ -508,11 +508,11 @@ def broadcast(target, name, *args): # {{{
 # }}}
 
 class Machine: # {{{
-	def __init__(self, port, process, detectport, run_id, send = True): # {{{
+	def __init__(self, port, process, run_id, send = True): # {{{
 		'''Create a new Machine object.
 		This can be called for several reasons:
 		- At startup, every saved machine is started.  In this case, port is None.
-		- When a new machine with an unknown uuid is detected on a port.  In this case, port, detectport and run_id are set.
+		- When a new machine with an unknown uuid is detected on a port.  In this case, port and run_id are set.
 		'''
 		if port is not None:
 			self.detecting = True
@@ -531,14 +531,8 @@ class Machine: # {{{
 		def get_vars(success, vars, cb = None):
 			if not success:
 				log('failed to get vars')
-				if detectport is not None:
-					log('Closing server port anyway')
-					detectport.close()
 				return
 			# The child has opened the port now; close our handle.
-			if detectport is not None:
-				log('Driver started; closing server port')
-				detectport.close()
 			if self.uuid is None:
 				log('new uuid:' + repr(vars['uuid']))
 				self.uuid = vars['uuid']
@@ -714,7 +708,7 @@ def detect(port): # {{{
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
 		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', '-', '--cdriver', config['local'] or fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-		machines[port] = Machine(port, process, None, run_id)
+		machines[port] = Machine(port, process, run_id)
 		ports[port] = port
 		return False
 	if not os.path.exists(port):
@@ -773,6 +767,7 @@ def detect(port): # {{{
 						machine.close()
 						ports[port] = None
 						broadcast(None, 'port_state', port, 0)
+						log('Starting controller driver on ' + port)
 						env = os.environ.copy()
 						env['PORT'] = port
 						subprocess.Popen(config['controller'], env = env, shell = True)
@@ -829,9 +824,11 @@ def detect(port): # {{{
 				machines[uuid].call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: None)
 			else:
 				log('accepting unknown machine on port %s' % port)
+				# Close detect port so it doesn't interfere.
+				machine.close()
 				#log('machines: %s' % repr(tuple(machines.keys())))
 				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--uuid', uuid if uuid is not None else '', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-				new_machine = Machine(port, process, machine, run_id, send = uuid is not None)
+				new_machine = Machine(port, process, run_id, send = uuid is not None)
 				def finish():
 					log('finish detect %s' % repr(new_machine.uuid))
 					ports[port] = new_machine.uuid
@@ -929,7 +926,7 @@ def create_machine(uuid = None): # {{{
 	if uuid is None:
 		uuid = protocol.new_uuid()
 	process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-	machines[uuid] = Machine(None, process, None, None)
+	machines[uuid] = Machine(None, process, None)
 	return uuid
 # }}}
 

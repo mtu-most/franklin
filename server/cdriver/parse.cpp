@@ -182,16 +182,16 @@ bool Parser::handle_command() { // {{{
 					else
 						debug("%d:ignoring invalid parameter %c: %s", lineno, arg.type, line.c_str());
 				}
-				if (!isnan(F)) {
+				if (!std::isnan(F)) {
 					current_f[code == 0 ? 0 : 1] = F * unit / 60;
-					//if (!(current_f[code == 0 ? 0 : 1] > 0))
-					//	debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
+					if (!(current_f[code == 0 ? 0 : 1] > 0))
+						debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
 				}
 				auto oldpos = pos;
 				double estep, r;
 				if (code != 81) {
 					r = NAN;
-					if (!isnan(E)) {
+					if (!std::isnan(E)) {
 						if (erel)
 							estep = E * unit;
 						else
@@ -203,7 +203,7 @@ bool Parser::handle_command() { // {{{
 				}
 				else {
 					estep = 0;
-					if (!isnan(R)) {
+					if (!std::isnan(R)) {
 						if (rel)
 							r = pos[2] + R * unit;
 						else
@@ -212,54 +212,54 @@ bool Parser::handle_command() { // {{{
 					else
 						r = pos[2];
 				}
-				if (!isnan(X)) pos[0] = (rel ? pos[0] : 0) + X * unit;
-				if (!isnan(Y)) pos[1] = (rel ? pos[1] : 0) + Y * unit;
-				if (!isnan(Z)) pos[2] = (rel ? pos[2] : 0) + Z * unit;
-				if (!isnan(A)) pos[3] = (rel ? pos[3] : 0) + A * unit;
-				if (!isnan(B)) pos[4] = (rel ? pos[4] : 0) + B * unit;
-				if (!isnan(C)) pos[5] = (rel ? pos[5] : 0) + C * unit;
+				if (!std::isnan(X)) pos[0] = (rel ? pos[0] : 0) + X * unit;
+				if (!std::isnan(Y)) pos[1] = (rel ? pos[1] : 0) + Y * unit;
+				if (!std::isnan(Z)) pos[2] = (rel ? pos[2] : 0) + Z * unit;
+				if (!std::isnan(A)) pos[3] = (rel ? pos[3] : 0) + A * unit;
+				if (!std::isnan(B)) pos[4] = (rel ? pos[4] : 0) + B * unit;
+				if (!std::isnan(C)) pos[5] = (rel ? pos[5] : 0) + C * unit;
 				if (code != 81) {
 					double dist = 0;
 					for (int i = 0; i < 3; ++i)
 						dist += (pos[i] - oldpos[i]) * (pos[i] - oldpos[i]);
 					dist = sqrt(dist);
-					if (isnan(dist))
+					if (std::isnan(dist))
 						dist = 0;
 					pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], dist > 0 ? current_f[code == 0 ? 0 : 1] / dist : INFINITY, epos[current_tool]));
 				}
 				else {
-					if (isnan(oldpos[2]))
+					if (std::isnan(oldpos[2]))
 						oldpos[2] = r;
 					flush_pending();
 					// Only support OLD_Z (G90) retract mode; don't support repeats(L).
 					// goto x, y
 					add_record(RUN_LINE, current_tool, pos[0], pos[1], oldpos[2]);
 					double dist = sqrt((pos[0] - oldpos[0]) * (pos[0] - oldpos[0]) + (pos[1] - oldpos[1]) * (pos[1] - oldpos[1]));
-					if (!isnan(dist))
+					if (!std::isnan(dist))
 						last_dist += dist;
 					// goto r
 					add_record(RUN_LINE, current_tool, pos[0], pos[1], r);
 					dist = abs(r - oldpos[2]);
-					if (!isnan(dist))
+					if (!std::isnan(dist))
 						last_dist += dist;
 					// goto z
 					if (pos[2] != r) {
 						dist = abs(pos[2] - r);
 						double f = dist > 0 ? current_f[1] / dist : INFINITY;
 						add_record(RUN_LINE, current_tool, pos[0], pos[1], pos[2], NAN, f, f);
-						if (isinf(f)) {
-							if (!isnan(dist))
+						if (std::isinf(f)) {
+							if (!std::isnan(dist))
 								last_dist += dist;
 						}
 						else {
-							if (!isnan(f))
+							if (!std::isnan(f))
 								last_time += 1 / f;
 						}
 					}
 					// go back to old z
 					add_record(RUN_LINE, current_tool, pos[0], pos[1], oldpos[2]);
 					dist = abs(r - oldpos[2]);
-					if (!isnan(dist))
+					if (!std::isnan(dist))
 						last_dist += dist;
 					// update pos[2].
 					pos[2] = oldpos[2];
@@ -299,26 +299,26 @@ bool Parser::handle_command() { // {{{
 					else
 						debug("%d:ignoring invalid arc parameter %c: %s", lineno, arg.type, line.c_str());
 				}
-				if (!isnan(F)) {
+				if (!std::isnan(F)) {
 					current_f[1] = F * unit / 60;
 					//debug("new f1: %f", current_f[code]);
 				}
 				double estep;
-				estep = isnan(E) ? 0 : erel ? E * unit - epos[current_tool] : E * unit;
+				estep = std::isnan(E) ? 0 : erel ? E * unit - epos[current_tool] : E * unit;
 				epos[current_tool] += estep;
 				std::vector <double> center;
 				center.push_back(0);
 				center.push_back(0);
 				center.push_back(0);
-				if (!isnan(X)) pos[0] = (rel ? pos[0] : 0) + X * unit;
-				if (!isnan(Y)) pos[1] = (rel ? pos[1] : 0) + Y * unit;
-				if (!isnan(Z)) pos[2] = (rel ? pos[2] : 0) + Z * unit;
-				if (!isnan(A)) pos[3] = (rel ? pos[3] : 0) + A * unit;
-				if (!isnan(B)) pos[4] = (rel ? pos[4] : 0) + B * unit;
-				if (!isnan(C)) pos[5] = (rel ? pos[5] : 0) + C * unit;
-				center[0] = pos[0] + (isnan(I) ? 0 : I * unit);
-				center[1] = pos[1] + (isnan(J) ? 0 : J * unit);
-				center[2] = pos[2] + (isnan(K) ? 0 : K * unit);
+				if (!std::isnan(X)) pos[0] = (rel ? pos[0] : 0) + X * unit;
+				if (!std::isnan(Y)) pos[1] = (rel ? pos[1] : 0) + Y * unit;
+				if (!std::isnan(Z)) pos[2] = (rel ? pos[2] : 0) + Z * unit;
+				if (!std::isnan(A)) pos[3] = (rel ? pos[3] : 0) + A * unit;
+				if (!std::isnan(B)) pos[4] = (rel ? pos[4] : 0) + B * unit;
+				if (!std::isnan(C)) pos[5] = (rel ? pos[5] : 0) + C * unit;
+				center[0] = pos[0] + (std::isnan(I) ? 0 : I * unit);
+				center[1] = pos[1] + (std::isnan(J) ? 0 : J * unit);
+				center[2] = pos[2] + (std::isnan(K) ? 0 : K * unit);
 				int s = code == 2 ? -1 : 1;
 				pending.push_back(Record(true, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], -current_f[1], epos[current_tool], center[0], center[1], center[2], s * arc_normal[0], s * arc_normal[1], s * arc_normal[2]));
 			}
@@ -752,6 +752,7 @@ void Parser::flush_pending() { // {{{
 		return;
 	pending.push_front(pending.front());
 	pending.push_back(pending.back());
+#if 0
 	// Limit moves.
 	// Look ahead to prevent overly limiting moves.
 	pending.begin()->s[0] = 0;
@@ -822,6 +823,7 @@ void Parser::flush_pending() { // {{{
 		++P1;
 		++P2;
 	}
+#endif
 	// Turn Records into Run_Records and write them out.  Ignore fake first and last record.
 	Record old_p = pending.front();
 	pending.pop_front();
@@ -835,7 +837,7 @@ void Parser::flush_pending() { // {{{
 		}
 		else {
 			// Not an arc.
-			if (((!isnan(old_p.a) || !isnan(p.a)) && old_p.a != p.a) || ((!isnan(old_p.b) || !isnan(p.b)) && old_p.b != p.b) || ((!isnan(old_p.c) || !isnan(p.c)) && old_p.c != p.c))
+			if (((!std::isnan(old_p.a) || !std::isnan(p.a)) && old_p.a != p.a) || ((!std::isnan(old_p.b) || !std::isnan(p.b)) && old_p.b != p.b) || ((!std::isnan(old_p.c) || !std::isnan(p.c)) && old_p.c != p.c))
 				add_record(RUN_PRE_LINE, p.tool, p.a, p.b, p.c);
 			add_record(RUN_LINE, p.tool, p.x, p.y, p.z, p.e, p.f, p.f);
 			// Update time+dist.
@@ -843,20 +845,20 @@ void Parser::flush_pending() { // {{{
 			double dists[3] = {p.x - old_p.x, p.y - old_p.y, p.z - old_p.z};
 			for (int i = 0; i < 3; ++i) {
 				double d = dists[i] * dists[i];
-				if (!isnan(d))
+				if (!std::isnan(d))
 					dist += d;
 			}
 			dist = sqrt(dist);
 			if (dist > 0) {
-				if (isinf(p.f)) {
-					if (!isnan(dist))
+				if (std::isinf(p.f)) {
+					if (!std::isnan(dist))
 						last_dist += dist;
 				}
 				else {
 					double t = 1 / p.f;
-					if (isinf(t))
+					if (std::isinf(t))
 						debug("%d:wtf dist %f x %f y %f f %f", lineno, dist, p.x, p.y, p.f);
-					if (!isnan(t))
+					if (!std::isnan(t))
 						last_time += t;
 				}
 			}
@@ -878,6 +880,7 @@ void Parser::flush_pending() { // {{{
 		old_p = p;
 		pending.pop_front();
 	}
+	pending.pop_front();
 } // }}}
 
 void Parser::add_record(RunType cmd, int tool, double x, double y, double z, double e, double f0, double f1) { // {{{

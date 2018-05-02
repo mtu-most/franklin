@@ -81,7 +81,7 @@ bool globals_load(int32_t &addr)
 	fan_id = read_16(addr);
 	spindle_id = read_16(addr);
 	feedrate = read_float(addr);
-	if (isnan(feedrate) || isinf(feedrate) || feedrate <= 0)
+	if (std::isnan(feedrate) || std::isinf(feedrate) || feedrate <= 0)
 		feedrate = 1;
 	max_deviation = read_float(addr);
 	max_v = read_float(addr);

@@ -137,7 +137,7 @@ function ui_build(string, top, pos) {
 
 // A Bin is a container that can hold any type of content.
 function Bin(top, configuring) {
-	var self = Create('div', 'Bin');
+	var self = Create('div', 'ui_bin');
 	self.emsize = function() {
 		var ret;
 		if (window.getComputedStyle) {
@@ -150,18 +150,9 @@ function Bin(top, configuring) {
 	self.px2em = function(px) { return px / self.emsize(); };
 	self.em2px = function(em) { return em * self.emsize(); };
 	self.top = top;
-	self.style.position = 'absolute';
-	self.style.left = '0em';
-	self.style.right = '0em';
-	self.style.top = '0em';
-	self.style.bottom = '0em';
-	self.control = self.AddElement('div');
+	self.control = self.AddElement('div', 'ui_control');
 	self.configuring = configuring ? true : false;	// This turns undefined into false.
 	self.control.style.display = (configuring && top.show_hidden) ? '' : 'none';
-	self.control.style.position = 'absolute';
-	self.control.style.width = '100%';
-	self.control.style.bottom = '0em';
-	self.control.style.background = 'yellow';
 	self.content_selector = self.control.AddElement('select');
 	var sorted_names = [];
 	for (var m in ui_modules)
@@ -272,9 +263,8 @@ function Split(top, configuring) {
 	self.value = 50;
 	self.first = self.Add(new Bin(top, self.configuring));
 	self.second = self.Add(new Bin(top, self.configuring));
-	self.controldiv = self.AddElement('div');
+	self.controldiv = self.AddElement('div', 'ui_controldiv');
 	self.control = self.controldiv.AddElement('input');
-	self.controldiv.style.position = 'absolute';
 	self.control.type = 'radio';
 	self.control.name = 'ActiveSplit' + top.object_id;
 	self.control.AddEvent('click', function() {
@@ -304,11 +294,10 @@ function Split(top, configuring) {
 		this.first.update();
 		this.second.update();
 		var clear = function(target) {
-			target.style.position = 'absolute';
-			target.style.left = '0em';
-			target.style.top = '0em';
-			target.style.right = '0em';
-			target.style.bottom = '0em';
+			target.style.left = '';
+			target.style.top = '';
+			target.style.right = '';
+			target.style.bottom = '';
 			target.style.width = '';
 			target.style.height = '';
 		};
@@ -340,7 +329,7 @@ function Split(top, configuring) {
 					top.radio_v_first.checked = true;
 			}
 			this.first.style[attr[2]] = this.value + unit;
-			this.first.style[attr[1]] = '';
+			this.first.style[attr[1]] = 'auto';
 			this.second.style[attr[0]] = this.value + unit;
 		}
 		else {
@@ -352,7 +341,7 @@ function Split(top, configuring) {
 			}
 			this.first.style[attr[1]] = this.value + unit;
 			this.second.style[attr[2]] = this.value + unit;
-			this.second.style[attr[0]] = '';
+			this.second.style[attr[0]] = 'auto';
 		}
 		if (this.configuring) {
 			this.controldiv.style.display = '';
@@ -409,27 +398,18 @@ function Tabs(top, configuring) {
 	self.name = 'Tabs';
 	self.top = top;
 	self.configuring = configuring ? true : false; // Treat undefined as false.
-	self.bar = self.AddElement('div');
-	self.bar.style.position = 'absolute';
-	self.bar.style.top = '0em';
-	self.bar.style.width = '100%';
-	self.bar.style.height = '2em';
-	self.bar.style.background = '#cfc';
-	self.plus = self.bar.AddElement('div', 'tab').AddText('+').AddEvent('click', function() {
+	self.bar = self.AddElement('div', 'ui_tabbar');
+	self.plus = self.bar.AddElement('div', 'ui_tabplus').AddText('+').AddEvent('click', function() {
 		self.add_tab(self.tabs[self.selected].copy());
 	});
-	self.plus.style.float = 'right';
 	self.tabs = [];
 	self.selected = -1;
 	self.add_tab = function(content) {
 		var tab = this.Add(new Bin(this.top, this.configuring));
-		tab.style.position = 'absolute';
-		tab.style.width = '100%';
-		tab.style.bottom = '0em';
-		tab.style.top = '2em';
+		tab.style.top = '3em';
 		tab.style.overflow = 'auto';
 		tab.tabname = 'New Tab';
-		tab.titlebox = this.bar.AddElement('div', 'tab');
+		tab.titlebox = this.bar.AddElement('div', 'ui_tab');
 		tab.titlebox.AddEvent('click', function() {
 			self.select(self.tabs.indexOf(tab));
 		});
@@ -443,7 +423,7 @@ function Tabs(top, configuring) {
 			if (self.tabs.length == 0) {
 				self.destroy();
 				self.parent_bin.removeChild(self);
-				tab.style.top = '0em';
+				tab.style.top = '';
 				self.parent_bin.set_content(tab);
 			}
 		});
@@ -497,7 +477,7 @@ function Tabs(top, configuring) {
 			this.tabs[t].style.display = 'block';
 			numtabs += 1;
 			if (t == this.selected) {
-				this.tabs[t].titlebox.AddClass('active');
+				this.tabs[t].titlebox.AddClass('ui_active');
 				this.tabs[t].style.display = '';
 				if (this.configuring) {
 					if (this.selected != this.last_selected) {
@@ -515,7 +495,7 @@ function Tabs(top, configuring) {
 				}
 			}
 			else {
-				this.tabs[t].titlebox.RemoveClass('active');
+				this.tabs[t].titlebox.RemoveClass('ui_active');
 				this.tabs[t].style.display = 'none';
 			}
 			this.tabs[t].killbutton.style.display = 'none';
@@ -556,26 +536,20 @@ function Tabs(top, configuring) {
 var _UI_id = 0;
 function UI_setup(bin_parent, content, data) {
 	var bin = bin_parent.Add(new Bin(null, false));
+	bin.AddClass('ui_top');
 	bin.top = bin;
 	bin.data = data;
 	bin.object_id = _UI_id;
 	_UI_id += 1;
 	bin.active_split = null;
-	bin.splitcontrol = bin_parent.AddElement('div', 'SplitControl'); // {
-	bin.splitcontrol.style.zIndex = 10;
+	bin.splitcontrol = bin_parent.AddElement('div', 'ui_splitcontrol'); // {
 	bin.splitcontrol.style.display = 'none';
-	bin.splitcontrol.style.position = 'absolute';
-	bin.splitcontrol.style.top = '0em';
-	bin.splitcontrol.style.left = '0em';
+	bin.splitcontrol.style.left = '0px';
+	bin.splitcontrol.style.top = '0px';
 	bin.splitcontrol.control_x = 0;
 	bin.splitcontrol.control_y = 0;
-	bin.splitcontrol.style.background = 'yellow';
-	bin.splitcontrol.style.border = '2px solid black';
 	var d = bin.splitcontrol.AddElement('div').AddText('Split Controls');
-	d.style.textAlign = 'center';
-	d.style.background = '#cc0';
 	d = bin.splitcontrol.AddElement('div');
-	d.style.textAlign = 'center';
 	bin.splitcontrol.x = NaN;
 	bin.splitcontrol.y = NaN;
 	d.AddEvent('mousedown', function(event) {
@@ -614,9 +588,8 @@ function UI_setup(bin_parent, content, data) {
 		bin.active_split.dominant_first = true;
 		bin.active_split.update();
 	});
-	bin.radio_h_first = bin.splitcontrol.AddElement('input');
+	bin.radio_h_first = bin.splitcontrol.AddElement('input', 'ui_splitleft');
 	bin.radio_h_first.type = 'radio';
-	bin.radio_h_first.style.float = 'left';
 	bin.radio_h_first.name = 'SplitControl' + bin.object_id;
 	bin.radio_h_first.AddEvent('click', function() {
 		if (bin.active_split === null)
@@ -625,9 +598,8 @@ function UI_setup(bin_parent, content, data) {
 		bin.active_split.dominant_first = true;
 		bin.active_split.update();
 	});
-	bin.radio_h_second = bin.splitcontrol.AddElement('input');
+	bin.radio_h_second = bin.splitcontrol.AddElement('input', 'ui_splitright');
 	bin.radio_h_second.type = 'radio';
-	bin.radio_h_second.style.float = 'right';
 	bin.radio_h_second.name = 'SplitControl' + bin.object_id;
 	bin.radio_h_second.AddEvent('click', function() {
 		if (bin.active_split === null)
@@ -636,9 +608,7 @@ function UI_setup(bin_parent, content, data) {
 		bin.active_split.dominant_first = false;
 		bin.active_split.update();
 	});
-	d = bin.splitcontrol.AddElement('div');
-	d.style.textAlign = 'center';
-	d.style.clear = 'both';
+	d = bin.splitcontrol.AddElement('div', 'ui_splitbottom');
 	bin.radio_v_second = d.AddElement('input');
 	bin.radio_v_second.type = 'radio';
 	bin.radio_v_second.name = 'SplitControl' + bin.object_id;
@@ -650,8 +620,7 @@ function UI_setup(bin_parent, content, data) {
 		bin.active_split.update();
 	});
 	d = bin.splitcontrol.AddElement('div');
-	bin.split_input = d.AddElement('input');
-	bin.split_input.style.width = '5em';
+	bin.split_input = d.AddElement('input', 'ui_splitinput');
 	bin.split_input.type = 'number';
 	bin.split_input.min = 0;
 	bin.split_input.step = 0.1;
@@ -670,7 +639,7 @@ function UI_setup(bin_parent, content, data) {
 		bin.active_split.em = this.value != '%';
 		bin.active_split.update();
 	});
-	var button = bin.splitcontrol.AddElement('button').AddText('Remove Split').AddEvent('click', function() {
+	var button = bin.splitcontrol.AddElement('button', 'ui_splitbutton').AddText('Remove Split').AddEvent('click', function() {
 		if (bin.active_split === null)
 			return;
 		var active = bin.active_split;
@@ -682,14 +651,12 @@ function UI_setup(bin_parent, content, data) {
 		active.parent_bin.update();
 	});
 	button.type = 'button';
-	button.style.width = '100%';
-	button = bin.splitcontrol.AddElement('button').AddText('Add Split').AddEvent('click', function() {
+	button = bin.splitcontrol.AddElement('button', 'ui_splitbutton').AddText('Add Split').AddEvent('click', function() {
 		if (bin.active_split === null)
 			return;
 		bin.active_split.parent_bin.add_split();
 	});
 	button.type = 'button';
-	button.style.width = '100%';
 	d = bin.splitcontrol.AddElement('div');
 	var label = d.AddElement('label');
 	var box = label.AddElement('input');
@@ -720,8 +687,8 @@ var ui_modules = {'dummy': Dummy};
 
 // Create a bin and fill it with the content module.
 window.AddEvent('load', function() {
-	var r = ui_build('{dh25%(dummy:){Dv25%(dummy:)(dummy:)}}');
-	document.getElementById('ui').Add(new Bin()).set_content(r);
+	var element = document.getElementById('ui');
+	var r = UI_setup(element, '{dh25%(dummy:){Dv25%(dummy:)(dummy:)}}');
 });
 */
 

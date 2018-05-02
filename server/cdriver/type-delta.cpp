@@ -74,10 +74,10 @@ static inline double delta_to_axis(Space *s, uint8_t a) {
 }
 
 static void xyz2motors(Space *s, double *motors) {
-	if (isnan(s->axis[0]->settings.target) || isnan(s->axis[1]->settings.target) || isnan(s->axis[2]->settings.target)) {
+	if (std::isnan(s->axis[0]->settings.target) || std::isnan(s->axis[1]->settings.target) || std::isnan(s->axis[2]->settings.target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 3; ++aa) {
-			if (isnan(s->axis[aa]->settings.target))
+			if (std::isnan(s->axis[aa]->settings.target))
 				s->axis[aa]->settings.target = s->axis[aa]->settings.current;
 		}
 	}
@@ -90,10 +90,10 @@ static void xyz2motors(Space *s, double *motors) {
 }
 
 static void check_position(Space *s, double *data) {
-	if (isnan(data[0]) || isnan(data[1])) {
-		if (!isnan(data[0]))
+	if (std::isnan(data[0]) || std::isnan(data[1])) {
+		if (!std::isnan(data[0]))
 			data[1] = s->axis[1]->settings.source;
-		else if (!isnan(data[1]))
+		else if (!std::isnan(data[1]))
 			data[0] = s->axis[0]->settings.source;
 		else {
 			// Cannot check; assume it's ok.
@@ -123,7 +123,7 @@ static void load(Space *s, uint8_t old_type, int32_t &addr) {
 		APEX(s, a).radius = read_float(addr);
 	}
 	PRIVATE(s).angle = read_float(addr);
-	if (isinf(PRIVATE(s).angle) || isnan(PRIVATE(s).angle))
+	if (std::isinf(PRIVATE(s).angle) || std::isnan(PRIVATE(s).angle))
 		PRIVATE(s).angle = 0;
 #define sin210 -.5
 #define cos210 -0.8660254037844386	// .5*sqrt(3)

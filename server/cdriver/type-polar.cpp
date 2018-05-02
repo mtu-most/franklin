@@ -26,10 +26,10 @@ struct Polar_private {
 #define PRIVATE(s) (*reinterpret_cast <Polar_private *>(s->type_data))
 
 static void xyz2motors(Space *s, double *motors) {
-	if (isnan(s->axis[0]->settings.target) || isnan(s->axis[1]->settings.target)) {
+	if (std::isnan(s->axis[0]->settings.target) || std::isnan(s->axis[1]->settings.target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 2; ++aa) {
-			if (isnan(s->axis[aa]->settings.target))
+			if (std::isnan(s->axis[aa]->settings.target))
 				s->axis[aa]->settings.target = s->axis[aa]->settings.current;
 		}
 	}
