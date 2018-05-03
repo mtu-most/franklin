@@ -185,7 +185,7 @@ class Machine: # {{{
 		sys.stdout.write(json.dumps(data) + '\n')
 		sys.stdout.flush()
 	# }}}
-	def _refresh_queue(self):
+	def _refresh_queue(self): # {{{
 		if self.uuid is None:
 			return
 		spool = fhs.read_spool(self.uuid, dir = True, opened = False)
@@ -247,12 +247,13 @@ class Machine: # {{{
 			sortable_queue = list(self.audioqueue.keys())
 			sortable_queue.sort()
 			self._broadcast(None, 'audioqueue', sortable_queue)
+	# }}}
 	def __init__(self, allow_system): # {{{
 		self.initialized = False
 		self.connected = False
 		self.uuid = config['uuid']
-		# Start a block because the next line has an accidental end marker. {{{
-		self.user_interface = '{Dv2m(Blocker:){Dv2m(No Connection:){dv3m{dv3m{dv3m[0:*Controls:{Dh60%{Dv12m{Dv5m{dh11m(Job Control:)(Buttons:)}(Position:)}{Dh85%(XY Map:)(Z Map:)}}{Dv4m(Abort:){Dv6m(Multipliers:){Dv2m(Gpios:){Dv9m(Temps:)(Temp Graph:)}}}}}Setup:{Dv2m(Save Profile:)[0:*Profile:(Profile Setup:)Probe:(Probe Setup:)Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dv3m(Type Setup:){Dh50%(Cartesian Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)]}](Confirmation:)}(Message:)}(State:)}}}'
+		# Break string in parts to avoid fold markers.
+		self.user_interface = '{Dv2m(Blocker:){Dv2m(No Connection:){dv3m{dv3m{dv3m[0:*Controls:{Dh60%{Dv12m{Dv5m{dh11m(Job Control:)(Buttons:)}(Position:)}{Dh85%(XY Map:)(Z Map:)}}{Dv4m(Abort:){Dv6m(Multipliers:){Dv2m(Gpios:){Dv9m(Temps:)(Temp Graph:)}}' + '}}' + '}Setup:{Dv2m(Save Profile:)[0:*Profile:(Profile Setup:)Probe:(Probe Setup:)Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dv3m(Type Setup:){Dh50%(Cartesian Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}' + '}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)]}](Confirmation:)}(Message:)}(State:)}}' + '}'
 		self.pin_names = []
 		self.machine = Driver()
 		self.allow_system = allow_system
@@ -2203,7 +2204,9 @@ class Machine: # {{{
 			self.id = id
 			self.value = float('nan')
 		def read(self, data):
-			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp, self.fan_duty, heater_limit_l, heater_limit_h, fan_limit_l, fan_limit_h, self.hold_time = struct.unpack('=dddddHHHddddddd', data)
+			self.R0, self.R1, logRc, Tc, self.beta, self.heater_pin, self.fan_pin, self.thermistor_pin, fan_temp, fan_duty, heater_limit_l, heater_limit_h, fan_limit_l, fan_limit_h, self.hold_time = struct.unpack('=dddddHHHddddddd', data)
+			if not math.isnan(fan_duty):
+				self.fan_duty = fan_duty
 			try:
 				self.Rc = math.exp(logRc)
 			except:

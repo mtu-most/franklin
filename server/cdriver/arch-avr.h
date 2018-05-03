@@ -685,10 +685,10 @@ void arch_pin_set_reset(Pin_t _pin, char state) { // {{{
 
 double arch_get_duty(Pin_t _pin) { // {{{
 	if (!connected)
-		return 1;
+		return NAN;
 	if (_pin.pin >= NUM_DIGITAL_PINS) {
 		debug("invalid pin for arch_get_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
-		return 1;
+		return NAN;
 	}
 	return (avr_pins[_pin.pin].duty + 1) / 256.;
 } // }}}
