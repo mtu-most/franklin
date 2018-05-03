@@ -21,6 +21,7 @@ server/bb/setpin /usr/lib/franklin/bb
 server/html/server.js /usr/lib/franklin/html
 server/html/templates.js /usr/lib/franklin/html
 server/html/ui.js /usr/lib/franklin/html
+server/html/ui.css /usr/lib/franklin/html
 server/html/index.html /usr/lib/franklin/html
 server/html/main.js /usr/lib/franklin/html
 server/html/style.css /usr/lib/franklin/html
