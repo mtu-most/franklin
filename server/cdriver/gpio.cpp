@@ -19,10 +19,9 @@
 
 #include "cdriver.h"
 
-void Gpio::load(int32_t &addr)
-{
-	pin.read(read_16(addr));
-	state = read_8(addr);
+void Gpio::load() {
+	pin.read(shmem->ints[1]);
+	state = shmem->ints[2];
 	reset = (state >> 2) & 0x3;
 	state &= 0x3;
 	// State:  0: off, 1: on, 2: pullup input, 3: disabled
@@ -45,16 +44,15 @@ void Gpio::load(int32_t &addr)
 #ifdef SERIAL
 	arch_pin_set_reset(pin, reset);
 #endif
-	double duty = read_float(addr);
+	double duty = shmem->floats[0];
 	if (pin.valid())
 		arch_set_duty(pin, duty);
 }
 
-void Gpio::save(int32_t &addr)
-{
-	write_16(addr, pin.write());
-	write_8(addr, state | (reset << 2));
-	write_float(addr, pin.valid() ? arch_get_duty(pin) : 1);
+void Gpio::save() {
+	shmem->ints[1] = pin.write();
+	shmem->ints[2] = state | (reset << 2);
+	shmem->floats[0] = pin.valid() ? arch_get_duty(pin) : 1;
 }
 
 void Gpio::init() {

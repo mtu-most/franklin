@@ -1,5 +1,5 @@
 /* parse.cpp - Parsing G-Code for Franklin.
- * Copyright 2017 Bas Wijnen <wijnen@debian.org> {{{
+ * Copyright 2017-2018 Bas Wijnen <wijnen@debian.org> {{{
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,12 +16,14 @@
  * }}} */
 
 // Includes. {{{
-#include "cdriver.h"
+#define EXTERN
+#include "module.h"
 #include <fstream>
 #include <vector>
 #include <list>
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 // }}}
 
 static double const C0 = 273.15; // 0 degrees celsius in kelvin.
@@ -38,6 +40,7 @@ struct Parser { // {{{
 		bool arc;
 		int tool;
 		double x, y, z, a, b, c, f, e;
+		double e0, a0, b0, c0;
 		double center[3];
 		double normal[3];
 		double time, dist;
@@ -51,11 +54,13 @@ struct Parser { // {{{
 		}
 		// Helper variables for computing the move.
 		double s[3];	// Vector to this point.
-		double length;	// Length of segment to this point.
-		double l_max;	// Maximum length, based on length of this and next segment.
+		double length;	// Half of length of segment to this point.
 		double unit[3];	// Unit vector along s.
-		double n[3];	// Vector normal to e0 and e1.
-		double theta;	// Angle between e0 and e1.
+		double n[3];	// Vector normal to this and next segment.
+		double nnAL[3], nnLK[3];	// Normal to segment and normal, for AL and LK.
+		double theta;	// Angle between this and next segment.
+		double v1;	// speed at corner.
+		double k, C;
 	}; // }}}
 	// Variables. {{{
 	std::ifstream infile;
@@ -85,6 +90,7 @@ struct Parser { // {{{
 	double arc_normal[3];
 	double last_time, last_dist;
 	std::list <Chunk> command;
+	double max_dev;
 	// }}}
 	// Member functions. {{{
 	Parser(std::string const &infilename, std::string const &outfilename);
@@ -96,7 +102,8 @@ struct Parser { // {{{
 	int read_int(double *power = NULL, int *sign = NULL);
 	double read_fraction();
 	void flush_pending();
-	void add_record(RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double e = NAN, double f0 = INFINITY, double f1 = INFINITY);
+	void add_curve(Record *P, double *start, double *end, double *B, double v0, double v1, double f, double r);
+	void add_record(RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double Bx = 0, double By = 0, double Bz = 0, double e = NAN, double v0 = INFINITY, double v1 = INFINITY, double radius = INFINITY);
 	// }}}
 }; // }}}
 
@@ -205,19 +212,19 @@ bool Parser::handle_command() { // {{{
 					estep = 0;
 					if (!std::isnan(R)) {
 						if (rel)
-							r = pos[2] + R * unit;
+							r = (std::isnan(pos[2]) ? 0 : pos[2]) + R * unit;
 						else
 							r = R * unit;
 					}
 					else
-						r = pos[2];
+						r = (std::isnan(pos[2]) ? 0 : pos[2]);
 				}
-				if (!std::isnan(X)) pos[0] = (rel ? pos[0] : 0) + X * unit;
-				if (!std::isnan(Y)) pos[1] = (rel ? pos[1] : 0) + Y * unit;
-				if (!std::isnan(Z)) pos[2] = (rel ? pos[2] : 0) + Z * unit;
-				if (!std::isnan(A)) pos[3] = (rel ? pos[3] : 0) + A * unit;
-				if (!std::isnan(B)) pos[4] = (rel ? pos[4] : 0) + B * unit;
-				if (!std::isnan(C)) pos[5] = (rel ? pos[5] : 0) + C * unit;
+				if (!std::isnan(X)) pos[0] = (rel && !std::isnan(pos[0]) ? pos[0] : 0) + X * unit;
+				if (!std::isnan(Y)) pos[1] = (rel && !std::isnan(pos[1]) ? pos[1] : 0) + Y * unit;
+				if (!std::isnan(Z)) pos[2] = (rel && !std::isnan(pos[2]) ? pos[2] : 0) + Z * unit;
+				if (!std::isnan(A)) pos[3] = (rel && !std::isnan(pos[3]) ? pos[3] : 0) + A * unit;
+				if (!std::isnan(B)) pos[4] = (rel && !std::isnan(pos[4]) ? pos[4] : 0) + B * unit;
+				if (!std::isnan(C)) pos[5] = (rel && !std::isnan(pos[5]) ? pos[5] : 0) + C * unit;
 				if (code != 81) {
 					double dist = 0;
 					for (int i = 0; i < 3; ++i)
@@ -233,12 +240,12 @@ bool Parser::handle_command() { // {{{
 					flush_pending();
 					// Only support OLD_Z (G90) retract mode; don't support repeats(L).
 					// goto x, y
-					add_record(RUN_LINE, current_tool, pos[0], pos[1], oldpos[2]);
+					pending.push_back(Record(false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
 					double dist = sqrt((pos[0] - oldpos[0]) * (pos[0] - oldpos[0]) + (pos[1] - oldpos[1]) * (pos[1] - oldpos[1]));
 					if (!std::isnan(dist))
 						last_dist += dist;
 					// goto r
-					add_record(RUN_LINE, current_tool, pos[0], pos[1], r);
+					pending.push_back(Record(false, current_tool, pos[0], pos[1], r, NAN, NAN, NAN, INFINITY, NAN));
 					dist = abs(r - oldpos[2]);
 					if (!std::isnan(dist))
 						last_dist += dist;
@@ -246,7 +253,7 @@ bool Parser::handle_command() { // {{{
 					if (pos[2] != r) {
 						dist = abs(pos[2] - r);
 						double f = dist > 0 ? current_f[1] / dist : INFINITY;
-						add_record(RUN_LINE, current_tool, pos[0], pos[1], pos[2], NAN, f, f);
+						pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], NAN, NAN, NAN, f, NAN));
 						if (std::isinf(f)) {
 							if (!std::isnan(dist))
 								last_dist += dist;
@@ -257,7 +264,7 @@ bool Parser::handle_command() { // {{{
 						}
 					}
 					// go back to old z
-					add_record(RUN_LINE, current_tool, pos[0], pos[1], oldpos[2]);
+					pending.push_back(Record(false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
 					dist = abs(r - oldpos[2]);
 					if (!std::isnan(dist))
 						last_dist += dist;
@@ -268,6 +275,9 @@ bool Parser::handle_command() { // {{{
 			break;
 		case 2:
 		case 3:
+			// TODO: This is broken, so it is disabled. It should be fixed and enabled.
+			debug("Arc commands (G2/G3) are disabled at the moment");
+			break;
 			{
 				modetype = type;
 				modecode = code;
@@ -366,6 +376,22 @@ bool Parser::handle_command() { // {{{
 			for (unsigned i = 0; i < pos.size(); ++i)
 				pos[i] = NAN;
 			break;
+		case 64:
+		{
+			flush_pending();
+			bool specified = false;
+			for (auto arg: command) {
+				if (arg.type != 'P') {
+					debug("ignoring %c argument for G64", arg.type);
+					continue;
+				}
+				max_dev = arg.num;
+				specified = true;
+			}
+			if (!specified)
+				max_dev = max_deviation;
+			break;
+		}
 		case 90:
 			rel = false;
 			erel = false;
@@ -647,6 +673,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	epos.push_back(0);
 	current_f[0] = INFINITY;
 	current_f[1] = INFINITY;
+	max_dev = max_deviation;
 	for (int i = 0; i < 6; ++i) {
 		pos.push_back(NAN);
 		bbox.push_back(NAN);
@@ -752,149 +779,316 @@ void Parser::flush_pending() { // {{{
 		return;
 	pending.push_front(pending.front());
 	pending.push_back(pending.back());
-#if 0
-	// Limit moves.
-	// Look ahead to prevent overly limiting moves.
 	pending.begin()->s[0] = 0;
 	pending.begin()->s[1] = 0;
 	pending.begin()->s[2] = 0;
+	pending.begin()->e0 = 0;
+	pending.begin()->a0 = 0;
+	pending.begin()->b0 = 0;
+	pending.begin()->c0 = 0;
 	pending.begin()->length = 0;
-	pending.begin()->unit[0] = INFINITY;
-	pending.begin()->unit[1] = INFINITY;
-	pending.begin()->unit[2] = INFINITY;
+	pending.begin()->unit[0] = 0;
+	pending.begin()->unit[1] = 0;
+	pending.begin()->unit[2] = 0;
+	pending.begin()->f = 0;
+	pending.begin()->v1 = 0;
+	int n = 0;
 	for (auto P0 = pending.begin(), P1 = ++pending.begin(); P1 != pending.end(); ++P0, ++P1) {
+		P1->f = min(max_v, P1->f);
+		P1->e0 = P0->e;
+		P1->a0 = P0->a;
+		P1->b0 = P0->b;
+		P1->c0 = P0->c;
 		P1->s[0] = P1->x - P0->x;
 		P1->s[1] = P1->y - P0->y;
 		P1->s[2] = P1->z - P0->z;
-		P1->length = sqrt(P0->s[0] * P0->s[0] + P0->s[1] * P0->s[1] + P0->s[2] * P0->s[2]);
-		P0->l_max = P1->length > P0->length ? P0->length / 2 : P1->length / 2;
-		P1->unit[0] = P1->s[0] / P1->length;
-		P1->unit[1] = P1->s[1] / P1->length;
-		P1->unit[2] = P1->s[2] / P1->length;
-		P0->n[0] = (P1->s[1] - P0->s[2]) * (P1->s[2] - P0->s[1]);
-		P0->n[1] = (P1->s[2] - P0->s[0]) * (P1->s[0] - P0->s[2]);
-		P0->n[2] = (P1->s[0] - P0->s[1]) * (P1->s[1] - P0->s[0]);
-		P0->theta = acos(P0->unit[0] * P1->unit[0] + P0->unit[1] * P1->unit[1] + P0->unit[2] * P1->unit[2]);
+		P1->length = sqrt(P1->s[0] * P1->s[0] + P1->s[1] * P1->s[1] + P1->s[2] * P1->s[2]);
+		P0->n[0] = (P1->s[1] * P0->s[2]) - (P1->s[2] * P0->s[1]);
+		P0->n[1] = (P1->s[2] * P0->s[0]) - (P1->s[0] * P0->s[2]);
+		P0->n[2] = (P1->s[0] * P0->s[1]) - (P1->s[1] * P0->s[0]);
+		P0->nnAL[0] = (P0->n[1] * P0->s[2]) - (P0->n[2] * P0->s[1]);
+		P0->nnAL[1] = (P0->n[2] * P0->s[0]) - (P0->n[0] * P0->s[2]);
+		P0->nnAL[2] = (P0->n[0] * P0->s[1]) - (P0->n[1] * P0->s[0]);
+		P0->nnLK[0] = (P0->n[1] * P1->s[2]) - (P0->n[2] * P1->s[1]);
+		P0->nnLK[1] = (P0->n[2] * P1->s[0]) - (P0->n[0] * P1->s[2]);
+		P0->nnLK[2] = (P0->n[0] * P1->s[1]) - (P0->n[1] * P1->s[0]);
+		double nnAL_length = sqrt(P0->nnAL[0] * P0->nnAL[0] + P0->nnAL[1] * P0->nnAL[1] + P0->nnAL[2] * P0->nnAL[2]);
+		double nnAK_length = sqrt(P0->nnLK[0] * P0->nnLK[0] + P0->nnLK[1] * P0->nnLK[1] + P0->nnLK[2] * P0->nnLK[2]);
+		for (int i = 0; i < 3; ++i) {
+			P1->unit[i] = P1->length == 0 ? 0 : P1->s[i] / P1->length;
+			if (nnAL_length > 0)
+				P0->nnAL[i] /= nnAL_length;
+			else
+				P0->nnAL[i] = 0;
+			if (nnAK_length > 0)
+				P0->nnLK[i] /= nnAK_length;
+			else
+				P0->nnLK[i] = 0;
+		}
+		P0->theta = acos(-P0->unit[0] * P1->unit[0] + -P0->unit[1] * P1->unit[1] + -P0->unit[2] * P1->unit[2]);
+		if (P0->length < 1e-10 || P1->length < 1e-10 || std::isnan(P0->theta))
+			P0->theta = 0;
+		P1->length /= 2;
+		P0->k = (1 - std::sin(P0->theta / 2)) / (1 + std::sin(P0->theta / 2));
+		P0->C = 2 * sqrt(P0->k) + 2 * sqrt(P0->k - P0->k * P0->k / 4);
+		n += 1;
 	}
-	(--pending.end())->theta = NAN;
-	auto P0 = pending.begin();
+	(--pending.end())->theta = 0;
+	(--pending.end())->k = 1;
+	(--pending.end())->C = 1 + sqrt(3) / 2;
+	(--pending.end())->n[0] = 0;
+	(--pending.end())->n[1] = 0;
+	(--pending.end())->n[2] = 0;
+	(--pending.end())->nnAL[0] = 0;
+	(--pending.end())->nnAL[1] = 0;
+	(--pending.end())->nnAL[2] = 0;
+	(--pending.end())->nnLK[0] = 0;
+	(--pending.end())->nnLK[1] = 0;
+	(--pending.end())->nnLK[2] = 0;
 	auto P1 = ++pending.begin();
 	auto P2 = ++ ++pending.begin();
+	n = 1;
 	while (P2 != pending.end()) {
-		double orig_v = P0->f;
-		// Set up variables with names used in this part.
-		double &d_max = max_deviation;
-		double v_max = P0->f > P1->f ? P0->f : P1->f;	// This is the highest of the two.
-		if (v_max > max_v)
-			v_max = max_v;
-		double &a = max_a;
-		// theta, d_max -> r_a
-		double r_a = 2 * d_max / (1 - sin(P1->theta / 2)) - d_max;
-		// r_a, d_max -> l_a
-		double l1 = sqrt((r_a + d_max) * (r_a + d_max) - (r_a - d_max) * (r_a - d_max));
-		double l2 = sqrt(r_a * r_a - (r_a - d_max / 2) * (r_a - d_max / 2));
-		double l_a = l1 + 2 * l2;
-		// l_a, l_max, ra -> l_b, r_b
-		double l_b, r_b;
-		if (l_a <= P1->l_max) {
-			l_b = l_a;
-			r_b = r_a;
+		if (std::isnan(P1->C)) {
+			debug("skipping segment (length %f), because C is NaN", P1->length);
+			n += 1;
+			++P1;
+			++P2;
+			continue;
+		}
+		double v1A1 = sqrt((2 * max_a * P1->length + P1->f * P1->f) / (2 * P1->C + 1));
+		double v1K1 = sqrt((2 * max_a * P2->length + P2->f * P2->f) / (2 * P1->C + 1));
+		double v1A0 = sqrt((2 * max_a * P1->length - P1->f * P1->f) / (2 * P1->C - 1));
+		double v1K0 = sqrt((2 * max_a * P2->length - P2->f * P2->f) / (2 * P1->C - 1));
+		if (P1->C > 0.5) {
+			if (std::isnan(v1K0)) {
+				P2->f = sqrt(2 * max_a * P2->length) * (1 - 1e-10);
+				debug("sharp same %f", P1->f);
+				continue;
+			}
+			if (std::isnan(v1A0)) {
+				debug("sharp prev");
+				P1->f = sqrt(2 * max_a * P1->length) * (1 - 1e-10);
+				n -= 1;
+				--P1;
+				--P2;
+				continue;
+			}
+			P1->v1 = min(min(min(max(P1->f, P2->f), max_a * max_dev / P1->k), v1A1 > P1->f ? v1A1 : v1A0), v1K1 > P2->f ? v1K1 : v1K0);
 		}
 		else {
-			l_b = P1->l_max;
-			r_b = r_a * (l_b / l_a);
+			if (v1K1 < P2->f) {
+				debug("dull same");
+				P2->f = sqrt(max_a * P2->length / P1->C) * (1 - 1e-10);
+				continue;
+			}
+			if (v1A1 < P1->f) {
+				P1->f = sqrt(max_a * P1->length / P1->C) * (1 - 1e-10);
+				debug("dull prev %f", v1A1);
+				n -= 1;
+				--P1;
+				--P2;
+				continue;
+			}
+			double vmax = min(min(min(max(P1->f, P2->f), max_a * max_dev / P1->k), v1A1), v1K1);
+			if (vmax < v1K0) {
+				debug("dull same 2");
+				P2->f = sqrt(2 * max_a * P2->length - (2 * P1->C - 1) * vmax * vmax) * (1 - 1e-10);
+				continue;
+			}
+			if (vmax < v1A0) {
+				debug("dull prev 2");
+				P1->f = sqrt(2 * max_a * P1->length - (2 * P1->C - 1) * vmax * vmax) * (1 - 1e-10);
+				n -= 1;
+				--P1;
+				--P2;
+				continue;
+			}
+			P1->v1 = vmax;
 		}
-		// r_b, a -> v_a
-		double v_a = sqrt(a * r_b);
-		// v_a, v_max -> v_b
-		double v_b = v_a > v_max ? v_max : v_a;
-		// v_b, a -> r_c
-		double r_c = v_b * v_b / a;
-		// r_c, theta -> d_a
-		double d_a = 2 * r_c * sin(P1->theta / 2) + r_c;
-		// Adjust target speed.
-		if (P1->f > v_b)
-			P1->f = v_b;
-		if (P0->f > v_b)
-			P0->f = v_b;
-		double length = P1->length + P2->length + r_c * P1->theta - 2 * l_a;
-		// TODO: Finish this.
-		++P0;
+		debug("next");
+		n += 1;
 		++P1;
 		++P2;
 	}
-#endif
 	// Turn Records into Run_Records and write them out.  Ignore fake first and last record.
-	Record old_p = pending.front();
+	Record P0 = pending.front();
 	pending.pop_front();
-	while (pending.size() > 1) {
-		Record &p = pending.front();
-		if (p.arc) {
-			add_record(RUN_PRE_ARC, p.tool, p.center[0], p.center[1], p.center[2], p.normal[0], p.normal[1], p.normal[2]);
-			add_record(RUN_ARC, p.tool, p.x, p.y, p.z, p.e, p.f, p.f);
+	while (!pending.empty()) {
+		P1 = pending.begin();
+		if (P1->arc) {
+			// TODO: support arcs.
 			// TODO: Update time+dist.
 			// TODO: Update bbox.
 		}
 		else {
 			// Not an arc.
-			if (((!std::isnan(old_p.a) || !std::isnan(p.a)) && old_p.a != p.a) || ((!std::isnan(old_p.b) || !std::isnan(p.b)) && old_p.b != p.b) || ((!std::isnan(old_p.c) || !std::isnan(p.c)) && old_p.c != p.c))
-				add_record(RUN_PRE_LINE, p.tool, p.a, p.b, p.c);
-			add_record(RUN_LINE, p.tool, p.x, p.y, p.z, p.e, p.f, p.f);
+			// TODO: support abc again.
+			//if (((!std::isnan(old_p.a) || !std::isnan(p.a)) && old_p.a != p.a) || ((!std::isnan(old_p.b) || !std::isnan(p.b)) && old_p.b != p.b) || ((!std::isnan(old_p.c) || !std::isnan(p.c)) && old_p.c != p.c))
+			//	add_record(RUN_PRE_LINE, p.tool, p.a, p.b, p.c);
+			double r = P0.v1 * P0.v1 / max_a;
+			double d = r * P0.k;
+			double ANL = P0.length;
+			double CNL = P0.C * r;
+			double AC = ANL - CNL;
+			double BC = abs(P0.v1 * P0.v1 - P0.f * P0.f) / (2 * max_a * max_a);
+			debug("AC %f BC %f ANL %f CNL %f v1 %f r %f f %f max a %f", AC, BC, ANL, CNL, P0.v1, r, P0.f, max_a);
+			double AB = AC - BC;
+			double CD = acos((r - d / 2) / r) * r;
+			double DEF = (M_PI / 2 - P0.theta / 2) * r + CD;
+			double AEF = AC + CD + DEF;
+
+			double LK = P1->length;
+			double LI = P0.C / max_a * P0.v1 * P0.v1;
+			double IK = LK - LI;
+			double IJ = abs(P0.v1 * P0.v1 - P1->f * P1->f) / (2 * max_a * max_a);
+			double JK = IK - IJ;
+			double FGH = DEF;
+			double FGK = FGH + CD + IK;
+
+			double A[3], B[3], C[3], D[3], E[3], F[3], G[3], H[3], I[3], J[3], K[3], M[3], N[3], N2[3], DE[3], DF[3], FH[3], GH[3], M_DE[3], M_DF[3], M_FH[3], M_GH[3];
+			double X0[3] = { P0.x - P0.s[0], P0.y - P0.s[1], P0.z - P0.s[2] };
+			double X1[3] = { P0.x, P0.y, P0.z };
+			double X2[3] = { P1->x, P1->y, P1->z };
+			double l_MDE = 0, l_MDF = 0, l_MFH = 0, l_MGH = 0;
+			for (int i = 0; i < 3; ++i) {
+				A[i] = (X0[i] + X1[i]) / 2;
+				B[i] = A[i] + P0.unit[i] * AB;
+				C[i] = A[i] + P0.unit[i] * AC;
+				N[i] = X1[i] - P0.unit[i] * std::cos(P0.theta / 2) * (r + d);
+				M[i] = N[i] - P0.nnAL[i] * (r - d);
+				E[i] = M[i] + P0.nnAL[i] * r;
+				D[i] = (C[i] + E[i]) / 2;
+				F[i] = M[i] + (r + d < 1e-10 ? 0 : (X1[i] - M[i]) * r / (r + d));
+
+				K[i] = (X1[i] + X2[i]) / 2;
+				J[i] = K[i] - P1->unit[i] * JK;
+				I[i] = K[i] - P1->unit[i] * IK;
+				N2[i] = X1[i] + P1->unit[i] * std::cos(P0.theta / 2) * (r + d);
+				G[i] = N2[i] + P0.nnLK[i] * d;
+				H[i] = (G[i] + I[i]) / 2;
+
+				// Use DE and GE, not CD and HI, because they are easier to compute.
+				// The resulting B-vector is the same length and opposite direction of what is needed.
+				DE[i] = (D[i] + E[i]) / 2;
+				DF[i] = (D[i] + F[i]) / 2;
+				FH[i] = (F[i] + H[i]) / 2;
+				GH[i] = (G[i] + H[i]) / 2;
+
+				M_DE[i] = DE[i] - M[i];
+				M_DF[i] = DF[i] - M[i];
+				M_FH[i] = FH[i] - M[i];
+				M_GH[i] = GH[i] - M[i];
+				l_MDE += M_DE[i] * M_DE[i];
+				l_MDF += M_DF[i] * M_DF[i];
+				l_MFH += M_FH[i] * M_FH[i];
+				l_MGH += M_GH[i] * M_GH[i];
+			}
+			double Ba_[3], Ba[3], Bb[3], Bb_[3];
+			for (int i = 0; i < 3; ++i) {
+				M_DE[i] /= sqrt(l_MDE);
+				M_DF[i] /= sqrt(l_MDF);
+				M_FH[i] /= sqrt(l_MFH);
+				M_GH[i] /= sqrt(l_MGH);
+				Ba_[i] = -(M[i] + r * M_DE[i] - DE[i]);
+				Ba[i] = M[i] + r * M_DF[i] - DF[i];
+				Bb[i] = M[i] + r * M_FH[i] - FH[i];
+				Bb_[i] = -(M[i] + r * M_GH[i] - GH[i]);
+			}
+			debug("v %f %f %f", P0.f, P0.v1, P1->f);
+			debug("C %f AB %f k %f theta %f", P0.C, AB, P0.k, P0.theta * 180 / M_PI);
+			debug("nnAL %f %f %f", P0.nnAL[0], P0.nnAL[1], P0.nnAL[2]);
+			debug("nnLK %f %f %f", P0.nnLK[0], P0.nnLK[1], P0.nnLK[2]);
+			debug("unit0 %f %f %f", P0.unit[0], P0.unit[1], P0.unit[2]);
+			debug("unit1 %f %f %f", P1->unit[0], P1->unit[1], P1->unit[2]);
+			debug("A %f %f %f", A[0], A[1], A[2]);
+			debug("B %f %f %f", B[0], B[1], B[2]);
+			debug("C %f %f %f", C[0], C[1], C[2]);
+			debug("D %f %f %f", D[0], D[1], D[2]);
+			debug("E %f %f %f", E[0], E[1], E[2]);
+			debug("F %f %f %f", F[0], F[1], F[2]);
+			debug("M %f %f %f", M[0], M[1], M[2]);
+			add_curve(&P0, A, B, NULL, P0.f, P0.f, AB / AEF, INFINITY);
+			add_curve(&P0, B, C, NULL, P0.f, P0.v1, AC / AEF, INFINITY);
+			add_curve(&P0, C, D, Ba_, P0.v1, P0.v1, (AC + CD) / AEF, -r);
+			add_curve(&P0, D, F, Ba, P0.v1, P0.v1, 1, r);
+			add_curve(&*P1, F, H, Bb, P0.v1, P0.v1, FGH / FGK, r);
+			add_curve(&*P1, H, I, Bb_, P0.v1, P0.v1, (FGH + CD) / FGK, -r);
+			add_curve(&*P1, I, J, NULL, P0.v1, P1->f, (FGH + CD + IJ) / FGK, INFINITY);
+			add_curve(&*P1, J, K, NULL, P1->f, P1->f, .5, INFINITY);
 			// Update time+dist.
 			double dist = 0;
-			double dists[3] = {p.x - old_p.x, p.y - old_p.y, p.z - old_p.z};
+			double dists[3] = {P1->x - P0.x, P1->y - P0.y, P1->z - P0.z};
 			for (int i = 0; i < 3; ++i) {
-				double d = dists[i] * dists[i];
-				if (!std::isnan(d))
-					dist += d;
+				double dst = dists[i] * dists[i];
+				if (!std::isnan(dst))
+					dist += dst;
 			}
 			dist = sqrt(dist);
 			if (dist > 0) {
-				if (std::isinf(p.f)) {
+				if (std::isinf(P1->f)) {
 					if (!std::isnan(dist))
 						last_dist += dist;
 				}
 				else {
-					double t = 1 / p.f;
+					double t = 1 / P1->f;
 					if (std::isinf(t))
-						debug("%d:wtf dist %f x %f y %f f %f", lineno, dist, p.x, p.y, p.f);
+						debug("%d:wtf dist %f x %f y %f f %f", lineno, dist, P1->x, P1->y, P1->f);
 					if (!std::isnan(t))
 						last_time += t;
 				}
 			}
 			// Update bbox.
 			// Use "not larger" instead of "smaller" so NaNs are replaced.
-			if (!(p.x > bbox[0]))
-				bbox[0] = p.x;
-			if (!(p.x < bbox[1]))
-				bbox[1] = p.x;
-			if (!(p.y > bbox[2]))
-				bbox[2] = p.y;
-			if (!(p.y < bbox[3]))
-				bbox[3] = p.y;
-			if (!(p.z > bbox[4]))
-				bbox[4] = p.z;
-			if (!(p.z < bbox[5]))
-				bbox[5] = p.z;
+			if (!(P1->x > bbox[0]))
+				bbox[0] = P1->x;
+			if (!(P1->x < bbox[1]))
+				bbox[1] = P1->x;
+			if (!(P1->y > bbox[2]))
+				bbox[2] = P1->y;
+			if (!(P1->y < bbox[3]))
+				bbox[3] = P1->y;
+			if (!(P1->z > bbox[4]))
+				bbox[4] = P1->z;
+			if (!(P1->z < bbox[5]))
+				bbox[5] = P1->z;
 		}
-		old_p = p;
+		P0 = *P1;
 		pending.pop_front();
 	}
-	pending.pop_front();
 } // }}}
 
-void Parser::add_record(RunType cmd, int tool, double x, double y, double z, double e, double f0, double f1) { // {{{
+void Parser::add_curve(Record *P, double *start, double *end, double *B, double v0, double v1, double f, double r) { // {{{
+	if (f < 1e-10)
+		return;
+	/* TODO: Support abc
+	if (!std::isnan(P->a) || !std::isnan(P->b) || !std::isnan(P->c))
+		add_record(RUN_PRELINE, P->tool, P->a, P->b, P->c, 0, 0, 0, 0, vi, vf);
+	*/
+	double dist = 0;
+	for (int i = 0; i < 3; ++i)
+		dist += (start[i] - end[i]) * (start[i] - end[i]);
+	if (dist < 1e-10)
+		return;
+	add_record(RUN_LINE, P->tool, end[0], end[1], end[2], B ? B[0] : 0, B ? B[1] : 0, B ? B[2] : 0, P->e0 + f * (P->e - P->e0), v0, v1, (P->n[2] < 0 ? -1 : 1) * r);
+} // }}}
+
+void Parser::add_record(RunType cmd, int tool, double x, double y, double z, double Bx, double By, double Bz, double e, double v0, double v1, double radius) { // {{{
 	Run_Record r;
 	r.type = cmd;
 	r.tool = tool;
 	r.X = x;
 	r.Y = y;
 	r.Z = z;
+	r.Bx = Bx;
+	r.By = By;
+	r.Bz = Bz;
 	r.E = e;
-	r.F_start = f0;
-	r.F_end = f1;
+	r.v0 = v0;
+	r.v1 = v1;
 	r.time = last_time;
 	r.dist = last_dist;
+	r.r = radius;
 	outfile.write(reinterpret_cast <char *>(&r), sizeof(r));
 } // }}}
 

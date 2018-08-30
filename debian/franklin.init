@@ -13,9 +13,6 @@
 # The defaults below can be overridden in this file.
 CONFIG_FILE=/etc/default/franklin
 
-# Should the server be started?
-RUN=1
-
 # All the commented values below are the defaults.  If the variables are given a value (even if empty), they will be passed to the server.
 
 # Port to listen for browser requests.
@@ -114,9 +111,6 @@ fi
 #
 do_start()
 {
-	if [ "$RUN" -eq 0 ]; then
-		return 0
-	fi
 	start-stop-daemon "${START_ARGS[@]}"
 	RETVAL="$?"
 	if [ "$RETVAL" -eq 0 ]; then

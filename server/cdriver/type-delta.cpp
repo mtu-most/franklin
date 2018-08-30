@@ -73,7 +73,7 @@ static inline double delta_to_axis(Space *s, uint8_t a) {
 	return dest;
 }
 
-static void xyz2motors(Space *s, double *motors) {
+static void xyz2motors(Space *s) {
 	if (std::isnan(s->axis[0]->settings.target) || std::isnan(s->axis[1]->settings.target) || std::isnan(s->axis[2]->settings.target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 3; ++aa) {
@@ -81,12 +81,8 @@ static void xyz2motors(Space *s, double *motors) {
 				s->axis[aa]->settings.target = s->axis[aa]->settings.current;
 		}
 	}
-	for (uint8_t a = 0; a < 3; ++a) {
-		if (motors)
-			motors[a] = delta_to_axis(s, a);
-		else
-			s->motor[a]->settings.endpos = delta_to_axis(s, a);
-	}
+	for (uint8_t a = 0; a < 3; ++a)
+		s->motor[a]->settings.target_pos = delta_to_axis(s, a);
 }
 
 static void check_position(Space *s, double *data) {
@@ -109,20 +105,19 @@ static void check_position(Space *s, double *data) {
 	}
 }
 
-static void load(Space *s, uint8_t old_type, int32_t &addr) {
-	(void)&old_type;
+static void load(Space *s) {
 	if (!s->setup_nums(3, 3)) {
 		debug("Failed to set up delta axes");
 		s->cancel_update();
 		return;
 	}
 	for (uint8_t a = 0; a < 3; ++a) {
-		APEX(s, a).axis_min = read_float(addr);
-		APEX(s, a).axis_max = read_float(addr);
-		APEX(s, a).rodlength = read_float(addr);
-		APEX(s, a).radius = read_float(addr);
+		APEX(s, a).axis_min = shmem->floats[4 * a];
+		APEX(s, a).axis_max = shmem->floats[4 * a + 1];
+		APEX(s, a).rodlength = shmem->floats[4 * a + 2];
+		APEX(s, a).radius = shmem->floats[4 * a + 3];
 	}
-	PRIVATE(s).angle = read_float(addr);
+	PRIVATE(s).angle = shmem->floats[12];
 	if (std::isinf(PRIVATE(s).angle) || std::isnan(PRIVATE(s).angle))
 		PRIVATE(s).angle = 0;
 #define sin210 -.5
@@ -145,14 +140,14 @@ static void load(Space *s, uint8_t old_type, int32_t &addr) {
 	}
 }
 
-static void save(Space *s, int32_t &addr) {
+static void save(Space *s) {
 	for (uint8_t a = 0; a < 3; ++a) {
-		write_float(addr, APEX(s, a).axis_min);
-		write_float(addr, APEX(s, a).axis_max);
-		write_float(addr, APEX(s, a).rodlength);
-		write_float(addr, APEX(s, a).radius);
+		shmem->floats[4 * a] = APEX(s, a).axis_min;
+		shmem->floats[4 * a + 1] = APEX(s, a).axis_max;
+		shmem->floats[4 * a + 2] = APEX(s, a).rodlength;
+		shmem->floats[4 * a + 3] = APEX(s, a).radius;
 	}
-	write_float(addr, PRIVATE(s).angle);
+	shmem->floats[13] = PRIVATE(s).angle;
 }
 
 static bool init(Space *s) {
@@ -214,7 +209,7 @@ static void outer(double result[3], double a[3], double b[3]) {
 	}
 }
 
-static void motors2xyz(Space *s, double motors[3], double xyz[3]) {
+static void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
 	// Find intersecting circle of spheres 0 and 1.
 	double x0x1[3], pos[3][3];
 	for (int i = 0; i < 3; ++i) {

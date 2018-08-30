@@ -20,9 +20,10 @@
 
 #include "cdriver.h"
 
+// Nothing in this file is useful if there serial ports are not used for communicating.
+#ifdef SERIAL
+
 //#define DEBUG_DATA
-//#define DEBUG_HOST
-//#define DEBUG_ALL_HOST
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 
@@ -41,23 +42,10 @@
 // These are defined in cdriver.h.
 // }}}
 
-struct Queuerecord { // {{{
-	Queuerecord *next;
-	unsigned len;
-	char cmd;
-	int32_t s, m, e;
-	double f;
-}; // }}}
-
 // Globals. {{{
-static bool sending_to_host = false;
-static Queuerecord *hostqueue_head = NULL;
-static Queuerecord *hostqueue_tail = NULL;
-#ifdef SERIAL
 static bool had_data = false;
 static bool doing_debug = false;
 static uint8_t need_id = 0;
-#endif
 // }}}
 
 // Parity masks for decoding. {{{
@@ -70,55 +58,19 @@ static const uint8_t MASK[5][4] = {
 // }}}
 
 // Constants. {{{
-const SingleByteCommands cmd_ack[4] = { CMD_ACK0, CMD_ACK1, CMD_ACK2, CMD_ACK3 };
-const SingleByteCommands cmd_nack[4] = { CMD_NACK0, CMD_NACK1, CMD_NACK2, CMD_NACK3 };
-const SingleByteCommands cmd_stall[4] = { CMD_STALL0, CMD_STALL1, CMD_STALL2, CMD_STALL3 };
+SingleByteCommands cmd_ack[4] = { CMD_ACK0, CMD_ACK1, CMD_ACK2, CMD_ACK3 };
+SingleByteCommands cmd_nack[4] = { CMD_NACK0, CMD_NACK1, CMD_NACK2, CMD_NACK3 };
+SingleByteCommands cmd_stall[4] = { CMD_STALL0, CMD_STALL1, CMD_STALL2, CMD_STALL3 };
 // }}}
 
-static void send_to_host() { // {{{
-	sending_to_host = true;
-	//debug("sending");
-	Queuerecord *r = hostqueue_head;
-	hostqueue_head = r->next;
-	if (!hostqueue_head)
-		hostqueue_tail = NULL;
-#ifdef DEBUG_HOST
-#ifndef DEBUG_ALL_HOST
-	if (r->cmd != CMD_POS && r->cmd != CMD_TIME && r->cmd != CMD_TEMP)
-#endif
-	{
-		debug("**** host send cmd %02x s %08x m %08x e %08x f %f data len %d", r->cmd, r->s, r->m, r->e, r->f, r->len);
-		for (uint8_t i = 0; i < r->len; ++i)
-			fprintf(stderr, " %02x", reinterpret_cast <unsigned char *>(r)[sizeof(Queuerecord) + i]);
-		fprintf(stderr, "\n");
-	}
-#endif
-	serialdev[0]->write(22 + r->len);
-	serialdev[0]->write(r->cmd);
-	for (unsigned i = 0; i < sizeof(int32_t); ++i)
-		serialdev[0]->write(reinterpret_cast <char *>(&r->s)[i]);
-	for (unsigned i = 0; i < sizeof(int32_t); ++i)
-		serialdev[0]->write(reinterpret_cast <char *>(&r->m)[i]);
-	for (unsigned i = 0; i < sizeof(int32_t); ++i)
-		serialdev[0]->write(reinterpret_cast <char *>(&r->e)[i]);
-	for (unsigned i = 0; i < sizeof(double); ++i)
-		serialdev[0]->write(reinterpret_cast <char *>(&r->f)[i]);
-	for (unsigned i = 0; i < r->len; ++i)
-		serialdev[0]->write(reinterpret_cast <char *>(r)[sizeof(Queuerecord) + i]);
-	if (r->cmd == CMD_LIMIT)
-		stopping = 1;
-	free(r);
-} // }}}
-
-#ifdef SERIAL
 static void command_cancel() { // {{{
 	while (true) {
-		command_end[1] -= 1;
-		memmove(command[1], &command[1][1], command_end[1]);
-		if (command_end[1] == 0)
+		command_end -= 1;
+		memmove(command, &command[1], command_end);
+		if (command_end == 0)
 			break;
 		int len = 0;
-		if (hwpacketsize(command_end[1], &len) <= command_end[1])
+		if (hwpacketsize(command_end, &len) <= command_end)
 			break;
 	}
 } // }}}
@@ -135,404 +87,305 @@ static void resend(int amount) { // {{{
 		}
 	}
 } // }}}
-#endif
 
 // There may be serial data available.
-bool serial(uint8_t channel) { // {{{
+bool serial() { // {{{
 	while (true) { // Loop until all data is handled.
-#ifdef SERIAL // Handle timeouts on serial line. {{{
-		if (channel == 1) {
-			int32_t utm = utime();
-			if (int32_t(utm - last_micros) >= 100000)
-			{
-				if (command_end[channel] > 0) {
-					if (!had_data) {
-						// Command not finished; ignore it and wait for next.
-						debug("Ignoring unfinished command");
-						command_cancel();
-						last_micros = utm;
-					}
-					//debug("Silence, but handle data first");
-				}
-				else {
-					//debug("Too much silence; request packet to be sure");
-					write_nack();
-					resend(out_busy);
+		// Handle timeouts on serial line.
+		int32_t utm = utime();
+		if (int32_t(utm - last_micros) >= 100000)
+		{
+			if (command_end > 0) {
+				if (!had_data) {
+					// Command not finished; ignore it and wait for next.
+					debug("Ignoring unfinished command");
+					command_cancel();
 					last_micros = utm;
 				}
-			}
-			had_data = false;
-		}
-#endif // }}}
-		if (channel == 0) { // Ignore host data while blocking it.
-			if (host_block)
-				return false;
-		}
-		if (!serialdev[channel]->available())
-			return false;
-		while (command_end[channel] == 0) { // First byte. {{{
-			if (!serialdev[channel]->available()) {
-				//debug("serial %d done", channel);
-				return true;
-			}
-			command[channel][0] = serialdev[channel]->read();
-#ifdef DEBUG_SERIAL
-			debug("received on %d: %x", channel, command[channel][0]);
-#endif
-#ifdef SERIAL // {{{
-			if (channel == 1) {
-				had_data = true;
-				if (doing_debug) {
-					if (command[channel][0] == 0) {
-						END_DEBUG();
-						doing_debug = false;
-						continue;
-					}
-					DO_DEBUG(command[channel][0]);
-					continue;
-				}
-				if (need_id) {
-					need_id -= 1;
-					if (!need_id) {
-						// Firmware has reset.
-						//arch_reset();
-						// avr_* should not be used outside arch_avr.h, but this is just for debugging...
-						if (avr_pong == 255)
-							debug("firmware sent id");
-					}
-					continue;
-				}
-				// If this is a 1-byte command, handle it.
-				int which = 0;
-				switch (command[channel][0])
-				{
-				case CMD_DEBUG:
-					if (channel == 0) {
-						debug("wtf?");
-						abort();
-					}
-					doing_debug = true;
-					START_DEBUG();
-					continue;
-				case CMD_STALL3:
-					which += 1;
-					// Fall through.
-				case CMD_STALL2:
-					which += 1;
-					// Fall through.
-				case CMD_STALL1:
-					which += 1;
-					// Fall through.
-				case CMD_STALL0:
-					debug("received stall!");
-					ff_out = which;
-					out_busy = 0;
-					serialdev[1]->write(CMD_STALLACK);
-					which += 1;
-					// Fall through.
-				case CMD_ACK3:
-					which += 1;
-					// Fall through.
-				case CMD_ACK2:
-					which += 1;
-					// Fall through.
-				case CMD_ACK1:
-					which += 1;
-					// Fall through.
-				case CMD_ACK0:
-					//debug("ack%d ff %d busy %d", which, ff_out, out_busy);
-					which &= 3;
-					// Ack: flip the flipflop.
-					if (out_busy > 0 && ((ff_out - out_busy) & 3) == which) { // Only if we expected it and it is the right type.
-						out_busy -= 1;
-						void (*cb)() = serial_cb[0];
-						for (int i = 0; i < out_busy; ++i)
-							serial_cb[i] = serial_cb[i + 1];
-						serial_cb[out_busy] = NULL;
-						if (cb)
-							cb();
-					}
-					if (out_busy < 3 && change_pending)
-						arch_motors_change();
-					if (out_busy < 3 && start_pending) {
-						arch_start_move(0);
-					}
-					if (out_busy < 3 && stop_pending) {
-						//debug("do pending stop");
-						arch_stop();
-					}
-					if (out_busy < 3 && discard_pending)
-						arch_do_discard();
-					if (!sending_fragment && !stopping && arch_running()) {
-						run_file_fill_queue();
-						buffer_refill();
-					}
-					if (!preparing)
-						arch_had_ack();
-					continue;
-				case CMD_NACK3:
-					which += 1;
-					// Fall through.
-				case CMD_NACK2:
-					which += 1;
-					// Fall through.
-				case CMD_NACK1:
-					which += 1;
-					// Fall through.
-				case CMD_NACK0:
-				{
-					// Nack: the host didn't properly receive the packet: resend.
-					int amount = ((ff_out - which - 1) & 3) + 1;
-					resend(amount);
-					continue;
-				}
-				case CMD_ID:
-				case CMD_STARTUP:
-					// Request machine id.  This is called when the host
-					// connects to the machine.  This may be a reconnect,
-					// and can happen at any time.
-					// Response to host is to send the machine id; from machine this is handled after receiving the id.
-					if (channel == 0) {
-						debug("ID request from host");
-						continue;
-					}
-					need_id = ID_SIZE + UUID_SIZE + (1 + ID_SIZE + UUID_SIZE + 2) / 3;
-					continue;
-				default:
-					if (!expected_replies)
-						last_micros = utime();
-					break;
-				}
-				if ((command[1][0] & 0x90) != 0x10) {
-					// These lengths are not allowed; this cannot be a good packet.
-					debug("invalid firmware command code %02x", command[1][0]);
-					//abort();
-					write_nack();
-					continue;
-				}
+				//debug("Silence, but handle data first");
 			}
 			else {
-#endif // }}}
-				// Message received.
-				if (command[channel][0] == OK) {
-					if (sending_to_host) {
-						//debug("no longer sending");
-						sending_to_host = false;
-						//debug("received OK; sending next to host (if any)");
-						if (stopping == 1) {
-							//debug("done stopping");
-							stopping = 0;
-							sending_fragment = 0;
-						}
-						if (hostqueue_head) {
-							//debug("sending next");
-							send_to_host();
-						}
-					}
-					else {
-						debug("received unexpected OK");
-						abort();
-					}
+				//debug("Too much silence; request packet to be sure");
+				write_nack();
+				resend(out_busy);
+				last_micros = utm;
+			}
+		}
+		had_data = false;
+		if (!serialdev->available())
+			return false;
+		while (command_end == 0) { // First byte. {{{
+			if (!serialdev->available()) {
+				//debug("serial done");
+				return true;
+			}
+			command[0] = serialdev->read();
+#ifdef DEBUG_SERIAL
+			debug("received: %x", command[0]);
+#endif
+			had_data = true;
+			if (doing_debug) {
+				if (command[0] == 0) {
+					END_DEBUG();
+					doing_debug = false;
 					continue;
 				}
-				else if (command[channel][0] & 0x80) {
-					debug("invalid first byte from host: 0x%02x", command[channel][0] & 0xff);
-					abort();
-				}
-#ifdef SERIAL // {{{
+				DO_DEBUG(command[0]);
+				continue;
 			}
-#endif // }}}
-			command_end[channel] = 1;
+			if (need_id) {
+				need_id -= 1;
+				if (!need_id) {
+					// Firmware has reset.
+					//arch_reset();
+					// avr_* should not be used outside arch_avr.h, but this is just for debugging...
+					if (avr_pong == 255)
+						debug("firmware sent id");
+				}
+				continue;
+			}
+			// If this is a 1-byte command, handle it.
+			int which = 0;
+			switch (command[0])
+			{
+			case CMD_DEBUG:
+				doing_debug = true;
+				START_DEBUG();
+				continue;
+			case CMD_STALL3:
+				which += 1;
+				// Fall through.
+			case CMD_STALL2:
+				which += 1;
+				// Fall through.
+			case CMD_STALL1:
+				which += 1;
+				// Fall through.
+			case CMD_STALL0:
+				debug("received stall!");
+				ff_out = which;
+				out_busy = 0;
+				serialdev->write(CMD_STALLACK);
+				which += 1;
+				// Fall through.
+			case CMD_ACK3:
+				which += 1;
+				// Fall through.
+			case CMD_ACK2:
+				which += 1;
+				// Fall through.
+			case CMD_ACK1:
+				which += 1;
+				// Fall through.
+			case CMD_ACK0:
+				//debug("ack%d ff %d busy %d", which, ff_out, out_busy);
+				which &= 3;
+				// Ack: flip the flipflop.
+				if (out_busy > 0 && ((ff_out - out_busy) & 3) == which) { // Only if we expected it and it is the right type.
+					out_busy -= 1;
+					void (*cb)() = serial_cb[0];
+					for (int i = 0; i < out_busy; ++i)
+						serial_cb[i] = serial_cb[i + 1];
+					serial_cb[out_busy] = NULL;
+					if (cb)
+						cb();
+				}
+				if (out_busy < 3 && change_pending)
+					arch_motors_change();
+				if (out_busy < 3 && start_pending) {
+					arch_start_move(0);
+				}
+				if (out_busy < 3 && stop_pending) {
+					//debug("do pending stop");
+					arch_stop();
+				}
+				if (out_busy < 3 && discard_pending)
+					arch_do_discard();
+				if (!sending_fragment && !stopping && arch_running()) {
+					run_file_fill_queue();
+					buffer_refill();
+				}
+				if (!preparing)
+					arch_had_ack();
+				continue;
+			case CMD_NACK3:
+				which += 1;
+				// Fall through.
+			case CMD_NACK2:
+				which += 1;
+				// Fall through.
+			case CMD_NACK1:
+				which += 1;
+				// Fall through.
+			case CMD_NACK0:
+			{
+				// Nack: the host didn't properly receive the packet: resend.
+				int amount = ((ff_out - which - 1) & 3) + 1;
+				resend(amount);
+				continue;
+			}
+			case CMD_ID:
+			case CMD_STARTUP:
+				// Request machine id.  This is called when the host
+				// connects to the machine.  This may be a reconnect,
+				// and can happen at any time.
+				// Response to host is to send the machine id; from machine this is handled after receiving the id.
+				need_id = ID_SIZE + UUID_SIZE + (1 + ID_SIZE + UUID_SIZE + 2) / 3;
+				continue;
+			default:
+				if (!expected_replies)
+					last_micros = utime();
+				break;
+			}
+			if ((command[0] & 0x90) != 0x10) {
+				// These lengths are not allowed; this cannot be a good packet.
+				debug("invalid firmware command code %02x", command[0]);
+				//abort();
+				write_nack();
+				continue;
+			}
+			command_end = 1;
 		} // }}}
-		int len = serialdev[channel]->available();
+		int len = serialdev->available();
 		// Get at least two bytes in buffer.
-		if (command_end[channel] == 1) {
+		if (command_end == 1) {
 			if (len == 0)
 				break;
-			command[channel][1] = serialdev[channel]->read();
+			command[1] = serialdev->read();
 #ifdef DEBUG_SERIAL
-			debug("second byte on %d: %x", channel, command[channel][1]);
+			debug("second byte: %x", command[1]);
 #endif
 			len -= 1;
-			command_end[channel] += 1;
+			command_end += 1;
 		}
-#ifdef SERIAL // {{{
-		if (channel == 1) {
-			had_data = true;
-			if (!expected_replies)
-				last_micros = utime();
-			if (len + command_end[channel] > COMMAND_SIZE) {
-				debug("clip size! %d %d %d", len, command_end[channel], COMMAND_SIZE);
-				len = COMMAND_SIZE - command_end[channel];
-				if (len == 0) {
-					debug("canceling command");
-					command_cancel();
-					continue;
-				}
+		had_data = true;
+		if (!expected_replies)
+			last_micros = utime();
+		if (len + command_end > COMMAND_SIZE) {
+			debug("clip size! %d %d %d", len, command_end, COMMAND_SIZE);
+			len = COMMAND_SIZE - command_end;
+			if (len == 0) {
+				debug("canceling command");
+				command_cancel();
+				continue;
 			}
 		}
-		else
-#endif // }}}
-			if (len + command_end[channel] > FULL_COMMAND_SIZE[channel]) {
-				debug("clip size! %d %d %d", len, command_end[channel], FULL_COMMAND_SIZE[channel]);
-				len = FULL_COMMAND_SIZE[channel] - command_end[channel];
-			}
 		int cmd_len;
-#ifdef SERIAL // {{{
-		if (channel == 1) {
-			cmd_len = hwpacketsize(command_end[channel], &len);
-			cmd_len += (cmd_len + 2) / 3;
-		}
-		else
-#endif // }}}
-			cmd_len = ((command[channel][0] & 0xff) << 8) | (command[channel][1] & 0xff);
-		if (cmd_len > FULL_COMMAND_SIZE[channel]) {
+		cmd_len = hwpacketsize(command_end, &len);
+		cmd_len += (cmd_len + 2) / 3;
+		if (cmd_len > FULL_COMMAND_SIZE) {
 			// This command does not fit in the buffer, so it cannot be parsed.  Reject it.
 			debug("Command length %d larger than buffer; rejecting", cmd_len);
-#ifdef SERIAL // {{{
-			if (channel == 1)
-				command_cancel();
-#endif // }}}
+			command_cancel();
 			continue;
 		}
-		if (command_end[channel] + len > cmd_len)
-			len = cmd_len - command_end[channel];
-		serialdev[channel]->readBytes(reinterpret_cast <char *> (&command[channel][command_end[channel]]), len);
+		if (command_end + len > cmd_len)
+			len = cmd_len - command_end;
+		serialdev->readBytes(reinterpret_cast <char *> (&command[command_end]), len);
 #ifdef DEBUG_SERIAL // {{{
-		debug("read %d bytes on %d:", len, channel);
+		debug("read %d bytes:", len);
 		for (uint8_t i = 0; i < len; ++i)
-			fprintf(stderr, " %02x", command[channel][command_end[channel] + i]);
+			fprintf(stderr, " %02x", command[command_end + i]);
 		fprintf(stderr, "\n");
 #endif // }}}
-#ifdef SERIAL // {{{
-		if (channel == 1)
-			if (!expected_replies)
-				last_micros = utime();
-#endif // }}}
-		command_end[channel] += len;
-		if (command_end[channel] < cmd_len)
-		{
+		if (!expected_replies)
+			last_micros = utime();
+		command_end += len;
+		if (command_end < cmd_len) {
 #ifdef DEBUG_SERIAL // {{{
-			debug("%d not done yet; %d of %d received.", channel, command_end[channel], cmd_len);
+			debug("not done yet; %d of %d received.", command_end, cmd_len);
 #endif // }}}
 			return true;
 		}
-#ifdef SERIAL // {{{
 #ifdef DEBUG_DATA
-		if (channel == 1 && (command[1][0] & 0xf) != 8) {
+		if ((command[0] & 0xf) != 8) {
 			fprintf(stderr, "recv:");
-			for (uint8_t i = 0; i < command_end[channel]; ++i)
-				fprintf(stderr, " %02x", command[channel][i]);
+			for (uint8_t i = 0; i < command_end; ++i)
+				fprintf(stderr, " %02x", command[i]);
 			fprintf(stderr, "\n");
 		}
 #endif
-#endif // }}}
-#ifdef DEBUG_HOST // {{{
-		if (channel == 0) {
-#ifndef DEBUG_ALL_HOST
-			if (command[channel][2] != CMD_GETPOS && command[channel][2] != CMD_GETTIME && command[channel][2] != CMD_READTEMP)
-#endif
-			{
-				fprintf(stderr, "**** host recv:");
-				for (uint8_t i = 0; i < command_end[channel]; ++i)
-					fprintf(stderr, " %02x", command[channel][i]);
-				fprintf(stderr, "\n");
-			}
-		}
-#endif // }}}
-#ifdef SERIAL // {{{
-		int end = command_end[channel];
+		int end = command_end;
 		// Check packet integrity.
-		if (channel == 1) {
-			// Checksum must be good.
-			len = hwpacketsize(end, NULL);
-			for (uint8_t t = 0; t < (len + 2) / 3; ++t)
+		// Checksum must be good.
+		len = hwpacketsize(end, NULL);
+		for (uint8_t t = 0; t < (len + 2) / 3; ++t) {
+			uint8_t sum = command[len + t];
+			if (len == 1)
+				command[2] = 0;
+			if (len <= 2 || (len == 4 && t == 1))
+				command[len + t] = 0;
+			if ((sum & 0x7) != (t & 0x7))
 			{
-				uint8_t sum = command[channel][len + t];
-				if (len == 1)
-					command[channel][2] = 0;
-				if (len <= 2 || (len == 4 && t == 1))
-					command[channel][len + t] = 0;
-				if ((sum & 0x7) != (t & 0x7))
+				debug("incorrect extra bit, size = %d t = %d", len, t);
+				//abort();
+				command_cancel();
+				if (command_end == 0)
+					write_nack();
+				else
+					continue;
+				return true;
+			}
+			for (uint8_t bit = 0; bit < 5; ++bit)
+			{
+				uint8_t check = sum & MASK[bit][3];
+				for (uint8_t p = 0; p < 3; ++p)
+					check ^= command[3 * t + p] & MASK[bit][p];
+				check ^= check >> 4;
+				check ^= check >> 2;
+				check ^= check >> 1;
+				if (check & 1)
 				{
-					debug("incorrect extra bit, size = %d t = %d", len, t);
+					debug("incorrect checksum byte %d bit %d", t, bit);
 					//abort();
+		//fprintf(stderr, "err (%d %d):", len, t);
+		//for (uint8_t i = 0; i < len + (len + 2) / 3; ++i)
+		//	fprintf(stderr, " %02x", command[i]);
+		//fprintf(stderr, "\n");
 					command_cancel();
-					if (command_end[channel] == 0)
+					if (command_end == 0)
 						write_nack();
 					else
 						continue;
 					return true;
 				}
-				for (uint8_t bit = 0; bit < 5; ++bit)
-				{
-					uint8_t check = sum & MASK[bit][3];
-					for (uint8_t p = 0; p < 3; ++p)
-						check ^= command[channel][3 * t + p] & MASK[bit][p];
-					check ^= check >> 4;
-					check ^= check >> 2;
-					check ^= check >> 1;
-					if (check & 1)
-					{
-						debug("incorrect checksum byte %d bit %d", t, bit);
-						//abort();
-			//fprintf(stderr, "err %d (%d %d):", channel, len, t);
-			//for (uint8_t i = 0; i < len + (len + 2) / 3; ++i)
-			//	fprintf(stderr, " %02x", command[channel][i]);
-			//fprintf(stderr, "\n");
-						command_cancel();
-						if (command_end[channel] == 0)
-							write_nack();
-						else
-							continue;
-						return true;
-					}
-				}
-			}
-			// Packet is good.
-			//debug("%d good", channel);
-			// Flip-flop must have good state.
-			int which = (command[channel][0] >> 5) & 3;
-			if (which != ff_in)
-			{
-				// Wrong: this must be a retry to send the previous packet, so our ack was lost.
-				// Resend the ack, but don't do anything (the action has already been taken).
-				//debug("%d duplicate %x", channel, command[channel][0]);
-#ifdef DEBUG_FF
-				debug("old ff_in: %d", ff_in);
-#endif
-				serialdev[channel]->write(cmd_ack[which]);
-				command_end[channel] = 0;
-				continue;
-			}
-#ifdef DEBUG_FF
-			debug("new ff_in: %d", ff_in);
-#endif
-			// Clear flag for easier parsing.
-			command[channel][0] &= 0x1f;
-			command_end[channel] = 0;
-			if (hwpacket(cmd_len)) {
-				void (*cb)() = wait_for_reply[0];
-				expected_replies -= 1;
-				for (int i = 0; i < expected_replies; ++i)
-					wait_for_reply[i] = wait_for_reply[i + 1];
-				wait_for_reply[expected_replies] = NULL;
-				cb();
-				break;
 			}
 		}
-		else {
-#endif // }}}
-			command_end[channel] = 0;
-			packet();
-#ifdef SERIAL // {{{
+		// Packet is good.
+		//debug("good");
+		// Flip-flop must have good state.
+		int which = (command[0] >> 5) & 3;
+		if (which != ff_in)
+		{
+			// Wrong: this must be a retry to send the previous packet, so our ack was lost.
+			// Resend the ack, but don't do anything (the action has already been taken).
+			//debug("duplicate %x", command[0]);
+#ifdef DEBUG_FF
+			debug("old ff_in: %d", ff_in);
+#endif
+			serialdev->write(cmd_ack[which]);
+			command_end = 0;
+			continue;
 		}
-#endif // }}}
+#ifdef DEBUG_FF
+		debug("new ff_in: %d", ff_in);
+#endif
+		// Clear flag for easier parsing.
+		command[0] &= 0x1f;
+		command_end = 0;
+		if (hwpacket(cmd_len)) {
+			void (*cb)() = wait_for_reply[0];
+			expected_replies -= 1;
+			for (int i = 0; i < expected_replies; ++i)
+				wait_for_reply[i] = wait_for_reply[i + 1];
+			wait_for_reply[expected_replies] = NULL;
+			cb();
+			break;
+		}
 	}
 	return true;
 } // }}}
 
-#ifdef SERIAL
 // Command sending method:
 // When sending a command:
 // - fill appropriate command buffer
@@ -560,8 +413,8 @@ bool prepare_packet(char *the_packet, int size) { // {{{
 	// Wait for room in the queue.  This is required to avoid a stall being received in between prepare and send.
 	preparing = true;
 	while (out_busy >= 3) {
-		poll(&pollfds[2], 1, -1);
-		serial(1);
+		poll(&pollfds[BASE_FDS], 1, -1);
+		serial();
 	}
 	preparing = false;	// Not yet, but there are no further interruptions.
 	if (stopping)
@@ -631,7 +484,7 @@ void send_packet() { // {{{
 	fprintf(stderr, "\n");
 #endif
 	for (uint8_t t = 0; t < pending_len[which]; ++t)
-		serialdev[1]->write(pending_packet[which][t]);
+		serialdev->write(pending_packet[which][t]);
 	out_busy += 1;
 	out_time = utime();
 } // }}}
@@ -640,7 +493,7 @@ void write_ack() { // {{{
 //#ifdef DEBUG_DATA
 	//debug("wack %d", ff_in);
 //#endif
-	serialdev[1]->write(cmd_ack[ff_in]);
+	serialdev->write(cmd_ack[ff_in]);
 	ff_in = (ff_in + 1) & 3;
 } // }}}
 
@@ -648,32 +501,7 @@ void write_nack() { // {{{
 //#ifdef DEBUG_DATA
 	//debug("wnack %d", ff_in);
 //#endif
-	serialdev[1]->write(cmd_nack[ff_in]);
+	serialdev->write(cmd_nack[ff_in]);
 } // }}}
-#endif
 
-void send_host(char cmd, int s, int m, double f, int e, unsigned len) { // {{{
-	//debug("queueing for host cmd %x", cmd);
-	// Use malloc, not mem_alloc, because there are multiple pointers to the same memory and mem_alloc cannot handle that.
-	Queuerecord *record = reinterpret_cast <Queuerecord *>(malloc(sizeof(Queuerecord) + len));
-	if (hostqueue_head)
-		hostqueue_tail->next = record;
-	else
-		hostqueue_head = record;
-	hostqueue_tail = record;
-	record->s = s;
-	record->m = m;
-	record->f = f;
-	record->e = e;
-	record->cmd = cmd;
-	record->len = len;
-	record->next = NULL;
-	for (unsigned i = 0; i < len; ++i)
-		reinterpret_cast <char *>(record)[sizeof(Queuerecord) + i] = datastore[i];
-	if (!sending_to_host) {
-		//debug("immediately sending");
-		send_to_host();
-	}
-	//else
-	//	debug("queueing host cmd");
-} // }}}
+#endif

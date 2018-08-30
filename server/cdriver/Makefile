@@ -1,6 +1,5 @@
 # Makefile - cdriver build rules for Franklin
-# Copyright 2014-2016 Michigan Technological University
-# Copyright 2016 Bas Wijnen <wijnen@debian.org>
+# Copyright 2018 Bas Wijnen <wijnen@debian.org>
 # Author: Bas Wijnen <wijnen@debian.org>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -16,64 +15,48 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#TARGET ?= orangepizero
+CPPFLAGS ?= -Wall -Wextra -Wformat -Werror -Wdate-time -D_FORTIFY_SOURCE=2
+CXXFLAGS ?= -fPIC -ggdb3 -O3 -fstack-protector-strong
+LDFLAGS ?= -Wall -Wextra -Wformat -Werror ${CXXFLAGS}
 
-PROFILE = #-pg
+CPPFLAGS += -DARCH_INCLUDE='"arch-avr.h"'
 
-CPPFLAGS ?= -ggdb3 -O3 -Wall -Wextra -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow $(PROFILE)
-LDFLAGS ?= $(PROFILE)
+all: module franklin-cdriver
 
-all: franklin-cdriver
-
-ifeq (${TARGET}, orangepizero)
-ARCH_HEADER = arch-multicore.h
-CPPFLAGS += -DORANGEPIZERO
-else
-ifeq (${TARGET}, pine64)
-ARCH_HEADER = arch-multicore.h
-CPPFLAGS += -DPINE64
-else
-ARCH_HEADER = arch-avr.h
-endif
-endif
+module:
+	python3 setup.py build
 
 SOURCES = \
 	base.cpp \
 	debug.cpp \
 	globals.cpp \
 	gpio.cpp \
-	hostserial.cpp \
 	move.cpp \
 	packet.cpp \
-	parse.cpp \
 	run.cpp \
 	serial.cpp \
 	setup.cpp \
 	space.cpp \
-	storage.cpp \
 	temp.cpp \
 	type-cartesian.cpp \
 	type-delta.cpp \
 	type-polar.cpp
 
+OBJS = $(patsubst %.cpp,build/%.o,${SOURCES})
+
 HEADERS = \
-	configuration.h \
+	arch-avr.h \
 	cdriver.h \
-	${ARCH_HEADER}
+	configuration.h
 
-CPPFLAGS += -DARCH_INCLUDE=\"${ARCH_HEADER}\" -std=c++0x
+DEPENDS = \
+	  Makefile
 
-OBJECTS = $(addprefix build/,$(patsubst %.cpp,%.o,$(SOURCES)))
+franklin-cdriver: ${OBJS} ${HEADERS} ${DEPENDS}
+	g++ ${LDFLAGS} ${OBJS} -o $@
 
-franklin-cdriver: $(OBJECTS) Makefile
-	g++ $(LDFLAGS) $(OBJECTS) $(LIBS) -o $@
-
-build/stamp:
-	mkdir -p build
-	touch $@
-
-build/%.o: %.cpp $(HEADERS) build/stamp Makefile
-	g++ $(CPPFLAGS) $(CXXFLAGS) -c $< -o $@
+build/%.o: %.cpp ${HEADERS} ${DEPENDS}
+	g++ -c ${CPPFLAGS} ${CXXFLAGS} $< -o $@
 
 clean:
-	rm -rf $(OBJECTS) build franklin-cdriver $(DTBO)
+	rm -rf build franklin-cdriver

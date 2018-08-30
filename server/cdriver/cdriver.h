@@ -20,6 +20,14 @@
 #ifndef _CDRIVER_H
 #define _CDRIVER_H
 
+// Exactly one file defines EXTERN as empty, which leads to the data to be defined.
+#ifndef EXTERN
+#define EXTERN extern
+#else
+#define DEFINE_VARIABLES
+#endif
+
+#include "module.h"
 #include "configuration.h"
 #include <cstdio>
 #include <cmath>
@@ -31,33 +39,24 @@
 #include <string>
 
 #define PROTOCOL_VERSION ((uint32_t)3)	// Required version response in BEGIN.
-#define ID_SIZE 8
-#define UUID_SIZE 16
-#define BASE_FDS 2
+#define BASE_FDS 3
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
 #define MAXINT MAXLONG
-
-// Exactly one file defines EXTERN as empty, which leads to the data to be defined.
-#ifndef EXTERN
-#define EXTERN extern
-#else
-#define DEFINE_VARIABLES
-#endif
-
-#define NUM_SPACES 3
 
 #include ARCH_INCLUDE
 
 #define debug(...) do { buffered_debug_flush(); fprintf(stderr, "#"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); fflush(stderr); } while (0)
 
-static inline int min(int a, int b) {
+template <typename T> inline T min(T a, T b) {
 	return a < b ? a : b;
 }
 
-static inline int max(int a, int b) {
+template <typename T> inline T max(T a, T b) {
 	return a > b ? a : b;
 }
+
+extern "C" {
 
 struct Pin_t {
 	int flags;
@@ -100,100 +99,9 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values. {
 	CMD_STALLACK = 0x8f     // Clear stall.
 }; // }}}
 
-extern const SingleByteCommands cmd_ack[4];
-extern const SingleByteCommands cmd_nack[4];
-extern const SingleByteCommands cmd_stall[4];
-
-enum Command {
-	// from host
-	CMD_SET_UUID,	// 22 bytes: uuid.
-	CMD_GET_UUID,	// 0.  Reply: UUID.
-	CMD_LINE,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
-	CMD_SINGLE,	// Same as CMD_LINE.
-	CMD_PROBE,	// Same as CMD_LINE.
-	CMD_PARSE_GCODE,// 2 byte: in filename length, in filename, out filename
-	CMD_RUN_FILE,	// n byte: filename.
-	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
-	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [°C].
-	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [°C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
-	CMD_READTEMP,	// 1 byte: which channel.  Reply: TEMP. [°C]
-	CMD_READPOWER,	// 1 byte: which channel.  Reply: POWER. [μs, μs]
-	CMD_SETPOS,	// 1 byte: which channel; 4 bytes: pos.
-	CMD_GETPOS,	// 1 byte: which channel.  Reply: POS. [steps, mm]
-	CMD_READ_GLOBALS,
-	CMD_WRITE_GLOBALS,
-	CMD_READ_SPACE_INFO,	// 1 byte: which channel.  Reply: DATA.
-	CMD_READ_SPACE_AXIS,	// 1 byte: which channel.  Reply: DATA.
-	CMD_READ_SPACE_MOTOR,	// 1 byte: which channel; n bytes: data.
-	CMD_WRITE_SPACE_INFO,	// 1 byte: which channel.  Reply: DATA.
-	CMD_WRITE_SPACE_AXIS,	// 1 byte: which channel; n bytes: data.
-	CMD_WRITE_SPACE_MOTOR,	// 1 byte: which channel; n bytes: data.
-	CMD_READ_TEMP,	// 1 byte: which channel.  Reply: DATA.
-	CMD_WRITE_TEMP,	// 1 byte: which channel; n bytes: data.
-	CMD_READ_GPIO,	// 1 byte: which channel.  Reply: DATA.
-	CMD_WRITE_GPIO,	// 1 byte: which channel; n bytes: data.
-	CMD_QUEUED,	// 1 byte: 0: query queue length; 1: stop and query queue length.  Reply: QUEUE.
-	CMD_READPIN,	// 1 byte: which channel. Reply: GPIO.
-	CMD_HOME,	// 1 byte: homing space; n bytes: homing type (0=pos, 1=neg, 3=no)
-	CMD_FORCE_DISCONNECT,	// 0
-	CMD_CONNECT,	// 8 byte: run ID, n bytes: port name (0-terminated)
-	CMD_RECONNECT,	// n bytes: port name (0-terminated)
-	CMD_RESUME,
-	CMD_GETTIME,
-	CMD_SPI,
-	CMD_ADJUSTPROBE,	// 3 doubles: probe position.
-	CMD_TP_GETPOS,
-	CMD_TP_SETPOS,	// 1 double: new toolpath position.
-	CMD_TP_FINDPOS,	// 3 doubles: search position or NaN.
-	CMD_MOTORS2XYZ,	// 1 byte: which space, n doubles: motor positions.  Reply: m times XYZ.
-	// to host
-		// responses to host requests; only one active at a time.
-	CMD_UUID = 0x40,	// 16 byte uuid.
-	CMD_TEMP,	// 4 byte: requested channel's temperature. [°C]
-	CMD_POWER,	// 4 byte: requested channel's power time; 4 bytes: current time. [μs, μs]
-	CMD_POS,	// 4 byte: pos [steps]; 4 byte: current [mm].
-	CMD_DATA,	// n byte: requested data.
-	CMD_PIN,	// 1 byte: 0 or 1: pin state.
-	CMD_QUEUE,	// 1 byte: current number of records in queue.
-	CMD_HOMED,	// 0
-	CMD_TIME,
-	CMD_TP_POS,	// double: current or found position in toolpath.
-	CMD_XYZ,	// double: axis position.
-	CMD_PARSED_GCODE,	// 0
-		// asynchronous events.
-	CMD_MOVECB,	// 1 byte: number of movecb events.
-	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
-	CMD_CONTINUE,	// 1 byte: is_audio.  Bool flag if it needs to be sent.
-	CMD_LIMIT,	// 1 byte: which channel.
-	CMD_TIMEOUT,	// 0
-	CMD_DISCONNECT,	// 0
-	CMD_PINCHANGE,	// 1 byte: pin, 1 byte: current value.
-		// Updates from RUN_FILE.
-	CMD_UPDATE_TEMP,
-	CMD_UPDATE_PIN,
-	CMD_CONFIRM,
-	CMD_FILE_DONE,
-	CMD_PARKWAIT,
-	CMD_CONNECTED,
-		// Pin names; broadcast during setup.
-	CMD_PINNAME,
-};
-
-enum RunType {
-	RUN_SYSTEM,
-	RUN_PRE_LINE,
-	RUN_LINE,
-	RUN_PRE_ARC,
-	RUN_ARC,
-	RUN_GPIO,
-	RUN_SETTEMP,
-	RUN_WAITTEMP,
-	RUN_SETPOS,
-	RUN_WAIT,
-	RUN_CONFIRM,
-	RUN_PARK,
-};
-void parse_gcode(std::string const &infilename, std::string const &outfilename);
+extern SingleByteCommands cmd_ack[4];
+extern SingleByteCommands cmd_nack[4];
+extern SingleByteCommands cmd_stall[4];
 
 // All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp {
@@ -234,23 +142,31 @@ struct Temp {
 	int32_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
 	double fromadc(int32_t adc);	// convert ADC to K.
 	int32_t toadc(double T, int32_t default_);	// convert K to ADC.
-	void load(int32_t &addr, int id);
-	void save(int32_t &addr);
+	void load(int id);
+	void save();
 	void init();
 	void free();
 	void copy(Temp &dst);
 };
 
+// Variables defining the current move:
+// double P[3]: Point in the middle of the line between start and end point.
+// double A[3], B[3]: vectors from P to end point and half way point on arc respectively.
+// double end_time: time when current arc is completed.
+// double v0, v1: start and end speed of the move.
+// double dist: length of segment, along the arc.
+// double alpha_max: angle between lines through center of arc through mid point and begin/end point.
 struct History {
-	double t0, tp;
-	double f0, f1, f2, fp, fq, fmain;
-	int32_t hwtime, start_time, last_time, last_current_time;
+	double P[3], A[3], B[3];
+	double v0, v1, dist, alpha_max;
+	int32_t hwtime, end_time, last_time;
 	int cbs;
 	int queue_start, queue_end;
 	bool queue_full;
 	int run_file_current;
 	bool probing, single;
 	double run_time, run_dist;
+	double factor;
 };
 
 struct Space_History {
@@ -266,14 +182,13 @@ struct Space_History {
 
 struct Motor_History {
 	double last_v;		// v during last iteration, for using limit_a [m/s].
-	double target_v, target_dist;	// Internal values for moving.
+	double target_v, target_pos;	// Internal values for moving.
 	double current_pos;	// Current position of motor (in steps), and (cast to int) what the hardware currently thinks.
-	double endpos;
 };
 
 struct Axis_History {
 	double dist[2], main_dist;
-	double source, current;	// Source position of current movement of axis (in μm), or current position if there is no movement.
+	double source, current;	// Source position of current movement of axis, or current position if there is no movement.
 	double target;
 	double endpos[2];
 };
@@ -306,10 +221,10 @@ struct Motor {
 struct Space;
 
 struct SpaceType {
-	void (*xyz2motors)(Space *s, double *motors);
+	void (*xyz2motors)(Space *s);
 	void (*check_position)(Space *s, double *data);
-	void (*load)(Space *s, uint8_t old_type, int32_t &addr);
-	void (*save)(Space *s, int32_t &addr);
+	void (*load)(Space *s);
+	void (*save)(Space *s);
 	bool (*init)(Space *s);
 	void (*free)(Space *s);
 	void (*afree)(Space *s, int a);
@@ -317,7 +232,7 @@ struct SpaceType {
 	double (*unchange0)(Space *s, int axis, double value);
 	double (*probe_speed)(Space *s);
 	int (*follow)(Space *s, int axis);
-	void (*motors2xyz)(Space *s, double *motors, double *xyz);
+	void (*motors2xyz)(Space *s, const double *motors, double *xyz);
 };
 
 struct Space {
@@ -329,12 +244,12 @@ struct Space {
 	int id;
 	int type;
 	int num_axes, num_motors;
-	void load_info(int32_t &addr);
-	void load_axis(int a, int32_t &addr);
-	void load_motor(int m, int32_t &addr);
-	void save_info(int32_t &addr);
-	void save_axis(int a, int32_t &addr);
-	void save_motor(int m, int32_t &addr);
+	void load_info();
+	void load_axis(int a);
+	void load_motor(int m);
+	void save_info();
+	void save_axis(int a);
+	void save_motor(int m);
 	void init(int space_id);
 	bool setup_nums(int na, int nm);
 	void cancel_update();
@@ -365,22 +280,11 @@ struct Gpio {
 	Pin_t pin;
 	uint8_t state, reset;
 	void setup(uint8_t new_state);
-	void load(int32_t &addr);
-	void save(int32_t &addr);
+	void load();
+	void save();
 	void init();
 	void free();
 	void copy(Gpio &dst);
-};
-
-struct MoveCommand {
-	bool cb;
-	bool probe, single;
-	double f[2];
-	double data[10];	// Value if given, NAN otherwise.  Variable size array. TODO
-	double time, dist;
-	bool arc;
-	double center[3];
-	double normal[3];
 };
 
 struct Serial_t {
@@ -391,35 +295,15 @@ struct Serial_t {
 	virtual int available() = 0;
 };
 
-struct HostSerial : public Serial_t {
-	char buffer[256];
-	int start, end;
-	void begin();
-	void write(char c);
-	void refill();
-	int read();
-	int readBytes (char *target, int len) {
-		for (int i = 0; i < len; ++i)
-			*target++ = read();
-		return len;
-	}
-	void flush() {}
-	int available();
-};
-EXTERN HostSerial host_serial;
-
 #define COMMAND_SIZE 256
-#define FULL_SERIAL_COMMAND_SIZE (COMMAND_SIZE + (COMMAND_SIZE + 2) / 3)
-#define HOST_COMMAND_SIZE 0x4000
-static int const FULL_COMMAND_SIZE[2] = {HOST_COMMAND_SIZE, FULL_SERIAL_COMMAND_SIZE};
+static int const FULL_COMMAND_SIZE = COMMAND_SIZE + (COMMAND_SIZE + 2) / 3;
 
 // Globals
 EXTERN double max_deviation;
 EXTERN double max_v, max_a;
-EXTERN unsigned char uuid[UUID_SIZE];
 EXTERN uint8_t num_extruders;
-EXTERN uint8_t num_temps;
-EXTERN uint8_t num_gpios;
+EXTERN int num_temps;
+EXTERN int num_gpios;
 EXTERN uint32_t protocol_version;
 EXTERN uint8_t machine_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, stop_pin, probe_pin, spiss_pin;
@@ -429,9 +313,9 @@ EXTERN int bed_id, fan_id, spindle_id;
 EXTERN double feedrate;		// Multiplication factor for f values, used at start of move.
 EXTERN double targetx, targety, targetangle, zoffset;	// Offset for axis 2 of space 0.
 // Other variables.
-EXTERN Serial_t *serialdev[2];
-EXTERN unsigned char *command[2];
-EXTERN int command_end[2];
+EXTERN Serial_t *serialdev;
+EXTERN unsigned char command[FULL_COMMAND_SIZE];
+EXTERN int command_end;
 EXTERN Space spaces[NUM_SPACES];
 EXTERN Temp *temps;
 EXTERN Gpio *gpios;
@@ -446,10 +330,9 @@ EXTERN int cbs_after_current_move;
 EXTERN bool motors_busy;
 EXTERN int out_busy;
 EXTERN int32_t out_time;
-EXTERN char pending_packet[4][FULL_SERIAL_COMMAND_SIZE];
+EXTERN char pending_packet[4][FULL_COMMAND_SIZE];
 EXTERN int pending_len[4];
 EXTERN void (*serial_cb[4])();
-EXTERN char datastore[HOST_COMMAND_SIZE];
 EXTERN int32_t last_active;
 EXTERN int32_t last_micros;
 EXTERN int16_t led_phase;
@@ -474,6 +357,11 @@ EXTERN struct pollfd pollfds[BASE_FDS + ARCH_MAX_FDS];
 EXTERN void (*wait_for_reply[4])();
 EXTERN int expected_replies;
 
+// Event data and flags for pending interrupts.
+EXTERN int num_file_done_events;
+EXTERN bool continue_event;
+EXTERN int num_movecbs;
+
 #if DEBUG_BUFFER_LENGTH > 0
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
 EXTERN int16_t debug_buffer_ptr;
@@ -486,53 +374,49 @@ void buffered_debug(char const *fmt, ...);
 #endif
 
 // Force cpdebug if requested, to enable only specific lines without adding all the cp things in manually.
-#define fcpdebug(s, m, fmt, ...) do { if (s == 1 && m == 0) debug("CP curfragment %d curpos %f current %f " fmt, current_fragment, spaces[s].motor[m]->settings.current_pos, spaces[s].axis[m]->settings.current, ##__VA_ARGS__); } while (0)
-//#define fcpdebug(s, m, fmt, ...) do { debug("CP curfragment %d curpos %f current %f " fmt, current_fragment, spaces[s].motor[m]->settings.current_pos, spaces[s].axis[m]->settings.current, ##__VA_ARGS__); } while (0)
+//#define fcpdebug(s, m, fmt, ...) do { if (s == 1 && m == 0) debug("CP curfragment %d curpos %f current %f " fmt, current_fragment, spaces[s].motor[m]->settings.current_pos, spaces[s].axis[m]->settings.current, ##__VA_ARGS__); } while (0)
+#define fcpdebug(s, m, fmt, ...) do { debug("CP %d %d curfragment %d curpos %f current %f " fmt, s, m, current_fragment, spaces[s].motor[m]->settings.current_pos, spaces[s].axis[m]->settings.current, ##__VA_ARGS__); } while (0)
 //#define cpdebug fcpdebug
 #define cpdebug(...) do {} while (0)
 
 // packet.cpp
-void packet();	// A command packet has arrived; handle it.
+void request(int req);
 void settemp(int which, double target);
 void waittemp(int which, double mintemp, double maxtemp);
 void setpos(int which, int t, double f);
+void delayed_reply();
+void send_to_parent(char cmd);
+void prepare_interrupt();
 
 // serial.cpp
-bool serial(uint8_t which);	// Handle commands from serial.
+bool serial();	// Handle commands from serial.
 bool prepare_packet(char *the_packet, int len);
 void send_packet();
 void write_ack();
 void write_nack();
-void send_host(char cmd, int s = 0, int m = 0, double f = 0, int e = 0, unsigned len = 0);
 EXTERN uint8_t ff_in;	// Index of next in-packet that is expected.
 EXTERN uint8_t ff_out;	// Index of next out-packet that will be sent.
 
 // move.cpp
-int next_move();
+int next_move(int32_t start_time);
 void abort_move(int pos);
 
 // run.cpp
-struct Run_Record {
-	uint8_t type;
-	int32_t tool;
-	double X, Y, Z, E, F_start, F_end;
-	double time, dist;
-} __attribute__((__packed__));
 struct ProbeFile {
 	double targetx, targety, x0, y0, w, h, sina, cosa;
 	unsigned long nx, ny;
 	double angle;
 	double sample[0];
 } __attribute__((__packed__));
-void run_file(int name_len, char const *name, int probe_name_len, char const *probe_name, bool start, double sina, double cosa, int audio);
+void run_file(char const *name, char const *probe_name, bool start, double sina, double cosa, int audio);
 void abort_run_file();
 void run_file_fill_queue();
 void run_adjust_probe(double x, double y, double z);
-double run_find_pos(double pos[3]);
-EXTERN char probe_file_name[256];
+double run_find_pos(const double pos[3]);
+EXTERN char *probe_file_name;
 EXTERN off_t probe_file_size;
 EXTERN ProbeFile *probe_file_map;
-EXTERN char run_file_name[256];
+EXTERN char *run_file_name;
 EXTERN off_t run_file_size;
 EXTERN Run_Record *run_file_map;
 EXTERN int run_file_num_strings;
@@ -551,21 +435,13 @@ EXTERN int run_file_audio;
 
 // setup.cpp
 void setup();
-void connect(char const *port, char const *run_id);
+void connect_machine(char const *port, char const *run_id);
 void connect_end();
 Axis_History *setup_axis_history();
 Motor_History *setup_motor_history();
 EXTERN bool host_block;
 EXTERN bool sent_names;
 EXTERN bool connected;
-
-// storage.cpp
-uint8_t read_8(int32_t &address);
-void write_8(int32_t &address, uint8_t data);
-int16_t read_16(int32_t &address);
-void write_16(int32_t &address, int16_t data);
-double read_float(int32_t &address);
-void write_float(int32_t &address, double data);
 
 // temp.cpp
 void handle_temp(int id, int temp);
@@ -574,15 +450,13 @@ void handle_temp(int id, int temp);
 void buffer_refill();
 void store_settings();
 void restore_settings();
-void apply_tick();
-void send_fragment();
 void move_to_current();
 void reset_pos(Space *s);
 EXTERN int moving_to_current;
 
 // globals.cpp
-bool globals_load(int32_t &address);
-void globals_save(int32_t &address);
+bool globals_load();
+void globals_save();
 
 // base.cpp
 void disconnect(bool notify);
@@ -622,7 +496,7 @@ bool arch_send_fragment();
 #ifdef SERIAL
 int hwpacketsize(int len, int *available);
 bool hwpacket(int len);
-void arch_reconnect(char *port);
+void arch_reconnect(const char *port);
 void arch_disconnect();
 int arch_fds();
 // Serial_t derivative Serial;
@@ -631,7 +505,6 @@ void START_DEBUG();
 void DO_DEBUG(char c);
 void END_DEBUG();
 #endif
-
 
 bool Pin_t::valid() {
 	return pin < NUM_PINS && flags & 1;
@@ -655,3 +528,5 @@ void Pin_t::read(uint16_t data) {
 	}
 }
 #endif
+
+}

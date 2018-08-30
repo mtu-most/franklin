@@ -19,27 +19,15 @@
 
 #include "cdriver.h"
 
-static unsigned char host_command[HOST_COMMAND_SIZE];
-#ifdef SERIAL
-static unsigned char serial_command[FULL_SERIAL_COMMAND_SIZE];
-#endif
-
 void setup()
 {
-	command[0] = host_command;
-#ifdef SERIAL
-	command[1] = serial_command;
-#endif
 	connected = false;
 	preparing = false;
-	host_block = false;
 	sent_names = false;
 	last_active = millis();
 	last_micros = utime();
-	serialdev[0] = &host_serial;
-	host_serial.begin();
-	serialdev[1] = NULL;
-	command_end[1] = 0;
+	serialdev = NULL;
+	command_end = 0;
 	arch_setup_start();
 	setup_spacetypes();
 	// Initialize volatile variables.
@@ -51,7 +39,6 @@ void setup()
 	pollfds[0].fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
 	pollfds[0].events = POLLIN | POLLPRI;
 	pollfds[0].revents = 0;
-	command_end[0] = 0;
 	motors_busy = false;
 	current_extruder = 0;
 	continue_cb = 0;
@@ -62,6 +49,9 @@ void setup()
 		serial_cb[i] = NULL;
 	}
 	out_busy = 0;
+	num_file_done_events = 0;
+	continue_event = false;
+	num_movecbs = 0;
 	led_pin.init();
 	stop_pin.init();
 	probe_pin.init();
@@ -79,7 +69,8 @@ void setup()
 	audio_hwtime_step = 1;	// This is set by audio file.
 	feedrate = 1;
 	max_deviation = 0;
-	max_v = INFINITY;
+	max_v = 100;
+	max_a = 10000;
 	targetx = 0;
 	targety = 0;
 	zoffset = 0;
@@ -126,18 +117,8 @@ void connect_end() {
 	history = new History[FRAGMENTS_PER_BUFFER];
 	for (int i = 0; i < 2; ++i) {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-		history[f].t0 = 0;
-		history[f].f0 = 0;
 		history[f].hwtime = 0;
-		history[f].last_current_time = 0;
 		history[f].cbs = 0;
-		history[f].tp = 0;
-		history[f].f1 = 1;
-		history[f].f2 = 0;
-		history[f].fp = 0;
-		history[f].fq = 0;
-		history[f].fmain = 1;
-		history[f].start_time = 0;
 		history[f].last_time = 0;
 		history[f].queue_start = 0;
 		history[f].queue_end = 0;
@@ -160,13 +141,13 @@ void connect_end() {
 		settemp(t, temps[t].target[0]);
 	// Update current position.
 	first_fragment = current_fragment;
-	//debug("not blocking host");
-	host_block = false;
 	arch_stop(true);
 	// Update pin names at next globals update.
 	sent_names = false;
-	if (connected)
-		send_host(CMD_CONNECTED);
+	if (connected) {
+		prepare_interrupt();
+		send_to_parent(CMD_CONNECTED);
+	}
 }
 
 Axis_History *setup_axis_history() {
@@ -189,8 +170,7 @@ Motor_History *setup_motor_history() {
 		ret[f].current_pos = 0;
 		ret[f].last_v = 0;
 		ret[f].target_v = NAN;
-		ret[f].target_dist = NAN;
-		ret[f].endpos = NAN;
+		ret[f].target_pos = NAN;
 	}
 	return ret;
 }

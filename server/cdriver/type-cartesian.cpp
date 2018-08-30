@@ -20,16 +20,13 @@
 #include "cdriver.h"
 
 // Cartesian functions. {{{
-static void xyz2motors(Space *s, double *motors) { // {{{
+static void xyz2motors(Space *s) { // {{{
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
-		if (motors)
-			motors[a] = s->axis[a]->settings.target;
-		else
-			s->motor[a]->settings.endpos = s->axis[a]->settings.target;
+		s->motor[a]->settings.target_pos = s->axis[a]->settings.target;
 	}
 } // }}}
 
-static void motors2xyz(Space *s, double *motors, double *xyz) { // {{{
+static void motors2xyz(Space *s, const double *motors, double *xyz) { // {{{
 	for (uint8_t a = 0; a < s->num_axes; ++a)
 		xyz[a] = motors[a];
 } // }}}
@@ -39,17 +36,16 @@ static void check_position(Space *s, double *data) { // {{{
 	(void)&data;
 } // }}}
 
-static void load(Space *s, uint8_t old_type, int32_t &addr) { // {{{
-	(void)&old_type;
-	uint8_t num = read_8(addr);
-	if (!s->setup_nums(num, num)) {
+static void load(Space *s) { // {{{
+	shmem->ints[3] = shmem->ints[2];
+	if (!s->setup_nums(shmem->ints[2], shmem->ints[3])) {
 		debug("Failed to set up cartesian axes");
 		s->cancel_update();
 	}
 } // }}}
 
-static void save(Space *s, int32_t &addr) { // {{{
-	write_8(addr, s->num_axes);
+static void save(Space *s) { // {{{
+	(void)&s;
 } // }}}
 
 static bool init(Space *s) { // {{{
@@ -118,10 +114,9 @@ struct ExtruderAxisData { // {{{
 #define EDATA(s) (*reinterpret_cast <ExtruderData *>(s->type_data))
 #define EADATA(s, a) (*reinterpret_cast <ExtruderAxisData *>(s->axis[a]->type_data))
 
-static void eload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
-	(void)&old_type;
-	uint8_t num = read_8(addr);
-	if (!s->setup_nums(num, num)) {
+static void eload(Space *s) { // {{{
+	shmem->ints[3] = shmem->ints[2];
+	if (!s->setup_nums(shmem->ints[2], shmem->ints[3])) {
 		debug("Failed to set up extruder axes");
 		uint8_t n = min(s->num_axes, s->num_motors);
 		if (!s->setup_nums(n, n)) {
@@ -137,7 +132,8 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
 	}
 	EDATA(s).num_axes = s->num_axes;
 	bool move = false;
-	if (motors_busy && !computing_move && settings.queue_start == settings.queue_end && !settings.queue_full) {
+	/*if (motors_busy && !computing_move && settings.queue_start == settings.queue_end && !settings.queue_full) {
+		// FIXME: move to current.
 		move = true;
 		queue[settings.queue_end].probe = false;
 		queue[settings.queue_end].cb = false;
@@ -158,24 +154,23 @@ static void eload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
 		// This shouldn't happen and causes communication problems, but if you have a 1-item buffer it is correct.
 		if (settings.queue_end == settings.queue_start)
 			settings.queue_full = true;
-	}
+	} */
 	for (int a = 0; a < s->num_axes; ++a) {
 		for (int o = 0; o < 3; ++o) {
-			EADATA(s, a).offset[o] = read_float(addr);
+			EADATA(s, a).offset[o] = shmem->floats[3 * a + o];
 			//debug("load offset %d %d %d = %f", s->id, a, o, EADATA(s, a).offset[o]);
 		}
 	}
 	if (move) {
-		next_move();
+		next_move(settings.hwtime);
 		buffer_refill();
 	}
 } // }}}
 
-static void esave(Space *s, int32_t &addr) { // {{{
-	write_8(addr, s->num_axes);
+static void esave(Space *s) { // {{{
 	for (int a = 0; a < s->num_axes; ++a) {
 		for (int o = 0; o < 3; ++o)
-			write_float(addr, EADATA(s, a).offset[o]);
+			shmem->floats[3 * a + o] = EADATA(s, a).offset[o];
 	}
 } // }}}
 
@@ -233,10 +228,9 @@ struct FollowerAxisData { // {{{
 #define FDATA(s) (*reinterpret_cast <FollowerData *>(s->type_data))
 #define FADATA(s, a) (*reinterpret_cast <FollowerAxisData *>(s->axis[a]->type_data))
 
-static void fload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
-	(void)&old_type;
-	uint8_t num = read_8(addr);
-	if (!s->setup_nums(num, num)) {
+static void fload(Space *s) { // {{{
+	shmem->ints[3] = shmem->ints[2];
+	if (!s->setup_nums(shmem->ints[2], shmem->ints[3])) {
 		debug("Failed to set up follower axes");
 		uint8_t n = min(s->num_axes, s->num_motors);
 		if (!s->setup_nums(n, n)) {
@@ -251,17 +245,16 @@ static void fload(Space *s, uint8_t old_type, int32_t &addr) { // {{{
 	}
 	FDATA(s).num_axes = s->num_axes;
 	for (int a = 0; a < s->num_axes; ++a) {
-		FADATA(s, a).space = read_8(addr);
-		FADATA(s, a).motor = read_8(addr);
+		FADATA(s, a).space = shmem->ints[4 + 2 * a];
+		FADATA(s, a).motor = shmem->ints[4 + 2 * a + 1];
 	}
 	arch_motors_change();
 } // }}}
 
-static void fsave(Space *s, int32_t &addr) { // {{{
-	write_8(addr, s->num_axes);
+static void fsave(Space *s) { // {{{
 	for (int a = 0; a < s->num_axes; ++a) {
-		write_8(addr, FADATA(s, a).space);
-		write_8(addr, FADATA(s, a).motor);
+		shmem->ints[4 + 2 * a] = FADATA(s, a).space;
+		shmem->ints[4 + 2 * a + 1] = FADATA(s, a).motor;
 	}
 } // }}}
 

@@ -25,11 +25,10 @@
 #define ldebug(...) do {} while(0)
 #endif
 
-bool globals_load(int32_t &addr)
-{
+bool globals_load() {
 	bool change_hw = false;
-	uint8_t nt = read_8(addr);
-	uint8_t ng = read_8(addr);
+	int nt = shmem->ints[2];
+	int ng = shmem->ints[3];
 	// Free the old memory and initialize the new memory.
 	if (nt != num_temps) {
 		ldebug("new temp");
@@ -58,39 +57,41 @@ bool globals_load(int32_t &addr)
 	}
 	ldebug("new done");
 	int p = led_pin.write();
-	led_pin.read(read_16(addr));
+	led_pin.read(shmem->ints[4]);
 	if (p != led_pin.write())
 		change_hw = true;
 	p = stop_pin.write();
-	stop_pin.read(read_16(addr));
+	stop_pin.read(shmem->ints[5]);
 	if (p != stop_pin.write())
 		change_hw = true;
 	p = probe_pin.write();
-	probe_pin.read(read_16(addr));
+	probe_pin.read(shmem->ints[6]);
 	if (p != probe_pin.write())
 		change_hw = true;
 	p = spiss_pin.write();
-	spiss_pin.read(read_16(addr));
+	spiss_pin.read(shmem->ints[7]);
 	if (p != spiss_pin.write())
 		change_hw = true;
 	int t = timeout;
-	timeout = read_16(addr);
+	timeout = shmem->ints[8];
 	if (t != timeout)
 		change_hw = true;
-	bed_id = read_16(addr);
-	fan_id = read_16(addr);
-	spindle_id = read_16(addr);
-	feedrate = read_float(addr);
+	bed_id = shmem->ints[9];
+	fan_id = shmem->ints[10];
+	spindle_id = shmem->ints[11];
+	feedrate = shmem->floats[0];
 	if (std::isnan(feedrate) || std::isinf(feedrate) || feedrate <= 0)
 		feedrate = 1;
-	max_deviation = read_float(addr);
-	max_v = read_float(addr);
-	int ce = read_8(addr);
-	targetx = read_float(addr);
-	targety = read_float(addr);
-	targetangle = read_float(addr);
-	double zo = read_float(addr);
-	if (motors_busy && (current_extruder != ce || zoffset != zo) && settings.queue_start == settings.queue_end && !settings.queue_full && !computing_move) {
+	max_deviation = shmem->floats[1];
+	max_v = shmem->floats[2];
+	max_a = shmem->floats[3];
+	int ce = shmem->ints[12];
+	targetx = shmem->floats[4];
+	targety = shmem->floats[5];
+	targetangle = shmem->floats[6];
+	double zo = shmem->floats[7];
+	/*if (motors_busy && (current_extruder != ce || zoffset != zo) && settings.queue_start == settings.queue_end && !settings.queue_full && !computing_move) {
+		// FIXME: move to current position
 		queue[settings.queue_end].probe = false;
 		queue[settings.queue_end].cb = false;
 		queue[settings.queue_end].f[0] = INFINITY;
@@ -112,11 +113,11 @@ bool globals_load(int32_t &addr)
 		next_move();
 		buffer_refill();
 	}
-	else {
+	else */ {
 		current_extruder = ce;
 		zoffset = zo;
 	}
-	bool store = read_8(addr);
+	bool store = shmem->ints[13];
 	if (store && !store_adc) {
 		store_adc = fopen("/tmp/franklin-adc-dump", "a");
 	}
@@ -130,27 +131,27 @@ bool globals_load(int32_t &addr)
 	return true;
 }
 
-void globals_save(int32_t &addr)
-{
-	write_8(addr, QUEUE_LENGTH);
-	write_8(addr, NUM_PINS);
-	write_8(addr, num_temps);
-	write_8(addr, num_gpios);
-	write_16(addr, led_pin.write());
-	write_16(addr, stop_pin.write());
-	write_16(addr, probe_pin.write());
-	write_16(addr, spiss_pin.write());
-	write_16(addr, timeout);
-	write_16(addr, bed_id);
-	write_16(addr, fan_id);
-	write_16(addr, spindle_id);
-	write_float(addr, feedrate);
-	write_float(addr, max_deviation);
-	write_float(addr, max_v);
-	write_8(addr, current_extruder);
-	write_float(addr, targetx);
-	write_float(addr, targety);
-	write_float(addr, targetangle);
-	write_float(addr, zoffset);
-	write_8(addr, store_adc != NULL);
+void globals_save() {
+	shmem->ints[0] = QUEUE_LENGTH;
+	shmem->ints[1] = NUM_PINS;
+	shmem->ints[2] = num_temps;
+	shmem->ints[3] = num_gpios;
+	shmem->ints[4] = led_pin.write();
+	shmem->ints[5] = stop_pin.write();
+	shmem->ints[6] = probe_pin.write();
+	shmem->ints[7] = spiss_pin.write();
+	shmem->ints[8] = timeout;
+	shmem->ints[9] = bed_id;
+	shmem->ints[10] = fan_id;
+	shmem->ints[11] = spindle_id;
+	shmem->ints[12] = current_extruder;
+	shmem->ints[13] = store_adc != NULL;
+	shmem->floats[0] = feedrate;
+	shmem->floats[1] = max_deviation;
+	shmem->floats[2] = max_v;
+	shmem->floats[3] = max_a;
+	shmem->floats[4] = targetx;
+	shmem->floats[5] = targety;
+	shmem->floats[6] = targetangle;
+	shmem->floats[7] = zoffset;
 }

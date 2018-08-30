@@ -25,7 +25,7 @@ struct Polar_private {
 
 #define PRIVATE(s) (*reinterpret_cast <Polar_private *>(s->type_data))
 
-static void xyz2motors(Space *s, double *motors) {
+static void xyz2motors(Space *s) {
 	if (std::isnan(s->axis[0]->settings.target) || std::isnan(s->axis[1]->settings.target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 2; ++aa) {
@@ -42,19 +42,12 @@ static void xyz2motors(Space *s, double *motors) {
 		theta -= 2 * M_PI;
 	while (theta - s->motor[1]->settings.current_pos / s->motor[1]->steps_per_unit < -2 * M_PI)
 		theta += 2 * M_PI;
-	if (motors) {
-		motors[0] = r;
-		motors[1] = theta;
-		motors[2] = z;
-	}
-	else {
-		s->motor[0]->settings.endpos = r;
-		s->motor[0]->settings.endpos = theta;
-		s->motor[0]->settings.endpos = z;
-	}
+	s->motor[0]->settings.target_pos = r;
+	s->motor[0]->settings.target_pos = theta;
+	s->motor[0]->settings.target_pos = z;
 }
 
-static void motors2xyz(Space *s, double motors[3], double xyz[3]) {
+static void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
 	(void)&s;
 	xyz[0] = motors[0] * cos(motors[1]);
 	xyz[1] = motors[0] * sin(motors[1]);
@@ -69,18 +62,17 @@ static void check_position(Space *s, double *data) {
 	data[1] *= PRIVATE(s).max_r / r;
 }
 
-static void load(Space *s, uint8_t old_type, int32_t &addr) {
-	(void)&old_type;
+static void load(Space *s) {
 	if (!s->setup_nums(3, 3)) {
 		debug("Failed to set up polar axes");
 		s->cancel_update();
 		return;
 	}
-	PRIVATE(s).max_r = read_float(addr);
+	PRIVATE(s).max_r = shmem->floats[0];
 }
 
-static void save(Space *s, int32_t &addr) {
-	write_float(addr, PRIVATE(s).max_r);
+static void save(Space *s) {
+	shmem->floats[0] = PRIVATE(s).max_r;
 }
 
 static bool init(Space *s) {

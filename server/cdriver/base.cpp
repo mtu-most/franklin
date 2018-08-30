@@ -26,8 +26,10 @@
 void disconnect(bool notify) { // {{{
 	// Hardware has disconnected.  Notify host and wait for reconnect.
 	arch_disconnect();
-	if (notify)
-		send_host(CMD_DISCONNECT);
+	if (notify) {
+		prepare_interrupt();
+		send_to_parent(CMD_DISCONNECT);
+	}
 }
 // }}}
 #endif
@@ -56,10 +58,88 @@ int32_t millis() {
 }
 // }}}
 
+static void handle_request() { // {{{
+	// There is exactly one command waiting, so don't try to read more.
+	//debug("command received");
+	char cmd;
+	while (true) {
+		errno = 0;
+		int ret = read(fromserver, &cmd, 1);
+		if (ret == 1)
+			break;
+		if (errno == EINTR || errno == EAGAIN)
+			continue;
+		debug("cannot read from server: %s (%d, %d)", strerror(errno), errno, ret);
+		exit(0);
+		//abort();
+	}
+	//debug("command was %x", cmd);
+	request(cmd);
+} // }}}
+
+static bool interrupt_pending;
+
+static void handle_interrupt_reply() { // {{{
+	char cmd;
+	while (true) {
+		errno = 0;
+		int ret = read(interrupt_reply, &cmd, 1);
+		if (ret == 1)
+			break;
+		if (errno == EINTR || errno == EAGAIN)
+			continue;
+		debug("cannot read interrupt reply from server: %s", strerror(errno));
+		exit(0);
+		//abort();
+	}
+	if (!interrupt_pending)
+		debug("received interrupt reply without pending interrupt");
+	interrupt_pending = false;
+} // }}}
+
+static void handle_pending_events() {
+	if (interrupt_pending)
+		return;
+	if (num_file_done_events > 0) {
+		prepare_interrupt();
+		send_to_parent(CMD_FILE_DONE);
+		num_file_done_events -=1;
+		return;
+	}
+	if (continue_event) {
+		prepare_interrupt();
+		send_to_parent(CMD_CONTINUE);
+		continue_event = false;
+		return;
+	}
+	if (num_movecbs > 0) {
+		prepare_interrupt();
+		shmem->interrupt_ints[0] = num_movecbs;
+		//debug("sent %d move cbs", num_movecbs);
+		num_movecbs = 0;
+		send_to_parent(CMD_MOVECB);
+		return;
+	}
+	run_file_fill_queue();
+}
+
 int main(int argc, char **argv) { // {{{
 	(void)&argc;
-	(void)&argv;
+	memfd = atoi(argv[1]);
+	shmem = reinterpret_cast <SharedMemory *>(mmap(NULL, sizeof(SharedMemory), PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0));
+	// to from int int_reply
+	toserver = shmem->ints[0];
+	fromserver = shmem->ints[1];
+	interrupt = shmem->ints[2];
+	interrupt_reply = shmem->ints[3];
+	pollfds[1].fd = fromserver;
+	pollfds[1].events = POLLIN | POLLPRI;
+	pollfds[1].revents = 0;
+	pollfds[2].fd = interrupt_reply;
+	pollfds[2].events = POLLIN | POLLPRI;
+	pollfds[2].revents = 0;
 	setup();
+	delayed_reply(); // Let server know we are ready.
 	struct itimerspec zero;
 	zero.it_interval.tv_sec = 0;
 	zero.it_interval.tv_nsec = 0;
@@ -67,29 +147,56 @@ int main(int argc, char **argv) { // {{{
 	zero.it_value.tv_nsec = 0;
 	int delay = 0;
 	while (true) {
-		for (int i = 0; i < 2 + arch_fds(); ++i)
+		for (int i = 0; i < BASE_FDS + arch_fds(); ++i)
 			pollfds[i].revents = 0;
 		while (true) {
 			bool action = false;
-			if (!host_block && serialdev[0]->available())
-				action |= serial(0);
-			if (arch_fds() && serialdev[1] && serialdev[1]->available())
-				action |= serial(1);
+			if (arch_fds() && serialdev && serialdev->available())
+				action |= serial();
 			if (!action)
 				break;
 		}
-		//debug("polling %d %d %d", host_block, arch_fds(), delay);
-		poll(host_block ? &pollfds[2] : pollfds, arch_fds() + (host_block ? 0 : 2), delay);
-		//debug("return %d %d %d", pollfds[0].revents, pollfds[1].revents, pollfds[2].revents);
+		//debug("polling with delay %d", delay);
+		poll(pollfds, arch_fds() + BASE_FDS, delay);
+		//debug("poll values in %d pri %d err %d hup %d nval %d out %d", POLLIN, POLLPRI, POLLERR, POLLHUP, POLLNVAL, POLLOUT);
+		//debug("poll return %d %d %d", pollfds[0].revents, pollfds[1].revents, pollfds[2].revents);
 		if (pollfds[0].revents) {
 			timerfd_settime(pollfds[0].fd, 0, &zero, NULL);
 			//debug("gcode wait done; stop waiting (was %d)", run_file_wait);
 			if (run_file_wait)
 				run_file_wait -= 1;
-			run_file_fill_queue();
 		}
 		if (pollfds[1].revents)
-			serial(0);
+			handle_request();
+		if (pollfds[2].revents)
+			handle_interrupt_reply();
+		handle_pending_events();
 		delay = arch_tick();
+	}
+} // }}}
+
+void send_to_parent(char cmd) { // {{{
+	if (interrupt_pending) {
+		debug("send_to_parent called without previous prepare_interrupt!");
+		abort();
+		prepare_interrupt();
+	}
+	//debug("sending interrupt 0x%x", cmd);
+	if (write(interrupt, &cmd, 1) != 1)
+		abort();
+	interrupt_pending = true;
+} // }}}
+
+void prepare_interrupt() { // {{{
+	//debug("waiting for interrupt");
+	while (interrupt_pending) {
+		// Ignore timeouts.
+		pollfds[1].revents = 0;
+		pollfds[2].revents = 0;
+		poll(&pollfds[1], BASE_FDS - 1, -1);
+		if (pollfds[1].revents)
+			handle_request();
+		if (pollfds[2].revents)
+			handle_interrupt_reply();
 	}
 } // }}}

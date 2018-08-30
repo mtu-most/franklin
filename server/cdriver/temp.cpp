@@ -19,41 +19,40 @@
 
 #include "cdriver.h"
 
-void Temp::load(int32_t &addr, int id)
-{
-	R0 = read_float(addr);
-	R1 = read_float(addr);
-	logRc = read_float(addr);
-	Tc = read_float(addr);
-	beta = read_float(addr);
+void Temp::load(int id) {
+	R0 = shmem->floats[0];
+	R1 = shmem->floats[1];
+	logRc = shmem->floats[2];
+	Tc = shmem->floats[3];
+	beta = shmem->floats[4];
 	K = exp(logRc - beta / Tc);
 	//debug("K %f R0 %f R1 %f logRc %f Tc %f beta %f", K, R0, R1, logRc, Tc, beta);
 	/*
-	core_C = read_float(addr);
-	shell_C = read_float(addr);
-	transfer = read_float(addr);
-	radiation = read_float(addr);
-	power = read_float(addr);
+	core_C = shmem->floats[0];
+	shell_C = shmem->floats[0];
+	transfer = shmem->floats[0];
+	radiation = shmem->floats[0];
+	power = shmem->floats[0];
 	*/
-	power_pin[0].read(read_16(addr));
-	power_pin[1].read(read_16(addr));
+	power_pin[0].read(shmem->ints[1]);
+	power_pin[1].read(shmem->ints[2]);
 	int old_pin = thermistor_pin.write();
 	int old_pin_pin = thermistor_pin.pin;
 	bool old_valid = thermistor_pin.valid();
-	thermistor_pin.read(read_16(addr));
-	target[1] = read_float(addr);
+	thermistor_pin.read(shmem->ints[3]);
+	target[1] = shmem->floats[5];
 	adctarget[1] = toadc(target[1], MAXINT);
-	arch_set_duty(power_pin[1], read_float(addr));
+	arch_set_duty(power_pin[1], shmem->floats[6]);
 	for (int i = 0; i < 2; ++i) {
-		limit[i][0] = read_float(addr);
-		limit[i][1] = read_float(addr);
+		limit[i][0] = shmem->floats[7 + 2 * i];
+		limit[i][1] = shmem->floats[8 + 2 * i];
 		int adc_i = std::isnan(beta) && R0 >= 0 ? 0 : 1;
 		adclimit[i][adc_i] = toadc(limit[i][0], adc_i * MAXINT);
 		adclimit[i][1 - adc_i] = toadc(limit[i][1], (1 - adc_i) * MAXINT);
 		SET_OUTPUT(power_pin[i]);
 	}
 	last_change_time = millis();
-	hold_time = read_float(addr);
+	hold_time = shmem->floats[11];
 	if (old_pin != thermistor_pin.write() && old_valid)
 		arch_setup_temp(~0, old_pin_pin, false);
 	if (thermistor_pin.valid()) {
@@ -66,30 +65,29 @@ void Temp::load(int32_t &addr, int id)
 	}
 }
 
-void Temp::save(int32_t &addr)
-{
-	write_float(addr, R0);
-	write_float(addr, R1);
-	write_float(addr, logRc);
-	write_float(addr, Tc);
-	write_float(addr, beta);
+void Temp::save() {
+	shmem->ints[1] = power_pin[0].write();
+	shmem->ints[2] = power_pin[1].write();
+	shmem->ints[3] = thermistor_pin.write();
+	shmem->floats[0] = R0;
+	shmem->floats[1] = R1;
+	shmem->floats[2] = logRc;
+	shmem->floats[3] = Tc;
+	shmem->floats[4] = beta;
+	shmem->floats[5] = target[1];
+	shmem->floats[6] = arch_get_duty(power_pin[1]);
+	shmem->floats[7] = limit[0][0];
+	shmem->floats[8] = limit[0][1];
+	shmem->floats[9] = limit[1][0];
+	shmem->floats[10] = limit[1][1];
+	shmem->floats[11] = hold_time;
 	/*
-	write_float(addr, core_C);
-	write_float(addr, shell_C);
-	write_float(addr, transfer);
-	write_float(addr, radiation);
-	write_float(addr, power);
+	shmem->floats[0] = core_C;
+	shmem->floats[0] = shell_C;
+	shmem->floats[0] = transfer;
+	shmem->floats[0] = radiation;
+	shmem->floats[0] = power;
 	*/
-	write_16(addr, power_pin[0].write());
-	write_16(addr, power_pin[1].write());
-	write_16(addr, thermistor_pin.write());
-	write_float(addr, target[1]);
-	write_float(addr, arch_get_duty(power_pin[1]));
-	write_float(addr, limit[0][0]);
-	write_float(addr, limit[0][1]);
-	write_float(addr, limit[1][0]);
-	write_float(addr, limit[1][1]);
-	write_float(addr, hold_time);
 }
 
 double Temp::fromadc(int32_t adc) {
@@ -211,9 +209,9 @@ void handle_temp(int id, int temp) { // {{{
 		fprintf(store_adc, "%d %d %f %d\n", millis(), id, temps[id].fromadc(temp), temp);
 	if (requested_temp < num_temps && temps[requested_temp].thermistor_pin.pin == temps[id].thermistor_pin.pin) {
 		//debug("replying temp");
-		double result = temps[requested_temp].fromadc(temp);
+		shmem->floats[0] = temps[requested_temp].fromadc(temp);
 		requested_temp = ~0;
-		send_host(CMD_TEMP, 0, 0, result);
+		delayed_reply();
 	}
 	//debug("temp for %d: %d", id, temp);
 	// If an alarm should be triggered, do so.  Adc values are higher for lower temperatures.
@@ -228,8 +226,11 @@ void handle_temp(int id, int temp) { // {{{
 			run_file_wait_temp -= 1;
 			run_file_fill_queue();
 		}
-		else
-			send_host(CMD_TEMPCB, id);
+		else {
+			prepare_interrupt();
+			shmem->interrupt_ints[0] = id;
+			send_to_parent(CMD_TEMPCB);
+		}
 	}
 	/*
 	// TODO: Make this work and decide on units.

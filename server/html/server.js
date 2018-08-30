@@ -122,7 +122,6 @@ function _setup_updater() {
 					ui_update: true,
 					queue: [],
 					audioqueue: [],
-					queue_length: constants[0],
 					pin_names: [],
 					num_temps: 0,
 					num_gpios: 0,
@@ -146,6 +145,7 @@ function _setup_updater() {
 					feedrate: 1,
 					max_deviation: 0,
 					max_v: 0,
+					max_a: 0,
 					targetx: 0,
 					targety: 0,
 					targetangle: 0,
@@ -189,6 +189,8 @@ function _setup_updater() {
 					temps: [],
 					gpios: []
 				};
+				for (var c in constants)
+					machines[machine][c] = constants[c];
 				machines[machine].call = function(name, a, ka, reply) {
 					//console.info('calling', name);
 					ka.machine = this.uuid;
@@ -217,44 +219,13 @@ function _setup_updater() {
 			trigger_update(machine, 'message', stat);
 		},
 		globals_update: function(machine, values) {
-			machines[machine].name = values[0];
-			machines[machine].profile = values[1];
-			var new_num_temps = values[2];
-			var new_num_gpios = values[3];
-			machines[machine].ui_update |= machines[machine].user_interface != values[4];
-			machines[machine].user_interface = values[4];
-			machines[machine].pin_names = values[5];
-			machines[machine].led_pin = values[6];
-			machines[machine].stop_pin = values[7];
-			machines[machine].probe_pin = values[8];
-			machines[machine].spiss_pin = values[9];
-			machines[machine].probe_dist = values[10];
-			machines[machine].probe_offset = values[11];
-			machines[machine].probe_safe_dist = values[12];
-			machines[machine].bed_id = values[13];
-			machines[machine].fan_id = values[14];
-			machines[machine].spindle_id = values[15];
-			machines[machine].unit_name = values[16];
-			machines[machine].timeout = values[17];
-			machines[machine].feedrate = values[18];
-			machines[machine].max_deviation = values[19];
-			machines[machine].max_v = values[20];
-			machines[machine].targetx = values[21];
-			machines[machine].targety = values[22];
-			machines[machine].targetangle = values[23];
-			machines[machine].zoffset = values[24];
-			machines[machine].store_adc = values[25];
-			machines[machine].park_after_job = values[26];
-			machines[machine].sleep_after_job = values[27];
-			machines[machine].cool_after_job = values[28];
-			machines[machine].spi_setup = values[29];
-			machines[machine].temp_scale_min = values[30];
-			machines[machine].temp_scale_max = values[31];
-			machines[machine].probemap = values[32];
-			machines[machine].connected = values[33];
-			machines[machine].status = values[34];
-			var nums_changed = machines[machine].num_temps != new_num_temps || machines[machine].num_gpios != new_num_gpios;
-			for (var i = machines[machine].num_temps; i < new_num_temps; ++i) {
+			machines[machine].ui_update |= machines[machine].user_interface != values.user_interface;
+			var old_num_temps = machines[machine].num_temps;
+			var old_num_gpios = machines[machine].num_gpios;
+			for (var v in values)
+				machines[machine][v] = values[v];
+			var nums_changed = machines[machine].num_temps != old_num_temps || machines[machine].num_gpios != old_num_gpios;
+			for (var i = old_num_temps; i < machines[machine].num_temps; ++i) {
 				machines[machine].temps.push({
 					name: null,
 					heater_pin: 0,
@@ -271,9 +242,8 @@ function _setup_updater() {
 					history: []
 				});
 			}
-			machines[machine].temps.length = new_num_temps;
-			machines[machine].num_temps = new_num_temps;
-			for (var i = machines[machine].num_gpios; i < new_num_gpios; ++i) {
+			machines[machine].temps.length = machines[machine].num_temps;
+			for (var i = old_num_gpios; i < machines[machine].num_gpios; ++i) {
 				machines[machine].gpios.push({
 					name: null,
 					pin: 0,
@@ -281,8 +251,7 @@ function _setup_updater() {
 					reset: 3
 				});
 			}
-			machines[machine].gpios.length = new_num_gpios;
-			machines[machine].num_gpios = new_num_gpios;
+			machines[machine].gpios.length = machines[machine].num_gpios;
 			trigger_update(machine, 'globals_update', machines[machine].ui_update, nums_changed);
 		},
 		space_update: function(machine, index, values) {
@@ -358,32 +327,13 @@ function _setup_updater() {
 			trigger_update(machine, 'space_update', index, nums_changed);
 		},
 		temp_update: function(machine, index, values) {
-			machines[machine].temps[index].name = values[0];
-			machines[machine].temps[index].R0 = values[1];
-			machines[machine].temps[index].R1 = values[2];
-			machines[machine].temps[index].Rc = values[3];
-			machines[machine].temps[index].Tc = values[4];
-			machines[machine].temps[index].beta = values[5];
-			machines[machine].temps[index].heater_pin = values[6];
-			machines[machine].temps[index].fan_pin = values[7];
-			machines[machine].temps[index].thermistor_pin = values[8];
-			machines[machine].temps[index].fan_temp = values[9];
-			machines[machine].temps[index].fan_duty = values[10];
-			machines[machine].temps[index].heater_limit_l = values[11];
-			machines[machine].temps[index].heater_limit_h = values[12];
-			machines[machine].temps[index].fan_limit_l = values[13];
-			machines[machine].temps[index].fan_limit_h = values[14];
-			machines[machine].temps[index].hold_time = values[15];
-			machines[machine].temps[index].value = values[16];
+			for (var v in values)
+				machines[machine].temps[index][v] = values[v];
 			trigger_update(machine, 'temp_update', index);
 		},
 		gpio_update: function(machine, index, values) {
-			machines[machine].gpios[index].name = values[0];
-			machines[machine].gpios[index].pin = values[1];
-			machines[machine].gpios[index].state = values[2];
-			machines[machine].gpios[index].reset = values[3];
-			machines[machine].gpios[index].duty = values[4];
-			machines[machine].gpios[index].value = values[5];
+			for (var v in values)
+				machines[machine].gpios[index][v] = values[v];
 			trigger_update(machine, 'gpio_update', index);
 		}
 	};

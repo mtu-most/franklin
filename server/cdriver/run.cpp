@@ -46,20 +46,20 @@ static Run_Record run_preline;
 
 static double probe_adjust;
 
-void run_file(int name_len, char const *name, int probe_name_len, char const *probename, bool start, double sina, double cosa, int audio) {
+void run_file(char const *name, char const *probename, bool start, double sina, double cosa, int audio) {
 	rundebug("run file %d %f %f", start, sina, cosa);
 	abort_run_file();
-	if (name_len == 0)
+	if (name[0] == '\0')
 		return;
-	strncpy(run_file_name, name, name_len);
-	run_file_name[name_len] = '\0';
-	strncpy(probe_file_name, probename, probe_name_len);
-	probe_file_name[probe_name_len] = '\0';
+	free(run_file_name);
+	run_file_name = strdup(name);
+	free(probe_file_name);
+	probe_file_name = strdup(probename);
 	settings.run_time = 0;
 	settings.run_dist = 0;
 	settings.run_file_current = 0;
 	int probe_fd = -1;
-	if (probe_name_len > 0) {
+	if (probename[0] != '\0') {
 		probe_fd = open(probe_file_name, O_RDONLY);
 		if (probe_fd < 0) {
 			debug("Failed to open probe file '%s': %s", probe_file_name, strerror(errno));
@@ -81,7 +81,7 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	int fd = open(run_file_name, O_RDONLY);
 	if (fd < 0) {
 		debug("Failed to open run file '%s': %s", run_file_name, strerror(errno));
-		if (probe_name_len > 0)
+		if (probename[0] != '\0')
 			close(probe_fd);
 		return;
 	}
@@ -89,14 +89,14 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	if (fstat(fd, &stat) < 0) {
 		debug("Failed to stat run file '%s': %s", run_file_name, strerror(errno));
 		close(fd);
-		if (probe_name_len > 0)
+		if (probename[0] != '\0')
 			close(probe_fd);
 		return;
 	}
 	run_file_size = stat.st_size;
 	run_file_map = reinterpret_cast<Run_Record *>(mmap(NULL, run_file_size, PROT_READ, MAP_SHARED, fd, 0));
 	close(fd);
-	if (probe_name_len > 0) {
+	if (probename[0] != '\0') {
 		probe_file_map = reinterpret_cast<ProbeFile *>(mmap(NULL, probe_file_size, PROT_READ, MAP_SHARED, probe_fd, 0));
 		close(probe_fd);
 		if (((probe_file_map->nx + 1) * (probe_file_map->ny + 1)) * sizeof(double) + sizeof(ProbeFile) != unsigned(probe_file_size)) {
@@ -118,7 +118,6 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 		// int32_t numstrings
 		// double bbox[8]
 		run_file_num_strings = read_num(run_file_size - sizeof(double) * 8 - sizeof(int32_t));
-		debug("num strings: %d", run_file_num_strings);
 		strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
 		off_t pos = run_file_size - sizeof(double) * 8 - sizeof(int32_t) - sizeof(int32_t) * run_file_num_strings;
 		off_t current = 0;
@@ -149,7 +148,6 @@ void run_file(int name_len, char const *name, int probe_name_len, char const *pr
 	run_preline.Y = NAN;
 	run_preline.Z = NAN;
 	run_preline.E = NAN;
-	run_file_fill_queue();
 }
 
 void abort_run_file() {
@@ -255,7 +253,7 @@ void run_file_fill_queue() {
 				&& !run_file_wait	// We are not waiting for something else (pause or confirm).
 				&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
 			int t = run_file_map[settings.run_file_current].type;
-			if (t != RUN_LINE && t != RUN_PRE_LINE && t != RUN_PRE_ARC && t != RUN_ARC && (arch_running() || settings.queue_end != settings.queue_start || computing_move || sending_fragment || transmitting_fragment))
+			if (t != RUN_LINE && t != RUN_PRE_LINE && (arch_running() || settings.queue_end != settings.queue_start || computing_move || sending_fragment || transmitting_fragment))
 				break;
 			Run_Record &r = run_file_map[settings.run_file_current];
 			rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
@@ -268,20 +266,6 @@ void run_file_fill_queue() {
 					debug("Done running system command, return = %d", ret);
 					break;
 				}
-				case RUN_PRE_ARC:
-				{
-					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
-					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
-					double z = r.Z;
-					//debug("line %f %f %f", x, y, z);
-					queue[settings.queue_end].center[0] = x;
-					queue[settings.queue_end].center[1] = y;
-					queue[settings.queue_end].center[2] = handle_probe(x, y, z);
-					queue[settings.queue_end].normal[0] = r.E;
-					queue[settings.queue_end].normal[1] = r.F_start;
-					queue[settings.queue_end].normal[2] = r.F_end;
-					break;
-				}
 				case RUN_PRE_LINE:
 				{
 					run_preline.X = r.X;
@@ -292,52 +276,30 @@ void run_file_fill_queue() {
 					break;
 				}
 				case RUN_LINE:
-				case RUN_ARC:
 				{
 					queue[settings.queue_end].single = false;
 					queue[settings.queue_end].probe = false;
-					queue[settings.queue_end].arc = r.type == RUN_ARC;
-					queue[settings.queue_end].f[0] = r.F_start;
-					queue[settings.queue_end].f[1] = r.F_end;
+					queue[settings.queue_end].v0 = r.v0;
+					queue[settings.queue_end].v1 = r.v1;
 					double x = r.X * run_file_cosa - r.Y * run_file_sina + run_file_refx;
 					double y = r.Y * run_file_cosa + r.X * run_file_sina + run_file_refy;
 					double z = r.Z;
 					//debug("line/arc %d: %f %f %f", settings.run_file_current, x, y, z);
-					int num0 = spaces[0].num_axes;
-					if (num0 > 0) {
-						queue[settings.queue_end].data[0] = x;
-						if (num0 > 1) {
-							queue[settings.queue_end].data[1] = y;
-							if (num0 > 2) {
-								queue[settings.queue_end].data[2] = handle_probe(x, y, z);
-								if (num0 > 3) {
-									queue[settings.queue_end].data[3] = run_preline.X;
-									if (num0 > 4) {
-										queue[settings.queue_end].data[4] = run_preline.Y;
-										if (num0 > 5) {
-											queue[settings.queue_end].data[5] = run_preline.Z;
-										}
-									}
-									run_preline.X = NAN;
-									run_preline.Y = NAN;
-									run_preline.Z = NAN;
-								}
-							}
-						}
-					}
-					for (int i = 6; i < num0; ++i)
-						queue[settings.queue_end].data[i] = NAN;
-					for (int i = 0; i < spaces[1].num_axes; ++i) {
-						queue[settings.queue_end].data[num0 + i] = (i == r.tool ? r.E : i == run_preline.tool ? run_preline.E : NAN);
-						//debug("queue %d + %d = %f", num0, i, queue[settings.queue_end].data[num0 + i]);
-					}
+					queue[settings.queue_end].X[0] = x;
+					queue[settings.queue_end].X[1] = y;
+					queue[settings.queue_end].X[2] = handle_probe(x, y, z);
+					queue[settings.queue_end].X[3] = run_preline.X;
+					queue[settings.queue_end].X[4] = run_preline.Y;
+					queue[settings.queue_end].X[5] = run_preline.Z;
+					queue[settings.queue_end].B[0] = r.Bx;
+					queue[settings.queue_end].B[1] = r.By;
+					queue[settings.queue_end].B[2] = r.Bz;
+					queue[settings.queue_end].e = r.E;
+					queue[settings.queue_end].tool = r.tool;
+					run_preline.X = NAN;
+					run_preline.Y = NAN;
+					run_preline.Z = NAN;
 					run_preline.E = NAN;
-					num0 += spaces[1].num_axes;
-					for (int s = 2; s < NUM_SPACES; ++s) {
-						for (int i = 0; i < spaces[s].num_axes; ++i)
-							queue[settings.queue_end].data[num0 + i] = NAN;
-						num0 += spaces[s].num_axes;
-					}
 					queue[settings.queue_end].time = r.time;
 					queue[settings.queue_end].dist = r.dist;
 					queue[settings.queue_end].cb = false;
@@ -364,7 +326,10 @@ void run_file_fill_queue() {
 						gpios[tool].state = 0;
 						RESET(gpios[tool].pin);
 					}
-					send_host(CMD_UPDATE_PIN, tool, gpios[tool].state);
+					prepare_interrupt();
+					shmem->interrupt_ints[0] = tool;
+					shmem->interrupt_ints[1] = gpios[tool].state;
+					send_to_parent(CMD_UPDATE_PIN);
 					break;
 				}
 				case RUN_SETTEMP:
@@ -374,7 +339,10 @@ void run_file_fill_queue() {
 						tool = bed_id != 255 ? bed_id : -1;
 					rundebug("settemp %d %f", tool, r.X);
 					settemp(tool, r.X);
-					send_host(CMD_UPDATE_TEMP, tool, 0, r.X);
+					prepare_interrupt();
+					shmem->interrupt_ints[0] = tool;
+					shmem->interrupt_float = r.X;
+					send_to_parent(CMD_UPDATE_TEMP);
 					break;
 				}
 				case RUN_WAITTEMP:
@@ -424,15 +392,19 @@ void run_file_fill_queue() {
 					break;
 				case RUN_CONFIRM:
 				{
-					int len = min(strings[r.tool].len, 250);
-					memcpy(datastore, &reinterpret_cast<char const *>(run_file_map)[run_file_first_string + strings[r.tool].start], len);
+					int len = min(strings[r.tool].len, PATH_MAX);
+					memcpy(const_cast<char *>(shmem->interrupt_str), &reinterpret_cast<char const *>(run_file_map)[run_file_first_string + strings[r.tool].start], len);
 					run_file_wait += 1;
-					send_host(CMD_CONFIRM, r.X ? 1 : 0, 0, 0, 0, len);
+					prepare_interrupt();
+					shmem->interrupt_ints[0] = r.X ? 1 : 0;
+					shmem->interrupt_ints[1] = len;
+					send_to_parent(CMD_CONFIRM);
 					break;
 				}
 				case RUN_PARK:
 					run_file_wait += 1;
-					send_host(CMD_PARKWAIT);
+					prepare_interrupt();
+					send_to_parent(CMD_PARKWAIT);
 					break;
 				default:
 					debug("Invalid record type %d in %s", r.type, run_file_name);
@@ -444,19 +416,21 @@ void run_file_fill_queue() {
 		}
 		if (must_move) {
 			while (!computing_move && (settings.queue_start != settings.queue_end || settings.queue_full))
-				cbs += next_move();
+				cbs += next_move(settings.hwtime);
 		}
 	}
-	if (cbs > 0)
-		send_host(CMD_MOVECB, cbs);
+	if (cbs > 0) {
+		num_movecbs += cbs;
+		//debug("adding %d cbs during run", cbs);
+	}
 	buffer_refill();
 	rundebug("run queue done");
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
 		// Done.
 		//debug("done running file");
 		if (!computing_move && !sending_fragment && !arch_running()) {
-			send_host(CMD_FILE_DONE);
 			abort_run_file();
+			num_file_done_events += 1;
 		}
 		else
 			run_file_finishing = true;
@@ -471,7 +445,7 @@ void run_adjust_probe(double x, double y, double z) {
 	probe_adjust = z - probe_z;
 }
 
-double run_find_pos(double pos[3]) {
+double run_find_pos(const double pos[3]) {
 	// Find position in toolpath that is closest to requested position.
 	if (!run_file_map)
 		return NAN;
@@ -495,16 +469,6 @@ double run_find_pos(double pos[3]) {
 			case RUN_CONFIRM:
 			case RUN_PARK:
 				continue;
-			case RUN_PRE_ARC:
-				center[0] = run_file_map[i].X;
-				center[1] = run_file_map[i].Y;
-				center[2] = run_file_map[i].Z;
-				normal[0] = run_file_map[i].E;
-				normal[1] = run_file_map[i].F_start;
-				normal[2] = run_file_map[i].F_end;
-				continue;
-			case RUN_ARC:
-				// TODO: handle arc; workaround: fall through, handle as line.
 			case RUN_LINE:
 				double target[3] = {run_file_map[i].X, run_file_map[i].Y, run_file_map[i].Z};
 				int k;

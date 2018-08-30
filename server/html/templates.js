@@ -470,9 +470,9 @@ function Position(desc, pos, top) { // {{{
 	var b = Create('button').AddText('Park').AddEvent('click', function() { ui.machine.call('park', [], {}, function() { update_canvas_and_spans(ui); }); });
 	b.type = 'button';
 	t.Add(make_tablerow(ui, add_name(ui, 'space', 0, 0), [
-		Float(ui, [['axis', [0, 0]], 'current'], 2, 1, '', function(v) { ui.machine.call('line_cb', [[{0: v}]], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
-		Float(ui, [['axis', [0, 1]], 'current'], 2, 1, '', function(v) { ui.machine.call('line_cb', [[{1: v}]], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
-		Float(ui, [['axis', [0, 2]], 'current'], 2, 1, '', function(v) { ui.machine.call('line_cb', [[{2: v}]], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
+		Float(ui, [['axis', [0, 0]], 'current'], 2, 1, '', function(v) { ui.machine.call('line', [{0: v}], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
+		Float(ui, [['axis', [0, 1]], 'current'], 2, 1, '', function(v) { ui.machine.call('line', [{1: v}], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
+		Float(ui, [['axis', [0, 2]], 'current'], 2, 1, '', function(v) { ui.machine.call('line', [{2: v}], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
 		b
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
@@ -559,10 +559,7 @@ function Multipliers(desc, pos, top) { // {{{
 		e.Add(Float(ui, [['axis', [space, axis]], 'multiplier'], 0, 1e-2));
 		e.AddText(' %');
 		e.Add(Float(ui, [['axis', [space, axis]], 'current'], 1, 1, '', function(v) {
-			var obj = {};
-			obj[space] = {};
-			obj[space][axis] = v;
-			ui.machine.call('line_cb', [obj], {}, function() {
+			ui.machine.call('line', [], {tool: axis, e: v}, function() {
 				ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); });
 			});
 		}));
@@ -775,6 +772,10 @@ function setup_globals(desc, pos, top) { // {{{
 	e.Add(Float(ui, [null, 'max_v'], 2, 1));
 	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
 	e.AddText('/s');
+	e = ret.AddElement('div').AddText('Max a');
+	e.Add(Float(ui, [null, 'max_a'], 2, 1));
+	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
+	e.AddText('/s²');
 	var pins = ret.Add(make_table(ui));
 	// Add dummy first child instead of a title row.
 	pins.Add(document.createComment(''));

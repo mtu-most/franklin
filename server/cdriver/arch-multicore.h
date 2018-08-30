@@ -118,7 +118,7 @@ int arch_tick();
 void arch_set_duty(Pin_t pin, double duty);
 double arch_get_duty(Pin_t pin);
 void arch_discard();
-void arch_send_spi(int bits, uint8_t *data);
+void arch_send_spi(int bits, const uint8_t *data);
 off_t arch_send_audio(uint8_t *data, off_t sample, off_t num_records, int motor);
 void DATA_SET(int s, int m, int value);
 // }}}
@@ -567,8 +567,9 @@ void arch_request_temp(int which) { // {{{
 		requested_temp = which;
 		return;
 	}
+	shmem->floats[0] = NAN;
+	delayed_reply();
 	requested_temp = ~0;
-	send_host(CMD_TEMP, 0, 0, NAN);
 } // }}}
 
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit_l, int heater_limit_h, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit_l, int fan_limit_h, double hold_time) { // {{{
@@ -607,8 +608,11 @@ void arch_send_pin_name(int pin) { // {{{
 	else
 		name = "\x08" "i²c-0:0x4d";
 	int len = strlen(name);
-	strcpy(datastore, name);
-	send_host(CMD_PINNAME, pin, 0, 0, 0, len);
+	prepare_interrupt();
+	strcpy(shmem->interrupt_str, name, avr_pin_name_len[pin]);
+	shmem->interrupt_ints[0] = pin;
+	shmem->interrupt_ints[1] = len;
+	send_to_parent(CMD_PINNAME);
 } // }}}
 // }}}
 
@@ -639,12 +643,12 @@ int arch_tick() { // {{{
 			running_fragment = (running_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		}
 		if (cbs)
-			send_host(CMD_MOVECB, cbs);
+			num_movecbs += cbs;
 		buffer_refill();
 		run_file_fill_queue();
 		if (!computing_move && run_file_finishing) {
-			send_host(CMD_FILE_DONE);
 			abort_run_file();
+			num_file_done_events += 1;
 		}
 	}
 	// Handle temps and check temp limits.
@@ -713,7 +717,11 @@ int arch_tick() { // {{{
 				abort_move(0);
 				sending_fragment = 0;
 				stopping = 2;
-				send_host(CMD_LIMIT, -1, -1, NAN);
+				prepare_interrupt();
+				shmem->interrupt_ints[0] = -1;
+				shmem->interrupt_ints[1] = -1;
+				shmem->interrupt_float = NAN;
+				send_to_parent(CMD_LIMIT);
 				//debug("cbs after current cleared %d for probe", cbs_after_current_move);
 				cbs_after_current_move = 0;
 			}
@@ -756,7 +764,11 @@ int arch_tick() { // {{{
 						abort_move(0);
 						sending_fragment = 0;
 						stopping = 2;
-						send_host(CMD_LIMIT, s, m, spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit);
+						prepare_interrupt();
+						shmem->interrupt_ints[0] = s;
+						shmem->interrupt_ints[1] = m;
+						shmem->interrupt_float = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
+						send_to_parent(CMD_LIMIT);
 						//debug("cbs after current cleared %d after sending limit", cbs_after_current_move);
 						cbs_after_current_move = 0;
 					}
@@ -780,7 +792,8 @@ int arch_tick() { // {{{
 							// Done homing.
 							mc_shared->state = 1;
 							homing = false;
-							send_host(CMD_HOMED);
+							prepare_interrupt();
+							send_to_parent(CMD_HOMED);
 						}
 					}
 				}
@@ -800,8 +813,12 @@ int arch_tick() { // {{{
 			continue;
 		debug("interrupt on pin %d", i);
 		for (int g = 0; g < num_gpios; ++g) {
-			if (gpios[g].pin.valid() && gpios[g].pin.pin == i)
-				send_host(CMD_PINCHANGE, g, pin_state ^ gpios[g].pin.inverted());
+			if (gpios[g].pin.valid() && gpios[g].pin.pin == i) {
+				prepare_interrupt();
+				shmem->interrupt_ints[0] = g;
+				shmem->interrupt_ints[1] = pin_state ^ gpios[g].pin.inverted();
+				send_to_parent(CMD_PINCHANGE, g, pin_state ^ gpios[g].pin.inverted());
+			}
 		}
 		mc_pin_state[i] = pin_state;
 	}
@@ -901,7 +918,8 @@ void arch_home() { // {{{
 	}
 	if (mc_shared->num_homers == 0) {
 		debug("no homers");
-		send_host(CMD_HOMED);
+		prepare_interrupt();
+		send_to_parent(CMD_HOMED);
 	}
 } // }}}
 
@@ -962,7 +980,7 @@ void arch_discard() { // {{{
 	restore_settings();
 } // }}}
 
-void arch_send_spi(int bits, uint8_t *data) { // {{{
+void arch_send_spi(int bits, const uint8_t *data) { // {{{
 	debug("send spi request ignored");
 	(void)&bits;
 	(void)&data;

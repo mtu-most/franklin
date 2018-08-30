@@ -46,7 +46,7 @@ function timed_update() { // {{{
 			return;
 		}
 		if (num < ui.machine.temps.length) {
-			ui.machine.call('readtemp', [num], {}, function(t) {
+			ui.machine.call('temp_value', [num], {}, function(t) {
 				if (num < ui.machine.temps.length) {
 					ui.machine.temps[num].temp = t;
 					var e = get_elements(ui, [['temp', num], 'temp']);
@@ -642,10 +642,6 @@ function new_machine(uuid) { // {{{
 	var p = machines[uuid].ui;
 	labels_element.insertBefore(machines[uuid].label, new_tab);
 	machines_element.Add(p);
-	machines[uuid].label.RemoveClass('connected');
-	machines[uuid].ui.RemoveClass('connected');
-	machines[uuid].label.AddClass('notconnected');
-	machines[uuid].ui.AddClass('notconnected');
 	globals_update(uuid, false);
 	if (selected_machine === null)
 		select_machine(p);
@@ -691,7 +687,7 @@ function ask_confirmation(uuid, id, message) { // {{{
 } // }}}
 
 function update_queue(ui, element) { // {{{
-	var old = get_queue(ui, element);
+	var old = get_queue(ui, element)[0];
 	var q = [];
 	for (var i = 0; i < element.options.length; ++i)
 		q.push(element.options[i].value);
@@ -803,6 +799,7 @@ function globals_update(uuid, ui_configure, nums_changed) { // {{{
 	update_float(p, [null, 'feedrate']);
 	update_float(p, [null, 'max_deviation']);
 	update_float(p, [null, 'max_v']);
+	update_float(p, [null, 'max_a']);
 	update_float(p, [null, 'targetx']);
 	update_float(p, [null, 'targety']);
 	update_float(p, [null, 'targetangle']);
@@ -901,10 +898,8 @@ function globals_update(uuid, ui_configure, nums_changed) { // {{{
 	for (var i = 0; i < p.machine.gpios.length; ++i)
 		gpio_update(p.machine.uuid, i);
 	update_canvas_and_spans(p);
-	if (!ui_configure && nums_changed && p.bin !== undefined) {
-		console.info('nums changed in globals');
+	if (!ui_configure && p.bin !== undefined)
 		p.bin.update();
-	}
 	p.updating_globals = false;
 } // }}}
 
@@ -1943,7 +1938,7 @@ function xyup(ui, e) { // {{{
 	if (!(e.buttons & 5))
 		return false;
 	if (e.buttons & 1) {
-		ui.machine.call('line_cb', [[[pos[0], pos[1]]]], {}, function() { update_canvas_and_spans(ui); });
+		ui.machine.call('line', [[pos[0], pos[1]]], {}, function() { update_canvas_and_spans(ui); });
 	}
 	else if (e.buttons & 4) {
 		drag[3] += 1;
@@ -1969,11 +1964,11 @@ function xymove(ui, e) { // {{{
 		return false;
 	if (e.buttons & 1) {
 		drag[3] += 1;
-		ui.machine.call('line_cb', [[[drag[0][1] + dx, drag[1][1] + dy]]], {}, function() { drag[3] -= 1; update_canvas_and_spans(ui); });
+		ui.machine.call('line', [[drag[0][1] + dx, drag[1][1] + dy]], {}, function() { drag[3] -= 1; update_canvas_and_spans(ui); });
 	}
 	else if (e.buttons & 4) {
 		drag[3] += 1;
-		ui.machine.call('line_cb', [[[dx, dy]]], {relative: true}, function() {
+		ui.machine.call('line', [[dx, dy]], {relative: true}, function() {
 			ui.machine.call('move_target', [dx, dy], {}, function() {
 				drag[0][0] += dx;
 				drag[1][0] += dy;
@@ -2001,7 +1996,7 @@ function zup(ui, e) { // {{{
 	if (!(e.buttons & 5))
 		return false;
 	if (e.buttons & 1) {
-		ui.machine.call('line_cb', [[{2: pos}]], {}, function() { update_canvas_and_spans(ui); });
+		ui.machine.call('line', [{2: pos}], {}, function() { update_canvas_and_spans(ui); });
 	}
 	return false;
 }
@@ -2020,7 +2015,7 @@ function zmove(ui, e) { // {{{
 		return false;
 	if (e.buttons & 1) {
 		drag[3] = true;
-		ui.machine.call('line_cb', [[{2: drag[2][1] + dz}]], {}, function() { drag[3] = false; update_canvas_and_spans(ui); });
+		ui.machine.call('line', [{2: drag[2][1] + dz}], {}, function() { drag[3] = false; update_canvas_and_spans(ui); });
 	}
 	return false;
 }
@@ -2035,7 +2030,7 @@ function keypress(event) { // {{{
 		if (event.shiftKey)
 			amount /= 10;
 		var target = [[-amount, 0], [0, amount], [amount, 0], [0, -amount]][event.keyCode - 37];
-		ui.machine.call('line_cb', [[target]], {relative: true}, function() {
+		ui.machine.call('line', [target], {relative: true}, function() {
 			if (event.altKey) {
 				ui.machine.call('set_globals', [], {'targetx': ui.machine.targetx + target[0], 'targety': ui.machine.targety + target[1]});
 			}
@@ -2062,7 +2057,7 @@ function keypress(event) { // {{{
 		var posy = Math.cos(ui.machine.targetangle) * pos[1] + Math.sin(ui.machine.targetangle) * pos[0];
 		posx += ui.machine.targetx;
 		posy += ui.machine.targety;
-		ui.machine.call('line_cb', [[[posx, posy]]], {}, function() { update_canvas_and_spans(ui); });
+		ui.machine.call('line', [[posx, posy]], {}, function() { update_canvas_and_spans(ui); });
 		event.preventDefault();
 	}
 } // }}}
@@ -2076,7 +2071,7 @@ function update_angle(ui, value) { // {{{
 		pos[0] = Math.cos(value) * posx - Math.sin(value) * posy + ui.machine.targetx;
 		pos[1] = Math.cos(value) * posy + Math.sin(value) * posx + ui.machine.targety;
 		set_value(ui, [null, 'targetangle'], value);
-		ui.machine.call('line_cb', [[[pos[0], pos[1]]]], {}, function() {
+		ui.machine.call('line', [[pos[0], pos[1]]], {}, function() {
 			update_canvas_and_spans(ui);
 		});
 	});

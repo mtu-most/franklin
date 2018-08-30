@@ -64,7 +64,6 @@ is in a configuration file):
   password, or a username:password pair.  If only a password is supplied, any
   username is accepted with that password.  Default: ''
 * done: system command to run after completing a job.  Default: ''
-* local: Internal use only.  Do not use.
 * log: passed on to the websockets server, which uses it to create a log file
   with websockets traffic.
 * tls: passed on to the websockets server, which uses it to enable encryption.
@@ -118,7 +117,6 @@ config = fhs.init(packagename = 'franklin', config = {
 		'expert': '',	# Expert password; defaults to user password.
 		'user': '',	# User password; defaults to no password.
 		'done': '',	# Program to run when a job is done.
-		'local': '',	# alternate cdriver executable for local machine.
 		'log': '',	# Enable logging to a given logfile.
 		'tls': 'False',	# Whether TLS is used on the network connection.  If using Apache's virtual proxy method, this must be False, because Apache handles the encryption.
 		'arc': False,	# Whether arc detection in G-Code is enabled.  This is False by default, because it is broken.
@@ -532,7 +530,6 @@ class Machine: # {{{
 			if not success:
 				log('failed to get vars')
 				return
-			# The child has opened the port now; close our handle.
 			if self.uuid is None:
 				log('new uuid:' + repr(vars['uuid']))
 				self.uuid = vars['uuid']
@@ -707,7 +704,7 @@ def detect(port): # {{{
 	broadcast(None, 'port_state', port, 1)
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
-		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', '-', '--cdriver', config['local'] or fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', '-', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		machines[port] = Machine(port, process, run_id)
 		ports[port] = port
 		return False
@@ -827,13 +824,13 @@ def detect(port): # {{{
 				# Close detect port so it doesn't interfere.
 				machine.close()
 				#log('machines: %s' % repr(tuple(machines.keys())))
-				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--uuid', uuid if uuid is not None else '', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid if uuid is not None else '', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 				new_machine = Machine(port, process, run_id, send = uuid is not None)
 				def finish():
-					log('finish detect %s' % repr(new_machine.uuid))
-					ports[port] = new_machine.uuid
-					machines[new_machine.uuid] = new_machine
-					log('connecting new machine %s to port %s' % (new_machine.uuid, port))
+					log('finish detect %s' % repr(uuid))
+					ports[port] = uuid
+					machines[uuid] = new_machine
+					log('connecting new machine %s to port %s' % (uuid, port))
 					new_machine.call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: None)
 				if uuid is None:
 					def prefinish(success, uuid):
@@ -919,13 +916,10 @@ except OSError:
 # }}}
 
 # Initialization. {{{
-if config['local'] != '':
-	add_port('-')
-
 def create_machine(uuid = None): # {{{
 	if uuid is None:
 		uuid = protocol.new_uuid()
-	process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--cdriver', fhs.read_data('franklin-cdriver', opened = False), '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+	process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 	machines[uuid] = Machine(None, process, None)
 	return uuid
 # }}}
