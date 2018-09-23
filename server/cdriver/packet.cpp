@@ -26,6 +26,125 @@ static void get_cb(bool value) {
 
 #define CASE(x) case x: //debug("request " # x);
 
+int go_to(bool relative, MoveCommand const *move, bool cb) {
+	if (computing_move || settings.queue_full || settings.queue_end != settings.queue_start) {
+		// This is not allowed; signal error to Python glue.
+		debug("move error %d %d %d %d", computing_move, settings.queue_full, settings.queue_start, settings.queue_end);
+		return 1;
+	}
+	settings.queue_start = 0;
+	settings.queue_end = 3;
+	double vmax = NAN;
+	double amax = NAN;
+	double dist = NAN;
+	for (int a = 0; a < 3; ++a) {
+		if (spaces[0].num_axes <= a)
+			break;
+		double pos = spaces[0].axis[a]->settings.current;
+		//debug("prepare move, pos[%d] = %f + %f", a, pos, move->X[a]);
+		if (std::isnan(pos) || std::isnan(move->X[a]))
+			continue;
+		double d = move->X[a] - (relative ? 0 : pos);
+		if (std::isnan(dist))
+			dist = d * d;
+		else
+			dist += d * d;
+	}
+	if (!std::isnan(dist)) {
+		dist = std::sqrt(dist);
+		vmax = max_v;
+		amax = max_a;
+		//debug("dist = %f", dist);
+	}
+	else {
+		for (int a = 3; a < 6; ++a) {
+			if (a >= spaces[0].num_axes)
+				break;
+			double pos = spaces[0].axis[a]->settings.current;
+			if (std::isnan(pos))
+				continue;
+			double d = std::abs(pos - move->X[a]);
+			if (std::isnan(dist) || dist < d) {
+				dist = d;
+				vmax = spaces[0].motor[a]->limit_v;
+				amax = spaces[0].motor[a]->limit_a;
+			}
+		}
+		int tool = isnan(move->tool) ? current_extruder : move->tool;
+		double e;
+		if (tool < spaces[1].num_axes)
+			e = spaces[1].axis[tool]->settings.current;
+		else
+			e = NAN;
+		if (!std::isnan(e)) {
+			double d = std::abs(e - move->e);
+			if (std::isnan(dist) || dist < d) {
+				dist = d;
+				vmax = spaces[1].motor[tool]->limit_v;
+				amax = spaces[1].motor[tool]->limit_a;
+			}
+		}
+	}
+	if (std::isnan(dist)) {
+		// No moves requested.
+		debug("dist is nan");
+		num_movecbs += 1;
+		//debug("adding 1 move cb for manual move");
+		settings.queue_end = 0;
+		return 1;
+	}
+	// x = 1/2at**2 => t=sqrt(2x/a), v=at=sqrt(2ax)
+	vmax = min(vmax, std::sqrt(dist * amax));
+	vmax = min(vmax, move->v0);
+	// t=v/a => x = v**2/(2a)
+	double ramp = (vmax * vmax / (2 * amax)) / dist;
+	//debug("ramp %f vmax %f amax %f", ramp, vmax, amax);
+	for (int i = 0; i < 3; ++i) {
+		memcpy(&queue[i], move, sizeof(MoveCommand));
+		queue[i].cb = false;
+	}
+	for (int a = 0; a < 6; ++a) {
+		if (a >= spaces[0].num_axes) {
+			queue[0].X[a] = NAN;
+			queue[1].X[a] = NAN;
+			queue[2].X[a] = NAN;
+			continue;
+		}
+		double pos = spaces[0].axis[a]->settings.current;
+		if (std::isnan(pos))
+			continue;
+		double d = queue[2].X[a] - pos;
+		queue[0].X[a] = pos + d * ramp;
+		queue[1].X[a] = pos + d * (1 - ramp);
+	}
+	queue[0].v0 = 0;
+	queue[0].v1 = vmax;
+	queue[1].v0 = vmax;
+	queue[1].v1 = vmax;
+	queue[2].v0 = vmax;
+	queue[2].v1 = 0;
+	if (cb)
+		queue[2].cb = true;
+	//debug("starting move (dist = %f)", dist);
+	int new_num_movecbs = next_move(settings.hwtime);
+	bool ret = 0;
+	if (new_num_movecbs > 0) {
+		if (arch_running()) {
+			cbs_after_current_move += new_num_movecbs;
+			//debug("adding %d cbs after current move to %d", new_num_movecbs, cbs_after_current_move);
+		}
+		else {
+			ret = 1;
+			num_movecbs += new_num_movecbs;
+			//debug("adding %d cbs because move is immediately done", new_num_movecbs);
+			//debug("sent immediate %d cbs", new_num_movecbs);
+		}
+	}
+	//debug("no movecbs to add (prev %d)", history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs);
+	buffer_refill();
+	return ret;
+}
+
 void request(int req) {
 	switch (req) {
 	CASE(CMD_SET_UUID)
@@ -51,122 +170,11 @@ void request(int req) {
 		arch_reconnect(const_cast<const char *>(shmem->strs[0]));
 		break;
 	CASE(CMD_MOVE)
-	{
 		//debug("moving to (%f,%f,%f)", shmem->move.X[0], shmem->move.X[1], shmem->move.X[2]);
 		last_active = millis();
 		initialized = true;
-		if (computing_move || settings.queue_full || settings.queue_end != settings.queue_start) {
-			// This is not allowed; signal error to Python glue.
-			shmem->ints[0] = 1;
-			break;
-		}
-		settings.queue_start = 0;
-		settings.queue_end = 3;
-		double vmax = NAN;
-		double amax = NAN;
-		double dist = NAN;
-		for (int a = 0; a < 3; ++a) {
-			if (spaces[0].num_axes <= a)
-				break;
-			double pos = spaces[0].axis[a]->settings.current;
-			//debug("prepare move, pos[%d] = %f + %f", a, pos, shmem->move.X[a]);
-			if (std::isnan(pos) || std::isnan(shmem->move.X[a]))
-				continue;
-			double d = shmem->move.X[a] - pos;
-			if (std::isnan(dist))
-				dist = d * d;
-			else
-				dist += d * d;
-		}
-		if (!std::isnan(dist)) {
-			dist = std::sqrt(dist);
-			vmax = max_v;
-			amax = max_a;
-			//debug("dist = %f", dist);
-		}
-		else {
-			for (int a = 3; a < 6; ++a) {
-				if (a >= spaces[0].num_axes)
-					break;
-				double pos = spaces[0].axis[a]->settings.current;
-				if (std::isnan(pos))
-					continue;
-				double d = std::abs(pos - shmem->move.X[a]);
-				if (std::isnan(dist) || dist < d) {
-					dist = d;
-					vmax = spaces[0].motor[a]->limit_v;
-					amax = spaces[0].motor[a]->limit_a;
-				}
-			}
-			int tool = isnan(shmem->move.tool) ? current_extruder : shmem->move.tool;
-			double e = spaces[1].axis[tool]->settings.current;
-			if (!std::isnan(e)) {
-				double d = std::abs(e - shmem->move.e);
-				if (std::isnan(dist) || dist < d) {
-					dist = d;
-					vmax = spaces[1].motor[tool]->limit_v;
-					amax = spaces[1].motor[tool]->limit_a;
-				}
-			}
-		}
-		if (std::isnan(dist)) {
-			// No moves requested.
-			//debug("dist is nan");
-			shmem->ints[0] = 1;
-			num_movecbs += 1;
-			//debug("adding 1 move cb for manual move");
-			settings.queue_end = 0;
-			break;
-		}
-		// x = 1/2at**2 => t=sqrt(2x/a), v=at=sqrt(2ax)
-		vmax = min(vmax, std::sqrt(dist * amax));
-		vmax = min(vmax, shmem->move.v0);
-		// t=v/a => x = v**2/(2a)
-		double ramp = (vmax * vmax / (2 * amax)) / dist;
-		//debug("ramp %f vmax %f amax %f", ramp, vmax, amax);
-		shmem->move.cb = false;
-		for (int i = 0; i < 3; ++i)
-			memcpy(&queue[i], const_cast<const MoveCommand *>(&shmem->move), sizeof(MoveCommand));
-		for (int a = 0; a < 6; ++a) {
-			if (a >= spaces[0].num_axes) {
-				queue[0].X[a] = NAN;
-				queue[1].X[a] = NAN;
-				queue[2].X[a] = NAN;
-				continue;
-			}
-			double pos = spaces[0].axis[a]->settings.current;
-			if (std::isnan(pos))
-				continue;
-			double d = queue[2].X[a] - pos;
-			queue[0].X[a] = pos + d * ramp;
-			queue[1].X[a] = pos + d * (1 - ramp);
-		}
-		queue[0].v0 = 0;
-		queue[0].v1 = vmax;
-		queue[1].v0 = vmax;
-		queue[1].v1 = vmax;
-		queue[2].v0 = vmax;
-		queue[2].v1 = 0;
-		queue[2].cb = true;
-		shmem->ints[0] = 0;
-		//debug("starting move (dist = %f)", dist);
-		int new_num_movecbs = next_move(settings.hwtime);
-		if (new_num_movecbs > 0) {
-			if (arch_running()) {
-				cbs_after_current_move += new_num_movecbs;
-				//debug("adding %d cbs after current move to %d", new_num_movecbs, cbs_after_current_move);
-			}
-			else {
-				shmem->ints[0] = 1;
-				num_movecbs += new_num_movecbs;
-				//debug("adding %d cbs because move is immediately done", new_num_movecbs);
-				//debug("sent immediate %d cbs", new_num_movecbs);
-			}
-		}
-		//debug("no movecbs to add (prev %d)", history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs);
-		buffer_refill();
+		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move), true);
 		break;
-	}
 	CASE(CMD_RUN)
 		last_active = millis();
 		run_file(const_cast<const char *>(shmem->strs[0]), const_cast<const char *>(shmem->strs[1]), shmem->ints[0], shmem->floats[0], shmem->floats[1], shmem->ints[1]);
@@ -463,6 +471,8 @@ void request(int req) {
 	CASE(CMD_MOTORS2XYZ)
 		space_types[spaces[shmem->ints[0]].type].motors2xyz(&spaces[shmem->ints[0]], const_cast<const double *>(shmem->floats), const_cast<double *>(&shmem->floats[shmem->ints[1]]));
 		break;
+	default:
+		debug("unknown packet received: %x", req);
 	}
 	// Not delayed, but use the same system.
 	delayed_reply();
@@ -470,7 +480,6 @@ void request(int req) {
 
 void delayed_reply() {
 	char cmd = 0;
-	//debug("replying to server");
 	if (write(toserver, &cmd, 1) != 1)
 		abort();
 }

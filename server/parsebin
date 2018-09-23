@@ -30,7 +30,7 @@ config = fhs.init({'src': None, 'svg': False, 'z': float('nan'), 'offset': 0.0})
 
 file = open(config['src'], 'rb')
 
-cmds = ['system', 'pre-line', 'line', 'gpio', 'settemp', 'waittemp', 'setpos', 'wait', 'confirm', 'park']
+cmds = ['system', 'pre-line', 'line', 'goto', 'gpio', 'settemp', 'waittemp', 'setpos', 'wait', 'confirm', 'park']
 def mkcmd(t):
 	if t < len(cmds):
 		return cmds[t]

@@ -30,8 +30,8 @@ bool globals_load() {
 	int nt = shmem->ints[2];
 	int ng = shmem->ints[3];
 	// Free the old memory and initialize the new memory.
+	ldebug("num temps %d->%d", num_temps, nt);
 	if (nt != num_temps) {
-		ldebug("new temp");
 		for (uint8_t t = nt; t < num_temps; ++t)
 			temps[t].free();
 		Temp *new_temps = new Temp[nt];

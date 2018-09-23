@@ -153,8 +153,14 @@ int next_move(int32_t start_time) { // {{{
 		settings.alpha_max = 0;
 	settings.dist = (normb > 1e-5 ? norma * (normab / normb) * settings.alpha_max: norma) * 2;
 	//debug("move prepared, Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f", queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist);
+	if ((std::isnan(settings.dist) || abs(settings.dist) < 1e-10) && queue[q].tool < spaces[1].num_axes)
+		settings.dist = abs(queue[q].e - spaces[1].axis[queue[q].tool]->settings.source);
 	double dt = settings.dist / ((settings.v0 + settings.v1) / 2);
 	settings.end_time = (std::isnan(dt) ? 0 : 1e6 * dt);
+	if (queue[q].tool < spaces[1].num_axes && !std::isnan(queue[q].e)) {
+		spaces[1].axis[queue[q].tool]->settings.endpos = queue[q].e;
+		//debug("move extruder to %f", queue[q].e);
+	}
 	//debug("times end %d current %d dist %f v0 %f v1 %f", settings.end_time, settings.hwtime, settings.dist, settings.v0, settings.v1);
 
 	settings.queue_start = n;

@@ -272,7 +272,7 @@ void avr_send() { // {{{
 	while (out_busy >= 3) {
 		//debug("avr send");
 		poll(&pollfds[BASE_FDS], 1, -1);
-		serial();
+		serial(false);
 	}
 	serial_cb[out_busy] = avr_cb;
 	avr_cb = NULL;
@@ -330,7 +330,7 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 			else {
 				// Motor positions were unknown; no check, just update position.
 				if (arch_round_pos(ts, tm, old) != arch_round_pos(ts, tm, p)) {
-					fcpdebug(ts, tm, "update current pos from %f to %f", spaces[ts].motor[tm]->settings.current_pos, p);
+					cpdebug(ts, tm, "update current pos from %f to %f", spaces[ts].motor[tm]->settings.current_pos, p);
 					spaces[ts].motor[tm]->settings.current_pos = p;
 				}
 			}
@@ -553,10 +553,11 @@ bool hwpacket(int len) { // {{{
 		avr_write_ack("pinchange");
 		for (int i = 0; i < num_gpios; ++i) {
 			if (gpios[i].pin.pin == command[1]) {
-				prepare_interrupt();
-				shmem->interrupt_ints[0] = i;
-				shmem->interrupt_ints[1] = gpios[i].pin.inverted() ? !command[2] : command[2];
-				send_to_parent(CMD_PINCHANGE);
+				gpios[i].value = command[2];
+				if (gpios[i].changed)
+					continue;
+				gpios[i].changed = true;
+				pins_changed += 1;
 			}
 		}
 		return false;
@@ -759,7 +760,7 @@ void arch_reset() { // {{{
 		//debug("avr pongwait %d", avr_pong);
 		pollfds[BASE_FDS].revents = 0;
 		poll(&pollfds[BASE_FDS], 1, 1);
-		serial();
+		serial(false);
 	}
 	if (avr_pong != 7) {
 		debug("no pong seen; giving up.\n");
@@ -938,7 +939,7 @@ void arch_send_pin_name(int pin) { // {{{
 static void avr_connect4() { // {{{
 	while (out_busy >= 3) {
 		poll(&pollfds[BASE_FDS], 1, -1);
-		serial();
+		serial(false);
 	}
 	avr_pin_name_len[avr_next_pin_name] = command[1];
 	avr_pin_name[avr_next_pin_name] = new char[command[1] + 1];
@@ -1048,7 +1049,7 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bo
 	while (out_busy >= 3) {
 		//debug("avr send");
 		poll(&pollfds[BASE_FDS], 1, -1);
-		serial();
+		serial(false);
 		try_send_control();
 	}
 	thermistor_pin -= NUM_DIGITAL_PINS;
@@ -1128,7 +1129,7 @@ void arch_reconnect(const char *port) { // {{{
 // Running hooks. {{{
 int arch_tick() { // {{{
 	if (connected) {
-		serial();
+		serial(true);
 		return 500;
 	}
 	return -1;
@@ -1212,7 +1213,7 @@ bool arch_send_fragment() { // {{{
 	}
 	while (out_busy >= 3) {
 		poll(&pollfds[BASE_FDS], 1, -1);
-		serial();
+		serial(false);
 	}
 	if (stop_pending || discard_pending)
 		return false;
@@ -1236,7 +1237,7 @@ bool arch_send_fragment() { // {{{
 				//debug("sending %d %d cf %d cp 0x%x", s, m, current_fragment, current_fragment_pos);
 				while (out_busy >= 3) {
 					poll(&pollfds[BASE_FDS], 1, -1);
-					serial();
+					serial(false);
 				}
 				if (stop_pending || discard_pending)
 					break;
@@ -1280,7 +1281,7 @@ void arch_start_move(int extra) { // {{{
 	//debug("start move %d %d %d %d", current_fragment, running_fragment, sending_fragment, extra);
 	while (out_busy >= 3) {
 		poll(&pollfds[BASE_FDS], 1, -1);
-		serial();
+		serial(false);
 	}
 	start_pending = false;
 	avr_running = true;
@@ -1299,23 +1300,21 @@ void arch_home() { // {{{
 	avr_homing = true;
 	while (out_busy >= 3) {
 		poll(&pollfds[BASE_FDS], 1, -1);
-		serial();
+		serial(false);
 	}
 	avr_buffer[0] = HWC_HOME;
 	int speed = 10000;	// μs/step.
 	for (int i = 0; i < 4; ++i)
 		avr_buffer[1 + i] = (speed >> (8 * i)) & 0xff;
-	int mi = 0;
-	for (int s = 0; s < NUM_SPACES; mi += spaces[s++].num_motors) {
-		Space &sp = spaces[s];
-		for (int m = 0; m < sp.num_motors; ++m) {
-			if (abs(int8_t(shmem->ints[mi + m])) <= 1) {
-				avr_buffer[5 + mi + m] = (sp.motor[m]->dir_pin.inverted() ? -1 : 1) * shmem->ints[mi + m];
-			}
-			else {
-				debug("invalid code in home: %d", shmem->ints[mi + m]);
-				return;
-			}
+	for (int m = 0; m < avr_active_motors; ++m) {
+		if (m >= min(shmem->ints[0], spaces[0].num_motors))
+			avr_buffer[5 + m] = 0;
+		else if (abs(int8_t(shmem->ints[m + 1])) <= 1) {
+			avr_buffer[5 + m] = (spaces[0].motor[m]->dir_pin.inverted() ? -1 : 1) * shmem->ints[m + 1];
+		}
+		else {
+			debug("invalid code in home %d: %d", m, shmem->ints[m + 1]);
+			return;
 		}
 	}
 	if (prepare_packet(avr_buffer, 5 + avr_active_motors))
@@ -1344,7 +1343,7 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{
 		return max;
 	while (out_busy >= 3) {
 		poll(&pollfds[BASE_FDS], 1, -1);
-		serial();
+		serial(false);
 	}
 	avr_buffer[0] = HWC_START_MOVE;
 	avr_buffer[1] = len;
@@ -1360,7 +1359,7 @@ off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{
 	for (int m = 0; m < NUM_MOTORS; ++m) {
 		while (out_busy >= 3) {
 			poll(&pollfds[BASE_FDS], 1, -1);
-			serial();
+			serial(false);
 		}
 		avr_buffer[0] = HWC_MOVE_SINGLE;
 		avr_buffer[1] = m;
@@ -1381,7 +1380,7 @@ void arch_do_discard() { // {{{
 	int cbs = 0;
 	while (out_busy >= 3) {
 		poll(&pollfds[BASE_FDS], 1, -1);
-		serial();
+		serial(false);
 	}
 	if (!discard_pending)
 		return;
@@ -1422,7 +1421,7 @@ void arch_send_spi(int bits, const uint8_t *data) { // {{{
 		return;
 	while (out_busy >= 3) {
 		poll(&pollfds[BASE_FDS], 1, -1);
-		serial();
+		serial(false);
 	}
 	avr_buffer[0] = HWC_SPI;
 	avr_buffer[1] = bits;

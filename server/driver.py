@@ -167,7 +167,7 @@ class Machine: # {{{
 		sys.stdout.write(json.dumps(data) + '\n')
 		sys.stdout.flush()
 	# }}}
-	def _refresh_queue(self): # {{{
+	def _refresh_queue(self, target = None): # {{{
 		if self.uuid is None:
 			return
 		spool = fhs.read_spool(self.uuid, dir = True, opened = False)
@@ -210,9 +210,10 @@ class Machine: # {{{
 				except:
 					traceback.print_exc()
 					log('failed to open gcode file %s' % os.path.join(gcode, filename))
+					os.unlink(os.path.join(gcode, filename))
 			sortable_queue = [(q, self.jobqueue[q]) for q in self.jobqueue]
 			sortable_queue.sort()
-			self._broadcast(None, 'queue', sortable_queue)
+			self._broadcast(target, 'queue', sortable_queue)
 		if os.path.isdir(audio):
 			self.audioqueue = {}
 			for filename in os.listdir(audio):
@@ -228,7 +229,7 @@ class Machine: # {{{
 					log('failed to stat audio file %s' % os.path.join(audio, filename))
 			sortable_queue = list(self.audioqueue.keys())
 			sortable_queue.sort()
-			self._broadcast(None, 'audioqueue', sortable_queue)
+			self._broadcast(target, 'audioqueue', sortable_queue)
 	# }}}
 	def __init__(self, allow_system): # {{{
 		self.initialized = False
@@ -460,6 +461,7 @@ class Machine: # {{{
 		elif cmd['type'] == 'limit':
 			if cmd['space'] < len(self.spaces) and cmd['motor'] < len(self.spaces[cmd['space']].motor):
 				self.limits[cmd['space']][cmd['motor']] = cmd['pos']
+			self.wait = False	# queue is flushed when limit switch is hit.
 			#log('limit; %d waits' % e)
 			self._trigger_movewaits(self.movewait, False)
 		elif cmd['type'] == 'timeout':
@@ -486,7 +488,7 @@ class Machine: # {{{
 			self._close()
 			# _close returns after reconnect.
 		elif cmd['type'] == 'update-temp':
-			if s < len(self.temps):
+			if cmd['temp'] < len(self.temps):
 				self.temps[cmd['temp']].value = cmd['value'] - C0
 				self._temp_update(cmd['temp'])
 			else:
@@ -563,6 +565,7 @@ class Machine: # {{{
 		dg = ng - len(self.gpios)
 		data = {'num_temps': nt, 'num_gpios': ng}
 		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'timeout', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'current_extruder', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc')})
+		#log('writing globals: %s' % repr(data))
 		cdriver.write_globals(data)
 		self._read_globals(update = True)
 		if update:
@@ -782,15 +785,18 @@ class Machine: # {{{
 			move = {int(k): move[k] for k in move}
 			# Turn into list of floats.
 			move = [move[i] if i in move else float('nan') for i in range(6)]
-			# Set defaults for feedrates.
-			if v is None or not 0 < v <= self.max_v:
-				v = self.max_v
+			# Set current tool.
 			if tool is not None:
 				self.current_extruder = tool
+			# Set defaults for feedrates.
+			if all(math.isnan(x) for x in move) and self.current_extruder < len(self.spaces[1].motor) and (v is None or not 0 < v <= self.spaces[1].motor[self.current_extruder]['limit_v']):
+				v = self.spaces[1].motor[self.current_extruder]['limit_v']
+			elif v is None or not 0 < v <= self.max_v:
+				v = self.max_v
 			self.movewait += 1
 			#log('movewait +1 -> %d' % self.movewait)
 			#log('move args: ' + repr((self.current_extruder, move, e, v)))
-			self.wait = cdriver.move(*([self.current_extruder] + move + [0, 0, 0, e, v]), single = single, probe = probe)
+			self.wait = cdriver.move(*([self.current_extruder] + move + [0, 0, 0, e, v]), single = single, probe = probe, relative = rel)
 		if self.flushing is None and not self.wait:
 			self.flushing = False
 		#log('queue done %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
@@ -857,15 +863,15 @@ class Machine: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("home phase %d target %s" % (self.home_phase, self.home_target))
-				self.line(self.home_target, v = home_v, single = True)[1](None)
+				self.line(self.home_target, v = home_v, single = True, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 2:
 			# Continue moving to find limit switch.
 			found_limits = False
-			for s, a in self.limits[s].keys():
-				if s == 0 and a in self.home_target:
-					#log('found limit %d %d' % a)
+			for a in self.limits[0].keys():
+				if a in self.home_target:
+					#log('found limit %d' % a)
 					self.home_target.pop(a)
 					found_limits = True
 					# Make sure no attempt is made to move through the limit switch (not even by rounding errors).
@@ -880,7 +886,7 @@ class Machine: # {{{
 				dist = abs(self.home_target[k] - self.spaces[0].get_current_pos(k))
 				if dist > 0:
 					#log("home phase %d target %s" % (self.home_phase, self.home_target))
-					self.line(self.home_target, v = home_v, single = True)[1](None)
+					self.line(self.home_target, v = home_v, single = True, force = True)[1](None)
 					return
 				# Fall through.
 			if len(self.home_target) > 0:
@@ -991,7 +997,7 @@ class Machine: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("home phase %d target %s" % (self.home_phase, self.home_target))
-				self.line(self.home_target, single = True)[1](None)
+				self.line(self.home_target, single = True, force = True)[1](None)
 				return
 			'''
 			# Fall through.
@@ -1011,7 +1017,7 @@ class Machine: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 					#log("home phase %d target %s" % (self.home_phase, target))
-				self.line(target)[1](None)
+				self.line(target, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 5:
@@ -1030,7 +1036,7 @@ class Machine: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("home phase %d target %s" % (self.home_phase, target))
-				self.line(target)[1](None)
+				self.line(target, force = True)[1](None)
 				#log('movecb: ' + repr(self.movecb))
 				return
 			# Fall through.
@@ -1370,6 +1376,7 @@ class Machine: # {{{
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
+			#log('writing info: %s' % repr(data))
 			cdriver.write_space_info(self.id, data)
 		def write_axis(self, axis):
 			data = {'park_order': 0, 'park': float('nan'), 'min': float('-inf'), 'max': float('inf')}
@@ -1505,6 +1512,7 @@ class Machine: # {{{
 			data['fan_pin'] ^= 0x200
 			for key in ('Tc', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'fan_temp'):
 				data[key] += C0
+			#log('writing temp: %s' % repr(data))
 			cdriver.write_temp(self.id, data)
 		def export(self):
 			attrnames = ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time', 'value')
@@ -1531,7 +1539,10 @@ class Machine: # {{{
 			self.state = data['state'] & 0x3
 			self.reset = (data['state'] >> 2) & 0x3
 		def write(self):
-			return struct.pack('=HBd', self.pin, self.state | (self.reset << 2), self.duty)
+			attrnames = ('pin', 'duty')
+			data = {n: getattr(self, n) for n in attrnames}
+			data['state'] = self.state | (self.reset << 2)
+			cdriver.write_gpio(self.id, data)
 		def export(self):
 			attrnames = ('name', 'pin', 'state', 'reset', 'duty')
 			attrs = {n: getattr(self, n) for n in attrnames}
@@ -1620,11 +1631,11 @@ class Machine: # {{{
 		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2))
 	# }}}
 	@delayed
-	def line(self, id, moves = (), e = None, tool = None, v = None, relative = False, probe = False, single = False): # {{{
+	def line(self, id, moves = (), e = None, tool = None, v = None, relative = False, probe = False, single = False, force = False): # {{{
 		'''Move the tool in a straight line; return when done.
 		'''
-		if self.home_phase is not None and not self.paused:
-			log('ignoring linecb during home')
+		if not force and self.home_phase is not None and not self.paused:
+			log('ignoring line during home')
 			if id is not None:
 				self._send(id, 'return', None)
 			return
@@ -2275,20 +2286,20 @@ class Machine: # {{{
 	def queue_remove(self, name, audio = False): # {{{
 		'''Remove an entry from the queue.
 		'''
-		assert name in self.jobqueue
 		#log('removing %s' % name)
 		if audio:
+			assert name in self.audioqueue
 			filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
 			del self.audioqueue[name]
-			self._broadcast(None, 'audioqueue', tuple(self.audioqueue.keys()))
 		else:
+			assert name in self.jobqueue
 			filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', name + os.extsep + 'bin'), opened = False)
 			del self.jobqueue[name]
-			self._broadcast(None, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
 		try:
 			os.unlink(filename)
 		except:
 			log('unable to unlink %s' % filename)
+		self._refresh_queue()
 	# }}}
 	@delayed
 	def queue_run(self, id, name, paused = False): # {{{
@@ -2344,8 +2355,7 @@ class Machine: # {{{
 			self._temp_update(i, target)
 		for i, g in enumerate(self.gpios):
 			self._gpio_update(i, target)
-		self._broadcast(target, 'queue', [(q, self.jobqueue[q]) for q in self.jobqueue])
-		self._broadcast(target, 'audioqueue', tuple(self.audioqueue.keys()))
+		self._refresh_queue(target)
 		if self.confirmer is not None:
 			self._broadcast(target, 'confirm', self.confirm_id, self.confirm_message)
 	# }}}

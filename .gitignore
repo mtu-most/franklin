@@ -13,3 +13,4 @@ module-python-network
 module-python-websocketd
 .gitmodules
 zipdir
+server/cdriver.cpython-*

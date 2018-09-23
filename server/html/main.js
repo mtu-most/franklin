@@ -542,10 +542,12 @@ function download_probemap(ui) { // {{{
 
 // Queue functions.  {{{
 function get_queue(ui, select) { // {{{
-	if (select.selectedOptions.length > 0)
-		return ui.machine.queue[select.selectedOptions[0].index];
-	else
-		return [null, [NaN, NaN, NaN, NaN, NaN, NaN]];
+	if (select.selectedOptions.length > 0) {
+		var ret = ui.machine.queue[select.selectedOptions[0].index];
+		if (ret !== undefined)
+			return ret;
+	}
+	return [null, [NaN, NaN, NaN, NaN, NaN, NaN]];
 }
 // }}}
 
@@ -1022,7 +1024,6 @@ function space_update(uuid, index, nums_changed) { // {{{
 	update_table_visibility(p);
 	update_canvas_and_spans(p);
 	if (nums_changed && p.bin !== undefined) {
-		console.info('nums changed in space');
 		p.bin.update();
 	}
 } // }}}

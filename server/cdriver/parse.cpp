@@ -101,6 +101,7 @@ struct Parser { // {{{
 	void read_space();
 	int read_int(double *power = NULL, int *sign = NULL);
 	double read_fraction();
+	void handle_coordinate(double value, int index, bool *controlled, bool rel);
 	void flush_pending();
 	void add_curve(Record *P, double *start, double *end, double *B, double v0, double v1, double f, double r);
 	void add_record(RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double Bx = 0, double By = 0, double Bz = 0, double e = NAN, double v0 = INFINITY, double v1 = INFINITY, double radius = INFINITY);
@@ -149,6 +150,16 @@ bool Parser::get_chunk(Chunk &ret, std::string &comment) { // {{{
 	return true;
 } // }}}
 
+void Parser::handle_coordinate(double value, int index, bool *controlled, bool rel) {
+	if (std::isnan(value))
+		return;
+	if (std::isnan(pos[index])) {
+		*controlled = false;
+		rel = false;
+	}
+	pos[index] = (rel ? pos[index] : 0) + value * unit;
+}
+
 bool Parser::handle_command() { // {{{
 	// M6 is "tool change"; record that it happened and turn it into G28: park. {{{
 	if (type == 'M' && code == 6) {
@@ -191,8 +202,8 @@ bool Parser::handle_command() { // {{{
 				}
 				if (!std::isnan(F)) {
 					current_f[code == 0 ? 0 : 1] = F * unit / 60;
-					if (!(current_f[code == 0 ? 0 : 1] > 0))
-						debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
+					//if (!(current_f[code == 0 ? 0 : 1] > 0))
+						//debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
 				}
 				auto oldpos = pos;
 				double estep, r;
@@ -219,20 +230,20 @@ bool Parser::handle_command() { // {{{
 					else
 						r = (std::isnan(pos[2]) ? 0 : pos[2]);
 				}
-				if (!std::isnan(X)) pos[0] = (rel && !std::isnan(pos[0]) ? pos[0] : 0) + X * unit;
-				if (!std::isnan(Y)) pos[1] = (rel && !std::isnan(pos[1]) ? pos[1] : 0) + Y * unit;
-				if (!std::isnan(Z)) pos[2] = (rel && !std::isnan(pos[2]) ? pos[2] : 0) + Z * unit;
-				if (!std::isnan(A)) pos[3] = (rel && !std::isnan(pos[3]) ? pos[3] : 0) + A * unit;
-				if (!std::isnan(B)) pos[4] = (rel && !std::isnan(pos[4]) ? pos[4] : 0) + B * unit;
-				if (!std::isnan(C)) pos[5] = (rel && !std::isnan(pos[5]) ? pos[5] : 0) + C * unit;
+				bool controlled = true;
+				handle_coordinate(X, 0, &controlled, rel);
+				handle_coordinate(Y, 1, &controlled, rel);
+				handle_coordinate(Z, 2, &controlled, rel);
+				handle_coordinate(A, 3, &controlled, rel);
+				handle_coordinate(B, 4, &controlled, rel);
+				handle_coordinate(C, 5, &controlled, rel);
+				if (!controlled || (std::isnan(X) && std::isnan(Y) && std::isnan(Z))) {
+					flush_pending();
+					add_record(RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], epos[current_tool], current_f[code == 0 ? 0 : 1]);
+					break;
+				}
 				if (code != 81) {
-					double dist = 0;
-					for (int i = 0; i < 3; ++i)
-						dist += (pos[i] - oldpos[i]) * (pos[i] - oldpos[i]);
-					dist = sqrt(dist);
-					if (std::isnan(dist))
-						dist = 0;
-					pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], dist > 0 ? current_f[code == 0 ? 0 : 1] / dist : INFINITY, epos[current_tool]));
+					pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], current_f[code == 0 ? 0 : 1], epos[current_tool]));
 				}
 				else {
 					if (std::isnan(oldpos[2]))
@@ -252,15 +263,14 @@ bool Parser::handle_command() { // {{{
 					// goto z
 					if (pos[2] != r) {
 						dist = abs(pos[2] - r);
-						double f = dist > 0 ? current_f[1] / dist : INFINITY;
-						pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], NAN, NAN, NAN, f, NAN));
-						if (std::isinf(f)) {
+						pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], NAN, NAN, NAN, current_f[1], NAN));
+						if (std::isinf(current_f[1])) {
 							if (!std::isnan(dist))
 								last_dist += dist;
 						}
 						else {
-							if (!std::isnan(f))
-								last_time += 1 / f;
+							if (!std::isnan(current_f[1]))
+								last_time += 1 / current_f[1];
 						}
 					}
 					// go back to old z
@@ -320,12 +330,13 @@ bool Parser::handle_command() { // {{{
 				center.push_back(0);
 				center.push_back(0);
 				center.push_back(0);
-				if (!std::isnan(X)) pos[0] = (rel ? pos[0] : 0) + X * unit;
-				if (!std::isnan(Y)) pos[1] = (rel ? pos[1] : 0) + Y * unit;
-				if (!std::isnan(Z)) pos[2] = (rel ? pos[2] : 0) + Z * unit;
-				if (!std::isnan(A)) pos[3] = (rel ? pos[3] : 0) + A * unit;
-				if (!std::isnan(B)) pos[4] = (rel ? pos[4] : 0) + B * unit;
-				if (!std::isnan(C)) pos[5] = (rel ? pos[5] : 0) + C * unit;
+				bool controlled = true;
+				handle_coordinate(X, 0, &controlled, rel);
+				handle_coordinate(Y, 1, &controlled, rel);
+				handle_coordinate(Z, 2, &controlled, rel);
+				handle_coordinate(A, 3, &controlled, rel);
+				handle_coordinate(B, 4, &controlled, rel);
+				handle_coordinate(C, 5, &controlled, rel);
 				center[0] = pos[0] + (std::isnan(I) ? 0 : I * unit);
 				center[1] = pos[1] + (std::isnan(J) ? 0 : J * unit);
 				center[2] = pos[2] + (std::isnan(K) ? 0 : K * unit);
@@ -409,7 +420,7 @@ bool Parser::handle_command() { // {{{
 				}
 				epos[current_tool] = arg.num;
 				flush_pending();
-				add_record(RUN_SETPOS, current_tool, arg.num);
+				add_record(RUN_SETPOS, current_tool, NAN, NAN, NAN, NAN, NAN, NAN, arg.num);
 			}
 			break;
 		case 94:
@@ -611,13 +622,19 @@ int Parser::read_int(double *power, int *sign) { // {{{
 		return 0;
 	}
 	int s = 1;
-	if (line[linepos] == '-') {
+	switch (line[linepos]) {
+	case '-':
 		s = -1;
+		// Fall through.
+	case '+':
 		linepos += 1;
 		if (linepos >= line.size()) {
 			debug("%d:int requested at end of line", lineno);
 			return 0;
 		}
+		break;
+	default:
+		break;
 	}
 	if (sign)
 		*sign = s;
@@ -802,7 +819,11 @@ void Parser::flush_pending() { // {{{
 		P1->s[0] = P1->x - P0->x;
 		P1->s[1] = P1->y - P0->y;
 		P1->s[2] = P1->z - P0->z;
-		P1->length = sqrt(P1->s[0] * P1->s[0] + P1->s[1] * P1->s[1] + P1->s[2] * P1->s[2]);
+		P1->length = 0;
+		for (int i = 0; i < 3; ++i)
+			if (!std::isnan(P1->s[i]))
+				P1->length += P1->s[i] * P1->s[i];
+		P1->length = sqrt(P1->length);
 		P0->n[0] = (P1->s[1] * P0->s[2]) - (P1->s[2] * P0->s[1]);
 		P0->n[1] = (P1->s[2] * P0->s[0]) - (P1->s[0] * P0->s[2]);
 		P0->n[2] = (P1->s[0] * P0->s[1]) - (P1->s[1] * P0->s[0]);
@@ -862,13 +883,13 @@ void Parser::flush_pending() { // {{{
 		double v1K0 = sqrt((2 * max_a * P2->length - P2->f * P2->f) / (2 * P1->C - 1));
 		if (P1->C > 0.5) {
 			if (std::isnan(v1K0)) {
-				P2->f = sqrt(2 * max_a * P2->length) * (1 - 1e-10);
-				debug("sharp same %f", P1->f);
+				P2->f = sqrt(2 * max_a * P2->length) * (1 - 1e-5);
+				//debug("sharp same %f (%f, %f, %f)", P2->f, P1->C, max_a, P2->length);
 				continue;
 			}
 			if (std::isnan(v1A0)) {
-				debug("sharp prev");
-				P1->f = sqrt(2 * max_a * P1->length) * (1 - 1e-10);
+				//debug("sharp prev");
+				P1->f = sqrt(2 * max_a * P1->length) * (1 - 1e-5);
 				n -= 1;
 				--P1;
 				--P2;
@@ -878,13 +899,13 @@ void Parser::flush_pending() { // {{{
 		}
 		else {
 			if (v1K1 < P2->f) {
-				debug("dull same");
-				P2->f = sqrt(max_a * P2->length / P1->C) * (1 - 1e-10);
+				//debug("dull same");
+				P2->f = sqrt(max_a * P2->length / P1->C) * (1 - 1e-5);
 				continue;
 			}
 			if (v1A1 < P1->f) {
-				P1->f = sqrt(max_a * P1->length / P1->C) * (1 - 1e-10);
-				debug("dull prev %f", v1A1);
+				P1->f = sqrt(max_a * P1->length / P1->C) * (1 - 1e-5);
+				//debug("dull prev %f", v1A1);
 				n -= 1;
 				--P1;
 				--P2;
@@ -892,12 +913,12 @@ void Parser::flush_pending() { // {{{
 			}
 			double vmax = min(min(min(max(P1->f, P2->f), max_a * max_dev / P1->k), v1A1), v1K1);
 			if (vmax < v1K0) {
-				debug("dull same 2");
+				//debug("dull same 2");
 				P2->f = sqrt(2 * max_a * P2->length - (2 * P1->C - 1) * vmax * vmax) * (1 - 1e-10);
 				continue;
 			}
 			if (vmax < v1A0) {
-				debug("dull prev 2");
+				//debug("dull prev 2");
 				P1->f = sqrt(2 * max_a * P1->length - (2 * P1->C - 1) * vmax * vmax) * (1 - 1e-10);
 				n -= 1;
 				--P1;
@@ -906,7 +927,7 @@ void Parser::flush_pending() { // {{{
 			}
 			P1->v1 = vmax;
 		}
-		debug("next");
+		//debug("next");
 		n += 1;
 		++P1;
 		++P2;
@@ -932,7 +953,7 @@ void Parser::flush_pending() { // {{{
 			double CNL = P0.C * r;
 			double AC = ANL - CNL;
 			double BC = abs(P0.v1 * P0.v1 - P0.f * P0.f) / (2 * max_a * max_a);
-			debug("AC %f BC %f ANL %f CNL %f v1 %f r %f f %f max a %f", AC, BC, ANL, CNL, P0.v1, r, P0.f, max_a);
+			//debug("AC %f BC %f ANL %f CNL %f v1 %f r %f f %f max a %f", AC, BC, ANL, CNL, P0.v1, r, P0.f, max_a);
 			double AB = AC - BC;
 			double CD = acos((r - d / 2) / r) * r;
 			double DEF = (M_PI / 2 - P0.theta / 2) * r + CD;
@@ -995,7 +1016,7 @@ void Parser::flush_pending() { // {{{
 				Bb[i] = M[i] + r * M_FH[i] - FH[i];
 				Bb_[i] = -(M[i] + r * M_GH[i] - GH[i]);
 			}
-			debug("v %f %f %f", P0.f, P0.v1, P1->f);
+			/*debug("v %f %f %f", P0.f, P0.v1, P1->f);
 			debug("C %f AB %f k %f theta %f", P0.C, AB, P0.k, P0.theta * 180 / M_PI);
 			debug("nnAL %f %f %f", P0.nnAL[0], P0.nnAL[1], P0.nnAL[2]);
 			debug("nnLK %f %f %f", P0.nnLK[0], P0.nnLK[1], P0.nnLK[2]);
@@ -1007,7 +1028,7 @@ void Parser::flush_pending() { // {{{
 			debug("D %f %f %f", D[0], D[1], D[2]);
 			debug("E %f %f %f", E[0], E[1], E[2]);
 			debug("F %f %f %f", F[0], F[1], F[2]);
-			debug("M %f %f %f", M[0], M[1], M[2]);
+			debug("M %f %f %f", M[0], M[1], M[2]);*/
 			add_curve(&P0, A, B, NULL, P0.f, P0.f, AB / AEF, INFINITY);
 			add_curve(&P0, B, C, NULL, P0.f, P0.v1, AC / AEF, INFINITY);
 			add_curve(&P0, C, D, Ba_, P0.v1, P0.v1, (AC + CD) / AEF, -r);
@@ -1066,8 +1087,11 @@ void Parser::add_curve(Record *P, double *start, double *end, double *B, double 
 		add_record(RUN_PRELINE, P->tool, P->a, P->b, P->c, 0, 0, 0, 0, vi, vf);
 	*/
 	double dist = 0;
-	for (int i = 0; i < 3; ++i)
-		dist += (start[i] - end[i]) * (start[i] - end[i]);
+	for (int i = 0; i < 3; ++i) {
+		double d = (start[i] - end[i]) * (start[i] - end[i]);
+		if (!std::isnan(d))
+			dist += d;
+	}
 	if (dist < 1e-10)
 		return;
 	add_record(RUN_LINE, P->tool, end[0], end[1], end[2], B ? B[0] : 0, B ? B[1] : 0, B ? B[2] : 0, P->e0 + f * (P->e - P->e0), v0, v1, (P->n[2] < 0 ? -1 : 1) * r);

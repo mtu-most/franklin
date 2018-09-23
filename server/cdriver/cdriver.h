@@ -118,6 +118,7 @@ struct Temp {
 	*/
 	// Pins.
 	Pin_t power_pin[2];
+	double fan_duty;
 	Pin_t thermistor_pin;
 	// Volatile variables.
 	double target[2], limit[2][2];			// target and limit temperature; NAN to disable. [K]
@@ -190,7 +191,7 @@ struct Axis_History {
 	double dist[2], main_dist;
 	double source, current;	// Source position of current movement of axis, or current position if there is no movement.
 	double target;
-	double endpos[2];
+	double endpos;
 };
 
 struct Axis {
@@ -279,6 +280,8 @@ EXTERN int current_extruder;
 struct Gpio {
 	Pin_t pin;
 	uint8_t state, reset;
+	double duty;
+	bool changed, value;
 	void setup(uint8_t new_state);
 	void load();
 	void save();
@@ -356,6 +359,7 @@ EXTERN int hwtime_step, audio_hwtime_step;
 EXTERN struct pollfd pollfds[BASE_FDS + ARCH_MAX_FDS];
 EXTERN void (*wait_for_reply[4])();
 EXTERN int expected_replies;
+EXTERN int pins_changed;
 
 // Event data and flags for pending interrupts.
 EXTERN int num_file_done_events;
@@ -381,6 +385,7 @@ void buffered_debug(char const *fmt, ...);
 
 // packet.cpp
 void request(int req);
+int go_to(bool relative, MoveCommand const *move, bool cb);
 void settemp(int which, double target);
 void waittemp(int which, double mintemp, double maxtemp);
 void setpos(int which, int t, double f);
@@ -389,7 +394,7 @@ void send_to_parent(char cmd);
 void prepare_interrupt();
 
 // serial.cpp
-bool serial();	// Handle commands from serial.
+bool serial(bool allow_pending);	// Handle commands from serial.
 bool prepare_packet(char *the_packet, int len);
 void send_packet();
 void write_ack();

@@ -20,6 +20,8 @@
 #include "cdriver.h"
 
 void Gpio::load() {
+	if (pin.valid() && pin.write() != shmem->ints[1])
+		arch_set_duty(pin, 1);
 	pin.read(shmem->ints[1]);
 	state = shmem->ints[2];
 	reset = (state >> 2) & 0x3;
@@ -44,7 +46,7 @@ void Gpio::load() {
 #ifdef SERIAL
 	arch_pin_set_reset(pin, reset);
 #endif
-	double duty = shmem->floats[0];
+	duty = shmem->floats[0];
 	if (pin.valid())
 		arch_set_duty(pin, duty);
 }
@@ -52,13 +54,15 @@ void Gpio::load() {
 void Gpio::save() {
 	shmem->ints[1] = pin.write();
 	shmem->ints[2] = state | (reset << 2);
-	shmem->floats[0] = pin.valid() ? arch_get_duty(pin) : 1;
+	shmem->floats[0] = duty;
 }
 
 void Gpio::init() {
 	pin.init();
 	state = 3;
 	reset = 3;
+	changed = false;
+	value = false;
 }
 
 void Gpio::free() {

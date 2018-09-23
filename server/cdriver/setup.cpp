@@ -137,8 +137,16 @@ void connect_end() {
 		}
 	}
 	// Restore all temps to their current values.
-	for (int t = 0; t < num_temps; ++t)
+	for (int t = 0; t < num_temps; ++t) {
 		settemp(t, temps[t].target[0]);
+		if (temps[t].power_pin[1].valid())
+			arch_set_duty(temps[t].power_pin[1], temps[t].fan_duty);
+	}
+	// Set all gpio duty cycle values.
+	for (int g = 0; g < num_gpios; ++g) {
+		if (gpios[g].pin.valid())
+			arch_set_duty(gpios[g].pin, gpios[g].duty);
+	}
 	// Update current position.
 	first_fragment = current_fragment;
 	arch_stop(true);

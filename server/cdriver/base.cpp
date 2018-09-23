@@ -94,6 +94,10 @@ static void handle_interrupt_reply() { // {{{
 	}
 	if (!interrupt_pending)
 		debug("received interrupt reply without pending interrupt");
+	if (stopping == 1) {
+		sending_fragment = false;
+		stopping = 0;
+	}
 	interrupt_pending = false;
 } // }}}
 
@@ -152,7 +156,25 @@ int main(int argc, char **argv) { // {{{
 		while (true) {
 			bool action = false;
 			if (arch_fds() && serialdev && serialdev->available())
-				action |= serial();
+				action |= serial(true);
+			if (!interrupt_pending && pins_changed > 0) {
+				for (int i = 0; i < num_gpios; ++i) {
+					if (gpios[i].changed) {
+						gpios[i].changed = false;
+						pins_changed -= 1;
+						prepare_interrupt();	// Does nothing, but good to always have it paired with send_to_parent.
+						shmem->interrupt_ints[0] = i;
+						shmem->interrupt_ints[1] = gpios[i].pin.inverted() ? !gpios[i].value : gpios[i].value;
+						send_to_parent(CMD_PINCHANGE);
+						action = true;
+						break;
+					}
+				}
+				if (!action) {
+					debug("warning: pins_changed = %d, but no pins are marked changed", pins_changed);
+					pins_changed = 0;
+				}
+			}
 			if (!action)
 				break;
 		}
@@ -181,6 +203,8 @@ void send_to_parent(char cmd) { // {{{
 		abort();
 		prepare_interrupt();
 	}
+	if (stopping == 2 && cmd == CMD_LIMIT)
+		stopping = 1;
 	//debug("sending interrupt 0x%x", cmd);
 	if (write(interrupt, &cmd, 1) != 1)
 		abort();

@@ -113,9 +113,12 @@ bool Space::setup_nums(int na, int nm) { // {{{
 void Space::load_info() { // {{{
 	loaddebug("loading space %d", id);
 	int t = type;
-	if (t < 0 || t >= NUM_SPACE_TYPES)
+	if (t < 0 || t >= NUM_SPACE_TYPES) {
+		debug("invalid current type?! using default type instead");
 		t = DEFAULT_TYPE;
+	}
 	type = shmem->ints[1];
+	loaddebug("requested type %d, current is %d", type, t);
 	if (type < 0 || type >= NUM_SPACE_TYPES || (id == 1 && type != EXTRUDER_TYPE) || (id == 2 && type != FOLLOWER_TYPE)) {
 		debug("request for type %d ignored", type);
 		type = t;
@@ -481,7 +484,11 @@ static double set_targets(double factor) { // {{{
 		Space &sp = spaces[s];
 		for (int a = (s == 0 ? 3 : 0); a < sp.num_axes; ++a) {
 			auto ax = sp.axis[a];
-			ax->settings.target = ax->settings.source + factor * (ax->settings.target - ax->settings.source);
+			if (std::isnan(ax->settings.source)) {
+				ax->settings.source = 0;
+				debug("setting axis %d %d source from nan to 0", s, a);
+			}
+			ax->settings.target = ax->settings.source + factor * (ax->settings.endpos - ax->settings.source);
 		}
 		double f = move_axes(&sp);
 		if (min_f > f)
@@ -618,8 +625,7 @@ void store_settings() { // {{{
 			sp.axis[a]->history[current_fragment].target = sp.axis[a]->settings.target;
 			sp.axis[a]->history[current_fragment].source = sp.axis[a]->settings.source;
 			sp.axis[a]->history[current_fragment].current = sp.axis[a]->settings.current;
-			sp.axis[a]->history[current_fragment].endpos[0] = sp.axis[a]->settings.endpos[0];
-			sp.axis[a]->history[current_fragment].endpos[1] = sp.axis[a]->settings.endpos[1];
+			sp.axis[a]->history[current_fragment].endpos = sp.axis[a]->settings.endpos;
 		}
 	}
 	DATA_CLEAR();
@@ -684,8 +690,7 @@ void restore_settings() { // {{{
 			sp.axis[a]->settings.target = sp.axis[a]->history[current_fragment].target;
 			sp.axis[a]->settings.source = sp.axis[a]->history[current_fragment].source;
 			sp.axis[a]->settings.current = sp.axis[a]->history[current_fragment].current;
-			sp.axis[a]->settings.endpos[0] = sp.axis[a]->history[current_fragment].endpos[0];
-			sp.axis[a]->settings.endpos[1] = sp.axis[a]->history[current_fragment].endpos[1];
+			sp.axis[a]->settings.endpos = sp.axis[a]->history[current_fragment].endpos;
 		}
 	}
 	DATA_CLEAR();
@@ -716,8 +721,6 @@ void buffer_refill() { // {{{
 			//debug("fragment full %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
 			send_fragment();
 		}
-		// Check for commands from host; in case of many short buffers, this loop may not end in a reasonable time.
-		//serial(0);
 	}
 	if (stopping || discard_pending) {
 		//debug("aborting refill for stopping");
@@ -764,6 +767,10 @@ void abort_move(int pos) { // {{{
 	}
 	if (spaces[0].num_axes > 0)
 		cpdebug(0, 0, "ending hwpos %f", arch_round_pos(0, 0, spaces[0].motor[0]->settings.current_pos) + avr_pos_offset[0]);
+	// Flush queue.
+	settings.queue_start = 0;
+	settings.queue_end = 0;
+	settings.queue_full = false;
 	// Copy settings back to previous fragment.
 	store_settings();
 	computing_move = false;

@@ -306,6 +306,28 @@ void run_file_fill_queue() {
 					settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
 					break;
 				}
+				case RUN_GOTO:
+				{
+					MoveCommand move;
+					move.cb = false;
+					move.probe = false;
+					move.single = false;
+					move.v0 = r.v0;
+					move.v1 = r.v0;
+					move.tool = r.tool;
+					move.X[0] = r.X;
+					move.X[1] = r.Y;
+					move.X[2] = r.Z;
+					move.X[3] = r.Bx;
+					move.X[4] = r.By;
+					move.X[5] = r.Bz;
+					move.B[0] = 0;
+					move.B[1] = 0;
+					move.B[2] = 0;
+					move.e = r.E;
+					go_to(false, &move, false);
+					break;
+				}
 				case RUN_GPIO:
 				{
 					int tool = r.tool;
@@ -380,7 +402,7 @@ void run_file_fill_queue() {
 						debug("Not setting position of invalid extruder %d", r.tool);
 						break;
 					}
-					setpos(1, r.tool, r.X);
+					setpos(1, r.tool, r.E);
 					break;
 				case RUN_WAIT:
 					if (r.X > 0) {

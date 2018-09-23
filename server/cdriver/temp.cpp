@@ -34,6 +34,8 @@ void Temp::load(int id) {
 	radiation = shmem->floats[0];
 	power = shmem->floats[0];
 	*/
+	if (power_pin[1].valid() && power_pin[1].write() != shmem->ints[2])
+		arch_set_duty(power_pin[1], 1);
 	power_pin[0].read(shmem->ints[1]);
 	power_pin[1].read(shmem->ints[2]);
 	int old_pin = thermistor_pin.write();
@@ -42,7 +44,9 @@ void Temp::load(int id) {
 	thermistor_pin.read(shmem->ints[3]);
 	target[1] = shmem->floats[5];
 	adctarget[1] = toadc(target[1], MAXINT);
-	arch_set_duty(power_pin[1], shmem->floats[6]);
+	fan_duty = shmem->floats[6];
+	if (power_pin[1].valid())
+		arch_set_duty(power_pin[1], fan_duty);
 	for (int i = 0; i < 2; ++i) {
 		limit[i][0] = shmem->floats[7 + 2 * i];
 		limit[i][1] = shmem->floats[8 + 2 * i];
@@ -75,7 +79,7 @@ void Temp::save() {
 	shmem->floats[3] = Tc;
 	shmem->floats[4] = beta;
 	shmem->floats[5] = target[1];
-	shmem->floats[6] = arch_get_duty(power_pin[1]);
+	shmem->floats[6] = fan_duty;
 	shmem->floats[7] = limit[0][0];
 	shmem->floats[8] = limit[0][1];
 	shmem->floats[9] = limit[1][0];

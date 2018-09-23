@@ -89,7 +89,7 @@ static void resend(int amount) { // {{{
 } // }}}
 
 // There may be serial data available.
-bool serial() { // {{{
+bool serial(bool allow_pending) { // {{{
 	while (true) { // Loop until all data is handled.
 		// Handle timeouts on serial line.
 		int32_t utm = utime();
@@ -190,20 +190,22 @@ bool serial() { // {{{
 					if (cb)
 						cb();
 				}
-				if (out_busy < 3 && change_pending)
-					arch_motors_change();
-				if (out_busy < 3 && start_pending) {
-					arch_start_move(0);
-				}
-				if (out_busy < 3 && stop_pending) {
-					//debug("do pending stop");
-					arch_stop();
-				}
-				if (out_busy < 3 && discard_pending)
-					arch_do_discard();
-				if (!sending_fragment && !stopping && arch_running()) {
-					run_file_fill_queue();
-					buffer_refill();
+				if (allow_pending) {
+					if (out_busy < 3 && change_pending)
+						arch_motors_change();
+					if (out_busy < 3 && start_pending) {
+						arch_start_move(0);
+					}
+					if (out_busy < 3 && stop_pending) {
+						//debug("do pending stop");
+						arch_stop();
+					}
+					if (out_busy < 3 && discard_pending)
+						arch_do_discard();
+					if (!sending_fragment && !stopping && arch_running()) {
+						run_file_fill_queue();
+						buffer_refill();
+					}
 				}
 				if (!preparing)
 					arch_had_ack();
@@ -414,7 +416,7 @@ bool prepare_packet(char *the_packet, int size) { // {{{
 	preparing = true;
 	while (out_busy >= 3) {
 		poll(&pollfds[BASE_FDS], 1, -1);
-		serial();
+		serial(false);
 	}
 	preparing = false;	// Not yet, but there are no further interruptions.
 	if (stopping)

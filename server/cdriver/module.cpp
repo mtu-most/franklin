@@ -19,8 +19,16 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <sys/mman.h>
+#include <unistd.h>
 #include <libgen.h>
 #include "module.h"
+#include <linux/memfd.h>
+#include <sys/syscall.h>
+#include <poll.h>
+
+#ifndef memfd_create
+#define memfd_create(...) syscall(SYS_memfd_create, __VA_ARGS__)
+#endif
 
 #if 0
 #define FUNCTION_START do { debug("Entering %s:%d", __PRETTY_FUNCTION__, __LINE__); } while (0)
@@ -51,7 +59,20 @@ static PyObject *assert_empty_dict(PyObject *dict, char const *src) {
 
 static inline char send_to_child(char cmd) {
 	//debug("sending to child: %x", cmd);
-	if (cmd != -1) {
+	struct pollfd test;
+	test.fd = toserver;
+	test.events = POLLIN | POLLPRI;
+	test.revents = 0;
+	int p = poll(&test, 1, 0);
+	if (p < 0) {
+		debug("send_to_child: test poll fails: %s", strerror(errno));
+	}
+	else if (p > 0) {
+		debug("send_to_child: data was ready before request was sent");
+		abort();
+	}
+	if (cmd != (char)-1) {
+		//debug("actually writing");
 		while (true) {
 			errno = 0;
 			int ret = write(fromserver, &cmd, 1);
@@ -137,8 +158,9 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 	FUNCTION_START;
 	shmem->move.single = false;
 	shmem->move.probe = false;
-	const char *keywordnames[] = {"tool", "x", "y", "z", "a", "b", "c", "Bx", "By", "Bz", "e", "v", "single", "probe", NULL};
-	if (!PyArg_ParseTupleAndKeywords(args, keywords, "iddddddddddd|pp", const_cast <char **>(keywordnames),
+	shmem->ints[0] = 0;
+	const char *keywordnames[] = {"tool", "x", "y", "z", "a", "b", "c", "Bx", "By", "Bz", "e", "v", "single", "probe", "relative", NULL};
+	if (!PyArg_ParseTupleAndKeywords(args, keywords, "iddddddddddd|ppp", const_cast <char **>(keywordnames),
 				&shmem->move.tool,
 				&shmem->move.X[0], &shmem->move.X[1], &shmem->move.X[2],
 				&shmem->move.X[3], &shmem->move.X[4], &shmem->move.X[5],
@@ -146,7 +168,8 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 				&shmem->move.e,
 				&shmem->move.v0,
 				&shmem->move.single,
-				&shmem->move.probe))
+				&shmem->move.probe,
+				&shmem->ints[0]))
 		return NULL;
 	if (std::isnan(shmem->move.v0))
 		shmem->move.v0 = INFINITY;
@@ -156,7 +179,7 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 		Py_RETURN_TRUE;
 	}
 	send_to_child(CMD_MOVE);
-	if (shmem->ints[0])
+	if (shmem->ints[1])
 		Py_RETURN_FALSE;
 	else
 		Py_RETURN_TRUE;
@@ -287,8 +310,10 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 
 static void set_int(int num, char const *name, PyObject *dict) {
 	PyObject *value = PyMapping_GetItemString(dict, name);
-	if (!value)
+	if (!value) {
+		debug("not setting value for %s, which is not in the dict", name);
 		return;
+	}
 	PyMapping_DelItemString(dict, name);
 	shmem->ints[num] = PyLong_AsLong(value);
 	Py_DECREF(value);
@@ -612,9 +637,10 @@ static PyObject *queued(PyObject *Py_UNUSED(self), PyObject *args) {
 
 static PyObject *home(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
+	shmem->ints[0] = PyTuple_Size(args);
 	for (int i = 0; i < shmem->ints[0]; ++i) {
 		PyObject *value = PyTuple_GetItem(args, i);
-		shmem->ints[i] = PyLong_AsLong(value);
+		shmem->ints[i + 1] = PyLong_AsLong(value);
 		Py_DECREF(value);
 	}
 	send_to_child(CMD_HOME);
