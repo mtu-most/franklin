@@ -20,7 +20,11 @@
 
 #include "cdriver.h"
 
-//#define DEBUG_MOVE
+//#define mdebug debug
+
+#ifndef mdebug
+#define mdebug(...) do {} while (0)
+#endif
 
 static void change0(int qpos) { // {{{
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -45,9 +49,7 @@ int next_move(int32_t start_time) { // {{{
 		computing_move = false;
 		return num_cbs;
 	}
-#ifdef DEBUG_MOVE
-	debug("Next move; queue start = %d, end = %d", settings.queue_start, settings.queue_end);
-#endif
+	mdebug("Next move; queue start = %d, end = %d", settings.queue_start, settings.queue_end);
 	// Set everything up for running queue[settings.queue_start].
 	int q = settings.queue_start;
 	int n = (settings.queue_start + 1) % QUEUE_LENGTH;
@@ -74,10 +76,8 @@ int next_move(int32_t start_time) { // {{{
 					sp.axis[aa]->settings.current = sp.axis[aa]->settings.source;
 				break;
 			}
-#ifdef DEBUG_MOVE
 			else
-				debug("non-nan: %d %d %f %f", s, a, sp.axis[a]->settings.source, sp.motor[a]->settings.current_pos);
-#endif
+				mdebug("non-nan: %d %d %f %f", s, a, sp.axis[a]->settings.source, sp.motor[a]->settings.current_pos);
 		}
 	}
 	// }}}
@@ -90,15 +90,11 @@ int next_move(int32_t start_time) { // {{{
 			// If only one of them is set, set the other one as well to make the rounded corner work.
 			if (!std::isnan(queue[q].X[a]) && std::isnan(queue[n].X[a])) {
 				queue[n].X[a] = sp0.axis[a]->settings.source + sp0.axis[a]->settings.dist[1] - (a == 2 ? zoffset : 0);
-#ifdef DEBUG_MOVE
-				debug("filling next %d with %f", a, queue[n].X[a]);
-#endif
+				mdebug("filling next %d with %f", a, queue[n].X[a]);
 			}
 			if (std::isnan(queue[q].X[a]) && !std::isnan(queue[n].X[a])) {
 				queue[q].X[a] = sp0.axis[a]->settings.source;
-#ifdef DEBUG_MOVE
-				debug("filling %d with %f", a, queue[q].X[a]);
-#endif
+				mdebug("filling %d with %f", a, queue[q].X[a]);
 			}
 		}
 		if ((!std::isnan(queue[q].X[a]) || (n != settings.queue_end && !std::isnan(queue[n].X[a]))) && std::isnan(sp0.axis[a]->settings.source)) {
@@ -116,9 +112,7 @@ int next_move(int32_t start_time) { // {{{
 	// }}}
 
 	if (!computing_move) {	// Set up source if this is a new move. {{{
-#ifdef DEBUG_MOVE
-		debug("starting new move");
-#endif
+		mdebug("starting new move");
 		//debug("current %d running %d", current_fragment, running_fragment);
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
@@ -152,15 +146,17 @@ int next_move(int32_t start_time) { // {{{
 	if (std::isnan(settings.alpha_max))
 		settings.alpha_max = 0;
 	settings.dist = (normb > 1e-5 ? norma * (normab / normb) * settings.alpha_max: norma) * 2;
-	//debug("move prepared, Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f", queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist);
 	if ((std::isnan(settings.dist) || abs(settings.dist) < 1e-10) && queue[q].tool < spaces[1].num_axes)
 		settings.dist = abs(queue[q].e - spaces[1].axis[queue[q].tool]->settings.source);
 	double dt = settings.dist / ((settings.v0 + settings.v1) / 2);
 	settings.end_time = (std::isnan(dt) ? 0 : 1e6 * dt);
 	if (queue[q].tool < spaces[1].num_axes && !std::isnan(queue[q].e)) {
 		spaces[1].axis[queue[q].tool]->settings.endpos = queue[q].e;
-		//debug("move extruder to %f", queue[q].e);
+		mdebug("move extruder to %f", queue[q].e);
 	}
+	else
+		spaces[1].axis[queue[q].tool]->settings.endpos = spaces[1].axis[queue[q].tool]->settings.current;
+	mdebug("move prepared, Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f", queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6);
 	//debug("times end %d current %d dist %f v0 %f v1 %f", settings.end_time, settings.hwtime, settings.dist, settings.v0, settings.v1);
 
 	settings.queue_start = n;

@@ -56,38 +56,37 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		amax = max_a;
 		//debug("dist = %f", dist);
 	}
-	else {
+	if (std::isnan(dist) || dist < 1e-10) {
 		for (int a = 3; a < 6; ++a) {
 			if (a >= spaces[0].num_axes)
 				break;
 			double pos = spaces[0].axis[a]->settings.current;
 			if (std::isnan(pos))
 				continue;
-			double d = std::abs(pos - move->X[a]);
+			double d = std::abs(move->X[a] - (relative ? 0 : pos));
 			if (std::isnan(dist) || dist < d) {
 				dist = d;
 				vmax = spaces[0].motor[a]->limit_v;
 				amax = spaces[0].motor[a]->limit_a;
 			}
 		}
-		int tool = isnan(move->tool) ? current_extruder : move->tool;
-		double e;
-		if (tool < spaces[1].num_axes)
-			e = spaces[1].axis[tool]->settings.current;
-		else
-			e = NAN;
-		if (!std::isnan(e)) {
-			double d = std::abs(e - move->e);
-			if (std::isnan(dist) || dist < d) {
-				dist = d;
-				vmax = spaces[1].motor[tool]->limit_v;
-				amax = spaces[1].motor[tool]->limit_a;
-			}
+	}
+	int tool = isnan(move->tool) ? current_extruder : move->tool;
+	double e;
+	if (tool < spaces[1].num_axes)
+		e = spaces[1].axis[tool]->settings.current;
+	else
+		e = NAN;
+	if (!std::isnan(e)) {
+		if (std::isnan(dist) || dist < 1e-10) {
+			dist = std::abs(move->e - (relative ? 0 : e));
+			vmax = spaces[1].motor[tool]->limit_v;
+			amax = spaces[1].motor[tool]->limit_a;
 		}
 	}
 	if (std::isnan(dist)) {
 		// No moves requested.
-		debug("dist is nan");
+		//debug("dist is nan");
 		num_movecbs += 1;
 		//debug("adding 1 move cb for manual move");
 		settings.queue_end = 0;
@@ -102,6 +101,9 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	for (int i = 0; i < 3; ++i) {
 		memcpy(&queue[i], move, sizeof(MoveCommand));
 		queue[i].cb = false;
+		queue[i].B[0] = 0;
+		queue[i].B[1] = 0;
+		queue[i].B[2] = 0;
 	}
 	for (int a = 0; a < 6; ++a) {
 		if (a >= spaces[0].num_axes) {
@@ -113,9 +115,15 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		double pos = spaces[0].axis[a]->settings.current;
 		if (std::isnan(pos))
 			continue;
-		double d = queue[2].X[a] - pos;
+		double d = queue[2].X[a] - (relative ? 0 : pos);
 		queue[0].X[a] = pos + d * ramp;
 		queue[1].X[a] = pos + d * (1 - ramp);
+	}
+	if (move->tool < spaces[1].num_axes) {
+		double pos = spaces[1].axis[move->tool]->settings.current;
+		double d = move->e - (relative ? 0 : pos);
+		queue[0].e = pos + d * ramp;
+		queue[1].e = pos + d * (1 - ramp);
 	}
 	queue[0].v0 = 0;
 	queue[0].v1 = vmax;
@@ -125,7 +133,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	queue[2].v1 = 0;
 	if (cb)
 		queue[2].cb = true;
-	//debug("starting move (dist = %f)", dist);
+	//debug("starting move (dist = %f, ramp=%f)", dist, ramp);
 	int new_num_movecbs = next_move(settings.hwtime);
 	bool ret = 0;
 	if (new_num_movecbs > 0) {
@@ -283,12 +291,12 @@ void request(int req) {
 			break;
 		}
 		if (std::isnan(spaces[shmem->ints[0]].axis[shmem->ints[1]]->settings.current)) {
-			//debug("resetting space %d for getpos; %f", shmem->ints[0], spaces[0].axis[0]->settings.current);
 			reset_pos(&spaces[shmem->ints[0]]);
 			for (int a = 0; a < spaces[shmem->ints[0]].num_axes; ++a)
 				spaces[shmem->ints[0]].axis[a]->settings.current = spaces[shmem->ints[0]].axis[a]->settings.source;
 		}
 		shmem->floats[0] = spaces[shmem->ints[0]].axis[shmem->ints[1]]->settings.current;
+		//debug("getpos %d %d %f", shmem->ints[0], shmem->ints[1], shmem->floats[0]);
 		if (shmem->ints[0] == 0) {
 			for (int s = 0; s < NUM_SPACES; ++s) {
 				shmem->floats[0] = space_types[spaces[s].type].unchange0(&spaces[s], shmem->ints[1], shmem->floats[0]);
@@ -560,8 +568,10 @@ void setpos(int which, int t, double f) {
 	if (!std::isnan(spaces[which].motor[t]->settings.current_pos)) {
 		diff = f * spaces[which].motor[t]->steps_per_unit - arch_round_pos(which, t, spaces[which].motor[t]->settings.current_pos);
 		spaces[which].motor[t]->settings.current_pos += diff;
-		//debug("non nan %f %f %f", spaces[which].motor[t]->settings.current_pos, diff, f);
-		//debug("setpos non-nan %d %d %f", which, t, diff);
+		if (which == 1) {
+			//debug("non nan %f %f %f", spaces[which].motor[t]->settings.current_pos, diff, f);
+			//debug("setpos non-nan %d %d %f", which, t, diff);
+		}
 	}
 	else {
 		diff = f * spaces[which].motor[t]->steps_per_unit;
@@ -577,7 +587,6 @@ void setpos(int which, int t, double f) {
 	reset_pos(&spaces[which]);
 	for (int a = 0; a < spaces[which].num_axes; ++a) {
 		spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
-		//debug("setpos %d %d done source %f", which, a, spaces[which].axis[a]->settings.source);
 	}
 	cpdebug(which, t, "setpos diff %f", diff);
 	// */

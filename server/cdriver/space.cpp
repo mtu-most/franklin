@@ -406,9 +406,8 @@ static void do_steps() { // {{{
 			continue;
 		Space &sp = spaces[s];
 		for (int a = 0; a < sp.num_axes; ++a) {
-			if (!std::isnan(sp.axis[a]->settings.target)) {
+			if (!std::isnan(sp.axis[a]->settings.target))
 				sp.axis[a]->settings.current = sp.axis[a]->settings.target;
-			}
 		}
 	}
 	// Move the motors.
