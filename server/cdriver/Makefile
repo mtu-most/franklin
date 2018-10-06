@@ -56,7 +56,7 @@ franklin-cdriver: ${OBJS} ${HEADERS} ${DEPENDS}
 	g++ ${LDFLAGS} ${OBJS} -o $@
 
 build/%.o: %.cpp ${HEADERS} ${DEPENDS}
-	g++ -c ${CPPFLAGS} ${CXXFLAGS} $< -o $@
+	g++ -std=c++11 -c ${CPPFLAGS} ${CXXFLAGS} $< -o $@
 
 clean:
 	rm -rf build franklin-cdriver

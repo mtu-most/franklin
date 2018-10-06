@@ -25,6 +25,7 @@
 #include <linux/memfd.h>
 #include <sys/syscall.h>
 #include <poll.h>
+#include <cmath>
 
 #ifndef memfd_create
 #define memfd_create(...) syscall(SYS_memfd_create, __VA_ARGS__)

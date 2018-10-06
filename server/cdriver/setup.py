@@ -26,6 +26,7 @@ cdrivermodule = Extension('cdriver',
 		],
 		define_macros = macros,
 		language = 'c++',
+		extra_compile_args = ['-std=c++11'],
 	)
 
 setup(name = 'cdriver',
