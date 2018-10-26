@@ -105,8 +105,14 @@ struct Parser { // {{{
 	void flush_pending();
 	void add_curve(Record *P, double *start, double *end, double *B, double v0, double v1, double f, double r);
 	void add_record(RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double Bx = 0, double By = 0, double Bz = 0, double e = NAN, double v0 = INFINITY, double v1 = INFINITY, double radius = INFINITY);
+	void reset_pending_pos();
 	// }}}
 }; // }}}
+
+void Parser::reset_pending_pos() { // {{{
+	pending.pop_front();
+	pending.push_front(Record(false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, unsigned(current_tool) < epos.size() ? epos[current_tool] : NAN));
+} // }}}
 
 bool Parser::get_chunk(Chunk &ret, std::string &comment) { // {{{
 	// Clear type so a premature return will also have an empty value.
@@ -150,7 +156,7 @@ bool Parser::get_chunk(Chunk &ret, std::string &comment) { // {{{
 	return true;
 } // }}}
 
-void Parser::handle_coordinate(double value, int index, bool *controlled, bool rel) {
+void Parser::handle_coordinate(double value, int index, bool *controlled, bool rel) { // {{{
 	if (std::isnan(value))
 		return;
 	if (std::isnan(pos[index])) {
@@ -158,7 +164,7 @@ void Parser::handle_coordinate(double value, int index, bool *controlled, bool r
 		rel = false;
 	}
 	pos[index] = (rel ? pos[index] : 0) + value * unit;
-}
+} // }}}
 
 bool Parser::handle_command() { // {{{
 	// M6 is "tool change"; record that it happened and turn it into G28: park. {{{
@@ -240,6 +246,7 @@ bool Parser::handle_command() { // {{{
 				if (!controlled || (std::isnan(X) && std::isnan(Y) && std::isnan(Z))) {
 					flush_pending();
 					add_record(RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], epos[current_tool], current_f[code == 0 ? 0 : 1]);
+					reset_pending_pos();
 					break;
 				}
 				if (code != 81) {
@@ -386,6 +393,7 @@ bool Parser::handle_command() { // {{{
 			add_record(RUN_PARK);
 			for (unsigned i = 0; i < pos.size(); ++i)
 				pos[i] = NAN;
+			reset_pending_pos();
 			break;
 		case 64:
 		{
@@ -421,6 +429,7 @@ bool Parser::handle_command() { // {{{
 				epos[current_tool] = arg.num;
 				flush_pending();
 				add_record(RUN_SETPOS, current_tool, NAN, NAN, NAN, NAN, NAN, NAN, arg.num);
+				reset_pending_pos();
 			}
 			break;
 		case 94:
@@ -690,6 +699,8 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	epos.push_back(0);
 	current_f[0] = INFINITY;
 	current_f[1] = INFINITY;
+	// Pending initial state contains the current position.
+	pending.push_front(Record(false, 0, NAN, NAN, NAN, NAN, NAN, NAN, INFINITY, NAN));
 	max_dev = max_deviation;
 	for (int i = 0; i < 6; ++i) {
 		pos.push_back(NAN);
@@ -792,9 +803,8 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 } // }}}
 
 void Parser::flush_pending() { // {{{
-	if (pending.size() == 0)
+	if (pending.size() <= 1)
 		return;
-	pending.push_front(pending.front());
 	pending.push_back(pending.back());
 	pending.begin()->s[0] = 0;
 	pending.begin()->s[1] = 0;
@@ -933,10 +943,9 @@ void Parser::flush_pending() { // {{{
 		++P2;
 	}
 	// Turn Records into Run_Records and write them out.  Ignore fake first and last record.
-	Record P0 = pending.front();
-	pending.pop_front();
-	while (!pending.empty()) {
-		P1 = pending.begin();
+	auto P0 = pending.begin();
+	while (pending.size() > 1) {
+		P1 = ++pending.begin();
 		if (P1->arc) {
 			// TODO: support arcs.
 			// TODO: Update time+dist.
@@ -947,46 +956,46 @@ void Parser::flush_pending() { // {{{
 			// TODO: support abc again.
 			//if (((!std::isnan(old_p.a) || !std::isnan(p.a)) && old_p.a != p.a) || ((!std::isnan(old_p.b) || !std::isnan(p.b)) && old_p.b != p.b) || ((!std::isnan(old_p.c) || !std::isnan(p.c)) && old_p.c != p.c))
 			//	add_record(RUN_PRE_LINE, p.tool, p.a, p.b, p.c);
-			double r = P0.v1 * P0.v1 / max_a;
-			double d = r * P0.k;
-			double ANL = P0.length;
-			double CNL = P0.C * r;
+			double r = P0->v1 * P0->v1 / max_a;
+			double d = r * P0->k;
+			double ANL = P0->length;
+			double CNL = P0->C * r;
 			double AC = ANL - CNL;
-			double BC = abs(P0.v1 * P0.v1 - P0.f * P0.f) / (2 * max_a * max_a);
-			//debug("AC %f BC %f ANL %f CNL %f v1 %f r %f f %f max a %f", AC, BC, ANL, CNL, P0.v1, r, P0.f, max_a);
+			double BC = abs(P0->v1 * P0->v1 - P0->f * P0->f) / (2 * max_a * max_a);
+			//debug("AC %f BC %f ANL %f CNL %f v1 %f r %f f %f max a %f", AC, BC, ANL, CNL, P0->v1, r, P0->f, max_a);
 			double AB = AC - BC;
 			double CD = acos((r - d / 2) / r) * r;
-			double DEF = (M_PI / 2 - P0.theta / 2) * r + CD;
+			double DEF = (M_PI / 2 - P0->theta / 2) * r + CD;
 			double AEF = AC + CD + DEF;
 
 			double LK = P1->length;
-			double LI = P0.C / max_a * P0.v1 * P0.v1;
+			double LI = P0->C / max_a * P0->v1 * P0->v1;
 			double IK = LK - LI;
-			double IJ = abs(P0.v1 * P0.v1 - P1->f * P1->f) / (2 * max_a * max_a);
+			double IJ = abs(P0->v1 * P0->v1 - P1->f * P1->f) / (2 * max_a * max_a);
 			double JK = IK - IJ;
 			double FGH = DEF;
 			double FGK = FGH + CD + IK;
 
 			double A[3], B[3], C[3], D[3], E[3], F[3], G[3], H[3], I[3], J[3], K[3], M[3], N[3], N2[3], DE[3], DF[3], FH[3], GH[3], M_DE[3], M_DF[3], M_FH[3], M_GH[3];
-			double X0[3] = { P0.x - P0.s[0], P0.y - P0.s[1], P0.z - P0.s[2] };
-			double X1[3] = { P0.x, P0.y, P0.z };
+			double X0[3] = { P0->x - P0->s[0], P0->y - P0->s[1], P0->z - P0->s[2] };
+			double X1[3] = { P0->x, P0->y, P0->z };
 			double X2[3] = { P1->x, P1->y, P1->z };
 			double l_MDE = 0, l_MDF = 0, l_MFH = 0, l_MGH = 0;
 			for (int i = 0; i < 3; ++i) {
 				A[i] = (X0[i] + X1[i]) / 2;
-				B[i] = A[i] + P0.unit[i] * AB;
-				C[i] = A[i] + P0.unit[i] * AC;
-				N[i] = X1[i] - P0.unit[i] * std::cos(P0.theta / 2) * (r + d);
-				M[i] = N[i] - P0.nnAL[i] * (r - d);
-				E[i] = M[i] + P0.nnAL[i] * r;
+				B[i] = A[i] + P0->unit[i] * AB;
+				C[i] = A[i] + P0->unit[i] * AC;
+				N[i] = X1[i] - P0->unit[i] * std::cos(P0->theta / 2) * (r + d);
+				M[i] = N[i] - P0->nnAL[i] * (r - d);
+				E[i] = M[i] + P0->nnAL[i] * r;
 				D[i] = (C[i] + E[i]) / 2;
 				F[i] = M[i] + (r + d < 1e-10 ? 0 : (X1[i] - M[i]) * r / (r + d));
 
 				K[i] = (X1[i] + X2[i]) / 2;
 				J[i] = K[i] - P1->unit[i] * JK;
 				I[i] = K[i] - P1->unit[i] * IK;
-				N2[i] = X1[i] + P1->unit[i] * std::cos(P0.theta / 2) * (r + d);
-				G[i] = N2[i] + P0.nnLK[i] * d;
+				N2[i] = X1[i] + P1->unit[i] * std::cos(P0->theta / 2) * (r + d);
+				G[i] = N2[i] + P0->nnLK[i] * d;
 				H[i] = (G[i] + I[i]) / 2;
 
 				// Use DE and GE, not CD and HI, because they are easier to compute.
@@ -1016,11 +1025,11 @@ void Parser::flush_pending() { // {{{
 				Bb[i] = M[i] + r * M_FH[i] - FH[i];
 				Bb_[i] = -(M[i] + r * M_GH[i] - GH[i]);
 			}
-			/*debug("v %f %f %f", P0.f, P0.v1, P1->f);
-			debug("C %f AB %f k %f theta %f", P0.C, AB, P0.k, P0.theta * 180 / M_PI);
-			debug("nnAL %f %f %f", P0.nnAL[0], P0.nnAL[1], P0.nnAL[2]);
-			debug("nnLK %f %f %f", P0.nnLK[0], P0.nnLK[1], P0.nnLK[2]);
-			debug("unit0 %f %f %f", P0.unit[0], P0.unit[1], P0.unit[2]);
+			/*debug("v %f %f %f", P0->f, P0->v1, P1->f);
+			debug("C %f AB %f k %f theta %f", P0->C, AB, P0->k, P0->theta * 180 / M_PI);
+			debug("nnAL %f %f %f", P0->nnAL[0], P0->nnAL[1], P0->nnAL[2]);
+			debug("nnLK %f %f %f", P0->nnLK[0], P0->nnLK[1], P0->nnLK[2]);
+			debug("unit0 %f %f %f", P0->unit[0], P0->unit[1], P0->unit[2]);
 			debug("unit1 %f %f %f", P1->unit[0], P1->unit[1], P1->unit[2]);
 			debug("A %f %f %f", A[0], A[1], A[2]);
 			debug("B %f %f %f", B[0], B[1], B[2]);
@@ -1029,17 +1038,17 @@ void Parser::flush_pending() { // {{{
 			debug("E %f %f %f", E[0], E[1], E[2]);
 			debug("F %f %f %f", F[0], F[1], F[2]);
 			debug("M %f %f %f", M[0], M[1], M[2]);*/
-			add_curve(&P0, A, B, NULL, P0.f, P0.f, AB / AEF, INFINITY);
-			add_curve(&P0, B, C, NULL, P0.f, P0.v1, AC / AEF, INFINITY);
-			add_curve(&P0, C, D, Ba_, P0.v1, P0.v1, (AC + CD) / AEF, -r);
-			add_curve(&P0, D, F, Ba, P0.v1, P0.v1, 1, r);
-			add_curve(&*P1, F, H, Bb, P0.v1, P0.v1, FGH / FGK, r);
-			add_curve(&*P1, H, I, Bb_, P0.v1, P0.v1, (FGH + CD) / FGK, -r);
-			add_curve(&*P1, I, J, NULL, P0.v1, P1->f, (FGH + CD + IJ) / FGK, INFINITY);
+			add_curve(&*P0, A, B, NULL, P0->f, P0->f, AB / AEF, INFINITY);
+			add_curve(&*P0, B, C, NULL, P0->f, P0->v1, AC / AEF, INFINITY);
+			add_curve(&*P0, C, D, Ba_, P0->v1, P0->v1, (AC + CD) / AEF, -r);
+			add_curve(&*P0, D, F, Ba, P0->v1, P0->v1, 1, r);
+			add_curve(&*P1, F, H, Bb, P0->v1, P0->v1, FGH / FGK, r);
+			add_curve(&*P1, H, I, Bb_, P0->v1, P0->v1, (FGH + CD) / FGK, -r);
+			add_curve(&*P1, I, J, NULL, P0->v1, P1->f, (FGH + CD + IJ) / FGK, INFINITY);
 			add_curve(&*P1, J, K, NULL, P1->f, P1->f, .5, INFINITY);
 			// Update time+dist.
 			double dist = 0;
-			double dists[3] = {P1->x - P0.x, P1->y - P0.y, P1->z - P0.z};
+			double dists[3] = {P1->x - P0->x, P1->y - P0->y, P1->z - P0->z};
 			for (int i = 0; i < 3; ++i) {
 				double dst = dists[i] * dists[i];
 				if (!std::isnan(dst))
@@ -1074,7 +1083,7 @@ void Parser::flush_pending() { // {{{
 			if (!(P1->z < bbox[5]))
 				bbox[5] = P1->z;
 		}
-		P0 = *P1;
+		++P0;
 		pending.pop_front();
 	}
 } // }}}
