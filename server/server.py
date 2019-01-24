@@ -113,9 +113,10 @@ config = fhs.init(packagename = 'franklin', config = {
 		'predetect': 'stty -F $PORT raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',	# What to do to a port before detecting a machine.
 		'controller': '/usr/lib/franklin/controller.py --dev "$PORT"',	# How to start a controller subprocess
 		'allow-system': '^$',	# Which commands are allowed through system comments in G-Code.
-		'admin': '',	# Admin password; defaults to expert password.
-		'expert': '',	# Expert password; defaults to user password.
-		'user': '',	# User password; defaults to no password.
+		'admin': '',	# Admin password.
+		'expert': '',	# Expert password.
+		'user': '',	# User password.
+		'remote': '',	# Remote password.
 		'done': '',	# Program to run when a job is done.
 		'log': '',	# Enable logging to a given logfile.
 		'tls': 'False',	# Whether TLS is used on the network connection.  If using Apache's virtual proxy method, this must be False, because Apache handles the encryption.
@@ -139,16 +140,34 @@ class Server(websocketd.RPChttpd): # {{{
 				path = path[:-len(extra)]
 		if path.endswith('/benjamin'):
 			connection.data['role'] = 'benjamin'
-			connection.data['pwd'] = config['admin'] or config['expert'] or config['user']
+			escalate = ()
+			down = ('admin', 'expert', 'user', 'remote',)
 		elif path.endswith('/admin'):
 			connection.data['role'] = 'admin'
-			connection.data['pwd'] = config['admin'] or config['expert'] or config['user']
+			escalate = ()
+			down = ('expert', 'user', 'remote',)
 		elif path.endswith('/expert'):
 			connection.data['role'] = 'expert'
-			connection.data['pwd'] = config['expert'] or config['user']
-		else:
+			escalate = ('admin',)
+			down = ('user', 'remote',)
+		elif path.endswith('/user'):
 			connection.data['role'] = 'user'
-			connection.data['pwd'] = config['user']
+			escalate = ('expert', 'admin',)
+			down = ('remote',)
+		else:
+			connection.data['role'] = 'remote'
+			escalate = ('user', 'expert', 'admin',)
+			down = ()
+		for role in escalate:
+			if config[role]:
+				break
+			connection.data['role'] = role
+		connection.data['pwd'] = config[connection.data['role'] if connection.data['role'] != 'benjamin' else 'admin']
+		if not connection.data['pwd']:
+			for role in down:
+				if config[role]:
+					connection.data['pwd'] = config[role]
+					break
 		return 'Please identify yourself for %s access' % connection.data['role'] if connection.data['pwd'] else None
 	def authenticate(self, connection):
 		if ':' in connection.data['pwd']:

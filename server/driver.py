@@ -345,7 +345,7 @@ class Machine: # {{{
 		self.audioqueue = {}
 		self._refresh_queue()
 		try:
-			self.load(update = False)
+			self.user_load(update = False)
 		except:
 			log('Failed to import initial settings')
 			traceback.print_exc()
@@ -382,7 +382,7 @@ class Machine: # {{{
 			self.command_buffer = self.command_buffer[pos + 1:]
 			try:
 				#log('command: %s(%s %s)' % (func, a, ka))
-				assert not any(func.startswith(x + '_') for x in ('benjamin', 'admin', 'expert', 'user'))
+				assert not any(func.startswith(x + '_') for x in ('benjamin', 'admin', 'expert', 'user', 'remote'))
 				role = a.pop(0) + '_'
 				if hasattr(self, role + func):
 					func = role + func
@@ -390,6 +390,8 @@ class Machine: # {{{
 					func = 'admin_' + func
 				elif role in ('benjamin_', 'admin_') and hasattr(self, 'expert_' + func):
 					func = 'expert_' + func
+				elif role in ('benjamin_', 'admin_', 'expert_') and hasattr(self, 'user_' + func):
+					func = 'user_' + func
 				ret = getattr(self, func)(*a, **ka)
 				if isinstance(ret, tuple) and len(ret) == 2 and ret[0] is WAIT:
 					# The function blocks; it will send its own reply later.
@@ -499,9 +501,9 @@ class Machine: # {{{
 		elif cmd['type'] == 'confirm':
 			if cmd['tool-changed'] and self.probemap is not None:
 				self.probe_pending = True
-			call_queue.append((self.request_confirmation(cmd['message'] or 'Continue?')[1], (False,)))
+			call_queue.append((self.user_request_confirmation(cmd['message'] or 'Continue?')[1], (False,)))
 		elif cmd['type'] == 'park':
-			call_queue.append((self.park(cb = cdriver.resume, abort = False)[1], (None,)))
+			call_queue.append((self.user_park(cb = cdriver.resume, abort = False)[1], (None,)))
 		elif cmd['type'] == 'file-done':
 			call_queue.append((self._job_done, (True, 'completed')))
 		elif cmd['type'] == 'pinname':
@@ -522,13 +524,13 @@ class Machine: # {{{
 				for i, t in enumerate(self.temps):
 					t.write()
 					# Disable heater.
-					self.settemp(i, float('nan'), update = False)
+					self.user_settemp(i, float('nan'), update = False)
 					# Disable heater alarm.
-					self.waittemp(i, None, None)
+					self.user_waittemp(i, None, None)
 				for i, g in enumerate(self.gpios):
 					g.write()
 				# The machine may still be doing things.  Pause it and send a move; this will discard the queue.
-				self.pause(True, False, update = False)
+				self.user_pause(True, False, update = False)
 				if self.spi_setup:
 					self._spi_send(self.spi_setup)
 				self.connected = True
@@ -682,12 +684,12 @@ class Machine: # {{{
 	def _finish_done(self): # {{{
 		if self.cool_after_job:
 			for t in range(len(self.temps)):
-				self.settemp(t, float('nan'))
+				self.user_settemp(t, float('nan'))
 		def maybe_sleep():
 			if self.sleep_after_job:
-				self.sleep()
+				self.user_sleep()
 		if self.park_after_job:
-			self.park(cb = maybe_sleep)[1](None)
+			self.user_park(cb = maybe_sleep)[1](None)
 		else:
 			maybe_sleep()
 	# }}}
@@ -822,10 +824,10 @@ class Machine: # {{{
 			# Initial call; start homing.
 			self.home_phase = 1
 			# If it is currently moving, doing the things below without pausing causes stall responses.
-			self.pause(True, False)
-			self.sleep(False)
+			self.user_pause(True, False)
+			self.user_sleep(False)
 			for i, e in enumerate(self.spaces[1].axis):
-				self.set_axis_pos(1, i, 0)
+				self.user_set_axis_pos(1, i, 0)
 			self.home_limits = [(a['min'], a['max']) for a in self.spaces[0].axis]
 			for a, ax in enumerate(self.spaces[0].axis):
 				self.expert_set_axis((0, a), min = float('-inf'), max = float('inf'))
@@ -836,7 +838,7 @@ class Machine: # {{{
 				if self._pin_valid(mtr['limit_min_pin']) or self._pin_valid(mtr['limit_max_pin']):
 					n.add(mtr['home_order'])
 				else:
-					self.set_axis_pos(0, m, 0)
+					self.user_set_axis_pos(0, m, 0)
 			if len(n) == 0:
 				self.home_phase = 4
 			else:
@@ -863,7 +865,7 @@ class Machine: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("home phase %d target %s" % (self.home_phase, self.home_target))
-				self.line(self.home_target, v = home_v, single = True, force = True)[1](None)
+				self.user_line(self.home_target, v = home_v, single = True, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 2:
@@ -886,7 +888,7 @@ class Machine: # {{{
 				dist = abs(self.home_target[k] - self.spaces[0].get_current_pos(k))
 				if dist > 0:
 					#log("home phase %d target %s" % (self.home_phase, self.home_target))
-					self.line(self.home_target, v = home_v, single = True, force = True)[1](None)
+					self.user_line(self.home_target, v = home_v, single = True, force = True)[1](None)
 					return
 				# Fall through.
 			if len(self.home_target) > 0:
@@ -997,7 +999,7 @@ class Machine: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("home phase %d target %s" % (self.home_phase, self.home_target))
-				self.line(self.home_target, single = True, force = True)[1](None)
+				self.user_line(self.home_target, single = True, force = True)[1](None)
 				return
 			'''
 			# Fall through.
@@ -1017,7 +1019,7 @@ class Machine: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 					#log("home phase %d target %s" % (self.home_phase, target))
-				self.line(target, force = True)[1](None)
+				self.user_line(target, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 5:
@@ -1036,7 +1038,7 @@ class Machine: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("home phase %d target %s" % (self.home_phase, target))
-				self.line(target, force = True)[1](None)
+				self.user_line(target, force = True)[1](None)
 				#log('movecb: ' + repr(self.movecb))
 				return
 			# Fall through.
@@ -1057,16 +1059,16 @@ class Machine: # {{{
 			return
 		pos = self.get_axis_pos(0)
 		cdriver.adjust_probe(pos[0], pos[1], pos[2] + self.zoffset)
-		self.probe_cb[1] = lambda good: self.request_confirmation("Continue?")[1](False) if good is not None else None
+		self.probe_cb[1] = lambda good: self.user_request_confirmation("Continue?")[1](False) if good is not None else None
 		self.movecb.append(self.probe_cb)
-		self.line({2: self.probe_safe_dist}, relative = True)[1](None)
+		self.user_line({2: self.probe_safe_dist}, relative = True)[1](None)
 	# }}}
 	def _one_probe(self): # {{{
 		self.probe_cb[1] = self._handle_one_probe
 		self.movecb.append(self.probe_cb)
 		z = self.get_axis_pos(0, 2)
 		z_low = self.spaces[0].axis[2]['min']
-		self.line({2: z_low}, f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)[1](None)
+		self.user_line({2: z_low}, f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)[1](None)
 	# }}}
 	def _do_probe(self, id, x, y, z, phase = 0, good = True): # {{{
 		#log('probe %d %s' % (phase, good))
@@ -1081,7 +1083,7 @@ class Machine: # {{{
 			return
 		self.probing = True
 		if not self.position_valid:
-			self.home(cb = lambda: self._do_probe(id, x, y, z, phase, True), abort = False)[1](None)
+			self.user_home(cb = lambda: self._do_probe(id, x, y, z, phase, True), abort = False)[1](None)
 			return
 		p = self.probemap
 		if phase == 0:
@@ -1102,17 +1104,17 @@ class Machine: # {{{
 			px = p[0][2] + p[0][4] * x / p[1][0]
 			py = p[0][3] + p[0][5] * y / p[1][1]
 			log(repr((p, px, py, x, y, self.gcode_angle)))
-			self.line([p[0][0] + px * self.gcode_angle[1] - py * self.gcode_angle[0], p[0][1] + py * self.gcode_angle[1] + px * self.gcode_angle[0]])[1](None)
+			self.user_line([p[0][0] + px * self.gcode_angle[1] - py * self.gcode_angle[0], p[0][1] + py * self.gcode_angle[1] + px * self.gcode_angle[0]])[1](None)
 		elif phase == 1:
 			# Probe
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 2, good)
 			if self._pin_valid(self.probe_pin):
 				self.movecb.append(self.probe_cb)
 				z_low = self.spaces[0].axis[2]['min']
-				self.line({2: z_low}, f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)[1](None)
+				self.user_line({2: z_low}, f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)[1](None)
 			else:
 				#log('confirm probe')
-				self.request_confirmation('Please move the tool to the surface')[1](False)
+				self.user_request_confirmation('Please move the tool to the surface')[1](False)
 		else:
 			# Record result
 			if good:
@@ -1140,7 +1142,7 @@ class Machine: # {{{
 			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 0, good)
 			self.movecb.append(self.probe_cb)
 			# Retract
-			self.line({2: z})[1](None)
+			self.user_line({2: z})[1](None)
 	# }}}
 	def _check_probemap(self): # {{{
 		'''Check the probemap, and save it if it is valid; discard it otherwise.
@@ -1191,12 +1193,12 @@ class Machine: # {{{
 	def _start_job(self, paused): # {{{
 		# Set all extruders to 0.
 		for i, e in enumerate(self.spaces[1].axis):
-			self.set_axis_pos(1, i, 0)
+			self.user_set_axis_pos(1, i, 0)
 		def cb():
 			#log('start job %s' % self.job_current)
 			self._gcode_run(self.job_current, abort = False, paused = paused)
 		if not self.position_valid:
-			self.park(cb = cb, abort = False)[1](None)
+			self.user_park(cb = cb, abort = False)[1](None)
 		else:
 			cb()
 		self.gcode_id = None
@@ -1215,13 +1217,13 @@ class Machine: # {{{
 		self.queue_info = None
 		# Disable all alarms.
 		for i in range(len(self.temps)):
-			self.waittemp(i, None, None)
+			self.user_waittemp(i, None, None)
 		self.paused = paused
 		self._globals_update()
-		self.sleep(False)
+		self.user_sleep(False)
 		if len(self.spaces) > 1:
 			for e in range(len(self.spaces[1].axis)):
-				self.set_axis_pos(1, e, 0)
+				self.user_set_axis_pos(1, e, 0)
 		filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', src + os.extsep + 'bin'), text = False, opened = False)
 		self.total_time = self.jobqueue[src][-2:]
 		self.gcode_fd = os.open(filename, os.O_RDONLY)
@@ -1253,7 +1255,7 @@ class Machine: # {{{
 			for a, pos in enumerate(sp):
 				# Assume motor[a] corresponds to axis[a] if it exists.
 				if len(self.spaces[i].motor) > a and not self._pin_valid(self.spaces[i].motor[a]['limit_max_pin']) and not self._pin_valid(self.spaces[i].motor[a]['limit_min_pin']):
-					self.set_axis_pos(i, a, pos)
+					self.user_set_axis_pos(i, a, pos)
 	# }}}
 	def _pin_valid(self, pin):	# {{{
 		return (pin & 0x100) != 0
@@ -1597,11 +1599,11 @@ class Machine: # {{{
 				self._send(id, 'return', w)
 		self.movecb.append((False, cb))
 		if self.flushing is not True:
-			self.line()[1](None)
+			self.user_line()[1](None)
 		#log('end flush preparation')
 	# }}}
 	@delayed
-	def probe(self, id, area, speed = 3.): # {{{
+	def user_probe(self, id, area, speed = 3.): # {{{
 		'''Run a probing routine.
 		This moves over the given area and probes a grid of points less
 		than max_probe_distance apart.
@@ -1631,7 +1633,7 @@ class Machine: # {{{
 		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2))
 	# }}}
 	@delayed
-	def line(self, id, moves = (), e = None, tool = None, v = None, relative = False, probe = False, single = False, force = False): # {{{
+	def user_line(self, id, moves = (), e = None, tool = None, v = None, relative = False, probe = False, single = False, force = False): # {{{
 		'''Move the tool in a straight line; return when done.
 		'''
 		if not force and self.home_phase is not None and not self.paused:
@@ -1648,13 +1650,13 @@ class Machine: # {{{
 			pass
 		self.wait_for_cb()[1](id)
 	# }}}
-	def move_target(self, dx, dy): # {{{
+	def user_move_target(self, dx, dy): # {{{
 		'''Move the target position.
 		Using this function avoids a round trip to the driver.
 		'''
-		self.set_globals(targetx = self.targetx + dx, targety = self.targety + dy)
+		self.user_set_globals(targetx = self.targetx + dx, targety = self.targety + dy)
 	# }}}
-	def sleep(self, sleeping = True, update = True, force = False): # {{{
+	def user_sleep(self, sleeping = True, update = True, force = False): # {{{
 		'''Put motors to sleep, or wake them up.
 		'''
 		if sleeping:
@@ -1665,7 +1667,7 @@ class Machine: # {{{
 				self._globals_update()
 		cdriver.sleep(sleeping)
 	# }}}
-	def settemp(self, channel, temp, update = True): # {{{
+	def user_settemp(self, channel, temp, update = True): # {{{
 		'''Set target temperature.
 		'''
 		channel = int(channel)
@@ -1674,9 +1676,9 @@ class Machine: # {{{
 			self._temp_update(channel)
 		cdriver.settemp(channel, temp + C0 if not math.isnan(self.temps[channel].beta) else temp)
 		if self.gcode_waiting > 0 and any(channel == x[0] for x in self.tempcb):
-			self.waittemp(channel, temp)
+			self.user_waittemp(channel, temp)
 	# }}}
-	def waittemp(self, channel, min, max = None): # {{{
+	def user_waittemp(self, channel, min, max = None): # {{{
 		'''Set temperature alarm values.
 		Note that this function returns immediately; it does not wait
 		for the temperature to be reached.
@@ -1718,7 +1720,7 @@ class Machine: # {{{
 		'''
 		return cdriver.pin_value(pin)
 	# }}}
-	def load(self, profile = None, update = True): # {{{
+	def user_load(self, profile = None, update = True): # {{{
 		'''Load a profile.
 		'''
 		filenames = fhs.read_data(os.path.join(self.uuid, 'profiles', ((profile and profile.strip()) or self.profile) + os.extsep + 'ini'), opened = False, multiple = True)
@@ -1775,19 +1777,19 @@ class Machine: # {{{
 			f.write(self.name + '\n')
 			f.write(profile + '\n')
 	# }}}
-	def abort(self): # {{{
+	def user_abort(self): # {{{
 		'''Abort the current job.
 		'''
 		for t, temp in enumerate(self.temps):
-			self.settemp(t, float('nan'))
-		self.pause(store = False)
+			self.user_settemp(t, float('nan'))
+		self.user_pause(store = False)
 		for g, gpio in enumerate(self.gpios):
-			self.set_gpio(g, state = gpio.reset)
+			self.user_set_gpio(g, state = gpio.reset)
 		self._job_done(False, 'aborted by user')
 		# Sleep doesn't work as long as home_phase is non-None, so do it after _job_done.
-		self.sleep(force = True)
+		self.user_sleep(force = True)
 	# }}}
-	def pause(self, pausing = True, store = True, update = True): # {{{
+	def user_pause(self, pausing = True, store = True, update = True): # {{{
 		'''Pause or resume the machine.
 		'''
 		was_paused = self.paused
@@ -1802,7 +1804,7 @@ class Machine: # {{{
 				# First reset all axes that don't have a limit switch.
 				if self.queue_info is not None:
 					self._reset_extruders(self.queue_info[1])
-					self.line(self.queue_info[1])[1](None)
+					self.user_line(self.queue_info[1])[1](None)
 				# TODO: adjust extrusion of current segment to shorter path length.
 				#log('resuming')
 				self.resuming = True
@@ -1855,7 +1857,7 @@ class Machine: # {{{
 		return cdriver.queued(False)
 	# }}}
 	@delayed
-	def home(self, id, speed = 5, cb = None, abort = True): # {{{
+	def user_home(self, id, speed = 5, cb = None, abort = True): # {{{
 		'''Recalibrate the position with its limit switches.
 		'''
 		if self.home_phase is not None and not self.paused:
@@ -1874,7 +1876,7 @@ class Machine: # {{{
 		self._do_home()
 	# }}}
 	@delayed
-	def park(self, id, cb = None, abort = True, order = 0, aborted = False): # {{{
+	def user_park(self, id, cb = None, abort = True, order = 0, aborted = False): # {{{
 		'''Go to the park position.
 		Home first if the position is unknown.
 		'''
@@ -1888,7 +1890,7 @@ class Machine: # {{{
 		self.parking = True
 		if not self.position_valid:
 			#log('homing')
-			self.home(cb = lambda: self.park(cb, abort = False)[1](id), abort = False)[1](None)
+			self.user_home(cb = lambda: self.user_park(cb, abort = False)[1](id), abort = False)[1](None)
 			return
 		next_order = None
 		topark = [a['park_order'] for a in self.spaces[0].axis if not math.isnan(a['park']) and a['park_order'] >= order]
@@ -1903,19 +1905,19 @@ class Machine: # {{{
 					if id is not None:
 						self._send(id, 'return', None)
 				self.movecb.append((False, wrap_cb))
-				self.line()[1](None)
+				self.user_line()[1](None)
 			else:
 				if id is not None:
 					self._send(id, 'return', None)
 			return
 		#log('not done parking: ' + repr((next_order)))
-		self.movecb.append((False, lambda done: self.park(cb, abort = False, order = next_order + 1, aborted = not done)[1](id)))
-		self.line([a['park'] - (0 if ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(self.spaces[0].axis)])[1](None)
+		self.movecb.append((False, lambda done: self.user_park(cb, abort = False, order = next_order + 1, aborted = not done)[1](id)))
+		self.user_line([a['park'] - (0 if ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(self.spaces[0].axis)])[1](None)
 	# }}}
 	@delayed
 	def benjamin_audio_play(self, id, name, motor = 2): # {{{
 		self.audio_id = id
-		self.sleep(False)
+		self.user_sleep(False)
 		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
 		cdriver.run_file(filename.encode('utf-8'), b'', 1, 0, 0, motor, 0)
 	# }}}
@@ -1964,7 +1966,7 @@ class Machine: # {{{
 		else:
 			self.tempcb.append((which, cb))
 	# }}}
-	def clear_alarm(self, which = None): # {{{
+	def user_clear_alarm(self, which = None): # {{{
 		'''Disable a temp alarm.
 		If which is None, disable all temp alarms.
 		'''
@@ -1982,7 +1984,7 @@ class Machine: # {{{
 			return self.limits[space][motor]
 		return None
 	# }}}
-	def clear_limits(self):	# {{{
+	def user_clear_limits(self):	# {{{
 		'''Clear all recorded limits.
 		'''
 		for s in range(len(self.spaces)):
@@ -2021,7 +2023,7 @@ class Machine: # {{{
 		The filename is ignored.
 		'''
 		self._broadcast(None, 'blocked', 'importing settings')
-		self.sleep(update = update)
+		self.user_sleep(update = update)
 		section = 'general'
 		index = None
 		obj = None
@@ -2182,7 +2184,7 @@ class Machine: # {{{
 		return ', '.join('%s (%s)' % (msg, ln) for ln, msg in self.expert_import_settings(open(filename).read(), name))
 	# }}}
 	@delayed
-	def gcode_run(self, id, code, paused = False): # {{{
+	def user_gcode_run(self, id, code, paused = False): # {{{
 		'''Run a string of g-code.
 		'''
 		with fhs.write_temp(text = False) as f:
@@ -2194,7 +2196,7 @@ class Machine: # {{{
 			return ret
 	# }}}
 	@delayed
-	def request_confirmation(self, id, message): # {{{
+	def user_request_confirmation(self, id, message): # {{{
 		'''Wait for confirmation.
 		The return value is True if confirmation is given, False if
 		not.
@@ -2226,7 +2228,7 @@ class Machine: # {{{
 			return
 		self.confirm_waits.add(id)
 	# }}}
-	def confirm(self, confirm_id, success = True): # {{{
+	def user_confirm(self, confirm_id, success = True): # {{{
 		'''Respond to a confirmation request.
 		If confirm_id is not None, it must be equal to the current id
 		or the confirmation is ignored.
@@ -2302,7 +2304,7 @@ class Machine: # {{{
 		self._refresh_queue()
 	# }}}
 	@delayed
-	def queue_run(self, id, name, paused = False): # {{{
+	def user_queue_run(self, id, name, paused = False): # {{{
 		'''Start a new job.
 		'''
 		if self.probing:
@@ -2371,7 +2373,7 @@ class Machine: # {{{
 			return 0, 0
 		return cdriver.tp_getpos(), self.gcode_num_records
 	# }}}
-	def tp_set_position(self, position): # {{{
+	def user_tp_set_position(self, position): # {{{
 		'''Set current toolpath position.
 		It is an error to call this function while not paused.
 		@param position: new toolpath position.
@@ -2458,7 +2460,7 @@ class Machine: # {{{
 		self._write_globals(nt, ng, update = update)
 		assert len(ka) == 0
 	# }}}
-	def set_globals(self, update = True, **ka): # {{{
+	def user_set_globals(self, update = True, **ka): # {{{
 		real_ka = {}
 		for key in ('feedrate', 'targetx', 'targety', 'targetangle', 'zoffset'):
 			if key in ka:
@@ -2477,7 +2479,7 @@ class Machine: # {{{
 		else:
 			return self.spaces[space].get_current_pos(axis)
 	# }}}
-	def set_axis_pos(self, space, axis, pos): # {{{
+	def user_set_axis_pos(self, space, axis, pos): # {{{
 		if space >= len(self.spaces) or (axis is not None and axis >= len(self.spaces[space].axis)):
 			log('request to set invalid axis position %d %d' % (space, axis))
 			return False
@@ -2593,7 +2595,7 @@ class Machine: # {{{
 		if len(ka) != 0:
 			log('invalid input ignored: %s' % repr(ka))
 		if space == 0 and current_pos is not None and not all(math.isnan(x) for x in current_pos) and (self.paused or (self.home_phase is None and not self.gcode_file and self.gcode_map is None)):
-			self.line(current_pos)[1](None)
+			self.user_line(current_pos)[1](None)
 		#else:
 		#	log(repr(('not going to pos:', current_pos, self.paused, self.home_phase, self.gcode_file, self.gcode_map)))
 	# }}}
@@ -2648,7 +2650,7 @@ class Machine: # {{{
 					self._space_update(2)
 		assert len(ka) == 0
 		if not math.isnan(current_pos) and (self.paused or (self.home_phase is None and not self.gcode_file and self.gcode_map is None)):
-			self.line({motor: current_pos})[1](None)
+			self.user_line({motor: current_pos})[1](None)
 	# }}}
 	# }}}
 	# Temp {{{
@@ -2671,7 +2673,7 @@ class Machine: # {{{
 			log('problem: %s' % repr(ka))
 		assert len(ka) == 0
 	# }}}
-	def set_temp(self, temp, update = True, **ka): # {{{
+	def user_set_temp(self, temp, update = True, **ka): # {{{
 		real_ka = {}
 		if 'fan_duty' in ka:
 			real_ka['fan_duty'] = ka.pop('fan_duty')
@@ -2711,7 +2713,7 @@ class Machine: # {{{
 			self._gpio_update(gpio)
 		assert len(ka) == 0
 	# }}}
-	def set_gpio(self, gpio, update = True, **ka): # {{{
+	def user_set_gpio(self, gpio, update = True, **ka): # {{{
 		real_ka = {}
 		if 'state' in ka:
 			real_ka['state'] = ka.pop('state')

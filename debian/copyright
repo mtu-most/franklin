@@ -1,7 +1,7 @@
-Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: most-reprap
 Upstream-Contact: Bas Wijnen <wijnen@debian.org>
-Source: https://github.com/mtu-most/most-reprap
+Source: https://github.com/mtu-most/franklin
 
 Files: *
 Copyright:

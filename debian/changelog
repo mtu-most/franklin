@@ -1,8 +1,12 @@
 franklin (0.2-1) UNRELEASED; urgency=medium
 
-  * New release.
+  * Update standards version to 4.3.0.
+  * Update copyright format link to https.
+  * Add remote user type.
+  * Escalate privileges to highest user without new password; use password from
+    less privileged user.
 
- -- Bas Wijnen <wijnen@debian.org>  Mon, 30 Nov 2015 11:23:00 -0500
+ -- Bas Wijnen <wijnen@debian.org>  Thu, 24 Jan 2019 11:00:25 +0100
 
 franklin (0.1-1) unstable; urgency=medium
 
