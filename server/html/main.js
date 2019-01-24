@@ -495,7 +495,8 @@ function port_changed() { // {{{
 		firmwares.AddElement('option').AddText(all_firmwares[port][o][1]).value = all_firmwares[port][o][0];
 } // }}}
 
-function detect(ports) { // {{{
+function detect() { // {{{
+	var ports = document.getElementById('ports');
 	var port = ports.options[ports.selectedIndex].value;
 	rpc.call('detect', [port], {}, null);
 } // }}}
@@ -1776,32 +1777,34 @@ function redraw_canvas(ui) { // {{{
 			c.rotate(ui.machine.targetangle);
 
 			c.beginPath();
-			for (var i = 0; i < b.length; ++i) {
-				if (b[i][0] != b[i][1] && b[i][2] != b[i][3]) {
-					// Draw job bounding box. {{{
-					c.rect(b[i][0], b[i][2], b[i][1] - b[i][0], b[i][3] - b[i][2]);
-					// }}}
+			if (b) {
+				for (var i = 0; i < b.length; ++i) {
+					if (b[i][0] != b[i][1] && b[i][2] != b[i][3]) {
+						// Draw job bounding box. {{{
+						c.rect(b[i][0], b[i][2], b[i][1] - b[i][0], b[i][3] - b[i][2]);
+						// }}}
 
-					// Draw tick marks. {{{
-					c.moveTo((b[i][1] + b[i][0]) / 2, b[i][2]);
-					c.lineTo((b[i][1] + b[i][0]) / 2, b[i][2] + 5);
+						// Draw tick marks. {{{
+						c.moveTo((b[i][1] + b[i][0]) / 2, b[i][2]);
+						c.lineTo((b[i][1] + b[i][0]) / 2, b[i][2] + 5);
 
-					c.moveTo((b[i][1] + b[i][0]) / 2, b[i][3]);
-					c.lineTo((b[i][1] + b[i][0]) / 2, b[i][3] - 5);
+						c.moveTo((b[i][1] + b[i][0]) / 2, b[i][3]);
+						c.lineTo((b[i][1] + b[i][0]) / 2, b[i][3] - 5);
 
-					c.moveTo(b[i][0], (b[i][3] + b[i][2]) / 2);
-					c.lineTo(b[i][0] + 5, (b[i][3] + b[i][2]) / 2);
+						c.moveTo(b[i][0], (b[i][3] + b[i][2]) / 2);
+						c.lineTo(b[i][0] + 5, (b[i][3] + b[i][2]) / 2);
 
-					c.moveTo(b[i][1], (b[i][3] + b[i][2]) / 2);
-					c.lineTo(b[i][1] - 5, (b[i][3] + b[i][2]) / 2);
-					// }}}
+						c.moveTo(b[i][1], (b[i][3] + b[i][2]) / 2);
+						c.lineTo(b[i][1] - 5, (b[i][3] + b[i][2]) / 2);
+						// }}}
 
-					// Draw central cross. {{{
-					c.moveTo((b[i][1] + b[i][0]) / 2 - 5, (b[i][3] + b[i][2]) / 2);
-					c.lineTo((b[i][1] + b[i][0]) / 2 + 5, (b[i][3] + b[i][2]) / 2);
-					c.moveTo((b[i][1] + b[i][0]) / 2, (b[i][3] + b[i][2]) / 2 + 5);
-					c.lineTo((b[i][1] + b[i][0]) / 2, (b[i][3] + b[i][2]) / 2 - 5);
-					// }}}
+						// Draw central cross. {{{
+						c.moveTo((b[i][1] + b[i][0]) / 2 - 5, (b[i][3] + b[i][2]) / 2);
+						c.lineTo((b[i][1] + b[i][0]) / 2 + 5, (b[i][3] + b[i][2]) / 2);
+						c.moveTo((b[i][1] + b[i][0]) / 2, (b[i][3] + b[i][2]) / 2 + 5);
+						c.lineTo((b[i][1] + b[i][0]) / 2, (b[i][3] + b[i][2]) / 2 - 5);
+						// }}}
+					}
 				}
 			}
 

@@ -156,7 +156,6 @@ void connect_end() {
 		prepare_interrupt();
 		send_to_parent(CMD_CONNECTED);
 	}
-	delayed_reply();
 }
 
 Axis_History *setup_axis_history() {
