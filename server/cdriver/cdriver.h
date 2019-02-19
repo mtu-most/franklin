@@ -445,7 +445,6 @@ void connect_end();
 Axis_History *setup_axis_history();
 Motor_History *setup_motor_history();
 EXTERN bool host_block;
-EXTERN bool sent_names;
 EXTERN bool connected;
 
 // temp.cpp

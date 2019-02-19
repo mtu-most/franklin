@@ -101,7 +101,7 @@ static void handle_interrupt_reply() { // {{{
 	interrupt_pending = false;
 } // }}}
 
-static void handle_pending_events() {
+static void handle_pending_events() { // {{{
 	if (interrupt_pending)
 		return;
 	if (num_file_done_events > 0) {
@@ -125,7 +125,7 @@ static void handle_pending_events() {
 		return;
 	}
 	run_file_fill_queue();
-}
+} // }}}
 
 int main(int argc, char **argv) { // {{{
 	(void)&argc;

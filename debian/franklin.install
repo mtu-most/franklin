@@ -6,6 +6,8 @@ server/server.py /usr/lib/franklin
 server/protocol.py /usr/lib/franklin
 server/driver.py /usr/lib/franklin
 server/control.py /usr/lib/franklin
+# Helper file to get around udev restriction.
+server/control-wrap /usr/lib/franklin
 
 # Python module.
 server/cdriver/build/lib.*/* /usr/lib/franklin

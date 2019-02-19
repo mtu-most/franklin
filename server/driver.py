@@ -1407,6 +1407,8 @@ class Machine: # {{{
 			cdriver.setpos(self.id, axis, pos)
 		def get_current_pos(self, axis):
 			#log('getting current pos %d %d' % (self.id, axis))
+			if not self.machine.connected:
+				return float('nan')
 			return cdriver.getpos(self.id, axis)
 		def motor_name(self, i):
 			if self.type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER):
@@ -1694,6 +1696,8 @@ class Machine: # {{{
 	def temp_value(self, channel): # {{{
 		'''Read current temperature.
 		'''
+		if not self.connected:
+			return float('nan')
 		channel = int(channel)
 		if channel >= len(self.temps):
 			log('Trying to read invalid temp %d' % channel)

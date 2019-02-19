@@ -55,7 +55,7 @@ function trigger_update(machine, name) {
 		var args = [machine];
 		for (var a = 2; a < arguments.length; ++a)
 			args.push(arguments[a]);
-		//console.log(name);
+		//console.log(name, args);
 		window[name].apply(null, args);
 	} catch (e) {
 		console.info(e);

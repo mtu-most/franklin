@@ -582,6 +582,9 @@ class Machine: # {{{
 			# Schedule this as a callback, so the generator isn't called recursively.
 			websocketd.add_idle(kill)
 			return
+		#def debug_cb(success, ret):
+		#	log('call {} returned: {}: {}'.format(name, success, ret))
+		#	cb(success, ret)
 		self.waiters[0][self.next_mid] = cb
 		self.next_mid += 1
 	# }}}
@@ -844,7 +847,7 @@ def detect(port): # {{{
 				machine.close()
 				#log('machines: %s' % repr(tuple(machines.keys())))
 				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid if uuid is not None else '', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
-				new_machine = Machine(port, process, run_id, send = uuid is not None)
+				new_machine = Machine(port, process, run_id, send = False)
 				def finish():
 					log('finish detect %s' % repr(uuid))
 					ports[port] = uuid
@@ -858,7 +861,7 @@ def detect(port): # {{{
 						new_machine.finish(finish)
 					new_machine.call('reset_uuid', ['admin'], {}, prefinish)
 				else:
-					finish()
+					new_machine.finish(finish)
 			return False
 		def boot_machine_error():
 			log('error during machine detection on port %s.' % port)

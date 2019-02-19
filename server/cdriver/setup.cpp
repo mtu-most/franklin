@@ -23,7 +23,6 @@ void setup()
 {
 	connected = false;
 	preparing = false;
-	sent_names = false;
 	last_active = millis();
 	last_micros = utime();
 	serialdev = NULL;
@@ -151,7 +150,6 @@ void connect_end() {
 	first_fragment = current_fragment;
 	arch_stop(true);
 	// Update pin names at next globals update.
-	sent_names = false;
 	if (connected) {
 		prepare_interrupt();
 		send_to_parent(CMD_CONNECTED);

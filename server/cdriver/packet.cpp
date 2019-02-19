@@ -168,6 +168,7 @@ void request(int req) {
 			return;
 		}
 		arch_connect(const_cast<const char *>(shmem->strs[0]), const_cast<const char *>(shmem->strs[1]));
+		debug("Finished connecting");
 		break;
 	CASE(CMD_RECONNECT)
 		if (arch_fds() != 0) {
