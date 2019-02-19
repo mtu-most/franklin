@@ -724,6 +724,7 @@ class Machine: # {{{
 		cdriver.parse_gcode(infilename, outfilename)
 		self._refresh_queue()
 		self._broadcast(None, 'blocked', None)
+		return name
 	# }}}
 	def _audio_add(self, f, name): # {{{
 		name = os.path.splitext(os.path.split(name)[1])[0]
