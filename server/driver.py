@@ -808,6 +808,7 @@ class Machine: # {{{
 		#log('do_home: %s %s' % (self.home_phase, done))
 		# 0: Prepare for next order.
 		# 1: Move to limits. (enter from loop after 2).
+		#  : If leader or follower hits limit: move only partner(s) until all hit limit.
 		# 2: Finish moving to limits; loop home_order; move slowly away from switch.
 		# 3: Set current position; move delta and followers.
 		# 4: Move within limits.
@@ -1326,19 +1327,27 @@ class Machine: # {{{
 			else:
 				self.axis[num_axes:] = []
 			if num_motors > len(self.motor):
-				self.motor += [{} for i in range(len(self.motor), num_motors)]
+				self.motor += [{'unit': self.machine.unit_name} if self.id == 1 else {} for i in range(len(self.motor), num_motors)]
 			else:
 				self.motor[num_motors:] = []
 			if self.type == TYPE_CARTESIAN:
-				pass
+				for m in self.motor:
+					m['unit'] = self.machine.unit_name
 			elif self.type == TYPE_DELTA:
+				for m in self.motor:
+					m['unit'] = self.machine.unit_name
 				for a, d in enumerate(data.pop('delta')):
 					for k in d:
 						self.delta[a][k] = d[k]
 				self.delta_angle = data['delta_angle']
 			elif self.type == TYPE_POLAR:
+				for i, m in enumerate(self.motor):
+					m['unit'] = self.machine.unit_name if i != 1 else '°'
 				self.polar_max_r = data['max_r']
 			elif self.type == TYPE_EXTRUDER:
+				for m in self.motor:
+					if 'unit' not in m:
+						m['unit'] = self.machine.unit_name
 				offset = data.pop('offset')
 				for a in range(num_axes):
 					for i, k in enumerate(('dx', 'dy', 'dz')):
@@ -1348,6 +1357,8 @@ class Machine: # {{{
 				for a in range(num_axes):
 					for i, x in enumerate(('space', 'motor')):
 						self.follower[a][x] = follow[a][i]
+					s, m = follow[a]
+					self.motor[a]['unit'] = self.machine.unit_name if not 0 <= s <= 1 or not 0 <= m < len(self.machine.spaces[s].motor) else self.machine.spaces[s].motor[m]['unit']
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -1397,6 +1408,7 @@ class Machine: # {{{
 					base = self.machine.spaces[self.follower[motor]['space']].motor[self.follower[motor]['motor']]
 			else:
 				base = self.motor[motor]
+			# don't include unit, because cdriver doesn't use it.
 			data = {x: self.motor[motor][x] for x in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'home_pos', 'home_order')}
 			data.update({x: base[x] for x in ('limit_v', 'limit_a', 'steps_per_unit')})
 			if self.id == 1 and motor < len(self.machine.multipliers):
@@ -1421,7 +1433,7 @@ class Machine: # {{{
 				log('invalid type')
 				raise AssertionError('invalid space type')
 		def export(self):
-			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max'], a['home_pos2']] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['steps_per_unit'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.machine.multipliers]
+			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max'], a['home_pos2']] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['steps_per_unit'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order'], m['unit']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.machine.multipliers]
 			if self.type == TYPE_CARTESIAN:
 				return std
 			elif self.type == TYPE_DELTA:
@@ -1482,6 +1494,7 @@ class Machine: # {{{
 					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('home_pos',)])
 					ret += ''.join(['%s = %d\r\n' % (x, m[x]) for x in ('home_order',)])
 				if self.id != 2:
+					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('unit',)])
 					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'limit_v', 'limit_a')])
 			return ret
 	# }}}
@@ -2049,7 +2062,7 @@ class Machine: # {{{
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
 				'axis': {'name', 'park', 'park_order', 'min', 'max', 'home_pos2'},
-				'motor': {'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'home_pos', 'limit_v', 'limit_a', 'home_order'},
+				'motor': {'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'home_pos', 'limit_v', 'limit_a', 'home_order', 'unit'},
 				'extruder': {'dx', 'dy', 'dz'},
 				'delta': {'axis_min', 'axis_max', 'rodlength', 'radius'},
 				'follower': {'space', 'motor'}
@@ -2538,7 +2551,7 @@ class Machine: # {{{
 			for key in ('limit_min_pin', 'limit_max_pin', 'home_pos', 'home_order'):
 				ret[key] = self.spaces[space].motor[motor][key]
 		if space != 2:
-			for key in ('steps_per_unit', 'limit_v', 'limit_a'):
+			for key in ('steps_per_unit', 'limit_v', 'limit_a', 'unit'):
 				ret[key] = self.spaces[space].motor[motor][key]
 		return ret
 	# }}}
@@ -2564,6 +2577,7 @@ class Machine: # {{{
 					for key in ('space', 'motor'):
 						if key in ff:
 							self.spaces[space].follower[fi][key] = int(ff.pop(key))
+						log('follower set to {}'.format(self.spaces[space].follower))
 				assert len(ff) == 0
 		if self.spaces[space].type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER):
 			if 'num_axes' in ka:
@@ -2637,6 +2651,8 @@ class Machine: # {{{
 		for key in ('steps_per_unit', 'limit_v', 'limit_a'):
 			if space != 2 and key in ka:
 				self.spaces[space].motor[motor][key] = ka.pop(key)
+		if space == 1 and 'unit' in ka:
+			self.spaces[space].motor[motor]['unit'] = ka.pop('unit')
 		self.spaces[space].write_motor(motor)
 		followers = False
 		for m, mt in enumerate(self.spaces[2].motor):

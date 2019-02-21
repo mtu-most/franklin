@@ -512,7 +512,7 @@ static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 		PyObject *follow = get_object("follow", dict);
 		for (int i = 0; i < shmem->ints[2]; ++i) {
 			PyObject *axis = PySequence_GetItem(follow, i);
-			PyArg_ParseTuple(axis, "ii", &shmem->ints[i * 2 + 3], &shmem->ints[i * 2 + 4]);
+			PyArg_ParseTuple(axis, "ii", &shmem->ints[i * 2 + 4], &shmem->ints[i * 2 + 5]);
 			Py_DECREF(axis);
 		}
 		break;

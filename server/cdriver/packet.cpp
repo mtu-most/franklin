@@ -73,15 +73,24 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	}
 	int tool = isnan(move->tool) ? current_extruder : move->tool;
 	double e;
-	if (tool < spaces[1].num_axes)
+	if (tool >= 0 && tool < spaces[1].num_axes)
 		e = spaces[1].axis[tool]->settings.current;
+	else if (tool < 0 && ~tool < spaces[2].num_axes)
+		e = spaces[2].axis[~tool]->settings.current;
 	else
 		e = NAN;
 	if (!std::isnan(e)) {
 		if (std::isnan(dist) || dist < 1e-10) {
 			dist = std::abs(move->e - (relative ? 0 : e));
-			vmax = spaces[1].motor[tool]->limit_v;
-			amax = spaces[1].motor[tool]->limit_a;
+			if (tool >= 0) {
+				vmax = spaces[1].motor[tool]->limit_v;
+				amax = spaces[1].motor[tool]->limit_a;
+			}
+			else {
+				// TODO: use leader limits with fallback to global limits.
+				vmax = spaces[2].motor[~tool]->limit_v;
+				amax = spaces[2].motor[~tool]->limit_a;
+			}
 		}
 	}
 	if (std::isnan(dist)) {
@@ -119,8 +128,14 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		queue[0].X[a] = pos + d * ramp;
 		queue[1].X[a] = pos + d * (1 - ramp);
 	}
-	if (move->tool < spaces[1].num_axes) {
-		double pos = spaces[1].axis[move->tool]->settings.current;
+	if (tool >= 0 && tool < spaces[1].num_axes) {
+		double pos = spaces[1].axis[tool]->settings.current;
+		double d = move->e - (relative ? 0 : pos);
+		queue[0].e = pos + d * ramp;
+		queue[1].e = pos + d * (1 - ramp);
+	}
+	else if (tool < 0) {
+		double pos = spaces[2].axis[~tool]->settings.current;
 		double d = move->e - (relative ? 0 : pos);
 		queue[0].e = pos + d * ramp;
 		queue[1].e = pos + d * (1 - ramp);
@@ -556,34 +571,16 @@ void setpos(int which, int t, double f) {
 		}
 		motors_busy = true;
 	}
-	if (std::isnan(spaces[which].motor[t]->steps_per_unit)) {
-		debug("Error: NaN steps per unit");
-		abort();
-	}
 	for (int a = 0; a < spaces[which].num_axes; ++a) {
 		spaces[which].axis[a]->settings.source = NAN;
 		spaces[which].axis[a]->settings.current = NAN;
 	}
 	//debug("setting pos for %d %d to %f", which, t, f);
-	double diff;
-	if (!std::isnan(spaces[which].motor[t]->settings.current_pos)) {
-		diff = f * spaces[which].motor[t]->steps_per_unit - arch_round_pos(which, t, spaces[which].motor[t]->settings.current_pos);
-		spaces[which].motor[t]->settings.current_pos += diff;
-		if (which == 1) {
-			//debug("non nan %f %f %f", spaces[which].motor[t]->settings.current_pos, diff, f);
-			//debug("setpos non-nan %d %d %f", which, t, diff);
-		}
-	}
-	else {
-		diff = f * spaces[which].motor[t]->steps_per_unit;
-		spaces[which].motor[t]->settings.current_pos = diff;
-		//debug("setpos nan %d %d %f", which, t, diff);
-	}
-	for (int fragment = 0; fragment < FRAGMENTS_PER_BUFFER; ++fragment) {
-		if (!std::isnan(spaces[which].motor[t]->history[fragment].current_pos))
-			spaces[which].motor[t]->history[fragment].current_pos += diff;
-	}
-	arch_addpos(which, t, diff);
+	double old = spaces[which].motor[t]->settings.current_pos;
+	if (std::isnan(old))
+		old = 0;
+	spaces[which].motor[t]->settings.current_pos = f;
+	arch_addpos(which, t, f - old);
 	//arch_stop();
 	reset_pos(&spaces[which]);
 	for (int a = 0; a < spaces[which].num_axes; ++a) {

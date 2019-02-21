@@ -767,7 +767,7 @@ int arch_tick() { // {{{
 						prepare_interrupt();
 						shmem->interrupt_ints[0] = s;
 						shmem->interrupt_ints[1] = m;
-						shmem->interrupt_float = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
+						shmem->interrupt_float = spaces[s].motor[m]->settings.current_pos;
 						send_to_parent(CMD_LIMIT);
 						//debug("cbs after current cleared %d after sending limit", cbs_after_current_move);
 						cbs_after_current_move = 0;

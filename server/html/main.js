@@ -292,7 +292,7 @@ function set_value(ui, id, value, reply, arg) { // {{{
 					ui.machine.call('set_space', [id[0][1][0]], {delta: o}, reply);
 				}
 				else {
-					// [['motor', [0, 1]], 'delta_radius']
+					// [['motor', [0, 1]], 'follower_motor']
 					obj = {};	// obj was wrong in this case.
 					obj[id[1].substr(9)] = value;
 					var o = {};
@@ -972,6 +972,7 @@ function space_update(uuid, index, nums_changed) { // {{{
 		update_float(p, [['motor', [index, m]], 'limit_a']);
 		if (index != 1)
 			update_float(p, [['motor', [index, m]], 'home_order']);
+		set_name(p, 'motorunit', index, m, p.machine.spaces[index].motor[m].unit);
 	}
 	if (p.machine.spaces[index].type == TYPE_DELTA) {
 		for (var d = 0; d < 3; ++d) {
@@ -1310,9 +1311,11 @@ function Choice(ui, obj, options, classes, containerclasses) { // {{{
 	return ret;
 } // }}}
 
-function UnitTitle(ui, title, post, pre) { // {{{
+function UnitTitle(ui, title, post, pre, unitname) { // {{{
 	var ret = Create('span').AddText(title + ' (' + (pre ? pre : ''));
-	ret.Add(add_name(ui, 'unit', 0, 0));
+	if (unitname === undefined)
+		unitname = ['unit', 0, 0];
+	ret.Add(add_name(ui, unitname[0], unitname[1], unitname[2]));
 	return ret.AddText((post ? post : '') + ')');
 } // }}}
 

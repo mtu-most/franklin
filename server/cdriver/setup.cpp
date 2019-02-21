@@ -172,7 +172,6 @@ Axis_History *setup_axis_history() {
 Motor_History *setup_motor_history() {
 	Motor_History *ret = new Motor_History[FRAGMENTS_PER_BUFFER];
 	for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
-		ret[f].last_v = 0;
 		ret[f].current_pos = 0;
 		ret[f].last_v = 0;
 		ret[f].target_v = NAN;

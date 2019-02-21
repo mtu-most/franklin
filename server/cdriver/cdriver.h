@@ -182,7 +182,7 @@ struct Space_History {
 };
 
 struct Motor_History {
-	double last_v;		// v during last iteration, for using limit_a [m/s].
+	double last_v;
 	double target_v, target_pos;	// Internal values for moving.
 	double current_pos;	// Current position of motor (in steps), and (cast to int) what the hardware currently thinks.
 };

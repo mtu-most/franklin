@@ -38,13 +38,13 @@ static void xyz2motors(Space *s) {
 	double z = s->axis[2]->settings.target;
 	double r = sqrt(x * x + y * y);
 	double theta = atan2(y, x);
-	while (theta - s->motor[1]->settings.current_pos / s->motor[1]->steps_per_unit > 2 * M_PI)
+	while (theta - s->motor[1]->settings.current_pos > 2 * M_PI)
 		theta -= 2 * M_PI;
-	while (theta - s->motor[1]->settings.current_pos / s->motor[1]->steps_per_unit < -2 * M_PI)
+	while (theta - s->motor[1]->settings.current_pos < -2 * M_PI)
 		theta += 2 * M_PI;
 	s->motor[0]->settings.target_pos = r;
-	s->motor[0]->settings.target_pos = theta;
-	s->motor[0]->settings.target_pos = z;
+	s->motor[1]->settings.target_pos = theta;
+	s->motor[2]->settings.target_pos = z;
 }
 
 static void motors2xyz(Space *s, const double motors[3], double xyz[3]) {

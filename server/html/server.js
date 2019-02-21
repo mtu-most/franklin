@@ -292,7 +292,8 @@ function _setup_updater() {
 					home_pos: values[3][m][7],
 					limit_v: values[3][m][8],
 					limit_a: values[3][m][9],
-					home_order: values[3][m][10]
+					home_order: values[3][m][10],
+					unit: values[3][m][11]
 				});
 			}
 			if (index == 1) {

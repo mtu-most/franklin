@@ -261,11 +261,16 @@ function Axis(ui, space, axis) {
 }
 
 function Motor(ui, space, motor) {
-	var e = [['steps_per_unit', 3, 1], ['home_pos', 3, 1], ['home_order', 0, 1], ['limit_v', 0, 1], ['limit_a', 1, 1]];
+	var e = [['steps_per_unit', 3, 1, 'steps/', ''], ['home_pos', 3, 1, '', ''], ['home_order', 0, 1, null, null], ['limit_v', 0, 1, '', '/s'], ['limit_a', 1, 1, '', '/s²']];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		if (space == 0 || (space == 1 && i != 1 && i != 2) || (space == 2 && (i == 1 || i == 2)))
+		if (space == 0 || (space == 1 && i != 1 && i != 2) || (space == 2 && (i == 1 || i == 2))) {
 			div.Add(Float(ui, [['motor', [space, motor]], e[i][0]], e[i][1], e[i][2]));
+			if (motor !== null && e[i][4] !== null) {
+				div.AddText(' ' + e[i][3]).Add(add_name(ui, 'motorunit', space, motor));
+				div.AddText(e[i][4]);
+			}
+		}
 		e[i] = div;
 	}
 	return make_tablerow(ui, motor_name(ui, space, motor), e, ['rowtitle5']);
@@ -563,7 +568,8 @@ function Multipliers(desc, pos, top) { // {{{
 				ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); });
 			});
 		}));
-		e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
+		if (axis !== null)
+			e.AddText(' ').Add(add_name(ui, 'motorunit', space, axis));
 		return e;
 	}, true);
 	return [ret, pos];
@@ -827,11 +833,11 @@ function setup_motor(desc, pos, top) { // {{{
 	ret.update = function() { this.hide(ui.machine.spaces[0].motor.length + ui.machine.spaces[1].motor.length + ui.machine.spaces[2].motor.length == 0); };
 	ret.Add([make_table(ui).AddMultipleTitles([
 		'Motor Settings',
-		UnitTitle(ui, 'Coupling', null, 'steps/'),
-		UnitTitle(ui, 'Switch Pos'),
+		'Coupling',
+		'Switch Pos',
 		'Home Order',
-		UnitTitle(ui, 'Limit v', '/s'),
-		UnitTitle(ui, 'Limit a', '/s²')
+		'Limit v',
+		'Limit a'
 	], [
 		'htitle5',
 		'title5',
@@ -1095,8 +1101,8 @@ function UI(machine) {	// {{{
 	// Prevent updates until all setup is done.
 	ret.updating_globals = true;
 	ret.machine = machine;
-	ret.names = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
-	ret.name_values = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: []};
+	ret.names = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: [], motorunit: []};
+	ret.name_values = {space: [], axis: [], motor: [], temp: [], gpio: [], unit: [], motorunit: []};
 	ret.pinranges = [];
 	ret.temphistory = [];
 	ret.targetangle = 0;

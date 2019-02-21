@@ -295,7 +295,7 @@ double arch_round_pos(int s, int m, double pos) { // {{{
 	for (int ts = 0; ts < s; ++ts) mi += spaces[ts].num_motors;
 	if (mi + m >= NUM_MOTORS)
 		return pos;
-	return round(pos + avr_pos_offset[mi + m]) - avr_pos_offset[mi + m];
+	return (round((pos + avr_pos_offset[mi + m]) * spaces[s].motor[m]->steps_per_unit) - avr_pos_offset[mi + m] * spaces[s].motor[m]->steps_per_unit) / spaces[s].motor[m]->steps_per_unit;
 } // }}}
 
 void avr_get_current_pos(int offset, bool check) { // {{{
@@ -303,16 +303,14 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 	for (int ts = 0; ts < NUM_SPACES; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
 			double old = spaces[ts].motor[tm]->settings.current_pos;
-			cpdebug(ts, tm, "cpb offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], spaces[ts].motor[tm]->settings.current_pos, spaces[ts].motor[tm]->settings.current_pos + avr_pos_offset[tm + mi]);
 			double p = 0;
 			for (int i = 0; i < 4; ++i) {
 				p += int(uint8_t(command[offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
+			p /= spaces[ts].motor[tm]->steps_per_unit;
 			if (spaces[ts].motor[tm]->dir_pin.inverted())
 				p *= -1;
 			p -= avr_pos_offset[tm + mi];
-			cpdebug(ts, tm, "cpa offset %f raw %f hwpos %f", avr_pos_offset[tm + mi], p, p + avr_pos_offset[tm + mi]);
-			cpdebug(ts, tm, "getpos offset %f diff %d", avr_pos_offset[tm + mi], arch_round_pos(ts, tm, p) - arch_round_pos(ts, tm, old));
 			if (check) {
 				if (arch_round_pos(ts, tm, old) != arch_round_pos(ts, tm, p)) {
 					if (moving_to_current == 1)
@@ -383,7 +381,7 @@ bool hwpacket(int len) { // {{{
 				which -= spaces[s].num_motors;
 			}
 			cpdebug(s, m, "limit");
-			pos = spaces[s].motor[m]->settings.current_pos / spaces[s].motor[m]->steps_per_unit;
+			pos = spaces[s].motor[m]->settings.current_pos;
 		}
 		//debug("cbs after current cleared %d for limit", cbs_after_current_move);
 		cbs_after_current_move = 0;
@@ -1147,8 +1145,7 @@ void arch_addpos(int s, int m, double diff) { // {{{
 		avr_pos_offset[mi + m] -= diff;
 	else
 		abort();
-	//debug("addpos %d %d %f -> %f", s, m, diff, avr_pos_offset[mi]);
-	cpdebug(s, m, "arch addpos diff %f offset %f raw %f pos %f", diff, avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
+	cpdebug(s, m, "arch addpos diff %f offset %f pos %f", diff, avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
 } // }}}
 
 void arch_stop(bool fake) { // {{{
