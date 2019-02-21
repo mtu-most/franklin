@@ -1,0 +1,4 @@
+#!/bin/sh
+exec systemd-run --scope /usr/lib/franklin/control.py
+# In case systemd is not active, call the script directly.
+exec /usr/lib/franklin/control.py
