@@ -76,7 +76,6 @@ void setup()
 	aborting = false;
 	computing_move = false;
 	moving_to_current = 0;
-	prepared = false;
 	stopping = 0;
 	sending_fragment = 0;
 	transmitting_fragment = false;
@@ -118,7 +117,6 @@ void connect_end() {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		history[f].hwtime = 0;
 		history[f].cbs = 0;
-		history[f].last_time = 0;
 		history[f].queue_start = 0;
 		history[f].queue_end = 0;
 		history[f].queue_full = false;

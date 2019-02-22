@@ -1469,7 +1469,8 @@ function set_file(ui, id, element, action) { // {{{
 			return;
 		if (!this.responseText)
 			return;
-		alert('Errors: ' + this.responseText);
+		// TODO: figure out how to pass errors; return value (for queue_add) is actual filename.
+		//alert('Errors: ' + this.responseText);
 	});
 	post.send(fd);
 } // }}}

@@ -45,7 +45,6 @@ int next_move(int32_t start_time) { // {{{
 	run_file_fill_queue();
 	if (settings.queue_start == settings.queue_end && !settings.queue_full) {
 		//debug("no next move");
-		prepared = false;
 		computing_move = false;
 		return num_cbs;
 	}
@@ -108,8 +107,10 @@ int next_move(int32_t start_time) { // {{{
 	}
 	// }}}
 	// Reset time. {{{
-	settings.hwtime -= start_time;
-	settings.last_time -= start_time;
+	if (computing_move)
+		settings.hwtime -= start_time;
+	else
+		settings.hwtime = 0;
 	// }}}
 
 	if (!computing_move) {	// Set up source if this is a new move. {{{
@@ -163,7 +164,7 @@ int next_move(int32_t start_time) { // {{{
 		spaces[1].axis[~queue[q].tool]->settings.endpos = queue[q].e;
 		mdebug("move follower to %f", queue[q].e);
 	}
-	//debug("move prepared, Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f", queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6);
+	mdebug("move prepared, Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f", queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6);
 	//debug("times end %d current %d dist %f v0 %f v1 %f", settings.end_time, settings.hwtime, settings.dist, settings.v0, settings.v1);
 
 	settings.queue_start = n;
@@ -233,19 +234,19 @@ static void check_distance(int sp, int mt, Motor *mtr, double distance, double d
 	int s = (mtr->settings.target_v < 0 ? -1 : 1);
 	// When turning around, ignore limits (they shouldn't have been violated anyway).
 	if (mtr->settings.last_v * s < 0) {
-		debug("direction change");
+		//debug("direction change");
 		mtr->settings.last_v = 0;
 	}
 	// Limit v.
 	if (v > mtr->limit_v) {
-		debug("%d %d v %f limit %f dist %f t %f", sp, mt, v, mtr->limit_v, distance, dt);
+		debug("%d %d v %f limit %f dist %f t %f current %f", sp, mt, v, mtr->limit_v, distance, dt, mtr->settings.current_pos);
 		distance = (s * mtr->limit_v) * dt;
 		v = fabs(distance / dt);
 	}
 	// Limit a+.
 	double limit_dv = mtr->limit_a * dt;
 	if (v - mtr->settings.last_v * s > limit_dv) {
-		debug("a+ %d %d target v %f limit dv %f last v %f s %d", sp, mt, mtr->settings.target_v, limit_dv, mtr->settings.last_v, s);
+		debug("a+ %d %d target v %f limit dv %f last v %f s %d current %f", sp, mt, mtr->settings.target_v, limit_dv, mtr->settings.last_v, s, mtr->settings.current_pos);
 		distance = (limit_dv * s + mtr->settings.last_v) * dt;
 		v = fabs(distance / dt);
 	}
@@ -272,6 +273,8 @@ static void check_distance(int sp, int mt, Motor *mtr, double distance, double d
 	//debug("checked %d %d src %f target %f target dist %f new dist %f old factor %f new factor %f", sp, mt, mtr->settings.current_pos, mtr->settings.target_pos, orig_distance, distance, factor, f);
 	if (f < factor)
 		factor = f;
+	// Store adjusted value of v.
+	mtr->settings.target_v = s * v;
 } // }}}
 
 static double move_axes(Space *s) { // {{{
@@ -288,14 +291,13 @@ static double move_axes(Space *s) { // {{{
 		//if (s->id == 0 && m == 0)
 			//debug("check move %d %d target %f current %f", s->id, m, s->motor[m]->settings.target_pos, s->motor[m]->settings.current_pos);
 		double distance = s->motor[m]->settings.target_pos - s->motor[m]->settings.current_pos;
-		check_distance(s->id, m, s->motor[m], distance, (settings.hwtime - settings.last_time) / 1e6, factor);
+		check_distance(s->id, m, s->motor[m], distance, hwtime_step / 1e6, factor);
 	}
 	return factor; // */
 } // }}}
 
 static void do_steps() { // {{{
 	// Do the steps to arrive at the correct position. Update axis and motor current positions.
-	settings.last_time = settings.hwtime;
 	// Set new current position.
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		if (!settings.single && s == 2)
@@ -394,6 +396,7 @@ static double set_targets(double factor) { // {{{
 				debug("setting axis %d %d source from nan to 0", s, a);
 			}
 			ax->settings.target = ax->settings.source + factor * (ax->settings.endpos - ax->settings.source);
+			//debug("setting target for %d %d to %f (%f -> %f)", s, a, ax->settings.target, ax->settings.source, ax->settings.endpos);
 		}
 		double f = move_axes(&sp);
 		if (max_f > f)
@@ -439,7 +442,7 @@ static void apply_tick() { // {{{
 				target_factor = settings.factor + f * (target_factor - settings.factor);
 				set_targets(target_factor);
 				// TODO: Adjust time.
-				//settings.start_time += (settings.hwtime - the_last_time) * ((1 - factor) * .99);
+				//settings.start_time += hwtime_step * ((1 - factor) * .99);
 			}
 			//debug("target factor %f time 0 -> %d -> %d v %f -> %f", target_factor, settings.hwtime, settings.end_time, settings.v0, settings.v1);
 			settings.factor = target_factor;
@@ -490,7 +493,6 @@ void store_settings() { // {{{
 	history[current_fragment].alpha_max = settings.alpha_max;
 	history[current_fragment].hwtime = settings.hwtime;
 	history[current_fragment].end_time = settings.end_time;
-	history[current_fragment].last_time = settings.last_time;
 	history[current_fragment].cbs = 0;
 	history[current_fragment].queue_start = settings.queue_start;
 	history[current_fragment].queue_end = settings.queue_end;
@@ -554,7 +556,6 @@ void restore_settings() { // {{{
 	settings.alpha_max = history[current_fragment].alpha_max;
 	settings.hwtime = history[current_fragment].hwtime;
 	settings.end_time = history[current_fragment].end_time;
-	settings.last_time = history[current_fragment].last_time;
 	history[current_fragment].cbs = 0;
 	settings.queue_start = history[current_fragment].queue_start;
 	settings.queue_end = history[current_fragment].queue_end;
@@ -662,9 +663,6 @@ void abort_move(int pos) { // {{{
 		}
 	}
 	restore_settings();
-#ifdef DEBUG_MOVE
-	debug("move no longer prepared");
-#endif
 	//debug("free abort reset");
 	current_fragment_pos = 0;
 	computing_move = true;
@@ -681,7 +679,6 @@ void abort_move(int pos) { // {{{
 	// Copy settings back to previous fragment.
 	store_settings();
 	computing_move = false;
-	prepared = false;
 	current_fragment_pos = 0;
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];

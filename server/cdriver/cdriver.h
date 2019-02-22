@@ -160,7 +160,7 @@ struct Temp {
 struct History {
 	double P[3], A[3], B[3];
 	double v0, v1, dist, alpha_max;
-	int32_t hwtime, end_time, last_time;
+	int32_t hwtime, end_time;
 	int cbs;
 	int queue_start, queue_end;
 	bool queue_full;
@@ -342,7 +342,7 @@ EXTERN int16_t led_phase;
 EXTERN History *history;
 EXTERN History settings;
 EXTERN bool computing_move;	// True as long as steps are sent to firmware.
-EXTERN bool aborting, prepared, preparing;
+EXTERN bool aborting, preparing;
 EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.
 EXTERN int sending_fragment;

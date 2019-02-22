@@ -564,7 +564,7 @@ void waittemp(int which, double mintemp, double maxtemp) {
 
 void setpos(int which, int t, double f) {
 	if (!motors_busy) {
-		debug("Error: Setting position while motors are not busy!");
+		//debug("Error: Setting position while motors are not busy!");
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			for (int m = 0; m < spaces[s].num_motors; ++m)
 				SET(spaces[s].motor[m]->enable_pin);
@@ -585,7 +585,8 @@ void setpos(int which, int t, double f) {
 	reset_pos(&spaces[which]);
 	for (int a = 0; a < spaces[which].num_axes; ++a) {
 		spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
+		spaces[which].axis[a]->settings.endpos = spaces[which].axis[a]->settings.source;
 	}
-	cpdebug(which, t, "setpos diff %f", diff);
+	cpdebug(which, t, "setpos new %f old %f diff %f", f, old, f - old);
 	// */
 }

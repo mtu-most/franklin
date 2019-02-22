@@ -192,7 +192,7 @@ EXTERN int avr_limiter_space;
 EXTERN int avr_limiter_motor;
 EXTERN bool avr_running;
 EXTERN Avr_pin_t *avr_pins;
-EXTERN double *avr_pos_offset;
+EXTERN double *avr_pos_offset;	// pos + offset = hwpos
 EXTERN int avr_active_motors;
 EXTERN int *avr_adc_id;
 EXTERN uint8_t *avr_control_queue;
@@ -295,7 +295,7 @@ double arch_round_pos(int s, int m, double pos) { // {{{
 	for (int ts = 0; ts < s; ++ts) mi += spaces[ts].num_motors;
 	if (mi + m >= NUM_MOTORS)
 		return pos;
-	return (round((pos + avr_pos_offset[mi + m]) * spaces[s].motor[m]->steps_per_unit) - avr_pos_offset[mi + m] * spaces[s].motor[m]->steps_per_unit) / spaces[s].motor[m]->steps_per_unit;
+	return round((pos + avr_pos_offset[mi + m]) * spaces[s].motor[m]->steps_per_unit) / spaces[s].motor[m]->steps_per_unit - avr_pos_offset[mi + m];
 } // }}}
 
 void avr_get_current_pos(int offset, bool check) { // {{{

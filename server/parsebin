@@ -44,6 +44,7 @@ if config['svg']:
 else:
 	print('type\tcommand\ttool\t      X\t      Y\t      Z\t     Bx\t     By\t     Bz\t      E\t     v0\t     v1\t   time\t   dist\t      r')
 pos = (float('nan'), float('nan'), 0.0)
+oldx = [0, 0, 0]
 while True:
 	s = file.read(1 + 4 + 8 * 12)
 	if len(s) != 1 + 4 + 8 * 12:
@@ -53,7 +54,11 @@ while True:
 		n += 1
 		continue
 	if not config['svg']:
-		print(('%d\t%s\t%d' + '\t%7.3f' * 12) % (n, mkcmd(t), T, X, Y, Z, Bx, By, Bz, E, v0, v1, time, dist, r))
+		x = [X, Y, Z]
+		dx = sum((new - old) ** 2 if not math.isnan(new - old) else 0 for old, new in zip(oldx, x)) ** .5
+		oldx = [old if math.isnan(new) else new for old, new in zip(oldx, x)]
+		dt = dx / ((v1 + v0) / 2)
+		print(('%d\t%s\t%d' + '\t%7.3f' * 13) % (n, mkcmd(t), T, X, Y, Z, Bx, By, Bz, E, v0, v1, time, dist, r, (v1 - v0) / dt if dt != 0 else float('nan')))
 	else:
 		Y += Z * config['offset']
 		print('<!-- %d -->' % n)

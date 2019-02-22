@@ -1494,7 +1494,7 @@ class Machine: # {{{
 					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('home_pos',)])
 					ret += ''.join(['%s = %d\r\n' % (x, m[x]) for x in ('home_order',)])
 				if self.id != 2:
-					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('unit',)])
+					ret += ''.join(['%s = %s\r\n' % (x, m[x]) for x in ('unit',)])
 					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'limit_v', 'limit_a')])
 			return ret
 	# }}}
