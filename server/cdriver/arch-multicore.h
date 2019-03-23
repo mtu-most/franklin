@@ -108,6 +108,7 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~
 void arch_send_pin_name(int pin);
 void arch_motors_change();
 void arch_addpos(int s, int m, double diff);
+void arch_invertpos(int s, int m);
 void arch_stop(bool fake);
 void arch_home();
 bool arch_running();
@@ -857,6 +858,12 @@ void arch_addpos(int s, int m, double diff) { // {{{
 	(void)&s;
 	(void)&m;
 	(void)&diff;
+	// Nothing to do.
+} // }}}
+
+void arch_invertpos(int s, int m) { // {{{
+	(void)&s;
+	(void)&m;
 	// Nothing to do.
 } // }}}
 

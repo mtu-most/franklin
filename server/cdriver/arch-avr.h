@@ -143,6 +143,7 @@ int arch_fds();
 int arch_tick();
 void arch_reconnect(const char *port);
 void arch_addpos(int s, int m, double diff);
+void arch_invertpos(int s, int m);
 void arch_stop(bool fake);
 void avr_stop2();
 bool arch_send_fragment();
@@ -1146,6 +1147,19 @@ void arch_addpos(int s, int m, double diff) { // {{{
 	else
 		abort();
 	cpdebug(s, m, "arch addpos diff %f offset %f pos %f", diff, avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
+} // }}}
+
+void arch_invertpos(int s, int m) { // {{{
+	if (s >= NUM_SPACES)
+		return;
+	int mi = 0;
+	for (uint8_t st = 0; st < s; ++st)
+		mi += spaces[st].num_motors;
+	if (mi + m >= NUM_MOTORS)
+		return;
+	if (std::isnan(spaces[s].motor[m]->settings.current_pos))
+		return;
+	avr_pos_offset[mi + m] -= 2 * (spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi + m]);
 } // }}}
 
 void arch_stop(bool fake) { // {{{

@@ -466,7 +466,7 @@ function floatkey(event, element) { // {{{
 	}
 	else {
 		space = element.obj[1] == 'zoffset' ? 0 : element.obj[0][0] == 'space' ? element.obj[0][1] : element.obj[0][1][0];
-		element.ui.machine.call('get_axis_pos', [space], {}, function (pos) {
+		element.ui.machine.call('get_axis_pos', [space], {}, function(pos) {
 			finish();
 			if (space == 0) {
 				element.ui.machine.call('line', [pos], {});

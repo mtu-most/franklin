@@ -159,6 +159,7 @@ void Space::load_motor(int m) { // {{{
 	uint16_t enable = motor[m]->enable_pin.write();
 	double old_home_pos = motor[m]->home_pos;
 	double old_steps_per_unit = motor[m]->steps_per_unit;
+	bool old_dir_invert = motor[m]->dir_pin.inverted();
 	motor[m]->step_pin.read(shmem->ints[2]);
 	motor[m]->dir_pin.read(shmem->ints[3]);
 	motor[m]->enable_pin.read(shmem->ints[4]);
@@ -186,6 +187,8 @@ void Space::load_motor(int m) { // {{{
 	RESET(motor[m]->dir_pin);
 	SET_INPUT(motor[m]->limit_min_pin);
 	SET_INPUT(motor[m]->limit_max_pin);
+	if (motor[m]->dir_pin.inverted() != old_dir_invert)
+		arch_invertpos(id, m);
 	if (!std::isnan(motor[m]->home_pos)) {
 		// Axes with a limit switch.
 		if (motors_busy && (old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !std::isnan(old_home_pos)) {
