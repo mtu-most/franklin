@@ -867,7 +867,7 @@ class Machine: # {{{
 				if self.home_cb not in self.movecb:
 					self.movecb.append(self.home_cb)
 				#log("home phase %d target %s" % (self.home_phase, self.home_target))
-				self.user_line(self.home_target, v = home_v, single = True, force = True)[1](None)
+				self.user_line(self.home_target, v = home_v * len(self.home_target) ** .5, single = True, force = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 2:
@@ -890,7 +890,7 @@ class Machine: # {{{
 				dist = abs(self.home_target[k] - self.spaces[0].get_current_pos(k))
 				if dist > 0:
 					#log("home phase %d target %s" % (self.home_phase, self.home_target))
-					self.user_line(self.home_target, v = home_v, single = True, force = True)[1](None)
+					self.user_line(self.home_target, v = home_v * len(self.home_target) ** .5, single = True, force = True)[1](None)
 					return
 				# Fall through.
 			if len(self.home_target) > 0:

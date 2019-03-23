@@ -119,11 +119,12 @@ int next_move(int32_t start_time) { // {{{
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
 			for (int a = 0; a < sp.num_axes; ++a) {
-				if (!std::isnan(sp.axis[a]->settings.current))
+				if (!std::isnan(sp.axis[a]->settings.current)) {
+					mdebug("setting source for %d %d to current %f (was %f)", s, a, sp.axis[a]->settings.current, sp.axis[a]->settings.source);
 					sp.axis[a]->settings.source = sp.axis[a]->settings.current;
+				}
 			}
 		}
-		store_settings();
 	} // }}}
 
 	settings.v0 = queue[q].v0;
@@ -147,7 +148,7 @@ int next_move(int32_t start_time) { // {{{
 	settings.alpha_max = acos(dot / (norma * normab));
 	if (std::isnan(settings.alpha_max))
 		settings.alpha_max = 0;
-	settings.dist = (normb > 1e-5 ? norma * (normab / normb) * settings.alpha_max: norma) * 2;
+	settings.dist = (normb > 1e-5 ? norma * (normab / normb) * settings.alpha_max : norma) * 2;
 	if (std::isnan(settings.dist) || abs(settings.dist) < 1e-10) {
 		if (queue[q].tool >= 0 && queue[q].tool < spaces[1].num_axes)
 			settings.dist = abs(queue[q].e - spaces[1].axis[queue[q].tool]->settings.source);
@@ -164,11 +165,14 @@ int next_move(int32_t start_time) { // {{{
 		spaces[1].axis[~queue[q].tool]->settings.endpos = queue[q].e;
 		mdebug("move follower to %f", queue[q].e);
 	}
-	mdebug("move prepared, Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f", queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6);
+	mdebug("move prepared, from=(%f,%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6);
 	//debug("times end %d current %d dist %f v0 %f v1 %f", settings.end_time, settings.hwtime, settings.dist, settings.v0, settings.v1);
 
 	settings.queue_start = n;
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
+	if (!computing_move) {
+		store_settings();
+	}
 	computing_move = true;
 	return num_cbs;
 } // }}}
@@ -381,7 +385,7 @@ static double set_targets(double factor) { // {{{
 		for (int i = 0; i < 3; ++i) {
 			if (i < spaces[0].num_axes) {
 				spaces[0].axis[i]->settings.target = settings.P[i] + a * settings.A[i] + b * settings.B[i];
-				mdebug("target %f P %f a %f A %f B %f amax %f factor2 %f", spaces[0].axis[i]->settings.target, settings.P[i],a, settings.A[i], settings.B[i], settings.alpha_max, factor2);
+				mdebug("target %d = %f P %f a %f A %f B %f amax %f factor2 %f", i, spaces[0].axis[i]->settings.target, settings.P[i],a, settings.A[i], settings.B[i], settings.alpha_max, factor2);
 			}
 		}
 	}
@@ -393,7 +397,7 @@ static double set_targets(double factor) { // {{{
 			auto ax = sp.axis[a];
 			if (std::isnan(ax->settings.source)) {
 				ax->settings.source = 0;
-				debug("setting axis %d %d source from nan to 0", s, a);
+				mdebug("setting axis %d %d source from nan to 0", s, a);
 			}
 			ax->settings.target = ax->settings.source + factor * (ax->settings.endpos - ax->settings.source);
 			//debug("setting target for %d %d to %f (%f -> %f)", s, a, ax->settings.target, ax->settings.source, ax->settings.endpos);
@@ -606,7 +610,7 @@ void restore_settings() { // {{{
 void buffer_refill() { // {{{
 	// Try to fill the buffer. This is called at any time that the buffer may be refillable.
 	//debug("refill");
-	if (preparing || FRAGMENTS_PER_BUFFER == 0) {
+	if (aborting || preparing || FRAGMENTS_PER_BUFFER == 0) {
 		//debug("no refill because prepare or no buffer yet");
 		return;
 	}
@@ -620,7 +624,7 @@ void buffer_refill() { // {{{
 		send_fragment();
 	//debug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
-	while (computing_move && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
+	while (computing_move && !aborting && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
 		//debug("refill %d %d %f", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings.current_pos);
 		// fill fragment until full.
 		apply_tick();
@@ -630,7 +634,7 @@ void buffer_refill() { // {{{
 			send_fragment();
 		}
 	}
-	if (stopping || discard_pending) {
+	if (aborting || stopping || discard_pending) {
 		//debug("aborting refill for stopping");
 		refilling = false;
 		return;
@@ -692,6 +696,6 @@ void abort_move(int pos) { // {{{
 			sp.axis[a]->settings.dist[1] = NAN;
 		}
 	}
-	//debug("aborted move");
+	mdebug("aborted move");
 	aborting = false;
 } // }}}
