@@ -85,38 +85,11 @@ bool globals_load() {
 	max_deviation = shmem->floats[1];
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
-	int ce = shmem->ints[12];
+	current_extruder = shmem->ints[12];
 	targetx = shmem->floats[4];
 	targety = shmem->floats[5];
 	targetangle = shmem->floats[6];
-	double zo = shmem->floats[7];
-	/*if (motors_busy && (current_extruder != ce || zoffset != zo) && settings.queue_start == settings.queue_end && !settings.queue_full && !computing_move) {
-		// FIXME: move to current position
-		queue[settings.queue_end].probe = false;
-		queue[settings.queue_end].cb = false;
-		queue[settings.queue_end].f[0] = INFINITY;
-		queue[settings.queue_end].f[1] = INFINITY;
-		for (int i = 0; i < spaces[0].num_axes; ++i) {
-			queue[settings.queue_end].data[i] = spaces[0].axis[i]->settings.current - (i == 2 ? zoffset : 0);
-			for (int s = 0; s < NUM_SPACES; ++s)
-				queue[settings.queue_end].data[i] = space_types[spaces[s].type].unchange0(&spaces[s], i, queue[settings.queue_end].data[i]);
-		}
-		for (int i = spaces[0].num_axes; i < 10; ++i) { // TODO: Make 10 a dynamic size.
-			queue[settings.queue_end].data[i] = NAN;
-		}
-		settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
-		// This shouldn't happen and causes communication problems, but if you have a 1-item buffer it is correct.
-		if (settings.queue_end == settings.queue_start)
-			settings.queue_full = true;
-		current_extruder = ce;
-		zoffset = zo;
-		next_move();
-		buffer_refill();
-	}
-	else */ {
-		current_extruder = ce;
-		zoffset = zo;
-	}
+	zoffset = shmem->floats[7];
 	bool store = shmem->ints[13];
 	if (store && !store_adc) {
 		store_adc = fopen("/tmp/franklin-adc-dump", "a");

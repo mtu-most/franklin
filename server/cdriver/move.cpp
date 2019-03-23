@@ -88,7 +88,7 @@ int next_move(int32_t start_time) { // {{{
 		if (n != settings.queue_end) {
 			// If only one of them is set, set the other one as well to make the rounded corner work.
 			if (!std::isnan(queue[q].X[a]) && std::isnan(queue[n].X[a])) {
-				queue[n].X[a] = sp0.axis[a]->settings.source + sp0.axis[a]->settings.dist[1] - (a == 2 ? zoffset : 0);
+				queue[n].X[a] = queue[q].X[a];
 				mdebug("filling next %d with %f", a, queue[n].X[a]);
 			}
 			if (std::isnan(queue[q].X[a]) && !std::isnan(queue[n].X[a])) {
@@ -133,7 +133,7 @@ int next_move(int32_t start_time) { // {{{
 	for (int i = 0; i < 3; ++i) {
 		bool use = i < spaces[0].num_axes;
 		double p = (use ? spaces[0].axis[i]->settings.source : 0);
-		settings.P[i] = (use ? (std::isnan(queue[q].X[i]) ? p : (queue[q].X[i] + p) / 2) : 0);
+		settings.P[i] = (use ? (std::isnan(queue[q].X[i]) ? p : (queue[q].X[i] + (i == 2 ? zoffset : 0) + p) / 2) : 0);
 		settings.A[i] = settings.P[i] - p;
 		settings.B[i] = (use ? queue[q].B[i] : 0);
 		double ab = settings.A[i] + settings.B[i];

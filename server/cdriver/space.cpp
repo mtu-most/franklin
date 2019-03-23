@@ -28,7 +28,6 @@
 #define loaddebug(...) do {} while(0)
 #endif
 
-// Setup. {{{
 bool Space::setup_nums(int na, int nm) { // {{{
 	if (na == num_axes && nm == num_motors)
 		return true;
@@ -249,4 +248,3 @@ void Space::cancel_update() { // {{{
 			debug("You're in trouble; this shouldn't be possible");
 	}
 } // }}}
-// }}}

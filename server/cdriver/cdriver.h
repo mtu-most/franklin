@@ -454,7 +454,6 @@ void handle_temp(int id, int temp);
 void buffer_refill();
 void store_settings();
 void restore_settings();
-void move_to_current();
 void reset_pos(Space *s);
 EXTERN int moving_to_current;
 

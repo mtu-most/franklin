@@ -409,47 +409,80 @@ function floatkey(event, element) { // {{{
 	event.preventDefault();
 	if (event.shiftKey)
 		amount /= 10;
-	if (element.obj[0] !== null && element.obj[0][1] === null) {
-		// Update a series of elements.
-		for (var n = 0; n < element.ui.machine['num_' + type2plural[element.obj[0][0]]]; ++n) {
-			var obj = [[element.obj[0][0], n], element.obj[1], element.obj[2]];
-			var value;
-			if (set)
-				value = amount;
-			else if (element.obj.length == 2)
-				value = get_value(element.ui, obj) / element.factor + amount;
-			else
-				continue;
-			set_value(element.ui, obj, element.factor * value);
+	var finish = function() {
+		if (element.obj[0] !== null && element.obj[0][1] === null) {
+			// Update a series of elements.
+			for (var n = 0; n < element.ui.machine['num_' + type2plural[element.obj[0][0]]]; ++n) {
+				var obj = [[element.obj[0][0], n], element.obj[1], element.obj[2]];
+				var value;
+				if (set)
+					value = amount;
+				else if (element.obj.length == 2)
+					value = get_value(element.ui, obj) / element.factor + amount;
+				else
+					continue;
+				set_value(element.ui, obj, element.factor * value);
+			}
+			return;
 		}
-		return;
-	}
-	if (element.obj[0] !== null && typeof element.obj[0][1] != 'number' && element.obj[0][1][1] === null) {
-		// Update a series of axes or motors.
-		for (var n = 0; n < element.ui.machine.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][0]]]; ++n) {
-			var obj = [[element.obj[0][0], [element.obj[0][1][0], n]], element.obj[1]];
-			var value;
-			if (set)
-				value = amount;
-			else if (element.obj.length == 2)
-				value = get_value(element.ui, obj) / element.factor + amount;
-			else
-				continue;
-			set_value(element.ui, obj, element.factor * value);
+		if (element.obj[0] !== null && typeof element.obj[0][1] != 'number' && element.obj[0][1][1] === null) {
+			// Update a series of axes or motors.
+			for (var n = 0; n < element.ui.machine.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][0]]]; ++n) {
+				var obj = [[element.obj[0][0], [element.obj[0][1][0], n]], element.obj[1]];
+				var value;
+				if (set)
+					value = amount;
+				else if (element.obj.length == 2)
+					value = get_value(element.ui, obj) / element.factor + amount;
+				else
+					continue;
+				set_value(element.ui, obj, element.factor * value);
+			}
+			return;
 		}
-		return;
+		var value;
+		if (set)
+			value = amount;
+		else if (element.obj.length == 2)
+			value = get_value(element.ui, element.obj) / element.factor + amount;
+		else
+			return;
+		if (element.set !== undefined)
+			element.set(element.factor * value);
+		else
+			set_value(element.ui, element.obj, element.factor * value);
+	};
+	// Element types:
+	// [null, 'max_v']
+	// [['space', null], 'num_axes']
+	// [['axis', [0, null]], 'offset']
+	// [['motor', [0, null]], 'delta_radius']
+	// [['space', 1], 'num_axes']
+	// [['axis', [0, 1]], 'offset']
+	// [['motor', [0, 1]], 'delta_radius']
+	// [['motor', [0, 1]], 'follower_motor']
+	if ((element.obj[0] === null && element.obj[1] != 'zoffset') || (element.obj[0] !== null && element.obj[0][0] != 'space' && element.obj[0][0] != 'axis' && element.obj[0][0] != 'motor') || element.obj[1] == 'current') {
+		finish();
 	}
-	var value;
-	if (set)
-		value = amount;
-	else if (element.obj.length == 2)
-		value = get_value(element.ui, element.obj) / element.factor + amount;
-	else
-		return;
-	if (element.set !== undefined)
-		element.set(element.factor * value);
-	else
-		set_value(element.ui, element.obj, element.factor * value);
+	else {
+		space = element.obj[1] == 'zoffset' ? 0 : element.obj[0][0] == 'space' ? element.obj[0][1] : element.obj[0][1][0];
+		element.ui.machine.call('get_axis_pos', [space], {}, function (pos) {
+			finish();
+			if (space == 0) {
+				element.ui.machine.call('line', [pos], {});
+			}
+			else if (space == 1) {
+				if (element.obj[0][1] !== null) {
+					var e = element.obj[0][1];
+					element.ui.machine.call('line', [], {e: pos[e], tool: e});
+				}
+				else {
+					for (var e = 0; e < pos.length; ++e)
+						element.ui.machine.call('line', [], {e: pos[e], tool: e});
+				}
+			}
+		});
+	}
 }
 // }}}
 

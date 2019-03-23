@@ -44,7 +44,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		//debug("prepare move, pos[%d] = %f + %f", a, pos, move->X[a]);
 		if (std::isnan(pos) || std::isnan(move->X[a]))
 			continue;
-		double d = move->X[a] - (relative ? 0 : pos);
+		double d = move->X[a] + (a == 2 ? zoffset : 0) - (relative ? 0 : pos);
 		if (std::isnan(dist))
 			dist = d * d;
 		else
@@ -121,7 +121,8 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 			queue[2].X[a] = NAN;
 			continue;
 		}
-		double pos = spaces[0].axis[a]->settings.current;
+		// This part is in user coordinates, so remove zoffset and extruder offset. TODO: remove extruder offset.
+		double pos = spaces[0].axis[a]->settings.current - (a == 2 ? zoffset : 0);
 		if (std::isnan(pos))
 			continue;
 		double d = queue[2].X[a] - (relative ? 0 : pos);

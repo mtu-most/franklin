@@ -733,7 +733,7 @@ void arch_reset() { // {{{
 		return;
 	}
 	// Wait for reset to complete.
-	sleep(12);
+	sleep(2);
 	avr_serial.write(CMD_ACK1);
 	avr_serial.write(CMD_ACK2);
 	avr_serial.write(CMD_ACK3);
