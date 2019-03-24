@@ -92,6 +92,7 @@ import os
 import sys
 import math
 import random
+import network
 import websocketd
 from websocketd import log
 import fhs
@@ -258,44 +259,6 @@ class Connection: # {{{
 		Connection.connections[self.id] = self
 		# Done with setup; activate connection.
 		self.socket()
-	# }}}
-	def set_autodetect(self, detect): # {{{
-		'''Enable or disable autodetection on new ports.
-		If autodetection is enabled, detection will be attempted for
-		any newly detected port, both at boot time and later.  Changing
-		to autodetect does not trigger a detection on ports that were
-		already known to Franklin.
-		@param detect: New autodetect state.
-		@return: None.
-		'''
-		global autodetect
-		autodetect = detect
-		broadcast(None, 'autodetect', autodetect)
-	# }}}
-	def get_autodetect(self): # {{{
-		'''Get autodetection status.
-		@return: Autodetection status.
-		'''
-		return autodetect
-	# }}}
-	def detect(self, port): # {{{
-		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
-		detect(port)
-	# }}}
-	def detect_all(self): # {{{
-		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
-		for p in ports:
-			if ports[p] is not None:
-				continue
-			detect(p)
-	# }}}
-	def add_port(self, port): # {{{
-		assert self.socket.data['role'] in ('benjamin', 'admin')
-		add_port(port)
-	# }}}
-	def remove_port(self, port): # {{{
-		assert self.socket.data['role'] in ('benjamin', 'admin')
-		remove_port(port)
 	# }}}
 	def get_ports(self): # {{{
 		return tuple(ports.keys())
@@ -709,7 +672,69 @@ def job_done(port, completed, reason): # {{{
 		websocketd.add_read(p.stdout, process_done, process_error)
 # }}}
 
-# Port management. {{{
+def disable(uuid, reason): # {{{
+	if uuid not in machines:
+		log('not disabling nonexistent machine %s' % uuid)
+		return
+	p = machines[uuid]
+	if p.port not in ports:
+		log("not disabling machine which isn't enabled")
+		return
+	p.call('disconnect', ('admin', reason), {}, lambda success, ret: None)
+	port = p.port
+	ports[port] = None
+	p.port = None
+	broadcast(None, 'port_state', port, 0)
+# }}}
+
+
+class Admin_Connection: # {{{
+	def __init__(self, remote): # {{{
+		self.remote = remote
+		remote.readlines(self.read)
+		remote.disconnect_cb(lambda connection, data: data)
+	# }}}
+	def read(self, line): # {{{
+		if line.strip() == '':
+			return
+		try:
+			action, dev = line.split(None, 1)
+		except:
+			log('invalid command on admin socket: %s' % line)
+			return
+		if action == 'add':
+			add_port(dev.strip())
+		elif action == 'remove':
+			remove_port(dev.strip())
+		else:
+			log('invalid action on admin socket: %s' % line)
+	# }}}
+# }}}
+
+def remove_port(port): # {{{
+	log('removing port %s' % port)
+	if port not in ports:
+		return
+	if ports[port]:
+		disable(ports[port], 'port is removed')
+	del ports[port]
+	broadcast(None, 'del_port', port)
+# }}}
+
+def add_port(port): # {{{
+	if port in ports:
+		log('already existing port %s cannot be added' % port)
+		return
+	if re.match(config['blacklist'], port) or re.match(config['add-blacklist'], port):
+		#log('skipping blacklisted port %s' % port)
+		return
+	ports[port] = None
+	broadcast(None, 'new_port', port, upload_options(port))
+	broadcast(None, 'port_state', port, 0)
+	if autodetect:
+		detect(port)
+# }}}
+
 def detect(port): # {{{
 	log('detecting machine on %s' % port)
 	if port not in ports:
@@ -887,51 +912,16 @@ def detect(port): # {{{
 	ports[port] = cancel
 # }}}
 
-def disable(uuid, reason): # {{{
-	if uuid not in machines:
-		log('not disabling nonexistent machine %s' % uuid)
-		return
-	p = machines[uuid]
-	if p.port not in ports:
-		log("not disabling machine which isn't enabled")
-		return
-	p.call('disconnect', ('admin', reason), {}, lambda success, ret: None)
-	port = p.port
-	ports[port] = None
-	p.port = None
-	broadcast(None, 'port_state', port, 0)
-# }}}
-
-def add_port(port): # {{{
-	if port in ports:
-		log('already existing port %s cannot be added' % port)
-		return
-	if re.match(config['blacklist'], port) or re.match(config['add-blacklist'], port):
-		#log('skipping blacklisted port %s' % port)
-		return
-	ports[port] = None
-	broadcast(None, 'new_port', port, upload_options(port))
-	broadcast(None, 'port_state', port, 0)
-	if autodetect:
-		detect(port)
-# }}}
-
-def remove_port(port): # {{{
-	log('removing port %s' % port)
-	if port not in ports:
-		return
-	if ports[port]:
-		machines[ports[port]].disconnect()
-	del ports[port]
-	broadcast(None, 'del_port', port)
-# }}}
-# }}}
-
 # Main loop. {{{
 def _disconnect(socket, data):
 	del Connection.connections[socket.connection.id]
 try:
 	httpd = Server(config['port'], Connection, disconnect_cb = _disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = tls)
+	udevsocket = fhs.write_runtime('udev.socket', packagename = 'franklin', opened = False)
+	os.makedirs(os.path.dirname(udevsocket), exist_ok = True)
+	if os.path.exists(udevsocket):
+		os.unlink(udevsocket)
+	udevserver = network.Server(udevsocket, Admin_Connection)
 except OSError:
 	log('failed to start server: %s' % sys.exc_info()[1])
 	sys.exit(1)

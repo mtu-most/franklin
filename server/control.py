@@ -17,52 +17,31 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import websocketd
+import network
 import os
 import sys
 
-port = 8000
-tls = False
-user = None
-password = None
-current_level = 0
+action = os.getenv('ACTION')
+dev = os.getenv('DEVNAME')
 
-def credentials(level, value):
-	global current_level
-	if level < current_level:
-		return
-	current_level = level
-	if ':' in value:
-		user, password = value.split(':', 1)
-	else:
-		user = 'admin'
-		password = value
-
-with open('/etc/default/franklin') as f:
-	for l in f.readlines():
-		l = l.strip()
-		if l == '' or l.startswith('#') or not '=' in l:
+users = []
+if os.path.exists('/run/user'):
+	for u in os.listdir('/run/user'):
+		try:
+			n = int(u)
+		except:
 			continue
-		key, value = l.split('=', 1)
-		if key == 'PORT':
-			# Leave it as a string because it need not be numerical.
-			port = value.strip()
-		if key == 'TLS':
-			tls = value.lower().strip() in ('1', 'true')
-		if key == 'USER':
-			credentials(0, value.strip())
-		if key == 'EXPERT':
-			credentials(1, value.strip())
-		if key == 'ADMIN':
-			credentials(2, value.strip())
+		users.append(n)
+	users.sort()
+dirs = ['/run'] + ['/run/user/{}'.format(u) for u in users]
 
-try:
-	p = websocketd.RPC(port, tls = tls, url = '/admin', user = user, password = password)
-	action = os.getenv('ACTION')
-	dev = os.getenv('DEVNAME')
-	if action == 'add':
-		p.add_port(dev)
-	elif action == 'remove':
-		p.remove_port(dev)
-except:
-	sys.stderr.write('Failed to handle serial port event for Franklin')
+for d in dirs:
+	try:
+		s = network.Socket(d + '/franklin/udev.socket')
+		s.sendline('{} {}\n'.format(action, dev))
+		break
+	except:
+		continue
+else:
+	sys.stderr.write('Failed to handle udev event for Franklin\n')
+	sys.exit(1)
