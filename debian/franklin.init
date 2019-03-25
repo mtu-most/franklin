@@ -111,6 +111,10 @@ fi
 #
 do_start()
 {
+	if [ ! -d /run/franklin ] ; then
+		mkdir /run/franklin
+		chown franklin3d:franklin3d /run/franklin
+	fi
 	start-stop-daemon "${START_ARGS[@]}"
 	RETVAL="$?"
 	if [ "$RETVAL" -eq 0 ]; then
