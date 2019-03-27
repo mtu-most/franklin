@@ -40,6 +40,7 @@ static void change0(int qpos) { // {{{
 int next_move(int32_t start_time) { // {{{
 	settings.probing = false;
 	settings.single = false;
+	settings.factor = 0;
 	moving_to_current = 0;
 	int num_cbs = 0;
 	run_file_fill_queue();
@@ -459,7 +460,9 @@ static void apply_tick() { // {{{
 		if (!std::isnan(target_factor)) {
 			double f = set_targets(target_factor);
 			if (f < 1) {
+				//double old = target_factor;
 				target_factor = settings.factor + f * (target_factor - settings.factor);
+				//debug("adjust factor from %f to %f because f=%f", old, target_factor, f);
 				set_targets(target_factor);
 				// TODO: Adjust time.
 				//settings.start_time += hwtime_step * ((1 - factor) * .99);
