@@ -344,7 +344,7 @@ class Connection: # {{{
 		broadcast(None, 'port_state', port, 0)
 		ports[port] = None
 		if autodetect:
-			websocketd.call(None, self.detect, port)
+			websocketd.call(None, detect, port)
 		if d:
 			return 'firmware upload for %s: ' % board + d
 		else:
@@ -609,7 +609,7 @@ class Machine: # {{{
 					ports[self.port] = None
 					broadcast(None, 'port_state', port, 0)
 					if autodetect:
-						detect(port)
+						websocketd.call(None, detect, port)
 				elif data[1] == 'error':
 					if data[0] is None:
 						# Error on command without id.
@@ -673,6 +673,9 @@ def job_done(port, completed, reason): # {{{
 # }}}
 
 def disable(uuid, reason): # {{{
+	if not isinstance(uuid, str):
+		uuid()
+		return
 	if uuid not in machines:
 		log('not disabling nonexistent machine %s' % uuid)
 		return
@@ -686,7 +689,6 @@ def disable(uuid, reason): # {{{
 	p.port = None
 	broadcast(None, 'port_state', port, 0)
 # }}}
-
 
 class Admin_Connection: # {{{
 	def __init__(self, remote): # {{{
@@ -732,7 +734,7 @@ def add_port(port): # {{{
 	broadcast(None, 'new_port', port, upload_options(port))
 	broadcast(None, 'port_state', port, 0)
 	if autodetect:
-		detect(port)
+		websocketd.call(None, detect, port)
 # }}}
 
 def detect(port): # {{{

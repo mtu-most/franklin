@@ -393,6 +393,8 @@ static double set_targets(double factor) { // {{{
 	double max_f = 1;
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
+		if (s == 2 && !settings.single)
+			continue;
 		for (int a = (s == 0 ? 3 : 0); a < sp.num_axes; ++a) {
 			auto ax = sp.axis[a];
 			if (std::isnan(ax->settings.source)) {
