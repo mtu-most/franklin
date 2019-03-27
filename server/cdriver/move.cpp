@@ -219,8 +219,9 @@ static void send_fragment() { // {{{
 	}
 } // }}}
 
-static void check_distance(int sp, int mt, Motor *mtr, double distance, double dt, double &factor) { // {{{
-	// Check motor limits for motor (sp,mt), which is mtr. distance is the distance to travel; dt is the time, factor is lowered if needed.
+static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double distance, double dt, double &factor) { // {{{
+	// Check motor limits for motor (sp,mt), which is mtr. For followers, limit_mtr is set to its leader unless settings.single is true.
+	// distance is the distance to travel; dt is the time, factor is lowered if needed.
 	//debug("check distance %d %d dist %f t %f", sp, mt, distance, dt);
 	if (dt == 0) {
 		debug("check distance for 0 time");
@@ -242,13 +243,13 @@ static void check_distance(int sp, int mt, Motor *mtr, double distance, double d
 		mtr->settings.last_v = 0;
 	}
 	// Limit v.
-	if (v > mtr->limit_v) {
-		debug("%d %d v %f limit %f dist %f t %f current %f", sp, mt, v, mtr->limit_v, distance, dt, mtr->settings.current_pos);
-		distance = (s * mtr->limit_v) * dt;
+	if (v > limit_mtr->limit_v) {
+		debug("%d %d v %f limit %f dist %f t %f current %f", sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos);
+		distance = (s * limit_mtr->limit_v) * dt;
 		v = fabs(distance / dt);
 	}
 	// Limit a+.
-	double limit_dv = mtr->limit_a * dt;
+	double limit_dv = limit_mtr->limit_a * dt;
 	if (v - mtr->settings.last_v * s > limit_dv) {
 		debug("a+ %d %d target v %f limit dv %f last v %f s %d current %f", sp, mt, mtr->settings.target_v, limit_dv, mtr->settings.last_v, s, mtr->settings.current_pos);
 		distance = (limit_dv * s + mtr->settings.last_v) * dt;
@@ -295,7 +296,20 @@ static double move_axes(Space *s) { // {{{
 		//if (s->id == 0 && m == 0)
 			//debug("check move %d %d target %f current %f", s->id, m, s->motor[m]->settings.target_pos, s->motor[m]->settings.current_pos);
 		double distance = s->motor[m]->settings.target_pos - s->motor[m]->settings.current_pos;
-		check_distance(s->id, m, s->motor[m], distance, hwtime_step / 1e6, factor);
+		Motor *limit_mtr;
+		if (settings.single)
+			limit_mtr = s->motor[m];
+		else {
+			int target = space_types[s->type].follow(s, m);
+			if (target < 0)
+				limit_mtr = s->motor[m];
+			else {
+				int fs = target >> 8;
+				int fa = target & 0xff;
+				limit_mtr = spaces[fs].motor[fa];
+			}
+		}
+		check_distance(s->id, m, s->motor[m], limit_mtr, distance, hwtime_step / 1e6, factor);
 	}
 	return factor; // */
 } // }}}

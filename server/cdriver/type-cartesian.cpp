@@ -250,7 +250,7 @@ static void fafree(Space *s, int a) { // {{{
 } // }}}
 
 static int ffollow(Space *s, int axis) { // {{{
-	if (FDATA(s).num_axes <= axis)
+	if (axis < 0 || axis >= FDATA(s).num_axes)
 		return -1;
 	int fs = FADATA(s, axis).space;
 	if (fs >= 0 && fs < NUM_SPACES) {
