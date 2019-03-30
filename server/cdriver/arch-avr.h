@@ -314,17 +314,13 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 			p -= avr_pos_offset[tm + mi];
 			if (check) {
 				if (arch_round_pos(ts, tm, old) != arch_round_pos(ts, tm, p)) {
-					if (moving_to_current == 1)
-						moving_to_current = 2;
-					else {
-						debug("WARNING: position for %d %d out of sync!  old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
-						//abort();
-						spaces[ts].motor[tm]->settings.current_pos = p;
-					}
+					debug("WARNING: position for %d %d out of sync!  old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
+					//abort();
+					spaces[ts].motor[tm]->settings.current_pos = p;
 				}
-				else {
+				//else {
 					//debug("Check: position for %d %d in sync, old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
-				}
+				//}
 			}
 			else {
 				// Motor positions were unknown; no check, just update position.
@@ -1420,7 +1416,7 @@ void arch_do_discard() { // {{{
 
 void arch_discard() { // {{{
 	// Discard much of the buffer, so the upcoming change will be used almost immediately.
-	if (!avr_running || stopping || avr_homing)
+	if (!avr_running || stopping || avr_homing || !computing_move)
 		return;
 	discard_pending = true;
 	if (connected && !avr_filling)

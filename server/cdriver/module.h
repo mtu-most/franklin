@@ -31,7 +31,7 @@
 
 struct MoveCommand {
 	bool cb;
-	bool probe, single;
+	int probe, single;
 	double v0, v1;
 	int tool;	// Negative value means follower ~tool.
 	double X[6];	// Value if given, NAN otherwise. (x,y,z,a,b,c)

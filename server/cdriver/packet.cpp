@@ -75,7 +75,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	double e;
 	if (tool >= 0 && tool < spaces[1].num_axes)
 		e = spaces[1].axis[tool]->settings.current;
-	else if (tool < 0 && ~tool < spaces[2].num_axes)
+	else if (move->single && tool < 0 && ~tool < spaces[2].num_axes)
 		e = spaces[2].axis[~tool]->settings.current;
 	else
 		e = NAN;
@@ -87,9 +87,18 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 				amax = spaces[1].motor[tool]->limit_a;
 			}
 			else {
-				// TODO: use leader limits with fallback to global limits.
-				vmax = spaces[2].motor[~tool]->limit_v;
-				amax = spaces[2].motor[~tool]->limit_a;
+				// use leader limits with fallback to global limits.
+				int sm = space_types[spaces[2].type].follow(&spaces[2], ~tool);
+				int fs = sm >> 8;
+				int fm = sm & 0xff;
+				if (fs >= 0 && fs < NUM_SPACES && fm >= 0 && fm < spaces[fs].num_motors) {
+					vmax = spaces[fs].motor[fm]->limit_v;
+					amax = spaces[fs].motor[fm]->limit_a;
+				}
+				else {
+					vmax = max_v;
+					amax = max_a;
+				}
 			}
 		}
 	}
@@ -149,7 +158,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	queue[2].v1 = 0;
 	if (cb)
 		queue[2].cb = true;
-	//debug("starting move (dist = %f, ramp=%f)", dist, ramp);
+	//debug("starting move (dist = %f, ramp=%f, tool=%d e=%f) single=%d", dist, ramp, tool, move->e, move->single);
 	int new_num_movecbs = next_move(settings.hwtime);
 	bool ret = 0;
 	if (new_num_movecbs > 0) {

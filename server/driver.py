@@ -251,9 +251,10 @@ class Machine: # {{{
 		self.probe_pending = False
 		self.parking = False
 		self.home_phase = None
+		self.home_order = None
 		self.home_target = None
-		self.home_cb = [False, self._do_home]
-		self.probe_cb = [False, None]
+		self.home_cb = self._do_home
+		self.probe_cb = None
 		self.probe_speed = 3.
 		self.gcode_file = False
 		self.gcode_map = None
@@ -431,7 +432,7 @@ class Machine: # {{{
 			self.movewait -= num
 		if self.movewait == 0:
 			#log('running cbs: %s' % repr(self.movecb))
-			call_queue.extend([(x[1], [done]) for x in self.movecb])
+			call_queue.extend([(x, [done]) for x in self.movecb])
 			self.movecb = []
 			if self.flushing and self.queue_pos >= len(self.queue):
 				#log('done flushing')
@@ -443,7 +444,7 @@ class Machine: # {{{
 		cmd = cdriver.get_interrupt()
 		#log('received interrupt: %s' % repr(cmd))
 		if cmd['type'] == 'move-cb':
-			#log('movecb %d/%d (%d in queue)' % (s, self.movewait, len(self.movecb)))
+			#log('movecb %d/%d (%d in queue)' % (cmd['num'], self.movewait, len(self.movecb)))
 			self._trigger_movewaits(cmd['num'])
 		elif cmd['type'] == 'temp-cb':
 			self.alarms.add(cmd['temp'])
@@ -509,7 +510,7 @@ class Machine: # {{{
 		elif cmd['type'] == 'pinname':
 			if cmd['pin'] >= len(self.pin_names):
 				self.pin_names.extend([[0xf, '(Pin %d)' % i] for i in range(len(self.pin_names), cmd['pin'] + 1)])
-			self.pin_names[cmd['pin']] = [cmd['mode'], cmd['name']]
+			self.pin_names[cmd['pin']] = [cmd['mode'], cmd['name'].decode('utf-8', 'replace')]
 			#log('pin name {} = {}'.format(cmd['pin'], self.pin_names[cmd['pin']]))
 		elif cmd['type'] == 'connected':
 			def sync():
@@ -678,7 +679,7 @@ class Machine: # {{{
 		if self.probe_cb in self.movecb:
 			#log('killing prober')
 			self.movecb.remove(self.probe_cb)
-			self.probe_cb[1](None)
+			self.probe_cb(None)
 		self._globals_update()
 	# }}}
 	def _finish_done(self): # {{{
@@ -798,36 +799,42 @@ class Machine: # {{{
 				v = self.max_v
 			self.movewait += 1
 			#log('movewait +1 -> %d' % self.movewait)
-			#log('move args: ' + repr((self.current_extruder, move, e, v)))
+			#log('move args: ' + repr((self.current_extruder, move, e, v, single, probe, rel)))
 			self.wait = cdriver.move(*([self.current_extruder] + move + [0, 0, 0, e, v]), single = single, probe = probe, relative = rel)
 		if self.flushing is None and not self.wait:
 			self.flushing = False
 		#log('queue done %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 	# }}}
 	def _do_home(self, done = None): # {{{
-		#log('do_home: %s %s' % (self.home_phase, done))
-		# 0: Prepare for next order.
-		# 1: Move to limits. (enter from loop after 2).
-		#  : If leader or follower hits limit: move only partner(s) until all hit limit.
-		# 2: Finish moving to limits; loop home_order; move slowly away from switch.
-		# 3: Set current position; move delta and followers.
-		# 4: Move within limits.
-		# 5: Return.
-		#log('home %s %s' % (self.home_phase, repr(self.home_target)))
-		#traceback.print_stack()
+		'''Home the machine.
+		Steps to do:
+		None: ignore; return (may happen after home is aborted).
+		0: Set up everything
+		For each order id that is present, in ascending order:
+			move position to switch, including followers with switch on the same side; wait for limit: 1, or
+			if a leader or follower with its partners on the same side hit a switch, move only its partners until they also hits their switches: 2
+			continue until all switches are hit
+		Move all motors away from their switches: 3
+		Synchronize followers: 4
+		Move to opposite followers: 5
+		Move away from switches: 6
+		Synchronize followers: 7
+		Move to second home position: 8
+		Move head within limits: 9
+		Finish up.
+		'''
+
+		#log('home %s %s' % (self.home_phase, repr(self.home_order)))
 		home_v = 50 / self.feedrate
 		if self.home_phase is None:
 			#log('_do_home ignored because home_phase is None')
 			return
 		if self.home_phase == 0:
-			if done is not None:
-				# Continuing call received after homing was aborted; ignore.
-				return
 			# Initial call; start homing.
-			self.home_phase = 1
 			# If it is currently moving, doing the things below without pausing causes stall responses.
 			self.user_pause(True, False)
 			self.user_sleep(False)
+			# Set all extruders to 0.
 			for i, e in enumerate(self.spaces[1].axis):
 				self.user_set_axis_pos(1, i, 0)
 			self.home_limits = [(a['min'], a['max']) for a in self.spaces[0].axis]
@@ -835,177 +842,191 @@ class Machine: # {{{
 				self.expert_set_axis((0, a), min = float('-inf'), max = float('inf'))
 			self.home_orig_type = self.spaces[0].type
 			self.expert_set_space(0, type = TYPE_CARTESIAN)
-			n = set()
+			self.home_order = {'standard': {}, 'opposite': [], 'homing': {}, 'single': []}
+			followers_used = {'standard': set(), 'opposite': []}
 			for m, mtr in enumerate(self.spaces[0].motor):
-				if self._pin_valid(mtr['limit_min_pin']) or self._pin_valid(mtr['limit_max_pin']):
-					n.add(mtr['home_order'])
+				can_use_pos = self._pin_valid(mtr['limit_max_pin'])
+				can_use_neg = self._pin_valid(mtr['limit_min_pin'])
+				if can_use_pos or can_use_neg:
+					followers = []
+					for fm, fmtr in enumerate(self.spaces[2].motor):
+						if self.spaces[2].follower[fm]['space'] == 0 and self.spaces[2].follower[fm]['motor'] == m:
+							followers.append({'leader': m, 'motor': (2, fm), 'min': self._pin_valid(fmtr['limit_min_pin']), 'max': self._pin_valid(fmtr['limit_max_pin'])})
+					if not can_use_neg:
+						use_pos = True
+					elif not can_use_pos:
+						use_pos = False
+					else:
+						num_pos = sum(f['max'] for f in followers)
+						num_neg = sum(f['min'] for f in followers)
+						use_pos = num_pos >= num_neg
+					if mtr['home_order'] not in self.home_order['standard']:
+						self.home_order['standard'][mtr['home_order']] = {}
+					# Use f.update() or f to add the field to the dict, but also use the dict as the expression.
+					use_followers = {f['motor']: f.update({'positive': use_pos}) or f for f in followers if f['max' if use_pos else 'min']}
+					self.home_order['standard'][mtr['home_order']][m] = {'motor': (0, m), 'positive': use_pos, 'followers': use_followers}
+					followers_used['standard'].update(use_followers[f]['motor'][1] for f in use_followers)
+					for f in followers:
+						if f['motor'][1] in followers_used['standard']:
+							continue
+						if any(self._pin_valid(f[limit]) for limit in ('limit_min_pin', 'limit_max_pin')):
+							self.home_order['opposite'].append({'motor': f['motor'], 'positive': self._pin_valid(f['limit_max_pin']), 'leader': m})
+							followers_used['opposite'].append(f['motor'][1])
 				else:
-					self.user_set_axis_pos(0, m, 0)
-			if len(n) == 0:
-				self.home_phase = 4
-			else:
-				self.home_order = min(n)
+					self.user_set_axis_pos(0, m, mtr['home_pos'])
+			self.home_phase = 1
 			# Fall through.
-		if self.home_phase == 1:
-			# Move to limit.
-			self.home_phase = 2
-			self.home_motors = []
-			for i, m in enumerate(self.spaces[0].motor):
-				if (self._pin_valid(m['limit_min_pin']) or self._pin_valid(m['limit_max_pin'])) and m['home_order'] == self.home_order:
-					self.home_motors.append((i, self.spaces[0].axis[i], m))
-			self.limits[0].clear()
-			self.home_target = {}
-			dist = 1000 #TODO: use better value.
-			for i, a, m in self.home_motors:
-				self.spaces[0].set_current_pos(i, 0)
-				if self._pin_valid(m['limit_max_pin']):
-					self.home_target[i] = dist - (0 if i != 2 else self.zoffset)
+		while True:	# Allow code below to repeat from here.
+			if self.home_phase == 1:
+				# Find out what the situation is. Which motors should still be moved, and should we now move all or a single motor?
+				if len(self.home_order['standard']) > 0:
+					current = self.home_order['standard'][min(self.home_order['standard'])]
+					if done is True:
+						# We moved dist and still didn't arrive at any switch. Give up.
+						log('Warning: limits were not hit during home: {}'.format(current))
+						# No targets left to move to.
+						self.home_phase = 3
+					elif done is False:
+						#log('hit limit %s %s current %s' % (self.limits[0], self.limits[2], current))
+						# A limit was hit. Find out which one and start single moves if so needed.
+						for m in self.limits[0]:
+							if m in current:
+								if len(current[m]['followers']) > 0:
+									self.home_order['single'] = current[m]['followers']
+									self.home_order['leader'] = m
+									self.home_phase = 2
+									#log('leader hit first; single = {}'.format(self.home_order['single']))
+								#else:
+									#log('solo hit')
+								self.home_order['homing'][(0, m)] = current.pop(m)
+						self.limits[0].clear()
+						for fm in self.limits[2]:
+							for m in current:
+								if (2, fm) in current[m]['followers']:
+									self.home_order['homing'][(2, fm)] = current[m]['followers'][(2, fm)]
+									self.home_order['single'] = {(0, m): current[m]}
+									self.home_order['single'].update(current[m]['followers'])
+									self.home_order['leader'] = m
+									self.home_order['homing'][(2, fm)] = self.home_order['single'].pop((2, fm))
+									self.home_phase = 2
+									#log('follower hit first; single = {}'.format(self.home_order['single']))
+						self.limits[2].clear()
+					else:
+						# This is the first time we are here. Start the move.
+						pass
+					# If the home phase is still 1, move all motors.
+					if self.home_phase == 1:
+						dist = 1000 #TODO: use better value.
+						self.home_target = {m: dist if current[m]['positive'] else -dist for m in current}
+						if len(self.home_target) > 0:
+							self.movecb.append(self.home_cb)
+							self.user_line(self.home_target, v = home_v * len(self.home_target) ** .5, single = False, force = True, relative = True)[1](None)
+							return
+						else:
+							# Done with this phase.
+							self.home_phase = 3
+							break
 				else:
-					self.home_target[i] = -dist - (0 if i != 2 else self.zoffset)
-			if len(self.home_target) > 0:
-				self.home_cb[0] = list(self.home_target.keys())
-				if self.home_cb not in self.movecb:
-					self.movecb.append(self.home_cb)
-				#log("home phase %d target %s" % (self.home_phase, self.home_target))
-				self.user_line(self.home_target, v = home_v * len(self.home_target) ** .5, single = True, force = True)[1](None)
-				return
-			# Fall through.
-		if self.home_phase == 2:
-			# Continue moving to find limit switch.
-			found_limits = False
-			for a in self.limits[0].keys():
-				if a in self.home_target:
-					#log('found limit %d' % a)
-					self.home_target.pop(a)
-					found_limits = True
-					# Make sure no attempt is made to move through the limit switch (not even by rounding errors).
-					self.spaces[0].set_current_pos(a, self.spaces[0].get_current_pos(a))
-			# Repeat until move is done, or all limits are hit.
-			if (not done or found_limits) and len(self.home_target) > 0:
-				self.home_cb[0] = list(self.home_target.keys())
-				if self.home_cb not in self.movecb:
-					self.movecb.append(self.home_cb)
-				#log("0 t %s" % (self.home_target))
-				k = tuple(self.home_target.keys())[0]
-				dist = abs(self.home_target[k] - self.spaces[0].get_current_pos(k))
-				if dist > 0:
-					#log("home phase %d target %s" % (self.home_phase, self.home_target))
-					self.user_line(self.home_target, v = home_v * len(self.home_target) ** .5, single = True, force = True)[1](None)
-					return
+					# No targets left to move to.
+					self.home_phase = 3
+					break
 				# Fall through.
-			if len(self.home_target) > 0:
-				log('Warning: not all limits were found during homing')
-			n = set()
-			for m in self.spaces[0].motor:
-				if (self._pin_valid(m['limit_min_pin']) or self._pin_valid(m['limit_max_pin'])) and m['home_order'] > self.home_order:
-					n.add(m['home_order'])
-			if len(n) > 0:
+			if self.home_phase == 2:
+				for m in self.limits[0]:
+					if (0, m) in self.home_order['single']:
+						self.home_order['homing'][(0, m)] = self.home_order['single'].pop((0, m))
+						current = self.home_order['standard'][min(self.home_order['standard'])]
+						current.pop(m)
+				self.limits[0].clear()
+				for m in self.limits[2]:
+					if (2, m) in self.home_order['single']:
+						self.home_order['homing'][(2, m)] = self.home_order['single'].pop((2, m))
+				self.limits[2].clear()
+				if len(self.home_order['single']) > 0:
+					target = tuple(self.home_order['single'])[0]
+					target_obj = self.home_order['single'][target]
+					self.movecb.append(self.home_cb)
+					if target[0] == 0:
+						self.user_line({target[1]: self.home_target[target[1]]}, relative = True, force = True, single = True)[1](None)
+					else:
+						self.user_line(e = self.home_target[target_obj['leader']], tool = ~target[1], relative = False, force = True, single = True)[1](None)
+					return
+				# Done with these followers, clean up and move on.
 				self.home_phase = 1
-				self.home_order = min(n)
-				return self._do_home()
-			# Move away slowly.
+				continue	# Restart at phase 1.
+			break
+		if self.home_phase == 3:
+			# Move all motors away from their switches
 			data = []
 			num = 0
-			for m in self.spaces[0].motor:
-				if self._pin_valid(m['limit_max_pin']):
-					data.append(-1)
-					num += 1
-				elif self._pin_valid(m['limit_min_pin']):
-					data.append(1)
-					num += 1
-				else:
+			for m, mtr in enumerate(self.spaces[0].motor):
+				if (0, m) not in self.home_order['homing']:
 					data.append(0)
-			self.home_phase = 3
+				else:
+					num += 1
+					data.append(-1 if self.home_order['homing'][(0, m)]['positive'] else 1)
+			data.extend([0] * len(self.spaces[1].motor))
+			for m, mtr in enumerate(self.spaces[2].motor):
+				if (2, m) not in self.home_order['homing']:
+					data.append(0)
+				else:
+					num += 1
+					data.append(-1 if self.home_order['homing'][(2, m)]['positive'] else 1)
+			self.home_phase = 4
 			if num > 0:
-				dprint('homing', data)
 				cdriver.home(*data)
 				return
 			# Fall through.
-		if self.home_phase == 3:
-			# Move followers and delta into alignment.
-			self.home_return = []
-			for i, m in enumerate(self.spaces[0].motor):
-				if i in self.limits[0]:
-					if not math.isnan(m['home_pos']):
-						#log('set %d %d %f' % (0, i, m['home_pos']))
-						self.home_return.append(m['home_pos'] - self.spaces[0].get_current_pos(i))
-						self.spaces[0].set_current_pos(i, m['home_pos'])
-					else:
-						#log('limited zeroset %d %d' % (0, i))
-						self.home_return.append(-self.spaces[0].get_current_pos(i))
-						self.spaces[0].set_current_pos(i, 0)
-				else:
-					if (self._pin_valid(m['limit_min_pin']) or self._pin_valid(m['limit_max_pin'])) and not math.isnan(m['home_pos']):
-						#log('defset %d %d %f' % (0, i, m['home_pos']))
-						self.home_return.append(m['home_pos'] - self.spaces[0].get_current_pos(i))
-						self.spaces[0].set_current_pos(i, m['home_pos'])
-					else:
-						#log('unlimited zeroset %d %d' % (0, i))
-						self.home_return.append(-self.spaces[0].get_current_pos(i))
-						self.spaces[0].set_current_pos(i, 0)
-			self.home_phase = 4
-			# FIXME: support homing of followers.
-			'''
-			# Align followers.
-			for i, m in enumerate(self.spaces[2].motor):
-				fs = self.spaces[2].follower[i]['space']
-				fm = self.spaces[2].follower[i]['motor']
-				# Use 2, not len(self.spaces), because following followers is not supported.
-				if not 0 <= fs < 2 or not 0 <= fm < len(self.spaces[fs].motor):
-					continue
-				if self._pin_valid(m['limit_max_pin']):
-					if not self._pin_valid(self.spaces[fs].motor[fm]['limit_max_pin']) and self._pin_valid(self.spaces[fs].motor[fm]['limit_min_pin']):
-						# Opposite limit pin: don't compare values.
-						groups[2].append((2, i))
-						continue
-					for g in groups[1]:
-						if (fs, fm) in g:
-							g.append((2, i))
-							break
-					else:
-						groups[1].append([(2, i), (fs, fm)])
-				elif self._pin_valid(m['limit_min_pin']):
-					if self._pin_valid(self.spaces[fs].motor[fm]['limit_max_pin']):
-						# Opposite limit pin: don't compare values.
-						groups[2].append((2, i))
-						continue
-					for g in groups[0]:
-						if (fs, fm) in g:
-							g.append((2, i))
-							break
-					else:
-						groups[0].append([(2, i), (fs, fm)])
-			self.home_target = {}
-			for g in groups[0]:
-				target = max(g, key = lambda x: self.spaces[x[0]].motor[x[1]]['home_pos'])
-				target = self.spaces[target[0]].motor[target[1]]['home_pos']
-				for s, m in g:
-					if target != self.spaces[s].motor[m]['home_pos']:
-						offset = (0 if s != 0 or m != 2 else self.zoffset)
-						self.home_target[(s, m)] = target - offset
-			for g in groups[1]:
-				target = min(g, key = lambda x: self.spaces[x[0]].motor[x[1]]['home_pos'])
-				target = self.spaces[target[0]].motor[target[1]]['home_pos']
-				for s, m in g:
-					if target != self.spaces[s].motor[m]['home_pos']:
-						offset = (0 if s != 0 or m != 2 else self.zoffset)
-						self.home_target[(s, m)] = target - offset
-			for s, m in groups[2]:
-				fs = self.spaces[s].follower[m]['space']
-				fm = self.spaces[s].follower[m]['motor']
-				if self.spaces[fs].motor[fm]['home_pos'] != self.spaces[s].motor[m]['home_pos']:
-					offset = (0 if s != 0 or m != 2 else self.zoffset)
-					self.home_target[(s, m)] = self.spaces[fs].motor[fm]['home_pos'] - offset
-			if len(self.home_target) > 0:
-				self.home_cb[0] = False
-				if self.home_cb not in self.movecb:
-					self.movecb.append(self.home_cb)
-				#log("home phase %d target %s" % (self.home_phase, self.home_target))
-				self.user_line(self.home_target, single = True, force = True)[1](None)
-				return
-			'''
-			# Fall through.
 		if self.home_phase == 4:
+			# Homing finished; set motor positions.
+			self.home_order['sync'] = {}
+			for s, m in self.home_order['homing']:
+				self.user_set_axis_pos(s, m, self.spaces[s].motor[m]['home_pos'])
+				if s == 0:
+					leader = m
+				else:
+					leader = self.spaces[s].follower[m]['motor']
+				if leader not in self.home_order['sync']:
+					self.home_order['sync'][leader] = {}
+				self.home_order['sync'][leader][(s, m)] = self.spaces[s].motor[m]
+			# Move motors to be synchronized.
+			for leader in self.home_order['sync']:
+				if self.home_order['homing'][(0, leader)]['positive']:
+					self.home_order['sync'][leader][None] = min(self.home_order['sync'][leader][x]['home_pos'] for x in self.home_order['sync'][leader])
+				else:
+					self.home_order['sync'][leader][None] = max(self.home_order['sync'][leader][x]['home_pos'] for x in self.home_order['sync'][leader])
+			self.home_order['leader'] = [[l, list(x for x in self.home_order['sync'][l] if x is not None and self.home_order['sync'][l][x]['home_pos'] != self.home_order['sync'][l][None])] for l in list(self.home_order['sync'])]
+			#log('cleanup: {}'.format(self.home_order['leader']))
+			while len(self.home_order['leader']) > 0 and len(self.home_order['leader'][0][1]) == 0:
+				self.home_order['leader'].pop(0)
+			self.home_phase = 5
+			if len(self.home_order['leader']) > 0:
+				target = self.home_order['sync'][self.home_order['leader'][0][0]][None]
+				m = self.home_order['leader'][0][1].pop(0)
+				self.movecb.append(self.home_cb)
+				#log('m={}'.format(m))
+				if m[0] == 0:
+					self.user_line({m[1]: target}, relative = False, force = True, single = True)[1](None)
+				else:
+					self.user_line(tool = ~target[1], e = target, relative = False, force = True, single = True)[1](None)
+				return
+			# Fall through.
+		if self.home_phase == 5:
+			while len(self.home_order['leader']) > 0 and len(self.home_order['leader'][0][1]) == 0:
+				self.home_order['leader'].pop(0)
+			if len(self.home_order['leader']) > 0:
+				target = self.home_order['sync'][self.home_order['leader']][0][0]
+				m = self.home_order['leader'][0][1].pop(0)
+				self.movecb.append(self.home_cb)
+				if m[0] == 0:
+					self.user_line({m[1]: target}, relative = False, force = True, single = True)[1](None)
+				else:
+					self.user_line(tool = ~target[1], e = target, relative = False, force = True, single = True)[1](None)
+				return
+			# Move to opposite followers
+			# for m in self.home_order['opposite']: TODO
+			# Move away from switches: 5
+
 			# Reset space type and move to pos2.
 			self.expert_set_space(0, type = self.home_orig_type)
 			for a, ax in enumerate(self.spaces[0].axis):
@@ -1015,16 +1036,13 @@ class Machine: # {{{
 				if not math.isnan(a['home_pos2']):
 					offset = (0 if i != 2 else self.zoffset)
 					target[i] = a['home_pos2'] - offset
-			self.home_phase = 5
+			self.home_phase = 8
 			if len(target) > 0:
-				self.home_cb[0] = False
-				if self.home_cb not in self.movecb:
-					self.movecb.append(self.home_cb)
-					#log("home phase %d target %s" % (self.home_phase, target))
+				self.movecb.append(self.home_cb)
 				self.user_line(target, force = True)[1](None)
 				return
 			# Fall through.
-		if self.home_phase == 5:
+		if self.home_phase == 8:
 			# Move within bounds.
 			target = {}
 			for i, a in enumerate(self.spaces[0].axis):
@@ -1034,17 +1052,13 @@ class Machine: # {{{
 					target[i] = a['max'] - offset
 				elif current < a['min'] - offset:
 					target[i] = a['min'] - offset
-			self.home_phase = 6
+			self.home_phase = 9
 			if len(target) > 0:
-				self.home_cb[0] = False
-				if self.home_cb not in self.movecb:
-					self.movecb.append(self.home_cb)
-				#log("home phase %d target %s" % (self.home_phase, target))
+				self.movecb.append(self.home_cb)
 				self.user_line(target, force = True)[1](None)
-				#log('movecb: ' + repr(self.movecb))
 				return
 			# Fall through.
-		if self.home_phase == 6:
+		if self.home_phase == 9:
 			self.home_phase = None
 			self.position_valid = True
 			if self.home_id is not None:
@@ -1061,12 +1075,12 @@ class Machine: # {{{
 			return
 		pos = self.get_axis_pos(0)
 		cdriver.adjust_probe(pos[0], pos[1], pos[2] + self.zoffset)
-		self.probe_cb[1] = lambda good: self.user_request_confirmation("Continue?")[1](False) if good is not None else None
+		self.probe_cb = lambda good: self.user_request_confirmation("Continue?")[1](False) if good is not None else None
 		self.movecb.append(self.probe_cb)
 		self.user_line({2: self.probe_safe_dist}, relative = True)[1](None)
 	# }}}
 	def _one_probe(self): # {{{
-		self.probe_cb[1] = self._handle_one_probe
+		self.probe_cb = self._handle_one_probe
 		self.movecb.append(self.probe_cb)
 		z = self.get_axis_pos(0, 2)
 		z_low = self.spaces[0].axis[2]['min']
@@ -1101,7 +1115,7 @@ class Machine: # {{{
 					sys.stderr.write('\n')
 				return
 			# Goto x,y
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 1, good)
+			self.probe_cb = lambda good: self._do_probe(id, x, y, z, 1, good)
 			self.movecb.append(self.probe_cb)
 			px = p[0][2] + p[0][4] * x / p[1][0]
 			py = p[0][3] + p[0][5] * y / p[1][1]
@@ -1109,7 +1123,7 @@ class Machine: # {{{
 			self.user_line([p[0][0] + px * self.gcode_angle[1] - py * self.gcode_angle[0], p[0][1] + py * self.gcode_angle[1] + px * self.gcode_angle[0]])[1](None)
 		elif phase == 1:
 			# Probe
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 2, good)
+			self.probe_cb = lambda good: self._do_probe(id, x, y, z, 2, good)
 			if self._pin_valid(self.probe_pin):
 				self.movecb.append(self.probe_cb)
 				z_low = self.spaces[0].axis[2]['min']
@@ -1141,7 +1155,7 @@ class Machine: # {{{
 						x = p[1][0]
 						y += 1
 			z += self.probe_safe_dist
-			self.probe_cb[1] = lambda good: self._do_probe(id, x, y, z, 0, good)
+			self.probe_cb = lambda good: self._do_probe(id, x, y, z, 0, good)
 			self.movecb.append(self.probe_cb)
 			# Retract
 			self.user_line({2: z})[1](None)
@@ -1613,7 +1627,7 @@ class Machine: # {{{
 			#log('flush done')
 			if id is not  None:
 				self._send(id, 'return', w)
-		self.movecb.append((False, cb))
+		self.movecb.append(cb)
 		if self.flushing is not True:
 			self.user_line()[1](None)
 		#log('end flush preparation')
@@ -1658,7 +1672,7 @@ class Machine: # {{{
 				self._send(id, 'return', None)
 			return
 		self.queue.append((moves, e, tool, v, probe, single, relative))
-		#log('moving to {}'.format(moves))
+		#log('moving to {}, e({})={}'.format(moves, tool, e))
 		if not self.wait:
 			#log('doing queue now')
 			self._do_queue()
@@ -1804,6 +1818,7 @@ class Machine: # {{{
 		self.user_pause(store = False)
 		for g, gpio in enumerate(self.gpios):
 			self.user_set_gpio(g, state = gpio.reset)
+		self._unpause()
 		self._job_done(False, 'aborted by user')
 		# Sleep doesn't work as long as home_phase is non-None, so do it after _job_done.
 		self.user_sleep(force = True)
@@ -1823,10 +1838,11 @@ class Machine: # {{{
 				# First reset all axes that don't have a limit switch.
 				if self.queue_info is not None:
 					self._reset_extruders(self.queue_info[1])
-					self.user_line(self.queue_info[1])[1](None)
+					self.user_line(self.queue_info[1][0], e = self.queue_info[1][1][self.current_extruder] if self.current_extruder < len(self.spaces[1].axis) else 0)[1](None)
 				# TODO: adjust extrusion of current segment to shorter path length.
 				#log('resuming')
 				self.resuming = True
+			self._unpause()
 			#log('sending resume')
 			cdriver.resume()
 			self._do_queue()
@@ -1848,7 +1864,7 @@ class Machine: # {{{
 						store = False
 					if self.probe_cb in self.movecb:
 						self.movecb.remove(self.probe_cb)
-						self.probe_cb[1](None)
+						self.probe_cb(None)
 						store = False
 					#log('pausing gcode %d/%d/%d' % (self.queue_pos, num_in_queue, len(self.queue)))
 					if self.flushing is None:
@@ -1860,9 +1876,9 @@ class Machine: # {{{
 					self.paused = False
 					if self.probe_cb in self.movecb:
 						self.movecb.remove(self.probe_cb)
-						self.probe_cb[1](None)
+						self.probe_cb(None)
 					if len(self.movecb) > 0:
-						call_queue.extend([(x[1], [False]) for x in self.movecb])
+						call_queue.extend([(x, [False]) for x in self.movecb])
 				self.queue = []
 				self.movecb = []
 				self.flushing = False
@@ -1923,14 +1939,14 @@ class Machine: # {{{
 					call_queue.append((cb, []))
 					if id is not None:
 						self._send(id, 'return', None)
-				self.movecb.append((False, wrap_cb))
+				self.movecb.append(wrap_cb)
 				self.user_line()[1](None)
 			else:
 				if id is not None:
 					self._send(id, 'return', None)
 			return
 		#log('not done parking: ' + repr((next_order)))
-		self.movecb.append((False, lambda done: self.user_park(cb, abort = False, order = next_order + 1, aborted = not done)[1](id)))
+		self.movecb.append(lambda done: self.user_park(cb, abort = False, order = next_order + 1, aborted = not done)[1](id))
 		self.user_line([a['park'] - (0 if ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(self.spaces[0].axis)])[1](None)
 	# }}}
 	@delayed
@@ -1964,7 +1980,7 @@ class Machine: # {{{
 			ret(self.movewait == 0)
 		else:
 			#log('waiting for cb')
-			self.movecb.append((True, ret))
+			self.movecb.append(ret)
 	# }}}
 	def waiting_for_cb(self): # {{{
 		'''Check if any process is waiting for the move queue to be empty.
@@ -2268,7 +2284,7 @@ class Machine: # {{{
 			self._send(id, 'return', success)
 		else:
 			if self.probing:
-				call_queue.append((self.probe_cb[1], [False if success else None]))
+				call_queue.append((self.probe_cb, [False if success else None]))
 			else:
 				if not success:
 					self.probe_pending = False

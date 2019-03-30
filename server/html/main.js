@@ -679,7 +679,7 @@ function new_machine(uuid) { // {{{
 	labels_element.insertBefore(machines[uuid].label, new_tab);
 	machines_element.Add(p);
 	globals_update(uuid, false);
-	if (selected_machine === null)
+	if (selected_machine === null || !selected_machine.connected)
 		select_machine(p);
 } // }}}
 

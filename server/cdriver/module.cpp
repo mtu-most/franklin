@@ -783,8 +783,8 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		ret = Py_BuildValue("{ss,si,si}", "type", "pinchange", "pin", shmem->interrupt_ints[0], "state", shmem->interrupt_ints[1]);
 		break;
 	case CMD_PINNAME:
-		//debug("name for pin %d: %x %s", shmem->interrupt_ints[0], shmem->interrupt_str[0], &shmem->interrupt_str[1]);
-		ret = Py_BuildValue("{ss,si,si,ss#}", "type", "pinname", "pin", shmem->interrupt_ints[0], "mode", shmem->interrupt_str[0], "name", &shmem->interrupt_str[1], shmem->interrupt_ints[1]);
+		//debug("name for pin %d: %x %s %d", shmem->interrupt_ints[0], shmem->interrupt_str[0], &shmem->interrupt_str[1], shmem->interrupt_ints[1]);
+		ret = Py_BuildValue("{ss,si,si,sy#}", "type", "pinname", "pin", shmem->interrupt_ints[0], "mode", shmem->interrupt_str[0], "name", &shmem->interrupt_str[1], shmem->interrupt_ints[1]);
 		break;
 	case CMD_DISCONNECT:
 		ret = Py_BuildValue("{ss}", "type", "disconnect");

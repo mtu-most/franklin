@@ -39,9 +39,7 @@ static void change0(int qpos) { // {{{
 // For documentation about variables used here, see struct History in cdriver.h
 int next_move(int32_t start_time) { // {{{
 	settings.probing = false;
-	settings.single = false;
 	settings.factor = 0;
-	moving_to_current = 0;
 	int num_cbs = 0;
 	run_file_fill_queue();
 	if (settings.queue_start == settings.queue_end && !settings.queue_full) {
@@ -53,6 +51,7 @@ int next_move(int32_t start_time) { // {{{
 	// Set everything up for running queue[settings.queue_start].
 	int q = settings.queue_start;
 	int n = (settings.queue_start + 1) % QUEUE_LENGTH;
+	settings.single = queue[q].single;
 
 	if (queue[q].cb)
 		++num_cbs;
@@ -78,6 +77,11 @@ int next_move(int32_t start_time) { // {{{
 			}
 			else
 				mdebug("non-nan: %d %d %f %f", s, a, sp.axis[a]->settings.source, sp.motor[a]->settings.current_pos);
+		}
+		// Followers don't have good motor data, so initialize them here.
+		for (int a = 0; a < sp.num_axes; ++a) {
+			if (s == 2)
+				sp.motor[a]->settings.current_pos = sp.axis[a]->settings.source;
 		}
 	}
 	// }}}
@@ -163,10 +167,10 @@ int next_move(int32_t start_time) { // {{{
 		mdebug("move extruder to %f", queue[q].e);
 	}
 	else if (queue[q].single && queue[q].tool < 0 && ~queue[q].tool < spaces[2].num_axes && !std::isnan(queue[q].e)) {
-		spaces[1].axis[~queue[q].tool]->settings.endpos = queue[q].e;
-		mdebug("move follower to %f", queue[q].e);
+		spaces[2].axis[~queue[q].tool]->settings.endpos = queue[q].e;
+		mdebug("move follower to %f, current=%f source=%f current_pos=%f", queue[q].e, spaces[2].axis[~queue[q].tool]->settings.current, spaces[2].axis[~queue[q].tool]->settings.source, spaces[2].motor[~queue[q].tool]->settings.current_pos);
 	}
-	mdebug("move prepared, from=(%f,%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6);
+	mdebug("move prepared, from=(%f,%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f, single=%d", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6, queue[q].single);
 	//debug("times end %d current %d dist %f v0 %f v1 %f", settings.end_time, settings.hwtime, settings.dist, settings.v0, settings.v1);
 
 	settings.queue_start = n;
@@ -417,7 +421,7 @@ static double set_targets(double factor) { // {{{
 				mdebug("setting axis %d %d source from nan to 0", s, a);
 			}
 			ax->settings.target = ax->settings.source + factor * (ax->settings.endpos - ax->settings.source);
-			//debug("setting target for %d %d to %f (%f -> %f)", s, a, ax->settings.target, ax->settings.source, ax->settings.endpos);
+			mdebug("setting target for %d %d to %f (%f -> %f)", s, a, ax->settings.target, ax->settings.source, ax->settings.endpos);
 		}
 		double f = move_axes(&sp);
 		if (max_f > f)

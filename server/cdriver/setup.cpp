@@ -75,7 +75,6 @@ void setup()
 	zoffset = 0;
 	aborting = false;
 	computing_move = false;
-	moving_to_current = 0;
 	stopping = 0;
 	sending_fragment = 0;
 	transmitting_fragment = false;

@@ -455,7 +455,6 @@ void buffer_refill();
 void store_settings();
 void restore_settings();
 void reset_pos(Space *s);
-EXTERN int moving_to_current;
 
 // globals.cpp
 bool globals_load();
