@@ -626,17 +626,14 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"cpi 16, %[state_non_move]"	"\n"
 		"\t"	"brcc 1f"			"\n"
 		"\t"	"rjmp isr_end16"		"\n"
+	"2:\t"						"\n"
+		"\t"	"rjmp isr_underrun"		"\n"
 	"1:\t"						"\n"
 		// Enable interrupts, so the uart doesn't overrun.
 		"\t"	"push 27"			"\n"
 		"\t"	"clr 27"			"\n"
 		"\t"	"sts %[timsk], 27"		"\n"
 		"\t"	"sei"				"\n"
-
-		// If audio, everything is different.
-		"\t"	"lds 16, audio"			"\n"
-		"\t"	"tst 16"			"\n"
-		"\t"	"brne 2f"			"\n"
 
 		// Save all registers that are used.
 		"\t"	"push 0"			"\n"
@@ -654,22 +651,18 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"push 30"			"\n"
 		"\t"	"push 31"			"\n"
 		// move_phase += 1;
-		"\t"	"lds 17, move_phase"		"\n"
+		"\t"	"lds 17, %[move_phase]"		"\n"
 		"\t"	"inc 17"			"\n"
-		"\t"	"sts move_phase, 17"		"\n"
+		"\t"	"sts %[move_phase], 17"		"\n"
 		// 16 is motor countdown; y is motor pointer.
 		"\t"	"lds 16, active_motors"		"\n"
 		"\t"	"ldi 28, lo8(motor)"		"\n"
 		"\t"	"ldi 29, hi8(motor)"		"\n"
 		// If active_motors is 0 and move is requested; trigger underrun immediately.
 		"\t"	"tst 16"			"\n"
-		"\t"	"brne 1f"			"\n"
-		"\t"	"rjmp isr_underrun"		"\n"
-	"2:\t"						"\n"
-		"\t"	"rjmp isr_audio"		"\n"
-	"1:\t"						"\n"
+		"\t"	"breq 2b"			"\n"
 
-	// Register usage:
+	// Register usage: (outdated!)
 	// 16: motor countdown.
 	// 17: move_phase.
 	// 18: sample value (signed).
@@ -691,6 +684,10 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"sbrs 20, %[activebit]"		"\n"
 		"\t"	"rjmp isr_action_continue"	"\n"
 		// }}}
+		// If pwm: skip normal movement.
+		"\t"	"sbrc 20, %[pwmbit]"		"\n"
+		"\t"	"rjmp isr_action_pwm"		"\n"
+
 		// Load value.
 		"\t"	"ld 24, z"			"\n"
 		"\t"	"ldd 25, z + 1"			"\n"
@@ -700,7 +697,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"ldd 0, y + %[dir_bitmask]"	"\n"
 		"\t"	"ld 21, x"			"\n"	// r21 is current port value.
 		// }}}
-		// positive ? set dir : reset dir (don't send yet) <18(numsteps) <0(dir bitmask) <21(current value) >21(new value) >19(abs numsteps) {{{
+		// positive ? set dir : reset dir (don't send yet) <0(dir bitmask) <21(current value) >21(new value) >19(abs numsteps) {{{
 		"\t"	"tst 25"			"\n"	// Test sample sign.
 		"\t"	"brmi 1f"			"\n"
 		"\t"	"or 21, 0"			"\n"
@@ -825,7 +822,47 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"rjmp 2b"			"\n"	// 2	2
 	"3:\t"		"clr 27"			"\n"	// r27 is 0 again.
 		ADD_DIR_DELAY
+		"\t"	"rjmp isr_action_continue"	"\n"
 		//*/
+	"isr_action_pwm:"				"\n"
+		// If move_phase is not 1, do nothing.
+		"\t"	"dec 17"			"\n"
+		"\t"	"lds 18, full_phase_bits"	"\n"
+		// Shift right until only 4 bits are left.
+	"1:\t"		"cpi 18, 4"			"\n"
+		"\t"	"breq 1f"			"\n"
+		"\t"	"lsr 17"			"\n"
+		"\t"	"dec 18"			"\n"
+		"\t"	"rjmp 1b"			"\n"
+	"1:\t"						"\n"
+
+		// Load value.
+		"\t"	"ld 24, z"			"\n"
+		"\t"	"ldd 25, z + 1"			"\n"
+		// Shift bits.
+		"\t"	"cp 17, 27"			"\n"
+	"1:\t"		"breq 1f"			"\n"
+		"\t"	"ror 25"			"\n"
+		"\t"	"ror 24"			"\n"
+		"\t"	"dec 17"			"\n"
+		"\t"	"rjmp 1b"			"\n"
+	"1:\t"						"\n"
+		// Set or clear the step pin based on bit 0 of r25.
+		"\t"	"sbrc 20, %[step_invert_bit]"	"\n"
+		"\t"	"com 25"			"\n"
+		"\t"	"ldd 26, y + %[step_port]"	"\n"
+		"\t"	"ldd 27, y + %[step_port] + 1"	"\n"
+		"\t"	"ldd 18, y + %[step_bitmask]"	"\n"
+		"\t"	"ld 19, x"			"\n"
+		"\t"	"or 19, 18"			"\n"
+		"\t"	"com 18"			"\n"
+		"\t"	"sbrs 25, 0"			"\n"
+		"\t"	"and 19, 18"			"\n"
+		"\t"	"st x, 19"			"\n"
+
+		// Restore variables.
+		"\t"	"clr 27"			"\n"
+		"\t"	"lds 17, %[move_phase]"		"\n"
 
 		// Increment Y and Z, dec counter 16 and loop.
 	"isr_action_continue:"				"\n"
@@ -843,7 +880,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	"1:\t"						"\n"
 		// Next sample.
 		// move_phase = 0;
-		"\t"	"sts move_phase, 27"		"\n"
+		"\t"	"sts %[move_phase], 27"		"\n"
 		// If step_state == 2(single): step_state = 0(wait for sensor).
 		"\t"	"lds 16, step_state"		"\n"
 		"\t"	"subi 16, %[state_decay]"	"\n"
@@ -941,7 +978,6 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"pop 17"			"\n"
 		"\t"	"pop 1"				"\n"
 		"\t"	"pop 0"				"\n"
-	"isr_end_audio:"				"\n"
 		"\t"	"cli"				"\n"
 		"\t"	"lds 16, step_state"		"\n"
 		"\t"	"cpi 16, %[state_stop]"		"\n"
@@ -955,135 +991,11 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"out __SREG__, 16"		"\n"
 		"\t"	"pop 16"			"\n"
 		"\t"	"reti"				"\n"
-		//"\t"	"rjmp isr_end_nonaked"		"\n"
 
-	// Audio handling.  16 and 27 are pushed; 16 is audio.  At exit: rjmp isr_end_audio.
-	"isr_audio:"					"\n"
-		"\t"	"push 17"			"\n"
-		"\t"	"push 28"			"\n"
-		"\t"	"push 29"			"\n"
-		"\t"	"push 30"			"\n"
-		"\t"	"push 31"			"\n"
-
-		"\t"	"lds 30, %[current_buffer]"	"\n"
-		"\t"	"lds 31, %[current_buffer] + 1"	"\n"
-		"\t"	"lds 17, move_phase"		"\n"
-		"\t"	"tst 17"			"\n"
-		"\t"	"breq 2f"			"\n"
-	"1:"						"\n"
-		"\t"	"adiw 30, %[fragment_size]"	"\n"
-		"\t"	"dec 17"			"\n"
-		"\t"	"brne 1b"			"\n"
-	"2:"						"\n"
-		"\t"	"lds 17, current_sample"	"\n"
-		"\t"	"add 30, 17"			"\n"
-		"\t"	"brcc 1f"			"\n"
-		"\t"	"inc 31"			"\n"
-	"1:"						"\n"
-		"\t"	"lds 17, %[audio_bit]"		"\n"
-		"\t"	"ld 27, z"			"\n"
-		"\t"	"and 27, 17"			"\n"
-		"\t"	"breq 1f"			"\n"
-		"\t"	"ldi 27, 1"			"\n"
-	"1:\t"						"\n"
-		"\t"	"eor 16, 27"			"\n"
-		"\t"	"sbrs 16, 0"			"\n"
-		"\t"	"rjmp isr_audio_end"		"\n"
-		"\t"	"andi 16, ~1"			"\n"
-		"\t"	"or 16, 27"			"\n"
-		"\t"	"sts audio, 16"			"\n"
-
-		// Set dir.
-		"\t"	"ldi 28, lo8(audio_motor)"	"\n"
-		"\t"	"ldi 29, hi8(audio_motor)"	"\n"
-		"\t"	"ld 30, y"			"\n"
-		"\t"	"ldd 31, y + 1"			"\n"
-		"\t"	"ldd 16, z + %[dir_bitmask]"	"\n"
-		"\t"	"ldd 28, z + %[dir_port]"	"\n"
-		"\t"	"ldd 29, z + %[dir_port] + 1"	"\n"
-		"\t"	"ld 17, y"			"\n"
-		"\t"	"or 17, 16"			"\n"
-		"\t"	"tst 27"			"\n"
-		"\t"	"breq 1f"			"\n"
-		"\t"	"com 16"			"\n"
-		"\t"	"and 17, 16"			"\n"
-	"1:\t"						"\n"
-		"\t"	"st y, 17"			"\n"
-		// Take step.
-		"\t"	"ldd 16, z + %[step_bitmask]"	"\n"
-		"\t"	"ldd 28, z + %[step_port]"	"\n"
-		"\t"	"ldd 29, z + %[step_port] + 1"	"\n"
-		"\t"	"ld 17, y"			"\n"
-		"\t"	"or 17, 16"			"\n"
-		"\t"	"com 16"			"\n"
-		"\t"	"and 16, 17"			"\n"
-		"\t"	"ldd 30, z + %[flags]"		"\n"
-		"\t"	"sbrs 30, %[step_invert_bit]"	"\n"
-		"\t"	"rjmp 1f"			"\n"
-		// Step is inverted: swap 16 and 17.
-		"\t"	"eor 16, 17"			"\n"
-		"\t"	"eor 17, 16"			"\n"
-		"\t"	"eor 16, 17"			"\n"
-	"1:\t"						"\n"
-		"\t"	"st y, 16"			"\n"	// 2	2
-		"\t"	"nop"				"\n"	// 1	3
-		"\t"	"nop"				"\n"	// 1	4
-		// Wait 1 us (16 cycles).
-		"\t"	"ldi 16, 4"			"\n"	// 1	5
-	"1:\t"						"\n"
-		"\t"	"dec 16"			"\n"	// n	5+n
-		"\t"	"brne 1b"			"\n"	// 2n-1	4+3n == 16 => n = 4
-		"\t"	"st y, 17"			"\n"
-
-	"isr_audio_end:\t"				"\n"
-		"\t"	"lds 16, %[audio_bit]"		"\n"
-		"\t"	"lsl 16"			"\n"
-		"\t"	"brne 4f"			"\n"
-		// Byte is done.
-		"\t"	"lds 16, current_sample"	"\n"
-		"\t"	"inc 16"			"\n"
-		"\t"	"lds 17, current_len"		"\n"
-		"\t"	"cp 16, 17"			"\n"
-		"\t"	"brne 3f"			"\n"
-		// Motor is done.
-		"\t"	"lds 16, move_phase"		"\n"
-		"\t"	"inc 16"			"\n"
-		"\t"	"lds 17, active_motors"		"\n"
-		"\t"	"cp 16, 17"			"\n"
-		"\t"	"breq 1f"			"\n"
-		// Increment current_buffer; continue.
-		"\t"	"sts move_phase, 16"		"\n"
-		"\t"	"rjmp 8f"			"\n"
-	"1:\t"						"\n"
-		// Fragment is done.
-		"\t"	"ldi 17, 0"			"\n"
-		"\t"	"sts move_phase, 17"		"\n"
-		next_fragment("", "isr_audio_underrun")
-	"8:\t"						"\n"
-		"\t"	"ldi 16, 0"			"\n"
-	"3:\t"						"\n"
-		"\t"	"sts current_sample, 16"	"\n"
-	"7:\t"						"\n"
-		"\t"	"ldi 16, 1"			"\n"
-	"4:\t"						"\n"
-		"\t"	"sts %[audio_bit], 16"		"\n"
-	"5:\t"						"\n"
-		"\t"	"pop 31"			"\n"
-		"\t"	"pop 30"			"\n"
-		"\t"	"pop 29"			"\n"
-		"\t"	"pop 28"			"\n"
-		"\t"	"pop 17"			"\n"
-		"\t"	"rjmp isr_end_audio"		"\n"
-	"isr_audio_underrun:"				"\n"
-		"\t"	"ldi 16, %[state_stop]"		"\n"
-		"\t"	"sts step_state, 16"		"\n"
-		"\t"	"rjmp 5b"			"\n"
-
-	"isr_end_nonaked:"				"\n"
 		::
 			[current_buffer] "" (&current_buffer),
 			[full_phase_bits] "" (&full_phase_bits),
-			[audio_bit] "" (&audio_bit),
+			[move_phase] "" (&move_phase),
 			[current_pos] "I" (offsetof(Motor, current_pos)),
 			[step_port] "I" (offsetof(Motor, step_port)),
 			[step_bitmask] "I" (offsetof(Motor, step_bitmask)),
@@ -1093,6 +1005,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 			[steps_current] "I" (offsetof(Motor, steps_current)),
 			[flags] "I" (offsetof(Motor, intflags)),
 			[activebit] "I" (Motor::ACTIVE_BIT),
+			[pwmbit] "I" (Motor::PWM_BIT),
 			[active] "M" (Motor::ACTIVE),
 			[fragment_size] "I" (BYTES_PER_FRAGMENT),
 			[num_fragments] "M" (1 << FRAGMENTS_PER_MOTOR_BITS),

@@ -1954,7 +1954,7 @@ class Machine: # {{{
 		self.audio_id = id
 		self.user_sleep(False)
 		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
-		cdriver.run_file(filename.encode('utf-8'), b'', 1, 0, 0, motor, 0)
+		cdriver.run_file(filename.encode('utf-8'), b'', 1, 0, 0, motor)
 	# }}}
 	def benjamin_audio_add_POST(self, filename, name): # {{{
 		with open(filename, 'rb') as f:

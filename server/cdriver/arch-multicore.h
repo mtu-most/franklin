@@ -120,7 +120,6 @@ void arch_set_duty(Pin_t pin, double duty);
 double arch_get_duty(Pin_t pin);
 void arch_discard();
 void arch_send_spi(int bits, const uint8_t *data);
-off_t arch_send_audio(uint8_t *data, off_t sample, off_t num_records, int motor);
 void DATA_SET(int s, int m, int value);
 // }}}
 
@@ -991,18 +990,6 @@ void arch_send_spi(int bits, const uint8_t *data) { // {{{
 	debug("send spi request ignored");
 	(void)&bits;
 	(void)&data;
-} // }}}
-
-off_t arch_send_audio(uint8_t *data, off_t sample, off_t num_records, int motor) { // {{{
-	// TODO.
-	(void)&data;
-	(void)&sample;
-	(void)&motor;
-	return num_records;
-} // }}}
-
-void arch_stop_audio() { // {{{
-	// TODO.
 } // }}}
 
 static void mc_set_shared(int which, int s, int m) { // {{{

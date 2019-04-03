@@ -40,7 +40,6 @@ void setup()
 	pollfds[0].revents = 0;
 	motors_busy = false;
 	current_extruder = 0;
-	continue_cb = 0;
 	ping = 0;
 	for (int i = 0; i < 4; ++i) {
 		pending_len[i] = 0;
@@ -65,7 +64,6 @@ void setup()
 	current_fragment_pos = 0;
 	num_active_motors = 0;
 	hwtime_step = 10000; // Note: When changing this, also change max in cdriver/space.cpp
-	audio_hwtime_step = 1;	// This is set by audio file.
 	feedrate = 1;
 	max_deviation = 0;
 	max_v = 100;

@@ -125,24 +125,14 @@ void packet()
 		}
 		pin_flags = command(9);
 		timeout_time = read_16(10);
-		if (command(13) < active_motors) {
-			audio = 2;
-			move_phase = 0;
-			full_phase = 1;
-			audio_motor = &motor[command(13)];
-		}
-		else {
-			uint8_t fpb = 0;
-			while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << fpb)
-				fpb += 1;
-			fpb -= 1;
-			cli();
-			audio = 0;
-			audio_motor = 0;
-			full_phase_bits = fpb;
-			full_phase = 1 << full_phase_bits;
-			sei();
-		}
+		uint8_t fpb = 0;
+		while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << fpb)
+			fpb += 1;
+		fpb -= 1;
+		cli();
+		full_phase_bits = fpb;
+		full_phase = 1 << full_phase_bits;
+		sei();
 		p = spiss_pin;
 		spiss_pin = command(12);
 		if (p != spiss_pin) {
@@ -214,7 +204,7 @@ void packet()
 		motor[m].limit_min_pin = command(4);
 		motor[m].limit_max_pin = command(5);
 		motor[m].follow = command(6);
-		uint8_t const intmask = Motor::INVERT_STEP;
+		uint8_t const intmask = Motor::INVERT_STEP | Motor::PWM;
 		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX;
 		cli();
 		motor[m].intflags &= ~intmask;
@@ -421,6 +411,7 @@ void packet()
 		write_ack();
 		return;
 	}
+	case CMD_PWM:
 	case CMD_MOVE:
 	case CMD_MOVE_SINGLE:
 	{
@@ -448,6 +439,11 @@ void packet()
 		}
 		for (uint8_t b = 0; b < last_len; ++b)
 			buffer[last_fragment][m][b] = static_cast <uint8_t>(command(2 + b));
+		if (bool(motor[m].flags & Motor::PWM) ^ (command(0) == CMD_PWM)) {
+			debug("pwm state of motor %d and command don't match", m);
+			write_stall();
+			return;
+		}
 		if (command(0) != CMD_MOVE_SINGLE) {
 			for (uint8_t f = 0; f < active_motors; ++f) {
 				if ((motor[f].follow & 0x7f) == m) {

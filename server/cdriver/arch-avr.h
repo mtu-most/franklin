@@ -56,7 +56,6 @@
 
 // Not defines, because they can change value.
 EXTERN uint8_t NUM_PINS, NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT;
-EXTERN int avr_audio;
 // }}}
 
 enum Control { // {{{
@@ -80,13 +79,14 @@ enum HWCommands { // {{{
 	HWC_START_PROBE,// 09
 	HWC_MOVE,	// 0a
 	HWC_MOVE_SINGLE,// 0b
-	HWC_START,	// 0c
-	HWC_STOP,	// 0d
-	HWC_ABORT,	// 0e
-	HWC_DISCARD,	// 0f
-	HWC_GETPIN,	// 10
-	HWC_SPI,	// 11
-	HWC_PINNAME,	// 12
+	HWC_PWM,	// 0c
+	HWC_START,	// 0d
+	HWC_STOP,	// 0e
+	HWC_ABORT,	// 0f
+	HWC_DISCARD,	// 10
+	HWC_GETPIN,	// 11
+	HWC_SPI,	// 12
+	HWC_PINNAME,	// 13
 };
 
 enum HWResponses {
@@ -150,7 +150,6 @@ bool arch_send_fragment();
 void arch_start_move(int extra);
 bool arch_running();
 void arch_home();
-off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor);
 void arch_do_discard();
 void arch_discard();
 void arch_send_spi(int len, const uint8_t *data);
@@ -827,18 +826,9 @@ void arch_change(bool motors) { // {{{
 			}
 		}
 		avr_buffer[0] = HWC_SETUP;
-		if (avr_audio >= 0) {
-			avr_buffer[1] = NUM_MOTORS;
-			for (int i = 0; i < 4; ++i)
-				avr_buffer[2 + i] = (audio_hwtime_step >> (8 * i)) & 0xff;
-			avr_buffer[13] = avr_audio;
-		}
-		else {
-			avr_buffer[1] = avr_active_motors;
-			for (int i = 0; i < 4; ++i)
-				avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
-			avr_buffer[13] = 0xff;
-		}
+		avr_buffer[1] = avr_active_motors;
+		for (int i = 0; i < 4; ++i)
+			avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
 		avr_buffer[6] = led_pin.valid() ? led_pin.pin : ~0;
 		avr_buffer[7] = stop_pin.valid() ? stop_pin.pin : ~0;
 		avr_buffer[8] = probe_pin.valid() ? probe_pin.pin : ~0;
@@ -846,7 +836,7 @@ void arch_change(bool motors) { // {{{
 		avr_buffer[10] = timeout & 0xff;
 		avr_buffer[11] = (timeout >> 8) & 0xff;
 		avr_buffer[12] = spiss_pin.valid() ? spiss_pin.pin : ~0;
-		prepare_packet(avr_buffer, 14);
+		prepare_packet(avr_buffer, 13);
 		avr_send();
 	}
 	if (motors) {
@@ -897,7 +887,6 @@ void arch_setup_start() { // {{{
 	avr_limiter_space = -1;
 	avr_limiter_motor = 0;
 	avr_active_motors = 0;
-	avr_audio = -1;
 	avr_uuid_dirty = false;
 	// Set up serial port.
 	connected = false;
@@ -1326,61 +1315,6 @@ void arch_home() { // {{{
 	}
 	if (prepare_packet(avr_buffer, 5 + avr_active_motors))
 		avr_send();
-} // }}}
-
-void arch_stop_audio() { // {{{
-	if (avr_audio < 0)
-		return;
-	debug("audio recover");
-	arch_stop(false);
-	avr_audio = -1;
-	arch_globals_change();
-} // }}}
-
-off_t arch_send_audio(uint8_t *map, off_t pos, off_t max, int motor) { // {{{
-	if (!connected)
-		return max;
-	if (avr_audio != motor) {
-		arch_stop(false);
-		avr_audio = motor;
-		arch_globals_change();
-	}
-	int len = max - pos >= NUM_MOTORS * BYTES_PER_FRAGMENT ? BYTES_PER_FRAGMENT : (max - pos) / NUM_MOTORS;
-	if (len <= 0)
-		return max;
-	while (out_busy >= 3) {
-		poll(&pollfds[BASE_FDS], 1, -1);
-		serial(false);
-	}
-	avr_buffer[0] = HWC_START_MOVE;
-	avr_buffer[1] = len;
-	avr_buffer[2] = NUM_MOTORS;
-	sending_fragment = NUM_MOTORS + 1;
-	if (!prepare_packet(avr_buffer, 3)) {
-		debug("audio upload failed");
-		return pos + NUM_MOTORS * len;
-	}
-	avr_cb = &avr_sent_fragment;
-	avr_send();
-	avr_filling = true;
-	for (int m = 0; m < NUM_MOTORS; ++m) {
-		while (out_busy >= 3) {
-			poll(&pollfds[BASE_FDS], 1, -1);
-			serial(false);
-		}
-		avr_buffer[0] = HWC_MOVE_SINGLE;
-		avr_buffer[1] = m;
-		for (int i = 0; i < len; ++i)
-			avr_buffer[2 + i] = map[pos + m * len + i];
-		if (!prepare_packet(avr_buffer, 2 + len)) {
-			debug("audio data upload failed");
-			break;
-		}
-		avr_cb = &avr_sent_fragment;
-		avr_send();
-	}
-	avr_filling = false;
-	return pos + NUM_MOTORS * len;
 } // }}}
 
 void arch_do_discard() { // {{{

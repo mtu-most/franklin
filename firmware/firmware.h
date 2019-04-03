@@ -28,7 +28,7 @@
 
 #define ID_SIZE 8	// Number of bytes in machineid; 8.
 #define UUID_SIZE 16	// Number of bytes in uuid; 16.
-#define PROTOCOL_VERSION 3
+#define PROTOCOL_VERSION 4
 
 #define ADC_INTERVAL 1000	// Delay 1 ms between ADC measurements.
 
@@ -100,7 +100,6 @@ EXTERN volatile uint8_t current_sample;		// The sample in the current fragment t
 EXTERN volatile uint8_t current_len;		// Copy of settings[current_fragment].len, for easy access from asm.
 EXTERN volatile uint8_t step_state;		// 0: disabled; 1: Waiting for limit switch check; 2: Waiting for step; 3: free running.
 EXTERN volatile uint8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
-EXTERN volatile uint8_t audio_bit;	// Bitmask for current audio playback.
 EXTERN volatile uint8_t last_fragment;	// Fragment that is currently being filled.
 
 EXTERN uint8_t machineid[1 + ID_SIZE + UUID_SIZE + (1 + ID_SIZE + UUID_SIZE + 2) / 3];
@@ -122,7 +121,6 @@ EXTERN uint8_t led_pin, stop_pin, probe_pin, pin_flags;
 EXTERN uint8_t spiss_pin;
 EXTERN uint16_t timeout_time, last_active;
 EXTERN uint8_t enabled_pins;
-EXTERN uint8_t audio;	// Bit 0: state; bit 1: enable.
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values.
 	CMD_NACK0 = 0xf0,	// Incorrect packet; please resend.
@@ -235,6 +233,7 @@ enum Command {
 	CMD_START_PROBE,// 1:num_samples, 1:num_moving_motors
 	CMD_MOVE,	// 1:which, *:samples
 	CMD_MOVE_SINGLE,// 1:which, *:samples
+	CMD_PWM,	// 1:which, *:samples
 	CMD_START,	// 0 start moving.
 	CMD_STOP,	// 0 stop moving.
 	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.
@@ -329,9 +328,8 @@ struct Motor
 	enum IntFlags {
 		ACTIVE_BIT = 0,
 		ACTIVE			= 1 << ACTIVE_BIT,
-		//AUDIO_BIT = 1,
-		//AUDIO			= 1 << AUDIO_BIT,
-		AUDIO_STATE_BIT = 2,
+		PWM_BIT = 2,
+		PWM			= 1 << PWM_BIT,
 		INVERT_STEP_BIT = 6,
 		INVERT_STEP		= 1 << INVERT_STEP_BIT
 	};
@@ -377,7 +375,6 @@ struct Motor
 };
 
 EXTERN Motor motor[NUM_MOTORS];
-EXTERN Motor *audio_motor;
 EXTERN int stopping;	// number of switch which has been hit, or active_motors for a probe hit and -1 for none.
 EXTERN uint32_t home_step_time;
 EXTERN uint8_t homers;

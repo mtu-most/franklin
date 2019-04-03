@@ -203,8 +203,7 @@ static PyObject *run_file(PyObject *Py_UNUSED(self), PyObject *args) {
 	// Run commands from a file.
 	const char *file = "", *probe = "";
 	shmem->ints[0] = 0;
-	shmem->ints[1] = -1;	// Not sending audio.
-	if (!PyArg_ParseTuple(args, "|yypddi", &file, &probe, &shmem->ints[0], &shmem->floats[0], &shmem->floats[1], &shmem->ints[1]))
+	if (!PyArg_ParseTuple(args, "|yypdd", &file, &probe, &shmem->ints[0], &shmem->floats[0], &shmem->floats[1]))
 		return NULL;
 	strncpy(const_cast <char *> (shmem->strs[0]), file, PATH_MAX);
 	strncpy(const_cast <char *> (shmem->strs[1]), probe, PATH_MAX);

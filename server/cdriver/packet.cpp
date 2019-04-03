@@ -211,7 +211,7 @@ void request(int req) {
 		break;
 	CASE(CMD_RUN)
 		last_active = millis();
-		run_file(const_cast<const char *>(shmem->strs[0]), const_cast<const char *>(shmem->strs[1]), shmem->ints[0], shmem->floats[0], shmem->floats[1], shmem->ints[1]);
+		run_file(const_cast<const char *>(shmem->strs[0]), const_cast<const char *>(shmem->strs[1]), shmem->ints[0], shmem->floats[0], shmem->floats[1]);
 		break;
 	CASE(CMD_SLEEP)
 		last_active = millis();

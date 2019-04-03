@@ -105,7 +105,7 @@ enum InterruptCommand {
 	CMD_PARKWAIT,
 	CMD_CONNECTED,
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
-	CMD_CONTINUE,	// 1 byte: is_audio.  Bool flag if it needs to be sent.
+	CMD_CONTINUE,
 };
 
 enum RunType {
@@ -120,6 +120,7 @@ enum RunType {
 	RUN_WAIT,
 	RUN_CONFIRM,
 	RUN_PARK,
+	RUN_PWM,
 };
 
 #ifndef PATH_MAX

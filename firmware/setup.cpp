@@ -81,8 +81,6 @@ void setup()
 	stop_pin = ~0;
 	probe_pin = ~0;
 	spiss_pin = ~0;
-	audio = 0;
-	audio_motor = 0;
 	// Do arch-specific things.  This fills machineid and uuid.
 	arch_setup_end();
 	// Inform host of reset.

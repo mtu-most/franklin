@@ -38,7 +38,7 @@
 #include <sys/timerfd.h>
 #include <string>
 
-#define PROTOCOL_VERSION ((uint32_t)3)	// Required version response in BEGIN.
+#define PROTOCOL_VERSION ((uint32_t)4)	// Required version response in BEGIN.
 #define BASE_FDS 3
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
@@ -325,7 +325,6 @@ EXTERN Gpio *gpios;
 EXTERN FILE *store_adc;
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];
-EXTERN uint8_t continue_cb;		// is a continue event waiting to be sent out? (0: no, 1: move, 2: audio, 3: both)
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
@@ -355,7 +354,7 @@ EXTERN bool refilling;
 EXTERN int current_fragment, running_fragment;
 EXTERN unsigned current_fragment_pos;
 EXTERN int num_active_motors;
-EXTERN int hwtime_step, audio_hwtime_step;
+EXTERN int hwtime_step;
 EXTERN struct pollfd pollfds[BASE_FDS + ARCH_MAX_FDS];
 EXTERN void (*wait_for_reply[4])();
 EXTERN int expected_replies;
@@ -413,7 +412,7 @@ struct ProbeFile {
 	double angle;
 	double sample[0];
 } __attribute__((__packed__));
-void run_file(char const *name, char const *probe_name, bool start, double sina, double cosa, int audio);
+void run_file(char const *name, char const *probe_name, bool start, double sina, double cosa);
 void abort_run_file();
 void run_file_fill_queue();
 void run_adjust_probe(double x, double y, double z);
@@ -436,7 +435,6 @@ EXTERN double run_file_refz;
 EXTERN double run_file_sina;
 EXTERN double run_file_cosa;
 EXTERN bool run_file_finishing;
-EXTERN int run_file_audio;
 
 // setup.cpp
 void setup();
@@ -491,7 +489,6 @@ void arch_stop(bool fake = false);
 void arch_home();
 bool arch_running();
 double arch_round_pos(int s, int m, double pos);
-void arch_stop_audio();
 //void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit_l = ~0, int heater_limit_h = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit_l = ~0, int fan_limit_h = ~0, double hold_time = 0);
 void arch_start_move(int extra);
 bool arch_send_fragment();

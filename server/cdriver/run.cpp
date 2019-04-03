@@ -46,7 +46,7 @@ static Run_Record run_preline;
 
 static double probe_adjust;
 
-void run_file(char const *name, char const *probename, bool start, double sina, double cosa, int audio) {
+void run_file(char const *name, char const *probename, bool start, double sina, double cosa) {
 	rundebug("run file %d %f %f", start, sina, cosa);
 	abort_run_file();
 	if (name[0] == '\0')
@@ -110,29 +110,23 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 	}
 	else
 		probe_file_map = NULL;
-	if (audio < 0) {
-		// File format:
-		// records
-		// strings
-		// int32_t stringlengths[]
-		// int32_t numstrings
-		// double bbox[8]
-		run_file_num_strings = read_num(run_file_size - sizeof(double) * 8 - sizeof(int32_t));
-		strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
-		off_t pos = run_file_size - sizeof(double) * 8 - sizeof(int32_t) - sizeof(int32_t) * run_file_num_strings;
-		off_t current = 0;
-		for (int i = 0; i < run_file_num_strings; ++i) {
-			strings[i].start = current;
-			strings[i].len = read_num(pos + sizeof(int32_t) * i);
-			current += strings[i].len;
-		}
-		run_file_first_string = pos - current;
-		run_file_num_records = run_file_first_string / sizeof(Run_Record);
+	// File format:
+	// records
+	// strings
+	// int32_t stringlengths[]
+	// int32_t numstrings
+	// double bbox[8]
+	run_file_num_strings = read_num(run_file_size - sizeof(double) * 8 - sizeof(int32_t));
+	strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
+	off_t pos = run_file_size - sizeof(double) * 8 - sizeof(int32_t) - sizeof(int32_t) * run_file_num_strings;
+	off_t current = 0;
+	for (int i = 0; i < run_file_num_strings; ++i) {
+		strings[i].start = current;
+		strings[i].len = read_num(pos + sizeof(int32_t) * i);
+		current += strings[i].len;
 	}
-	else {
-		audio_hwtime_step = 1000000. / *reinterpret_cast <double *>(run_file_map);
-		run_file_num_records = run_file_size - sizeof(double);
-	}
+	run_file_first_string = pos - current;
+	run_file_num_records = run_file_first_string / sizeof(Run_Record);
 	run_file_wait_temp = 0;
 	run_file_wait = start ? 0 : 1;
 	run_file_timer.it_interval.tv_sec = 0;
@@ -143,7 +137,6 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 	//debug("run target %f %f", targetx, targety);
 	run_file_sina = sina;
 	run_file_cosa = cosa;
-	run_file_audio = audio;
 	run_preline.X = NAN;
 	run_preline.Y = NAN;
 	run_preline.Z = NAN;
@@ -162,7 +155,6 @@ void abort_run_file() {
 	}
 	free(strings);
 	strings = NULL;
-	arch_stop_audio();
 }
 
 static double handle_probe(double ox, double oy, double z) {
@@ -219,28 +211,6 @@ void run_file_fill_queue() {
 		return;
 	lock = true;
 	rundebug("run queue, current = %d/%d wait = %d tempwait = %d q = %d %d %d finish = %d", settings.run_file_current, run_file_num_records, run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start, settings.queue_full, run_file_finishing);
-	if (run_file_audio >= 0) {
-		while (true) {
-			if (!run_file_map || run_file_wait || run_file_finishing)
-				break;
-			if (settings.run_file_current >= run_file_num_records) {
-				run_file_finishing = true;
-				//debug("done running audio");
-				break;
-			}
-			int16_t next = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
-			if (next == running_fragment)
-				break;
-			settings.run_file_current = arch_send_audio(&reinterpret_cast <uint8_t *>(run_file_map)[sizeof(double)], settings.run_file_current, run_file_num_records, run_file_audio);
-			current_fragment = next;
-			//debug("current_fragment = next; %d", current_fragment);
-			store_settings();
-			if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping)
-				arch_start_move(0);
-		}
-		lock = false;
-		return;
-	}
 	int cbs = 0;
 	bool must_move = true;
 	while (must_move) {
