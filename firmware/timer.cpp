@@ -1,7 +1,7 @@
 /* timer.cpp - timing related parts for Franklin
  * vim: set foldmethod=marker :
  * Copyright 2014-2016 Michigan Technological University
- * Copyright 2016 Bas Wijnen <wijnen@debian.org>
+ * Copyright 2016-2019 Bas Wijnen <wijnen@debian.org>
  * Author: Bas Wijnen <wijnen@debian.org>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -67,7 +67,7 @@ void handle_motors() {
 					continue;
 				// Check limit switches.
 				if (stopping < 0) {
-					int16_t value = *reinterpret_cast <volatile int16_t *>(&buffer[cf][m][cs]);
+					int8_t value = buffer[cf][m][cs];
 					if (value == 0)
 						continue;
 					uint8_t limit_pin = value < 0 ? motor[m].limit_min_pin : motor[m].limit_max_pin;
@@ -100,7 +100,7 @@ void handle_motors() {
 				if (!(motor[m].intflags & Motor::ACTIVE))
 					continue;
 				// Get the "wrong" limit pin for the given direction.
-				int16_t value = *reinterpret_cast <volatile int16_t *>(&buffer[cf][m][cs]);
+				int8_t value = buffer[cf][m][cs];
 				uint8_t limit_pin = (value < 0 ? motor[m].limit_max_pin : motor[m].limit_min_pin);
 				bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
 				if (limit_pin < NUM_DIGITAL_PINS && GET(limit_pin) ^ inverted) {

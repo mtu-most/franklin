@@ -71,7 +71,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 			}
 		}
 	}
-	int tool = isnan(move->tool) ? current_extruder : move->tool;
+	int tool = std::isnan(move->tool) ? current_extruder : move->tool;
 	double e;
 	if (tool >= 0 && tool < spaces[1].num_axes)
 		e = spaces[1].axis[tool]->settings.current;

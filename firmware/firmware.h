@@ -93,13 +93,13 @@ EXTERN volatile bool serial_overflow;
 EXTERN volatile uint8_t *serial_buffer_head;
 EXTERN volatile uint8_t *serial_buffer_tail;
 EXTERN volatile uint8_t serial_buffer[SERIAL_BUFFER_SIZE] __attribute__ ((aligned (SERIAL_BUFFER_SIZE)));
-EXTERN volatile uint8_t buffer[1 << FRAGMENTS_PER_MOTOR_BITS][NUM_MOTORS][BYTES_PER_FRAGMENT];
+EXTERN volatile int8_t buffer[1 << FRAGMENTS_PER_MOTOR_BITS][NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN volatile uint8_t active_motors;
 EXTERN volatile uint8_t current_fragment;	// Fragment that is currently active, or if none, the one that will next be active.
 EXTERN volatile uint8_t current_sample;		// The sample in the current fragment that is active.
 EXTERN volatile uint8_t current_len;		// Copy of settings[current_fragment].len, for easy access from asm.
 EXTERN volatile uint8_t step_state;		// 0: disabled; 1: Waiting for limit switch check; 2: Waiting for step; 3: free running.
-EXTERN volatile uint8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
+EXTERN volatile int8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN volatile uint8_t last_fragment;	// Fragment that is currently being filled.
 
 EXTERN uint8_t machineid[1 + ID_SIZE + UUID_SIZE + (1 + ID_SIZE + UUID_SIZE + 2) / 3];
@@ -246,7 +246,7 @@ enum Command {
 enum RCommand {
 	// to host
 		// responses to host requests; only one active at a time.
-	CMD_READY = 0x10,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:fragments/motor, 1:bytes/fragment
+	CMD_READY = 0x10,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:fragments/motor, 1:bytes/fragment, 2:time/isr
 	CMD_PONG,	// 1:code
 	CMD_HOMED,	// {4:motor_pos}*
 	CMD_PIN,	// 1:state
@@ -276,7 +276,7 @@ static inline int16_t minpacketlen() {
 	case CMD_SET_UUID:
 		return 1 + UUID_SIZE;
 	case CMD_SETUP:
-		return 14;
+		return 13;
 	case CMD_CONTROL:
 		return 4;
 	case CMD_MSETUP:
@@ -326,17 +326,24 @@ struct Motor
 	uint8_t flags;	// Flags that are not used by the interrupt handler.
 	ARCH_MOTOR
 	enum IntFlags {
-		ACTIVE_BIT = 0,
-		ACTIVE			= 1 << ACTIVE_BIT,
-		PWM_BIT = 2,
-		PWM			= 1 << PWM_BIT,
-		INVERT_STEP_BIT = 6,
-		INVERT_STEP		= 1 << INVERT_STEP_BIT
+		ACTIVE_BIT,
+		INVERT_STEP_BIT,
+		PWM_BIT,
+		CURRENT_DIR_BIT,
+		CURRENT_STEP_BIT,
+	};
+	enum IntFlagValues {
+		ACTIVE		= 1 << ACTIVE_BIT,
+		INVERT_STEP	= 1 << INVERT_STEP_BIT,
+		PWM		= 1 << PWM_BIT,
+		CURRENT_DIR	= 1 << CURRENT_DIR_BIT,
+		CURRENT_STEP	= 1 << CURRENT_STEP_BIT,
 	};
 	enum Flags {
-		LIMIT			= 0x01,
-		INVERT_LIMIT_MIN	= 0x02,
-		INVERT_LIMIT_MAX	= 0x04,
+		// Avoid overlap with IntFlags so they can be sent as 1 byte.
+		LIMIT			= 0x20,
+		INVERT_LIMIT_MIN	= 0x40,
+		INVERT_LIMIT_MAX	= 0x80,
 	};
 	void init(uint8_t m) {
 		//debug("init motor %d", m);

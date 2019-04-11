@@ -130,8 +130,8 @@ static inline void arch_msetup(uint8_t m) {
 	(void)&m;
 }
 
-static inline void arch_set_speed(uint16_t count) {
-	if (count == 0)
+static inline void arch_set_speed(uint16_t us_per_sample) {
+	if (us_per_sample == 0)
 		step_state = STEP_STATE_STOP;
 }
 

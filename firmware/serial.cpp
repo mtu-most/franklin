@@ -279,6 +279,8 @@ void serial() { // {{{
 		if ((sum & 0x7) != (t & 0x7))
 		{
 			debug("incorrect extra bit %d %d %x %x %x", fulllen, t, command(0), sum, command(fulllen - 1));
+			for (int i = 0; i < (fulllen + 2) / 3 * 4; ++i)
+				debug("cmd %d: %x", i, command(i));
 			debug_dump();
 			inc_tail(cmd_len);
 			return;

@@ -308,6 +308,7 @@ EXTERN uint8_t num_extruders;
 EXTERN int num_temps;
 EXTERN int num_gpios;
 EXTERN uint32_t protocol_version;
+EXTERN int num_subfragments_bits;
 EXTERN uint8_t machine_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, stop_pin, probe_pin, spiss_pin;
 EXTERN uint16_t timeout;
@@ -440,6 +441,7 @@ EXTERN bool run_file_finishing;
 void setup();
 void connect_machine(char const *port, char const *run_id);
 void connect_end();
+void check_protocol();
 Axis_History *setup_axis_history();
 Motor_History *setup_motor_history();
 EXTERN bool host_block;

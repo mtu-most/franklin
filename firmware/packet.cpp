@@ -56,13 +56,15 @@ void packet()
 		homers = 0;
 		home_step_time = 0;
 		reply[0] = CMD_READY;
-		reply[1] = 11;
+		reply[1] = 13;
 		*reinterpret_cast <uint32_t *>(&reply[2]) = PROTOCOL_VERSION;
 		reply[6] = NUM_DIGITAL_PINS;
 		reply[7] = NUM_ANALOG_INPUTS;
 		reply[8] = NUM_MOTORS;
 		reply[9] = 1 << FRAGMENTS_PER_MOTOR_BITS;
 		reply[10] = BYTES_PER_FRAGMENT;
+		reply[11] = TIME_PER_ISR & 0xff;
+		reply[12] = TIME_PER_ISR >> 8;
 		reply_ready = reply[1];	// Update the length there if it needs to change.
 		write_ack();
 		return;
@@ -126,6 +128,8 @@ void packet()
 		pin_flags = command(9);
 		timeout_time = read_16(10);
 		uint8_t fpb = 0;
+		// TIME_PER_ISR is the time that is spent in a single ISR.
+		// Set full_phase_bits so that it is as high as possible given that limit.
 		while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << fpb)
 			fpb += 1;
 		fpb -= 1;
@@ -310,26 +314,21 @@ void packet()
 			if (command(5 + m) == 1) {
 				// Fill both sample 0 and 1, because the interrupt handler may change current_sample at any time.
 				buffer[current_fragment][m][0] = 1;
-				buffer[current_fragment][m][1] = 0;
-				buffer[current_fragment][m][2] = 1;
-				buffer[current_fragment][m][3] = 0;
+				buffer[current_fragment][m][1] = 1;
 				homers += 1;
 				motor[m].intflags |= Motor::ACTIVE;
 				motor[m].steps_current = 0;
 			}
 			else if (int8_t(command(5 + m)) == -1) {
 				// Fill both sample 0 and 1, because the interrupt handler may change current_sample at any time.
-				buffer[current_fragment][m][0] = 0xff;
-				buffer[current_fragment][m][1] = 0xff;
-				buffer[current_fragment][m][2] = 0xff;
-				buffer[current_fragment][m][3] = 0xff;
+				buffer[current_fragment][m][0] = -1;
+				buffer[current_fragment][m][1] = -1;
 				homers += 1;
 				motor[m].intflags |= Motor::ACTIVE;
 				motor[m].steps_current = 0;
 			}
 			else if (command(5 + m) == 0) {
-				buffer[current_fragment][m][0] = 0x00;
-				buffer[current_fragment][m][1] = 0x80;
+				buffer[current_fragment][m][0] = -0x80;
 				motor[m].intflags &= ~Motor::ACTIVE;
 			}
 			else {
@@ -380,11 +379,6 @@ void packet()
 			write_stall();
 			return;
 		}
-		if ((command(1) & 1) != 0) {
-			debug("Odd fragment size (%d)", command(1));
-			write_stall();
-			return;
-		}
 		uint8_t next = (last_fragment + 1) & FRAGMENTS_PER_MOTOR_MASK;
 		if (next == current_fragment) {
 			debug("New buffer sent with full buffer.");
@@ -394,8 +388,7 @@ void packet()
 		settings[last_fragment].len = command(1);
 		filling = command(2);
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			buffer[last_fragment][m][0] = 0x00;	// Sentinel indicating no data is available for this motor.
-			buffer[last_fragment][m][1] = 0x80;
+			buffer[last_fragment][m][0] = -0x80;	// Sentinel indicating no data is available for this motor.
 		}
 		if (command(0) == CMD_START_MOVE) {
 			//debug("move no probe %d", last_fragment);
@@ -432,13 +425,13 @@ void packet()
 			write_stall();
 			return;
 		}
-		if (*reinterpret_cast <volatile uint16_t *>(&buffer[last_fragment][m][0]) != uint16_t(0x8000)) {
+		if (buffer[last_fragment][m][0] != -0x80) {
 			debug("duplicate buffer %d to fill", m);
 			write_stall();
 			return;
 		}
 		for (uint8_t b = 0; b < last_len; ++b)
-			buffer[last_fragment][m][b] = static_cast <uint8_t>(command(2 + b));
+			buffer[last_fragment][m][b] = static_cast <int8_t>(command(2 + b));
 		if (bool(motor[m].flags & Motor::PWM) ^ (command(0) == CMD_PWM)) {
 			debug("pwm state of motor %d and command don't match", m);
 			write_stall();
@@ -448,10 +441,10 @@ void packet()
 			for (uint8_t f = 0; f < active_motors; ++f) {
 				if ((motor[f].follow & 0x7f) == m) {
 					for (uint8_t b = 0; b < last_len; b += 2) {
-						int16_t value = *reinterpret_cast <volatile int16_t *>(&buffer[last_fragment][m][b]);
+						int8_t value = buffer[last_fragment][m][b];
 						if (motor[f].follow & 0x80)
 							value = -value;
-						*reinterpret_cast <volatile int16_t *>(&buffer[last_fragment][f][b]) = value;
+						buffer[last_fragment][f][b] = value;
 					}
 				}
 			}
@@ -486,7 +479,7 @@ void packet()
 		BUFFER_CHECK(buffer, current_fragment);
 		current_buffer = &buffer[current_fragment];
 		for (uint8_t m = 0; m < active_motors; ++m) {
-			if (buffer[current_fragment][m][0] != 0 || buffer[current_fragment][m][1] != uint8_t(0x80)) {
+			if (buffer[current_fragment][m][0] != -0x80) {
 				motor[m].intflags |= Motor::ACTIVE;
 				motor[m].steps_current = 0;
 			}

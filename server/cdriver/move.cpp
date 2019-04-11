@@ -266,9 +266,8 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	if (settings.probing && steps)
 		steps = s;
 	else {
-		// Maximum depends on number of subfragments.  Be conservative and use 0x7e per subfragment; assume 128 subfragments (largest power of 2 smaller than 10000/75)
-		// TODO: 10000 and 75 should follow the actual values for step_time in cdriver and TIME_PER_ISR in firmware.
-		int max = 0x7e << 7;
+		// Maximum depends on number of subfragments.  Use max 0x7e steps per sample.
+		int max = 0x7e << num_subfragments_bits;
 		if (abs(steps) > max) {
 			debug("overflow %d from cp %f dist %f steps/mm %f dt %f s %d max %d", steps, mtr->settings.current_pos, distance, mtr->steps_per_unit, dt, s, max);
 			steps = max * s;
@@ -398,7 +397,7 @@ static double set_targets(double factor) { // {{{
 		// b = cos(alpha)-cos(alpha_max)/(1-cos(alpha_max). For small angles this also breaks, so use 1-abs(factor2).
 		double cmax = cos(settings.alpha_max);
 		double b = (cos(alpha) - cmax) / (1 - cmax);
-		if (isnan(b))
+		if (std::isnan(b))
 			b = 1 - std::abs(factor2);	// Doesn't really matter; B == {0, 0, 0}.
 		// Set position for xyz axes.
 		for (int i = 0; i < 3; ++i) {

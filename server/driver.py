@@ -890,6 +890,7 @@ class Machine: # {{{
 						#log('hit limit %s %s current %s' % (self.limits[0], self.limits[2], current))
 						# A limit was hit. Find out which one and start single moves if so needed.
 						for m in self.limits[0]:
+							self.user_set_axis_pos(0, m, self.spaces[0].motor[m]['home_pos'])
 							if m in current:
 								if len(current[m]['followers']) > 0:
 									self.home_order['single'] = current[m]['followers']
@@ -901,6 +902,7 @@ class Machine: # {{{
 								self.home_order['homing'][(0, m)] = current.pop(m)
 						self.limits[0].clear()
 						for fm in self.limits[2]:
+							self.user_set_axis_pos(2, fm, self.spaces[2].motor[fm]['home_pos'])
 							for m in current:
 								if (2, fm) in current[m]['followers']:
 									self.home_order['homing'][(2, fm)] = current[m]['followers'][(2, fm)]
@@ -933,12 +935,14 @@ class Machine: # {{{
 				# Fall through.
 			if self.home_phase == 2:
 				for m in self.limits[0]:
+					self.user_set_axis_pos(0, m, self.spaces[0].motor[m]['home_pos'])
 					if (0, m) in self.home_order['single']:
 						self.home_order['homing'][(0, m)] = self.home_order['single'].pop((0, m))
 						current = self.home_order['standard'][min(self.home_order['standard'])]
 						current.pop(m)
 				self.limits[0].clear()
 				for m in self.limits[2]:
+					self.user_set_axis_pos(2, m, self.spaces[2].motor[m]['home_pos'])
 					if (2, m) in self.home_order['single']:
 						self.home_order['homing'][(2, m)] = self.home_order['single'].pop((2, m))
 				self.limits[2].clear()

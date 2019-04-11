@@ -36,7 +36,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
-#include <math.h>
+#include <cmath>
 #include <sys/mman.h>
 #include <sched.h>
 #include <sys/ioctl.h>

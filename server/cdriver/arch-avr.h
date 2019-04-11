@@ -34,7 +34,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
-#include <math.h>
+#include <cmath>
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -42,7 +42,7 @@
 // Enable all the parts for a serial connection (which can fail) to the machine.
 #define SERIAL
 #define ADCBITS 10
-#define DATA_TYPE int16_t
+#define DATA_TYPE int8_t
 #define ARCH_MOTOR DATA_TYPE *avr_data;
 #define ARCH_SPACE
 #define ARCH_NEW_MOTOR(s, m, base) base[m]->avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT / sizeof(DATA_TYPE)];
@@ -55,7 +55,7 @@
 #else
 
 // Not defines, because they can change value.
-EXTERN uint8_t NUM_PINS, NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT;
+EXTERN uint8_t NUM_PINS, NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS, NUM_MOTORS, FRAGMENTS_PER_BUFFER, BYTES_PER_FRAGMENT, TIME_PER_ISR;
 // }}}
 
 enum Control { // {{{
@@ -760,7 +760,6 @@ void arch_reset() { // {{{
 		debug("no pong seen; giving up.\n");
 		abort();
 	}
-	arch_change(true);
 	if (avr_uuid_dirty) {
 		avr_uuid_dirty = false;
 		arch_set_uuid();
@@ -768,10 +767,14 @@ void arch_reset() { // {{{
 } // }}}
 
 enum MotorFlags { // {{{
-	LIMIT			= 0x01,
-	INVERT_LIMIT_MIN	= 0x02,
-	INVERT_LIMIT_MAX	= 0x04,
-	INVERT_STEP		= 0x40
+	// active
+	INVERT_STEP		= 0x02,
+	PWM			= 0x04,
+	// current dir
+	// current step
+	// limit
+	INVERT_LIMIT_MIN	= 0x40,
+	INVERT_LIMIT_MAX	= 0x80,
 }; // }}}
 
 void arch_motor_change(uint8_t s, uint8_t sm) { // {{{
@@ -949,6 +952,7 @@ static void avr_connect3() { // {{{
 			}
 		}
 		connect_end();
+		arch_change(true);
 		return;
 	}
 	avr_buffer[0] = HWC_PINNAME;
@@ -962,12 +966,14 @@ void avr_connect2() { // {{{
 	protocol_version = 0;
 	for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
 		protocol_version |= int(uint8_t(command[2 + i])) << (i * 8);
+	check_protocol();
 	NUM_DIGITAL_PINS = command[6];
 	NUM_ANALOG_INPUTS = command[7];
 	NUM_PINS = NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS;
 	NUM_MOTORS = command[8];
 	FRAGMENTS_PER_BUFFER = command[9];
 	BYTES_PER_FRAGMENT = command[10];
+	TIME_PER_ISR = uint8_t(command[11]) | uint8_t(command[12]) << 8;
 	//id[0][:8] + '-' + id[0][8:12] + '-' + id[0][12:16] + '-' + id[0][16:20] + '-' + id[0][20:32]
 	for (int i = 0; i < UUID_SIZE; ++i)
 		shmem->uuid[i] = command[11 + i];
@@ -1003,6 +1009,7 @@ void arch_connect(char const *run_id, char const *port) { // {{{
 	arch_reset();
 	// Get constants.
 	avr_buffer[0] = HWC_BEGIN;
+	// Send packet size. Required by older protocols.
 	avr_buffer[1] = 10;
 	for (int i = 0; i < ID_SIZE; ++i)
 		avr_buffer[2 + i] = run_id[i];
@@ -1215,7 +1222,7 @@ bool arch_send_fragment() { // {{{
 		return false;
 	avr_buffer[0] = settings.probing ? HWC_START_PROBE : HWC_START_MOVE;
 	//debug("send fragment current-fragment-pos=%d current-fragment=%d active-moters=%d running=%d num-running=0x%x", current_fragment_pos, current_fragment, num_active_motors, running_fragment, (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
-	avr_buffer[1] = current_fragment_pos * 2;
+	avr_buffer[1] = current_fragment_pos;
 	avr_buffer[2] = num_active_motors;
 	sending_fragment = num_active_motors + 1;
 	if (prepare_packet(avr_buffer, 3)) {
@@ -1241,10 +1248,9 @@ bool arch_send_fragment() { // {{{
 				avr_buffer[1] = mi + m;
 				for (int i = 0; i < cfp; ++i) {
 					int value = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->avr_data[i];
-					avr_buffer[2 + 2 * i] = value & 0xff;
-					avr_buffer[2 + 2 * i + 1] = (value >> 8) & 0xff;
+					avr_buffer[2 + i] = value;
 				}
-				if (prepare_packet(avr_buffer, 2 + 2 * cfp)) {
+				if (prepare_packet(avr_buffer, 2 + cfp)) {
 					avr_cb = &avr_sent_fragment;
 					avr_send();
 				}

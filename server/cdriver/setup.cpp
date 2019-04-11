@@ -63,7 +63,7 @@ void setup()
 	//debug("current_fragment = running_fragment; %d %p", current_fragment, &current_fragment);
 	current_fragment_pos = 0;
 	num_active_motors = 0;
-	hwtime_step = 10000; // Note: When changing this, also change max in cdriver/space.cpp
+	hwtime_step = 10000;
 	feedrate = 1;
 	max_deviation = 0;
 	max_v = 100;
@@ -99,7 +99,7 @@ void setup()
 	arch_setup_end();
 }
 
-void connect_end() {
+void check_protocol() {
 	if (protocol_version < PROTOCOL_VERSION) {
 		debug("Machine has older Franklin version %d than host which has %d; please flash newer firmware.", protocol_version, PROTOCOL_VERSION);
 		exit(1);
@@ -108,7 +108,11 @@ void connect_end() {
 		debug("Machine has newer Franklin version %d than host which has %d; please upgrade your host software.", protocol_version, PROTOCOL_VERSION);
 		exit(1);
 	}
-	// Now set things up that need information from the firmware.
+}
+
+void connect_end() {
+	// Set things up that need information from the firmware.
+	num_subfragments_bits = int(std::log2(hwtime_step / TIME_PER_ISR));
 	history = new History[FRAGMENTS_PER_BUFFER];
 	for (int i = 0; i < 2; ++i) {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
