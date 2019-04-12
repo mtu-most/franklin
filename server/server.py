@@ -108,8 +108,9 @@ import protocol
 config = fhs.init(packagename = 'franklin', config = {
 		'port': '8000',	# Port to listen on.
 		'address': '',	# Address to listen on.  Mainly intended for RPi, which cannot handle IPv6 and needs 0.0.0.0 here to force IPv4.
-		'blacklist': '/dev/(input/.*|ptmx|console|tty(printk|(GS)?\\d*))$', # Which serial ports to refuse detecting on.
-		'add-blacklist': '$',	# Which serial ports to additionally refuse detecting on.  Used to add ports to the list without losing the defaults.
+		'whitelist': r'', # Which serial ports to attempt detecting on. Ports that are both whitelisted and blacklisted are not included.
+		'blacklist': r'/dev/(input/.*|ptmx|console|tty(printk|(GS)?\d*))$', # Which serial ports to refuse detecting on.
+		'add-blacklist': r'$',	# Which serial ports to additionally refuse detecting on.  Used to add ports to the list without losing the defaults.
 		'autodetect': True,	# Whether new machines are autodetected on new ports, and after flashing.
 		'predetect': 'stty -F $PORT raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',	# What to do to a port before detecting a machine.
 		'controller': '/usr/lib/franklin/controller.py --dev "$PORT"',	# How to start a controller subprocess
@@ -727,8 +728,8 @@ def add_port(port): # {{{
 	if port in ports:
 		log('already existing port %s cannot be added' % port)
 		return
-	if re.match(config['blacklist'], port) or re.match(config['add-blacklist'], port):
-		#log('skipping blacklisted port %s' % port)
+	if not re.match(config['whitelist'], port) or re.match(config['blacklist'], port) or re.match(config['add-blacklist'], port):
+		#log('skipping blacklisted or non-whitelisted port %s' % port)
 		return
 	ports[port] = None
 	broadcast(None, 'new_port', port, upload_options(port))
