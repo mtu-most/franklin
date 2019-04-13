@@ -125,6 +125,7 @@ parsed = {
 	'WAIT': 8,
 	'CONFIRM': 9,
 	'PARK': 10,
+	'PWM': 11,
 }
 
 mask = [[0xc0, 0xc3, 0xff, 0x09],

@@ -63,7 +63,7 @@ void setup()
 	//debug("current_fragment = running_fragment; %d %p", current_fragment, &current_fragment);
 	current_fragment_pos = 0;
 	num_active_motors = 0;
-	hwtime_step = 10000;
+	hwtime_step = 4000;
 	feedrate = 1;
 	max_deviation = 0;
 	max_v = 100;

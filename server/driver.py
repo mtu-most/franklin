@@ -1268,7 +1268,7 @@ class Machine: # {{{
 		self.gcode_file = True
 		self._globals_update()
 		log('running %s %f %f' % (filename, self.gcode_angle[0], self.gcode_angle[1]))
-		cdriver.run_file(filename.encode('utf-8'), encoded_probemap_filename, 1 if not paused and self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1], -1)
+		cdriver.run_file(filename.encode('utf-8'), encoded_probemap_filename, 1 if not paused and self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1])
 	# }}}
 	def _reset_extruders(self, axes): # {{{
 		for i, sp in enumerate(axes):

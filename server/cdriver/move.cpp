@@ -154,11 +154,12 @@ int next_move(int32_t start_time) { // {{{
 	if (std::isnan(settings.alpha_max))
 		settings.alpha_max = 0;
 	settings.dist = (normb > 1e-5 ? norma * (normab / normb) * settings.alpha_max : norma) * 2;
-	if (std::isnan(settings.dist) || abs(settings.dist) < 1e-10) {
+	if (std::isnan(settings.dist) || std::fabs(settings.dist) < 1e-10) {
+		//debug("no space dist, using other system. dist=%f a=%f ab=%f b=%f", settings.dist, norma, normab, normb);
 		if (queue[q].tool >= 0 && queue[q].tool < spaces[1].num_axes)
-			settings.dist = abs(queue[q].e - spaces[1].axis[queue[q].tool]->settings.source);
+			settings.dist = std::fabs(queue[q].e - spaces[1].axis[queue[q].tool]->settings.source);
 		else if (queue[q].single && queue[q].tool < 0 && ~queue[q].tool < spaces[2].num_axes)
-			settings.dist = abs(queue[q].e - spaces[2].axis[~queue[q].tool]->settings.source);
+			settings.dist = std::fabs(queue[q].e - spaces[2].axis[~queue[q].tool]->settings.source);
 	}
 	double dt = settings.dist / ((settings.v0 + settings.v1) / 2);
 	settings.end_time = (std::isnan(dt) ? 0 : 1e6 * dt);
@@ -170,7 +171,7 @@ int next_move(int32_t start_time) { // {{{
 		spaces[2].axis[~queue[q].tool]->settings.endpos = queue[q].e;
 		mdebug("move follower to %f, current=%f source=%f current_pos=%f", queue[q].e, spaces[2].axis[~queue[q].tool]->settings.current, spaces[2].axis[~queue[q].tool]->settings.source, spaces[2].motor[~queue[q].tool]->settings.current_pos);
 	}
-	mdebug("move prepared, from=(%f,%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f, single=%d", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6, queue[q].single);
+	mdebug("move prepared, from=(%f,%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f, single=%d, UVW=(%f,%f,%f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6, queue[q].single, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[1]->settings.current_pos, spaces[0].motor[2]->settings.current_pos);
 	//debug("times end %d current %d dist %f v0 %f v1 %f", settings.end_time, settings.hwtime, settings.dist, settings.v0, settings.v1);
 
 	settings.queue_start = n;
@@ -192,7 +193,7 @@ static void send_fragment() { // {{{
 		return;
 	}
 	if (num_active_motors == 0) {
-		if (current_fragment_pos < 2) {
+		if (current_fragment_pos < 1) {
 			// TODO: find out why this is attempted and avoid it.
 			debug("not sending short fragment for 0 motors; %d %d", current_fragment, running_fragment);
 			if (history[current_fragment].cbs) {
@@ -213,12 +214,12 @@ static void send_fragment() { // {{{
 		//abort();
 	}
 	//debug("sending %d prevcbs %d", current_fragment, history[(current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER].cbs);
-	if (arch_send_fragment()) {
+	if (aborting || arch_send_fragment()) {
 		current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		//debug("current_fragment = (current_fragment + 1) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
 		//debug("current send -> %x", current_fragment);
 		store_settings();
-		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping) {
+		if (!aborting && (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping) {
 			arch_start_move(0);
 		}
 	}
@@ -240,7 +241,7 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	double orig_distance = distance;
 	//debug("cd %f %f", distance, dt);
 	mtr->settings.target_v = distance / dt;
-	double v = fabs(mtr->settings.target_v);
+	double v = std::fabs(mtr->settings.target_v);
 	int s = (mtr->settings.target_v < 0 ? -1 : 1);
 	// When turning around, ignore limits (they shouldn't have been violated anyway).
 	if (mtr->settings.last_v * s < 0) {
@@ -249,16 +250,16 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	}
 	// Limit v.
 	if (v > limit_mtr->limit_v) {
-		debug("%d %d v %f limit %f dist %f t %f current %f", sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos);
+		debug("%d %d v %f limit %f dist %f t %f current %f factor %f", sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, settings.factor);
 		distance = (s * limit_mtr->limit_v) * dt;
-		v = fabs(distance / dt);
+		v = std::fabs(distance / dt);
 	}
 	// Limit a+.
 	double limit_dv = limit_mtr->limit_a * dt;
 	if (v - mtr->settings.last_v * s > limit_dv) {
 		debug("a+ %d %d target v %f limit dv %f last v %f s %d current %f", sp, mt, mtr->settings.target_v, limit_dv, mtr->settings.last_v, s, mtr->settings.current_pos);
 		distance = (limit_dv * s + mtr->settings.last_v) * dt;
-		v = fabs(distance / dt);
+		v = std::fabs(distance / dt);
 	}
 	int steps = round((arch_round_pos(sp, mt, mtr->settings.current_pos + distance) - arch_round_pos(sp, mt, mtr->settings.current_pos)) * mtr->steps_per_unit);
 	int targetsteps = steps;
@@ -266,16 +267,16 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	if (settings.probing && steps)
 		steps = s;
 	else {
-		// Maximum depends on number of subfragments.  Use max 0x7e steps per sample.
-		int max = 0x7e << num_subfragments_bits;
+		int max = 0x7c;	// Don't use 0x7f, because limiting isn't accurate.
 		if (abs(steps) > max) {
 			debug("overflow %d from cp %f dist %f steps/mm %f dt %f s %d max %d", steps, mtr->settings.current_pos, distance, mtr->steps_per_unit, dt, s, max);
 			steps = max * s;
 		}
 	}
 	if (abs(steps) < abs(targetsteps)) {
-		distance = (arch_round_pos(sp, mt, mtr->settings.current_pos) + steps + s * .5 - mtr->settings.current_pos);
-		v = fabs(distance / dt);
+		distance = arch_round_pos(sp, mt, mtr->settings.current_pos) + (steps + s * .5) / mtr->steps_per_unit - mtr->settings.current_pos;
+		v = std::fabs(distance / dt);
+		debug("new distance = %f, old = %f", distance, orig_distance);
 	}
 	//debug("=============");
 	double f = distance / orig_distance;
@@ -351,7 +352,7 @@ static void do_steps() { // {{{
 					num_active_motors += 1;
 				}
 				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
-				mdebug("sending %d %d steps %d", s, m, diff);
+				//debug("sending %d %d steps %d", s, m, diff);
 				DATA_SET(s, m, diff);
 			}
 			//debug("new cp: %d %d %f %d", s, m, target, current_fragment_pos);
@@ -375,7 +376,7 @@ static void do_steps() { // {{{
 	}
 	current_fragment_pos += 1;
 	if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
-		//debug("fragment full %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
+		//debug("fragment full (normal) %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
 		send_fragment();
 	}
 } // }}}
@@ -398,7 +399,7 @@ static double set_targets(double factor) { // {{{
 		double cmax = cos(settings.alpha_max);
 		double b = (cos(alpha) - cmax) / (1 - cmax);
 		if (std::isnan(b))
-			b = 1 - std::abs(factor2);	// Doesn't really matter; B == {0, 0, 0}.
+			b = 1 - std::fabs(factor2);	// Doesn't really matter; B == {0, 0, 0}.
 		// Set position for xyz axes.
 		for (int i = 0; i < 3; ++i) {
 			if (i < spaces[0].num_axes) {
@@ -458,17 +459,35 @@ static void apply_tick() { // {{{
 			if (target_factor > 1)
 				target_factor = 1;
 		}
-		mdebug("target factor: %f", target_factor);
+		mdebug("target factor: %f (t=%f end=%f)", target_factor, t, settings.end_time / 1e6);
 		// Go straight to the next move if the distance was 0 (so target_factor is NaN).
 		if (!std::isnan(target_factor)) {
 			double f = set_targets(target_factor);
 			if (f < 1) {
 				//double old = target_factor;
-				target_factor = settings.factor + f * (target_factor - settings.factor);
-				//debug("adjust factor from %f to %f because f=%f", old, target_factor, f);
+				if (settings.factor > 0 || settings.hwtime <= 0)
+					target_factor = settings.factor + f * (target_factor - settings.factor);
+				else {
+					// Example:
+					// hwtime_step = 10
+					// hwtime = 6
+					// -> newpart = 0.6
+					// f = 0.9
+					// target move = 100
+					// so (1-0.9)*100=10 of target move must be removed
+					// that is (1-0.9)/0.6 of new part.
+					double newpart = settings.hwtime * 1. / hwtime_step;
+					f = 1 - (1 - f) / newpart;
+					target_factor = f * target_factor;
+				}
+				if (target_factor < 0)
+					target_factor = 0;
+				else if (target_factor > 1)
+					target_factor = 1;
+				//debug("adjust factor (%f) from %f to %f because f=%f", settings.factor, old, target_factor, f);
 				set_targets(target_factor);
-				// TODO: Adjust time.
-				//settings.start_time += hwtime_step * ((1 - factor) * .99);
+				// Adjust time.
+				settings.hwtime -= hwtime_step * ((1 - f) * .99);
 			}
 			//debug("target factor %f time 0 -> %d -> %d v %f -> %f", target_factor, settings.hwtime, settings.end_time, settings.v0, settings.v1);
 			settings.factor = target_factor;
@@ -477,7 +496,7 @@ static void apply_tick() { // {{{
 				return;
 			}
 		}
-		mdebug("next segment");
+		//debug("next segment");
 		// Set new sources for all axes.
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
@@ -642,8 +661,10 @@ void buffer_refill() { // {{{
 	}
 	refilling = true;
 	// send_fragment in the previous refill may have failed; try it again.
-	if (current_fragment_pos > 0)
+	if (current_fragment_pos > 0) {
+		//debug("send last fragment");
 		send_fragment();
+	}
 	//debug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
 	while (computing_move && !aborting && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
@@ -652,7 +673,7 @@ void buffer_refill() { // {{{
 		apply_tick();
 		//debug("refill2 %d %f", current_fragment, spaces[0].motor[0]->settings.current_pos);
 		if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
-			//debug("fragment full %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
+			//debug("fragment full (weird) %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
 			send_fragment();
 		}
 	}

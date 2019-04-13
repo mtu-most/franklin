@@ -357,7 +357,7 @@ bool hwpacket(int len) { // {{{
 		}
 		avr_write_ack("limit");
 		avr_homing = false;
-		abort_move(int8_t(command[3] / 2));
+		abort_move(int8_t(command[3]));
 		avr_get_current_pos(4, false);
 		if (spaces[0].num_axes > 0)
 			cpdebug(0, 0, "ending hwpos %f", spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);

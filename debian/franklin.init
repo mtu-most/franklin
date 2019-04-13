@@ -44,6 +44,9 @@ CONFIG_FILE=/etc/default/franklin
 # System command to run when a controller is found.
 #CONTROLLER='/usr/lib/franklin/controller.py --dev "$PORT"'
 
+# Regular expression of serial ports to use.
+#WHITELIST=''
+
 # Regular expression of serial ports to ignore.
 #BLACKLIST='/dev/(input/.*|ptmx|console|tty(printk|(GS)?\d*))$'
 #ADD_BLACKLIST='$'
@@ -90,6 +93,7 @@ if [ -v ADDRESS ] ; then	START_ARGS+=(--address="$ADDRESS") ; fi
 if [ -v TLS ] ; then		START_ARGS+=(--tls="$TLS") ; fi
 if [ -v LOG ] ; then		START_ARGS+=(--log="$LOG") ; fi
 if [ -v PRINTER ] ; then	START_ARGS+=(--printer="$PRINTER") ; fi
+if [ -v WHITELIST ] ; then	START_ARGS+=(--whitelist="$WHITELIST") ; fi
 if [ -v BLACKLIST ] ; then	START_ARGS+=(--blacklist="$BLACKLIST") ; fi
 if [ -v ADD_BLACKLIST ] ; then	START_ARGS+=(--add-blacklist="$ADD_BLACKLIST") ; fi
 if [ -v ALLOW_SYSTEM ] ; then	START_ARGS+=(--allow-system="$ALLOW_SYSTEM") ; fi

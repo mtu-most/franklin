@@ -63,7 +63,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 			double pos = spaces[0].axis[a]->settings.current;
 			if (std::isnan(pos))
 				continue;
-			double d = std::abs(move->X[a] - (relative ? 0 : pos));
+			double d = std::fabs(move->X[a] - (relative ? 0 : pos));
 			if (std::isnan(dist) || dist < d) {
 				dist = d;
 				vmax = spaces[0].motor[a]->limit_v;
@@ -81,7 +81,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		e = NAN;
 	if (!std::isnan(e)) {
 		if (std::isnan(dist) || dist < 1e-10) {
-			dist = std::abs(move->e - (relative ? 0 : e));
+			dist = std::fabs(move->e - (relative ? 0 : e));
 			if (tool >= 0) {
 				vmax = spaces[1].motor[tool]->limit_v;
 				amax = spaces[1].motor[tool]->limit_a;

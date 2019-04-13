@@ -264,12 +264,12 @@ bool Parser::handle_command() { // {{{
 						last_dist += dist;
 					// goto r
 					pending.push_back(Record(false, current_tool, pos[0], pos[1], r, NAN, NAN, NAN, INFINITY, NAN));
-					dist = abs(r - oldpos[2]);
+					dist = std::fabs(r - oldpos[2]);
 					if (!std::isnan(dist))
 						last_dist += dist;
 					// goto z
 					if (pos[2] != r) {
-						dist = abs(pos[2] - r);
+						dist = std::fabs(pos[2] - r);
 						pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], NAN, NAN, NAN, current_f[1], NAN));
 						if (std::isinf(current_f[1])) {
 							if (!std::isnan(dist))
@@ -282,7 +282,7 @@ bool Parser::handle_command() { // {{{
 					}
 					// go back to old z
 					pending.push_back(Record(false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
-					dist = abs(r - oldpos[2]);
+					dist = std::fabs(r - oldpos[2]);
 					if (!std::isnan(dist))
 						last_dist += dist;
 					// update pos[2].
@@ -961,7 +961,7 @@ void Parser::flush_pending() { // {{{
 			double ANL = P0->length;
 			double CNL = P0->C * r;
 			double AC = ANL - CNL;
-			double BC = abs(P0->v1 * P0->v1 - P0->f * P0->f) / (2 * max_a);
+			double BC = std::fabs(P0->v1 * P0->v1 - P0->f * P0->f) / (2 * max_a);
 			//debug("AC %f BC %f ANL %f CNL %f v1 %f r %f f %f max a %f", AC, BC, ANL, CNL, P0->v1, r, P0->f, max_a);
 			double AB = AC - BC;
 			double CD = acos((r - d / 2) / r) * r;
@@ -971,7 +971,7 @@ void Parser::flush_pending() { // {{{
 			double LK = P1->length;
 			double LI = P0->C / max_a * P0->v1 * P0->v1;
 			double IK = LK - LI;
-			double IJ = abs(P0->v1 * P0->v1 - P1->f * P1->f) / (2 * max_a);
+			double IJ = std::fabs(P0->v1 * P0->v1 - P1->f * P1->f) / (2 * max_a);
 			double JK = IK - IJ;
 			double FGH = DEF;
 			double FGK = FGH + CD + IK;
