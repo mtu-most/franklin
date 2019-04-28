@@ -267,7 +267,7 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	if (settings.probing && steps)
 		steps = s;
 	else {
-		int max = 0x7c;	// Don't use 0x7f, because limiting isn't accurate.
+		int max = 0x78;	// Don't use 0x7f, because limiting isn't accurate.
 		if (abs(steps) > max) {
 			debug("overflow %d from cp %f dist %f steps/mm %f dt %f s %d max %d", steps, mtr->settings.current_pos, distance, mtr->steps_per_unit, dt, s, max);
 			steps = max * s;
@@ -352,6 +352,20 @@ static void do_steps() { // {{{
 					num_active_motors += 1;
 				}
 				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
+				if (diff > 0x7f) {
+					debug("Error: trying to send more than 127 steps: %d", diff);
+					int adjust = diff - 0x7f;
+					diff = 0x7f;
+					target -= adjust;
+					mtr.settings.target_pos = target;
+				}
+				if (diff < -0x80) {
+					debug("Error: trying to send more than 128 steps: %d", -diff);
+					int adjust = diff + 0x80;
+					diff = -0x80;
+					target -= adjust;
+					mtr.settings.target_pos = target;
+				}
 				//debug("sending %d %d steps %d", s, m, diff);
 				DATA_SET(s, m, diff);
 			}
