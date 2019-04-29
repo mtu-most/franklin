@@ -257,23 +257,22 @@ struct Space {
 	ARCH_SPACE
 };
 
-#define DEFAULT_TYPE 0
-#define EXTRUDER_TYPE 3
-#define FOLLOWER_TYPE 4
 void Cartesian_init(int num);
 void Delta_init(int num);
 void Polar_init(int num);
+void Hbot_init(int num);
 void Extruder_init(int num);
 void Follower_init(int num);
 
 #define setup_spacetypes() do { \
 	Cartesian_init(0); \
-	Delta_init(1); \
-	Polar_init(2); \
-	Extruder_init(3); \
-	Follower_init(4); \
+	Extruder_init(1); \
+	Follower_init(2); \
+	Delta_init(3); \
+	Polar_init(4); \
+	Hbot_init(5); \
 } while(0)
-#define NUM_SPACE_TYPES 5
+#define DEFAULT_TYPE 0
 EXTERN SpaceType space_types[NUM_SPACE_TYPES];
 EXTERN int current_extruder;
 

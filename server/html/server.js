@@ -34,10 +34,11 @@ var audio_list;
 var role;
 
 var TYPE_CARTESIAN = 0;
-var TYPE_DELTA = 1;
-var TYPE_POLAR = 2;
-var TYPE_EXTRUDER = 3;
-var TYPE_FOLLOWER = 4;
+var TYPE_EXTRUDER = 1;
+var TYPE_FOLLOWER = 2;
+var TYPE_DELTA = 3;
+var TYPE_POLAR = 4;
+var TYPE_HBOT = 5;
 // }}}
 
 // {{{ Events from server.

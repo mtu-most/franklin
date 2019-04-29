@@ -28,10 +28,11 @@ WAIT = object()	# Sentinel for blocking functions.
 NUM_SPACES = 3
 # Space types
 TYPE_CARTESIAN = 0
-TYPE_DELTA = 1
-TYPE_POLAR = 2
-TYPE_EXTRUDER = 3
-TYPE_FOLLOWER = 4
+TYPE_EXTRUDER = 1
+TYPE_FOLLOWER = 2
+TYPE_DELTA = 3
+TYPE_POLAR = 4
+TYPE_HBOT = 5
 record_format = '=Bidddddddddddd' # type, tool, X, Y, Z, Bx, By, Bz, E, v0, v1, time, dist, r
 # }}}
 
@@ -1351,17 +1352,6 @@ class Machine: # {{{
 			if self.type == TYPE_CARTESIAN:
 				for m in self.motor:
 					m['unit'] = self.machine.unit_name
-			elif self.type == TYPE_DELTA:
-				for m in self.motor:
-					m['unit'] = self.machine.unit_name
-				for a, d in enumerate(data.pop('delta')):
-					for k in d:
-						self.delta[a][k] = d[k]
-				self.delta_angle = data['delta_angle']
-			elif self.type == TYPE_POLAR:
-				for i, m in enumerate(self.motor):
-					m['unit'] = self.machine.unit_name if i != 1 else '°'
-				self.polar_max_r = data['max_r']
 			elif self.type == TYPE_EXTRUDER:
 				for m in self.motor:
 					if 'unit' not in m:
@@ -1377,6 +1367,20 @@ class Machine: # {{{
 						self.follower[a][x] = follow[a][i]
 					s, m = follow[a]
 					self.motor[a]['unit'] = self.machine.unit_name if not 0 <= s <= 1 or not 0 <= m < len(self.machine.spaces[s].motor) else self.machine.spaces[s].motor[m]['unit']
+			elif self.type == TYPE_DELTA:
+				for m in self.motor:
+					m['unit'] = self.machine.unit_name
+				for a, d in enumerate(data.pop('delta')):
+					for k in d:
+						self.delta[a][k] = d[k]
+				self.delta_angle = data['delta_angle']
+			elif self.type == TYPE_POLAR:
+				for i, m in enumerate(self.motor):
+					m['unit'] = self.machine.unit_name if i != 1 else '°'
+				self.polar_max_r = data['max_r']
+			elif self.type == TYPE_HBOT:
+				for m in self.motor:
+					m['unit'] = self.machine.unit_name
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -1396,15 +1400,17 @@ class Machine: # {{{
 			data = {'type': self.type, 'num_axes': num_axes}
 			if self.type == TYPE_CARTESIAN:
 				pass
+			elif self.type == TYPE_EXTRUDER:
+				data['offset'] = [tuple(self.extruder[a][x] for x in ('dx', 'dy', 'dz')) if a < len(self.extruder) else (0, 0, 0) for a in range(num_axes)]
+			elif self.type == TYPE_FOLLOWER:
+				data['follow'] = [tuple(self.follower[a][x] for x in ('space', 'motor')) if a < len(self.follower) else (-1, -1) for a in range(num_axes)]
 			elif self.type == TYPE_DELTA:
 				data['delta'] = [{k: self.delta[a][k] for k in ('axis_min', 'axis_max', 'rodlength', 'radius')} for a in range(3)]
 				data['delta_angle'] = self.delta_angle
 			elif self.type == TYPE_POLAR:
 				data['max_r'] = self.polar_max_r
-			elif self.type == TYPE_EXTRUDER:
-				data['offset'] = [tuple(self.extruder[a][x] for x in ('dx', 'dy', 'dz')) if a < len(self.extruder) else (0, 0, 0) for a in range(num_axes)]
-			elif self.type == TYPE_FOLLOWER:
-				data['follow'] = [tuple(self.follower[a][x] for x in ('space', 'motor')) if a < len(self.follower) else (-1, -1) for a in range(num_axes)]
+			elif self.type == TYPE_HBOT:
+				pass
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -1443,7 +1449,7 @@ class Machine: # {{{
 		def motor_name(self, i):
 			if self.type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER):
 				return self.axis[i]['name']
-			elif self.type == TYPE_DELTA:
+			elif self.type in (TYPE_DELTA, TYPE_HBOT):
 				return chr(ord('u') + i)
 			elif self.type == TYPE_POLAR:
 				return ['r', 'θ', 'z'][i]
@@ -1452,16 +1458,16 @@ class Machine: # {{{
 				raise AssertionError('invalid space type')
 		def export(self):
 			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max'], a['home_pos2']] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['steps_per_unit'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order'], m['unit']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.machine.multipliers]
-			if self.type == TYPE_CARTESIAN:
+			if self.type in (TYPE_CARTESIAN, TYPE_HBOT):
 				return std
-			elif self.type == TYPE_DELTA:
-				return std + [[[a['axis_min'], a['axis_max'], a['rodlength'], a['radius']] for a in self.delta] + [self.delta_angle]]
-			elif self.type == TYPE_POLAR:
-				return std + [self.polar_max_r]
 			elif self.type == TYPE_EXTRUDER:
 				return std + [[[a['dx'], a['dy'], a['dz']] for a in self.extruder]]
 			elif self.type == TYPE_FOLLOWER:
 				return std + [[[a['space'], a['motor']] for a in self.follower]]
+			elif self.type == TYPE_DELTA:
+				return std + [[[a['axis_min'], a['axis_max'], a['rodlength'], a['radius']] for a in self.delta] + [self.delta_angle]]
+			elif self.type == TYPE_POLAR:
+				return std + [self.polar_max_r]
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -1475,13 +1481,6 @@ class Machine: # {{{
 				ret += 'type = %d\r\n' % type
 			if type == TYPE_CARTESIAN:
 				ret += 'num_axes = %d\r\n' % len(self.axis)
-			elif type == TYPE_DELTA:
-				ret += 'delta_angle = %f\r\n' % self.delta_angle
-				for i in range(3):
-					ret += '[delta %d %d]\r\n' % (self.id, i)
-					ret += ''.join(['%s = %f\r\n' % (x, self.delta[i][x]) for x in ('rodlength', 'radius', 'axis_min', 'axis_max')])
-			elif type == TYPE_POLAR:
-				ret += 'polar_max_r = %f\r\n' % self.polar_max_r
 			elif type == TYPE_EXTRUDER:
 				ret += 'num_axes = %d\r\n' % len(self.axis)
 				for i in range(len(self.extruder)):
@@ -1492,6 +1491,15 @@ class Machine: # {{{
 				for i in range(len(self.follower)):
 					ret += '[follower %d %d]\r\n' % (self.id, i)
 					ret += ''.join(['%s = %d\r\n' % (x, self.follower[i][x]) for x in ('space', 'motor')])
+			elif type == TYPE_DELTA:
+				ret += 'delta_angle = %f\r\n' % self.delta_angle
+				for i in range(3):
+					ret += '[delta %d %d]\r\n' % (self.id, i)
+					ret += ''.join(['%s = %f\r\n' % (x, self.delta[i][x]) for x in ('rodlength', 'radius', 'axis_min', 'axis_max')])
+			elif type == TYPE_POLAR:
+				ret += 'polar_max_r = %f\r\n' % self.polar_max_r
+			elif type == TYPE_HBOT:
+				pass
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -2528,17 +2536,6 @@ class Machine: # {{{
 		ret = {'name': self.spaces[space].name, 'num_axes': len(self.spaces[space].axis), 'num_motors': len(self.spaces[space].motor)}
 		if self.spaces[space].type == TYPE_CARTESIAN:
 			pass
-		elif self.spaces[space].type == TYPE_DELTA:
-			delta = []
-			for i in range(3):
-				d = {}
-				for key in ('axis_min', 'axis_max', 'rodlength', 'radius'):
-					d[key] = self.spaces[space].delta[i][key]
-				delta.append(d)
-			delta.append(self.spaces[space].delta_angle)
-			ret['delta'] = delta
-		elif self.spaces[space].type == TYPE_POLAR:
-			ret['polar_max_r'] = self.spaces[space].polar_max_r
 		elif self.spaces[space].type == TYPE_EXTRUDER:
 			ret['extruder'] = []
 			for a in range(len(self.spaces[space].axis)):
@@ -2551,6 +2548,19 @@ class Machine: # {{{
 				ret['follower'].append({})
 				for key in ('space', 'motor'):
 					ret['follower'][-1][key] = self.spaces[space].follower[a][key]
+		elif self.spaces[space].type == TYPE_DELTA:
+			delta = []
+			for i in range(3):
+				d = {}
+				for key in ('axis_min', 'axis_max', 'rodlength', 'radius'):
+					d[key] = self.spaces[space].delta[i][key]
+				delta.append(d)
+			delta.append(self.spaces[space].delta_angle)
+			ret['delta'] = delta
+		elif self.spaces[space].type == TYPE_POLAR:
+			ret['polar_max_r'] = self.spaces[space].polar_max_r
+		elif self.spaces[space].type == TYPE_HBOT:
+			pass
 		else:
 			log('invalid type')
 		return ret
@@ -2599,7 +2609,7 @@ class Machine: # {{{
 							self.spaces[space].follower[fi][key] = int(ff.pop(key))
 						log('follower set to {}'.format(self.spaces[space].follower))
 				assert len(ff) == 0
-		if self.spaces[space].type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER):
+		if self.spaces[space].type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER, TYPE_HBOT):
 			if 'num_axes' in ka:
 				num_axes = int(ka.pop('num_axes'))
 			else:

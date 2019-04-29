@@ -29,6 +29,14 @@
 #define UUID_SIZE 16
 #define NUM_SPACES 3
 
+#define TYPE_CARTESIAN 0
+#define TYPE_EXTRUDER 1
+#define TYPE_FOLLOWER 2
+#define TYPE_DELTA 3
+#define TYPE_POLAR 4
+#define TYPE_HBOT 5
+#define NUM_SPACE_TYPES 6
+
 struct MoveCommand {
 	bool cb;
 	int probe, single;

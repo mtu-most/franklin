@@ -375,12 +375,39 @@ static PyObject *read_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 		return NULL;
 	send_to_child(CMD_READ_SPACE_INFO);
 	switch (shmem->ints[1]) {
-	case 0: // Cartesian
+	case TYPE_CARTESIAN:
+	case TYPE_HBOT:
 		return Py_BuildValue("{si,si,si}",
 				"type", shmem->ints[1],
 				"num_axes", shmem->ints[2],
 				"num_motors", shmem->ints[3]);
-	case 1: // Delta
+	case TYPE_EXTRUDER:
+	{
+		PyObject *tuple = PyTuple_New(shmem->ints[2]);
+		for (int i = 0; i < shmem->ints[2]; ++i)
+			PyTuple_SET_ITEM(tuple, i, Py_BuildValue("ddd", shmem->floats[3 * i], shmem->floats[3 * i + 1], shmem->floats[3 * i + 2]));
+		PyObject *ret = Py_BuildValue("{si,si,si,sO}",
+				"type", shmem->ints[1],
+				"num_axes", shmem->ints[2],
+				"num_motors", shmem->ints[3],
+				"offset", tuple);
+		Py_DECREF(tuple);
+		return ret;
+	}
+	case TYPE_FOLLOWER:
+	{
+		PyObject *tuple = PyTuple_New(shmem->ints[2]);
+		for (int i = 0; i < shmem->ints[2]; ++i)
+			PyTuple_SET_ITEM(tuple, i, Py_BuildValue("ii", shmem->ints[2 * i + 4], shmem->ints[2 * i + 5]));
+		PyObject *ret = Py_BuildValue("{si,si,si,sO}",
+				"type", shmem->ints[1],
+				"num_axes", shmem->ints[2],
+				"num_motors", shmem->ints[3],
+				"follow", tuple);
+		Py_DECREF(tuple);
+		return ret;
+	}
+	case TYPE_DELTA:
 		return Py_BuildValue("{si,si,si,s({sd,sd,sd,sd},{sd,sd,sd,sd},{sd,sd,sd,sd}),sd}",
 				"type", shmem->ints[1],
 				"num_axes", shmem->ints[2],
@@ -399,38 +426,12 @@ static PyObject *read_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 				"rodlength", shmem->floats[10],
 				"radius", shmem->floats[11],
 				"delta_angle", shmem->floats[12]);
-	case 2: // Polar
+	case TYPE_POLAR:
 		return Py_BuildValue("{si,si,si,sd}",
 				"type", shmem->ints[1],
 				"num_axes", shmem->ints[2],
 				"num_motors", shmem->ints[3],
 				"max_r", shmem->floats[0]);
-	case 3: // Extruder
-	{
-		PyObject *tuple = PyTuple_New(shmem->ints[2]);
-		for (int i = 0; i < shmem->ints[2]; ++i)
-			PyTuple_SET_ITEM(tuple, i, Py_BuildValue("ddd", shmem->floats[3 * i], shmem->floats[3 * i + 1], shmem->floats[3 * i + 2]));
-		PyObject *ret = Py_BuildValue("{si,si,si,sO}",
-				"type", shmem->ints[1],
-				"num_axes", shmem->ints[2],
-				"num_motors", shmem->ints[3],
-				"offset", tuple);
-		Py_DECREF(tuple);
-		return ret;
-	}
-	case 4: // Follower
-	{
-		PyObject *tuple = PyTuple_New(shmem->ints[2]);
-		for (int i = 0; i < shmem->ints[2]; ++i)
-			PyTuple_SET_ITEM(tuple, i, Py_BuildValue("ii", shmem->ints[2 * i + 4], shmem->ints[2 * i + 5]));
-		PyObject *ret = Py_BuildValue("{si,si,si,sO}",
-				"type", shmem->ints[1],
-				"num_axes", shmem->ints[2],
-				"num_motors", shmem->ints[3],
-				"follow", tuple);
-		Py_DECREF(tuple);
-		return ret;
-	}
 	default:
 		PyErr_SetString(PyExc_ValueError, "invalid space for reading info");
 		return NULL;
@@ -476,9 +477,30 @@ static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_int(1, "type", dict);
 	set_int(2, "num_axes", dict);
 	switch (shmem->ints[1]) {
-	case 0: // Cartesian
+	case TYPE_CARTESIAN:
+	case TYPE_HBOT:
 		break;
-	case 1: // Delta
+	case TYPE_EXTRUDER:
+	{
+		PyObject *offset = get_object("offset", dict);
+		for (int i = 0; i < shmem->ints[2]; ++i) {
+			PyObject *axis = PySequence_GetItem(offset, i);
+			PyArg_ParseTuple(axis, "ddd", &shmem->floats[i * 3], &shmem->floats[i * 3 + 1], &shmem->floats[i * 3 + 2]);
+			Py_DECREF(axis);
+		}
+		break;
+	}
+	case TYPE_FOLLOWER:
+	{
+		PyObject *follow = get_object("follow", dict);
+		for (int i = 0; i < shmem->ints[2]; ++i) {
+			PyObject *axis = PySequence_GetItem(follow, i);
+			PyArg_ParseTuple(axis, "ii", &shmem->ints[i * 2 + 4], &shmem->ints[i * 2 + 5]);
+			Py_DECREF(axis);
+		}
+		break;
+	}
+	case TYPE_DELTA:
 	{
 		PyObject *delta = get_object("delta", dict);
 		for (int i = 0; i < 3; ++i) {
@@ -493,29 +515,9 @@ static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 		set_float(12, "delta_angle", dict);
 		break;
 	}
-	case 2: // Polar
+	case TYPE_POLAR:
 		set_float(0, "max_r", dict);
 		break;
-	case 3: // Extruder
-	{
-		PyObject *offset = get_object("offset", dict);
-		for (int i = 0; i < shmem->ints[2]; ++i) {
-			PyObject *axis = PySequence_GetItem(offset, i);
-			PyArg_ParseTuple(axis, "ddd", &shmem->floats[i * 3], &shmem->floats[i * 3 + 1], &shmem->floats[i * 3 + 2]);
-			Py_DECREF(axis);
-		}
-		break;
-	}
-	case 4: // Follower
-	{
-		PyObject *follow = get_object("follow", dict);
-		for (int i = 0; i < shmem->ints[2]; ++i) {
-			PyObject *axis = PySequence_GetItem(follow, i);
-			PyArg_ParseTuple(axis, "ii", &shmem->ints[i * 2 + 4], &shmem->ints[i * 2 + 5]);
-			Py_DECREF(axis);
-		}
-		break;
-	}
 	}
 	send_to_child(CMD_WRITE_SPACE_INFO);
 	return assert_empty_dict(dict, "write_space_info");

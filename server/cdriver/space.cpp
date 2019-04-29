@@ -112,7 +112,7 @@ void Space::load_info() { // {{{
 	}
 	type = shmem->ints[1];
 	loaddebug("requested type %d, current is %d", type, t);
-	if (type < 0 || type >= NUM_SPACE_TYPES || (id == 1 && type != EXTRUDER_TYPE) || (id == 2 && type != FOLLOWER_TYPE)) {
+	if (type < 0 || type >= NUM_SPACE_TYPES || (id == 1 && type != TYPE_EXTRUDER) || (id == 2 && type != TYPE_FOLLOWER)) {
 		debug("request for type %d ignored", type);
 		type = t;
 		return;	// The rest of the info is not meant for this type, so ignore it.
@@ -230,7 +230,7 @@ void Space::save_motor(int m) { // {{{
 } // }}}
 
 void Space::init(int space_id) { // {{{
-	type = space_id == 0 ? DEFAULT_TYPE : space_id == 1 ? EXTRUDER_TYPE : FOLLOWER_TYPE;
+	type = space_id == 0 ? DEFAULT_TYPE : space_id == 1 ? TYPE_EXTRUDER : TYPE_FOLLOWER;
 	id = space_id;
 	type_data = NULL;
 	num_axes = 0;

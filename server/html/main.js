@@ -24,7 +24,7 @@ var upload_options = {};
 var labels_element, machines_element;
 var selected_machine;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
-var space_types = ['Cartesian', 'Delta', 'Polar', 'Extruder', 'Follower'];
+var space_types = ['Cartesian', 'Extruder', 'Follower', 'Delta', 'Polar', 'H-bot'];
 var new_tab, new_page;
 // }}}
 
@@ -1604,6 +1604,7 @@ function redraw_canvas(ui) { // {{{
 			var outline, center;
 			switch (ui.machine.spaces[0].type) { // Define geometry-specific options, including outline. {{{
 			case TYPE_CARTESIAN:
+			case TYPE_HBOT:
 				var xaxis = ui.machine.spaces[0].axis[0];
 				var yaxis = ui.machine.spaces[0].axis[1];
 				machinewidth = xaxis.max - xaxis.min + .010;
