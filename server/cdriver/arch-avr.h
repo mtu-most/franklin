@@ -44,11 +44,18 @@
 #define ADCBITS 10
 #define DATA_TYPE int8_t
 #define ARCH_MOTOR DATA_TYPE *avr_data;
+#define ARCH_PWM DATA_TYPE *avr_data;
 #define ARCH_SPACE
 #define ARCH_NEW_MOTOR(s, m, base) base[m]->avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT / sizeof(DATA_TYPE)];
 #define DATA_DELETE(s, m) delete[] (spaces[s].motor[m]->avr_data)
-#define DATA_CLEAR() do { for (int s = 0; s < NUM_SPACES; ++s) for (int m = 0; m < spaces[s].num_motors; ++m) memset((spaces[s].motor[m]->avr_data), 0, BYTES_PER_FRAGMENT); } while (0)
+#define DATA_CLEAR() do { \
+		for (int s = 0; s < NUM_SPACES; ++s) \
+			for (int m = 0; m < spaces[s].num_motors; ++m) \
+				memset((spaces[s].motor[m]->avr_data), 0, BYTES_PER_FRAGMENT); \
+		memset(pwm.avr_data, 0, BYTES_PER_FRAGMENT); \
+	} while (0)
 #define DATA_SET(s, m, v) spaces[s].motor[m]->avr_data[current_fragment_pos] = v;
+#define PWM_SET(v) pwm.avr_data[current_fragment_pos] = v;
 #define SAMPLES_PER_FRAGMENT (BYTES_PER_FRAGMENT / sizeof(DATA_TYPE))
 #define ARCH_MAX_FDS 1	// Maximum number of fds for arch-specific purposes.
 
@@ -127,6 +134,7 @@ double arch_get_duty(Pin_t _pin);
 void arch_set_duty(Pin_t _pin, double duty);
 void arch_reset();
 void arch_motor_change(uint8_t s, uint8_t sm);
+void arch_pwm_change();
 void arch_change(bool motors);
 void arch_motors_change();
 void arch_globals_change();
@@ -784,6 +792,15 @@ void arch_motor_change(uint8_t s, uint8_t sm) { // {{{
 	uint8_t m = sm;
 	for (uint8_t st = 0; st < s; ++st)
 		m += spaces[st].num_motors;
+	// Motor setup packet:
+	// 0: MSETUP
+	// 1: motor id
+	// 2: step pin
+	// 3: dir pin
+	// 4: min limit pin
+	// 5: max limit pin
+	// 6: follow id
+	// 7: flags
 	avr_buffer[0] = HWC_MSETUP;
 	avr_buffer[1] = m;
 	//debug("arch motor change %d %d %d %x", s, sm, m, p);
@@ -814,7 +831,47 @@ void arch_motor_change(uint8_t s, uint8_t sm) { // {{{
 	}
 	else
 		avr_buffer[6] = 0xff;
+	// Flags is a bitmask of:
+	// 1: step pin is inverted.
+	// 2: motor is pwm channel.
+	// 6: min limit is inverted.
+	// 7: max limit is inverted.
+	// Other bits (0, 3, 4, 5) are for internal use by the firmware and are ignored.
 	avr_buffer[7] = (mtr.step_pin.inverted() ? INVERT_STEP : 0) | (mininvert ? INVERT_LIMIT_MIN : 0) | (maxinvert ? INVERT_LIMIT_MAX : 0);
+	prepare_packet(avr_buffer, 8);
+	avr_send();
+} // }}}
+
+void arch_pwm_change() { // {{{
+	if (!connected)
+		return;
+	uint8_t m = 0;
+	for (uint8_t st = 0; st < NUM_SPACES; ++st)
+		m += spaces[st].num_motors;
+	// Motor setup packet:
+	// 0: MSETUP
+	// 1: motor id
+	// 2: step pin
+	// 3: dir pin
+	// 4: min limit pin
+	// 5: max limit pin
+	// 6: follow id
+	// 7: flags
+	avr_buffer[0] = HWC_MSETUP;
+	avr_buffer[1] = m;
+	//debug("arch motor change %d %d %d %x", s, sm, m, p);
+	avr_buffer[2] = (pwm.step_pin.valid() ? pwm.step_pin.pin : ~0);
+	avr_buffer[3] = (pwm.dir_pin.valid() ? pwm.dir_pin.pin : ~0);
+	avr_buffer[4] = ~0;
+	avr_buffer[5] = ~0;
+	avr_buffer[6] = 0xff;
+	// Flags is a bitmask of:
+	// 1: step pin is inverted.
+	// 2: motor is pwm channel.
+	// 6: min limit is inverted.
+	// 7: max limit is inverted.
+	// Other bits (0, 3, 4, 5) are for internal use by the firmware and are ignored.
+	avr_buffer[7] = PWM | (pwm.step_pin.inverted() ? INVERT_STEP : 0);
 	prepare_packet(avr_buffer, 8);
 	avr_send();
 } // }}}
@@ -822,16 +879,14 @@ void arch_motor_change(uint8_t s, uint8_t sm) { // {{{
 void arch_change(bool motors) { // {{{
 	int old_active_motors = avr_active_motors;
 	if (connected) {
-		if (motors) {
-			avr_active_motors = 0;
-			for (uint8_t s = 0; s < NUM_SPACES; ++s) {
-				avr_active_motors += spaces[s].num_motors;
-			}
+		avr_active_motors = 1;
+		for (uint8_t s = 0; s < NUM_SPACES; ++s) {
+			avr_active_motors += spaces[s].num_motors;
 		}
 		avr_buffer[0] = HWC_SETUP;
 		avr_buffer[1] = avr_active_motors;
 		for (int i = 0; i < 4; ++i)
-			avr_buffer[2 + i] = (hwtime_step >> (8 * i)) & 0xff;
+			avr_buffer[2 + i] = (settings.hwtime_step >> (8 * i)) & 0xff;
 		avr_buffer[6] = led_pin.valid() ? led_pin.pin : ~0;
 		avr_buffer[7] = stop_pin.valid() ? stop_pin.pin : ~0;
 		avr_buffer[8] = probe_pin.valid() ? probe_pin.pin : ~0;
@@ -848,6 +903,7 @@ void arch_change(bool motors) { // {{{
 				arch_motor_change(s, m);
 			}
 		}
+		arch_pwm_change();
 		if (connected) {
 			for (int m = old_active_motors; m < avr_active_motors; ++m) {
 				avr_buffer[0] = HWC_MSETUP;
@@ -951,6 +1007,8 @@ static void avr_connect3() { // {{{
 				sp.motor[m]->avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT / sizeof(DATA_TYPE)];
 			}
 		}
+		delete[] pwm.avr_data;
+		pwm.avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT / sizeof(DATA_TYPE)];
 		connect_end();
 		arch_change(true);
 		return;
@@ -1256,6 +1314,22 @@ bool arch_send_fragment() { // {{{
 				}
 				else
 					break;
+			}
+		}
+		if (pwm.active) {
+			while (out_busy >= 3) {
+				poll(&pollfds[BASE_FDS], 1, -1);
+				serial(false);
+			}
+			if (!stop_pending && !discard_pending) {
+				avr_buffer[0] = settings.single ? HWC_MOVE_SINGLE : HWC_MOVE;
+				avr_buffer[1] = mi;
+				for (int i = 0; i < cfp; ++i)
+					avr_buffer[2 + i] = pwm.avr_data[i];
+				if (prepare_packet(avr_buffer, 2 + cfp)) {
+					avr_cb = &avr_sent_fragment;
+					avr_send();
+				}
 			}
 		}
 		transmitting_fragment = false;

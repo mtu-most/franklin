@@ -130,6 +130,8 @@ function _setup_updater() {
 					stop_pin: 0,
 					probe_pin: 0,
 					spiss_pin: 0,
+					pwm_step_pin: 0,
+					pwm_dir_pin: 0,
 					probe_dist: Infinity,
 					probe_offset: 0,
 					probe_safe_dist: Infinity,

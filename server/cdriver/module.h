@@ -37,6 +37,8 @@
 #define TYPE_HBOT 5
 #define NUM_SPACE_TYPES 6
 
+#define PWM_MAX int(9 * sizeof(double))
+
 struct MoveCommand {
 	bool cb;
 	int probe, single;
@@ -46,6 +48,8 @@ struct MoveCommand {
 	double B[3];
 	double e;
 	double time, dist;
+	int pwm_size;	// in bytes; each bit is a pulse.
+	uint8_t pwm[PWM_MAX];
 };
 
 struct Run_Record {

@@ -43,7 +43,7 @@ static void check_position(Space *s, double *data) { // {{{
 
 static void load(Space *s) { // {{{
 	shmem->ints[3] = shmem->ints[2];
-	if (!s->setup_nums(shmem->ints[2], shmem->ints[3])) {
+	if (!s->setup_nums(2, 2)) {
 		debug("Failed to set up H-bot axes");
 		s->cancel_update();
 	}
@@ -81,7 +81,7 @@ static double unchange0(Space *s, int axis, double value) { // {{{
 
 static double probe_speed(Space *s) { // {{{
 	if (s->num_motors >= 3)
-		return 1e6 / hwtime_step / s->motor[2]->steps_per_unit;
+		return 1e6 / settings.hwtime_step / s->motor[2]->steps_per_unit;
 	return INFINITY;
 } // }}}
 

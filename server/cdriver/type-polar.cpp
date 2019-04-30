@@ -104,7 +104,7 @@ static double unchange0(Space *s, int axis, double value) {
 }
 
 static double probe_speed(Space *s) {
-	return 1e6 / hwtime_step / s->motor[2]->steps_per_unit;
+	return 1e6 / settings.hwtime_step / s->motor[2]->steps_per_unit;
 }
 
 static int follow(Space *s, int axis) {

@@ -27,6 +27,8 @@ static void get_cb(bool value) {
 #define CASE(x) case x: //debug("request " # x);
 
 int go_to(bool relative, MoveCommand const *move, bool cb) {
+	// This is a manual move or the start of a job; set hwtime step to default.
+	settings.hwtime_step = default_hwtime_step;
 	if (computing_move || settings.queue_full || settings.queue_end != settings.queue_start) {
 		// This is not allowed; signal error to Python glue.
 		debug("move error %d %d %d %d", computing_move, settings.queue_full, settings.queue_start, settings.queue_end);
@@ -102,9 +104,9 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 			}
 		}
 	}
-	if (std::isnan(dist)) {
+	if (std::isnan(dist) || dist < 1e-10) {
 		// No moves requested.
-		//debug("dist is nan");
+		//debug("dist is %f", dist);
 		num_movecbs += 1;
 		//debug("adding 1 move cb for manual move");
 		settings.queue_end = 0;

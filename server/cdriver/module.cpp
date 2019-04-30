@@ -159,6 +159,7 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 	FUNCTION_START;
 	shmem->move.single = false;
 	shmem->move.probe = false;
+	shmem->move.pwm_size = 0;
 	shmem->ints[0] = 0;
 	const char *keywordnames[] = {"tool", "x", "y", "z", "a", "b", "c", "Bx", "By", "Bz", "e", "v", "single", "probe", "relative", NULL};
 	if (!PyArg_ParseTupleAndKeywords(args, keywords, "iddddddddddd|ppp", const_cast <char **>(keywordnames),
@@ -207,6 +208,7 @@ static PyObject *run_file(PyObject *Py_UNUSED(self), PyObject *args) {
 		return NULL;
 	strncpy(const_cast <char *> (shmem->strs[0]), file, PATH_MAX);
 	strncpy(const_cast <char *> (shmem->strs[1]), probe, PATH_MAX);
+	//debug("running file %s", file);
 	send_to_child(CMD_RUN);
 	Py_RETURN_NONE;
 }
@@ -283,7 +285,7 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	max_deviation = shmem->floats[1];
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
-	return Py_BuildValue("{si,si,si,si,si,si,si,si,si,si,si,si,si,si,sd,sd,sd,sd,sd,sd,sd,sd}",
+	return Py_BuildValue("{si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,sd,sd,sd,sd,sd,sd,sd,sd}",
 			"queue_length", shmem->ints[0],
 			"num_pins", shmem->ints[1],
 			"num_temps", shmem->ints[2],
@@ -292,12 +294,14 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 			"stop_pin", shmem->ints[5],
 			"probe_pin", shmem->ints[6],
 			"spiss_pin", shmem->ints[7],
-			"timeout", shmem->ints[8],
-			"bed_id", shmem->ints[9],
-			"fan_id", shmem->ints[10],
-			"spindle_id", shmem->ints[11],
-			"current_extruder", shmem->ints[12],
-			"store_adc", shmem->ints[13],
+			"pwm_step_pin", shmem->ints[8],
+			"pwm_dir_pin", shmem->ints[9],
+			"timeout", shmem->ints[10],
+			"bed_id", shmem->ints[11],
+			"fan_id", shmem->ints[12],
+			"spindle_id", shmem->ints[13],
+			"current_extruder", shmem->ints[14],
+			"store_adc", shmem->ints[15],
 			"feedrate", shmem->floats[0],
 			"max_deviation", shmem->floats[1],
 			"max_v", shmem->floats[2],
@@ -351,12 +355,14 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_int(5, "stop_pin", dict);
 	set_int(6, "probe_pin", dict);
 	set_int(7, "spiss_pin", dict);
-	set_int(8, "timeout", dict);
-	set_int(9, "bed_id", dict);
-	set_int(10, "fan_id", dict);
-	set_int(11, "spindle_id", dict);
-	set_int(12, "current_extruder", dict);
-	set_int(13, "store_adc", dict);
+	set_int(8, "pwm_step_pin", dict);
+	set_int(9, "pwm_dir_pin", dict);
+	set_int(10, "timeout", dict);
+	set_int(11, "bed_id", dict);
+	set_int(12, "fan_id", dict);
+	set_int(13, "spindle_id", dict);
+	set_int(14, "current_extruder", dict);
+	set_int(15, "store_adc", dict);
 	set_float(0, "feedrate", dict);
 	set_float(1, "max_deviation", dict);
 	set_float(2, "max_v", dict);

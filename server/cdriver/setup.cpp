@@ -63,7 +63,9 @@ void setup()
 	//debug("current_fragment = running_fragment; %d %p", current_fragment, &current_fragment);
 	current_fragment_pos = 0;
 	num_active_motors = 0;
-	hwtime_step = 4000;
+	default_hwtime_step = 4000;
+	min_hwtime_step = 3000;
+	settings.hwtime_step = default_hwtime_step;
 	feedrate = 1;
 	max_deviation = 0;
 	max_v = 100;
@@ -94,6 +96,9 @@ void setup()
 	temps = NULL;
 	num_gpios = 0;
 	gpios = NULL;
+	pwm.step_pin.read(0);
+	pwm.dir_pin.read(0);
+	pwm.active = false;
 	for (int s = 0; s < NUM_SPACES; ++s)
 		spaces[s].init(s);
 	arch_setup_end();
@@ -112,7 +117,7 @@ void check_protocol() {
 
 void connect_end() {
 	// Set things up that need information from the firmware.
-	num_subfragments_bits = int(std::log2(hwtime_step / TIME_PER_ISR));
+	num_subfragments_bits = int(std::log2(settings.hwtime_step / TIME_PER_ISR));
 	history = new History[FRAGMENTS_PER_BUFFER];
 	for (int i = 0; i < 2; ++i) {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;

@@ -81,22 +81,22 @@ enum SingleByteHostCommands {
 };
 
 enum SingleByteCommands {	// See serial.cpp for computation of command values. {{{
-	CMD_NACK0 = 0xf0,       // Incorrect packet; please resend.
-	CMD_NACK1 = 0x91,       // Incorrect packet; please resend.
-	CMD_NACK2 = 0xa2,       // Incorrect packet; please resend.
-	CMD_NACK3 = 0xc3,       // Incorrect packet; please resend.
-	CMD_ACK0 = 0xc4,        // Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_ACK1 = 0xa5,        // Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_ACK2 = 0x96,        // Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_ACK3 = 0xf7,        // Packet properly received and accepted; ready for next command.  Reply follows if it should.
-	CMD_STALL0 = 0x88,      // Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_STALL1 = 0xe9,      // Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_STALL2 = 0xda,      // Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_STALL3 = 0xbb,      // Packet properly received, but not accepted; don't resend packet unmodified.
-	CMD_ID = 0xbc,          // Request/reply machine ID code.
-	CMD_DEBUG = 0xdd,       // Debug message; a nul-terminated message follows (no checksum; no resend).
-	CMD_STARTUP = 0xee,     // Starting up.
-	CMD_STALLACK = 0x8f     // Clear stall.
+	CMD_NACK0 = 0xf0,	// Incorrect packet; please resend.
+	CMD_NACK1 = 0x91,	// Incorrect packet; please resend.
+	CMD_NACK2 = 0xa2,	// Incorrect packet; please resend.
+	CMD_NACK3 = 0xc3,	// Incorrect packet; please resend.
+	CMD_ACK0 = 0xc4,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACK1 = 0xa5,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACK2 = 0x96,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_ACK3 = 0xf7,	// Packet properly received and accepted; ready for next command.  Reply follows if it should.
+	CMD_STALL0 = 0x88,	// Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_STALL1 = 0xe9,	// Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_STALL2 = 0xda,	// Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_STALL3 = 0xbb,	// Packet properly received, but not accepted; don't resend packet unmodified.
+	CMD_ID = 0xbc,		// Request/reply machine ID code.
+	CMD_DEBUG = 0xdd,	// Debug message; a nul-terminated message follows (no checksum; no resend).
+	CMD_STARTUP = 0xee,	// Starting up.
+	CMD_STALLACK = 0x8f	// Clear stall.
 }; // }}}
 
 extern SingleByteCommands cmd_ack[4];
@@ -161,6 +161,7 @@ struct History {
 	double P[3], A[3], B[3];
 	double v0, v1, dist, alpha_max;
 	int32_t hwtime, end_time;
+	int hwtime_step;
 	int cbs;
 	int queue_start, queue_end;
 	bool queue_full;
@@ -168,6 +169,8 @@ struct History {
 	bool probing, single;
 	double run_time, run_dist;
 	double factor;
+	uint8_t pwm[PWM_MAX];
+	int pwm_size;	// in bytes; each bit is a pulse.
 };
 
 struct Space_History {
@@ -216,6 +219,13 @@ struct Motor {
 	bool active;
 	double limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
+	ARCH_MOTOR
+};
+
+struct Pwm {
+	Pin_t step_pin;
+	Pin_t dir_pin;
+	bool active;
 	ARCH_MOTOR
 };
 
@@ -322,9 +332,11 @@ EXTERN int command_end;
 EXTERN Space spaces[NUM_SPACES];
 EXTERN Temp *temps;
 EXTERN Gpio *gpios;
+EXTERN Pwm pwm;
 EXTERN FILE *store_adc;
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];
+EXTERN int default_hwtime_step, min_hwtime_step;
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
@@ -354,7 +366,6 @@ EXTERN bool refilling;
 EXTERN int current_fragment, running_fragment;
 EXTERN unsigned current_fragment_pos;
 EXTERN int num_active_motors;
-EXTERN int hwtime_step;
 EXTERN struct pollfd pollfds[BASE_FDS + ARCH_MAX_FDS];
 EXTERN void (*wait_for_reply[4])();
 EXTERN int expected_replies;

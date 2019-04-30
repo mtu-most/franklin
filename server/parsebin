@@ -30,7 +30,7 @@ config = fhs.init({'src': None, 'svg': False, 'z': float('nan'), 'offset': 0.0})
 
 file = open(config['src'], 'rb')
 
-cmds = ['system', 'pre-line', 'line', 'goto', 'gpio', 'settemp', 'waittemp', 'setpos', 'wait', 'confirm', 'park']
+cmds = ['system', 'pre-line', 'line', 'goto', 'gpio', 'settemp', 'waittemp', 'setpos', 'wait', 'confirm', 'park', 'pwm']
 def mkcmd(t):
 	if t < len(cmds):
 		return cmds[t]
@@ -54,11 +54,16 @@ while True:
 		n += 1
 		continue
 	if not config['svg']:
-		x = [X, Y, Z]
-		dx = sum((new - old) ** 2 if not math.isnan(new - old) else 0 for old, new in zip(oldx, x)) ** .5
-		oldx = [old if math.isnan(new) else new for old, new in zip(oldx, x)]
-		dt = dx / ((v1 + v0) / 2)
-		print(('%d\t%s\t%d' + '\t%7.3f' * 13) % (n, mkcmd(t), T, X, Y, Z, Bx, By, Bz, E, v0, v1, time, dist, r, (v1 - v0) / dt if dt != 0 else float('nan')))
+		if mkcmd(t) == 'pwm':
+			if T > 72:
+				sys.stderr.write('Warning: invalid pwm record')
+			print('%d\tpwm\t%d\t%s' % (n, T, ' '.join('%02x' % x for x in s[5:5 + (T if T <= 72 else 72)])))
+		else:
+			x = [X, Y, Z]
+			dx = sum((new - old) ** 2 if not math.isnan(new - old) else 0 for old, new in zip(oldx, x)) ** .5
+			oldx = [old if math.isnan(new) else new for old, new in zip(oldx, x)]
+			dt = dx / ((v1 + v0) / 2)
+			print(('%d\t%s\t%d' + '\t%7.3f' * 13) % (n, mkcmd(t), T, X, Y, Z, Bx, By, Bz, E, v0, v1, time, dist, r, (v1 - v0) / dt if dt != 0 else float('nan')))
 	else:
 		Y += Z * config['offset']
 		print('<!-- %d -->' % n)

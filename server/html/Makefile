@@ -20,7 +20,7 @@ all: check links
 check:
 	! which gjslint || gjslint --disable 5,110,220 server.js main.js templates.js ui.js
 
-links:
+links: clean
 	ln -s /usr/share/python3-websocketd/rpc.js .
 	ln -s /usr/share/python3-websocketd/builders.js .
 

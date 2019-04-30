@@ -46,6 +46,9 @@ static Run_Record run_preline;
 
 static double probe_adjust;
 
+static int pwm_size;
+static uint8_t current_pwm[PWM_MAX];
+
 void run_file(char const *name, char const *probename, bool start, double sina, double cosa) {
 	rundebug("run file %d %f %f", start, sina, cosa);
 	abort_run_file();
@@ -223,7 +226,7 @@ void run_file_fill_queue() {
 				&& !run_file_wait	// We are not waiting for something else (pause or confirm).
 				&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
 			int t = run_file_map[settings.run_file_current].type;
-			if (t != RUN_LINE && t != RUN_PRE_LINE && (arch_running() || settings.queue_end != settings.queue_start || computing_move || sending_fragment || transmitting_fragment))
+			if (t != RUN_LINE && t != RUN_PRE_LINE  && t != RUN_PWM && (arch_running() || settings.queue_end != settings.queue_start || computing_move || sending_fragment || transmitting_fragment))
 				break;
 			Run_Record &r = run_file_map[settings.run_file_current];
 			rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
@@ -273,6 +276,10 @@ void run_file_fill_queue() {
 					queue[settings.queue_end].time = r.time;
 					queue[settings.queue_end].dist = r.dist;
 					queue[settings.queue_end].cb = false;
+					queue[settings.queue_end].pwm_size = pwm_size;
+					if (pwm_size > 0)
+						memcpy(queue[settings.queue_end].pwm, current_pwm, pwm_size);
+					pwm_size = 0;
 					settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
 					break;
 				}
@@ -282,6 +289,7 @@ void run_file_fill_queue() {
 					move.cb = false;
 					move.probe = false;
 					move.single = false;
+					move.pwm_size = 0;
 					move.v0 = r.v0;
 					move.v1 = r.v0;
 					move.tool = r.tool;
@@ -296,6 +304,12 @@ void run_file_fill_queue() {
 					move.B[2] = 0;
 					move.e = r.E;
 					go_to(false, &move, false);
+					break;
+				}
+				case RUN_PWM:
+				{
+					pwm_size = r.tool;
+					memcpy(current_pwm, &r.X, pwm_size);
 					break;
 				}
 				case RUN_GPIO:
@@ -473,8 +487,7 @@ double run_find_pos(const double pos[3]) {
 						if (std::isnan(target[k]))
 							break;
 					}
-					/* ((pos-O).(target-O))/((target-O).(target-O))*(target-O) = projection-O
-					   */
+					// ((pos-O).(target-O))/((target-O).(target-O))*(target-O) = projection-O
 					pt += (pos[k] - current[k]) * (target[k] - current[k]);
 					tt += (target[k] - current[k]) * (target[k] - current[k]);
 				}

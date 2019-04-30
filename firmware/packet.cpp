@@ -21,8 +21,11 @@
 #include "firmware.h"
 
 //#define cmddebug debug
-#define cmddebug(...) do {} while (0)
 //#define cmddebug(...) do { debug_add(command(0)); } while (0)
+
+#ifndef cmddebug
+#define cmddebug(...) do {} while (0)
+#endif
 
 static uint16_t read_16(int pos) {
 	return command(pos) | (command(pos + 1) << 8);
@@ -101,6 +104,8 @@ void packet()
 			motor[m].disable(m);
 		active_motors = command(1);
 		time_per_sample = read_32(2);
+		if (time_per_sample <= 0)
+			debug("invalid time per sample: %d", time_per_sample);
 		uint8_t p = led_pin;
 		led_pin = command(6);
 		if (p != led_pin) {
@@ -137,6 +142,7 @@ void packet()
 		full_phase_bits = fpb;
 		full_phase = 1 << full_phase_bits;
 		sei();
+		//debug("time per sample: %d μs, full phase bits: %d", time_per_sample, fpb);
 		p = spiss_pin;
 		spiss_pin = command(12);
 		if (p != spiss_pin) {

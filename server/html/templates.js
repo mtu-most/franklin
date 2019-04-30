@@ -789,6 +789,8 @@ function setup_globals(desc, pos, top) { // {{{
 	pins.Add(Pin(ui, 'Stop', [null, 'stop_pin'], 4));
 	pins.Add(Pin(ui, 'Probe', [null, 'probe_pin'], 4));
 	pins.Add(Pin(ui, 'SPI SS', [null, 'spiss_pin'], 2));
+	pins.Add(Pin(ui, 'Pwm step', [null, 'pwm_step_pin'], 1));
+	pins.Add(Pin(ui, 'Pwm dir', [null, 'pwm_dir_pin'], 1));
 	return [ret, pos];
 } // }}}
 function setup_cartesian(desc, pos, top) { // {{{

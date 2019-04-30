@@ -402,7 +402,7 @@ static void mc_set_pins(uint64_t mask) { // {{{
 
 // This function is called in a separate thread, and moved to an isolated cpu core.  It handles the realtime operations.
 static void mc_realtime() { // {{{
-	uint64_t period = (hwtime_step * 1000) / 4;
+	uint64_t period = (settings.hwtime_step * 1000) / 4;
 	int fd = timerfd_create(CLOCK_MONOTONIC, 0);
 	struct itimerspec it;
 	time_t sec = period / 1000000000;
@@ -476,7 +476,7 @@ static void mc_realtime() { // {{{
 
 void arch_setup_start() { // {{{
 	// Override hwtime_step.
-	hwtime_step = 800;
+	default_hwtime_step = 800;
 	// Claim that firmware has correct version.
 	protocol_version = PROTOCOL_VERSION;
 	// Prepare gpios.

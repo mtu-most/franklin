@@ -72,25 +72,33 @@ bool globals_load() {
 	spiss_pin.read(shmem->ints[7]);
 	if (p != spiss_pin.write())
 		change_hw = true;
+	p = pwm.step_pin.write();
+	pwm.step_pin.read(shmem->ints[8]);
+	if (p != pwm.step_pin.write())
+		change_hw = true;
+	p = pwm.dir_pin.write();
+	pwm.dir_pin.read(shmem->ints[9]);
+	if (p != pwm.dir_pin.write())
+		change_hw = true;
 	int t = timeout;
-	timeout = shmem->ints[8];
+	timeout = shmem->ints[10];
 	if (t != timeout)
 		change_hw = true;
-	bed_id = shmem->ints[9];
-	fan_id = shmem->ints[10];
-	spindle_id = shmem->ints[11];
+	bed_id = shmem->ints[11];
+	fan_id = shmem->ints[12];
+	spindle_id = shmem->ints[13];
 	feedrate = shmem->floats[0];
 	if (std::isnan(feedrate) || std::isinf(feedrate) || feedrate <= 0)
 		feedrate = 1;
 	max_deviation = shmem->floats[1];
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
-	current_extruder = shmem->ints[12];
+	current_extruder = shmem->ints[14];
 	targetx = shmem->floats[4];
 	targety = shmem->floats[5];
 	targetangle = shmem->floats[6];
 	zoffset = shmem->floats[7];
-	bool store = shmem->ints[13];
+	bool store = shmem->ints[15];
 	if (store && !store_adc) {
 		store_adc = fopen("/tmp/franklin-adc-dump", "a");
 	}
@@ -113,12 +121,14 @@ void globals_save() {
 	shmem->ints[5] = stop_pin.write();
 	shmem->ints[6] = probe_pin.write();
 	shmem->ints[7] = spiss_pin.write();
-	shmem->ints[8] = timeout;
-	shmem->ints[9] = bed_id;
-	shmem->ints[10] = fan_id;
-	shmem->ints[11] = spindle_id;
-	shmem->ints[12] = current_extruder;
-	shmem->ints[13] = store_adc != NULL;
+	shmem->ints[8] = pwm.step_pin.write();
+	shmem->ints[9] = pwm.dir_pin.write();
+	shmem->ints[10] = timeout;
+	shmem->ints[11] = bed_id;
+	shmem->ints[12] = fan_id;
+	shmem->ints[13] = spindle_id;
+	shmem->ints[14] = current_extruder;
+	shmem->ints[15] = store_adc != NULL;
 	shmem->floats[0] = feedrate;
 	shmem->floats[1] = max_deviation;
 	shmem->floats[2] = max_v;

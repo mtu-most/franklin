@@ -48,7 +48,8 @@ OBJS = $(patsubst %.cpp,build/%.o,${SOURCES})
 HEADERS = \
 	arch-avr.h \
 	cdriver.h \
-	configuration.h
+	configuration.h \
+	module.h
 
 DEPENDS = \
 	  Makefile

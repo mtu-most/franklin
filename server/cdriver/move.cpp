@@ -26,6 +26,49 @@
 #define mdebug(...) do {} while (0)
 #endif
 
+static void send_fragment() { // {{{
+	if (host_block) {
+		current_fragment_pos = 0;
+		return;
+	}
+	if (current_fragment_pos <= 0 || stopping || sending_fragment) {
+		//debug("no send fragment %d %d %d", current_fragment_pos, stopping, sending_fragment);
+		return;
+	}
+	if (num_active_motors == 0) {
+		if (current_fragment_pos < 1) {
+			// TODO: find out why this is attempted and avoid it.
+			debug("not sending short fragment for 0 motors; %d %d", current_fragment, running_fragment);
+			if (history[current_fragment].cbs) {
+				if (settings.queue_start == settings.queue_end && !settings.queue_full) {
+					// Send cbs immediately.
+					if (!host_block) {
+						num_movecbs += history[current_fragment].cbs;
+						//debug("adding %d cbs in send_fragment", history[current_fragment].cbs);
+						history[current_fragment].cbs = 0;
+					}
+				}
+			}
+			current_fragment_pos = 0;
+			return;
+		}
+		else {
+			//debug("sending fragment for 0 motors at position %d", current_fragment_pos);
+		}
+		//abort();
+	}
+	//debug("sending %d prevcbs %d", current_fragment, history[(current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER].cbs);
+	if (aborting || arch_send_fragment()) {
+		current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
+		//debug("current_fragment = (current_fragment + 1) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
+		//debug("current send -> %x", current_fragment);
+		store_settings();
+		if (!aborting && (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping) {
+			arch_start_move(0);
+		}
+	}
+} // }}}
+
 static void change0(int qpos) { // {{{
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
@@ -38,6 +81,11 @@ static void change0(int qpos) { // {{{
 
 // For documentation about variables used here, see struct History in cdriver.h
 int next_move(int32_t start_time) { // {{{
+	// Clean up state before starting the move.
+	if (current_fragment_pos > 0) {
+		//debug("sending because new move is started");
+		send_fragment();
+	}
 	settings.probing = false;
 	settings.factor = 0;
 	int num_cbs = 0;
@@ -112,10 +160,13 @@ int next_move(int32_t start_time) { // {{{
 	}
 	// }}}
 	// Reset time. {{{
-	if (computing_move)
+	if (computing_move) {
 		settings.hwtime -= start_time;
-	else
+		//debug("time -= %d, now %d", start_time, settings.hwtime);
+	}
+	else {
 		settings.hwtime = 0;
+	}
 	// }}}
 
 	if (!computing_move) {	// Set up source if this is a new move. {{{
@@ -171,64 +222,38 @@ int next_move(int32_t start_time) { // {{{
 		spaces[2].axis[~queue[q].tool]->settings.endpos = queue[q].e;
 		mdebug("move follower to %f, current=%f source=%f current_pos=%f", queue[q].e, spaces[2].axis[~queue[q].tool]->settings.current, spaces[2].axis[~queue[q].tool]->settings.source, spaces[2].motor[~queue[q].tool]->settings.current_pos);
 	}
-	mdebug("move prepared, from=(%f,%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f, single=%d, UVW=(%f,%f,%f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6, queue[q].single, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[1]->settings.current_pos, spaces[0].motor[2]->settings.current_pos);
+	auto last_hwtime_step = settings.hwtime_step;
+	if (queue[q].pwm_size > 0) {
+		memcpy(settings.pwm, queue[q].pwm, queue[q].pwm_size);
+		settings.hwtime_step = dt * 1e6 / (queue[q].pwm_size * 8);
+		if (settings.hwtime_step < min_hwtime_step)
+			settings.hwtime_step = min_hwtime_step;
+	}
+	settings.pwm_size = queue[q].pwm_size;
+	if (settings.hwtime_step != last_hwtime_step)
+		arch_globals_change();
+	/*
+	if (spaces[0].num_axes > 2) {
+		debug("move prepared, from=(%f,%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f, single=%d, UVW=(%f,%f,%f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6, queue[q].single, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[1]->settings.current_pos, spaces[0].motor[2]->settings.current_pos);
+	}
+	else if (spaces[0].num_axes > 1) {
+		debug("move prepared, from=(%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f, single=%d, UV=(%f,%f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6, queue[q].single, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[1]->settings.current_pos);
+	}
+	// */
 	//debug("times end %d current %d dist %f v0 %f v1 %f", settings.end_time, settings.hwtime, settings.dist, settings.v0, settings.v1);
 
 	settings.queue_start = n;
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
-	if (!computing_move) {
+	if (!computing_move)
 		store_settings();
-	}
 	computing_move = true;
 	return num_cbs;
-} // }}}
-
-static void send_fragment() { // {{{
-	if (host_block) {
-		current_fragment_pos = 0;
-		return;
-	}
-	if (current_fragment_pos <= 0 || stopping || sending_fragment) {
-		//debug("no send fragment %d %d %d", current_fragment_pos, stopping, sending_fragment);
-		return;
-	}
-	if (num_active_motors == 0) {
-		if (current_fragment_pos < 1) {
-			// TODO: find out why this is attempted and avoid it.
-			debug("not sending short fragment for 0 motors; %d %d", current_fragment, running_fragment);
-			if (history[current_fragment].cbs) {
-				if (settings.queue_start == settings.queue_end && !settings.queue_full) {
-					// Send cbs immediately.
-					if (!host_block) {
-						num_movecbs += history[current_fragment].cbs;
-						//debug("adding %d cbs in send_fragment", history[current_fragment].cbs);
-						history[current_fragment].cbs = 0;
-					}
-				}
-			}
-			current_fragment_pos = 0;
-			return;
-		}
-		else
-			debug("sending fragment for 0 motors at position %d", current_fragment_pos);
-		//abort();
-	}
-	//debug("sending %d prevcbs %d", current_fragment, history[(current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER].cbs);
-	if (aborting || arch_send_fragment()) {
-		current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
-		//debug("current_fragment = (current_fragment + 1) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
-		//debug("current send -> %x", current_fragment);
-		store_settings();
-		if (!aborting && (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping) {
-			arch_start_move(0);
-		}
-	}
 } // }}}
 
 static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double distance, double dt, double &factor) { // {{{
 	// Check motor limits for motor (sp,mt), which is mtr. For followers, limit_mtr is set to its leader unless settings.single is true.
 	// distance is the distance to travel; dt is the time, factor is lowered if needed.
-	//debug("check distance %d %d dist %f t %f", sp, mt, distance, dt);
+	//debug("check distance %d %d dist %f t %f current %f time step %d", sp, mt, distance, dt, mtr->settings.current_pos, settings.hwtime_step);
 	if (dt == 0) {
 		debug("check distance for 0 time");
 		factor = 0;
@@ -257,7 +282,7 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	// Limit a+.
 	double limit_dv = limit_mtr->limit_a * dt;
 	if (v - mtr->settings.last_v * s > limit_dv) {
-		debug("a+ %d %d target v %f limit dv %f last v %f s %d current %f", sp, mt, mtr->settings.target_v, limit_dv, mtr->settings.last_v, s, mtr->settings.current_pos);
+		debug("a+ %d %d target v %f limit dv %f last v %f s %d current %f factor %f", sp, mt, mtr->settings.target_v, limit_dv, mtr->settings.last_v, s, mtr->settings.current_pos, settings.factor);
 		distance = (limit_dv * s + mtr->settings.last_v) * dt;
 		v = std::fabs(distance / dt);
 	}
@@ -314,7 +339,7 @@ static double move_axes(Space *s) { // {{{
 				limit_mtr = spaces[fs].motor[fa];
 			}
 		}
-		check_distance(s->id, m, s->motor[m], limit_mtr, distance, hwtime_step / 1e6, factor);
+		check_distance(s->id, m, s->motor[m], limit_mtr, distance, settings.hwtime_step / 1e6, factor);
 	}
 	return factor; // */
 } // }}}
@@ -348,8 +373,8 @@ static void do_steps() { // {{{
 			if (rounded_cp != rounded_new_cp) {
 				if (!mtr.active) {
 					mtr.active = true;
-					//debug("activating motor %d %d", s, m);
 					num_active_motors += 1;
+					//debug("activating motor %d %d", s, m);
 				}
 				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
 				if (diff > 0x7f) {
@@ -388,9 +413,20 @@ static void do_steps() { // {{{
 			mtr.settings.last_v = mtr.settings.target_v;
 		}
 	}
+	int pwm_pos = (settings.hwtime - settings.hwtime_step / 2) / settings.hwtime_step;
+	//debug("time %d step %d pwm pos %d size %d", settings.hwtime, settings.hwtime_step, pwm_pos, settings.pwm_size);
+	if (pwm_pos < settings.pwm_size * 8) {
+		if (!pwm.active) {
+			pwm.active = true;
+			num_active_motors += 1;
+			//debug("activating pwm");
+		}
+		//debug("set pwm for %d at %d to %d", current_fragment, current_fragment_pos, settings.pwm[pwm_pos]);
+		PWM_SET(settings.pwm[pwm_pos]);
+	}
 	current_fragment_pos += 1;
 	if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
-		//debug("fragment full (normal) %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
+		//debug("sending because fragment full (normal) %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
 		send_fragment();
 	}
 } // }}}
@@ -458,10 +494,11 @@ static void apply_tick() { // {{{
 		mdebug("apply tick called, but not moving");
 		return;
 	}
-	settings.hwtime += hwtime_step;
 	mdebug("handling %d %d", computing_move, cbs_after_current_move);
 	// This loop is normally only run once, but when a move is complete it is rerun for the next move.
 	while ((running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2)) {
+		settings.hwtime += settings.hwtime_step;
+		//debug("tick time %d step %d frag %d pos %d", settings.hwtime, settings.hwtime_step, current_fragment, current_fragment_pos);
 		double t = settings.hwtime / 1e6;
 		double target_factor;	// Factor of current move that should be completed at this time.
 		if (settings.hwtime >= settings.end_time)
@@ -472,8 +509,10 @@ static void apply_tick() { // {{{
 			target_factor = ((settings.v1 - settings.v0) / (settings.end_time / 1e6) * t * t / 2 + settings.v0 * t) / settings.dist;
 			if (target_factor > 1)
 				target_factor = 1;
+			if (target_factor < 0)
+				target_factor = 0;
 		}
-		mdebug("target factor: %f (t=%f end=%f)", target_factor, t, settings.end_time / 1e6);
+		//debug("target factor: %f (t=%f end=%f)", target_factor, t, settings.end_time / 1e6);
 		// Go straight to the next move if the distance was 0 (so target_factor is NaN).
 		if (!std::isnan(target_factor)) {
 			double f = set_targets(target_factor);
@@ -482,6 +521,9 @@ static void apply_tick() { // {{{
 				if (settings.factor > 0 || settings.hwtime <= 0)
 					target_factor = settings.factor + f * (target_factor - settings.factor);
 				else {
+					// settings.factor == 0, so we're at the start of a move.
+					// settings.hwtime > 0, so this must be a continuation.
+					// Only the new part can be limited, so to limit the same distance, it needs to be a larger fraction.
 					// Example:
 					// hwtime_step = 10
 					// hwtime = 6
@@ -490,7 +532,7 @@ static void apply_tick() { // {{{
 					// target move = 100
 					// so (1-0.9)*100=10 of target move must be removed
 					// that is (1-0.9)/0.6 of new part.
-					double newpart = settings.hwtime * 1. / hwtime_step;
+					double newpart = settings.hwtime * 1. / settings.hwtime_step;
 					f = 1 - (1 - f) / newpart;
 					target_factor = f * target_factor;
 				}
@@ -501,7 +543,7 @@ static void apply_tick() { // {{{
 				//debug("adjust factor (%f) from %f to %f because f=%f", settings.factor, old, target_factor, f);
 				set_targets(target_factor);
 				// Adjust time.
-				settings.hwtime -= hwtime_step * ((1 - f) * .99);
+				settings.hwtime -= settings.hwtime_step * ((1 - f) * .99);
 			}
 			//debug("target factor %f time 0 -> %d -> %d v %f -> %f", target_factor, settings.hwtime, settings.end_time, settings.v0, settings.v1);
 			settings.factor = target_factor;
@@ -531,6 +573,8 @@ static void apply_tick() { // {{{
 			return;
 		}
 		mdebug("try again");
+		// Next loop the time is incremented again, but in this case that shouldn't happen, so compensate.
+		settings.hwtime -= settings.hwtime_step;
 	}
 	//if (spaces[0].num_axes >= 2)
 		//debug("move z %d %d %f %f %f", current_fragment, current_fragment_pos, spaces[0].axis[2]->settings.current, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
@@ -551,6 +595,7 @@ void store_settings() { // {{{
 	history[current_fragment].dist = settings.dist;
 	history[current_fragment].alpha_max = settings.alpha_max;
 	history[current_fragment].hwtime = settings.hwtime;
+	history[current_fragment].hwtime_step = settings.hwtime_step;
 	history[current_fragment].end_time = settings.end_time;
 	history[current_fragment].cbs = 0;
 	history[current_fragment].queue_start = settings.queue_start;
@@ -562,6 +607,9 @@ void store_settings() { // {{{
 	history[current_fragment].run_time = settings.run_time;
 	history[current_fragment].run_dist = settings.run_dist;
 	history[current_fragment].factor = settings.factor;
+	history[current_fragment].pwm_size = settings.pwm_size;
+	for (int i = 0; i < PWM_MAX; ++i)
+		history[current_fragment].pwm[i] = settings.pwm[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
 		sp.history[current_fragment].dist[0] = sp.settings.dist[0];
@@ -596,6 +644,7 @@ void store_settings() { // {{{
 			sp.axis[a]->history[current_fragment].endpos = sp.axis[a]->settings.endpos;
 		}
 	}
+	pwm.active = false;
 	DATA_CLEAR();
 } // }}}
 
@@ -614,6 +663,7 @@ void restore_settings() { // {{{
 	settings.dist = history[current_fragment].dist;
 	settings.alpha_max = history[current_fragment].alpha_max;
 	settings.hwtime = history[current_fragment].hwtime;
+	settings.hwtime_step = history[current_fragment].hwtime_step;
 	settings.end_time = history[current_fragment].end_time;
 	history[current_fragment].cbs = 0;
 	settings.queue_start = history[current_fragment].queue_start;
@@ -625,6 +675,9 @@ void restore_settings() { // {{{
 	settings.run_time = history[current_fragment].run_time;
 	settings.run_dist = history[current_fragment].run_dist;
 	settings.factor = history[current_fragment].factor;
+	settings.pwm_size = history[current_fragment].pwm_size;
+	for (int i = 0; i < PWM_MAX; ++i)
+		settings.pwm[i] = history[current_fragment].pwm[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
 		sp.settings.dist[0] = sp.history[current_fragment].dist[0];
@@ -659,6 +712,7 @@ void restore_settings() { // {{{
 			sp.axis[a]->settings.endpos = sp.axis[a]->history[current_fragment].endpos;
 		}
 	}
+	pwm.active = false;
 	DATA_CLEAR();
 } // }}}
 
@@ -675,10 +729,10 @@ void buffer_refill() { // {{{
 	}
 	refilling = true;
 	// send_fragment in the previous refill may have failed; try it again.
-	if (current_fragment_pos > 0) {
-		//debug("send last fragment");
+	/*if (current_fragment_pos > 0) {
+		debug("sending because data pending frag=%d pos=%d", current_fragment, current_fragment_pos);
 		send_fragment();
-	}
+	}*/
 	//debug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
 	while (computing_move && !aborting && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
@@ -687,7 +741,7 @@ void buffer_refill() { // {{{
 		apply_tick();
 		//debug("refill2 %d %f", current_fragment, spaces[0].motor[0]->settings.current_pos);
 		if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
-			//debug("fragment full (weird) %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
+			//debug("sending because fragment full (weird) %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
 			send_fragment();
 		}
 	}
@@ -697,7 +751,7 @@ void buffer_refill() { // {{{
 		return;
 	}
 	if (!computing_move && current_fragment_pos > 0) {
-		//debug("finalize");
+		//debug("sending because move ended");
 		send_fragment();
 	}
 	refilling = false;

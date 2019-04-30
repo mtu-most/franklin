@@ -183,7 +183,7 @@ static double probe_speed(Space *s) {
 	for (int i = 0; i < s->num_motors; ++i)
 		if (max_spu < s->motor[i]->steps_per_unit)
 			max_spu = s->motor[i]->steps_per_unit;
-	return 1e6 / hwtime_step / max_spu;
+	return 1e6 / settings.hwtime_step / max_spu;
 }
 
 static int follow(Space *s, int axis) {
