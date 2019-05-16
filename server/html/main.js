@@ -24,7 +24,7 @@ var upload_options = {};
 var labels_element, machines_element;
 var selected_machine;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
-var space_types = ['Cartesian', 'Extruder', 'Follower', 'Delta', 'Polar', 'H-bot'];
+var space_types = {'cartesian': 'Cartesian', 'delta': 'Delta', 'polar': 'Polar', 'h-bot': 'H-bot'};
 var new_tab, new_page;
 // }}}
 
@@ -1301,8 +1301,10 @@ function temprange(ui) { // {{{
 
 function create_space_type_select(ui) { // {{{
 	var ret = document.createElement('select');
-	for (var o = 0; o < space_types.length; ++o)
+	for (var o in space_types) {
 		ret.AddElement('option').AddText(space_types[o]);
+		ret.type_name = o;
+	}
 	return ret;
 } // }}}
 

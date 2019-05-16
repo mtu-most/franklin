@@ -749,7 +749,7 @@ function setup_type(desc, pos, top) { // {{{
 	var button = ret.AddElement('button').AddText('Set');
 	button.type = 'button';
 	button.obj = select;
-	button.AddEvent('click', function() { set_value(ui, [['space', 0], 'type'], this.obj.selectedIndex); });
+	button.AddEvent('click', function() { set_value(ui, [['space', 0], 'type'], this.obj.options[this.obj.selectedIndex].type_name); });
 	ret.AddElement('span').AddClass(make_id(ui, [['space', 0], 'type']));
 	return [ret, pos];
 } // }}}

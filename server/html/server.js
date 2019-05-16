@@ -18,8 +18,6 @@
  */
 
 // {{{ Global variables.
-var eval_code = ['[!(', ')!]'];
-var ref_code = ['[$(', ')$]'];
 var _update_handle;
 var _updater;
 var _update_running = false;
@@ -33,12 +31,12 @@ var blacklist;
 var audio_list;
 var role;
 
-var TYPE_CARTESIAN = 0;
-var TYPE_EXTRUDER = 1;
-var TYPE_FOLLOWER = 2;
-var TYPE_DELTA = 3;
-var TYPE_POLAR = 4;
-var TYPE_HBOT = 5;
+var TYPE_CARTESIAN = 'cartesian';
+var TYPE_EXTRUDER = 'extruder';
+var TYPE_FOLLOWER = 'follower';
+var TYPE_DELTA = 'delta';
+var TYPE_POLAR = 'polar';
+var TYPE_HBOT = 'h-bot';
 // }}}
 
 // {{{ Events from server.

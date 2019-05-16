@@ -27,12 +27,13 @@ C0 = 273.15	# Conversion between K and °C
 WAIT = object()	# Sentinel for blocking functions.
 NUM_SPACES = 3
 # Space types
-TYPE_CARTESIAN = 0
-TYPE_EXTRUDER = 1
-TYPE_FOLLOWER = 2
-TYPE_DELTA = 3
-TYPE_POLAR = 4
-TYPE_HBOT = 5
+TYPE_CARTESIAN = 'cartesian'
+TYPE_EXTRUDER = 'extruder'
+TYPE_FOLLOWER = 'follower'
+TYPE_DELTA = 'delta'
+TYPE_POLAR = 'polar'
+TYPE_HBOT = 'h-bot'
+type_names = [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER, TYPE_DELTA, TYPE_POLAR, TYPE_HBOT]
 record_format = '=Bidddddddddddd' # type, tool, X, Y, Z, Bx, By, Bz, E, v0, v1, time, dist, r
 # }}}
 
@@ -1319,7 +1320,7 @@ class Machine: # {{{
 				self.read_motor(m)
 		def read_info(self):
 			data = cdriver.read_space_info(self.id)
-			self.type = data.pop('type')
+			self.type = type_names[data.pop('type')]
 			num_axes = data.pop('num_axes')
 			num_motors = data.pop('num_motors')
 			if self.id == 1:
@@ -1399,7 +1400,7 @@ class Machine: # {{{
 		def write_info(self, num_axes = None):
 			if num_axes is None:
 				num_axes = len(self.axis)
-			data = {'type': self.type, 'num_axes': num_axes}
+			data = {'type': type_names.index(self.type) if self.type in type_names else 0, 'num_axes': num_axes}
 			if self.type == TYPE_CARTESIAN:
 				pass
 			elif self.type == TYPE_EXTRUDER:
@@ -1480,7 +1481,7 @@ class Machine: # {{{
 			ret = '[space %d]\r\n' % self.id
 			type = self.type if self.id != 0 or self.machine.home_phase is None else self.machine.home_orig_type
 			if self.id == 0:
-				ret += 'type = %d\r\n' % type
+				ret += 'type = %s\r\n' % type
 			if type == TYPE_CARTESIAN:
 				ret += 'num_axes = %d\r\n' % len(self.axis)
 			elif type == TYPE_EXTRUDER:
@@ -2155,7 +2156,7 @@ class Machine: # {{{
 						# Avoid errors when empty.
 						continue
 					value = [[int(x[0]), x[1:]] for x in value.split(',')]
-				elif 'name' in key or key == 'user_interface':
+				elif 'name' in key or key in ('user_interface', 'type'):
 					pass	# Keep strings as they are.
 				elif key == 'spi_setup':
 					value = self._unmangle_spi(value)
@@ -2591,7 +2592,7 @@ class Machine: # {{{
 	def expert_set_space(self, space, readback = True, update = True, **ka): # {{{
 		old_type = self.spaces[space].type
 		if space == 0 and 'type' in ka:
-			self.spaces[space].type = int(ka.pop('type'))
+			self.spaces[space].type = ka.pop('type').strip()
 		if self.spaces[space].type == TYPE_EXTRUDER:
 			if 'extruder' in ka:
 				e = ka.pop('extruder')
