@@ -176,6 +176,7 @@ void packet()
 		uint8_t value = command(2);
 		pin[p].set_state((pin[p].state & ~0xc) | (value & 0xc));
 		pin[p].duty = command(3);
+		debug("set duty for pin %d to %d", p, pin[p].duty);
 		if (pin[p].num_temps == 0) {
 			switch (CONTROL_CURRENT(value)) {
 			case CTRL_RESET:

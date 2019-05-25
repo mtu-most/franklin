@@ -52,7 +52,7 @@
 #define ARDUINO_MAIN
 #define NOT_A_PIN 0
 #define NOT_A_PORT 0
-#define NOT_ON_TIMER 0
+#define NOT_ON_TIMER 0xff
 #define PA 1
 #define PB 2
 #define PC 3
@@ -64,25 +64,25 @@
 #define PJ 10
 #define PK 11
 #define PL 12
-#define TIMER0 1
-#define TIMER0A 2
-#define TIMER0B 3
-#define TIMER1A 4
-#define TIMER1B 5
-#define TIMER1C 6
-#define TIMER2  7
-#define TIMER2A 8
-#define TIMER2B 9
-#define TIMER3A 10
-#define TIMER3B 11
-#define TIMER3C 12
-#define TIMER4A 13
-#define TIMER4B 14
-#define TIMER4C 15
-#define TIMER4D 16
-#define TIMER5A 17
-#define TIMER5B 18
-#define TIMER5C 19
+#define TIMER0 0
+#define TIMER0A 0
+#define TIMER0B 1
+#define TIMER1A 2
+#define TIMER1B 3
+#define TIMER1C 4
+#define TIMER2  5
+#define TIMER2A 5
+#define TIMER2B 6
+#define TIMER3A 7
+#define TIMER3B 8
+#define TIMER3C 9
+#define TIMER4A 10
+#define TIMER4B 11
+#define TIMER4C 12
+#define TIMER4D NOT_ON_TIMER	// Not supported.
+#define TIMER5A 13
+#define TIMER5B 14
+#define TIMER5C 15
 // }}}
 
 #include <stdio.h>
@@ -92,6 +92,49 @@
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
 #include <EEPROM.h>
+
+struct Timer_data {
+	volatile uint8_t *mode, *oc;
+	uint8_t mode_mask;
+	uint8_t num;
+	char part;
+	Timer_data(volatile uint8_t *mode_, volatile uint8_t *oc_, uint8_t mode_mask_, uint8_t num_, char part_) : mode(mode_), oc(oc_), mode_mask(mode_mask_), num(num_), part(part_) {}
+};
+static const Timer_data timer_data[] = {
+	Timer_data(&TCCR0A, &OCR0A, 2 << 6, 0, 'A'),
+	Timer_data(&TCCR0A, &OCR0B, 2 << 4, 0, 'B'),
+
+	Timer_data(&TCCR1A, &OCR1AL, 2 << 6, 1, 'A'),
+	Timer_data(&TCCR1A, &OCR1BL, 2 << 4, 1, 'B'),
+#ifdef OCR1C
+	Timer_data(&TCCR1A, &OCR1CL, 2 << 2, 1, 'C'),
+#else
+	Timer_data(NULL, NULL, 0, 0, 'x'),
+#endif
+
+	Timer_data(&TCCR2A, &OCR2A, 2 << 6, 2, 'A'),
+	Timer_data(&TCCR2A, &OCR2B, 2 << 4, 2, 'B'),
+
+#ifdef TCCR3A
+	Timer_data(&TCCR3A, &OCR3AL, 2 << 6, 3, 'A'),
+	Timer_data(&TCCR3A, &OCR3BL, 2 << 4, 3, 'B'),
+#ifdef OCR3C
+	Timer_data(&TCCR3A, &OCR3CL, 2 << 2, 3, 'C'),
+#else
+	Timer_data(NULL, NULL, 0, 0, 'x'),
+#endif
+#endif
+#ifdef TCCR4A
+	Timer_data(&TCCR4A, &OCR4AL, 2 << 6, 4, 'A'),
+	Timer_data(&TCCR4A, &OCR4BL, 2 << 4, 4, 'B'),
+	Timer_data(&TCCR4A, &OCR4CL, 2 << 2, 4, 'C'),
+#endif
+#ifdef TCCR5A
+	Timer_data(&TCCR5A, &OCR5AL, 2 << 6, 5, 'A'),
+	Timer_data(&TCCR5A, &OCR5BL, 2 << 4, 5, 'B'),
+	Timer_data(&TCCR5A, &OCR5CL, 2 << 2, 5, 'C'),
+#endif
+};
 
 #ifdef F
 #undef F
@@ -482,6 +525,9 @@ static inline void arch_reset() { // {{{
 
 // Setup. {{{
 EXTERN volatile uint32_t avr_time_h, avr_seconds_h, avr_seconds;
+EXTERN int timer1_pins[3];
+EXTERN int num_timer1_pins;
+EXTERN uint16_t timer1_top;
 
 static inline void arch_setup_start() { // {{{
 	cli();
@@ -493,6 +539,9 @@ static inline void arch_setup_start() { // {{{
 		pin[pin_no].avr_bitmask = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
 		pin[pin_no].avr_on = false;
 		pin[pin_no].avr_target = 0;
+		int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_no);
+		if (timer != NOT_ON_TIMER && timer_data[timer].num == 1)
+			timer1_pins[num_timer1_pins++] = pin_no;
 	}
 	avr_time_h = 0;
 	avr_seconds_h = 0;
@@ -510,15 +559,40 @@ static inline void arch_setup_start() { // {{{
 		*avr_serial_ports[i][5] = ubrr & 0xff;	// ubrrl 1:1M; 16:115k2
 	}
 	// Setup timer1 for microsecond counting.
-	TCCR1A = 0;
-	TCCR1B = 0x09;	// clock at F_CPU.
+	TCCR1A = 0x02;
+	TCCR1B = 0x19;	// clock at F_CPU.
+	ICR1H = 0;
+	ICR1L = 0xff;
+	timer1_top = 0xff;
 	TIMSK1 = 0;	// Disable the interrupt while the motors are disabled.
 	TIFR1 = 0xff;
 	// Setup timer0 for millis().
-	TCCR0A = 0;
+	TCCR0A = 3;
 	TCCR0B = 4;	// Clock/256: 62.5 ticks/millisecond.
 	TIFR0 = 1 << TOV0;
 	TIMSK0 |= 1 << TOIE0;
+	// Enable timer2 for pwm.
+	TCCR2A = 3;
+	TCCR2B = 1;
+	// And the other timers that exist.
+#ifdef TCCR3A
+	TCCR3A = 1;
+	TCCR3B = 0x09;
+	TCNT3H = 0;
+	TCNT3L = 0;
+#endif
+#ifdef TCCR4A
+	TCCR4A = 1;
+	TCCR4B = 0x09;
+	TCNT4H = 0;
+	TCNT4L = 0;
+#endif
+#ifdef TCCR5A
+	TCCR5A = 1;
+	TCCR5B = 0x09;
+	TCNT5H = 0;
+	TCNT5L = 0;
+#endif
 	// Setup ADC.
 	ADCSRA = AVR_ADCSRA_BASE;
 	// Enable interrupts.
@@ -532,7 +606,6 @@ static inline void arch_setup_start() { // {{{
 } // }}}
 
 static inline void arch_setup_end() { // {{{
-	debug("Startup.");
 } // }}}
 
 static inline void arch_tick() { // {{{
@@ -557,6 +630,23 @@ static inline void arch_msetup(uint8_t m) { // {{{
 	}
 } // }}}
 
+static inline void update_timer1_pwm() { // {{{
+	for (int i = 0; i < num_timer1_pins; ++i) {
+		// OC / top = duty / 255
+		int tp = timer1_pins[i];
+		uint32_t value = pin[tp].duty;
+		if (value < 255) {
+			int timer = pgm_read_byte(digital_pin_to_timer_PGM + tp);
+			Timer_data const &p = timer_data[timer];
+			value *= timer1_top;
+			value >>= 8;
+			p.oc[1] = (value >> 8) & 0xff;
+			p.oc[0] = value & 0xff;
+			//debug("set timer1 pin %d:%d to %d for %d with top %d (%x %x) ocr1b %x %x", i, tp, (int)value, pin[tp].duty, timer1_top, ICR1H, ICR1L, OCR1BH, OCR1BL);
+		}
+	}
+} // }}}
+
 static inline void arch_set_speed(uint16_t us_per_sample) { // {{{
 	if (us_per_sample == 0) {
 		TIMSK1 = 0;
@@ -565,14 +655,15 @@ static inline void arch_set_speed(uint16_t us_per_sample) { // {{{
 	else {
 		uint32_t c = us_per_sample;
 		c *= F_CPU / 1000000;
-		c /= full_phase;
+		timer1_top = c >> full_phase_bits;
 		//debug("%d us, top=%d", us_per_sample, c);
 		// Set TOP.
-		OCR1AH = (c >> 8) & 0xff;
-		OCR1AL = c & 0xff;
+		ICR1H = (timer1_top >> 8) & 0xff;
+		ICR1L = timer1_top & 0xff;
 		// Clear counter.
 		TCNT1H = 0;
 		TCNT1L = 0;
+		update_timer1_pwm();
 		// Clear and enable interrupt.
 		TIFR1 = 1 << OCF1A;
 		TIMSK1 = 1 << OCIE1A;
@@ -604,11 +695,41 @@ static inline void arch_spi_stop() { // {{{
 } // }}}
 
 static inline int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { // {{{
+	char const *extra;
+	switch (pin_) {
+		case MOSI:
+			extra = "; MOSI";
+			break;
+		case MISO:
+			extra = "; MISO";
+			break;
+		case SCK:
+			extra = "; SCK";
+			break;
+		case SDA:
+			extra = "; SDA";
+			break;
+		case SCL:
+			extra = "; SCL";
+			break;
+		default:
+			extra = "";
+			break;
+	}
 	if (digital) {
 		if (pin_ >= A0)
-			return sprintf(buffer_, "D%d (A%d)", pin_, pin_ - A0);
-		else
-			return sprintf(buffer_, "D%d", pin_);
+			return sprintf(buffer_, "D%d (A%d%s)", pin_, pin_ - A0, extra);
+		else {
+			int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_);
+			if (timer == NOT_ON_TIMER) {
+				if (extra[0] != '\0')
+					return sprintf(buffer_, "D%d (%s)", pin_, &extra[2]);
+				else
+					return sprintf(buffer_, "D%d", pin_);
+			}
+			else
+				return sprintf(buffer_, "D%d (PWM%d%c%s)", pin_, timer_data[timer].num, timer_data[timer].part, extra);
+		}
 	}
 	else {
 		if (pin_ + A0 < NUM_DIGITAL_PINS)
@@ -1110,6 +1231,12 @@ inline void SET_INPUT(uint8_t pin_no) { // {{{
 } // }}}
 
 inline void UNSET(uint8_t pin_no) { // {{{
+	int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_no);
+	if (timer != NOT_ON_TIMER) {
+		Timer_data const *data = &timer_data[timer];
+		*data->mode &= ~data->mode_mask;
+		//debug("unset pin %d, OC%d%c mode to %x", pin_no, data->num, data->part, *data->mode);
+	}
 	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_UNSET);
@@ -1117,7 +1244,23 @@ inline void UNSET(uint8_t pin_no) { // {{{
 } // }}}
 
 inline void SET(uint8_t pin_no) { // {{{
-	if ((pin[pin_no].state & 0x3) == CTRL_SET)
+	int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_no);
+	if (timer != NOT_ON_TIMER) {
+		Timer_data const *data = &timer_data[timer];
+		if (pin[pin_no].duty < 255) {
+			*data->mode |= data->mode_mask;
+			//debug("set pin %d, OC%d%c mode to %x", pin_no, data->num, data->part, *data->mode);
+			if (data->num == 1)
+				update_timer1_pwm();
+			else
+				*data->oc = pin[pin_no].duty;
+		}
+		else {
+			*data->mode &= ~data->mode_mask;
+			//debug("set2 pin %d, OC%d%c mode to %x", pin_no, data->num, data->part, *data->mode);
+		}
+	}
+	else if ((pin[pin_no].state & 0x3) == CTRL_SET)
 		return;
 	pin[pin_no].avr_on = true;
 	pin[pin_no].avr_target = 0;
@@ -1130,6 +1273,12 @@ inline void SET(uint8_t pin_no) { // {{{
 inline void RESET(uint8_t pin_no) { // {{{
 	if ((pin[pin_no].state & 0x3) == CTRL_RESET)
 		return;
+	int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_no);
+	if (timer != NOT_ON_TIMER) {
+		Timer_data const *data = &timer_data[timer];
+		*data->mode &= ~data->mode_mask;
+		//debug("reset pin %d, OC%d%c mode to %x", pin_no, data->num, data->part, *data->mode);
+	}
 	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
 	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
 	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
