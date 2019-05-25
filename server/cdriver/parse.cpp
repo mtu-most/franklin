@@ -45,7 +45,7 @@ struct Parser { // {{{
 		double center[3];
 		double normal[3];
 		double time, dist;
-		std::string pwm;
+		std::string pattern;
 		Record(bool arc_, int tl, double x_, double y_, double z_, double a_, double b_, double c_, double f_, double e_, double cx = NAN, double cy = NAN, double cz = NAN, double nx = NAN, double ny = NAN, double nz = NAN) : arc(arc_), tool(tl), x(x_), y(y_), z(z_), a(a_), b(b_), c(c_), f(f_), e(e_) {
 			center[0] = cx;
 			center[1] = cy;
@@ -93,12 +93,12 @@ struct Parser { // {{{
 	double last_time, last_dist;
 	std::list <Chunk> command;
 	double max_dev;
-	std::string pwm_data;
+	std::string pattern_data;
 	// }}}
 	// Member functions. {{{
 	Parser(std::string const &infilename, std::string const &outfilename);
 	void get_full_line();
-	bool handle_command(bool handle_pwm);
+	bool handle_command(bool handle_pattern);
 	bool get_chunk(Chunk &ret, std::string &comment);
 	int add_string(std::string const &str);
 	void read_space();
@@ -106,7 +106,7 @@ struct Parser { // {{{
 	double read_fraction();
 	void handle_coordinate(double value, int index, bool *controlled, bool rel);
 	void flush_pending();
-	void add_curve(char const *name, Record *P, double *start, double *end, double *B, double v0, double v1, double f, double r, std::string const &pwm = std::string());
+	void add_curve(char const *name, Record *P, double *start, double *end, double *B, double v0, double v1, double f, double r, std::string const &pattern = std::string());
 	void add_record(RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double Bx = 0, double By = 0, double Bz = 0, double e = NAN, double v0 = INFINITY, double v1 = INFINITY, double radius = INFINITY);
 	void reset_pending_pos();
 	// }}}
@@ -169,7 +169,7 @@ void Parser::handle_coordinate(double value, int index, bool *controlled, bool r
 	pos[index] = (rel ? pos[index] : 0) + value * unit;
 } // }}}
 
-bool Parser::handle_command(bool handle_pwm) { // {{{
+bool Parser::handle_command(bool handle_pattern) { // {{{
 	// M6 is "tool change"; record that it happened and turn it into G28: park. {{{
 	if (type == 'M' && code == 6) {
 		type = 'G';
@@ -247,8 +247,8 @@ bool Parser::handle_command(bool handle_pwm) { // {{{
 				handle_coordinate(B, 4, &controlled, rel);
 				handle_coordinate(C, 5, &controlled, rel);
 				if (!controlled || (std::isnan(X) && std::isnan(Y) && std::isnan(Z))) {
-					if (handle_pwm)
-						debug("Warning: not handling PWM because position is unknown");
+					if (handle_pattern)
+						debug("Warning: not handling pattern because position is unknown");
 					flush_pending();
 					add_record(RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], epos[current_tool], current_f[code == 0 ? 0 : 1]);
 					reset_pending_pos();
@@ -256,9 +256,9 @@ bool Parser::handle_command(bool handle_pwm) { // {{{
 				}
 				if (code != 81) {
 					pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], current_f[code == 0 ? 0 : 1], epos[current_tool]));
-					if (handle_pwm && code == 1)
-						pending.back().pwm = pwm_data;
-					pwm_data.clear();
+					if (handle_pattern && code == 1)
+						pending.back().pattern = pattern_data;
+					pattern_data.clear();
 				}
 				else {
 					if (std::isnan(oldpos[2]))
@@ -757,10 +757,10 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 			flush_pending();
 			add_record(RUN_SYSTEM, s);
 		}
-		if (comment.substr(0, 4) == "PWM:") {
-			// Decode base64 code for pwm.
-			uint8_t data[2 * PWM_MAX];
-			for (int i = 0; 4 * i + 3 < int(comment.size()) - 4 && 3 * i + 2 < 2 * PWM_MAX; i += 1) {
+		if (comment.substr(0, 4) == "PATTERN:") {
+			// Decode base64 code for pattern.
+			uint8_t data[2 * PATTERN_MAX];
+			for (int i = 0; 4 * i + 3 < int(comment.size()) - 4 && 3 * i + 2 < 2 * PATTERN_MAX; i += 1) {
 				// input = comment[4 + 4 * i:4 + 4 * (i + 1)]
 				// output = data[3 * i:3 * (i + 1)]
 				decode_base64(comment, 4 + 4 * i, data, 3 * i);
@@ -772,11 +772,11 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 				else
 					size -= 1;
 			}
-			pwm_data = std::string(reinterpret_cast <char *>(data), size);
-			//debug("read pwm (%d=%d): %s", size, pwm_data.size(), pwm_data.c_str());
+			pattern_data = std::string(reinterpret_cast <char *>(data), size);
+			//debug("read pattern (%d=%d): %s", size, pattern_data.size(), pattern_data.c_str());
 		}
 		else
-			pwm_data.clear();
+			pattern_data.clear();
 		if (chunks.size() == 0)
 			continue;
 		if (chunks.front().type == 'N') {
@@ -829,9 +829,9 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 		if (stop)
 			break;
 		if (type != 0) {
-			if (!pwm_data.empty() && (type != 'G' || num != 1))
-				debug("Warning: ignoring PWM comment because command is not G1");
-			if (!handle_command(!pwm_data.empty()))
+			if (!pattern_data.empty() && (type != 'G' || num != 1))
+				debug("Warning: ignoring pattern comment because command is not G1");
+			if (!handle_command(!pattern_data.empty()))
 				break;
 		}
 	}
@@ -1099,15 +1099,15 @@ void Parser::flush_pending() { // {{{
 			debug("J %f %f %f", J[0], J[1], J[2]);
 			debug("K %f %f %f", K[0], K[1], K[2]);
 			debug("M %f %f %f", M[0], M[1], M[2]); // */
-			//debug("sending pwm (%d): %s", P0->pwm.size(), P0->pwm.c_str());
-			add_curve("AB", &*P0, A, B, NULL, P0->f, P0->f, AB / AEF, INFINITY, P0->pwm.substr(P0->pwm.size() / 2));	// PWM last half
+			//debug("sending pattern (%d): %s", P0->pattern.size(), P0->pattern.c_str());
+			add_curve("AB", &*P0, A, B, NULL, P0->f, P0->f, AB / AEF, INFINITY, P0->pattern.substr(P0->pattern.size() / 2));	// pattern last half
 			add_curve("BC", &*P0, B, C, NULL, P0->f, P0->v1, AC / AEF, INFINITY);
 			add_curve("CD", &*P0, C, D, Ba_, P0->v1, P0->v1, (AC + CD) / AEF, -r);
 			add_curve("DF", &*P0, D, F, Ba, P0->v1, P0->v1, 1, r);
 			add_curve("FH", &*P1, F, H, Bb, P0->v1, P0->v1, FGH / FGK, r);
 			add_curve("HI", &*P1, H, I, Bb_, P0->v1, P0->v1, (FGH + CD) / FGK, -r);
 			add_curve("IJ", &*P1, I, J, NULL, P0->v1, P1->f, (FGH + CD + IJ) / FGK, INFINITY);
-			add_curve("JK", &*P1, J, K, NULL, P1->f, P1->f, .5, INFINITY, P1->pwm.substr(0, P1->pwm.size() / 2));	// PWM first half
+			add_curve("JK", &*P1, J, K, NULL, P1->f, P1->f, .5, INFINITY, P1->pattern.substr(0, P1->pattern.size() / 2));	// pattern first half
 			// Update time+dist.
 			double dist = 0;
 			double dists[3] = {P1->x - P0->x, P1->y - P0->y, P1->z - P0->z};
@@ -1150,16 +1150,16 @@ void Parser::flush_pending() { // {{{
 	}
 } // }}}
 
-void Parser::add_curve(char const *name, Record *P, double *start, double *end, double *B, double v0, double v1, double f, double r, std::string const &pwm) { // {{{
-	if (pwm.size() > 0) {
+void Parser::add_curve(char const *name, Record *P, double *start, double *end, double *B, double v0, double v1, double f, double r, std::string const &pattern) { // {{{
+	if (pattern.size() > 0) {
 		Run_Record r;
-		r.type = RUN_PWM;
-		r.tool = pwm.size();
+		r.type = RUN_PATTERN;
+		r.tool = pattern.size();
 		r.time = last_time;
 		r.dist = last_dist;
-		std::memcpy(reinterpret_cast <char *>(&r.X), pwm.c_str(), pwm.size());
+		std::memcpy(reinterpret_cast <char *>(&r.X), pattern.c_str(), pattern.size());
 		r.r = 0;
-		//debug("adding pwm segment of %d bytes for %s: %s", pwm.size(), name, pwm.c_str());
+		//debug("adding pattern segment of %d bytes for %s: %s", pattern.size(), name, pattern.c_str());
 		outfile.write(reinterpret_cast <char *>(&r), sizeof(r));
 	}
 	if (f < 1e-10) {

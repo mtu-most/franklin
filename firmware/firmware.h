@@ -233,7 +233,7 @@ enum Command {
 	CMD_START_PROBE,// 1:num_samples, 1:num_moving_motors
 	CMD_MOVE,	// 1:which, *:samples
 	CMD_MOVE_SINGLE,// 1:which, *:samples
-	CMD_PWM,	// 1:which, *:samples
+	CMD_PATTERN,	// 1:which, *:samples
 	CMD_START,	// 0 start moving.
 	CMD_STOP,	// 0 stop moving.
 	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.
@@ -328,14 +328,14 @@ struct Motor
 	enum IntFlags {
 		ACTIVE_BIT,
 		INVERT_STEP_BIT,
-		PWM_BIT,
+		PATTERN_BIT,
 		CURRENT_DIR_BIT,
 		CURRENT_STEP_BIT,
 	};
 	enum IntFlagValues {
 		ACTIVE		= 1 << ACTIVE_BIT,
 		INVERT_STEP	= 1 << INVERT_STEP_BIT,
-		PWM		= 1 << PWM_BIT,
+		PATTERN		= 1 << PATTERN_BIT,
 		CURRENT_DIR	= 1 << CURRENT_DIR_BIT,
 		CURRENT_STEP	= 1 << CURRENT_STEP_BIT,
 	};

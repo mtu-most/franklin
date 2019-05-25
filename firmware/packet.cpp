@@ -176,7 +176,6 @@ void packet()
 		uint8_t value = command(2);
 		pin[p].set_state((pin[p].state & ~0xc) | (value & 0xc));
 		pin[p].duty = command(3);
-		debug("set duty for pin %d to %d", p, pin[p].duty);
 		if (pin[p].num_temps == 0) {
 			switch (CONTROL_CURRENT(value)) {
 			case CTRL_RESET:
@@ -215,7 +214,7 @@ void packet()
 		motor[m].limit_min_pin = command(4);
 		motor[m].limit_max_pin = command(5);
 		motor[m].follow = command(6);
-		uint8_t const intmask = Motor::INVERT_STEP | Motor::PWM;
+		uint8_t const intmask = Motor::INVERT_STEP | Motor::PATTERN;
 		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX;
 		cli();
 		motor[m].intflags &= ~intmask;
@@ -411,7 +410,7 @@ void packet()
 		write_ack();
 		return;
 	}
-	case CMD_PWM:
+	case CMD_PATTERN:
 	case CMD_MOVE:
 	case CMD_MOVE_SINGLE:
 	{
@@ -439,8 +438,8 @@ void packet()
 		}
 		for (uint8_t b = 0; b < last_len; ++b)
 			buffer[last_fragment][m][b] = static_cast <int8_t>(command(2 + b));
-		if (bool(motor[m].flags & Motor::PWM) ^ (command(0) == CMD_PWM)) {
-			debug("pwm state of motor %d and command don't match", m);
+		if (bool(motor[m].flags & Motor::PATTERN) ^ (command(0) == CMD_PATTERN)) {
+			debug("pattern state of motor %d and command don't match", m);
 			write_stall();
 			return;
 		}

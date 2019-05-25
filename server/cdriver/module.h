@@ -37,7 +37,7 @@
 #define TYPE_HBOT 5
 #define NUM_SPACE_TYPES 6
 
-#define PWM_MAX int(9 * sizeof(double))
+#define PATTERN_MAX int(9 * sizeof(double))
 
 struct MoveCommand {
 	bool cb;
@@ -48,8 +48,8 @@ struct MoveCommand {
 	double B[3];
 	double e;
 	double time, dist;
-	int pwm_size;	// in bytes; each bit is a pulse.
-	uint8_t pwm[PWM_MAX];
+	int pattern_size;	// in bytes; each bit is a pulse.
+	uint8_t pattern[PATTERN_MAX];
 };
 
 struct Run_Record {
@@ -132,7 +132,7 @@ enum RunType {
 	RUN_WAIT,
 	RUN_CONFIRM,
 	RUN_PARK,
-	RUN_PWM,
+	RUN_PATTERN,
 };
 
 #ifndef PATH_MAX

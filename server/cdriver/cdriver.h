@@ -169,8 +169,8 @@ struct History {
 	bool probing, single;
 	double run_time, run_dist;
 	double factor;
-	uint8_t pwm[PWM_MAX];
-	int pwm_size;	// in bytes; each bit is a pulse.
+	uint8_t pattern[PATTERN_MAX];
+	int pattern_size;	// in bytes; each bit is a pulse.
 };
 
 struct Space_History {
@@ -217,12 +217,13 @@ struct Motor {
 	Pin_t limit_max_pin;
 	double home_pos;	// Position of motor (in μm) when the home switch is triggered.
 	bool active;
+	bool pwm;		// If true, use step pin as pwm for dc motor.
 	double limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
 	ARCH_MOTOR
 };
 
-struct Pwm {
+struct Pattern {
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	bool active;
@@ -332,7 +333,7 @@ EXTERN int command_end;
 EXTERN Space spaces[NUM_SPACES];
 EXTERN Temp *temps;
 EXTERN Gpio *gpios;
-EXTERN Pwm pwm;
+EXTERN Pattern pattern;
 EXTERN FILE *store_adc;
 EXTERN uint8_t temps_busy;
 EXTERN MoveCommand queue[QUEUE_LENGTH];

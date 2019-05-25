@@ -159,7 +159,7 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 	FUNCTION_START;
 	shmem->move.single = false;
 	shmem->move.probe = false;
-	shmem->move.pwm_size = 0;
+	shmem->move.pattern_size = 0;
 	shmem->ints[0] = 0;
 	const char *keywordnames[] = {"tool", "x", "y", "z", "a", "b", "c", "Bx", "By", "Bz", "e", "v", "single", "probe", "relative", NULL};
 	if (!PyArg_ParseTupleAndKeywords(args, keywords, "iddddddddddd|ppp", const_cast <char **>(keywordnames),
@@ -294,8 +294,8 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 			"stop_pin", shmem->ints[5],
 			"probe_pin", shmem->ints[6],
 			"spiss_pin", shmem->ints[7],
-			"pwm_step_pin", shmem->ints[8],
-			"pwm_dir_pin", shmem->ints[9],
+			"pattern_step_pin", shmem->ints[8],
+			"pattern_dir_pin", shmem->ints[9],
 			"timeout", shmem->ints[10],
 			"bed_id", shmem->ints[11],
 			"fan_id", shmem->ints[12],
@@ -355,8 +355,8 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_int(5, "stop_pin", dict);
 	set_int(6, "probe_pin", dict);
 	set_int(7, "spiss_pin", dict);
-	set_int(8, "pwm_step_pin", dict);
-	set_int(9, "pwm_dir_pin", dict);
+	set_int(8, "pattern_step_pin", dict);
+	set_int(9, "pattern_dir_pin", dict);
 	set_int(10, "timeout", dict);
 	set_int(11, "bed_id", dict);
 	set_int(12, "fan_id", dict);

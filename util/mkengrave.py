@@ -24,6 +24,6 @@ for y in range(h):
 	code = binascii.b2a_base64(line).strip().decode('utf-8', 'replace')
 	print('G1 X%f Y%f' % (-config['margin'], y / config['dpmm']))
 	print('G1 X0')
-	print('G1 X%f ;PWM:%s' % (w / config['dpmm'], code))
+	print('G1 X%f ;PATTERN:%s' % (w / config['dpmm'], code))
 	print('G1 X%f' % (w / config['dpmm'] + config['margin']))
 	print('G1 X0 Y0')

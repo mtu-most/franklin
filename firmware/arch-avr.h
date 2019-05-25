@@ -811,9 +811,9 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"sbrs 20, %[activebit]"		"\n"
 		"\t"	"rjmp isr_action_continue"	"\n"
 		// }}}
-		// If pwm: skip normal movement.
-		"\t"	"sbrc 20, %[pwmbit]"		"\n"
-		"\t"	"rjmp isr_action_pwm"		"\n"
+		// If pattern: skip normal movement.
+		"\t"	"sbrc 20, %[patternbit]"	"\n"
+		"\t"	"rjmp isr_action_pattern"	"\n"
 
 		// Load value in 24.
 		"\t"	"ld 24, z"			"\n"
@@ -931,7 +931,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		ADD_DIR_DELAY
 		"\t"	"rjmp isr_action_continue"	"\n"
 		//*/
-	"isr_action_pwm:"				"\n"
+	"isr_action_pattern:"				"\n"
 		// Step pin is set every ISR, but it changes max 8 times per sample.
 		"\t"	"dec 17"			"\n"
 		"\t"	"lds 25, %[full_phase_bits]"	"\n"
@@ -1011,7 +1011,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 			[steps_current] "I" (offsetof(Motor, steps_current)),
 			[flags] "I" (offsetof(Motor, intflags)),
 			[activebit] "I" (Motor::ACTIVE_BIT),
-			[pwmbit] "I" (Motor::PWM_BIT),
+			[patternbit] "I" (Motor::PATTERN_BIT),
 			[current_step_bit] "M" (Motor::CURRENT_STEP_BIT),
 			[current_step] "M" (Motor::CURRENT_STEP),
 			[current_dir_bit] "M" (Motor::CURRENT_DIR_BIT),

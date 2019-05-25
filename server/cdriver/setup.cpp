@@ -96,9 +96,9 @@ void setup()
 	temps = NULL;
 	num_gpios = 0;
 	gpios = NULL;
-	pwm.step_pin.read(0);
-	pwm.dir_pin.read(0);
-	pwm.active = false;
+	pattern.step_pin.read(0);
+	pattern.dir_pin.read(0);
+	pattern.active = false;
 	for (int s = 0; s < NUM_SPACES; ++s)
 		spaces[s].init(s);
 	arch_setup_end();

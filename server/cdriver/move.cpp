@@ -223,13 +223,13 @@ int next_move(int32_t start_time) { // {{{
 		mdebug("move follower to %f, current=%f source=%f current_pos=%f", queue[q].e, spaces[2].axis[~queue[q].tool]->settings.current, spaces[2].axis[~queue[q].tool]->settings.source, spaces[2].motor[~queue[q].tool]->settings.current_pos);
 	}
 	auto last_hwtime_step = settings.hwtime_step;
-	if (queue[q].pwm_size > 0) {
-		memcpy(settings.pwm, queue[q].pwm, queue[q].pwm_size);
-		settings.hwtime_step = dt * 1e6 / (queue[q].pwm_size * 8);
+	if (queue[q].pattern_size > 0) {
+		memcpy(settings.pattern, queue[q].pattern, queue[q].pattern_size);
+		settings.hwtime_step = dt * 1e6 / (queue[q].pattern_size * 8);
 		if (settings.hwtime_step < min_hwtime_step)
 			settings.hwtime_step = min_hwtime_step;
 	}
-	settings.pwm_size = queue[q].pwm_size;
+	settings.pattern_size = queue[q].pattern_size;
 	if (settings.hwtime_step != last_hwtime_step)
 		arch_globals_change();
 	/*
@@ -413,16 +413,16 @@ static void do_steps() { // {{{
 			mtr.settings.last_v = mtr.settings.target_v;
 		}
 	}
-	int pwm_pos = (settings.hwtime - settings.hwtime_step / 2) / settings.hwtime_step;
-	//debug("time %d step %d pwm pos %d size %d", settings.hwtime, settings.hwtime_step, pwm_pos, settings.pwm_size);
-	if (pwm_pos < settings.pwm_size * 8) {
-		if (!pwm.active) {
-			pwm.active = true;
+	int pattern_pos = (settings.hwtime - settings.hwtime_step / 2) / settings.hwtime_step;
+	//debug("time %d step %d pattern pos %d size %d", settings.hwtime, settings.hwtime_step, pattern_pos, settings.pattern_size);
+	if (pattern_pos < settings.pattern_size * 8) {
+		if (!pattern.active) {
+			pattern.active = true;
 			num_active_motors += 1;
-			//debug("activating pwm");
+			//debug("activating pattern");
 		}
-		//debug("set pwm for %d at %d to %d", current_fragment, current_fragment_pos, settings.pwm[pwm_pos]);
-		PWM_SET(settings.pwm[pwm_pos]);
+		//debug("set pattern for %d at %d to %d", current_fragment, current_fragment_pos, settings.pattern[pattern_pos]);
+		PATTERN_SET(settings.pattern[pattern_pos]);
 	}
 	current_fragment_pos += 1;
 	if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
@@ -607,9 +607,9 @@ void store_settings() { // {{{
 	history[current_fragment].run_time = settings.run_time;
 	history[current_fragment].run_dist = settings.run_dist;
 	history[current_fragment].factor = settings.factor;
-	history[current_fragment].pwm_size = settings.pwm_size;
-	for (int i = 0; i < PWM_MAX; ++i)
-		history[current_fragment].pwm[i] = settings.pwm[i];
+	history[current_fragment].pattern_size = settings.pattern_size;
+	for (int i = 0; i < PATTERN_MAX; ++i)
+		history[current_fragment].pattern[i] = settings.pattern[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
 		sp.history[current_fragment].dist[0] = sp.settings.dist[0];
@@ -644,7 +644,7 @@ void store_settings() { // {{{
 			sp.axis[a]->history[current_fragment].endpos = sp.axis[a]->settings.endpos;
 		}
 	}
-	pwm.active = false;
+	pattern.active = false;
 	DATA_CLEAR();
 } // }}}
 
@@ -675,9 +675,9 @@ void restore_settings() { // {{{
 	settings.run_time = history[current_fragment].run_time;
 	settings.run_dist = history[current_fragment].run_dist;
 	settings.factor = history[current_fragment].factor;
-	settings.pwm_size = history[current_fragment].pwm_size;
-	for (int i = 0; i < PWM_MAX; ++i)
-		settings.pwm[i] = history[current_fragment].pwm[i];
+	settings.pattern_size = history[current_fragment].pattern_size;
+	for (int i = 0; i < PATTERN_MAX; ++i)
+		settings.pattern[i] = history[current_fragment].pattern[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
 		sp.settings.dist[0] = sp.history[current_fragment].dist[0];
@@ -712,7 +712,7 @@ void restore_settings() { // {{{
 			sp.axis[a]->settings.endpos = sp.axis[a]->history[current_fragment].endpos;
 		}
 	}
-	pwm.active = false;
+	pattern.active = false;
 	DATA_CLEAR();
 } // }}}
 

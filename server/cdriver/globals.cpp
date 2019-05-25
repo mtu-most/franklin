@@ -72,13 +72,13 @@ bool globals_load() {
 	spiss_pin.read(shmem->ints[7]);
 	if (p != spiss_pin.write())
 		change_hw = true;
-	p = pwm.step_pin.write();
-	pwm.step_pin.read(shmem->ints[8]);
-	if (p != pwm.step_pin.write())
+	p = pattern.step_pin.write();
+	pattern.step_pin.read(shmem->ints[8]);
+	if (p != pattern.step_pin.write())
 		change_hw = true;
-	p = pwm.dir_pin.write();
-	pwm.dir_pin.read(shmem->ints[9]);
-	if (p != pwm.dir_pin.write())
+	p = pattern.dir_pin.write();
+	pattern.dir_pin.read(shmem->ints[9]);
+	if (p != pattern.dir_pin.write())
 		change_hw = true;
 	int t = timeout;
 	timeout = shmem->ints[10];
@@ -121,8 +121,8 @@ void globals_save() {
 	shmem->ints[5] = stop_pin.write();
 	shmem->ints[6] = probe_pin.write();
 	shmem->ints[7] = spiss_pin.write();
-	shmem->ints[8] = pwm.step_pin.write();
-	shmem->ints[9] = pwm.dir_pin.write();
+	shmem->ints[8] = pattern.step_pin.write();
+	shmem->ints[9] = pattern.dir_pin.write();
 	shmem->ints[10] = timeout;
 	shmem->ints[11] = bed_id;
 	shmem->ints[12] = fan_id;
