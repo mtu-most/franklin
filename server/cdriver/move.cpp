@@ -380,6 +380,7 @@ static void do_steps() { // {{{
 				if (diff > 0x7f) {
 					debug("Error: trying to send more than 127 steps: %d", diff);
 					int adjust = diff - 0x7f;
+					settings.hwtime -= settings.hwtime_step * (adjust / diff);
 					diff = 0x7f;
 					target -= adjust;
 					mtr.settings.target_pos = target;
@@ -387,6 +388,7 @@ static void do_steps() { // {{{
 				if (diff < -0x80) {
 					debug("Error: trying to send more than 128 steps: %d", -diff);
 					int adjust = diff + 0x80;
+					settings.hwtime -= settings.hwtime_step * (adjust / diff);
 					diff = -0x80;
 					target -= adjust;
 					mtr.settings.target_pos = target;

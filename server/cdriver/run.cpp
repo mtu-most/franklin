@@ -326,6 +326,8 @@ void run_file_fill_queue() {
 					}
 					if (r.X) {
 						gpios[tool].state = 1;
+						gpios[tool].duty = r.X;
+						arch_set_duty(gpios[tool].pin, r.X);
 						SET(gpios[tool].pin);
 					}
 					else {

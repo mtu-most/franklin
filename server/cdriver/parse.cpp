@@ -80,6 +80,7 @@ struct Parser { // {{{
 	double unit;
 	bool rel;
 	bool erel;
+	double spindle_speed;
 	std::vector <double> pos;
 	std::vector <double> epos;
 	int current_tool;
@@ -451,11 +452,12 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 	} // }}}
 	else if (type == 'M') { // {{{
 		int e = current_tool;
+		double s = NAN;
 		for (auto arg: command) {
-			if (arg.type == 'E') {
+			if (arg.type == 'E')
 				e = arg.code;
-				break;
-			}
+			if (arg.type == 'S')
+				s = arg.num;
 		}
 		switch (code) {
 		case 0:
@@ -469,12 +471,12 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		case 3:
 			// Spindle on, clockwise.
 			flush_pending();
-			add_record(RUN_GPIO, -3, 1);
+			add_record(RUN_GPIO, -3, std::isnan(s) ? spindle_speed : s);
 			break;
 		case 4:
 			// Spindle on, counterclockwise.
 			flush_pending();
-			add_record(RUN_GPIO, -3, 1);
+			add_record(RUN_GPIO, -3, std::isnan(s) ? spindle_speed : s);
 			break;
 		case 5:
 			// Spindle off.
@@ -489,19 +491,14 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			{
 				// Initialize these to avoid warning; they always get new values if used.
 				int p = 0;
-				double s = NAN;
-				bool have_p = false, have_s = false;
+				bool have_p = false;
 				for (auto arg: command) {
 					if (arg.type == 'P') {
 						p = arg.code;
 						have_p = true;
 					}
-					if (arg.type == 'S') {
-						s = arg.num;
-						have_s = true;
-					}
 				}
-				if (!have_p || !have_s) {
+				if (!have_p || std::isnan(s)) {
 					debug("%d:M42 needs both P and S arguments.", lineno);
 					break;
 				}
@@ -524,19 +521,15 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			// Set extruder temperature.
 			flush_pending();
 			{
-				double s = 0, t = 0;
-				bool have_s = false, have_t = false;
+				double t = 0;
+				bool have_t = false;
 				for (auto arg: command) {
-					if (arg.type == 'S') {
-						s = arg.num;
-						have_s = true;
-					}
 					if (arg.type == 'T') {
 						t = arg.num;
 						have_t = true;
 					}
 				}
-				if (!have_s) {
+				if (std::isnan(s)) {
 					debug("%d:M104 needs S argument.", lineno);
 					break;
 				}
@@ -546,7 +539,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		case 106:
 			// Fan on.
 			flush_pending();
-			add_record(RUN_GPIO, -2, 1);
+			add_record(RUN_GPIO, -2, std::isnan(s) ? 1 : s);
 			break;
 		case 107:
 			// Fan off.
@@ -560,13 +553,9 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			// Set extruder or bed temperature and wait for it to heat up.
 			flush_pending();
 			{
-				double s = 0, t = 0;
-				bool have_s = false, have_t = false;
+				double t = 0;
+				bool have_t = false;
 				for (auto arg: command) {
-					if (arg.type == 'S') {
-						s = arg.num;
-						have_s = true;
-					}
 					if (arg.type == 'T') {
 						t = arg.num;
 						have_t = true;
@@ -574,7 +563,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				}
 				if (!have_t)
 					t = e;
-				if (have_s)
+				if (!std::isnan(s))
 					add_record(RUN_SETTEMP, t, s + C0);
 				add_record(RUN_WAITTEMP, t);
 			}
@@ -784,7 +773,8 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 			chunks.pop_front();
 		}
 		if (chunks.front().type == 'S') {
-			// Spindle speed. Ignore.
+			// Spindle speed.
+			spindle_speed = chunks.front().num;
 			chunks.pop_front();
 		}
 		if (chunks.back().type == '*') {

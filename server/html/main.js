@@ -1302,8 +1302,7 @@ function temprange(ui) { // {{{
 function create_space_type_select(ui) { // {{{
 	var ret = document.createElement('select');
 	for (var o in space_types) {
-		ret.AddElement('option').AddText(space_types[o]);
-		ret.type_name = o;
+		ret.AddElement('option').AddText(space_types[o]).type_name = o;
 	}
 	return ret;
 } // }}}

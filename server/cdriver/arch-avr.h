@@ -321,8 +321,10 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 			p -= avr_pos_offset[tm + mi];
 			if (check) {
 				if (arch_round_pos(ts, tm, old) != arch_round_pos(ts, tm, p)) {
-					debug("WARNING: position for %d %d out of sync!  old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
-					//abort();
+					if (ts != 2) {	// followers are expected to go out of sync all the time.
+						debug("WARNING: position for %d %d out of sync!  old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
+						//abort();
+					}
 					spaces[ts].motor[tm]->settings.current_pos = p;
 				}
 				//else {

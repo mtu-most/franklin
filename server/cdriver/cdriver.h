@@ -212,12 +212,11 @@ struct Motor {
 	Pin_t step_pin;
 	Pin_t dir_pin;
 	Pin_t enable_pin;
-	double steps_per_unit;			// hardware calibration [steps/unit].
+	double steps_per_unit;			// hardware calibration [steps/unit]; if negative, send PWM for DC motor, value is -seconds/unit.
 	Pin_t limit_min_pin;
 	Pin_t limit_max_pin;
 	double home_pos;	// Position of motor (in μm) when the home switch is triggered.
 	bool active;
-	bool pwm;		// If true, use step pin as pwm for dc motor.
 	double limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
 	ARCH_MOTOR
