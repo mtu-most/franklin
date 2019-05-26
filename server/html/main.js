@@ -1034,7 +1034,7 @@ function space_update(uuid, index, nums_changed) { // {{{
 	}
 	var newhidetypes = [];
 	function hide_check(type, onlytype) {
-		if (typeof onlytype == 'number')
+		if (typeof onlytype == 'string')
 			return type != onlytype;
 		for (var i = 0; i < onlytype.length; ++i) {
 			if (onlytype[i] == type)
