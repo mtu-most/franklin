@@ -1206,7 +1206,7 @@ function update_profiles(ui) { // {{{
 			selector[j].ClearAll();
 			for (var i = 0; i < profiles.length; ++i) {
 				selector[j].AddElement('option').AddText(profiles[i]).value = profiles[i];
-				if (ui.profile == profiles[i])
+				if (ui.machine.profile == profiles[i])
 					selector[j].selectedIndex = i;
 			}
 		}
