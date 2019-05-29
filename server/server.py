@@ -267,6 +267,9 @@ class Connection: # {{{
 	def get_machines(self): # {{{
 		return tuple(machines.keys())
 	# }}}
+	def detect(self, port): # {{{
+		return detect(port)
+	# }}}
 	def disable(self, machine, reason = 'disabled by user'): # {{{
 		assert self.socket.data['role'] in ('benjamin', 'admin', 'expert')
 		assert machine in machines
