@@ -428,7 +428,7 @@ void run_file_fill_queue() {
 		}
 	}
 	if (cbs > 0) {
-		num_movecbs += cbs;
+		history[current_fragment].cbs += cbs;
 		//debug("adding %d cbs during run", cbs);
 	}
 	buffer_refill();
@@ -436,7 +436,7 @@ void run_file_fill_queue() {
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
 		// Done.
 		//debug("done running file");
-		if (!computing_move && !sending_fragment && !arch_running()) {
+		if (!computing_move && !sending_fragment && !transmitting_fragment && !arch_running()) {
 			abort_run_file();
 			num_file_done_events += 1;
 		}

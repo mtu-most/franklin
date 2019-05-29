@@ -642,8 +642,10 @@ int arch_tick() { // {{{
 			history[running_fragment].cbs = 0;
 			running_fragment = (running_fragment + 1) % FRAGMENTS_PER_BUFFER;
 		}
-		if (cbs)
+		if (cbs) {
+			//debug("adding %d cbs during tick");
 			num_movecbs += cbs;
+		}
 		buffer_refill();
 		run_file_fill_queue();
 		if (!computing_move && run_file_finishing) {

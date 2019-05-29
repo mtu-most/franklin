@@ -198,8 +198,17 @@ void Space::load_motor(int m) { // {{{
 			// adjusting the arch pos is not affected by steps/unit.
 			arch_addpos(id, m, motor[m]->home_pos - old_home_pos);
 		}
+		reset_pos(this);
 	}
-	reset_pos(this);
+	else if (!std::isnan(motor[m]->settings.current_pos)) {
+		// Motors without a limit switch: adjust motor position to match axes.
+		for (int a = 0; a < num_axes; ++a)
+			axis[a]->settings.target = axis[a]->settings.current;
+		space_types[type].xyz2motors(this);
+		double diff = motor[m]->settings.target_pos - motor[m]->settings.current_pos;
+		motor[m]->settings.current_pos += diff;
+		arch_addpos(id, m, diff);
+	}
 } // }}}
 
 void Space::save_info() { // {{{

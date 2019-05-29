@@ -43,7 +43,7 @@ static void send_fragment() { // {{{
 				if (settings.queue_start == settings.queue_end && !settings.queue_full) {
 					// Send cbs immediately.
 					if (!host_block) {
-						num_movecbs += history[current_fragment].cbs;
+						history[(current_fragment + 1) % FRAGMENTS_PER_BUFFER].cbs += history[current_fragment].cbs;
 						//debug("adding %d cbs in send_fragment", history[current_fragment].cbs);
 						history[current_fragment].cbs = 0;
 					}
@@ -183,8 +183,8 @@ int next_move(int32_t start_time) { // {{{
 		}
 	} // }}}
 
-	settings.v0 = queue[q].v0;
-	settings.v1 = queue[q].v1;
+	settings.v0 = queue[q].v0 * feedrate;
+	settings.v1 = queue[q].v1 * feedrate;
 	double dot = 0, norma = 0, normb = 0, normab = 0;
 	for (int i = 0; i < 3; ++i) {
 		bool use = i < spaces[0].num_axes;
@@ -564,9 +564,10 @@ static void apply_tick() { // {{{
 			}
 		}
 		// start new move; adjust time.
-		num_movecbs = cbs_after_current_move;
+		history[current_fragment].cbs += cbs_after_current_move;
 		//debug("adding %d cbs because move is completed", cbs_after_current_move);
 		cbs_after_current_move = next_move(settings.end_time);
+		//debug("new pending cbs: %d", cbs_after_current_move);
 		mdebug("next move prepared");
 		if (!computing_move) {
 			// There is no next move.

@@ -222,8 +222,8 @@ void request(int req) {
 			if (arch_running() && !stop_pending)
 			{
 				debug("Sleeping while moving");
-				//abort();
-				return;
+				abort();
+				break;
 			}
 			for (int t = 0; t < NUM_SPACES; ++t) {
 				for (int m = 0; m < spaces[t].num_motors; ++m) {

@@ -118,6 +118,7 @@ void check_protocol() {
 void connect_end() {
 	// Set things up that need information from the firmware.
 	num_subfragments_bits = int(std::log2(settings.hwtime_step / TIME_PER_ISR));
+	delete[] history;
 	history = new History[FRAGMENTS_PER_BUFFER];
 	for (int i = 0; i < 2; ++i) {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;

@@ -483,9 +483,10 @@ bool hwpacket(int len) { // {{{
 		}
 		if (!avr_running) {
 			cbs += cbs_after_current_move;
+			//debug("going to send %d cbs from pending", cbs_after_current_move);
 			cbs_after_current_move = 0;
 		}
-		//debug("cbs: %d after current %d computing %d", cbs, cbs_after_current_move, computing_move);
+		//debug("cbs: %d after current %d computing %d current %d running %d", cbs, cbs_after_current_move, computing_move, current_fragment, running_fragment);
 		if (cbs && !host_block) {
 			//debug("adding %d cbs at hw done event", cbs);
 			num_movecbs += cbs;
