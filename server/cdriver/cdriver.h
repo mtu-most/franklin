@@ -48,14 +48,6 @@
 
 #define debug(...) do { buffered_debug_flush(); fprintf(stderr, "#"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); fflush(stderr); } while (0)
 
-template <typename T> inline T min(T a, T b) {
-	return a < b ? a : b;
-}
-
-template <typename T> inline T max(T a, T b) {
-	return a > b ? a : b;
-}
-
 extern "C" {
 
 struct Pin_t {

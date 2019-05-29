@@ -679,7 +679,7 @@ void Parser::get_full_line() { // {{{
 	}
 } // }}}
 
-void decode_base64(std::string const &comment, int inpos, uint8_t *data, int outpos) {
+void decode_base64(std::string const &comment, int inpos, uint8_t *data, int outpos) { // {{{
 	int value = 0;
 	for (int i = 0; i < 4; ++i) {
 		int digit;
@@ -700,7 +700,7 @@ void decode_base64(std::string const &comment, int inpos, uint8_t *data, int out
 	}
 	for (int i = 0; i < 3; ++i)
 		data[outpos + i] = value >> (8 * (2 - i));
-}
+} // }}}
 
 Parser::Parser(std::string const &infilename, std::string const &outfilename) // {{{
 		: infile(infilename.c_str()), outfile(outfilename.c_str(), std::ios::binary) {
@@ -982,6 +982,7 @@ void Parser::flush_pending() { // {{{
 				continue;
 			}
 			P1->v1 = vmax;
+			//debug("set dull v1 to %f (f = %f; %f; max a %f dev %f k %f vak %f; %f)", P1->v1, P1->f, P2->f, max_a, max_dev, P1->k, v1A1, v1K1);
 		}
 		//debug("next");
 		n += 1;

@@ -18,6 +18,7 @@
 #ifndef _MODULE_H
 #define _MODULE_H
 
+#include <cmath>
 #include <stdint.h>
 
 // EXTERN is defined in exactly one file; the variables are defined in that file.
@@ -154,19 +155,25 @@ extern "C" {
 	EXTERN int memfd, fromserver, toserver, interrupt, interrupt_reply;
 }
 
-#ifdef MODULE
-
-#include <string>
-
-#define debug(...) do { fprintf(stderr, "$"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); fflush(stderr); } while (0)
-
 template <typename T> inline T min(T a, T b) {
 	return a < b ? a : b;
+}
+template <> inline double min <double>(double a, double b) {
+	return a < b || std::isnan(b) ? a : b;
 }
 
 template <typename T> inline T max(T a, T b) {
 	return a > b ? a : b;
 }
+template <> inline double max <double>(double a, double b) {
+	return a > b || std::isnan(b) ? a : b;
+}
+
+#ifdef MODULE
+
+#include <string>
+
+#define debug(...) do { fprintf(stderr, "$"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); fflush(stderr); } while (0)
 
 extern "C" {
 	// Globals
