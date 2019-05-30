@@ -81,11 +81,6 @@ static void change0(int qpos) { // {{{
 
 // For documentation about variables used here, see struct History in cdriver.h
 int next_move(int32_t start_time) { // {{{
-	// Clean up state before starting the move.
-	if (current_fragment_pos > 0) {
-		//debug("sending because new move is started");
-		send_fragment();
-	}
 	settings.probing = false;
 	settings.factor = 0;
 	int num_cbs = 0;
@@ -94,6 +89,11 @@ int next_move(int32_t start_time) { // {{{
 		//debug("no next move");
 		computing_move = false;
 		return num_cbs;
+	}
+	// Clean up state before starting the move (but not if there is no next move; in that case finish the current tick before sending).
+	if (current_fragment_pos > 0) {
+		//debug("sending because new move is started");
+		send_fragment();
 	}
 	mdebug("Next move; queue start = %d, end = %d", settings.queue_start, settings.queue_end);
 	// Set everything up for running queue[settings.queue_start].
@@ -573,6 +573,10 @@ static void apply_tick() { // {{{
 			// There is no next move.
 			continue_event = true;
 			do_steps();
+			if (current_fragment_pos > 0) {
+				//debug("sending because new move is started");
+				send_fragment();
+			}
 			return;
 		}
 		mdebug("try again");
