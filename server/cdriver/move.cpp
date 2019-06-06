@@ -305,9 +305,10 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	}
 	//debug("=============");
 	double f = distance / orig_distance;
-	//debug("checked %d %d src %f target %f target dist %f new dist %f old factor %f new factor %f", sp, mt, mtr->settings.current_pos, mtr->settings.target_pos, orig_distance, distance, factor, f);
-	if (f < factor)
+	if (f < factor) {
+		//debug("checked %d %d src %f target %f target dist %f new dist %f old factor %f new factor %f", sp, mt, mtr->settings.current_pos, mtr->settings.target_pos, orig_distance, distance, factor, f);
 		factor = f;
+	}
 	// Store adjusted value of v.
 	mtr->settings.target_v = s * v;
 } // }}}
@@ -545,7 +546,11 @@ static void apply_tick() { // {{{
 				//debug("adjust factor (%f) from %f to %f because f=%f", settings.factor, old, target_factor, f);
 				set_targets(target_factor);
 				// Adjust time.
-				settings.hwtime -= settings.hwtime_step * ((1 - f) * .99);
+				double diff = settings.hwtime_step * ((1 - f) * .99);
+				if (diff > settings.hwtime)
+					settings.hwtime = 0;
+				else
+					settings.hwtime -= diff;
 			}
 			//debug("target factor %f time 0 -> %d -> %d v %f -> %f", target_factor, settings.hwtime, settings.end_time, settings.v0, settings.v1);
 			settings.factor = target_factor;
