@@ -212,7 +212,7 @@ int next_move(int32_t start_time) { // {{{
 		else if (queue[q].single && queue[q].tool < 0 && ~queue[q].tool < spaces[2].num_axes)
 			settings.dist = std::fabs(queue[q].e - spaces[2].axis[~queue[q].tool]->settings.source);
 	}
-	double dt = settings.dist / ((settings.v0 + settings.v1) / 2);
+	double dt = settings.dist / std::fabs((settings.v0 + settings.v1) / 2);
 	settings.end_time = (std::isnan(dt) ? 0 : 1e6 * dt);
 	if (queue[q].tool >= 0 && queue[q].tool < spaces[1].num_axes && !std::isnan(queue[q].e)) {
 		spaces[1].axis[queue[q].tool]->settings.endpos = queue[q].e;
@@ -326,7 +326,7 @@ static double move_axes(Space *s) { // {{{
 	for (int m = 0; m < s->num_motors; ++m) {
 		//if (s->id == 0 && m == 0)
 			//debug("check move %d %d target %f current %f", s->id, m, s->motor[m]->settings.target_pos, s->motor[m]->settings.current_pos);
-		double distance = s->motor[m]->settings.target_pos - s->motor[m]->settings.current_pos;
+		double distance = std::fabs(s->motor[m]->settings.target_pos - s->motor[m]->settings.current_pos);
 		Motor *limit_mtr;
 		if (settings.single)
 			limit_mtr = s->motor[m];
@@ -347,7 +347,8 @@ static double move_axes(Space *s) { // {{{
 
 static void adjust_time(double target_factor) { // {{{
 	// Adjust time.
-	double x = target_factor * settings.dist;
+	//double old_time = settings.hwtime / 1e6;
+	double x = target_factor * std::fabs(settings.dist);
 	if (settings.v0 == settings.v1) {
 		// a == 0, x = v0*t
 		settings.hwtime = (x / settings.v0) * 1e6;
@@ -356,17 +357,19 @@ static void adjust_time(double target_factor) { // {{{
 		// x = a*t**2+v0*t
 		double a = (settings.v1 - settings.v0) / (settings.end_time / 1e6);
 		double part1 = -settings.v0 / a;
-		double part2 = 2 * a * x + settings.v0 * settings.v0;
+		double part2 = std::sqrt(2 * a * x + settings.v0 * settings.v0) / a;
 		double plus = part1 + part2;
-		if (plus < 0 || plus > settings.end_time / 1e6 * a * a) {
+		if (plus < 0 || plus > settings.end_time / 1e6) {
 			plus = part1 - part2;
-			if (plus < 0 || plus > settings.end_time / 1e6 * a * a) {
+			if (plus < 0 || plus > settings.end_time / 1e6) {
 				debug("unable to correct for factor");
 				abort();
 			}
 		}
-		settings.hwtime = plus / (a * a) * 1e6;
+		settings.hwtime = plus * 1e6;
+		//debug("time adjust properties: a = %f, part1 = %f, part2 = %f, plus = %f, end time = %f, v01 = %f, %f", a, part1, part2, plus, settings.end_time / 1e6, settings.v0, settings.v1);
 	}
+	//debug("adjust time for factor %f: %f -> %f", target_factor, old_time, settings.hwtime / 1e6);
 } // }}}
 
 static void do_steps(double old_factor) { // {{{
@@ -535,7 +538,7 @@ static void apply_tick() { // {{{
 		else if (settings.hwtime <= 0)
 			target_factor = 0;
 		else {
-			target_factor = ((settings.v1 - settings.v0) / (settings.end_time / 1e6) * t * t / 2 + settings.v0 * t) / settings.dist;
+			target_factor = ((settings.v1 - settings.v0) / (settings.end_time / 1e6) * t * t / 2 + settings.v0 * t) / std::fabs(settings.dist);
 			if (target_factor > 1)
 				target_factor = 1;
 			if (target_factor < 0)
@@ -563,6 +566,7 @@ static void apply_tick() { // {{{
 					// so (1-0.9)*100=10 of target move must be removed
 					// that is (1-0.9)/0.6 of new part.
 					double newpart = settings.hwtime * 1. / settings.hwtime_step;
+					//debug("update f from %f", f);
 					f = 1 - (1 - f) / newpart;
 					target_factor = f * target_factor;
 				}
@@ -570,8 +574,9 @@ static void apply_tick() { // {{{
 					target_factor = 0;
 				else if (target_factor > 1)
 					target_factor = 1;
-				//debug("adjust factor (%f) from %f to %f because f=%f", settings.factor, old, target_factor, f);
+				//debug("adjust target factor (%f) from %f to %f because f=%f", settings.factor, old, target_factor, f);
 				set_targets(target_factor);
+				//debug("adjusting time with f = %f, old factor = %f, old time = %f", f, old_factor, settings.hwtime / 1e6);
 				adjust_time(target_factor);
 			}
 			//debug("target factor %f time 0 -> %d -> %d v %f -> %f", target_factor, settings.hwtime, settings.end_time, settings.v0, settings.v1);
