@@ -345,7 +345,31 @@ static double move_axes(Space *s) { // {{{
 	return factor; // */
 } // }}}
 
-static void do_steps() { // {{{
+static void adjust_time(double target_factor) { // {{{
+	// Adjust time.
+	double x = target_factor * settings.dist;
+	if (settings.v0 == settings.v1) {
+		// a == 0, x = v0*t
+		settings.hwtime = (x / settings.v0) * 1e6;
+	}
+	else {
+		// x = a*t**2+v0*t
+		double a = (settings.v1 - settings.v0) / (settings.end_time / 1e6);
+		double part1 = -settings.v0 / a;
+		double part2 = 2 * a * x + settings.v0 * settings.v0;
+		double plus = part1 + part2;
+		if (plus < 0 || plus > settings.end_time / 1e6 * a * a) {
+			plus = part1 - part2;
+			if (plus < 0 || plus > settings.end_time / 1e6 * a * a) {
+				debug("unable to correct for factor");
+				abort();
+			}
+		}
+		settings.hwtime = plus / (a * a) * 1e6;
+	}
+} // }}}
+
+static void do_steps(double old_factor) { // {{{
 	// Do the steps to arrive at the correct position. Update axis and motor current positions.
 	// Set new current position.
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -382,6 +406,7 @@ static void do_steps() { // {{{
 					debug("Error: trying to send more than 127 steps: %d", diff);
 					int adjust = diff - 0x7f;
 					settings.hwtime -= settings.hwtime_step * (adjust / diff);
+					settings.factor -= (adjust / diff) * (settings.factor - old_factor);
 					diff = 0x7f;
 					target -= adjust;
 					mtr.settings.target_pos = target;
@@ -390,6 +415,7 @@ static void do_steps() { // {{{
 					debug("Error: trying to send more than 128 steps: %d", -diff);
 					int adjust = diff + 0x80;
 					settings.hwtime -= settings.hwtime_step * (adjust / diff);
+					settings.factor -= (adjust / diff) * (settings.factor - old_factor);
 					diff = -0x80;
 					target -= adjust;
 					mtr.settings.target_pos = target;
@@ -517,6 +543,7 @@ static void apply_tick() { // {{{
 		}
 		//debug("target factor: %f (t=%f end=%f)", target_factor, t, settings.end_time / 1e6);
 		// Go straight to the next move if the distance was 0 (so target_factor is NaN).
+		double old_factor = settings.factor;
 		if (!std::isnan(target_factor)) {
 			double f = set_targets(target_factor);
 			if (f < 1) {
@@ -545,17 +572,12 @@ static void apply_tick() { // {{{
 					target_factor = 1;
 				//debug("adjust factor (%f) from %f to %f because f=%f", settings.factor, old, target_factor, f);
 				set_targets(target_factor);
-				// Adjust time.
-				double diff = settings.hwtime_step * ((1 - f) * .99);
-				if (diff > settings.hwtime)
-					settings.hwtime = 0;
-				else
-					settings.hwtime -= diff;
+				adjust_time(target_factor);
 			}
 			//debug("target factor %f time 0 -> %d -> %d v %f -> %f", target_factor, settings.hwtime, settings.end_time, settings.v0, settings.v1);
 			settings.factor = target_factor;
 			if (settings.factor < 1) {
-				do_steps();
+				do_steps(old_factor);
 				return;
 			}
 		}
@@ -577,7 +599,7 @@ static void apply_tick() { // {{{
 		if (!computing_move) {
 			// There is no next move.
 			continue_event = true;
-			do_steps();
+			do_steps(old_factor);
 			if (current_fragment_pos > 0) {
 				//debug("sending because new move is started");
 				send_fragment();
