@@ -234,7 +234,10 @@ int next_move(int32_t start_time) { // {{{
 		arch_globals_change();
 	/*
 	if (spaces[0].num_axes > 2) {
-		debug("move prepared, from=(%f,%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f, single=%d, UVW=(%f,%f,%f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6, queue[q].single, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[1]->settings.current_pos, spaces[0].motor[2]->settings.current_pos);
+		for (int a = 0; a < spaces[0].num_axes; ++a)
+			spaces[0].axis[a]->settings.target = spaces[0].axis[a]->settings.source;
+		space_types[spaces[0].type].xyz2motors(&spaces[0]);
+		debug("move prepared, from=(%f,%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f, single=%d, src UVW=(%f,%f,%f), target UVW=(%f,%f,%f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6, queue[q].single, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[1]->settings.current_pos, spaces[0].motor[2]->settings.current_pos, spaces[0].motor[0]->settings.target_pos, spaces[0].motor[1]->settings.target_pos, spaces[0].motor[2]->settings.target_pos);
 	}
 	else if (spaces[0].num_axes > 1) {
 		debug("move prepared, from=(%f,%f) Q=(%f,%f,%f) P=(%f,%f,%f), A=(%f,%f,%f), B=(%f,%f,%f), max alpha=%f, dist=%f, e=%f, v0=%f, v1=%f, end time=%f, single=%d, UV=(%f,%f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, queue[q].X[0], queue[q].X[1], queue[q].X[2], settings.P[0], settings.P[1], settings.P[2], settings.A[0], settings.A[1], settings.A[2], settings.B[0], settings.B[1], settings.B[2], settings.alpha_max, settings.dist, queue[q].e, settings.v0, settings.v1, settings.end_time / 1e6, queue[q].single, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[1]->settings.current_pos);
@@ -275,7 +278,7 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	}
 	// Limit v.
 	if (v > limit_mtr->limit_v) {
-		debug("%d %d v %f limit %f dist %f t %f current %f factor %f", sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, settings.factor);
+		debug("%d %d v %f limit %f dist %f dt %f current %f factor %f", sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, settings.factor);
 		distance = (s * limit_mtr->limit_v) * dt;
 		v = std::fabs(distance / dt);
 	}
@@ -325,7 +328,7 @@ static double move_axes(Space *s) { // {{{
 	double factor = 1;
 	for (int m = 0; m < s->num_motors; ++m) {
 		//if (s->id == 0 && m == 0)
-			//debug("check move %d %d target %f current %f", s->id, m, s->motor[m]->settings.target_pos, s->motor[m]->settings.current_pos);
+		//	debug("check move %d %d time %f target %f current %f", s->id, m, settings.hwtime / 1e6, s->motor[m]->settings.target_pos, s->motor[m]->settings.current_pos);
 		double distance = std::fabs(s->motor[m]->settings.target_pos - s->motor[m]->settings.current_pos);
 		Motor *limit_mtr;
 		if (settings.single)
@@ -406,7 +409,7 @@ static void do_steps(double old_factor) { // {{{
 				}
 				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
 				if (diff > 0x7f) {
-					debug("Error: trying to send more than 127 steps: %d", diff);
+					debug("Error: %d %d trying to send more than 127 steps: %d", s, m, diff);
 					int adjust = diff - 0x7f;
 					settings.hwtime -= settings.hwtime_step * (adjust / diff);
 					settings.factor -= (adjust / diff) * (settings.factor - old_factor);
@@ -415,7 +418,7 @@ static void do_steps(double old_factor) { // {{{
 					mtr.settings.target_pos = target;
 				}
 				if (diff < -0x80) {
-					debug("Error: trying to send more than 128 steps: %d", -diff);
+					debug("Error: %d %d trying to send more than 128 steps: %d", s, m, -diff);
 					int adjust = diff + 0x80;
 					settings.hwtime -= settings.hwtime_step * (adjust / diff);
 					settings.factor -= (adjust / diff) * (settings.factor - old_factor);

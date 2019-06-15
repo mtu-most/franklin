@@ -203,51 +203,72 @@ static double length(double a[3]) {
 	return sqrt(inner(a, a));
 }
 
-static void outer(double result[3], double a[3], double b[3]) {
+static void norm(double a[3]) {
+	double len = length(a);
+	for (int i = 0; i < 3; ++i)
+		a[i] /= len;
+}
+
+static void cross(double a[3], double b[3], double ret[3]) {
+	for (int i = 0; i < 3; ++i)
+		ret[i] = a[(i + 1) % 3] * b[(i + 2) % 3] - a[(i + 2) % 3] * b[(i + 1) % 3];
+}
+
+static void intersect_spheres(double A[3], double B[3], double len_AC, double len_BC, double D[3], double n[3], double *r) {
+	double AB[3];
+	for (int i = 0; i < 3; ++i)
+		AB[i] = B[i] - A[i];
+	double len_AB = length(AB);
+	double len_AD = (len_AC * len_AC - len_BC * len_BC + len_AB * len_AB) / (2 * len_AB);
+	*r = sqrt(len_AC * len_AC - len_AD * len_AD);
 	for (int i = 0; i < 3; ++i) {
-		result[i] = a[(i + 1) % 3] * b[(i + 2) % 3] - a[(i + 2) % 3] * b[(i + 1) % 3];
+		n[i] = AB[i] / len_AB;
+		D[i] = A[i] + n[i] * len_AD;
 	}
 }
 
 static void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
 	// Find intersecting circle of spheres 0 and 1.
-	double x0x1[3], pos[3][3];
+	double pos[3][3];	// Position of carriages: centers of spheres.
 	for (int i = 0; i < 3; ++i) {
 		pos[i][0] = APEX(s, i).x;
 		pos[i][1] = APEX(s, i).y;
 		pos[i][2] = APEX(s, i).z + motors[i];
 	}
+	double P_uv[3];
+	double n_uv[3];
+	double r_uv;
+	intersect_spheres(pos[0], pos[1], APEX(s, 0).rodlength, APEX(s, 1).rodlength, P_uv, n_uv, &r_uv);
+	double P_uvw[3];
+	double n_uvw[3];
+	double r_uvw;
+	intersect_spheres(P_uv, pos[2], r_uv, APEX(s, 2).rodlength, P_uvw, n_uvw, &r_uvw);
+	// Compute direction of L.
+	double dir_L[3];
+	cross(n_uv, n_uvw, dir_L);
+	norm(dir_L);
+	// Compute direction of M and M.
+	double dir_M[3];
+	cross(dir_L, n_uvw, dir_M);
+	norm(dir_M);
+	double PuvPuvw[3];
 	for (int i = 0; i < 3; ++i)
-		x0x1[i] = pos[1][i] - pos[0][i];
-	double x1 = length(x0x1);
-	double len01 = x1 / 2 + (APEX(s, 0).rodlength * APEX(s, 0).rodlength - APEX(s, 1).rodlength * APEX(s, 1).rodlength) / (2 * x1);
-	double r01_squared = APEX(s, 0).rodlength * APEX(s, 0).rodlength - len01 * len01;
-	double p[3], pq[3];
-	// Make x0x1 a unit vector and compute p and pq.
+		PuvPuvw[i] = P_uvw[i] - P_uv[i];
+	double len_PP = std::sqrt(inner(PuvPuvw, PuvPuvw));
+	// Compute alpha.
+	double tan_alpha = std::tan(std::asin(inner(n_uv, PuvPuvw) / len_PP));
+	// Compute P_M.
+	double PuvwP_M[3];
+	double P_M[3];
 	for (int i = 0; i < 3; ++i) {
-		x0x1[i] /= x1;
-		p[i] = pos[0][i] + x0x1[i] * len01;
-		pq[i] = pos[2][i] - p[i];
+		PuvwP_M[i] = dir_M[i] * len_PP * tan_alpha;
+		P_M[i] = P_uvw[i] + PuvwP_M[i];
 	}
-	// Compute the projection of pq on x0x1, and the rest of pq.
-	double projected_factor = inner(pq, x0x1) / inner(pq, pq);
-	double projected[3], rest[3], center[3], qcenter[3];
-	for (int i = 0; i < 3; ++i) {
-		projected[i] = projected_factor * x0x1[i];
-		rest[i] = pq[i] - projected[i];
-		center[i] = p[i] + rest[i];
-		qcenter[i] = pos[2][i] - center[i];
-	}
-	double r2 = cos(asin(length(qcenter) / APEX(s, 2).rodlength)) * APEX(s, 2).rodlength;
-	double x2 = length(rest);
-	double len012 = x2 / 2 + (r01_squared - r2 * r2) / (2 * x2);
-	double r012 = sqrt(r01_squared - len012 * len012);
-	double updown[3];
-	outer(updown, x0x1, pq);
-	double lenud = length(updown);
-	for (int i = 0; i < 3; ++i) {
-		xyz[i] = p[i] + len012 * rest[i] / x2 - r012 * updown[i] / lenud;
-	}
+	double offset_P_M_squared = inner(PuvwP_M, PuvwP_M);
+	double P_MR = std::sqrt(r_uvw * r_uvw - offset_P_M_squared);
+	for (int i = 0; i < 3; ++i)
+		xyz[i] = P_M[i] - dir_L[i] * P_MR;
+	//debug("motors2xyz: Puv (%f,%f,%f) Puvw (%f,%f,%f) ruv %f ruvw %f lenPP %f dir_M (%f,%f,%f) PM (%f,%f,%f) ret (%f,%f,%f)", P_uv[0], P_uv[1], P_uv[2], P_uvw[0], P_uvw[1], P_uvw[2], r_uv, r_uvw, len_PP, dir_M[0], dir_M[1], dir_M[2], P_M[0], P_M[1], P_M[2], xyz[0], xyz[1], xyz[2]);
 }
 
 void Delta_init(int num) {
