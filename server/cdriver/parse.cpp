@@ -1012,6 +1012,8 @@ void Parser::flush_pending() { // {{{
 			//debug("AC %f BC %f ANL %f CNL %f v1 %f r %f f %f max a %f", AC, BC, ANL, CNL, P0->v1, r, P0->f, max_a);
 			double AB = AC - BC;
 			double CD = acos((r - d / 2) / r) * r;
+			if (std::isnan(CD))
+				CD = 0;
 			double DEF = (M_PI / 2 - P0->theta / 2) * r + CD;
 			double AEF = AC + CD + DEF;
 
@@ -1090,6 +1092,7 @@ void Parser::flush_pending() { // {{{
 			debug("J %f %f %f", J[0], J[1], J[2]);
 			debug("K %f %f %f", K[0], K[1], K[2]);
 			debug("M %f %f %f", M[0], M[1], M[2]); // */
+			//debug("AB %f AEF %f AC %f CD %f FGH %f FGK %f", AB, AEF, AC, CD, FGH, FGK);
 			//debug("sending pattern (%d): %s", P0->pattern.size(), P0->pattern.c_str());
 			add_curve("AB", &*P0, A, B, NULL, P0->f, P0->f, AB / AEF, INFINITY, P0->pattern.substr(P0->pattern.size() / 2));	// pattern last half
 			add_curve("BC", &*P0, B, C, NULL, P0->f, P0->v1, AC / AEF, INFINITY);
