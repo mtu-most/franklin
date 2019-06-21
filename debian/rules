@@ -8,12 +8,7 @@ export DEB_BUILD_MAINT_OPTIONS=hardening=-stackprotector
 ARCH = $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
 override_dh_auto_build:
-	${MAKE} -C server/html
-	${MAKE} -C server/bb
-	${MAKE} -C server/cdriver
-	${MAKE} -C firmware TARGET=atmega1284p
-	${MAKE} -C firmware TARGET=atmega2560
-	${MAKE} -C firmware TARGET=atmega1280
+	${MAKE} -C server
 	${MAKE} -C util
 
 override_dh_auto_install:
@@ -23,6 +18,5 @@ override_dh_auto_clean:
 	dh_auto_clean
 	rm -f *.pyc *.pyo
 	rm -rf firmware/build-*
-	$(MAKE) -C server/html clean
-	$(MAKE) -C server/cdriver clean
+	$(MAKE) -C server clean
 	$(MAKE) -C util clean

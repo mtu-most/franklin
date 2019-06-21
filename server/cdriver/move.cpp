@@ -411,8 +411,8 @@ static void do_steps(double old_factor) { // {{{
 				if (diff > 0x7f) {
 					debug("Error: %d %d trying to send more than 127 steps: %d", s, m, diff);
 					int adjust = diff - 0x7f;
-					settings.hwtime -= settings.hwtime_step * (adjust / diff);
-					settings.factor -= (adjust / diff) * (settings.factor - old_factor);
+					settings.hwtime -= settings.hwtime_step;
+					settings.factor = old_factor;
 					diff = 0x7f;
 					target -= adjust;
 					mtr.settings.target_pos = target;
@@ -420,8 +420,8 @@ static void do_steps(double old_factor) { // {{{
 				if (diff < -0x80) {
 					debug("Error: %d %d trying to send more than 128 steps: %d", s, m, -diff);
 					int adjust = diff + 0x80;
-					settings.hwtime -= settings.hwtime_step * (adjust / diff);
-					settings.factor -= (adjust / diff) * (settings.factor - old_factor);
+					settings.hwtime -= settings.hwtime_step;
+					settings.factor = old_factor;
 					diff = -0x80;
 					target -= adjust;
 					mtr.settings.target_pos = target;
