@@ -423,7 +423,7 @@ void run_file_fill_queue() {
 				must_move = true;
 		}
 		if (must_move) {
-			while (!computing_move && (settings.queue_start != settings.queue_end || settings.queue_full))
+			while (!sending_fragment && !computing_move && (settings.queue_start != settings.queue_end || settings.queue_full))
 				cbs += next_move(settings.hwtime);
 		}
 	}

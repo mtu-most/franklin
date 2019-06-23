@@ -88,9 +88,9 @@ if False:
 
 # Traceback at hangup. {{{
 if False:
-	def handle_exit(*args):
-		time.sleep(1)
-		log('exit from signal: %s' % repr(args))
+	def handle_exit(signum, stack):
+		#time.sleep(1)
+		log('exit from signal %d' % signum)
 		traceback.print_stack()
 	for sig in dir(signal):
 		value = getattr(signal, sig)
@@ -102,7 +102,7 @@ if False:
 			signal.signal(value, handle_exit)
 		else:
 			log('not setting signal handler for %s: %s' % (sig, repr(value)))
-	atexit.register(handle_exit, 'exit')
+	atexit.register(handle_exit, 0, None)
 # }}}
 
 fcntl.fcntl(sys.stdin.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)

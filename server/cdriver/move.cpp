@@ -60,12 +60,17 @@ static void send_fragment() { // {{{
 	//debug("sending %d prevcbs %d", current_fragment, history[(current_fragment + FRAGMENTS_PER_BUFFER - 1) % FRAGMENTS_PER_BUFFER].cbs);
 	if (aborting || arch_send_fragment()) {
 		current_fragment = (current_fragment + 1) % FRAGMENTS_PER_BUFFER;
+		current_fragment_pos = 0;
 		//debug("current_fragment = (current_fragment + 1) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
 		//debug("current send -> %x", current_fragment);
 		store_settings();
 		if (!aborting && (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping) {
 			arch_start_move(0);
 		}
+	}
+	else {
+		// Reset current_fragment_pos anyway, otherwise store_settings will complain.
+		current_fragment_pos = 0;
 	}
 } // }}}
 
@@ -247,8 +252,11 @@ int next_move(int32_t start_time) { // {{{
 
 	settings.queue_start = n;
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
-	if (!computing_move)
+	if (!computing_move) {
+		if (current_fragment_pos > 0)
+			abort();
 		store_settings();
+	}
 	computing_move = true;
 	return num_cbs;
 } // }}}
@@ -426,7 +434,7 @@ static void do_steps(double old_factor) { // {{{
 					target -= adjust;
 					mtr.settings.target_pos = target;
 				}
-				//debug("sending %d %d steps %d", s, m, diff);
+				//debug("sending %d %d steps %d at %d", s, m, diff, current_fragment_pos);
 				DATA_SET(s, m, diff);
 			}
 			//debug("new cp: %d %d %f %d", s, m, target, current_fragment_pos);
@@ -623,7 +631,8 @@ static void apply_tick() { // {{{
 } // }}}
 
 void store_settings() { // {{{
-	current_fragment_pos = 0;
+	if (current_fragment_pos != 0)
+		abort();
 	num_active_motors = 0;
 	if (FRAGMENTS_PER_BUFFER == 0)
 		return;
@@ -834,6 +843,7 @@ void abort_move(int pos) { // {{{
 	settings.queue_end = 0;
 	settings.queue_full = false;
 	// Copy settings back to previous fragment.
+	current_fragment_pos = 0;
 	store_settings();
 	computing_move = false;
 	current_fragment_pos = 0;

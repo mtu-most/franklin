@@ -307,6 +307,7 @@ double arch_round_pos(int s, int m, double pos) { // {{{
 } // }}}
 
 void avr_get_current_pos(int offset, bool check) { // {{{
+	static int have_error = 0;
 	int mi = 0;
 	for (int ts = 0; ts < NUM_SPACES; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
@@ -322,8 +323,8 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 			if (check) {
 				if (arch_round_pos(ts, tm, old) != arch_round_pos(ts, tm, p)) {
 					if (ts != 2) {	// followers are expected to go out of sync all the time.
-						debug("WARNING: position for %d %d out of sync!  old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
-						//abort();
+						debug("WARNING: position for %d %d out of sync!  old = %f, new = %f (difference = %f), offset = %f", ts, tm, old, p, p - old, avr_pos_offset[tm + mi]);
+						have_error += 1;
 					}
 					spaces[ts].motor[tm]->settings.current_pos = p;
 				}
@@ -339,6 +340,9 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 				}
 			}
 		}
+	}
+	if (have_error > 0) {
+		abort();
 	}
 } // }}}
 
@@ -444,7 +448,7 @@ bool hwpacket(int len) { // {{{
 		else {
 			// Only overwrite current position if the new value is correct.
 			//debug("underrun ok current=%d running=%d computing_move=%d sending=%d pending=%d finishing=%d transmitting=%d", current_fragment, running_fragment, computing_move, sending_fragment, command[3], run_file_finishing, transmitting_fragment);
-			if (!sending_fragment && !transmitting_fragment) {
+			if (!sending_fragment && !transmitting_fragment && current_fragment_pos == 0) {
 				if (command[3] == 0) {
 					avr_get_current_pos(4, true);
 					if (run_file_finishing) {
@@ -1266,7 +1270,12 @@ static void avr_sent_fragment() { // {{{
 	if (stopping)
 		return;
 	sending_fragment -= 1;
-	if (sending_fragment == 0) {
+	int cbs = 0;
+	while (!sending_fragment && !computing_move && (settings.queue_start != settings.queue_end || settings.queue_full)) {
+		cbs += next_move(settings.hwtime);
+	}
+	if (cbs > 0) {
+		history[current_fragment].cbs += cbs;
 	}
 } // }}}
 

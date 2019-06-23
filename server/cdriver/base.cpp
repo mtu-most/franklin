@@ -95,7 +95,7 @@ static void handle_interrupt_reply() { // {{{
 	if (!interrupt_pending)
 		debug("received interrupt reply without pending interrupt");
 	if (stopping == 1) {
-		sending_fragment = false;
+		sending_fragment = 0;
 		stopping = 0;
 	}
 	interrupt_pending = false;
