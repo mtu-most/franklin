@@ -163,6 +163,7 @@ void Temp::init() {
 	last_temp_time = utime();
 	time_on = 0;
 	K = NAN;
+	last_value = -1;
 	hold_time = 0;
 }
 
@@ -206,9 +207,11 @@ void Temp::copy(Temp &dst) {
 	dst.last_temp_time = last_temp_time;
 	dst.time_on = time_on;
 	dst.K = K;
+	dst.last_value = last_value;
 }
 
 void handle_temp(int id, int temp) { // {{{
+	temps[id].last_value = temp;
 	if (store_adc)
 		fprintf(store_adc, "%d %d %f %d\n", millis(), id, temps[id].fromadc(temp), temp);
 	if (requested_temp < num_temps && temps[requested_temp].thermistor_pin.pin == temps[id].thermistor_pin.pin) {

@@ -84,6 +84,7 @@ void setup()
 	change_pending = false;
 	discarding = false;
 	cbs_after_current_move = 0;
+	interrupt_pending = false;
 	which_autosleep = 0;
 	timeout = 0;
 	bed_id = 255;

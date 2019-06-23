@@ -77,8 +77,6 @@ static void handle_request() { // {{{
 	request(cmd);
 } // }}}
 
-static bool interrupt_pending;
-
 static void handle_interrupt_reply() { // {{{
 	char cmd;
 	while (true) {
@@ -212,7 +210,6 @@ void send_to_parent(char cmd) { // {{{
 } // }}}
 
 void prepare_interrupt() { // {{{
-	//debug("waiting for interrupt");
 	while (interrupt_pending) {
 		// Ignore timeouts.
 		pollfds[1].revents = 0;

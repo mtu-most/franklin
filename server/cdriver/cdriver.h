@@ -131,8 +131,8 @@ struct Temp {
 	double hold_time;		// Minimum time to hold value after change.
 	unsigned long last_change_time;	// millis() when value was last changed.
 	double K;			// Thermistor constant; kept in memory for performance.
+	int32_t last_value;		// last measured value.
 	// Functions.
-	int32_t get_value();		// Get thermistor reading, or -1 if it isn't available yet.
 	double fromadc(int32_t adc);	// convert ADC to K.
 	int32_t toadc(double T, int32_t default_);	// convert K to ADC.
 	void load(int id);
@@ -466,6 +466,7 @@ void globals_save();
 void disconnect(bool notify);
 int32_t utime();
 int32_t millis();
+EXTERN bool interrupt_pending;
 
 #include ARCH_INCLUDE
 

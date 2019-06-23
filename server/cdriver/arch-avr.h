@@ -1085,12 +1085,19 @@ void arch_connect(char const *run_id, char const *port) { // {{{
 
 void arch_request_temp(int which) { // {{{
 	if (connected && which >= 0 && which < num_temps && temps[which].thermistor_pin.pin >= NUM_DIGITAL_PINS && temps[which].thermistor_pin.pin < NUM_PINS) {
-		requested_temp = which;
-		return;
+		if (interrupt_pending) {
+			requested_temp = ~0;
+			shmem->floats[0] = temps[which].fromadc(temps[which].last_value);
+			delayed_reply();
+		}
+		else
+			requested_temp = which;
 	}
-	requested_temp = ~0;
-	shmem->floats[0] = NAN;
-	delayed_reply();
+	else {
+		requested_temp = ~0;
+		shmem->floats[0] = NAN;
+		delayed_reply();
+	}
 } // }}}
 
 void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bool heater_invert, int heater_adctemp, int heater_limit_l, int heater_limit_h, int fan_pin, bool fan_invert, int fan_adctemp, int fan_limit_l, int fan_limit_h, double hold_time) { // {{{
