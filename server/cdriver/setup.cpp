@@ -128,6 +128,8 @@ void connect_end() {
 		history[f].queue_start = 0;
 		history[f].queue_end = 0;
 		history[f].queue_full = false;
+		history[f].run_time = 0;
+		history[f].run_dist = 0;
 	}
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];

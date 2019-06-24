@@ -303,6 +303,8 @@ void run_file_fill_queue() {
 					move.B[1] = 0;
 					move.B[2] = 0;
 					move.e = r.E;
+					move.time = r.time;
+					move.dist = r.dist;
 					go_to(false, &move, false);
 					break;
 				}

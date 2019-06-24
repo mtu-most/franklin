@@ -190,6 +190,8 @@ int next_move(int32_t start_time) { // {{{
 
 	settings.v0 = queue[q].v0 * feedrate;
 	settings.v1 = queue[q].v1 * feedrate;
+	settings.run_time = queue[q].time;
+	settings.run_dist = queue[q].dist;
 	double dot = 0, norma = 0, normb = 0, normab = 0;
 	for (int i = 0; i < 3; ++i) {
 		bool use = i < spaces[0].num_axes;
