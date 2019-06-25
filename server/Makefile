@@ -11,6 +11,6 @@ clean:
 	$(MAKE) -C html clean
 	$(MAKE) -C firmware clean
 	$(MAKE) -C bb clean
-	rm cdriver.cpython*
+	rm cdriver.cpython* || :
 
 .PHONY: all clean
