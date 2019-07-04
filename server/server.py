@@ -677,7 +677,7 @@ def job_done(port, completed, reason): # {{{
 # }}}
 
 def disable(uuid, reason): # {{{
-	if not isinstance(uuid, str):
+	if uuid is not None and not isinstance(uuid, str):
 		uuid()
 		return
 	if uuid not in machines:
