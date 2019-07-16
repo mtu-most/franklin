@@ -1396,8 +1396,10 @@ function make_pin_title(ui, title, content) { // {{{
 		t.AddElement('th').AddText(title);
 	else
 		t.AddElement('th').Add(title);
-	for (var i = 0; i < content.length; ++i)
-		container.Add(content[i]);
+	for (var i = 0; i < content.length; ++i) {
+		if (content[i] !== null)
+			container.Add(content[i]);
+	}
 	return container;
 } // }}}
 

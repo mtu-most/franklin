@@ -279,7 +279,7 @@ function Motor(ui, space, motor) {
 function Pins_space(ui, space, motor) {
 	var e = [['Step', 'step', 1], ['Dir', 'dir', 1], ['Enable', 'enable', 2], ['Min Limit', 'limit_min', 4], ['Max Limit', 'limit_max', 4]];
 	for (var i = 0; i < e.length; ++i)
-		e[i] = Pin(ui, e[i][0], [['motor', [space, motor]], e[i][1] + '_pin'], e[i][2]);
+		e[i] = (i < 3 || space != 1) ? Pin(ui, e[i][0], [['motor', [space, motor]], e[i][1] + '_pin'], e[i][2]) : null;
 	return make_pin_title(ui, motor_name(ui, space, motor), e, ['rowtitle6']);
 }
 // }}}

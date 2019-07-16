@@ -98,7 +98,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 			if i not in mem:
 				print('position %d not stored' % i)
 				return True
-			printer.line_cb([mem[i]])
+			printer.line(mem[i])
 			return True
 		return impl
 
@@ -186,7 +186,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		move[0] += move[3]
 		move[1] += move[4]
 		if any(move[:3]):
-			printer.line_cb([move[:3]], relative = True)
+			printer.line(move[:3], relative = True)
 		if any(move[3:]):
 			printer.move_target.event(*move[3:])
 		return True

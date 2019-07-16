@@ -139,18 +139,21 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		double d = queue[2].X[a] - (relative ? 0 : pos);
 		queue[0].X[a] = pos + d * ramp;
 		queue[1].X[a] = pos + d * (1 - ramp);
+		queue[2].X[a] = pos + d;
 	}
 	if (tool >= 0 && tool < spaces[1].num_axes) {
 		double pos = spaces[1].axis[tool]->settings.current;
 		double d = move->e - (relative ? 0 : pos);
 		queue[0].e = pos + d * ramp;
 		queue[1].e = pos + d * (1 - ramp);
+		queue[2].e = pos + d;
 	}
 	else if (tool < 0) {
 		double pos = spaces[2].axis[~tool]->settings.current;
 		double d = move->e - (relative ? 0 : pos);
 		queue[0].e = pos + d * ramp;
 		queue[1].e = pos + d * (1 - ramp);
+		queue[2].e = pos + d;
 	}
 	queue[0].v0 = 0;
 	queue[0].v1 = vmax;
