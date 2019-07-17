@@ -107,7 +107,8 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	if (std::isnan(dist) || dist < 1e-10) {
 		// No moves requested.
 		//debug("dist is %f", dist);
-		num_movecbs += 1;
+		if (cb)
+			num_movecbs += 1;
 		//debug("adding 1 move cb for manual move");
 		settings.queue_end = 0;
 		return 1;

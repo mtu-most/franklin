@@ -78,7 +78,7 @@ while True:
 					style = 'stroke="green"'
 				else:
 					style = 'stroke="black" stroke-width=".2"'
-				if Bx ** 2 + By ** 2 + Bz ** 2 < 1e-5:
+				if Bx ** 2 + By ** 2 + Bz ** 2 < 1e-10:
 					print('<line %s x1="%f" y1="%f" x2="%f" y2="%f"/>' % (style, pos[0] * scale + offset, offset - pos[1] * scale, X * scale + offset, offset - Y * scale))
 				else:
 					print('<path %s d="M%f %fA%f %f 0 %d %d %f %f"/>' % (style, pos[0] * scale + offset, offset - pos[1] * scale, abs(r) * scale, abs(r) * scale, 0, r > 0, X * scale + offset, offset - Y * scale)) # Determine large arc flag.

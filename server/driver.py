@@ -429,7 +429,7 @@ class Machine: # {{{
 		#log('trigger %s' % repr(self.movecb))
 		#log('movecbs: %d/%d' % (num, self.movewait))
 		if self.movewait < num:
-			log('More cbs received than requested!')
+			log('More cbs received than requested! (%d/%d)' % (num, self.movewait))
 			self.movewait = 0
 		else:
 			#log('movewait %d/%d' % (num, self.movewait))

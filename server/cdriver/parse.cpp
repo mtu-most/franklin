@@ -846,6 +846,10 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	outfile.write(reinterpret_cast <char *>(&last_dist), sizeof(last_dist));
 } // }}}
 
+static double nanplus(double a, double b) {
+	return std::isnan(b) ? a : a + b;
+}
+
 void Parser::flush_pending() { // {{{
 	if (pending.size() <= 1)
 		return;
@@ -874,9 +878,11 @@ void Parser::flush_pending() { // {{{
 		P1->s[1] = P1->y - P0->y;
 		P1->s[2] = P1->z - P0->z;
 		P1->length = 0;
-		for (int i = 0; i < 3; ++i)
-			if (!std::isnan(P1->s[i]))
-				P1->length += P1->s[i] * P1->s[i];
+		for (int i = 0; i < 3; ++i) {
+			if (std::isnan(P1->s[i]))
+				P1->s[i] = 0; // If P0->x or P1->x is NaN, treat the length as zero.
+			P1->length += P1->s[i] * P1->s[i];
+		}
 		P1->length = sqrt(P1->length);
 		P0->n[0] = (P1->s[1] * P0->s[2]) - (P1->s[2] * P0->s[1]);
 		P0->n[1] = (P1->s[2] * P0->s[0]) - (P1->s[0] * P0->s[2]);
@@ -1058,10 +1064,10 @@ void Parser::flush_pending() { // {{{
 				M_DF[i] = DF[i] - M[i];
 				M_FH[i] = FH[i] - M[i];
 				M_GH[i] = GH[i] - M[i];
-				l_MDE += M_DE[i] * M_DE[i];
-				l_MDF += M_DF[i] * M_DF[i];
-				l_MFH += M_FH[i] * M_FH[i];
-				l_MGH += M_GH[i] * M_GH[i];
+				l_MDE = nanplus(l_MDE, M_DE[i] * M_DE[i]);
+				l_MDF = nanplus(l_MDF, M_DF[i] * M_DF[i]);
+				l_MFH = nanplus(l_MFH, M_FH[i] * M_FH[i]);
+				l_MGH = nanplus(l_MGH, M_GH[i] * M_GH[i]);
 			}
 			double Ba_[3], Ba[3], Bb[3], Bb_[3];
 			for (int i = 0; i < 3; ++i) {
@@ -1074,7 +1080,8 @@ void Parser::flush_pending() { // {{{
 				Bb[i] = M[i] + r * M_FH[i] - FH[i];
 				Bb_[i] = -(M[i] + r * M_GH[i] - GH[i]);
 			}
-			/*debug("======================");
+			/*debug("l_MDE %f l_MDF %f l_MFH %f l_MGH %f r %f", l_MDE, l_MDF, l_MFH, l_MGH, r);
+			debug("======================");
 			debug("v %f %f %f", P0->f, P0->v1, P1->f);
 			debug("C %f AB %f k %f theta %f", P0->C, AB, P0->k, P0->theta * 180 / M_PI);
 			debug("nnAL %f %f %f", P0->nnAL[0], P0->nnAL[1], P0->nnAL[2]);
@@ -1174,7 +1181,7 @@ void Parser::add_curve(char const *name, Record *P, double *start, double *end, 
 		//debug("skipping %s because distance is too low.", name);
 		return;
 	}
-	add_record(RUN_LINE, P->tool, end[0], end[1], end[2], B ? B[0] : 0, B ? B[1] : 0, B ? B[2] : 0, P->e0 + f * (P->e - P->e0), v0, v1, (P->n[2] < 0 ? -1 : 1) * r);
+	add_record(RUN_LINE, P->tool, end[0], end[1], end[2], B && !std::isnan(B[0]) ? B[0] : 0, B && !std::isnan(B[1]) ? B[1] : 0, B && !std::isnan(B[2]) ? B[2] : 0, P->e0 + f * (P->e - P->e0), v0, v1, (P->n[2] < 0 ? -1 : 1) * r);
 } // }}}
 
 void Parser::add_record(RunType cmd, int tool, double x, double y, double z, double Bx, double By, double Bz, double e, double v0, double v1, double radius) { // {{{
