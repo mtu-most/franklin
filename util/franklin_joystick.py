@@ -121,7 +121,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 	# A, B, X, Y, LT, RT, BACK, START, SELECT, L, R
 	button_action = {4: abort, 5: resume, 6: home, 7: start, 8: MODIFIER}
 	button_action.update({i: gomem(i) for i in range(4) })
-	button_action.update({i + 11: storemem(i) for i in range(4) })
+	button_action.update({i + num_buttons: storemem(i) for i in range(4) })
 	button_action.update(buttons)
 
 	modifiers = [x for x in button_action if button_action[x] is MODIFIER]
