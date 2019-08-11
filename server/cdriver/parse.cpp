@@ -62,7 +62,6 @@ struct Parser { // {{{
 		double nnAL[3], nnLK[3];	// Normal to segment and normal, for AL and LK.
 		double theta;	// Angle between this and next segment.
 		double v1;	// speed at corner.
-		double k, C;
 	}; // }}}
 	// Variables. {{{
 	std::ifstream infile;
@@ -107,7 +106,6 @@ struct Parser { // {{{
 	double read_fraction();
 	void handle_coordinate(double value, int index, bool *controlled, bool rel);
 	void flush_pending();
-	void add_curve(char const *name, Record *P, double *start, double *end, double *B, double v0, double v1, double f, double r, std::string const &pattern = std::string());
 	void add_record(RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double Bx = 0, double By = 0, double Bz = 0, double e = NAN, double v0 = INFINITY, double v1 = INFINITY, double radius = INFINITY);
 	void reset_pending_pos();
 	// }}}
@@ -846,9 +844,27 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	outfile.write(reinterpret_cast <char *>(&last_dist), sizeof(last_dist));
 } // }}}
 
-static double nanplus(double a, double b) {
-	return std::isnan(b) ? a : a + b;
-}
+static double compute_max_v(double x, double v, double J, double d, double T) { // {{{
+	x -= d / (3 * T); // discard final part: no acceleration there.
+	// First assume max_a is not reached.
+	// Mean a is max_a / 2.
+	// v = a t + v
+	// x = 1/4 max_a t^2 + v t
+	// 4x/max_a = (t + v/2)^2 - v^2/4
+	// t = sqrt(4x/max_a + v^2/4) - v/2
+	double t = std::sqrt(4 * x / max_a + v * v / 4) - v / 2;
+	double t_ramp = max_a / J;
+	if (t > 2 * t_ramp) {
+		// Assumption was incorrect; max_a is reached.
+		double b = 3 * t_ramp + 2 * v / max_a;
+		double c = 2 * x / max_a - 4 * v * t_ramp / max_a - 2 * t_ramp * t_ramp;
+		double t_mid = std::sqrt(c + b * b / 4) - b / 2;
+		return v + max_a * t_ramp + max_a * t_mid;
+	}
+	else {
+		return v + t * a_max / 2;
+	}
+} // }}}
 
 void Parser::flush_pending() { // {{{
 	if (pending.size() <= 1)
@@ -867,7 +883,6 @@ void Parser::flush_pending() { // {{{
 	pending.begin()->unit[2] = 0;
 	pending.begin()->f = 0;
 	pending.begin()->v1 = 0;
-	int n = 0;
 	for (auto P0 = pending.begin(), P1 = ++pending.begin(); P1 != pending.end(); ++P0, ++P1) {
 		P1->f = min(max_v, P1->f);
 		P1->e0 = P0->e;
@@ -912,13 +927,8 @@ void Parser::flush_pending() { // {{{
 		if (P0->length < 1e-10 || P1->length < 1e-10 || std::isnan(P0->theta))
 			P0->theta = 0;
 		P1->length /= 2;
-		P0->k = (1 - std::sin(P0->theta / 2)) / (1 + std::sin(P0->theta / 2));
-		P0->C = 2 * sqrt(P0->k) + 2 * sqrt(P0->k - P0->k * P0->k / 4);
-		n += 1;
 	}
 	(--pending.end())->theta = 0;
-	(--pending.end())->k = 1;
-	(--pending.end())->C = 1 + sqrt(3) / 2;
 	(--pending.end())->n[0] = 0;
 	(--pending.end())->n[1] = 0;
 	(--pending.end())->n[2] = 0;
@@ -930,68 +940,37 @@ void Parser::flush_pending() { // {{{
 	(--pending.end())->nnLK[2] = 0;
 	auto P1 = ++pending.begin();
 	auto P2 = ++ ++pending.begin();
-	n = 1;
 	while (P2 != pending.end()) {
-		if (std::isnan(P1->C)) {
-			debug("skipping segment (length %f), because C is NaN", P1->length);
-			n += 1;
-			++P1;
-			++P2;
+		double tana = std::tan(P1->theta / 2);
+		double T = tana + 1 / tana;
+		P1->dev = std::sin(P1->theta / 2) * max_deviation;	// 1-D deviation from horizontal line
+		P1->dev = min(P1->dev, min(P1->length, P2->length) / (3 * T));
+		// compute maximum v for angle alpha.
+		double Jh = max_J / std::sqrt(1 + 1 / tana);
+		double max_t = std::pow(6 * P1->dev / Jh, 1 / 3.);
+		double max_v_J = 3 * P1->dev * T / max_t;
+		double max_v_a = max_J / max_t;
+		P1->v1 = min(max_v_J, max_v_a);
+		P1->v1 = min(P1->v1, min(P1->f, P2->f));
+		double v = compute_max_v(P2->length, P1->v1, Jh, P1->dev, T);
+		bool changed = false;
+		if (v < P2->f) {
+			P2->f = v * .999;
+			changed = true;
+		}
+		v = compute_max_v(P1->length, P1->v1, Jh, P1->dev, T);
+		if (v < P1->f) {
+			P1->f = v * .999;
+			// Recompute previous segment.
+			--P1;
+			--P2;
 			continue;
 		}
-		double v1A1 = sqrt((2 * max_a * P1->length + P1->f * P1->f) / (2 * P1->C + 1));
-		double v1K1 = sqrt((2 * max_a * P2->length + P2->f * P2->f) / (2 * P1->C + 1));
-		double v1A0 = sqrt((2 * max_a * P1->length - P1->f * P1->f) / (2 * P1->C - 1));
-		double v1K0 = sqrt((2 * max_a * P2->length - P2->f * P2->f) / (2 * P1->C - 1));
-		if (P1->C > 0.5) {
-			if (std::isnan(v1K0)) {
-				P2->f = sqrt(2 * max_a * P2->length) * (1 - 1e-5);
-				//debug("sharp same %f (%f, %f, %f)", P2->f, P1->C, max_a, P2->length);
-				continue;
-			}
-			if (std::isnan(v1A0)) {
-				//debug("sharp prev");
-				P1->f = sqrt(2 * max_a * P1->length) * (1 - 1e-5);
-				n -= 1;
-				--P1;
-				--P2;
-				continue;
-			}
-			P1->v1 = min(min(min(max(P1->f, P2->f), max_a * max_dev / P1->k), v1A1 > P1->f ? v1A1 : v1A0), v1K1 > P2->f ? v1K1 : v1K0);
-		}
-		else {
-			if (v1K1 < P2->f) {
-				//debug("dull same");
-				P2->f = sqrt(max_a * P2->length / P1->C) * (1 - 1e-5);
-				continue;
-			}
-			if (v1A1 < P1->f) {
-				P1->f = sqrt(max_a * P1->length / P1->C) * (1 - 1e-5);
-				//debug("dull prev %f", v1A1);
-				n -= 1;
-				--P1;
-				--P2;
-				continue;
-			}
-			double vmax = min(min(min(max(P1->f, P2->f), max_a * max_dev / P1->k), v1A1), v1K1);
-			if (vmax < v1K0) {
-				//debug("dull same 2");
-				P2->f = sqrt(2 * max_a * P2->length - (2 * P1->C - 1) * vmax * vmax) * (1 - 1e-10);
-				continue;
-			}
-			if (vmax < v1A0) {
-				//debug("dull prev 2");
-				P1->f = sqrt(2 * max_a * P1->length - (2 * P1->C - 1) * vmax * vmax) * (1 - 1e-10);
-				n -= 1;
-				--P1;
-				--P2;
-				continue;
-			}
-			P1->v1 = vmax;
-			//debug("set dull v1 to %f (f = %f; %f; max a %f dev %f k %f vak %f; %f)", P1->v1, P1->f, P2->f, max_a, max_dev, P1->k, v1A1, v1K1);
+		if (changed) {
+			// Recompute this segment.
+			continue;
 		}
 		//debug("next");
-		n += 1;
 		++P1;
 		++P2;
 	}
@@ -1007,108 +986,63 @@ void Parser::flush_pending() { // {{{
 		else {
 			// Not an arc.
 			// TODO: support abc again.
-			//if (((!std::isnan(old_p.a) || !std::isnan(p.a)) && old_p.a != p.a) || ((!std::isnan(old_p.b) || !std::isnan(p.b)) && old_p.b != p.b) || ((!std::isnan(old_p.c) || !std::isnan(p.c)) && old_p.c != p.c))
-			//	add_record(RUN_PRE_LINE, p.tool, p.a, p.b, p.c);
-			double r = P0->v1 * P0->v1 / max_a;
-			double d = r * P0->k;
-			double ANL = P0->length;
-			double CNL = P0->C * r;
-			double AC = ANL - CNL;
-			double BC = std::fabs(P0->v1 * P0->v1 - P0->f * P0->f) / (2 * max_a);
-			//debug("AC %f BC %f ANL %f CNL %f v1 %f r %f f %f max a %f", AC, BC, ANL, CNL, P0->v1, r, P0->f, max_a);
-			double AB = AC - BC;
-			double CD = acos((r - d / 2) / r) * r;
-			if (std::isnan(CD))
-				CD = 0;
-			double DEF = (M_PI / 2 - P0->theta / 2) * r + CD;
-			double AEF = AC + CD + DEF;
 
-			double LK = P1->length;
-			double LI = P0->C / max_a * P0->v1 * P0->v1;
-			double IK = LK - LI;
-			double IJ = std::fabs(P0->v1 * P0->v1 - P1->f * P1->f) / (2 * max_a);
-			double JK = IK - IJ;
-			double FGH = DEF;
-			double FGK = FGH + CD + IK;
+			double tana = std::tan(P1->theta / 2);
+			double T = tana + 1 / tana;
+			if (P1->f > 0) {
+				double dv = P1->f - P1->v1;
+				double max_dv = a_max * a_max / J;
+				bool have_max_a = dv > max_dv;
+				double a_top = have_max_a ? max_a : std::sqrt(dv * J);
+				double t_ramp = a_top / J;
+				double t_mid = 
+				if (t <= 2 * t_ramp) {
+					t_ramp = t / 2;
+					a_top = J * t_ramp;
+				}
+				else
+					a_top = max_a;
 
-			double A[3], B[3], C[3], D[3], E[3], F[3], G[3], H[3], I[3], J[3], K[3], M[3], N[3], N2[3], DE[3], DF[3], FH[3], GH[3], M_DE[3], M_DF[3], M_FH[3], M_GH[3];
-			double X0[3] = { P0->x - P0->s[0], P0->y - P0->s[1], P0->z - P0->s[2] };
-			double X1[3] = { P0->x, P0->y, P0->z };
-			double X2[3] = { P1->x, P1->y, P1->z };
-			double l_MDE = 0, l_MDF = 0, l_MFH = 0, l_MGH = 0;
-			for (int i = 0; i < 3; ++i) {
-				A[i] = (X0[i] + X1[i]) / 2;
-				B[i] = A[i] + P0->unit[i] * AB;
-				C[i] = A[i] + P0->unit[i] * AC;
-				N[i] = X1[i] - P0->unit[i] * std::cos(P0->theta / 2) * (r + d);
-				M[i] = N[i] - P0->nnAL[i] * (r - d);
-				E[i] = M[i] + P0->nnAL[i] * r;
-				D[i] = (C[i] + E[i]) / 2;
-				F[i] = M[i] + (r + d < 1e-10 ? 0 : (X1[i] - M[i]) * r / (r + d));
+				// lengths for key segments:
+				double s_ramp_up = -a_top / 4 * t_ramp * t_ramp + P1->f * t_ramp;
+				double s_const_a = -max_a * (t - 2 * t_ramp) * (t - 2 * t_ramp) / 2 + (P1->f - a_top / 2 * t_ramp) * (t - 2 * t_ramp);
+				double s_ramp_down = a_top / 4 * t_ramp * t_ramp + P1->v1 * t_ramp;
+				double s_corner = 3 * P1->dev * T;
+				double s_const_v = P1->length - s_ramp_up - s_const_a - s_ramp_down - s_corner;
 
-				K[i] = (X1[i] + X2[i]) / 2;
-				J[i] = K[i] - P1->unit[i] * JK;
-				I[i] = K[i] - P1->unit[i] * IK;
-				N2[i] = X1[i] + P1->unit[i] * std::cos(P0->theta / 2) * (r + d);
-				G[i] = N2[i] + P0->nnLK[i] * d;
-				H[i] = (G[i] + I[i]) / 2;
+				// timing for key segments:
+				double t_const_v = s_const_v / P1->f;
+				// ramp up: t_ramp
+				// constant a: t - 2 * t_ramp
+				// ramp down: t_ramp
+				double t_corner = 3 * P1->dev * T / P1->v1;
 
-				// Use DE and GE, not CD and HI, because they are easier to compute.
-				// The resulting B-vector is the same length and opposite direction of what is needed.
-				DE[i] = (D[i] + E[i]) / 2;
-				DF[i] = (D[i] + F[i]) / 2;
-				FH[i] = (F[i] + H[i]) / 2;
-				GH[i] = (G[i] + H[i]) / 2;
-
-				M_DE[i] = DE[i] - M[i];
-				M_DF[i] = DF[i] - M[i];
-				M_FH[i] = FH[i] - M[i];
-				M_GH[i] = GH[i] - M[i];
-				l_MDE = nanplus(l_MDE, M_DE[i] * M_DE[i]);
-				l_MDF = nanplus(l_MDF, M_DF[i] * M_DF[i]);
-				l_MFH = nanplus(l_MFH, M_FH[i] * M_FH[i]);
-				l_MGH = nanplus(l_MGH, M_GH[i] * M_GH[i]);
+				// constant v
+				if (s_const_v > 1e-10)
+					add_record();
+				if (P1->v1 != P1->f) {
+					// start slowdown
+					add_record();
+					// constant a slowdown
+					if (have_const_a)
+						add_record();
+					// stop slowdown
+					add_record();
+				}
+				// first half curve
+				if (s_corner > 1e-10)
+					add_record();
 			}
-			double Ba_[3], Ba[3], Bb[3], Bb_[3];
-			for (int i = 0; i < 3; ++i) {
-				M_DE[i] /= sqrt(l_MDE);
-				M_DF[i] /= sqrt(l_MDF);
-				M_FH[i] /= sqrt(l_MFH);
-				M_GH[i] /= sqrt(l_MGH);
-				Ba_[i] = -(M[i] + r * M_DE[i] - DE[i]);
-				Ba[i] = M[i] + r * M_DF[i] - DF[i];
-				Bb[i] = M[i] + r * M_FH[i] - FH[i];
-				Bb_[i] = -(M[i] + r * M_GH[i] - GH[i]);
+
+			if (P2->f > 0) {
+				// TODO: compute second half.
+				// second half curve
+				// start speedup
+				// constant a speedup
+				// stop speedup
+				// constant v
 			}
-			/*debug("l_MDE %f l_MDF %f l_MFH %f l_MGH %f r %f", l_MDE, l_MDF, l_MFH, l_MGH, r);
-			debug("======================");
-			debug("v %f %f %f", P0->f, P0->v1, P1->f);
-			debug("C %f AB %f k %f theta %f", P0->C, AB, P0->k, P0->theta * 180 / M_PI);
-			debug("nnAL %f %f %f", P0->nnAL[0], P0->nnAL[1], P0->nnAL[2]);
-			debug("nnLK %f %f %f", P0->nnLK[0], P0->nnLK[1], P0->nnLK[2]);
-			debug("unit0 %f %f %f", P0->unit[0], P0->unit[1], P0->unit[2]);
-			debug("unit1 %f %f %f", P1->unit[0], P1->unit[1], P1->unit[2]);
-			debug("A %f %f %f", A[0], A[1], A[2]);
-			debug("B %f %f %f", B[0], B[1], B[2]);
-			debug("C %f %f %f", C[0], C[1], C[2]);
-			debug("D %f %f %f", D[0], D[1], D[2]);
-			debug("E %f %f %f", E[0], E[1], E[2]);
-			debug("F %f %f %f", F[0], F[1], F[2]);
-			debug("H %f %f %f", H[0], H[1], H[2]);
-			debug("I %f %f %f", I[0], I[1], I[2]);
-			debug("J %f %f %f", J[0], J[1], J[2]);
-			debug("K %f %f %f", K[0], K[1], K[2]);
-			debug("M %f %f %f", M[0], M[1], M[2]); // */
-			//debug("AB %f AEF %f AC %f CD %f FGH %f FGK %f", AB, AEF, AC, CD, FGH, FGK);
-			//debug("sending pattern (%d): %s", P0->pattern.size(), P0->pattern.c_str());
-			add_curve("AB", &*P0, A, B, NULL, P0->f, P0->f, AB / AEF, INFINITY, P0->pattern.substr(P0->pattern.size() / 2));	// pattern last half
-			add_curve("BC", &*P0, B, C, NULL, P0->f, P0->v1, AC / AEF, INFINITY);
-			add_curve("CD", &*P0, C, D, Ba_, P0->v1, P0->v1, (AC + CD) / AEF, -r);
-			add_curve("DF", &*P0, D, F, Ba, P0->v1, P0->v1, 1, r);
-			add_curve("FH", &*P1, F, H, Bb, P0->v1, P0->v1, FGH / FGK, r);
-			add_curve("HI", &*P1, H, I, Bb_, P0->v1, P0->v1, (FGH + CD) / FGK, -r);
-			add_curve("IJ", &*P1, I, J, NULL, P0->v1, P1->f, (FGH + CD + IJ) / FGK, INFINITY);
-			add_curve("JK", &*P1, J, K, NULL, P1->f, P1->f, .5, INFINITY, P1->pattern.substr(0, P1->pattern.size() / 2));	// pattern first half
+
 			// Update time+dist.
 			double dist = 0;
 			double dists[3] = {P1->x - P0->x, P1->y - P0->y, P1->z - P0->z};
@@ -1151,39 +1085,6 @@ void Parser::flush_pending() { // {{{
 	}
 } // }}}
 
-void Parser::add_curve(char const *name, Record *P, double *start, double *end, double *B, double v0, double v1, double f, double r, std::string const &pattern) { // {{{
-	if (pattern.size() > 0) {
-		Run_Record r;
-		r.type = RUN_PATTERN;
-		r.tool = pattern.size();
-		r.time = last_time;
-		r.dist = last_dist;
-		std::memcpy(reinterpret_cast <char *>(&r.X), pattern.c_str(), pattern.size());
-		r.r = 0;
-		//debug("adding pattern segment of %d bytes for %s: %s", pattern.size(), name, pattern.c_str());
-		outfile.write(reinterpret_cast <char *>(&r), sizeof(r));
-	}
-	if (f < 1e-10) {
-		//debug("skipping %s because speed is too low.", name);
-		return;
-	}
-	/* TODO: Support abc
-	if (!std::isnan(P->a) || !std::isnan(P->b) || !std::isnan(P->c))
-		add_record(RUN_PRELINE, P->tool, P->a, P->b, P->c, 0, 0, 0, 0, vi, vf);
-	*/
-	double dist = 0;
-	for (int i = 0; i < 3; ++i) {
-		double d = (start[i] - end[i]) * (start[i] - end[i]);
-		if (!std::isnan(d))
-			dist += d;
-	}
-	if (dist < 1e-10) {
-		//debug("skipping %s because distance is too low.", name);
-		return;
-	}
-	add_record(RUN_LINE, P->tool, end[0], end[1], end[2], B && !std::isnan(B[0]) ? B[0] : 0, B && !std::isnan(B[1]) ? B[1] : 0, B && !std::isnan(B[2]) ? B[2] : 0, P->e0 + f * (P->e - P->e0), v0, v1, (P->n[2] < 0 ? -1 : 1) * r);
-} // }}}
-
 void Parser::add_record(RunType cmd, int tool, double x, double y, double z, double Bx, double By, double Bz, double e, double v0, double v1, double radius) { // {{{
 	Run_Record r;
 	r.type = cmd;
@@ -1203,9 +1104,9 @@ void Parser::add_record(RunType cmd, int tool, double x, double y, double z, dou
 	outfile.write(reinterpret_cast <char *>(&r), sizeof(r));
 } // }}}
 
-void parse_gcode(std::string const &infilename, std::string const &outfilename) {
+void parse_gcode(std::string const &infilename, std::string const &outfilename) { // {{{
 	// Create an instance of the class.  The constructor does all the work.
 	Parser p(infilename, outfilename);
 	// No other actions needed.
-}
+} // }}}
 // vim: set foldmethod=marker :

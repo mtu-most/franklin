@@ -43,10 +43,12 @@
 struct MoveCommand {
 	bool cb;
 	int probe, single;
-	double v0, v1;
+	double v0;
 	int tool;	// Negative value means follower ~tool.
-	double X[6];	// Value if given, NAN otherwise. (x,y,z,a,b,c)
-	double B[3];
+	double X[6]; 	// Value if given, NAN otherwise. (x, y, z, a, b, c)
+	double h[3];
+	double Jg;	// If Jg < 0, this is a reverse curve.
+	double tf;
 	double e;
 	double time, dist;
 	int pattern_size;	// in bytes; each bit is a pulse.
@@ -56,7 +58,12 @@ struct MoveCommand {
 struct Run_Record {
 	uint8_t type;
 	int32_t tool;
-	double X, Y, Z, Bx, By, Bz, E, v0, v1;
+	double g[3];
+	double h[3];
+	double Jg;	// If Jg < 0, this is a reverse curve.
+	double tf;
+	double v0;
+	double E;
 	double time, dist;
 	double r;
 } __attribute__((__packed__));
