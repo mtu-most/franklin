@@ -161,12 +161,11 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 	shmem->move.probe = false;
 	shmem->move.pattern_size = 0;
 	shmem->ints[0] = 0;
-	const char *keywordnames[] = {"tool", "x", "y", "z", "a", "b", "c", "Bx", "By", "Bz", "e", "v", "single", "probe", "relative", NULL};
-	if (!PyArg_ParseTupleAndKeywords(args, keywords, "iddddddddddd|ppp", const_cast <char **>(keywordnames),
+	const char *keywordnames[] = {"tool", "x", "y", "z", "a", "b", "c", "e", "v", "single", "probe", "relative", NULL};
+	if (!PyArg_ParseTupleAndKeywords(args, keywords, "idddddddd|ppp", const_cast <char **>(keywordnames),
 				&shmem->move.tool,
-				&shmem->move.X[0], &shmem->move.X[1], &shmem->move.X[2],
-				&shmem->move.X[3], &shmem->move.X[4], &shmem->move.X[5],
-				&shmem->move.B[0], &shmem->move.B[1], &shmem->move.B[2],
+				&shmem->move.g[0], &shmem->move.g[1], &shmem->move.g[2],
+				&shmem->move.abc[0], &shmem->move.abc[1], &shmem->move.abc[2],
 				&shmem->move.e,
 				&shmem->move.v0,
 				&shmem->move.single,
@@ -285,6 +284,7 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	max_deviation = shmem->floats[1];
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
+	max_J = shmem->floats[4];
 	return Py_BuildValue("{si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,sd,sd,sd,sd,sd,sd,sd,sd}",
 			"queue_length", shmem->ints[0],
 			"num_pins", shmem->ints[1],
@@ -306,10 +306,11 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 			"max_deviation", shmem->floats[1],
 			"max_v", shmem->floats[2],
 			"max_a", shmem->floats[3],
-			"targetx", shmem->floats[4],
-			"targety", shmem->floats[5],
-			"targetangle", shmem->floats[6],
-			"zoffset", shmem->floats[7]);
+			"max_J", shmem->floats[4],
+			"targetx", shmem->floats[5],
+			"targety", shmem->floats[6],
+			"targetangle", shmem->floats[7],
+			"zoffset", shmem->floats[8]);
 }
 
 static void set_int(int num, char const *name, PyObject *dict) {
@@ -367,10 +368,11 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_float(1, "max_deviation", dict);
 	set_float(2, "max_v", dict);
 	set_float(3, "max_a", dict);
-	set_float(4, "targetx", dict);
-	set_float(5, "targety", dict);
-	set_float(6, "targetangle", dict);
-	set_float(7, "zoffset", dict);
+	set_float(4, "max_J", dict);
+	set_float(5, "targetx", dict);
+	set_float(6, "targety", dict);
+	set_float(7, "targetangle", dict);
+	set_float(8, "zoffset", dict);
 	send_to_child(CMD_WRITE_GLOBALS);
 	return assert_empty_dict(dict, "write_globals");
 }

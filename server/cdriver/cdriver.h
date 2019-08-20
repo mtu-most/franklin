@@ -150,8 +150,10 @@ struct Temp {
 // double dist: length of segment, along the arc.
 // double alpha_max: angle between lines through center of arc through mid point and begin/end point.
 struct History {
-	double P[3], A[3], B[3];
-	double v0, v1, dist, alpha_max;
+	double g[3], h[3];
+	double unitg[3], unith[3];
+	double Jg, Jh, a0g, a0h, v0g, v0h, x0g, x0h;
+	double dist;
 	int32_t hwtime, end_time;
 	int hwtime_step;
 	int cbs;
@@ -159,7 +161,7 @@ struct History {
 	bool queue_full;
 	int run_file_current;
 	bool probing, single;
-	double run_time, run_dist;
+	double run_time;
 	double factor;
 	uint8_t pattern[PATTERN_MAX];
 	int pattern_size;	// in bytes; each bit is a pulse.
@@ -304,7 +306,7 @@ static int const FULL_COMMAND_SIZE = COMMAND_SIZE + (COMMAND_SIZE + 2) / 3;
 
 // Globals
 EXTERN double max_deviation;
-EXTERN double max_v, max_a;
+EXTERN double max_v, max_a, max_J;
 EXTERN uint8_t num_extruders;
 EXTERN int num_temps;
 EXTERN int num_gpios;

@@ -732,7 +732,7 @@ function update_queue(ui, element) { // {{{
 	for (var i = 0; i < ui.machine.queue.length; ++i) {
 		var item = ui.machine.queue[i];
 		var o = element.AddElement('option');
-		o.AddText(item[0] + ' - ' + display_time(item[1][6] + item[1][7] / ui.machine.max_v));
+		o.AddText(item[0] + ' - ' + display_time(item[1][6]));
 		o.value = item[0];
 		if (item[0] == old)
 			o.selected = true;
@@ -837,6 +837,7 @@ function globals_update(uuid, ui_configure, nums_changed) { // {{{
 	update_float(p, [null, 'max_deviation']);
 	update_float(p, [null, 'max_v']);
 	update_float(p, [null, 'max_a']);
+	update_float(p, [null, 'max_J']);
 	update_float(p, [null, 'targetx']);
 	update_float(p, [null, 'targety']);
 	update_float(p, [null, 'targetangle']);

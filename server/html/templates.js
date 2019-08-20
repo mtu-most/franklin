@@ -782,6 +782,10 @@ function setup_globals(desc, pos, top) { // {{{
 	e.Add(Float(ui, [null, 'max_a'], 2, 1));
 	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
 	e.AddText('/s²');
+	e = ret.AddElement('div').AddText('Max J');
+	e.Add(Float(ui, [null, 'max_J'], 2, 1));
+	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
+	e.AddText('/s³');
 	var pins = ret.Add(make_table(ui));
 	// Add dummy first child instead of a title row.
 	pins.Add(document.createComment(''));

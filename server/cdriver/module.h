@@ -42,15 +42,18 @@
 
 struct MoveCommand {
 	bool cb;
-	int probe, single;
+	int probe, single, reverse;
 	double v0;
 	int tool;	// Negative value means follower ~tool.
-	double X[6]; 	// Value if given, NAN otherwise. (x, y, z, a, b, c)
+	double g[3];
 	double h[3];
-	double Jg;	// If Jg < 0, this is a reverse curve.
+	double unitg[3];
+	double unith[3];
+	double abc[3];
+	double Jg, Jh;
 	double tf;
 	double e;
-	double time, dist;
+	double time;
 	int pattern_size;	// in bytes; each bit is a pulse.
 	uint8_t pattern[PATTERN_MAX];
 };
@@ -58,14 +61,14 @@ struct MoveCommand {
 struct Run_Record {
 	uint8_t type;
 	int32_t tool;
-	double g[3];
+	double X[3];
 	double h[3];
-	double Jg;	// If Jg < 0, this is a reverse curve.
+	double Jg;
 	double tf;
 	double v0;
 	double E;
-	double time, dist;
-	double r;
+	double time;
+	int64_t gcode_line;
 } __attribute__((__packed__));
 
 enum Command {
@@ -130,8 +133,10 @@ enum InterruptCommand {
 
 enum RunType {
 	RUN_SYSTEM,
-	RUN_PRE_LINE,
-	RUN_LINE,
+	RUN_POLY3PLUS,
+	RUN_POLY3MINUS,
+	RUN_POLY2,
+	RUN_ARC,
 	RUN_GOTO,
 	RUN_GPIO,
 	RUN_SETTEMP,
@@ -185,7 +190,7 @@ template <> inline double max <double>(double a, double b) {
 extern "C" {
 	// Globals
 	EXTERN double max_deviation;
-	EXTERN double max_v, max_a;
+	EXTERN double max_v, max_a, max_J;
 
 	void parse_gcode(std::string const &infilename, std::string const &outfilename);
 }

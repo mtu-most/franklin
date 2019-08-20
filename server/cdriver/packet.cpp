@@ -43,10 +43,10 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		if (spaces[0].num_axes <= a)
 			break;
 		double pos = spaces[0].axis[a]->settings.current;
-		//debug("prepare move, pos[%d] = %f + %f", a, pos, move->X[a]);
-		if (std::isnan(pos) || std::isnan(move->X[a]))
+		//debug("prepare move, pos[%d] = %f + %f", a, pos, move->g[a]);
+		if (std::isnan(pos) || std::isnan(move->g[a]))
 			continue;
-		double d = move->X[a] + (a == 2 ? zoffset : 0) - (relative ? 0 : pos);
+		double d = move->g[a] + (a == 2 ? zoffset : 0) - (relative ? 0 : pos);
 		if (std::isnan(dist))
 			dist = d * d;
 		else
@@ -65,7 +65,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 			double pos = spaces[0].axis[a]->settings.current;
 			if (std::isnan(pos))
 				continue;
-			double d = std::fabs(move->X[a] - (relative ? 0 : pos));
+			double d = std::fabs(move->g[a] - (relative ? 0 : pos));
 			if (std::isnan(dist) || dist < d) {
 				dist = d;
 				vmax = spaces[0].motor[a]->limit_v;
@@ -122,25 +122,24 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	for (int i = 0; i < 3; ++i) {
 		memcpy(&queue[i], move, sizeof(MoveCommand));
 		queue[i].cb = false;
-		queue[i].B[0] = 0;
-		queue[i].B[1] = 0;
-		queue[i].B[2] = 0;
+		queue[i].h[0] = 0;
+		queue[i].h[1] = 0;
+		queue[i].h[2] = 0;
 	}
 	for (int a = 0; a < 6; ++a) {
 		if (a >= spaces[0].num_axes) {
-			queue[0].X[a] = NAN;
-			queue[1].X[a] = NAN;
-			queue[2].X[a] = NAN;
+			queue[0].g[a] = NAN;
+			queue[1].g[a] = NAN;
+			queue[2].g[a] = NAN;
 			continue;
 		}
 		// This part is in user coordinates, so remove zoffset and extruder offset. TODO: remove extruder offset.
 		double pos = spaces[0].axis[a]->settings.current - (a == 2 ? zoffset : 0);
 		if (std::isnan(pos))
 			continue;
-		double d = queue[2].X[a] - (relative ? 0 : pos);
-		queue[0].X[a] = pos + d * ramp;
-		queue[1].X[a] = pos + d * (1 - ramp);
-		queue[2].X[a] = pos + d;
+		double d = queue[2].g[a] - (relative ? 0 : pos);
+		queue[0].g[a] = pos + d * ramp;
+		queue[1].g[a] = pos + d * (1 - ramp);
 	}
 	if (tool >= 0 && tool < spaces[1].num_axes) {
 		double pos = spaces[1].axis[tool]->settings.current;
@@ -157,11 +156,8 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		queue[2].e = pos + d;
 	}
 	queue[0].v0 = 0;
-	queue[0].v1 = vmax;
 	queue[1].v0 = vmax;
-	queue[1].v1 = vmax;
 	queue[2].v0 = vmax;
-	queue[2].v1 = 0;
 	if (cb)
 		queue[2].cb = true;
 	//debug("starting move (dist = %f, ramp=%f, tool=%d e=%f) single=%d", dist, ramp, tool, move->e, move->single);
@@ -210,7 +206,7 @@ void request(int req) {
 		arch_reconnect(const_cast<const char *>(shmem->strs[0]));
 		break;
 	CASE(CMD_MOVE)
-		//debug("moving to (%f,%f,%f)", shmem->move.X[0], shmem->move.X[1], shmem->move.X[2]);
+		//debug("moving to (%f,%f,%f)", shmem->move.g[0], shmem->move.g[1], shmem->move.g[2]);
 		last_active = millis();
 		initialized = true;
 		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move), true);
@@ -473,7 +469,7 @@ void request(int req) {
 		run_file_fill_queue();
 		break;
 	CASE(CMD_GET_TIME)
-		shmem->floats[0] = (history[running_fragment].run_time + history[running_fragment].run_dist / max_v) / feedrate + settings.hwtime / 1e6;
+		shmem->floats[0] = history[running_fragment].run_time / feedrate + settings.hwtime / 1e6;
 		break;
 	CASE(CMD_SPI)
 		arch_send_spi(shmem->ints[0], reinterpret_cast<const uint8_t *>(const_cast<const char *>(shmem->strs[0])));
@@ -488,8 +484,6 @@ void request(int req) {
 	CASE(CMD_TP_SETPOS)
 	{
 		int ipos = int(shmem->floats[0]);
-		if (ipos > 0 && ipos < run_file_num_records && run_file_map[ipos - 1].type == RUN_PRE_LINE)
-			ipos -= 1;
 		discarding = true;
 		arch_discard();
 		settings.run_file_current = ipos;

@@ -34,7 +34,7 @@ TYPE_DELTA = 'delta'
 TYPE_POLAR = 'polar'
 TYPE_HBOT = 'h-bot'
 type_names = [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER, TYPE_DELTA, TYPE_POLAR, TYPE_HBOT]
-record_format = '=Bidddddddddddd' # type, tool, X, Y, Z, Bx, By, Bz, E, v0, v1, time, dist, r
+record_format = '=Biddddddddddd' # type, tool, X, Y, Z, Bx, By, Bz, E, v0, v1, time, r	 TODO
 # }}}
 
 # Imports.  {{{
@@ -207,8 +207,8 @@ class Machine: # {{{
 				try:
 					#log('opening %s' % filename)
 					with open(os.path.join(gcode, filename), 'rb') as f:
-						f.seek(-8 * 8, os.SEEK_END)
-						self.jobqueue[name] = struct.unpack('=' + 'd' * 8, f.read())
+						f.seek(-8 * 7, os.SEEK_END)
+						self.jobqueue[name] = struct.unpack('=' + 'd' * 7, f.read())
 				except:
 					traceback.print_exc()
 					log('failed to open gcode file %s' % os.path.join(gcode, filename))
@@ -268,7 +268,7 @@ class Machine: # {{{
 		self.queue_info = None
 		self.confirm_waits = set()
 		self.gpio_waits = {}
-		self.total_time = [float('nan'), float('nan')]
+		self.total_time = float('nan')
 		self.resuming = False
 		self.flushing = False
 		self.debug_buffer = None
@@ -339,6 +339,7 @@ class Machine: # {{{
 		self.max_deviation = 0
 		self.max_v = 100
 		self.max_a = 10000
+		self.max_J = 10000
 		self.current_extruder = 0
 		self.targetx = 0.
 		self.targety = 0.
@@ -571,7 +572,7 @@ class Machine: # {{{
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
 		data = {'num_temps': nt, 'num_gpios': ng}
-		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'timeout', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'current_extruder', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc')})
+		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'timeout', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'current_extruder', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc')})
 		#log('writing globals: %s' % repr(data))
 		cdriver.write_globals(data)
 		self._read_globals(update = True)
@@ -602,7 +603,7 @@ class Machine: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		attrnames = ('name', 'profile', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'temp_scale_min', 'temp_scale_max', 'probemap', 'connected')
+		attrnames = ('name', 'profile', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'temp_scale_min', 'temp_scale_max', 'probemap', 'connected')
 		attrs = {n: getattr(self, n) for n in attrnames}
 		attrs['num_temps'] = len(self.temps)
 		attrs['num_gpios'] = len(self.gpios)
@@ -1249,7 +1250,7 @@ class Machine: # {{{
 			for e in range(len(self.spaces[1].axis)):
 				self.user_set_axis_pos(1, e, 0)
 		filename = fhs.read_spool(os.path.join(self.uuid, 'gcode', src + os.extsep + 'bin'), text = False, opened = False)
-		self.total_time = self.jobqueue[src][-2:]
+		self.total_time = self.jobqueue[src][-1]
 		self.gcode_fd = os.open(filename, os.O_RDONLY)
 		self.gcode_map = mmap.mmap(self.gcode_fd, 0, prot = mmap.PROT_READ)
 		filesize = os.fstat(self.gcode_fd).st_size
@@ -2057,7 +2058,7 @@ class Machine: # {{{
 		message += 'spi_setup = %s\r\n' % self._mangle_spi()
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin')])
 		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'timeout')])
-		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a')])
+		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J')])
 		message += 'user_interface = %s\r\n' % self.user_interface
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings()
@@ -2089,7 +2090,7 @@ class Machine: # {{{
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set(), 'follower': set()}
 		keys = {
-				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a'},
+				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J'},
 				'space': {'type', 'num_axes', 'delta_angle', 'polar_max_r'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
@@ -2392,7 +2393,7 @@ class Machine: # {{{
 			state = 'Running'
 		else:
 			return 'Idle', float('nan'), float('nan'), pos[0], pos[1], context
-		return state, cdriver.get_time(), (self.total_time[0] + (0 if len(self.spaces) < 1 else self.total_time[1] / self.max_v)) / self.feedrate, pos[0], pos[1], context
+		return state, cdriver.get_time(), self.total_time / self.feedrate, pos[0], pos[1], context
 	# }}}
 	def send_machine(self, target): # {{{
 		'''Return all settings about a machine.
@@ -2476,7 +2477,7 @@ class Machine: # {{{
 	def get_globals(self): # {{{
 		#log('getting globals')
 		ret = {'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probemap', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a'):
+		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probemap', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J'):
 			ret[key] = getattr(self, key)
 		return ret
 	# }}}
@@ -2504,7 +2505,7 @@ class Machine: # {{{
 		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'timeout'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
-		for key in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a'):
+		for key in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J'):
 			if key in ka:
 				setattr(self, key, float(ka.pop(key)))
 		self._write_globals(nt, ng, update = update)

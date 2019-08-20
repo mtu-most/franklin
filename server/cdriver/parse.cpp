@@ -27,6 +27,9 @@
 #include <cstring>
 // }}}
 
+#define pdebug debug
+//#define pdebug(...)
+
 static double const C0 = 273.15; // 0 degrees celsius in kelvin.
 
 // The class below only to hold its variables in a convenient way.  The constructor does all the work; once the object is constructed, it should be discarded.
@@ -44,7 +47,7 @@ struct Parser { // {{{
 		double e0, a0, b0, c0;
 		double center[3];
 		double normal[3];
-		double time, dist;
+		double time;
 		std::string pattern;
 		Record(bool arc_, int tl, double x_, double y_, double z_, double a_, double b_, double c_, double f_, double e_, double cx = NAN, double cy = NAN, double cz = NAN, double nx = NAN, double ny = NAN, double nz = NAN) : arc(arc_), tool(tl), x(x_), y(y_), z(z_), a(a_), b(b_), c(c_), f(f_), e(e_) {
 			center[0] = cx;
@@ -58,10 +61,15 @@ struct Parser { // {{{
 		double s[3];	// Vector to this point.
 		double length;	// Half of length of segment to this point.
 		double unit[3];	// Unit vector along s.
+		double from[3];	// Position halfway between previous point and here.
 		double n[3];	// Vector normal to this and next segment.
 		double nnAL[3], nnLK[3];	// Normal to segment and normal, for AL and LK.
 		double theta;	// Angle between this and next segment.
+		double x0;	// length of half curve.
 		double v1;	// speed at corner.
+		double dev;	// actual maximum deviation from line.
+		double tf;	// time for curve.
+		double Jg, Jh;	// Jerk along and perpendicular to segment.
 	}; // }}}
 	// Variables. {{{
 	std::ifstream infile;
@@ -90,7 +98,7 @@ struct Parser { // {{{
 	std::string line;
 	unsigned linepos;
 	double arc_normal[3];
-	double last_time, last_dist;
+	double last_time;
 	std::list <Chunk> command;
 	double max_dev;
 	std::string pattern_data;
@@ -106,7 +114,7 @@ struct Parser { // {{{
 	double read_fraction();
 	void handle_coordinate(double value, int index, bool *controlled, bool rel);
 	void flush_pending();
-	void add_record(RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double Bx = 0, double By = 0, double Bz = 0, double e = NAN, double v0 = INFINITY, double v1 = INFINITY, double radius = INFINITY);
+	void add_record(RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double hx = 0, double hy = 0, double hz = 0, double Jg = 0, double tf = NAN, double v0 = NAN, double e = NAN);
 	void reset_pending_pos();
 	// }}}
 }; // }}}
@@ -249,7 +257,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					if (handle_pattern)
 						debug("Warning: not handling pattern because position is unknown");
 					flush_pending();
-					add_record(RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], epos[current_tool], current_f[code == 0 ? 0 : 1]);
+					add_record(RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], NAN, NAN, current_f[code == 0 ? 0 : 1], epos[current_tool]);
 					reset_pending_pos();
 					break;
 				}
@@ -266,32 +274,14 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					// Only support OLD_Z (G90) retract mode; don't support repeats(L).
 					// goto x, y
 					pending.push_back(Record(false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
-					double dist = sqrt((pos[0] - oldpos[0]) * (pos[0] - oldpos[0]) + (pos[1] - oldpos[1]) * (pos[1] - oldpos[1]));
-					if (!std::isnan(dist))
-						last_dist += dist;
 					// goto r
 					pending.push_back(Record(false, current_tool, pos[0], pos[1], r, NAN, NAN, NAN, INFINITY, NAN));
-					dist = std::fabs(r - oldpos[2]);
-					if (!std::isnan(dist))
-						last_dist += dist;
 					// goto z
 					if (pos[2] != r) {
-						dist = std::fabs(pos[2] - r);
 						pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], NAN, NAN, NAN, current_f[1], NAN));
-						if (std::isinf(current_f[1])) {
-							if (!std::isnan(dist))
-								last_dist += dist;
-						}
-						else {
-							if (!std::isnan(current_f[1]))
-								last_time += 1 / current_f[1];
-						}
 					}
 					// go back to old z
 					pending.push_back(Record(false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
-					dist = std::fabs(r - oldpos[2]);
-					if (!std::isnan(dist))
-						last_dist += dist;
 					// update pos[2].
 					pos[2] = oldpos[2];
 				}
@@ -435,7 +425,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				}
 				epos[current_tool] = arg.num;
 				flush_pending();
-				add_record(RUN_SETPOS, current_tool, NAN, NAN, NAN, NAN, NAN, NAN, arg.num);
+				add_record(RUN_SETPOS, current_tool, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, arg.num);
 				reset_pending_pos();
 			}
 			break;
@@ -710,7 +700,6 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	current_tool = 0;
 	tool_changed = false;
 	last_time = 0;
-	last_dist = 0;
 	arc_normal[0] = 0;
 	arc_normal[1] = 0;
 	arc_normal[2] = 1;
@@ -839,30 +828,33 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	// Bbox.
 	for (double b: bbox)
 		outfile.write(reinterpret_cast <char *>(&b), sizeof(b));
-	// Time+dist
+	// Time
 	outfile.write(reinterpret_cast <char *>(&last_time), sizeof(last_time));
-	outfile.write(reinterpret_cast <char *>(&last_dist), sizeof(last_dist));
 } // }}}
 
-static double compute_max_v(double x, double v, double J, double d, double T) { // {{{
-	x -= d / (3 * T); // discard final part: no acceleration there.
-	// First assume max_a is not reached.
-	// Mean a is max_a / 2.
-	// v = a t + v
-	// x = 1/4 max_a t^2 + v t
-	// 4x/max_a = (t + v/2)^2 - v^2/4
-	// t = sqrt(4x/max_a + v^2/4) - v/2
-	double t = std::sqrt(4 * x / max_a + v * v / 4) - v / 2;
-	double t_ramp = max_a / J;
-	if (t > 2 * t_ramp) {
-		// Assumption was incorrect; max_a is reached.
-		double b = 3 * t_ramp + 2 * v / max_a;
-		double c = 2 * x / max_a - 4 * v * t_ramp / max_a - 2 * t_ramp * t_ramp;
-		double t_mid = std::sqrt(c + b * b / 4) - b / 2;
-		return v + max_a * t_ramp + max_a * t_mid;
+static double compute_max_v(double x, double v, double J) { // {{{
+	// Compute maximum vf that can be reached starting from v with J on length x.
+
+	// Time for maximum ramp.
+	double t_ramp_max = max_a / max_J;
+	double dv_ramp_max = max_a * max_a / (2 * max_J);
+	double x_ramp_max = max_a * max_a * max_a / (3 * max_J * max_J) + (2 * v + dv_ramp_max) * max_a / max_J;
+	if (x_ramp_max <= x) {
+		// Ramp fits on segment, compute size of middle part.
+		double a = max_J / 2;
+		double b = v + 3 * dv_ramp_max;
+		double c = max_J / 3 * t_ramp_max * t_ramp_max * t_ramp_max + (2 * v + dv_ramp_max) * t_ramp_max - x;
+		double t_const_a = (-b + std::sqrt(b * b - 4 * a * c)) / (2 * a);
+		return v + 2 * dv_ramp_max + max_a * t_const_a;
 	}
 	else {
-		return v + t * a_max / 2;
+		// Ramp does not fit on segment.
+		double J2 = max_J * max_J;
+		double J3 = J2 * max_J;
+		double J4 = J2 * J2;
+		double k = std::pow(15 * J2 * x + sqrt(5 * (45 * J4 * x * x + 64 * J3 * v * v * v)), 1. / 3);
+		double t_ramp = k / (std::pow(5, 2. / 3) * max_J) - 4 * v / (std::pow(5, 1. / 3) * k);
+		return v + max_J * t_ramp * t_ramp;
 	}
 } // }}}
 
@@ -870,6 +862,7 @@ void Parser::flush_pending() { // {{{
 	if (pending.size() <= 1)
 		return;
 	pending.push_back(pending.back());
+	(--pending.end())->f = 0;
 	pending.begin()->s[0] = 0;
 	pending.begin()->s[1] = 0;
 	pending.begin()->s[2] = 0;
@@ -883,6 +876,7 @@ void Parser::flush_pending() { // {{{
 	pending.begin()->unit[2] = 0;
 	pending.begin()->f = 0;
 	pending.begin()->v1 = 0;
+	pending.push_front(pending.front());
 	for (auto P0 = pending.begin(), P1 = ++pending.begin(); P1 != pending.end(); ++P0, ++P1) {
 		P1->f = min(max_v, P1->f);
 		P1->e0 = P0->e;
@@ -892,6 +886,9 @@ void Parser::flush_pending() { // {{{
 		P1->s[0] = P1->x - P0->x;
 		P1->s[1] = P1->y - P0->y;
 		P1->s[2] = P1->z - P0->z;
+		P1->from[0] = P0->x + P1->s[0] * .5;
+		P1->from[1] = P0->y + P1->s[1] * .5;
+		P1->from[2] = P0->z + P1->s[2] * .5;
 		P1->length = 0;
 		for (int i = 0; i < 3; ++i) {
 			if (std::isnan(P1->s[i]))
@@ -902,14 +899,14 @@ void Parser::flush_pending() { // {{{
 		P0->n[0] = (P1->s[1] * P0->s[2]) - (P1->s[2] * P0->s[1]);
 		P0->n[1] = (P1->s[2] * P0->s[0]) - (P1->s[0] * P0->s[2]);
 		P0->n[2] = (P1->s[0] * P0->s[1]) - (P1->s[1] * P0->s[0]);
-		P0->nnAL[0] = (P0->n[1] * P0->s[2]) - (P0->n[2] * P0->s[1]);
-		P0->nnAL[1] = (P0->n[2] * P0->s[0]) - (P0->n[0] * P0->s[2]);
-		P0->nnAL[2] = (P0->n[0] * P0->s[1]) - (P0->n[1] * P0->s[0]);
-		P0->nnLK[0] = (P0->n[1] * P1->s[2]) - (P0->n[2] * P1->s[1]);
-		P0->nnLK[1] = (P0->n[2] * P1->s[0]) - (P0->n[0] * P1->s[2]);
-		P0->nnLK[2] = (P0->n[0] * P1->s[1]) - (P0->n[1] * P1->s[0]);
+		P0->nnAL[0] = (P0->n[2] * P0->s[1]) - (P0->n[1] * P0->s[2]);
+		P0->nnAL[1] = (P0->n[0] * P0->s[2]) - (P0->n[2] * P0->s[0]);
+		P0->nnAL[2] = (P0->n[1] * P0->s[0]) - (P0->n[0] * P0->s[1]);
+		P0->nnLK[0] = (P0->n[2] * P1->s[1]) - (P0->n[1] * P1->s[2]);
+		P0->nnLK[1] = (P0->n[0] * P1->s[2]) - (P0->n[2] * P1->s[0]);
+		P0->nnLK[2] = (P0->n[1] * P1->s[0]) - (P0->n[0] * P1->s[1]);
 		double nnAL_length = sqrt(P0->nnAL[0] * P0->nnAL[0] + P0->nnAL[1] * P0->nnAL[1] + P0->nnAL[2] * P0->nnAL[2]);
-		double nnAK_length = sqrt(P0->nnLK[0] * P0->nnLK[0] + P0->nnLK[1] * P0->nnLK[1] + P0->nnLK[2] * P0->nnLK[2]);
+		double nnLK_length = sqrt(P0->nnLK[0] * P0->nnLK[0] + P0->nnLK[1] * P0->nnLK[1] + P0->nnLK[2] * P0->nnLK[2]);
 		for (int i = 0; i < 3; ++i) {
 			P1->unit[i] = P1->length == 0 ? 0 : P1->s[i] / P1->length;
 			if (std::isnan(P1->unit[i]))
@@ -918,8 +915,8 @@ void Parser::flush_pending() { // {{{
 				P0->nnAL[i] /= nnAL_length;
 			else
 				P0->nnAL[i] = 0;
-			if (nnAK_length > 0)
-				P0->nnLK[i] /= nnAK_length;
+			if (nnLK_length > 0)
+				P0->nnLK[i] /= nnLK_length;
 			else
 				P0->nnLK[i] = 0;
 		}
@@ -941,33 +938,36 @@ void Parser::flush_pending() { // {{{
 	auto P1 = ++pending.begin();
 	auto P2 = ++ ++pending.begin();
 	while (P2 != pending.end()) {
-		double tana = std::tan(P1->theta / 2);
-		double T = tana + 1 / tana;
-		P1->dev = std::sin(P1->theta / 2) * max_deviation;	// 1-D deviation from horizontal line
-		P1->dev = min(P1->dev, min(P1->length, P2->length) / (3 * T));
-		// compute maximum v for angle alpha.
-		double Jh = max_J / std::sqrt(1 + 1 / tana);
-		double max_t = std::pow(6 * P1->dev / Jh, 1 / 3.);
-		double max_v_J = 3 * P1->dev * T / max_t;
-		double max_v_a = max_J / max_t;
-		P1->v1 = min(max_v_J, max_v_a);
-		P1->v1 = min(P1->v1, min(P1->f, P2->f));
-		double v = compute_max_v(P2->length, P1->v1, Jh, P1->dev, T);
-		bool changed = false;
-		if (v < P2->f) {
-			P2->f = v * .999;
-			changed = true;
+		double s = -std::tan(P1->theta / 2);
+		P1->dev = std::min(max_deviation, std::min(P1->length, P2->length) / (6 * -s * std::sin(P1->theta / 2)));
+		P1->x0 = 6 * s * P1->dev * std::sin(P1->theta / 2);
+		if (std::isnan(s) || std::isnan(P1->dev) || std::isnan(P1->x0)) {
+			s = 0;
+			P1->dev = 0;
+			P1->x0 = 0;
 		}
-		v = compute_max_v(P1->length, P1->v1, Jh, P1->dev, T);
-		if (v < P1->f) {
-			P1->f = v * .999;
-			// Recompute previous segment.
+		debug("s %f dev %f x0 %f", s, P1->dev, P1->x0);
+		double sq = std::sqrt(s * s + 1);
+		double max_v_J = std::pow(-max_J * P1->x0 * P1->x0 * s / sq, 1. / 3);
+		double max_v_a = std::sqrt(max_a * s * P1->x0 / sq);
+		P1->v1 = min(min(min(max_v_J, max_v_a), P1->f), P2->f);
+		P1->tf = -P1->x0 / P1->v1;
+		if (std::isnan(P1->tf))
+			P1->tf = 0;
+		P1->Jh = -P1->v1 * P1->v1 * P1->v1 / (s * P1->x0 * P1->x0);
+		if (std::isnan(P1->Jh))
+			P1->Jh = 0;
+		P1->Jg = P1->Jh * s;
+
+		// Check if v0/v2 should be lowered.
+		double v0 = compute_max_v(P1->length + P1->x0, P1->v1, max_J);
+		double v2 = compute_max_v(P2->length + P1->x0, P1->v1, max_J);
+		if (v2 < P2->f)
+			P2->f = v2;
+		if (v0 < P1->f) {
+			P1->f = v0;
 			--P1;
 			--P2;
-			continue;
-		}
-		if (changed) {
-			// Recompute this segment.
 			continue;
 		}
 		//debug("next");
@@ -975,96 +975,159 @@ void Parser::flush_pending() { // {{{
 		++P2;
 	}
 	// Turn Records into Run_Records and write them out.  Ignore fake first and last record.
-	auto P0 = pending.begin();
-	while (pending.size() > 1) {
+	while (pending.size() > 2) {
+		//auto P0 = pending.begin(); TODO: use P0 and P1 instead of P1 and P2.
 		P1 = ++pending.begin();
+		P2 = ++ ++pending.begin();
 		if (P1->arc) {
+			abort();
 			// TODO: support arcs.
-			// TODO: Update time+dist.
+			// TODO: Update time.
 			// TODO: Update bbox.
 		}
 		else {
 			// Not an arc.
 			// TODO: support abc again.
 
-			double tana = std::tan(P1->theta / 2);
-			double T = tana + 1 / tana;
+			pdebug("Writing out segment from (%f,%f,%f) via (%f,%f,%f) to (%f,%f,%f)", P1->from[0], P1->from[1], P1->from[2], P1->x, P1->y, P1->z, P2->from[0], P2->from[1], P2->from[2]);
+
+			double max_ramp_t = max_a / max_J;
+			double max_ramp_dv = max_J / 2 * max_ramp_t * max_ramp_t;
 			if (P1->f > 0) {
-				double dv = P1->f - P1->v1;
-				double max_dv = a_max * a_max / J;
-				bool have_max_a = dv > max_dv;
-				double a_top = have_max_a ? max_a : std::sqrt(dv * J);
-				double t_ramp = a_top / J;
-				double t_mid = 
-				if (t <= 2 * t_ramp) {
-					t_ramp = t / 2;
-					a_top = J * t_ramp;
+				double de = (P1->e - P1->e0) / 2;
+				double total_dv = P1->f - P1->v1;
+				// Compute s and t for all parts.
+				bool have_max_a = total_dv > max_ramp_dv * 2;
+				double s_const_v, s_ramp_start, s_const_a, s_ramp_end, s_curve;
+				double t_const_v, t_ramp, t_const_a, t_curve;
+				s_curve = -P1->x0;
+				t_curve = P1->tf;
+				if (have_max_a) {
+					t_const_a = (total_dv - max_ramp_dv * 2) / max_a;
+					s_const_a = max_a / 2 * t_const_a * t_const_a;
+					t_ramp = max_ramp_t;
 				}
-				else
-					a_top = max_a;
+				else {
+					t_const_a = 0;
+					s_const_a = 0;
+					t_ramp = std::sqrt(total_dv / max_J);
+				}
+				double a_top = max_J * t_ramp;
+				double t_ramp2 = t_ramp * t_ramp;
+				double t_ramp3 = t_ramp2 * t_ramp;
+				double dv_ramp = max_J / 2 * t_ramp2;
+				s_ramp_start = P1->f * t_ramp - max_J / 6 * t_ramp3;
+				s_ramp_end = (P1->v1 + dv_ramp) * t_ramp - a_top / 2 * t_ramp2 + max_J / 6 * t_ramp3;
+				s_const_v = P1->length - s_curve - s_ramp_start - s_ramp_end - s_const_a;
+				t_const_v = s_const_v / P1->f;
 
-				// lengths for key segments:
-				double s_ramp_up = -a_top / 4 * t_ramp * t_ramp + P1->f * t_ramp;
-				double s_const_a = -max_a * (t - 2 * t_ramp) * (t - 2 * t_ramp) / 2 + (P1->f - a_top / 2 * t_ramp) * (t - 2 * t_ramp);
-				double s_ramp_down = a_top / 4 * t_ramp * t_ramp + P1->v1 * t_ramp;
-				double s_corner = 3 * P1->dev * T;
-				double s_const_v = P1->length - s_ramp_up - s_const_a - s_ramp_down - s_corner;
-
-				// timing for key segments:
-				double t_const_v = s_const_v / P1->f;
-				// ramp up: t_ramp
-				// constant a: t - 2 * t_ramp
-				// ramp down: t_ramp
-				double t_corner = 3 * P1->dev * T / P1->v1;
+				debug("part 1 s,t: cv %f,%f rs %f,%f ca %f,%f re %f,%f curve %f,%f", s_const_v, t_const_v, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_curve, t_curve);
 
 				// constant v
-				if (s_const_v > 1e-10)
-					add_record();
+				if (s_const_v > 1e-10) {
+					double X[3];
+					for (int i = 0; i < 3; ++i)
+						X[i] = P1->from[i] + P1->unit[i] * s_const_v;
+					add_record(RUN_POLY3PLUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, 0, t_const_v, P1->f, P1->e0 + de * s_const_v / P1->length);
+					pdebug("1.const v to (%f,%f,%f) v=%f", X[0], X[1], X[2], P1->f);
+				}
 				if (P1->v1 != P1->f) {
 					// start slowdown
-					add_record();
+					double X[3];
+					for (int i = 0; i < 3; ++i)
+						X[i] = P1->from[i] + P1->unit[i] * (s_const_v + s_ramp_start);
+					add_record(RUN_POLY3PLUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P1->f, P1->e0 + de * (s_const_v + s_ramp_start) / P1->length);
+					pdebug("1.start to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->f);
 					// constant a slowdown
-					if (have_const_a)
-						add_record();
+					if (have_max_a) {
+						for (int i = 0; i < 3; ++i)
+							X[i] = P1->from[i] + P1->unit[i] * (s_const_v + s_ramp_start + s_const_a);
+						add_record(RUN_POLY2, P1->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P1->f - dv_ramp, P1->e0 + de * (s_const_v + s_ramp_start + s_const_a) / P1->length);
+						pdebug("1.const a to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->f - dv_ramp);
+					}
 					// stop slowdown
-					add_record();
+					for (int i = 0; i < 3; ++i)
+						X[i] = P1->from[i] + P1->unit[i] * (P1->length - s_curve);
+					add_record(RUN_POLY3MINUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, max_J, t_ramp, P1->v1, P1->e0 + de * (P1->length - s_curve) / P1->length);
+					pdebug("1.stop- to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->v1);
 				}
 				// first half curve
-				if (s_corner > 1e-10)
-					add_record();
+				if (s_curve > 1e-10) {
+					double h[3];
+					for (int i = 0; i < 3; ++i)
+						h[i] = P1->nnAL[i] * P1->Jh;
+					add_record(RUN_POLY3PLUS, P1->tool, P1->x, P1->y, P1->z, h[0], h[1], h[2], P1->Jg, t_curve, P1->v1, P1->e);
+					pdebug("1.curve to (%f,%f,%f) v0=%f h = (%f,%f,%f)", P1->x, P1->y, P1->z, P1->v1, h[0], h[1], h[2]);
+				}
 			}
 
 			if (P2->f > 0) {
-				// TODO: compute second half.
-				// second half curve
-				// start speedup
-				// constant a speedup
-				// stop speedup
-				// constant v
-			}
-
-			// Update time+dist.
-			double dist = 0;
-			double dists[3] = {P1->x - P0->x, P1->y - P0->y, P1->z - P0->z};
-			for (int i = 0; i < 3; ++i) {
-				double dst = dists[i] * dists[i];
-				if (!std::isnan(dst))
-					dist += dst;
-			}
-			dist = sqrt(dist);
-			if (dist > 0) {
-				if (std::isinf(P1->f)) {
-					if (!std::isnan(dist))
-						last_dist += dist;
+				double de = P2->e - P2->e0;
+				double total_dv = P2->f - P1->v1;
+				// Compute s and t for all parts.
+				bool have_max_a = total_dv > max_ramp_dv * 2;
+				double s_const_v, s_ramp_start, s_const_a, s_ramp_end, s_curve;
+				double t_const_v, t_ramp, t_const_a, t_curve;
+				s_curve = -P1->x0;
+				t_curve = P1->tf;
+				if (have_max_a) {
+					t_const_a = (total_dv - max_ramp_dv * 2) / max_a;
+					s_const_a = max_a / 2 * t_const_a * t_const_a;
+					t_ramp = max_ramp_t;
 				}
 				else {
-					double t = 1 / P1->f;
-					if (std::isinf(t))
-						debug("%d:wtf dist %f x %f y %f f %f", lineno, dist, P1->x, P1->y, P1->f);
-					if (!std::isnan(t))
-						last_time += t;
+					t_const_a = 0;
+					s_const_a = 0;
+					t_ramp = std::sqrt(total_dv / max_J);
+				}
+				double a_top = max_J * t_ramp;
+				double t_ramp2 = t_ramp * t_ramp;
+				double t_ramp3 = t_ramp2 * t_ramp;
+				double dv_ramp = max_J / 2 * t_ramp2;
+				s_ramp_start = P1->f * t_ramp + max_J / 6 * t_ramp3;
+				s_ramp_end = (P2->f - dv_ramp) * t_ramp + a_top / 2 * t_ramp2 - max_J / 6 * t_ramp3;
+				s_const_v = P2->length - s_curve - s_ramp_start - s_ramp_end - s_const_a;
+				t_const_v = s_const_v / P2->f;
+
+				debug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
+
+				// second half curve
+				if (s_curve > 1e-10) {
+					double g[3], h[3];
+					for (int i = 0; i < 3; ++i) {
+						g[i] = P2->unit[i] * s_curve;
+						h[i] = P1->nnLK[i] * P1->Jh;
+					}
+					add_record(RUN_POLY3MINUS, P2->tool, P1->x + g[0], P1->y + g[1], P1->z + g[2], h[0], h[1], h[2], P1->Jg, t_curve, P1->v1, P2->e0 + de * s_curve / P2->length);
+					pdebug("2.curve- to (%f,%f,%f) v=%f h (%f,%f,%f) nnLK.x=%f Jh=%f", P1->x + g[0], P1->y + g[1], P1->z + g[2], P1->v1, h[0], h[1], h[2], P1->nnLK[0], P1->Jh);
+				}
+				if (P1->v1 != P2->f) {
+					// start speedup
+					double X[3];
+					for (int i = 0; i < 3; ++i)
+						X[i] = P2->from[i] - P2->unit[i] * (s_const_v + s_ramp_end + s_const_a);
+					add_record(RUN_POLY3PLUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, max_J, t_ramp, P1->v1, P2->e0 + de * (s_curve + s_ramp_start) / P2->length);
+					pdebug("2.start to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->v1);
+					// constant a speedup
+					if (have_max_a) {
+						for (int i = 0; i < 3; ++i)
+							X[i] = P2->from[i] - P2->unit[i] * (s_const_v + s_ramp_end);
+						add_record(RUN_POLY2, P2->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P1->v1 + dv_ramp, P2->e0 + de * (s_curve + s_ramp_start + s_const_a) / P2->length);
+						pdebug("2.mid to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->v1 + dv_ramp);
+					}
+					// stop speedup
+					for (int i = 0; i < 3; ++i)
+						X[i] = P2->from[i] - P2->unit[i] * s_const_v;
+					add_record(RUN_POLY3MINUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P2->f, P2->e - de * s_const_v / P1->length);
+					pdebug("2.stop- to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P2->f);
+				}
+				// constant v
+				if (s_const_v > 1e-10) {
+					add_record(RUN_POLY3PLUS, P1->tool, P2->from[0], P2->from[1], P2->from[2], 0, 0, 0, 0, t_const_v, P2->f, P2->e);
+					pdebug("2.const v to (%f,%f,%f) v0=%f", P2->from[0], P2->from[1], P2->from[2], P2->f);
 				}
 			}
+
 			// Update bbox.
 			// Use "not larger" instead of "smaller" so NaNs are replaced.
 			if (!(P1->x > bbox[0]))
@@ -1080,27 +1143,28 @@ void Parser::flush_pending() { // {{{
 			if (!(P1->z < bbox[5]))
 				bbox[5] = P1->z;
 		}
-		++P0;
 		pending.pop_front();
 	}
 } // }}}
 
-void Parser::add_record(RunType cmd, int tool, double x, double y, double z, double Bx, double By, double Bz, double e, double v0, double v1, double radius) { // {{{
+void Parser::add_record(RunType cmd, int tool, double x, double y, double z, double hx, double hy, double hz, double Jg, double tf, double v0, double e) { // {{{
 	Run_Record r;
 	r.type = cmd;
 	r.tool = tool;
-	r.X = x;
-	r.Y = y;
-	r.Z = z;
-	r.Bx = Bx;
-	r.By = By;
-	r.Bz = Bz;
-	r.E = e;
+	r.X[0] = x;
+	r.X[1] = y;
+	r.X[2] = z;
+	r.h[0] = hx;
+	r.h[1] = hy;
+	r.h[2] = hz;
+	r.Jg = Jg;
+	r.tf = tf;
 	r.v0 = v0;
-	r.v1 = v1;
+	r.E = e;
+	r.gcode_line = lineno;
 	r.time = last_time;
-	r.dist = last_dist;
-	r.r = radius;
+	if (!std::isnan(tf))
+		last_time += tf;
 	outfile.write(reinterpret_cast <char *>(&r), sizeof(r));
 } // }}}
 

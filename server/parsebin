@@ -22,6 +22,7 @@
 import struct
 import fhs
 import math
+import sys
 
 scale = 30
 offset = 12 * scale
@@ -30,7 +31,7 @@ config = fhs.init({'src': None, 'svg': False, 'z': float('nan'), 'offset': 0.0})
 
 file = open(config['src'], 'rb')
 
-cmds = ['system', 'preline', 'line', 'goto', 'gpio', 'set T', 'wait T', 'setpos', 'wait', 'confirm', 'park', 'pattern']
+cmds = ['system', 'poly3+', 'poly3-', 'poly2', 'arc', 'goto', 'gpio', 'set T', 'wait T', 'setpos', 'wait', 'confirm', 'park', 'pattern']
 def mkcmd(t):
 	if t < len(cmds):
 		return cmds[t]
@@ -40,51 +41,108 @@ n = 0
 if config['svg']:
 	print('<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">')
 	print('<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink">')
-	print('<g fill="none" stroke-width="1">')
+	print('<g fill="none" stroke="black" stroke-width="0.01">')
 else:
-	print('type\tcommand\ttool\t      X\t      Y\t      Z\t     Bx\t     By\t     Bz\t      E\t     v0\t     v1\t   time\t   dist\t      r')
+	print('   n command tool     X     Y     Z      h[0]      h[1]      h[2]       Jg     tf    v0       E      time line')
 pos = (float('nan'), float('nan'), 0.0)
-oldx = [0, 0, 0]
+current_v = (0, 0, 0)
+current_a = (0, 0, 0)
+dataformat = '=Bl' + 'd' * 11 + 'q'
+datasize = struct.calcsize(dataformat)
+path = ''
 while True:
-	s = file.read(1 + 4 + 8 * 12)
-	if len(s) != 1 + 4 + 8 * 12:
+	s = file.read(datasize)
+	if len(s) != datasize:
 		break
-	t, T, X, Y, Z, Bx, By, Bz, E, v0, v1, time, dist, r = struct.unpack('=Bl' + 'd' * 12, s)
+	t, T, X, Y, Z, h0, h1, h2, Jg, tf, v0, E, time, line = struct.unpack(dataformat, s)
 	if not math.isnan(config['z']) and Z != config['z']:
 		n += 1
 		continue
 	if not config['svg']:
 		if mkcmd(t) == 'pattern':
 			if T > 72:
-				sys.stderr.write('Warning: invalid pattern record')
+				sys.stderr.write('Warning: invalid pattern record\n')
 			print('%d\tpattern\t%d\t%s' % (n, T, ' '.join('%02x' % x for x in s[5:5 + (T if T <= 72 else 72)])))
 		else:
-			x = [X, Y, Z]
-			dx = sum((new - old) ** 2 if not math.isnan(new - old) else 0 for old, new in zip(oldx, x)) ** .5
-			oldx = [old if math.isnan(new) else new for old, new in zip(oldx, x)]
-			dt = dx / ((v1 + v0) / 2)
-			print(('%d\t%s\t%d' + '\t%7.3f' * 13) % (n, mkcmd(t), T, X, Y, Z, Bx, By, Bz, E, v0, v1, time, dist, r, (v1 - v0) / dt if dt != 0 else float('nan')))
+			print(('%4d %7s %4d %5.2f %5.2f %5.2f %9.2f %9.2f %9.2f %8.0f %6.3f %5.1f %7.1f %9.3f %4d') % (n, mkcmd(t), T, X, Y, Z, h0, h1, h2, Jg, tf, v0, E, time, line))
 	else:
-		Y += Z * config['offset']
-		print('<!-- %d -->' % n)
-		if t == 2:
-			# Line.
-			if not math.isnan(pos[0]) and not math.isnan(pos[1]):
-				print('<circle cx="%f" cy="%f" r="1" fill="blue"/>' % (pos[0] * scale + offset, offset - pos[1] * scale))
-			if not math.isnan(X) and not math.isnan(Y):
-				print('<circle cx="%f" cy="%f" r="1" fill="blue"/>' % (X * scale + offset, offset - Y * scale))
-			if not math.isnan(pos[0]) and not math.isnan(pos[1]):
-				if not math.isnan(E) and not math.isnan(pos[2]) and E != pos[2]:
-					style = 'stroke="green"'
+		plotY = Y + Z * config['offset']
+		if t == 5:
+			# goto.
+			path += 'M%f %f' % (X, plotY)
+			pos = (X, Y, Z)
+			if sum(x ** 2 for x in current_v) > 1e-10:
+				sys.stderr.write("Warning: goto while v is not 0")
+			if sum(x ** 2 for x in current_a) > 1e-10:
+				sys.stderr.write("Warning: goto while a is not 0")
+			current_v = (0, 0, 0)
+			current_a = (0, 0, 0)
+		elif t == 1:
+			# poly3plus.
+			if math.isnan(pos[0]) or math.isnan(pos[1]):
+				sys.stderr.write('poly3plus with NaN x or y position\n')
+			else:
+				g = tuple(x - pos[i] for i, x in enumerate((X, Y, Z)))
+				leng = sum(x ** 2 for x in g) ** .5
+				Jh = sum(x ** 2 for x in (h0, h1, h2)) ** .5
+				unitg = tuple(x / leng for x in g)
+				unith = (0, 0, 0) if Jh == 0 else tuple(x / Jh for x in (h0, h1, h2))
+				newpos = tuple((Jg / 6 * tf ** 3 + v0 * tf) * unitg[i] + (Jh / 6 * tf ** 3) * unith[i] + pos[i] for i in range(3))
+				cross = tuple(current_v[(i + 1) % 3] * v0 * unitg[(i + 2) % 3] - current_v[(i + 2) % 3] * v0 * unitg[(i + 1) % 3] for i in range(3))
+				if sum(c ** 2 for c in cross) > 1e-5:
+					sys.stderr.write("Warning: start v (%f,%f,%f) and end v (%f,%f,%f) do not match for %f,%f,%f (cross %f,%f,%f)\n" % (current_v[0], current_v[1], current_v[2], v0 * unitg[0], v0 * unitg[1], v0 * unitg[2], X, Y, Z, cross[0], cross[1], cross[2]))
+				current_v = tuple((Jg / 2 * tf ** 2 + v0) * unitg[i] + Jh / 2 * tf ** 2 * unith[i] for i in range(3))
+				if sum(x ** 2 for x in current_a) > 1e-10:
+					sys.stderr.write("Warning: poly3plus while a is not 0")
+				if Jh == 0:
+					if (any(abs(n - p) > 1e-10 for n, p in zip(newpos, (X, Y, Z)))):
+						sys.stderr.write('Warning: given and computed position differ: %f,%f,%f != %f,%f,%f\n' % (X, Y, Z, newpos[0], newpos[1], newpos[2]))
+					path += 'L%f %f' % (newpos[0], newpos[1] + Z * config['offset'])
 				else:
-					style = 'stroke="black" stroke-width=".2"'
-				if Bx ** 2 + By ** 2 + Bz ** 2 < 1e-10:
-					print('<line %s x1="%f" y1="%f" x2="%f" y2="%f"/>' % (style, pos[0] * scale + offset, offset - pos[1] * scale, X * scale + offset, offset - Y * scale))
-				else:
-					print('<path %s d="M%f %fA%f %f 0 %d %d %f %f"/>' % (style, pos[0] * scale + offset, offset - pos[1] * scale, abs(r) * scale, abs(r) * scale, 0, r > 0, X * scale + offset, offset - Y * scale)) # Determine large arc flag.
-					print('<path %s d="M%f %fA%f %f 0 %d %d %f %f"/>' % (style, pos[0] * scale + offset, offset - pos[1] * scale, abs(r) * scale, abs(r) * scale, 0, r <= 0, X * scale + offset, offset - Y * scale)) # Determine large arc flag.
-			pos = (X, Y, E)
+					vgvh = (Jg / 2 * tf ** 2 + v0) / (Jh / 2 * tf ** 2)
+					dg = Jh / 6 * tf ** 3 * vgvh
+					l = Jg / 6 * tf ** 3 + v0 * tf - dg
+					control = tuple(pos[i] + unitg[i] * l for i in range(3))
+					path += 'Q%f %f,%f %f' % (control[0], control[1] + Z * config['offset'], newpos[0], newpos[1] + Z * config['offset'])
+			pos = (X, Y, Z)
+		elif t == 2:
+			# poly3minus
+			g = tuple(pos[i] - x for i, x in enumerate((X, Y, Z)))
+			leng = sum(x ** 2 for x in g) ** .5
+			Jh = sum(x ** 2 for x in (h0, h1, h2)) ** .5
+			unitg = tuple(x / leng for x in g)
+			unith = (0, 0, 0) if Jh == 0 else tuple(x / Jh for x in (h0, h1, h2))
+			frompos = tuple((Jg / 6 * tf ** 3 + v0 * tf) * unitg[i] + (Jh / 6 * tf ** 3) * unith[i] + (X, Y, Z)[i] for i in range(3))
+			new_v = tuple((Jg / 2 * tf ** 2 + v0) * unitg[i] + Jh / 2 * tf ** 2 * unith[i] for i in range(3))
+			cross = tuple(current_v[(i + 1) % 3] * new_v[(i + 2) % 3] - current_v[(i + 2) % 3] * new_v[(i + 1) % 3] for i in range(3))
+			if sum(c ** 2 for c in cross) > 1e-5:
+				sys.stderr.write("Warning: start v (%f,%f,%f) and end v (%f,%f,%f) do not match for %f,%f,%f (cross %f,%f,%f)\n" % (current_v[0], current_v[1], current_v[2], new_v[0], new_v[1], new_v[2], X, Y, Z, cross[0], cross[1], cross[2]))
+			current_v = tuple(v0 * -unitg[i] for i in range(3))
+			new_a = tuple(Jg * tf * unitg[i] + Jh * tf * unith[i] for i in range(3))
+			cross = tuple(current_a[(i + 1) % 3] * new_a[(i + 2) % 3] - current_a[(i + 2) % 3] * new_a[(i + 1) % 3] for i in range(3))
+			if sum(c ** 2 for c in cross) > 1e-5:
+				sys.stderr.write("Warning: start a (%f,%f,%f) and end a (%f,%f,%f) do not match for %f,%f,%f (cross %f,%f,%f)\n" % (current_a[0], current_a[1], current_a[2], new_a[0], new_a[1], new_a[2], X, Y, Z, cross[0], cross[1], cross[2]))
+			current_a = (0, 0, 0)
+			if (any(abs(n - p) > 1e-10 for n, p in zip(newpos, frompos))):
+				sys.stderr.write('Warning: position in arc differ: %f,%f,%f != %f,%f,%f\n' % (newpos[0], newpos[1], newpos[2], frompos[0], frompos[1], frompos[2]))
+			denominator = Jh / 2 * tf ** 2
+			vgvh = (Jg / 2 * tf ** 2 + v0) / (Jh / 2 * tf ** 2) if denominator != 0 else 0
+			dg = Jh / 6 * tf ** 3 * vgvh
+			l = Jg / 6 * tf ** 3 + v0 * tf - dg
+			control = tuple((X, Y, Z)[i] + unitg[i] * l for i in range(3))
+			#path += 'M%f %f' % (X, plotY)
+			path += 'Q%f %f,%f %f' % (control[0], control[1] + Z * config['offset'], X, plotY)
+			pos = (X, Y, Z)
+		elif t == 3:
+			# poly2
+			pos = (X, Y, Z)
+			# TODO
+		elif t == 4:
+			# arc
+			pos = (X, Y, Z)
+			# TODO
 	n += 1
 if config['svg']:
+	print('<path d="%s"/>' % path);
 	print('</g>')
 	print('</svg>')

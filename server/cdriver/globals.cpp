@@ -93,11 +93,12 @@ bool globals_load() {
 	max_deviation = shmem->floats[1];
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
+	max_J = shmem->floats[4];
 	current_extruder = shmem->ints[14];
-	targetx = shmem->floats[4];
-	targety = shmem->floats[5];
-	targetangle = shmem->floats[6];
-	zoffset = shmem->floats[7];
+	targetx = shmem->floats[5];
+	targety = shmem->floats[6];
+	targetangle = shmem->floats[7];
+	zoffset = shmem->floats[8];
 	bool store = shmem->ints[15];
 	if (store && !store_adc) {
 		store_adc = fopen("/tmp/franklin-adc-dump", "a");
@@ -133,8 +134,9 @@ void globals_save() {
 	shmem->floats[1] = max_deviation;
 	shmem->floats[2] = max_v;
 	shmem->floats[3] = max_a;
-	shmem->floats[4] = targetx;
-	shmem->floats[5] = targety;
-	shmem->floats[6] = targetangle;
-	shmem->floats[7] = zoffset;
+	shmem->floats[4] = max_J;
+	shmem->floats[5] = targetx;
+	shmem->floats[6] = targety;
+	shmem->floats[7] = targetangle;
+	shmem->floats[8] = zoffset;
 }

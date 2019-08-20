@@ -70,6 +70,7 @@ void setup()
 	max_deviation = 0;
 	max_v = 100;
 	max_a = 10000;
+	max_J = 10000;
 	targetx = 0;
 	targety = 0;
 	zoffset = 0;
@@ -129,7 +130,6 @@ void connect_end() {
 		history[f].queue_end = 0;
 		history[f].queue_full = false;
 		history[f].run_time = 0;
-		history[f].run_dist = 0;
 	}
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
