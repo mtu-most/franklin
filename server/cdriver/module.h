@@ -45,7 +45,7 @@ struct MoveCommand {
 	int probe, single, reverse;
 	double v0;
 	int tool;	// Negative value means follower ~tool.
-	double g[3];
+	double target[3];
 	double h[3];
 	double unitg[3];
 	double unith[3];
@@ -179,6 +179,32 @@ template <typename T> inline T max(T a, T b) {
 }
 template <> inline double max <double>(double a, double b) {
 	return a > b || std::isnan(b) ? a : b;
+}
+
+static inline double compute_max_v(double x, double v, double max_J, double max_a) {
+	// Compute maximum vf that can be reached starting from v with J on length x.
+
+	// Time for maximum ramp.
+	double t_ramp_max = max_a / max_J;
+	double dv_ramp_max = max_a * max_a / (2 * max_J);
+	double x_ramp_max = max_a * max_a * max_a / (3 * max_J * max_J) + (2 * v + dv_ramp_max) * max_a / max_J;
+	if (x_ramp_max <= x) {
+		// Ramp fits on segment, compute size of middle part.
+		double a = max_J / 2;
+		double b = v + 3 * dv_ramp_max;
+		double c = max_J / 3 * t_ramp_max * t_ramp_max * t_ramp_max + (2 * v + dv_ramp_max) * t_ramp_max - x;
+		double t_const_a = (-b + std::sqrt(b * b - 4 * a * c)) / (2 * a);
+		return v + 2 * dv_ramp_max + max_a * t_const_a;
+	}
+	else {
+		// Ramp does not fit on segment.
+		double J2 = max_J * max_J;
+		double J3 = J2 * max_J;
+		double J4 = J2 * J2;
+		double k = std::pow(15 * J2 * x + sqrt(5 * (45 * J4 * x * x + 64 * J3 * v * v * v)), 1. / 3);
+		double t_ramp = k / (std::pow(5, 2. / 3) * max_J) - 4 * v / (std::pow(5, 1. / 3) * k);
+		return v + max_J * t_ramp * t_ramp;
+	}
 }
 
 #ifdef MODULE

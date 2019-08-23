@@ -115,10 +115,11 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 	// strings
 	// int32_t stringlengths[]
 	// int32_t numstrings
-	// double bbox[8]
-	run_file_num_strings = read_num(run_file_size - sizeof(double) * 8 - sizeof(int32_t));
+	// double bbox[6]
+	// double time
+	run_file_num_strings = read_num(run_file_size - sizeof(double) * 7 - sizeof(int32_t));
 	strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
-	off_t pos = run_file_size - sizeof(double) * 8 - sizeof(int32_t) - sizeof(int32_t) * run_file_num_strings;
+	off_t pos = run_file_size - sizeof(double) * 7 - sizeof(int32_t) - sizeof(int32_t) * run_file_num_strings;
 	off_t current = 0;
 	for (int i = 0; i < run_file_num_strings; ++i) {
 		strings[i].start = current;
@@ -209,6 +210,7 @@ void run_file_fill_queue() {
 	rundebug("run queue, current = %d/%d wait = %d tempwait = %d q = %d %d %d finish = %d", settings.run_file_current, run_file_num_records, run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start, settings.queue_full, run_file_finishing);
 	int cbs = 0;
 	bool must_move = true;
+	double lastpos[3] = {0, 0, 0};
 	while (must_move) {
 		must_move = false;
 		while (run_file_map	// There is a file to run.
@@ -243,12 +245,31 @@ void run_file_fill_queue() {
 					double y = r.X[1] * run_file_cosa + r.X[0] * run_file_sina + run_file_refy;
 					double z = r.X[2];
 					//debug("line %d: %f %f %f", settings.run_file_current, x, y, z);
-					queue[settings.queue_end].g[0] = x;
-					queue[settings.queue_end].g[1] = y;
-					queue[settings.queue_end].g[2] = handle_probe(x, y, z);
+					queue[settings.queue_end].target[0] = x;
+					queue[settings.queue_end].target[1] = y;
+					queue[settings.queue_end].target[2] = handle_probe(x, y, z);
 					queue[settings.queue_end].h[0] = r.h[0];
 					queue[settings.queue_end].h[1] = r.h[1];
 					queue[settings.queue_end].h[2] = r.h[2];
+					double distg = 0, disth = 0;
+					for (int i = 0; i < 3; ++i) {
+						double d = queue[settings.queue_end].target[i] - lastpos[i];
+						if (!std::isnan(d))
+							distg += d * d;
+						d = queue[settings.queue_end].h[i];
+						if (!std::isnan(d))
+							disth += d * d;
+						queue[settings.queue_end].abc[i] = 0;
+					}
+					distg = std::sqrt(distg);
+					disth = std::sqrt(disth);
+					for (int i = 0; i < 3; ++i) {
+						queue[settings.queue_end].unitg[i] = (queue[settings.queue_end].target[i] - lastpos[i]) / distg;
+						queue[settings.queue_end].unith[i] = queue[settings.queue_end].h[i] / disth;
+					}
+					queue[settings.queue_end].Jg = r.Jg;
+					queue[settings.queue_end].Jh = disth;
+					queue[settings.queue_end].tf = r.tf;
 					queue[settings.queue_end].e = r.E;
 					queue[settings.queue_end].tool = r.tool;
 					queue[settings.queue_end].time = r.time;
@@ -257,6 +278,8 @@ void run_file_fill_queue() {
 					if (pattern_size > 0)
 						memcpy(queue[settings.queue_end].pattern, current_pattern, pattern_size);
 					pattern_size = 0;
+					for (int i = 0; i < 3; ++i)
+						lastpos[i] = queue[settings.queue_end].target[i];
 					settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
 					break;
 				}
@@ -274,15 +297,19 @@ void run_file_fill_queue() {
 					move.pattern_size = 0;
 					move.v0 = r.v0;
 					move.tool = r.tool;
-					move.g[0] = r.X[0];
-					move.g[1] = r.X[1];
-					move.g[2] = r.X[2];
+					move.target[0] = r.X[0];
+					move.target[1] = r.X[1];
+					move.target[2] = r.X[2];
 					move.h[0] = 0;
 					move.h[1] = 0;
 					move.h[2] = 0;
 					move.e = r.E;
 					move.time = r.time;
 					go_to(false, &move, false);
+					for (int i = 0; i < 3; ++i) {
+						if (!std::isnan(r.X[i]))
+							lastpos[i] = r.X[i];
+					}
 					break;
 				}
 				case RUN_PATTERN:

@@ -145,7 +145,7 @@ struct Temp {
 // Variables defining the current move:
 // double P[3]: Point in the middle of the line between start and end point.
 // double A[3], B[3]: vectors from P to end point and half way point on arc respectively.
-// double end_time: time when current arc is completed.
+// int32_t end_time: time when current arc is completed.
 // double v0, v1: start and end speed of the move.
 // double dist: length of segment, along the arc.
 // double alpha_max: angle between lines through center of arc through mid point and begin/end point.

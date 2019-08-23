@@ -70,7 +70,7 @@ static inline char send_to_child(char cmd) {
 	}
 	else if (p > 0) {
 		debug("send_to_child: data was ready before request was sent");
-		abort();
+		exit(1);
 	}
 	if (cmd != (char)-1) {
 		//debug("actually writing");
@@ -164,7 +164,7 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 	const char *keywordnames[] = {"tool", "x", "y", "z", "a", "b", "c", "e", "v", "single", "probe", "relative", NULL};
 	if (!PyArg_ParseTupleAndKeywords(args, keywords, "idddddddd|ppp", const_cast <char **>(keywordnames),
 				&shmem->move.tool,
-				&shmem->move.g[0], &shmem->move.g[1], &shmem->move.g[2],
+				&shmem->move.target[0], &shmem->move.target[1], &shmem->move.target[2],
 				&shmem->move.abc[0], &shmem->move.abc[1], &shmem->move.abc[2],
 				&shmem->move.e,
 				&shmem->move.v0,
@@ -176,7 +176,7 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 		shmem->move.v0 = INFINITY;
 	if (shmem->move.v0 == 0) {
 		debug("Invalid speed");
-		abort();
+		exit(1);
 		Py_RETURN_TRUE;
 	}
 	send_to_child(CMD_MOVE);
@@ -765,7 +765,7 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 	char c;
 	if (read(interrupt, &c, 1) != 1) {
 		debug("unable to read interrupt");
-		abort();
+		exit(1);
 	}
 	PyObject *ret;
 	if (DEBUG_FUNCTIONS) {
@@ -825,7 +825,7 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		break;
 	}
 	if (write(interrupt_reply, &c, 1) != 1)
-		abort();
+		exit(1);
 	return ret;
 }
 

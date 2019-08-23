@@ -39,14 +39,21 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	double vmax = NAN;
 	double amax = NAN;
 	double dist = NAN;
+	double unit[3] = {0, 0, 0};
+	double target[3];
 	for (int a = 0; a < 3; ++a) {
 		if (spaces[0].num_axes <= a)
 			break;
 		double pos = spaces[0].axis[a]->settings.current;
-		//debug("prepare move, pos[%d] = %f + %f", a, pos, move->g[a]);
-		if (std::isnan(pos) || std::isnan(move->g[a]))
+		debug("prepare move, pos[%d]: %f -> %f", a, pos, move->target[a]);
+		if (std::isnan(pos))
 			continue;
-		double d = move->g[a] + (a == 2 ? zoffset : 0) - (relative ? 0 : pos);
+		if (std::isnan(move->target[a]))
+			target[a] = (relative ? 0 : pos) - (a == 2 ? zoffset : 0);
+		else
+			target[a] = move->target[a];
+		double d = target[a] + (a == 2 ? zoffset : 0) - (relative ? 0 : pos);
+		unit[a] = d;
 		if (std::isnan(dist))
 			dist = d * d;
 		else
@@ -56,7 +63,13 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		dist = std::sqrt(dist);
 		vmax = max_v;
 		amax = max_a;
-		//debug("dist = %f", dist);
+		for (int i = 0; i < 3; ++i)
+			unit[i] /= dist;
+		debug("dist = %f", dist);
+	}
+	else {
+		for (int i = 0; i < 3; ++i)
+			unit[i] = 0;
 	}
 	if (std::isnan(dist) || dist < 1e-10) {
 		for (int a = 3; a < 6; ++a) {
@@ -65,7 +78,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 			double pos = spaces[0].axis[a]->settings.current;
 			if (std::isnan(pos))
 				continue;
-			double d = std::fabs(move->g[a] - (relative ? 0 : pos));
+			double d = std::fabs(target[a] - (relative ? 0 : pos));
 			if (std::isnan(dist) || dist < d) {
 				dist = d;
 				vmax = spaces[0].motor[a]->limit_v;
@@ -113,54 +126,78 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		settings.queue_end = 0;
 		return 1;
 	}
-	// x = 1/2at**2 => t=sqrt(2x/a), v=at=sqrt(2ax)
-	vmax = min(vmax, std::sqrt(dist * amax));
-	vmax = min(vmax, move->v0);
-	// t=v/a => x = v**2/(2a)
-	double ramp = (vmax * vmax / (2 * amax)) / dist;
-	//debug("ramp %f vmax %f amax %f", ramp, vmax, amax);
-	for (int i = 0; i < 3; ++i) {
-		memcpy(&queue[i], move, sizeof(MoveCommand));
+
+	double reachable_v = compute_max_v(dist / 2, 0, max_J, amax);
+	vmax = min(vmax, reachable_v);
+	double max_ramp_dv = amax * amax / (2 * max_J);
+	// Initialize the queue. At most 7 items will be used.
+	for (int i = 0; i < 7; ++i) {
 		queue[i].cb = false;
-		queue[i].h[0] = 0;
-		queue[i].h[1] = 0;
-		queue[i].h[2] = 0;
-	}
-	for (int a = 0; a < 6; ++a) {
-		if (a >= spaces[0].num_axes) {
-			queue[0].g[a] = NAN;
-			queue[1].g[a] = NAN;
-			queue[2].g[a] = NAN;
-			continue;
+		queue[i].probe = false;
+		queue[i].single = false;
+		queue[i].reverse = false;
+		queue[i].tool = move->tool;
+		for (int j = 0; j < 3; ++j) {
+			queue[i].h[j] = 0;
+			queue[i].unitg[j] = unit[j];
+			queue[i].unith[j] = 0;
+			queue[i].abc[j] = 0;
 		}
-		// This part is in user coordinates, so remove zoffset and extruder offset. TODO: remove extruder offset.
-		double pos = spaces[0].axis[a]->settings.current - (a == 2 ? zoffset : 0);
-		if (std::isnan(pos))
+		queue[i].Jh = 0;
+		queue[i].time = move->time;
+		queue[i].pattern_size = 0;
+	}
+	double dv_ramp, t_max_a;
+	if (max_ramp_dv * 2 >= vmax) {
+		// ramp up, ramp down, const v, ramp down, ramp up.
+		dv_ramp = vmax / 2;
+		t_max_a = 0;
+	}
+	else {
+		// ramp up, const a, ramp down, const v, ramp down, const a, ramp up.
+		dv_ramp = max_ramp_dv;
+		t_max_a = (vmax - 2 * dv_ramp) / amax;
+	}
+	int q = 0;
+	double t_ramp = std::sqrt(2 * dv_ramp / max_J);
+	double s_ramp_up = max_J / 6 * t_ramp * t_ramp * t_ramp;
+	double s_ramp_down = -max_J / 6 * t_ramp * t_ramp * t_ramp + (2 * dv_ramp) * t_ramp;
+	double s_const_a = amax / 2 * t_max_a * t_max_a;
+	double s_const_v = dist - 2 * (s_ramp_up + s_ramp_down + s_const_a);
+	double t_const_v = s_const_v / vmax;
+
+	double s[7] = {s_ramp_up, s_const_a, s_ramp_down, s_const_v, s_ramp_down, s_const_a, s_ramp_up};
+	double t[7] = {t_ramp, t_max_a, t_ramp, t_const_v, t_ramp, t_max_a, t_ramp};
+	double J[7] =     {max_J,       0, -max_J,     0, -max_J,              0, max_J};
+	double v0[7] =    {    0, dv_ramp,   vmax,  vmax,   vmax, vmax - dv_ramp,     0};
+	bool reverse[7] = {false,   false,   true, false,  false,          false,  true};
+	double X[3];
+	for (int i = 0; i < 3; ++i)
+		X[i] = spaces[0].axis[i]->settings.current;
+	for (int part = 0; part < 7; ++part) {
+		if (s[part] < 1e-10)
 			continue;
-		double d = queue[2].g[a] - (relative ? 0 : pos);
-		queue[0].g[a] = pos + d * ramp;
-		queue[1].g[a] = pos + d * (1 - ramp);
+		for (int i = 0; i < 3; ++i) {
+			X[i] += unit[i] * s[part];
+			queue[q].target[i] = X[i];
+		}
+		debug("target %d: %f,%f,%f", part, X[0], X[1], X[2]);
+		queue[q].Jg = J[part];
+		queue[q].tf = t[part];
+		queue[q].v0 = v0[part];
+		queue[q].reverse = reverse[part];
+		queue[q].e = move->e * s[part] / dist;
+		q += 1;
 	}
-	if (tool >= 0 && tool < spaces[1].num_axes) {
-		double pos = spaces[1].axis[tool]->settings.current;
-		double d = move->e - (relative ? 0 : pos);
-		queue[0].e = pos + d * ramp;
-		queue[1].e = pos + d * (1 - ramp);
-		queue[2].e = pos + d;
-	}
-	else if (tool < 0) {
-		double pos = spaces[2].axis[~tool]->settings.current;
-		double d = move->e - (relative ? 0 : pos);
-		queue[0].e = pos + d * ramp;
-		queue[1].e = pos + d * (1 - ramp);
-		queue[2].e = pos + d;
-	}
-	queue[0].v0 = 0;
-	queue[1].v0 = vmax;
-	queue[2].v0 = vmax;
+	settings.queue_end = q;
+
 	if (cb)
-		queue[2].cb = true;
-	//debug("starting move (dist = %f, ramp=%f, tool=%d e=%f) single=%d", dist, ramp, tool, move->e, move->single);
+		queue[q - 1].cb = true;
+	debug("goto dir=%f,%f,%f, dist=%f, tool=%d e=%f single=%d", unit[0], unit[1], unit[2], dist, tool, move->e, move->single);
+	debug("goto s %f,%f,%f,%f,%f,%f,%f", s[0], s[1], s[2], s[3], s[4], s[5], s[6]);
+	debug("goto t %f,%f,%f,%f,%f,%f,%f", t[0], t[1], t[2], t[3], t[4], t[5], t[6]);
+	debug("goto J %f,%f,%f,%f,%f,%f,%f", J[0], J[1], J[2], J[3], J[4], J[5], J[6]);
+	debug("goto v0 %f,%f,%f,%f,%f,%f,%f", v0[0], v0[1], v0[2], v0[3], v0[4], v0[5], v0[6]);
 	int new_num_movecbs = next_move(settings.hwtime);
 	bool ret = 0;
 	if (new_num_movecbs > 0) {

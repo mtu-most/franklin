@@ -805,7 +805,7 @@ class Machine: # {{{
 			self.movewait += 1
 			#log('movewait +1 -> %d' % self.movewait)
 			#log('move args: ' + repr((self.current_extruder, move, e, v, single, probe, rel)))
-			self.wait = cdriver.move(*([self.current_extruder] + move + [0, 0, 0, e, v]), single = single, probe = probe, relative = rel)
+			self.wait = cdriver.move(*([self.current_extruder] + move + [e, v]), single = single, probe = probe, relative = rel)
 		if self.flushing is None and not self.wait:
 			self.flushing = False
 		#log('queue done %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))

@@ -49,7 +49,7 @@ struct Parser { // {{{
 		double normal[3];
 		double time;
 		std::string pattern;
-		Record(bool arc_, int tl, double x_, double y_, double z_, double a_, double b_, double c_, double f_, double e_, double cx = NAN, double cy = NAN, double cz = NAN, double nx = NAN, double ny = NAN, double nz = NAN) : arc(arc_), tool(tl), x(x_), y(y_), z(z_), a(a_), b(b_), c(c_), f(f_), e(e_) {
+		Record(int gcode_line, bool arc_, int tl, double x_, double y_, double z_, double a_, double b_, double c_, double f_, double e_, double cx = NAN, double cy = NAN, double cz = NAN, double nx = NAN, double ny = NAN, double nz = NAN) : arc(arc_), tool(tl), x(x_), y(y_), z(z_), a(a_), b(b_), c(c_), f(f_), e(e_), gcode_line(gcode_line) {
 			center[0] = cx;
 			center[1] = cy;
 			center[2] = cz;
@@ -70,6 +70,7 @@ struct Parser { // {{{
 		double dev;	// actual maximum deviation from line.
 		double tf;	// time for curve.
 		double Jg, Jh;	// Jerk along and perpendicular to segment.
+		int gcode_line;
 	}; // }}}
 	// Variables. {{{
 	std::ifstream infile;
@@ -114,14 +115,14 @@ struct Parser { // {{{
 	double read_fraction();
 	void handle_coordinate(double value, int index, bool *controlled, bool rel);
 	void flush_pending();
-	void add_record(RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double hx = 0, double hy = 0, double hz = 0, double Jg = 0, double tf = NAN, double v0 = NAN, double e = NAN);
+	void add_record(int gcode_line, RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double hx = 0, double hy = 0, double hz = 0, double Jg = 0, double tf = NAN, double v0 = NAN, double e = NAN);
 	void reset_pending_pos();
 	// }}}
 }; // }}}
 
 void Parser::reset_pending_pos() { // {{{
 	pending.pop_front();
-	pending.push_front(Record(false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, unsigned(current_tool) < epos.size() ? epos[current_tool] : NAN));
+	pending.push_front(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, unsigned(current_tool) < epos.size() ? epos[current_tool] : NAN));
 } // }}}
 
 bool Parser::get_chunk(Chunk &ret, std::string &comment) { // {{{
@@ -257,12 +258,12 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					if (handle_pattern)
 						debug("Warning: not handling pattern because position is unknown");
 					flush_pending();
-					add_record(RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], NAN, NAN, current_f[code == 0 ? 0 : 1], epos[current_tool]);
+					add_record(lineno, RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], NAN, NAN, current_f[code == 0 ? 0 : 1], epos[current_tool]);
 					reset_pending_pos();
 					break;
 				}
 				if (code != 81) {
-					pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], current_f[code == 0 ? 0 : 1], epos[current_tool]));
+					pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], current_f[code == 0 ? 0 : 1], epos[current_tool]));
 					if (handle_pattern && code == 1)
 						pending.back().pattern = pattern_data;
 					pattern_data.clear();
@@ -273,15 +274,15 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					flush_pending();
 					// Only support OLD_Z (G90) retract mode; don't support repeats(L).
 					// goto x, y
-					pending.push_back(Record(false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
+					pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
 					// goto r
-					pending.push_back(Record(false, current_tool, pos[0], pos[1], r, NAN, NAN, NAN, INFINITY, NAN));
+					pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], r, NAN, NAN, NAN, INFINITY, NAN));
 					// goto z
 					if (pos[2] != r) {
-						pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], NAN, NAN, NAN, current_f[1], NAN));
+						pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], NAN, NAN, NAN, current_f[1], NAN));
 					}
 					// go back to old z
-					pending.push_back(Record(false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
+					pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
 					// update pos[2].
 					pos[2] = oldpos[2];
 				}
@@ -345,7 +346,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				center[1] = pos[1] + (std::isnan(J) ? 0 : J * unit);
 				center[2] = pos[2] + (std::isnan(K) ? 0 : K * unit);
 				int s = code == 2 ? -1 : 1;
-				pending.push_back(Record(true, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], -current_f[1], epos[current_tool], center[0], center[1], center[2], s * arc_normal[0], s * arc_normal[1], s * arc_normal[2]));
+				pending.push_back(Record(lineno, true, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], -current_f[1], epos[current_tool], center[0], center[1], center[2], s * arc_normal[0], s * arc_normal[1], s * arc_normal[2]));
 			}
 			break;
 		case 4:
@@ -358,7 +359,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 						t = arg.num / 1000;
 				}
 				flush_pending();
-				add_record(RUN_WAIT, 0, t);
+				add_record(lineno, RUN_WAIT, 0, t);
 				last_time += t;
 			}
 			break;
@@ -387,7 +388,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			// Park.
 			epos[current_tool] = 0;
 			flush_pending();
-			add_record(RUN_PARK);
+			add_record(lineno, RUN_PARK);
 			for (unsigned i = 0; i < pos.size(); ++i)
 				pos[i] = NAN;
 			reset_pending_pos();
@@ -425,7 +426,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				}
 				epos[current_tool] = arg.num;
 				flush_pending();
-				add_record(RUN_SETPOS, current_tool, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, arg.num);
+				add_record(lineno, RUN_SETPOS, current_tool, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, arg.num);
 				reset_pending_pos();
 			}
 			break;
@@ -451,7 +452,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		case 0:
 			// Request confirmation.
 			flush_pending();
-			add_record(RUN_CONFIRM, add_string(message), tool_changed ? 1 : 0);
+			add_record(lineno, RUN_CONFIRM, add_string(message), tool_changed ? 1 : 0);
 			tool_changed = false;
 			break;
 		case 2:
@@ -459,17 +460,17 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		case 3:
 			// Spindle on, clockwise.
 			flush_pending();
-			add_record(RUN_GPIO, -3, std::isnan(s) ? spindle_speed : s);
+			add_record(lineno, RUN_GPIO, -3, std::isnan(s) ? spindle_speed : s);
 			break;
 		case 4:
 			// Spindle on, counterclockwise.
 			flush_pending();
-			add_record(RUN_GPIO, -3, std::isnan(s) ? spindle_speed : s);
+			add_record(lineno, RUN_GPIO, -3, std::isnan(s) ? spindle_speed : s);
 			break;
 		case 5:
 			// Spindle off.
 			flush_pending();
-			add_record(RUN_GPIO, -3, 0);
+			add_record(lineno, RUN_GPIO, -3, 0);
 			break;
 		case 9:
 			// Coolant off.  Ignore.
@@ -490,7 +491,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					debug("%d:M42 needs both P and S arguments.", lineno);
 					break;
 				}
-				add_record(RUN_GPIO, p, s);
+				add_record(lineno, RUN_GPIO, p, s);
 			}
 			break;
 		case 82:
@@ -521,18 +522,18 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					debug("%d:M104 needs S argument.", lineno);
 					break;
 				}
-				add_record(RUN_SETTEMP, have_t ? t : e, s + C0);
+				add_record(lineno, RUN_SETTEMP, have_t ? t : e, s + C0);
 			}
 			break;
 		case 106:
 			// Fan on.
 			flush_pending();
-			add_record(RUN_GPIO, -2, std::isnan(s) ? 1 : s);
+			add_record(lineno, RUN_GPIO, -2, std::isnan(s) ? 1 : s);
 			break;
 		case 107:
 			// Fan off.
 			flush_pending();
-			add_record(RUN_GPIO, -2, 0);
+			add_record(lineno, RUN_GPIO, -2, 0);
 			break;
 		case 190:
 			e = -1;
@@ -552,14 +553,14 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				if (!have_t)
 					t = e;
 				if (!std::isnan(s))
-					add_record(RUN_SETTEMP, t, s + C0);
-				add_record(RUN_WAITTEMP, t);
+					add_record(lineno, RUN_SETTEMP, t, s + C0);
+				add_record(lineno, RUN_WAITTEMP, t);
 			}
 			break;
 		case 116:
 			// Wait for all temperatures to reach their target.
 			flush_pending();
-			add_record(RUN_WAITTEMP, -2);
+			add_record(lineno, RUN_WAITTEMP, -2);
 			break;
 		default:
 			// Command was not handled: complain.
@@ -577,7 +578,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		current_tool = code;
 		// Move to current position for extruder offset correction.
 		flush_pending();
-		pending.push_back(Record(false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, epos[current_tool]));
+		pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, epos[current_tool]));
 	} // }}}
 	else {
 		// Command was not handled: complain.
@@ -707,7 +708,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	current_f[0] = INFINITY;
 	current_f[1] = INFINITY;
 	// Pending initial state contains the current position.
-	pending.push_front(Record(false, 0, NAN, NAN, NAN, NAN, NAN, NAN, INFINITY, NAN));
+	pending.push_front(Record(lineno, false, 0, NAN, NAN, NAN, NAN, NAN, NAN, INFINITY, NAN));
 	max_dev = max_deviation;
 	for (int i = 0; i < 6; ++i) {
 		pos.push_back(NAN);
@@ -731,7 +732,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 		if (comment.substr(0, 7) == "SYSTEM:") {
 			int s = add_string(comment.substr(7));
 			flush_pending();
-			add_record(RUN_SYSTEM, s);
+			add_record(lineno, RUN_SYSTEM, s);
 		}
 		if (comment.substr(0, 4) == "PATTERN:") {
 			// Decode base64 code for pattern.
@@ -832,32 +833,6 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	outfile.write(reinterpret_cast <char *>(&last_time), sizeof(last_time));
 } // }}}
 
-static double compute_max_v(double x, double v, double J) { // {{{
-	// Compute maximum vf that can be reached starting from v with J on length x.
-
-	// Time for maximum ramp.
-	double t_ramp_max = max_a / max_J;
-	double dv_ramp_max = max_a * max_a / (2 * max_J);
-	double x_ramp_max = max_a * max_a * max_a / (3 * max_J * max_J) + (2 * v + dv_ramp_max) * max_a / max_J;
-	if (x_ramp_max <= x) {
-		// Ramp fits on segment, compute size of middle part.
-		double a = max_J / 2;
-		double b = v + 3 * dv_ramp_max;
-		double c = max_J / 3 * t_ramp_max * t_ramp_max * t_ramp_max + (2 * v + dv_ramp_max) * t_ramp_max - x;
-		double t_const_a = (-b + std::sqrt(b * b - 4 * a * c)) / (2 * a);
-		return v + 2 * dv_ramp_max + max_a * t_const_a;
-	}
-	else {
-		// Ramp does not fit on segment.
-		double J2 = max_J * max_J;
-		double J3 = J2 * max_J;
-		double J4 = J2 * J2;
-		double k = std::pow(15 * J2 * x + sqrt(5 * (45 * J4 * x * x + 64 * J3 * v * v * v)), 1. / 3);
-		double t_ramp = k / (std::pow(5, 2. / 3) * max_J) - 4 * v / (std::pow(5, 1. / 3) * k);
-		return v + max_J * t_ramp * t_ramp;
-	}
-} // }}}
-
 void Parser::flush_pending() { // {{{
 	if (pending.size() <= 1)
 		return;
@@ -939,7 +914,7 @@ void Parser::flush_pending() { // {{{
 	auto P2 = ++ ++pending.begin();
 	while (P2 != pending.end()) {
 		double s = -std::tan(P1->theta / 2);
-		P1->dev = std::min(max_deviation, std::min(P1->length, P2->length) / (6 * -s * std::sin(P1->theta / 2)));
+		P1->dev = std::min(max_dev, std::min(P1->length, P2->length) / (6 * -s * std::sin(P1->theta / 2)));
 		P1->x0 = 6 * s * P1->dev * std::sin(P1->theta / 2);
 		if (std::isnan(s) || std::isnan(P1->dev) || std::isnan(P1->x0)) {
 			s = 0;
@@ -960,8 +935,8 @@ void Parser::flush_pending() { // {{{
 		P1->Jg = P1->Jh * s;
 
 		// Check if v0/v2 should be lowered.
-		double v0 = compute_max_v(P1->length + P1->x0, P1->v1, max_J);
-		double v2 = compute_max_v(P2->length + P1->x0, P1->v1, max_J);
+		double v0 = compute_max_v(P1->length + P1->x0, P1->v1, max_J, max_a);
+		double v2 = compute_max_v(P2->length + P1->x0, P1->v1, max_J, max_a);
 		if (v2 < P2->f)
 			P2->f = v2;
 		if (v0 < P1->f) {
@@ -1028,7 +1003,7 @@ void Parser::flush_pending() { // {{{
 					double X[3];
 					for (int i = 0; i < 3; ++i)
 						X[i] = P1->from[i] + P1->unit[i] * s_const_v;
-					add_record(RUN_POLY3PLUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, 0, t_const_v, P1->f, P1->e0 + de * s_const_v / P1->length);
+					add_record(P1->gcode_line, RUN_POLY3PLUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, 0, t_const_v, P1->f, P1->e0 + de * s_const_v / P1->length);
 					pdebug("1.const v to (%f,%f,%f) v=%f", X[0], X[1], X[2], P1->f);
 				}
 				if (P1->v1 != P1->f) {
@@ -1036,19 +1011,19 @@ void Parser::flush_pending() { // {{{
 					double X[3];
 					for (int i = 0; i < 3; ++i)
 						X[i] = P1->from[i] + P1->unit[i] * (s_const_v + s_ramp_start);
-					add_record(RUN_POLY3PLUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P1->f, P1->e0 + de * (s_const_v + s_ramp_start) / P1->length);
+					add_record(P1->gcode_line, RUN_POLY3PLUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P1->f, P1->e0 + de * (s_const_v + s_ramp_start) / P1->length);
 					pdebug("1.start to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->f);
 					// constant a slowdown
 					if (have_max_a) {
 						for (int i = 0; i < 3; ++i)
 							X[i] = P1->from[i] + P1->unit[i] * (s_const_v + s_ramp_start + s_const_a);
-						add_record(RUN_POLY2, P1->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P1->f - dv_ramp, P1->e0 + de * (s_const_v + s_ramp_start + s_const_a) / P1->length);
+						add_record(P1->gcode_line, RUN_POLY2, P1->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P1->f - dv_ramp, P1->e0 + de * (s_const_v + s_ramp_start + s_const_a) / P1->length);
 						pdebug("1.const a to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->f - dv_ramp);
 					}
 					// stop slowdown
 					for (int i = 0; i < 3; ++i)
 						X[i] = P1->from[i] + P1->unit[i] * (P1->length - s_curve);
-					add_record(RUN_POLY3MINUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, max_J, t_ramp, P1->v1, P1->e0 + de * (P1->length - s_curve) / P1->length);
+					add_record(P1->gcode_line, RUN_POLY3MINUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, max_J, t_ramp, P1->v1, P1->e0 + de * (P1->length - s_curve) / P1->length);
 					pdebug("1.stop- to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->v1);
 				}
 				// first half curve
@@ -1056,7 +1031,7 @@ void Parser::flush_pending() { // {{{
 					double h[3];
 					for (int i = 0; i < 3; ++i)
 						h[i] = P1->nnAL[i] * P1->Jh;
-					add_record(RUN_POLY3PLUS, P1->tool, P1->x, P1->y, P1->z, h[0], h[1], h[2], P1->Jg, t_curve, P1->v1, P1->e);
+					add_record(P1->gcode_line, RUN_POLY3PLUS, P1->tool, P1->x, P1->y, P1->z, h[0], h[1], h[2], P1->Jg, t_curve, P1->v1, P1->e);
 					pdebug("1.curve to (%f,%f,%f) v0=%f h = (%f,%f,%f)", P1->x, P1->y, P1->z, P1->v1, h[0], h[1], h[2]);
 				}
 			}
@@ -1084,7 +1059,7 @@ void Parser::flush_pending() { // {{{
 				double t_ramp2 = t_ramp * t_ramp;
 				double t_ramp3 = t_ramp2 * t_ramp;
 				double dv_ramp = max_J / 2 * t_ramp2;
-				s_ramp_start = P1->f * t_ramp + max_J / 6 * t_ramp3;
+				s_ramp_start = P1->v1 * t_ramp + max_J / 6 * t_ramp3;
 				s_ramp_end = (P2->f - dv_ramp) * t_ramp + a_top / 2 * t_ramp2 - max_J / 6 * t_ramp3;
 				s_const_v = P2->length - s_curve - s_ramp_start - s_ramp_end - s_const_a;
 				t_const_v = s_const_v / P2->f;
@@ -1098,7 +1073,7 @@ void Parser::flush_pending() { // {{{
 						g[i] = P2->unit[i] * s_curve;
 						h[i] = P1->nnLK[i] * P1->Jh;
 					}
-					add_record(RUN_POLY3MINUS, P2->tool, P1->x + g[0], P1->y + g[1], P1->z + g[2], h[0], h[1], h[2], P1->Jg, t_curve, P1->v1, P2->e0 + de * s_curve / P2->length);
+					add_record(P2->gcode_line, RUN_POLY3MINUS, P2->tool, P1->x + g[0], P1->y + g[1], P1->z + g[2], h[0], h[1], h[2], P1->Jg, t_curve, P1->v1, P2->e0 + de * s_curve / P2->length);
 					pdebug("2.curve- to (%f,%f,%f) v=%f h (%f,%f,%f) nnLK.x=%f Jh=%f", P1->x + g[0], P1->y + g[1], P1->z + g[2], P1->v1, h[0], h[1], h[2], P1->nnLK[0], P1->Jh);
 				}
 				if (P1->v1 != P2->f) {
@@ -1106,48 +1081,54 @@ void Parser::flush_pending() { // {{{
 					double X[3];
 					for (int i = 0; i < 3; ++i)
 						X[i] = P2->from[i] - P2->unit[i] * (s_const_v + s_ramp_end + s_const_a);
-					add_record(RUN_POLY3PLUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, max_J, t_ramp, P1->v1, P2->e0 + de * (s_curve + s_ramp_start) / P2->length);
+					add_record(P2->gcode_line, RUN_POLY3PLUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, max_J, t_ramp, P1->v1, P2->e0 + de * (s_curve + s_ramp_start) / P2->length);
 					pdebug("2.start to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->v1);
 					// constant a speedup
 					if (have_max_a) {
 						for (int i = 0; i < 3; ++i)
 							X[i] = P2->from[i] - P2->unit[i] * (s_const_v + s_ramp_end);
-						add_record(RUN_POLY2, P2->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P1->v1 + dv_ramp, P2->e0 + de * (s_curve + s_ramp_start + s_const_a) / P2->length);
+						add_record(P2->gcode_line, RUN_POLY2, P2->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P1->v1 + dv_ramp, P2->e0 + de * (s_curve + s_ramp_start + s_const_a) / P2->length);
 						pdebug("2.mid to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->v1 + dv_ramp);
 					}
 					// stop speedup
 					for (int i = 0; i < 3; ++i)
 						X[i] = P2->from[i] - P2->unit[i] * s_const_v;
-					add_record(RUN_POLY3MINUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P2->f, P2->e - de * s_const_v / P1->length);
+					add_record(P2->gcode_line, RUN_POLY3MINUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P2->f, P2->e - de * s_const_v / P1->length);
 					pdebug("2.stop- to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P2->f);
 				}
 				// constant v
 				if (s_const_v > 1e-10) {
-					add_record(RUN_POLY3PLUS, P1->tool, P2->from[0], P2->from[1], P2->from[2], 0, 0, 0, 0, t_const_v, P2->f, P2->e);
+					add_record(P2->gcode_line, RUN_POLY3PLUS, P1->tool, P2->from[0], P2->from[1], P2->from[2], 0, 0, 0, 0, t_const_v, P2->f, P2->e);
 					pdebug("2.const v to (%f,%f,%f) v0=%f", P2->from[0], P2->from[1], P2->from[2], P2->f);
 				}
 			}
 
 			// Update bbox.
 			// Use "not larger" instead of "smaller" so NaNs are replaced.
-			if (!(P1->x > bbox[0]))
-				bbox[0] = P1->x;
-			if (!(P1->x < bbox[1]))
-				bbox[1] = P1->x;
-			if (!(P1->y > bbox[2]))
-				bbox[2] = P1->y;
-			if (!(P1->y < bbox[3]))
-				bbox[3] = P1->y;
-			if (!(P1->z > bbox[4]))
-				bbox[4] = P1->z;
-			if (!(P1->z < bbox[5]))
-				bbox[5] = P1->z;
+			if (!std::isnan(P1->x)) {
+				if (!(P1->x > bbox[0]))
+					bbox[0] = P1->x;
+				if (!(P1->x < bbox[1]))
+					bbox[1] = P1->x;
+			}
+			if (!std::isnan(P1->y)) {
+				if (!(P1->y > bbox[2]))
+					bbox[2] = P1->y;
+				if (!(P1->y < bbox[3]))
+					bbox[3] = P1->y;
+			}
+			if (!std::isnan(P1->z)) {
+				if (!(P1->z > bbox[4]))
+					bbox[4] = P1->z;
+				if (!(P1->z < bbox[5]))
+					bbox[5] = P1->z;
+			}
 		}
 		pending.pop_front();
 	}
 } // }}}
 
-void Parser::add_record(RunType cmd, int tool, double x, double y, double z, double hx, double hy, double hz, double Jg, double tf, double v0, double e) { // {{{
+void Parser::add_record(int gcode_line, RunType cmd, int tool, double x, double y, double z, double hx, double hy, double hz, double Jg, double tf, double v0, double e) { // {{{
 	Run_Record r;
 	r.type = cmd;
 	r.tool = tool;
@@ -1161,7 +1142,7 @@ void Parser::add_record(RunType cmd, int tool, double x, double y, double z, dou
 	r.tf = tf;
 	r.v0 = v0;
 	r.E = e;
-	r.gcode_line = lineno;
+	r.gcode_line = gcode_line;
 	r.time = last_time;
 	if (!std::isnan(tf))
 		last_time += tf;

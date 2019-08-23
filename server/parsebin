@@ -37,19 +37,48 @@ def mkcmd(t):
 		return cmds[t]
 	return '0x%x' % t
 
-n = 0
-if config['svg']:
-	print('<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">')
-	print('<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink">')
-	print('<g fill="none" stroke="black" stroke-width="0.01">')
-else:
-	print('   n command tool     X     Y     Z      h[0]      h[1]      h[2]       Jg     tf    v0       E      time line')
 pos = (float('nan'), float('nan'), 0.0)
 current_v = (0, 0, 0)
 current_a = (0, 0, 0)
 dataformat = '=Bl' + 'd' * 11 + 'q'
 datasize = struct.calcsize(dataformat)
 path = ''
+footerformat = '=l' + 'd' * 7
+footersize = struct.calcsize(footerformat)
+file.seek(-footersize, 2)
+footer = struct.unpack(footerformat, file.read(footersize))
+numstrings = footer[0]
+bbox = footer[1:-1]
+jobtime = footer[-1]
+strings = []
+lenformat = 'l' * numstrings
+lensize = struct.calcsize(lenformat)
+file.seek(-footersize - lensize, 2)
+stringlengths = struct.unpack(lenformat, file.read(lensize))
+totalstringlength = sum(stringlengths)
+fullsize = file.seek(-footersize - lensize - totalstringlength, 2)
+for s in stringlengths:
+	strings.append(file.read(s))
+file.seek(0, 0)
+
+minutes = jobtime // 60
+seconds = jobtime - minutes * 60
+print('# Total time: %02d:%05.2f' % (minutes, seconds))
+print('# Bbox: %s' % str(bbox))
+for i, s in enumerate(strings):
+	print('# String %d: %s' % (i, s))
+
+numrecords = fullsize // datasize
+assert fullsize % datasize == 0
+
+n = 0
+if config['svg']:
+	print('<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">')
+	print('<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink">')
+	print('<g fill="none" stroke="black" stroke-width="0.01">')
+else:
+	print('#  n command tool     X     Y     Z      h[0]      h[1]      h[2]       Jg      tf     v0       E      time line')
+
 while True:
 	s = file.read(datasize)
 	if len(s) != datasize:
@@ -64,7 +93,7 @@ while True:
 				sys.stderr.write('Warning: invalid pattern record\n')
 			print('%d\tpattern\t%d\t%s' % (n, T, ' '.join('%02x' % x for x in s[5:5 + (T if T <= 72 else 72)])))
 		else:
-			print(('%4d %7s %4d %5.2f %5.2f %5.2f %9.2f %9.2f %9.2f %8.0f %6.3f %5.1f %7.1f %9.3f %4d') % (n, mkcmd(t), T, X, Y, Z, h0, h1, h2, Jg, tf, v0, E, time, line))
+			print(('%4d %7s %4d %5.2f %5.2f %5.2f %9.2f %9.2f %9.2f %8.0f %7.4f %6.2f %7.1f %9.3f %4d') % (n, mkcmd(t), T, X, Y, Z, h0, h1, h2, Jg, tf, v0, E, time, line))
 	else:
 		plotY = Y + Z * config['offset']
 		if t == 5:
@@ -79,6 +108,7 @@ while True:
 			current_a = (0, 0, 0)
 		elif t == 1:
 			# poly3plus.
+			#sys.stderr.write('plus\n')
 			if math.isnan(pos[0]) or math.isnan(pos[1]):
 				sys.stderr.write('poly3plus with NaN x or y position\n')
 			else:
@@ -107,18 +137,19 @@ while True:
 			pos = (X, Y, Z)
 		elif t == 2:
 			# poly3minus
-			g = tuple(pos[i] - x for i, x in enumerate((X, Y, Z)))
+			#sys.stderr.write('minus\n')
+			g = tuple(x - pos[i] for i, x in enumerate((X, Y, Z)))
 			leng = sum(x ** 2 for x in g) ** .5
 			Jh = sum(x ** 2 for x in (h0, h1, h2)) ** .5
 			unitg = tuple(x / leng for x in g)
 			unith = (0, 0, 0) if Jh == 0 else tuple(x / Jh for x in (h0, h1, h2))
-			frompos = tuple((Jg / 6 * tf ** 3 + v0 * tf) * unitg[i] + (Jh / 6 * tf ** 3) * unith[i] + (X, Y, Z)[i] for i in range(3))
-			new_v = tuple((Jg / 2 * tf ** 2 + v0) * unitg[i] + Jh / 2 * tf ** 2 * unith[i] for i in range(3))
+			frompos = tuple(-(Jg / 6 * tf ** 3 + v0 * tf) * unitg[i] + (Jh / 6 * tf ** 3) * unith[i] + (X, Y, Z)[i] for i in range(3))
+			new_v = tuple((Jg / 2 * tf ** 2 + v0) * unitg[i] - Jh / 2 * tf ** 2 * unith[i] for i in range(3))
 			cross = tuple(current_v[(i + 1) % 3] * new_v[(i + 2) % 3] - current_v[(i + 2) % 3] * new_v[(i + 1) % 3] for i in range(3))
 			if sum(c ** 2 for c in cross) > 1e-5:
 				sys.stderr.write("Warning: start v (%f,%f,%f) and end v (%f,%f,%f) do not match for %f,%f,%f (cross %f,%f,%f)\n" % (current_v[0], current_v[1], current_v[2], new_v[0], new_v[1], new_v[2], X, Y, Z, cross[0], cross[1], cross[2]))
-			current_v = tuple(v0 * -unitg[i] for i in range(3))
-			new_a = tuple(Jg * tf * unitg[i] + Jh * tf * unith[i] for i in range(3))
+			current_v = tuple(v0 * unitg[i] for i in range(3))
+			new_a = tuple(-Jg * tf * unitg[i] + Jh * tf * unith[i] for i in range(3))
 			cross = tuple(current_a[(i + 1) % 3] * new_a[(i + 2) % 3] - current_a[(i + 2) % 3] * new_a[(i + 1) % 3] for i in range(3))
 			if sum(c ** 2 for c in cross) > 1e-5:
 				sys.stderr.write("Warning: start a (%f,%f,%f) and end a (%f,%f,%f) do not match for %f,%f,%f (cross %f,%f,%f)\n" % (current_a[0], current_a[1], current_a[2], new_a[0], new_a[1], new_a[2], X, Y, Z, cross[0], cross[1], cross[2]))
