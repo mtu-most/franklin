@@ -45,7 +45,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		if (spaces[0].num_axes <= a)
 			break;
 		double pos = spaces[0].axis[a]->settings.current;
-		debug("prepare move, pos[%d]: %f -> %f", a, pos, move->target[a]);
+		//debug("prepare move, pos[%d]: %f -> %f", a, pos, move->target[a]);
 		if (std::isnan(pos))
 			continue;
 		if (std::isnan(move->target[a]))
@@ -65,7 +65,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		amax = max_a;
 		for (int i = 0; i < 3; ++i)
 			unit[i] /= dist;
-		debug("dist = %f", dist);
+		//debug("dist = %f", dist);
 	}
 	else {
 		for (int i = 0; i < 3; ++i)
@@ -181,7 +181,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 			X[i] += unit[i] * s[part];
 			queue[q].target[i] = X[i];
 		}
-		debug("target %d: %f,%f,%f", part, X[0], X[1], X[2]);
+		//debug("target %d: %f,%f,%f", part, X[0], X[1], X[2]);
 		queue[q].Jg = J[part];
 		queue[q].tf = t[part];
 		queue[q].v0 = v0[part];
@@ -193,11 +193,11 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 
 	if (cb)
 		queue[q - 1].cb = true;
-	debug("goto dir=%f,%f,%f, dist=%f, tool=%d e=%f single=%d", unit[0], unit[1], unit[2], dist, tool, move->e, move->single);
-	debug("goto s %f,%f,%f,%f,%f,%f,%f", s[0], s[1], s[2], s[3], s[4], s[5], s[6]);
-	debug("goto t %f,%f,%f,%f,%f,%f,%f", t[0], t[1], t[2], t[3], t[4], t[5], t[6]);
-	debug("goto J %f,%f,%f,%f,%f,%f,%f", J[0], J[1], J[2], J[3], J[4], J[5], J[6]);
-	debug("goto v0 %f,%f,%f,%f,%f,%f,%f", v0[0], v0[1], v0[2], v0[3], v0[4], v0[5], v0[6]);
+	//debug("goto dir=%f,%f,%f, dist=%f, tool=%d e=%f single=%d", unit[0], unit[1], unit[2], dist, tool, move->e, move->single);
+	//debug("goto s %f,%f,%f,%f,%f,%f,%f", s[0], s[1], s[2], s[3], s[4], s[5], s[6]);
+	//debug("goto t %f,%f,%f,%f,%f,%f,%f", t[0], t[1], t[2], t[3], t[4], t[5], t[6]);
+	//debug("goto J %f,%f,%f,%f,%f,%f,%f", J[0], J[1], J[2], J[3], J[4], J[5], J[6]);
+	//debug("goto v0 %f,%f,%f,%f,%f,%f,%f", v0[0], v0[1], v0[2], v0[3], v0[4], v0[5], v0[6]);
 	int new_num_movecbs = next_move(settings.hwtime);
 	bool ret = 0;
 	if (new_num_movecbs > 0) {

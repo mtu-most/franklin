@@ -27,8 +27,8 @@
 #include <cstring>
 // }}}
 
-#define pdebug debug
-//#define pdebug(...)
+//#define pdebug debug
+#define pdebug(...)
 
 static double const C0 = 273.15; // 0 degrees celsius in kelvin.
 
@@ -92,6 +92,7 @@ struct Parser { // {{{
 	std::vector <double> pos;
 	std::vector <double> epos;
 	int current_tool;
+	bool extruding;
 	double current_f[2];
 	bool tool_changed;
 	std::list <Record> pending;
@@ -246,6 +247,10 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					}
 					else
 						r = (std::isnan(pos[2]) ? 0 : pos[2]);
+				}
+				if ((estep != 0) ^ extruding) {
+					flush_pending();
+					extruding = (estep != 0);
 				}
 				bool controlled = true;
 				handle_coordinate(X, 0, &controlled, rel);
@@ -576,8 +581,9 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		while (code >= (signed)epos.size())
 			epos.push_back(0);
 		current_tool = code;
-		// Move to current position for extruder offset correction.
+		// Make full stop between tools.
 		flush_pending();
+		// Apply new offset.
 		pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, epos[current_tool]));
 	} // }}}
 	else {
@@ -699,6 +705,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 	rel = false;
 	erel = false;
 	current_tool = 0;
+	extruding = false;
 	tool_changed = false;
 	last_time = 0;
 	arc_normal[0] = 0;
@@ -921,7 +928,7 @@ void Parser::flush_pending() { // {{{
 			P1->dev = 0;
 			P1->x0 = 0;
 		}
-		debug("s %f dev %f x0 %f", s, P1->dev, P1->x0);
+		pdebug("s %f dev %f x0 %f", s, P1->dev, P1->x0);
 		double sq = std::sqrt(s * s + 1);
 		double max_v_J = std::pow(-max_J * P1->x0 * P1->x0 * s / sq, 1. / 3);
 		double max_v_a = std::sqrt(max_a * s * P1->x0 / sq);
@@ -996,7 +1003,7 @@ void Parser::flush_pending() { // {{{
 				s_const_v = P1->length - s_curve - s_ramp_start - s_ramp_end - s_const_a;
 				t_const_v = s_const_v / P1->f;
 
-				debug("part 1 s,t: cv %f,%f rs %f,%f ca %f,%f re %f,%f curve %f,%f", s_const_v, t_const_v, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_curve, t_curve);
+				pdebug("part 1 s,t: cv %f,%f rs %f,%f ca %f,%f re %f,%f curve %f,%f", s_const_v, t_const_v, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_curve, t_curve);
 
 				// constant v
 				if (s_const_v > 1e-10) {
@@ -1064,7 +1071,7 @@ void Parser::flush_pending() { // {{{
 				s_const_v = P2->length - s_curve - s_ramp_start - s_ramp_end - s_const_a;
 				t_const_v = s_const_v / P2->f;
 
-				debug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
+				pdebug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
 
 				// second half curve
 				if (s_curve > 1e-10) {
@@ -1093,7 +1100,7 @@ void Parser::flush_pending() { // {{{
 					// stop speedup
 					for (int i = 0; i < 3; ++i)
 						X[i] = P2->from[i] - P2->unit[i] * s_const_v;
-					add_record(P2->gcode_line, RUN_POLY3MINUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P2->f, P2->e - de * s_const_v / P1->length);
+					add_record(P2->gcode_line, RUN_POLY3MINUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P2->f, P2->e - de * s_const_v / P2->length);
 					pdebug("2.stop- to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P2->f);
 				}
 				// constant v

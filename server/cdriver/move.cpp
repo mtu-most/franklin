@@ -198,7 +198,7 @@ int next_move(int32_t start_time) { // {{{
 	}
 	double t = settings.end_time / 1e6;
 	if (queue[q].reverse) {
-		debug("set reverse from J %f v %f", queue[q].Jg, queue[q].v0);
+		mdebug("set reverse from J %f v %f", queue[q].Jg, queue[q].v0);
 		double t2 = t * t;
 		double t3 = t2 * t;
 		settings.x0h = queue[q].Jh / 6 * t3;
@@ -245,7 +245,7 @@ int next_move(int32_t start_time) { // {{{
 	settings.pattern_size = queue[q].pattern_size;
 	if (settings.hwtime_step != last_hwtime_step)
 		arch_globals_change();
-	debug("move prepared, from=(%f,%f,%f) target=(%f,%f,%f), h=(%f,%f,%f), dist=%f, e=%f, Jg=%f a0g=%f v0g=%f x0g=%f end time=%f, single=%d", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.h[0], settings.h[1], settings.h[2], settings.dist, queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single);
+	mdebug("move prepared, from=(%f,%f,%f) target=(%f,%f,%f), h=(%f,%f,%f), dist=%f, e=%f, Jg=%f a0g=%f v0g=%f x0g=%f end time=%f, single=%d", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.h[0], settings.h[1], settings.h[2], settings.dist, queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single);
 
 	settings.queue_start = n;
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
@@ -378,7 +378,7 @@ static void do_steps(double old_factor) { // {{{
 		}
 	}
 	// Move the motors.
-	debug("start move");
+	mdebug("start move");
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		if (!settings.single && s == 2)
 			continue;
@@ -401,9 +401,12 @@ static void do_steps(double old_factor) { // {{{
 				}
 				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
 				if (diff > 0x7f) {
-					debug("Error: %d %d trying to send more than 127 steps: %d", s, m, diff);
+					debug("Error: %d %d trying to send more than 127 steps: %d  from %f to %f (time %d)", s, m, diff, rounded_cp, rounded_new_cp, settings.hwtime);
 					int adjust = diff - 0x7f;
-					settings.hwtime -= settings.hwtime_step;
+					if (settings.hwtime_step > settings.hwtime)
+						settings.hwtime = 0;
+					else
+						settings.hwtime -= settings.hwtime_step;
 					settings.factor = old_factor;
 					diff = 0x7f;
 					target -= adjust / mtr.steps_per_unit;
@@ -470,7 +473,7 @@ static double set_targets(double factor) { // {{{
 		for (int i = 0; i < 3; ++i) {
 			spaces[0].axis[i]->settings.target = spaces[0].axis[i]->settings.source + xg * settings.unitg[i] + xh * settings.unith[i];
 		}
-		debug("targets %f,%f,%f src %f,%f,%f", spaces[0].axis[0]->settings.target, spaces[0].axis[1]->settings.target, spaces[0].axis[2]->settings.target, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source);
+		mdebug("targets %f,%f,%f src %f,%f,%f", spaces[0].axis[0]->settings.target, spaces[0].axis[1]->settings.target, spaces[0].axis[2]->settings.target, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source);
 	}
 	// Set all other axes with linear interpolation and compute motor positions, returning maximum allowed factor.
 	double max_f = 1;
@@ -562,7 +565,7 @@ static void apply_tick() { // {{{
 				//debug("adjusting time with f = %f, old factor = %f, old time = %f", f, old_factor, settings.hwtime / 1e6);
 				adjust_time(target_factor);
 			}
-			debug("target factor %f time 0 -> %d -> %d v0g %f", target_factor, settings.hwtime, settings.end_time, settings.v0g);
+			mdebug("target factor %f time 0 -> %d -> %d v0g %f", target_factor, settings.hwtime, settings.end_time, settings.v0g);
 			settings.factor = target_factor;
 			if (settings.factor < 1) {
 				do_steps(old_factor);

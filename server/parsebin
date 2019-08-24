@@ -77,7 +77,7 @@ if config['svg']:
 	print('<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink">')
 	print('<g fill="none" stroke="black" stroke-width="0.01">')
 else:
-	print('#  n command tool     X     Y     Z      h[0]      h[1]      h[2]       Jg      tf     v0       E      time line')
+	print('#  n command tool       X       Y       Z      h[0]      h[1]      h[2]       Jg      tf     v0       E      time line')
 
 while True:
 	s = file.read(datasize)
@@ -93,7 +93,7 @@ while True:
 				sys.stderr.write('Warning: invalid pattern record\n')
 			print('%d\tpattern\t%d\t%s' % (n, T, ' '.join('%02x' % x for x in s[5:5 + (T if T <= 72 else 72)])))
 		else:
-			print(('%4d %7s %4d %5.2f %5.2f %5.2f %9.2f %9.2f %9.2f %8.0f %7.4f %6.2f %7.1f %9.3f %4d') % (n, mkcmd(t), T, X, Y, Z, h0, h1, h2, Jg, tf, v0, E, time, line))
+			print(('%4d %7s %4d %7.2f %7.2f %7.2f %9.2f %9.2f %9.2f %8.0f %7.4f %6.2f %7.1f %9.3f %4d') % (n, mkcmd(t), T, X, Y, Z, h0, h1, h2, Jg, tf, v0, E, time, line))
 	else:
 		plotY = Y + Z * config['offset']
 		if t == 5:
