@@ -1281,6 +1281,7 @@ static void avr_sent_fragment() { // {{{
 	while (!sending_fragment && !computing_move && (settings.queue_start != settings.queue_end || settings.queue_full)) {
 		cbs += next_move(settings.hwtime);
 	}
+	//debug("adding %d cbs for fragment %d", cbs, current_fragment);
 	if (cbs > 0) {
 		history[current_fragment].cbs += cbs;
 	}

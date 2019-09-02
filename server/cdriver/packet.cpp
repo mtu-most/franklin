@@ -28,6 +28,7 @@ static void get_cb(bool value) {
 
 int go_to(bool relative, MoveCommand const *move, bool cb) {
 	// This is a manual move or the start of a job; set hwtime step to default.
+	//debug("goto (%f,%f,%f) at speed %f", move->target[0], move->target[1], move->target[2], move->v0);
 	settings.hwtime_step = default_hwtime_step;
 	if (computing_move || settings.queue_full || settings.queue_end != settings.queue_start) {
 		// This is not allowed; signal error to Python glue.
@@ -128,6 +129,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	}
 
 	double reachable_v = compute_max_v(dist / 2, 0, max_J, amax);
+	//debug("vmax = %f, reachable = %f, dist=%f", vmax, reachable_v, dist);
 	vmax = min(vmax, reachable_v);
 	double max_ramp_dv = amax * amax / (2 * max_J);
 	// Initialize the queue. At most 7 items will be used.
@@ -161,7 +163,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	int q = 0;
 	double t_ramp = std::sqrt(2 * dv_ramp / max_J);
 	double s_ramp_up = max_J / 6 * t_ramp * t_ramp * t_ramp;
-	double s_ramp_down = -max_J / 6 * t_ramp * t_ramp * t_ramp + (2 * dv_ramp) * t_ramp;
+	double s_ramp_down = -max_J / 6 * t_ramp * t_ramp * t_ramp + vmax * t_ramp;
 	double s_const_a = amax / 2 * t_max_a * t_max_a;
 	double s_const_v = dist - 2 * (s_ramp_up + s_ramp_down + s_const_a);
 	double t_const_v = s_const_v / vmax;
@@ -170,6 +172,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	double t[7] = {t_ramp, t_max_a, t_ramp, t_const_v, t_ramp, t_max_a, t_ramp};
 	double J[7] =     {max_J,       0, -max_J,     0, -max_J,              0, max_J};
 	double v0[7] =    {    0, dv_ramp,   vmax,  vmax,   vmax, vmax - dv_ramp,     0};
+	double a0[7] =    {    0,    amax,      0,     0,      0,          -amax,     0};
 	bool reverse[7] = {false,   false,   true, false,  false,          false,  true};
 	double X[3];
 	for (int i = 0; i < 3; ++i)
@@ -185,14 +188,17 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		queue[q].Jg = J[part];
 		queue[q].tf = t[part];
 		queue[q].v0 = v0[part];
+		queue[q].a0 = a0[part];
 		queue[q].reverse = reverse[part];
 		queue[q].e = move->e * s[part] / dist;
 		q += 1;
 	}
 	settings.queue_end = q;
 
-	if (cb)
+	if (cb) {
 		queue[q - 1].cb = true;
+		//debug("adding cb for queue %d", q - 1);
+	}
 	//debug("goto dir=%f,%f,%f, dist=%f, tool=%d e=%f single=%d", unit[0], unit[1], unit[2], dist, tool, move->e, move->single);
 	//debug("goto s %f,%f,%f,%f,%f,%f,%f", s[0], s[1], s[2], s[3], s[4], s[5], s[6]);
 	//debug("goto t %f,%f,%f,%f,%f,%f,%f", t[0], t[1], t[2], t[3], t[4], t[5], t[6]);

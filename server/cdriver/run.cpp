@@ -221,7 +221,7 @@ void run_file_fill_queue() {
 				&& !run_file_wait	// We are not waiting for something else (pause or confirm).
 				&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
 			int t = run_file_map[settings.run_file_current].type;
-			if (t != RUN_POLY3PLUS && t != RUN_POLY3MINUS && t != RUN_PATTERN && (arch_running() || settings.queue_end != settings.queue_start || computing_move || sending_fragment || transmitting_fragment))
+			if (t != RUN_POLY3PLUS && t != RUN_POLY3MINUS && t != RUN_POLY2 && t != RUN_PATTERN && (arch_running() || settings.queue_end != settings.queue_start || computing_move || sending_fragment || transmitting_fragment))
 				break;
 			Run_Record &r = run_file_map[settings.run_file_current];
 			rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
@@ -236,10 +236,12 @@ void run_file_fill_queue() {
 				}
 				case RUN_POLY3PLUS:
 				case RUN_POLY3MINUS:
+				case RUN_POLY2:
 				{
 					queue[settings.queue_end].reverse = r.type == RUN_POLY3MINUS;
 					queue[settings.queue_end].single = false;
 					queue[settings.queue_end].probe = false;
+					queue[settings.queue_end].a0 = (r.type == RUN_POLY2 ? r.Jg : 0);
 					queue[settings.queue_end].v0 = r.v0;
 					double x = r.X[0] * run_file_cosa - r.X[1] * run_file_sina + run_file_refx;
 					double y = r.X[1] * run_file_cosa + r.X[0] * run_file_sina + run_file_refy;
@@ -267,7 +269,7 @@ void run_file_fill_queue() {
 						queue[settings.queue_end].unitg[i] = (queue[settings.queue_end].target[i] - lastpos[i]) / distg;
 						queue[settings.queue_end].unith[i] = queue[settings.queue_end].h[i] / disth;
 					}
-					queue[settings.queue_end].Jg = r.Jg;
+					queue[settings.queue_end].Jg = (r.type == RUN_POLY2 ? 0 : r.Jg);
 					queue[settings.queue_end].Jh = disth;
 					queue[settings.queue_end].tf = r.tf;
 					queue[settings.queue_end].e = r.E;

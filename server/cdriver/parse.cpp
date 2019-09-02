@@ -27,7 +27,7 @@
 #include <cstring>
 // }}}
 
-//#define pdebug debug
+//#define pdebug(format, ...) debug("%4d " format, P1->gcode_line, ##__VA_ARGS__)
 #define pdebug(...)
 
 static double const C0 = 273.15; // 0 degrees celsius in kelvin.
@@ -921,8 +921,8 @@ void Parser::flush_pending() { // {{{
 	auto P2 = ++ ++pending.begin();
 	while (P2 != pending.end()) {
 		double s = -std::tan(P1->theta / 2);
-		P1->dev = std::min(max_dev, std::min(P1->length, P2->length) / (6 * -s * std::sin(P1->theta / 2)));
-		P1->x0 = 6 * s * P1->dev * std::sin(P1->theta / 2);
+		P1->dev = std::min(max_dev, std::min(P1->length, P2->length) / (3 * -(s + 1 / s) * std::sin(P1->theta / 2)));
+		P1->x0 = 3 * P1->dev * (s + 1 / s) * std::sin(P1->theta / 2);
 		if (std::isnan(s) || std::isnan(P1->dev) || std::isnan(P1->x0)) {
 			s = 0;
 			P1->dev = 0;
@@ -930,16 +930,16 @@ void Parser::flush_pending() { // {{{
 		}
 		pdebug("s %f dev %f x0 %f", s, P1->dev, P1->x0);
 		double sq = std::sqrt(s * s + 1);
-		double max_v_J = std::pow(-max_J * P1->x0 * P1->x0 * s / sq, 1. / 3);
-		double max_v_a = std::sqrt(max_a * s * P1->x0 / sq);
+		double max_v_J = std::pow(-max_J * P1->x0 * P1->x0 * sq / 2, 1. / 3);
+		double max_v_a = std::sqrt(max_a * P1->x0 * sq / 2);
 		P1->v1 = min(min(min(max_v_J, max_v_a), P1->f), P2->f);
 		P1->tf = -P1->x0 / P1->v1;
 		if (std::isnan(P1->tf))
 			P1->tf = 0;
-		P1->Jh = -P1->v1 * P1->v1 * P1->v1 / (s * P1->x0 * P1->x0);
+		P1->Jh = -2 * P1->v1 * P1->v1 * P1->v1 / ((s + 1 / s) * P1->x0 * P1->x0);
 		if (std::isnan(P1->Jh))
 			P1->Jh = 0;
-		P1->Jg = P1->Jh * s;
+		P1->Jg = P1->Jh / s;
 
 		// Check if v0/v2 should be lowered.
 		double v0 = compute_max_v(P1->length + P1->x0, P1->v1, max_J, max_a);
@@ -1004,6 +1004,8 @@ void Parser::flush_pending() { // {{{
 				t_const_v = s_const_v / P1->f;
 
 				pdebug("part 1 s,t: cv %f,%f rs %f,%f ca %f,%f re %f,%f curve %f,%f", s_const_v, t_const_v, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_curve, t_curve);
+				if (s_const_v < -1e-2)
+					abort();
 
 				// constant v
 				if (s_const_v > 1e-10) {
@@ -1024,7 +1026,7 @@ void Parser::flush_pending() { // {{{
 					if (have_max_a) {
 						for (int i = 0; i < 3; ++i)
 							X[i] = P1->from[i] + P1->unit[i] * (s_const_v + s_ramp_start + s_const_a);
-						add_record(P1->gcode_line, RUN_POLY2, P1->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P1->f - dv_ramp, P1->e0 + de * (s_const_v + s_ramp_start + s_const_a) / P1->length);
+						add_record(P1->gcode_line, RUN_POLY2, P1->tool, X[0], X[1], X[2], 0, 0, 0, -a_top, t_const_a, P1->f - dv_ramp, P1->e0 + de * (s_const_v + s_ramp_start + s_const_a) / P1->length);
 						pdebug("1.const a to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->f - dv_ramp);
 					}
 					// stop slowdown
@@ -1072,6 +1074,8 @@ void Parser::flush_pending() { // {{{
 				t_const_v = s_const_v / P2->f;
 
 				pdebug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
+				if (s_const_v < -1e-2)
+					abort();
 
 				// second half curve
 				if (s_curve > 1e-10) {

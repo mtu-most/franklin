@@ -19,6 +19,7 @@
 #define _MODULE_H
 
 #include <cmath>
+#include <cstdio>
 #include <stdint.h>
 
 // EXTERN is defined in exactly one file; the variables are defined in that file.
@@ -43,7 +44,7 @@
 struct MoveCommand {
 	bool cb;
 	int probe, single, reverse;
-	double v0;
+	double a0, v0;
 	int tool;	// Negative value means follower ~tool.
 	double target[3];
 	double h[3];
@@ -186,25 +187,31 @@ static inline double compute_max_v(double x, double v, double max_J, double max_
 
 	// Time for maximum ramp.
 	double t_ramp_max = max_a / max_J;
-	double dv_ramp_max = max_a * max_a / (2 * max_J);
-	double x_ramp_max = max_a * max_a * max_a / (3 * max_J * max_J) + (2 * v + dv_ramp_max) * max_a / max_J;
+	double x_ramp_max = (2 * v * max_a * max_J + max_a * max_a * max_a) / (max_J * max_J);
+	double ret;
 	if (x_ramp_max <= x) {
 		// Ramp fits on segment, compute size of middle part.
-		double a = max_J / 2;
-		double b = v + 3 * dv_ramp_max;
-		double c = max_J / 3 * t_ramp_max * t_ramp_max * t_ramp_max + (2 * v + dv_ramp_max) * t_ramp_max - x;
+		double t = t_ramp_max;
+		double t2 = t * t;
+		double t3 = t2 * t;
+		double a = max_a / 2;
+		double b = max_J * t2 / 2 + max_a * t;
+		double c = max_a * t2 / 2 + max_J  * t3 / 2 - x;
 		double t_const_a = (-b + std::sqrt(b * b - 4 * a * c)) / (2 * a);
-		return v + 2 * dv_ramp_max + max_a * t_const_a;
+		ret = max_J * t2 / 2 + max_a * t_const_a + max_a * t - max_J * t2 / 2;
+		//fprintf(stderr, "with max a\n");
 	}
 	else {
 		// Ramp does not fit on segment.
-		double J2 = max_J * max_J;
-		double J3 = J2 * max_J;
-		double J4 = J2 * J2;
-		double k = std::pow(15 * J2 * x + sqrt(5 * (45 * J4 * x * x + 64 * J3 * v * v * v)), 1. / 3);
-		double t_ramp = k / (std::pow(5, 2. / 3) * max_J) - 4 * v / (std::pow(5, 1. / 3) * k);
-		return v + max_J * t_ramp * t_ramp;
+		double b = x * max_J * max_J;
+		double c = 2 * v * max_a * max_J;
+		double k = std::pow(std::sqrt(81 * b * b + 12 * c * c * c) + 9 * b, 1. / 3);
+		double a = (std::pow(2, 1. / 3) * k * k - 2 * std::pow(3, 1. / 3) * c) / (std::pow(6, 2. / 3) * k);
+		double t_ramp = a / max_J;
+		ret = max_J * t_ramp * t_ramp;
 	}
+	//fprintf(stderr, "compute_max_v: x=%f, v=%f, J=%f, a=%f, ret=%f->%f\n", x, v, max_J, max_a, ret, v + ret);
+	return v + ret;
 }
 
 #ifdef MODULE

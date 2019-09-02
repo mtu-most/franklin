@@ -106,8 +106,10 @@ int next_move(int32_t start_time) { // {{{
 	int n = (settings.queue_start + 1) % QUEUE_LENGTH;
 	settings.single = queue[q].single;
 
-	if (queue[q].cb)
+	if (queue[q].cb) {
 		++num_cbs;
+		//debug("getting %d cbs from queue %d, which makes cbs = %d", queue[q].cb, q, num_cbs);
+	}
 
 	// Make sure machine state is good. {{{
 	// If the source is unknown, determine it from current_pos.
@@ -180,15 +182,18 @@ int next_move(int32_t start_time) { // {{{
 		}
 	} // }}}
 
-	settings.end_time = queue[q].tf * 1e6;
-	settings.run_time = queue[q].time;
+	double r = feedrate;
+	double r2 = r * r;
+	double r3 = r2 * r;
+	settings.end_time = queue[q].tf * 1e6 / r;
+	settings.run_time = queue[q].time / r;
 	settings.Jh = 0;
 	double leng = 0;
 	for (int i = 0; i < 3; ++i) {
 		settings.g[i] = queue[q].target[i] - spaces[0].axis[i]->settings.source;
 		settings.h[i] = queue[q].h[i];
 		leng += settings.g[i] * settings.g[i];
-		settings.Jh += settings.h[i] * settings.h[i];
+		settings.Jh += settings.h[i] * settings.h[i] * r3;
 	}
 	settings.Jh = std::sqrt(settings.Jh);
 	leng = std::sqrt(leng);
@@ -197,23 +202,23 @@ int next_move(int32_t start_time) { // {{{
 		settings.unith[i] = settings.Jh == 0 ? 0 : settings.h[i] / settings.Jh;
 	}
 	double t = settings.end_time / 1e6;
+	double t2 = t * t;
+	double t3 = t2 * t;
 	if (queue[q].reverse) {
 		mdebug("set reverse from J %f v %f", queue[q].Jg, queue[q].v0);
-		double t2 = t * t;
-		double t3 = t2 * t;
 		settings.x0h = queue[q].Jh / 6 * t3;
-		settings.v0h = -queue[q].Jh / 2 * t2;
-		settings.a0h = queue[q].Jh * t;
-		settings.Jh = -queue[q].Jh;
+		settings.v0h = r * -queue[q].Jh / 2 * t2;
+		settings.a0h = r2 * queue[q].Jh * t;
+		settings.Jh = r3 * -queue[q].Jh;
 		settings.x0g = leng - (queue[q].Jg / 6 * t3 + queue[q].v0 * t);
-		settings.v0g = queue[q].Jg / 2 * t2 + queue[q].v0;
-		settings.a0g = -queue[q].Jg * t;
-		settings.Jg = queue[q].Jg;	// TODO: compensate for feedrate.
+		settings.v0g = r * (queue[q].Jg / 2 * t2 + queue[q].v0);
+		settings.a0g = r2 * -queue[q].Jg * t;
+		settings.Jg = r3 * queue[q].Jg;
 	}
 	else {
-		settings.Jg = queue[q].Jg;	// TODO: compensate for feedrate.
-		settings.a0g = 0;
-		settings.v0g = queue[q].v0;
+		settings.Jg = r3 * queue[q].Jg;
+		settings.a0g = r2 * queue[q].a0;
+		settings.v0g = r * queue[q].v0;
 		settings.x0g = 0;
 		settings.a0h = 0;
 		settings.v0h = 0;
@@ -245,7 +250,7 @@ int next_move(int32_t start_time) { // {{{
 	settings.pattern_size = queue[q].pattern_size;
 	if (settings.hwtime_step != last_hwtime_step)
 		arch_globals_change();
-	mdebug("move prepared, from=(%f,%f,%f) target=(%f,%f,%f), h=(%f,%f,%f), dist=%f, e=%f, Jg=%f a0g=%f v0g=%f x0g=%f end time=%f, single=%d", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.h[0], settings.h[1], settings.h[2], settings.dist, queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single);
+	//debug("move prepared, from=(%f,%f,%f) target=(%f,%f,%f), h=(%f,%f,%f), dist=%f, e=%f, Jg=%f a0g=%f v0g=%f x0g=%f end time=%f, single=%d", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.h[0], settings.h[1], settings.h[2], settings.dist, queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single);
 
 	settings.queue_start = n;
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
@@ -413,9 +418,12 @@ static void do_steps(double old_factor) { // {{{
 					mtr.settings.target_pos = target;
 				}
 				if (diff < -0x7f) {
-					debug("Error: %d %d trying to send more than -127 steps: %d", s, m, diff);
+					debug("Error: %d %d trying to send more than -127 steps: %d  from %f to %f (time %d)", s, m, -diff, rounded_cp, rounded_new_cp, settings.hwtime);
 					int adjust = diff + 0x7f;
-					settings.hwtime -= settings.hwtime_step;
+					if (settings.hwtime_step > settings.hwtime)
+						settings.hwtime = 0;
+					else
+						settings.hwtime -= settings.hwtime_step;
 					settings.factor = old_factor;
 					diff = -0x7f;
 					target -= adjust / mtr.steps_per_unit;
@@ -582,21 +590,27 @@ static void apply_tick() { // {{{
 			}
 		}
 		// start new move; adjust time.
-		history[current_fragment].cbs += cbs_after_current_move;
+		int current_cbs = cbs_after_current_move;
 		//debug("adding %d cbs because move is completed", cbs_after_current_move);
 		cbs_after_current_move = next_move(settings.end_time);
 		//debug("new pending cbs: %d", cbs_after_current_move);
-		mdebug("next move prepared");
+		//debug("next move prepared, cbs after this = %d", cbs_after_current_move);
 		if (!computing_move) {
 			// There is no next move.
 			continue_event = true;
 			do_steps(old_factor);
-			if (current_fragment_pos > 0) {
-				//debug("sending because new move is started");
+			if (current_fragment_pos > 0 && !sending_fragment) {
+				//debug("sending %d cbs after fragment %d because no new move", current_cbs, current_fragment);
+				history[current_fragment].cbs += current_cbs;
 				send_fragment();
+			}
+			else {
+				//debug("move done, sending %d cbs now", current_cbs);
+				num_movecbs = current_cbs;
 			}
 			return;
 		}
+		history[current_fragment].cbs += current_cbs;
 		mdebug("try again");
 		// Next loop the time is incremented again, but in this case that shouldn't happen, so compensate.
 		settings.hwtime -= settings.hwtime_step;

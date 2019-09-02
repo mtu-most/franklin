@@ -303,8 +303,11 @@ bool serial(bool allow_pending) { // {{{
 		char const *recvname[0x10] = {"ready", "pong", "homed", "pin", "stopped", "named-pin", "done", "underrun", "adc", "limit", "timeout", "pinchange", "c", "d", "e", "f"};
 		if ((command[0] & 0xf) != 8) {
 			fprintf(stderr, "recv: %s ", recvname[command[0] & 0xf]);
-			for (uint8_t i = 0; i < command_end; ++i)
+			for (int i = 0; i < command_end; ++i) {
+				if (i == command_end - (command_end + 3) / 4)
+					fprintf(stderr, "\t\t*");
 				fprintf(stderr, " %02x", command[i]);
+			}
 			fprintf(stderr, "\n");
 		}
 #endif
@@ -483,8 +486,11 @@ void send_packet() { // {{{
 #ifdef DEBUG_DATA
 	char const *sendname[0x20] = {"begin", "ping", "set-uuid", "setup", "control", "msetup", "asetup", "home", "start-move", "start-probe", "move", "move-single", "pattern", "start", "stop", "abort", "discard", "getpin", "spi", "pinname", "14", "15", "16", "17", "18", "19", "1a", "1b", "1c", "1d", "1e", "1f"};
 	fprintf(stderr, "send (%d): %s ", out_busy, sendname[pending_packet[which][0] & 0x1f]);
-	for (uint8_t i = 0; i < pending_len[which]; ++i)
+	for (uint8_t i = 0; i < pending_len[which]; ++i) {
+		if (i == pending_len[which] - (pending_len[which] + 3) / 4)
+			fprintf(stderr, "\t\t/");
 		fprintf(stderr, " %02x", int(uint8_t(pending_packet[which][i])));
+	}
 	fprintf(stderr, "\n");
 #endif
 	for (uint8_t t = 0; t < pending_len[which]; ++t)
