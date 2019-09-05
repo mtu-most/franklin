@@ -176,7 +176,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	bool reverse[7] = {false,   false,   true, false,  false,          false,  true};
 	double X[3];
 	for (int i = 0; i < 3; ++i)
-		X[i] = spaces[0].axis[i]->settings.current;
+		X[i] = i < spaces[0].num_axes ? spaces[0].axis[i]->settings.current : 0;
 	for (int part = 0; part < 7; ++part) {
 		if (s[part] < 1e-10)
 			continue;

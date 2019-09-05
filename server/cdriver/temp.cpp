@@ -149,6 +149,7 @@ void Temp::init() {
 	max_alarm = NAN;
 	adcmin_alarm = -1;
 	adcmax_alarm = MAXINT;
+	fan_duty = 1;
 	for (int i = 0; i < 2; ++i) {
 		power_pin[i].init();
 		target[i] = NAN;

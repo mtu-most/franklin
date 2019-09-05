@@ -994,18 +994,20 @@ void Parser::flush_pending() { // {{{
 					s_const_a = 0;
 					t_ramp = std::sqrt(total_dv / max_J);
 				}
-				double a_top = max_J * t_ramp;
+				double a_top = -max_J * t_ramp;
 				double t_ramp2 = t_ramp * t_ramp;
 				double t_ramp3 = t_ramp2 * t_ramp;
 				double dv_ramp = max_J / 2 * t_ramp2;
 				s_ramp_start = P1->f * t_ramp - max_J / 6 * t_ramp3;
-				s_ramp_end = (P1->v1 + dv_ramp) * t_ramp - a_top / 2 * t_ramp2 + max_J / 6 * t_ramp3;
+				s_ramp_end = (P1->v1 + dv_ramp) * t_ramp + a_top / 2 * t_ramp2 + max_J / 6 * t_ramp3;
 				s_const_v = P1->length - s_curve - s_ramp_start - s_ramp_end - s_const_a;
 				t_const_v = s_const_v / P1->f;
 
 				pdebug("part 1 s,t: cv %f,%f rs %f,%f ca %f,%f re %f,%f curve %f,%f", s_const_v, t_const_v, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_curve, t_curve);
-				if (s_const_v < -1e-2)
-					abort();
+				if (s_const_v < -1e-2) {
+					debug("Error: const v part is negative: %f", s_const_v);
+					//abort();
+				}
 
 				// constant v
 				if (s_const_v > 1e-10) {
@@ -1026,7 +1028,7 @@ void Parser::flush_pending() { // {{{
 					if (have_max_a) {
 						for (int i = 0; i < 3; ++i)
 							X[i] = P1->from[i] + P1->unit[i] * (s_const_v + s_ramp_start + s_const_a);
-						add_record(P1->gcode_line, RUN_POLY2, P1->tool, X[0], X[1], X[2], 0, 0, 0, -a_top, t_const_a, P1->f - dv_ramp, P1->e0 + de * (s_const_v + s_ramp_start + s_const_a) / P1->length);
+						add_record(P1->gcode_line, RUN_POLY2, P1->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P1->f - dv_ramp, P1->e0 + de * (s_const_v + s_ramp_start + s_const_a) / P1->length);
 						pdebug("1.const a to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->f - dv_ramp);
 					}
 					// stop slowdown
@@ -1074,8 +1076,11 @@ void Parser::flush_pending() { // {{{
 				t_const_v = s_const_v / P2->f;
 
 				pdebug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
-				if (s_const_v < -1e-2)
-					abort();
+				if (s_const_v < -1e-2) {
+					debug("Error: const v2 is negative: %f, len %f %f", s_const_v, P1->length, P2->length);
+					debug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
+					//abort();
+				}
 
 				// second half curve
 				if (s_curve > 1e-10) {
