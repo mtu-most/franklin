@@ -78,6 +78,8 @@ static void change0(int qpos) { // {{{
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
 		for (int a = 0; a < 3; ++a) {
+			if (a >= spaces[s].num_axes)
+				continue;
 			//debug("change %d %d %d %f", s, a, sp.type, queue[qpos].X[a]);
 			queue[qpos].target[a] = space_types[sp.type].change0(&sp, a, queue[qpos].target[a]);	// TODO: this should be checked.
 		}
@@ -145,6 +147,8 @@ int next_move(int32_t start_time) { // {{{
 	// Fill unspecified coordinates with previous values. {{{
 	Space &sp0 = spaces[0];
 	for (int a = 0; a < 3; ++a) {
+		if (a >= sp0.num_axes)
+			continue;
 		if ((!std::isnan(queue[q].target[a]) || (n != settings.queue_end && !std::isnan(queue[n].target[a]))) && std::isnan(sp0.axis[a]->settings.source)) {
 			debug("Motor position for axis %d is not known, so move cannot take place; aborting move and removing it from the queue: q1=%f q2=%f src=%f", a, queue[q].target[a], queue[n].target[a], sp0.axis[a]->settings.source);
 			// This possibly removes one move too many, but it shouldn't happen anyway.
@@ -190,6 +194,8 @@ int next_move(int32_t start_time) { // {{{
 	settings.Jh = 0;
 	double leng = 0;
 	for (int i = 0; i < 3; ++i) {
+		if (i >= sp0.num_axes)
+			continue;
 		settings.g[i] = queue[q].target[i] - spaces[0].axis[i]->settings.source;
 		settings.h[i] = queue[q].h[i];
 		leng += settings.g[i] * settings.g[i];
@@ -479,6 +485,8 @@ static double set_targets(double factor) { // {{{
 		double xg = settings.Jg * t3 / 6 + settings.a0g * t2 / 2 + settings.v0g * t + settings.x0g;
 		double xh = settings.Jh * t3 / 6 + settings.a0h * t2 / 2 + settings.v0h * t + settings.x0h;
 		for (int i = 0; i < 3; ++i) {
+			if (i >= spaces[0].num_axes)
+				continue;
 			spaces[0].axis[i]->settings.target = spaces[0].axis[i]->settings.source + xg * settings.unitg[i] + xh * settings.unith[i];
 		}
 		mdebug("targets %f,%f,%f src %f,%f,%f", spaces[0].axis[0]->settings.target, spaces[0].axis[1]->settings.target, spaces[0].axis[2]->settings.target, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source);
