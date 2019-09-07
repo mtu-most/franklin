@@ -261,7 +261,7 @@ function Axis(ui, space, axis) {
 }
 
 function Motor(ui, space, motor) {
-	var e = [['steps_per_unit', 3, 1, 'steps/', ''], ['home_pos', 3, 1, '', ''], ['home_order', 0, 1, null, null], ['limit_v', 0, 1, '', '/s'], ['limit_a', 1, 1, '', '/s²']];
+	var e = [['steps_per_unit', 3, 1, 'steps/', ''], ['home_pos', 3, 1, '', ''], ['home_order', 0, 1, null, null], ['limit_v', 0, 1, '', '/s'], ['limit_a', 1, 1e3, ' ×10³ ', '/s²']];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
 		if (space == 0 || (space == 1 && i != 1 && i != 2) || (space == 2 && (i == 1 || i == 2))) {
@@ -779,12 +779,12 @@ function setup_globals(desc, pos, top) { // {{{
 	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
 	e.AddText('/s');
 	e = ret.AddElement('div').AddText('Max a');
-	e.Add(Float(ui, [null, 'max_a'], 2, 1));
-	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
+	e.Add(Float(ui, [null, 'max_a'], 2, 1e3));
+	e.AddText(' ×10³ ').Add(add_name(ui, 'unit', 0, 0));
 	e.AddText('/s²');
 	e = ret.AddElement('div').AddText('Max J');
-	e.Add(Float(ui, [null, 'max_J'], 2, 1));
-	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
+	e.Add(Float(ui, [null, 'max_J'], 2, 1e3));
+	e.AddText(' ×10³ ').Add(add_name(ui, 'unit', 0, 0));
 	e.AddText('/s³');
 	var pins = ret.Add(make_table(ui));
 	// Add dummy first child instead of a title row.

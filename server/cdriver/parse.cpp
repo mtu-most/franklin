@@ -930,8 +930,8 @@ void Parser::flush_pending() { // {{{
 		}
 		pdebug("s %f dev %f x0 %f", s, P1->dev, P1->x0);
 		double sq = std::sqrt(s * s + 1);
-		double max_v_J = std::pow(-max_J * P1->x0 * P1->x0 * sq / 2, 1. / 3);
-		double max_v_a = std::sqrt(max_a * P1->x0 * sq / 2);
+		double max_v_J = std::pow(max_J * P1->x0 * P1->x0 * sq / 2, 1. / 3);
+		double max_v_a = std::sqrt(max_a * -P1->x0 * sq / 2);
 		P1->v1 = min(min(min(max_v_J, max_v_a), P1->f), P2->f);
 		P1->tf = -P1->x0 / P1->v1;
 		if (std::isnan(P1->tf))
@@ -986,7 +986,7 @@ void Parser::flush_pending() { // {{{
 				t_curve = P1->tf;
 				if (have_max_a) {
 					t_const_a = (total_dv - max_ramp_dv * 2) / max_a;
-					s_const_a = max_a / 2 * t_const_a * t_const_a;
+					s_const_a = -max_a / 2 * t_const_a * t_const_a + (P1->f - max_ramp_dv) * t_const_a;
 					t_ramp = max_ramp_t;
 				}
 				else {
@@ -1058,7 +1058,7 @@ void Parser::flush_pending() { // {{{
 				t_curve = P1->tf;
 				if (have_max_a) {
 					t_const_a = (total_dv - max_ramp_dv * 2) / max_a;
-					s_const_a = max_a / 2 * t_const_a * t_const_a;
+					s_const_a = max_a / 2 * t_const_a * t_const_a + (P1->v1 + max_ramp_dv) * t_const_a;
 					t_ramp = max_ramp_t;
 				}
 				else {

@@ -187,7 +187,11 @@ static inline double compute_max_v(double x, double v, double max_J, double max_
 
 	// Time for maximum ramp.
 	double t_ramp_max = max_a / max_J;
-	double x_ramp_max = (2 * v * max_a * max_J + max_a * max_a * max_a) / (max_J * max_J);
+	// Compute total x with only two ramps.
+	double a_top_max = max_J * t_ramp_max;
+	double v_top_max = max_J / 2 * t_ramp_max * t_ramp_max;
+	// J/6*t^3 cancels against -J/6*t^3
+	double x_ramp_max = a_top_max / 2 * t_ramp_max * t_ramp_max + v_top_max * t_ramp_max + 2 * v * t_ramp_max;
 	double ret;
 	if (x_ramp_max <= x) {
 		// Ramp fits on segment, compute size of middle part.
@@ -195,23 +199,46 @@ static inline double compute_max_v(double x, double v, double max_J, double max_
 		double t2 = t * t;
 		double t3 = t2 * t;
 		double a = max_a / 2;
-		double b = max_J * t2 / 2 + max_a * t;
-		double c = max_a * t2 / 2 + max_J  * t3 / 2 - x;
+		double b = max_J * t2 / 2 + max_a * t + v;
+		double c = max_a * t2 / 2 + max_J * t3 / 2 + 2 * v * t - x;
 		double t_const_a = (-b + std::sqrt(b * b - 4 * a * c)) / (2 * a);
-		ret = max_J * t2 / 2 + max_a * t_const_a + max_a * t - max_J * t2 / 2;
+		ret = max_a * (t_const_a + t);
 		//fprintf(stderr, "with max a\n");
 	}
 	else {
 		// Ramp does not fit on segment.
-		double b = x * max_J * max_J;
-		double c = 2 * v * max_a * max_J;
+		double b = x / max_J;
+		double c = 2 * v / max_J;
 		double k = std::pow(std::sqrt(81 * b * b + 12 * c * c * c) + 9 * b, 1. / 3);
-		double a = (std::pow(2, 1. / 3) * k * k - 2 * std::pow(3, 1. / 3) * c) / (std::pow(6, 2. / 3) * k);
-		double t_ramp = a / max_J;
+		double t_ramp = (std::pow(2, 1. / 3) * k * k - 2 * std::pow(3, 1. / 3) * c) / (std::pow(6, 2. / 3) * k);
 		ret = max_J * t_ramp * t_ramp;
+		//fprintf(stderr, "without max a\n");
 	}
 	//fprintf(stderr, "compute_max_v: x=%f, v=%f, J=%f, a=%f, ret=%f->%f\n", x, v, max_J, max_a, ret, v + ret);
-	return v + ret;
+	// Check the result.
+	double max_dv = max_J / 2 * t_ramp_max * t_ramp_max;
+	bool have_max_a = ret > 2 * max_dv;
+	double v1, v2, t_const_a, t_ramp, a_top;
+	if (have_max_a) {
+		a_top = max_a;
+		v1 = v + max_dv;
+		v2 = v + ret - max_dv;
+		t_ramp = t_ramp_max;
+		double dv_const_a = ret - 2 * max_dv;
+		t_const_a = dv_const_a / max_a;
+	}
+	else {
+		v1 = v + ret / 2;
+		v2 = v1;
+		t_ramp = std::sqrt(2 * (v1 - v) / max_J);
+		a_top = max_J * t_ramp;
+		t_const_a = 0;
+	}
+	double s = v * t_ramp + a_top / 2 * t_const_a * t_const_a + v1 * t_const_a + a_top / 2 * t_ramp * t_ramp + v2 * t_ramp;
+	if ((s - x) * (s - x) > 1e-5)
+		fprintf(stderr, "Warning: max v %f + %f does not fit in requested distance %f != %f with max a,J=%f, %f (%s)\n", v, ret, x, s, max_a, max_J, have_max_a ? "+" : "-");
+	// Return 5% less so it still fits on segment with possible rounding errors.
+	return v + ret * .95;
 }
 
 #ifdef MODULE

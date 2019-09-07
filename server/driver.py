@@ -2450,10 +2450,10 @@ class Machine: # {{{
 		position = int(position)
 		def parse_record(num):
 			s = struct.calcsize(record_format)
-			type, tool, X, Y, Z, hx, hy, hz, Jg, v0, E, time, line = struct.unpack(record_format, self.gcode_map[num * s:(num + 1) * s])
+			type, tool, X, Y, Z, hx, hy, hz, Jg, tf, v0, E, time, line = struct.unpack(record_format, self.gcode_map[num * s:(num + 1) * s])
 			#log('get context type %d' % type)
 
-			return {'type': tuple(x for x in protocol.parsed if protocol.parsed[x] == type)[0], 'X': (X, Y, Z), 'h': (hx, hy, hz), 'Jg': Jg, 'v0': v0, 'E': E, 'time': time, 'line': line}
+			return {'type': tuple(x for x in protocol.parsed if protocol.parsed[x] == type)[0], 'X': (X, Y, Z), 'h': (hx, hy, hz), 'Jg': Jg, 'tf': tf, 'v0': v0, 'E': E, 'time': time, 'line': line}
 		return max(0, position - num), [parse_record(x) for x in range(position - num, position + num + 1) if 0 <= x < self.gcode_num_records]
 	# }}}
 	def tp_get_string(self, num): # {{{
