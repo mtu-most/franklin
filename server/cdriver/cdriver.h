@@ -163,6 +163,7 @@ struct History {
 	bool probing, single;
 	double run_time;
 	double factor;
+	int gcode_line;
 	uint8_t pattern[PATTERN_MAX];
 	int pattern_size;	// in bytes; each bit is a pulse.
 };

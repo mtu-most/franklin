@@ -27,8 +27,8 @@ static void get_cb(bool value) {
 #define CASE(x) case x: //debug("request " # x);
 
 int go_to(bool relative, MoveCommand const *move, bool cb) {
+	//debug("goto (%f,%f,%f)->(%f,%f,%f) at speed %f, e %f->%f", spaces[0].axis[0]->settings.current, spaces[0].axis[1]->settings.current, spaces[0].axis[2]->settings.current, move->target[0], move->target[1], move->target[2], move->v0, spaces[1].axis[move->tool]->settings.current, move->e);
 	// This is a manual move or the start of a job; set hwtime step to default.
-	//debug("goto (%f,%f,%f) at speed %f", move->target[0], move->target[1], move->target[2], move->v0);
 	settings.hwtime_step = default_hwtime_step;
 	if (computing_move || settings.queue_full || settings.queue_end != settings.queue_start) {
 		// This is not allowed; signal error to Python glue.
@@ -60,7 +60,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		else
 			dist += d * d;
 	}
-	if (!std::isnan(dist)) {
+	if (!std::isnan(dist) && dist >= 1e-10) {
 		dist = std::sqrt(dist);
 		vmax = max_v;
 		amax = max_a;
@@ -71,8 +71,6 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	else {
 		for (int i = 0; i < 3; ++i)
 			unit[i] = 0;
-	}
-	if (std::isnan(dist) || dist < 1e-10) {
 		for (int a = 3; a < 6; ++a) {
 			if (a >= spaces[0].num_axes)
 				break;
@@ -147,6 +145,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		}
 		queue[i].Jh = 0;
 		queue[i].time = move->time;
+		queue[i].gcode_line = -1;
 		queue[i].pattern_size = 0;
 	}
 	double dv_ramp, t_max_a;
@@ -177,7 +176,9 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	double X[3];
 	for (int i = 0; i < 3; ++i)
 		X[i] = i < spaces[0].num_axes ? spaces[0].axis[i]->settings.current : 0;
+	double current_s = 0;
 	for (int part = 0; part < 7; ++part) {
+		current_s += s[part];
 		if (s[part] < 1e-10)
 			continue;
 		for (int i = 0; i < 3; ++i) {
@@ -190,7 +191,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		queue[q].v0 = v0[part];
 		queue[q].a0 = a0[part];
 		queue[q].reverse = reverse[part];
-		queue[q].e = move->e * s[part] / dist;
+		queue[q].e = move->e * current_s / dist;
 		q += 1;
 	}
 	settings.queue_end = q;

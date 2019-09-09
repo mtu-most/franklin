@@ -80,7 +80,7 @@ else:
 	print('# Bbox: %s' % str(bbox))
 	for i, s in enumerate(strings):
 		print('# String %d: %s' % (i, s))
-	print('#  n command tool       X       Y       Z      h[0]      h[1]      h[2]       Jg      tf     v0       E      time line')
+	print('#  n command tool          X          Y          Z      h[0]      h[1]      h[2]       Jg      tf     v0       E      time line')
 
 while True:
 	extra = ''
@@ -127,7 +127,6 @@ while True:
 			if sum(x ** 2 for x in current_a) > 1e-4:
 				warn("poly3plus while a is not 0")
 			current_a = tuple(Jg * tf * unitg[i] + Jh * tf * unith[i] for i in range(3))
-			extra = ' %f %f' % (sum((x - n) ** 2 for x, n in zip((X, Y, Z), pos)) ** .5, (Y - newpos[1]) / (X - newpos[0]) if X != newpos[0] else float('nan'))
 			if Jh == 0:
 				if (any(abs(n - p) > 1e-2 for n, p in zip(newpos, (X, Y, Z)))):
 					warn('given and computed position differ: %f,%f,%f != %f,%f,%f' % (X, Y, Z, newpos[0], newpos[1], newpos[2]))
@@ -162,7 +161,6 @@ while True:
 		if (any(abs(n - p) > 1e-2 for n, p in zip(newpos, frompos))):
 			warn('positions in poly3- differ: %f,%f,%f != %f,%f,%f diff: %f,%f,%f fg=%f fh=%f' % (newpos[0], newpos[1], newpos[2], frompos[0], frompos[1], frompos[2], newpos[0] - frompos[0], newpos[1] - frompos[1], newpos[2] - frompos[2], fg, fh))
 			path += 'M%f %f' % (frompos[0], frompos[1])
-		extra = ' %f %f' % (sum((x - n) ** 2 for x, n in zip(pos, (X, Y, Z))) ** .5, (pos[1] - frompos[1]) / (pos[0] - frompos[0]) if pos[0] != frompos[0] else float('nan'))
 		denominator = Jh / 2 * tf ** 2
 		vgvh = (Jg / 2 * tf ** 2 + v0) / (Jh / 2 * tf ** 2) if denominator != 0 else 0
 		dg = Jh / 6 * tf ** 3 * vgvh
@@ -197,7 +195,7 @@ while True:
 		pos = (X, Y, Z)
 		# TODO
 	if not config['svg']:
-		print(('%4d %7s %4d %7.2f %7.2f %7.2f %9.2f %9.2f %9.2f %8.0f %7.4f %6.2f %7.1f %9.3f %4d%s') % (n, mkcmd(t), T, X, Y, Z, h0, h1, h2, Jg, tf, v0, E, time, line, extra))
+		print(('%4d %7s %4d %10.5f %10.5f %10.5f %9.2f %9.2f %9.2f %8.0f %7.4f %6.2f %7.1f %9.3f %4d%s') % (n, mkcmd(t), T, X, Y, Z, h0, h1, h2, Jg, tf, v0, E, time, line, extra))
 	n += 1
 
 if sum(c ** 2 for c in current_v) > 1e-4:

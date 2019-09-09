@@ -107,6 +107,7 @@ int next_move(int32_t start_time) { // {{{
 	int q = settings.queue_start;
 	int n = (settings.queue_start + 1) % QUEUE_LENGTH;
 	settings.single = queue[q].single;
+	settings.gcode_line = queue[q].gcode_line;
 
 	if (queue[q].cb) {
 		++num_cbs;
@@ -256,7 +257,7 @@ int next_move(int32_t start_time) { // {{{
 	settings.pattern_size = queue[q].pattern_size;
 	if (settings.hwtime_step != last_hwtime_step)
 		arch_globals_change();
-	//debug("move prepared, from=(%f,%f,%f) target=(%f,%f,%f), h=(%f,%f,%f), dist=%f, e=%f, Jg=%f a0g=%f v0g=%f x0g=%f end time=%f, single=%d", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.h[0], settings.h[1], settings.h[2], settings.dist, queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single);
+	//debug("move ln %d, from=(%f,%f,%f) (current %f,%f,%f) target=(%f,%f,%f), h=(%f,%f,%f), dist=%f, e=%f, Jg=%f a0g=%f v0g=%f x0g=%f end time=%f, single=%d", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->settings.current, spaces[0].axis[1]->settings.current, spaces[0].axis[2]->settings.current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.h[0], settings.h[1], settings.h[2], settings.dist, queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single);
 
 	settings.queue_start = n;
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
@@ -270,8 +271,6 @@ int next_move(int32_t start_time) { // {{{
 } // }}}
 
 static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double distance, double dt, double &factor) { // {{{
-	// TODO: fix and enable this.
-	return;
 	// Check motor limits for motor (sp,mt), which is mtr. For followers, limit_mtr is set to its leader unless settings.single is true.
 	// distance is the distance to travel; dt is the time, factor is lowered if needed.
 	//debug("check distance %d %d dist %f t %f current %f time step %d", sp, mt, distance, dt, mtr->settings.current_pos, settings.hwtime_step);
@@ -296,14 +295,14 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	}
 	// Limit v.
 	if (v > limit_mtr->limit_v) {
-		debug("%d %d v %f limit %f dist %f dt %f current %f factor %f", sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, settings.factor);
+		debug("line %d motor %d %d v %f limit %f dist %f dt %f current %f factor %f", settings.gcode_line, sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, settings.factor);
 		distance = (s * limit_mtr->limit_v) * dt;
 		v = std::fabs(distance / dt);
 	}
 	// Limit a+.
 	double limit_dv = limit_mtr->limit_a * dt;
 	if (v - mtr->settings.last_v * s > limit_dv) {
-		debug("a+ %d %d target v %f limit dv %f last v %f s %d current %f factor %f", sp, mt, mtr->settings.target_v, limit_dv, mtr->settings.last_v, s, mtr->settings.current_pos, settings.factor);
+		debug("line %d a+ %d %d target v %f limit dv %f last v %f s %d current %f factor %f", settings.gcode_line, sp, mt, mtr->settings.target_v, limit_dv, mtr->settings.last_v, s, mtr->settings.current_pos, settings.factor);
 		distance = (limit_dv * s + mtr->settings.last_v) * dt;
 		v = std::fabs(distance / dt);
 	}
@@ -328,10 +327,10 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	double f = distance / orig_distance;
 	if (f < factor) {
 		//debug("checked %d %d src %f target %f target dist %f new dist %f old factor %f new factor %f", sp, mt, mtr->settings.current_pos, mtr->settings.target_pos, orig_distance, distance, factor, f);
-		factor = f;
+		//factor = f;
 	}
 	// Store adjusted value of v.
-	mtr->settings.target_v = s * v;
+	//mtr->settings.target_v = s * v;
 } // }}}
 
 static double move_axes(Space *s) { // {{{
@@ -412,7 +411,7 @@ static void do_steps(double old_factor) { // {{{
 				}
 				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
 				if (diff > 0x7f) {
-					debug("Error: %d %d trying to send more than 127 steps: %d  from %f to %f (time %d)", s, m, diff, rounded_cp, rounded_new_cp, settings.hwtime);
+					debug("Error on line %d: %d %d trying to send more than 127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, diff, rounded_cp, rounded_new_cp, settings.hwtime);
 					int adjust = diff - 0x7f;
 					if (settings.hwtime_step > settings.hwtime)
 						settings.hwtime = 0;
@@ -424,7 +423,7 @@ static void do_steps(double old_factor) { // {{{
 					mtr.settings.target_pos = target;
 				}
 				if (diff < -0x7f) {
-					debug("Error: %d %d trying to send more than -127 steps: %d  from %f to %f (time %d)", s, m, -diff, rounded_cp, rounded_new_cp, settings.hwtime);
+					debug("Error on line %d: %d %d trying to send more than -127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, -diff, rounded_cp, rounded_new_cp, settings.hwtime);
 					int adjust = diff + 0x7f;
 					if (settings.hwtime_step > settings.hwtime)
 						settings.hwtime = 0;
@@ -594,6 +593,7 @@ static void apply_tick() { // {{{
 			Space &sp = spaces[s];
 			for (int a = 0; a < sp.num_axes; ++a) {
 				auto ax = sp.axis[a];
+				//debug("setting source for %d %d to target %f", s, a, ax->settings.target);
 				ax->settings.source = ax->settings.target;
 			}
 		}

@@ -861,7 +861,7 @@ void Parser::flush_pending() { // {{{
 	pending.push_front(pending.front());
 	for (auto P0 = pending.begin(), P1 = ++pending.begin(); P1 != pending.end(); ++P0, ++P1) {
 		P1->f = min(max_v, P1->f);
-		P1->e0 = P0->e;
+		P1->e0 = (P0->e + P1->e) / 2;
 		P1->a0 = P0->a;
 		P1->b0 = P0->b;
 		P1->c0 = P0->c;
@@ -976,7 +976,7 @@ void Parser::flush_pending() { // {{{
 			double max_ramp_t = max_a / max_J;
 			double max_ramp_dv = max_J / 2 * max_ramp_t * max_ramp_t;
 			if (P1->f > 0) {
-				double de = (P1->e - P1->e0) / 2;
+				double de = P1->e - P1->e0;
 				double total_dv = P1->f - P1->v1;
 				// Compute s and t for all parts.
 				bool have_max_a = total_dv > max_ramp_dv * 2;
@@ -1048,7 +1048,7 @@ void Parser::flush_pending() { // {{{
 			}
 
 			if (P2->f > 0) {
-				double de = P2->e - P2->e0;
+				double de = P2->e0 - P1->e;
 				double total_dv = P2->f - P1->v1;
 				// Compute s and t for all parts.
 				bool have_max_a = total_dv > max_ramp_dv * 2;
@@ -1089,7 +1089,7 @@ void Parser::flush_pending() { // {{{
 						g[i] = P2->unit[i] * s_curve;
 						h[i] = P1->nnLK[i] * P1->Jh;
 					}
-					add_record(P2->gcode_line, RUN_POLY3MINUS, P2->tool, P1->x + g[0], P1->y + g[1], P1->z + g[2], h[0], h[1], h[2], P1->Jg, t_curve, P1->v1, P2->e0 + de * s_curve / P2->length);
+					add_record(P2->gcode_line, RUN_POLY3MINUS, P2->tool, P1->x + g[0], P1->y + g[1], P1->z + g[2], h[0], h[1], h[2], P1->Jg, t_curve, P1->v1, P1->e + de * s_curve / P2->length);
 					pdebug("2.curve- to (%f,%f,%f) v=%f h (%f,%f,%f) nnLK.x=%f Jh=%f", P1->x + g[0], P1->y + g[1], P1->z + g[2], P1->v1, h[0], h[1], h[2], P1->nnLK[0], P1->Jh);
 				}
 				if (P1->v1 != P2->f) {
@@ -1097,24 +1097,24 @@ void Parser::flush_pending() { // {{{
 					double X[3];
 					for (int i = 0; i < 3; ++i)
 						X[i] = P2->from[i] - P2->unit[i] * (s_const_v + s_ramp_end + s_const_a);
-					add_record(P2->gcode_line, RUN_POLY3PLUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, max_J, t_ramp, P1->v1, P2->e0 + de * (s_curve + s_ramp_start) / P2->length);
+					add_record(P2->gcode_line, RUN_POLY3PLUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, max_J, t_ramp, P1->v1, P1->e + de * (s_curve + s_ramp_start) / P2->length);
 					pdebug("2.start to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->v1);
 					// constant a speedup
 					if (have_max_a) {
 						for (int i = 0; i < 3; ++i)
 							X[i] = P2->from[i] - P2->unit[i] * (s_const_v + s_ramp_end);
-						add_record(P2->gcode_line, RUN_POLY2, P2->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P1->v1 + dv_ramp, P2->e0 + de * (s_curve + s_ramp_start + s_const_a) / P2->length);
+						add_record(P2->gcode_line, RUN_POLY2, P2->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P1->v1 + dv_ramp, P1->e + de * (s_curve + s_ramp_start + s_const_a) / P2->length);
 						pdebug("2.mid to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->v1 + dv_ramp);
 					}
 					// stop speedup
 					for (int i = 0; i < 3; ++i)
 						X[i] = P2->from[i] - P2->unit[i] * s_const_v;
-					add_record(P2->gcode_line, RUN_POLY3MINUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P2->f, P2->e - de * s_const_v / P2->length);
+					add_record(P2->gcode_line, RUN_POLY3MINUS, P2->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P2->f, P2->e0 - de * s_const_v / P2->length);
 					pdebug("2.stop- to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P2->f);
 				}
 				// constant v
 				if (s_const_v > 1e-10) {
-					add_record(P2->gcode_line, RUN_POLY3PLUS, P1->tool, P2->from[0], P2->from[1], P2->from[2], 0, 0, 0, 0, t_const_v, P2->f, P2->e);
+					add_record(P2->gcode_line, RUN_POLY3PLUS, P1->tool, P2->from[0], P2->from[1], P2->from[2], 0, 0, 0, 0, t_const_v, P2->f, P2->e0);
 					pdebug("2.const v to (%f,%f,%f) v0=%f", P2->from[0], P2->from[1], P2->from[2], P2->f);
 				}
 			}

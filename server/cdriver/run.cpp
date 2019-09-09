@@ -277,6 +277,7 @@ void run_file_fill_queue() {
 					queue[settings.queue_end].time = r.time;
 					queue[settings.queue_end].cb = false;
 					queue[settings.queue_end].pattern_size = pattern_size;
+					queue[settings.queue_end].gcode_line = r.gcode_line;
 					if (pattern_size > 0)
 						memcpy(queue[settings.queue_end].pattern, current_pattern, pattern_size);
 					pattern_size = 0;

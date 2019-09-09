@@ -55,6 +55,7 @@ struct MoveCommand {
 	double tf;
 	double e;
 	double time;
+	int64_t gcode_line;
 	int pattern_size;	// in bytes; each bit is a pulse.
 	uint8_t pattern[PATTERN_MAX];
 };
