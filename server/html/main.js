@@ -473,8 +473,9 @@ function floatkey(event, element) { // {{{
 			}
 			else if (space == 1) {
 				if (element.obj[0][1] !== null) {
-					var e = element.obj[0][1];
-					element.ui.machine.call('line', [], {e: pos[e], tool: e});
+					var e = element.obj[0][1][1];
+					if (e !== undefined)
+						element.ui.machine.call('line', [], {e: pos[e], tool: e});
 				}
 				else {
 					for (var e = 0; e < pos.length; ++e)
