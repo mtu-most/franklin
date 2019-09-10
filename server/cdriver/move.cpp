@@ -257,13 +257,14 @@ int next_move(int32_t start_time) { // {{{
 	settings.pattern_size = queue[q].pattern_size;
 	if (settings.hwtime_step != last_hwtime_step)
 		arch_globals_change();
-	//debug("move ln %d, from=(%f,%f,%f) (current %f,%f,%f) target=(%f,%f,%f), h=(%f,%f,%f), dist=%f, e=%f, Jg=%f a0g=%f v0g=%f x0g=%f end time=%f, single=%d", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->settings.current, spaces[0].axis[1]->settings.current, spaces[0].axis[2]->settings.current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.h[0], settings.h[1], settings.h[2], settings.dist, queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single);
-
+	mdebug("move ln %d, from=(%f,%f,%f) (current %f,%f,%f) target=(%f,%f,%f), h=(%f,%f,%f), dist=%f, e=%f, Jg=%f a0g=%f v0g=%f x0g=%f end time=%f, single=%d", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->settings.current, spaces[0].axis[1]->settings.current, spaces[0].axis[2]->settings.current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.h[0], settings.h[1], settings.h[2], settings.dist, queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single);
 	settings.queue_start = n;
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
 	if (!computing_move) {
-		if (current_fragment_pos > 0)
+		if (current_fragment_pos > 0) {
+			debug("non-zero current fragment pos while not computing move");
 			abort();
+		}
 		store_settings();
 	}
 	computing_move = true;
@@ -294,14 +295,14 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 		mtr->settings.last_v = 0;
 	}
 	// Limit v.
-	if (v > limit_mtr->limit_v) {
+	if (v > limit_mtr->limit_v * (1 + 1e-5)) {
 		debug("line %d motor %d %d v %f limit %f dist %f dt %f current %f factor %f", settings.gcode_line, sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, settings.factor);
 		distance = (s * limit_mtr->limit_v) * dt;
 		v = std::fabs(distance / dt);
 	}
 	// Limit a+.
 	double limit_dv = limit_mtr->limit_a * dt;
-	if (v - mtr->settings.last_v * s > limit_dv) {
+	if (v - mtr->settings.last_v * s > limit_dv * (1 + 1e-5)) {
 		debug("line %d a+ %d %d target v %f limit dv %f last v %f s %d current %f factor %f", settings.gcode_line, sp, mt, mtr->settings.target_v, limit_dv, mtr->settings.last_v, s, mtr->settings.current_pos, settings.factor);
 		distance = (limit_dv * s + mtr->settings.last_v) * dt;
 		v = std::fabs(distance / dt);
@@ -503,7 +504,7 @@ static double set_targets(double factor) { // {{{
 				mdebug("setting axis %d %d source from nan to 0", s, a);
 			}
 			ax->settings.target = ax->settings.source + factor * (ax->settings.endpos - ax->settings.source);
-			if (s == 0)
+			//if (s == 0)
 				mdebug("setting target for %d %d to %f (%f -> %f)", s, a, ax->settings.target, ax->settings.source, ax->settings.endpos);
 		}
 		double f = move_axes(&sp);
@@ -628,8 +629,10 @@ static void apply_tick() { // {{{
 } // }}}
 
 void store_settings() { // {{{
-	if (current_fragment_pos != 0)
+	if (current_fragment_pos != 0) {
+		debug("store settings called with non-empty send buffer");
 		abort();
+	}
 	num_active_motors = 0;
 	if (FRAGMENTS_PER_BUFFER == 0)
 		return;

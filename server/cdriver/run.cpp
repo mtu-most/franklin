@@ -266,8 +266,8 @@ void run_file_fill_queue() {
 					distg = std::sqrt(distg);
 					disth = std::sqrt(disth);
 					for (int i = 0; i < 3; ++i) {
-						queue[settings.queue_end].unitg[i] = (queue[settings.queue_end].target[i] - lastpos[i]) / distg;
-						queue[settings.queue_end].unith[i] = queue[settings.queue_end].h[i] / disth;
+						queue[settings.queue_end].unitg[i] = distg < 1e-10 ? 0 : (queue[settings.queue_end].target[i] - lastpos[i]) / distg;
+						queue[settings.queue_end].unith[i] = disth < 1e-10 ? 0 : queue[settings.queue_end].h[i] / disth;
 					}
 					queue[settings.queue_end].Jg = (r.type == RUN_POLY2 ? 0 : r.Jg);
 					queue[settings.queue_end].Jh = disth;
@@ -289,6 +289,7 @@ void run_file_fill_queue() {
 				case RUN_ARC:
 				{
 					// TODO.
+					debug("G2/G3 are currently not supported");
 					abort();
 				}
 				case RUN_GOTO:

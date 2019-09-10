@@ -204,8 +204,10 @@ void send_to_parent(char cmd) { // {{{
 	if (stopping == 2 && cmd == CMD_LIMIT)
 		stopping = 1;
 	//debug("sending interrupt 0x%x", cmd);
-	if (write(interrupt, &cmd, 1) != 1)
+	if (write(interrupt, &cmd, 1) != 1) {
+		debug("failed to write to parent");
 		abort();
+	}
 	interrupt_pending = true;
 } // }}}
 

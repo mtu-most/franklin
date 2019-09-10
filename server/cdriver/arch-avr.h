@@ -518,8 +518,10 @@ bool hwpacket(int len) { // {{{
 	case HWC_HOMED: // {{{
 	{
 		if (!avr_homing) {
-			if (initialized)
+			if (initialized) {
+				debug("Unexpected home reply received");
 				abort();
+			}
 			avr_write_ack("pre-homed");
 			return false;
 		}
@@ -885,8 +887,10 @@ void arch_pattern_change() { // {{{
 
 void arch_change(bool motors) { // {{{
 	int old_active_motors = avr_active_motors;
+	bool pattern_valid = false;
 	if (connected) {
-		avr_active_motors = 1;
+		pattern_valid = pattern.step_pin.valid() || pattern.dir_pin.valid();
+		avr_active_motors = pattern_valid ? 1 : 0;
 		for (uint8_t s = 0; s < NUM_SPACES; ++s) {
 			avr_active_motors += spaces[s].num_motors;
 		}
@@ -910,7 +914,8 @@ void arch_change(bool motors) { // {{{
 				arch_motor_change(s, m);
 			}
 		}
-		arch_pattern_change();
+		if (pattern_valid)
+			arch_pattern_change();
 		if (connected) {
 			for (int m = old_active_motors; m < avr_active_motors; ++m) {
 				avr_buffer[0] = HWC_MSETUP;
@@ -1208,8 +1213,10 @@ void arch_addpos(int s, int m, double diff) { // {{{
 		return;
 	if (!std::isnan(diff))
 		avr_pos_offset[mi + m] -= diff;
-	else
+	else {
+		debug("Error: addpos called with NaN argument");
 		abort();
+	}
 	cpdebug(s, m, "arch addpos diff %f offset %f pos %f", diff, avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
 } // }}}
 
@@ -1506,6 +1513,7 @@ void AVRSerial::begin(char const *port) { // {{{
 			dup2(pipes[1], 1);
 			close(pipes[1]);
 			execlp(&port[1], &port[1], NULL);
+			debug("execlp for child failed");
 			abort();
 		}
 		// Parent.

@@ -177,6 +177,13 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 	for (int i = 0; i < 3; ++i)
 		X[i] = i < spaces[0].num_axes ? spaces[0].axis[i]->settings.current : 0;
 	double current_s = 0;
+	double e0;
+	if (tool >= 0 && tool < spaces[1].num_axes)
+		e0 = spaces[1].axis[tool]->settings.current;
+	else if (tool < 0 && ~tool < spaces[2].num_axes)
+		e0 = spaces[2].axis[~tool]->settings.current;
+	else
+		e0 = NAN;
 	for (int part = 0; part < 7; ++part) {
 		current_s += s[part];
 		if (s[part] < 1e-10)
@@ -191,7 +198,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) {
 		queue[q].v0 = v0[part];
 		queue[q].a0 = a0[part];
 		queue[q].reverse = reverse[part];
-		queue[q].e = move->e * current_s / dist;
+		queue[q].e = e0 + (move->e - e0) * current_s / dist;
 		q += 1;
 	}
 	settings.queue_end = q;
@@ -560,8 +567,10 @@ void request(int req) {
 
 void delayed_reply() {
 	char cmd = 0;
-	if (write(toserver, &cmd, 1) != 1)
+	if (write(toserver, &cmd, 1) != 1) {
+		debug("failed to send delayed reply");
 		abort();
+	}
 }
 
 void settemp(int which, double target) {
