@@ -75,6 +75,7 @@ struct Parser { // {{{
 	// Variables. {{{
 	std::ifstream infile;
 	std::ofstream outfile;
+	void *errors;
 	char type;
 	int code;
 	double num;
@@ -106,7 +107,7 @@ struct Parser { // {{{
 	std::string pattern_data;
 	// }}}
 	// Member functions. {{{
-	Parser(std::string const &infilename, std::string const &outfilename);
+	Parser(std::string const &infilename, std::string const &outfilename, void *errors);
 	void get_full_line();
 	bool handle_command(bool handle_pattern);
 	bool get_chunk(Chunk &ret, std::string &comment);
@@ -216,7 +217,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					else if (arg.type == 'R')
 						R = arg.num;
 					else
-						debug("%d:ignoring invalid parameter %c: %s", lineno, arg.type, line.c_str());
+						parse_error(errors, "%d: ignoring invalid parameter %c: %s", lineno, arg.type, line.c_str());
 				}
 				if (!std::isnan(F)) {
 					current_f[code == 0 ? 0 : 1] = F * unit / 60;
@@ -264,7 +265,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				handle_coordinate(C, 5, &controlled, rel);
 				if (!controlled || (std::isnan(X) && std::isnan(Y) && std::isnan(Z))) {
 					if (handle_pattern)
-						debug("Warning: not handling pattern because position is unknown");
+						parse_error(errors, "Warning: not handling pattern because position is unknown", lineno);
 					flush_pending();
 					add_record(lineno, RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], NAN, NAN, current_f[code == 0 ? 0 : 1], epos[current_tool]);
 					reset_pending_pos();
@@ -299,7 +300,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		case 2:
 		case 3:
 			// TODO: This is broken, so it is disabled. It should be fixed and enabled.
-			debug("Arc commands (G2/G3) are disabled at the moment");
+			parse_error(errors, "Arc commands (G2/G3) are disabled at the moment", lineno);
 			break;
 			{
 				modetype = type;
@@ -330,7 +331,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					else if (arg.type == 'K')
 						K = arg.num;
 					else
-						debug("%d:ignoring invalid arc parameter %c: %s", lineno, arg.type, line.c_str());
+						parse_error(errors, "%d: ignoring invalid arc parameter %c: %s", lineno, arg.type, line.c_str());
 				}
 				if (!std::isnan(F)) {
 					current_f[1] = F * unit / 60;
@@ -407,7 +408,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			bool specified = false;
 			for (auto arg: command) {
 				if (arg.type != 'P') {
-					debug("ignoring %c argument for G64", arg.type);
+					parse_error(errors, "%d: ignoring %c argument for G64", lineno, arg.type);
 					continue;
 				}
 				max_dev = arg.num;
@@ -429,7 +430,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			// Set position.  Only supported for extruders.
 			for (auto arg: command) {
 				if (arg.type != 'E') {
-					debug("%d:Not setting position for unsupported type %c", lineno, arg.type);
+					parse_error(errors, "%d: Not setting position for unsupported type %c", lineno, arg.type);
 					continue;
 				}
 				epos[current_tool] = arg.num;
@@ -443,7 +444,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			break;
 		default:
 			// Command was not handled: complain.
-			debug("%d:Invalid command %c.", type, code);
+			parse_error(errors, "%d: Invalid command %c%d.", lineno, type, code);
 			break;
 		}
 	} // }}}
@@ -496,7 +497,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					}
 				}
 				if (!have_p || std::isnan(s)) {
-					debug("%d:M42 needs both P and S arguments.", lineno);
+					parse_error(errors, "M42 needs both P and S arguments.", lineno);
 					break;
 				}
 				add_record(lineno, RUN_GPIO, p, s);
@@ -527,7 +528,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					}
 				}
 				if (std::isnan(s)) {
-					debug("%d:M104 needs S argument.", lineno);
+					parse_error(errors, "M104 needs S argument.", lineno);
 					break;
 				}
 				add_record(lineno, RUN_SETTEMP, have_t ? t : e, s + C0);
@@ -572,7 +573,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			break;
 		default:
 			// Command was not handled: complain.
-			debug("%d:Invalid command %c.", type, code);
+			parse_error(errors, "%d: Invalid command %c%d.", lineno, type, code);
 			break;
 		}
 	} // }}}
@@ -591,7 +592,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 	} // }}}
 	else {
 		// Command was not handled: complain.
-		debug("%d:Invalid command %c.", type, code);
+		parse_error(errors, "%d: Invalid command %c%d.", lineno, type, code);
 	}
 	command.clear();
 	return true;
@@ -622,7 +623,7 @@ void Parser::read_space() { // {{{
 
 int Parser::read_int(double *power, int *sign) { // {{{
 	if (linepos >= line.size()) {
-		debug("%d:int requested at end of line", lineno);
+		parse_error(errors, "int requested at end of line", lineno);
 		return 0;
 	}
 	int s = 1;
@@ -633,7 +634,7 @@ int Parser::read_int(double *power, int *sign) { // {{{
 	case '+':
 		linepos += 1;
 		if (linepos >= line.size()) {
-			debug("%d:int requested at end of line", lineno);
+			parse_error(errors, "int requested at end of line", lineno);
 			return 0;
 		}
 		break;
@@ -700,8 +701,8 @@ void decode_base64(std::string const &comment, int inpos, uint8_t *data, int out
 		data[outpos + i] = value >> (8 * (2 - i));
 } // }}}
 
-Parser::Parser(std::string const &infilename, std::string const &outfilename) // {{{
-		: infile(infilename.c_str()), outfile(outfilename.c_str(), std::ios::binary) {
+Parser::Parser(std::string const &infilename, std::string const &outfilename, void *errors) // {{{
+		: infile(infilename.c_str()), outfile(outfilename.c_str(), std::ios::binary), errors(errors) {
 	strings.push_back("");
 	modetype = 0;
 	unit = 1;
@@ -804,7 +805,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 			}
 			if (type == 0) {
 				if (modetype == 0) {
-					debug("%d:G-Code must have only G, M, T, S, or D-commands until first mode-command: %s", lineno, line.c_str());
+					parse_error(errors, "%d: G-Code must have only G, M, T, S, or D-commands until first mode-command: %s", lineno, line.c_str());
 					break;
 				}
 				type = modetype;
@@ -818,7 +819,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename) //
 			break;
 		if (type != 0) {
 			if (!pattern_data.empty() && (type != 'G' || num != 1))
-				debug("Warning: ignoring pattern comment because command is not G1");
+				parse_error(errors, "Warning: ignoring pattern comment because command is not G1", lineno);
 			if (!handle_command(!pattern_data.empty()))
 				break;
 		}
@@ -1009,7 +1010,7 @@ void Parser::flush_pending() { // {{{
 
 				pdebug("part 1 s,t: cv %f,%f rs %f,%f ca %f,%f re %f,%f curve %f,%f", s_const_v, t_const_v, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_curve, t_curve);
 				if (s_const_v < -1e-2) {
-					debug("Error: const v part is negative: %f", s_const_v);
+					parse_error(errors, "%d: Error: const v part is negative: %f", P0->gcode_line, s_const_v);
 					//abort();
 				}
 
@@ -1081,7 +1082,7 @@ void Parser::flush_pending() { // {{{
 
 				pdebug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
 				if (s_const_v < -1e-2) {
-					debug("Error: const v2 is negative: %f, len %f %f", s_const_v, P0->length, P1->length);
+					parse_error(errors, "%d: Error: const v2 is negative: %f, len %f %f", P0->gcode_line, s_const_v, P0->length, P1->length);
 					debug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
 					//abort();
 				}
@@ -1169,9 +1170,9 @@ void Parser::add_record(int gcode_line, RunType cmd, int tool, double x, double 
 	outfile.write(reinterpret_cast <char *>(&r), sizeof(r));
 } // }}}
 
-void parse_gcode(std::string const &infilename, std::string const &outfilename) { // {{{
+void parse_gcode(std::string const &infilename, std::string const &outfilename, void *errors) { // {{{
 	// Create an instance of the class.  The constructor does all the work.
-	Parser p(infilename, outfilename);
+	Parser p(infilename, outfilename, errors);
 	// No other actions needed.
 } // }}}
 // vim: set foldmethod=marker :

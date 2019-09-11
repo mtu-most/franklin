@@ -47,7 +47,6 @@ struct MoveCommand {
 	double a0, v0;
 	int tool;	// Negative value means follower ~tool.
 	double target[3];
-	double h[3];
 	double unitg[3];
 	double unith[3];
 	double abc[3];
@@ -105,7 +104,9 @@ enum Command {
 	CMD_FORCE_DISCONNECT,	// 0
 	CMD_CONNECT,	// 8 byte: run ID, n bytes: port name (0-terminated)
 	CMD_RECONNECT,	// n bytes: port name (0-terminated)
+	CMD_PAUSE,
 	CMD_RESUME,
+	CMD_UNPAUSE,
 	CMD_GET_TIME,
 	CMD_SPI,
 	CMD_ADJUST_PROBE,	// 3 doubles: probe position.
@@ -130,7 +131,6 @@ enum InterruptCommand {
 	CMD_PARKWAIT,
 	CMD_CONNECTED,
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
-	CMD_CONTINUE,
 };
 
 enum RunType {
@@ -253,7 +253,8 @@ extern "C" {
 	EXTERN double max_deviation;
 	EXTERN double max_v, max_a, max_J;
 
-	void parse_gcode(std::string const &infilename, std::string const &outfilename);
+	void parse_error(void *errors, char const *format, ...);
+	void parse_gcode(std::string const &infilename, std::string const &outfilename, void *errors);
 }
 
 #endif

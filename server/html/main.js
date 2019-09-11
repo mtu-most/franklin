@@ -1507,8 +1507,17 @@ function set_file(ui, id, element, action) { // {{{
 			return;
 		if (!this.responseText)
 			return;
-		// TODO: figure out how to pass errors; return value (for queue_add) is actual filename.
-		//alert('Errors: ' + this.responseText);
+		// Return value is filename, error list.
+		var response = this.responseText.split('\n', 2);
+		var filename = response[0];
+		console.info(response[1]);
+		var errors = JSON.parse(response[1]);
+		if (errors.length > 0) {
+			var msg = '';
+			for (var i = 0; i < errors.length; ++i)
+				msg += errors[i] + '\n';
+			alert('Parse errors:\n' + msg);
+		}
 	});
 	post.send(fd);
 } // }}}

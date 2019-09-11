@@ -186,6 +186,23 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 		Py_RETURN_TRUE;
 }
 
+void parse_error(void *errors, char const *format, ...) {
+	va_list ap;
+	va_start(ap, format);
+	int size = vsnprintf(NULL, 0, format, ap);
+	va_end(ap);
+	va_start(ap, format);
+	vfprintf(stderr, format, ap);
+	fprintf(stderr, "\n");
+	va_end(ap);
+	va_start(ap, format);
+	char buffer[size + 1];
+	vsnprintf(buffer, size + 1, format, ap);
+	va_end(ap);
+	PyObject *msg = Py_BuildValue("s#", buffer, size);
+	PyList_Append(reinterpret_cast <PyObject *>(errors), msg);
+}
+
 static PyObject *parse_gcode(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	// Convert a file of G-Code into a machine readable file.
@@ -193,9 +210,9 @@ static PyObject *parse_gcode(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (!PyArg_ParseTuple(args, "yy", &infile, &outfile))
 		return NULL;
 	// This is not sent to the child, so that the child can remain running a job while the G-Code is being parsed.
-	parse_gcode(infile, outfile);
-	// TODO: Return a list of errors.
-	Py_RETURN_NONE;
+	PyObject *errors = PyList_New(0);
+	parse_gcode(infile, outfile, errors);
+	return errors;
 }
 
 static PyObject *run_file(PyObject *Py_UNUSED(self), PyObject *args) {
@@ -668,11 +685,27 @@ static PyObject *pin_value(PyObject *Py_UNUSED(self), PyObject *args) {
 		Py_RETURN_FALSE;
 }
 
+static PyObject *pause(PyObject *Py_UNUSED(self), PyObject *args) {
+	FUNCTION_START;
+	if (!PyArg_ParseTuple(args, ""))
+		return NULL;
+	send_to_child(CMD_PAUSE);
+	Py_RETURN_NONE;
+}
+
 static PyObject *resume(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	if (!PyArg_ParseTuple(args, ""))
 		return NULL;
 	send_to_child(CMD_RESUME);
+	Py_RETURN_NONE;
+}
+
+static PyObject *unpause(PyObject *Py_UNUSED(self), PyObject *args) {
+	FUNCTION_START;
+	if (!PyArg_ParseTuple(args, ""))
+		return NULL;
+	send_to_child(CMD_UNPAUSE);
 	Py_RETURN_NONE;
 }
 
@@ -769,7 +802,7 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 	}
 	PyObject *ret;
 	if (DEBUG_FUNCTIONS) {
-		char const *interrupt_cmd_name[] = { "LIMIT", "FILE_DONE", "MOVECB", "HOMED", "TIMEOUT", "PINCHANGE", "PINNAME", "DISCONNECT", "UPDATE_PIN", "UPDATE_TEMP", "CONFIRM", "PARKWAIT", "CONNECTED", "TEMPCB", "CONTINUE" };
+		char const *interrupt_cmd_name[] = { "LIMIT", "FILE_DONE", "MOVECB", "HOMED", "TIMEOUT", "PINCHANGE", "PINNAME", "DISCONNECT", "UPDATE_PIN", "UPDATE_TEMP", "CONFIRM", "PARKWAIT", "CONNECTED", "TEMPCB" };
 		debug("interrupt received: %s", unsigned(c) < sizeof(interrupt_cmd_name) / sizeof(*interrupt_cmd_name) ? interrupt_cmd_name[unsigned(c)] : "(invalid)");
 	}
 	switch (c) {
@@ -815,9 +848,6 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		break;
 	case CMD_TEMPCB:
 		ret = Py_BuildValue("{ss,si}", "type", "temp-cb", "temp", shmem->interrupt_ints[0]);
-		break;
-	case CMD_CONTINUE:
-		ret = Py_BuildValue("{ss}", "type", "continue");
 		break;
 	default:
 		PyErr_Format(PyExc_AssertionError, "Interrupt returned unexpected code 0x{x}", c);
@@ -934,7 +964,9 @@ static PyMethodDef Methods[] = {
 	{"queued", queued, METH_VARARGS, "Query number of queued commands."},
 	{"home", home, METH_VARARGS, "Slowly move away from limit switches."},
 	{"pin_value", pin_value, METH_VARARGS, "Get state of gpio pin."},
+	{"pause", pause, METH_VARARGS, "Pause the job."},
 	{"resume", resume, METH_VARARGS, "Resume moving after pausing."},
+	{"unpause", unpause, METH_VARARGS, "Discard resume information."},
 	{"get_time", get_time, METH_VARARGS, "Get estimate for remaining time."},
 	{"spi", spi, METH_VARARGS, "Send SPI command."},
 	{"adjust_probe", adjust_probe, METH_VARARGS, "Change offset for probe."},

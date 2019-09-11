@@ -250,24 +250,20 @@ void run_file_fill_queue() {
 					queue[settings.queue_end].target[0] = x;
 					queue[settings.queue_end].target[1] = y;
 					queue[settings.queue_end].target[2] = handle_probe(x, y, z);
-					queue[settings.queue_end].h[0] = r.h[0];
-					queue[settings.queue_end].h[1] = r.h[1];
-					queue[settings.queue_end].h[2] = r.h[2];
 					double distg = 0, disth = 0;
 					for (int i = 0; i < 3; ++i) {
 						double d = queue[settings.queue_end].target[i] - lastpos[i];
 						if (!std::isnan(d))
 							distg += d * d;
-						d = queue[settings.queue_end].h[i];
-						if (!std::isnan(d))
-							disth += d * d;
+						if (!std::isnan(r.h[i]))
+							disth += r.h[i] * r.h[i];
 						queue[settings.queue_end].abc[i] = 0;
 					}
 					distg = std::sqrt(distg);
 					disth = std::sqrt(disth);
 					for (int i = 0; i < 3; ++i) {
 						queue[settings.queue_end].unitg[i] = distg < 1e-10 ? 0 : (queue[settings.queue_end].target[i] - lastpos[i]) / distg;
-						queue[settings.queue_end].unith[i] = disth < 1e-10 ? 0 : queue[settings.queue_end].h[i] / disth;
+						queue[settings.queue_end].unith[i] = disth < 1e-10 ? 0 : r.h[i] / disth;
 					}
 					queue[settings.queue_end].Jg = (r.type == RUN_POLY2 ? 0 : r.Jg);
 					queue[settings.queue_end].Jh = disth;
@@ -304,9 +300,6 @@ void run_file_fill_queue() {
 					move.target[0] = r.X[0];
 					move.target[1] = r.X[1];
 					move.target[2] = r.X[2];
-					move.h[0] = 0;
-					move.h[1] = 0;
-					move.h[2] = 0;
 					move.e = r.E;
 					move.time = r.time;
 					go_to(false, &move, false);

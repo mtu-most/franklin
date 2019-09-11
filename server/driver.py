@@ -263,14 +263,10 @@ class Machine: # {{{
 		self.gcode_id = None
 		self.gcode_waiting = 0
 		self.audio_id = None
-		self.queue = []
-		self.queue_pos = 0
-		self.queue_info = None
 		self.confirm_waits = set()
 		self.gpio_waits = {}
 		self.total_time = float('nan')
 		self.resuming = False
-		self.flushing = False
 		self.debug_buffer = None
 		self.command_buffer = ''
 		self.bed_id = -1
@@ -293,8 +289,7 @@ class Machine: # {{{
 		self.sending = False
 		self.paused = False
 		self.limits = [{} for s in self.spaces]
-		self.wait = False
-		self.movewait = 0
+		self.moving = False
 		self.movecb = []
 		self.tempcb = []
 		self.alarms = set()
@@ -425,32 +420,15 @@ class Machine: # {{{
 			traceback.print_stack()
 			sys.exit(0)
 	# }}}
-	def _trigger_movewaits(self, num, done = True): # {{{
-		#traceback.print_stack()
-		#log('trigger %s' % repr(self.movecb))
-		#log('movecbs: %d/%d' % (num, self.movewait))
-		if self.movewait < num:
-			log('More cbs received than requested! (%d/%d)' % (num, self.movewait))
-			self.movewait = 0
-		else:
-			#log('movewait %d/%d' % (num, self.movewait))
-			self.movewait -= num
-		if self.movewait == 0:
-			#log('running cbs: %s' % repr(self.movecb))
-			call_queue.extend([(x, [done]) for x in self.movecb])
-			self.movecb = []
-			if self.flushing and self.queue_pos >= len(self.queue):
-				#log('done flushing')
-				self.flushing = 'done'
-		#else:
-		#	log('cb seen, but waiting for more')
+	def _trigger_movewaits(self, done = True): # {{{
+		call_queue.extend([(x, [done]) for x in self.movecb])
+		self.movecb = []
 	# }}}
 	def _machine_input(self, reply = False): # {{{
 		cmd = cdriver.get_interrupt()
 		#log('received interrupt: %s' % repr(cmd))
 		if cmd['type'] == 'move-cb':
-			#log('movecb %d/%d (%d in queue)' % (cmd['num'], self.movewait, len(self.movecb)))
-			self._trigger_movewaits(cmd['num'])
+			self._trigger_movewaits()
 		elif cmd['type'] == 'temp-cb':
 			self.alarms.add(cmd['temp'])
 			t = 0
@@ -459,19 +437,10 @@ class Machine: # {{{
 					call_queue.append((self.tempcb.pop(t)[1], []))
 				else:
 					t += 1
-		elif cmd['type'] == 'continue':
-			# Move continue.
-			self.wait = False
-			#log('resuming queue %d' % len(self.queue))
-			call_queue.append((self._do_queue, []))
-			if self.flushing is None:
-				self.flushing = False
 		elif cmd['type'] == 'limit':
 			if cmd['space'] < len(self.spaces) and cmd['motor'] < len(self.spaces[cmd['space']].motor):
 				self.limits[cmd['space']][cmd['motor']] = cmd['pos']
-			self.wait = False	# queue is flushed when limit switch is hit.
-			#log('limit; %d waits' % e)
-			self._trigger_movewaits(self.movewait, False)
+			self._trigger_movewaits(False)
 		elif cmd['type'] == 'timeout':
 			self.position_valid = False
 			call_queue.append((self._globals_update, ()))
@@ -608,7 +577,8 @@ class Machine: # {{{
 		attrs['num_temps'] = len(self.temps)
 		attrs['num_gpios'] = len(self.gpios)
 		attrs['spi_setup'] = self._mangle_spi()
-		attrs['status'] = not self.paused and (None if self.gcode_map is None and not self.gcode_file else True)
+		# Status is True if printing, False if paused, None if there is no current job.
+		attrs['status'] = not self.paused and (self.gcode_file or None)
 		self._broadcast(target, 'globals_update', attrs)
 	# }}}
 	def _space_update(self, which, target = None): # {{{
@@ -640,16 +610,16 @@ class Machine: # {{{
 		self.gcode_map.close()
 		os.close(self.gcode_fd)
 		self.gcode_map = None
+		self.gcode_file = False
 		self.gcode_fd = -1
 	# }}}
 	def _job_done(self, complete, reason): # {{{
 		cdriver.run_file()
-		if self.gcode_map is not None:
+		if self.gcode_file:
 			log('job done: ' + reason)
 			self._gcode_close()
-		self.gcode_file = False
 		#traceback.print_stack()
-		if self.queue_info is None and self.gcode_id is not None:
+		if self.gcode_id is not None:
 			log('Job done (%d): %s' % (complete, reason))
 			self._send(self.gcode_id, 'return', (complete, reason))
 			self.gcode_id = None
@@ -657,20 +627,13 @@ class Machine: # {{{
 			log('Audio done (%d): %s' % (complete, reason))
 			self._send(self.audio_id, 'return', (complete, reason))
 		self.audio_id = None
-		if self.queue_info is None and self.job_current is not None:
+		if self.job_current is not None:
 			if self.job_id is not None:
 				self._send(self.job_id, 'return', (complete, reason))
 			self.job_id = None
 			self.job_current = None
 			if complete:
 				self._finish_done()
-		while self.queue_pos < len(self.queue):
-			move, e, tool, v, probe, single, rel = self.queue[self.queue_pos]
-			self.queue_pos += 1
-			if id is not None:
-				self._send(id, 'error', 'aborted')
-		self.queue = []
-		self.queue_pos = 0
 		if self.home_phase is not None:
 			#log('killing homer')
 			self.home_phase = None
@@ -700,18 +663,9 @@ class Machine: # {{{
 			maybe_sleep()
 	# }}}
 	def _unpause(self): # {{{
-		if self.gcode_file:
-			cdriver.resume() # Just in case.
-		if self.queue_info is None:
-			return
-		#log('doing resume to %d/%d' % (self.queue_info[0], len(self.queue_info[2])))
-		self.queue = self.queue_info[2]
-		self.queue_pos = self.queue_info[0]
-		self.movecb = self.queue_info[3]
-		self.flushing = self.queue_info[4]
-		self.resuming = False
-		self.queue_info = None
+		'''Stop being paused. Don't resume.'''
 		self.paused = False
+		cdriver.unpause()
 		self._globals_update()
 	# }}}
 	def _queue_add(self, filename, name): # {{{
@@ -727,10 +681,10 @@ class Machine: # {{{
 			os.makedirs(outfiledir)
 		outfilename = os.path.join(outfiledir, name + os.path.extsep + 'bin').encode('utf-8', 'replace')
 		self._broadcast(None, 'blocked', 'Parsing g-code')
-		cdriver.parse_gcode(infilename, outfilename)
+		errors = cdriver.parse_gcode(infilename, outfilename)
 		self._refresh_queue()
 		self._broadcast(None, 'blocked', None)
-		return name
+		return name + '\n' + json.dumps(errors)
 	# }}}
 	def _audio_add(self, f, name): # {{{
 		name = os.path.splitext(os.path.split(name)[1])[0]
@@ -765,50 +719,6 @@ class Machine: # {{{
 		self._broadcast(None, 'blocked', '')
 		self._broadcast(None, 'audioqueue', list(self.audioqueue.keys()))
 		return ''
-	# }}}
-	def _do_queue(self): # {{{
-		#log('queue %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
-		if self.paused and not self.resuming and len(self.queue) == 0:
-			#log('queue is empty')
-			return
-		while not self.wait and (self.queue_pos < len(self.queue) or self.resuming):
-			#log('queue not empty %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
-			if self.queue_pos >= len(self.queue):
-				self._unpause()
-				#log('unpaused, %d %d' % (self.queue_pos, len(self.queue)))
-				if self.queue_pos >= len(self.queue):
-					break
-			move, e, tool, v, probe, single, rel = self.queue[self.queue_pos]
-			if tool is None:
-				tool = self.current_extruder
-			if e is None:
-				e = float('nan')
-			self.queue_pos += 1
-			# Turn sequences into a dict.
-			if isinstance(move, (list, tuple)):
-				mdict = {}
-				for s, data in enumerate(move):
-					mdict[s] = data
-				move = mdict
-			# Make sure the keys are ints.
-			move = {int(k): move[k] for k in move}
-			# Turn into list of floats.
-			move = [move[i] if i in move else float('nan') for i in range(6)]
-			# Set current tool.
-			if tool is not None:
-				self.current_extruder = tool
-			# Set defaults for feedrates.
-			if all(math.isnan(x) for x in move) and self.current_extruder < len(self.spaces[1].motor) and (v is None or not 0 < v <= self.spaces[1].motor[self.current_extruder]['limit_v']):
-				v = self.spaces[1].motor[self.current_extruder]['limit_v']
-			elif v is None or not 0 < v <= self.max_v:
-				v = self.max_v
-			self.movewait += 1
-			#log('movewait +1 -> %d' % self.movewait)
-			#log('move args: ' + repr((self.current_extruder, move, e, v, single, probe, rel)))
-			self.wait = cdriver.move(*([self.current_extruder] + move + [e, v]), single = single, probe = probe, relative = rel)
-		if self.flushing is None and not self.wait:
-			self.flushing = False
-		#log('queue done %s' % repr((self.queue_pos, len(self.queue), self.resuming, self.wait)))
 	# }}}
 	def _do_home(self, done = None): # {{{
 		'''Home the machine.
@@ -1215,19 +1125,6 @@ class Machine: # {{{
 		self._globals_update()
 		return True
 	# }}}
-	def _start_job(self, paused): # {{{
-		# Set all extruders to 0.
-		for i, e in enumerate(self.spaces[1].axis):
-			self.user_set_axis_pos(1, i, 0)
-		def cb():
-			#log('start job %s' % self.job_current)
-			self._gcode_run(self.job_current, abort = False, paused = paused)
-		if not self.position_valid:
-			self.user_park(cb = cb, abort = False)[1](None)
-		else:
-			cb()
-		self.gcode_id = None
-	# }}}
 	def _gcode_run(self, src, abort = True, paused = False): # {{{
 		if self.parking:
 			return
@@ -1239,12 +1136,9 @@ class Machine: # {{{
 		if abort:
 			self._unpause()
 			self._job_done(False, 'aborted by starting new job')
-		self.queue_info = None
 		# Disable all alarms.
 		for i in range(len(self.temps)):
 			self.user_waittemp(i, None, None)
-		self.paused = paused
-		self._globals_update()
 		self.user_sleep(False)
 		if len(self.spaces) > 1:
 			for e in range(len(self.spaces[1].axis)):
@@ -1271,9 +1165,10 @@ class Machine: # {{{
 		else:
 			encoded_probemap_filename = fhs.read_spool(os.path.join(self.uuid, 'probe' + os.extsep + 'bin'), text = False, opened = False).encode('utf-8')
 		self.gcode_file = True
-		self._globals_update()
 		log('running %s %f %f' % (filename, self.gcode_angle[0], self.gcode_angle[1]))
 		cdriver.run_file(filename.encode('utf-8'), encoded_probemap_filename, 1 if not paused and self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1])
+		self.paused = paused
+		self._globals_update()
 	# }}}
 	def _reset_extruders(self, axes): # {{{
 		for i, sp in enumerate(axes):
@@ -1635,20 +1530,6 @@ class Machine: # {{{
 		return (WAIT, WAIT)
 	# }}}
 	@delayed
-	def flush(self, id): # {{{
-		'''Wait for currently scheduled moves to finish.
-		'''
-		#log('flush start')
-		def cb(w):
-			#log('flush done')
-			if id is not  None:
-				self._send(id, 'return', w)
-		self.movecb.append(cb)
-		if self.flushing is not True:
-			self.user_line()[1](None)
-		#log('end flush preparation')
-	# }}}
-	@delayed
 	def user_probe(self, id, area, speed = 3.): # {{{
 		'''Run a probing routine.
 		This moves over the given area and probes a grid of points less
@@ -1682,20 +1563,36 @@ class Machine: # {{{
 	def user_line(self, id, moves = (), e = None, tool = None, v = None, relative = False, probe = False, single = False, force = False): # {{{
 		'''Move the tool in a straight line; return when done.
 		'''
-		if not force and self.home_phase is not None and not self.paused:
+		if not force and self.home_phase is not None:
 			log('ignoring line during home')
 			if id is not None:
 				self._send(id, 'return', None)
 			return
-		self.queue.append((moves, e, tool, v, probe, single, relative))
-		#log('moving to {}, e({})={}'.format(moves, tool, e))
-		if not self.wait:
-			#log('doing queue now')
-			self._do_queue()
-		else:
-			#log('waiting for queue to be ready')
-			pass
-		self.wait_for_cb()[1](id)
+		if tool is None:
+			tool = self.current_extruder
+		if e is None:
+			e = float('nan')
+		# Turn sequences into a dict.
+		if isinstance(moves, (list, tuple)):
+			mdict = {}
+			for s, data in enumerate(moves):
+				mdict[s] = data
+			moves = mdict
+		# Make sure the keys are ints.
+		moves = {int(k): moves[k] for k in moves}
+		# Turn into list of floats.
+		moves = [moves[i] if i in moves else float('nan') for i in range(6)]
+		# Set current tool.
+		if tool is not None:
+			self.current_extruder = tool
+		# Set defaults for feedrates.
+		if all(math.isnan(x) for x in moves) and self.current_extruder < len(self.spaces[1].motor) and (v is None or not 0 < v <= self.spaces[1].motor[self.current_extruder]['limit_v']):
+			v = self.spaces[1].motor[self.current_extruder]['limit_v']
+		elif v is None or not 0 < v <= self.max_v:
+			v = self.max_v
+		cdriver.move(*([self.current_extruder] + moves + [e, v]), single = single, probe = probe, relative = relative)
+		if id is not None:
+			self.wait_for_cb()[1](id)
 	# }}}
 	def user_move_target(self, dx, dy): # {{{
 		'''Move the target position.
@@ -1703,11 +1600,11 @@ class Machine: # {{{
 		'''
 		self.user_set_globals(targetx = self.targetx + dx, targety = self.targety + dy)
 	# }}}
-	def user_sleep(self, sleeping = True, update = True, force = False): # {{{
+	def user_sleep(self, sleeping = True, update = True): # {{{
 		'''Put motors to sleep, or wake them up.
 		'''
 		if sleeping:
-			if self.home_phase is not None or (not force and not self.paused and (self.gcode_map is not None or self.gcode_file)):
+			if self.home_phase is not None or (not self.paused and self.gcode_file):
 				return
 			self.position_valid = False
 			if update:
@@ -1837,68 +1734,18 @@ class Machine: # {{{
 		self._unpause()
 		self._job_done(False, 'aborted by user')
 		# Sleep doesn't work as long as home_phase is non-None, so do it after _job_done.
-		self.user_sleep(force = True)
+		self.user_sleep()
 	# }}}
 	def user_pause(self, pausing = True, store = True, update = True): # {{{
 		'''Pause or resume the machine.
 		'''
-		was_paused = self.paused
-		if pausing:
-			num_in_queue = cdriver.queued(True)
-			self.movewait = 0
-			self.wait = False
+		if pausing == self.paused:
+			return
 		self.paused = pausing
-		if not self.paused:
-			if was_paused:
-				# Go back to pausing position.
-				# First reset all axes that don't have a limit switch.
-				if self.queue_info is not None:
-					self._reset_extruders(self.queue_info[1])
-					self.user_line(self.queue_info[1][0], e = self.queue_info[1][1][self.current_extruder] if self.current_extruder < len(self.spaces[1].axis) else 0)[1](None)
-				# TODO: adjust extrusion of current segment to shorter path length.
-				#log('resuming')
-				self.resuming = True
-			self._unpause()
-			#log('sending resume')
-			cdriver.resume()
-			self._do_queue()
+		if pausing:
+			cdriver.pause()
 		else:
-			#log('pausing')
-			if not was_paused:
-				#log('pausing %d %d %d %d %d' % (store, self.queue_info is None, len(self.queue), self.queue_pos, s))
-				if store and self.queue_info is None and ((len(self.queue) > 0 and self.queue_pos - num_in_queue >= 0) or self.gcode_file):
-					if self.home_phase is not None:
-						#log('killing homer')
-						self.home_phase = None
-						self.expert_set_space(0, type = self.home_orig_type)
-						for a, ax in enumerate(self.spaces[0].axis):
-							self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1])
-						if self.home_cb in self.movecb:
-							self.movecb.remove(self.home_cb)
-							if self.home_id is not None:
-								self._send(self.home_id, 'return', None)
-						store = False
-					if self.probe_cb in self.movecb:
-						self.movecb.remove(self.probe_cb)
-						self.probe_cb(None)
-						store = False
-					#log('pausing gcode %d/%d/%d' % (self.queue_pos, num_in_queue, len(self.queue)))
-					if self.flushing is None:
-						self.flushing = False
-					if store:
-						self.queue_info = [len(self.queue) if self.gcode_file else self.queue_pos - num_in_queue, [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces], self.queue, self.movecb, self.flushing]
-				else:
-					#log('stopping')
-					self.paused = False
-					if self.probe_cb in self.movecb:
-						self.movecb.remove(self.probe_cb)
-						self.probe_cb(None)
-					if len(self.movecb) > 0:
-						call_queue.extend([(x, [False]) for x in self.movecb])
-				self.queue = []
-				self.movecb = []
-				self.flushing = False
-				self.queue_pos = 0
+			cdriver.resume()
 		if update:
 			self._globals_update()
 	# }}}
@@ -1911,13 +1758,13 @@ class Machine: # {{{
 	def user_home(self, id, speed = 5, cb = None, abort = True): # {{{
 		'''Recalibrate the position with its limit switches.
 		'''
-		if self.home_phase is not None and not self.paused:
+		if self.home_phase is not None:
 			log("ignoring request to home because we're already homing")
 			if id is not None:
 				self._send(id, 'return', None)
 			return
-		# Abort only if it is requested, and the job is not paused.
-		if abort and self.queue_info is None:
+		# Abort only if it is requested.
+		if abort:
 			self._job_done(False, 'aborted by homing')
 		self.home_phase = 0
 		self.home_id = id
@@ -1936,7 +1783,7 @@ class Machine: # {{{
 				self._send(id, 'error', 'aborted')
 			return
 		#log('parking with cb %s' % repr(cb))
-		if abort and self.queue_info is None:
+		if abort:
 			self._job_done(False, 'aborted by parking')
 		self.parking = True
 		if not self.position_valid:
@@ -1991,17 +1838,15 @@ class Machine: # {{{
 		'''Block until the move queue is empty.
 		'''
 		ret = lambda w: id is None or self._send(id, 'return', w)
-		if self.movewait == 0:
-			#log('not delaying with wait_for_cb, because there is no cb waiting')
-			ret(self.movewait == 0)
-		else:
-			#log('waiting for cb')
+		if self.moving:
 			self.movecb.append(ret)
+		else:
+			ret(True)
 	# }}}
 	def waiting_for_cb(self): # {{{
 		'''Check if any process is waiting for the move queue to be empty.
 		'''
-		return self.movewait > 0
+		return self.moving
 	# }}}
 	@delayed
 	def wait_for_temp(self, id, which = None): # {{{
@@ -2372,7 +2217,17 @@ class Machine: # {{{
 		self.job_current = name
 		if self.job_current is not None:
 			self.job_id = id
-			self._start_job(paused)
+			self.gcode_id = None
+			# Set all extruders to 0.
+			for i, e in enumerate(self.spaces[1].axis):
+				self.user_set_axis_pos(1, i, 0)
+			def cb():
+				#log('start job %s' % self.job_current)
+				self._gcode_run(self.job_current, abort = False, paused = paused)
+			if not self.position_valid:
+				self.user_park(cb = cb, abort = False)[1](None)
+			else:
+				cb()
 		elif id is not None:
 			self._send(id, 'return', None)
 	# }}}
@@ -2389,7 +2244,7 @@ class Machine: # {{{
 		context = self.tp_get_context(position = pos[0])
 		if self.paused:
 			state = 'Paused'
-		elif self.gcode_map is not None or self.gcode_file:
+		elif self.gcode_file:
 			state = 'Running'
 		else:
 			return 'Idle', float('nan'), float('nan'), pos[0], pos[1], context
@@ -2420,7 +2275,7 @@ class Machine: # {{{
 	def tp_get_position(self): # {{{
 		'''Get current toolpath position.
 		@return position, total toolpath length.'''
-		if self.gcode_map is None:
+		if not self.gcode_file:
 			return 0, 0
 		return cdriver.tp_getpos(), self.gcode_num_records
 	# }}}
@@ -2429,11 +2284,9 @@ class Machine: # {{{
 		It is an error to call this function while not paused.
 		@param position: new toolpath position.
 		@return None.'''
-		assert self.gcode_map is not None
+		assert self.gcode_file
 		assert 0 <= position < self.gcode_num_records
 		assert self.paused
-		if self.queue_info is not None:
-			self.queue_info[1] = []	# Don't restore extruder position on resume.
 		cdriver.tp_setpos(position)
 	# }}}
 	def tp_get_context(self, num = None, position = None): # {{{
@@ -2441,7 +2294,7 @@ class Machine: # {{{
 		@param num: number of lines context on each side.
 		@param position: center of the returned region, or None for current position.
 		@return first position of returned region (normally position - num), list of lines+arcs+specials'''
-		if self.gcode_map is None:
+		if not self.gcode_file:
 			return 0, []
 		if num is None:
 			num = 100;
@@ -2469,7 +2322,7 @@ class Machine: # {{{
 		@param y: Y coordinate of target or None.
 		@param z: Z coordinate of target or None.
 		@return toolpath position.'''
-		assert self.gcode_map is not None
+		assert self.gcode_file
 		return cdriver.tp_findpos(*(a if a is not None else float('nan') for a in (x, y, z)))
 	# }}}
 	# }}}
@@ -2785,7 +2638,6 @@ while True: # {{{
 		#log('calling %s' % repr((f, a)))
 		f(*a)
 	fds = [sys.stdin, fd]
-	#log('waiting; movewait = %d' % machine.movewait)
 	found = select.select(fds, [], fds, None)
 	if sys.stdin in found[0] or sys.stdin in found[2]:
 		#log('command')

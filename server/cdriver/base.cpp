@@ -108,12 +108,6 @@ static void handle_pending_events() { // {{{
 		num_file_done_events -=1;
 		return;
 	}
-	if (continue_event) {
-		prepare_interrupt();
-		send_to_parent(CMD_CONTINUE);
-		continue_event = false;
-		return;
-	}
 	if (num_movecbs > 0) {
 		prepare_interrupt();
 		shmem->interrupt_ints[0] = num_movecbs;

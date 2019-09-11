@@ -26,213 +26,6 @@ static void get_cb(bool value) {
 
 #define CASE(x) case x: //debug("request " # x);
 
-int go_to(bool relative, MoveCommand const *move, bool cb) {
-	//debug("goto (%f,%f,%f)->(%f,%f,%f) at speed %f, e %f->%f", spaces[0].axis[0]->settings.current, spaces[0].axis[1]->settings.current, spaces[0].axis[2]->settings.current, move->target[0], move->target[1], move->target[2], move->v0, spaces[1].axis[move->tool]->settings.current, move->e);
-	// This is a manual move or the start of a job; set hwtime step to default.
-	settings.hwtime_step = default_hwtime_step;
-	if (computing_move || settings.queue_full || settings.queue_end != settings.queue_start) {
-		// This is not allowed; signal error to Python glue.
-		debug("move error %d %d %d %d", computing_move, settings.queue_full, settings.queue_start, settings.queue_end);
-		return 1;
-	}
-	settings.queue_start = 0;
-	settings.queue_end = 3;
-	double vmax = NAN;
-	double amax = NAN;
-	double dist = NAN;
-	double unit[3] = {0, 0, 0};
-	double target[3];
-	for (int a = 0; a < 3; ++a) {
-		if (spaces[0].num_axes <= a)
-			break;
-		double pos = spaces[0].axis[a]->settings.current;
-		//debug("prepare move, pos[%d]: %f -> %f", a, pos, move->target[a]);
-		if (std::isnan(pos))
-			continue;
-		if (std::isnan(move->target[a]))
-			target[a] = (relative ? 0 : pos) - (a == 2 ? zoffset : 0);
-		else
-			target[a] = move->target[a];
-		double d = target[a] + (a == 2 ? zoffset : 0) - (relative ? 0 : pos);
-		unit[a] = d;
-		if (std::isnan(dist))
-			dist = d * d;
-		else
-			dist += d * d;
-	}
-	if (!std::isnan(dist) && dist >= 1e-10) {
-		dist = std::sqrt(dist);
-		vmax = max_v;
-		amax = max_a;
-		for (int i = 0; i < 3; ++i)
-			unit[i] /= dist;
-		//debug("dist = %f", dist);
-	}
-	else {
-		for (int i = 0; i < 3; ++i)
-			unit[i] = 0;
-		for (int a = 3; a < 6; ++a) {
-			if (a >= spaces[0].num_axes)
-				break;
-			double pos = spaces[0].axis[a]->settings.current;
-			if (std::isnan(pos))
-				continue;
-			double d = std::fabs(target[a] - (relative ? 0 : pos));
-			if (std::isnan(dist) || dist < d) {
-				dist = d;
-				vmax = spaces[0].motor[a]->limit_v;
-				amax = spaces[0].motor[a]->limit_a;
-			}
-		}
-	}
-	int tool = std::isnan(move->tool) ? current_extruder : move->tool;
-	double e;
-	if (tool >= 0 && tool < spaces[1].num_axes)
-		e = spaces[1].axis[tool]->settings.current;
-	else if (move->single && tool < 0 && ~tool < spaces[2].num_axes)
-		e = spaces[2].axis[~tool]->settings.current;
-	else
-		e = NAN;
-	if (!std::isnan(e)) {
-		if (std::isnan(dist) || dist < 1e-10) {
-			dist = std::fabs(move->e - (relative ? 0 : e));
-			if (tool >= 0) {
-				vmax = spaces[1].motor[tool]->limit_v;
-				amax = spaces[1].motor[tool]->limit_a;
-			}
-			else {
-				// use leader limits with fallback to global limits.
-				int sm = space_types[spaces[2].type].follow(&spaces[2], ~tool);
-				int fs = sm >> 8;
-				int fm = sm & 0xff;
-				if (fs >= 0 && fs < NUM_SPACES && fm >= 0 && fm < spaces[fs].num_motors) {
-					vmax = spaces[fs].motor[fm]->limit_v;
-					amax = spaces[fs].motor[fm]->limit_a;
-				}
-				else {
-					vmax = max_v;
-					amax = max_a;
-				}
-			}
-		}
-	}
-	if (std::isnan(dist) || dist < 1e-10) {
-		// No moves requested.
-		//debug("dist is %f", dist);
-		if (cb)
-			num_movecbs += 1;
-		//debug("adding 1 move cb for manual move");
-		settings.queue_end = 0;
-		return 1;
-	}
-
-	double reachable_v = compute_max_v(dist / 2, 0, max_J, amax);
-	//debug("vmax = %f, reachable = %f, dist=%f", vmax, reachable_v, dist);
-	vmax = min(vmax, reachable_v);
-	double max_ramp_dv = amax * amax / (2 * max_J);
-	// Initialize the queue. At most 7 items will be used.
-	for (int i = 0; i < 7; ++i) {
-		queue[i].cb = false;
-		queue[i].probe = false;
-		queue[i].single = false;
-		queue[i].reverse = false;
-		queue[i].tool = move->tool;
-		for (int j = 0; j < 3; ++j) {
-			queue[i].h[j] = 0;
-			queue[i].unitg[j] = unit[j];
-			queue[i].unith[j] = 0;
-			queue[i].abc[j] = 0;
-		}
-		queue[i].Jh = 0;
-		queue[i].time = move->time;
-		queue[i].gcode_line = -1;
-		queue[i].pattern_size = 0;
-	}
-	double dv_ramp, t_max_a;
-	if (max_ramp_dv * 2 >= vmax) {
-		// ramp up, ramp down, const v, ramp down, ramp up.
-		dv_ramp = vmax / 2;
-		t_max_a = 0;
-	}
-	else {
-		// ramp up, const a, ramp down, const v, ramp down, const a, ramp up.
-		dv_ramp = max_ramp_dv;
-		t_max_a = (vmax - 2 * dv_ramp) / amax;
-	}
-	int q = 0;
-	double t_ramp = std::sqrt(2 * dv_ramp / max_J);
-	double s_ramp_up = max_J / 6 * t_ramp * t_ramp * t_ramp;
-	double s_ramp_down = -max_J / 6 * t_ramp * t_ramp * t_ramp + vmax * t_ramp;
-	double s_const_a = amax / 2 * t_max_a * t_max_a;
-	double s_const_v = dist - 2 * (s_ramp_up + s_ramp_down + s_const_a);
-	double t_const_v = s_const_v / vmax;
-
-	double s[7] = {s_ramp_up, s_const_a, s_ramp_down, s_const_v, s_ramp_down, s_const_a, s_ramp_up};
-	double t[7] = {t_ramp, t_max_a, t_ramp, t_const_v, t_ramp, t_max_a, t_ramp};
-	double J[7] =     {max_J,       0, -max_J,     0, -max_J,              0, max_J};
-	double v0[7] =    {    0, dv_ramp,   vmax,  vmax,   vmax, vmax - dv_ramp,     0};
-	double a0[7] =    {    0,    amax,      0,     0,      0,          -amax,     0};
-	bool reverse[7] = {false,   false,   true, false,  false,          false,  true};
-	double X[3];
-	for (int i = 0; i < 3; ++i)
-		X[i] = i < spaces[0].num_axes ? spaces[0].axis[i]->settings.current : 0;
-	double current_s = 0;
-	double e0;
-	if (tool >= 0 && tool < spaces[1].num_axes)
-		e0 = spaces[1].axis[tool]->settings.current;
-	else if (tool < 0 && ~tool < spaces[2].num_axes)
-		e0 = spaces[2].axis[~tool]->settings.current;
-	else
-		e0 = NAN;
-	for (int part = 0; part < 7; ++part) {
-		current_s += s[part];
-		if (s[part] < 1e-10)
-			continue;
-		for (int i = 0; i < 3; ++i) {
-			X[i] += unit[i] * s[part];
-			queue[q].target[i] = X[i];
-		}
-		//debug("target %d: %f,%f,%f", part, X[0], X[1], X[2]);
-		queue[q].Jg = J[part];
-		queue[q].tf = t[part];
-		queue[q].v0 = v0[part];
-		queue[q].a0 = a0[part];
-		queue[q].reverse = reverse[part];
-		queue[q].e = e0 + (move->e - e0) * current_s / dist;
-		q += 1;
-	}
-	settings.queue_end = q;
-
-	if (cb) {
-		queue[q - 1].cb = true;
-		//debug("adding cb for queue %d", q - 1);
-	}
-#if 0
-	debug("goto dir=%f,%f,%f, dist=%f, tool=%d e=%f single=%d", unit[0], unit[1], unit[2], dist, tool, move->e, move->single);
-	debug("goto s %f,%f,%f,%f,%f,%f,%f", s[0], s[1], s[2], s[3], s[4], s[5], s[6]);
-	debug("goto t %f,%f,%f,%f,%f,%f,%f", t[0], t[1], t[2], t[3], t[4], t[5], t[6]);
-	debug("goto J %f,%f,%f,%f,%f,%f,%f", J[0], J[1], J[2], J[3], J[4], J[5], J[6]);
-	debug("goto v0 %f,%f,%f,%f,%f,%f,%f", v0[0], v0[1], v0[2], v0[3], v0[4], v0[5], v0[6]);
-#endif
-	int new_num_movecbs = next_move(settings.hwtime);
-	bool ret = 0;
-	if (new_num_movecbs > 0) {
-		if (arch_running()) {
-			cbs_after_current_move += new_num_movecbs;
-			//debug("adding %d cbs after current move to %d", new_num_movecbs, cbs_after_current_move);
-		}
-		else {
-			ret = 1;
-			num_movecbs += new_num_movecbs;
-			//debug("adding %d cbs because move is immediately done", new_num_movecbs);
-			//debug("sent immediate %d cbs", new_num_movecbs);
-		}
-	}
-	//debug("no movecbs to add (prev %d)", history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs);
-	buffer_refill();
-	return ret;
-}
-
 void request(int req) {
 	switch (req) {
 	CASE(CMD_SET_UUID)
@@ -491,18 +284,6 @@ void request(int req) {
 	CASE(CMD_QUEUED)
 		last_active = millis();
 		shmem->ints[1] = settings.queue_full ? QUEUE_LENGTH : (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH;
-		if (shmem->ints[0]) {
-			if (run_file_map)
-				run_file_wait += 1;
-			else {
-				//debug("clearing %d cbs after current move for abort", cbs_after_current_move);
-				cbs_after_current_move = 0;
-			}
-			arch_stop();
-			settings.queue_start = 0;
-			settings.queue_end = 0;
-			settings.queue_full = false;
-		}
 		break;
 	CASE(CMD_HOME)
 		arch_home();
@@ -516,10 +297,29 @@ void request(int req) {
 		}
 		GET(gpios[shmem->ints[0]].pin, false, get_cb);
 		return;
+	CASE(CMD_PAUSE)
+		// TODO: store resume info.
+		if (run_file_map)
+			run_file_wait += 1;
+		else {
+			//debug("clearing %d cbs after current move for abort", cbs_after_current_move);
+			cbs_after_current_move = 0;
+		}
+		arch_stop();
+		settings.queue_start = 0;
+		settings.queue_end = 0;
+		settings.queue_full = false;
+		break;
 	CASE(CMD_RESUME)
+		if (computing_move)
+			break;
+		// TODO: go to resume position.
 		if (run_file_wait)
 			run_file_wait -= 1;
 		run_file_fill_queue();
+		break;
+	CASE(CMD_UNPAUSE)
+		// TODO: clear resume info.
 		break;
 	CASE(CMD_GET_TIME)
 		shmem->floats[0] = history[running_fragment].run_time / feedrate + settings.hwtime / 1e6;
