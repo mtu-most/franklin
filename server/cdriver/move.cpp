@@ -376,7 +376,8 @@ static void adjust_time(double target_factor) { // {{{
 			plus = part1 - part2;
 			if (plus < 0 || plus > settings.end_time / 1e6) {
 				debug("unable to correct for factor");
-				abort();
+				//abort();
+				plus = 0;
 			}
 		}
 		settings.hwtime = plus * 1e6;
@@ -424,16 +425,16 @@ static void do_steps(double old_factor) { // {{{
 					settings.hwtime -= settings.hwtime_step;
 					settings.factor = old_factor;
 					diff = 0x7f;
-					target -= adjust;
+					target -= adjust / mtr.steps_per_unit;
 					mtr.settings.target_pos = target;
 				}
-				if (diff < -0x80) {
-					debug("Error: %d %d trying to send more than 128 steps: %d", s, m, -diff);
-					int adjust = diff + 0x80;
+				if (diff < -0x7f) {
+					debug("Error: %d %d trying to send more than -127 steps: %d", s, m, diff);
+					int adjust = diff + 0x7f;
 					settings.hwtime -= settings.hwtime_step;
 					settings.factor = old_factor;
-					diff = -0x80;
-					target -= adjust;
+					diff = -0x7f;
+					target -= adjust / mtr.steps_per_unit;
 					mtr.settings.target_pos = target;
 				}
 				//debug("sending %d %d steps %d at %d", s, m, diff, current_fragment_pos);
