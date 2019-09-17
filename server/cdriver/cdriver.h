@@ -191,6 +191,7 @@ struct Axis_History {
 	double dist[2], main_dist;
 	double source, current;	// Source position of current movement of axis, or current position if there is no movement.
 	double target;
+	double last_target; // Used when retargeting to a position with NaN components.
 	double endpos;
 };
 

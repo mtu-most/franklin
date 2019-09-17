@@ -696,6 +696,7 @@ void store_settings() { // {{{
 			sp.axis[a]->history[current_fragment].dist[1] = sp.axis[a]->settings.dist[1];
 			sp.axis[a]->history[current_fragment].main_dist = sp.axis[a]->settings.main_dist;
 			sp.axis[a]->history[current_fragment].target = sp.axis[a]->settings.target;
+			sp.axis[a]->history[current_fragment].last_target = sp.axis[a]->settings.last_target;
 			sp.axis[a]->history[current_fragment].source = sp.axis[a]->settings.source;
 			sp.axis[a]->history[current_fragment].current = sp.axis[a]->settings.current;
 			sp.axis[a]->history[current_fragment].endpos = sp.axis[a]->settings.endpos;
@@ -769,6 +770,7 @@ void restore_settings() { // {{{
 			sp.axis[a]->settings.dist[1] = sp.axis[a]->history[current_fragment].dist[1];
 			sp.axis[a]->settings.main_dist = sp.axis[a]->history[current_fragment].main_dist;
 			sp.axis[a]->settings.target = sp.axis[a]->history[current_fragment].target;
+			sp.axis[a]->settings.last_target = sp.axis[a]->history[current_fragment].last_target;
 			sp.axis[a]->settings.source = sp.axis[a]->history[current_fragment].source;
 			sp.axis[a]->settings.current = sp.axis[a]->history[current_fragment].current;
 			sp.axis[a]->settings.endpos = sp.axis[a]->history[current_fragment].endpos;
@@ -874,25 +876,25 @@ void abort_move(int pos) { // {{{
 	aborting = false;
 } // }}}
 
-static void cross(double dst[3], double A[3], double B[3]) {
+static void cross(double dst[3], double A[3], double B[3]) { // {{{
 	// Compute cross product of A and B, store in dst.
 	for (int i = 0; i < 3; ++i)
 		dst[i] = (A[(i + 1) % 3] * B[(i + 2) % 3]) - (A[(i + 2) % 3] * B[(i + 1) % 3]);
-}
+} // }}}
 
-static double inner(double A[3], double B[3]) {
+static double inner(double A[3], double B[3]) { // {{{
 	double ret = 0;
 	for (int i = 0; i < 3; ++i)
 		ret += A[i] * B[i];
 	return ret;
-}
+} // }}}
 
-static void mul(double dst[3], double A[3], double f) {
+static void mul(double dst[3], double A[3], double f) { // {{{
 	for (int i = 0; i < 3; ++i)
 		dst[i] = A[i] * f;
-}
+} // }}}
 
-static double s_dv(double v1, double v2) {
+static double s_dv(double v1, double v2) { // {{{
 	// Compute length that is required for changing speed from v1 to v2.
 	double dv = std::fabs(v2 - v1);
 	double v0 = min(v1, v2);
@@ -909,9 +911,9 @@ static double s_dv(double v1, double v2) {
 		double t_a = dv_a / max_a;
 		return v0 * (2 * t + t_a) + max_ramp_dv * t_a + max_a / 2 * t_a * t_a + max_a / 2 * t * t + (dv - max_ramp_dv) * t;
 	}
-}
+} // }}}
 
-static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double pos[3], double tf, double v0, double a0, double e, double target[3], double Jg, double *h = NULL, double Jh = 0, bool reverse = false) {
+static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double pos[3], double tf, double v0, double a0, double e, double target[3], double Jg, double *h = NULL, double Jh = 0, bool reverse = false) { // {{{
 	queue[q].cb = false;
 	queue[q].probe = false;
 	queue[q].single = false;
@@ -945,9 +947,9 @@ static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double po
 	queue[q].a0 = a0;
 	queue[q].e = e;
 	return q + 1;
-}
+} // }}}
 
-static int queue_speed_change(int q, int tool, double x[3], double v[3], double unitv[3], double old_v, double new_v) {
+static int queue_speed_change(int q, int tool, double x[3], double v[3], double unitv[3], double old_v, double new_v) { // {{{
 	int s = new_v < old_v ? -1 : 1;
 	double dv = std::fabs(new_v - old_v);
 	if (dv < 1e-5)
@@ -992,7 +994,7 @@ static int queue_speed_change(int q, int tool, double x[3], double v[3], double 
 	for (int i = 0; i < 3; ++i)
 		v[i] *= new_v / old_v;
 	return q;
-}
+} // }}}
 
 int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 	debug("goto (%f,%f,%f) at speed %f, e %f", move->target[0], move->target[1], move->target[2], move->v0, move->e);
@@ -1092,7 +1094,17 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 			for (int i = 0; i < 3; ++i) {
 				g[i] = v[i] / lenv;
 				P[i] = x[i] + g[i] * s_stop;
-				unitPF[i] = std::isnan(move->target[i]) ? 0 : move->target[i] - P[i];
+				if (std::isnan(move->target[i])) {
+					if (i < spaces[0].num_axes && !std::isnan(spaces[0].axis[i]->settings.last_target))
+						unitPF[i] = spaces[0].axis[i]->settings.last_target - P[i];
+					else
+						unitPF[i] = 0;
+				}
+				else
+					unitPF[i] = move->target[i] - P[i];
+				// At this point, unitPF is not normalized yet, so it's just PF.
+				if (i < spaces[0].num_axes)
+					spaces[0].axis[i]->settings.last_target = P[i] + unitPF[i];
 				lenPF += unitPF[i] * unitPF[i];
 			}
 			lenPF = sqrt(lenPF);
@@ -1185,6 +1197,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 			target[a] = (relative ? 0 : pos) - (a == 2 ? zoffset : 0);
 		else
 			target[a] = move->target[a];
+		spaces[0].axis[a]->settings.last_target = target[a];
 		double d = target[a] + (a == 2 ? zoffset : 0) - (relative ? 0 : pos);
 		unit[a] = d;
 		if (std::isnan(dist))
