@@ -193,6 +193,7 @@ struct Axis_History {
 	double target;
 	double last_target; // Used when retargeting to a position with NaN components.
 	double endpos;
+	double final_x, final_v, final_a;
 };
 
 struct Axis {

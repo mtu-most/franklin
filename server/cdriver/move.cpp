@@ -230,6 +230,26 @@ int next_move(int32_t start_time) { // {{{
 		settings.v0h = 0;
 		settings.x0h = 0;
 	}
+	if (spaces[0].num_axes >= 3) {
+		double check_x = 0, check_v = 0, check_a = 0;
+		for (int i = 0; i < 3; ++i) {
+			double dx = spaces[0].axis[i]->settings.source - spaces[0].axis[i]->settings.final_x;
+			double dv = settings.v0g * settings.unitg[i] + settings.v0h * settings.unith[i] - spaces[0].axis[i]->settings.final_v;
+			double da = settings.a0g * settings.unitg[i] + settings.a0h * settings.unith[i] - spaces[0].axis[i]->settings.final_a;
+			check_x += dx * dx;
+			check_v += dv * dv;
+			check_a += da * da;
+		}
+		if (check_x > 1e-2) {
+			debug("Warning: final x %f,%f,%f != start x %f,%f,%f", spaces[0].axis[0]->settings.final_x, spaces[1].axis[1]->settings.final_x, spaces[2].axis[2]->settings.final_x, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source);
+		}
+		if (check_v > 1e-2) {
+			debug("Warning: final v %f,%f,%f != start v %f,%f,%f", spaces[0].axis[0]->settings.final_v, spaces[1].axis[1]->settings.final_v, spaces[2].axis[2]->settings.final_v, settings.v0g * settings.unitg[0] + settings.v0h * settings.unith[0], settings.v0g * settings.unitg[1] + settings.v0h * settings.unith[1], settings.v0g * settings.unitg[2] + settings.v0h * settings.unith[2]);
+		}
+		if (check_a > 1e2) {
+			debug("Warning: final a %f,%f,%f != start a %f,%f,%f", spaces[0].axis[0]->settings.final_a, spaces[1].axis[1]->settings.final_a, spaces[2].axis[2]->settings.final_a, settings.a0g * settings.unitg[0] + settings.a0h * settings.unith[0], settings.a0g * settings.unitg[1] + settings.a0h * settings.unith[1], settings.a0g * settings.unitg[2] + settings.a0h * settings.unith[2]);
+		}
+	}
 	settings.dist = ((settings.Jg * t / 6 + settings.a0g) * t + settings.v0g) * t;
 	if (std::isnan(settings.dist) || std::fabs(settings.dist) < 1e-10) {
 		//debug("no space dist, using other system. dist=%f a=%f ab=%f b=%f", settings.dist, norma, normab, normb);
@@ -265,6 +285,16 @@ int next_move(int32_t start_time) { // {{{
 			abort();
 		}
 		store_settings();
+	}
+	for (int i = 0; i < 3; ++i) {
+		if (i >= spaces[0].num_axes)
+			break;
+		double t = settings.end_time;
+		double t2 = t * t;
+		double t3 = t2 * t;
+		spaces[0].axis[i]->settings.final_x = spaces[0].axis[i]->settings.source + settings.unitg[i] * (settings.x0g + settings.v0g * t + settings.a0g / 2 * t2 + settings.Jg / 6 * t3) + settings.unith[i] * (settings.x0h + settings.v0h * t + settings.a0h / 2 * t2 + settings.Jh / 6 * t3);
+		spaces[0].axis[i]->settings.final_v = settings.unitg[i] * (settings.v0g + settings.a0g * t + settings.Jg / 2 * t2) + settings.unith[i] * (settings.v0h + settings.a0h * t + settings.Jh / 2 * t2);
+		spaces[0].axis[i]->settings.final_a = settings.unitg[i] * (settings.a0g + settings.Jg * t) + settings.unith[i] * (settings.a0h + settings.Jh * t);
 	}
 	computing_move = true;
 	return num_cbs;
@@ -700,6 +730,9 @@ void store_settings() { // {{{
 			sp.axis[a]->history[current_fragment].source = sp.axis[a]->settings.source;
 			sp.axis[a]->history[current_fragment].current = sp.axis[a]->settings.current;
 			sp.axis[a]->history[current_fragment].endpos = sp.axis[a]->settings.endpos;
+			sp.axis[a]->history[current_fragment].final_x = sp.axis[a]->settings.final_x;
+			sp.axis[a]->history[current_fragment].final_v = sp.axis[a]->settings.final_v;
+			sp.axis[a]->history[current_fragment].final_a = sp.axis[a]->settings.final_a;
 		}
 	}
 	pattern.active = false;
@@ -774,6 +807,9 @@ void restore_settings() { // {{{
 			sp.axis[a]->settings.source = sp.axis[a]->history[current_fragment].source;
 			sp.axis[a]->settings.current = sp.axis[a]->history[current_fragment].current;
 			sp.axis[a]->settings.endpos = sp.axis[a]->history[current_fragment].endpos;
+			sp.axis[a]->settings.final_x = sp.axis[a]->history[current_fragment].final_x;
+			sp.axis[a]->settings.final_v = sp.axis[a]->history[current_fragment].final_v;
+			sp.axis[a]->settings.final_a = sp.axis[a]->history[current_fragment].final_a;
 		}
 	}
 	pattern.active = false;
@@ -1004,6 +1040,10 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 		// discard buffer
 		discarding = true;
 		arch_discard();
+		for (int i = 0; i < 3; ++i) {
+			if (i < spaces[0].num_motors)
+				spaces[0].motor[i]->settings.last_v = NAN;
+		}
 		settings.hwtime_step = default_hwtime_step;
 		settings.queue_start = 0;
 		settings.queue_end = 0;
@@ -1021,6 +1061,12 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 			x[i] = (i < spaces[0].num_axes ? spaces[0].axis[i]->settings.source : 0) + xg * settings.unitg[i] + xh * settings.unith[i];
 			v[i] = vg * settings.unitg[i] + vh * settings.unith[i];
 			a[i] = ag * settings.unitg[i] + ah * settings.unith[i];
+			// Update "final" settings.
+			if (i < spaces[0].num_axes) {
+				spaces[0].axis[i]->settings.final_x = x[i];
+				spaces[0].axis[i]->settings.final_v = v[i];
+				spaces[0].axis[i]->settings.final_a = a[i];
+			}
 		}
 		double lena = sqrt(inner(a, a));
 		double lenv = std::sqrt(inner(v, v));
