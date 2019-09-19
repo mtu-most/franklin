@@ -88,11 +88,12 @@ static void change0(int qpos) { // {{{
 
 // For documentation about variables used here, see struct History in cdriver.h
 int next_move(int32_t start_time) { // {{{
+	//debug("next move, computing=%d, start time=%d, current time=%d", computing_move, start_time, settings.hwtime);
 	settings.probing = false;
 	settings.factor = 0;
 	int num_cbs = 0;
 	if (settings.queue_start == settings.queue_end && !settings.queue_full)
-		run_file_fill_queue();
+		run_file_fill_queue(false);
 	if (settings.queue_start == settings.queue_end && !settings.queue_full) {
 		//debug("no next move");
 		computing_move = false;
@@ -103,7 +104,7 @@ int next_move(int32_t start_time) { // {{{
 		//debug("sending because new move is started");
 		send_fragment();
 	}
-	mdebug("Next move; queue start = %d, end = %d", settings.queue_start, settings.queue_end);
+	//debug("Next move; queue start = %d, end = %d", settings.queue_start, settings.queue_end);
 	// Set everything up for running queue[settings.queue_start].
 	int q = settings.queue_start;
 	int n = (settings.queue_start + 1) % QUEUE_LENGTH;
@@ -209,7 +210,7 @@ int next_move(int32_t start_time) { // {{{
 	double t2 = t * t;
 	double t3 = t2 * t;
 	if (queue[q].reverse) {
-		mdebug("set reverse from J %f v %f", queue[q].Jg, queue[q].v0);
+		//debug("set reverse from J %f v %f", queue[q].Jg, queue[q].v0);
 		settings.x0h = queue[q].Jh / 6 * t3;
 		settings.v0h = -queue[q].Jh / 2 * t2;
 		settings.a0h = queue[q].Jh * t;
@@ -969,9 +970,9 @@ static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double po
 	}
 	leng = std::sqrt(leng);
 	lenh = std::sqrt(lenh);
-	//debug("adding to queue: %f,%f,%f -> %f,%f,%f time %f v0 %f a0 %f Jg %f g %f,%f,%f h %f,%f,%f Jh %f", pos[0], pos[1], pos[2], target[0], target[1], target[2], tf, v0, a0, Jg, g[0], g[1], g[2], h ? h[0] : 0, h ? h[1] : 0, h ? h[2] : 0, Jh);
-	// Compute and report [vaJ][gh](tf)
+	debug("adding to queue: %f,%f,%f -> %f,%f,%f time %f v0 %f a0 %f Jg %f g %f,%f,%f h %f,%f,%f Jh %f reverse %d", pos[0], pos[1], pos[2], target[0], target[1], target[2], tf, v0, a0, Jg, g[0], g[1], g[2], h ? h[0] : 0, h ? h[1] : 0, h ? h[2] : 0, Jh, reverse);
 #if 0
+	// Compute and report [vaJ][gh](tf)
 	if (!reverse) {
 		double x0 = 0;
 		for (int i = 0; i < 3; ++i)
@@ -1007,7 +1008,7 @@ static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double po
 	return q + 1;
 } // }}}
 
-static int queue_speed_change(int q, int tool, double x[3], double v[3], double unitv[3], double old_v, double new_v) { // {{{
+static int queue_speed_change(int q, int tool, double x[3], double v[3], double old_v, double new_v) { // {{{
 	int s = new_v < old_v ? -1 : 1;
 	double dv = std::fabs(new_v - old_v);
 	if (dv < 1e-5)
@@ -1023,15 +1024,15 @@ static int queue_speed_change(int q, int tool, double x[3], double v[3], double 
 		double dv_ramp = max_J / 2 * t_ramp2;
 		double target[3];
 		for (int i = 0; i < 3; ++i)
-			target[i] = x[i] + unitv[i] * (max_J / 6 * t_ramp3 + old_v * t_ramp);
+			target[i] = x[i] + v[i] * (max_J / 6 * t_ramp3 + old_v * t_ramp);
 		q = add_to_queue(q, -1, 0, tool, x, t_ramp, old_v, 0, NAN, target, max_J * s);
 		double extra = (old_v + dv_ramp) * t_max_a + max_a / 2 * t_max_a * t_max_a;
 		for (int i = 0; i < 3; ++i)
-			target[i] += unitv[i] * extra;
+			target[i] += v[i] * extra;
 		q = add_to_queue(q, -1, 0, tool, x, t_max_a, old_v + max_ramp_dv * s, max_a, NAN, target, 0);
 		extra = (old_v + dv_ramp + max_a * t_max_a) * t_ramp + (max_a / 2) * t_max_a * t_max_a - max_J / 6 * t_ramp3;
 		for (int i = 0; i < 3; ++i)
-			target[i] += unitv[i] * extra;
+			target[i] += v[i] * extra;
 		q = add_to_queue(q, -1, 0, tool, x, t_ramp, new_v, 0, NAN, target, -max_J * s, NULL, 0, true);
 	}
 	else {
@@ -1042,112 +1043,155 @@ static int queue_speed_change(int q, int tool, double x[3], double v[3], double 
 		// Compute both targets before adding anything to queue, so the reference is the same.
 		double target[2][3];
 		for (int i = 0; i < 3; ++i) {
-			target[0][i] = x[i] + unitv[i] * (s * max_J / 6 * t_ramp3 + old_v * t_ramp);
-			target[1][i] = x[i] + unitv[i] * (s * max_J * t_ramp3 + 2 * old_v * t_ramp);
+			target[0][i] = x[i] + v[i] * (s * max_J / 6 * t_ramp3 + old_v * t_ramp);
+			target[1][i] = x[i] + v[i] * (s * max_J * t_ramp3 + 2 * old_v * t_ramp);
 		}
 		//debug("ramps old v %f new v %f t_ramp %f s %d max J %f", old_v, new_v, t_ramp, s, max_J);
 		q = add_to_queue(q, -1, 0, tool, x, t_ramp, old_v, 0, NAN, target[0], max_J * s);
 		q = add_to_queue(q, -1, 0, tool, x, t_ramp, new_v, 0, NAN, target[1], -max_J * s, NULL, 0, true);
 	}
-	for (int i = 0; i < 3; ++i)
-		v[i] *= new_v / old_v;
 	return q;
 } // }}}
 
-int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
-	//debug("goto (%f,%f,%f) at speed %f, e %f", move->target[0], move->target[1], move->target[2], move->v0, move->e);
-	int q = 0;
-	if (computing_move) {
-		// Reset target of current move to given values.
-		// discard buffer
-		discarding = true;
-		arch_discard();
-		for (int i = 0; i < 3; ++i) {
-			if (i < spaces[0].num_motors)
-				spaces[0].motor[i]->settings.last_v = NAN;
+void compute_current_pos(double x[3], double v[3], double a[3]) { // {{{
+	// discard buffer
+	discarding = true;
+	arch_discard();
+	for (int i = 0; i < 3; ++i) {
+		if (i < spaces[0].num_motors)
+			spaces[0].motor[i]->settings.last_v = NAN;
+	}
+	settings.hwtime_step = default_hwtime_step;
+	settings.queue_start = 0;
+	settings.queue_end = 0;
+	double t = settings.hwtime / 1e6;
+	double t2 = t * t;
+	double t3 = t2 * t;
+	double ag = settings.a0g + settings.Jg * t;
+	double ah = settings.a0h + settings.Jh * t;
+	double vg = settings.v0g + settings.a0g * t + settings.Jg / 2 * t2;
+	double vh = settings.v0h + settings.a0h * t + settings.Jh / 2 * t2;
+	double xg = settings.x0g + settings.v0g * t + settings.a0g / 2 * t2 + settings.Jg / 6 * t3;
+	double xh = settings.x0h + settings.v0h * t + settings.a0h / 2 * t2 + settings.Jh / 6 * t3;
+	for (int i = 0; i < 3; ++i) {
+		x[i] = (i < spaces[0].num_axes ? spaces[0].axis[i]->settings.source : 0) + xg * settings.unitg[i] + xh * settings.unith[i];
+		v[i] = vg * settings.unitg[i] + vh * settings.unith[i];
+		a[i] = ag * settings.unitg[i] + ah * settings.unith[i];
+		// Update "final" settings.
+		if (i < spaces[0].num_axes) {
+			spaces[0].axis[i]->settings.final_x = x[i];
+			spaces[0].axis[i]->settings.final_v = v[i];
+			spaces[0].axis[i]->settings.final_a = a[i];
 		}
-		settings.hwtime_step = default_hwtime_step;
-		settings.queue_start = 0;
-		settings.queue_end = 0;
-		double t = settings.hwtime / 1e6;
+	}
+	for (int a = 0; a < spaces[1].num_axes; ++a) {
+		double src = spaces[1].axis[a]->settings.source;
+		double dst = spaces[1].axis[a]->settings.endpos;
+		spaces[1].axis[a]->settings.resume = src + t / (settings.end_time / 1e6) * (dst - src);
+	}
+	debug("current pos computed: %f,%f,%f v %f,%f,%f a %f,%f,%f", x[0], x[1], x[2], v[0], v[1], v[2], a[0], a[1], a[2]);
+} // }}}
+
+int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], bool resuming) { // {{{
+	if (resuming)
+		mul(v, v, -1);
+	double lena = sqrt(inner(a, a));
+	double lenv = std::sqrt(inner(v, v));
+	//debug("retargeting, x=(%f,%f,%f) v=(%f,%f,%f) * %f, a=(%f,%f,%f)", x[0], x[1], x[2], v[0], v[1], v[2], lenv, a[0], a[1], a[2]);
+	// add segment to bring a to zero {{{
+	if (lena > 1e-5) {
+		//debug("pull a from %f to zero", lena);
+		// J -> -a, t = a/J, g -> v, h -> g x (g x a)
+		double target_x[3], target_v[3];
+		double t = lena / max_J;
 		double t2 = t * t;
 		double t3 = t2 * t;
-		double ag = settings.a0g + settings.Jg * t;
-		double ah = settings.a0h + settings.Jh * t;
-		double vg = settings.v0g + settings.a0g * t + settings.Jg / 2 * t2;
-		double vh = settings.v0h + settings.a0h * t + settings.Jh / 2 * t2;
-		double xg = settings.x0g + settings.v0g * t + settings.a0g / 2 * t2 + settings.Jg / 6 * t3;
-		double xh = settings.x0h + settings.v0h * t + settings.a0h / 2 * t2 + settings.Jh / 6 * t3;
-		double x[3], v[3], a[3];
+		double J[3];
 		for (int i = 0; i < 3; ++i) {
-			x[i] = (i < spaces[0].num_axes ? spaces[0].axis[i]->settings.source : 0) + xg * settings.unitg[i] + xh * settings.unith[i];
-			v[i] = vg * settings.unitg[i] + vh * settings.unith[i];
-			a[i] = ag * settings.unitg[i] + ah * settings.unith[i];
-			// Update "final" settings.
-			if (i < spaces[0].num_axes) {
-				spaces[0].axis[i]->settings.final_x = x[i];
-				spaces[0].axis[i]->settings.final_v = v[i];
-				spaces[0].axis[i]->settings.final_a = a[i];
-			}
+			J[i] = -a[i] / lena * max_J;
+			target_x[i] = J[i] / 6 * t3 + a[i] / 2 * t2 + v[i] * t + x[i];
+			target_v[i] = J[i] / 2 * t2 + a[i] * t + v[i];
 		}
-		double lena = sqrt(inner(a, a));
-		double lenv = std::sqrt(inner(v, v));
-		double unitv[3];
-		mul(unitv, v, 1 / lenv);
-		//debug("retargeting, x=(%f,%f,%f) v=(%f,%f,%f), a=(%f,%f,%f)", x[0], x[1], x[2], v[0], v[1], v[2], a[0], a[1], a[2]);
-		// add segment to bring a to zero {{{
-		if (lena > 1e-5) {
-			//debug("pull a from %f to zero", lena);
-			// J -> -a, t = a/J, g -> v, h -> g x (g x a)
-			double target_x[3], target_v[3];
-			double t = lena / max_J;
-			double t2 = t * t;
-			double t3 = t2 * t;
-			double J[3];
-			for (int i = 0; i < 3; ++i) {
-				J[i] = -a[i] / lena * max_J;
-				target_x[i] = J[i] / 6 * t3 + a[i] / 2 * t2 + v[i] * t + x[i];
-				target_v[i] = J[i] / 2 * t2 + a[i] * t + v[i];
-			}
-			double len_target_v = std::sqrt(inner(target_v, target_v));
-			double unitg[3], normal[3], h[3];
-			mul(unitg, target_v, 1 / len_target_v);
-			cross(normal, unitg, a);
-			cross(h, normal, unitg);
-			double lenh = std::sqrt(inner(h, h));
-			mul(h, h, lenh > 0 ? 1 / lenh : 0);
-			double Jg = inner(J, unitg);
-			double Jh = inner(J, h);
-			mul(h, h, Jh);
-			// Set source.
-			double sh = Jh / 6 * t3;
-			double sg = sh / std::tan(M_PI / 2 - std::acos(inner(unitg, unitv)));
-			for (int i = 0; i < 3; ++i) {
-				if (i < spaces[0].num_axes)
-					spaces[0].axis[i]->settings.source = x[i] - h[i] / Jh * sh - unitg[i] * sg;
-			}
-			// Add segment to queue.
-			q = add_to_queue(q, -1, 0, move->tool, x, t, len_target_v, 0, NAN, target_x, Jg, h, Jh, true);
+		double len_target_v = std::sqrt(inner(target_v, target_v));
+		double unitg[3], normal[3], h[3];
+		mul(unitg, target_v, 1 / len_target_v);
+		cross(normal, unitg, a);
+		cross(h, normal, unitg);
+		double lenh = std::sqrt(inner(h, h));
+		mul(h, h, lenh > 0 ? 1 / lenh : 0);
+		double Jg = inner(J, unitg);
+		double Jh = inner(J, h);
+		mul(h, h, Jh);
+		// Set source.
+		double sh = Jh / 6 * t3;
+		double sg = sh / std::tan(M_PI / 2 - std::acos(inner(unitg, v) / lenv));
+		for (int i = 0; i < 3; ++i) {
+			if (i < spaces[0].num_axes)
+				spaces[0].axis[i]->settings.source = x[i] - h[i] / Jh * sh - unitg[i] * sg;
+		}
+		// Add segment to queue.
+		if (resuming) {
+			MoveCommand move;
+			move.single = 0;
+			move.v0 = max_v;
+			move.tool = 0;
+			move.e = spaces[1].num_axes > 0 ? spaces[1].axis[0]->settings.current : 0;
+			move.gcode_line = -1;
+			move.time = 0;
+			for (int i = 0; i < 3; ++i)
+				move.target[i] = target_x[i];
+			q = go_to(false, &move, false, true);
+			q = add_to_queue(q, -1, 0, tool, target_x, t, len_target_v, 0, NAN, x, Jg, h, Jh, false);
+		}
+		else {
+			q = add_to_queue(q, -1, 0, tool, x, t, len_target_v, 0, NAN, target_x, Jg, h, Jh, true);
 			// Update movement variables.
 			for (int i = 0; i < 3; ++i) {
 				x[i] = target_x[i];
 				v[i] = target_v[i];
 			}
-			lenv = len_target_v;
-			mul(unitv, v, 1 / lenv);
 			//debug("Try from here, x=(%f,%f,%f) v=(%f,%f,%f)", x[0], x[1], x[2], v[0], v[1], v[2]);
-		} // }}}
-		else {
-			for (int i = 0; i < 3; ++i) {
-				if (i < spaces[0].num_axes)
-					spaces[0].axis[i]->settings.source = x[i];
-			}
 		}
+	} // }}}
+	else {
+		for (int i = 0; i < 3; ++i) {
+			if (i < spaces[0].num_axes)
+				spaces[0].axis[i]->settings.source = x[i];
+		}
+	}
+	return q;
+} // }}}
+
+void smooth_stop(int q, double x[3], double v[3]) { // {{{
+	double lenv = std::sqrt(inner(v, v));
+	mul(v, v, 1 / lenv);
+	settings.queue_end = queue_speed_change(q, -1, x, v, lenv, 0);
+	discarding = false;
+	next_move(settings.hwtime);
+	buffer_refill();
+} // }}}
+
+void do_resume() { // {{{
+	settings.queue_end = prepare_retarget(0, -1, resume.x, resume.v, resume.a, true);
+	next_move(settings.hwtime);
+	buffer_refill();
+} // }}}
+
+int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { // {{{
+	//debug("goto (%f,%f,%f) at speed %f, e %f", move->target[0], move->target[1], move->target[2], move->v0, move->e);
+	int q = 0;
+	if (computing_move) {
+		// Reset target of current move to given values.
+		double x[3], v[3], a[3];
+		compute_current_pos(x, v, a);
+		double q = prepare_retarget(0, move->tool, x, v, a);
+		double lenv = std::sqrt(inner(v, v));
+		mul(v, v, 1 / lenv);
 		// add segment to slow down to min(current_v, requested_v) {{{
 		if (move->v0 < lenv) {
 			//debug("slow down from %f to %f", lenv, move->v0);
 			// Add segments to queue
-			q = queue_speed_change(q, move->tool, x, v, unitv, lenv, move->v0);
+			q = queue_speed_change(q, move->tool, x, v, lenv, move->v0);
 			// Update movement variables.
 			lenv = move->v0;
 		} // }}}
@@ -1159,8 +1203,8 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 			double s_stop = s_dv(lenv, 0);
 			double g[3], h[3], P[3], unitPF[3];
 			double lenPF = 0;
-			mul(g, v, 1 / lenv);
 			for (int i = 0; i < 3; ++i) {
+				g[i] = v[i];
 				P[i] = x[i] + g[i] * s_stop;
 				if (std::isnan(move->target[i])) {
 					if (i < spaces[0].num_axes && !std::isnan(spaces[0].axis[i]->settings.last_target))
@@ -1187,7 +1231,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 			bool done = true;
 			if (lenPF < 2 * s_stop) {
 				// target is closer to P than tool: stop and goto target.
-				q = queue_speed_change(q, move->tool, x, v, unitv, lenv, 0);
+				q = queue_speed_change(q, move->tool, x, v, lenv, 0);
 				lenv = 0;
 				done = false; // Fall through to goto handling.
 			}
@@ -1204,8 +1248,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 					target[i] = P[i] + unitPF[i] * s_stop;
 				q = add_to_queue(q, -1, 0, move->tool, x, t, lenv, 0, NAN, P, Jg, h, Jh, false);
 				q = add_to_queue(q, -1, 0, move->tool, x, t, lenv, 0, NAN, target, Jg, h2, Jh, true);
-				mul(unitv, unitPF, 1);
-				mul(v, unitv, lenv);
+				mul(v, unitPF, 1);
 				double v_top;
 				if (lenPF - s_stop < s_speedup + s_slowdown) {
 					//debug("target is too close for reaching requested v");
@@ -1226,17 +1269,17 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 					v_top = move->v0;
 				}
 				// speed up
-				q = queue_speed_change(q, move->tool, x, v, unitv, lenv, v_top);
+				q = queue_speed_change(q, move->tool, x, v, lenv, v_top);
 				// constant v
 				double dist = lenPF - s_stop - s_speedup - s_slowdown;
 				if (dist < 0) {
 					debug("Warning: dist < 0 for retarget?! dist=%f, lenPF=%f, s_stop=%f, s_speedup=%f, s_slowdown=%f, v0=%f, v=%f", dist, lenPF, s_stop, s_speedup, s_slowdown, lenv, v_top);
 				}
 				for (int i = 0; i < 3; ++i)
-					target[i] = x[i] + unitv[i] * dist;
+					target[i] = x[i] + v[i] * dist;
 				q = add_to_queue(q, -1, 0, move->tool, x, dist / v_top, v_top, 0, NAN, target, 0);
 				// slow down to 0
-				q = queue_speed_change(q, move->tool, x, v, unitv, v_top, 0);
+				q = queue_speed_change(q, move->tool, x, v, v_top, 0);
 			}
 			settings.queue_end = q;
 			discarding = false;
@@ -1301,7 +1344,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 			}
 		}
 	}
-	int tool = std::isnan(move->tool) ? current_extruder : move->tool;
+	int tool = move->tool;
 	double e;
 	if (tool >= 0 && tool < spaces[1].num_axes)
 		e = spaces[1].axis[tool]->settings.current;
@@ -1334,36 +1377,20 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 	}
 	if (std::isnan(dist) || dist < 1e-10) {
 		// No moves requested.
-		//debug("dist is %f", dist);
+		//debug("not moving, because dist is %f", dist);
 		if (cb)
 			num_movecbs += 1;
 		//debug("adding 1 move cb for manual move");
 		settings.queue_end = 0;
-		return 1;
+		return queue_only ? 0 : 1;
 	}
 
 	double reachable_v = compute_max_v(dist / 2, 0, max_J, amax);
-	//debug("vmax = %f, reachable = %f, dist=%f", vmax, reachable_v, dist);
+	//debug("building queue for goto with vmax = %f, reachable = %f, dist=%f", vmax, reachable_v, dist);
 	vmax = min(vmax, reachable_v);
 	vmax = min(vmax, move->v0);
 	double max_ramp_dv = amax * amax / (2 * max_J);
 	// Initialize the queue. At most 7 items will be used.
-	for (int i = 0; i < 7; ++i) {
-		queue[i].cb = false;
-		queue[i].probe = false;
-		queue[i].single = false;
-		queue[i].reverse = false;
-		queue[i].tool = move->tool;
-		for (int j = 0; j < 3; ++j) {
-			queue[i].unitg[j] = unit[j];
-			queue[i].unith[j] = 0;
-			queue[i].abc[j] = 0;
-		}
-		queue[i].Jh = 0;
-		queue[i].time = move->time;
-		queue[i].gcode_line = -1;
-		queue[i].pattern_size = 0;
-	}
 	double dv_ramp, t_max_a;
 	if (max_ramp_dv * 2 >= vmax) {
 		// ramp up, ramp down, const v, ramp down, ramp up.
@@ -1382,12 +1409,12 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 	double s_const_v = dist - 2 * (s_ramp_up + s_ramp_down + s_const_a);
 	double t_const_v = s_const_v / vmax;
 
-	double s[7] = {s_ramp_up, s_const_a, s_ramp_down, s_const_v, s_ramp_down, s_const_a, s_ramp_up};
-	double t[7] = {t_ramp, t_max_a, t_ramp, t_const_v, t_ramp, t_max_a, t_ramp};
-	double J[7] =     {max_J,       0, -max_J,     0, -max_J,              0, max_J};
-	double v0[7] =    {    0, dv_ramp,   vmax,  vmax,   vmax, vmax - dv_ramp,     0};
-	double a0[7] =    {    0,    amax,      0,     0,      0,          -amax,     0};
-	bool reverse[7] = {false,   false,   true, false,  false,          false,  true};
+	double s[7] = {s_ramp_up, s_const_a, s_ramp_down, s_const_v, s_ramp_down,      s_const_a, s_ramp_up};
+	double t[7] =    {t_ramp,   t_max_a,      t_ramp, t_const_v,      t_ramp,        t_max_a,    t_ramp};
+	double J[7] =     {max_J,         0,      -max_J,         0,      -max_J,              0,     max_J};
+	double v0[7] =    {    0,   dv_ramp,        vmax,      vmax,        vmax, vmax - dv_ramp,         0};
+	double a0[7] =    {    0,      amax,           0,         0,           0,          -amax,         0};
+	bool reverse[7] = {false,     false,        true,     false,       false,          false,      true};
 	double X[3];
 	for (int i = 0; i < 3; ++i)
 		X[i] = i < spaces[0].num_axes ? spaces[0].axis[i]->settings.current : 0;
@@ -1403,18 +1430,10 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 		current_s += s[part];
 		if (s[part] < 1e-10)
 			continue;
-		for (int i = 0; i < 3; ++i) {
-			X[i] += unit[i] * s[part];
-			queue[q].target[i] = X[i];
-		}
-		//debug("target %d: %f,%f,%f", part, X[0], X[1], X[2]);
-		queue[q].Jg = J[part];
-		queue[q].tf = t[part];
-		queue[q].v0 = v0[part];
-		queue[q].a0 = a0[part];
-		queue[q].reverse = reverse[part];
-		queue[q].e = e0 + (move->e - e0) * current_s / dist;
-		q += 1;
+		double target[3];
+		for (int i = 0; i < 3; ++i)
+			target[i] = X[i] + unit[i] * s[part];
+		q = add_to_queue(q, move->gcode_line, move->time, move->tool, X, t[part], v0[part], a0[part], e0 + (move->e - e0) * current_s / dist, target, J[part], NULL, 0, reverse[part]);
 	}
 	settings.queue_end = q;
 
@@ -1429,6 +1448,10 @@ int go_to(bool relative, MoveCommand const *move, bool cb) { // {{{
 	debug("goto J %f,%f,%f,%f,%f,%f,%f", J[0], J[1], J[2], J[3], J[4], J[5], J[6]);
 	debug("goto v0 %f,%f,%f,%f,%f,%f,%f", v0[0], v0[1], v0[2], v0[3], v0[4], v0[5], v0[6]);
 #endif
+
+	if (queue_only)
+		return q;
+
 	int new_num_movecbs = next_move(settings.hwtime);
 	bool ret = 0;
 	if (new_num_movecbs > 0) {

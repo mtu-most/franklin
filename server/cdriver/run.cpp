@@ -202,7 +202,7 @@ static double handle_probe(double ox, double oy, double z) {
 	return z + l * (1 - fx) + r * fx + probe_adjust;
 }
 
-void run_file_fill_queue() {
+void run_file_fill_queue(bool move_allowed) {
 	static bool lock = false;
 	if (lock)
 		return;
@@ -302,7 +302,8 @@ void run_file_fill_queue() {
 					move.target[2] = r.X[2];
 					move.e = r.E;
 					move.time = r.time;
-					go_to(false, &move, false);
+					//debug("run goto %f,%f,%f tool %d E %f v %f", r.X[0], r.X[1], r.X[2], r.tool, r.E, r.v0);
+					settings.queue_end = go_to(false, &move, false, true);
 					for (int i = 0; i < 3; ++i) {
 						if (!std::isnan(r.X[i]))
 							lastpos[i] = r.X[i];
@@ -426,15 +427,15 @@ void run_file_fill_queue() {
 				must_move = true;
 		}
 		if (must_move) {
-			while (!sending_fragment && !computing_move && (settings.queue_start != settings.queue_end || settings.queue_full))
+			while (move_allowed && !sending_fragment && !computing_move && (settings.queue_start != settings.queue_end || settings.queue_full)) {
 				cbs += next_move(settings.hwtime);
+			}
 		}
 	}
 	if (cbs > 0) {
 		history[current_fragment].cbs += cbs;
 		//debug("adding %d cbs during run", cbs);
 	}
-	buffer_refill();
 	rundebug("run queue done");
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
 		// Done.

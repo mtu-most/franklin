@@ -52,7 +52,7 @@ void request(int req) {
 		arch_reconnect(const_cast<const char *>(shmem->strs[0]));
 		break;
 	CASE(CMD_MOVE)
-		//debug("moving to (%f,%f,%f)", shmem->move.g[0], shmem->move.g[1], shmem->move.g[2]);
+		//debug("moving to (%f,%f,%f), tool %d e %f v %f", shmem->move.target[0], shmem->move.target[1], shmem->move.target[2], shmem->move.tool, shmem->move.e, shmem->move.v0);
 		last_active = millis();
 		initialized = true;
 		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move), true);
@@ -298,28 +298,44 @@ void request(int req) {
 		GET(gpios[shmem->ints[0]].pin, false, get_cb);
 		return;
 	CASE(CMD_PAUSE)
-		// TODO: store resume info.
+	{
+		// Store resume info.
+		double x[3], v[3], a[3];
+		compute_current_pos(x, v, a);
+		for (int i = 0; i < 3; ++i) {
+			resume.x[i] = x[i];
+			resume.v[i] = v[i];
+			resume.a[i] = a[i];
+		}
+		// Bring a to 0.
+		int q = prepare_retarget(0, -1, x, v, a);
+		smooth_stop(q, x, v);
 		if (run_file_map)
 			run_file_wait += 1;
 		else {
 			//debug("clearing %d cbs after current move for abort", cbs_after_current_move);
 			cbs_after_current_move = 0;
 		}
-		arch_stop();
-		settings.queue_start = 0;
-		settings.queue_end = 0;
-		settings.queue_full = false;
 		break;
+	}
 	CASE(CMD_RESUME)
-		if (computing_move)
+		if (computing_move || !run_file_map)
 			break;
-		// TODO: go to resume position.
 		if (run_file_wait)
 			run_file_wait -= 1;
+		do_resume();
+		buffer_refill();
 		run_file_fill_queue();
 		break;
 	CASE(CMD_UNPAUSE)
-		// TODO: clear resume info.
+		// Clear resume info.
+		for (int i = 0; i < 3; ++i) {
+			resume.x[i] = NAN;
+			resume.v[i] = 0;
+			resume.a[i] = 0;
+		}
+		for (int a = 0; a < spaces[1].num_axes; ++a)
+			spaces[1].axis[a]->settings.resume = NAN;
 		break;
 	CASE(CMD_GET_TIME)
 		shmem->floats[0] = history[running_fragment].run_time / feedrate + settings.hwtime / 1e6;

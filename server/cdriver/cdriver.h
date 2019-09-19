@@ -95,6 +95,10 @@ extern SingleByteCommands cmd_ack[4];
 extern SingleByteCommands cmd_nack[4];
 extern SingleByteCommands cmd_stall[4];
 
+struct Resume {
+	double x[3], v[3], a[3];
+};
+
 // All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp {
 	// See temp.c from definition of calibration constants.
@@ -192,6 +196,7 @@ struct Axis_History {
 	double last_target; // Used when retargeting to a position with NaN components.
 	double endpos;
 	double final_x, final_v, final_a;
+	double resume;	// Only used for extruders: position to reset to when resuming.
 };
 
 struct Axis {
@@ -347,6 +352,7 @@ EXTERN void (*serial_cb[4])();
 EXTERN int32_t last_active;
 EXTERN int32_t last_micros;
 EXTERN int16_t led_phase;
+EXTERN Resume resume;
 EXTERN History *history;
 EXTERN History settings;
 EXTERN bool computing_move;	// True as long as steps are sent to firmware.
@@ -392,7 +398,11 @@ void buffered_debug(char const *fmt, ...);
 
 // packet.cpp
 void request(int req);
-int go_to(bool relative, MoveCommand const *move, bool cb);
+void compute_current_pos(double x[3], double v[3], double a[3]);
+int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], bool resuming = false);
+void smooth_stop(int q, double x[3], double v[3]);
+void do_resume();
+int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only = false);
 void settemp(int which, double target);
 void waittemp(int which, double mintemp, double maxtemp);
 void setpos(int which, int t, double f);
@@ -422,7 +432,7 @@ struct ProbeFile {
 } __attribute__((__packed__));
 void run_file(char const *name, char const *probe_name, bool start, double sina, double cosa);
 void abort_run_file();
-void run_file_fill_queue();
+void run_file_fill_queue(bool move_allowed = true);
 void run_adjust_probe(double x, double y, double z);
 double run_find_pos(const double pos[3]);
 EXTERN char *probe_file_name;

@@ -131,16 +131,11 @@ static void eload(Space *s) { // {{{
 		}
 	}
 	EDATA(s).num_axes = s->num_axes;
-	bool move = false;
 	for (int a = 0; a < s->num_axes; ++a) {
 		for (int o = 0; o < 3; ++o) {
 			EADATA(s, a).offset[o] = shmem->floats[3 * a + o];
 			//debug("load offset %d %d %d = %f", s->id, a, o, EADATA(s, a).offset[o]);
 		}
-	}
-	if (move) {
-		next_move(settings.hwtime);
-		buffer_refill();
 	}
 } // }}}
 

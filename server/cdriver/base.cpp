@@ -116,6 +116,7 @@ static void handle_pending_events() { // {{{
 		send_to_parent(CMD_MOVECB);
 		return;
 	}
+	buffer_refill();
 	run_file_fill_queue();
 } // }}}
 

@@ -1286,6 +1286,7 @@ static void avr_sent_fragment() { // {{{
 	sending_fragment -= 1;
 	int cbs = 0;
 	while (!sending_fragment && !computing_move && (settings.queue_start != settings.queue_end || settings.queue_full)) {
+		debug("start moving from send_fragment");
 		cbs += next_move(settings.hwtime);
 	}
 	//debug("adding %d cbs for fragment %d", cbs, current_fragment);

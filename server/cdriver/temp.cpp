@@ -233,6 +233,7 @@ void handle_temp(int id, int temp) { // {{{
 		if (run_file_wait_temp) {
 			run_file_wait_temp -= 1;
 			run_file_fill_queue();
+			buffer_refill();
 		}
 		else {
 			prepare_interrupt();
