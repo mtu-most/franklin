@@ -143,16 +143,14 @@ struct Temp {
 };
 
 // Variables defining the current move:
-// double g[3]: vector from current position to "target" (not actually reached if h != 0,0,0)
-// double h[3]: vector perpendicular to g in the plane of the curve.
-// double unitg[3], unith[3]: unit vectors for g and h, or 0,0,0
+// double unitg[3]: vector from current position to "target" (not actually reached if h != 0,0,0)
+// double unith[3]: vector perpendicular to g in the plane of the curve. (or 0,0,0 if Jh==0)
 // double Jg, Jh, a0g, a0h, v0g, v0h, x0g, x0h: Jerk and initial a, v and x for g and h.
 // double dist: Length of move (along g, or if tool does not move, along follower, a, b, c, or e)
 // int32_t hwtime: current time, where 0 is start of segment
 // int32_t end_time: time when current segment is completed.
 // int hwtime_step: time difference for each step.
 struct History {
-	double g[3], h[3];
 	double unitg[3], unith[3];
 	double Jg, Jh, a0g, a0h, v0g, v0h, x0g, x0h;
 	double dist;
