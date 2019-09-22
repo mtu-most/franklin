@@ -40,7 +40,7 @@ static void send_fragment() { // {{{
 			// TODO: find out why this is attempted and avoid it.
 			debug("not sending short fragment for 0 motors; %d %d", current_fragment, running_fragment);
 			if (history[current_fragment].cbs) {
-				if (settings.queue_start == settings.queue_end && !settings.queue_full) {
+				if (queue_start == queue_end && !queue_full) {
 					// Send cbs immediately.
 					if (!host_block) {
 						history[(current_fragment + 1) % FRAGMENTS_PER_BUFFER].cbs += history[current_fragment].cbs;
@@ -89,12 +89,12 @@ static void change0(int qpos) { // {{{
 // For documentation about variables used here, see struct History in cdriver.h
 int next_move(int32_t start_time) { // {{{
 	//debug("next move, computing=%d, start time=%d, current time=%d", computing_move, start_time, settings.hwtime);
-	settings.probing = false;
+	probing = false;
 	settings.factor = 0;
 	int num_cbs = 0;
-	if (settings.queue_start == settings.queue_end && !settings.queue_full)
+	if (queue_start == queue_end && !queue_full)
 		run_file_fill_queue(false);
-	if (settings.queue_start == settings.queue_end && !settings.queue_full) {
+	if (queue_start == queue_end && !queue_full) {
 		//debug("no next move");
 		computing_move = false;
 		return num_cbs;
@@ -106,9 +106,9 @@ int next_move(int32_t start_time) { // {{{
 	}
 	//debug("Next move; queue start = %d, end = %d", settings.queue_start, settings.queue_end);
 	// Set everything up for running queue[settings.queue_start].
-	int q = settings.queue_start;
-	int n = (settings.queue_start + 1) % QUEUE_LENGTH;
-	settings.single = queue[q].single;
+	int q = queue_start;
+	int n = (queue_start + 1) % QUEUE_LENGTH;
+	single = queue[q].single;
 	settings.gcode_line = queue[q].gcode_line;
 
 	if (queue[q].cb) {
@@ -152,11 +152,11 @@ int next_move(int32_t start_time) { // {{{
 	for (int a = 0; a < 3; ++a) {
 		if (a >= sp0.num_axes)
 			continue;
-		if ((!std::isnan(queue[q].target[a]) || (n != settings.queue_end && !std::isnan(queue[n].target[a]))) && std::isnan(sp0.axis[a]->settings.source)) {
+		if ((!std::isnan(queue[q].target[a]) || (n != queue_end && !std::isnan(queue[n].target[a]))) && std::isnan(sp0.axis[a]->settings.source)) {
 			debug("Motor position for axis %d is not known, so move cannot take place; aborting move and removing it from the queue: q1=%f q2=%f src=%f", a, queue[q].target[a], queue[n].target[a], sp0.axis[a]->settings.source);
 			// This possibly removes one move too many, but it shouldn't happen anyway.
-			settings.queue_start = n;
-			settings.queue_full = false;
+			queue_start = n;
+			queue_full = false;
 			abort_move(current_fragment_pos);
 			return num_cbs;
 		}
@@ -278,7 +278,7 @@ int next_move(int32_t start_time) { // {{{
 	if (settings.hwtime_step != last_hwtime_step)
 		arch_globals_change();
 	//debug("move ln %d, from=(%f,%f,%f) (current %f,%f,%f) target=(%f,%f,%f), h=(%f,%f,%f), dist=%f, e=%f, Jg=%f a0g=%f v0g=%f x0g=%f end time=%f, single=%d, Jh=%f, a0h=%f, v0h=%f, x0h=%f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->settings.current, spaces[0].axis[1]->settings.current, spaces[0].axis[2]->settings.current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unith[0], settings.unith[1], settings.unith[2], settings.dist, queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
-	settings.queue_start = n;
+	queue_start = n;
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
 	if (!computing_move) {
 		if (current_fragment_pos > 0) {
@@ -340,7 +340,7 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	int steps = round((arch_round_pos(sp, mt, mtr->settings.current_pos + distance) - arch_round_pos(sp, mt, mtr->settings.current_pos)) * mtr->steps_per_unit);
 	int targetsteps = steps;
 	//cpdebug(s, m, "cf %d value %d", current_fragment, value);
-	if (settings.probing && steps)
+	if (probing && steps)
 		steps = s;
 	else {
 		int max = 0x78;	// Don't use 0x7f, because limiting isn't accurate.
@@ -380,7 +380,7 @@ static double move_axes(Space *s) { // {{{
 		//	debug("check move %d %d time %f target %f current %f", s->id, m, settings.hwtime / 1e6, s->motor[m]->settings.target_pos, s->motor[m]->settings.current_pos);
 		double distance = std::fabs(s->motor[m]->settings.target_pos - s->motor[m]->settings.current_pos);
 		Motor *limit_mtr;
-		if (settings.single)
+		if (single)
 			limit_mtr = s->motor[m];
 		else {
 			int target = space_types[s->type].follow(s, m);
@@ -410,7 +410,7 @@ static void do_steps(double old_factor) { // {{{
 	// Do the steps to arrive at the correct position. Update axis and motor current positions.
 	// Set new current position.
 	for (int s = 0; s < NUM_SPACES; ++s) {
-		if (!settings.single && s == 2)
+		if (!single && s == 2)
 			continue;
 		Space &sp = spaces[s];
 		for (int a = 0; a < sp.num_axes; ++a) {
@@ -421,7 +421,7 @@ static void do_steps(double old_factor) { // {{{
 	// Move the motors.
 	mdebug("start move");
 	for (int s = 0; s < NUM_SPACES; ++s) {
-		if (!settings.single && s == 2)
+		if (!single && s == 2)
 			continue;
 		Space &sp = spaces[s];
 		for (int m = 0; m < sp.num_motors; ++m) {
@@ -471,7 +471,7 @@ static void do_steps(double old_factor) { // {{{
 				DATA_SET(s, m, diff);
 			}
 			//debug("new cp: %d %d %f %d", s, m, target, current_fragment_pos);
-			if (!settings.single) {
+			if (!single) {
 				for (int mm = 0; mm < spaces[2].num_motors; ++mm) {
 					int fm = space_types[spaces[2].type].follow(&spaces[2], mm);
 					if (fm < 0)
@@ -527,7 +527,7 @@ static double set_targets(double factor) { // {{{
 	double max_f = 1;
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
-		if (s == 2 && !settings.single)
+		if (s == 2 && !single)
 			continue;
 		for (int a = (s == 0 ? 3 : 0); a < sp.num_axes; ++a) {
 			auto ax = sp.axis[a];
@@ -685,12 +685,7 @@ void store_settings() { // {{{
 	history[current_fragment].hwtime_step = settings.hwtime_step;
 	history[current_fragment].end_time = settings.end_time;
 	history[current_fragment].cbs = 0;
-	history[current_fragment].queue_start = settings.queue_start;
-	history[current_fragment].queue_end = settings.queue_end;
-	history[current_fragment].queue_full = settings.queue_full;
 	history[current_fragment].run_file_current = settings.run_file_current;
-	history[current_fragment].probing = settings.probing;
-	history[current_fragment].single = settings.single;
 	history[current_fragment].run_time = settings.run_time;
 	history[current_fragment].factor = settings.factor;
 	history[current_fragment].pattern_size = settings.pattern_size;
@@ -698,8 +693,6 @@ void store_settings() { // {{{
 		history[current_fragment].pattern[i] = settings.pattern[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
-		sp.history[current_fragment].dist[0] = sp.settings.dist[0];
-		sp.history[current_fragment].dist[1] = sp.settings.dist[1];
 		for (int i = 0; i < 2; ++i) {
 			sp.history[current_fragment].arc[i] = sp.settings.arc[i];
 			sp.history[current_fragment].angle[i] = sp.settings.angle[i];
@@ -721,9 +714,6 @@ void store_settings() { // {{{
 			cpdebug(s, m, "store");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
-			sp.axis[a]->history[current_fragment].dist[0] = sp.axis[a]->settings.dist[0];
-			sp.axis[a]->history[current_fragment].dist[1] = sp.axis[a]->settings.dist[1];
-			sp.axis[a]->history[current_fragment].main_dist = sp.axis[a]->settings.main_dist;
 			sp.axis[a]->history[current_fragment].target = sp.axis[a]->settings.target;
 			sp.axis[a]->history[current_fragment].last_target = sp.axis[a]->settings.last_target;
 			sp.axis[a]->history[current_fragment].source = sp.axis[a]->settings.source;
@@ -760,12 +750,7 @@ void restore_settings() { // {{{
 	settings.hwtime_step = history[current_fragment].hwtime_step;
 	settings.end_time = history[current_fragment].end_time;
 	history[current_fragment].cbs = 0;
-	settings.queue_start = history[current_fragment].queue_start;
-	settings.queue_end = history[current_fragment].queue_end;
-	settings.queue_full = history[current_fragment].queue_full;
 	settings.run_file_current = history[current_fragment].run_file_current;
-	settings.probing = history[current_fragment].probing;
-	settings.single = history[current_fragment].single;
 	settings.run_time = history[current_fragment].run_time;
 	settings.factor = history[current_fragment].factor;
 	settings.pattern_size = history[current_fragment].pattern_size;
@@ -773,8 +758,6 @@ void restore_settings() { // {{{
 		settings.pattern[i] = history[current_fragment].pattern[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
-		sp.settings.dist[0] = sp.history[current_fragment].dist[0];
-		sp.settings.dist[1] = sp.history[current_fragment].dist[1];
 		for (int i = 0; i < 2; ++i) {
 			sp.settings.arc[i] = sp.history[current_fragment].arc[i];
 			sp.settings.angle[i] = sp.history[current_fragment].angle[i];
@@ -796,9 +779,6 @@ void restore_settings() { // {{{
 			cpdebug(s, m, "restore");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
-			sp.axis[a]->settings.dist[0] = sp.axis[a]->history[current_fragment].dist[0];
-			sp.axis[a]->settings.dist[1] = sp.axis[a]->history[current_fragment].dist[1];
-			sp.axis[a]->settings.main_dist = sp.axis[a]->history[current_fragment].main_dist;
 			sp.axis[a]->settings.target = sp.axis[a]->history[current_fragment].target;
 			sp.axis[a]->settings.last_target = sp.axis[a]->history[current_fragment].last_target;
 			sp.axis[a]->settings.source = sp.axis[a]->history[current_fragment].source;
@@ -892,9 +872,9 @@ void abort_move(int pos) { // {{{
 	if (spaces[0].num_axes > 0)
 		cpdebug(0, 0, "ending hwpos %f", arch_round_pos(0, 0, spaces[0].motor[0]->settings.current_pos) + avr_pos_offset[0]);
 	// Flush queue.
-	settings.queue_start = 0;
-	settings.queue_end = 0;
-	settings.queue_full = false;
+	queue_start = 0;
+	queue_end = 0;
+	queue_full = false;
 	// Copy settings back to previous fragment.
 	current_fragment_pos = 0;
 	store_settings();
@@ -902,14 +882,10 @@ void abort_move(int pos) { // {{{
 	current_fragment_pos = 0;
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
-		sp.settings.dist[0] = 0;
-		sp.settings.dist[1] = 0;
 		for (int a = 0; a < sp.num_axes; ++a) {
 			//debug("setting axis %d source to %f", a, sp.axis[a]->settings.current);
 			if (!std::isnan(sp.axis[a]->settings.current))
 				sp.axis[a]->settings.source = sp.axis[a]->settings.current;
-			sp.axis[a]->settings.dist[0] = NAN;
-			sp.axis[a]->settings.dist[1] = NAN;
 		}
 	}
 	mdebug("aborted move");
@@ -1062,8 +1038,8 @@ void compute_current_pos(double x[3], double v[3], double a[3]) { // {{{
 			spaces[0].motor[i]->settings.last_v = NAN;
 	}
 	settings.hwtime_step = default_hwtime_step;
-	settings.queue_start = 0;
-	settings.queue_end = 0;
+	queue_start = 0;
+	queue_end = 0;
 	double t = settings.hwtime / 1e6;
 	double t2 = t * t;
 	double t3 = t2 * t;
@@ -1165,14 +1141,14 @@ int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], boo
 void smooth_stop(int q, double x[3], double v[3]) { // {{{
 	double lenv = std::sqrt(inner(v, v));
 	mul(v, v, 1 / lenv);
-	settings.queue_end = queue_speed_change(q, -1, x, v, lenv, 0);
+	queue_end = queue_speed_change(q, -1, x, v, lenv, 0);
 	discarding = false;
 	next_move(settings.hwtime);
 	buffer_refill();
 } // }}}
 
 void do_resume() { // {{{
-	settings.queue_end = prepare_retarget(0, -1, resume.x, resume.v, resume.a, true);
+	queue_end = prepare_retarget(0, -1, resume.x, resume.v, resume.a, true);
 	next_move(settings.hwtime);
 	buffer_refill();
 } // }}}
@@ -1281,7 +1257,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 				// slow down to 0
 				q = queue_speed_change(q, move->tool, x, v, v_top, 0);
 			}
-			settings.queue_end = q;
+			queue_end = q;
 			discarding = false;
 			if (done) {
 				next_move(settings.hwtime);
@@ -1294,7 +1270,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	// This is a manual move or the start of a job; set hwtime step to default.
 	//debug("goto (%f,%f,%f)->(%f,%f,%f) at speed %f, e %f->%f", spaces[0].axis[0]->settings.current, spaces[0].axis[1]->settings.current, spaces[0].axis[2]->settings.current, move->target[0], move->target[1], move->target[2], move->v0, spaces[1].axis[move->tool]->settings.current, move->e);
 	settings.hwtime_step = default_hwtime_step;
-	settings.queue_start = 0;
+	queue_start = 0;
 	double vmax = NAN;
 	double amax = NAN;
 	double dist = NAN;
@@ -1381,7 +1357,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		if (cb)
 			num_movecbs += 1;
 		//debug("adding 1 move cb for manual move");
-		settings.queue_end = 0;
+		queue_end = 0;
 		return queue_only ? 0 : 1;
 	}
 
@@ -1435,7 +1411,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 			target[i] = X[i] + unit[i] * s[part];
 		q = add_to_queue(q, move->gcode_line, move->time, move->tool, X, t[part], v0[part], a0[part], e0 + (move->e - e0) * current_s / dist, target, J[part], NULL, 0, reverse[part]);
 	}
-	settings.queue_end = q;
+	queue_end = q;
 
 	if (cb) {
 		queue[q - 1].cb = true;

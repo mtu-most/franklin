@@ -214,14 +214,14 @@ void run_file_fill_queue(bool move_allowed) {
 	while (must_move) {
 		must_move = false;
 		while (run_file_map	// There is a file to run.
-				&& (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 4	// There is space in the queue.
-				&& !settings.queue_full	// Really, there is space in the queue.
+				&& (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 4	// There is space in the queue.
+				&& !queue_full	// Really, there is space in the queue.
 				&& settings.run_file_current < run_file_num_records	// There are records to send.
 				&& !run_file_wait_temp	// We are not waiting for a temp alarm.
 				&& !run_file_wait	// We are not waiting for something else (pause or confirm).
 				&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
 			int t = run_file_map[settings.run_file_current].type;
-			if (t != RUN_POLY3PLUS && t != RUN_POLY3MINUS && t != RUN_POLY2 && t != RUN_PATTERN && (arch_running() || settings.queue_end != settings.queue_start || computing_move || sending_fragment || transmitting_fragment))
+			if (t != RUN_POLY3PLUS && t != RUN_POLY3MINUS && t != RUN_POLY2 && t != RUN_PATTERN && (arch_running() || queue_end != queue_start || computing_move || sending_fragment || transmitting_fragment))
 				break;
 			Run_Record &r = run_file_map[settings.run_file_current];
 			rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
@@ -238,48 +238,48 @@ void run_file_fill_queue(bool move_allowed) {
 				case RUN_POLY3MINUS:
 				case RUN_POLY2:
 				{
-					queue[settings.queue_end].reverse = r.type == RUN_POLY3MINUS;
-					queue[settings.queue_end].single = false;
-					queue[settings.queue_end].probe = false;
-					queue[settings.queue_end].a0 = (r.type == RUN_POLY2 ? r.Jg : 0);
-					queue[settings.queue_end].v0 = r.v0;
+					queue[queue_end].reverse = r.type == RUN_POLY3MINUS;
+					queue[queue_end].single = false;
+					queue[queue_end].probe = false;
+					queue[queue_end].a0 = (r.type == RUN_POLY2 ? r.Jg : 0);
+					queue[queue_end].v0 = r.v0;
 					double x = r.X[0] * run_file_cosa - r.X[1] * run_file_sina + run_file_refx;
 					double y = r.X[1] * run_file_cosa + r.X[0] * run_file_sina + run_file_refy;
 					double z = r.X[2];
 					//debug("line %d: %f %f %f", settings.run_file_current, x, y, z);
-					queue[settings.queue_end].target[0] = x;
-					queue[settings.queue_end].target[1] = y;
-					queue[settings.queue_end].target[2] = handle_probe(x, y, z);
+					queue[queue_end].target[0] = x;
+					queue[queue_end].target[1] = y;
+					queue[queue_end].target[2] = handle_probe(x, y, z);
 					double distg = 0, disth = 0;
 					for (int i = 0; i < 3; ++i) {
-						double d = queue[settings.queue_end].target[i] - lastpos[i];
+						double d = queue[queue_end].target[i] - lastpos[i];
 						if (!std::isnan(d))
 							distg += d * d;
 						if (!std::isnan(r.h[i]))
 							disth += r.h[i] * r.h[i];
-						queue[settings.queue_end].abc[i] = 0;
+						queue[queue_end].abc[i] = 0;
 					}
 					distg = std::sqrt(distg);
 					disth = std::sqrt(disth);
 					for (int i = 0; i < 3; ++i) {
-						queue[settings.queue_end].unitg[i] = distg < 1e-10 ? 0 : (queue[settings.queue_end].target[i] - lastpos[i]) / distg;
-						queue[settings.queue_end].unith[i] = disth < 1e-10 ? 0 : r.h[i] / disth;
+						queue[queue_end].unitg[i] = distg < 1e-10 ? 0 : (queue[queue_end].target[i] - lastpos[i]) / distg;
+						queue[queue_end].unith[i] = disth < 1e-10 ? 0 : r.h[i] / disth;
 					}
-					queue[settings.queue_end].Jg = (r.type == RUN_POLY2 ? 0 : r.Jg);
-					queue[settings.queue_end].Jh = disth;
-					queue[settings.queue_end].tf = r.tf;
-					queue[settings.queue_end].e = r.E;
-					queue[settings.queue_end].tool = r.tool;
-					queue[settings.queue_end].time = r.time;
-					queue[settings.queue_end].cb = false;
-					queue[settings.queue_end].pattern_size = pattern_size;
-					queue[settings.queue_end].gcode_line = r.gcode_line;
+					queue[queue_end].Jg = (r.type == RUN_POLY2 ? 0 : r.Jg);
+					queue[queue_end].Jh = disth;
+					queue[queue_end].tf = r.tf;
+					queue[queue_end].e = r.E;
+					queue[queue_end].tool = r.tool;
+					queue[queue_end].time = r.time;
+					queue[queue_end].cb = false;
+					queue[queue_end].pattern_size = pattern_size;
+					queue[queue_end].gcode_line = r.gcode_line;
 					if (pattern_size > 0)
-						memcpy(queue[settings.queue_end].pattern, current_pattern, pattern_size);
+						memcpy(queue[queue_end].pattern, current_pattern, pattern_size);
 					pattern_size = 0;
 					for (int i = 0; i < 3; ++i)
-						lastpos[i] = queue[settings.queue_end].target[i];
-					settings.queue_end = (settings.queue_end + 1) % QUEUE_LENGTH;
+						lastpos[i] = queue[queue_end].target[i];
+					queue_end = (queue_end + 1) % QUEUE_LENGTH;
 					break;
 				}
 				case RUN_ARC:
@@ -303,7 +303,7 @@ void run_file_fill_queue(bool move_allowed) {
 					move.e = r.E;
 					move.time = r.time;
 					//debug("run goto %f,%f,%f tool %d E %f v %f", r.X[0], r.X[1], r.X[2], r.tool, r.E, r.v0);
-					settings.queue_end = go_to(false, &move, false, true);
+					queue_end = go_to(false, &move, false, true);
 					for (int i = 0; i < 3; ++i) {
 						if (!std::isnan(r.X[i]))
 							lastpos[i] = r.X[i];
@@ -423,11 +423,11 @@ void run_file_fill_queue(bool move_allowed) {
 					break;
 			}
 			settings.run_file_current += 1;
-			if (!computing_move && (settings.queue_start != settings.queue_end || settings.queue_full))
+			if (!computing_move && (queue_start != queue_end || queue_full))
 				must_move = true;
 		}
 		if (must_move) {
-			while (move_allowed && !sending_fragment && !computing_move && (settings.queue_start != settings.queue_end || settings.queue_full)) {
+			while (move_allowed && !sending_fragment && !computing_move && (queue_start != queue_end || queue_full)) {
 				cbs += next_move(settings.hwtime);
 			}
 		}

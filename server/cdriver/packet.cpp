@@ -283,7 +283,7 @@ void request(int req) {
 		break;
 	CASE(CMD_QUEUED)
 		last_active = millis();
-		shmem->ints[1] = settings.queue_full ? QUEUE_LENGTH : (settings.queue_end - settings.queue_start + QUEUE_LENGTH) % QUEUE_LENGTH;
+		shmem->ints[1] = queue_full ? QUEUE_LENGTH : (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH;
 		break;
 	CASE(CMD_HOME)
 		arch_home();

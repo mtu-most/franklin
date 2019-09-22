@@ -60,6 +60,9 @@ void setup()
 	refilling = false;
 	running_fragment = 0;
 	current_fragment = running_fragment;
+	queue_start = 0;
+	queue_end = 0;
+	queue_full = false;
 	//debug("current_fragment = running_fragment; %d %p", current_fragment, &current_fragment);
 	current_fragment_pos = 0;
 	num_active_motors = 0;
@@ -126,9 +129,6 @@ void connect_end() {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		history[f].hwtime = 0;
 		history[f].cbs = 0;
-		history[f].queue_start = 0;
-		history[f].queue_end = 0;
-		history[f].queue_full = false;
 		history[f].run_time = 0;
 	}
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -167,9 +167,6 @@ void connect_end() {
 Axis_History *setup_axis_history() {
 	Axis_History *ret = new Axis_History[FRAGMENTS_PER_BUFFER];
 	for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
-		ret[f].dist[0] = NAN;
-		ret[f].dist[1] = NAN;
-		ret[f].main_dist = NAN;
 		ret[f].target = NAN;
 		ret[f].source = NAN;
 		ret[f].current = NAN;

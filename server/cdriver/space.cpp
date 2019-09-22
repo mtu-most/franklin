@@ -48,9 +48,6 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_axes[a]->min_pos = -INFINITY;
 			new_axes[a]->max_pos = INFINITY;
 			new_axes[a]->type_data = NULL;
-			new_axes[a]->settings.dist[0] = NAN;
-			new_axes[a]->settings.dist[1] = NAN;
-			new_axes[a]->settings.main_dist = NAN;
 			new_axes[a]->settings.target = NAN;
 			new_axes[a]->settings.source = NAN;
 			new_axes[a]->settings.current = NAN;

@@ -95,10 +95,6 @@ extern SingleByteCommands cmd_ack[4];
 extern SingleByteCommands cmd_nack[4];
 extern SingleByteCommands cmd_stall[4];
 
-struct Resume {
-	double x[3], v[3], a[3];
-};
-
 // All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp {
 	// See temp.c from definition of calibration constants.
@@ -161,19 +157,20 @@ struct History {
 	int32_t hwtime, end_time;
 	int hwtime_step;
 	int cbs;
-	int queue_start, queue_end;
-	bool queue_full;
-	int run_file_current;
-	bool probing, single;
-	double run_time;
 	double factor;
+	double run_time;
 	int gcode_line;
+	int run_file_current;
 	uint8_t pattern[PATTERN_MAX];
-	int pattern_size;	// in bytes; each bit is a pulse.
+	int pattern_size;	// in bytes; each bit in the pattern is a pulse.
+};
+
+struct Resume {
+	double x[3], v[3], a[3];
+	History settings;
 };
 
 struct Space_History {
-	double dist[2];
 	bool arc[2];
 	double angle[2], helix[2];
 	double offset[2][3];
@@ -190,7 +187,6 @@ struct Motor_History {
 };
 
 struct Axis_History {
-	double dist[2], main_dist;
 	double source, current;	// Source position of current movement of axis, or current position if there is no movement.
 	double target;
 	double last_target; // Used when retargeting to a position with NaN components.
@@ -343,6 +339,9 @@ EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1:
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
 EXTERN int cbs_after_current_move;
+EXTERN int queue_start, queue_end;
+EXTERN bool queue_full;
+EXTERN bool probing, single;
 EXTERN bool motors_busy;
 EXTERN int out_busy;
 EXTERN int32_t out_time;

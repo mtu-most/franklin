@@ -1285,7 +1285,7 @@ static void avr_sent_fragment() { // {{{
 		return;
 	sending_fragment -= 1;
 	int cbs = 0;
-	while (!sending_fragment && !computing_move && (settings.queue_start != settings.queue_end || settings.queue_full)) {
+	while (!sending_fragment && !computing_move && (queue_start != queue_end || queue_full)) {
 		debug("start moving from send_fragment");
 		cbs += next_move(settings.hwtime);
 	}
@@ -1306,7 +1306,7 @@ bool arch_send_fragment() { // {{{
 	}
 	if (stop_pending || discard_pending)
 		return false;
-	avr_buffer[0] = settings.probing ? HWC_START_PROBE : HWC_START_MOVE;
+	avr_buffer[0] = probing ? HWC_START_PROBE : HWC_START_MOVE;
 	//debug("send fragment current-fragment-pos=%d current-fragment=%d active-moters=%d running=%d num-running=0x%x", current_fragment_pos, current_fragment, num_active_motors, running_fragment, (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
 	avr_buffer[1] = current_fragment_pos;
 	avr_buffer[2] = num_active_motors;
@@ -1330,7 +1330,7 @@ bool arch_send_fragment() { // {{{
 				}
 				if (stop_pending || discard_pending)
 					break;
-				avr_buffer[0] = settings.single ? HWC_MOVE_SINGLE : HWC_MOVE;
+				avr_buffer[0] = single ? HWC_MOVE_SINGLE : HWC_MOVE;
 				avr_buffer[1] = mi + m;
 				for (int i = 0; i < cfp; ++i) {
 					int value = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->avr_data[i];
@@ -1350,7 +1350,7 @@ bool arch_send_fragment() { // {{{
 				serial(false);
 			}
 			if (!stop_pending && !discard_pending) {
-				avr_buffer[0] = settings.single ? HWC_MOVE_SINGLE : HWC_MOVE;
+				avr_buffer[0] = single ? HWC_MOVE_SINGLE : HWC_MOVE;
 				avr_buffer[1] = mi;
 				for (int i = 0; i < cfp; ++i)
 					avr_buffer[2 + i] = pattern.avr_data[i];
@@ -1435,8 +1435,10 @@ void arch_do_discard() { // {{{
 		return;
 	discard_pending = false;
 	int fragments = (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-	if (fragments <= 2)
+	if (fragments <= 2) {
+		current_fragment_pos = 0;
 		return;
+	}
 	for (int i = 0; i < fragments - 2; ++i) {
 		current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		//debug("current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
