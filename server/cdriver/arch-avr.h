@@ -1435,10 +1435,6 @@ void arch_do_discard() { // {{{
 		return;
 	discard_pending = false;
 	int fragments = (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-	if (fragments <= 2) {
-		current_fragment_pos = 0;
-		return;
-	}
 	for (int i = 0; i < fragments - 2; ++i) {
 		current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		//debug("current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
