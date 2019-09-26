@@ -636,16 +636,7 @@ int arch_tick() { // {{{
 	int cf = mc_shared->current_fragment;
 	if (cf != running_fragment) {
 		//debug("cf=%d, runn=%d", cf, running_fragment);
-		int cbs = 0;
-		while (cf != running_fragment) {
-			cbs += history[running_fragment].cbs;
-			history[running_fragment].cbs = 0;
-			running_fragment = (running_fragment + 1) % FRAGMENTS_PER_BUFFER;
-		}
-		if (cbs) {
-			//debug("adding %d cbs during tick");
-			num_movecbs += cbs;
-		}
+		cf = running_fragment;
 		buffer_refill();
 		run_file_fill_queue();
 		if (!computing_move && run_file_finishing) {
@@ -724,8 +715,6 @@ int arch_tick() { // {{{
 				shmem->interrupt_ints[1] = -1;
 				shmem->interrupt_float = NAN;
 				send_to_parent(CMD_LIMIT);
-				//debug("cbs after current cleared %d for probe", cbs_after_current_move);
-				cbs_after_current_move = 0;
 			}
 		}
 		// Avoid race condition by reading cf twice (first was done at start of function).
@@ -771,8 +760,6 @@ int arch_tick() { // {{{
 						shmem->interrupt_ints[1] = m;
 						shmem->interrupt_float = spaces[s].motor[m]->settings.current_pos;
 						send_to_parent(CMD_LIMIT);
-						//debug("cbs after current cleared %d after sending limit", cbs_after_current_move);
-						cbs_after_current_move = 0;
 					}
 				}
 				// Check switches during homing.

@@ -135,6 +135,7 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 	run_file_refx = targetx;
 	run_file_refy = targety;
 	probe_adjust = 0;
+	resume_pending = false;
 	//debug("run target %f %f", targetx, targety);
 	run_file_sina = sina;
 	run_file_cosa = cosa;
@@ -208,7 +209,6 @@ void run_file_fill_queue(bool move_allowed) {
 		return;
 	lock = true;
 	rundebug("run queue, current = %d/%d wait = %d tempwait = %d q = %d %d %d finish = %d", settings.run_file_current, run_file_num_records, run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start, settings.queue_full, run_file_finishing);
-	int cbs = 0;
 	bool must_move = true;
 	double lastpos[3] = {0, 0, 0};
 	while (must_move) {
@@ -428,13 +428,9 @@ void run_file_fill_queue(bool move_allowed) {
 		}
 		if (must_move) {
 			while (move_allowed && !sending_fragment && !computing_move && (queue_start != queue_end || queue_full)) {
-				cbs += next_move(settings.hwtime);
+				next_move(settings.hwtime);
 			}
 		}
-	}
-	if (cbs > 0) {
-		history[current_fragment].cbs += cbs;
-		//debug("adding %d cbs during run", cbs);
 	}
 	rundebug("run queue done");
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {

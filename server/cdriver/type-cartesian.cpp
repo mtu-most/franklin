@@ -22,7 +22,7 @@
 // Cartesian functions. {{{
 static void xyz2motors(Space *s) { // {{{
 	for (uint8_t a = 0; a < s->num_axes; ++a) {
-		s->motor[a]->settings.target_pos = s->axis[a]->settings.target;
+		s->motor[a]->target_pos = s->axis[a]->target;
 	}
 } // }}}
 

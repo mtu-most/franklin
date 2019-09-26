@@ -26,25 +26,25 @@ struct Polar_private {
 #define PRIVATE(s) (*reinterpret_cast <Polar_private *>(s->type_data))
 
 static void xyz2motors(Space *s) {
-	if (std::isnan(s->axis[0]->settings.target) || std::isnan(s->axis[1]->settings.target)) {
+	if (std::isnan(s->axis[0]->target) || std::isnan(s->axis[1]->target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 2; ++aa) {
-			if (std::isnan(s->axis[aa]->settings.target))
-				s->axis[aa]->settings.target = s->axis[aa]->settings.current;
+			if (std::isnan(s->axis[aa]->target))
+				s->axis[aa]->target = s->axis[aa]->current;
 		}
 	}
-	double x = s->axis[0]->settings.target;
-	double y = s->axis[1]->settings.target;
-	double z = s->axis[2]->settings.target;
+	double x = s->axis[0]->target;
+	double y = s->axis[1]->target;
+	double z = s->axis[2]->target;
 	double r = sqrt(x * x + y * y);
 	double theta = atan2(y, x);
 	while (theta - s->motor[1]->settings.current_pos > 2 * M_PI)
 		theta -= 2 * M_PI;
 	while (theta - s->motor[1]->settings.current_pos < -2 * M_PI)
 		theta += 2 * M_PI;
-	s->motor[0]->settings.target_pos = r;
-	s->motor[1]->settings.target_pos = theta;
-	s->motor[2]->settings.target_pos = z;
+	s->motor[0]->target_pos = r;
+	s->motor[1]->target_pos = theta;
+	s->motor[2]->target_pos = z;
 }
 
 static void motors2xyz(Space *s, const double motors[3], double xyz[3]) {

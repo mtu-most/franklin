@@ -49,7 +49,6 @@ void setup()
 	out_busy = 0;
 	num_file_done_events = 0;
 	continue_event = false;
-	num_movecbs = 0;
 	led_pin.init();
 	stop_pin.init();
 	probe_pin.init();
@@ -87,8 +86,8 @@ void setup()
 	discard_pending = false;
 	change_pending = false;
 	discarding = false;
-	cbs_after_current_move = 0;
 	interrupt_pending = false;
+	cb_pending = false;
 	which_autosleep = 0;
 	timeout = 0;
 	bed_id = 255;
@@ -106,6 +105,12 @@ void setup()
 	pattern.active = false;
 	for (int s = 0; s < NUM_SPACES; ++s)
 		spaces[s].init(s);
+	for (int i = 0; i < 3; ++i) {
+		resume.x[i] = NAN;
+		resume.v[i] = 0;
+		resume.a[i] = 0;
+	}
+	resume_pending = false;
 	arch_setup_end();
 }
 
@@ -128,12 +133,10 @@ void connect_end() {
 	for (int i = 0; i < 2; ++i) {
 		int f = (current_fragment - i + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		history[f].hwtime = 0;
-		history[f].cbs = 0;
 		history[f].run_time = 0;
 	}
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
-		sp.history = new Space_History[FRAGMENTS_PER_BUFFER];
 		for (int a = 0; a < sp.num_axes; ++a) {
 			delete[] sp.axis[a]->history;
 			sp.axis[a]->history = setup_axis_history();
@@ -167,9 +170,8 @@ void connect_end() {
 Axis_History *setup_axis_history() {
 	Axis_History *ret = new Axis_History[FRAGMENTS_PER_BUFFER];
 	for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
-		ret[f].target = NAN;
 		ret[f].source = NAN;
-		ret[f].current = NAN;
+		ret[f].endpos = NAN;
 	}
 	return ret;
 }
@@ -178,9 +180,6 @@ Motor_History *setup_motor_history() {
 	Motor_History *ret = new Motor_History[FRAGMENTS_PER_BUFFER];
 	for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
 		ret[f].current_pos = 0;
-		ret[f].last_v = 0;
-		ret[f].target_v = NAN;
-		ret[f].target_pos = NAN;
 	}
 	return ret;
 }

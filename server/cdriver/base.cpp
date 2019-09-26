@@ -108,11 +108,9 @@ static void handle_pending_events() { // {{{
 		num_file_done_events -=1;
 		return;
 	}
-	if (num_movecbs > 0) {
+	if (cb_pending && !arch_running()) {
 		prepare_interrupt();
-		shmem->interrupt_ints[0] = num_movecbs;
-		//debug("sent %d move cbs", num_movecbs);
-		num_movecbs = 0;
+		cb_pending = false;
 		send_to_parent(CMD_MOVECB);
 		return;
 	}

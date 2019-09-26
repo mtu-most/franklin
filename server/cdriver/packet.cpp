@@ -78,7 +78,7 @@ void request(int req) {
 				}
 				for (int a = 0; a < spaces[t].num_axes; ++a) {
 					spaces[t].axis[a]->settings.source = NAN;
-					spaces[t].axis[a]->settings.current = NAN;
+					spaces[t].axis[a]->current = NAN;
 				}
 			}
 			motors_busy = false;
@@ -164,12 +164,12 @@ void request(int req) {
 			shmem->floats[0] = NAN;
 			break;
 		}
-		if (std::isnan(spaces[shmem->ints[0]].axis[shmem->ints[1]]->settings.current)) {
+		if (std::isnan(spaces[shmem->ints[0]].axis[shmem->ints[1]]->current)) {
 			reset_pos(&spaces[shmem->ints[0]]);
 			for (int a = 0; a < spaces[shmem->ints[0]].num_axes; ++a)
-				spaces[shmem->ints[0]].axis[a]->settings.current = spaces[shmem->ints[0]].axis[a]->settings.source;
+				spaces[shmem->ints[0]].axis[a]->current = spaces[shmem->ints[0]].axis[a]->settings.source;
 		}
-		shmem->floats[0] = spaces[shmem->ints[0]].axis[shmem->ints[1]]->settings.current;
+		shmem->floats[0] = spaces[shmem->ints[0]].axis[shmem->ints[1]]->current;
 		//debug("getpos %d %d %f", shmem->ints[0], shmem->ints[1], shmem->floats[0]);
 		if (shmem->ints[0] == 0) {
 			for (int s = 0; s < NUM_SPACES; ++s) {
@@ -299,6 +299,8 @@ void request(int req) {
 		return;
 	CASE(CMD_PAUSE)
 	{
+		if (run_file_map)
+			run_file_wait += 1;
 		// Store resume info.
 		double x[3], v[3], a[3];
 		compute_current_pos(x, v, a);
@@ -310,21 +312,15 @@ void request(int req) {
 		// Bring a to 0.
 		int q = prepare_retarget(0, -1, x, v, a);
 		smooth_stop(q, x, v);
-		if (run_file_map)
-			run_file_wait += 1;
-		else {
-			//debug("clearing %d cbs after current move for abort", cbs_after_current_move);
-			cbs_after_current_move = 0;
-		}
 		break;
 	}
 	CASE(CMD_RESUME)
 		if (computing_move || !run_file_map)
 			break;
-		if (run_file_wait)
-			run_file_wait -= 1;
 		do_resume();
 		buffer_refill();
+		if (run_file_wait)
+			run_file_wait -= 1;
 		run_file_fill_queue();
 		break;
 	CASE(CMD_UNPAUSE)
@@ -334,8 +330,10 @@ void request(int req) {
 			resume.v[i] = 0;
 			resume.a[i] = 0;
 		}
-		for (int a = 0; a < spaces[1].num_axes; ++a)
-			spaces[1].axis[a]->settings.resume = NAN;
+		for (int a = 0; a < spaces[1].num_axes; ++a) {
+			spaces[1].axis[a]->resume_start = NAN;
+			spaces[1].axis[a]->resume_end = NAN;
+		}
 		break;
 	CASE(CMD_GET_TIME)
 		shmem->floats[0] = history[running_fragment].run_time / feedrate + settings.hwtime / 1e6;
@@ -454,7 +452,7 @@ void setpos(int which, int t, double f) {
 	}
 	for (int a = 0; a < spaces[which].num_axes; ++a) {
 		spaces[which].axis[a]->settings.source = NAN;
-		spaces[which].axis[a]->settings.current = NAN;
+		spaces[which].axis[a]->current = NAN;
 	}
 	//debug("setting pos for %d %d to %f", which, t, f);
 	double old = spaces[which].motor[t]->settings.current_pos;
@@ -465,7 +463,7 @@ void setpos(int which, int t, double f) {
 	//arch_stop();
 	reset_pos(&spaces[which]);
 	for (int a = 0; a < spaces[which].num_axes; ++a) {
-		spaces[which].axis[a]->settings.current = spaces[which].axis[a]->settings.source;
+		spaces[which].axis[a]->current = spaces[which].axis[a]->settings.source;
 		spaces[which].axis[a]->settings.endpos = spaces[which].axis[a]->settings.source;
 	}
 	cpdebug(which, t, "setpos new %f old %f diff %f", f, old, f - old);

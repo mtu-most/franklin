@@ -26,8 +26,8 @@
 // v = x - y
 
 static void xyz2motors(Space *s) { // {{{
-	s->motor[0]->settings.target_pos = s->axis[0]->settings.target + s->axis[1]->settings.target;
-	s->motor[1]->settings.target_pos = s->axis[0]->settings.target - s->axis[1]->settings.target;
+	s->motor[0]->target_pos = s->axis[0]->target + s->axis[1]->target;
+	s->motor[1]->target_pos = s->axis[0]->target - s->axis[1]->target;
 } // }}}
 
 static void motors2xyz(Space *s, const double *motors, double *xyz) { // {{{

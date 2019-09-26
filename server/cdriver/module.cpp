@@ -813,7 +813,7 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		ret = Py_BuildValue("{ss}", "type", "file-done");
 		break;
 	case CMD_MOVECB:
-		ret = Py_BuildValue("{ss,si}", "type", "move-cb", "num", shmem->interrupt_ints[0]);
+		ret = Py_BuildValue("{ss}", "type", "move-cb");
 		break;
 	case CMD_HOMED:
 		ret = Py_BuildValue("{ss}", "type", "homed");

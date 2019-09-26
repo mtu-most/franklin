@@ -146,18 +146,14 @@ struct Temp {
 // double unitg[3]: vector from current position to "target" (not actually reached if h != 0,0,0)
 // double unith[3]: vector perpendicular to g in the plane of the curve. (or 0,0,0 if Jh==0)
 // double Jg, Jh, a0g, a0h, v0g, v0h, x0g, x0h: Jerk and initial a, v and x for g and h.
-// double dist: Length of move (along g, or if tool does not move, along follower, a, b, c, or e)
 // int32_t hwtime: current time, where 0 is start of segment
 // int32_t end_time: time when current segment is completed.
 // int hwtime_step: time difference for each step.
 struct History {
 	double unitg[3], unith[3];
 	double Jg, Jh, a0g, a0h, v0g, v0h, x0g, x0h;
-	double dist;
 	int32_t hwtime, end_time;
 	int hwtime_step;
-	int cbs;
-	double factor;
 	double run_time;
 	int gcode_line;
 	int run_file_current;
@@ -170,29 +166,13 @@ struct Resume {
 	History settings;
 };
 
-struct Space_History {
-	bool arc[2];
-	double angle[2], helix[2];
-	double offset[2][3];
-	double radius[2][2];
-	double e1[2][3];
-	double e2[2][3];
-	double normal[2][3];
-};
-
 struct Motor_History {
-	double last_v;
-	double target_v, target_pos;	// Internal values for moving.
 	double current_pos;	// Current position of motor (in steps), and (cast to int) what the hardware currently thinks.
 };
 
 struct Axis_History {
-	double source, current;	// Source position of current movement of axis, or current position if there is no movement.
-	double target;
-	double last_target; // Used when retargeting to a position with NaN components.
+	double source;	// Source position of current movement of axis, or current position if there is no movement.
 	double endpos;
-	double final_x, final_v, final_a;
-	double resume;	// Only used for extruders: position to reset to when resuming.
 };
 
 struct Axis {
@@ -201,6 +181,10 @@ struct Axis {
 	double park;		// Park position; not used by the firmware, but stored for use by the host.
 	uint8_t park_order;
 	double min_pos, max_pos;
+	double current;
+	double target;	// Target position for this tick.
+	double last_target; // Used when retargeting to a position with NaN components.
+	double resume_start, resume_end;	// Position to reset to when resuming.
 	void *type_data;
 };
 
@@ -217,6 +201,8 @@ struct Motor {
 	bool active;
 	double limit_v, limit_a;		// maximum value for f [m/s], [m/s^2].
 	uint8_t home_order;
+	double target_pos;	// Internal variable for moving.
+	double last_v;	// Internal variable for checking limits.
 	ARCH_MOTOR
 };
 
@@ -245,8 +231,6 @@ struct SpaceType {
 };
 
 struct Space {
-	Space_History *history;
-	Space_History settings;
 	void *type_data;
 	Motor **motor;
 	Axis **axis;
@@ -338,7 +322,6 @@ EXTERN int default_hwtime_step, min_hwtime_step;
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
-EXTERN int cbs_after_current_move;
 EXTERN int queue_start, queue_end;
 EXTERN bool queue_full;
 EXTERN bool probing, single;
@@ -352,8 +335,10 @@ EXTERN int32_t last_active;
 EXTERN int32_t last_micros;
 EXTERN int16_t led_phase;
 EXTERN Resume resume;
+EXTERN bool resume_pending;
 EXTERN History *history;
 EXTERN History settings;
+EXTERN double final_x[3], final_v[3], final_a[3];	// For checking that the segments fit.
 EXTERN bool computing_move;	// True as long as steps are sent to firmware.
 EXTERN bool aborting, preparing;
 EXTERN int first_fragment;
@@ -365,6 +350,7 @@ EXTERN bool discard_pending;
 EXTERN double done_factor;
 EXTERN uint8_t requested_temp;
 EXTERN bool refilling;
+EXTERN double factor;
 EXTERN int current_fragment, running_fragment;
 EXTERN unsigned current_fragment_pos;
 EXTERN int num_active_motors;
@@ -376,7 +362,7 @@ EXTERN int pins_changed;
 // Event data and flags for pending interrupts.
 EXTERN int num_file_done_events;
 EXTERN bool continue_event;
-EXTERN int num_movecbs;
+EXTERN bool cb_pending;
 
 #if DEBUG_BUFFER_LENGTH > 0
 EXTERN char debug_buffer[DEBUG_BUFFER_LENGTH];
@@ -419,7 +405,7 @@ EXTERN uint8_t ff_in;	// Index of next in-packet that is expected.
 EXTERN uint8_t ff_out;	// Index of next out-packet that will be sent.
 
 // move.cpp
-int next_move(int32_t start_time);
+void next_move(int32_t start_time);
 void abort_move(int pos);
 
 // run.cpp

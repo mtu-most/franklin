@@ -63,9 +63,9 @@ static bool check_delta(Space *s, uint8_t a, double *target) {	// {{{
 }	// }}}
 
 static inline double delta_to_axis(Space *s, uint8_t a) {
-	double dx = s->axis[0]->settings.target - APEX(s, a).x;
-	double dy = s->axis[1]->settings.target - APEX(s, a).y;
-	double dz = s->axis[2]->settings.target - APEX(s, a).z;
+	double dx = s->axis[0]->target - APEX(s, a).x;
+	double dy = s->axis[1]->target - APEX(s, a).y;
+	double dz = s->axis[2]->target - APEX(s, a).z;
 	double r2 = dx * dx + dy * dy;
 	double l2 = APEX(s, a).rodlength * APEX(s, a).rodlength;
 	double dest = sqrt(l2 - r2) + dz;
@@ -74,15 +74,15 @@ static inline double delta_to_axis(Space *s, uint8_t a) {
 }
 
 static void xyz2motors(Space *s) {
-	if (std::isnan(s->axis[0]->settings.target) || std::isnan(s->axis[1]->settings.target) || std::isnan(s->axis[2]->settings.target)) {
+	if (std::isnan(s->axis[0]->target) || std::isnan(s->axis[1]->target) || std::isnan(s->axis[2]->target)) {
 		// Fill up missing targets.
 		for (uint8_t aa = 0; aa < 3; ++aa) {
-			if (std::isnan(s->axis[aa]->settings.target))
-				s->axis[aa]->settings.target = s->axis[aa]->settings.current;
+			if (std::isnan(s->axis[aa]->target))
+				s->axis[aa]->target = s->axis[aa]->current;
 		}
 	}
 	for (uint8_t a = 0; a < 3; ++a)
-		s->motor[a]->settings.target_pos = delta_to_axis(s, a);
+		s->motor[a]->target_pos = delta_to_axis(s, a);
 }
 
 static void check_position(Space *s, double *data) {

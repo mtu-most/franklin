@@ -393,8 +393,7 @@ bool hwpacket(int len) { // {{{
 			cpdebug(s, m, "limit");
 			pos = spaces[s].motor[m]->settings.current_pos;
 		}
-		//debug("cbs after current cleared %d for limit", cbs_after_current_move);
-		cbs_after_current_move = 0;
+		cb_pending = false;
 		avr_running = false;
 		stopping = 2;
 		prepare_interrupt();
@@ -477,24 +476,6 @@ bool hwpacket(int len) { // {{{
 			return false;
 		}
 		first_fragment = -1;
-		int cbs = 0;
-		//debug("done: %d pending %d sending %d preparing %d current %d running %d", command[offset + 1], command[offset + 2], sending_fragment, preparing, current_fragment, running_fragment);
-		for (int i = 0; i < command[offset + 1]; ++i) {
-			int f = (running_fragment + i) % FRAGMENTS_PER_BUFFER;
-			//debug("fragment %d: cbs=%d current=%d", f, history[f].cbs, current_fragment);
-			cbs += history[f].cbs;
-			history[f].cbs = 0;
-		}
-		if (!avr_running) {
-			cbs += cbs_after_current_move;
-			//debug("going to send %d cbs from pending", cbs_after_current_move);
-			cbs_after_current_move = 0;
-		}
-		//debug("cbs: %d after current %d computing %d current %d running %d", cbs, cbs_after_current_move, computing_move, current_fragment, running_fragment);
-		if (cbs && !host_block) {
-			//debug("adding %d cbs at hw done event", cbs);
-			num_movecbs += cbs;
-		}
 		if ((current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER + 1 < command[offset + 1] + command[offset + 2]) {
 			debug("Done count %d+%d higher than busy fragments %d+1; clipping", command[offset + 1], command[offset + 2], (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER);
 			avr_write_ack("invalid done");
@@ -1284,14 +1265,9 @@ static void avr_sent_fragment() { // {{{
 	if (stopping)
 		return;
 	sending_fragment -= 1;
-	int cbs = 0;
 	while (!sending_fragment && !computing_move && (queue_start != queue_end || queue_full)) {
 		debug("start moving from send_fragment");
-		cbs += next_move(settings.hwtime);
-	}
-	//debug("adding %d cbs for fragment %d", cbs, current_fragment);
-	if (cbs > 0) {
-		history[current_fragment].cbs += cbs;
+		next_move(settings.hwtime);
 	}
 } // }}}
 
@@ -1426,7 +1402,6 @@ void arch_home() { // {{{
 } // }}}
 
 void arch_do_discard() { // {{{
-	int cbs = 0;
 	while (out_busy >= 3) {
 		poll(&pollfds[BASE_FDS], 1, -1);
 		serial(false);
@@ -1438,14 +1413,8 @@ void arch_do_discard() { // {{{
 	for (int i = 0; i < fragments - 2; ++i) {
 		current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 		//debug("current_fragment = (current_fragment - 1 + FRAGMENTS_PER_BUFFER) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
-		//debug("restoring %d %d", current_fragment, history[current_fragment].cbs);
-		cbs += history[current_fragment].cbs;
-		history[current_fragment].cbs = 0;
 	}
 	restore_settings();
-	history[(current_fragment - 1 + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER].cbs += cbs + cbs_after_current_move;
-	//debug("cbs after current cleared after setting %d+%d in history", cbs, cbs_after_current_move);
-	cbs_after_current_move = 0;
 	avr_buffer[0] = HWC_DISCARD;
 	avr_buffer[1] = fragments - 2;
 	// We're in the middle of a move again, so make sure the computation is restarted.

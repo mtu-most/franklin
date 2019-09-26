@@ -48,9 +48,9 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_axes[a]->min_pos = -INFINITY;
 			new_axes[a]->max_pos = INFINITY;
 			new_axes[a]->type_data = NULL;
-			new_axes[a]->settings.target = NAN;
+			new_axes[a]->current = NAN;
 			new_axes[a]->settings.source = NAN;
-			new_axes[a]->settings.current = NAN;
+			new_axes[a]->settings.endpos = NAN;
 			new_axes[a]->history = setup_axis_history();
 		}
 		for (int a = na; a < old_na; ++a) {
@@ -81,10 +81,9 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
 			new_motors[m]->active = false;
-			new_motors[m]->settings.last_v = 0;
+			new_motors[m]->last_v = NAN;
+			new_motors[m]->target_pos = NAN;
 			new_motors[m]->settings.current_pos = 0;
-			new_motors[m]->settings.target_v = NAN;
-			new_motors[m]->settings.target_pos = NAN;
 			new_motors[m]->history = setup_motor_history();
 			ARCH_NEW_MOTOR(id, m, new_motors);
 		}
@@ -121,7 +120,7 @@ void Space::load_info() { // {{{
 			type = DEFAULT_TYPE;
 			reset_pos(this);
 			for (int a = 0; a < num_axes; ++a)
-				axis[a]->settings.current = axis[a]->settings.source;
+				axis[a]->current = axis[a]->settings.source;
 			return;	// The rest of the info is not meant for DEFAULT_TYPE, so ignore it.
 		}
 	}
@@ -137,7 +136,7 @@ void reset_pos(Space *s) { // {{{
 		motors[m] = s->motor[m]->settings.current_pos;
 	space_types[s->type].motors2xyz(s, motors, xyz);
 	for (int a = 0; a < s->num_axes; ++a) {
-		s->axis[a]->settings.current = xyz[a];
+		s->axis[a]->current = xyz[a];
 		if (!computing_move)
 			s->axis[a]->settings.source = xyz[a];
 	}
@@ -200,9 +199,9 @@ void Space::load_motor(int m) { // {{{
 	else if (!std::isnan(motor[m]->settings.current_pos)) {
 		// Motors without a limit switch: adjust motor position to match axes.
 		for (int a = 0; a < num_axes; ++a)
-			axis[a]->settings.target = axis[a]->settings.current;
+			axis[a]->target = axis[a]->current;
 		space_types[type].xyz2motors(this);
-		double diff = motor[m]->settings.target_pos - motor[m]->settings.current_pos;
+		double diff = motor[m]->target_pos - motor[m]->settings.current_pos;
 		motor[m]->settings.current_pos += diff;
 		arch_addpos(id, m, diff);
 	}
