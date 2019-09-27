@@ -94,7 +94,6 @@ void setup()
 	fan_id = 255;
 	spindle_id = 255;
 	run_file_map = NULL;
-	run_file_finishing = false;
 	expected_replies = 0;
 	num_temps = 0;
 	temps = NULL;
@@ -105,11 +104,7 @@ void setup()
 	pattern.active = false;
 	for (int s = 0; s < NUM_SPACES; ++s)
 		spaces[s].init(s);
-	for (int i = 0; i < 3; ++i) {
-		resume.x[i] = NAN;
-		resume.v[i] = 0;
-		resume.a[i] = 0;
-	}
+	pausing = false;
 	resume_pending = false;
 	arch_setup_end();
 }

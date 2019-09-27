@@ -505,7 +505,7 @@ class Machine: # {{{
 				for i, g in enumerate(self.gpios):
 					g.write()
 				# The machine may still be doing things.  Pause it and send a move; this will discard the queue.
-				self.user_pause(True, False, update = False)
+				self.user_pause(True, False, update = False)[1](None)
 				if self.spi_setup:
 					self._spi_send(self.spi_setup)
 				self.connected = True
@@ -747,7 +747,7 @@ class Machine: # {{{
 		if self.home_phase == 0:
 			# Initial call; start homing.
 			# If it is currently moving, doing the things below without pausing causes stall responses.
-			self.user_pause(True, False)
+			self.user_pause(True, False)[1](None)
 			self.user_sleep(False)
 			# Set all extruders to 0.
 			for i, e in enumerate(self.spaces[1].axis):
@@ -1600,7 +1600,7 @@ class Machine: # {{{
 		'''
 		self.user_set_globals(targetx = self.targetx + dx, targety = self.targety + dy)
 	# }}}
-	def user_sleep(self, sleeping = True, update = True): # {{{
+	def user_sleep(self, sleeping = True, update = True, force = False): # {{{
 		'''Put motors to sleep, or wake them up.
 		'''
 		if sleeping:
@@ -1609,7 +1609,7 @@ class Machine: # {{{
 			self.position_valid = False
 			if update:
 				self._globals_update()
-		cdriver.sleep(sleeping)
+		cdriver.sleep(sleeping, force)
 	# }}}
 	def user_settemp(self, channel, temp, update = True): # {{{
 		'''Set target temperature.
@@ -1728,18 +1728,21 @@ class Machine: # {{{
 		'''
 		for t, temp in enumerate(self.temps):
 			self.user_settemp(t, float('nan'))
-		self.user_pause(store = False)
 		for g, gpio in enumerate(self.gpios):
 			self.user_set_gpio(g, state = gpio.reset)
-		self._unpause()
+		if self.paused:
+			self._unpause()
 		self._job_done(False, 'aborted by user')
 		# Sleep doesn't work as long as home_phase is non-None, so do it after _job_done.
-		self.user_sleep()
+		self.user_sleep(force = True)
 	# }}}
-	def user_pause(self, pausing = True, store = True, update = True): # {{{
+	@delayed
+	def user_pause(self, id, pausing = True, store = True, update = True): # {{{
 		'''Pause or resume the machine.
 		'''
 		if pausing == self.paused:
+			if id is not None:
+				self._send(id, 'return', None)
 			return
 		self.paused = pausing
 		if pausing:
@@ -1748,6 +1751,10 @@ class Machine: # {{{
 			cdriver.resume()
 		if update:
 			self._globals_update()
+		if pausing and id is not None:
+			self.movecb.append(lambda done: self._send(id, 'return', None))
+		elif id is not None:
+			self._send(id, 'return', None)
 	# }}}
 	def queued(self): # {{{
 		'''Get the number of currently queued segments.

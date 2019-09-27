@@ -230,8 +230,8 @@ void handle_temp(int id, int temp) { // {{{
 		temps[id].max_alarm = NAN;
 		temps[id].adcmin_alarm = -1;
 		temps[id].adcmax_alarm = MAXINT;
-		if (run_file_wait_temp) {
-			run_file_wait_temp -= 1;
+		if (run_file_wait) {
+			run_file_wait -= 1;
 			run_file_fill_queue();
 			buffer_refill();
 		}

@@ -175,8 +175,7 @@ int main(int argc, char **argv) { // {{{
 		//debug("poll return %d %d %d", pollfds[0].revents, pollfds[1].revents, pollfds[2].revents);
 		if (pollfds[0].revents) {
 			timerfd_settime(pollfds[0].fd, 0, &zero, NULL);
-			//debug("gcode wait done; stop waiting (was %d)", run_file_wait);
-			if (run_file_wait)
+			if (run_file_wait > 0)
 				run_file_wait -= 1;
 		}
 		if (pollfds[1].revents)

@@ -67,9 +67,16 @@ void request(int req) {
 			//debug("sleeping");
 			if (arch_running() && !stop_pending)
 			{
-				debug("Sleeping while moving");
-				abort();
-				break;
+				if (shmem->ints[1]) {
+					// Forced sleep; stop moving.
+					abort_move(current_fragment_pos);
+					arch_stop();
+				}
+				else {
+					debug("Sleeping while moving");
+					abort();
+					break;
+				}
 			}
 			for (int t = 0; t < NUM_SPACES; ++t) {
 				for (int m = 0; m < spaces[t].num_motors; ++m) {
@@ -299,6 +306,9 @@ void request(int req) {
 		return;
 	CASE(CMD_PAUSE)
 	{
+		if (!motors_busy)
+			break;
+		pausing = true;
 		if (run_file_map)
 			run_file_wait += 1;
 		// Store resume info.
@@ -309,6 +319,7 @@ void request(int req) {
 			resume.v[i] = v[i];
 			resume.a[i] = a[i];
 		}
+		memcpy(&resume.settings, &settings, sizeof(History));
 		// Bring a to 0.
 		int q = prepare_retarget(0, -1, x, v, a);
 		smooth_stop(q, x, v);
@@ -317,23 +328,15 @@ void request(int req) {
 	CASE(CMD_RESUME)
 		if (computing_move || !run_file_map)
 			break;
-		do_resume();
-		buffer_refill();
-		if (run_file_wait)
+		if (pausing)
+			do_resume();
+		if (run_file_wait > 0)
 			run_file_wait -= 1;
 		run_file_fill_queue();
+		buffer_refill();
 		break;
 	CASE(CMD_UNPAUSE)
-		// Clear resume info.
-		for (int i = 0; i < 3; ++i) {
-			resume.x[i] = NAN;
-			resume.v[i] = 0;
-			resume.a[i] = 0;
-		}
-		for (int a = 0; a < spaces[1].num_axes; ++a) {
-			spaces[1].axis[a]->resume_start = NAN;
-			spaces[1].axis[a]->resume_end = NAN;
-		}
+		pausing = false;
 		break;
 	CASE(CMD_GET_TIME)
 		shmem->floats[0] = history[running_fragment].run_time / feedrate + settings.hwtime / 1e6;

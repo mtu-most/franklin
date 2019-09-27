@@ -335,7 +335,7 @@ EXTERN int32_t last_active;
 EXTERN int32_t last_micros;
 EXTERN int16_t led_phase;
 EXTERN Resume resume;
-EXTERN bool resume_pending;
+EXTERN bool pausing, resume_pending;
 EXTERN History *history;
 EXTERN History settings;
 EXTERN double final_x[3], final_v[3], final_a[3];	// For checking that the segments fit.
@@ -429,7 +429,6 @@ EXTERN Run_Record *run_file_map;
 EXTERN int run_file_num_strings;
 EXTERN off_t run_file_first_string;
 EXTERN int run_file_num_records;
-EXTERN int run_file_wait_temp;
 EXTERN int run_file_wait;
 EXTERN struct itimerspec run_file_timer;
 EXTERN double run_file_refx;
@@ -437,7 +436,6 @@ EXTERN double run_file_refy;
 EXTERN double run_file_refz;
 EXTERN double run_file_sina;
 EXTERN double run_file_cosa;
-EXTERN bool run_file_finishing;
 
 // setup.cpp
 void setup();

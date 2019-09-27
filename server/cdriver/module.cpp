@@ -232,7 +232,7 @@ static PyObject *run_file(PyObject *Py_UNUSED(self), PyObject *args) {
 static PyObject *sleep(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	// Enable or disable motor current
-	if (!PyArg_ParseTuple(args, "p", &shmem->ints[0]))
+	if (!PyArg_ParseTuple(args, "pp", &shmem->ints[0], &shmem->ints[1]))
 		return NULL;
 	send_to_child(CMD_SLEEP);
 	Py_RETURN_NONE;

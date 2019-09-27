@@ -128,13 +128,13 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 	}
 	run_file_first_string = pos - current;
 	run_file_num_records = run_file_first_string / sizeof(Run_Record);
-	run_file_wait_temp = 0;
 	run_file_wait = start ? 0 : 1;
 	run_file_timer.it_interval.tv_sec = 0;
 	run_file_timer.it_interval.tv_nsec = 0;
 	run_file_refx = targetx;
 	run_file_refy = targety;
 	probe_adjust = 0;
+	pausing = false;
 	resume_pending = false;
 	//debug("run target %f %f", targetx, targety);
 	run_file_sina = sina;
@@ -142,7 +142,6 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 }
 
 void abort_run_file() {
-	run_file_finishing = false;
 	if (!run_file_map)
 		return;
 	munmap(run_file_map, run_file_size);
@@ -205,21 +204,20 @@ static double handle_probe(double ox, double oy, double z) {
 
 void run_file_fill_queue(bool move_allowed) {
 	static bool lock = false;
-	if (lock)
+	if (pausing || lock)
 		return;
 	lock = true;
-	rundebug("run queue, current = %d/%d wait = %d tempwait = %d q = %d %d %d finish = %d", settings.run_file_current, run_file_num_records, run_file_wait, run_file_wait_temp, settings.queue_end, settings.queue_start, settings.queue_full, run_file_finishing);
+	rundebug("run queue, current = %d/%d wait = %d q = %d %d %d", settings.run_file_current, run_file_num_records, run_file_wait, queue_end, queue_start, queue_full);
 	bool must_move = true;
 	double lastpos[3] = {0, 0, 0};
 	while (must_move) {
 		must_move = false;
-		while (run_file_map	// There is a file to run.
+		while (!pausing	// We are running.
+				&& run_file_map	// There is a file to run.
 				&& (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 4	// There is space in the queue.
 				&& !queue_full	// Really, there is space in the queue.
 				&& settings.run_file_current < run_file_num_records	// There are records to send.
-				&& !run_file_wait_temp	// We are not waiting for a temp alarm.
-				&& !run_file_wait	// We are not waiting for something else (pause or confirm).
-				&& !run_file_finishing) {	// We are not waiting for underflow (should be impossible anyway, if there are commands in the queue).
+				&& !run_file_wait) {	// We are not waiting for something else (pause or confirm).
 			int t = run_file_map[settings.run_file_current].type;
 			if (t != RUN_POLY3PLUS && t != RUN_POLY3MINUS && t != RUN_POLY2 && t != RUN_PATTERN && (arch_running() || queue_end != queue_start || computing_move || sending_fragment || transmitting_fragment))
 				break;
@@ -365,7 +363,7 @@ void run_file_fill_queue(bool move_allowed) {
 					if (tool == -3) {
 						for (int i = 0; i < num_temps; ++i) {
 							if (temps[i].min_alarm >= 0 || temps[i].max_alarm < MAXINT) {
-								run_file_wait_temp += 1;
+								run_file_wait += 1;
 								waittemp(i, temps[i].min_alarm, temps[i].max_alarm);
 							}
 						}
@@ -380,7 +378,7 @@ void run_file_fill_queue(bool move_allowed) {
 						rundebug("waittemp %d", tool);
 					if (temps[tool].adctarget[0] >= 0 && temps[tool].adctarget[0] < MAXINT) {
 						rundebug("waiting");
-						run_file_wait_temp += 1;
+						run_file_wait += 1;
 						waittemp(tool, temps[tool].target[0], temps[tool].max_alarm);
 					}
 					else
@@ -414,6 +412,8 @@ void run_file_fill_queue(bool move_allowed) {
 					break;
 				}
 				case RUN_PARK:
+					compute_current_pos(resume.x, resume.v, resume.a);
+					discarding = false;
 					run_file_wait += 1;
 					prepare_interrupt();
 					send_to_parent(CMD_PARKWAIT);
@@ -433,15 +433,13 @@ void run_file_fill_queue(bool move_allowed) {
 		}
 	}
 	rundebug("run queue done");
-	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait_temp && !run_file_wait && !run_file_finishing) {
+	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait) {
 		// Done.
 		//debug("done running file");
 		if (!computing_move && !sending_fragment && !transmitting_fragment && !arch_running()) {
 			abort_run_file();
 			num_file_done_events += 1;
 		}
-		else
-			run_file_finishing = true;
 	}
 	lock = false;
 	return;

@@ -446,14 +446,11 @@ bool hwpacket(int len) { // {{{
 		}
 		else {
 			// Only overwrite current position if the new value is correct.
-			//debug("underrun ok current=%d running=%d computing_move=%d sending=%d pending=%d finishing=%d transmitting=%d", current_fragment, running_fragment, computing_move, sending_fragment, command[3], run_file_finishing, transmitting_fragment);
+			//debug("underrun ok current=%d running=%d computing_move=%d sending=%d pending=%d transmitting=%d", current_fragment, running_fragment, computing_move, sending_fragment, command[3], transmitting_fragment);
 			if (!sending_fragment && !transmitting_fragment && current_fragment_pos == 0) {
 				if (command[3] == 0) {
 					avr_get_current_pos(4, true);
-					if (run_file_finishing) {
-						abort_run_file();
-						num_file_done_events += 1;
-					}
+					run_file_fill_queue();
 				}
 			}
 			//debug("underrun check %d %d %d", sending_fragment, current_fragment, running_fragment);

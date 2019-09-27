@@ -637,12 +637,8 @@ int arch_tick() { // {{{
 	if (cf != running_fragment) {
 		//debug("cf=%d, runn=%d", cf, running_fragment);
 		cf = running_fragment;
-		buffer_refill();
 		run_file_fill_queue();
-		if (!computing_move && run_file_finishing) {
-			abort_run_file();
-			num_file_done_events += 1;
-		}
+		buffer_refill();
 	}
 	// Handle temps and check temp limits.
 	if (mc_active_temp >= 0) {
