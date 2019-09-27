@@ -438,7 +438,7 @@ static void do_steps(double old_factor) { // {{{
 				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
 				if (diff > 0x7f) {
 					debug("Error on line %d: %d %d trying to send more than 127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, diff, rounded_cp, rounded_new_cp, settings.hwtime);
-					abort();
+					//abort();
 					int adjust = diff - 0x7f;
 					if (settings.hwtime_step > settings.hwtime)
 						settings.hwtime = 0;
@@ -451,7 +451,7 @@ static void do_steps(double old_factor) { // {{{
 				}
 				if (diff < -0x7f) {
 					debug("Error on line %d: %d %d trying to send more than -127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, -diff, rounded_cp, rounded_new_cp, settings.hwtime);
-					abort();
+					//abort();
 					int adjust = diff + 0x7f;
 					if (settings.hwtime_step > settings.hwtime)
 						settings.hwtime = 0;
