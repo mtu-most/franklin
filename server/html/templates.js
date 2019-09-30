@@ -622,8 +622,18 @@ function message(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'message');
 	ret.update = function() {
-		this.ClearAll().AddText(ui.machine.message);
-		this.hide(!ui.machine.message);
+		if (!ui.machine.message) {
+			ret.hide(true);
+		}
+		else {
+			var button = ret.ClearAll().AddText(ui.machine.message).AddElement('button', 'msgbutton').AddText('Dismiss');
+			button.type = 'button';
+			button.AddEvent('click', function() {
+				ui.machine.message = null;
+				ret.hide(true);
+			});
+			ret.hide(false);
+		}
 	};
 	return [ret, pos];
 } // }}}

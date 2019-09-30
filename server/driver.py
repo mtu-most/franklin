@@ -438,6 +438,13 @@ class Machine: # {{{
 				else:
 					t += 1
 		elif cmd['type'] == 'limit':
+			if self.home_phase is None:
+				if not 0 <= cmd['space'] < NUM_SPACES or not 0 <= cmd['motor'] < len(self.spaces[cmd['space']].motor):
+					button = 'the emergency stop button'
+				else:
+					button = 'the limit switch for motor %s' % self.spaces[cmd['space']].motor_name(cmd['motor'])
+				log('Move stopped because %s was hit.' % button)
+				self._broadcast(None, 'message', 'Move stopped because %s was hit.' % button)
 			if cmd['space'] < len(self.spaces) and cmd['motor'] < len(self.spaces[cmd['space']].motor):
 				self.limits[cmd['space']][cmd['motor']] = cmd['pos']
 			self._trigger_movewaits(False)
@@ -749,6 +756,8 @@ class Machine: # {{{
 			# If it is currently moving, doing the things below without pausing causes stall responses.
 			self.user_pause(True, False)[1](None)
 			self.user_sleep(False)
+			for l in self.limits:
+				l.clear()
 			# Set all extruders to 0.
 			for i, e in enumerate(self.spaces[1].axis):
 				self.user_set_axis_pos(1, i, 0)
