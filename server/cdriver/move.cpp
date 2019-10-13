@@ -46,7 +46,6 @@ static void send_fragment() { // {{{
 		else {
 			//debug("sending fragment for 0 motors at position %d", current_fragment_pos);
 		}
-		//abort();
 	}
 	//debug("sending %d", current_fragment);
 	if (aborting || arch_send_fragment()) {
@@ -54,7 +53,6 @@ static void send_fragment() { // {{{
 		current_fragment_pos = 0;
 		//debug("current_fragment = (current_fragment + 1) %% FRAGMENTS_PER_BUFFER; %d", current_fragment);
 		//debug("current send -> %x", current_fragment);
-		store_settings();
 		if (!aborting && (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER >= MIN_BUFFER_FILL && !stopping) {
 			arch_start_move(0);
 		}
@@ -63,6 +61,11 @@ static void send_fragment() { // {{{
 		// Reset current_fragment_pos anyway, otherwise store_settings will complain.
 		current_fragment_pos = 0;
 	}
+	while (sending_fragment) {
+		//debug("waiting for sending fragment to be 0 from %d", sending_fragment);
+		serial_wait();
+	}
+	store_settings();
 } // }}}
 
 static void change0(int qpos) { // {{{
@@ -79,7 +82,11 @@ static void change0(int qpos) { // {{{
 
 // For documentation about variables used here, see struct History in cdriver.h
 void next_move(int32_t start_time) { // {{{
-	mdebug("next move, computing=%d, start time=%d, current time=%d, queue %d -> %d", computing_move, start_time, settings.hwtime, queue_start, queue_end);
+	if (stopping) {
+		//debug("ignoring move while stopping");
+		return;
+	}
+	//debug("next move, computing=%d, start time=%d, current time=%d, queue %d -> %d", computing_move, start_time, settings.hwtime, queue_start, queue_end);
 	probing = false;
 	factor = 0;
 	if (queue_start == queue_end && !queue_full) {
@@ -93,6 +100,7 @@ void next_move(int32_t start_time) { // {{{
 			for (int s = 0; s < NUM_SPACES; ++s) {
 				for (int a = 0; a < spaces[s].num_axes; ++a) {
 					Axis *ax = spaces[s].axis[a];
+					mdebug("settings source for %d to %.2f for resume", a, ax->resume_start);
 					ax->settings.source = ax->resume_start;
 					ax->settings.endpos = ax->resume_end;
 					if (s == 1)
@@ -114,9 +122,19 @@ void next_move(int32_t start_time) { // {{{
 	// Clean up state before starting the move (but not if there is no next move; in that case finish the current tick before sending).
 	if (current_fragment_pos > 0) {
 		//debug("sending because new move is started");
+		while (sending_fragment)
+			serial_wait();
+		if (host_block || stopping || discard_pending || stop_pending) {
+			//debug("not moving yet");
+			return;
+		}
 		send_fragment();
+		if (host_block || stopping || discard_pending || stop_pending) {
+			//debug("not moving more");
+			return;
+		}
 	}
-	//debug("Next move; queue start = %d, end = %d", settings.queue_start, settings.queue_end);
+	//debug("Next move; queue start = %d, end = %d", queue_start, queue_end);
 	// Set everything up for running queue[settings.queue_start].
 	int q = queue_start;
 	int n = (queue_start + 1) % QUEUE_LENGTH;
@@ -124,6 +142,7 @@ void next_move(int32_t start_time) { // {{{
 	settings.gcode_line = queue[q].gcode_line;
 
 	if (queue[q].cb) {
+		//debug("pending cb for move");
 		cb_pending = true;
 	}
 
@@ -138,12 +157,13 @@ void next_move(int32_t start_time) { // {{{
 		for (int a = 0; a < sp.num_axes; ++a) {
 			if (std::isnan(sp.axis[a]->settings.source)) {
 				if (!std::isnan(sp.axis[a]->current)) {
+					mdebug("settings source for %d to %.2f for non-move", a, sp.axis[a]->current);
 					sp.axis[a]->settings.source = sp.axis[a]->current;
 					continue;
 				}
 				reset_pos(&sp);
 				for (int aa = 0; aa < sp.num_axes; ++aa)
-					sp.axis[aa]->current = sp.axis[aa]->settings.source;
+					sp.axis[aa]->settings.source = sp.axis[aa]->current;
 				break;
 			}
 			else
@@ -240,6 +260,7 @@ void next_move(int32_t start_time) { // {{{
 		settings.v0h = 0;
 		settings.x0h = 0;
 	}
+	//debug("move ln %d, from=(%.2f,%.2f,%.2f) (current %.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.2f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
 	if (spaces[0].num_axes >= 3) {
 		double check_x = 0, check_v = 0, check_a = 0;
 		for (int i = 0; i < 3; ++i) {
@@ -278,18 +299,12 @@ void next_move(int32_t start_time) { // {{{
 	settings.pattern_size = queue[q].pattern_size;
 	for (int a = 0; a < min(6, spaces[0].num_axes); ++a)
 		spaces[0].axis[a]->settings.endpos = queue[q].target[a];
+	store_settings();
 	if (settings.hwtime_step != last_hwtime_step)
 		arch_globals_change();
-	//debug("move ln %d, from=(%f,%f,%f) (current %f,%f,%f) target=(%f,%f,%f), h=(%f,%f,%f), e=%f, Jg=%f a0g=%f v0g=%f x0g=%f end time=%f, single=%d, Jh=%f, a0h=%f, v0h=%f, x0h=%f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
+	//debug("set queue start to %d", n);
 	queue_start = n;
 	first_fragment = current_fragment;	// Do this every time, because otherwise the queue must be regenerated.	TODO: send partial fragment to make sure this hack actually works, or fix it properly.
-	if (!computing_move) {
-		if (current_fragment_pos > 0) {
-			debug("non-zero current fragment pos while not computing move");
-			abort();
-		}
-		store_settings();
-	}
 	for (int i = 0; i < 3; ++i) {
 		if (i >= spaces[0].num_axes)
 			break;
@@ -298,8 +313,10 @@ void next_move(int32_t start_time) { // {{{
 		double t3 = t2 * t;
 		final_x[i] = spaces[0].axis[i]->settings.source + settings.unitg[i] * (settings.x0g + settings.v0g * t + settings.a0g / 2 * t2 + settings.Jg / 6 * t3) + settings.unith[i] * (settings.x0h + settings.v0h * t + settings.a0h / 2 * t2 + settings.Jh / 6 * t3);
 		final_v[i] = settings.unitg[i] * (settings.v0g + settings.a0g * t + settings.Jg / 2 * t2) + settings.unith[i] * (settings.v0h + settings.a0h * t + settings.Jh / 2 * t2);
+		mdebug("final v[%d] = %f", i, final_v[i]);
 		final_a[i] = settings.unitg[i] * (settings.a0g + settings.Jg * t) + settings.unith[i] * (settings.a0h + settings.Jh * t);
 	}
+	//debug("computing for next move, stopping=%d", stopping);
 	computing_move = true;
 } // }}}
 
@@ -495,7 +512,7 @@ static void do_steps(double old_factor) { // {{{
 	}
 	current_fragment_pos += 1;
 	if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
-		//debug("sending because fragment full (normal) %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
+		mdebug("sending because fragment full (normal) %d %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT, stopping);
 		send_fragment();
 	}
 } // }}}
@@ -545,7 +562,7 @@ static void apply_tick() { // {{{
 	//debug("tick");
 	if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
 		// Fragment is already full. This shouldn't normally happen.
-		debug("aborting apply_tick, because fragment is already full.");
+		mdebug("aborting apply_tick, because fragment is already full.");
 		return;
 	}
 	// Check for move.
@@ -554,7 +571,7 @@ static void apply_tick() { // {{{
 		return;
 	}
 	// This loop is normally only run once, but when a move is complete it is rerun for the next move.
-	while ((running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2)) {
+	while (!stopping && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2)) {
 		settings.hwtime += settings.hwtime_step;
 		//debug("tick time %d step %d frag %d pos %d", settings.hwtime, settings.hwtime_step, current_fragment, current_fragment_pos);
 		double t = settings.hwtime / 1e6;
@@ -618,7 +635,7 @@ static void apply_tick() { // {{{
 			Space &sp = spaces[s];
 			for (int a = 0; a < sp.num_axes; ++a) {
 				auto ax = sp.axis[a];
-				//debug("setting source for %d %d to target %f", s, a, ax->target);
+				mdebug("setting source for %d %d to target %f", s, a, ax->target);
 				ax->settings.source = ax->settings.endpos;
 			}
 		}
@@ -629,6 +646,7 @@ static void apply_tick() { // {{{
 			continue_event = true;
 			do_steps(old_factor);
 			if (current_fragment_pos > 0 && !sending_fragment) {
+				mdebug("sending final fragment");
 				send_fragment();
 			}
 			return;
@@ -677,6 +695,7 @@ void store_settings() { // {{{
 			cpdebug(s, m, "store");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
+			//debug("setting history %d of source for %d %d to %f", current_fragment, s, a, sp.axis[a]->settings.source);
 			sp.axis[a]->history[current_fragment].source = sp.axis[a]->settings.source;
 			sp.axis[a]->history[current_fragment].endpos = sp.axis[a]->settings.endpos;
 		}
@@ -695,6 +714,7 @@ void restore_settings() { // {{{
 		settings.unith[i] = history[current_fragment].unith[i];
 	}
 	settings.Jg = history[current_fragment].Jg;
+	//debug("restored Jg to %f from history %d", settings.Jg, current_fragment);
 	settings.Jh = history[current_fragment].Jh;
 	settings.a0g = history[current_fragment].a0g;
 	settings.a0h = history[current_fragment].a0h;
@@ -718,6 +738,7 @@ void restore_settings() { // {{{
 			cpdebug(s, m, "restore");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
+			mdebug("setting source for %d %d to history %d of %f", s, a, current_fragment, sp.axis[a]->history[current_fragment].source);
 			sp.axis[a]->settings.source = sp.axis[a]->history[current_fragment].source;
 			sp.axis[a]->settings.endpos = sp.axis[a]->history[current_fragment].endpos;
 		}
@@ -733,8 +754,8 @@ void buffer_refill() { // {{{
 		mdebug("no refill because prepare or no buffer yet");
 		return;
 	}
-	if (!computing_move || refilling || stopping || discard_pending || discarding) {
-		mdebug("no refill due to block: %d %d %d %d %d", !computing_move, refilling, stopping, discard_pending, discarding);
+	if (!computing_move || refilling || stopping || discarding != 0) {
+		mdebug("no refill due to block: not computing %d refilling %d stopping %d discarding %d", !computing_move, refilling, stopping, discarding);
 		return;
 	}
 	refilling = true;
@@ -745,17 +766,17 @@ void buffer_refill() { // {{{
 	}*/
 	mdebug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
-	while (computing_move && !aborting && !stopping && !discard_pending && !discarding && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
+	while (computing_move && !aborting && !stopping && discarding == 0 && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
 		mdebug("refill %d %d %f", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings.current_pos);
 		// fill fragment until full.
 		apply_tick();
 		mdebug("refill2 %d %f", current_fragment, spaces[0].motor[0]->settings.current_pos);
 		if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
-			mdebug("sending because fragment full (weird) %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
+			debug("sending because fragment full (weird) %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT);
 			send_fragment();
 		}
 	}
-	if (aborting || stopping || discard_pending) {
+	if (aborting || stopping || discarding != 0) {
 		mdebug("aborting refill for stopping");
 		refilling = false;
 		return;
@@ -814,7 +835,7 @@ void abort_move(int pos) { // {{{
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
 		for (int a = 0; a < sp.num_axes; ++a) {
-			//debug("setting axis %d source to %f", a, sp.axis[a]->current);
+			mdebug("setting axis %d source to %f for abort", a, sp.axis[a]->current);
 			if (!std::isnan(sp.axis[a]->current))
 				sp.axis[a]->settings.source = sp.axis[a]->current;
 		}
@@ -877,7 +898,7 @@ static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double po
 	}
 	leng = std::sqrt(leng);
 	lenh = std::sqrt(lenh);
-	mdebug("adding to queue: %f,%f,%f -> %f,%f,%f time %f v0 %f a0 %f Jg %f g %f,%f,%f h %f,%f,%f Jh %f reverse %d", pos[0], pos[1], pos[2], target[0], target[1], target[2], tf, v0, a0, Jg, g[0], g[1], g[2], h ? h[0] : 0, h ? h[1] : 0, h ? h[2] : 0, Jh, reverse);
+	mdebug("adding to queue: %.2f,%.2f,%.4f -> %.2f,%.2f,%.4f time %.2f v0 %.2f a0 %.2f Jg %.2f g %.2f,%.2f,%.2f h %.2f,%.2f,%.2f Jh %.2f reverse %d", pos[0], pos[1], pos[2], target[0], target[1], target[2], tf, v0, a0, Jg, g[0], g[1], g[2], h ? h[0] : 0, h ? h[1] : 0, h ? h[2] : 0, Jh, reverse);
 #if 0
 	// Compute and report [vaJ][gh](tf)
 	if (!reverse) {
@@ -916,6 +937,7 @@ static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double po
 } // }}}
 
 static int queue_speed_change(int q, int tool, double x[3], double v[3], double old_v, double new_v) { // {{{
+	mdebug("speed change from %f to %f", old_v, new_v);
 	int s = new_v < old_v ? -1 : 1;
 	double dv = std::fabs(new_v - old_v);
 	if (dv < 1e-5)
@@ -962,15 +984,16 @@ static int queue_speed_change(int q, int tool, double x[3], double v[3], double 
 
 void compute_current_pos(double x[3], double v[3], double a[3]) { // {{{
 	// discard buffer
-	discarding = true;
 	arch_discard();
 	for (int i = 0; i < 3; ++i) {
 		if (i < spaces[0].num_motors)
 			spaces[0].motor[i]->last_v = NAN;
 	}
 	settings.hwtime_step = default_hwtime_step;
+	mdebug("flush queue for discard at compute current");
 	queue_start = 0;
 	queue_end = 0;
+	queue_full = false;
 	double t = settings.hwtime / 1e6;
 	double t2 = t * t;
 	double t3 = t2 * t;
@@ -980,6 +1003,7 @@ void compute_current_pos(double x[3], double v[3], double a[3]) { // {{{
 	double vh = settings.v0h + settings.a0h * t + settings.Jh / 2 * t2;
 	double xg = settings.x0g + settings.v0g * t + settings.a0g / 2 * t2 + settings.Jg / 6 * t3;
 	double xh = settings.x0h + settings.v0h * t + settings.a0h / 2 * t2 + settings.Jh / 6 * t3;
+	mdebug("agh=%.2f,%.2f vgh=%.2f,%.2f xgh=%.2f,%.2f g %.2f,%.2f,%.2f Jg %f src=%.2f,%.2f,%.2f", ag, ah, vg, vh, xg, xh, settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.Jg, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source);
 	for (int i = 0; i < 3; ++i) {
 		x[i] = (i < spaces[0].num_axes ? spaces[0].axis[i]->settings.source : 0) + xg * settings.unitg[i] + xh * settings.unith[i];
 		v[i] = vg * settings.unitg[i] + vh * settings.unith[i];
@@ -990,6 +1014,9 @@ void compute_current_pos(double x[3], double v[3], double a[3]) { // {{{
 			final_v[i] = v[i];
 			final_a[i] = a[i];
 		}
+		// Update current position.
+		if (i < spaces[0].num_axes)
+			spaces[0].axis[i]->current = x[i];
 	}
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		for (int a = 0; a < spaces[s].num_axes; ++a) {
@@ -1005,7 +1032,7 @@ int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], boo
 		mul(v, v, -1);
 	double lena = std::sqrt(inner(a, a));
 	double lenv = std::sqrt(inner(v, v));
-	mdebug("retargeting%s, x=(%f,%f,%f) v=(%f,%f,%f) * %f, a=(%f,%f,%f)", resuming ? " (for resume)" : "", x[0], x[1], x[2], v[0], v[1], v[2], lenv, a[0], a[1], a[2]);
+	mdebug("retargeting%s, x=(%.2f,%.2f,%.2f) v=(%.2f,%.2f,%.2f), a=(%.2f,%.2f,%.2f)", resuming ? " (for resume)" : "", x[0], x[1], x[2], v[0], v[1], v[2], a[0], a[1], a[2]);
 	// add segment to bring a to zero {{{
 	mdebug("pull a from %f to zero", lena);
 	// J -> -a, t = a/J, g -> v, h -> g x (g x a)
@@ -1021,7 +1048,10 @@ int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], boo
 	}
 	double len_target_v = std::sqrt(inner(target_v, target_v));
 	double unitg[3], normal[3], h[3];
-	mul(unitg, target_v, 1 / len_target_v);
+	if (len_target_v > 1e-5)
+		mul(unitg, target_v, 1 / len_target_v);
+	else
+		mul(unitg, v, 1 / lenv);
 	cross(normal, unitg, a);
 	cross(h, normal, unitg);
 	double lenh = std::sqrt(inner(h, h));
@@ -1032,12 +1062,15 @@ int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], boo
 	// Set source.
 	double sh = Jh / 6 * t3;
 	double sg = sh / std::tan(M_PI / 2 - std::acos(inner(unitg, v) / lenv));
+	mdebug("retargeting, g=%.2f,%.2f,%.2f sh=%.2f sg=%.2f Jg=%.2f", unitg[0], unitg[1], unitg[2], sh, sg, Jh);
 	for (int i = 0; i < 3; ++i) {
-		if (i < spaces[0].num_axes)
+		if (i < spaces[0].num_axes) {
 			spaces[0].axis[i]->settings.source = x[i] - h[i] / Jh * sh - unitg[i] * sg;
+			mdebug("setting axis %d source to %f for retarget", i, spaces[0].axis[i]->settings.source);
+		}
 	}
 	// Add segment to queue.
-	if (resuming) {
+	if (resuming) { // {{{
 		// target_x, -target_v is the last point before the resume point.
 		double s = s_dv(0, len_target_v);
 		MoveCommand move;
@@ -1064,14 +1097,19 @@ int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], boo
 		}
 		if (lena > 1e-5)
 			q = add_to_queue(q, -1, 0, tool, target_x, t, len_target_v, 0, NAN, x, Jg, h, Jh, false);
-	}
+	} // }}}
 	else {
-		if (lena > 1e-5)
+		if (lena > 1e-5) {
+			mdebug("bring a to 0");
 			q = add_to_queue(q, -1, 0, tool, x, t, len_target_v, 0, NAN, target_x, Jg, h, Jh, true);
+		}
 		else {
+			mdebug("a was already 0: %f", lena);
 			for (int i = 0; i < 3; ++i) {
-				if (i < spaces[0].num_axes)
+				if (i < spaces[0].num_axes) {
 					spaces[0].axis[i]->settings.source = x[i];
+					mdebug("setting axis %d source to %f for retarget correction", i, spaces[0].axis[i]->settings.source);
+				}
 			}
 		}
 		// Update movement variables.
@@ -1089,33 +1127,40 @@ void smooth_stop(int q, double x[3], double v[3]) { // {{{
 	double lenv = std::sqrt(inner(v, v));
 	mul(v, v, 1 / lenv);
 	queue_end = queue_speed_change(q, -1, x, v, lenv, 0);
-	discarding = false;
 	next_move(settings.hwtime);
-	buffer_refill();
 } // }}}
 
 void do_resume() { // {{{
 	pausing = false;
 	resume_pending = true;
+	mdebug("new queue for resume");
 	queue_start = 0;
 	queue_end = prepare_retarget(0, -1, resume.x, resume.v, resume.a, true);
+	queue_full = false;
 	next_move(settings.hwtime);
 	buffer_refill();
 } // }}}
 
 int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { // {{{
-	//debug("goto (%f,%f,%f) at speed %f, e %f", move->target[0], move->target[1], move->target[2], move->v0, move->e);
+	mdebug("goto (%.2f,%.2f,%.2f) at speed %.2f, e %.2f", move->target[0], move->target[1], move->target[2], move->v0, move->e);
+	mdebug("new queue for goto");
+	queue_start = 0;
 	int q = 0;
+	double x[3];
+	for (int a = 0; a < 3; ++a) {
+		if (a < spaces[0].num_axes)
+			x[a] = spaces[0].axis[a]->current;
+	}
 	if (computing_move) {
 		// Reset target of current move to given values.
-		double x[3], v[3], a[3];
+		double v[3], a[3];
 		compute_current_pos(x, v, a);
-		double q = prepare_retarget(0, move->tool, x, v, a);
+		q = prepare_retarget(q, move->tool, x, v, a);
 		double lenv = std::sqrt(inner(v, v));
 		mul(v, v, 1 / lenv);
 		// add segment to slow down to min(current_v, requested_v) {{{
 		if (move->v0 < lenv) {
-			//debug("slow down from %f to %f", lenv, move->v0);
+			mdebug("slow down from %f to %f", lenv, move->v0);
 			// Add segments to queue
 			q = queue_speed_change(q, move->tool, x, v, lenv, move->v0);
 			// Update movement variables.
@@ -1123,7 +1168,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		} // }}}
 		// Only do a curve if current v is not 0, otherwise do a normal goto.
 		if (lenv > 1e-10) {
-			//debug("current v %f > 0", lenv);
+			mdebug("current v %f > 0", lenv);
 			// Compute P, g, unitPF, h, EF {{{
 			// v = J/2t^2
 			double s_stop = s_dv(lenv, 0);
@@ -1166,7 +1211,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 				double theta = std::acos(inner(g, unitPF));
 				double dir = std::tan(theta / 2);	// direction along curve at midpoint.
 				double t = s_stop / lenv;
-				//debug("retarget curve, x=(%f,%f,%f), P=(%f,%f,%f), unitPF=(%f,%f,%f), theta=%f, dir=%f, v0=%f, x0=-%f", x[0], x[1], x[2], P[0], P[1], P[2], unitPF[0], unitPF[1], unitPF[2], theta, dir, lenv, s_stop);
+				mdebug("retarget curve, x=(%f,%f,%f), P=(%f,%f,%f), unitPF=(%f,%f,%f), theta=%f, dir=%f, v0=%f, x0=-%f", x[0], x[1], x[2], P[0], P[1], P[2], unitPF[0], unitPF[1], unitPF[2], theta, dir, lenv, s_stop);
 				double Jh = 2 * lenv * dir / ((dir * dir + 1) * t * t);
 				double Jg = -dir * Jh;
 				double target[3];
@@ -1208,21 +1253,16 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 				q = queue_speed_change(q, move->tool, x, v, v_top, 0);
 			}
 			queue_end = q;
-			discarding = false;
-			if (done) {
+			if (done && !stopping) {
 				next_move(settings.hwtime);
-				buffer_refill();
 				return 0;
 			}
 		}
-		else
-			discarding = false;
 		//debug("retarget fall through to regular goto");
 	}
 	// This is a manual move or the start of a job; set hwtime step to default.
-	//debug("goto (%f,%f,%f)->(%f,%f,%f) at speed %f, e %f->%f", spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, move->target[0], move->target[1], move->target[2], move->v0, spaces[1].axis[move->tool]->current, move->e);
+	mdebug("goto (%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) at speed %.2f, e %.2f->%.2f", x[0], x[1], x[2], move->target[0], move->target[1], move->target[2], move->v0, spaces[1].axis[move->tool]->current, move->e);
 	settings.hwtime_step = default_hwtime_step;
-	queue_start = 0;
 	double vmax = NAN;
 	double amax = NAN;
 	double dist = NAN;
@@ -1231,7 +1271,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	for (int a = 0; a < 3; ++a) {
 		if (spaces[0].num_axes <= a)
 			break;
-		double pos = spaces[0].axis[a]->current;
+		double pos = x[a];
 		//debug("prepare move, pos[%d]: %f -> %f", a, pos, move->target[a]);
 		if (std::isnan(pos))
 			continue;
@@ -1306,10 +1346,12 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	if (std::isnan(dist) || dist < 1e-10) {
 		// No moves requested.
 		//debug("not moving, because dist is %f", dist);
-		if (cb)
+		if (cb) {
+			mdebug("pending cb for goto");
 			cb_pending = true;
+		}
 		//debug("adding 1 move cb for manual move");
-		queue_end = 0;
+		queue_end = q;
 		return queue_only ? 0 : 1;
 	}
 
@@ -1345,7 +1387,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	bool reverse[7] = {false,     false,        true,     false,       false,          false,      true};
 	double X[3];
 	for (int i = 0; i < 3; ++i)
-		X[i] = i < spaces[0].num_axes ? spaces[0].axis[i]->current : 0;
+		X[i] = i < spaces[0].num_axes ? x[i] : 0;
 	double current_s = 0;
 	double e0;
 	if (tool >= 0 && tool < spaces[1].num_axes)
@@ -1381,7 +1423,5 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		return q;
 
 	next_move(settings.hwtime);
-	bool ret = 0;
-	buffer_refill();
-	return ret;
+	return 0;
 } // }}}

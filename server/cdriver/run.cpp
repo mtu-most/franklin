@@ -413,7 +413,6 @@ void run_file_fill_queue(bool move_allowed) {
 				}
 				case RUN_PARK:
 					compute_current_pos(resume.x, resume.v, resume.a);
-					discarding = false;
 					run_file_wait += 1;
 					prepare_interrupt();
 					send_to_parent(CMD_PARKWAIT);
@@ -427,7 +426,7 @@ void run_file_fill_queue(bool move_allowed) {
 				must_move = true;
 		}
 		if (must_move) {
-			while (move_allowed && !sending_fragment && !computing_move && (queue_start != queue_end || queue_full)) {
+			while (move_allowed && !stopping && !sending_fragment && !computing_move && (queue_start != queue_end || queue_full)) {
 				next_move(settings.hwtime);
 			}
 		}

@@ -21,6 +21,9 @@
 #define EXTERN	// This must be done in exactly one source file.
 #include "cdriver.h"
 
+//#define cdebug debug
+#define cdebug(...) do {} while (0)
+
 #ifdef SERIAL
 // Only for connections that can fail.
 void disconnect(bool notify) { // {{{
@@ -60,7 +63,7 @@ int32_t millis() {
 
 static void handle_request() { // {{{
 	// There is exactly one command waiting, so don't try to read more.
-	//debug("command received");
+	cdebug("command received");
 	char cmd;
 	while (true) {
 		errno = 0;
@@ -73,7 +76,7 @@ static void handle_request() { // {{{
 		exit(0);
 		//abort();
 	}
-	//debug("command was %x", cmd);
+	cdebug("command was %x", cmd);
 	request(cmd);
 } // }}}
 
@@ -81,6 +84,7 @@ static void handle_interrupt_reply() { // {{{
 	char cmd;
 	while (true) {
 		errno = 0;
+		cdebug("reading interrupt reply");
 		int ret = read(interrupt_reply, &cmd, 1);
 		if (ret == 1)
 			break;
@@ -92,10 +96,11 @@ static void handle_interrupt_reply() { // {{{
 	}
 	if (!interrupt_pending)
 		debug("received interrupt reply without pending interrupt");
-	if (stopping == 1) {
+	if (stopping == 2) {
 		sending_fragment = 0;
-		stopping = 0;
+		stopping = 1;
 	}
+	cdebug("received interrupt reply");
 	interrupt_pending = false;
 } // }}}
 
@@ -109,10 +114,14 @@ static void handle_pending_events() { // {{{
 		return;
 	}
 	if (cb_pending && !arch_running()) {
+		cdebug("sending movecb");
 		prepare_interrupt();
 		cb_pending = false;
 		send_to_parent(CMD_MOVECB);
 		return;
+	}
+	if (stopping == 1) {
+		stopping = 0;
 	}
 	buffer_refill();
 	run_file_fill_queue();
@@ -172,16 +181,16 @@ int main(int argc, char **argv) { // {{{
 		//debug("polling with delay %d", delay);
 		poll(pollfds, arch_fds() + BASE_FDS, delay);
 		//debug("poll values in %d pri %d err %d hup %d nval %d out %d", POLLIN, POLLPRI, POLLERR, POLLHUP, POLLNVAL, POLLOUT);
-		//debug("poll return %d %d %d", pollfds[0].revents, pollfds[1].revents, pollfds[2].revents);
+		cdebug("poll return %d %d %d (pending %d)", pollfds[0].revents, pollfds[1].revents, pollfds[2].revents, interrupt_pending);
 		if (pollfds[0].revents) {
 			timerfd_settime(pollfds[0].fd, 0, &zero, NULL);
 			if (run_file_wait > 0)
 				run_file_wait -= 1;
 		}
-		if (pollfds[1].revents)
-			handle_request();
 		if (pollfds[2].revents)
 			handle_interrupt_reply();
+		if (pollfds[1].revents)
+			handle_request();
 		handle_pending_events();
 		delay = arch_tick();
 	}
@@ -193,13 +202,15 @@ void send_to_parent(char cmd) { // {{{
 		abort();
 		prepare_interrupt();
 	}
-	if (stopping == 2 && cmd == CMD_LIMIT)
-		stopping = 1;
-	//debug("sending interrupt 0x%x", cmd);
+	if (stopping == 3 && cmd == CMD_LIMIT) {
+		stopping = 2;
+	}
+	cdebug("sending interrupt 0x%x", cmd);
 	if (write(interrupt, &cmd, 1) != 1) {
 		debug("failed to write to parent");
 		abort();
 	}
+	cdebug("interrupt sent: %02x", cmd);
 	interrupt_pending = true;
 } // }}}
 
@@ -209,9 +220,9 @@ void prepare_interrupt() { // {{{
 		pollfds[1].revents = 0;
 		pollfds[2].revents = 0;
 		poll(&pollfds[1], BASE_FDS - 1, -1);
-		if (pollfds[1].revents)
-			handle_request();
 		if (pollfds[2].revents)
 			handle_interrupt_reply();
+		if (pollfds[1].revents)
+			handle_request();
 	}
 } // }}}

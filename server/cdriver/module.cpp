@@ -39,6 +39,10 @@
 #define DEBUG_FUNCTIONS false
 #endif
 
+// Debug communication.
+//#define cdebug debug
+#define cdebug(...) do {} while (0)
+
 static void print_dict(PyObject *dict) {
 	PyObject *keys = PyDict_Keys(dict);
 	for (Py_ssize_t i = 0; i < PyList_Size(keys); ++i) {
@@ -59,7 +63,7 @@ static PyObject *assert_empty_dict(PyObject *dict, char const *src) {
 }
 
 static inline char send_to_child(char cmd) {
-	//debug("sending to child: %x", cmd);
+	cdebug("sending to child: %x", cmd);
 	struct pollfd test;
 	test.fd = toserver;
 	test.events = POLLIN | POLLPRI;
@@ -73,7 +77,7 @@ static inline char send_to_child(char cmd) {
 		exit(1);
 	}
 	if (cmd != (char)-1) {
-		//debug("actually writing");
+		cdebug("actually writing");
 		while (true) {
 			errno = 0;
 			int ret = write(fromserver, &cmd, 1);
@@ -85,7 +89,7 @@ static inline char send_to_child(char cmd) {
 			exit(0);
 		}
 	}
-	//debug("done writing; reading");
+	cdebug("done writing; reading");
 	while (true) {
 		errno = 0;
 		int ret = read(toserver, &cmd, 1);
@@ -96,7 +100,7 @@ static inline char send_to_child(char cmd) {
 		debug("failed to receive reply to %x from child: %s (%d)", cmd, strerror(errno), errno);
 		exit(0);
 	}
-	//debug("read %x", cmd);
+	cdebug("read %x", cmd);
 	return cmd;
 }
 
@@ -854,8 +858,10 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		ret = NULL;
 		break;
 	}
+	cdebug("interrupt received, sending reply");
 	if (write(interrupt_reply, &c, 1) != 1)
 		exit(1);
+	cdebug("reply sent");
 	return ret;
 }
 

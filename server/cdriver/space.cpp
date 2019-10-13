@@ -120,7 +120,7 @@ void Space::load_info() { // {{{
 			type = DEFAULT_TYPE;
 			reset_pos(this);
 			for (int a = 0; a < num_axes; ++a)
-				axis[a]->current = axis[a]->settings.source;
+				axis[a]->settings.source = axis[a]->current;
 			return;	// The rest of the info is not meant for DEFAULT_TYPE, so ignore it.
 		}
 	}
@@ -137,8 +137,10 @@ void reset_pos(Space *s) { // {{{
 	space_types[s->type].motors2xyz(s, motors, xyz);
 	for (int a = 0; a < s->num_axes; ++a) {
 		s->axis[a]->current = xyz[a];
-		if (!computing_move)
+		if (!computing_move) {
 			s->axis[a]->settings.source = xyz[a];
+			//debug("setting axis %d %d source to %f for reset pos", s->id, a, s->axis[a]->settings.source);
+		}
 	}
 } // }}}
 

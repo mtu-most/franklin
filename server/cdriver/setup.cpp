@@ -83,9 +83,8 @@ void setup()
 	transmitting_fragment = false;
 	start_pending = false;
 	stop_pending = false;
-	discard_pending = false;
 	change_pending = false;
-	discarding = false;
+	discarding = 0;
 	interrupt_pending = false;
 	cb_pending = false;
 	which_autosleep = 0;

@@ -167,6 +167,7 @@ bool serial(bool allow_pending) { // {{{
 				out_busy = 0;
 				serialdev->write(CMD_STALLACK);
 				which += 1;
+				abort();
 				// Fall through.
 			case CMD_ACK3:
 				which += 1;
@@ -392,6 +393,12 @@ bool serial(bool allow_pending) { // {{{
 	return true;
 } // }}}
 
+// This is run in a loop until some event happened.
+void serial_wait(int timeout) { // {{{
+	poll(&pollfds[BASE_FDS], 1, timeout);
+	serial(false);
+} // }}}
+
 // Command sending method:
 // When sending a command:
 // - fill appropriate command buffer
@@ -418,10 +425,8 @@ bool prepare_packet(char *the_packet, int size) { // {{{
 	}
 	// Wait for room in the queue.  This is required to avoid a stall being received in between prepare and send.
 	preparing = true;
-	while (out_busy >= 3) {
-		poll(&pollfds[BASE_FDS], 1, -1);
-		serial(false);
-	}
+	while (out_busy >= 3)
+		serial_wait();
 	preparing = false;	// Not yet, but there are no further interruptions.
 	if (stopping)
 		return false;

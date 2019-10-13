@@ -52,11 +52,16 @@ void request(int req) {
 		arch_reconnect(const_cast<const char *>(shmem->strs[0]));
 		break;
 	CASE(CMD_MOVE)
+		// Ignore move while stopping.
+		if (stopping)
+			break;
 		//debug("moving to (%f,%f,%f), tool %d e %f v %f", shmem->move.target[0], shmem->move.target[1], shmem->move.target[2], shmem->move.tool, shmem->move.e, shmem->move.v0);
 		last_active = millis();
 		initialized = true;
 		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move), true);
-		break;
+		delayed_reply();
+		buffer_refill();
+		return;
 	CASE(CMD_RUN)
 		last_active = millis();
 		run_file(const_cast<const char *>(shmem->strs[0]), const_cast<const char *>(shmem->strs[1]), shmem->ints[0], shmem->floats[0], shmem->floats[1]);
@@ -174,7 +179,7 @@ void request(int req) {
 		if (std::isnan(spaces[shmem->ints[0]].axis[shmem->ints[1]]->current)) {
 			reset_pos(&spaces[shmem->ints[0]]);
 			for (int a = 0; a < spaces[shmem->ints[0]].num_axes; ++a)
-				spaces[shmem->ints[0]].axis[a]->current = spaces[shmem->ints[0]].axis[a]->settings.source;
+				spaces[shmem->ints[0]].axis[a]->settings.source = spaces[shmem->ints[0]].axis[a]->current;
 		}
 		shmem->floats[0] = spaces[shmem->ints[0]].axis[shmem->ints[1]]->current;
 		//debug("getpos %d %d %f", shmem->ints[0], shmem->ints[1], shmem->floats[0]);
@@ -190,11 +195,8 @@ void request(int req) {
 		globals_save();
 		break;
 	CASE(CMD_WRITE_GLOBALS)
-		discarding = true;
 		arch_discard();
 		globals_load();
-		discarding = false;
-		buffer_refill();
 		break;
 	CASE(CMD_READ_SPACE_INFO)
 		if (shmem->ints[0] < 0 || shmem->ints[0] >= NUM_SPACES) {
@@ -226,11 +228,8 @@ void request(int req) {
 			abort();
 			return;
 		}
-		discarding = true;
 		arch_discard();
 		spaces[shmem->ints[0]].load_info();
-		discarding = false;
-		buffer_refill();
 		break;
 	CASE(CMD_WRITE_SPACE_AXIS)
 		if (shmem->ints[0] < 0 || shmem->ints[0] >= NUM_SPACES || shmem->ints[1] < 0 || shmem->ints[1] >= spaces[shmem->ints[0]].num_axes) {
@@ -238,11 +237,8 @@ void request(int req) {
 			abort();
 			return;
 		}
-		discarding = true;
 		arch_discard();
 		spaces[shmem->ints[0]].load_axis(shmem->ints[1]);
-		discarding = false;
-		buffer_refill();
 		break;
 	CASE(CMD_WRITE_SPACE_MOTOR)
 		if (shmem->ints[0] < 0 || shmem->ints[0] >= NUM_SPACES || shmem->ints[1] < 0 || shmem->ints[1] >= spaces[shmem->ints[0]].num_motors) {
@@ -250,11 +246,8 @@ void request(int req) {
 			abort();
 			return;
 		}
-		discarding = true;
 		arch_discard();
 		spaces[shmem->ints[0]].load_motor(shmem->ints[1]);
-		discarding = false;
-		buffer_refill();
 		break;
 	CASE(CMD_READ_TEMP)
 		if (shmem->ints[0] < 0 || shmem->ints[0] >= num_temps) {
@@ -354,7 +347,6 @@ void request(int req) {
 	CASE(CMD_TP_SETPOS)
 	{
 		int ipos = int(shmem->floats[0]);
-		discarding = true;
 		arch_discard();
 		settings.run_file_current = ipos;
 		// Hack to force TP_GETPOS to return the same value; this is only called when paused, so it does no harm.
@@ -365,8 +357,6 @@ void request(int req) {
 				sp.axis[a]->settings.source = NAN;
 		}
 		// TODO: Use fraction.
-		discarding = false;
-		buffer_refill();
 		break;
 	}
 	CASE(CMD_TP_FINDPOS)
@@ -466,8 +456,8 @@ void setpos(int which, int t, double f) {
 	//arch_stop();
 	reset_pos(&spaces[which]);
 	for (int a = 0; a < spaces[which].num_axes; ++a) {
-		spaces[which].axis[a]->current = spaces[which].axis[a]->settings.source;
-		spaces[which].axis[a]->settings.endpos = spaces[which].axis[a]->settings.source;
+		spaces[which].axis[a]->settings.source = spaces[which].axis[a]->current;
+		spaces[which].axis[a]->settings.endpos = spaces[which].axis[a]->current;
 	}
 	cpdebug(which, t, "setpos new %f old %f diff %f", f, old, f - old);
 	// */

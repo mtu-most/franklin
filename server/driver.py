@@ -421,6 +421,7 @@ class Machine: # {{{
 			sys.exit(0)
 	# }}}
 	def _trigger_movewaits(self, done = True): # {{{
+		#log('movewaits triggered: %s' % repr(self.movecb))
 		call_queue.extend([(x, [done]) for x in self.movecb])
 		self.movecb = []
 	# }}}
@@ -746,7 +747,7 @@ class Machine: # {{{
 		Finish up.
 		'''
 
-		#log('home %s %s' % (self.home_phase, repr(self.home_order)))
+		#log('home %s %s %s' % (self.home_phase, repr(self.home_order), done))
 		home_v = 50 / self.feedrate
 		if self.home_phase is None:
 			#log('_do_home ignored because home_phase is None')
@@ -1753,7 +1754,7 @@ class Machine: # {{{
 			if id is not None:
 				self._send(id, 'return', None)
 			return
-		self.paused = pausing
+		self.paused = self.gcode_file and pausing
 		if pausing:
 			cdriver.pause()
 		else:
@@ -1774,6 +1775,10 @@ class Machine: # {{{
 	def user_home(self, id, speed = 5, cb = None, abort = True): # {{{
 		'''Recalibrate the position with its limit switches.
 		'''
+		if not self.connected:
+			if id is not None:
+				self._send(id, 'return', None)
+			return
 		if self.home_phase is not None:
 			log("ignoring request to home because we're already homing")
 			if id is not None:

@@ -105,7 +105,7 @@ import traceback
 import fcntl
 import protocol
 
-config = fhs.init(packagename = 'franklin', config = {
+config = fhs.init(packagename = 'franklin-server', config = {
 		'port': '8000',	# Port to listen on.
 		'address': '',	# Address to listen on.  Mainly intended for RPi, which cannot handle IPv6 and needs 0.0.0.0 here to force IPv4.
 		'whitelist': r'', # Which serial ports to attempt detecting on. Ports that are both whitelisted and blacklisted are not included.

@@ -750,7 +750,7 @@ int arch_tick() { // {{{
 						// Limit hit.
 						abort_move(0);
 						sending_fragment = 0;
-						stopping = 2;
+						stopping = 3;
 						prepare_interrupt();
 						shmem->interrupt_ints[0] = s;
 						shmem->interrupt_ints[1] = m;

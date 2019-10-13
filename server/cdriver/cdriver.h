@@ -345,7 +345,8 @@ EXTERN int first_fragment;
 EXTERN int stopping;		// From limit.
 EXTERN int sending_fragment;
 EXTERN bool transmitting_fragment;
-EXTERN bool start_pending, stop_pending, change_pending, discarding;
+EXTERN bool start_pending, stop_pending, change_pending;
+EXTERN int discarding;
 EXTERN bool discard_pending;
 EXTERN double done_factor;
 EXTERN uint8_t requested_temp;
@@ -377,7 +378,7 @@ void buffered_debug(char const *fmt, ...);
 
 // Force cpdebug if requested, to enable only specific lines without adding all the cp things in manually.
 //#define fcpdebug(s, m, fmt, ...) do { if (s == 1 && m == 0) debug("CP curfragment %d curpos %f current %f " fmt, current_fragment, spaces[s].motor[m]->settings.current_pos, spaces[s].axis[m]->settings.current, ##__VA_ARGS__); } while (0)
-#define fcpdebug(s, m, fmt, ...) do { debug("CP %d %d curfragment %d curpos %f current %f " fmt, s, m, current_fragment, spaces[s].motor[m]->settings.current_pos, spaces[s].axis[m]->settings.current, ##__VA_ARGS__); } while (0)
+#define fcpdebug(s, m, fmt, ...) do { debug("CP %d %d curfragment %d curpos %f current %f " fmt, s, m, current_fragment, spaces[s].motor[m]->settings.current_pos, spaces[s].axis[m]->current, ##__VA_ARGS__); } while (0)
 //#define cpdebug fcpdebug
 #define cpdebug(...) do {} while (0)
 
@@ -397,6 +398,7 @@ void prepare_interrupt();
 
 // serial.cpp
 bool serial(bool allow_pending);	// Handle commands from serial.
+void serial_wait(int timeout = -1);
 bool prepare_packet(char *the_packet, int len);
 void send_packet();
 void write_ack();
