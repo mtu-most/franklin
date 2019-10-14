@@ -20,6 +20,7 @@
 #include "module.h"
 #include <fstream>
 #include <vector>
+#include <map>
 #include <list>
 #include <algorithm>
 #include <cctype>
@@ -83,15 +84,16 @@ struct Parser { // {{{
 	int modecode;
 	double modenum;
 	std::string message;
-	std::vector <double> bbox;
+	double bbox[6];
 	std::vector <std::string> strings;
 	std::list <unsigned> stringmap;
 	double unit;
 	bool rel;
 	bool erel;
 	double spindle_speed;
-	std::vector <double> pos;
-	std::vector <double> epos;
+	double pos[6];
+	std::map <int, double> epos;
+	int max_epos;
 	int current_tool;
 	bool extruding;
 	double current_f[2];
@@ -124,7 +126,7 @@ struct Parser { // {{{
 
 void Parser::reset_pending_pos() { // {{{
 	pending.pop_front();
-	pending.push_front(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, unsigned(current_tool) < epos.size() ? epos[current_tool] : NAN));
+	pending.push_front(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, epos.at(current_tool)));
 } // }}}
 
 bool Parser::get_chunk(Chunk &ret, std::string &comment) { // {{{
@@ -231,11 +233,11 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					if (!std::isnan(E)) {
 						if (erel) {
 							estep = E * unit;
-							epos[current_tool] += estep;
+							epos.at(current_tool) += estep;
 						}
 						else {
-							estep = E * unit - epos[current_tool];
-							epos[current_tool] = E * unit;
+							estep = E * unit - epos.at(current_tool);
+							epos.at(current_tool) = E * unit;
 						}
 					}
 					else
@@ -267,12 +269,12 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					if (handle_pattern)
 						parse_error(errors, "Warning: not handling pattern because position is unknown", lineno);
 					flush_pending();
-					add_record(lineno, RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], NAN, NAN, current_f[code == 0 ? 0 : 1], epos[current_tool]);
+					add_record(lineno, RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], NAN, NAN, current_f[code == 0 ? 0 : 1], epos.at(current_tool));
 					reset_pending_pos();
 					break;
 				}
 				if (code != 81) {
-					pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], current_f[code == 0 ? 0 : 1], epos[current_tool]));
+					pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], current_f[code == 0 ? 0 : 1], epos.at(current_tool)));
 					if (handle_pattern && code == 1)
 						pending.back().pattern = pattern_data;
 					pattern_data.clear();
@@ -338,12 +340,9 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					//debug("new f1: %f", current_f[code]);
 				}
 				double estep;
-				estep = std::isnan(E) ? 0 : erel ? E * unit - epos[current_tool] : E * unit;
-				epos[current_tool] += estep;
-				std::vector <double> center;
-				center.push_back(0);
-				center.push_back(0);
-				center.push_back(0);
+				estep = std::isnan(E) ? 0 : erel ? E * unit - epos.at(current_tool) : E * unit;
+				epos.at(current_tool) += estep;
+				double center[3];
 				bool controlled = true;
 				handle_coordinate(X, 0, &controlled, rel);
 				handle_coordinate(Y, 1, &controlled, rel);
@@ -355,7 +354,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				center[1] = pos[1] + (std::isnan(J) ? 0 : J * unit);
 				center[2] = pos[2] + (std::isnan(K) ? 0 : K * unit);
 				int s = code == 2 ? -1 : 1;
-				pending.push_back(Record(lineno, true, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], -current_f[1], epos[current_tool], center[0], center[1], center[2], s * arc_normal[0], s * arc_normal[1], s * arc_normal[2]));
+				pending.push_back(Record(lineno, true, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], -current_f[1], epos.at(current_tool), center[0], center[1], center[2], s * arc_normal[0], s * arc_normal[1], s * arc_normal[2]));
 			}
 			break;
 		case 4:
@@ -395,10 +394,10 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			break;
 		case 28:
 			// Park.
-			epos[current_tool] = 0;
+			epos.at(current_tool) = 0;
 			flush_pending();
 			add_record(lineno, RUN_PARK);
-			for (unsigned i = 0; i < pos.size(); ++i)
+			for (unsigned i = 0; i < 6; ++i)
 				pos[i] = NAN;
 			reset_pending_pos();
 			break;
@@ -433,7 +432,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					parse_error(errors, "%d: Not setting position for unsupported type %c", lineno, arg.type);
 					continue;
 				}
-				epos[current_tool] = arg.num;
+				epos.at(current_tool) = arg.num;
 				flush_pending();
 				add_record(lineno, RUN_SETPOS, current_tool, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, arg.num);
 				reset_pending_pos();
@@ -582,13 +581,16 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 	} // }}}
 	else if (type == 'T') { // {{{
 		// New tool.
-		while (code >= (signed)epos.size())
-			epos.push_back(0);
+		if (epos.find(code) == epos.end()) {
+			epos.insert(std::pair <int, double>(code, 0));
+			if (code >= max_epos)
+				max_epos = code + 1;
+		}
 		current_tool = code;
 		// Make full stop between tools.
 		flush_pending();
 		// Apply new offset.
-		pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, epos[current_tool]));
+		pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, epos.at(current_tool)));
 	} // }}}
 	else {
 		// Command was not handled: complain.
@@ -715,15 +717,15 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 	arc_normal[0] = 0;
 	arc_normal[1] = 0;
 	arc_normal[2] = 1;
-	epos.push_back(0);
+	epos.insert(std::pair <int, double>(0, 0));
 	current_f[0] = INFINITY;
 	current_f[1] = INFINITY;
 	// Pending initial state contains the current position.
 	pending.push_front(Record(lineno, false, 0, NAN, NAN, NAN, NAN, NAN, NAN, INFINITY, NAN));
 	max_dev = max_deviation;
 	for (int i = 0; i < 6; ++i) {
-		pos.push_back(NAN);
-		bbox.push_back(NAN);
+		pos[i] = NAN;
+		bbox[i] = NAN;
 	}
 	lineno = 0;
 	while (infile) {
@@ -838,8 +840,8 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 	uint32_t strnum = strings.size() - 1;
 	outfile.write(reinterpret_cast <char *>(&strnum), sizeof(strnum));
 	// Bbox.
-	for (double b: bbox)
-		outfile.write(reinterpret_cast <char *>(&b), sizeof(b));
+	for (int i = 0; i < 6; ++i)
+		outfile.write(reinterpret_cast <char *>(&bbox[i]), sizeof(double));
 	// Time
 	outfile.write(reinterpret_cast <char *>(&last_time), sizeof(last_time));
 } // }}}

@@ -511,6 +511,7 @@ static void do_steps(double old_factor) { // {{{
 		PATTERN_SET(settings.pattern[pattern_pos]);
 	}
 	current_fragment_pos += 1;
+	//debug("current fragment pos -> %d", current_fragment_pos);
 	if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
 		mdebug("sending because fragment full (normal) %d %d %d %d", computing_move, current_fragment_pos, BYTES_PER_FRAGMENT, stopping);
 		send_fragment();

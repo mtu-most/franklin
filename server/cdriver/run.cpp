@@ -52,22 +52,20 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 	abort_run_file();
 	if (name[0] == '\0')
 		return;
-	free(run_file_name);
-	run_file_name = strdup(name);
-	free(probe_file_name);
-	probe_file_name = strdup(probename);
+	run_file_name = name;
+	probe_file_name = probename;
 	settings.run_time = 0;
 	settings.run_file_current = 0;
 	int probe_fd = -1;
 	if (probename[0] != '\0') {
-		probe_fd = open(probe_file_name, O_RDONLY);
+		probe_fd = open(probe_file_name.c_str(), O_RDONLY);
 		if (probe_fd < 0) {
-			debug("Failed to open probe file '%s': %s", probe_file_name, strerror(errno));
+			debug("Failed to open probe file '%s': %s", probe_file_name.c_str(), strerror(errno));
 			return;
 		}
 		struct stat stat;
 		if (fstat(probe_fd, &stat) < 0) {
-			debug("Failed to stat probe file '%s': %s", probe_file_name, strerror(errno));
+			debug("Failed to stat probe file '%s': %s", probe_file_name.c_str(), strerror(errno));
 			close(probe_fd);
 			return;
 		}
@@ -78,16 +76,16 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 			return;
 		}
 	}
-	int fd = open(run_file_name, O_RDONLY);
+	int fd = open(run_file_name.c_str(), O_RDONLY);
 	if (fd < 0) {
-		debug("Failed to open run file '%s': %s", run_file_name, strerror(errno));
+		debug("Failed to open run file '%s': %s", run_file_name.c_str(), strerror(errno));
 		if (probename[0] != '\0')
 			close(probe_fd);
 		return;
 	}
 	struct stat stat;
 	if (fstat(fd, &stat) < 0) {
-		debug("Failed to stat run file '%s': %s", run_file_name, strerror(errno));
+		debug("Failed to stat run file '%s': %s", run_file_name.c_str(), strerror(errno));
 		close(fd);
 		if (probename[0] != '\0')
 			close(probe_fd);
@@ -118,7 +116,7 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 	// double bbox[6]
 	// double time
 	run_file_num_strings = read_num(run_file_size - sizeof(double) * 7 - sizeof(int32_t));
-	strings = reinterpret_cast<String *>(malloc(run_file_num_strings * sizeof(String)));
+	strings = new String[run_file_num_strings];
 	off_t pos = run_file_size - sizeof(double) * 7 - sizeof(int32_t) - sizeof(int32_t) * run_file_num_strings;
 	off_t current = 0;
 	for (int i = 0; i < run_file_num_strings; ++i) {
@@ -150,7 +148,7 @@ void abort_run_file() {
 		munmap(probe_file_map, probe_file_size);
 		probe_file_map = NULL;
 	}
-	free(strings);
+	delete[] strings;
 	strings = NULL;
 }
 
@@ -418,7 +416,7 @@ void run_file_fill_queue(bool move_allowed) {
 					send_to_parent(CMD_PARKWAIT);
 					break;
 				default:
-					debug("Invalid record type %d in %s", r.type, run_file_name);
+					debug("Invalid record type %d in %s", r.type, run_file_name.c_str());
 					break;
 			}
 			settings.run_file_current += 1;

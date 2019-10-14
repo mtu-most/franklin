@@ -20,6 +20,7 @@
 
 #define EXTERN	// This must be done in exactly one source file.
 #include "cdriver.h"
+#include <execinfo.h>
 
 //#define cdebug debug
 #define cdebug(...) do {} while (0)
@@ -36,6 +37,26 @@ void disconnect(bool notify) { // {{{
 }
 // }}}
 #endif
+
+void debug_backtrace() {
+	void *array[10];
+	size_t size;
+
+	// get void*'s for all entries on the stack
+	size = backtrace(array, 10);
+
+	// print out all the frames to stderr
+	debug("Stack backtrace:");
+	char **frames = backtrace_symbols(array, size);
+	if (frames == NULL) {
+		debug("unable to print stack backtrace");
+		return;
+	}
+	for (size_t i = 0; i < size; ++i) {
+		debug("frame %d: %s", i, frames[i]);
+	}
+	free(frames);
+}
 
 // Time handling.  {{{
 static void get_current_times(int32_t *current_time, int32_t *longtime) {

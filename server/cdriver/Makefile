@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 CPPFLAGS ?= -Wall -Wextra -Wformat -Werror -Wdate-time -D_FORTIFY_SOURCE=2
-CXXFLAGS ?= -fPIC -ggdb3 -O3 -fstack-protector-strong
+CXXFLAGS ?= -fPIC -ggdb3 -O3 -fstack-protector-strong -rdynamic
 LDFLAGS ?= -Wall -Wextra -Wformat -Werror ${CXXFLAGS}
 
 CPPFLAGS += -DARCH_INCLUDE='"arch-avr.h"'

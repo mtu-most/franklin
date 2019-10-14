@@ -1944,7 +1944,7 @@ class Machine: # {{{
 		section = 'general'
 		index = None
 		obj = None
-		regexp = re.compile('\s*\[(general|(space|temp|gpio|(extruder|axis|motor|delta|follower)\s+(\d+))\s+(\d+))\]\s*$|\s*(\w+)\s*=\s*(.*?)\s*$|\s*(?:#.*)?$')
+		regexp = re.compile(r'\s*\[(general|(space|temp|gpio|(extruder|axis|motor|delta|follower)\s+(\d+))\s+(\d+))\]\s*$|\s*(\w+)\s*=\s*(.*?)\s*$|\s*(?:#.*)?$')
 		#1: (general|(space|temp|gpio|(axis|motor|delta)\s+(\d+))\s+(\d+))	1 section
 		#2: (space|temp|gpio|(extruder|axis|motor|delta)\s+(\d+))		2 section with index
 		#3: (extruder|axis|motor|delta)						3 sectionname with two indices

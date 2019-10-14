@@ -48,7 +48,6 @@ static void print_dict(PyObject *dict) {
 	for (Py_ssize_t i = 0; i < PyList_Size(keys); ++i) {
 		PyObject *key = PyList_GetItem(keys, i);
 		debug("\t%s", PyUnicode_AsUTF8(key));
-		Py_DECREF(key);
 	}
 	Py_DECREF(keys);
 }
@@ -517,6 +516,7 @@ static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 			PyArg_ParseTuple(axis, "ddd", &shmem->floats[i * 3], &shmem->floats[i * 3 + 1], &shmem->floats[i * 3 + 2]);
 			Py_DECREF(axis);
 		}
+		Py_DECREF(offset);
 		break;
 	}
 	case TYPE_FOLLOWER:
@@ -527,6 +527,7 @@ static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 			PyArg_ParseTuple(axis, "ii", &shmem->ints[i * 2 + 4], &shmem->ints[i * 2 + 5]);
 			Py_DECREF(axis);
 		}
+		Py_DECREF(follow);
 		break;
 	}
 	case TYPE_DELTA:
@@ -672,7 +673,6 @@ static PyObject *home(PyObject *Py_UNUSED(self), PyObject *args) {
 	for (int i = 0; i < shmem->ints[0]; ++i) {
 		PyObject *value = PyTuple_GetItem(args, i);
 		shmem->ints[i + 1] = PyLong_AsLong(value);
-		Py_DECREF(value);
 	}
 	send_to_child(CMD_HOME);
 	Py_RETURN_NONE;
@@ -772,18 +772,15 @@ static PyObject *motors2xyz(PyObject *Py_UNUSED(self), PyObject *args) {
 	}
 	PyObject *value = PyTuple_GetItem(args, 0);
 	shmem->ints[0] = PyLong_AsLong(value);
-	Py_DECREF(value);
 	for (int i = 0; i < shmem->ints[1]; ++i) {
 		value = PyTuple_GetItem(args, i + 1);
 		shmem->floats[i] = PyFloat_AsDouble(value);
-		Py_DECREF(value);
 	}
 	send_to_child(CMD_MOTORS2XYZ);
 	value = PyTuple_New(shmem->ints[0]);
 	for (int i = 0; i < shmem->ints[0]; ++i) {
 		PyObject *f = PyFloat_FromDouble(shmem->floats[shmem->ints[1] + i]);
 		PyTuple_SET_ITEM(value, i, f);
-		Py_DECREF(f);
 	}
 	return value;
 }

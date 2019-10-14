@@ -422,10 +422,10 @@ void abort_run_file();
 void run_file_fill_queue(bool move_allowed = true);
 void run_adjust_probe(double x, double y, double z);
 double run_find_pos(const double pos[3]);
-EXTERN char *probe_file_name;
+EXTERN std::string probe_file_name;
 EXTERN off_t probe_file_size;
 EXTERN ProbeFile *probe_file_map;
-EXTERN char *run_file_name;
+EXTERN std::string run_file_name;
 EXTERN off_t run_file_size;
 EXTERN Run_Record *run_file_map;
 EXTERN int run_file_num_strings;
@@ -463,6 +463,7 @@ bool globals_load();
 void globals_save();
 
 // base.cpp
+void debug_backtrace();
 void disconnect(bool notify);
 int32_t utime();
 int32_t millis();

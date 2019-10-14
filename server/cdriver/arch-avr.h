@@ -992,8 +992,8 @@ static void avr_connect3() { // {{{
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
 			for (int m = 0; m < sp.num_motors; ++m) {
-				delete[] sp.motor[m]->avr_data;
-				sp.motor[m]->avr_data = new DATA_TYPE[BYTES_PER_FRAGMENT / sizeof(DATA_TYPE)];
+				DATA_DELETE(s, m);
+				ARCH_NEW_MOTOR(s, m, sp.motor);
 			}
 		}
 		delete[] pattern.avr_data;
