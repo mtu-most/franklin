@@ -156,7 +156,7 @@ struct History {
 	int hwtime_step;
 	double run_time;
 	int gcode_line;
-	int run_file_current;
+	int64_t current_restore;
 	uint8_t pattern[PATTERN_MAX];
 	int pattern_size;	// in bytes; each bit in the pattern is a pulse.
 };
@@ -384,14 +384,14 @@ void buffered_debug(char const *fmt, ...);
 
 // packet.cpp
 void request(int req);
-void compute_current_pos(double x[3], double v[3], double a[3]);
+bool compute_current_pos(double x[3], double v[3], double a[3], bool store);
 int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], bool resuming = false);
 void smooth_stop(int q, double x[3], double v[3]);
 void do_resume();
 int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only = false);
 void settemp(int which, double target);
 void waittemp(int which, double mintemp, double maxtemp);
-void setpos(int which, int t, double f);
+void setpos(int which, int t, double f, bool reset);
 void delayed_reply();
 void send_to_parent(char cmd);
 void prepare_interrupt();
@@ -409,6 +409,7 @@ EXTERN uint8_t ff_out;	// Index of next out-packet that will be sent.
 // move.cpp
 void next_move(int32_t start_time);
 void abort_move(int pos);
+void discard_finals();
 
 // run.cpp
 struct ProbeFile {
@@ -422,6 +423,7 @@ void abort_run_file();
 void run_file_fill_queue(bool move_allowed = true);
 void run_adjust_probe(double x, double y, double z);
 double run_find_pos(const double pos[3]);
+EXTERN int64_t run_file_current;
 EXTERN std::string probe_file_name;
 EXTERN off_t probe_file_size;
 EXTERN ProbeFile *probe_file_map;

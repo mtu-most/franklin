@@ -142,6 +142,7 @@ void reset_pos(Space *s) { // {{{
 			//debug("setting axis %d %d source to %f for reset pos", s->id, a, s->axis[a]->settings.source);
 		}
 	}
+	discard_finals();
 } // }}}
 
 void Space::load_axis(int a) { // {{{

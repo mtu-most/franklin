@@ -487,8 +487,8 @@ bool hwpacket(int len) { // {{{
 			avr_write_ack("done");
 		running_fragment = (running_fragment + command[offset + 1]) % FRAGMENTS_PER_BUFFER;
 		//debug("running -> %x", running_fragment);
-		if (current_fragment + discarding == running_fragment && command[0] == HWC_DONE) {
-			debug("Done received, but should be underrun");
+		if ((current_fragment + discarding + (transmitting_fragment ? 1 : 0)) % FRAGMENTS_PER_BUFFER == running_fragment && command[0] == HWC_DONE) {
+			debug("Done received, but should be underrun (current: %d discarding: %d running: %d sending: %d transmitting %d)", current_fragment, discarding, running_fragment, sending_fragment, transmitting_fragment);
 			//abort();
 		}
 		if (out_busy < 3)
@@ -1253,7 +1253,7 @@ void avr_stop2() { // {{{
 
 static void avr_sent_fragment() { // {{{
 	if (sending_fragment == 0) {
-		debug("calling avr_sent_fragment with zero sending_fragment");
+		//debug("calling avr_sent_fragment with zero sending_fragment");
 		return;
 	}
 	if (stopping)
@@ -1414,11 +1414,7 @@ void arch_discard() { // {{{
 		return;
 	//debug("discard start current = %d, sending = %d", current_fragment, sending_fragment);
 	discard_pending = true;
-	for (int i = 0; i < 3; ++i) {
-		final_x[i] = NAN;
-		final_v[i] = NAN;
-		final_a[i] = NAN;
-	}
+	discard_finals();
 	int fragments = (current_fragment + (transmitting_fragment ? 1 : 0) - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	if (fragments <= 3)
 		return;

@@ -55,7 +55,7 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 	run_file_name = name;
 	probe_file_name = probename;
 	settings.run_time = 0;
-	settings.run_file_current = 0;
+	run_file_current = 0;
 	int probe_fd = -1;
 	if (probename[0] != '\0') {
 		probe_fd = open(probe_file_name.c_str(), O_RDONLY);
@@ -205,7 +205,7 @@ void run_file_fill_queue(bool move_allowed) {
 	if (pausing || lock)
 		return;
 	lock = true;
-	rundebug("run queue, current = %d/%d wait = %d q = %d %d %d", settings.run_file_current, run_file_num_records, run_file_wait, queue_end, queue_start, queue_full);
+	rundebug("run queue, current = %d/%d wait = %d q = %d %d %d", run_file_current, run_file_num_records, run_file_wait, queue_end, queue_start, queue_full);
 	bool must_move = true;
 	double lastpos[3] = {0, 0, 0};
 	while (must_move) {
@@ -214,13 +214,13 @@ void run_file_fill_queue(bool move_allowed) {
 				&& run_file_map	// There is a file to run.
 				&& (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH < 4	// There is space in the queue.
 				&& !queue_full	// Really, there is space in the queue.
-				&& settings.run_file_current < run_file_num_records	// There are records to send.
+				&& run_file_current < run_file_num_records	// There are records to send.
 				&& !run_file_wait) {	// We are not waiting for something else (pause or confirm).
-			int t = run_file_map[settings.run_file_current].type;
+			Run_Record &r = run_file_map[run_file_current];
+			int t = r.type;
 			if (t != RUN_POLY3PLUS && t != RUN_POLY3MINUS && t != RUN_POLY2 && t != RUN_PATTERN && (arch_running() || queue_end != queue_start || computing_move || sending_fragment || transmitting_fragment))
 				break;
-			Run_Record &r = run_file_map[settings.run_file_current];
-			rundebug("running %d: %d %d", settings.run_file_current, r.type, r.tool);
+			rundebug("running %d: %d %d", run_file_current, r.type, r.tool);
 			switch (r.type) {
 				case RUN_SYSTEM:
 				{
@@ -234,6 +234,7 @@ void run_file_fill_queue(bool move_allowed) {
 				case RUN_POLY3MINUS:
 				case RUN_POLY2:
 				{
+					queue[queue_end].current_restore = run_file_current + 1;
 					queue[queue_end].reverse = r.type == RUN_POLY3MINUS;
 					queue[queue_end].single = false;
 					queue[queue_end].probe = false;
@@ -242,7 +243,7 @@ void run_file_fill_queue(bool move_allowed) {
 					double x = r.X[0] * run_file_cosa - r.X[1] * run_file_sina + run_file_refx;
 					double y = r.X[1] * run_file_cosa + r.X[0] * run_file_sina + run_file_refy;
 					double z = r.X[2];
-					//debug("line %d: %f %f %f", settings.run_file_current, x, y, z);
+					//debug("line %d: %f %f %f", run_file_current, x, y, z);
 					queue[queue_end].target[0] = x;
 					queue[queue_end].target[1] = y;
 					queue[queue_end].target[2] = handle_probe(x, y, z);
@@ -287,6 +288,7 @@ void run_file_fill_queue(bool move_allowed) {
 				case RUN_GOTO:
 				{
 					MoveCommand move;
+					move.current_restore = run_file_current + 1;
 					move.cb = false;
 					move.probe = false;
 					move.single = false;
@@ -388,7 +390,7 @@ void run_file_fill_queue(bool move_allowed) {
 						debug("Not setting position of invalid extruder %d", r.tool);
 						break;
 					}
-					setpos(1, r.tool, r.E);
+					setpos(1, r.tool, r.E, true);
 					break;
 				case RUN_WAIT:
 					if (r.X[0] > 0) {
@@ -410,7 +412,7 @@ void run_file_fill_queue(bool move_allowed) {
 					break;
 				}
 				case RUN_PARK:
-					compute_current_pos(resume.x, resume.v, resume.a);
+					compute_current_pos(resume.x, resume.v, resume.a, false);
 					run_file_wait += 1;
 					prepare_interrupt();
 					send_to_parent(CMD_PARKWAIT);
@@ -419,7 +421,7 @@ void run_file_fill_queue(bool move_allowed) {
 					debug("Invalid record type %d in %s", r.type, run_file_name.c_str());
 					break;
 			}
-			settings.run_file_current += 1;
+			run_file_current += 1;
 			if (!computing_move && (queue_start != queue_end || queue_full))
 				must_move = true;
 		}
@@ -430,7 +432,7 @@ void run_file_fill_queue(bool move_allowed) {
 		}
 	}
 	rundebug("run queue done");
-	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait) {
+	if (run_file_map && run_file_current >= run_file_num_records && !run_file_wait) {
 		// Done.
 		//debug("done running file");
 		if (!computing_move && !sending_fragment && !transmitting_fragment && !arch_running()) {

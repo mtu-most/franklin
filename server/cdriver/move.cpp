@@ -26,6 +26,8 @@
 #define mdebug(...) do {} while (0)
 #endif
 
+#define warning debug
+
 static void send_fragment() { // {{{
 	if (host_block) {
 		current_fragment_pos = 0;
@@ -38,7 +40,7 @@ static void send_fragment() { // {{{
 	if (num_active_motors == 0) {
 		if (current_fragment_pos < 1) {
 			// TODO: find out why this is attempted and avoid it.
-			debug("not sending short fragment for 0 motors; %d %d", current_fragment, running_fragment);
+			warning("not sending short fragment for 0 motors; %d %d", current_fragment, running_fragment);
 			// TODO: Maybe the move cb is not sent in this case?
 			current_fragment_pos = 0;
 			return;
@@ -92,6 +94,7 @@ void next_move(int32_t start_time) { // {{{
 	if (queue_start == queue_end && !queue_full) {
 		if (resume_pending) {
 			memcpy(&settings, &resume.settings, sizeof(History));
+			run_file_current = settings.current_restore;
 			factor = (settings.hwtime / 1e6) / (settings.end_time / 1e6);
 			if (factor < 0)
 				factor = 0;
@@ -104,12 +107,13 @@ void next_move(int32_t start_time) { // {{{
 					ax->settings.source = ax->resume_start;
 					ax->settings.endpos = ax->resume_end;
 					if (s == 1)
-						setpos(s, a, ax->settings.source + factor * (ax->settings.endpos - ax->settings.source));
+						setpos(s, a, ax->settings.source + factor * (ax->settings.endpos - ax->settings.source), false);
 				}
 			}
+			reset_pos(&spaces[1]);
 			computing_move = true;
 			resume_pending = false;
-			mdebug("finished resume. axes = %f,%f,%f motors = %f,%f,%f", spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[1]->settings.current_pos, spaces[0].motor[2]->settings.current_pos);
+			mdebug("finished resume. axes = %f,%f,%f motors = %f,%f,%f, extruder[0] = %f", spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[1]->settings.current_pos, spaces[0].motor[2]->settings.current_pos, spaces[1].axis[0]->current);
 			return;
 		}
 		run_file_fill_queue(false);
@@ -184,7 +188,7 @@ void next_move(int32_t start_time) { // {{{
 		if (a >= sp0.num_axes)
 			continue;
 		if ((!std::isnan(queue[q].target[a]) || (n != queue_end && !std::isnan(queue[n].target[a]))) && std::isnan(sp0.axis[a]->settings.source)) {
-			debug("Motor position for axis %d is not known, so move cannot take place; aborting move and removing it from the queue: q1=%f q2=%f src=%f", a, queue[q].target[a], queue[n].target[a], sp0.axis[a]->settings.source);
+			warning("Motor position for axis %d is not known, so move cannot take place; aborting move and removing it from the queue: q1=%f q2=%f src=%f", a, queue[q].target[a], queue[n].target[a], sp0.axis[a]->settings.source);
 			// This possibly removes one move too many, but it shouldn't happen anyway.
 			queue_start = n;
 			queue_full = false;
@@ -260,7 +264,7 @@ void next_move(int32_t start_time) { // {{{
 		settings.v0h = 0;
 		settings.x0h = 0;
 	}
-	//debug("move ln %d, from=(%.2f,%.2f,%.2f) (current %.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.2f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
+	mdebug("move ln %d, from=(%.2f,%.2f,%.2f) (current %.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
 	if (spaces[0].num_axes >= 3) {
 		double check_x = 0, check_v = 0, check_a = 0;
 		for (int i = 0; i < 3; ++i) {
@@ -272,13 +276,16 @@ void next_move(int32_t start_time) { // {{{
 			check_a += da * da;
 		}
 		if (check_x > 1e-2) {
-			debug("Warning: final x %f,%f,%f != start x %f,%f,%f", final_x[0], final_x[1], final_x[2], spaces[0].axis[0]->settings.source + settings.unitg[0] * settings.x0g + settings.unith[0] * settings.x0h, spaces[0].axis[1]->settings.source + settings.unitg[1] * settings.x0g + settings.unith[1] * settings.x0h, spaces[0].axis[2]->settings.source + settings.unitg[2] * settings.x0g + settings.unith[2] * settings.x0h);
+			warning("Warning: final x %f,%f,%f != start x %f,%f,%f", final_x[0], final_x[1], final_x[2], spaces[0].axis[0]->settings.source + settings.unitg[0] * settings.x0g + settings.unith[0] * settings.x0h, spaces[0].axis[1]->settings.source + settings.unitg[1] * settings.x0g + settings.unith[1] * settings.x0h, spaces[0].axis[2]->settings.source + settings.unitg[2] * settings.x0g + settings.unith[2] * settings.x0h);
+			//abort();
 		}
 		if (check_v > 1e-2) {
-			debug("Warning: final v %f,%f,%f != start v %f,%f,%f", final_v[0], final_v[1], final_v[2], settings.v0g * settings.unitg[0] + settings.v0h * settings.unith[0], settings.v0g * settings.unitg[1] + settings.v0h * settings.unith[1], settings.v0g * settings.unitg[2] + settings.v0h * settings.unith[2]);
+			warning("Warning: final v %f,%f,%f != start v %f,%f,%f", final_v[0], final_v[1], final_v[2], settings.v0g * settings.unitg[0] + settings.v0h * settings.unith[0], settings.v0g * settings.unitg[1] + settings.v0h * settings.unith[1], settings.v0g * settings.unitg[2] + settings.v0h * settings.unith[2]);
+			//abort();
 		}
 		if (check_a > 1e2) {
-			debug("Warning: final a %f,%f,%f != start a %f,%f,%f", final_a[0], final_a[1], final_a[2], settings.a0g * settings.unitg[0] + settings.a0h * settings.unith[0], settings.a0g * settings.unitg[1] + settings.a0h * settings.unith[1], settings.a0g * settings.unitg[2] + settings.a0h * settings.unith[2]);
+			warning("Warning: final a %f,%f,%f != start a %f,%f,%f", final_a[0], final_a[1], final_a[2], settings.a0g * settings.unitg[0] + settings.a0h * settings.unith[0], settings.a0g * settings.unitg[1] + settings.a0h * settings.unith[1], settings.a0g * settings.unitg[2] + settings.a0h * settings.unith[2]);
+			//abort();
 		}
 	}
 	if (queue[q].tool >= 0 && queue[q].tool < spaces[1].num_axes && !std::isnan(queue[q].e)) {
@@ -299,6 +306,7 @@ void next_move(int32_t start_time) { // {{{
 	settings.pattern_size = queue[q].pattern_size;
 	for (int a = 0; a < min(6, spaces[0].num_axes); ++a)
 		spaces[0].axis[a]->settings.endpos = queue[q].target[a];
+	settings.current_restore = queue[q].current_restore;
 	store_settings();
 	if (settings.hwtime_step != last_hwtime_step)
 		arch_globals_change();
@@ -313,7 +321,7 @@ void next_move(int32_t start_time) { // {{{
 		double t3 = t2 * t;
 		final_x[i] = spaces[0].axis[i]->settings.source + settings.unitg[i] * (settings.x0g + settings.v0g * t + settings.a0g / 2 * t2 + settings.Jg / 6 * t3) + settings.unith[i] * (settings.x0h + settings.v0h * t + settings.a0h / 2 * t2 + settings.Jh / 6 * t3);
 		final_v[i] = settings.unitg[i] * (settings.v0g + settings.a0g * t + settings.Jg / 2 * t2) + settings.unith[i] * (settings.v0h + settings.a0h * t + settings.Jh / 2 * t2);
-		mdebug("final v[%d] = %f", i, final_v[i]);
+		mdebug("final x,v[%d] = %f,%f", i, final_x[i], final_v[i]);
 		final_a[i] = settings.unitg[i] * (settings.a0g + settings.Jg * t) + settings.unith[i] * (settings.a0h + settings.Jh * t);
 	}
 	//debug("computing for next move, stopping=%d", stopping);
@@ -325,7 +333,7 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	// distance is the distance to travel; dt is the time, factor is lowered if needed.
 	//debug("check distance %d %d dist %f t %f current %f time step %d", sp, mt, distance, dt, mtr->settings.current_pos, settings.hwtime_step);
 	if (dt == 0) {
-		debug("check distance for 0 time");
+		warning("check distance for 0 time");
 		factor = 0;
 		return;
 	}
@@ -345,14 +353,14 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	}
 	// Limit v.
 	if (v > limit_mtr->limit_v * (1 + 1e-5)) {
-		debug("line %d motor %d %d v %f limit %f dist %f dt %f current %f factor %f", settings.gcode_line, sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, factor);
+		warning("line %d motor %d %d v %f limit %f dist %f dt %f current %f factor %f", settings.gcode_line, sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, factor);
 		distance = (s * limit_mtr->limit_v) * dt;
 		v = std::fabs(distance / dt);
 	}
 	// Limit a+.
 	double limit_dv = limit_mtr->limit_a * dt;
 	if (v - mtr->last_v * s > limit_dv * (1 + 1e-5)) {
-		debug("line %d a+ %d %d target v %f limit dv %f last v %f s %d current %f factor %f", settings.gcode_line, sp, mt, target_v, limit_dv, mtr->last_v, s, mtr->settings.current_pos, factor);
+		warning("line %d a+ %d %d target v %f limit dv %f last v %f s %d current %f factor %f", settings.gcode_line, sp, mt, target_v, limit_dv, mtr->last_v, s, mtr->settings.current_pos, factor);
 		distance = (limit_dv * s + mtr->last_v) * dt;
 		v = std::fabs(distance / dt);
 	}
@@ -364,14 +372,14 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	else {
 		int max = 0x78;	// Don't use 0x7f, because limiting isn't accurate.
 		if (abs(steps) > max) {
-			debug("overflow %d from cp %f dist %f steps/mm %f dt %f s %d max %d", steps, mtr->settings.current_pos, distance, mtr->steps_per_unit, dt, s, max);
+			warning("overflow %d from cp %f dist %f steps/mm %f dt %f s %d max %d", steps, mtr->settings.current_pos, distance, mtr->steps_per_unit, dt, s, max);
 			steps = max * s;
 		}
 	}
 	if (abs(steps) < abs(targetsteps)) {
 		distance = arch_round_pos(sp, mt, mtr->settings.current_pos) + (steps + s * .5) / mtr->steps_per_unit - mtr->settings.current_pos;
 		v = std::fabs(distance / dt);
-		debug("new distance = %f, old = %f", distance, orig_distance);
+		warning("new distance = %f, old = %f", distance, orig_distance);
 	}
 	//debug("=============");
 	double f = distance / orig_distance;
@@ -454,7 +462,7 @@ static void do_steps(double old_factor) { // {{{
 				}
 				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
 				if (diff > 0x7f) {
-					debug("Error on line %d: %d %d trying to send more than 127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, diff, rounded_cp, rounded_new_cp, settings.hwtime);
+					warning("Error on line %d: %d %d trying to send more than 127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, diff, rounded_cp, rounded_new_cp, settings.hwtime);
 					//abort();
 					int adjust = diff - 0x7f;
 					if (settings.hwtime_step > settings.hwtime)
@@ -467,7 +475,7 @@ static void do_steps(double old_factor) { // {{{
 					mtr.target_pos = target;
 				}
 				if (diff < -0x7f) {
-					debug("Error on line %d: %d %d trying to send more than -127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, -diff, rounded_cp, rounded_new_cp, settings.hwtime);
+					warning("Error on line %d: %d %d trying to send more than -127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, -diff, rounded_cp, rounded_new_cp, settings.hwtime);
 					//abort();
 					int adjust = diff + 0x7f;
 					if (settings.hwtime_step > settings.hwtime)
@@ -547,8 +555,8 @@ static double set_targets(double factor) { // {{{
 				mdebug("setting axis %d %d source from nan to 0", s, a);
 			}
 			ax->target = ax->settings.source + factor * (ax->settings.endpos - ax->settings.source);
-			//if (s == 0)
-				mdebug("setting target for %d %d to %f (%f -> %f)", s, a, ax->target, ax->settings.source, ax->settings.endpos);
+			//if (s == 1)
+			//	debug("setting target for %d %d to %f (%f -> %f)", s, a, ax->target, ax->settings.source, ax->settings.endpos);
 		}
 		double f = move_axes(&sp);
 		if (max_f > f)
@@ -642,6 +650,8 @@ static void apply_tick() { // {{{
 		}
 		// start new move; adjust time.
 		next_move(settings.end_time);
+		if (stopping)
+			break;
 		if (!computing_move) {
 			// There is no next move.
 			continue_event = true;
@@ -662,7 +672,7 @@ static void apply_tick() { // {{{
 
 void store_settings() { // {{{
 	if (current_fragment_pos != 0) {
-		debug("store settings called with non-empty send buffer");
+		warning("store settings called with non-empty send buffer");
 		abort();
 	}
 	num_active_motors = 0;
@@ -683,7 +693,7 @@ void store_settings() { // {{{
 	history[current_fragment].hwtime = settings.hwtime;
 	history[current_fragment].hwtime_step = settings.hwtime_step;
 	history[current_fragment].end_time = settings.end_time;
-	history[current_fragment].run_file_current = settings.run_file_current;
+	history[current_fragment].current_restore = settings.current_restore;
 	history[current_fragment].run_time = settings.run_time;
 	history[current_fragment].pattern_size = settings.pattern_size;
 	for (int i = 0; i < PATTERN_MAX; ++i)
@@ -726,7 +736,7 @@ void restore_settings() { // {{{
 	settings.hwtime = history[current_fragment].hwtime;
 	settings.hwtime_step = history[current_fragment].hwtime_step;
 	settings.end_time = history[current_fragment].end_time;
-	settings.run_file_current = history[current_fragment].run_file_current;
+	settings.current_restore = history[current_fragment].current_restore;
 	settings.run_time = history[current_fragment].run_time;
 	settings.pattern_size = history[current_fragment].pattern_size;
 	for (int i = 0; i < PATTERN_MAX; ++i)
@@ -819,9 +829,10 @@ void abort_move(int pos) { // {{{
 	current_fragment_pos = 0;
 	computing_move = true;
 	while (computing_move && current_fragment_pos < unsigned(pos)) {
-		//debug("abort reconstruct %d %d", current_fragment_pos, pos);
+		mdebug("abort reconstruct %d %d", current_fragment_pos, pos);
 		apply_tick();
 	}
+	mdebug("done reconstructing");
 	if (spaces[0].num_axes > 0)
 		cpdebug(0, 0, "ending hwpos %f", arch_round_pos(0, 0, spaces[0].motor[0]->settings.current_pos) + avr_pos_offset[0]);
 	// Flush queue.
@@ -832,7 +843,6 @@ void abort_move(int pos) { // {{{
 	current_fragment_pos = 0;
 	store_settings();
 	computing_move = false;
-	current_fragment_pos = 0;
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
 		for (int a = 0; a < sp.num_axes; ++a) {
@@ -841,7 +851,7 @@ void abort_move(int pos) { // {{{
 				sp.axis[a]->settings.source = sp.axis[a]->current;
 		}
 	}
-	mdebug("aborted move");
+	mdebug("aborted move, current fragment pos is %d", current_fragment_pos);
 	aborting = false;
 } // }}}
 
@@ -914,8 +924,8 @@ static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double po
 		double agt = Jg * tf + a0;
 		double aht = Jh * tf;
 		debug("dxh/dxg(tf)=%f/%f=%f=1/%f", xht, xgt, xht / xgt, xgt / xht);
-		debug("dvh/dvg(tf)=%f/%f=%f=1/%f", vht, vgt, vht / vgt, vgt / vht);
-		debug("dah/dag(tf)=%f/%f=%f=1/%f", aht, agt, aht / agt, agt / aht);
+		debug("vh/vg(tf)=%f/%f=%f=1/%f", vht, vgt, vht / vgt, vgt / vht);
+		debug("ah/ag(tf)=%f/%f=%f=1/%f", aht, agt, aht / agt, agt / aht);
 		debug("Jh/Jg=%f/%f=%f=1/%f", Jh, Jg, Jh / Jg, Jg / Jh);
 	}
 #endif
@@ -937,7 +947,7 @@ static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double po
 	return q + 1;
 } // }}}
 
-static int queue_speed_change(int q, int tool, double x[3], double v[3], double old_v, double new_v) { // {{{
+static int queue_speed_change(int q, int tool, double x[3], double unitv[3], double old_v, double new_v) { // {{{
 	mdebug("speed change from %f to %f", old_v, new_v);
 	int s = new_v < old_v ? -1 : 1;
 	double dv = std::fabs(new_v - old_v);
@@ -949,20 +959,20 @@ static int queue_speed_change(int q, int tool, double x[3], double v[3], double 
 		double t_ramp = max_a / max_J;
 		double t_ramp2 = t_ramp * t_ramp;
 		double t_ramp3 = t_ramp2 * t_ramp;
-		double dv_a = dv - s * max_J * t_ramp * t_ramp;
-		double t_max_a = std::fabs(dv_a) / max_a;
-		double dv_ramp = max_J / 2 * t_ramp2;
+		double dv_a = dv - max_J * t_ramp * t_ramp;
+		double t_max_a = dv_a / max_a;
+		double dv_ramp = max_ramp_dv;
 		double target[3];
 		for (int i = 0; i < 3; ++i)
-			target[i] = x[i] + v[i] * (max_J / 6 * t_ramp3 + old_v * t_ramp);
+			target[i] = x[i] + unitv[i] * (old_v * t_ramp + max_J * s / 6 * t_ramp3);
 		q = add_to_queue(q, -1, 0, tool, x, t_ramp, old_v, 0, NAN, target, max_J * s);
-		double extra = (old_v + dv_ramp) * t_max_a + max_a / 2 * t_max_a * t_max_a;
+		double extra = (old_v + dv_ramp * s) * t_max_a + max_a * s / 2 * t_max_a * t_max_a;
 		for (int i = 0; i < 3; ++i)
-			target[i] += v[i] * extra;
-		q = add_to_queue(q, -1, 0, tool, x, t_max_a, old_v + max_ramp_dv * s, max_a, NAN, target, 0);
-		extra = (old_v + dv_ramp + max_a * t_max_a) * t_ramp + (max_a / 2) * t_max_a * t_max_a - max_J / 6 * t_ramp3;
+			target[i] += unitv[i] * extra;
+		q = add_to_queue(q, -1, 0, tool, x, t_max_a, old_v + dv_ramp * s, max_a * s, NAN, target, 0);
+		extra = new_v * t_ramp - max_J * s / 6 * t_ramp3;
 		for (int i = 0; i < 3; ++i)
-			target[i] += v[i] * extra;
+			target[i] += unitv[i] * extra;
 		q = add_to_queue(q, -1, 0, tool, x, t_ramp, new_v, 0, NAN, target, -max_J * s, NULL, 0, true);
 	}
 	else {
@@ -973,8 +983,8 @@ static int queue_speed_change(int q, int tool, double x[3], double v[3], double 
 		// Compute both targets before adding anything to queue, so the reference is the same.
 		double target[2][3];
 		for (int i = 0; i < 3; ++i) {
-			target[0][i] = x[i] + v[i] * (s * max_J / 6 * t_ramp3 + old_v * t_ramp);
-			target[1][i] = x[i] + v[i] * (s * max_J * t_ramp3 + 2 * old_v * t_ramp);
+			target[0][i] = x[i] + unitv[i] * (s * max_J / 6 * t_ramp3 + old_v * t_ramp);
+			target[1][i] = x[i] + unitv[i] * (s * max_J * t_ramp3 + 2 * old_v * t_ramp);
 		}
 		//debug("ramps old v %f new v %f t_ramp %f s %d max J %f", old_v, new_v, t_ramp, s, max_J);
 		q = add_to_queue(q, -1, 0, tool, x, t_ramp, old_v, 0, NAN, target[0], max_J * s);
@@ -983,7 +993,7 @@ static int queue_speed_change(int q, int tool, double x[3], double v[3], double 
 	return q;
 } // }}}
 
-void compute_current_pos(double x[3], double v[3], double a[3]) { // {{{
+bool compute_current_pos(double x[3], double v[3], double a[3], bool store) { // {{{
 	// discard buffer
 	arch_discard();
 	for (int i = 0; i < 3; ++i) {
@@ -991,6 +1001,25 @@ void compute_current_pos(double x[3], double v[3], double a[3]) { // {{{
 			spaces[0].motor[i]->last_v = NAN;
 	}
 	settings.hwtime_step = default_hwtime_step;
+	if (store) {
+		for (int s = 0; s < NUM_SPACES; ++s) {
+			for (int a = 0; a < spaces[s].num_axes; ++a) {
+				mdebug("storing %d,%d: %f, %f", s, a, spaces[s].axis[a]->settings.source, spaces[s].axis[a]->settings.endpos);
+				spaces[s].axis[a]->resume_start = spaces[s].axis[a]->settings.source;
+				spaces[s].axis[a]->resume_end = spaces[s].axis[a]->settings.endpos;
+			}
+		}
+	}
+	if (!computing_move) {
+		// Not running, simply fill parameters with current static position.
+		for (int i = 0; i < 3; ++i) {
+			if (i < spaces[0].num_axes)
+				x[i] = spaces[0].axis[i]->current;
+			v[i] = 0;
+			a[i] = 0;
+		}
+		return true;
+	}
 	mdebug("flush queue for discard at compute current");
 	queue_start = 0;
 	queue_end = 0;
@@ -1005,6 +1034,16 @@ void compute_current_pos(double x[3], double v[3], double a[3]) { // {{{
 	double xg = settings.x0g + settings.v0g * t + settings.a0g / 2 * t2 + settings.Jg / 6 * t3;
 	double xh = settings.x0h + settings.v0h * t + settings.a0h / 2 * t2 + settings.Jh / 6 * t3;
 	mdebug("agh=%.2f,%.2f vgh=%.2f,%.2f xgh=%.2f,%.2f g %.2f,%.2f,%.2f Jg %f src=%.2f,%.2f,%.2f", ag, ah, vg, vh, xg, xh, settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.Jg, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source);
+	double factor = t / (settings.end_time / 1e6);
+	for (int s = 0; s < NUM_SPACES; ++s) {
+		for (int i = (s == 0 ? 3 : 0); i < spaces[s].num_axes; ++i) {
+			double src = spaces[s].axis[i]->settings.source;
+			double dst = spaces[s].axis[i]->settings.endpos;
+			spaces[s].axis[i]->current = src + factor * (dst - src);
+			spaces[s].axis[i]->settings.source = spaces[s].axis[i]->current;
+			spaces[s].axis[i]->settings.endpos = spaces[s].axis[i]->current;
+		}
+	}
 	for (int i = 0; i < 3; ++i) {
 		x[i] = (i < spaces[0].num_axes ? spaces[0].axis[i]->settings.source : 0) + xg * settings.unitg[i] + xh * settings.unith[i];
 		v[i] = vg * settings.unitg[i] + vh * settings.unith[i];
@@ -1019,13 +1058,8 @@ void compute_current_pos(double x[3], double v[3], double a[3]) { // {{{
 		if (i < spaces[0].num_axes)
 			spaces[0].axis[i]->current = x[i];
 	}
-	for (int s = 0; s < NUM_SPACES; ++s) {
-		for (int a = 0; a < spaces[s].num_axes; ++a) {
-			spaces[s].axis[a]->resume_start = spaces[s].axis[a]->settings.source;
-			spaces[s].axis[a]->resume_end = spaces[s].axis[a]->settings.endpos;
-		}
-	}
 	mdebug("current pos computed (t=%f): %f,%f,%f v %f,%f,%f a %f,%f,%f", t, x[0], x[1], x[2], v[0], v[1], v[2], a[0], a[1], a[2]);
+	return false;
 } // }}}
 
 int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], bool resuming) { // {{{
@@ -1034,7 +1068,7 @@ int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], boo
 	double lena = std::sqrt(inner(a, a));
 	double lenv = std::sqrt(inner(v, v));
 	mdebug("retargeting%s, x=(%.2f,%.2f,%.2f) v=(%.2f,%.2f,%.2f), a=(%.2f,%.2f,%.2f)", resuming ? " (for resume)" : "", x[0], x[1], x[2], v[0], v[1], v[2], a[0], a[1], a[2]);
-	// add segment to bring a to zero {{{
+	// add segment to bring a to zero
 	mdebug("pull a from %f to zero", lena);
 	// J -> -a, t = a/J, g -> v, h -> g x (g x a)
 	double target_x[3], target_v[3];
@@ -1119,7 +1153,7 @@ int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], boo
 			v[i] = target_v[i];
 		}
 		//debug("Try from here, x=(%f,%f,%f) v=(%f,%f,%f)", x[0], x[1], x[2], v[0], v[1], v[2]);
-	} // }}}
+	}
 	return q;
 } // }}}
 
@@ -1155,7 +1189,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	if (computing_move) {
 		// Reset target of current move to given values.
 		double v[3], a[3];
-		compute_current_pos(x, v, a);
+		compute_current_pos(x, v, a, false);
 		q = prepare_retarget(q, move->tool, x, v, a);
 		double lenv = std::sqrt(inner(v, v));
 		mul(v, v, 1 / lenv);
@@ -1245,7 +1279,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 				// constant v
 				double dist = lenPF - s_stop - s_speedup - s_slowdown;
 				if (dist < 0) {
-					debug("Warning: dist < 0 for retarget?! dist=%f, lenPF=%f, s_stop=%f, s_speedup=%f, s_slowdown=%f, v0=%f, v=%f", dist, lenPF, s_stop, s_speedup, s_slowdown, lenv, v_top);
+					warning("Warning: dist < 0 for retarget?! dist=%f, lenPF=%f, s_stop=%f, s_speedup=%f, s_slowdown=%f, v0=%f, v=%f", dist, lenPF, s_stop, s_speedup, s_slowdown, lenv, v_top);
 				}
 				for (int i = 0; i < 3; ++i)
 					target[i] = x[i] + v[i] * dist;
@@ -1376,7 +1410,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	double t_ramp = std::sqrt(2 * dv_ramp / max_J);
 	double s_ramp_up = max_J / 6 * t_ramp * t_ramp * t_ramp;
 	double s_ramp_down = -max_J / 6 * t_ramp * t_ramp * t_ramp + vmax * t_ramp;
-	double s_const_a = amax / 2 * t_max_a * t_max_a;
+	double s_const_a = amax / 2 * t_max_a * t_max_a + dv_ramp * t_max_a;
 	double s_const_v = dist - 2 * (s_ramp_up + s_ramp_down + s_const_a);
 	double t_const_v = s_const_v / vmax;
 
@@ -1425,4 +1459,12 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 
 	next_move(settings.hwtime);
 	return 0;
+} // }}}
+
+void discard_finals() { // {{{
+	for (int i = 0; i < 3; ++i) {
+		final_x[i] = NAN;
+		final_v[i] = NAN;
+		final_a[i] = NAN;
+	}
 } // }}}

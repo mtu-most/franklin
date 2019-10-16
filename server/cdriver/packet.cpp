@@ -24,7 +24,8 @@ static void get_cb(bool value) {
 	delayed_reply();
 }
 
-#define CASE(x) case x: //debug("request " # x);
+#define CASE(x) case x: //debug("request " # x " current fragment pos = %d", current_fragment_pos);
+#define CASE2(x) case x: //debug("request " # x);
 
 void request(int req) {
 	switch (req) {
@@ -113,7 +114,7 @@ void request(int req) {
 		initialized = true;
 		waittemp(shmem->ints[0], shmem->floats[0], shmem->floats[1]);
 		break;
-	CASE(CMD_TEMP_VALUE)
+	CASE2(CMD_TEMP_VALUE)
 		if (shmem->ints[0] < 0 || shmem->ints[0] >= num_temps)
 		{
 			debug("Reading invalid temp %d", shmem->ints[0]);
@@ -164,9 +165,9 @@ void request(int req) {
 			//abort();
 			break;
 		}
-		setpos(shmem->ints[0], shmem->ints[1], shmem->floats[0]);
+		setpos(shmem->ints[0], shmem->ints[1], shmem->floats[0], true);
 		break;
-	CASE(CMD_GETPOS)
+	CASE2(CMD_GETPOS)
 		if (shmem->ints[0] >= NUM_SPACES || shmem->ints[1] >= spaces[shmem->ints[0]].num_axes) {
 			debug("Getting position of invalid axis %d %d", shmem->ints[0], shmem->ints[1]);
 			abort();
@@ -301,18 +302,25 @@ void request(int req) {
 	{
 		if (!motors_busy)
 			break;
+		bool store = !pausing && run_file_wait == 0;
 		pausing = true;
 		if (run_file_map)
 			run_file_wait += 1;
 		// Store resume info.
 		double x[3], v[3], a[3];
-		compute_current_pos(x, v, a);
-		for (int i = 0; i < 3; ++i) {
-			resume.x[i] = x[i];
-			resume.v[i] = v[i];
-			resume.a[i] = a[i];
+		bool done = compute_current_pos(x, v, a, store);
+		if (store) {
+			for (int i = 0; i < 3; ++i) {
+				resume.x[i] = x[i];
+				resume.v[i] = v[i];
+				resume.a[i] = a[i];
+			}
+			//debug("storing resume settings in fragment %d, times: %d, %d", current_fragment, settings.hwtime, settings.end_time);
+			memcpy(&resume.settings, &settings, sizeof(History));
 		}
-		memcpy(&resume.settings, &settings, sizeof(History));
+		if (done) {
+			break;
+		}
 		// Bring a to 0.
 		int q = prepare_retarget(0, -1, x, v, a);
 		smooth_stop(q, x, v);
@@ -331,7 +339,7 @@ void request(int req) {
 	CASE(CMD_UNPAUSE)
 		pausing = false;
 		break;
-	CASE(CMD_GET_TIME)
+	CASE2(CMD_GET_TIME)
 		shmem->floats[0] = history[running_fragment].run_time / feedrate + settings.hwtime / 1e6;
 		break;
 	CASE(CMD_SPI)
@@ -340,17 +348,16 @@ void request(int req) {
 	CASE(CMD_ADJUST_PROBE)
 		run_adjust_probe(shmem->floats[0], shmem->floats[1], shmem->floats[2]);
 		break;
-	CASE(CMD_TP_GETPOS)
-		// TODO: Send actual current position, not next queued.  Include fraction.
-		shmem->floats[0] = settings.run_file_current;
+	CASE2(CMD_TP_GETPOS)
+		shmem->floats[0] = history[running_fragment].current_restore + (history[running_fragment].hwtime / 1e6) / (history[running_fragment].end_time / 1e6);
 		break;
 	CASE(CMD_TP_SETPOS)
 	{
 		int ipos = int(shmem->floats[0]);
 		arch_discard();
-		settings.run_file_current = ipos;
+		run_file_current = ipos;
 		// Hack to force TP_GETPOS to return the same value; this is only called when paused, so it does no harm.
-		history[running_fragment].run_file_current = ipos;
+		history[running_fragment].current_restore = ipos;
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
 			for (int a = 0; a < sp.num_axes; ++a)
@@ -434,7 +441,7 @@ void waittemp(int which, double mintemp, double maxtemp) {
 	temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm, MAXINT);
 }
 
-void setpos(int which, int t, double f) {
+void setpos(int which, int t, double f, bool reset) {
 	if (!motors_busy) {
 		//debug("Error: Setting position while motors are not busy!");
 		for (int s = 0; s < NUM_SPACES; ++s) {
@@ -443,10 +450,6 @@ void setpos(int which, int t, double f) {
 		}
 		motors_busy = true;
 	}
-	for (int a = 0; a < spaces[which].num_axes; ++a) {
-		spaces[which].axis[a]->settings.source = NAN;
-		spaces[which].axis[a]->current = NAN;
-	}
 	//debug("setting pos for %d %d to %f", which, t, f);
 	double old = spaces[which].motor[t]->settings.current_pos;
 	if (std::isnan(old))
@@ -454,10 +457,12 @@ void setpos(int which, int t, double f) {
 	spaces[which].motor[t]->settings.current_pos = f;
 	arch_addpos(which, t, f - old);
 	//arch_stop();
-	reset_pos(&spaces[which]);
-	for (int a = 0; a < spaces[which].num_axes; ++a) {
-		spaces[which].axis[a]->settings.source = spaces[which].axis[a]->current;
-		spaces[which].axis[a]->settings.endpos = spaces[which].axis[a]->current;
+	if (reset) {
+		reset_pos(&spaces[which]);
+		for (int a = 0; a < spaces[which].num_axes; ++a) {
+			spaces[which].axis[a]->settings.source = spaces[which].axis[a]->current;
+			spaces[which].axis[a]->settings.endpos = spaces[which].axis[a]->current;
+		}
 	}
 	cpdebug(which, t, "setpos new %f old %f diff %f", f, old, f - old);
 	// */

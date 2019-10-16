@@ -486,7 +486,7 @@ class Machine: # {{{
 				self.probe_pending = True
 			call_queue.append((self.user_request_confirmation(cmd['message'] or 'Continue?')[1], (False,)))
 		elif cmd['type'] == 'park':
-			call_queue.append((self.user_park(cb = cdriver.resume, abort = False)[1], (None,)))
+			call_queue.append((self.user_park(cb = cdriver.resume)[1], (None,)))
 		elif cmd['type'] == 'file-done':
 			call_queue.append((self._job_done, (True, 'completed')))
 		elif cmd['type'] == 'pinname':
@@ -1028,7 +1028,7 @@ class Machine: # {{{
 			return
 		self.probing = True
 		if not self.position_valid:
-			self.user_home(cb = lambda: self._do_probe(id, x, y, z, phase, True), abort = False)[1](None)
+			self.user_home(cb = lambda: self._do_probe(id, x, y, z, phase, True))[1](None)
 			return
 		p = self.probemap
 		if phase == 0:
@@ -1772,7 +1772,7 @@ class Machine: # {{{
 		return cdriver.queued(False)
 	# }}}
 	@delayed
-	def user_home(self, id, speed = 5, cb = None, abort = True): # {{{
+	def user_home(self, id, speed = 5, cb = None): # {{{
 		'''Recalibrate the position with its limit switches.
 		'''
 		if not self.connected:
@@ -1784,9 +1784,6 @@ class Machine: # {{{
 			if id is not None:
 				self._send(id, 'return', None)
 			return
-		# Abort only if it is requested.
-		if abort:
-			self._job_done(False, 'aborted by homing')
 		self.home_phase = 0
 		self.home_id = id
 		self.home_return = None
@@ -1795,7 +1792,7 @@ class Machine: # {{{
 		self._do_home()
 	# }}}
 	@delayed
-	def user_park(self, id, cb = None, abort = True, order = 0, aborted = False): # {{{
+	def user_park(self, id, cb = None, order = 0, aborted = False): # {{{
 		'''Go to the park position.
 		Home first if the position is unknown.
 		'''
@@ -1804,12 +1801,10 @@ class Machine: # {{{
 				self._send(id, 'error', 'aborted')
 			return
 		#log('parking with cb %s' % repr(cb))
-		if abort:
-			self._job_done(False, 'aborted by parking')
 		self.parking = True
 		if not self.position_valid:
 			#log('homing')
-			self.user_home(cb = lambda: self.user_park(cb, abort = False)[1](id), abort = False)[1](None)
+			self.user_home(cb = lambda: self.user_park(cb)[1](id))[1](None)
 			return
 		next_order = None
 		topark = [a['park_order'] for a in self.spaces[0].axis if not math.isnan(a['park']) and a['park_order'] >= order]
@@ -1830,7 +1825,7 @@ class Machine: # {{{
 					self._send(id, 'return', None)
 			return
 		#log('not done parking: ' + repr((next_order)))
-		self.movecb.append(lambda done: self.user_park(cb, abort = False, order = next_order + 1, aborted = not done)[1](id))
+		self.movecb.append(lambda done: self.user_park(cb, order = next_order + 1, aborted = not done)[1](id))
 		self.user_line([a['park'] - (0 if ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(self.spaces[0].axis)])[1](None)
 	# }}}
 	@delayed
@@ -2246,7 +2241,7 @@ class Machine: # {{{
 				#log('start job %s' % self.job_current)
 				self._gcode_run(self.job_current, abort = False, paused = paused)
 			if not self.position_valid:
-				self.user_park(cb = cb, abort = False)[1](None)
+				self.user_park(cb = cb)[1](None)
 			else:
 				cb()
 		elif id is not None:
