@@ -580,7 +580,7 @@ static void apply_tick() { // {{{
 		return;
 	}
 	// This loop is normally only run once, but when a move is complete it is rerun for the next move.
-	while (!stopping && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2)) {
+	while (!stopping && !discarding && !discard_pending && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2)) {
 		settings.hwtime += settings.hwtime_step;
 		//debug("tick time %d step %d frag %d pos %d", settings.hwtime, settings.hwtime_step, current_fragment, current_fragment_pos);
 		double t = settings.hwtime / 1e6;
@@ -650,7 +650,7 @@ static void apply_tick() { // {{{
 		}
 		// start new move; adjust time.
 		next_move(settings.end_time);
-		if (stopping)
+		if (stopping || discarding || discard_pending)
 			break;
 		if (!computing_move) {
 			// There is no next move.
@@ -777,7 +777,7 @@ void buffer_refill() { // {{{
 	}*/
 	mdebug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
-	while (computing_move && !aborting && !stopping && discarding == 0 && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
+	while (computing_move && !aborting && !stopping && discarding == 0 && !discard_pending && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
 		mdebug("refill %d %d %f", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings.current_pos);
 		// fill fragment until full.
 		apply_tick();
@@ -787,7 +787,7 @@ void buffer_refill() { // {{{
 			send_fragment();
 		}
 	}
-	if (aborting || stopping || discarding != 0) {
+	if (aborting || stopping || discarding != 0 || discard_pending) {
 		mdebug("aborting refill for stopping");
 		refilling = false;
 		return;

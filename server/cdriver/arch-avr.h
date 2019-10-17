@@ -1414,6 +1414,9 @@ void arch_discard() { // {{{
 		return;
 	//debug("discard start current = %d, sending = %d", current_fragment, sending_fragment);
 	discard_pending = true;
+	queue_start = 0;
+	queue_end = 0;
+	queue_full = false;
 	discard_finals();
 	int fragments = (current_fragment + (transmitting_fragment ? 1 : 0) - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	if (fragments <= 3)

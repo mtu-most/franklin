@@ -88,6 +88,24 @@ static void resend(int amount) { // {{{
 	}
 } // }}}
 
+static void try_pending() {
+	if (out_busy < 3 && change_pending)
+		arch_motors_change();
+	if (out_busy < 3 && start_pending) {
+		arch_start_move(0);
+	}
+	if (out_busy < 3 && stop_pending) {
+		//debug("do pending stop");
+		arch_stop();
+	}
+	if (out_busy < 3 && discard_pending)
+		arch_do_discard();
+	if (!sending_fragment && !stopping && arch_running()) {
+		run_file_fill_queue();
+		buffer_refill();
+	}
+}
+
 // There may be serial data available.
 bool serial(bool allow_pending) { // {{{
 	while (true) { // Loop until all data is handled.
@@ -112,11 +130,16 @@ bool serial(bool allow_pending) { // {{{
 			}
 		}
 		had_data = false;
-		if (!serialdev->available())
+		if (!serialdev->available()) {
+			if (allow_pending)
+				try_pending();
 			return false;
+		}
 		while (command_end == 0) { // First byte. {{{
 			if (!serialdev->available()) {
 				//debug("serial done");
+				if (allow_pending)
+					try_pending();
 				return true;
 			}
 			command[0] = serialdev->read();
@@ -179,7 +202,7 @@ bool serial(bool allow_pending) { // {{{
 				which += 1;
 				// Fall through.
 			case CMD_ACK0:
-				//debug("ack%d ff %d busy %d", which, ff_out, out_busy);
+				//debug("ack%d ff %d busy %d alllow pending %d discard pending %d", which, ff_out, out_busy, allow_pending, discard_pending);
 				which &= 3;
 				// Ack: flip the flipflop.
 				if (out_busy > 0 && ((ff_out - out_busy) & 3) == which) { // Only if we expected it and it is the right type.
@@ -192,21 +215,7 @@ bool serial(bool allow_pending) { // {{{
 						cb();
 				}
 				if (allow_pending) {
-					if (out_busy < 3 && change_pending)
-						arch_motors_change();
-					if (out_busy < 3 && start_pending) {
-						arch_start_move(0);
-					}
-					if (out_busy < 3 && stop_pending) {
-						//debug("do pending stop");
-						arch_stop();
-					}
-					if (out_busy < 3 && discard_pending)
-						arch_do_discard();
-					if (!sending_fragment && !stopping && arch_running()) {
-						run_file_fill_queue();
-						buffer_refill();
-					}
+					try_pending();
 				}
 				if (!preparing)
 					arch_had_ack();
@@ -490,7 +499,7 @@ void send_packet() { // {{{
 	int which = (ff_out - 1) & 3;
 #ifdef DEBUG_DATA
 	char const *sendname[0x20] = {"begin", "ping", "set-uuid", "setup", "control", "msetup", "asetup", "home", "start-move", "start-probe", "move", "move-single", "pattern", "start", "stop", "abort", "discard", "getpin", "spi", "pinname", "14", "15", "16", "17", "18", "19", "1a", "1b", "1c", "1d", "1e", "1f"};
-	fprintf(stderr, "send (%d): %s ", out_busy, sendname[pending_packet[which][0] & 0x1f]);
+	fprintf(stderr, "send (%d): %s ", which, sendname[pending_packet[which][0] & 0x1f]);
 	for (uint8_t i = 0; i < pending_len[which]; ++i) {
 		if (i == pending_len[which] - (pending_len[which] + 3) / 4)
 			fprintf(stderr, "\t\t/");
