@@ -908,6 +908,8 @@ static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double po
 		queue[q].abc[i] = 0;
 	}
 	leng = std::sqrt(leng);
+	if (leng < 1e-5)
+		return q;
 	lenh = std::sqrt(lenh);
 	mdebug("adding to queue: %.2f,%.2f,%.4f -> %.2f,%.2f,%.4f time %.2f v0 %.2f a0 %.2f Jg %.2f g %.2f,%.2f,%.2f h %.2f,%.2f,%.2f Jh %.2f reverse %d", pos[0], pos[1], pos[2], target[0], target[1], target[2], tf, v0, a0, Jg, g[0], g[1], g[2], h ? h[0] : 0, h ? h[1] : 0, h ? h[2] : 0, Jh, reverse);
 #if 0
