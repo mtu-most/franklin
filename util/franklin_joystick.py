@@ -185,8 +185,12 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 				return False
 		move[0] += move[3]
 		move[1] += move[4]
-		if any(move[:3]):
-			printer.line(move[:3], relative = True)
+		v = sum(x ** 2 for x in move[:3]) ** .5
+		unit = [x / v if v > 0 else 0 for x in move[:3]]
+		t = cfg['tick_time']
+		v *= 20
+		s = v * t * 2
+		printer.line.event([x * s for x in unit], v = v, relative = True)
 		if any(move[3:]):
 			printer.move_target.event(*move[3:])
 		return True
