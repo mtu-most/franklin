@@ -188,7 +188,7 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		v = sum(x ** 2 for x in move[:3]) ** .5
 		unit = [x / v if v > 0 else 0 for x in move[:3]]
 		t = cfg['tick_time']
-		v *= 20
+		v *= printer.get_globals()['max_v'] / 3
 		s = v * t * 2
 		printer.line.event([x * s for x in unit], v = v, relative = True)
 		if any(move[3:]):
