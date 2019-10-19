@@ -190,7 +190,10 @@ def main(config = {}, buttons = {}, axes = {}, tick = None):
 		t = cfg['tick_time']
 		v *= printer.get_globals()['max_v'] / 3
 		s = v * t * 2
-		printer.line.event([x * s for x in unit], v = v, relative = True)
+		target = [x * s for x in unit]
+		if v > 0:
+			#print('move to', target, ', v', v)
+			printer.line.event(target, v = v, relative = True)
 		if any(move[3:]):
 			printer.move_target.event(*move[3:])
 		return True

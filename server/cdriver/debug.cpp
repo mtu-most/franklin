@@ -137,3 +137,25 @@ void buffered_debug(char const *fmt, ...) {
 	add_char(';');
 }
 #endif
+
+void debug_add(int a, int b, int c, int d) {
+	debug_list[debug_list_next][0] = a;
+	debug_list[debug_list_next][1] = b;
+	debug_list[debug_list_next][2] = c;
+	debug_list[debug_list_next][3] = d;
+	debug_list_next = (debug_list_next + 1) % DEBUG_LIST_SIZE;
+}
+
+void debug_dump() {
+	fprintf(stderr, "Debug dump:\n");
+	for (int i = 0; i < DEBUG_LIST_SIZE; ++i) {
+		int n = (debug_list_next + i) % DEBUG_LIST_SIZE;
+		fprintf(stderr, "\t%02d", n);
+		for (int m = 0; m < 4; ++m) {
+			if (m > 0 && debug_list[n][m] == int(0xfbfbfbfb))
+				continue;
+			fprintf(stderr, "\t%08x", debug_list[n][m]);
+		}
+		fprintf(stderr, "\n");
+	}
+}

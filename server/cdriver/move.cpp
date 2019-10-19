@@ -230,8 +230,11 @@ void next_move(int32_t start_time) { // {{{
 	settings.Jh = 0;
 	double leng = 0;
 	for (int i = 0; i < 3; ++i) {
-		if (i >= sp0.num_axes)
+		if (i >= sp0.num_axes) {
+			settings.unitg[i] = 0;
+			settings.unith[i] = 0;
 			continue;
+		}
 		settings.unitg[i] = queue[q].target[i] - spaces[0].axis[i]->settings.source;
 		settings.unith[i] = queue[q].unith[i];
 		leng += settings.unitg[i] * settings.unitg[i];
@@ -265,6 +268,8 @@ void next_move(int32_t start_time) { // {{{
 		settings.x0h = 0;
 	}
 	mdebug("move ln %d, from=(%.2f,%.2f,%.2f) (current %.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
+	mdebug("move ln %d, from=(%.2f,%.2f) (current %.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
+	//debug("move (%.2f,%.2f) -> (%.2f,%.2f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, queue[q].target[0], queue[q].target[1]);
 	if (spaces[0].num_axes >= 3) {
 		double check_x = 0, check_v = 0, check_a = 0;
 		for (int i = 0; i < 3; ++i) {
@@ -1179,7 +1184,7 @@ void do_resume() { // {{{
 } // }}}
 
 int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { // {{{
-	mdebug("goto (%.2f,%.2f,%.2f) at speed %.2f, e %.2f", move->target[0], move->target[1], move->target[2], move->v0, move->e);
+	mdebug("goto (%.2f,%.2f,%.2f) %s at speed %.2f, e %.2f", move->target[0], move->target[1], move->target[2], relative ? "rel" : "abs", move->v0, move->e);
 	mdebug("new queue for goto");
 	queue_start = 0;
 	int q = 0;
@@ -1221,7 +1226,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 						unitPF[i] = 0;
 				}
 				else
-					unitPF[i] = move->target[i] - P[i];
+					unitPF[i] = move->target[i] + (relative ? x[i] : 0) - P[i];
 				lenPF += unitPF[i] * unitPF[i];
 				if (i < spaces[0].num_axes)
 					spaces[0].axis[i]->last_target = move->target[i];
@@ -1298,7 +1303,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		//debug("retarget fall through to regular goto");
 	}
 	// This is a manual move or the start of a job; set hwtime step to default.
-	mdebug("goto (%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) at speed %.2f, e %.2f->%.2f", x[0], x[1], x[2], move->target[0], move->target[1], move->target[2], move->v0, spaces[1].axis[move->tool]->current, move->e);
+	mdebug("goto (%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) at speed %.2f, e %.2f->%.2f", x[0], x[1], x[2], move->target[0], move->target[1], move->target[2], move->v0, move->tool >= 0 && move->tool < spaces[1].num_axes ? spaces[1].axis[move->tool]->current : 0, move->e);
 	settings.hwtime_step = default_hwtime_step;
 	double vmax = NAN;
 	double amax = NAN;
@@ -1330,9 +1335,10 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		amax = max_a;
 		for (int i = 0; i < 3; ++i)
 			unit[i] /= dist;
-		//debug("dist = %f", dist);
+		mdebug("dist = %f", dist);
 	}
 	else {
+		mdebug("no dist");
 		for (int i = 0; i < 3; ++i)
 			unit[i] = 0;
 		for (int a = 3; a < 6; ++a) {
@@ -1393,7 +1399,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	}
 
 	double reachable_v = compute_max_v(dist / 2, 0, max_J, amax);
-	//debug("building queue for goto with vmax = %f, reachable = %f, dist=%f", vmax, reachable_v, dist);
+	mdebug("building queue for goto with vmax = %f, reachable = %f, dist=%f", vmax, reachable_v, dist);
 	vmax = min(vmax, reachable_v);
 	vmax = min(vmax, move->v0);
 	double max_ramp_dv = amax * amax / (2 * max_J);
