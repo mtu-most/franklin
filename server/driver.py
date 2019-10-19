@@ -1530,13 +1530,13 @@ class Machine: # {{{
 			try:
 				shutil.rmtree(dirname, ignore_errors = False)
 			except:
-				log('Could not remove %d' % dirname)
+				log('Could not remove %s' % dirname)
 		# Clean up profiles.
 		for dirname in fhs.read_data(self.uuid, dir = True, multiple = True, opened = False):
 			try:
 				shutil.rmtree(dirname, ignore_errors = False)
 			except:
-				log('Could not remove %d' % dirname)
+				log('Could not remove %s' % dirname)
 		return (WAIT, WAIT)
 	# }}}
 	@delayed
