@@ -424,6 +424,7 @@ class Machine: # {{{
 		#log('movewaits triggered: %s' % repr(self.movecb))
 		call_queue.extend([(x, [done]) for x in self.movecb])
 		self.movecb = []
+		self.moving = False
 	# }}}
 	def _machine_input(self, reply = False): # {{{
 		cmd = cdriver.get_interrupt()
@@ -1600,6 +1601,7 @@ class Machine: # {{{
 			v = self.spaces[1].motor[self.current_extruder]['limit_v']
 		elif v is None or not 0 < v <= self.max_v:
 			v = self.max_v
+		self.moving = True
 		cdriver.move(*([self.current_extruder] + moves + [e, v]), single = single, probe = probe, relative = relative)
 		if id is not None:
 			self.wait_for_cb()[1](id)
@@ -1754,6 +1756,7 @@ class Machine: # {{{
 			if id is not None:
 				self._send(id, 'return', None)
 			return
+		self._trigger_movewaits(False)
 		self.paused = self.gcode_file and pausing
 		if pausing:
 			cdriver.pause()
@@ -1761,7 +1764,7 @@ class Machine: # {{{
 			cdriver.resume()
 		if update:
 			self._globals_update()
-		if pausing and id is not None:
+		if pausing and id is not None and self.moving:
 			self.movecb.append(lambda done: self._send(id, 'return', None))
 		elif id is not None:
 			self._send(id, 'return', None)
