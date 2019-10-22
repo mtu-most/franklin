@@ -21,9 +21,14 @@
 #include "cdriver.h"
 
 //#define mdebug(...) debug(__VA_ARGS__)
+//#define debug_abort() abort()
 
 #ifndef mdebug
 #define mdebug(...) do {} while (0)
+#endif
+
+#ifndef debug_abort
+#define debug_abort() do {} while(0)
 #endif
 
 #define warning debug
@@ -282,15 +287,15 @@ void next_move(int32_t start_time) { // {{{
 		}
 		if (check_x > 1e-2) {
 			warning("Warning: final x %f,%f,%f != start x %f,%f,%f", final_x[0], final_x[1], final_x[2], spaces[0].axis[0]->settings.source + settings.unitg[0] * settings.x0g + settings.unith[0] * settings.x0h, spaces[0].axis[1]->settings.source + settings.unitg[1] * settings.x0g + settings.unith[1] * settings.x0h, spaces[0].axis[2]->settings.source + settings.unitg[2] * settings.x0g + settings.unith[2] * settings.x0h);
-			//abort();
+			debug_abort();
 		}
 		if (check_v > 1e-2) {
 			warning("Warning: final v %f,%f,%f != start v %f,%f,%f", final_v[0], final_v[1], final_v[2], settings.v0g * settings.unitg[0] + settings.v0h * settings.unith[0], settings.v0g * settings.unitg[1] + settings.v0h * settings.unith[1], settings.v0g * settings.unitg[2] + settings.v0h * settings.unith[2]);
-			//abort();
+			debug_abort();
 		}
 		if (check_a > 1e2) {
 			warning("Warning: final a %f,%f,%f != start a %f,%f,%f", final_a[0], final_a[1], final_a[2], settings.a0g * settings.unitg[0] + settings.a0h * settings.unith[0], settings.a0g * settings.unitg[1] + settings.a0h * settings.unith[1], settings.a0g * settings.unitg[2] + settings.a0h * settings.unith[2]);
-			//abort();
+			debug_abort();
 		}
 	}
 	if (queue[q].tool >= 0 && queue[q].tool < spaces[1].num_axes && !std::isnan(queue[q].e)) {
@@ -468,7 +473,7 @@ static void do_steps(double old_factor) { // {{{
 				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
 				if (diff > 0x7f) {
 					warning("Error on line %d: %d %d trying to send more than 127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, diff, rounded_cp, rounded_new_cp, settings.hwtime);
-					//abort();
+					debug_abort();
 					int adjust = diff - 0x7f;
 					if (settings.hwtime_step > settings.hwtime)
 						settings.hwtime = 0;
@@ -481,7 +486,7 @@ static void do_steps(double old_factor) { // {{{
 				}
 				if (diff < -0x7f) {
 					warning("Error on line %d: %d %d trying to send more than -127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, -diff, rounded_cp, rounded_new_cp, settings.hwtime);
-					//abort();
+					debug_abort();
 					int adjust = diff + 0x7f;
 					if (settings.hwtime_step > settings.hwtime)
 						settings.hwtime = 0;
@@ -1192,6 +1197,21 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	for (int a = 0; a < 3; ++a) {
 		if (a < spaces[0].num_axes)
 			x[a] = spaces[0].axis[a]->current;
+		else
+			x[a] = 0;
+	}
+	double target[3];
+	for (int a = 0; a < 3; ++a) {
+		if (a >= spaces[0].num_axes)
+			break;
+		double pos = x[a];
+		if (std::isnan(pos))
+			continue;
+		if (std::isnan(move->target[a]))
+			target[a] = pos - (a == 2 ? zoffset : 0);
+		else
+			target[a] = (relative ? x[a] : 0) + move->target[a];
+		spaces[0].axis[a]->last_target = target[a];
 	}
 	if (computing_move) {
 		// Reset target of current move to given values.
@@ -1226,10 +1246,8 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 						unitPF[i] = 0;
 				}
 				else
-					unitPF[i] = move->target[i] + (relative ? x[i] : 0) - P[i];
+					unitPF[i] = target[i] - P[i];
 				lenPF += unitPF[i] * unitPF[i];
-				if (i < spaces[0].num_axes)
-					spaces[0].axis[i]->last_target = move->target[i];
 			}
 			lenPF = sqrt(lenPF);
 			mul(unitPF, unitPF, 1 / lenPF);
@@ -1256,11 +1274,11 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 				mdebug("retarget curve, x=(%f,%f,%f), P=(%f,%f,%f), unitPF=(%f,%f,%f), theta=%f, dir=%f, v0=%f, x0=-%f", x[0], x[1], x[2], P[0], P[1], P[2], unitPF[0], unitPF[1], unitPF[2], theta, dir, lenv, s_stop);
 				double Jh = 2 * lenv * dir / ((dir * dir + 1) * t * t);
 				double Jg = -dir * Jh;
-				double target[3];
+				double subtarget[3];
 				for (int i = 0; i < 3; ++i)
-					target[i] = P[i] + unitPF[i] * s_stop;
+					subtarget[i] = P[i] + unitPF[i] * s_stop;
 				q = add_to_queue(q, -1, 0, move->tool, x, t, lenv, 0, NAN, P, Jg, h, Jh, false);
-				q = add_to_queue(q, -1, 0, move->tool, x, t, lenv, 0, NAN, target, Jg, h2, Jh, true);
+				q = add_to_queue(q, -1, 0, move->tool, x, t, lenv, 0, NAN, subtarget, Jg, h2, Jh, true);
 				mul(v, unitPF, 1);
 				double v_top;
 				if (lenPF - s_stop < s_speedup + s_slowdown) {
@@ -1289,8 +1307,8 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 					warning("Warning: dist < 0 for retarget?! dist=%f, lenPF=%f, s_stop=%f, s_speedup=%f, s_slowdown=%f, v0=%f, v=%f", dist, lenPF, s_stop, s_speedup, s_slowdown, lenv, v_top);
 				}
 				for (int i = 0; i < 3; ++i)
-					target[i] = x[i] + v[i] * dist;
-				q = add_to_queue(q, -1, 0, move->tool, x, dist / v_top, v_top, 0, NAN, target, 0);
+					subtarget[i] = x[i] + v[i] * dist;
+				q = add_to_queue(q, -1, 0, move->tool, x, dist / v_top, v_top, 0, NAN, subtarget, 0);
 				// slow down to 0
 				q = queue_speed_change(q, move->tool, x, v, v_top, 0);
 			}
@@ -1309,7 +1327,6 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	double amax = NAN;
 	double dist = NAN;
 	double unit[3] = {0, 0, 0};
-	double target[3];
 	for (int a = 0; a < 3; ++a) {
 		if (spaces[0].num_axes <= a)
 			break;
@@ -1322,7 +1339,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		else
 			target[a] = move->target[a];
 		spaces[0].axis[a]->last_target = target[a];
-		double d = target[a] + (a == 2 ? zoffset : 0) - (relative ? 0 : pos);
+		double d = target[a] + (a == 2 ? zoffset : 0) - pos;
 		unit[a] = d;
 		if (std::isnan(dist))
 			dist = d * d;
@@ -1347,7 +1364,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 			double pos = spaces[0].axis[a]->current;
 			if (std::isnan(pos))
 				continue;
-			double d = std::fabs(target[a] - (relative ? 0 : pos));
+			double d = std::fabs(target[a] - pos);
 			if (std::isnan(dist) || dist < d) {
 				dist = d;
 				vmax = spaces[0].motor[a]->limit_v;
@@ -1443,10 +1460,10 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		current_s += s[part];
 		if (s[part] < 1e-10)
 			continue;
-		double target[3];
+		double subtarget[3];
 		for (int i = 0; i < 3; ++i)
-			target[i] = X[i] + unit[i] * s[part];
-		q = add_to_queue(q, move->gcode_line, move->time, move->tool, X, t[part], v0[part], a0[part], e0 + (move->e - e0) * current_s / dist, target, J[part], NULL, 0, reverse[part]);
+			subtarget[i] = X[i] + unit[i] * s[part];
+		q = add_to_queue(q, move->gcode_line, move->time, move->tool, X, t[part], v0[part], a0[part], e0 + (move->e - e0) * current_s / dist, subtarget, J[part], NULL, 0, reverse[part]);
 	}
 	queue_end = q;
 
