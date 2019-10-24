@@ -272,9 +272,14 @@ void next_move(int32_t start_time) { // {{{
 		settings.v0h = 0;
 		settings.x0h = 0;
 	}
+
+	// Info for 3-D robot
 	mdebug("move ln %d, from=(%.2f,%.2f,%.2f) (current %.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
+	// Info for 2-D robot
 	mdebug("move ln %d, from=(%.2f,%.2f) (current %.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
-	//debug("move (%.2f,%.2f) -> (%.2f,%.2f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, queue[q].target[0], queue[q].target[1]);
+	// Short info for 2-D robot
+	mdebug("move (%.2f,%.2f) -> (%.2f,%.2f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, queue[q].target[0], queue[q].target[1]);
+
 	if (spaces[0].num_axes >= 3) {
 		double check_x = 0, check_v = 0, check_a = 0;
 		for (int i = 0; i < 3; ++i) {
@@ -918,7 +923,7 @@ static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double po
 		queue[q].abc[i] = 0;
 	}
 	leng = std::sqrt(leng);
-	if (leng < 1e-5)
+	if (tf < 1e-6)
 		return q;
 	lenh = std::sqrt(lenh);
 	mdebug("adding to queue: %.2f,%.2f,%.4f -> %.2f,%.2f,%.4f time %.2f v0 %.2f a0 %.2f Jg %.2f g %.2f,%.2f,%.2f h %.2f,%.2f,%.2f Jh %.2f reverse %d", pos[0], pos[1], pos[2], target[0], target[1], target[2], tf, v0, a0, Jg, g[0], g[1], g[2], h ? h[0] : 0, h ? h[1] : 0, h ? h[2] : 0, Jh, reverse);
@@ -1352,7 +1357,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		amax = max_a;
 		for (int i = 0; i < 3; ++i)
 			unit[i] /= dist;
-		mdebug("dist = %f", dist);
+		mdebug("normal goto, dist = %f", dist);
 	}
 	else {
 		mdebug("no dist");
@@ -1383,6 +1388,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	if (!std::isnan(e)) {
 		if (std::isnan(dist) || dist < 1e-10) {
 			dist = std::fabs(move->e - (relative ? 0 : e));
+			mdebug("dist for e %d = %f", tool, dist);
 			if (tool >= 0) {
 				vmax = spaces[1].motor[tool]->limit_v;
 				amax = spaces[1].motor[tool]->limit_a;
