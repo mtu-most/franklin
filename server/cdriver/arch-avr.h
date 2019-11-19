@@ -339,7 +339,7 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 		}
 	}
 	if (have_error > 0) {
-		abort();
+		//abort();
 	}
 } // }}}
 

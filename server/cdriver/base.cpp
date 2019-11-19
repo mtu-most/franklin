@@ -53,7 +53,7 @@ void debug_backtrace() {
 		return;
 	}
 	for (size_t i = 0; i < size; ++i) {
-		debug("frame %ld: %s", i, frames[i]);
+		debug("frame %ld: %s", long(i), frames[i]);
 	}
 	free(frames);
 }

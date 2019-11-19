@@ -1336,13 +1336,15 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		if (spaces[0].num_axes <= a)
 			break;
 		double pos = x[a];
-		//debug("prepare move, pos[%d]: %f -> %f", a, pos, move->target[a]);
-		if (std::isnan(pos))
+		if (std::isnan(pos)) {
+			target[a] = pos;
 			continue;
+		}
 		if (std::isnan(move->target[a]))
-			target[a] = (relative ? 0 : pos) - (a == 2 ? zoffset : 0);
+			target[a] = pos - (a == 2 ? zoffset : 0);
 		else
 			target[a] = move->target[a];
+		//debug("prepare move, pos[%d]: %f -> %f", a, pos, move->target[a]);
 		spaces[0].axis[a]->last_target = target[a];
 		double d = target[a] + (a == 2 ? zoffset : 0) - pos;
 		unit[a] = d;
