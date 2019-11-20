@@ -44,8 +44,37 @@ static void load(Space *s) { // {{{
 	}
 } // }}}
 
+static void aload(Space *s, int a) { // {{{
+	(void)&s;
+	(void)&a;
+} // }}}
+
+static void mload(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
+} // }}}
+
 static void save(Space *s) { // {{{
 	(void)&s;
+	// Record 0 items for modules that don't implement this.
+	shmem->ints[100] = 0;
+	shmem->ints[101] = 0;
+} // }}}
+
+static void asave(Space *s, int a) { // {{{
+	(void)&s;
+	(void)&a;
+	// Record 0 items for modules that don't implement this.
+	shmem->ints[100] = 0;
+	shmem->ints[101] = 0;
+} // }}}
+
+static void msave(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
+	// Record 0 items for modules that don't implement this.
+	shmem->ints[100] = 0;
+	shmem->ints[101] = 0;
 } // }}}
 
 static bool init(Space *s) { // {{{
@@ -53,13 +82,18 @@ static bool init(Space *s) { // {{{
 	return true;
 } // }}}
 
-static void free(Space *s) { // {{{
+static void space_free(Space *s) { // {{{
 	(void)&s;
 } // }}}
 
-static void afree(Space *s, int a) { // {{{
+static void axis_free(Space *s, int a) { // {{{
 	(void)&s;
 	(void)&a;
+} // }}}
+
+static void motor_free(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
 } // }}}
 
 static double change0(Space *s, int axis, double value) { // {{{
@@ -90,10 +124,15 @@ void Cartesian_init(int num) { // {{{
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].check_position = check_position;
 	space_types[num].load = load;
+	space_types[num].aload = aload;
+	space_types[num].mload = mload;
 	space_types[num].save = save;
+	space_types[num].asave = asave;
+	space_types[num].msave = msave;
 	space_types[num].init = init;
-	space_types[num].free = free;
-	space_types[num].afree = afree;
+	space_types[num].space_free = space_free;
+	space_types[num].axis_free = axis_free;
+	space_types[num].motor_free = motor_free;
 	space_types[num].change0 = change0;
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;
@@ -139,11 +178,31 @@ static void eload(Space *s) { // {{{
 	}
 } // }}}
 
+static void eaload(Space *s, int a) { // {{{
+	(void)&s;
+	(void)&a;
+} // }}}
+
+static void emload(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
+} // }}}
+
 static void esave(Space *s) { // {{{
 	for (int a = 0; a < s->num_axes; ++a) {
 		for (int o = 0; o < 3; ++o)
 			shmem->floats[3 * a + o] = EADATA(s, a).offset[o];
 	}
+} // }}}
+
+static void easave(Space *s, int a) { // {{{
+	(void)&s;
+	(void)&a;
+} // }}}
+
+static void emsave(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
 } // }}}
 
 static bool einit(Space *s) { // {{{
@@ -158,6 +217,11 @@ static void efree(Space *s) { // {{{
 
 static void eafree(Space *s, int a) { // {{{
 	delete reinterpret_cast <ExtruderAxisData *>(s->axis[a]->type_data);
+} // }}}
+
+static void emfree(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
 } // }}}
 
 static double echange0(Space *s, int axis, double value) { // {{{
@@ -176,10 +240,15 @@ void Extruder_init(int num) { // {{{
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].check_position = check_position;
 	space_types[num].load = eload;
+	space_types[num].aload = eaload;
+	space_types[num].mload = emload;
 	space_types[num].save = esave;
+	space_types[num].asave = easave;
+	space_types[num].msave = emsave;
 	space_types[num].init = einit;
-	space_types[num].free = efree;
-	space_types[num].afree = eafree;
+	space_types[num].space_free = efree;
+	space_types[num].axis_free = eafree;
+	space_types[num].motor_free = emfree;
 	space_types[num].change0 = echange0;
 	space_types[num].unchange0 = eunchange0;
 	space_types[num].probe_speed = probe_speed;
@@ -223,11 +292,31 @@ static void fload(Space *s) { // {{{
 	arch_motors_change();
 } // }}}
 
+static void faload(Space *s, int a) { // {{{
+	(void)&s;
+	(void)&a;
+} // }}}
+
+static void fmload(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
+} // }}}
+
 static void fsave(Space *s) { // {{{
 	for (int a = 0; a < s->num_axes; ++a) {
 		shmem->ints[4 + 2 * a] = FADATA(s, a).space;
 		shmem->ints[4 + 2 * a + 1] = FADATA(s, a).motor;
 	}
+} // }}}
+
+static void fasave(Space *s, int a) { // {{{
+	(void)&s;
+	(void)&a;
+} // }}}
+
+static void fmsave(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
 } // }}}
 
 static bool finit(Space *s) { // {{{
@@ -242,6 +331,11 @@ static void ffree(Space *s) { // {{{
 
 static void fafree(Space *s, int a) { // {{{
 	delete reinterpret_cast <FollowerAxisData *>(s->axis[a]->type_data);
+} // }}}
+
+static void fmfree(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
 } // }}}
 
 static int ffollow(Space *s, int axis) { // {{{
@@ -260,10 +354,15 @@ void Follower_init(int num) { // {{{
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].check_position = check_position;
 	space_types[num].load = fload;
+	space_types[num].aload = faload;
+	space_types[num].mload = fmload;
 	space_types[num].save = fsave;
+	space_types[num].asave = fasave;
+	space_types[num].msave = fmsave;
 	space_types[num].init = finit;
-	space_types[num].free = ffree;
-	space_types[num].afree = fafree;
+	space_types[num].space_free = ffree;
+	space_types[num].axis_free = fafree;
+	space_types[num].motor_free = fmfree;
 	space_types[num].change0 = change0;
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;

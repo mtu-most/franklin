@@ -219,26 +219,6 @@ function Follower(ui, space, motor) {
 	return make_tablerow(ui, motor_name(ui, space, motor), f, ['rowtitle2'], undefined, TYPE_FOLLOWER, space);
 }
 
-function Delta(ui, space, motor) {
-	if (space != 0)
-		return null;
-	var e = [['delta_axis_min', 1], ['delta_axis_max', 1], ['delta_rodlength', 3], ['delta_radius', 3]];
-	for (var i = 0; i < e.length; ++i) {
-		var div = Create('div');
-		div.Add(Float(ui, [['motor', [space, motor]], e[i][0]], e[i][1], 1));
-		e[i] = div;
-	}
-	return make_tablerow(ui, motor_name(ui, space, motor), e, ['rowtitle4'], undefined, TYPE_DELTA, space);
-}
-
-function Delta_space(ui, num) {
-	if (num != 0)
-		return null;
-	var div = Create('div');
-	div.Add(Float(ui, [['space', num], 'delta_angle'], 2, Math.PI / 180));
-	return make_tablerow(ui, space_name(ui, num), [div], ['rowtitle1'], undefined, TYPE_DELTA, num);
-}
-
 function Polar_space(ui, num) {
 	if (num != 0)
 		return null;
@@ -875,41 +855,6 @@ function setup_motor(desc, pos, top) { // {{{
 	pins.AddMultiple(ui, 'motor', Pins_space, false);
 	return [ret, pos];
 } // }}}
-function setup_delta(desc, pos, top) { // {{{
-	var ui = top.data;
-	var ret = Create('div', 'setup expert');
-	ret.update = function() { this.hide(ui.machine.spaces[0].type != TYPE_DELTA); };
-	ret.Add([make_table(ui).AddMultipleTitles([
-		'Delta',
-		UnitTitle(ui, 'Min Distance'),
-		UnitTitle(ui, 'Max Distance'),
-		UnitTitle(ui, 'Rod Length'),
-		UnitTitle(ui, 'Radius')
-	], [
-		'htitle4',
-		'title4',
-		'title4',
-		'title4',
-		'title4'
-	], [
-		null,
-		'Minimum horizontal distance between tie rod pivot points.  Usually 0.',
-		'Maximum horizontal distance between tie rod pivot points.  Usually Infinity.',
-		'Length of the tie rods between pivot points.  Measure this with as high precision as possible.',
-		'Horizontal distance between tie rod pivot points when the end effector is at (0, 0, 0).'
-	]).AddMultiple(ui, 'motor', Delta)]);
-	ret.Add([make_table(ui).AddMultipleTitles([
-		'Delta',
-		'Angle'
-	], [
-		'htitle1',
-		'title1'
-	], [
-		null,
-		'Correction angle for the machine. (degrees)'
-	]).AddMultiple(ui, 'space', Delta_space, false)]);
-	return [ret, pos];
-} // }}}
 function setup_polar(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
@@ -1097,7 +1042,6 @@ ui_modules = { // {{{
 	'Cartesian Setup': setup_cartesian,
 	'Axis Setup': setup_axis,
 	'Motor Setup': setup_motor,
-	'Delta Setup': setup_delta,
 	'Polar Setup': setup_polar,
 	'Extruder Setup': setup_extruder,
 	'Follower Setup': setup_follower,

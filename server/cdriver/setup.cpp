@@ -18,6 +18,16 @@
  */
 
 #include "cdriver.h"
+#include <vector>
+#include <fstream>
+#include <dlfcn.h>
+
+static void *load_sym(void *handle, char const *name, void *default_sym) {
+	void *ret = dlsym(handle, name);
+	if (ret)
+		return ret;
+	return default_sym;
+}
 
 void setup()
 {
@@ -28,7 +38,56 @@ void setup()
 	serialdev = NULL;
 	command_end = 0;
 	arch_setup_start();
-	setup_spacetypes();
+	// Set up space type modules. Path is in shmem->strs[0].
+	std::string typepath(const_cast <const char *>(shmem->strs[0]));
+	std::string types_file = typepath + "types.txt";
+	std::ifstream f(types_file.c_str());
+	std::vector <std::string> types;
+	if (!f)
+		debug("Warning: Types file %s could not be opened", types_file.c_str());
+	while (f) {
+		char buffer[PATH_MAX];
+		f.getline(buffer, PATH_MAX);
+		if (buffer[0] != '\0' && buffer[0] != '#')
+			types.push_back(buffer);
+	}
+	num_space_types = 5 + types.size();
+	space_types = new SpaceType[num_space_types];
+	Cartesian_init(0);
+	Extruder_init(1);
+	Follower_init(2);
+	Polar_init(3);
+	Hbot_init(4);
+	int type_id = 5;
+	for (auto i: types) {
+		std::string filename = typepath + i + "/" + i + ".so";
+		void *handle = dlopen(filename.c_str(), RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
+		*(void **)(&space_types[type_id].check_position) = load_sym(handle, "check_position", *(void **)&space_types[0].check_position);
+		*(void **)(&space_types[type_id].load) = load_sym(handle, "load", *(void **)&space_types[0].load);
+		*(void **)(&space_types[type_id].aload) = load_sym(handle, "aload", *(void **)&space_types[0].aload);
+		*(void **)(&space_types[type_id].mload) = load_sym(handle, "mload", *(void **)&space_types[0].mload);
+		*(void **)(&space_types[type_id].save) = load_sym(handle, "save", *(void **)&space_types[0].save);
+		*(void **)(&space_types[type_id].asave) = load_sym(handle, "asave", *(void **)&space_types[0].asave);
+		*(void **)(&space_types[type_id].msave) = load_sym(handle, "msave", *(void **)&space_types[0].msave);
+		*(void **)(&space_types[type_id].init) = load_sym(handle, "init", *(void **)&space_types[0].init);
+		*(void **)(&space_types[type_id].space_free) = load_sym(handle, "space_free", *(void **)&space_types[0].space_free);
+		*(void **)(&space_types[type_id].axis_free) = load_sym(handle, "axis_free", *(void **)&space_types[0].axis_free);
+		*(void **)(&space_types[type_id].motor_free) = load_sym(handle, "motor_free", *(void **)&space_types[0].motor_free);
+		*(void **)(&space_types[type_id].change0) = load_sym(handle, "change0", *(void **)&space_types[0].change0);
+		*(void **)(&space_types[type_id].unchange0) = load_sym(handle, "unchange0", *(void **)&space_types[0].unchange0);
+		*(void **)(&space_types[type_id].probe_speed) = load_sym(handle, "probe_speed", *(void **)&space_types[0].probe_speed);
+		*(void **)(&space_types[type_id].follow) = load_sym(handle, "follow", *(void **)&space_types[0].follow);
+		dlerror();
+		*(void **)(&space_types[type_id].xyz2motors) = dlsym(handle, "xyz2motors");
+		*(void **)(&space_types[type_id].motors2xyz) = dlsym(handle, "motors2xyz");
+		char const *error = dlerror();
+		if (error != NULL) {
+			debug("Error loading type module %s: %s", filename.c_str(), error);
+			abort();
+		}
+		debug("finished loading type module %s", filename.c_str());
+		type_id += 1;
+	}
 	// Initialize volatile variables.
 	initialized = false;
 #if DEBUG_BUFFER_LENGTH > 0

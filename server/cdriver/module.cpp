@@ -397,80 +397,99 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	return assert_empty_dict(dict, "write_globals");
 }
 
+static PyObject *read_module_data() {
+	int num_int = shmem->ints[100];
+	int num_float = shmem->ints[101];
+	PyObject *ints = PyTuple_New(num_int);
+	for (int i = 0; i < num_int; ++i)
+		PyTuple_SET_ITEM(ints, i, PyLong_FromLong(shmem->ints[102 + i]));
+	PyObject *floats = PyTuple_New(num_float);
+	for (int i = 0; i < num_float; ++i)
+		PyTuple_SET_ITEM(floats, i, PyFloat_FromDouble(shmem->floats[100 + i]));
+	PyObject *ret = Py_BuildValue("OO", ints, floats);
+	Py_DECREF(ints);
+	Py_DECREF(floats);
+	return ret;
+}
+
 static PyObject *read_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	if (!PyArg_ParseTuple(args, "i", &shmem->ints[0]))
 		return NULL;
 	send_to_child(CMD_READ_SPACE_INFO);
-	switch (shmem->ints[1]) {
-	case TYPE_CARTESIAN:
-	case TYPE_HBOT:
-		return Py_BuildValue("{si,si,si}",
-				"type", shmem->ints[1],
-				"num_axes", shmem->ints[2],
-				"num_motors", shmem->ints[3]);
-	case TYPE_EXTRUDER:
-	{
-		PyObject *tuple = PyTuple_New(shmem->ints[2]);
-		for (int i = 0; i < shmem->ints[2]; ++i)
-			PyTuple_SET_ITEM(tuple, i, Py_BuildValue("ddd", shmem->floats[3 * i], shmem->floats[3 * i + 1], shmem->floats[3 * i + 2]));
+	if (shmem->ints[1] >= NUM_FIXED_SPACE_TYPES) {
+		// This is a module.
+		PyObject *module_data = read_module_data();
 		PyObject *ret = Py_BuildValue("{si,si,si,sO}",
 				"type", shmem->ints[1],
 				"num_axes", shmem->ints[2],
 				"num_motors", shmem->ints[3],
-				"offset", tuple);
-		Py_DECREF(tuple);
+				"module", module_data);
 		return ret;
 	}
-	case TYPE_FOLLOWER:
-	{
-		PyObject *tuple = PyTuple_New(shmem->ints[2]);
-		for (int i = 0; i < shmem->ints[2]; ++i)
-			PyTuple_SET_ITEM(tuple, i, Py_BuildValue("ii", shmem->ints[2 * i + 4], shmem->ints[2 * i + 5]));
-		PyObject *ret = Py_BuildValue("{si,si,si,sO}",
-				"type", shmem->ints[1],
-				"num_axes", shmem->ints[2],
-				"num_motors", shmem->ints[3],
-				"follow", tuple);
-		Py_DECREF(tuple);
-		return ret;
-	}
-	case TYPE_DELTA:
-		return Py_BuildValue("{si,si,si,s({sd,sd,sd,sd},{sd,sd,sd,sd},{sd,sd,sd,sd}),sd}",
-				"type", shmem->ints[1],
-				"num_axes", shmem->ints[2],
-				"num_motors", shmem->ints[3],
-				"delta",
-				"axis_min", shmem->floats[0],
-				"axis_max", shmem->floats[1],
-				"rodlength", shmem->floats[2],
-				"radius", shmem->floats[3],
-				"axis_min", shmem->floats[4],
-				"axis_max", shmem->floats[5],
-				"rodlength", shmem->floats[6],
-				"radius", shmem->floats[7],
-				"axis_min", shmem->floats[8],
-				"axis_max", shmem->floats[9],
-				"rodlength", shmem->floats[10],
-				"radius", shmem->floats[11],
-				"delta_angle", shmem->floats[12]);
-	case TYPE_POLAR:
-		return Py_BuildValue("{si,si,si,sd}",
-				"type", shmem->ints[1],
-				"num_axes", shmem->ints[2],
-				"num_motors", shmem->ints[3],
-				"max_r", shmem->floats[0]);
-	default:
-		PyErr_SetString(PyExc_ValueError, "invalid space for reading info");
-		return NULL;
+	else {
+		switch (shmem->ints[1]) {
+		case TYPE_CARTESIAN:
+		case TYPE_HBOT:
+			return Py_BuildValue("{si,si,si}",
+					"type", shmem->ints[1],
+					"num_axes", shmem->ints[2],
+					"num_motors", shmem->ints[3]);
+		case TYPE_EXTRUDER:
+		{
+			PyObject *tuple = PyTuple_New(shmem->ints[2]);
+			for (int i = 0; i < shmem->ints[2]; ++i)
+				PyTuple_SET_ITEM(tuple, i, Py_BuildValue("ddd", shmem->floats[3 * i], shmem->floats[3 * i + 1], shmem->floats[3 * i + 2]));
+			PyObject *ret = Py_BuildValue("{si,si,si,sO}",
+					"type", shmem->ints[1],
+					"num_axes", shmem->ints[2],
+					"num_motors", shmem->ints[3],
+					"offset", tuple);
+			Py_DECREF(tuple);
+			return ret;
+		}
+		case TYPE_FOLLOWER:
+		{
+			PyObject *tuple = PyTuple_New(shmem->ints[2]);
+			for (int i = 0; i < shmem->ints[2]; ++i)
+				PyTuple_SET_ITEM(tuple, i, Py_BuildValue("ii", shmem->ints[2 * i + 4], shmem->ints[2 * i + 5]));
+			PyObject *ret = Py_BuildValue("{si,si,si,sO}",
+					"type", shmem->ints[1],
+					"num_axes", shmem->ints[2],
+					"num_motors", shmem->ints[3],
+					"follow", tuple);
+			Py_DECREF(tuple);
+			return ret;
+		}
+		case TYPE_POLAR:
+			return Py_BuildValue("{si,si,si,sd}",
+					"type", shmem->ints[1],
+					"num_axes", shmem->ints[2],
+					"num_motors", shmem->ints[3],
+					"max_r", shmem->floats[0]);
+		default:
+			PyErr_SetString(PyExc_ValueError, "invalid space for reading info");
+			return NULL;
+		}
 	}
 }
 
 static PyObject *read_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
-	if (!PyArg_ParseTuple(args, "ii", &shmem->ints[0], &shmem->ints[1]))
+	int type;
+	if (!PyArg_ParseTuple(args, "iii", &shmem->ints[0], &shmem->ints[1], &type))
 		return NULL;
 	send_to_child(CMD_READ_SPACE_AXIS);
+	if (type >= NUM_FIXED_SPACE_TYPES) {
+		// This is a module.
+		PyObject *module_data = read_module_data();
+		return Py_BuildValue("{si,sd,sd,sd,sO}",
+				"park_order", shmem->ints[2],
+				"park", shmem->floats[0],
+				"min", shmem->floats[1],
+				"max", shmem->floats[2],
+				"module", module_data);
+	}
 	return Py_BuildValue("{si,sd,sd,sd}",
 			"park_order", shmem->ints[2],
 			"park", shmem->floats[0],
@@ -480,9 +499,26 @@ static PyObject *read_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 
 static PyObject *read_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
-	if (!PyArg_ParseTuple(args, "ii", &shmem->ints[0], &shmem->ints[1]))
+	int type;
+	if (!PyArg_ParseTuple(args, "iii", &shmem->ints[0], &shmem->ints[1], &type))
 		return NULL;
 	send_to_child(CMD_READ_SPACE_MOTOR);
+	if (type >= NUM_FIXED_SPACE_TYPES) {
+		// This is a module.
+		PyObject *module_data = read_module_data();
+		return Py_BuildValue("{si,si,si,si,si,si,sd,sd,sd,sd,sO}",
+				"step_pin", shmem->ints[2],
+				"dir_pin", shmem->ints[3],
+				"enable_pin", shmem->ints[4],
+				"limit_min_pin", shmem->ints[5],
+				"limit_max_pin", shmem->ints[6],
+				"home_order", shmem->ints[7],
+				"steps_per_unit", shmem->floats[0],
+				"home_pos", shmem->floats[1],
+				"limit_v", shmem->floats[2],
+				"limit_a", shmem->floats[3],
+				"module", module_data);
+	}
 	return Py_BuildValue("{si,si,si,si,si,si,sd,sd,sd,sd}",
 			"step_pin", shmem->ints[2],
 			"dir_pin", shmem->ints[3],
@@ -496,6 +532,33 @@ static PyObject *read_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 			"limit_a", shmem->floats[3]);
 }
 
+#define assert_type(type, value) do { if (! Py ## type ## _Check (value)) { debug("python type check failed: " #type); abort();}} while (0)
+
+static void write_module_data(PyObject *module) {
+	// Write module data from module object into shmem at offset.
+	// Steals reference to module.
+	int int_index = 102;
+	int float_index = 100;
+	int num = PySequence_Size(module);
+	if (num < 0) {
+		abort();
+	}
+	for (int i = 0; i < num; ++i) {
+		PyObject *value = PySequence_GetItem(module, i);
+		if (PyLong_Check(value)) {
+			shmem->ints[int_index++] = PyLong_AsLong(value);
+		}
+		else {
+			assert_type(Float, value);
+			shmem->floats[float_index++] = PyFloat_AsDouble(value);
+		}
+		Py_DECREF(value);
+	}
+	shmem->ints[100] = int_index - 100;
+	shmem->ints[101] = float_index - 100;
+	Py_DECREF(module);
+}
+
 static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	PyObject *dict;
@@ -504,50 +567,41 @@ static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 	send_to_child(CMD_READ_SPACE_INFO);
 	set_int(1, "type", dict);
 	set_int(2, "num_axes", dict);
-	switch (shmem->ints[1]) {
-	case TYPE_CARTESIAN:
-	case TYPE_HBOT:
-		break;
-	case TYPE_EXTRUDER:
-	{
-		PyObject *offset = get_object("offset", dict);
-		for (int i = 0; i < shmem->ints[2]; ++i) {
-			PyObject *axis = PySequence_GetItem(offset, i);
-			PyArg_ParseTuple(axis, "ddd", &shmem->floats[i * 3], &shmem->floats[i * 3 + 1], &shmem->floats[i * 3 + 2]);
-			Py_DECREF(axis);
-		}
-		Py_DECREF(offset);
-		break;
+	if (shmem->ints[1] >= NUM_FIXED_SPACE_TYPES) {
+		PyObject *module = get_object("module", dict);
+		write_module_data(module);
 	}
-	case TYPE_FOLLOWER:
-	{
-		PyObject *follow = get_object("follow", dict);
-		for (int i = 0; i < shmem->ints[2]; ++i) {
-			PyObject *axis = PySequence_GetItem(follow, i);
-			PyArg_ParseTuple(axis, "ii", &shmem->ints[i * 2 + 4], &shmem->ints[i * 2 + 5]);
-			Py_DECREF(axis);
+	else {
+		switch (shmem->ints[1]) {
+		case TYPE_CARTESIAN:
+		case TYPE_HBOT:
+			break;
+		case TYPE_EXTRUDER:
+		{
+			PyObject *offset = get_object("offset", dict);
+			for (int i = 0; i < shmem->ints[2]; ++i) {
+				PyObject *axis = PySequence_GetItem(offset, i);
+				PyArg_ParseTuple(axis, "ddd", &shmem->floats[i * 3], &shmem->floats[i * 3 + 1], &shmem->floats[i * 3 + 2]);
+				Py_DECREF(axis);
+			}
+			Py_DECREF(offset);
+			break;
 		}
-		Py_DECREF(follow);
-		break;
-	}
-	case TYPE_DELTA:
-	{
-		PyObject *delta = get_object("delta", dict);
-		for (int i = 0; i < 3; ++i) {
-			PyObject *axis = PySequence_GetItem(delta, i);
-			set_float(i * 4 + 0, "axis_min", axis);
-			set_float(i * 4 + 1, "axis_max", axis);
-			set_float(i * 4 + 2, "rodlength", axis);
-			set_float(i * 4 + 3, "radius", axis);
-			Py_DECREF(axis);
+		case TYPE_FOLLOWER:
+		{
+			PyObject *follow = get_object("follow", dict);
+			for (int i = 0; i < shmem->ints[2]; ++i) {
+				PyObject *axis = PySequence_GetItem(follow, i);
+				PyArg_ParseTuple(axis, "ii", &shmem->ints[i * 2 + 4], &shmem->ints[i * 2 + 5]);
+				Py_DECREF(axis);
+			}
+			Py_DECREF(follow);
+			break;
 		}
-		Py_DECREF(delta);
-		set_float(12, "delta_angle", dict);
-		break;
-	}
-	case TYPE_POLAR:
-		set_float(0, "max_r", dict);
-		break;
+		case TYPE_POLAR:
+			set_float(0, "max_r", dict);
+			break;
+		}
 	}
 	send_to_child(CMD_WRITE_SPACE_INFO);
 	return assert_empty_dict(dict, "write_space_info");
@@ -556,13 +610,18 @@ static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 static PyObject *write_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	PyObject *dict;
-	if (!PyArg_ParseTuple(args, "iiO!", &shmem->ints[0], &shmem->ints[1], &PyDict_Type, &dict))
+	int type;
+	if (!PyArg_ParseTuple(args, "iiO!i", &shmem->ints[0], &shmem->ints[1], &PyDict_Type, &dict, &type))
 		return NULL;
 	send_to_child(CMD_READ_SPACE_AXIS);
 	set_int(2, "park_order", dict);
 	set_float(0, "park", dict);
 	set_float(1, "min", dict);
 	set_float(2, "max", dict);
+	if (type >= NUM_FIXED_SPACE_TYPES) {
+		PyObject *module = get_object("module", dict);
+		write_module_data(module);
+	}
 	send_to_child(CMD_WRITE_SPACE_AXIS);
 	return assert_empty_dict(dict, "write_space_axis");
 }
@@ -570,7 +629,8 @@ static PyObject *write_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 static PyObject *write_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	PyObject *dict;
-	if (!PyArg_ParseTuple(args, "iiO!", &shmem->ints[0], &shmem->ints[1], &PyDict_Type, &dict))
+	int type;
+	if (!PyArg_ParseTuple(args, "iiO!i", &shmem->ints[0], &shmem->ints[1], &PyDict_Type, &dict, &type))
 		return NULL;
 	send_to_child(CMD_READ_SPACE_MOTOR);
 	set_int(2, "step_pin", dict);
@@ -583,6 +643,10 @@ static PyObject *write_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_float(1, "home_pos", dict);
 	set_float(2, "limit_v", dict);
 	set_float(3, "limit_a", dict);
+	if (type >= NUM_FIXED_SPACE_TYPES) {
+		PyObject *module = get_object("module", dict);
+		write_module_data(module);
+	}
 	send_to_child(CMD_WRITE_SPACE_MOTOR);
 	return assert_empty_dict(dict, "write_space_motor");
 }
@@ -865,7 +929,8 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 PyObject *init_module(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	char const *cdriver;
-	if (!PyArg_ParseTuple(args, "y", &cdriver))
+	char const *typepath;
+	if (!PyArg_ParseTuple(args, "yy", &cdriver, &typepath))
 		return NULL;
 	int pipe_toserver[2], pipe_fromserver[2], pipe_interrupt[2], pipe_interrupt_reply[2];
 	memfd = memfd_create("shmem", 0);
@@ -878,6 +943,7 @@ PyObject *init_module(PyObject *Py_UNUSED(self), PyObject *args) {
 		return PyErr_SetFromErrno(PyExc_ImportError);
 	}
 	shmem = reinterpret_cast <SharedMemory *>(mmap(NULL, sizeof(SharedMemory), PROT_READ | PROT_WRITE, MAP_SHARED, memfd, 0));
+	strncpy(const_cast <char *>(shmem->strs[0]), typepath, PATH_MAX);
 	if (shmem == NULL) {
 		debug("failed to map shared memory");
 		return PyErr_SetFromErrno(PyExc_ImportError);

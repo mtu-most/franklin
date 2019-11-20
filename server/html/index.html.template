@@ -1,5 +1,6 @@
 <!-- index.html - html source for Franklin
   .. Copyright 2014 Michigan Technological University
+  .. Copyright 2019 Bas Wijnen <wijnen@debian.org>
   .. Author: Bas Wijnen <wijnen@debian.org>
   ..
   .. This program is free software: you can redistribute it and/or modify
@@ -26,6 +27,7 @@
 		<script type='application/javascript' src='templates.js'></script>
 		<script type='application/javascript' src='server.js'></script>
 		<script type='application/javascript' src='main.js'></script>
+		<!-- TYPE-INCLUDES -->
 		<style type='text/css'></style>
 		<link rel='stylesheet' href='ui.css'/>
 		<link rel='stylesheet' href='style.css'/>

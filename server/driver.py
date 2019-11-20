@@ -22,21 +22,6 @@
 show_own_debug = False
 #show_own_debug = True
 
-# Constants {{{
-C0 = 273.15	# Conversion between K and °C
-WAIT = object()	# Sentinel for blocking functions.
-NUM_SPACES = 3
-# Space types
-TYPE_CARTESIAN = 'cartesian'
-TYPE_EXTRUDER = 'extruder'
-TYPE_FOLLOWER = 'follower'
-TYPE_DELTA = 'delta'
-TYPE_POLAR = 'polar'
-TYPE_HBOT = 'h-bot'
-type_names = [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER, TYPE_DELTA, TYPE_POLAR, TYPE_HBOT]
-record_format = '=Bi' + 'd' * 11 + 'q' # type, tool, X[3], h[3], Jg, tf, v0, E, time, line
-# }}}
-
 # Imports.  {{{
 import fhs
 import websocketd
@@ -67,6 +52,20 @@ import shutil
 import cdriver
 # }}}
 
+# Constants {{{
+C0 = 273.15	# Conversion between K and °C
+WAIT = object()	# Sentinel for blocking functions.
+NUM_SPACES = 3	# Position, extruders, followers
+record_format = '=Bi' + 'd' * 11 + 'q' # type, tool, X[3], h[3], Jg, tf, v0, E, time, line
+# Space types
+TYPE_CARTESIAN = 'cartesian'
+TYPE_EXTRUDER = 'extruder'
+TYPE_FOLLOWER = 'follower'
+TYPE_POLAR = 'polar'
+TYPE_HBOT = 'h-bot'
+type_names = [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER, TYPE_POLAR, TYPE_HBOT]
+# }}}
+
 config = fhs.init(packagename = 'franklin', config = { # {{{
 	'allow-system': None,
 	'uuid': None,
@@ -75,7 +74,66 @@ config = fhs.init(packagename = 'franklin', config = { # {{{
 	})
 # }}}
 
-cdriver.init(fhs.read_data('franklin-cdriver', opened = False).encode('utf-8'))
+# Load space type modules {{{
+modulepath = fhs.read_data(os.path.join('type', 'types.txt'), opened = False)
+moduledir = os.path.dirname(modulepath)
+typeinfo = {}
+#typeinfo['polar'] = {
+#		'space': [('radius', 0.)],
+#		'axis': [],
+#		'motor': [],
+#		'name': (['r', None], ['θ', '°'], ['z', None])
+#	}
+
+# Config file format:
+#name=r
+#name=θ
+#unit=°
+#name=z
+#[space]
+#radius = 0.
+
+#If a value contains only [-0-9], it is an int; otherwise it is a float. 'inf' and 'nan' are supported.
+
+# tabs are required; spaces are part of the name.
+for m in open(modulepath):
+	module = m.strip()
+	with open(os.path.join(moduledir, module, module + os.extsep + 'ini')) as f:
+		section = None
+		ret = {'space': [], 'axis': [], 'motor': [], 'name': []}
+		for ln in f:
+			if ln.strip() == '' or ln.strip().startswith('#'):
+				continue
+			r = re.match(r'^\s*(?:\[(space|axis|motor)\]|(\w+)\s*=\s*(.*?))\s*$', ln)
+			assert r is not None
+			# 1: space|axis|motor		new section
+			# 2: name|unit|float|int	key
+			# 3: .*?			value
+			if r.group(1) is not None:
+				# New section.
+				section = r.group(1)
+				continue
+			key = r.group(2)
+			value = r.group(3)
+			if section is None:
+				if key == 'name':
+					ret['name'].append([value, None])
+				elif key == 'unit':
+					assert len(name) > 0
+					assert name[-1][1] is None
+					name[-1][1] = value
+				else:
+					raise AssertionError('this should not be reached')
+			else:
+				if re.match(r'^[-0-9]+$', value):
+					ret[section].append((key, int(value)))
+				else:
+					ret[section].append((key, float(value)))
+	typeinfo[module] = ret
+	type_names.append(module)
+# }}}
+
+cdriver.init(fhs.read_data('franklin-cdriver', opened = False).encode('utf-8'), (moduledir + os.sep).encode('utf-8'))
 
 # Enable code trace. {{{
 if False:
@@ -1214,11 +1272,32 @@ class Machine: # {{{
 			self.id = id
 			self.axis = []
 			self.motor = []
-			self.delta = [{'axis_min': 0., 'axis_max': 0., 'rodlength': 0., 'radius': 0.} for t in range(3)]
-			self.delta_angle = 0
+			if self.type in typeinfo:
+				self.module = {key: value for key, value in typeinfo[self.type]['space']}
 			self.polar_max_r = float('inf')
 			self.extruder = []
 			self.follower = []
+		def parse_info(self, data, info):
+			'''Decode data from cdriver
+			data is ([ints], [floats])'''
+			int_num = 0
+			float_num = 0
+			ret = {}
+			for key, value in info:
+				if isinstance(value, int):
+					ret[key] = data[0][int_num]
+					int_num += 1
+				else:
+					ret[key] = data[1][float_num]
+					float_num += 1
+			return ret
+		def build_module_data(self, data, info):
+			'''Prepare data for sending to cdriver'''
+			ret = []
+			for key, value in info:
+				assert key in data
+				ret.append(type(value)(data[key]))
+			return ret
 		def read(self):
 			self.read_info()
 			for a in range(len(self.axis)):
@@ -1227,7 +1306,11 @@ class Machine: # {{{
 				self.read_motor(m)
 		def read_info(self):
 			data = cdriver.read_space_info(self.id)
+			old_type = self.type
 			self.type = type_names[data.pop('type')]
+			if old_type != self.type:
+				if self.type in typeinfo:
+					self.module = self.parse_info(data['module'], typeinfo[self.type]['space'])
 			num_axes = data.pop('num_axes')
 			num_motors = data.pop('num_motors')
 			if self.id == 1:
@@ -1252,14 +1335,31 @@ class Machine: # {{{
 						return 'extruder %d' % i
 					else:
 						return 'follower %d' % i
-				self.axis += [{'name': nm(i), 'home_pos2': float('nan')} for i in range(len(self.axis), num_axes)]
+				for i in range(len(self.axis), num_axes):
+					self.axis.append({'name': nm(i), 'home_pos2': float('nan'), 'module': {}})
+					if old_type == self.type and self.type in typeinfo:
+						self.axis[i]['module'] = {key: value for key, value in typeinfo[self.type]['axis']}
 			else:
-				self.axis[num_axes:] = []
+				while len(self.axis) > num_axes:
+					self.axis.pop(-1)
+			if old_type != self.type and self.type in typeinfo:
+				for a, axis in enumerate(self.axis):
+					self.axis[a]['module'] = {key: value for key, value in typeinfo[self.type]['axis']}
 			if num_motors > len(self.motor):
-				self.motor += [{'unit': self.machine.unit_name} if self.id == 1 else {} for i in range(len(self.motor), num_motors)]
+				for i in range(len(self.motor), num_motors):
+					self.motor.append({'unit': self.machine.unit_name, 'module': {}})
+					if old_type == self.type and self.type in typeinfo:
+						self.motor[i]['module'] = {key: value for key, value in typeinfo[self.type]['motor']}
 			else:
-				self.motor[num_motors:] = []
-			if self.type == TYPE_CARTESIAN:
+				while len(self.motor) > num_motors:
+					self.motor.pop(-1)
+			if old_type != self.type and self.type in typeinfo:
+				for m, motor in enumerate(self.motor):
+					self.motor[m]['module'] = {key: value for key, value in typeinfo[self.type]['motor']}
+			if self.type in typeinfo:
+				module_data = data.pop('module')
+				self.module = self.parse_info(module_data, typeinfo[self.type]['space'])
+			elif self.type == TYPE_CARTESIAN:
 				for m in self.motor:
 					m['unit'] = self.machine.unit_name
 			elif self.type == TYPE_EXTRUDER:
@@ -1277,13 +1377,6 @@ class Machine: # {{{
 						self.follower[a][x] = follow[a][i]
 					s, m = follow[a]
 					self.motor[a]['unit'] = self.machine.unit_name if not 0 <= s <= 1 or not 0 <= m < len(self.machine.spaces[s].motor) else self.machine.spaces[s].motor[m]['unit']
-			elif self.type == TYPE_DELTA:
-				for m in self.motor:
-					m['unit'] = self.machine.unit_name
-				for a, d in enumerate(data.pop('delta')):
-					for k in d:
-						self.delta[a][k] = d[k]
-				self.delta_angle = data['delta_angle']
 			elif self.type == TYPE_POLAR:
 				for i, m in enumerate(self.motor):
 					m['unit'] = self.machine.unit_name if i != 1 else '°'
@@ -1295,11 +1388,17 @@ class Machine: # {{{
 				log('invalid type')
 				raise AssertionError('invalid space type')
 		def read_axis(self, a):
-			data = cdriver.read_space_axis(self.id, a)
+			data = cdriver.read_space_axis(self.id, a, type_names.index(self.type))
+			if self.type in typeinfo:
+				module_data = data.pop('module')
+				self.axis[a]['module'] = self.parse_info(module_data, typeinfo[self.type]['axis'])
 			for k in data:
 				self.axis[a][k] = data[k]
 		def read_motor(self, m):
-			data = cdriver.read_space_motor(self.id, m)
+			data = cdriver.read_space_motor(self.id, m, type_names.index(self.type))
+			if self.type in typeinfo:
+				module_data = data.pop('module')
+				self.motor[m]['module'] = self.parse_info(module_data, typeinfo[self.type]['motor'])
 			for k in data:
 				self.motor[m][k] = data[k]
 			if self.id == 1 and m < len(self.machine.multipliers):
@@ -1308,30 +1407,30 @@ class Machine: # {{{
 			if num_axes is None:
 				num_axes = len(self.axis)
 			data = {'type': type_names.index(self.type) if self.type in type_names else 0, 'num_axes': num_axes}
-			if self.type == TYPE_CARTESIAN:
+			if self.type in typeinfo:
+				data['module'] = self.build_module_data(self.module, typeinfo[self.type]['space'])
+			elif self.type == TYPE_CARTESIAN:
 				pass
 			elif self.type == TYPE_EXTRUDER:
 				data['offset'] = [tuple(self.extruder[a][x] for x in ('dx', 'dy', 'dz')) if a < len(self.extruder) else (0, 0, 0) for a in range(num_axes)]
 			elif self.type == TYPE_FOLLOWER:
 				data['follow'] = [tuple(self.follower[a][x] for x in ('space', 'motor')) if a < len(self.follower) else (-1, -1) for a in range(num_axes)]
-			elif self.type == TYPE_DELTA:
-				data['delta'] = [{k: self.delta[a][k] for k in ('axis_min', 'axis_max', 'rodlength', 'radius')} for a in range(3)]
-				data['delta_angle'] = self.delta_angle
 			elif self.type == TYPE_POLAR:
 				data['max_r'] = self.polar_max_r
 			elif self.type == TYPE_HBOT:
 				pass
 			else:
-				log('invalid type')
+				log('invalid type in write_info')
 				raise AssertionError('invalid space type')
-			#log('writing info: %s' % repr(data))
 			cdriver.write_space_info(self.id, data)
 		def write_axis(self, axis):
 			data = {'park_order': 0, 'park': float('nan'), 'min': float('-inf'), 'max': float('inf')}
 			if self.id == 0:
 				for k in data.keys():
 					data[k] = self.axis[axis][k]
-			cdriver.write_space_axis(self.id, axis, data)
+			if self.type in typeinfo:
+				data['module'] = self.build_module_data(self.axis[axis]['module'], typeinfo[self.type]['axis'])
+			cdriver.write_space_axis(self.id, axis, data, type_names.index(self.type))
 		def write_motor(self, motor):
 			if self.id == 2:
 				if self.follower[motor]['space'] >= len(self.machine.spaces) or self.follower[motor]['motor'] >= len(self.machine.spaces[self.follower[motor]['space']].motor):
@@ -1345,9 +1444,11 @@ class Machine: # {{{
 			# don't include unit, because cdriver doesn't use it.
 			data = {x: self.motor[motor][x] for x in ('step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'home_pos', 'home_order')}
 			data.update({x: base[x] for x in ('limit_v', 'limit_a', 'steps_per_unit')})
+			if self.type in typeinfo:
+				data['module'] = self.build_module_data(self.motor[motor]['module'], typeinfo[self.type]['motor'])
 			if self.id == 1 and motor < len(self.machine.multipliers):
 				data['steps_per_unit'] *= self.machine.multipliers[motor]
-			cdriver.write_space_motor(self.id, motor, data)
+			cdriver.write_space_motor(self.id, motor, data, type_names.index(self.type))
 		def set_current_pos(self, axis, pos):
 			#log('setting pos of %d %d to %f' % (self.id, axis, pos))
 			cdriver.setpos(self.id, axis, pos)
@@ -1357,29 +1458,41 @@ class Machine: # {{{
 				return float('nan')
 			return cdriver.getpos(self.id, axis)
 		def motor_name(self, i):
-			if self.type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER):
+			if self.type in typeinfo:
+				if i < len(typeinfo[self.type]['name']):
+					name = typeinfo[self.type]['name'][i][0]
+					if name is not None:
+						return name
+				if i < len(self.spaces[self.id].axis):
+					return self.spaces[self.id].axis[i]['name']
+				return 'motor %d' % i
+			elif self.type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER):
 				return self.axis[i]['name']
-			elif self.type in (TYPE_DELTA, TYPE_HBOT):
+			elif self.type == TYPE_HBOT:
 				return chr(ord('u') + i)
 			elif self.type == TYPE_POLAR:
 				return ['r', 'θ', 'z'][i]
 			else:
-				log('invalid type')
+				log('invalid type for motor_name')
 				raise AssertionError('invalid space type')
 		def export(self):
 			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max'], a['home_pos2']] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['steps_per_unit'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order'], m['unit']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.machine.multipliers]
-			if self.type in (TYPE_CARTESIAN, TYPE_HBOT):
+			if self.type in typeinfo:
+				for a, data in enumerate(std[2]):
+					data.append(self.axis[a]['module'])
+				for m, data in enumerate(std[3]):
+					data.append(self.motor[m]['module'])
+				return std + [self.module]
+			elif self.type in (TYPE_CARTESIAN, TYPE_HBOT):
 				return std
 			elif self.type == TYPE_EXTRUDER:
 				return std + [[[a['dx'], a['dy'], a['dz']] for a in self.extruder]]
 			elif self.type == TYPE_FOLLOWER:
 				return std + [[[a['space'], a['motor']] for a in self.follower]]
-			elif self.type == TYPE_DELTA:
-				return std + [[[a['axis_min'], a['axis_max'], a['rodlength'], a['radius']] for a in self.delta] + [self.delta_angle]]
 			elif self.type == TYPE_POLAR:
 				return std + [self.polar_max_r]
 			else:
-				log('invalid type')
+				log('invalid type for export')
 				raise AssertionError('invalid space type')
 		def export_settings(self):
 			# Things to handle specially while homing:
@@ -1389,29 +1502,27 @@ class Machine: # {{{
 			type = self.type if self.id != 0 or self.machine.home_phase is None else self.machine.home_orig_type
 			if self.id == 0:
 				ret += 'type = %s\r\n' % type
-			if type == TYPE_CARTESIAN:
-				ret += 'num_axes = %d\r\n' % len(self.axis)
+			ret += 'num_axes = %d\r\n' % len(self.axis)
+			if type in typeinfo:
+				for key in self.module:
+					value = self.module[key]
+					ret += '%s-%s = %s\r\n' % (self.type, key, value)
+			elif type == TYPE_CARTESIAN:
+				pass
 			elif type == TYPE_EXTRUDER:
-				ret += 'num_axes = %d\r\n' % len(self.axis)
 				for i in range(len(self.extruder)):
 					ret += '[extruder %d %d]\r\n' % (self.id, i)
 					ret += ''.join(['%s = %f\r\n' % (x, self.extruder[i][x]) for x in ('dx', 'dy', 'dz')])
 			elif type == TYPE_FOLLOWER:
-				ret += 'num_axes = %d\r\n' % len(self.axis)
 				for i in range(len(self.follower)):
 					ret += '[follower %d %d]\r\n' % (self.id, i)
 					ret += ''.join(['%s = %d\r\n' % (x, self.follower[i][x]) for x in ('space', 'motor')])
-			elif type == TYPE_DELTA:
-				ret += 'delta_angle = %f\r\n' % self.delta_angle
-				for i in range(3):
-					ret += '[delta %d %d]\r\n' % (self.id, i)
-					ret += ''.join(['%s = %f\r\n' % (x, self.delta[i][x]) for x in ('rodlength', 'radius', 'axis_min', 'axis_max')])
 			elif type == TYPE_POLAR:
 				ret += 'polar_max_r = %f\r\n' % self.polar_max_r
 			elif type == TYPE_HBOT:
 				pass
 			else:
-				log('invalid type')
+				log('invalid type for export_settings')
 				raise AssertionError('invalid space type')
 			for i, a in enumerate(self.axis):
 				ret += '[axis %d %d]\r\n' % (self.id, i)
@@ -1422,6 +1533,10 @@ class Machine: # {{{
 						ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('min', 'max')])
 					else:
 						ret += ''.join(['%s = %f\r\n' % (x, y) for x, y in zip(('min', 'max'), self.machine.home_limits[self.id])])
+				if type in typeinfo:
+					for key in a['module']:
+						value = a['module'][key]
+						ret += '%s-%s = %s\r\n' % (self.type, key, value)
 			for i, m in enumerate(self.motor):
 				ret += '[motor %d %d]\r\n' % (self.id, i)
 				ret += ''.join(['%s = %s\r\n' % (x, write_pin(m[x])) for x in ('step_pin', 'dir_pin', 'enable_pin')])
@@ -1432,6 +1547,10 @@ class Machine: # {{{
 				if self.id != 2:
 					ret += ''.join(['%s = %s\r\n' % (x, m[x]) for x in ('unit',)])
 					ret += ''.join(['%s = %f\r\n' % (x, m[x]) for x in ('steps_per_unit', 'limit_v', 'limit_a')])
+				if type in typeinfo:
+					for key in m['module']:
+						value = m['module'][key]
+						ret += '%s-%s = %s\r\n' % (self.type, key, value)
 			return ret
 	# }}}
 	class Temp: # {{{
@@ -1942,26 +2061,26 @@ class Machine: # {{{
 		section = 'general'
 		index = None
 		obj = None
-		regexp = re.compile(r'\s*\[(general|(space|temp|gpio|(extruder|axis|motor|delta|follower)\s+(\d+))\s+(\d+))\]\s*$|\s*(\w+)\s*=\s*(.*?)\s*$|\s*(?:#.*)?$')
-		#1: (general|(space|temp|gpio|(axis|motor|delta)\s+(\d+))\s+(\d+))	1 section
-		#2: (space|temp|gpio|(extruder|axis|motor|delta)\s+(\d+))		2 section with index
-		#3: (extruder|axis|motor|delta)						3 sectionname with two indices
-		#4: (\d+)								4 index of space
-		#5: (\d+)								5 only or component index
-		#6: (\w+)								6 identifier
-		#7: (.*?)								7 value
+		regexp = re.compile(r'\s*\[(general|(space|temp|gpio|(extruder|axis|motor|follower)\s+(\d+))\s+(\d+))\]\s*$|\s*(?:(\w+)-)?(\w+)\s*=\s*(.*?)\s*$|\s*(?:#.*)?$')
+		#1: (general|(space|temp|gpio|(axis|motor)\s+(\d+))\s+(\d+))	1 section
+		#2: (space|temp|gpio|(extruder|axis|motor)\s+(\d+))		2 section with index
+		#3: (extruder|axis|motor)					3 sectionname with two indices
+		#4: (\d+)							4 index of space
+		#5: (\d+)							5 only or component index
+		#6: (\w+)							6 module prefix
+		#7: (\w+)							7 identifier
+		#8: (.*?)							8 value
 		errors = []
 		globals_changed = True
-		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'delta': set(), 'follower': set()}
+		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'follower': set()}
 		keys = {
 				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J'},
-				'space': {'type', 'num_axes', 'delta_angle', 'polar_max_r'},
+				'space': {'type', 'num_axes', 'polar_max_r'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
 				'axis': {'name', 'park', 'park_order', 'min', 'max', 'home_pos2'},
 				'motor': {'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'home_pos', 'limit_v', 'limit_a', 'home_order', 'unit'},
 				'extruder': {'dx', 'dy', 'dz'},
-				'delta': {'axis_min', 'axis_max', 'rodlength', 'radius'},
 				'follower': {'space', 'motor'}
 			}
 		for l in settings.split('\n'):
@@ -1975,7 +2094,7 @@ class Machine: # {{{
 					# At least one index.
 					#log("At least one index")
 					if r.group(3) is not None:
-						# Two indices: axis, motor, extruder, delta, follower.
+						# Two indices: axis, motor, extruder, follower.
 						#log("Two indices")
 						index = (int(r.group(4)), int(r.group(5)))
 						section = r.group(3)
@@ -2007,39 +2126,63 @@ class Machine: # {{{
 			elif obj is None:
 				# Ignore settings for incorrect section.
 				continue
-			if not r.group(6):
+			if not r.group(7):
 				# Comment or empty line.
 				continue
-			key = r.group(6)
-			value = r.group(7)
-			try:
-				if key == 'pin_names':
-					if len(self.pin_names) > 0:
-						# Don't override hardware-provided names.
+			module = r.group(6)
+			key = r.group(7)
+			value = r.group(8)
+			if module is None:
+				try:
+					if key == 'pin_names':
+						if len(self.pin_names) > 0:
+							# Don't override hardware-provided names.
+							continue
+						if value.strip() == '':
+							# Avoid errors when empty.
+							continue
+						value = [[int(x[0]), x[1:]] for x in value.split(',')]
+					elif 'name' in key or key in ('user_interface', 'type'):
+						pass	# Keep strings as they are.
+					elif key == 'spi_setup':
+						value = self._unmangle_spi(value)
+					elif key.endswith('pin'):
+						value = read_pin(self, value)
+						#log('pin imported as {} for {}'.format(value, key))
+					elif key.startswith('num') or section == 'follower' or key.endswith('_id'):
+						value = int(value)
+					else:
+						value = float(value)
+				except ValueError:
+					errors.append((l, 'invalid value for %s' % key))
+					continue
+				if key not in keys[section] or (section == 'motor' and ((key in ('home_pos', 'home_order') and index[0] == 1) or (key in ('steps_per_unit', 'limit_v', 'limit_a') and index[0] == 2))):
+					errors.append((l, 'invalid key for section %s' % section))
+					continue
+			else:
+				if index is None:
+					errors.append((l, 'module keys are not allowed in the general section'))
+					continue
+				if section == 'space':
+					if module != obj.type:
+						errors.append((l, 'invalid module type: %s != %s' % (module, obj.type)))
 						continue
-					if value.strip() == '':
-						# Avoid errors when empty.
-						continue
-					value = [[int(x[0]), x[1:]] for x in value.split(',')]
-				elif 'name' in key or key in ('user_interface', 'type'):
-					pass	# Keep strings as they are.
-				elif key == 'spi_setup':
-					value = self._unmangle_spi(value)
-				elif key.endswith('pin'):
-					value = read_pin(self, value)
-					#log('pin imported as {} for {}'.format(value, key))
-				elif key.startswith('num') or section == 'follower' or key.endswith('_id'):
-					value = int(value)
+					module_data = obj.module
+				elif section not in ('motor', 'axis'):
+					errors.append((l, 'invalid section %s for module key' % section))
+					continue
 				else:
-					value = float(value)
-			except ValueError:
-				errors.append((l, 'invalid value for %s' % key))
-				continue
-			if key not in keys[section] or (section == 'motor' and ((key in ('home_pos', 'home_order') and index[0] == 1) or (key in ('steps_per_unit', 'limit_v', 'limit_a') and index[0] == 2))):
-				errors.append((l, 'invalid key for section %s' % section))
-				continue
+					if module != self.spaces[index[0]].type:
+						errors.append((l, 'invalid module type: %s != %s' % (module, self.spaces[index[0]].type)))
+						continue
+					module_data = obj['module']
+				if key not in module_data:
+					errors.append((l, 'invalid module key %s-%s' % (module, key)))
+					continue
+				# Cast to correct type.
+				module_data[key] = type(module_data[key])(value)
 			# If something critical is changed, update instantly.
-			if key.startswith('num') or key == 'type':
+			if module is None and (key.startswith('num') or key == 'type'):
 				#log('setting now for %s:%s=%s' % (section, key, value))
 				if index is None:
 					self.expert_set_globals(**{key: value})
@@ -2049,9 +2192,6 @@ class Machine: # {{{
 							if i[0] == index:
 								self.expert_set_motor(i, readback = False)
 						for i in changed['axis']:
-							if i[0] == index:
-								self.expert_set_axis(i, readback = False)
-						for i in changed['delta']:
 							if i[0] == index:
 								self.expert_set_axis(i, readback = False)
 					getattr(self, 'expert_set_' + section)(index, **{key: value})
@@ -2073,14 +2213,12 @@ class Machine: # {{{
 			changed['space'].add(index[0])
 		for index in changed['follower']:
 			changed['space'].add(index[0])
-		for index in changed['delta']:
-			changed['space'].add(index[0])
 		for section in changed:
 			for index in changed[section]:
 				if not isinstance(index, tuple):
 					continue
-				if section not in ('follower', 'delta', 'extruder'):
-					#log('setting non-{delta,follower} %s %s' % (section, index))
+				if section not in ('follower', 'extruder'):
+					#log('setting non-follower %s %s' % (section, index))
 					getattr(self, 'expert_set_' + section)(index, readback = False)
 				changed['space'].add(index[0])
 		for section in changed:
@@ -2272,7 +2410,6 @@ class Machine: # {{{
 	def send_machine(self, target): # {{{
 		'''Return all settings about a machine.
 		'''
-		log('sending machine ' + repr(self.uuid))
 		self.initialized = True
 		self._broadcast(target, 'new_machine', [self.queue_length])
 		self._globals_update(target)
@@ -2411,7 +2548,9 @@ class Machine: # {{{
 	# }}}
 	def get_space(self, space): # {{{
 		ret = {'name': self.spaces[space].name, 'num_axes': len(self.spaces[space].axis), 'num_motors': len(self.spaces[space].motor)}
-		if self.spaces[space].type == TYPE_CARTESIAN:
+		if self.spaces[space].type in typeinfo:
+			ret['module'] = self.spaces[space].module
+		elif self.spaces[space].type == TYPE_CARTESIAN:
 			pass
 		elif self.spaces[space].type == TYPE_EXTRUDER:
 			ret['extruder'] = []
@@ -2425,15 +2564,6 @@ class Machine: # {{{
 				ret['follower'].append({})
 				for key in ('space', 'motor'):
 					ret['follower'][-1][key] = self.spaces[space].follower[a][key]
-		elif self.spaces[space].type == TYPE_DELTA:
-			delta = []
-			for i in range(3):
-				d = {}
-				for key in ('axis_min', 'axis_max', 'rodlength', 'radius'):
-					d[key] = self.spaces[space].delta[i][key]
-				delta.append(d)
-			delta.append(self.spaces[space].delta_angle)
-			ret['delta'] = delta
 		elif self.spaces[space].type == TYPE_POLAR:
 			ret['polar_max_r'] = self.spaces[space].polar_max_r
 		elif self.spaces[space].type == TYPE_HBOT:
@@ -2449,6 +2579,8 @@ class Machine: # {{{
 		if space == 0:
 			for key in ('park', 'park_order', 'min', 'max', 'home_pos2'):
 				ret[key] = self.spaces[space].axis[axis][key]
+		if self.spaces[space].type in typeinfo:
+			ret['module'] = self.spaces[space].axis[axis]['module']
 		return ret
 	# }}}
 	def get_motor(self, space, motor): # {{{
@@ -2461,6 +2593,8 @@ class Machine: # {{{
 		if space != 2:
 			for key in ('steps_per_unit', 'limit_v', 'limit_a', 'unit'):
 				ret[key] = self.spaces[space].motor[motor][key]
+		if self.spaces[space].type in typeinfo:
+			ret['module'] = self.spaces[space].motor[motor]['module']
 		return ret
 	# }}}
 	def expert_set_space(self, space, readback = True, update = True, **ka): # {{{
@@ -2488,31 +2622,23 @@ class Machine: # {{{
 							self.spaces[space].follower[fi][key] = int(ff.pop(key))
 						log('follower set to {}'.format(self.spaces[space].follower))
 				assert len(ff) == 0
-		if self.spaces[space].type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER, TYPE_HBOT):
-			if 'num_axes' in ka:
-				num_axes = int(ka.pop('num_axes'))
-			else:
-				num_axes = len(self.spaces[space].axis)
-			num_motors = num_axes
-		elif self.spaces[space].type == TYPE_DELTA:
-			num_axes = 3
-			num_motors = 3
-			if 'delta' in ka:
-				d = ka.pop('delta')
-				if isinstance(d, (list, tuple)):
-					d = {i: item for i, item in enumerate(d)}
-				for di, dd in d.items():
-					i = int(di)
-					assert 0 <= i < 3
-					for key in ('axis_min', 'axis_max', 'rodlength', 'radius'):
-						if key in dd:
-							self.spaces[space].delta[i][key] = dd.pop(key)
-					assert len(dd) == 0
-			if 'delta_angle' in ka:
-				self.spaces[space].delta_angle = ka.pop('delta_angle')
+		if 'num_axes' in ka:
+			num_axes = int(ka.pop('num_axes'))
+		else:
+			num_axes = len(self.spaces[space].axis)
+		num_motors = num_axes
+		if self.spaces[space].type in typeinfo:
+			if not hasattr(self.spaces[space], 'module'):
+				self.spaces[space].module = {key: value for key, value in typeinfo[self.spaces[space].type]['space']}
+			if 'module' in ka:
+				module_data = ka.pop('module')
+				assert module_data.pop('type') == self.spaces[space].type
+				for key in module_data:
+					assert key in self.spaces[space].module
+					self.spaces[space].module[key] = type(self.spaces[space].module[key])(module_data[key])
+		elif self.spaces[space].type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER, TYPE_HBOT):
+			pass
 		elif self.spaces[space].type == TYPE_POLAR:
-			num_axes = 3
-			num_motors = 3
 			if 'polar_max_r' in ka:
 				self.spaces[space].polar_max_r = ka.pop('polar_max_r')
 		self.spaces[space].write_info(num_axes)
@@ -2535,6 +2661,15 @@ class Machine: # {{{
 			assert(ka['multiplier'] > 0)
 			self.multipliers[axis] = ka.pop('multiplier')
 			self.expert_set_motor((space, axis), readback, update)
+		if self.spaces[space].type in typeinfo:
+			if 'module' not in self.spaces[space].axis[axis]:
+				self.spaces[space].axis[axis]['module'] = {key: value for key, value in typeinfo[self.spaces[space].type]['axis']}
+			if 'module' in ka:
+				module_data = ka.pop('module')
+				assert module_data.pop('type') == self.spaces[space].type
+				for key in module_data:
+					assert key in self.spaces[space].axis[axis]['module']
+					self.spaces[space].axis[axis]['module'][key] = type(self.spaces[space].axis[axis]['module'][key])(module_data[key])
 		self.spaces[space].write_axis(axis)
 		if readback:
 			self.spaces[space].read()
@@ -2557,6 +2692,15 @@ class Machine: # {{{
 				self.spaces[space].motor[motor][key] = ka.pop(key)
 		if space == 1 and 'unit' in ka:
 			self.spaces[space].motor[motor]['unit'] = ka.pop('unit')
+		if self.spaces[space].type in typeinfo:
+			if 'module' not in self.spaces[space].motor[motor]:
+				self.spaces[space].motor[motor]['module'] = {key: value for key, value in typeinfo[self.spaces[space].type]['motor']}
+			if 'module' in ka:
+				module_data = ka.pop('module')
+				assert module_data.pop('type') == self.spaces[space].type
+				for key in module_data:
+					assert key in self.spaces[space].motor[motor]['module']
+					self.spaces[space].motor[motor]['module'][key] = type(self.spaces[space].motor[motor]['module'][key])(module_data[key])
 		self.spaces[space].write_motor(motor)
 		followers = False
 		for m, mt in enumerate(self.spaces[2].motor):

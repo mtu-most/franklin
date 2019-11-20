@@ -203,6 +203,7 @@ struct Motor {
 	uint8_t home_order;
 	double target_pos;	// Internal variable for moving.
 	double last_v;	// Internal variable for checking limits.
+	void *type_data;
 	ARCH_MOTOR
 };
 
@@ -219,10 +220,15 @@ struct SpaceType {
 	void (*xyz2motors)(Space *s);
 	void (*check_position)(Space *s, double *data);
 	void (*load)(Space *s);
+	void (*aload)(Space *s, int a);
+	void (*mload)(Space *s, int m);
 	void (*save)(Space *s);
+	void (*asave)(Space *s, int a);
+	void (*msave)(Space *s, int m);
 	bool (*init)(Space *s);
-	void (*free)(Space *s);
-	void (*afree)(Space *s, int a);
+	void (*space_free)(Space *s);
+	void (*axis_free)(Space *s, int a);
+	void (*motor_free)(Space *s, int m);
 	double (*change0)(Space *s, int axis, double value);
 	double (*unchange0)(Space *s, int axis, double value);
 	double (*probe_speed)(Space *s);
@@ -250,22 +256,13 @@ struct Space {
 };
 
 void Cartesian_init(int num);
-void Delta_init(int num);
-void Polar_init(int num);
-void Hbot_init(int num);
 void Extruder_init(int num);
 void Follower_init(int num);
+void Polar_init(int num);
+void Hbot_init(int num);
 
-#define setup_spacetypes() do { \
-	Cartesian_init(0); \
-	Extruder_init(1); \
-	Follower_init(2); \
-	Delta_init(3); \
-	Polar_init(4); \
-	Hbot_init(5); \
-} while(0)
-#define DEFAULT_TYPE 0
-EXTERN SpaceType space_types[NUM_SPACE_TYPES];
+EXTERN SpaceType *space_types;
+EXTERN int num_space_types;
 EXTERN int current_extruder;
 
 struct Gpio {
@@ -300,7 +297,6 @@ EXTERN int num_temps;
 EXTERN int num_gpios;
 EXTERN uint32_t protocol_version;
 EXTERN int num_subfragments_bits;
-EXTERN uint8_t machine_type;		// 0: cartesian, 1: delta.
 EXTERN Pin_t led_pin, stop_pin, probe_pin, spiss_pin;
 EXTERN uint16_t timeout;
 EXTERN int bed_id, fan_id, spindle_id;

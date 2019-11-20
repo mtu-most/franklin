@@ -54,7 +54,7 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_axes[a]->history = setup_axis_history();
 		}
 		for (int a = na; a < old_na; ++a) {
-			space_types[type].afree(this, a);
+			space_types[type].axis_free(this, a);
 			delete[] axis[a]->history;
 			delete axis[a];
 		}
@@ -85,10 +85,12 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_motors[m]->target_pos = NAN;
 			new_motors[m]->settings.current_pos = 0;
 			new_motors[m]->history = setup_motor_history();
+			new_motors[m]->type_data = NULL;
 			ARCH_NEW_MOTOR(id, m, new_motors);
 		}
 		for (int m = nm; m < old_nm; ++m) {
 			DATA_DELETE(id, m);
+			space_types[type].motor_free(this, m);
 			delete[] motor[m]->history;
 			delete motor[m];
 		}
@@ -102,26 +104,26 @@ bool Space::setup_nums(int na, int nm) { // {{{
 void Space::load_info() { // {{{
 	loaddebug("loading space %d", id);
 	int t = type;
-	if (t < 0 || t >= NUM_SPACE_TYPES) {
+	if (t < 0 || t >= num_space_types) {
 		debug("invalid current type?! using default type instead");
-		t = DEFAULT_TYPE;
+		t = id;
 	}
 	type = shmem->ints[1];
 	loaddebug("requested type %d, current is %d", type, t);
-	if (type < 0 || type >= NUM_SPACE_TYPES || (id == 1 && type != TYPE_EXTRUDER) || (id == 2 && type != TYPE_FOLLOWER)) {
+	if (type < 0 || type >= num_space_types || (id == 1 && type != TYPE_EXTRUDER) || (id == 2 && type != TYPE_FOLLOWER)) {
 		debug("request for type %d ignored", type);
 		type = t;
 		return;	// The rest of the info is not meant for this type, so ignore it.
 	}
 	if (t != type) {
 		loaddebug("setting type to %d", type);
-		space_types[t].free(this);
+		space_types[t].space_free(this);
 		if (!space_types[type].init(this)) {
-			type = DEFAULT_TYPE;
+			type = id;
 			reset_pos(this);
 			for (int a = 0; a < num_axes; ++a)
 				axis[a]->settings.source = axis[a]->current;
-			return;	// The rest of the info is not meant for DEFAULT_TYPE, so ignore it.
+			return;	// The rest of the info is not meant for this type, so ignore it.
 		}
 	}
 	space_types[type].load(this);
@@ -151,6 +153,7 @@ void Space::load_axis(int a) { // {{{
 	axis[a]->park = shmem->floats[0];
 	axis[a]->min_pos = shmem->floats[1];
 	axis[a]->max_pos = shmem->floats[2];
+	space_types[type].aload(this, a);
 } // }}}
 
 void Space::load_motor(int m) { // {{{
@@ -173,6 +176,7 @@ void Space::load_motor(int m) { // {{{
 	motor[m]->home_pos = shmem->floats[1];
 	motor[m]->limit_v = shmem->floats[2];
 	motor[m]->limit_a = shmem->floats[3];
+	space_types[type].mload(this, m);
 	arch_motors_change();
 	SET_OUTPUT(motor[m]->enable_pin);
 	if (enable != motor[m]->enable_pin.write()) {
@@ -222,6 +226,7 @@ void Space::save_axis(int a) { // {{{
 	shmem->floats[0] = axis[a]->park;
 	shmem->floats[1] = axis[a]->min_pos;
 	shmem->floats[2] = axis[a]->max_pos;
+	space_types[type].asave(this, a);
 } // }}}
 
 void Space::save_motor(int m) { // {{{
@@ -235,10 +240,11 @@ void Space::save_motor(int m) { // {{{
 	shmem->floats[1] = motor[m]->home_pos;
 	shmem->floats[2] = motor[m]->limit_v;
 	shmem->floats[3] = motor[m]->limit_a;
+	space_types[type].msave(this, m);
 } // }}}
 
 void Space::init(int space_id) { // {{{
-	type = space_id == 0 ? DEFAULT_TYPE : space_id == 1 ? TYPE_EXTRUDER : TYPE_FOLLOWER;
+	type = space_id;
 	id = space_id;
 	type_data = NULL;
 	num_axes = 0;
@@ -251,7 +257,7 @@ void Space::init(int space_id) { // {{{
 
 void Space::cancel_update() { // {{{
 	// setup_nums failed; restore system to a usable state.
-	type = DEFAULT_TYPE;
+	type = id;
 	int n = min(num_axes, num_motors);
 	if (!setup_nums(n, n)) {
 		debug("Failed to free memory; removing all motors and axes to make sure it works");

@@ -18,6 +18,7 @@
 CPPFLAGS ?= -Wall -Wextra -Wformat -Werror -Wdate-time -D_FORTIFY_SOURCE=2
 CXXFLAGS ?= -fPIC -ggdb3 -O3 -fstack-protector-strong -rdynamic
 LDFLAGS ?= -Wall -Wextra -Wformat -Werror ${CXXFLAGS}
+LIBS ?= -ldl
 
 CPPFLAGS += -DARCH_INCLUDE='"arch-avr.h"'
 
@@ -39,7 +40,6 @@ SOURCES = \
 	space.cpp \
 	temp.cpp \
 	type-cartesian.cpp \
-	type-delta.cpp \
 	type-polar.cpp \
 	type-hbot.cpp
 
@@ -55,7 +55,7 @@ DEPENDS = \
 	  Makefile
 
 franklin-cdriver: ${OBJS} ${HEADERS} ${DEPENDS}
-	g++ ${LDFLAGS} ${OBJS} -o $@
+	g++ ${LDFLAGS} ${OBJS} -o $@ ${LIBS}
 
 build/%.o: %.cpp ${HEADERS} ${DEPENDS}
 	g++ -std=c++11 -c ${CPPFLAGS} ${CXXFLAGS} $< -o $@

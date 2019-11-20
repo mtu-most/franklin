@@ -4,6 +4,7 @@ server/cdriver/franklin-cdriver
 server/cdriver/bbb_pru.bin
 server/cdriver/build
 server/cdriver.cpython-36m-x86_64-linux-gnu.so
+server/html/index.html
 server/html/builders.js
 server/html/rpc.js
 server/bb/setpin
@@ -16,3 +17,5 @@ module-python-websocketd
 .gitmodules
 zipdir
 server/cdriver.cpython-*
+server/html/type
+server/type/*/*.so

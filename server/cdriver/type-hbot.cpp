@@ -49,8 +49,28 @@ static void load(Space *s) { // {{{
 	}
 } // }}}
 
+static void aload(Space *s, int a) { // {{{
+	(void)&s;
+	(void)&a;
+} // }}}
+
+static void mload(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
+} // }}}
+
 static void save(Space *s) { // {{{
 	(void)&s;
+} // }}}
+
+static void asave(Space *s, int a) { // {{{
+	(void)&s;
+	(void)&a;
+} // }}}
+
+static void msave(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
 } // }}}
 
 static bool init(Space *s) { // {{{
@@ -58,13 +78,18 @@ static bool init(Space *s) { // {{{
 	return true;
 } // }}}
 
-static void free(Space *s) { // {{{
+static void space_free(Space *s) { // {{{
 	(void)&s;
 } // }}}
 
-static void afree(Space *s, int a) { // {{{
+static void axis_free(Space *s, int a) { // {{{
 	(void)&s;
 	(void)&a;
+} // }}}
+
+static void motor_free(Space *s, int m) { // {{{
+	(void)&s;
+	(void)&m;
 } // }}}
 
 static double change0(Space *s, int axis, double value) { // {{{
@@ -95,10 +120,15 @@ void Hbot_init(int num) { // {{{
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].check_position = check_position;
 	space_types[num].load = load;
+	space_types[num].aload = aload;
+	space_types[num].mload = mload;
 	space_types[num].save = save;
+	space_types[num].asave = asave;
+	space_types[num].msave = msave;
 	space_types[num].init = init;
-	space_types[num].free = free;
-	space_types[num].afree = afree;
+	space_types[num].space_free = space_free;
+	space_types[num].axis_free = axis_free;
+	space_types[num].motor_free = motor_free;
 	space_types[num].change0 = change0;
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;

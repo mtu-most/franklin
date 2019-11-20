@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-all: check links
+all: check links index.html
 
 check:
 	! which gjslint || gjslint --disable 5,110,220 server.js main.js templates.js ui.js
@@ -25,4 +25,10 @@ links: clean
 	ln -s /usr/share/python3-websocketd/builders.js .
 
 clean:
-	rm -f rpc.js builders.js
+	rm -f rpc.js builders.js index.html
+
+files := $(wildcard type/*.js)
+header := $(foreach file,${files},<script type="application/javascript" src="${file}"></script>)
+
+index.html: index.html.template
+	sed 's#<!-- TYPE-INCLUDES -->#${header}#' < $< > $@

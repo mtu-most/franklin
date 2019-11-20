@@ -34,7 +34,6 @@ var role;
 var TYPE_CARTESIAN = 'cartesian';
 var TYPE_EXTRUDER = 'extruder';
 var TYPE_FOLLOWER = 'follower';
-var TYPE_DELTA = 'delta';
 var TYPE_POLAR = 'polar';
 var TYPE_HBOT = 'h-bot';
 // }}}
@@ -163,7 +162,6 @@ function _setup_updater() {
 							type: TYPE_CARTESIAN,
 							num_axes: 0,
 							num_motors: 0,
-							delta_angle: 0,
 							polar_max_r: Infinity,
 							axis: [],
 							motor: []
@@ -173,7 +171,6 @@ function _setup_updater() {
 							type: TYPE_EXTRUDER,
 							num_axes: 0,
 							num_motors: 0,
-							delta_angle: 0,
 							polar_max_r: Infinity,
 							axis: [],
 							motor: []
@@ -183,7 +180,6 @@ function _setup_updater() {
 							type: TYPE_FOLLOWER,
 							num_axes: 0,
 							num_motors: 0,
-							delta_angle: 0,
 							polar_max_r: Infinity,
 							axis: [],
 							motor: []
@@ -267,6 +263,7 @@ function _setup_updater() {
 				nums_changed = true;
 			machines[machine].spaces[index].num_motors = values[3].length;
 			var current = [];
+			var info = type_info[machines[machine].spaces[index].type];
 			for (var a = 0; a < machines[machine].spaces[index].num_axes; ++a)
 				current.push(a < machines[machine].spaces[index].axis.length ? machines[machine].spaces[index].axis[a].current : NaN);
 			machines[machine].spaces[index].axis = [];
@@ -302,29 +299,34 @@ function _setup_updater() {
 				for (var a = 0; a < values[4].length; ++a)
 					machines[machine].spaces[index].axis[a].multiplier = values[4][a];
 			}
-			if (machines[machine].spaces[index].type == TYPE_DELTA) {
-				for (var i = 0; i < 3; ++i) {
-					machines[machine].spaces[index].motor[i].delta_axis_min = values[5][i][0];
-					machines[machine].spaces[index].motor[i].delta_axis_max = values[5][i][1];
-					machines[machine].spaces[index].motor[i].delta_rodlength = values[5][i][2];
-					machines[machine].spaces[index].motor[i].delta_radius = values[5][i][3];
+			if (info) {
+				if (info.load !== undefined)
+					info.load(machine, index, values[5]);
+				if (info.aload !== undefined) {
+					for (var a = 0; a < machines[machine].spaces[index].num_axes; ++a)
+						info.aload(machine, index, a, values[2][a][6]);
 				}
-				machines[machine].spaces[index].delta_angle = values[5][3];
-			}
-			if (machines[machine].spaces[index].type == TYPE_POLAR) {
-				machines[machine].spaces[index].polar_max_r = values[5];
-			}
-			if (machines[machine].spaces[index].type == TYPE_EXTRUDER) {
-				for (var i = 0; i < machines[machine].spaces[index].axis.length; ++i) {
-					machines[machine].spaces[index].axis[i].extruder_dx = values[5][i][0];
-					machines[machine].spaces[index].axis[i].extruder_dy = values[5][i][1];
-					machines[machine].spaces[index].axis[i].extruder_dz = values[5][i][2];
+				if (info.mload !== undefined) {
+					for (var m = 0; m < machines[machine].spaces[index].num_motors; ++m)
+						info.mload(machine, index, m, values[3][m][12]);
 				}
 			}
-			if (machines[machine].spaces[index].type == TYPE_FOLLOWER) {
-				for (var i = 0; i < machines[machine].spaces[index].axis.length; ++i) {
-					machines[machine].spaces[index].motor[i].follower_space = values[5][i][0];
-					machines[machine].spaces[index].motor[i].follower_motor = values[5][i][1];
+			else {
+				if (machines[machine].spaces[index].type == TYPE_POLAR) {
+					machines[machine].spaces[index].polar_max_r = values[5];
+				}
+				if (machines[machine].spaces[index].type == TYPE_EXTRUDER) {
+					for (var i = 0; i < machines[machine].spaces[index].axis.length; ++i) {
+						machines[machine].spaces[index].axis[i].extruder_dx = values[5][i][0];
+						machines[machine].spaces[index].axis[i].extruder_dy = values[5][i][1];
+						machines[machine].spaces[index].axis[i].extruder_dz = values[5][i][2];
+					}
+				}
+				if (machines[machine].spaces[index].type == TYPE_FOLLOWER) {
+					for (var i = 0; i < machines[machine].spaces[index].axis.length; ++i) {
+						machines[machine].spaces[index].motor[i].follower_space = values[5][i][0];
+						machines[machine].spaces[index].motor[i].follower_motor = values[5][i][1];
+					}
 				}
 			}
 			trigger_update(machine, 'space_update', index, nums_changed);

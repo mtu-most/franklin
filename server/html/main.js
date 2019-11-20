@@ -24,7 +24,8 @@ var upload_options = {};
 var labels_element, machines_element;
 var selected_machine;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
-var space_types = {'cartesian': 'Cartesian', 'delta': 'Delta', 'polar': 'Polar', 'h-bot': 'H-bot'};
+var space_types = {'cartesian': 'Cartesian', 'polar': 'Polar', 'h-bot': 'H-bot'};
+var type_info;
 var new_tab, new_page;
 // }}}
 
@@ -199,6 +200,9 @@ AddEvent('load', function() { // {{{
 	new_page = document.getElementById('new_page');
 	selected_machine = null;
 	setup();
+	type_info = {};
+	var setup_event = new Event('setup');
+	window.dispatchEvent(setup_event);
 	window.AddEvent('keypress', keypress);
 	setInterval(timed_update, 400);
 }); // }}}
@@ -240,27 +244,23 @@ function set_value(ui, id, value, reply, arg) { // {{{
 			ui.machine.call('set_globals', [], obj, reply);
 		}
 		else {
-			if (id[0][1] === null) {
+			if (id[0][0] == 'module') {
+				type_info[id[0][2]].set_value(ui, id, value, reply);
+			}
+			else if (id[0][1] === null) {
 				// [['space', null], 'num_axes']
 				for (var n = 0; n < ui.machine['num_' + type2plural[id[0][0]]]; ++n)
 					ui.machine.call('set_' + id[0][0], [n], obj, reply);
 			}
 			else if (typeof id[0][1] != 'number' && id[0][1][1] == null) {
-				// [['axis', [0, null]], 'offset']
-				// [['motor', [0, null]], 'delta_radius']
-				if ((id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') && (id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_') && (id[0][0] != 'motor' || id[1].substr(0, 9) != 'follower_')) {
+				// [['axis', [0, null]], 'park_pos']
+				// [['motor', [0, null]], 'home_pos']
+				if ((id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_') && (id[0][0] != 'motor' || id[1].substr(0, 9) != 'follower_')) {
 					for (var n = 0; n < ui.machine.spaces[id[0][1][0]]['num_' + type2plural[id[0][0]]]; ++n)
 						ui.machine.call('set_' + id[0][0], [[id[0][1][0], n]], obj, reply);
 				}
-				else if (id[0][0] == 'motor') {
-					obj = {};	// obj was wrong in this case.
-					obj[id[1].substr(6)] = value;
-					var o = {};
-					for (var n = 0; n < ui.machine.spaces[id[0][1][0]].num_motors; ++n)
-						o[n] = obj;
-					ui.machine.call('set_space', [id[0][1][0]], {delta: o}, reply);
-				}
 				else if (id[1][0] == 'e') {
+					// extruder
 					obj = {};	// obj was wrong in this case.
 					obj[id[1].substr(9)] = value;
 					var o = {};
@@ -269,6 +269,7 @@ function set_value(ui, id, value, reply, arg) { // {{{
 					ui.machine.call('set_space', [id[0][1][0]], {extruder: o}, reply);
 				}
 				else {
+					// follower
 					obj = {};	// obj was wrong in this case.
 					obj[id[1].substr(9)] = value;
 					var o = {};
@@ -277,31 +278,21 @@ function set_value(ui, id, value, reply, arg) { // {{{
 					ui.machine.call('set_motor', [id[0][1][0]], {follower: o}, reply);
 				}
 			}
-			else if ((id[0][0] != 'motor' || id[1].substr(0, 6) != 'delta_') && (id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_') && (id[0][0] != 'motor' || id[1].substr(0, 9) != 'follower_')) {
+			else if ((id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_') && (id[0][0] != 'motor' || id[1].substr(0, 9) != 'follower_')) {
 				// [['space', 1], 'num_axes']
 				// [['axis', [0, 1]], 'offset']
 				ui.machine.call('set_' + id[0][0], [id[0][1]], obj, reply);
 			}
 			else if (id[0][0] == 'motor') {
-				if (id[1][0] != 'f') {
-					// [['motor', [0, 1]], 'delta_radius']
-					obj = {};	// obj was wrong in this case.
-					obj[id[1].substr(6)] = value;
-					var o = {};
-					o[id[0][1][1]] = obj;
-					ui.machine.call('set_space', [id[0][1][0]], {delta: o}, reply);
-				}
-				else {
-					// [['motor', [0, 1]], 'follower_motor']
-					obj = {};	// obj was wrong in this case.
-					obj[id[1].substr(9)] = value;
-					var o = {};
-					o[id[0][1][1]] = obj;
-					ui.machine.call('set_space', [id[0][1][0]], {follower: o}, reply);
-				}
+				// [['motor', [0, 1]], 'follower_motor']
+				obj = {};	// obj was wrong in this case.
+				obj[id[1].substr(9)] = value;
+				var o = {};
+				o[id[0][1][1]] = obj;
+				ui.machine.call('set_space', [id[0][1][0]], {follower: o}, reply);
 			}
 			else {
-				// [['motor', [0, 1]], 'delta_radius']
+				// [['motor', [0, 1]], 'extruder_dx']
 				obj = {};	// obj was wrong in this case.
 				obj[id[1].substr(9)] = value;
 				var o = {};
@@ -335,15 +326,13 @@ function set_value(ui, id, value, reply, arg) { // {{{
 function get_value(ui, id) { // {{{
 	if (id[0] === null)
 		return ui.machine[id[1]];
-	if (id[0][0] == 'axis') {
+	if (id[0][0] == 'module')
+		return type_info[id[0][2]].get_value(ui, id);
+	if (id[0][0] == 'axis')
 		return ui.machine.spaces[id[0][1][0]].axis[id[0][1][1]][id[1]];
-	}
-	else if (id[0][0] == 'motor') {
+	if (id[0][0] == 'motor')
 		return ui.machine.spaces[id[0][1][0]].motor[id[0][1][1]][id[1]];
-	}
-	else {
-		return ui.machine[type2plural[id[0][0]]][id[0][1]][id[1]];
-	}
+	return ui.machine[type2plural[id[0][0]]][id[0][1]][id[1]];
 } // }}}
 
 function get_elements(ui, id, extra) { // {{{
@@ -454,18 +443,17 @@ function floatkey(event, element) { // {{{
 	};
 	// Element types:
 	// [null, 'max_v']
+	// [['module', ...], ...]
 	// [['space', null], 'num_axes']
 	// [['axis', [0, null]], 'offset']
-	// [['motor', [0, null]], 'delta_radius']
 	// [['space', 1], 'num_axes']
 	// [['axis', [0, 1]], 'offset']
-	// [['motor', [0, 1]], 'delta_radius']
 	// [['motor', [0, 1]], 'follower_motor']
-	if ((element.obj[0] === null && element.obj[1] != 'zoffset') || (element.obj[0] !== null && element.obj[0][0] != 'space' && element.obj[0][0] != 'axis' && element.obj[0][0] != 'motor') || element.obj[1] == 'current') {
+	if ((element.obj[0] === null && element.obj[1] != 'zoffset') || (element.obj[0] !== null && element.obj[0][0] != 'module' && element.obj[0][0] != 'space' && element.obj[0][0] != 'axis' && element.obj[0][0] != 'motor') || element.obj[1] == 'current') {
 		finish();
 	}
 	else {
-		space = element.obj[1] == 'zoffset' ? 0 : element.obj[0][0] == 'space' ? element.obj[0][1] : element.obj[0][1][0];
+		space = element.obj[1] == 'zoffset' ? 0 : typeof element.obj[0][1] == 'number' ? element.obj[0][1] : element.obj[0][1][0];
 		element.ui.machine.call('get_axis_pos', [space], {}, function(pos) {
 			finish();
 			if (space == 0) {
@@ -1009,15 +997,9 @@ function space_update(uuid, index, nums_changed) { // {{{
 			update_float(p, [['motor', [index, m]], 'home_order']);
 		set_name(p, 'motorunit', index, m, p.machine.spaces[index].motor[m].unit);
 	}
-	if (p.machine.spaces[index].type == TYPE_DELTA) {
-		for (var d = 0; d < 3; ++d) {
-			update_float(p, [['motor', [index, d]], 'delta_axis_min']);
-			update_float(p, [['motor', [index, d]], 'delta_axis_max']);
-			update_float(p, [['motor', [index, d]], 'delta_rodlength']);
-			update_float(p, [['motor', [index, d]], 'delta_radius']);
-		}
-		update_float(p, [['space', index], 'delta_angle']);
-	}
+	var info = type_info[p.machine.spaces[index].type];
+	if (info)
+		info.update(p, index);
 	if (p.machine.spaces[index].type == TYPE_POLAR) {
 		update_float(p, [['space', index], 'polar_max_r']);
 	}
@@ -1373,12 +1355,6 @@ function motor_name(ui, index1, index2) { // {{{
 	return add_name(ui, 'motor', index1, index2);
 } // }}}
 
-function delta_name(ui, index1, index2) { // {{{
-	if (index1 === null)
-		return 'all apexes';
-	return motor_name(ui, index1, index2);
-} // }}}
-
 function temp_name(ui, index) { // {{{
 	if (index === null)
 		return 'all temps';
@@ -1616,97 +1592,39 @@ function redraw_canvas(ui) { // {{{
 			var machinewidth;
 			var machineheight;
 			var outline, center;
-			switch (ui.machine.spaces[0].type) { // Define geometry-specific options, including outline. {{{
-			case TYPE_CARTESIAN:
-			case TYPE_HBOT:
-				var xaxis = ui.machine.spaces[0].axis[0];
-				var yaxis = ui.machine.spaces[0].axis[1];
-				machinewidth = xaxis.max - xaxis.min + .010;
-				machineheight = yaxis.max - yaxis.min + .010;
-				center = [(xaxis.min + xaxis.max) / 2, (yaxis.min + yaxis.max) / 2];
-				outline = function(ui, c) {
-					// Rectangle is always drawn; nothing else to do here.
-				};
-				break;
-			case TYPE_DELTA:
-				var radius = [];
-				var length = [];
-				for (var a = 0; a < 3; ++a) {
-					radius.push(ui.machine.spaces[0].motor[a].delta_radius);
-					length.push(ui.machine.spaces[0].motor[a].delta_rodlength);
-				}
-				//var origin = [[radius[0], 0], [radius[1] * -.5, radius[1] * .8660254037844387], [radius[2] * -.5, radius[2] * -.8660254037844387]];
-				//var dx = [0, -.8660254037844387, .8660254037844387];
-				//var dy = [1, -.5, -.5];
-				var origin = [[radius[0] * -.8660254037844387, radius[0] * -.5], [radius[1] * .8660254037844387, radius[1] * -.5], [0, radius[2]]];
-				center = [0, 0];
-				var dx = [.5, .5, -1];
-				var dy = [-.8660254037844387, .8660254037844387, 0];
-				var intersects = [];
-				var intersect = function(x0, y0, r, x1, y1, dx1, dy1, positive) {
-					// Find intersection of circle(x-x0)^2+(y-y0)^2==r^2 and line l=(x1,y1)+t(dx1,dy1); use positive or negative solution for t.
-					// Return coordinate.
-					var s = positive ? 1 : -1;
-					var k = (dx1 * (x1 - x0) + dy1 * (y1 - y0)) / (dx1 * dx1 + dy1 * dy1);
-					var t = s * Math.sqrt(r * r - (x1 - x0) * (x1 - x0) - (y1 - y0) * (y1 - y0) + k * k) - k;
-					return [x1 + t * dx1, y1 + t * dy1];
-				};
-				var angles = [[null, null], [null, null], [null, null]];
-				var maxx = 0, maxy = 0;
-				for (var a = 0; a < 3; ++a) {
-					intersects.push([]);
-					for (var aa = 0; aa < 2; ++aa) {
-						var A = (a + aa + 1) % 3;
-						var point = intersect(origin[A][0], origin[A][1], length[A], origin[a][0], origin[a][1], dx[a], dy[a], aa);
-						intersects[a].push(point);
-						if (Math.abs(point[0]) > maxx)
-							maxx = Math.abs(point[0]);
-						if (Math.abs(point[1]) > maxy)
-							maxy = Math.abs(point[1]);
-						angles[A][aa] = Math.atan2(point[1] - origin[A][1], point[0] - origin[A][0]);
-					}
-				}
-				outline = function(ui, c) {
-					c.save(); // Rotate the outline. {{{
-					c.rotate(ui.machine.spaces[0].delta_angle);
-					c.beginPath();
-					c.moveTo(intersects[0][0][0], intersects[0][0][1]);
-					for (var a = 0; a < 3; ++a) {
-						var A = (a + 1) % 3;
-						var B = (a + 2) % 3;
-						c.lineTo(intersects[a][1][0], intersects[a][1][1]);
-						c.arc(origin[B][0], origin[B][1], length[B], angles[B][1], angles[B][0], false);
-					}
-					c.closePath();
-					c.stroke();
-					for (var a = 0; a < 3; ++a) {
-						var name = ui.machine.spaces[0].motor[a].name;
-						var w = c.measureText(name).width;
+			var info = type_info[ui.machine.spaces[0].type];
+			if (info) {
+				var data = info.draw(ui, c);
+				machinewidth = data[0];
+				machineheight = data[1];
+				center = data[2];
+				outline = data[3];
+			}
+			else {
+				switch (ui.machine.spaces[0].type) { // Define geometry-specific options, including outline. {{{
+				case TYPE_CARTESIAN:
+				case TYPE_HBOT:
+					var xaxis = ui.machine.spaces[0].axis[0];
+					var yaxis = ui.machine.spaces[0].axis[1];
+					machinewidth = xaxis.max - xaxis.min + .010;
+					machineheight = yaxis.max - yaxis.min + .010;
+					center = [(xaxis.min + xaxis.max) / 2, (yaxis.min + yaxis.max) / 2];
+					outline = function(ui, c) {
+						// Rectangle is always drawn; nothing else to do here.
+					};
+					break;
+				case TYPE_POLAR:
+					machinewidth = 2 * ui.machine.spaces[0].polar_max_r + 2;
+					machineheight = 2 * ui.machine.spaces[0].polar_max_r + 2;
+					center = [0, 0];
+					outline = function(ui, c) {
 						c.beginPath();
-						c.save(); // Print axis name. {{{
-						c.translate(origin[a][0] + dy[a] * 10 - w / 2, origin[a][1] - dx[a] * 10);
-						c.rotate(-ui.machine.spaces[0].delta_angle);
-						c.scale(1, -1);
-						c.fillText(name, 0, 0);
-						c.restore(); // }}}
-					}
-					c.restore(); // }}}
-				};
-				var extra = c.measureText(ui.machine.spaces[0].motor[0].name).width + .02;
-				machinewidth = 2 * (maxx + extra);
-				machineheight = 2 * (maxy + extra);
-				break;
-			case TYPE_POLAR:
-				machinewidth = 2 * ui.machine.spaces[0].polar_max_r + 2;
-				machineheight = 2 * ui.machine.spaces[0].polar_max_r + 2;
-				center = [0, 0];
-				outline = function(ui, c) {
-					c.beginPath();
-					c.arc(0, 0, ui.machine.spaces[0].polar_max_r, 0, 2 * Math.PI, false);
-					c.stroke();
-				};
-				break;
-			} // }}}
+						c.arc(0, 0, ui.machine.spaces[0].polar_max_r, 0, 2 * Math.PI, false);
+						c.stroke();
+					};
+					break;
+				} // }}}
+			}
 			// Prepare canvas. {{{
 			var factor = Math.max(machinewidth, machineheight);
 			var sizebase = Math.min(canvas.clientWidth, canvas.clientHeight);
