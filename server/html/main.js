@@ -236,7 +236,7 @@ function make_id(ui, id, extra) { // {{{
 } // }}}
 
 function set_value(ui, id, value, reply, arg) { // {{{
-	console.info('setting value for', id, 'to', value);
+	//console.info('setting value for', id, 'to', value);
 	if (id.length == 2 || id[2] === undefined) {
 		var obj = {};
 		obj[id[1]] = value;

@@ -9,7 +9,7 @@ html:
 clean:
 	rm -f ${targets}
 
-%.so: %.o Makefile
+%.so: %.o Makefile ../cdriver/cdriver.h ../cdriver/franklin-module.h
 	g++ -Wall -Wextra -shared -fPIC $< -o $@
 	mkdir -p ../html/type
 	ln -sf ../../type/$(patsubst %.o,%.js,$<) ../html/type/

@@ -15,15 +15,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <cdriver.h>
+#include <franklin-module.h>
 
-struct Apex {
+struct MotorData {
 	double x, y;
 };
 
-#define APEX(s, m) (*reinterpret_cast <Apex *>(s->motor[m]->type_data))
+UseMotor;
 
-extern "C" {
 void load_space(Space *s) {
 	if (!s->setup_nums(2, 2)) {
 		debug("Failed to set up drawbot axes");
@@ -33,30 +32,20 @@ void load_space(Space *s) {
 }
 
 void load_motor(Space *s, int m) {
-	APEX(s, m).x = shmem->floats[100];
-	APEX(s, m).y = shmem->floats[101];
+	myMotor(s, m).x = shmem->floats[100];
+	myMotor(s, m).y = shmem->floats[101];
 }
 
 void save_motor(Space *s, int m) {
-	shmem->ints[100] = 0;
-	shmem->ints[101] = 2;
-	shmem->floats[100] = APEX(s, m).x;
-	shmem->floats[101] = APEX(s, m).y;
+	save_count(0, 2);
+	shmem->floats[100] = myMotor(s, m).x;
+	shmem->floats[101] = myMotor(s, m).y;
 }
-
-void init_motor(Space *s, int m) {
-	s->motor[m]->type_data = new Apex;
-}
-
-void free_motor(Space *s, int m) {
-	delete reinterpret_cast <Apex *>(s->motor[m]->type_data);
-}
-
 
 void xyz2motors(Space *s) {
 	for (int m = 0; m < 2; ++m) {
-		double dx = s->axis[0]->target - APEX(s, m).x;
-		double dy = s->axis[1]->target - APEX(s, m).y;
+		double dx = s->axis[0]->target - myMotor(s, m).x;
+		double dy = s->axis[1]->target - myMotor(s, m).y;
 		s->motor[m]->target_pos = sqrt(dx * dx + dy * dy);
 	}
 	for (int m = 2; m < s->num_motors; ++m)
@@ -65,8 +54,8 @@ void xyz2motors(Space *s) {
 
 void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
 	double uv[2];
-	uv[0] = APEX(s, 1).x - APEX(s, 0).x;
-	uv[1] = APEX(s, 1).y - APEX(s, 0).y;
+	uv[0] = myMotor(s, 1).x - myMotor(s, 0).x;
+	uv[1] = myMotor(s, 1).y - myMotor(s, 0).y;
 	double down[2], l;
 	l = sqrt(uv[0] * uv[0] + uv[1] * uv[1]);
 	for (int i = 0; i < 2; ++i)
@@ -82,8 +71,7 @@ void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
 	double AD = (AC * AC - BC * BC) / (2 * AB) + AB / 2;
 	double CD = sqrt(AC * AC - AD * AD);
 
-	xyz[0] = APEX(s, 0).x + AD * uv[0] + CD * down[0];
-	xyz[1] = APEX(s, 0).y + AD * uv[1] + CD * down[1];
+	xyz[0] = myMotor(s, 0).x + AD * uv[0] + CD * down[0];
+	xyz[1] = myMotor(s, 0).y + AD * uv[1] + CD * down[1];
 	xyz[2] = motors[2];
-}
 }
