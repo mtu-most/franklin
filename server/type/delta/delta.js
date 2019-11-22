@@ -2,7 +2,7 @@ var TYPE_DELTA = 'delta';
 
 function delta_get_value(ui, id) { // {{{
 	if (typeof id[0][1] == 'number')
-		return ui.machine['delta_' + id[1]];
+		return ui.machine.spaces[id[0][1]]['delta_' + id[1]];
 	return ui.machine.spaces[id[0][1][0]].motor[id[0][1][1]]['delta_' + id[1]];
 } // }}}
 
@@ -107,14 +107,14 @@ function delta_draw(ui, context) { // {{{
 } // }}}
 
 function delta_load(machine, index, data) { // {{{
-	machines[machine].spaces[index].delta_angle = data[3];
+	machines[machine].spaces[index].delta_angle = data.angle;
 } // }}}
 
 function delta_mload(machine, index, m, data) { // {{{
-	machines[machine].spaces[index].motor[m].delta_axis_min = data[0];
-	machines[machine].spaces[index].motor[m].delta_axis_max = data[1];
-	machines[machine].spaces[index].motor[m].delta_rodlength = data[2];
-	machines[machine].spaces[index].motor[m].delta_radius = data[3];
+	machines[machine].spaces[index].motor[m].delta_axis_min = data.axis_min;
+	machines[machine].spaces[index].motor[m].delta_axis_max = data.axis_max;
+	machines[machine].spaces[index].motor[m].delta_rodlength = data.rodlength;
+	machines[machine].spaces[index].motor[m].delta_radius = data.radius;
 } // }}}
 
 // UI modules. {{{
@@ -163,7 +163,7 @@ function setup_delta(desc, pos, top) { // {{{
 	]).AddMultiple(ui, 'motor', Delta)]);
 	ret.Add([make_table(ui).AddMultipleTitles([
 		'Delta',
-		'Angle'
+		'Angle (°)'
 	], [
 		'htitle1',
 		'title1'

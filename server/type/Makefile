@@ -11,6 +11,7 @@ clean:
 
 %.so: %.o Makefile
 	g++ -Wall -Wextra -shared -fPIC $< -o $@
+	mkdir -p ../html/type
 	ln -sf ../../type/$(patsubst %.o,%.js,$<) ../html/type/
 
 %.o: %.cpp Makefile

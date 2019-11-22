@@ -148,10 +148,11 @@ void load(Space *s) {
 		s->cancel_update();
 		return;
 	}
-	for (uint8_t m = 0; m < 3; ++m) {
-		s->motor[m]->type_data = new Apex;
+	for (int m = 0; m < 3; ++m) {
+		if (s->motor[m]->type_data == NULL)
+			s->motor[m]->type_data = new Apex;
 	}
-	PRIVATE(s).angle = shmem->floats[12];
+	PRIVATE(s).angle = shmem->floats[100];
 	if (std::isinf(PRIVATE(s).angle) || std::isnan(PRIVATE(s).angle))
 		PRIVATE(s).angle = 0;
 #define sin210 -.5
@@ -175,6 +176,8 @@ void load(Space *s) {
 }
 
 void mload(Space *s, int m) {
+	if (s->motor[m]->type_data == NULL)
+		s->motor[m]->type_data = new Apex;
 	APEX(s, m).axis_min = shmem->floats[100];
 	APEX(s, m).axis_max = shmem->floats[101];
 	APEX(s, m).rodlength = shmem->floats[102];
@@ -182,7 +185,9 @@ void mload(Space *s, int m) {
 }
 
 void save(Space *s) {
-	shmem->floats[13] = PRIVATE(s).angle;
+	shmem->ints[100] = 0;
+	shmem->ints[101] = 1;
+	shmem->floats[100] = PRIVATE(s).angle;
 }
 
 void msave(Space *s, int m) {
@@ -203,10 +208,12 @@ bool init(Space *s) {
 
 void space_free(Space *s) {
 	delete reinterpret_cast <Delta_private *>(s->type_data);
+	s->type_data = NULL;
 }
 
 void motor_free(Space *s, int m) {
 	delete reinterpret_cast <Apex *>(s->motor[m]->type_data);
+	s->motor[m]->type_data = NULL;
 }
 
 void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
