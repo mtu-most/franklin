@@ -54,12 +54,14 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			new_axes[a]->history = setup_axis_history();
 		}
 		for (int a = na; a < old_na; ++a) {
-			space_types[type].axis_free(this, a);
+			space_types[type].free_axis(this, a);
 			delete[] axis[a]->history;
 			delete axis[a];
 		}
 		delete[] axis;
 		axis = new_axes;
+		for (int a = old_na; a < na; ++a)
+			space_types[type].init_axis(this, a);
 	}
 	if (nm != old_nm) {
 		Motor **new_motors = new Motor *[nm];
@@ -90,12 +92,14 @@ bool Space::setup_nums(int na, int nm) { // {{{
 		}
 		for (int m = nm; m < old_nm; ++m) {
 			DATA_DELETE(id, m);
-			space_types[type].motor_free(this, m);
+			space_types[type].free_motor(this, m);
 			delete[] motor[m]->history;
 			delete motor[m];
 		}
 		delete[] motor;
 		motor = new_motors;
+		for (int m = old_nm; m < nm; ++m)
+			space_types[type].init_motor(this, m);
 		arch_motors_change();
 	}
 	return true;
@@ -117,16 +121,37 @@ void Space::load_info() { // {{{
 	}
 	if (t != type) {
 		loaddebug("setting type to %d", type);
-		space_types[t].space_free(this);
-		if (!space_types[type].init(this)) {
+		for (int m = 0; m < num_motors; ++m) {
+			space_types[type].free_motor(this, m);
+			motor[m]->type_data = NULL;
+		}
+		for (int a = 0; a < num_axes; ++a) {
+			space_types[type].free_axis(this, a);
+			axis[a]->type_data = NULL;
+		}
+		space_types[t].free_space(this);
+		type_data = NULL;
+		if (!space_types[type].init_space(this)) {
 			type = id;
+			if (!space_types[type].init_space(this))
+				debug("restoring previous space type failed. Hoping for the best.");
+			for (int a = 0; a < num_axes; ++a)
+				space_types[type].init_axis(this, a);
+			for (int m = 0; m < num_motors; ++m)
+				space_types[type].init_motor(this, m);
 			reset_pos(this);
 			for (int a = 0; a < num_axes; ++a)
 				axis[a]->settings.source = axis[a]->current;
 			return;	// The rest of the info is not meant for this type, so ignore it.
 		}
+		space_types[type].load_space(this);
+		for (int a = 0; a < num_axes; ++a)
+			space_types[type].init_axis(this, a);
+		for (int m = 0; m < num_motors; ++m)
+			space_types[type].init_motor(this, m);
 	}
-	space_types[type].load(this);
+	else
+		space_types[type].load_space(this);
 	reset_pos(this);
 	loaddebug("done loading space");
 } // }}}
@@ -153,7 +178,7 @@ void Space::load_axis(int a) { // {{{
 	axis[a]->park = shmem->floats[0];
 	axis[a]->min_pos = shmem->floats[1];
 	axis[a]->max_pos = shmem->floats[2];
-	space_types[type].aload(this, a);
+	space_types[type].load_axis(this, a);
 } // }}}
 
 void Space::load_motor(int m) { // {{{
@@ -176,7 +201,7 @@ void Space::load_motor(int m) { // {{{
 	motor[m]->home_pos = shmem->floats[1];
 	motor[m]->limit_v = shmem->floats[2];
 	motor[m]->limit_a = shmem->floats[3];
-	space_types[type].mload(this, m);
+	space_types[type].load_motor(this, m);
 	arch_motors_change();
 	SET_OUTPUT(motor[m]->enable_pin);
 	if (enable != motor[m]->enable_pin.write()) {
@@ -218,7 +243,7 @@ void Space::save_info() { // {{{
 	shmem->ints[1] = type;
 	shmem->ints[2] = num_axes;
 	shmem->ints[3] = num_motors;
-	space_types[type].save(this);
+	space_types[type].save_space(this);
 } // }}}
 
 void Space::save_axis(int a) { // {{{
@@ -226,7 +251,7 @@ void Space::save_axis(int a) { // {{{
 	shmem->floats[0] = axis[a]->park;
 	shmem->floats[1] = axis[a]->min_pos;
 	shmem->floats[2] = axis[a]->max_pos;
-	space_types[type].asave(this, a);
+	space_types[type].save_axis(this, a);
 } // }}}
 
 void Space::save_motor(int m) { // {{{
@@ -240,7 +265,7 @@ void Space::save_motor(int m) { // {{{
 	shmem->floats[1] = motor[m]->home_pos;
 	shmem->floats[2] = motor[m]->limit_v;
 	shmem->floats[3] = motor[m]->limit_a;
-	space_types[type].msave(this, m);
+	space_types[type].save_motor(this, m);
 } // }}}
 
 void Space::init(int space_id) { // {{{
@@ -252,7 +277,7 @@ void Space::init(int space_id) { // {{{
 	motor = NULL;
 	axis = NULL;
 	history = NULL;
-	space_types[type].init(this);
+	space_types[type].init_space(this);
 } // }}}
 
 void Space::cancel_update() { // {{{

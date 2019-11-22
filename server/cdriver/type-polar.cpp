@@ -102,6 +102,16 @@ static bool init(Space *s) {
 	return true;
 }
 
+static void ainit(Space *s, int a) {
+	(void)&s;
+	(void)&a;
+}
+
+static void minit(Space *s, int m) {
+	(void)&s;
+	(void)&m;
+}
+
 static void space_free(Space *s) {
 	delete reinterpret_cast <Polar_private *>(s->type_data);
 }
@@ -141,16 +151,18 @@ static int follow(Space *s, int axis) {
 void Polar_init(int num) {
 	space_types[num].xyz2motors = xyz2motors;
 	space_types[num].check_position = check_position;
-	space_types[num].load = load;
-	space_types[num].aload = aload;
-	space_types[num].mload = mload;
-	space_types[num].save = save;
-	space_types[num].asave = asave;
-	space_types[num].msave = msave;
-	space_types[num].init = init;
-	space_types[num].space_free = space_free;
-	space_types[num].axis_free = axis_free;
-	space_types[num].motor_free = motor_free;
+	space_types[num].init_space = init;
+	space_types[num].init_axis = ainit;
+	space_types[num].init_motor = minit;
+	space_types[num].load_space = load;
+	space_types[num].load_axis = aload;
+	space_types[num].load_motor = mload;
+	space_types[num].save_space = save;
+	space_types[num].save_axis = asave;
+	space_types[num].save_motor = msave;
+	space_types[num].free_space = space_free;
+	space_types[num].free_axis = axis_free;
+	space_types[num].free_motor = motor_free;
 	space_types[num].change0 = change0;
 	space_types[num].unchange0 = unchange0;
 	space_types[num].probe_speed = probe_speed;

@@ -430,24 +430,12 @@ static PyObject *read_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 	else {
 		switch (shmem->ints[1]) {
 		case TYPE_CARTESIAN:
+		case TYPE_EXTRUDER:
 		case TYPE_HBOT:
 			return Py_BuildValue("{si,si,si}",
 					"type", shmem->ints[1],
 					"num_axes", shmem->ints[2],
 					"num_motors", shmem->ints[3]);
-		case TYPE_EXTRUDER:
-		{
-			PyObject *tuple = PyTuple_New(shmem->ints[2]);
-			for (int i = 0; i < shmem->ints[2]; ++i)
-				PyTuple_SET_ITEM(tuple, i, Py_BuildValue("ddd", shmem->floats[3 * i], shmem->floats[3 * i + 1], shmem->floats[3 * i + 2]));
-			PyObject *ret = Py_BuildValue("{si,si,si,sO}",
-					"type", shmem->ints[1],
-					"num_axes", shmem->ints[2],
-					"num_motors", shmem->ints[3],
-					"offset", tuple);
-			Py_DECREF(tuple);
-			return ret;
-		}
 		case TYPE_FOLLOWER:
 		{
 			PyObject *tuple = PyTuple_New(shmem->ints[2]);
@@ -489,6 +477,17 @@ static PyObject *read_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 				"min", shmem->floats[1],
 				"max", shmem->floats[2],
 				"module", module_data);
+	}
+	else if (type == TYPE_EXTRUDER) {
+		PyObject *ret = Py_BuildValue("{si,si,si,s(ddd)}",
+				"type", shmem->ints[1],
+				"num_axes", shmem->ints[2],
+				"num_motors", shmem->ints[3],
+				"offset",
+				shmem->floats[100],
+				shmem->floats[101],
+				shmem->floats[102]);
+		return ret;
 	}
 	return Py_BuildValue("{si,sd,sd,sd}",
 			"park_order", shmem->ints[2],
@@ -574,19 +573,9 @@ static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 	else {
 		switch (shmem->ints[1]) {
 		case TYPE_CARTESIAN:
+		case TYPE_EXTRUDER:
 		case TYPE_HBOT:
 			break;
-		case TYPE_EXTRUDER:
-		{
-			PyObject *offset = get_object("offset", dict);
-			for (int i = 0; i < shmem->ints[2]; ++i) {
-				PyObject *axis = PySequence_GetItem(offset, i);
-				PyArg_ParseTuple(axis, "ddd", &shmem->floats[i * 3], &shmem->floats[i * 3 + 1], &shmem->floats[i * 3 + 2]);
-				Py_DECREF(axis);
-			}
-			Py_DECREF(offset);
-			break;
-		}
 		case TYPE_FOLLOWER:
 		{
 			PyObject *follow = get_object("follow", dict);
@@ -621,6 +610,11 @@ static PyObject *write_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (type >= NUM_FIXED_SPACE_TYPES) {
 		PyObject *module = get_object("module", dict);
 		write_module_data(module);
+	}
+	else if (type == TYPE_EXTRUDER) {
+		PyObject *offset = get_object("offset", dict);
+		PyArg_ParseTuple(offset, "ddd", &shmem->floats[100], &shmem->floats[101], &shmem->floats[102]);
+		Py_DECREF(offset);
 	}
 	send_to_child(CMD_WRITE_SPACE_AXIS);
 	return assert_empty_dict(dict, "write_space_axis");

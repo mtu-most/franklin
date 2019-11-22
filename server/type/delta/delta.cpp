@@ -142,15 +142,11 @@ void check_position(Space *s, double *data) {
 	}
 }
 
-void load(Space *s) {
+void load_space(Space *s) {
 	if (!s->setup_nums(3, 3)) {
 		debug("Failed to set up delta axes");
 		s->cancel_update();
 		return;
-	}
-	for (int m = 0; m < 3; ++m) {
-		if (s->motor[m]->type_data == NULL)
-			s->motor[m]->type_data = new Apex;
 	}
 	PRIVATE(s).angle = shmem->floats[100];
 	if (std::isinf(PRIVATE(s).angle) || std::isnan(PRIVATE(s).angle))
@@ -175,7 +171,7 @@ void load(Space *s) {
 	}
 }
 
-void mload(Space *s, int m) {
+void load_motor(Space *s, int m) {
 	if (s->motor[m]->type_data == NULL)
 		s->motor[m]->type_data = new Apex;
 	APEX(s, m).axis_min = shmem->floats[100];
@@ -184,13 +180,13 @@ void mload(Space *s, int m) {
 	APEX(s, m).radius = shmem->floats[103];
 }
 
-void save(Space *s) {
+void save_space(Space *s) {
 	shmem->ints[100] = 0;
 	shmem->ints[101] = 1;
 	shmem->floats[100] = PRIVATE(s).angle;
 }
 
-void msave(Space *s, int m) {
+void save_motor(Space *s, int m) {
 	shmem->ints[100] = 0;
 	shmem->ints[101] = 4;
 	shmem->floats[100] = APEX(s, m).axis_min;
@@ -199,21 +195,23 @@ void msave(Space *s, int m) {
 	shmem->floats[103] = APEX(s, m).radius;
 }
 
-bool init(Space *s) {
+bool init_space(Space *s) {
 	s->type_data = new Delta_private;
 	if (!s->type_data)
 		return false;
 	return true;
 }
 
-void space_free(Space *s) {
-	delete reinterpret_cast <Delta_private *>(s->type_data);
-	s->type_data = NULL;
+void init_motor(Space *s, int m) {
+	s->motor[m]->type_data = new Apex;
 }
 
-void motor_free(Space *s, int m) {
+void free_space(Space *s) {
+	delete reinterpret_cast <Delta_private *>(s->type_data);
+}
+
+void free_motor(Space *s, int m) {
 	delete reinterpret_cast <Apex *>(s->motor[m]->type_data);
-	s->motor[m]->type_data = NULL;
 }
 
 void motors2xyz(Space *s, const double motors[3], double xyz[3]) {

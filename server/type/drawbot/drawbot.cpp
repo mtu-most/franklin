@@ -24,33 +24,32 @@ struct Apex {
 #define APEX(s, m) (*reinterpret_cast <Apex *>(s->motor[m]->type_data))
 
 extern "C" {
-void load(Space *s) {
+void load_space(Space *s) {
 	if (!s->setup_nums(2, 2)) {
 		debug("Failed to set up drawbot axes");
 		s->cancel_update();
 		return;
 	}
-	for (uint8_t m = 0; m < 2; ++m) {
-		if (s->motor[m]->type_data == NULL)
-			s->motor[m]->type_data = new Apex;
-	}
 }
 
-void mload(Space *s, int m) {
+void load_motor(Space *s, int m) {
 	APEX(s, m).x = shmem->floats[100];
 	APEX(s, m).y = shmem->floats[101];
 }
 
-void msave(Space *s, int m) {
+void save_motor(Space *s, int m) {
 	shmem->ints[100] = 0;
 	shmem->ints[101] = 2;
 	shmem->floats[100] = APEX(s, m).x;
 	shmem->floats[101] = APEX(s, m).y;
 }
 
-void motor_free(Space *s, int m) {
+void init_motor(Space *s, int m) {
+	s->motor[m]->type_data = new Apex;
+}
+
+void free_motor(Space *s, int m) {
 	delete reinterpret_cast <Apex *>(s->motor[m]->type_data);
-	s->motor[m]->type_data = NULL;
 }
 
 

@@ -1377,10 +1377,6 @@ class Machine: # {{{
 				for m in self.motor:
 					if 'unit' not in m:
 						m['unit'] = self.machine.unit_name
-				offset = data.pop('offset')
-				for a in range(num_axes):
-					for i, k in enumerate(('dx', 'dy', 'dz')):
-						self.extruder[a][k] = offset[a][i]
 			elif self.type == TYPE_FOLLOWER:
 				follow = data.pop('follow')
 				for a in range(num_axes):
@@ -1403,6 +1399,10 @@ class Machine: # {{{
 			if self.type in typeinfo:
 				module_data = data.pop('module')
 				self.axis[a]['module'] = self.parse_info(module_data, typeinfo[self.type]['axis'])
+			if self.type == TYPE_EXTRUDER:
+				offset = data.pop('offset')
+				for i, k in enumerate(('dx', 'dy', 'dz')):
+					self.extruder[a][k] = offset[i]
 			for k in data:
 				self.axis[a][k] = data[k]
 		def read_motor(self, m):
@@ -1423,7 +1423,7 @@ class Machine: # {{{
 			elif self.type == TYPE_CARTESIAN:
 				pass
 			elif self.type == TYPE_EXTRUDER:
-				data['offset'] = [tuple(self.extruder[a][x] for x in ('dx', 'dy', 'dz')) if a < len(self.extruder) else (0, 0, 0) for a in range(num_axes)]
+				pass
 			elif self.type == TYPE_FOLLOWER:
 				data['follow'] = [tuple(self.follower[a][x] for x in ('space', 'motor')) if a < len(self.follower) else (-1, -1) for a in range(num_axes)]
 			elif self.type == TYPE_POLAR:
@@ -1439,6 +1439,8 @@ class Machine: # {{{
 			if self.id == 0:
 				for k in data.keys():
 					data[k] = self.axis[axis][k]
+			if self.type == TYPE_EXTRUDER:
+				data['offset'] = tuple(self.extruder[axis][x] for x in ('dx', 'dy', 'dz'))
 			if self.type in typeinfo:
 				data['module'] = self.build_module_data(self.axis[axis]['module'], typeinfo[self.type]['axis'])
 			cdriver.write_space_axis(self.id, axis, data, type_names.index(self.type))
