@@ -704,9 +704,18 @@ class Machine: # {{{
 		if self.home_phase is not None:
 			#log('killing homer')
 			self.home_phase = None
-			self.expert_set_space(0, type = self.home_orig_type)
+			if self.home_orig_type in typeinfo:
+				self.expert_set_space(0, type = self.home_orig_type, module = self.home_orig_module[0])
+			else:
+				self.expert_set_space(0, type = self.home_orig_type)
 			for a, ax in enumerate(self.spaces[0].axis):
-				self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1])
+				if self.spaces[0].type in typeinfo:
+					self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1], module = self.home_orig_module[1][a])
+				else:
+					self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1])
+			if self.spaces[0].type in typeinfo:
+				for m, mtr in enumerate(self.spaces[0].motor):
+					self.expert_set_motor((0, m), module = self.home_orig_module[2][m])
 			if self.home_cb in self.movecb:
 				self.movecb.remove(self.home_cb)
 				if self.home_id is not None:
@@ -1347,7 +1356,7 @@ class Machine: # {{{
 					else:
 						return 'follower %d' % i
 				for i in range(len(self.axis), num_axes):
-					self.axis.append({'name': nm(i), 'home_pos2': float('nan'), 'module': {}})
+					self.axis.append({'name': nm(i), 'park': float('nan'), 'park_order': 0, 'min': float('nan'), 'max': float('nan'), 'home_pos2': float('nan')})
 					if old_type == self.type and self.type in typeinfo:
 						self.axis[i]['module'] = {key: value for key, value in typeinfo[self.type]['axis']}
 			else:
@@ -1358,7 +1367,7 @@ class Machine: # {{{
 					self.axis[a]['module'] = {key: value for key, value in typeinfo[self.type]['axis']}
 			if num_motors > len(self.motor):
 				for i in range(len(self.motor), num_motors):
-					self.motor.append({'unit': self.machine.unit_name})
+					self.motor.append({'step_pin': 0, 'dir_pin': 0, 'enable_pin': 0, 'limit_min_pin': 0, 'limit_max_pin': 0, 'steps_per_unit': 100., 'home_pos': 0., 'limit_v': float('inf'), 'limit_a': float('inf'), 'home_order': 0, 'unit': self.machine.unit_name})
 					if old_type == self.type and self.type in typeinfo:
 						self.motor[i]['module'] = {key: value for key, value in typeinfo[self.type]['motor']}
 			else:

@@ -717,18 +717,27 @@ static inline int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { 
 			break;
 	}
 	if (digital) {
+		int port = 'A' - 1 + pgm_read_byte(digital_pin_to_port_PGM + pin_);
+		int b = pgm_read_byte(digital_pin_to_bit_mask_PGM + pin_);
+		int bit = b & 0xf0
+			? b & 0xc0
+				? b & 0x80 ? 7 : 6
+				: b & 0x20 ? 5 : 4
+			: b & 0x0c
+				? b & 0x08 ? 3 : 2
+				: b & 0x02 ? 1 : 0;
 		if (pin_ >= A0)
-			return sprintf(buffer_, "D%d (A%d%s)", pin_, pin_ - A0, extra);
+			return sprintf(buffer_, "D%d/P%c%d (A%d%s)", pin_, port, bit, pin_ - A0, extra);
 		else {
 			int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_);
 			if (timer == NOT_ON_TIMER) {
 				if (extra[0] != '\0')
-					return sprintf(buffer_, "D%d (%s)", pin_, &extra[2]);
+					return sprintf(buffer_, "D%d/P%c%d (%s)", pin_, port, bit, &extra[2]);
 				else
-					return sprintf(buffer_, "D%d", pin_);
+					return sprintf(buffer_, "D%d/P%c%d", pin_, port, bit);
 			}
 			else
-				return sprintf(buffer_, "D%d (PWM%d%c%s)", pin_, timer_data[timer].num, timer_data[timer].part, extra);
+				return sprintf(buffer_, "D%d/P%c%d (PWM%d%c%s)", pin_, port, bit, timer_data[timer].num, timer_data[timer].part, extra);
 		}
 	}
 	else {
