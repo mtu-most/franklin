@@ -30,8 +30,10 @@ void load(Space *s) {
 		s->cancel_update();
 		return;
 	}
-	for (uint8_t m = 0; m < 2; ++m)
-		s->motor[m]->type_data = new Apex;
+	for (uint8_t m = 0; m < 2; ++m) {
+		if (s->motor[m]->type_data == NULL)
+			s->motor[m]->type_data = new Apex;
+	}
 }
 
 void mload(Space *s, int m) {

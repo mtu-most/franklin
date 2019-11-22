@@ -236,6 +236,7 @@ function make_id(ui, id, extra) { // {{{
 } // }}}
 
 function set_value(ui, id, value, reply, arg) { // {{{
+	console.info('setting value for', id, 'to', value);
 	if (id.length == 2 || id[2] === undefined) {
 		var obj = {};
 		obj[id[1]] = value;
@@ -416,16 +417,32 @@ function floatkey(event, element) { // {{{
 		}
 		if (element.obj[0] !== null && typeof element.obj[0][1] != 'number' && element.obj[0][1][1] === null) {
 			// Update a series of axes or motors.
-			for (var n = 0; n < element.ui.machine.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][0]]]; ++n) {
-				var obj = [[element.obj[0][0], [element.obj[0][1][0], n]], element.obj[1]];
-				var value;
-				if (set)
-					value = amount;
-				else if (element.obj.length == 2)
-					value = get_value(element.ui, obj) / element.factor + amount;
-				else
-					continue;
-				set_value(element.ui, obj, element.factor * value);
+			if (element.obj[0][0] == 'module') {
+				var type = type_info[element.obj[0][2]];
+				for (var n = 0; n < element.ui.machine.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][1][2]]]; ++n) {
+					var obj = [[element.obj[0][0], [element.obj[0][1][0], n, element.obj[0][1][2]], element.obj[0][2]], element.obj[1]];
+					var value;
+					if (set)
+						value = amount;
+					else if (element.obj.length == 2)
+						value = type.get_value(element.ui, obj) / element.factor + amount;
+					else
+						continue;
+					type_info[element.obj[0][2]].set_value(element.ui, obj, element.factor * value);
+				}
+			}
+			else {
+				for (var n = 0; n < element.ui.machine.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][0]]]; ++n) {
+					var obj = [[element.obj[0][0], [element.obj[0][1][0], n]], element.obj[1]];
+					var value;
+					if (set)
+						value = amount;
+					else if (element.obj.length == 2)
+						value = get_value(element.ui, obj) / element.factor + amount;
+					else
+						continue;
+					set_value(element.ui, obj, element.factor * value);
+				}
 			}
 			return;
 		}

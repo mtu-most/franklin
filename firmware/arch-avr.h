@@ -568,28 +568,28 @@ static inline void arch_setup_start() { // {{{
 	TIFR1 = 0xff;
 	// Setup timer0 for millis().
 	TCCR0A = 3;
-	TCCR0B = 4;	// Clock/256: 62.5 ticks/millisecond.
+	TCCR0B = 5;	// Clock/1024: 15.625 ticks/millisecond.
 	TIFR0 = 1 << TOV0;
 	TIMSK0 |= 1 << TOIE0;
 	// Enable timer2 for pwm.
 	TCCR2A = 3;
 	TCCR2B = 1;
-	// And the other timers that exist.
+	// And the other timers that exist; use same period as timer0 for all of them.
 #ifdef TCCR3A
 	TCCR3A = 1;
-	TCCR3B = 0x09;
+	TCCR3B = 0x0d;
 	TCNT3H = 0;
 	TCNT3L = 0;
 #endif
 #ifdef TCCR4A
 	TCCR4A = 1;
-	TCCR4B = 0x09;
+	TCCR4B = 0x0d;
 	TCNT4H = 0;
 	TCNT4L = 0;
 #endif
 #ifdef TCCR5A
 	TCCR5A = 1;
-	TCCR5B = 0x09;
+	TCCR5B = 0x0d;
 	TCNT5H = 0;
 	TCNT5L = 0;
 #endif
@@ -1180,18 +1180,36 @@ ISR(TIMER1_COMPA_vect) {
 
 // Timekeeping. {{{
 ISR(TIMER0_OVF_vect) { // {{{
-	uint32_t top = uint32_t(125) << 16;
+	// At overflow of TIMER0, adjust:
+	// avr_seconds_h: high byte for seconds.
+	// avr_seconds: low byte for seconds. Used directly for counting seconds.
+	// avr_time_h: high bits for millis(). Lower bits of this are always 0. Bitwise or'd with TCNT0 when used.
+
+	// Timing:
+	// 16e6 system ticks per second.
+	// 16e6/1024=15625 timer ticks per second.
+	// 15.625=125/8 timer ticks per ms.
+	// 16e6/1024/256=1/0.016384 overflows per second
+	// 16.384 ms/overflow
+
+	// When there are avr_time_h >> 8 overflows,
+	// there are (avr_time_h >> 8) / (1e6 / (1 << 14)) seconds
+	// = (avr_time_h << 6) / 1e6
+	// = avr_time_h / 15625
+
+	// seconds = overflows * 0.016384
+	// 	= avr_time_h / 256 * 0.016384
+	//	= avr_time_h * 64 / 1000
+
+	// Record the overflow.
 	avr_time_h += 0x100;
-	while (avr_time_h > top)
+
+	// Check if avr_time_h should overflow itself.
+	// Also update seconds counter.
+	uint32_t top = uint32_t(15625) << 11;
+	while (avr_time_h > top) {
 		avr_time_h -= top;
-	uint32_t t = avr_time_h - avr_seconds_h + top;
-	while (t >= top)
-		t -= top;
-	if (t >= 62500) {
-		avr_seconds_h += 62500;
-		while (avr_seconds_h >= top)
-			avr_seconds_h -= top;
-		avr_seconds += 1;
+		avr_seconds += 1e3;
 	}
 } // }}}
 #endif
@@ -1205,11 +1223,12 @@ static inline uint16_t millis() { // {{{
 		h += 0x100;
 	}
 	sei();
-	return ((h | l) << 1) / 125;
+	// There are 125/8 timer ticks/ms, so divide the timer ticks by 125/8 to get ms.
+	return ((h | l) << 3) / 125;
 } // }}}
 
 static inline uint16_t seconds() { // {{{
-	return avr_seconds;
+	return avr_seconds + (avr_time_h >> 8) / 15625;
 } // }}}
 // }}}
 

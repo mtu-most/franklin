@@ -825,6 +825,8 @@ class Machine: # {{{
 			for a, ax in enumerate(self.spaces[0].axis):
 				self.expert_set_axis((0, a), min = float('-inf'), max = float('inf'))
 			self.home_orig_type = self.spaces[0].type
+			if self.spaces[0].type in typeinfo:
+				self.home_orig_module = [self.get_space(0)['module'], [self.get_axis(0, a)['module'] for a in range(len(self.spaces[0].axis))], [self.get_motor(0, m)['module'] for m in range(len(self.spaces[0].motor))]]
 			self.expert_set_space(0, type = TYPE_CARTESIAN)
 			self.home_order = {'standard': {}, 'opposite': [], 'homing': {}, 'single': []}
 			followers_used = {'standard': set(), 'opposite': []}
@@ -1016,9 +1018,18 @@ class Machine: # {{{
 			# Move away from switches: 5
 
 			# Reset space type and move to pos2.
-			self.expert_set_space(0, type = self.home_orig_type)
+			if self.home_orig_type in typeinfo:
+				self.expert_set_space(0, type = self.home_orig_type, module = self.home_orig_module[0])
+			else:
+				self.expert_set_space(0, type = self.home_orig_type)
 			for a, ax in enumerate(self.spaces[0].axis):
-				self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1])
+				if self.spaces[0].type in typeinfo:
+					self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1], module = self.home_orig_module[1][a])
+				else:
+					self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1])
+			if self.spaces[0].type in typeinfo:
+				for m, mtr in enumerate(self.spaces[0].motor):
+					self.expert_set_motor((0, m), module = self.home_orig_module[2][m])
 			target = {}
 			for i, a in enumerate(self.spaces[0].axis):
 				if not math.isnan(a['home_pos2']):
@@ -1347,7 +1358,7 @@ class Machine: # {{{
 					self.axis[a]['module'] = {key: value for key, value in typeinfo[self.type]['axis']}
 			if num_motors > len(self.motor):
 				for i in range(len(self.motor), num_motors):
-					self.motor.append({'unit': self.machine.unit_name, 'module': {}})
+					self.motor.append({'unit': self.machine.unit_name})
 					if old_type == self.type and self.type in typeinfo:
 						self.motor[i]['module'] = {key: value for key, value in typeinfo[self.type]['motor']}
 			else:
@@ -2549,7 +2560,8 @@ class Machine: # {{{
 	def get_space(self, space): # {{{
 		ret = {'name': self.spaces[space].name, 'num_axes': len(self.spaces[space].axis), 'num_motors': len(self.spaces[space].motor)}
 		if self.spaces[space].type in typeinfo:
-			ret['module'] = self.spaces[space].module
+			ret['module'] = {'type': self.spaces[space].type}
+			ret['module'].update(self.spaces[space].module)
 		elif self.spaces[space].type == TYPE_CARTESIAN:
 			pass
 		elif self.spaces[space].type == TYPE_EXTRUDER:
@@ -2580,7 +2592,8 @@ class Machine: # {{{
 			for key in ('park', 'park_order', 'min', 'max', 'home_pos2'):
 				ret[key] = self.spaces[space].axis[axis][key]
 		if self.spaces[space].type in typeinfo:
-			ret['module'] = self.spaces[space].axis[axis]['module']
+			ret['module'] = {'type': self.spaces[space].type}
+			ret['module'].update(self.spaces[space].axis[axis]['module'])
 		return ret
 	# }}}
 	def get_motor(self, space, motor): # {{{
@@ -2594,7 +2607,8 @@ class Machine: # {{{
 			for key in ('steps_per_unit', 'limit_v', 'limit_a', 'unit'):
 				ret[key] = self.spaces[space].motor[motor][key]
 		if self.spaces[space].type in typeinfo:
-			ret['module'] = self.spaces[space].motor[motor]['module']
+			ret['module'] = {'type': self.spaces[space].type}
+			ret['module'].update(self.spaces[space].motor[motor]['module'])
 		return ret
 	# }}}
 	def expert_set_space(self, space, readback = True, update = True, **ka): # {{{
@@ -2694,6 +2708,7 @@ class Machine: # {{{
 			self.spaces[space].motor[motor]['unit'] = ka.pop('unit')
 		if self.spaces[space].type in typeinfo:
 			if 'module' not in self.spaces[space].motor[motor]:
+				log('new module')
 				self.spaces[space].motor[motor]['module'] = {key: value for key, value in typeinfo[self.spaces[space].type]['motor']}
 			if 'module' in ka:
 				module_data = ka.pop('module')
