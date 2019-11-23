@@ -54,8 +54,10 @@ bb: armhf
 	rm -r zipdir
 
 install:
-	# Fake target to make debhelper happy.
-	:
+	# Note: This target is called by debhelper to install files into the package.
+	# build (below) is not supposed to be called before it.
+	make -C server install
+	make -C util install
 
 build: basedeps mkdeb $(addprefix module-,$(MODULES))
 	git pull

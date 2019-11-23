@@ -1,0 +1,43 @@
+	step	dir	enable	limit
+u:	15	21	-14	18
+v:	22	23	-14	19
+w:	3	2	-29	20
+e:	1	0	-14
+
+	heater	thermistor
+hotend:	13	A7
+bed:	12	A6
+fan:	4
+
+0		dir e
+1		step e
+2		dir w
+3/PWM0A		step w
+4/PWM0B		fan
+5/MOSI
+6/PWM3A/MISO
+7/PWM3B/SCK
+8		rx0
+9		tx0
+10		rx1
+11		tx1
+12/PWM1B	hotend
+13/PWM1A	bed
+14/PWM2B	-enable uve
+15/PWM2A	step u
+16/SCL
+17/SDA
+18		limit u
+19		limit v
+20		limit w
+21		dir u
+22		step v
+23		dir v
+24/A0
+25/A1
+26/A2
+27/A3
+28/A4		LED
+29/A5		-enable w
+30/A6		bedtemp
+31/A7		hotendtemp

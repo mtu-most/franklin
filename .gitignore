@@ -7,6 +7,7 @@ server/cdriver.cpython-36m-x86_64-linux-gnu.so
 server/html/index.html
 server/html/builders.js
 server/html/rpc.js
+server/html/check.stamp
 server/bb/setpin
 util/joystick.py
 util/c457a-ui.gui

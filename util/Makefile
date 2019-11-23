@@ -29,5 +29,9 @@ all: joystick.py
 %.gui: %.gui.in
 	xmlgen <$< >$@
 
+install: joystick.py
+	install -m 644 -D -t ${DESTDIR}/usr/lib/franklin/ joystick.py
+	install -D -t ${DESTDIR}/usr/lib/franklin/ franklin_joystick.py
+
 clean:
 	rm -rf __pycache__ joystick.py c457a-ui.gui *.pyc

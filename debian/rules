@@ -11,8 +11,8 @@ override_dh_auto_build:
 	${MAKE} -C server
 	${MAKE} -C util
 
-override_dh_auto_install:
-	dh_auto_install
+override_dh_python3:
+	dh_python3 --no-ext-rename
 
 override_dh_auto_clean:
 	dh_auto_clean

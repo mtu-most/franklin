@@ -15,20 +15,28 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-all: check links index.html
+# Support {foo,bar} notation.
+SHELL=/bin/bash
 
-check:
-	! which gjslint || gjslint --disable 5,110,220 server.js main.js templates.js ui.js
+all: links check.stamp index.html
 
-links: clean
+check.stamp: server.js main.js templates.js ui.js
+	! which gjslint || gjslint --disable 5,110,220 $^
+	touch $@
+
+links:
+	rm -f rpc.js builders.js
 	ln -s /usr/share/python3-websocketd/rpc.js .
 	ln -s /usr/share/python3-websocketd/builders.js .
 
 clean:
-	rm -f rpc.js builders.js index.html
+	rm -f rpc.js builders.js index.html check.stamp
 
 files := $(wildcard type/*.js)
 header := $(foreach file,${files},<script type="application/javascript" src="${file}"></script>)
 
 index.html: index.html.template
 	sed 's#<!-- TYPE-INCLUDES -->#${header}#' < $< > $@
+
+install: index.html
+	install -m 644 -t $(DESTDIR)/usr/lib/franklin/html/ -D index.html {main,server,templates,ui}.js {style,ui}.css
