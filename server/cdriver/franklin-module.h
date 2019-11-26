@@ -4,20 +4,23 @@
 #define ARCH_INCLUDE "arch-avr.h"
 #include "cdriver.h"
 
-#define UseData \
+#define UseSpace(SpaceData) \
 	static inline SpaceData &mySpace(Space *s) { return *reinterpret_cast <SpaceData *>(s->type_data); } \
-	void init_space(Space *s) { s->type_data = new SpaceData; } \
-	void free_space(Space *s) { delete reinterpret_cast <SpaceData *>(s->type_data); }
+	bool init_space(Space *s) { s->type_data = new SpaceData; return s->type_data != NULL; } \
+	void free_space(Space *s) { delete reinterpret_cast <SpaceData *>(s->type_data); } \
+	void free_space(Space *s)
 
-#define UseAxis \
+#define UseAxis(AxisData) \
 	static inline AxisData &myAxis(Space *s, int a) { return *reinterpret_cast <AxisData *>(s->axis[a]->type_data); } \
 	void init_axis(Space *s, int a) { s->axis[a]->type_data = new AxisData; } \
-	void free_axis(Space *s, int a) { delete reinterpret_cast <AxisData *>(s->axis[a]->type_data); }
+	void free_axis(Space *s, int a) { delete reinterpret_cast <AxisData *>(s->axis[a]->type_data); } \
+	void free_axis(Space *s, int a)
 
-#define UseMotor \
+#define UseMotor(MotorData) \
 	static inline MotorData &myMotor(Space *s, int m) { return *reinterpret_cast <MotorData *>(s->motor[m]->type_data); } \
 	void init_motor(Space *s, int m) { s->motor[m]->type_data = new MotorData; } \
-	void free_motor(Space *s, int m) { delete reinterpret_cast <MotorData *>(s->motor[m]->type_data); }
+	void free_motor(Space *s, int m) { delete reinterpret_cast <MotorData *>(s->motor[m]->type_data); } \
+	void free_motor(Space *s, int m)
 
 static inline void save_count(int ints, int floats) {
 	shmem->ints[100] = ints;

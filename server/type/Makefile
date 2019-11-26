@@ -1,4 +1,5 @@
-modules = $(shell cat types.txt)
+modules := $(shell cat types.txt)
+targets := $(shell sed -E 's/^\s*(.*?)\s*$$/\1\/\1.so/' < types.txt)
 
 all: ${targets} html
 

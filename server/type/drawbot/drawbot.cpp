@@ -21,7 +21,7 @@ struct MotorData {
 	double x, y;
 };
 
-UseMotor;
+UseMotor(MotorData);
 
 void load_space(Space *s) {
 	if (!s->setup_nums(2, 2)) {

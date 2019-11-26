@@ -17,45 +17,45 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <cdriver.h>
+#include <franklin-module.h>
 
-struct Apex {
+struct SpaceData {
+	double angle;			// Adjust the front of the machine.
+};
+
+struct MotorData {
 	double axis_min, axis_max;	// Limits for the movement of this axis.
 	double rodlength, radius;	// Length of the tie rod and the horizontal distance between the vertical position and the zero position.
 	double x, y, z;		// Position of tower on the base plane, and the carriage height at zero position.
 };
 
-struct Delta_private {
-	double angle;			// Adjust the front of the machine.
-};
-
-#define PRIVATE(s) (*reinterpret_cast <Delta_private *>(s->type_data))
-#define APEX(s, m) (*reinterpret_cast <Apex *>(s->motor[m]->type_data))
+UseSpace(SpaceData);
+UseMotor(MotorData);
 
 static bool check_delta(Space *s, uint8_t m, double *target) {	// {{{
 	// Check whether position is allowed by provided limits.
 	// Adjust target if it isn't.
-	double dx = target[0] - APEX(s, m).x;
-	double dy = target[1] - APEX(s, m).y;
+	double dx = target[0] - myMotor(s, m).x;
+	double dy = target[1] - myMotor(s, m).y;
 	double r2 = dx * dx + dy * dy;
-	double amax = APEX(s, m).axis_max < APEX(s, m).rodlength ? APEX(s, m).axis_max : APEX(s, m).rodlength;
+	double amax = myMotor(s, m).axis_max < myMotor(s, m).rodlength ? myMotor(s, m).axis_max : myMotor(s, m).rodlength;
 	if (r2 > amax * amax) {
-		debug ("not ok 1: %f %f %f %f %f %f %f", target[0], target[1], dx, dy, r2, APEX(s, m).rodlength, APEX(s, m).axis_max);
+		debug ("not ok 1: %f %f %f %f %f %f %f", target[0], target[1], dx, dy, r2, myMotor(s, m).rodlength, myMotor(s, m).axis_max);
 		// target is too far away from axis.  Pull it towards axis so that it is on the edge.
 		// target = axis + (target - axis) * (l - epsilon) / r.
 		double factor(amax / sqrt(r2));
-		target[0] = APEX(s, m).x + (target[0] - APEX(s, m).x) * factor;
-		target[1] = APEX(s, m).y + (target[1] - APEX(s, m).y) * factor;
+		target[0] = myMotor(s, m).x + (target[0] - myMotor(s, m).x) * factor;
+		target[1] = myMotor(s, m).y + (target[1] - myMotor(s, m).y) * factor;
 		return false;
 	}
 	// Inner product shows if projection is inside or outside the printable region.
-	double projection = -(dx / APEX(s, m).radius * APEX(s, m).x + dy / APEX(s, m).radius * APEX(s, m).y);
-	double amin = APEX(s, m).axis_min < -APEX(s, m).rodlength ? -APEX(s, m).rodlength : APEX(s, m).axis_min;
+	double projection = -(dx / myMotor(s, m).radius * myMotor(s, m).x + dy / myMotor(s, m).radius * myMotor(s, m).y);
+	double amin = myMotor(s, m).axis_min < -myMotor(s, m).rodlength ? -myMotor(s, m).rodlength : myMotor(s, m).axis_min;
 	if (projection < amin) {
-		debug ("not ok 2: %f %f %f %f %f", projection, dx, dy, APEX(s, m).x, APEX(s, m).y);
+		debug ("not ok 2: %f %f %f %f %f", projection, dx, dy, myMotor(s, m).x, myMotor(s, m).y);
 		// target is on the wrong side of axis.  Pull it towards plane so it is on the edge.
-		target[0] -= ((amin - projection) / APEX(s, m).radius - .001) * APEX(s, m).x;
-		target[1] -= ((amin - projection) / APEX(s, m).radius - .001) * APEX(s, m).y;
+		target[0] -= ((amin - projection) / myMotor(s, m).radius - .001) * myMotor(s, m).x;
+		target[1] -= ((amin - projection) / myMotor(s, m).radius - .001) * myMotor(s, m).y;
 		// Assume this was a small correction; that way, things will work even if numerical errors cause this to be called for the real move.
 		return false;
 	}
@@ -64,13 +64,13 @@ static bool check_delta(Space *s, uint8_t m, double *target) {	// {{{
 }	// }}}
 
 static inline double delta_to_axis(Space *s, uint8_t m) {
-	double dx = s->axis[0]->target - APEX(s, m).x;
-	double dy = s->axis[1]->target - APEX(s, m).y;
-	double dz = s->axis[2]->target - APEX(s, m).z;
+	double dx = s->axis[0]->target - myMotor(s, m).x;
+	double dy = s->axis[1]->target - myMotor(s, m).y;
+	double dz = s->axis[2]->target - myMotor(s, m).z;
 	double r2 = dx * dx + dy * dy;
-	double l2 = APEX(s, m).rodlength * APEX(s, m).rodlength;
+	double l2 = myMotor(s, m).rodlength * myMotor(s, m).rodlength;
 	double dest = sqrt(l2 - r2) + dz;
-	//debug("dta dx %f dy %f dz %f z %f, r %f target %f", dx, dy, dz, APEX(s, m).z, r, target);
+	//debug("dta dx %f dy %f dz %f z %f, r %f target %f", dx, dy, dz, myMotor(s, m).z, r, target);
 	return dest;
 }
 
@@ -142,15 +142,9 @@ void check_position(Space *s, double *data) {
 	}
 }
 
-void load_space(Space *s) {
-	if (!s->setup_nums(3, 3)) {
-		debug("Failed to set up delta axes");
-		s->cancel_update();
+static void update(Space *s) {
+	if (s->motor[2]->type_data == NULL)
 		return;
-	}
-	PRIVATE(s).angle = shmem->floats[100];
-	if (std::isinf(PRIVATE(s).angle) || std::isnan(PRIVATE(s).angle))
-		PRIVATE(s).angle = 0;
 #define sin210 -.5
 #define cos210 -0.8660254037844386	// .5*sqrt(3)
 #define sin330 -.5
@@ -158,78 +152,70 @@ void load_space(Space *s) {
 #define sin90 1
 	// Coordinates of axes (at angles 210, 330, 90; each with its own radius).
 	double x[3], y[3];
-	x[0] = APEX(s, 0).radius * cos210;
-	y[0] = APEX(s, 0).radius * sin210;
-	x[1] = APEX(s, 1).radius * cos330;
-	y[1] = APEX(s, 1).radius * sin330;
+	x[0] = myMotor(s, 0).radius * cos210;
+	y[0] = myMotor(s, 0).radius * sin210;
+	x[1] = myMotor(s, 1).radius * cos330;
+	y[1] = myMotor(s, 1).radius * sin330;
 	x[2] = 0;
-	y[2] = APEX(s, 2).radius * sin90;
+	y[2] = myMotor(s, 2).radius * sin90;
 	for (uint8_t m = 0; m < 3; ++m) {
-		APEX(s, m).x = x[m] * cos(PRIVATE(s).angle) - y[m] * sin(PRIVATE(s).angle);
-		APEX(s, m).y = y[m] * cos(PRIVATE(s).angle) + x[m] * sin(PRIVATE(s).angle);
-		APEX(s, m).z = sqrt(APEX(s, m).rodlength * APEX(s, m).rodlength - APEX(s, m).radius * APEX(s, m).radius);
+		myMotor(s, m).x = x[m] * cos(mySpace(s).angle) - y[m] * sin(mySpace(s).angle);
+		myMotor(s, m).y = y[m] * cos(mySpace(s).angle) + x[m] * sin(mySpace(s).angle);
+		myMotor(s, m).z = sqrt(myMotor(s, m).rodlength * myMotor(s, m).rodlength - myMotor(s, m).radius * myMotor(s, m).radius);
 	}
 }
 
+void load_space(Space *s) {
+	if (!s->setup_nums(3, 3)) {
+		debug("Failed to set up delta axes");
+		s->cancel_update();
+		return;
+	}
+	mySpace(s).angle = shmem->floats[100];
+	if (std::isinf(mySpace(s).angle) || std::isnan(mySpace(s).angle))
+		mySpace(s).angle = 0;
+	update(s);
+}
+
 void load_motor(Space *s, int m) {
-	if (s->motor[m]->type_data == NULL)
-		s->motor[m]->type_data = new Apex;
-	APEX(s, m).axis_min = shmem->floats[100];
-	APEX(s, m).axis_max = shmem->floats[101];
-	APEX(s, m).rodlength = shmem->floats[102];
-	APEX(s, m).radius = shmem->floats[103];
+	myMotor(s, m).axis_min = shmem->floats[100];
+	myMotor(s, m).axis_max = shmem->floats[101];
+	myMotor(s, m).rodlength = shmem->floats[102];
+	myMotor(s, m).radius = shmem->floats[103];
+	update(s);
 }
 
 void save_space(Space *s) {
 	shmem->ints[100] = 0;
 	shmem->ints[101] = 1;
-	shmem->floats[100] = PRIVATE(s).angle;
+	shmem->floats[100] = mySpace(s).angle;
 }
 
 void save_motor(Space *s, int m) {
 	shmem->ints[100] = 0;
 	shmem->ints[101] = 4;
-	shmem->floats[100] = APEX(s, m).axis_min;
-	shmem->floats[101] = APEX(s, m).axis_max;
-	shmem->floats[102] = APEX(s, m).rodlength;
-	shmem->floats[103] = APEX(s, m).radius;
-}
-
-bool init_space(Space *s) {
-	s->type_data = new Delta_private;
-	if (!s->type_data)
-		return false;
-	return true;
-}
-
-void init_motor(Space *s, int m) {
-	s->motor[m]->type_data = new Apex;
-}
-
-void free_space(Space *s) {
-	delete reinterpret_cast <Delta_private *>(s->type_data);
-}
-
-void free_motor(Space *s, int m) {
-	delete reinterpret_cast <Apex *>(s->motor[m]->type_data);
+	shmem->floats[100] = myMotor(s, m).axis_min;
+	shmem->floats[101] = myMotor(s, m).axis_max;
+	shmem->floats[102] = myMotor(s, m).rodlength;
+	shmem->floats[103] = myMotor(s, m).radius;
 }
 
 void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
 	// Find intersecting circle of spheres 0 and 1.
 	double pos[3][3];	// Position of carriages: centers of spheres.
 	for (int i = 0; i < 3; ++i) {
-		pos[i][0] = APEX(s, i).x;
-		pos[i][1] = APEX(s, i).y;
-		pos[i][2] = APEX(s, i).z + motors[i];
+		pos[i][0] = myMotor(s, i).x;
+		pos[i][1] = myMotor(s, i).y;
+		pos[i][2] = myMotor(s, i).z + motors[i];
 	}
 	double P_uv[3];
 	double n_uv[3];
 	double r_uv;
-	intersect_spheres(pos[0], pos[1], APEX(s, 0).rodlength, APEX(s, 1).rodlength, P_uv, n_uv, &r_uv);
+	intersect_spheres(pos[0], pos[1], myMotor(s, 0).rodlength, myMotor(s, 1).rodlength, P_uv, n_uv, &r_uv);
 	double P_uvw[3];
 	double n_uvw[3];
 	double r_uvw;
-	intersect_spheres(P_uv, pos[2], r_uv, APEX(s, 2).rodlength, P_uvw, n_uvw, &r_uvw);
+	intersect_spheres(P_uv, pos[2], r_uv, myMotor(s, 2).rodlength, P_uvw, n_uvw, &r_uvw);
 	// Compute direction of L.
 	double dir_L[3];
 	cross(n_uv, n_uvw, dir_L);
