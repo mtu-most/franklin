@@ -1743,6 +1743,7 @@ class Machine: # {{{
 		elif v is None or not 0 < v <= self.max_v:
 			v = self.max_v
 		self.moving = True
+		#log('move to ' + repr(moves))
 		cdriver.move(*([self.current_extruder] + moves + [e, v]), single = single, probe = probe, relative = relative)
 		if id is not None:
 			self.wait_for_cb()[1](id)

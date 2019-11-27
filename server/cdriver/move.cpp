@@ -1326,7 +1326,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		//debug("retarget fall through to regular goto");
 	}
 	// This is a manual move or the start of a job; set hwtime step to default.
-	mdebug("goto (%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) at speed %.2f, e %.2f->%.2f", x[0], x[1], x[2], move->target[0], move->target[1], move->target[2], move->v0, move->tool >= 0 && move->tool < spaces[1].num_axes ? spaces[1].axis[move->tool]->current : 0, move->e);
+	mdebug("goto (%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) at speed %.2f, e %.2f->%.2f", x[0], x[1], x[2], target[0], target[1], target[2], move->v0, move->tool >= 0 && move->tool < spaces[1].num_axes ? spaces[1].axis[move->tool]->current : 0, move->e);
 	settings.hwtime_step = default_hwtime_step;
 	double vmax = NAN;
 	double amax = NAN;
@@ -1335,18 +1335,8 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	for (int a = 0; a < 3; ++a) {
 		if (spaces[0].num_axes <= a)
 			break;
-		double pos = x[a];
-		if (std::isnan(pos)) {
-			target[a] = pos;
-			continue;
-		}
-		if (std::isnan(move->target[a]))
-			target[a] = pos - (a == 2 ? zoffset : 0);
-		else
-			target[a] = move->target[a];
 		//debug("prepare move, pos[%d]: %f -> %f", a, pos, move->target[a]);
-		spaces[0].axis[a]->last_target = target[a];
-		double d = target[a] + (a == 2 ? zoffset : 0) - pos;
+		double d = target[a] + (a == 2 ? zoffset : 0) - x[a];
 		unit[a] = d;
 		if (std::isnan(dist))
 			dist = d * d;

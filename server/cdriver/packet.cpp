@@ -24,7 +24,7 @@ static void get_cb(bool value) {
 	delayed_reply();
 }
 
-#define CASE(x) case x: debug("request " # x " current fragment pos = %d", current_fragment_pos);
+#define CASE(x) case x: //debug("request " # x " current fragment pos = %d", current_fragment_pos);
 #define CASE2(x) case x: //debug("request " # x);
 
 void request(int req) {
