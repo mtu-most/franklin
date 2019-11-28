@@ -181,6 +181,13 @@ void Parser::handle_coordinate(double value, int index, bool *controlled, bool r
 	pos[index] = (rel ? pos[index] : 0) + value * unit;
 } // }}}
 
+static double inner(double a[3], double b[3]) {
+	double ret = 0;
+	for (int i = 0; i < 3; ++i)
+		ret += a[i] * b[i];
+	return ret;
+}
+
 bool Parser::handle_command(bool handle_pattern) { // {{{
 	// M6 is "tool change"; record that it happened and turn it into G28: park. {{{
 	if (type == 'M' && code == 6) {
@@ -301,8 +308,116 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			break;
 		case 2:
 		case 3:
+			{
+				double X = NAN, Y = NAN, Z = NAN, A = NAN, B = NAN, C = NAN, E = NAN, F = NAN, I = NAN, J = NAN, K = NAN;
+				for (auto arg: command) {
+					if (arg.type == 'X')
+						X = arg.num;
+					else if (arg.type == 'Y')
+						Y = arg.num;
+					else if (arg.type == 'Z')
+						Z = arg.num;
+					else if (arg.type == 'A')
+						A = arg.num;
+					else if (arg.type == 'B')
+						B = arg.num;
+					else if (arg.type == 'C')
+						C = arg.num;
+					else if (arg.type == 'I')
+						X = arg.num;
+					else if (arg.type == 'J')
+						Y = arg.num;
+					else if (arg.type == 'L')
+						Z = arg.num;
+					else if (arg.type == 'E')
+						E = arg.num;
+					else if (arg.type == 'F')
+						F = arg.num;
+					else
+						parse_error(errors, "%d: ignoring invalid arc parameter %c: %s", lineno, arg.type, line.c_str());
+				}
+				if (!std::isnan(F)) {
+					current_f[1] = F * unit / 60;
+					//if (!(current_f[code == 0 ? 0 : 1] > 0))
+						//debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
+				}
+				auto oldpos = pos;
+				double estep;
+				if (!std::isnan(E)) {
+					if (erel) {
+						estep = E * unit;
+						epos.at(current_tool) += estep;
+					}
+					else {
+						estep = E * unit - epos.at(current_tool);
+						epos.at(current_tool) = E * unit;
+					}
+				}
+				else
+					estep = 0;
+				if ((estep != 0) ^ extruding) {
+					flush_pending();
+					extruding = (estep != 0);
+				}
+				bool controlled = true;
+				handle_coordinate(X, 0, &controlled, rel);
+				handle_coordinate(Y, 1, &controlled, rel);
+				handle_coordinate(Z, 2, &controlled, rel);
+				handle_coordinate(A, 3, &controlled, rel);
+				handle_coordinate(B, 4, &controlled, rel);
+				handle_coordinate(C, 5, &controlled, rel);
+				double center[3];
+				if (std::isnan(I))
+					I = rel ? 0 : oldpos[0];
+				center[0] = (rel ? oldpos[0] : 0) + I;
+				if (std::isnan(J))
+					J = rel ? 0 : oldpos[1];
+				center[1] = (rel ? oldpos[1] : 0) + J;
+				if (std::isnan(J))
+					J = rel ? 0 : oldpos[2];
+				center[2] = (rel ? oldpos[2] : 0) + K;
+				double arm[2][3];
+				for (int i = 0; i < 3; ++i) {
+					arm[0][i] = oldpos[i] - center[i];
+					arm[1][i] = pos[i] - center[i];
+				}
+				double len_arm[2], z_arm[2], r_arm[2];
+				for (int a = 0; a < 2; ++a) {
+					len_arm[a] = std::sqrt(inner(arm[a], arm[a]));
+					z_arm[a] = inner(arc_normal, arm[a]);
+					r_arm[a] = std::sqrt(len_arm[a] * len_arm[a] - z_arm[a] * z_arm[a]);
+				}
+				double angle = std::acos(inner(arm[0], arm[1]) / (len_arm[0] * len_arm[1]));
+				double start[3];
+				for (int i = 0; i < 3; ++i)
+					start[i] = arm[0][i] / len_arm[0];
+				int num = angle / (2 * M_PI) * 50;
+				for (int t = 0; t < num; ++t) {
+					double factor = (t + 1.) / num;
+					double z = z_arm[0] + factor * (z_arm[1] - z_arm[0]);
+					double r = r_arm[0] + factor * (r_arm[1] - r_arm[0]);
+					double ang = factor * angle;
+					// Rotate start[] around arc_normal[] over ang.
+					double c = std::cos(ang);
+					double s = std::sin(ang);
+					double target_arm[3];
+					target_arm[0] = (c + arc_normal[0] * arc_normal[0] * (1 - c)) * start[0] +
+						(arc_normal[0] * arc_normal[1] * (1 - c) - arc_normal[2] * s) * start[1] +
+						(arc_normal[0] * arc_normal[2] * (1 - c) + arc_normal[1] * s) * start[2];
+					target_arm[1] = (arc_normal[1] * arc_normal[0] * (1 - c) + arc_normal[2] * s) * start[0] +
+						(c + arc_normal[1] * arc_normal[1] * (1 - c)) * start[1] +
+						(arc_normal[1] * arc_normal[2] * (1 - c) - arc_normal[0] * s) * start[2];
+					target_arm[2] = (arc_normal[2] * arc_normal[0] * (1 - c) - arc_normal[1] * s) * start[0] +
+						(arc_normal[2] * arc_normal[1] * (1 - c) + arc_normal[0] * s) * start[1] +
+						(c + arc_normal[2] * arc_normal[2] * (1 - c)) * start[2];
+					double target[3];
+					for (int i = 0; i < 3; ++i)
+						target[i] = center[i] + z * arc_normal[i] + r * target_arm[i];
+					pending.push_back(Record(lineno, false, current_tool, target[0], target[1], target[2], NAN, NAN, NAN, current_f[1], NAN));
+				}
+			}
 			// TODO: This is broken, so it is disabled. It should be fixed and enabled.
-			parse_error(errors, "Arc commands (G2/G3) are disabled at the moment", lineno);
+			//parse_error(errors, "Arc commands (G2/G3) are disabled at the moment", lineno);
 			break;
 			{
 				modetype = type;
