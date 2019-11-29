@@ -195,7 +195,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		code = 28;
 		tool_changed = true;
 	} // }}}
-	debug("handling %c%d", type, code);
+	//debug("handling %c%d", type, code);
 	if (type == 'G') { // {{{
 		switch (code) {
 		case 1:
@@ -234,7 +234,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					//if (!(current_f[code == 0 ? 0 : 1] > 0))
 						//debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
 				}
-				auto oldpos = pos;
+				double oldpos[6] = {pos[0], pos[1], pos[2], pos[3], pos[4], pos[5]};
 				double estep, r;
 				if (code != 81) {
 					r = NAN;
@@ -310,7 +310,6 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		case 2:
 		case 3:
 			{
-				debug("arc");
 				double X = NAN, Y = NAN, Z = NAN, A = NAN, B = NAN, C = NAN, E = NAN, F = NAN, I = NAN, J = NAN, K = NAN;
 				for (auto arg: command) {
 					if (arg.type == 'X')
@@ -343,7 +342,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					//if (!(current_f[code == 0 ? 0 : 1] > 0))
 						//debug("new f%d: %f", code == 0 ? 0 : 1, current_f[code == 0 ? 0 : 1]);
 				}
-				auto oldpos = pos;
+				double oldpos[6] = {pos[0], pos[1], pos[2], pos[3], pos[4], pos[5]};
 				double estep;
 				if (!std::isnan(E)) {
 					if (erel) {
@@ -385,18 +384,23 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				}
 				double len_arm[2], z_arm[2], r_arm[2];
 				for (int a = 0; a < 2; ++a) {
-					debug("arm %d: %f,%f,%f", a, arm[a][0], arm[a][1], arm[a][2]);
 					len_arm[a] = std::sqrt(inner(arm[a], arm[a]));
 					z_arm[a] = inner(arc_normal, arm[a]);
 					r_arm[a] = std::sqrt(len_arm[a] * len_arm[a] - z_arm[a] * z_arm[a]);
 				}
-				debug("lens %f, %f", len_arm[0], len_arm[1]);
 				double angle = std::acos(inner(arm[0], arm[1]) / (len_arm[0] * len_arm[1]));
+				if (arm[0][0] == arm[1][0] && arm[0][1] == arm[1][1] && arm[0][2] == arm[1][2])
+					angle = (code == 2 ? -1 : 1) * 2 * M_PI;
+				else {
+					if (angle < 0 && code == 3)
+						angle += 2 * M_PI;
+					if (angle > 0 && code == 2)
+						angle -= 2 * M_PI;
+				}
 				double start[3];
 				for (int i = 0; i < 3; ++i)
 					start[i] = arm[0][i] / len_arm[0];
-				int num = angle / (2 * M_PI) * 50;
-				debug("arc angle %f num %d", angle / (2 * M_PI) * 360, num);
+				int num = fabs(angle) * (r_arm[0] + r_arm[1]) / 2 + 1;
 				for (int t = 0; t < num; ++t) {
 					double factor = (t + 1.) / num;
 					double z = z_arm[0] + factor * (z_arm[1] - z_arm[0]);
@@ -418,7 +422,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					double target[3];
 					for (int i = 0; i < 3; ++i)
 						target[i] = center[i] + z * arc_normal[i] + r * target_arm[i];
-					debug("arc part %f,%f,%f", target[0], target[1], target[2]);
+					//debug("arc part %f,%f,%f", target[0], target[1], target[2]);
 					pending.push_back(Record(lineno, false, current_tool, target[0], target[1], target[2], NAN, NAN, NAN, current_f[1], NAN));
 				}
 			}
