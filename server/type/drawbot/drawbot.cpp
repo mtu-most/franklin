@@ -24,7 +24,7 @@ struct MotorData {
 UseMotor(MotorData);
 
 void load_space(Space *s) {
-	if (!s->setup_nums(2, 2)) {
+	if (!s->setup_nums(3, 3)) {
 		debug("Failed to set up drawbot axes");
 		s->cancel_update();
 		return;

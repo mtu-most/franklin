@@ -1485,8 +1485,8 @@ class Machine: # {{{
 					name = typeinfo[self.type]['name'][i][0]
 					if name is not None:
 						return name
-				if i < len(self.spaces[self.id].axis):
-					return self.spaces[self.id].axis[i]['name']
+				if i < len(self.axis):
+					return self.axis[i]['name']
 				return 'motor %d' % i
 			elif self.type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER):
 				return self.axis[i]['name']
@@ -1627,19 +1627,23 @@ class Machine: # {{{
 			self.reset = 3
 			self.value = False
 			self.duty = 1.
+			self.space = -1
+			self.motor = -1
 		def read(self):
 			data = cdriver.read_gpio(self.id)
 			self.pin = data['pin']
 			self.duty = data['duty']
 			self.state = data['state'] & 0x3
 			self.reset = (data['state'] >> 2) & 0x3
+			self.space = data['space']
+			self.motor = data['motor']
 		def write(self):
-			attrnames = ('pin', 'duty')
+			attrnames = ('pin', 'duty', 'space', 'motor')
 			data = {n: getattr(self, n) for n in attrnames}
 			data['state'] = self.state | (self.reset << 2)
 			cdriver.write_gpio(self.id, data)
 		def export(self):
-			attrnames = ('name', 'pin', 'state', 'reset', 'duty')
+			attrnames = ('name', 'pin', 'state', 'reset', 'duty', 'space', 'motor')
 			attrs = {n: getattr(self, n) for n in attrnames}
 			attrs['value'] = self.value if self.state >= 2 else self.state == 1
 			return attrs
@@ -1649,6 +1653,8 @@ class Machine: # {{{
 			ret += 'pin = %s\r\n' % write_pin(self.pin)
 			ret += 'reset = %d\r\n' % self.reset
 			ret += 'duty = %f\r\n' % self.duty
+			ret += 'space = %d\r\n' % self.space
+			ret += 'motor = %d\r\n' % self.motor
 			return ret
 	# }}}
 	# }}}
@@ -2100,7 +2106,7 @@ class Machine: # {{{
 				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J'},
 				'space': {'type', 'num_axes', 'polar_max_r'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'},
-				'gpio': {'name', 'pin', 'state', 'reset', 'duty'},
+				'gpio': {'name', 'pin', 'state', 'reset', 'duty', 'space', 'motor'},
 				'axis': {'name', 'park', 'park_order', 'min', 'max', 'home_pos2'},
 				'motor': {'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'home_pos', 'limit_v', 'limit_a', 'home_order', 'unit'},
 				'extruder': {'dx', 'dy', 'dz'},
@@ -2172,7 +2178,7 @@ class Machine: # {{{
 					elif key.endswith('pin'):
 						value = read_pin(self, value)
 						#log('pin imported as {} for {}'.format(value, key))
-					elif key.startswith('num') or section == 'follower' or key.endswith('_id'):
+					elif key.startswith('num') or key in ('space', 'motor') or key.endswith('_id'):
 						value = int(value)
 					else:
 						value = float(value)
@@ -2788,12 +2794,12 @@ class Machine: # {{{
 	# }}}
 	def get_gpio(self, gpio): # {{{
 		ret = {}
-		for key in ('name', 'pin', 'state', 'reset', 'duty', 'value'):
+		for key in ('name', 'pin', 'state', 'reset', 'duty', 'space', 'motor', 'value'):
 			ret[key] = getattr(self.gpios[gpio], key)
 		return ret
 	# }}}
 	def expert_set_gpio(self, gpio, update = True, **ka): # {{{
-		for key in ('name', 'pin', 'state', 'reset', 'duty'):
+		for key in ('name', 'pin', 'state', 'reset', 'duty', 'space', 'motor'):
 			if key in ka:
 				setattr(self.gpios[gpio], key, ka.pop(key))
 		self.gpios[gpio].state = int(self.gpios[gpio].state)

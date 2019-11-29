@@ -279,7 +279,7 @@ static inline int16_t minpacketlen() {
 	case CMD_SETUP:
 		return 13;
 	case CMD_CONTROL:
-		return 4;
+		return 5;
 	case CMD_MSETUP:
 		return 8;
 	case CMD_ASETUP:

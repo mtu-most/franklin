@@ -117,7 +117,7 @@ bool arch_send_fragment();
 int arch_fds();
 int arch_tick();
 void arch_set_duty(Pin_t pin, double duty);
-double arch_get_duty(Pin_t pin);
+void arch_set_pin_motor(Pin_t pin, int s, int m);
 void arch_discard();
 void arch_send_spi(int bits, const uint8_t *data);
 void DATA_SET(int s, int m, int value);
@@ -943,14 +943,6 @@ bool arch_send_fragment() { // {{{
 
 int arch_fds() { // {{{
 	return 0;
-} // }}}
-
-double arch_get_duty(Pin_t _pin) { // {{{
-	if (_pin.pin < 0 || _pin.pin >= NUM_DIGITAL_PINS) {
-		debug("invalid pin for arch_get_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
-		return 1;
-	}
-	return mc_duty[_pin.pin];
 } // }}}
 
 void arch_set_duty(Pin_t _pin, double duty) { // {{{

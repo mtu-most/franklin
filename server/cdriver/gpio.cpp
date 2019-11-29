@@ -20,10 +20,14 @@
 #include "cdriver.h"
 
 void Gpio::load() {
-	if (pin.valid() && pin.write() != shmem->ints[1])
+	if (pin.valid() && pin.write() != shmem->ints[1]) {
 		arch_set_duty(pin, 1);
+		arch_set_pin_motor(pin, -1, -1);
+	}
 	pin.read(shmem->ints[1]);
 	state = shmem->ints[2];
+	space = shmem->ints[3];
+	motor = shmem->ints[4];
 	reset = (state >> 2) & 0x3;
 	state &= 0x3;
 	// State:  0: off, 1: on, 2: pullup input, 3: disabled
@@ -47,13 +51,17 @@ void Gpio::load() {
 	arch_pin_set_reset(pin, reset);
 #endif
 	duty = shmem->floats[0];
-	if (pin.valid())
+	if (pin.valid()) {
 		arch_set_duty(pin, duty);
+		arch_set_pin_motor(pin, space, motor);
+	}
 }
 
 void Gpio::save() {
 	shmem->ints[1] = pin.write();
 	shmem->ints[2] = state | (reset << 2);
+	shmem->ints[3] = space;
+	shmem->ints[4] = motor;
 	shmem->floats[0] = duty;
 }
 

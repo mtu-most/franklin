@@ -1108,6 +1108,8 @@ function gpio_update(uuid, index) { // {{{
 	for (var i = 0; i < e.length; ++i)
 		e[i].selectedIndex = machines[uuid].gpios[index].reset;
 	update_float(p, [['gpio', index], 'duty']);
+	update_float(p, [['gpio', index], 'space']);
+	update_float(p, [['gpio', index], 'motor']);
 } // }}}
 // }}}
 

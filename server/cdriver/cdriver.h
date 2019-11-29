@@ -38,7 +38,7 @@
 #include <sys/timerfd.h>
 #include <string>
 
-#define PROTOCOL_VERSION ((uint32_t)4)	// Required version response in BEGIN.
+#define PROTOCOL_VERSION ((uint32_t)5)	// Required version response in BEGIN.
 #define BASE_FDS 3
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
@@ -287,6 +287,7 @@ EXTERN int current_extruder;
 struct Gpio {
 	Pin_t pin;
 	uint8_t state, reset;
+	int space, motor;
 	double duty;
 	bool changed, value;
 	void setup(uint8_t new_state);

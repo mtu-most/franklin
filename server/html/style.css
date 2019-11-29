@@ -100,6 +100,10 @@
 	width: 20%;
 	background: #66f;
 }
+.htitle7 {
+	width: 20.5%;
+	background: #66f;
+}
 
 .rowtitle1 {
 	width: 20%;
@@ -125,6 +129,10 @@
 	width: 20%;
 	background: #ccf;
 }
+.rowtitle7 {
+	width: 20.5%;
+	background: #ccf;
+}
 
 .title1 {
 	width: 60%;
@@ -148,6 +156,10 @@
 }
 .title6 {
 	width: 10%;
+	background: #88f;
+}
+.title7 {
+	width: 8.5%;
 	background: #88f;
 }
 

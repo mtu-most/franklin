@@ -209,8 +209,10 @@ void connect_end() {
 	}
 	// Set all gpio duty cycle values.
 	for (int g = 0; g < num_gpios; ++g) {
-		if (gpios[g].pin.valid())
+		if (gpios[g].pin.valid()) {
 			arch_set_duty(gpios[g].pin, gpios[g].duty);
+			arch_set_pin_motor(gpios[g].pin, gpios[g].space, gpios[g].motor);
+		}
 	}
 	// Update current position.
 	first_fragment = current_fragment;

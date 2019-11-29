@@ -332,7 +332,7 @@ function Gpio(ui, num) {
 		e.preventDefault();
 		return false;
 	});
-	return make_tablerow(ui, gpio_name(ui, num), [Name(ui, 'gpio', num), reset, Float(ui, [['gpio', num], 'duty'], 0, 1e-2), Id(ui, [['gpio', num], 'fan']), Id(ui, [['gpio', num], 'spindle'])], ['rowtitle5']);
+	return make_tablerow(ui, gpio_name(ui, num), [Name(ui, 'gpio', num), reset, Float(ui, [['gpio', num], 'duty'], 0, 1e-2), Id(ui, [['gpio', num], 'fan']), Id(ui, [['gpio', num], 'spindle']), Float(ui, [['gpio', num], 'space'], 0, 1), Float(ui, [['gpio', num], 'motor'], 0, 1)], ['rowtitle7']);
 }
 
 function Pins_gpio(ui, num) {
@@ -999,21 +999,27 @@ function setup_gpio(desc, pos, top) { // {{{
 		'Reset State',
 		'Power (%)',
 		'Fan',
-		'Spindle'
+		'Spindle',
+		'Space',
+		'Motor'
 	], [
-		'htitle5',
-		'title5',
-		'title5',
-		'title5',
-		'title5',
-		'title5'
+		'htitle7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7'
 	], [
 		null,
 		'Name of the Gpio.',
 		'Initial state and reset state of the Gpio.  There is a checkbox for the pin if this is not disabled.  If it is input, the checkbox shows the current value.  Otherwise it can be used to change the value.',
 		'Fraction of the time that the pin is enabled when on.  Note that this value can only be set up when the corresponding pin is valid.',
 		'Whether this Gpio is the fan pin, used by G-code commands M106 and M107.',
-		'Whether this Gpio is the spindle pin, used by G-code commands M3, M4 and M5.'
+		'Whether this Gpio is the spindle pin, used by G-code commands M3, M4 and M5.',
+		'Space of linked motor',
+		'Linked motor; duty cycle will follow the position of this motor. (Actual duty cycle is not updated in interface.)'
 	]).AddMultiple(ui, 'gpio', Gpio)]);
 	var pins = ret.Add(make_table(ui));
 	// Add dummy first child instead of a title row.

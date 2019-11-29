@@ -246,7 +246,9 @@ function _setup_updater() {
 					name: null,
 					pin: 0,
 					state: 3,
-					reset: 3
+					reset: 3,
+					space: -1,
+					motor: 0
 				});
 			}
 			machines[machine].gpios.length = machines[machine].num_gpios;

@@ -139,13 +139,9 @@ static void handle_led() {
 static void handle_pins() {
 	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
 		if (pin[p].motor < active_motors) {
-			int32_t current = motor[pin[p].motor].current_pos;
-			if (current <= 0)
-				pin[0].duty = 0;
-			else if (current >= 255)
-				pin[0].duty = 255;
-			else
-				pin[0].duty = current;
+			pin[p].duty = motor[pin[p].motor].current_pos & 0xff;
+			if (CONTROL_CURRENT(pin[p].state) == CTRL_SET)
+				SET(p);
 		}
 		if (!(pin[p].state & CTRL_NOTIFY))
 			continue;
