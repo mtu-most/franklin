@@ -136,8 +136,17 @@ static void handle_led() {
 		RESET(led_pin);
 }
 
-static void handle_inputs() {
+static void handle_pins() {
 	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
+		if (pin[p].motor < active_motors) {
+			int32_t current = motor[pin[p].motor].current_pos;
+			if (current <= 0)
+				pin[0].duty = 0;
+			else if (current >= 255)
+				pin[0].duty = 255;
+			else
+				pin[0].duty = current;
+		}
 		if (!(pin[p].state & CTRL_NOTIFY))
 			continue;
 		bool new_state = GET(p);
@@ -173,7 +182,7 @@ int main(void) {
 		try_send_next();
 		handle_motors();
 		// Update pin states.
-		handle_inputs();
+		handle_pins();
 		handle_motors();
 		// Handle PWM of outputs.
 		arch_outputs();

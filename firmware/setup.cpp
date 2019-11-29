@@ -31,6 +31,7 @@ void setup()
 	enabled_pins = NUM_DIGITAL_PINS;
 	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
 		pin[p].duty = 255;
+		pin[p].motor = 255;
 		// Reset state is unset, then unset the pin.
 		pin[p].state = CTRL_UNSET << 2 | CTRL_RESET;
 		UNSET(p);

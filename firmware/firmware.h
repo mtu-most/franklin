@@ -28,7 +28,7 @@
 
 #define ID_SIZE 8	// Number of bytes in machineid; 8.
 #define UUID_SIZE 16	// Number of bytes in uuid; 16.
-#define PROTOCOL_VERSION 4
+#define PROTOCOL_VERSION 5
 
 #define ADC_INTERVAL 1000	// Delay 1 ms between ADC measurements.
 
@@ -168,6 +168,7 @@ struct Pin_t {
 	uint8_t state;
 	uint8_t duty;
 	uint8_t num_temps;
+	uint8_t motor;
 	bool value() {
 		return CONTROL_VALUE(state);
 	}
