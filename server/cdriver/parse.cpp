@@ -188,6 +188,14 @@ static double inner(double a[3], double b[3]) {
 	return ret;
 }
 
+static void cross(double ret[3], double a[3], double b[3]) {
+	for (int i = 0; i < 3; ++i) {
+		int i1 = (i + 1) % 3;
+		int i2 = (i + 2) % 3;
+		ret[i] = a[i1] * b[i2] - a[i2] * b[i1];
+	}
+}
+
 bool Parser::handle_command(bool handle_pattern) { // {{{
 	// M6 is "tool change"; record that it happened and turn it into G28: park. {{{
 	if (type == 'M' && code == 6) {
@@ -382,6 +390,9 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					arm[0][i] = oldpos[i] - center[i];
 					arm[1][i] = pos[i] - center[i];
 				}
+				double cross_arm[3];
+				cross(cross_arm, arm[0], arm[1]);
+				double sign = inner(cross_arm, arc_normal);
 				double len_arm[2], z_arm[2], r_arm[2];
 				for (int a = 0; a < 2; ++a) {
 					len_arm[a] = std::sqrt(inner(arm[a], arm[a]));
@@ -389,6 +400,8 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					r_arm[a] = std::sqrt(len_arm[a] * len_arm[a] - z_arm[a] * z_arm[a]);
 				}
 				double angle = std::acos(inner(arm[0], arm[1]) / (len_arm[0] * len_arm[1]));
+				if (sign < 0)
+					angle *= -1;
 				if (arm[0][0] == arm[1][0] && arm[0][1] == arm[1][1] && arm[0][2] == arm[1][2])
 					angle = (code == 2 ? -1 : 1) * 2 * M_PI;
 				else {
