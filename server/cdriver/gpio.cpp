@@ -22,12 +22,13 @@
 void Gpio::load() {
 	if (pin.valid() && pin.write() != shmem->ints[1]) {
 		arch_set_duty(pin, 1);
-		arch_set_pin_motor(pin, -1, -1);
+		arch_set_pin_motor(pin, -1, -1, 1);
 	}
 	pin.read(shmem->ints[1]);
 	state = shmem->ints[2];
 	space = shmem->ints[3];
 	motor = shmem->ints[4];
+	ticks = shmem->ints[5];
 	reset = (state >> 2) & 0x3;
 	state &= 0x3;
 	// State:  0: off, 1: on, 2: pullup input, 3: disabled
@@ -53,7 +54,7 @@ void Gpio::load() {
 	duty = shmem->floats[0];
 	if (pin.valid()) {
 		arch_set_duty(pin, duty);
-		arch_set_pin_motor(pin, space, motor);
+		arch_set_pin_motor(pin, space, motor, ticks);
 	}
 }
 
@@ -62,6 +63,7 @@ void Gpio::save() {
 	shmem->ints[2] = state | (reset << 2);
 	shmem->ints[3] = space;
 	shmem->ints[4] = motor;
+	shmem->ints[5] = ticks;
 	shmem->floats[0] = duty;
 }
 
@@ -70,6 +72,7 @@ void Gpio::init() {
 	state = 3;
 	reset = 3;
 	duty = 1;
+	ticks = 1;
 	changed = false;
 	value = false;
 }
@@ -81,4 +84,8 @@ void Gpio::free() {
 void Gpio::copy(Gpio &dst) {
 	dst.pin.read(pin.write());
 	dst.state = state;
+	dst.duty = duty;
+	dst.space = space;
+	dst.motor = motor;
+	dst.ticks = ticks;
 }

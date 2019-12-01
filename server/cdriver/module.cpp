@@ -663,11 +663,12 @@ static PyObject *read_gpio(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (!PyArg_ParseTuple(args, "i", &shmem->ints[0]))
 		return NULL;
 	send_to_child(CMD_READ_GPIO);
-	return Py_BuildValue("{si,si,si,si,sd}",
+	return Py_BuildValue("{si,si,si,si,si,sd}",
 			"pin", shmem->ints[1],
 			"state", shmem->ints[2],
 			"space", shmem->ints[3],
 			"motor", shmem->ints[4],
+			"ticks", shmem->ints[5],
 			"duty", shmem->floats[0]);
 }
 
@@ -681,6 +682,7 @@ static PyObject *write_gpio(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_int(2, "state", dict);
 	set_int(3, "space", dict);
 	set_int(4, "motor", dict);
+	set_int(5, "ticks", dict);
 	set_float(0, "duty", dict);
 	send_to_child(CMD_WRITE_GPIO);
 	return assert_empty_dict(dict, "write_gpio");

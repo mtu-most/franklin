@@ -580,18 +580,16 @@ function download_probemap(ui) { // {{{
 } // }}}
 
 function update_motorselect(select) {
-	var current_option = select.options[select.selectedIndex];
-	var current = (current_option === undefined ? null : select.options[select.selectedIndex].spacemotor);
+	var current = (select.selectedIndex && select.options[select.selectedIndex] && select.options[select.selectedIndex].spacemotor) || null;
 	select.ClearAll();
-	var opt = select.AddElement('option');
+	var opt = select.AddElement('option').AddText('None');
 	opt.spacemotor = null;
-	opt.value = 'None';
 	for (var s = 0; s < select.ui.machine.spaces.length; ++s) {
 		for (var m = 0; m < select.ui.machine.spaces[s].motor.length; ++m) {
 			opt = select.AddElement('option');
 			opt.spacemotor = [s, m];
-			opt.value = select.ui.machine.spaces[s].motor[m].name;
-			if (opt.value == current)
+			opt.AddText(select.ui.machine.spaces[s].motor[m].name);
+			if (opt.spacemotor == current)
 				select.selectedIndex = select.options.length - 1;
 		}
 	}
@@ -1128,11 +1126,10 @@ function gpio_update(uuid, index) { // {{{
 	for (var i = 0; i < e.length; ++i)
 		e[i].selectedIndex = machines[uuid].gpios[index].reset;
 	update_float(p, [['gpio', index], 'duty']);
-	update_float(p, [['gpio', index], 'space']);
-	update_float(p, [['gpio', index], 'motor']);
+	update_float(p, [['gpio', index], 'ticks']);
 	var selects = get_elements(p, [['gpio', index], 'spacemotor']);
 	for (var s = 0; s < selects.length; ++s)
-		update_motorselect(s);
+		update_motorselect(selects[s]);
 } // }}}
 // }}}
 

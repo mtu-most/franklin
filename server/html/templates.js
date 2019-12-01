@@ -119,12 +119,18 @@ function Float(ui, obj, digits, factor, className, set) { // {{{
 } // }}}
 
 function MotorSelect(ui, obj, className) { // {{{
+	if (obj[0][1] === null)
+		return [];
 	var select = Create('select', className);
 	select.obj = obj;
 	select.AddClass(make_id(ui, obj));
 	select.ui = ui;
 	select.AddEvent('change', function(event) {
-		set_value(select.ui, select.obj, select.options[select.selectedIndex].spacemotor);
+		var option = select.options[select.selectedIndex];
+		if (option === undefined)
+			return;
+		var spacemotor = option.spacemotor;
+		ui.machine.call('set_' + obj[0][0], [obj[0][1]], {space: spacemotor[0], motor: spacemotor[1]});
 	});
 	update_motorselect(select);
 	return select;
@@ -324,7 +330,8 @@ function Gpio(ui, num) {
 		e.preventDefault();
 		return false;
 	});
-	return make_tablerow(ui, gpio_name(ui, num), [Name(ui, 'gpio', num), reset, Float(ui, [['gpio', num], 'duty'], 0, 1e-2), Id(ui, [['gpio', num], 'fan']), Id(ui, [['gpio', num], 'spindle']), Float(ui, [['gpio', num], 'space'], 0, 1), Float(ui, [['gpio', num], 'motor'], 0, 1)], ['rowtitle7']);
+	var motor_select = MotorSelect(ui, [['gpio', num], 'spacemotor']);
+	return make_tablerow(ui, gpio_name(ui, num), [Name(ui, 'gpio', num), reset, Float(ui, [['gpio', num], 'duty'], 0, 1e-2), Id(ui, [['gpio', num], 'fan']), Id(ui, [['gpio', num], 'spindle']), motor_select, Float(ui, [['gpio', num], 'ticks'], 0, 1)], ['rowtitle7']);
 }
 
 function Pins_gpio(ui, num) {
@@ -956,8 +963,8 @@ function setup_gpio(desc, pos, top) { // {{{
 		'Power (%)',
 		'Fan',
 		'Spindle',
-		'Space',
-		'Motor'
+		'Motor',
+		'Timer ticks per step'
 	], [
 		'htitle7',
 		'title7',
@@ -974,8 +981,8 @@ function setup_gpio(desc, pos, top) { // {{{
 		'Fraction of the time that the pin is enabled when on.  Note that this value can only be set up when the corresponding pin is valid.',
 		'Whether this Gpio is the fan pin, used by G-code commands M106 and M107.',
 		'Whether this Gpio is the spindle pin, used by G-code commands M3, M4 and M5.',
-		'Space of linked motor',
-		'Linked motor; duty cycle will follow the position of this motor. (Actual duty cycle is not updated in interface.)'
+		'Linked motor; duty cycle will follow the position of this motor. (Actual duty cycle is not updated in interface.)',
+		'How many timer ticks to change the pwm output for each step of the linked motor.'
 	]).AddMultiple(ui, 'gpio', Gpio)]);
 	var pins = ret.Add(make_table(ui));
 	// Add dummy first child instead of a title row.

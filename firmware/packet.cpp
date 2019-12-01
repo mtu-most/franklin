@@ -177,6 +177,7 @@ void packet()
 		pin[p].set_state((pin[p].state & ~0xc) | (value & 0xc));
 		pin[p].duty = command(3) | (command(4) << 8);
 		pin[p].motor = command(5);
+		pin[p].ticks = command(6);
 		if (pin[p].num_temps == 0) {
 			switch (CONTROL_CURRENT(value)) {
 			case CTRL_RESET:

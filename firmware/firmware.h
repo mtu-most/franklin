@@ -169,6 +169,7 @@ struct Pin_t {
 	uint16_t duty;
 	uint8_t num_temps;
 	uint8_t motor;
+	uint8_t ticks;
 	bool value() {
 		return CONTROL_VALUE(state);
 	}
@@ -279,7 +280,7 @@ static inline int16_t minpacketlen() {
 	case CMD_SETUP:
 		return 13;
 	case CMD_CONTROL:
-		return 6;
+		return 7;
 	case CMD_MSETUP:
 		return 8;
 	case CMD_ASETUP:

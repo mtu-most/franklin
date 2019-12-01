@@ -135,7 +135,7 @@ void GET(Pin_t _pin, bool _default, void(*cb)(bool));
 void avr_send_pin(Pin_t _pin);
 void arch_pin_set_reset(Pin_t _pin, char state);
 void arch_set_duty(Pin_t _pin, double duty);
-void arch_set_pin_motor(Pin_t _pin, int s, int m);
+void arch_set_pin_motor(Pin_t _pin, int s, int m, int ticks);
 void arch_reset();
 void arch_motor_change(uint8_t s, uint8_t sm);
 void arch_pattern_change();
@@ -195,6 +195,7 @@ struct Avr_pin_t { // {{{
 	char reset;
 	int duty;
 	int motor;
+	int ticks;
 }; // }}}
 
 // Declarations of static variables; extern because this is a header file. {{{
@@ -258,18 +259,20 @@ int hwpacketsize(int len, int *available) { // {{{
 	}
 } // }}}
 
+#define CONTROL_SIZE 6
 void try_send_control() { // {{{
 	if (!connected || preparing || out_busy >= 3 || avr_control_queue_length == 0)
 		return;
 	avr_control_queue_length -= 1;
 	avr_buffer[0] = HWC_CONTROL;
-	avr_buffer[1] = avr_control_queue[avr_control_queue_length * 5];
-	avr_buffer[2] = avr_control_queue[avr_control_queue_length * 5 + 1];
-	avr_buffer[3] = avr_control_queue[avr_control_queue_length * 5 + 2];
-	avr_buffer[4] = avr_control_queue[avr_control_queue_length * 5 + 3];
-	avr_buffer[5] = avr_control_queue[avr_control_queue_length * 5 + 4];
-	avr_in_control_queue[avr_control_queue[avr_control_queue_length * 5]] = false;
-	prepare_packet(avr_buffer, 6);
+	avr_buffer[1] = avr_control_queue[avr_control_queue_length * CONTROL_SIZE];
+	avr_buffer[2] = avr_control_queue[avr_control_queue_length * CONTROL_SIZE + 1];
+	avr_buffer[3] = avr_control_queue[avr_control_queue_length * CONTROL_SIZE + 2];
+	avr_buffer[4] = avr_control_queue[avr_control_queue_length * CONTROL_SIZE + 3];
+	avr_buffer[5] = avr_control_queue[avr_control_queue_length * CONTROL_SIZE + 4];
+	avr_buffer[6] = avr_control_queue[avr_control_queue_length * CONTROL_SIZE + 5];
+	avr_in_control_queue[avr_control_queue[avr_control_queue_length * CONTROL_SIZE]] = false;
+	prepare_packet(avr_buffer, CONTROL_SIZE + 1);
 	avr_send();
 } // }}}
 
@@ -589,20 +592,22 @@ void avr_setup_pin(int pin, int type, int resettype, int extra) { // {{{
 	if (avr_in_control_queue[pin])
 	{
 		for (int i = 0; i < avr_control_queue_length; ++i) {
-			if (avr_control_queue[i * 5] != pin)
+			if (avr_control_queue[i * CONTROL_SIZE] != pin)
 				continue;
-			avr_control_queue[i * 5 + 1] = type | (resettype << 2) | extra;
-			avr_control_queue[i * 5 + 2] = avr_pins[pin].duty & 0xff;
-			avr_control_queue[i * 5 + 3] = (avr_pins[pin].duty >> 8) & 0xff;
-			avr_control_queue[i * 5 + 4] = avr_pins[pin].motor;
+			avr_control_queue[i * CONTROL_SIZE + 1] = type | (resettype << 2) | extra;
+			avr_control_queue[i * CONTROL_SIZE + 2] = avr_pins[pin].duty & 0xff;
+			avr_control_queue[i * CONTROL_SIZE + 3] = (avr_pins[pin].duty >> 8) & 0xff;
+			avr_control_queue[i * CONTROL_SIZE + 4] = avr_pins[pin].motor;
+			avr_control_queue[i * CONTROL_SIZE + 5] = avr_pins[pin].ticks;
 			return;
 		}
 	}
-	avr_control_queue[avr_control_queue_length * 5] = pin;
-	avr_control_queue[avr_control_queue_length * 5 + 1] = type | (resettype << 2) | extra;
-	avr_control_queue[avr_control_queue_length * 5 + 2] = avr_pins[pin].duty & 0xff;
-	avr_control_queue[avr_control_queue_length * 5 + 3] = (avr_pins[pin].duty >> 8) & 0xff;
-	avr_control_queue[avr_control_queue_length * 5 + 4] = avr_pins[pin].motor;
+	avr_control_queue[avr_control_queue_length * CONTROL_SIZE] = pin;
+	avr_control_queue[avr_control_queue_length * CONTROL_SIZE + 1] = type | (resettype << 2) | extra;
+	avr_control_queue[avr_control_queue_length * CONTROL_SIZE + 2] = avr_pins[pin].duty & 0xff;
+	avr_control_queue[avr_control_queue_length * CONTROL_SIZE + 3] = (avr_pins[pin].duty >> 8) & 0xff;
+	avr_control_queue[avr_control_queue_length * CONTROL_SIZE + 4] = avr_pins[pin].motor;
+	avr_control_queue[avr_control_queue_length * CONTROL_SIZE + 5] = avr_pins[pin].ticks;
 	avr_control_queue_length += 1;
 	avr_in_control_queue[pin] = true;
 	try_send_control();
@@ -721,7 +726,7 @@ void arch_set_duty(Pin_t _pin, double duty) { // {{{
 	}
 } // }}}
 
-void arch_set_pin_motor(Pin_t _pin, int s, int m) { // {{{
+void arch_set_pin_motor(Pin_t _pin, int s, int m, int ticks) { // {{{
 	if (!connected)
 		return;
 	if (_pin.pin >= NUM_DIGITAL_PINS) {
@@ -734,8 +739,9 @@ void arch_set_pin_motor(Pin_t _pin, int s, int m) { // {{{
 		for (int i = 0; i < s; ++i)
 			m += spaces[s].num_motors;
 	}
-	if (m != avr_pins[_pin.pin].motor) {
+	if (m != avr_pins[_pin.pin].motor || ticks != avr_pins[_pin.pin].ticks) {
 		avr_pins[_pin.pin].motor = m;
+		avr_pins[_pin.pin].ticks = ticks;
 		avr_send_pin(_pin);
 	}
 } // }}}
@@ -1045,7 +1051,7 @@ void avr_connect2() { // {{{
 	for (int i = 0; i < UUID_SIZE; ++i)
 		shmem->uuid[i] = command[11 + i];
 	avr_write_ack("setup");
-	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * 5];
+	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * CONTROL_SIZE];
 	avr_in_control_queue = new bool[NUM_DIGITAL_PINS];
 	avr_control_queue_length = 0;
 	avr_pong = 255;	// Choke on reset again.

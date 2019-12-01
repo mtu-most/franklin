@@ -285,6 +285,7 @@ struct Gpio {
 	Pin_t pin;
 	uint8_t state, reset;
 	int space, motor;
+	int ticks;
 	double duty;
 	bool changed, value;
 	void setup(uint8_t new_state);
