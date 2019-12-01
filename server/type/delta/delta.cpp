@@ -109,7 +109,6 @@ static void intersect_spheres(double A[3], double B[3], double len_AC, double le
 	}
 }
 
-extern "C" {
 void xyz2motors(Space *s) {
 	if (std::isnan(s->axis[0]->target) || std::isnan(s->axis[1]->target) || std::isnan(s->axis[2]->target)) {
 		// Fill up missing targets.
@@ -171,33 +170,29 @@ void load_space(Space *s) {
 		s->cancel_update();
 		return;
 	}
-	mySpace(s).angle = shmem->floats[100];
+	mySpace(s).angle = load_float();
 	if (std::isinf(mySpace(s).angle) || std::isnan(mySpace(s).angle))
 		mySpace(s).angle = 0;
 	update(s);
 }
 
 void load_motor(Space *s, int m) {
-	myMotor(s, m).axis_min = shmem->floats[100];
-	myMotor(s, m).axis_max = shmem->floats[101];
-	myMotor(s, m).rodlength = shmem->floats[102];
-	myMotor(s, m).radius = shmem->floats[103];
+	myMotor(s, m).axis_min = load_float();
+	myMotor(s, m).axis_max = load_float();
+	myMotor(s, m).rodlength = load_float();
+	myMotor(s, m).radius = load_float();
 	update(s);
 }
 
 void save_space(Space *s) {
-	shmem->ints[100] = 0;
-	shmem->ints[101] = 1;
-	shmem->floats[100] = mySpace(s).angle;
+	save_float(mySpace(s).angle);
 }
 
 void save_motor(Space *s, int m) {
-	shmem->ints[100] = 0;
-	shmem->ints[101] = 4;
-	shmem->floats[100] = myMotor(s, m).axis_min;
-	shmem->floats[101] = myMotor(s, m).axis_max;
-	shmem->floats[102] = myMotor(s, m).rodlength;
-	shmem->floats[103] = myMotor(s, m).radius;
+	save_float(myMotor(s, m).axis_min);
+	save_float(myMotor(s, m).axis_max);
+	save_float(myMotor(s, m).rodlength);
+	save_float(myMotor(s, m).radius);
 }
 
 void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
@@ -242,5 +237,4 @@ void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
 	for (int i = 0; i < 3; ++i)
 		xyz[i] = P_M[i] - dir_L[i] * P_MR;
 	//debug("motors2xyz: Puv (%f,%f,%f) Puvw (%f,%f,%f) ruv %f ruvw %f lenPP %f dir_M (%f,%f,%f) PM (%f,%f,%f) ret (%f,%f,%f)", P_uv[0], P_uv[1], P_uv[2], P_uvw[0], P_uvw[1], P_uvw[2], r_uv, r_uvw, len_PP, dir_M[0], dir_M[1], dir_M[2], P_M[0], P_M[1], P_M[2], xyz[0], xyz[1], xyz[2]);
-}
 }

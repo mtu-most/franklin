@@ -100,6 +100,9 @@ struct Timer_data {
 	char part;
 	Timer_data(volatile uint8_t *mode_, volatile uint8_t *oc_, uint8_t mode_mask_, uint8_t num_, char part_) : mode(mode_), oc(oc_), mode_mask(mode_mask_), num(num_), part(part_) {}
 };
+inline bool timer_is_16bit(int t) {
+	return t != TIMER0 && t != TIMER2;
+}
 static const Timer_data timer_data[] = {
 	Timer_data(&TCCR0A, &OCR0A, 2 << 6, 0, 'A'),
 	Timer_data(&TCCR0A, &OCR0B, 2 << 4, 0, 'B'),
@@ -574,22 +577,28 @@ static inline void arch_setup_start() { // {{{
 	// Enable timer2 for pwm.
 	TCCR2A = 3;
 	TCCR2B = 1;
-	// And the other timers that exist; use same period as timer0 for all of them.
+	// And the other timers that exist; use same period as timer0 for all of them, but use 15 bits.
 #ifdef TCCR3A
-	TCCR3A = 1;
-	TCCR3B = 0x0d;
+	TCCR3A = 0x02;
+	TCCR3B = 0x19;
+	ICR3H = 0x7f;
+	ICR3L = 0xff;
 	TCNT3H = 0;
 	TCNT3L = 0;
 #endif
 #ifdef TCCR4A
-	TCCR4A = 1;
-	TCCR4B = 0x0d;
+	TCCR4A = 0x02;
+	TCCR4B = 0x19;
+	ICR4H = 0x7f;
+	ICR4L = 0xff;
 	TCNT4H = 0;
 	TCNT4L = 0;
 #endif
 #ifdef TCCR5A
-	TCCR5A = 1;
-	TCCR5B = 0x0d;
+	TCCR5A = 0x02;
+	TCCR5B = 0x19;
+	ICR5H = 0x7f;
+	ICR5L = 0xff;
 	TCNT5H = 0;
 	TCNT5L = 0;
 #endif
@@ -632,14 +641,14 @@ static inline void arch_msetup(uint8_t m) { // {{{
 
 static inline void update_timer1_pwm() { // {{{
 	for (int i = 0; i < num_timer1_pins; ++i) {
-		// OC / top = duty / 255
+		// OC / top = duty / 0x7fff
 		int tp = timer1_pins[i];
 		uint32_t value = pin[tp].duty;
-		if (value < 255) {
+		if (value < 0x7fff) {
 			int timer = pgm_read_byte(digital_pin_to_timer_PGM + tp);
 			Timer_data const &p = timer_data[timer];
 			value *= timer1_top;
-			value >>= 8;
+			value >>= 15;
 			p.oc[1] = (value >> 8) & 0xff;
 			p.oc[0] = value & 0xff;
 			//debug("set timer1 pin %d:%d to %d for %d with top %d (%x %x) ocr1b %x %x", i, tp, (int)value, pin[tp].duty, timer1_top, ICR1H, ICR1L, OCR1BH, OCR1BL);
@@ -1275,13 +1284,20 @@ inline void SET(uint8_t pin_no) { // {{{
 	int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_no);
 	if (timer != NOT_ON_TIMER) {
 		Timer_data const *data = &timer_data[timer];
-		if (pin[pin_no].duty < 255) {
+		if (pin[pin_no].duty < 0x7fff) {
 			*data->mode |= data->mode_mask;
 			//debug("set pin %d, OC%d%c mode to %x", pin_no, data->num, data->part, *data->mode);
 			if (data->num == 1)
 				update_timer1_pwm();
-			else
-				*data->oc = pin[pin_no].duty;
+			else {
+				if (timer_is_16bit(data->num)) {
+					data->oc[1] = (pin[pin_no].duty >> 8) & 0xff;
+					data->oc[0] = pin[pin_no].duty & 0xff;
+				}
+				else {
+					*data->oc = (pin[pin_no].duty >> 7) & 0xff;
+				}
+			}
 		}
 		else {
 			*data->mode &= ~data->mode_mask;
@@ -1329,7 +1345,7 @@ inline void arch_outputs() { // {{{
 			continue;
 		if (pin[p].avr_on)
 			pin[p].avr_target -= interval;
-		pin[p].avr_target += (interval * (int32_t(pin[p].duty) + 1)) >> 8;
+		pin[p].avr_target += (interval * (int32_t(pin[p].duty) + 1)) >> 15;
 		if (pin[p].avr_target < 0) {
 			*pin[p].avr_output &= ~pin[p].avr_bitmask;
 			pin[p].avr_on = false;

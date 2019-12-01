@@ -33,10 +33,7 @@
 
 #define TYPE_CARTESIAN 0
 #define TYPE_EXTRUDER 1
-#define TYPE_FOLLOWER 2
-#define TYPE_POLAR 3
-#define TYPE_HBOT 4
-#define NUM_FIXED_SPACE_TYPES 5
+#define NUM_FIXED_SPACE_TYPES 2
 
 #define PATTERN_MAX int(9 * sizeof(double))
 

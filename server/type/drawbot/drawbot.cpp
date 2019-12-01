@@ -32,14 +32,13 @@ void load_space(Space *s) {
 }
 
 void load_motor(Space *s, int m) {
-	myMotor(s, m).x = shmem->floats[100];
-	myMotor(s, m).y = shmem->floats[101];
+	myMotor(s, m).x = load_float();
+	myMotor(s, m).y = load_float();
 }
 
 void save_motor(Space *s, int m) {
-	save_count(0, 2);
-	shmem->floats[100] = myMotor(s, m).x;
-	shmem->floats[101] = myMotor(s, m).y;
+	save_float(myMotor(s, m).x);
+	save_float(myMotor(s, m).y);
 }
 
 void xyz2motors(Space *s) {

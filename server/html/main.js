@@ -24,7 +24,7 @@ var upload_options = {};
 var labels_element, machines_element;
 var selected_machine;
 var type2plural = {space: 'spaces', temp: 'temps', gpio: 'gpios', axis: 'axes', motor: 'motors'};
-var space_types = {'cartesian': 'Cartesian', 'polar': 'Polar', 'h-bot': 'H-bot'};
+var space_types = {'cartesian': 'Cartesian'};
 var type_info;
 var new_tab, new_page;
 // }}}
@@ -578,6 +578,23 @@ function download_probemap(ui) { // {{{
 	event.initEvent('click', true, true);
 	a.dispatchEvent(event);
 } // }}}
+
+function update_motorselect(select) {
+	var current = select.options[select.selectedIndex].spacemotor;
+	select.ClearAll();
+	var opt = select.AddElement('option');
+	opt.spacemotor = null;
+	opt.value = 'None';
+	for (var s = 0; s < select.ui.machine.spaces.length; ++s) {
+		for (var m = 0; m < select.ui.machine.spaces[s].motor.length) {
+			opt = select.AddElement('option');
+			opt.spacemotor = [s, m];
+			opt.value = select.ui.machine.spaces[s].motor[m].name;
+			if (opt.value == current)
+				select.selectedIndex = select.options.length - 1;
+		}
+	}
+}
 // }}}
 
 // Queue functions.  {{{
@@ -1013,13 +1030,15 @@ function space_update(uuid, index, nums_changed) { // {{{
 		if (index != 1)
 			update_float(p, [['motor', [index, m]], 'home_order']);
 		set_name(p, 'motorunit', index, m, p.machine.spaces[index].motor[m].unit);
+		if (index == 2) {
+			var selects = get_elements(p, [['motor', [index, m]], 'spacemotor']);
+			for (var s = 0; s < selects.length; ++s)
+				update_motorselect(s);
+		}
 	}
 	var info = type_info[p.machine.spaces[index].type];
-	if (info)
+	if (info && info.update !== undefined)
 		info.update(p, index);
-	if (p.machine.spaces[index].type == TYPE_POLAR) {
-		update_float(p, [['space', index], 'polar_max_r']);
-	}
 	if (p.machine.spaces[index].type == TYPE_EXTRUDER) {
 		for (var d = 0; d < p.machine.spaces[index].axis.length; ++d) {
 			update_float(p, [['axis', [index, d]], 'extruder_dx']);
@@ -1110,6 +1129,9 @@ function gpio_update(uuid, index) { // {{{
 	update_float(p, [['gpio', index], 'duty']);
 	update_float(p, [['gpio', index], 'space']);
 	update_float(p, [['gpio', index], 'motor']);
+	var selects = get_elements(p, [['gpio', index], 'spacemotor']);
+	for (var s = 0; s < selects.length; ++s)
+		update_motorselect(s);
 } // }}}
 // }}}
 
@@ -1622,7 +1644,6 @@ function redraw_canvas(ui) { // {{{
 			else {
 				switch (ui.machine.spaces[0].type) { // Define geometry-specific options, including outline. {{{
 				case TYPE_CARTESIAN:
-				case TYPE_HBOT:
 					var xaxis = ui.machine.spaces[0].axis[0];
 					var yaxis = ui.machine.spaces[0].axis[1];
 					machinewidth = xaxis.max - xaxis.min + .010;
@@ -1630,16 +1651,6 @@ function redraw_canvas(ui) { // {{{
 					center = [(xaxis.min + xaxis.max) / 2, (yaxis.min + yaxis.max) / 2];
 					outline = function(ui, c) {
 						// Rectangle is always drawn; nothing else to do here.
-					};
-					break;
-				case TYPE_POLAR:
-					machinewidth = 2 * ui.machine.spaces[0].polar_max_r + 2;
-					machineheight = 2 * ui.machine.spaces[0].polar_max_r + 2;
-					center = [0, 0];
-					outline = function(ui, c) {
-						c.beginPath();
-						c.arc(0, 0, ui.machine.spaces[0].polar_max_r, 0, 2 * Math.PI, false);
-						c.stroke();
 					};
 					break;
 				} // }}}

@@ -263,12 +263,13 @@ void try_send_control() { // {{{
 		return;
 	avr_control_queue_length -= 1;
 	avr_buffer[0] = HWC_CONTROL;
-	avr_buffer[1] = avr_control_queue[avr_control_queue_length * 4];
-	avr_buffer[2] = avr_control_queue[avr_control_queue_length * 4 + 1];
-	avr_buffer[3] = avr_control_queue[avr_control_queue_length * 4 + 2];
-	avr_buffer[4] = avr_control_queue[avr_control_queue_length * 4 + 3];
-	avr_in_control_queue[avr_control_queue[avr_control_queue_length * 4]] = false;
-	prepare_packet(avr_buffer, 5);
+	avr_buffer[1] = avr_control_queue[avr_control_queue_length * 5];
+	avr_buffer[2] = avr_control_queue[avr_control_queue_length * 5 + 1];
+	avr_buffer[3] = avr_control_queue[avr_control_queue_length * 5 + 2];
+	avr_buffer[4] = avr_control_queue[avr_control_queue_length * 5 + 3];
+	avr_buffer[5] = avr_control_queue[avr_control_queue_length * 5 + 4];
+	avr_in_control_queue[avr_control_queue[avr_control_queue_length * 5]] = false;
+	prepare_packet(avr_buffer, 6);
 	avr_send();
 } // }}}
 
@@ -588,18 +589,20 @@ void avr_setup_pin(int pin, int type, int resettype, int extra) { // {{{
 	if (avr_in_control_queue[pin])
 	{
 		for (int i = 0; i < avr_control_queue_length; ++i) {
-			if (avr_control_queue[i * 4] != pin)
+			if (avr_control_queue[i * 5] != pin)
 				continue;
-			avr_control_queue[i * 4 + 1] = type | (resettype << 2) | extra;
-			avr_control_queue[i * 4 + 2] = avr_pins[pin].duty;
-			avr_control_queue[i * 4 + 3] = avr_pins[pin].motor;
+			avr_control_queue[i * 5 + 1] = type | (resettype << 2) | extra;
+			avr_control_queue[i * 5 + 2] = avr_pins[pin].duty & 0xff;
+			avr_control_queue[i * 5 + 3] = (avr_pins[pin].duty >> 8) & 0xff;
+			avr_control_queue[i * 5 + 4] = avr_pins[pin].motor;
 			return;
 		}
 	}
-	avr_control_queue[avr_control_queue_length * 4] = pin;
-	avr_control_queue[avr_control_queue_length * 4 + 1] = type | (resettype << 2) | extra;
-	avr_control_queue[avr_control_queue_length * 4 + 2] = avr_pins[pin].duty;
-	avr_control_queue[avr_control_queue_length * 4 + 3] = avr_pins[pin].motor;
+	avr_control_queue[avr_control_queue_length * 5] = pin;
+	avr_control_queue[avr_control_queue_length * 5 + 1] = type | (resettype << 2) | extra;
+	avr_control_queue[avr_control_queue_length * 5 + 2] = avr_pins[pin].duty & 0xff;
+	avr_control_queue[avr_control_queue_length * 5 + 3] = (avr_pins[pin].duty >> 8) & 0xff;
+	avr_control_queue[avr_control_queue_length * 5 + 4] = avr_pins[pin].motor;
 	avr_control_queue_length += 1;
 	avr_in_control_queue[pin] = true;
 	try_send_control();
@@ -705,12 +708,12 @@ void arch_set_duty(Pin_t _pin, double duty) { // {{{
 		debug("invalid pin for arch_set_duty: %d (max %d)", _pin.pin, NUM_DIGITAL_PINS);
 		return;
 	}
-	int hwduty = round(duty * 256) - 1;
+	int hwduty = round(duty * 0x8000) - 1;
 	if (hwduty < 0)
 		hwduty = 0;
-	if (hwduty > 255) {
-		debug("invalid duty value %d; clipping to 255.", hwduty);
-		hwduty = 255;
+	if (hwduty > 0x7fff) {
+		debug("invalid duty value %d; clipping to 0x7fff.", hwduty);
+		hwduty = 0x7fff;
 	}
 	if (hwduty != avr_pins[_pin.pin].duty) {
 		avr_pins[_pin.pin].duty = hwduty;
@@ -825,8 +828,8 @@ void arch_motor_change(uint8_t s, uint8_t sm) { // {{{
 		maxinvert = mtr.limit_max_pin.inverted();
 	}
 	int fm = space_types[spaces[s].type].follow(&spaces[s], sm);
-	if (fm >= 0) {
-		int fs = fm >> 8;
+	int fs = (fm >> 8) & 0xff;
+	if (fs != 0xff) {
 		fm &= 0x7f;
 		if (spaces[s].motor[sm]->dir_pin.inverted() ^ spaces[fs].motor[fm]->dir_pin.inverted())
 			fm |= 0x80;
@@ -1042,7 +1045,7 @@ void avr_connect2() { // {{{
 	for (int i = 0; i < UUID_SIZE; ++i)
 		shmem->uuid[i] = command[11 + i];
 	avr_write_ack("setup");
-	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * 4];
+	avr_control_queue = new uint8_t[NUM_DIGITAL_PINS * 5];
 	avr_in_control_queue = new bool[NUM_DIGITAL_PINS];
 	avr_control_queue_length = 0;
 	avr_pong = 255;	// Choke on reset again.
@@ -1050,8 +1053,8 @@ void avr_connect2() { // {{{
 	for (int i = 0; i < NUM_DIGITAL_PINS; ++i) {
 		avr_pins[i].reset = 3;	// INPUT_NOPULLUP.
 		avr_pins[i].state = avr_pins[i].reset;
-		avr_pins[i].duty = 255;
-		avr_pins[i].motor = 255;
+		avr_pins[i].duty = 0x7fff;
+		avr_pins[i].motor = 0xff;
 		avr_in_control_queue[i] = false;
 	}
 	avr_adc_id = new int[NUM_ANALOG_INPUTS];

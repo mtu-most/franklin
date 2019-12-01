@@ -139,7 +139,7 @@ static void handle_led() {
 static void handle_pins() {
 	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
 		if (pin[p].motor < active_motors) {
-			pin[p].duty = motor[pin[p].motor].current_pos & 0xff;
+			pin[p].duty = motor[pin[p].motor].current_pos & 0x7fff;	// TODO: reset duty on home.
 			if (CONTROL_CURRENT(pin[p].state) == CTRL_SET)
 				SET(p);
 		}

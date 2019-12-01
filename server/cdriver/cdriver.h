@@ -252,7 +252,7 @@ struct SpaceType {
 	double (*probe_speed)(Space *s);
 
 	// Internal function for follower space.
-	int (*follow)(Space *s, int axis);
+	int (*follow)(Space *s, int motor);
 };
 
 struct Space {
@@ -276,9 +276,6 @@ struct Space {
 
 void Cartesian_init(int num);
 void Extruder_init(int num);
-void Follower_init(int num);
-void Polar_init(int num);
-void Hbot_init(int num);
 
 EXTERN SpaceType *space_types;
 EXTERN int num_space_types;
@@ -480,6 +477,7 @@ void buffer_refill();
 void store_settings();
 void restore_settings();
 void reset_pos(Space *s);
+EXTERN int current_int, current_float;
 
 // globals.cpp
 bool globals_load();

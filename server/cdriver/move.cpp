@@ -427,10 +427,10 @@ static double move_axes(Space *s) { // {{{
 			limit_mtr = s->motor[m];
 		else {
 			int target = space_types[s->type].follow(s, m);
-			if (target < 0)
+			int fs = (target >> 8) & 0xff;
+			if (fs == 0xff)
 				limit_mtr = s->motor[m];
 			else {
-				int fs = target >> 8;
 				int fa = target & 0xff;
 				limit_mtr = spaces[fs].motor[fa];
 			}
@@ -509,9 +509,9 @@ static void do_steps(double old_factor) { // {{{
 			if (!single) {
 				for (int mm = 0; mm < spaces[2].num_motors; ++mm) {
 					int fm = space_types[spaces[2].type].follow(&spaces[2], mm);
-					if (fm < 0)
+					int fs = (fm >> 8) & 0xff;
+					if (fm == 0xff)
 						continue;
-					int fs = fm >> 8;
 					fm &= 0x7f;
 					if (fs != s || fm != m || (fs == 2 && fm >= mm))
 						continue;
@@ -1388,9 +1388,9 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 			else {
 				// use leader limits with fallback to global limits.
 				int sm = space_types[spaces[2].type].follow(&spaces[2], ~tool);
-				int fs = sm >> 8;
+				int fs = (sm >> 8) & 0xff;
 				int fm = sm & 0xff;
-				if (fs >= 0 && fs < NUM_SPACES && fm >= 0 && fm < spaces[fs].num_motors) {
+				if (fs < NUM_SPACES && fm >= 0 && fm < spaces[fs].num_motors) {
 					vmax = spaces[fs].motor[fm]->limit_v;
 					amax = spaces[fs].motor[fm]->limit_a;
 				}

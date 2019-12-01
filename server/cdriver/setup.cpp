@@ -51,14 +51,11 @@ void setup()
 		if (buffer[0] != '\0' && buffer[0] != '#')
 			types.push_back(buffer);
 	}
-	num_space_types = 5 + types.size();
+	num_space_types = 4 + types.size();
 	space_types = new SpaceType[num_space_types];
 	Cartesian_init(0);
 	Extruder_init(1);
-	Follower_init(2);
-	Polar_init(3);
-	Hbot_init(4);
-	int type_id = 5;
+	int type_id = 2;
 	for (auto i: types) {
 		std::string filename = typepath + i + "/" + i + ".so";
 		void *handle = dlopen(filename.c_str(), RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);

@@ -34,8 +34,6 @@ var role;
 var TYPE_CARTESIAN = 'cartesian';
 var TYPE_EXTRUDER = 'extruder';
 var TYPE_FOLLOWER = 'follower';
-var TYPE_POLAR = 'polar';
-var TYPE_HBOT = 'h-bot';
 // }}}
 
 // {{{ Events from server.
@@ -162,7 +160,6 @@ function _setup_updater() {
 							type: TYPE_CARTESIAN,
 							num_axes: 0,
 							num_motors: 0,
-							polar_max_r: Infinity,
 							axis: [],
 							motor: []
 						},
@@ -171,7 +168,6 @@ function _setup_updater() {
 							type: TYPE_EXTRUDER,
 							num_axes: 0,
 							num_motors: 0,
-							polar_max_r: Infinity,
 							axis: [],
 							motor: []
 						},
@@ -180,7 +176,6 @@ function _setup_updater() {
 							type: TYPE_FOLLOWER,
 							num_axes: 0,
 							num_motors: 0,
-							polar_max_r: Infinity,
 							axis: [],
 							motor: []
 						}],
@@ -247,8 +242,7 @@ function _setup_updater() {
 					pin: 0,
 					state: 3,
 					reset: 3,
-					space: -1,
-					motor: 0
+					spacemotor: null,
 				});
 			}
 			machines[machine].gpios.length = machines[machine].num_gpios;
@@ -314,20 +308,11 @@ function _setup_updater() {
 				}
 			}
 			else {
-				if (machines[machine].spaces[index].type == TYPE_POLAR) {
-					machines[machine].spaces[index].polar_max_r = values[5];
-				}
 				if (machines[machine].spaces[index].type == TYPE_EXTRUDER) {
 					for (var i = 0; i < machines[machine].spaces[index].axis.length; ++i) {
 						machines[machine].spaces[index].axis[i].extruder_dx = values[5][i][0];
 						machines[machine].spaces[index].axis[i].extruder_dy = values[5][i][1];
 						machines[machine].spaces[index].axis[i].extruder_dz = values[5][i][2];
-					}
-				}
-				if (machines[machine].spaces[index].type == TYPE_FOLLOWER) {
-					for (var i = 0; i < machines[machine].spaces[index].axis.length; ++i) {
-						machines[machine].spaces[index].motor[i].follower_space = values[5][i][0];
-						machines[machine].spaces[index].motor[i].follower_motor = values[5][i][1];
 					}
 				}
 			}

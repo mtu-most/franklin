@@ -27,6 +27,22 @@ static inline void save_count(int ints, int floats) {
 	shmem->ints[101] = floats;
 }
 
+static inline void save_int(int value) {
+	shmem->ints[102 + current_int++] = value;
+}
+
+static inline int load_int() {
+	return shmem->ints[102 + current_int++];
+}
+
+static inline void save_float(double value) {
+	shmem->floats[100 + current_float++] = value;
+}
+
+static inline double load_float() {
+	return shmem->floats[100 + current_float++];
+}
+
 extern "C" {
 	void motors2xyz(Space *s, const double *motors, double *xyz);
         void xyz2motors(Space *s);
@@ -61,7 +77,7 @@ extern "C" {
         double probe_speed(Space *s);
 
         // Internal function for follower space.
-        int follow(Space *s, int axis);
+        int follow(Space *s, int motor);
 }
 
 #endif

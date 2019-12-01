@@ -114,7 +114,7 @@ void Space::load_info() { // {{{
 	}
 	type = shmem->ints[1];
 	loaddebug("requested type %d, current is %d", type, t);
-	if (type < 0 || type >= num_space_types || (id == 1 && type != TYPE_EXTRUDER) || (id == 2 && type != TYPE_FOLLOWER)) {
+	if (type < 0 || type >= num_space_types || (id != 0 && type != id)) {
 		debug("request for type %d ignored", type);
 		type = t;
 		return;	// The rest of the info is not meant for this type, so ignore it.
@@ -144,14 +144,22 @@ void Space::load_info() { // {{{
 				axis[a]->settings.source = axis[a]->current;
 			return;	// The rest of the info is not meant for this type, so ignore it.
 		}
+		current_int = 0;
+		current_float = 0;
 		space_types[type].load_space(this);
 		for (int a = 0; a < num_axes; ++a)
 			space_types[type].init_axis(this, a);
 		for (int m = 0; m < num_motors; ++m)
 			space_types[type].init_motor(this, m);
 	}
-	else
+	else {
+		current_int = 0;
+		current_float = 0;
 		space_types[type].load_space(this);
+	}
+	if (current_int != shmem->ints[100] || current_float != shmem->ints[101]) {
+		debug("Warning: load_space (for type %d) did not use correct number of parameters: ints/floats given = %d/%d, used = %d/%d", type, shmem->ints[100], shmem->ints[101], current_int, current_float);
+	}
 	reset_pos(this);
 	loaddebug("done loading space");
 } // }}}
@@ -178,7 +186,12 @@ void Space::load_axis(int a) { // {{{
 	axis[a]->park = shmem->floats[0];
 	axis[a]->min_pos = shmem->floats[1];
 	axis[a]->max_pos = shmem->floats[2];
+	current_int = 0;
+	current_float = 0;
 	space_types[type].load_axis(this, a);
+	if (current_int != shmem->ints[100] || current_float != shmem->ints[101]) {
+		debug("Warning: load_axis (for type %d, axis %d) did not use correct number of parameters: ints/floats given = %d/%d, used = %d/%d", type, a, shmem->ints[100], shmem->ints[101], current_int, current_float);
+	}
 } // }}}
 
 void Space::load_motor(int m) { // {{{
@@ -201,7 +214,12 @@ void Space::load_motor(int m) { // {{{
 	motor[m]->home_pos = shmem->floats[1];
 	motor[m]->limit_v = shmem->floats[2];
 	motor[m]->limit_a = shmem->floats[3];
+	current_int = 0;
+	current_float = 0;
 	space_types[type].load_motor(this, m);
+	if (current_int != shmem->ints[100] || current_float != shmem->ints[101]) {
+		debug("Warning: load_motor (for type %d, motor %d) did not use correct number of parameters: ints/floats given = %d/%d, used = %d/%d", type, m, shmem->ints[100], shmem->ints[101], current_int, current_float);
+	}
 	arch_motors_change();
 	SET_OUTPUT(motor[m]->enable_pin);
 	if (enable != motor[m]->enable_pin.write()) {
@@ -243,7 +261,11 @@ void Space::save_info() { // {{{
 	shmem->ints[1] = type;
 	shmem->ints[2] = num_axes;
 	shmem->ints[3] = num_motors;
+	current_int = 0;
+	current_float = 0;
 	space_types[type].save_space(this);
+	shmem->ints[100] = current_int;
+	shmem->ints[101] = current_float;
 } // }}}
 
 void Space::save_axis(int a) { // {{{
@@ -251,7 +273,11 @@ void Space::save_axis(int a) { // {{{
 	shmem->floats[0] = axis[a]->park;
 	shmem->floats[1] = axis[a]->min_pos;
 	shmem->floats[2] = axis[a]->max_pos;
+	current_int = 0;
+	current_float = 0;
 	space_types[type].save_axis(this, a);
+	shmem->ints[100] = current_int;
+	shmem->ints[101] = current_float;
 } // }}}
 
 void Space::save_motor(int m) { // {{{
@@ -265,7 +291,11 @@ void Space::save_motor(int m) { // {{{
 	shmem->floats[1] = motor[m]->home_pos;
 	shmem->floats[2] = motor[m]->limit_v;
 	shmem->floats[3] = motor[m]->limit_a;
+	current_int = 0;
+	current_float = 0;
 	space_types[type].save_motor(this, m);
+	shmem->ints[100] = current_int;
+	shmem->ints[101] = current_float;
 } // }}}
 
 void Space::init(int space_id) { // {{{

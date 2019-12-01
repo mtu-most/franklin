@@ -39,9 +39,7 @@ SOURCES = \
 	setup.cpp \
 	space.cpp \
 	temp.cpp \
-	type-cartesian.cpp \
-	type-polar.cpp \
-	type-hbot.cpp
+	type-cartesian.cpp
 
 OBJS = $(patsubst %.cpp,build/%.o,${SOURCES})
 

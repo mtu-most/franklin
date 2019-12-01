@@ -118,6 +118,18 @@ function Float(ui, obj, digits, factor, className, set) { // {{{
 	return [input, span];
 } // }}}
 
+function MotorSelect(ui, obj, className) { // {{{
+	var select = Create('select', className);
+	select.obj = obj;
+	select.AddClass(make_id(ui, obj));
+	select.ui = ui;
+	select.AddEvent('change', function(event) {
+		set_value(select.ui, select.obj, select.options[select.selectedIndex].spacemotor);
+	});
+	update_motorselect(select);
+	return select;
+} // }}}
+
 function File(ui, obj, action, buttontext, types, multiple, cb) { // {{{
 	var input = Create('input');
 	input.type = 'file';
@@ -205,26 +217,6 @@ function Extruder(ui, space, axis) {
 		e[i] = div;
 	}
 	return make_tablerow(ui, axis_name(ui, space, axis), e, ['rowtitle3'], undefined, TYPE_EXTRUDER, space);
-}
-
-function Follower(ui, space, motor) {
-	if (space != 2)
-		return null;
-	var f = ['follower_space', 'follower_motor'];
-	for (var i = 0; i < f.length; ++i) {
-		var div = Create('div');
-		div.Add(Float(ui, [['motor', [space, motor]], f[i]], 0));
-		f[i] = div;
-	}
-	return make_tablerow(ui, motor_name(ui, space, motor), f, ['rowtitle2'], undefined, TYPE_FOLLOWER, space);
-}
-
-function Polar_space(ui, num) {
-	if (num != 0)
-		return null;
-	var div = Create('div');
-	div.Add(Float(ui, [['space', num], 'polar_max_r'], 1, 1));
-	return make_tablerow(ui, space_name(ui, num), [div], ['rowtitle1'], undefined, TYPE_POLAR, num);
 }
 
 function Axis(ui, space, axis) {
@@ -855,22 +847,6 @@ function setup_motor(desc, pos, top) { // {{{
 	pins.AddMultiple(ui, 'motor', Pins_space, false);
 	return [ret, pos];
 } // }}}
-function setup_polar(desc, pos, top) { // {{{
-	var ui = top.data;
-	var ret = Create('div', 'setup expert');
-	ret.update = function() { this.hide(ui.machine.spaces[0].type != TYPE_POLAR); };
-	ret.Add([make_table(ui).AddMultipleTitles([
-		'Polar',
-		UnitTitle(ui, 'Radius')
-	], [
-		'htitle1',
-		'title1'
-	], [
-		null,
-		'Maximum value for the r motor.'
-	]).AddMultiple(ui, 'space', Polar_space, false)]);
-	return [ret, pos];
-} // }}}
 function setup_extruder(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
@@ -891,26 +867,6 @@ function setup_extruder(desc, pos, top) { // {{{
 		'Offset in Y direction when this extruder is in use.  Set to 0 for the first extruder.',
 		'Offset in Z direction when this extruder is in use.  Set to 0 for the first extruder.'
 	]).AddMultiple(ui, 'axis', Extruder, false)]);
-	return [ret, pos];
-} // }}}
-function setup_follower(desc, pos, top) { // {{{
-	var ui = top.data;
-	var ret = Create('div', 'setup expert');
-	ret.AddElement('div').AddText('Number of Followers:').Add(Float(ui, [['space', 2], 'num_axes'], 0));
-	ret.Add([make_table(ui).AddMultipleTitles([
-		'Follower',
-		'Space',
-		'Motor'
-	], [
-		'htitle2',
-		'title2',
-		'title2',
-		'title2'
-	], [
-		null,
-		'Space of motor to follow.',
-		'Motor to follow.'
-	]).AddMultiple(ui, 'motor', Follower, false)]);
 	return [ret, pos];
 } // }}}
 function setup_temp(desc, pos, top) { // {{{
@@ -1048,9 +1004,7 @@ ui_modules = { // {{{
 	'Cartesian Setup': setup_cartesian,
 	'Axis Setup': setup_axis,
 	'Motor Setup': setup_motor,
-	'Polar Setup': setup_polar,
 	'Extruder Setup': setup_extruder,
-	'Follower Setup': setup_follower,
 	'Temp Setup': setup_temp,
 	'Gpio Setup': setup_gpio,
 	'Type Setup': setup_type,

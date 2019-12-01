@@ -431,30 +431,10 @@ static PyObject *read_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 		switch (shmem->ints[1]) {
 		case TYPE_CARTESIAN:
 		case TYPE_EXTRUDER:
-		case TYPE_HBOT:
 			return Py_BuildValue("{si,si,si}",
 					"type", shmem->ints[1],
 					"num_axes", shmem->ints[2],
 					"num_motors", shmem->ints[3]);
-		case TYPE_FOLLOWER:
-		{
-			PyObject *tuple = PyTuple_New(shmem->ints[2]);
-			for (int i = 0; i < shmem->ints[2]; ++i)
-				PyTuple_SET_ITEM(tuple, i, Py_BuildValue("ii", shmem->ints[2 * i + 4], shmem->ints[2 * i + 5]));
-			PyObject *ret = Py_BuildValue("{si,si,si,sO}",
-					"type", shmem->ints[1],
-					"num_axes", shmem->ints[2],
-					"num_motors", shmem->ints[3],
-					"follow", tuple);
-			Py_DECREF(tuple);
-			return ret;
-		}
-		case TYPE_POLAR:
-			return Py_BuildValue("{si,si,si,sd}",
-					"type", shmem->ints[1],
-					"num_axes", shmem->ints[2],
-					"num_motors", shmem->ints[3],
-					"max_r", shmem->floats[0]);
 		default:
 			PyErr_SetString(PyExc_ValueError, "invalid space for reading info");
 			return NULL;
@@ -574,21 +554,6 @@ static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 		switch (shmem->ints[1]) {
 		case TYPE_CARTESIAN:
 		case TYPE_EXTRUDER:
-		case TYPE_HBOT:
-			break;
-		case TYPE_FOLLOWER:
-		{
-			PyObject *follow = get_object("follow", dict);
-			for (int i = 0; i < shmem->ints[2]; ++i) {
-				PyObject *axis = PySequence_GetItem(follow, i);
-				PyArg_ParseTuple(axis, "ii", &shmem->ints[i * 2 + 4], &shmem->ints[i * 2 + 5]);
-				Py_DECREF(axis);
-			}
-			Py_DECREF(follow);
-			break;
-		}
-		case TYPE_POLAR:
-			set_float(0, "max_r", dict);
 			break;
 		}
 	}

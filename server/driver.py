@@ -61,9 +61,7 @@ record_format = '=Bi' + 'd' * 11 + 'q' # type, tool, X[3], h[3], Jg, tf, v0, E, 
 TYPE_CARTESIAN = 'cartesian'
 TYPE_EXTRUDER = 'extruder'
 TYPE_FOLLOWER = 'follower'
-TYPE_POLAR = 'polar'
-TYPE_HBOT = 'h-bot'
-type_names = [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER, TYPE_POLAR, TYPE_HBOT]
+type_names = [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER]
 # }}}
 
 config = fhs.init(packagename = 'franklin', config = { # {{{
@@ -800,18 +798,18 @@ class Machine: # {{{
 		'''Home the machine.
 		Steps to do:
 		None: ignore; return (may happen after home is aborted).
-		0: Set up everything
+		'start': Set up everything
 		For each order id that is present, in ascending order:
-			move position to switch, including followers with switch on the same side; wait for limit: 1, or
-			if a leader or follower with its partners on the same side hit a switch, move only its partners until they also hits their switches: 2
+			move position to switch, including followers with switch on the same side; wait for limit: 'main-limit', or
+			if a leader or follower with its partners on the same side hit a switch, move only its partners until they also hits their switches: 'follow-limit'
 			continue until all switches are hit
-		Move all motors away from their switches: 3
-		Synchronize followers: 4
-		Move to opposite followers: 5
-		Move away from switches: 6
-		Synchronize followers: 7
-		Move to second home position: 8
-		Move head within limits: 9
+		Move all motors away from their switches: 'calibrate'
+		Synchronize followers: 'synchronize'
+		Move to opposite followers: 'opposite'
+		Move away from switches: 'follow-calibrate'
+		Synchronize followers: 'follow-synchronize'
+		Move to second home position: 'home2'
+		Move head within limits: 'finish'
 		Finish up.
 		'''
 
@@ -820,16 +818,21 @@ class Machine: # {{{
 		if self.home_phase is None:
 			#log('_do_home ignored because home_phase is None')
 			return
-		if self.home_phase == 0:
+		if self.home_phase == 'start':
 			# Initial call; start homing.
 			# If it is currently moving, doing the things below without pausing causes stall responses.
 			self.user_pause(True, False)[1](None)
 			self.user_sleep(False)
 			for l in self.limits:
 				l.clear()
-			# Set all extruders to 0.
+			gpio_motors = set()
+			for g, gpio in enumerate(self.gpios):
+				if 0 <= gpio.space <= 1 and 0 <= gpio.motor < len(self.spaces[gpio.space].motor):
+					gpio_motors.add((gpio.space, gpio.motor))
+			# Set all extruders to 0, except those which have a gpio linked to them (those are moved to the position later).
 			for i, e in enumerate(self.spaces[1].axis):
-				self.user_set_axis_pos(1, i, 0)
+				if (1, i) not in gpio_motors:
+					self.user_set_axis_pos(1, i, 0)
 			self.home_limits = [(a['min'], a['max']) for a in self.spaces[0].axis]
 			for a, ax in enumerate(self.spaces[0].axis):
 				self.expert_set_axis((0, a), min = float('-inf'), max = float('inf'))
@@ -843,9 +846,12 @@ class Machine: # {{{
 				can_use_pos = self._pin_valid(mtr['limit_max_pin'])
 				can_use_neg = self._pin_valid(mtr['limit_min_pin'])
 				if can_use_pos or can_use_neg:
+					# gpio_motors is a list of motors that should move to their home position without a limit switch, so remove motors with a limit switch from the list.
+					if (0, m) in gpio_motors:
+						gpio_motors.remove((0, m))
 					followers = []
 					for fm, fmtr in enumerate(self.spaces[2].motor):
-						if self.spaces[2].follower[fm]['space'] == 0 and self.spaces[2].follower[fm]['motor'] == m:
+						if self.spaces[2].follower[fm]['spacemotor'] == [0, m]:
 							followers.append({'leader': m, 'motor': (2, fm), 'min': self._pin_valid(fmtr['limit_min_pin']), 'max': self._pin_valid(fmtr['limit_max_pin'])})
 					if not can_use_neg:
 						use_pos = True
@@ -868,11 +874,39 @@ class Machine: # {{{
 							self.home_order['opposite'].append({'motor': f['motor'], 'positive': self._pin_valid(f['limit_max_pin']), 'leader': m})
 							followers_used['opposite'].append(f['motor'][1])
 				else:
-					self.user_set_axis_pos(0, m, mtr['home_pos'])
-			self.home_phase = 1
-			# Fall through.
+					if (0, m) not in gpio_motors:
+						self.user_set_axis_pos(0, m, mtr['home_pos'])
+			self.home_phase = 'main-limit'
+			if len(gpio_motors) > 0:
+				# Move motors with a gpio follower to their home position.
+				target = [{}, {}]
+				for s, m in gpio_motors:
+					target[s][m] = self.spaces[s].motor[m]['home_pos']
+				if len(target[1]) == 1:
+					# move position and single extruder.
+					self.movecb.append(self.home_cb)
+					self.user_line(target[0], tool = target[1].keys()[0], e = target[1].values()[0], force = True)[1](None)
+					# Immediately fall through to main-limit.
+					return
+				else:
+					# move position.
+					self.movecb.append(self.home_cb)
+					self.user_line(target[0], force = True)[1](None)
+					# move each extruder.
+					if len(target[1]) > 0:
+						self.home_phase = 'gpio'
+						self.home_gpio = target[1]
+					return
+			# Fall through (to main-limit).
+		if self.home_phase == 'gpio':
+			m = self.home_gpio.pop()
+			if len(self.home_gpio) == 0:
+				self.home_phase = 'main-limit'
+			self.movecb.append(self.home_cb)
+			self.user_line(tool = m, e = self.spaces[1].motor[m]['home_pos'], force = True)[1](None)
+			return
 		while True:	# Allow code below to repeat from here.
-			if self.home_phase == 1:
+			if self.home_phase == 'main-limit':
 				# Find out what the situation is. Which motors should still be moved, and should we now move all or a single motor?
 				if len(self.home_order['standard']) > 0:
 					current = self.home_order['standard'][min(self.home_order['standard'])]
@@ -880,7 +914,7 @@ class Machine: # {{{
 						# We moved dist and still didn't arrive at any switch. Give up.
 						log('Warning: limits were not hit during home: {}'.format(current))
 						# No targets left to move to.
-						self.home_phase = 3
+						self.home_phase = 'calibrate'
 					elif done is False:
 						#log('hit limit %s %s current %s' % (self.limits[0], self.limits[2], current))
 						# A limit was hit. Find out which one and start single moves if so needed.
@@ -890,7 +924,7 @@ class Machine: # {{{
 								if len(current[m]['followers']) > 0:
 									self.home_order['single'] = current[m]['followers']
 									self.home_order['leader'] = m
-									self.home_phase = 2
+									self.home_phase = 'follow-limit'
 									#log('leader hit first; single = {}'.format(self.home_order['single']))
 								#else:
 									#log('solo hit')
@@ -905,15 +939,15 @@ class Machine: # {{{
 									self.home_order['single'].update(current[m]['followers'])
 									self.home_order['leader'] = m
 									self.home_order['homing'][(2, fm)] = self.home_order['single'].pop((2, fm))
-									self.home_phase = 2
+									self.home_phase = 'follow-limit'
 									#log('follower hit first; single = {}'.format(self.home_order['single']))
 						self.limits[2].clear()
 					else:
 						# This is the first time we are here. Start the move.
 						pass
-					# If the home phase is still 1, move all motors.
-					if self.home_phase == 1:
-						dist = 1000 #TODO: use better value.
+					# If the home phase is still 'main-limit', move all motors.
+					if self.home_phase == 'main-limit':
+						dist = 10000 #TODO: use better value.
 						self.home_target = {m: dist if current[m]['positive'] else -dist for m in current}
 						if len(self.home_target) > 0:
 							self.movecb.append(self.home_cb)
@@ -921,14 +955,14 @@ class Machine: # {{{
 							return
 						else:
 							# Done with this phase.
-							self.home_phase = 3
+							self.home_phase = 'calibrate'
 							break
 				else:
 					# No targets left to move to.
-					self.home_phase = 3
+					self.home_phase = 'calibrate'
 					break
 				# Fall through.
-			if self.home_phase == 2:
+			if self.home_phase == 'follow-limit':
 				for m in self.limits[0]:
 					self.user_set_axis_pos(0, m, self.spaces[0].motor[m]['home_pos'])
 					if (0, m) in self.home_order['single']:
@@ -951,10 +985,10 @@ class Machine: # {{{
 						self.user_line(e = self.home_target[target_obj['leader']], tool = ~target[1], relative = False, force = True, single = True)[1](None)
 					return
 				# Done with these followers, clean up and move on.
-				self.home_phase = 1
-				continue	# Restart at phase 1.
+				self.home_phase = 'main-limit'
+				continue	# Restart at phase 'main-limit'.
 			break
-		if self.home_phase == 3:
+		if self.home_phase == 'calibrate':
 			# Move all motors away from their switches
 			data = []
 			num = 0
@@ -971,12 +1005,12 @@ class Machine: # {{{
 				else:
 					num += 1
 					data.append(-1 if self.home_order['homing'][(2, m)]['positive'] else 1)
-			self.home_phase = 4
+			self.home_phase = 'synchronize'
 			if num > 0:
 				cdriver.home(*data)
 				return
 			# Fall through.
-		if self.home_phase == 4:
+		if self.home_phase == 'synchronize':
 			# Homing finished; set motor positions.
 			self.home_order['sync'] = {}
 			for s, m in self.home_order['homing']:
@@ -984,7 +1018,7 @@ class Machine: # {{{
 				if s == 0:
 					leader = m
 				else:
-					leader = self.spaces[s].follower[m]['motor']
+					leader = self.spaces[s].follower[m]['spacemotor'][1]
 				if leader not in self.home_order['sync']:
 					self.home_order['sync'][leader] = {}
 				self.home_order['sync'][leader][(s, m)] = self.spaces[s].motor[m]
@@ -998,7 +1032,7 @@ class Machine: # {{{
 			#log('cleanup: {}'.format(self.home_order['leader']))
 			while len(self.home_order['leader']) > 0 and len(self.home_order['leader'][0][1]) == 0:
 				self.home_order['leader'].pop(0)
-			self.home_phase = 5
+			self.home_phase = 'opposite'
 			if len(self.home_order['leader']) > 0:
 				target = self.home_order['sync'][self.home_order['leader'][0][0]][None]
 				m = self.home_order['leader'][0][1].pop(0)
@@ -1010,7 +1044,7 @@ class Machine: # {{{
 					self.user_line(tool = ~target[1], e = target, relative = False, force = True, single = True)[1](None)
 				return
 			# Fall through.
-		if self.home_phase == 5:
+		if self.home_phase == 'opposite':
 			while len(self.home_order['leader']) > 0 and len(self.home_order['leader'][0][1]) == 0:
 				self.home_order['leader'].pop(0)
 			if len(self.home_order['leader']) > 0:
@@ -1044,13 +1078,13 @@ class Machine: # {{{
 				if not math.isnan(a['home_pos2']):
 					offset = (0 if i != 2 else self.zoffset)
 					target[i] = a['home_pos2'] - offset
-			self.home_phase = 8
+			self.home_phase = 'home2'
 			if len(target) > 0:
 				self.movecb.append(self.home_cb)
 				self.user_line(target, force = True)[1](None)
 				return
 			# Fall through.
-		if self.home_phase == 8:
+		if self.home_phase == 'home2':
 			# Move within bounds.
 			target = {}
 			for i, a in enumerate(self.spaces[0].axis):
@@ -1060,13 +1094,13 @@ class Machine: # {{{
 					target[i] = a['max'] - offset
 				elif current < a['min'] - offset:
 					target[i] = a['min'] - offset
-			self.home_phase = 9
+			self.home_phase = 'finish'
 			if len(target) > 0:
 				self.movecb.append(self.home_cb)
 				self.user_line(target, force = True)[1](None)
 				return
 			# Fall through.
-		if self.home_phase == 9:
+		if self.home_phase == 'finish':
 			self.home_phase = None
 			self.position_valid = True
 			if self.home_id is not None:
@@ -1076,7 +1110,7 @@ class Machine: # {{{
 				call_queue.append((self.home_done_cb, []))
 				self.home_done_cb = None
 			return
-		log('Internal error: invalid home phase')
+		log('Internal error: invalid home phase %s' % self.home_phase)
 	# }}}
 	def _handle_one_probe(self, good): # {{{
 		if good is None:
@@ -1294,7 +1328,6 @@ class Machine: # {{{
 			self.motor = []
 			if self.type in typeinfo:
 				self.module = {key: value for key, value in typeinfo[self.type]['space']}
-			self.polar_max_r = float('inf')
 			self.extruder = []
 			self.follower = []
 		def parse_info(self, data, info):
@@ -1386,20 +1419,6 @@ class Machine: # {{{
 				for m in self.motor:
 					if 'unit' not in m:
 						m['unit'] = self.machine.unit_name
-			elif self.type == TYPE_FOLLOWER:
-				follow = data.pop('follow')
-				for a in range(num_axes):
-					for i, x in enumerate(('space', 'motor')):
-						self.follower[a][x] = follow[a][i]
-					s, m = follow[a]
-					self.motor[a]['unit'] = self.machine.unit_name if not 0 <= s <= 1 or not 0 <= m < len(self.machine.spaces[s].motor) else self.machine.spaces[s].motor[m]['unit']
-			elif self.type == TYPE_POLAR:
-				for i, m in enumerate(self.motor):
-					m['unit'] = self.machine.unit_name if i != 1 else '°'
-				self.polar_max_r = data['max_r']
-			elif self.type == TYPE_HBOT:
-				for m in self.motor:
-					m['unit'] = self.machine.unit_name
 			else:
 				log('invalid type')
 				raise AssertionError('invalid space type')
@@ -1432,12 +1451,6 @@ class Machine: # {{{
 			elif self.type == TYPE_CARTESIAN:
 				pass
 			elif self.type == TYPE_EXTRUDER:
-				pass
-			elif self.type == TYPE_FOLLOWER:
-				data['follow'] = [tuple(self.follower[a][x] for x in ('space', 'motor')) if a < len(self.follower) else (-1, -1) for a in range(num_axes)]
-			elif self.type == TYPE_POLAR:
-				data['max_r'] = self.polar_max_r
-			elif self.type == TYPE_HBOT:
 				pass
 			else:
 				log('invalid type in write_info')
@@ -1488,12 +1501,8 @@ class Machine: # {{{
 				if i < len(self.axis):
 					return self.axis[i]['name']
 				return 'motor %d' % i
-			elif self.type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER):
+			elif self.type in (TYPE_CARTESIAN, TYPE_EXTRUDER):
 				return self.axis[i]['name']
-			elif self.type == TYPE_HBOT:
-				return chr(ord('u') + i)
-			elif self.type == TYPE_POLAR:
-				return ['r', 'θ', 'z'][i]
 			else:
 				log('invalid type for motor_name')
 				raise AssertionError('invalid space type')
@@ -1505,14 +1514,10 @@ class Machine: # {{{
 				for m, data in enumerate(std[3]):
 					data.append(self.motor[m]['module'])
 				return std + [self.module]
-			elif self.type in (TYPE_CARTESIAN, TYPE_HBOT):
+			elif self.type == TYPE_CARTESIAN:
 				return std
 			elif self.type == TYPE_EXTRUDER:
 				return std + [[[a['dx'], a['dy'], a['dz']] for a in self.extruder]]
-			elif self.type == TYPE_FOLLOWER:
-				return std + [[[a['space'], a['motor']] for a in self.follower]]
-			elif self.type == TYPE_POLAR:
-				return std + [self.polar_max_r]
 			else:
 				log('invalid type for export')
 				raise AssertionError('invalid space type')
@@ -1535,14 +1540,6 @@ class Machine: # {{{
 				for i in range(len(self.extruder)):
 					ret += '[extruder %d %d]\r\n' % (self.id, i)
 					ret += ''.join(['%s = %f\r\n' % (x, self.extruder[i][x]) for x in ('dx', 'dy', 'dz')])
-			elif type == TYPE_FOLLOWER:
-				for i in range(len(self.follower)):
-					ret += '[follower %d %d]\r\n' % (self.id, i)
-					ret += ''.join(['%s = %d\r\n' % (x, self.follower[i][x]) for x in ('space', 'motor')])
-			elif type == TYPE_POLAR:
-				ret += 'polar_max_r = %f\r\n' % self.polar_max_r
-			elif type == TYPE_HBOT:
-				pass
 			else:
 				log('invalid type for export_settings')
 				raise AssertionError('invalid space type')
@@ -1935,7 +1932,7 @@ class Machine: # {{{
 			if id is not None:
 				self._send(id, 'return', None)
 			return
-		self.home_phase = 0
+		self.home_phase = 'start'
 		self.home_id = id
 		self.home_return = None
 		self.home_speed = speed
@@ -2104,7 +2101,7 @@ class Machine: # {{{
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'follower': set()}
 		keys = {
 				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J'},
-				'space': {'type', 'num_axes', 'polar_max_r'},
+				'space': {'type', 'num_axes'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty', 'space', 'motor'},
 				'axis': {'name', 'park', 'park_order', 'min', 'max', 'home_pos2'},
@@ -2588,16 +2585,6 @@ class Machine: # {{{
 				ret['extruder'].append({})
 				for key in ('dx', 'dy', 'dz'):
 					ret['extruder'][-1][key] = self.spaces[space].extruder[a][key]
-		elif self.spaces[space].type == TYPE_FOLLOWER:
-			ret['follower'] = []
-			for a in range(len(self.spaces[space].axis)):
-				ret['follower'].append({})
-				for key in ('space', 'motor'):
-					ret['follower'][-1][key] = self.spaces[space].follower[a][key]
-		elif self.spaces[space].type == TYPE_POLAR:
-			ret['polar_max_r'] = self.spaces[space].polar_max_r
-		elif self.spaces[space].type == TYPE_HBOT:
-			pass
 		else:
 			log('invalid type')
 		return ret
@@ -2644,16 +2631,6 @@ class Machine: # {{{
 						if key in ee:
 							self.spaces[space].extruder[i][key] = ee.pop(key)
 					assert len(ee) == 0
-		if self.spaces[space].type == TYPE_FOLLOWER:
-			if 'follower' in ka:
-				f = ka.pop('follower')
-				for fi, ff in f.items():
-					fi = int(fi)
-					for key in ('space', 'motor'):
-						if key in ff:
-							self.spaces[space].follower[fi][key] = int(ff.pop(key))
-						log('follower set to {}'.format(self.spaces[space].follower))
-				assert len(ff) == 0
 		if 'num_axes' in ka:
 			num_axes = int(ka.pop('num_axes'))
 		else:
@@ -2668,11 +2645,6 @@ class Machine: # {{{
 				for key in module_data:
 					assert key in self.spaces[space].module
 					self.spaces[space].module[key] = type(self.spaces[space].module[key])(module_data[key])
-		elif self.spaces[space].type in (TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER, TYPE_HBOT):
-			pass
-		elif self.spaces[space].type == TYPE_POLAR:
-			if 'polar_max_r' in ka:
-				self.spaces[space].polar_max_r = ka.pop('polar_max_r')
 		self.spaces[space].write_info(num_axes)
 		if readback:
 			self.spaces[space].read()
