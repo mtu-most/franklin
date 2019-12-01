@@ -580,13 +580,14 @@ function download_probemap(ui) { // {{{
 } // }}}
 
 function update_motorselect(select) {
-	var current = select.options[select.selectedIndex].spacemotor;
+	var current_option = select.options[select.selectedIndex];
+	var current = (current_option === undefined ? null : select.options[select.selectedIndex].spacemotor);
 	select.ClearAll();
 	var opt = select.AddElement('option');
 	opt.spacemotor = null;
 	opt.value = 'None';
 	for (var s = 0; s < select.ui.machine.spaces.length; ++s) {
-		for (var m = 0; m < select.ui.machine.spaces[s].motor.length) {
+		for (var m = 0; m < select.ui.machine.spaces[s].motor.length; ++m) {
 			opt = select.AddElement('option');
 			opt.spacemotor = [s, m];
 			opt.value = select.ui.machine.spaces[s].motor[m].name;

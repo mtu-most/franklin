@@ -533,7 +533,7 @@ static void write_module_data(PyObject *module) {
 		}
 		Py_DECREF(value);
 	}
-	shmem->ints[100] = int_index - 100;
+	shmem->ints[100] = int_index - 102;
 	shmem->ints[101] = float_index - 100;
 	Py_DECREF(module);
 }

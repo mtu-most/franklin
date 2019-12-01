@@ -56,7 +56,7 @@ AddEvent('setup', function () {
 		get_value: follower_get_value,
 		set_value: follower_set_value,
 		update: follower_update,
-		draw: return [0, 0, [0, 0], function() {}];
+		draw: function() { return [0, 0, [0, 0], function() {}]; },
 		load: function() {},
 		aload: function() {},
 		mload: follower_mload

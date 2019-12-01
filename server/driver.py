@@ -60,8 +60,7 @@ record_format = '=Bi' + 'd' * 11 + 'q' # type, tool, X[3], h[3], Jg, tf, v0, E, 
 # Space types
 TYPE_CARTESIAN = 'cartesian'
 TYPE_EXTRUDER = 'extruder'
-TYPE_FOLLOWER = 'follower'
-type_names = [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER]
+type_names = [TYPE_CARTESIAN, TYPE_EXTRUDER]
 # }}}
 
 config = fhs.init(packagename = 'franklin', config = { # {{{
@@ -1321,7 +1320,7 @@ class Machine: # {{{
 	class Space: # {{{
 		def __init__(self, machine, id):
 			self.name = ['position', 'extruders', 'followers'][id]
-			self.type = [TYPE_CARTESIAN, TYPE_EXTRUDER, TYPE_FOLLOWER][id]
+			self.type = type_names[id]
 			self.machine = machine
 			self.id = id
 			self.axis = []

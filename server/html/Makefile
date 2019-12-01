@@ -40,3 +40,5 @@ index.html: index.html.template
 
 install: index.html
 	install -m 644 -t $(DESTDIR)/usr/lib/franklin/html/ -D index.html {main,server,templates,ui}.js {style,ui}.css
+
+.PHONY: index.html

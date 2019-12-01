@@ -160,7 +160,8 @@ void Space::load_info() { // {{{
 	if (current_int != shmem->ints[100] || current_float != shmem->ints[101]) {
 		debug("Warning: load_space (for type %d) did not use correct number of parameters: ints/floats given = %d/%d, used = %d/%d", type, shmem->ints[100], shmem->ints[101], current_int, current_float);
 	}
-	reset_pos(this);
+	if (id != 2)
+		reset_pos(this);
 	loaddebug("done loading space");
 } // }}}
 

@@ -18,7 +18,6 @@ AddEvent('setup', function () {
 		name: 'H-bot',
 		draw: hbot_draw,
 	};
-	ui_modules['H-bot Setup'] = setup_hbot;
 });
 
 // vim: set foldmethod=marker :

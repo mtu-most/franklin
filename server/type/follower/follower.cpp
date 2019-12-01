@@ -19,24 +19,14 @@
 
 #include <franklin-module.h>
 
-struct SpaceData {
-	int num_motors;
-};
-
 struct MotorData {
 	int space, motor;
 };
 
-UseSpace(SpaceData);
 UseMotor(MotorData);
 
 void load_space(Space *s) {
-	mySpace(s).num_motors = load_int();
-	s->setup_nums(0, mySpace(s).num_motors);
-}
-
-void save_space(Space *s) {
-	save_int(mySpace(s).num_motors);
+	s->setup_nums(0, 0);
 }
 
 void load_motor(Space *s, int m) {
@@ -64,7 +54,7 @@ void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
 }
 
 int follow(Space *s, int motor) {
-	if (motor >= 0 && motor < mySpace(s).num_motors) {
+	if (motor >= 0 && motor < s->num_motors) {
 		int fs = myMotor(s, motor).space;
 		if (fs >= 0 && fs < NUM_SPACES) {
 			int fm = myMotor(s, motor).motor;

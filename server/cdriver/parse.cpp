@@ -377,14 +377,14 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				handle_coordinate(C, 5, &controlled, rel);
 				double center[3];
 				if (std::isnan(I))
-					I = rel ? 0 : oldpos[0];
-				center[0] = (rel ? oldpos[0] : 0) + I;
+					I = 0;
+				center[0] = oldpos[0] + I;
 				if (std::isnan(J))
-					J = rel ? 0 : oldpos[1];
-				center[1] = (rel ? oldpos[1] : 0) + J;
+					J = 0;
+				center[1] = oldpos[1] + J;
 				if (std::isnan(K))
-					K = rel ? 0 : oldpos[2];
-				center[2] = (rel ? oldpos[2] : 0) + K;
+					K = 0;
+				center[2] = oldpos[2] + K;
 				double arm[2][3];
 				for (int i = 0; i < 3; ++i) {
 					arm[0][i] = oldpos[i] - center[i];
