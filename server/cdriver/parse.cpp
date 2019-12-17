@@ -118,15 +118,17 @@ struct Parser { // {{{
 	int read_int(double *power = NULL, int *sign = NULL);
 	double read_fraction();
 	void handle_coordinate(double value, int index, bool *controlled, bool rel);
-	void flush_pending();
+	void flush_pending(bool finish = true);
 	void add_record(int gcode_line, RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double hx = 0, double hy = 0, double hz = 0, double Jg = 0, double tf = NAN, double v0 = NAN, double e = NAN);
 	void reset_pending_pos();
+	void initialize_pending_front();
 	// }}}
 }; // }}}
 
 void Parser::reset_pending_pos() { // {{{
 	pending.pop_front();
 	pending.push_front(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, epos.at(current_tool)));
+	initialize_pending_front();
 } // }}}
 
 bool Parser::get_chunk(Chunk &ret, std::string &comment) { // {{{
@@ -181,20 +183,20 @@ void Parser::handle_coordinate(double value, int index, bool *controlled, bool r
 	pos[index] = (rel ? pos[index] : 0) + value * unit;
 } // }}}
 
-static double inner(double a[3], double b[3]) {
+static double inner(double a[3], double b[3]) { // {{{
 	double ret = 0;
 	for (int i = 0; i < 3; ++i)
 		ret += a[i] * b[i];
 	return ret;
-}
+} // }}}
 
-static void cross(double ret[3], double a[3], double b[3]) {
+static void cross(double ret[3], double a[3], double b[3]) { // {{{
 	for (int i = 0; i < 3; ++i) {
 		int i1 = (i + 1) % 3;
 		int i2 = (i + 2) % 3;
 		ret[i] = a[i1] * b[i2] - a[i2] * b[i1];
 	}
-}
+} // }}}
 
 bool Parser::handle_command(bool handle_pattern) { // {{{
 	// M6 is "tool change"; record that it happened and turn it into G28: park. {{{
@@ -291,6 +293,20 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				}
 				if (code != 81) {
 					pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], current_f[code == 0 ? 0 : 1], epos.at(current_tool)));
+					// If length is enough, flush partial queue.
+					// Compute length for coming to a stop from v=J/2*t**2
+					double t_stop = std::sqrt(2 * current_f[code == 0 ? 0 : 1] / max_J);
+					double s_stop = max_J / 6 * t_stop * t_stop * t_stop;
+					double dist = 0;
+					for (int i = 0; i < 3; ++i) {
+						if (!std::isnan(pos[i]) && !std::isnan(oldpos[i]))
+							dist += (pos[i] - oldpos[i]) * (pos[i] - oldpos[i]);
+					}
+					dist = std::sqrt(dist);
+					if (dist == 0)
+						flush_pending();
+					else if (s_stop < dist / 2)
+						flush_pending(false);
 					if (handle_pattern && code == 1)
 						pending.back().pattern = pattern_data;
 					pattern_data.clear();
@@ -841,6 +857,23 @@ void decode_base64(std::string const &comment, int inpos, uint8_t *data, int out
 		data[outpos + i] = value >> (8 * (2 - i));
 } // }}}
 
+void Parser::initialize_pending_front() { // {{{
+	auto f = pending.begin();
+	f->s[0] = 0;
+	f->s[1] = 0;
+	f->s[2] = 0;
+	f->e0 = 0;
+	f->a0 = 0;
+	f->b0 = 0;
+	f->c0 = 0;
+	f->length = 0;
+	f->unit[0] = 0;
+	f->unit[1] = 0;
+	f->unit[2] = 0;
+	f->f = 0;
+	f->v1 = 0;
+} // }}}
+
 Parser::Parser(std::string const &infilename, std::string const &outfilename, void *errors) // {{{
 		: infile(infilename.c_str()), outfile(outfilename.c_str(), std::ios::binary), errors(errors) {
 	strings.push_back("");
@@ -860,6 +893,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 	current_f[1] = INFINITY;
 	// Pending initial state contains the current position.
 	pending.push_front(Record(lineno, false, 0, NAN, NAN, NAN, NAN, NAN, NAN, INFINITY, NAN));
+	initialize_pending_front();
 	max_dev = max_deviation;
 	for (int i = 0; i < 6; ++i) {
 		pos[i] = NAN;
@@ -984,25 +1018,19 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 	outfile.write(reinterpret_cast <char *>(&last_time), sizeof(last_time));
 } // }}}
 
-void Parser::flush_pending() { // {{{
+void Parser::flush_pending(bool finish) { // {{{
 	if (pending.size() <= 1)
 		return;
-	pending.push_back(pending.back());
-	(--pending.end())->f = 0;
-	pending.begin()->s[0] = 0;
-	pending.begin()->s[1] = 0;
-	pending.begin()->s[2] = 0;
-	pending.begin()->e0 = 0;
-	pending.begin()->a0 = 0;
-	pending.begin()->b0 = 0;
-	pending.begin()->c0 = 0;
-	pending.begin()->length = 0;
-	pending.begin()->unit[0] = 0;
-	pending.begin()->unit[1] = 0;
-	pending.begin()->unit[2] = 0;
-	pending.begin()->f = 0;
-	pending.begin()->v1 = 0;
-	pending.push_front(pending.front());
+	if (finish) {
+		pending.push_back(pending.back());
+		(--pending.end())->f = 0;
+		(--pending.end())->theta = 0;
+		for (int i = 0; i < 3; ++i) {
+			(--pending.end())->n[i] = 0;
+			(--pending.end())->nnAL[i] = 0;
+			(--pending.end())->nnLK[i] = 0;
+		}
+	}
 	for (auto P0 = pending.begin(), P1 = ++pending.begin(); P1 != pending.end(); ++P0, ++P1) {
 		P1->f = min(max_v, P1->f);
 		P1->e0 = (P0->e + P1->e) / 2;
@@ -1051,16 +1079,6 @@ void Parser::flush_pending() { // {{{
 			P0->theta = 0;
 		P1->length /= 2;
 	}
-	(--pending.end())->theta = 0;
-	(--pending.end())->n[0] = 0;
-	(--pending.end())->n[1] = 0;
-	(--pending.end())->n[2] = 0;
-	(--pending.end())->nnAL[0] = 0;
-	(--pending.end())->nnAL[1] = 0;
-	(--pending.end())->nnAL[2] = 0;
-	(--pending.end())->nnLK[0] = 0;
-	(--pending.end())->nnLK[1] = 0;
-	(--pending.end())->nnLK[2] = 0;
 	auto P1 = ++pending.begin();
 	auto P2 = ++ ++pending.begin();
 	while (P2 != pending.end()) {
@@ -1100,7 +1118,7 @@ void Parser::flush_pending() { // {{{
 		++P1;
 		++P2;
 	}
-	// Turn Records into Run_Records and write them out.  Ignore fake first and last record.
+	// Turn Records into Run_Records and write them out.  Ignore fake first record; don't write last record.
 	pending.pop_front();
 	while (pending.size() > 1) {
 		auto P0 = pending.begin();
@@ -1287,6 +1305,8 @@ void Parser::flush_pending() { // {{{
 		}
 		pending.pop_front();
 	}
+	if (finish)
+		initialize_pending_front();
 } // }}}
 
 void Parser::add_record(int gcode_line, RunType cmd, int tool, double x, double y, double z, double hx, double hy, double hz, double Jg, double tf, double v0, double e) { // {{{
