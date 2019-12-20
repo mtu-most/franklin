@@ -126,8 +126,17 @@ struct Parser { // {{{
 }; // }}}
 
 void Parser::reset_pending_pos() { // {{{
-	pending.pop_front();
-	pending.push_front(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, epos.at(current_tool)));
+	auto &f = pending.front();
+	f.gcode_line = lineno;
+	f.arc = false;
+	f.tool = current_tool;
+	f.x = pos[0];
+	f.y = pos[1];
+	f.z = pos[2];
+	f.a = pos[3];
+	f.b = pos[4];
+	f.c = pos[5];
+	f.e = epos.at(current_tool);
 	initialize_pending_front();
 } // }}}
 
@@ -305,7 +314,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					dist = std::sqrt(dist);
 					if (dist == 0)
 						flush_pending();
-					else if (s_stop < dist / 2)
+					else if (s_stop < dist / 20)
 						flush_pending(false);
 					if (handle_pattern && code == 1)
 						pending.back().pattern = pattern_data;
@@ -586,10 +595,13 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					parse_error(errors, "%d: Not setting position for unsupported type %c", lineno, arg.type);
 					continue;
 				}
-				epos.at(current_tool) = arg.num;
-				flush_pending();
-				add_record(lineno, RUN_SETPOS, current_tool, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, arg.num);
-				reset_pending_pos();
+				auto &cepos = epos.at(current_tool);
+				if (cepos != arg.num) {
+					epos.at(current_tool) = arg.num;
+					flush_pending();
+					add_record(lineno, RUN_SETPOS, current_tool, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, arg.num);
+					reset_pending_pos();
+				}
 			}
 			break;
 		case 94:
@@ -1019,19 +1031,23 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 } // }}}
 
 void Parser::flush_pending(bool finish) { // {{{
-	if (pending.size() <= 1)
-		return;
+	//debug("flushing size %d finish %d", pending.size(), finish);
 	if (finish) {
 		pending.push_back(pending.back());
-		(--pending.end())->f = 0;
-		(--pending.end())->theta = 0;
+		auto &f = pending.back();
+		f.f = 0;
+		f.theta = 0;
 		for (int i = 0; i < 3; ++i) {
-			(--pending.end())->n[i] = 0;
-			(--pending.end())->nnAL[i] = 0;
-			(--pending.end())->nnLK[i] = 0;
+			f.n[i] = 0;
+			f.nnAL[i] = 0;
+			f.nnLK[i] = 0;
 		}
 	}
+	else if (pending.size() <= 1)
+		return;
+	// Compute static information about path. {{{
 	for (auto P0 = pending.begin(), P1 = ++pending.begin(); P1 != pending.end(); ++P0, ++P1) {
+		P0->f = min(max_v, P0->f);
 		P1->f = min(max_v, P1->f);
 		P1->e0 = (P0->e + P1->e) / 2;
 		P1->a0 = P0->a;
@@ -1078,50 +1094,57 @@ void Parser::flush_pending(bool finish) { // {{{
 		if (P0->length < 1e-10 || P1->length < 1e-10 || std::isnan(P0->theta))
 			P0->theta = 0;
 		P1->length /= 2;
-	}
+	} // }}}
+	// Compute dynamic information about path, back tracking when needed. {{{
+	auto P0 = pending.begin();
 	auto P1 = ++pending.begin();
-	auto P2 = ++ ++pending.begin();
-	while (P2 != pending.end()) {
-		double s = -std::tan(P1->theta / 2);
-		P1->dev = std::min(max_dev, std::min(P1->length, P2->length) / (3 * -(s + 1 / s) * std::sin(P1->theta / 2)));
-		P1->x0 = 3 * P1->dev * (s + 1 / s) * std::sin(P1->theta / 2);
-		if (std::isnan(s) || std::isnan(P1->dev) || std::isnan(P1->x0)) {
+	while (P1 != pending.end()) {
+		double s = -std::tan(P0->theta / 2);
+		P0->dev = std::min(max_dev, std::min(P0->length, P1->length) / (3 * -(s + 1 / s) * std::sin(P0->theta / 2)));
+		P0->x0 = 3 * P0->dev * (s + 1 / s) * std::sin(P0->theta / 2);
+		if (std::isnan(s) || std::isnan(P0->dev) || std::isnan(P0->x0)) {
 			s = 0;
-			P1->dev = 0;
-			P1->x0 = 0;
+			P0->dev = 0;
+			P0->x0 = 0;
 		}
-		pdebug("s %f dev %f x0 %f", s, P1->dev, P1->x0);
+		pdebug("s %f dev %f x0 %f", s, P0->dev, P0->x0);
 		double sq = std::sqrt(s * s + 1);
-		double max_v_J = std::pow(max_J * P1->x0 * P1->x0 * sq / 2, 1. / 3);
-		double max_v_a = std::sqrt(max_a * -P1->x0 * sq / 2);
-		P1->v1 = min(min(min(max_v_J, max_v_a), P1->f), P2->f);
-		P1->tf = -P1->x0 / P1->v1;
-		if (std::isnan(P1->tf))
-			P1->tf = 0;
-		P1->Jh = -2 * P1->v1 * P1->v1 * P1->v1 / ((s + 1 / s) * P1->x0 * P1->x0);
-		if (std::isnan(P1->Jh))
-			P1->Jh = 0;
-		P1->Jg = P1->Jh / s;
+		double max_v_J = std::pow(max_J * P0->x0 * P0->x0 * sq / 2, 1. / 3);
+		double max_v_a = std::sqrt(max_a * -P0->x0 * sq / 2);
+		if (fabs(s) < 1e-10)
+			P0->v1 = min(P0->f, P1->f);
+		else
+			P0->v1 = min(min(min(max_v_J, max_v_a), P0->f), P1->f);
+		//debug("setting v1 for %f,%f,%f to %f using x0=%f sq=%f f0=%f f1=%f max_J=%f max_a=%f", P0->x, P0->y, P0->z, P0->v1, P0->x0, sq, P0->f, P1->f, max_J, max_a);
+		P0->tf = -P0->x0 / P0->v1;
+		if (std::isnan(P0->tf))
+			P0->tf = 0;
+		P0->Jh = -2 * P0->v1 * P0->v1 * P0->v1 / ((s + 1 / s) * P0->x0 * P0->x0);
+		if (std::isnan(P0->Jh))
+			P0->Jh = 0;
+		P0->Jg = P0->Jh / s;
 
 		// Check if v0/v2 should be lowered.
-		double v0 = compute_max_v(P1->length + P1->x0, P1->v1, max_J, max_a);
-		double v2 = compute_max_v(P2->length + P1->x0, P1->v1, max_J, max_a);
-		if (v2 < P2->f)
-			P2->f = v2;
-		if (v0 < P1->f) {
-			P1->f = v0;
-			--P1;
-			--P2;
-			continue;
+		double v0 = compute_max_v(P0->length + P0->x0, P0->v1, max_J, max_a);
+		double v2 = compute_max_v(P1->length + P0->x0, P0->v1, max_J, max_a);
+		if (v2 < P1->f)
+			P1->f = v2;
+		if (v0 < P0->f) {
+			if (P0 != pending.begin()) {
+				P0->f = v0;
+				--P0;
+				--P1;
+				continue;
+			}
+			debug("Error: need to go back beyond start; ignoring.");
 		}
 		//debug("next");
+		++P0;
 		++P1;
-		++P2;
-	}
-	// Turn Records into Run_Records and write them out.  Ignore fake first record; don't write last record.
-	pending.pop_front();
+	} // }}}
+	// Turn Records into Run_Records and write them out.  Don't write last record. {{{
 	while (pending.size() > 1) {
-		auto P0 = pending.begin();
+		P0 = pending.begin();
 		P1 = ++pending.begin();
 		if (P0->arc) {
 			debug("arcs are currently not supported");
@@ -1134,11 +1157,11 @@ void Parser::flush_pending(bool finish) { // {{{
 			// Not an arc.
 			// TODO: support abc again.
 
-			pdebug("Writing out segment from (%f,%f,%f) via (%f,%f,%f) to (%f,%f,%f)", P0->from[0], P0->from[1], P0->from[2], P0->x, P0->y, P0->z, P1->from[0], P1->from[1], P1->from[2]);
+			//debug("Writing out segment from (%f,%f,%f)@%f via (%f,%f,%f)@%f to (%f,%f,%f)@%f", P0->from[0], P0->from[1], P0->from[2], P0->f, P0->x, P0->y, P0->z, P0->v1, P1->from[0], P1->from[1], P1->from[2], P1->f);
 
 			double max_ramp_t = max_a / max_J;
 			double max_ramp_dv = max_J / 2 * max_ramp_t * max_ramp_t;
-			if (P0->f > 0) {
+			if (P0->f > 0 || P0->v1 > 0) {
 				double de = P0->e - P0->e0;
 				double total_dv = P0->f - P0->v1;
 				// Compute s and t for all parts.
@@ -1210,7 +1233,7 @@ void Parser::flush_pending(bool finish) { // {{{
 				}
 			}
 
-			if (P1->f > 0) {
+			if (P1->f > 0 || P0->v1 > 0) {
 				double de = P1->e0 - P0->e;
 				double total_dv = P1->f - P0->v1;
 				// Compute s and t for all parts.
@@ -1241,7 +1264,7 @@ void Parser::flush_pending(bool finish) { // {{{
 				pdebug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
 				if (s_const_v < -1e-2) {
 					parse_error(errors, "%d: Error: const v2 is negative: %f, len %f %f", P0->gcode_line, s_const_v, P0->length, P1->length);
-					debug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
+					pdebug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
 					//abort();
 				}
 
@@ -1304,7 +1327,7 @@ void Parser::flush_pending(bool finish) { // {{{
 			}
 		}
 		pending.pop_front();
-	}
+	} // }}}
 	if (finish)
 		initialize_pending_front();
 } // }}}
