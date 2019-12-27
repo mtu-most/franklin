@@ -1,5 +1,5 @@
 follower
 delta
 polar
-hbot
+h-bot
 drawbot

@@ -15,10 +15,14 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# The values after ?= are defaults; the ones after += are required.
 CPPFLAGS ?= -Wall -Wextra -Wformat -Werror -Wdate-time -D_FORTIFY_SOURCE=2
-CXXFLAGS ?= -fPIC -ggdb3 -O3 -fstack-protector-strong -rdynamic
+CXXFLAGS ?= -ggdb3 -O3 -fstack-protector-strong
+CXXFLAGS += -fPIC -rdynamic
 LDFLAGS ?= -Wall -Wextra -Wformat -Werror ${CXXFLAGS}
-LIBS ?= -ldl
+LDFLAGS += -export-dynamic -fPIC -rdynamic
+LIBS ?=
+LIBS += -ldl
 
 CPPFLAGS += -DARCH_INCLUDE='"arch-avr.h"'
 

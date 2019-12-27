@@ -240,10 +240,12 @@ void Space::load_motor(int m) { // {{{
 		// Axes with a limit switch.
 		if (motors_busy && (old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !std::isnan(old_home_pos)) {
 			double diff = motor[m]->home_pos - old_home_pos * old_steps_per_unit / motor[m]->steps_per_unit;
-			motor[m]->settings.current_pos += diff;
-			//debug("load motor %d %d new home %f add %f", id, m, motor[m]->home_pos, diff);
-			// adjusting the arch pos is not affected by steps/unit.
-			arch_addpos(id, m, motor[m]->home_pos - old_home_pos);
+			if (!std::isnan(diff)) {
+				motor[m]->settings.current_pos += diff;
+				//debug("load motor %d %d new home %f add %f", id, m, motor[m]->home_pos, diff);
+				// adjusting the arch pos is not affected by steps/unit.
+				arch_addpos(id, m, motor[m]->home_pos - old_home_pos);
+			}
 		}
 		reset_pos(this);
 	}
@@ -253,8 +255,10 @@ void Space::load_motor(int m) { // {{{
 			axis[a]->target = axis[a]->current;
 		space_types[type].xyz2motors(this);
 		double diff = motor[m]->target_pos - motor[m]->settings.current_pos;
-		motor[m]->settings.current_pos += diff;
-		arch_addpos(id, m, diff);
+		if (!std::isnan(diff)) {
+			motor[m]->settings.current_pos += diff;
+			arch_addpos(id, m, diff);
+		}
 	}
 } // }}}
 
