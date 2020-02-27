@@ -579,8 +579,12 @@ function download_probemap(ui) { // {{{
 	a.dispatchEvent(event);
 } // }}}
 
-function update_motorselect(select) {
-	var current = (select.selectedIndex && select.options[select.selectedIndex] && select.options[select.selectedIndex].spacemotor) || null;
+function update_motorselect(select, new_space, new_motor) {
+	var current;
+	if (new_motor === undefined)
+		current = (select.selectedIndex && select.options[select.selectedIndex] && select.options[select.selectedIndex].spacemotor) || null;
+	else
+		current = [new_space, new_motor];
 	select.ClearAll();
 	var opt = select.AddElement('option').AddText('None');
 	opt.spacemotor = null;
@@ -589,8 +593,9 @@ function update_motorselect(select) {
 			opt = select.AddElement('option');
 			opt.spacemotor = [s, m];
 			opt.AddText(select.ui.machine.spaces[s].motor[m].name);
-			if (opt.spacemotor == current)
+			if (opt.spacemotor == current || (opt.spacemotor !== null && current !== null && opt.spacemotor[0] == current[0] && opt.spacemotor[1] == current[1])) {
 				select.selectedIndex = select.options.length - 1;
+			}
 		}
 	}
 }
@@ -1030,9 +1035,10 @@ function space_update(uuid, index, nums_changed) { // {{{
 			update_float(p, [['motor', [index, m]], 'home_order']);
 		set_name(p, 'motorunit', index, m, p.machine.spaces[index].motor[m].unit);
 		if (index == 2) {
+			var me = p.machine.spaces[index].motor[m];
 			var selects = get_elements(p, [['motor', [index, m]], 'spacemotor']);
 			for (var s = 0; s < selects.length; ++s)
-				update_motorselect(s);
+				update_motorselect(s, me.follower_space, me.follower_motor);
 		}
 	}
 	var info = type_info[p.machine.spaces[index].type];
@@ -1128,8 +1134,9 @@ function gpio_update(uuid, index) { // {{{
 	update_float(p, [['gpio', index], 'duty']);
 	update_float(p, [['gpio', index], 'ticks']);
 	var selects = get_elements(p, [['gpio', index], 'spacemotor']);
+	var me = machines[uuid].gpios[index];
 	for (var s = 0; s < selects.length; ++s)
-		update_motorselect(selects[s]);
+		update_motorselect(selects[s], me.space, me.motor);
 } // }}}
 // }}}
 

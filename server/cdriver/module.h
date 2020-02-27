@@ -128,6 +128,7 @@ enum InterruptCommand {
 	CMD_PARKWAIT,
 	CMD_CONNECTED,
 	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
+	CMD_MESSAGE,
 };
 
 enum RunType {

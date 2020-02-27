@@ -509,6 +509,9 @@ void try_send_next() { // Call send_packet if we can. {{{
 			home_step_time = 0;
 			prepare_packet(2 + 4 * active_motors);
 			send_packet();
+			// Clear current motor positions.
+			for (int m = 0; m < active_motors; ++m)
+				motor[m].current_pos = 0;
 			continue;
 		} // }}}
 		if (ping != 0) { // {{{

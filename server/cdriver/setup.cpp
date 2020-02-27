@@ -169,11 +169,11 @@ void setup()
 void check_protocol() {
 	if (protocol_version < PROTOCOL_VERSION) {
 		debug("Machine has older Franklin version %d than host which has %d; please flash newer firmware.", protocol_version, PROTOCOL_VERSION);
-		exit(1);
+		disconnect(true, "Machine has older Franklin version %d than host which has %d; please flash newer firmware.", protocol_version, PROTOCOL_VERSION);
 	}
 	else if (protocol_version > PROTOCOL_VERSION) {
 		debug("Machine has newer Franklin version %d than host which has %d; please upgrade your host software.", protocol_version, PROTOCOL_VERSION);
-		exit(1);
+		disconnect(true, "Machine has newer Franklin version %d than host which has %d; please upgrade your host software.", protocol_version, PROTOCOL_VERSION);
 	}
 }
 

@@ -521,6 +521,13 @@ bool hwpacket(int len) { // {{{
 		computing_move = false;
 		avr_homing = false;
 		avr_get_current_pos(2, false);
+		// Firmware resets motor positions to 0 after homing.
+		int m0 = 0;
+		for (int s = 0; s < NUM_SPACES; ++s) {
+			for (int m = 0; m < spaces[s].num_motors; ++m)
+				avr_pos_offset[m0 + m] = -spaces[s].motor[m]->settings.current_pos;
+			m0 += spaces[s].num_motors;
+		}
 		avr_write_ack("homed");
 		prepare_interrupt();
 		send_to_parent(CMD_HOMED);
@@ -1040,6 +1047,8 @@ void avr_connect2() { // {{{
 	for (uint8_t i = 0; i < sizeof(uint32_t); ++i)
 		protocol_version |= int(uint8_t(command[2 + i])) << (i * 8);
 	check_protocol();
+	if (!connected)
+		return;
 	NUM_DIGITAL_PINS = command[6];
 	NUM_ANALOG_INPUTS = command[7];
 	NUM_PINS = NUM_DIGITAL_PINS + NUM_ANALOG_INPUTS;
@@ -1515,8 +1524,7 @@ void AVRSerial::begin(char const *port) { // {{{
 	else {
 		fd = open(port, O_RDWR);
 		if (fd < 0) {
-			debug("failed to open port %s: %s", port, strerror(errno));
-			disconnect(true);
+			disconnect(true, "failed to open port %s: %s", port, strerror(errno));
 			return;
 		}
 	}
@@ -1542,8 +1550,7 @@ void AVRSerial::write(char c) { // {{{
 		if (ret == 1)
 			break;
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
-			debug("write to avr failed: %d %s", ret, strerror(errno));
-			disconnect(true);
+			disconnect(true, "write to avr failed: %d %s", ret, strerror(errno));
 			return;	// This causes protocol errors during reconnect, but they will be handled.
 		}
 	}
@@ -1560,8 +1567,7 @@ void AVRSerial::refill() { // {{{
 		end_ = 0;
 	}
 	if (end_ == 0 && pollfds[BASE_FDS].revents) {
-		debug("EOF detected on serial port; waiting for reconnect.");
-		disconnect(true);
+		disconnect(true, "EOF detected on serial port; waiting for reconnect.");
 	}
 	pollfds[BASE_FDS].revents = 0;
 } // }}}
@@ -1572,8 +1578,7 @@ int AVRSerial::read() { // {{{
 			refill();
 		if (start != end_)
 			break;
-		debug("eof on input; waiting for reconnect.");
-		disconnect(true);
+		disconnect(true, "eof on input; waiting for reconnect.");
 	}
 	int ret = buffer[start++];
 #ifdef DEBUG_AVRCOMM

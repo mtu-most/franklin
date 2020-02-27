@@ -526,8 +526,8 @@ class Machine: # {{{
 		elif cmd['type'] == 'homed':
 			call_queue.append((self._do_home, [True]))
 		elif cmd['type'] == 'disconnect':
+			self._broadcast(None, 'message', 'Machine disconnected. Reason: ' + ('unknown' if len(cmd['reason']) == 0 else cmd['reason']))
 			self._close()
-			# _close returns after reconnect.
 		elif cmd['type'] == 'update-temp':
 			if cmd['temp'] < len(self.temps):
 				self.temps[cmd['temp']].value = cmd['value'] - C0

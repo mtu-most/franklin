@@ -38,7 +38,7 @@
 #include <sys/timerfd.h>
 #include <string>
 
-#define PROTOCOL_VERSION ((uint32_t)5)	// Required version response in BEGIN.
+#define PROTOCOL_VERSION ((uint32_t)6)	// Required version response in BEGIN.
 #define BASE_FDS 3
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
@@ -486,7 +486,7 @@ void globals_save();
 
 // base.cpp
 void debug_backtrace();
-void disconnect(bool notify);
+void disconnect(bool notify, char const *reason, ...);
 int32_t utime();
 int32_t millis();
 EXTERN bool interrupt_pending;

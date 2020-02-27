@@ -33,7 +33,7 @@ void request(int req) {
 		arch_set_uuid();
 		break;
 	CASE(CMD_FORCE_DISCONNECT)
-		disconnect(false);
+		disconnect(false, NULL);
 		break;
 	CASE(CMD_CONNECT)
 		if (arch_fds() != 0) {

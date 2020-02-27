@@ -129,7 +129,7 @@ function MotorSelect(ui, obj, className) { // {{{
 		var option = select.options[select.selectedIndex];
 		if (option === undefined)
 			return;
-		var spacemotor = option.spacemotor;
+		var spacemotor = option.spacemotor || [-1, -1];
 		ui.machine.call('set_' + obj[0][0], [obj[0][1]], {space: spacemotor[0], motor: spacemotor[1]});
 	});
 	update_motorselect(select);

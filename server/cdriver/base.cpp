@@ -27,10 +27,18 @@
 
 #ifdef SERIAL
 // Only for connections that can fail.
-void disconnect(bool notify) { // {{{
+void disconnect(bool notify, char const *reason, ...) { // {{{
 	// Hardware has disconnected.  Notify host and wait for reconnect.
 	arch_disconnect();
 	if (notify) {
+		if (reason == NULL)
+			shmem->interrupt_str[0] = '\0';
+		else {
+			va_list v;
+			va_start(v, reason);
+			vsnprintf(const_cast <char *>(shmem->interrupt_str), PATH_MAX, reason, v);
+			va_end(v);
+		}
 		prepare_interrupt();
 		send_to_parent(CMD_DISCONNECT);
 	}

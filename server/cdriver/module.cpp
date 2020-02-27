@@ -832,7 +832,7 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 	}
 	PyObject *ret;
 	if (DEBUG_FUNCTIONS) {
-		char const *interrupt_cmd_name[] = { "LIMIT", "FILE_DONE", "MOVECB", "HOMED", "TIMEOUT", "PINCHANGE", "PINNAME", "DISCONNECT", "UPDATE_PIN", "UPDATE_TEMP", "CONFIRM", "PARKWAIT", "CONNECTED", "TEMPCB" };
+		char const *interrupt_cmd_name[] = { "LIMIT", "FILE_DONE", "MOVECB", "HOMED", "TIMEOUT", "PINCHANGE", "PINNAME", "DISCONNECT", "UPDATE_PIN", "UPDATE_TEMP", "CONFIRM", "PARKWAIT", "CONNECTED", "TEMPCB", "MESSAGE" };
 		debug("interrupt received: %s", unsigned(c) < sizeof(interrupt_cmd_name) / sizeof(*interrupt_cmd_name) ? interrupt_cmd_name[unsigned(c)] : "(invalid)");
 	}
 	switch (c) {
@@ -859,7 +859,7 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		ret = Py_BuildValue("{ss,si,si,sy#}", "type", "pinname", "pin", shmem->interrupt_ints[0], "mode", shmem->interrupt_str[0], "name", &shmem->interrupt_str[1], shmem->interrupt_ints[1]);
 		break;
 	case CMD_DISCONNECT:
-		ret = Py_BuildValue("{ss}", "type", "disconnect");
+		ret = Py_BuildValue("{ss,ss}", "type", "disconnect", "reason", shmem->interrupt_str);
 		break;
 	case CMD_UPDATE_PIN:
 		ret = Py_BuildValue("{ss,si,si}", "type", "update-pin", "pin", shmem->interrupt_ints[0], "state", shmem->interrupt_ints[1]);
@@ -878,6 +878,9 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		break;
 	case CMD_TEMPCB:
 		ret = Py_BuildValue("{ss,si}", "type", "temp-cb", "temp", shmem->interrupt_ints[0]);
+		break;
+	case CMD_MESSAGE:
+		ret = Py_BuildValue("{ss}", "message", shmem->interrupt_str[0]);
 		break;
 	default:
 		PyErr_Format(PyExc_AssertionError, "Interrupt returned unexpected code 0x{x}", c);

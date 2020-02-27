@@ -551,14 +551,14 @@ void packet()
 	case CMD_DISCARD:
 	{
 		cmddebug("CMD_DISCARD");
-		// TODO: work well with interrupts.
+		cli();
 		filling = 0;
 		if (command(1) >= ((last_fragment - current_fragment) & FRAGMENTS_PER_MOTOR_MASK)) {
 			debug("discarding more than entire buffer");
+			sei();
 			write_stall();
 			return;
 		}
-		cli();
 		last_fragment = (last_fragment - command(1)) & FRAGMENTS_PER_MOTOR_MASK;
 		sei();
 		write_ack();
