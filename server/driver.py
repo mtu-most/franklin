@@ -875,7 +875,7 @@ class Machine: # {{{
 				else:
 					if (0, m) not in gpio_motors:
 						self.user_set_axis_pos(0, m, mtr['home_pos'])
-			self.home_phase = 'main-limit'
+			self.home_phase = 'main-limit-start'
 			if len(gpio_motors) > 0:
 				# Move motors with a gpio follower to their home position.
 				target = [{}, {}]
@@ -900,11 +900,14 @@ class Machine: # {{{
 		if self.home_phase == 'gpio':
 			m = self.home_gpio.pop()
 			if len(self.home_gpio) == 0:
-				self.home_phase = 'main-limit'
+				self.home_phase = 'main-limit-start'
 			self.movecb.append(self.home_cb)
 			self.user_line(tool = m, e = self.spaces[1].motor[m]['home_pos'], force = True)[1](None)
 			return
 		while True:	# Allow code below to repeat from here.
+			if self.home_phase == 'main-limit-start':
+				done = False	# Fake incomplete move to avoid aborting home.
+				self.home_phase = 'main-limit'
 			if self.home_phase == 'main-limit':
 				# Find out what the situation is. Which motors should still be moved, and should we now move all or a single motor?
 				if len(self.home_order['standard']) > 0:
