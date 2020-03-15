@@ -476,7 +476,7 @@ static void mc_realtime() { // {{{
 
 void arch_setup_start() { // {{{
 	// Override hwtime_step.
-	default_hwtime_step = 800;
+	default_hwtime_step = 10000;
 	// Claim that firmware has correct version.
 	protocol_version = PROTOCOL_VERSION;
 	// Prepare gpios.

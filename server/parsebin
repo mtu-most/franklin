@@ -27,7 +27,11 @@ import sys
 scale = 30
 offset = 12 * scale
 
-config = fhs.init({'src': None, 'svg': False, 'z': float('nan'), 'offset': 0.0})
+fhs.option('src', 'source file')
+fhs.option('svg', 'generate svg output', argtype = bool)
+fhs.option('z', 'parse this layer only', default = float('nan'))
+fhs.option('offset', 'offset per layer', default = 0.0)
+config = fhs.init()
 
 file = open(config['src'], 'rb')
 
