@@ -417,29 +417,13 @@ static PyObject *read_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (!PyArg_ParseTuple(args, "i", &shmem->ints[0]))
 		return NULL;
 	send_to_child(CMD_READ_SPACE_INFO);
-	if (shmem->ints[1] >= NUM_FIXED_SPACE_TYPES) {
-		// This is a module.
-		PyObject *module_data = read_module_data();
-		PyObject *ret = Py_BuildValue("{si,si,si,sO}",
-				"type", shmem->ints[1],
-				"num_axes", shmem->ints[2],
-				"num_motors", shmem->ints[3],
-				"module", module_data);
-		return ret;
-	}
-	else {
-		switch (shmem->ints[1]) {
-		case TYPE_CARTESIAN:
-		case TYPE_EXTRUDER:
-			return Py_BuildValue("{si,si,si}",
-					"type", shmem->ints[1],
-					"num_axes", shmem->ints[2],
-					"num_motors", shmem->ints[3]);
-		default:
-			PyErr_SetString(PyExc_ValueError, "invalid space for reading info");
-			return NULL;
-		}
-	}
+	PyObject *module_data = read_module_data();
+	PyObject *ret = Py_BuildValue("{si,si,si,sO}",
+			"type", shmem->ints[1],
+			"num_axes", shmem->ints[2],
+			"num_motors", shmem->ints[3],
+			"module", module_data);
+	return ret;
 }
 
 static PyObject *read_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
@@ -448,32 +432,13 @@ static PyObject *read_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (!PyArg_ParseTuple(args, "iii", &shmem->ints[0], &shmem->ints[1], &type))
 		return NULL;
 	send_to_child(CMD_READ_SPACE_AXIS);
-	if (type >= NUM_FIXED_SPACE_TYPES) {
-		// This is a module.
-		PyObject *module_data = read_module_data();
-		return Py_BuildValue("{si,sd,sd,sd,sO}",
-				"park_order", shmem->ints[2],
-				"park", shmem->floats[0],
-				"min", shmem->floats[1],
-				"max", shmem->floats[2],
-				"module", module_data);
-	}
-	else if (type == TYPE_EXTRUDER) {
-		PyObject *ret = Py_BuildValue("{si,si,si,s(ddd)}",
-				"type", shmem->ints[1],
-				"num_axes", shmem->ints[2],
-				"num_motors", shmem->ints[3],
-				"offset",
-				shmem->floats[100],
-				shmem->floats[101],
-				shmem->floats[102]);
-		return ret;
-	}
-	return Py_BuildValue("{si,sd,sd,sd}",
+	PyObject *module_data = read_module_data();
+	return Py_BuildValue("{si,sd,sd,sd,sO}",
 			"park_order", shmem->ints[2],
 			"park", shmem->floats[0],
 			"min", shmem->floats[1],
-			"max", shmem->floats[2]);
+			"max", shmem->floats[2],
+			"module", module_data);
 }
 
 static PyObject *read_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
@@ -482,23 +447,8 @@ static PyObject *read_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (!PyArg_ParseTuple(args, "iii", &shmem->ints[0], &shmem->ints[1], &type))
 		return NULL;
 	send_to_child(CMD_READ_SPACE_MOTOR);
-	if (type >= NUM_FIXED_SPACE_TYPES) {
-		// This is a module.
-		PyObject *module_data = read_module_data();
-		return Py_BuildValue("{si,si,si,si,si,si,sd,sd,sd,sd,sO}",
-				"step_pin", shmem->ints[2],
-				"dir_pin", shmem->ints[3],
-				"enable_pin", shmem->ints[4],
-				"limit_min_pin", shmem->ints[5],
-				"limit_max_pin", shmem->ints[6],
-				"home_order", shmem->ints[7],
-				"steps_per_unit", shmem->floats[0],
-				"home_pos", shmem->floats[1],
-				"limit_v", shmem->floats[2],
-				"limit_a", shmem->floats[3],
-				"module", module_data);
-	}
-	return Py_BuildValue("{si,si,si,si,si,si,sd,sd,sd,sd}",
+	PyObject *module_data = read_module_data();
+	return Py_BuildValue("{si,si,si,si,si,si,sd,sd,sd,sd,sO}",
 			"step_pin", shmem->ints[2],
 			"dir_pin", shmem->ints[3],
 			"enable_pin", shmem->ints[4],
@@ -508,7 +458,8 @@ static PyObject *read_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 			"steps_per_unit", shmem->floats[0],
 			"home_pos", shmem->floats[1],
 			"limit_v", shmem->floats[2],
-			"limit_a", shmem->floats[3]);
+			"limit_a", shmem->floats[3],
+			"module", module_data);
 }
 
 #define assert_type(type, value) do { if (! Py ## type ## _Check (value)) { debug("python type check failed: " #type); abort();}} while (0)
@@ -546,17 +497,8 @@ static PyObject *write_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 	send_to_child(CMD_READ_SPACE_INFO);
 	set_int(1, "type", dict);
 	set_int(2, "num_axes", dict);
-	if (shmem->ints[1] >= NUM_FIXED_SPACE_TYPES) {
-		PyObject *module = get_object("module", dict);
-		write_module_data(module);
-	}
-	else {
-		switch (shmem->ints[1]) {
-		case TYPE_CARTESIAN:
-		case TYPE_EXTRUDER:
-			break;
-		}
-	}
+	PyObject *module = get_object("module", dict);
+	write_module_data(module);
 	send_to_child(CMD_WRITE_SPACE_INFO);
 	return assert_empty_dict(dict, "write_space_info");
 }
@@ -572,15 +514,8 @@ static PyObject *write_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_float(0, "park", dict);
 	set_float(1, "min", dict);
 	set_float(2, "max", dict);
-	if (type >= NUM_FIXED_SPACE_TYPES) {
-		PyObject *module = get_object("module", dict);
-		write_module_data(module);
-	}
-	else if (type == TYPE_EXTRUDER) {
-		PyObject *offset = get_object("offset", dict);
-		PyArg_ParseTuple(offset, "ddd", &shmem->floats[100], &shmem->floats[101], &shmem->floats[102]);
-		Py_DECREF(offset);
-	}
+	PyObject *module = get_object("module", dict);
+	write_module_data(module);
 	send_to_child(CMD_WRITE_SPACE_AXIS);
 	return assert_empty_dict(dict, "write_space_axis");
 }
@@ -602,10 +537,8 @@ static PyObject *write_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_float(1, "home_pos", dict);
 	set_float(2, "limit_v", dict);
 	set_float(3, "limit_a", dict);
-	if (type >= NUM_FIXED_SPACE_TYPES) {
-		PyObject *module = get_object("module", dict);
-		write_module_data(module);
-	}
+	PyObject *module = get_object("module", dict);
+	write_module_data(module);
 	send_to_child(CMD_WRITE_SPACE_MOTOR);
 	return assert_empty_dict(dict, "write_space_motor");
 }

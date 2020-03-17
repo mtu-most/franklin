@@ -28,9 +28,9 @@
 #define loaddebug(...) do {} while(0)
 #endif
 
-bool Space::setup_nums(int na, int nm) { // {{{
+void Space::setup_nums(int na, int nm) { // {{{
 	if (na == num_axes && nm == num_motors)
-		return true;
+		return;
 	loaddebug("new space %d %d %d %d", na, nm, num_axes, num_motors);
 	int old_nm = num_motors;
 	int old_na = num_axes;
@@ -102,19 +102,34 @@ bool Space::setup_nums(int na, int nm) { // {{{
 			space_types[type].init_motor(this, m);
 		arch_motors_change();
 	}
-	return true;
 } // }}}
+
+void Space::xyz2motors() {
+	// Set default values.
+	for (int a = 0; a < num_axes; ++a)
+		motor[a]->target_pos = axis[a]->target;
+	// Override with type computations.
+	space_types[type].xyz2motors(this);
+}
+
+void Space::motors2xyz(const double *motors, double *xyz) {
+	// Set default values.
+	for (int a = 0; a < num_axes; ++a)
+		xyz[a] = motors[a];
+	// Override with type computations.
+	space_types[type].motors2xyz(this, motors, xyz);
+}
 
 void Space::load_info() { // {{{
 	loaddebug("loading space %d", id);
 	int t = type;
-	if (t < 0 || t >= num_space_types) {
+	if (t < 0 || t >= num_space_types || (t != 0 && id != 0)) {
 		debug("invalid current type?! using default type instead");
-		t = id;
+		t = 0;
 	}
 	type = shmem->ints[1];
 	loaddebug("requested type %d, current is %d", type, t);
-	if (type < 0 || type >= num_space_types || (id != 0 && type != id)) {
+	if (type < 0 || type >= num_space_types || (id != 0 && type != 0)) {
 		debug("request for type %d ignored", type);
 		type = t;
 		return;	// The rest of the info is not meant for this type, so ignore it.
@@ -131,19 +146,9 @@ void Space::load_info() { // {{{
 		}
 		space_types[t].free_space(this);
 		type_data = NULL;
-		if (!space_types[type].init_space(this)) {
-			type = id;
-			if (!space_types[type].init_space(this))
-				debug("restoring previous space type failed. Hoping for the best.");
-			for (int a = 0; a < num_axes; ++a)
-				space_types[type].init_axis(this, a);
-			for (int m = 0; m < num_motors; ++m)
-				space_types[type].init_motor(this, m);
-			reset_pos(this);
-			for (int a = 0; a < num_axes; ++a)
-				axis[a]->settings.source = axis[a]->current;
-			return;	// The rest of the info is not meant for this type, so ignore it.
-		}
+		space_types[type].init_space(this);
+		shmem->ints[3] = shmem->ints[2];
+		setup_nums(shmem->ints[2], shmem->ints[3]);
 		current_int = 0;
 		current_float = 0;
 		space_types[type].load_space(this);
@@ -170,7 +175,7 @@ void reset_pos(Space *s) { // {{{
 	double xyz[s->num_axes];
 	for (int m = 0; m < s->num_motors; ++m)
 		motors[m] = s->motor[m]->settings.current_pos;
-	space_types[s->type].motors2xyz(s, motors, xyz);
+	s->motors2xyz(motors, xyz);
 	for (int a = 0; a < s->num_axes; ++a) {
 		s->axis[a]->current = xyz[a];
 		if (!computing_move) {
@@ -253,7 +258,7 @@ void Space::load_motor(int m) { // {{{
 		// Motors without a limit switch: adjust motor position to match axes.
 		for (int a = 0; a < num_axes; ++a)
 			axis[a]->target = axis[a]->current;
-		space_types[type].xyz2motors(this);
+		xyz2motors();
 		double diff = motor[m]->target_pos - motor[m]->settings.current_pos;
 		if (!std::isnan(diff)) {
 			motor[m]->settings.current_pos += diff;
@@ -313,15 +318,4 @@ void Space::init(int space_id) { // {{{
 	axis = NULL;
 	history = NULL;
 	space_types[type].init_space(this);
-} // }}}
-
-void Space::cancel_update() { // {{{
-	// setup_nums failed; restore system to a usable state.
-	type = id;
-	int n = min(num_axes, num_motors);
-	if (!setup_nums(n, n)) {
-		debug("Failed to free memory; removing all motors and axes to make sure it works");
-		if (!setup_nums(0, 0))
-			debug("You're in trouble; this shouldn't be possible");
-	}
 } // }}}

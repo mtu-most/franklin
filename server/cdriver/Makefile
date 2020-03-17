@@ -42,8 +42,7 @@ SOURCES = \
 	serial.cpp \
 	setup.cpp \
 	space.cpp \
-	temp.cpp \
-	type-cartesian.cpp
+	temp.cpp
 
 OBJS = $(patsubst %.cpp,build/%.o,${SOURCES})
 

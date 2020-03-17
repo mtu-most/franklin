@@ -62,11 +62,6 @@ void check_position(Space *s, double *data) {
 }
 
 void load_space(Space *s) {
-	if (!s->setup_nums(3, 3)) {
-		debug("Failed to set up polar axes");
-		s->cancel_update();
-		return;
-	}
 	mySpace(s).max_r = load_float();
 }
 

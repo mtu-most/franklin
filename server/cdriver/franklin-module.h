@@ -22,11 +22,6 @@
 	void free_motor(Space *s, int m) { delete reinterpret_cast <MotorData *>(s->motor[m]->type_data); } \
 	void free_motor(Space *s, int m)
 
-static inline void save_count(int ints, int floats) {
-	shmem->ints[100] = ints;
-	shmem->ints[101] = floats;
-}
-
 static inline void save_int(int value) {
 	shmem->ints[102 + current_int++] = value;
 }
@@ -68,10 +63,6 @@ extern "C" {
         void free_space(Space *s);
         void free_axis(Space *s, int a);
         void free_motor(Space *s, int m);
-
-        // Used by extruder to handle tool offset.
-        double change0(Space *s, int axis, double value);
-        double unchange0(Space *s, int axis, double value);
 
         // Safe speed for probing, should result in 1 step per iteration.
         double probe_speed(Space *s);

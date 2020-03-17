@@ -31,10 +31,6 @@
 #define UUID_SIZE 16
 #define NUM_SPACES 3
 
-#define TYPE_CARTESIAN 0
-#define TYPE_EXTRUDER 1
-#define NUM_FIXED_SPACE_TYPES 2
-
 #define PATTERN_MAX int(9 * sizeof(double))
 
 struct MoveCommand {

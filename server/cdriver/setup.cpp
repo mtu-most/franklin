@@ -51,11 +51,9 @@ void setup()
 		if (buffer[0] != '\0' && buffer[0] != '#')
 			types.push_back(buffer);
 	}
-	num_space_types = 4 + types.size();
+	num_space_types = types.size();
 	space_types = new SpaceType[num_space_types];
-	Cartesian_init(0);
-	Extruder_init(1);
-	int type_id = 2;
+	int type_id = 0;
 	for (auto i: types) {
 		std::string filename = typepath + i + "/" + i + ".so";
 		void *handle = dlopen(filename.c_str(), RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
@@ -72,8 +70,6 @@ void setup()
 		*(void **)(&space_types[type_id].free_space) = load_sym(handle, "free_space", *(void **)&space_types[0].free_space);
 		*(void **)(&space_types[type_id].free_axis) = load_sym(handle, "free_axis", *(void **)&space_types[0].free_axis);
 		*(void **)(&space_types[type_id].free_motor) = load_sym(handle, "free_motor", *(void **)&space_types[0].free_motor);
-		*(void **)(&space_types[type_id].change0) = load_sym(handle, "change0", *(void **)&space_types[0].change0);
-		*(void **)(&space_types[type_id].unchange0) = load_sym(handle, "unchange0", *(void **)&space_types[0].unchange0);
 		*(void **)(&space_types[type_id].probe_speed) = load_sym(handle, "probe_speed", *(void **)&space_types[0].probe_speed);
 		*(void **)(&space_types[type_id].follow) = load_sym(handle, "follow", *(void **)&space_types[0].follow);
 		dlerror();

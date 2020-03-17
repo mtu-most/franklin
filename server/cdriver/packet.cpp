@@ -185,9 +185,6 @@ void request(int req) {
 		shmem->floats[0] = spaces[shmem->ints[0]].axis[shmem->ints[1]]->current;
 		//debug("getpos %d %d %f", shmem->ints[0], shmem->ints[1], shmem->floats[0]);
 		if (shmem->ints[0] == 0) {
-			for (int s = 0; s < NUM_SPACES; ++s) {
-				shmem->floats[0] = space_types[spaces[s].type].unchange0(&spaces[s], shmem->ints[1], shmem->floats[0]);
-			}
 			if (shmem->ints[1] == 2)
 				shmem->floats[0] -= zoffset;
 		}
@@ -370,7 +367,7 @@ void request(int req) {
 		shmem->floats[3] = run_find_pos(const_cast<const double *>(shmem->floats));
 		break;
 	CASE(CMD_MOTORS2XYZ)
-		space_types[spaces[shmem->ints[0]].type].motors2xyz(&spaces[shmem->ints[0]], const_cast<const double *>(shmem->floats), const_cast<double *>(&shmem->floats[shmem->ints[1]]));
+		spaces[shmem->ints[0]].motors2xyz(const_cast<const double *>(shmem->floats), const_cast<double *>(&shmem->floats[shmem->ints[1]]));
 		break;
 	default:
 		debug("unknown packet received: %x", req);

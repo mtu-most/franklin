@@ -244,10 +244,6 @@ struct SpaceType {
 	void (*free_axis)(Space *s, int a);
 	void (*free_motor)(Space *s, int m);
 
-	// Used by extruder to handle tool offset.
-	double (*change0)(Space *s, int axis, double value);
-	double (*unchange0)(Space *s, int axis, double value);
-
 	// Safe speed for probing, should result in 1 step per iteration.
 	double (*probe_speed)(Space *s);
 
@@ -269,13 +265,11 @@ struct Space {
 	void save_axis(int a);
 	void save_motor(int m);
 	void init(int space_id);
-	bool setup_nums(int na, int nm);
-	void cancel_update();
+	void setup_nums(int na, int nm);
+	void xyz2motors();
+	void motors2xyz(const double *motors, double *xyz);
 	ARCH_SPACE
 };
-
-void Cartesian_init(int num);
-void Extruder_init(int num);
 
 EXTERN SpaceType *space_types;
 EXTERN int num_space_types;

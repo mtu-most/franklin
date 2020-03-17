@@ -165,11 +165,6 @@ static void update(Space *s) {
 }
 
 void load_space(Space *s) {
-	if (!s->setup_nums(3, 3)) {
-		debug("Failed to set up delta axes");
-		s->cancel_update();
-		return;
-	}
 	mySpace(s).angle = load_float();
 	if (std::isinf(mySpace(s).angle) || std::isnan(mySpace(s).angle))
 		mySpace(s).angle = 0;

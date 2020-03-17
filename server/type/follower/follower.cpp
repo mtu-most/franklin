@@ -25,10 +25,6 @@ struct MotorData {
 
 UseMotor(MotorData);
 
-void load_space(Space *s) {
-	s->setup_nums(0, 0);
-}
-
 void load_motor(Space *s, int m) {
 	myMotor(s, m).space = load_int();
 	myMotor(s, m).motor = load_int();

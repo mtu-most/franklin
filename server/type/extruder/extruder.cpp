@@ -1,6 +1,5 @@
-/* hbot.cpp - H-Bot geometry handling for Franklin
- * Copyright 2014-2016 Michigan Technological University
- * Copyright 2016-2019 Bas Wijnen <wijnen@debian.org>
+/* extruder.cpp - Extruder geometry handling for Franklin
+ * Copyright 2019-2020 Bas Wijnen <wijnen@debian.org>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,21 +15,30 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// x = (u + v) / 2
-// y = (u - v) / 2
-
-// u = x + y
-// v = x - y
-
 #include <franklin-module.h>
 
-void xyz2motors(Space *s) {
-	s->motor[0]->target_pos = s->axis[0]->target + s->axis[1]->target;
-	s->motor[1]->target_pos = s->axis[0]->target - s->axis[1]->target;
+struct AxisData {
+	double offset[3];
+};
+
+UseAxis(AxisData);
+
+void load_axis(Space *s, int a) {
+	for (int o = 0; o < 3; ++o)
+		myAxis(s, a).offset[o] = load_float();
 }
 
-void motors2xyz(Space *s, const double *motors, double *xyz) {
-	(void)(&s);
-	xyz[0] = (motors[0] + motors[1]) / 2;
-	xyz[1] = (motors[0] - motors[1]) / 2;
+void save_axis(Space *s, int a) {
+	for (int o = 0; o < 3; ++o)
+		save_float(myAxis(s, a).offset[o]);
+}
+
+void xyz2motors(Space *s) {
+	for (int m = 0; m < s->num_motors; ++m)
+		s->motor[m]->target_pos = s->axis[m]->target;
+}
+
+void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
+	for (int m = 0; m < s->num_motors; ++m)
+		xyz[m] = motors[m];
 }

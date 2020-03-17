@@ -75,18 +75,6 @@ static void send_fragment() { // {{{
 	store_settings();
 } // }}}
 
-static void change0(int qpos) { // {{{
-	for (int s = 0; s < NUM_SPACES; ++s) {
-		Space &sp = spaces[s];
-		for (int a = 0; a < 3; ++a) {
-			if (a >= spaces[s].num_axes)
-				continue;
-			//debug("change %d %d %d %f", s, a, sp.type, queue[qpos].X[a]);
-			queue[qpos].target[a] = space_types[sp.type].change0(&sp, a, queue[qpos].target[a]);	// TODO: this should be checked.
-		}
-	}
-} // }}}
-
 // For documentation about variables used here, see struct History in cdriver.h
 void next_move(int32_t start_time) { // {{{
 	if (stopping) {
@@ -186,7 +174,6 @@ void next_move(int32_t start_time) { // {{{
 	}
 	// }}}
 
-	change0(q);
 	// Fill unspecified coordinates with previous values. {{{
 	Space &sp0 = spaces[0];
 	for (int a = 0; a < 3; ++a) {
@@ -408,14 +395,7 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 } // }}}
 
 static double move_axes(Space *s) { // {{{
-	bool ok = true;
-	space_types[s->type].xyz2motors(s);
-	// Try again if it didn't work; it should have moved target to a better location.
-	if (!ok) {
-		space_types[s->type].xyz2motors(s);
-		mdebug("retried move");
-	}
-	//mdebug("ok %d", ok);
+	s->xyz2motors();
 	double factor = 1;
 	//*
 	for (int m = 0; m < s->num_motors; ++m) {

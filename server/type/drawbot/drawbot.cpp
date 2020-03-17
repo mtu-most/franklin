@@ -23,14 +23,6 @@ struct MotorData {
 
 UseMotor(MotorData);
 
-void load_space(Space *s) {
-	if (!s->setup_nums(3, 3)) {
-		debug("Failed to set up drawbot axes");
-		s->cancel_update();
-		return;
-	}
-}
-
 void load_motor(Space *s, int m) {
 	myMotor(s, m).x = load_float();
 	myMotor(s, m).y = load_float();
@@ -47,8 +39,6 @@ void xyz2motors(Space *s) {
 		double dy = s->axis[1]->target - myMotor(s, m).y;
 		s->motor[m]->target_pos = sqrt(dx * dx + dy * dy);
 	}
-	for (int m = 2; m < s->num_motors; ++m)
-		s->motor[m]->target_pos = s->axis[m]->target;
 }
 
 void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
@@ -72,5 +62,4 @@ void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
 
 	xyz[0] = myMotor(s, 0).x + AD * uv[0] + CD * down[0];
 	xyz[1] = myMotor(s, 0).y + AD * uv[1] + CD * down[1];
-	xyz[2] = motors[2];
 }
