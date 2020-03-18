@@ -17,11 +17,7 @@
 
 #include <franklin-module.h>
 
-struct AxisData {
-	double offset[3];
-};
-
-UseAxis(AxisData);
+UseAxis(ExtruderAxisData);
 
 void load_axis(Space *s, int a) {
 	for (int o = 0; o < 3; ++o)
@@ -34,11 +30,11 @@ void save_axis(Space *s, int a) {
 }
 
 void xyz2motors(Space *s) {
-	for (int m = 0; m < s->num_motors; ++m)
-		s->motor[m]->target_pos = s->axis[m]->target;
+	(void)&s;
 }
 
 void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
-	for (int m = 0; m < s->num_motors; ++m)
-		xyz[m] = motors[m];
+	(void)&s;
+	(void)&motors;
+	(void)&xyz;
 }

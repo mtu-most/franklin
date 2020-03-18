@@ -403,17 +403,14 @@ static double move_axes(Space *s) { // {{{
 		//	debug("check move %d %d time %f target %f current %f", s->id, m, settings.hwtime / 1e6, s->motor[m]->settings.target_pos, s->motor[m]->settings.current_pos);
 		double distance = std::fabs(s->motor[m]->target_pos - s->motor[m]->settings.current_pos);
 		Motor *limit_mtr;
-		if (single)
+		if (single || s->id != 2)
 			limit_mtr = s->motor[m];
 		else {
-			int target = space_types[s->type].follow(s, m);
-			int fs = (target >> 8) & 0xff;
-			if (fs == 0xff)
+			FollowerMotorData *data = reinterpret_cast <FollowerMotorData *>(s->motor[m]->type_data);
+			if (data->space < 0 || data->space > 1 || data->motor < 0 || data->motor >= spaces[data->space].num_motors)
 				limit_mtr = s->motor[m];
-			else {
-				int fa = target & 0xff;
-				limit_mtr = spaces[fs].motor[fa];
-			}
+			else
+				limit_mtr = spaces[data->space].motor[data->motor];
 		}
 		check_distance(s->id, m, s->motor[m], limit_mtr, distance, settings.hwtime_step / 1e6, factor);
 	}
@@ -488,14 +485,9 @@ static void do_steps(double old_factor) { // {{{
 			//debug("new cp: %d %d %f %d", s, m, target, current_fragment_pos);
 			if (!single) {
 				for (int mm = 0; mm < spaces[2].num_motors; ++mm) {
-					int fm = space_types[spaces[2].type].follow(&spaces[2], mm);
-					int fs = (fm >> 8) & 0xff;
-					if (fm == 0xff)
+					FollowerMotorData *data = reinterpret_cast <FollowerMotorData *>(spaces[2].motor[mm]->type_data);
+					if (data->space != s || data->motor != m)
 						continue;
-					fm &= 0x7f;
-					if (fs != s || fm != m || (fs == 2 && fm >= mm))
-						continue;
-					//debug("follow %d %d %d %d %d %f %f", s, m, fs, fm, mm, target, mtr.settings.current_pos);
 					spaces[2].motor[mm]->settings.current_pos += target - mtr.settings.current_pos;
 				}
 			}
@@ -1367,12 +1359,16 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 			}
 			else {
 				// use leader limits with fallback to global limits.
-				int sm = space_types[spaces[2].type].follow(&spaces[2], ~tool);
-				int fs = (sm >> 8) & 0xff;
-				int fm = sm & 0xff;
-				if (fs < NUM_SPACES && fm >= 0 && fm < spaces[fs].num_motors) {
-					vmax = spaces[fs].motor[fm]->limit_v;
-					amax = spaces[fs].motor[fm]->limit_a;
+				if (~tool < spaces[2].num_motors) {
+					FollowerMotorData *data = reinterpret_cast <FollowerMotorData *>(spaces[2].motor[~tool]->type_data);
+					if (data->space >= 0 && data->space <= 1 && data->motor >= 0 && data->motor < spaces[data->space].num_motors) {
+						vmax = spaces[data->space].motor[data->motor]->limit_v;
+						amax = spaces[data->space].motor[data->motor]->limit_a;
+					}
+					else {
+						vmax = max_v;
+						amax = max_a;
+					}
 				}
 				else {
 					vmax = max_v;

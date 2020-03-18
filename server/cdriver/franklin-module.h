@@ -66,9 +66,6 @@ extern "C" {
 
         // Safe speed for probing, should result in 1 step per iteration.
         double probe_speed(Space *s);
-
-        // Internal function for follower space.
-        int follow(Space *s, int motor);
 }
 
 #endif

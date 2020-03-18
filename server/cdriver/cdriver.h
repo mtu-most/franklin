@@ -95,6 +95,10 @@ extern SingleByteCommands cmd_ack[4];
 extern SingleByteCommands cmd_nack[4];
 extern SingleByteCommands cmd_stall[4];
 
+// Extruder and follower type data.
+struct ExtruderAxisData { double offset[3]; };
+struct FollowerMotorData { int space, motor; };
+
 // All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp {
 	// See temp.c from definition of calibration constants.
@@ -246,9 +250,6 @@ struct SpaceType {
 
 	// Safe speed for probing, should result in 1 step per iteration.
 	double (*probe_speed)(Space *s);
-
-	// Internal function for follower space.
-	int (*follow)(Space *s, int motor);
 };
 
 struct Space {

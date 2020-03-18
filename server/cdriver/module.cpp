@@ -354,7 +354,8 @@ static void set_float(int num, char const *name, PyObject *dict) {
 }
 
 static PyObject *get_object(char const *name, PyObject *dict) {
-	FUNCTION_START;
+	if (DEBUG_FUNCTIONS)
+		debug("get_object %s", name);
 	PyObject *value = PyMapping_GetItemString(dict, name);
 	if (!value) {
 		debug("Requested object %s not found", name);

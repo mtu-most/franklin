@@ -123,13 +123,14 @@ void Space::motors2xyz(const double *motors, double *xyz) {
 void Space::load_info() { // {{{
 	loaddebug("loading space %d", id);
 	int t = type;
-	if (t < 0 || t >= num_space_types || (t != 0 && id != 0)) {
+	if (t < 0 || t >= num_space_types || (t != id && id != 0)) {
 		debug("invalid current type?! using default type instead");
 		t = 0;
 	}
 	type = shmem->ints[1];
+	shmem->ints[3] = shmem->ints[2];
 	loaddebug("requested type %d, current is %d", type, t);
-	if (type < 0 || type >= num_space_types || (id != 0 && type != 0)) {
+	if (type < 0 || type >= num_space_types || (id != 0 && type != id)) {
 		debug("request for type %d ignored", type);
 		type = t;
 		return;	// The rest of the info is not meant for this type, so ignore it.
@@ -147,20 +148,16 @@ void Space::load_info() { // {{{
 		space_types[t].free_space(this);
 		type_data = NULL;
 		space_types[type].init_space(this);
-		shmem->ints[3] = shmem->ints[2];
-		setup_nums(shmem->ints[2], shmem->ints[3]);
-		current_int = 0;
-		current_float = 0;
-		space_types[type].load_space(this);
+	}
+	setup_nums(shmem->ints[2], shmem->ints[3]);
+	current_int = 0;
+	current_float = 0;
+	space_types[type].load_space(this);
+	if (t != type) {
 		for (int a = 0; a < num_axes; ++a)
 			space_types[type].init_axis(this, a);
 		for (int m = 0; m < num_motors; ++m)
 			space_types[type].init_motor(this, m);
-	}
-	else {
-		current_int = 0;
-		current_float = 0;
-		space_types[type].load_space(this);
 	}
 	if (current_int != shmem->ints[100] || current_float != shmem->ints[101]) {
 		debug("Warning: load_space (for type %d) did not use correct number of parameters: ints/floats given = %d/%d, used = %d/%d", type, shmem->ints[100], shmem->ints[101], current_int, current_float);

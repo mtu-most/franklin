@@ -118,8 +118,8 @@ for m in open(modulepath):
 					assert name[-1][1] is None
 					name[-1][1] = value
 				elif key == 'axes':
-					assert ret['min_axes'] is None
-					ret['min_axes'] = int(value)
+					assert ret['min-axes'] is None
+					ret['min-axes'] = int(value)
 				else:
 					raise AssertionError('this should not be reached')
 			else:
@@ -1335,8 +1335,10 @@ class Machine: # {{{
 			'''Prepare data for sending to cdriver'''
 			ret = []
 			for key, value in info:
-				assert key in data
-				ret.append(type(value)(data[key]))
+				if key in data:
+					ret.append(type(value)(data[key]))
+				else:
+					ret.append(value)
 			return ret
 		def read(self):
 			self.read_info()
@@ -2550,7 +2552,7 @@ class Machine: # {{{
 		else:
 			num_axes = len(self.spaces[space].axis)
 		num_motors = num_axes
-		if not hasattr(self.spaces[space], 'module'):
+		if old_type != self.spaces[space].type or not hasattr(self.spaces[space], 'module'):
 			self.spaces[space].module = {key: value for key, value in typeinfo[self.spaces[space].type]['space']}
 		if 'module' in ka:
 			module_data = ka.pop('module')

@@ -19,11 +19,7 @@
 
 #include <franklin-module.h>
 
-struct MotorData {
-	int space, motor;
-};
-
-UseMotor(MotorData);
+UseMotor(FollowerMotorData);
 
 void load_motor(Space *s, int m) {
 	myMotor(s, m).space = load_int();
@@ -47,16 +43,4 @@ void motors2xyz(Space *s, const double motors[3], double xyz[3]) {
 	(void)&xyz;
 	debug("motors2xyz should not be called for follower space");
 	abort();
-}
-
-int follow(Space *s, int motor) {
-	if (motor >= 0 && motor < s->num_motors) {
-		int fs = myMotor(s, motor).space;
-		if (fs >= 0 && fs < NUM_SPACES) {
-			int fm = myMotor(s, motor).motor;
-			if (fm >= 0 && fm < spaces[fs].num_motors)
-				return (fs << 8) | fm;
-		}
-	}
-	return 0xff << 8;
 }

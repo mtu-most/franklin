@@ -840,18 +840,21 @@ void arch_motor_change(uint8_t s, uint8_t sm) { // {{{
 		mininvert = mtr.limit_min_pin.inverted();
 		maxinvert = mtr.limit_max_pin.inverted();
 	}
-	int fm = space_types[spaces[s].type].follow(&spaces[s], sm);
-	int fs = (fm >> 8) & 0xff;
-	if (fs != 0xff) {
-		fm &= 0x7f;
-		if (spaces[s].motor[sm]->dir_pin.inverted() ^ spaces[fs].motor[fm]->dir_pin.inverted())
-			fm |= 0x80;
-		for (int fi = 0; fi < fs; ++fi)
-			fm += spaces[fi].num_motors;
-		avr_buffer[6] = fm;
-	}
-	else
+	if (s != 2)
 		avr_buffer[6] = 0xff;
+	else {
+		FollowerMotorData *data = reinterpret_cast <FollowerMotorData *>(mtr.type_data);
+		if (data->space < 0 || data->space >= 1 || data->motor < 0 || data->motor >= spaces[data->space].num_motors)
+			avr_buffer[6] = 0xff;
+		else {
+			int fm = data->motor;
+			for (int i = 0; i < data->space; ++i)
+				fm += spaces[i].num_motors;
+			if (mtr.dir_pin.inverted() ^ spaces[data->space].motor[data->motor]->dir_pin.inverted())
+				fm |= 0x80;
+			avr_buffer[6] = fm;
+		}
+	}
 	// Flags is a bitmask of:
 	// 1: step pin is inverted.
 	// 2: motor is pattern channel.

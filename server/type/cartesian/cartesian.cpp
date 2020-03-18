@@ -97,9 +97,3 @@ double probe_speed(Space *s) { // {{{
 		return 1e6 / settings.hwtime_step / s->motor[2]->steps_per_unit;
 	return INFINITY;
 } // }}}
-
-int follow(Space *s, int motor) { // {{{
-	(void)&s;
-	(void)&motor;
-	return 0xff << 8;
-} // }}}

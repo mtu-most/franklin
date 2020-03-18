@@ -71,7 +71,6 @@ void setup()
 		*(void **)(&space_types[type_id].free_axis) = load_sym(handle, "free_axis", *(void **)&space_types[0].free_axis);
 		*(void **)(&space_types[type_id].free_motor) = load_sym(handle, "free_motor", *(void **)&space_types[0].free_motor);
 		*(void **)(&space_types[type_id].probe_speed) = load_sym(handle, "probe_speed", *(void **)&space_types[0].probe_speed);
-		*(void **)(&space_types[type_id].follow) = load_sym(handle, "follow", *(void **)&space_types[0].follow);
 		dlerror();
 		*(void **)(&space_types[type_id].xyz2motors) = dlsym(handle, "xyz2motors");
 		*(void **)(&space_types[type_id].motors2xyz) = dlsym(handle, "motors2xyz");
