@@ -19,6 +19,7 @@
 
 struct SpaceData {
 	double max_r;
+	SpaceData() : max_r(200) {}
 };
 
 UseSpace(SpaceData);

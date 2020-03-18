@@ -15,7 +15,7 @@ install:
 clean:
 	rm -f ${targets}
 
-%.so: %.o Makefile ../cdriver/cdriver.h ../cdriver/franklin-module.h
+%.so: %.o Makefile ../cdriver/cdriver.h ../cdriver/franklin-module.h ../cdriver/arch-avr.h ../cdriver/module.h
 	g++ -ggdb3 -Wall -Wextra -shared -fPIC $< -o $@
 	mkdir -p ../html/type
 	ln -sf ../../type/$(patsubst %.o,%.js,$<) ../html/type/

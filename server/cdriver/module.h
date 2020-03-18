@@ -33,6 +33,16 @@
 
 #define PATTERN_MAX int(9 * sizeof(double))
 
+// Extruder and follower type data.
+struct ExtruderAxisData {
+	double offset[3];
+	ExtruderAxisData() : offset{0,0,0} {}
+};
+struct FollowerMotorData {
+	int space, motor;
+	FollowerMotorData() : space(-1), motor(0) {}
+};
+
 struct MoveCommand {
 	bool cb;
 	int probe, single, reverse;
@@ -246,6 +256,8 @@ extern "C" {
 	// Globals
 	EXTERN double max_deviation;
 	EXTERN double max_v, max_a, max_J;
+	EXTERN int num_extruders;
+	EXTERN ExtruderAxisData *extruder_data;
 
 	void parse_error(void *errors, char const *format, ...);
 	void parse_gcode(std::string const &infilename, std::string const &outfilename, void *errors);

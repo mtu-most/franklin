@@ -95,10 +95,6 @@ extern SingleByteCommands cmd_ack[4];
 extern SingleByteCommands cmd_nack[4];
 extern SingleByteCommands cmd_stall[4];
 
-// Extruder and follower type data.
-struct ExtruderAxisData { double offset[3]; };
-struct FollowerMotorData { int space, motor; };
-
 // All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp {
 	// See temp.c from definition of calibration constants.

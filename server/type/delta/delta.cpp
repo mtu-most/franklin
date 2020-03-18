@@ -21,12 +21,14 @@
 
 struct SpaceData {
 	double angle;			// Adjust the front of the machine.
+	SpaceData() : angle(0) {}
 };
 
 struct MotorData {
 	double axis_min, axis_max;	// Limits for the movement of this axis.
 	double rodlength, radius;	// Length of the tie rod and the horizontal distance between the vertical position and the zero position.
 	double x, y, z;		// Position of tower on the base plane, and the carriage height at zero position.
+	MotorData() : axis_min(0), axis_max(INFINITY), rodlength(250), radius(126) {}
 };
 
 UseSpace(SpaceData);

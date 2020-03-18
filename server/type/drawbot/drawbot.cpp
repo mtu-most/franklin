@@ -19,6 +19,7 @@
 
 struct MotorData {
 	double x, y;
+	MotorData() : x(0), y(0) {}
 };
 
 UseMotor(MotorData);
