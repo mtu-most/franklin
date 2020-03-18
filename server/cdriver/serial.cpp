@@ -123,7 +123,7 @@ bool serial(bool allow_pending) { // {{{
 				//debug("Silence, but handle data first");
 			}
 			else {
-				//debug("Too much silence; request packet to be sure");
+				debug("Too much silence; request packet to be sure");
 				write_nack();
 				resend(out_busy);
 				last_micros = utm;
@@ -232,6 +232,7 @@ bool serial(bool allow_pending) { // {{{
 			case CMD_NACK0:
 			{
 				// Nack: the host didn't properly receive the packet: resend.
+				//debug("nack received");
 				int amount = ((ff_out - which - 1) & 3) + 1;
 				resend(amount);
 				continue;
@@ -300,8 +301,7 @@ bool serial(bool allow_pending) { // {{{
 			fprintf(stderr, " %02x", command[command_end + i]);
 		fprintf(stderr, "\n");
 #endif // }}}
-		if (!expected_replies)
-			last_micros = utime();
+		last_micros = utime();
 		command_end += len;
 		if (command_end < cmd_len) {
 #ifdef DEBUG_SERIAL // {{{

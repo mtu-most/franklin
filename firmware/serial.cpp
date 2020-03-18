@@ -319,7 +319,9 @@ void serial() { // {{{
 	{
 		// Wrong: this must be a retry to send the previous packet, so our ack was lost.
 		// Resend the ack, but don't do anything (the action has already been taken).
-		debug("duplicate %d %d len: %d", ff_in, which, cmd_len);
+		// Don't complain about pings, those are part of the handshake.
+		if ((*serial_buffer_tail & 0x1f) != CMD_PING)
+			debug("duplicate command %x len: %d", *serial_buffer_tail, cmd_len);
 #ifdef DEBUG_FF
 		debug("old ff_in: %d", ff_in);
 #endif

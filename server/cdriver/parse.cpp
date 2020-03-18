@@ -189,7 +189,11 @@ void Parser::handle_coordinate(double value, int index, bool *controlled, bool r
 		*controlled = false;
 		rel = false;
 	}
-	pos[index] = (rel ? pos[index] : 0) + value * unit;
+	if (rel)
+		pos[index] += value * unit;
+	else {
+		pos[index] = extruder_data[current_tool].offset[index] + value * unit;
+	}
 } // }}}
 
 static double inner(double a[3], double b[3]) { // {{{

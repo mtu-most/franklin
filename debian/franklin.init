@@ -27,12 +27,6 @@ CONFIG_FILE=/etc/default/franklin
 # Location of log file or directory.  Set to /var/log/franklin to enable logging in the default location.
 #LOG=
 
-# Regular expression of default printer; normally empty.
-#PRINTER=''
-
-# Enable or disable arc detection in G-Code.
-#ARC=True
-
 # The server keeps a list of serial ports on the system.  If this is set to
 # yes, it tries to connect to a printer on any new port (and at startup, on any
 # port).
@@ -57,6 +51,7 @@ CONFIG_FILE=/etc/default/franklin
 #ALLOW_SYSTEM='$'
 
 # Required credentials for different roles.
+#REMOTEPWD=''
 #USERPWD=''
 #EXPERTPWD=''
 #ADMINPWD=''
@@ -84,22 +79,21 @@ DESC="Server for RepRap 3-D printers"
 DAEMON=/usr/bin/franklin
 ARGS=(--quiet --make-pidfile --pidfile "$PIDFILE" --chuid franklin3d:franklin3d)
 START_ARGS=("${ARGS[@]}" --background --oknodo --start --startas "$DAEMON" -- --system)
-if [ -v AUTODETECT ] ; then	START_ARGS+=(--autodetect="$AUTODETECT") ; fi
-if [ -v ARC ] ; then		START_ARGS+=(--arc="$ARC") ; fi
+if [ x"$AUTODETECT" = xFalse ] ; then	START_ARGS+=(--noautodetect) ; fi
 if [ -v PREDETECT ] ; then	START_ARGS+=(--predetect="$PREDETECT") ; fi
 if [ -v CONTROLLER ] ; then	START_ARGS+=(--controller="$CONTROLLER") ; fi
 if [ -v PORT ] ; then		START_ARGS+=(--port="$PORT") ; fi
 if [ -v ADDRESS ] ; then	START_ARGS+=(--address="$ADDRESS") ; fi
-if [ -v TLS ] ; then		START_ARGS+=(--tls="$TLS") ; fi
+if [ x"$TLS" = xTrue ] ; then	START_ARGS+=(--tls) ; fi
 if [ -v LOG ] ; then		START_ARGS+=(--log="$LOG") ; fi
-if [ -v PRINTER ] ; then	START_ARGS+=(--printer="$PRINTER") ; fi
 if [ -v WHITELIST ] ; then	START_ARGS+=(--whitelist="$WHITELIST") ; fi
 if [ -v BLACKLIST ] ; then	START_ARGS+=(--blacklist="$BLACKLIST") ; fi
 if [ -v ADD_BLACKLIST ] ; then	START_ARGS+=(--add-blacklist="$ADD_BLACKLIST") ; fi
 if [ -v ALLOW_SYSTEM ] ; then	START_ARGS+=(--allow-system="$ALLOW_SYSTEM") ; fi
-if [ -v USERPWD ] ; then		START_ARGS+=(--user="$USERPWD") ; fi
-if [ -v EXPERTPWD ] ; then		START_ARGS+=(--expert="$EXPERTPWD") ; fi
-if [ -v ADMINPWD ] ; then		START_ARGS+=(--admin="$ADMINPWD") ; fi
+if [ -v REMOTEPWD ] ; then	START_ARGS+=(--remote="$REMOTEPWD") ; fi
+if [ -v USERPWD ] ; then	START_ARGS+=(--user="$USERPWD") ; fi
+if [ -v EXPERTPWD ] ; then	START_ARGS+=(--expert="$EXPERTPWD") ; fi
+if [ -v ADMINPWD ] ; then	START_ARGS+=(--admin="$ADMINPWD") ; fi
 if [ -v DONE ] ; then		START_ARGS+=(--done="$DONE") ; fi
 STOP_ARGS=("${ARGS[@]}" --oknodo --stop)
 

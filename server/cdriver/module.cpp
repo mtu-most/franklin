@@ -425,7 +425,7 @@ static PyObject *read_space_info(PyObject *Py_UNUSED(self), PyObject *args) {
 		for (int i = 0; i < min(num_extruders, shmem->ints[2]); ++i)
 			new_data[i] = extruder_data[i];
 		for (int i = num_extruders; i < shmem->ints[2]; ++i) {
-			for (int j = 0; j < 3; ++j)
+			for (int j = 0; j < 6; ++j)
 				new_data[i].offset[j] = 0;
 		}
 		delete[] extruder_data;
@@ -449,7 +449,7 @@ static PyObject *read_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 	PyObject *module_data = read_module_data();
 	if (shmem->ints[0] == 1) {
 		// Store extruder data on the Python-side for use during parsing.
-		for (int i = 0; i < 3; ++i)
+		for (int i = 0; i < 6; ++i)
 			extruder_data[shmem->ints[1]].offset[i] = shmem->floats[100 + i];
 		//for (int a = 0; a < num_extruders; ++a)
 		//	debug("extruder %d/%d: %.2f,%.2f,%.2f", a, num_extruders, extruder_data[a].offset[0], extruder_data[a].offset[1], extruder_data[a].offset[2]);

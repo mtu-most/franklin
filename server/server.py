@@ -45,7 +45,7 @@ is in a configuration file):
 * add-blacklist: same as blacklist.  However, add-blacklist has a empty
   default, so it can be used to add ports to the standard blacklist, as opposed
   to replacing it.
-* autodetect: if true, communication is attempted on newly detected ports.
+* noautodetect: if not set, communication is attempted on newly detected ports.
   This is normally good, but it can be disabled if autodetection prevents
   flashing new firmware, or if it is unclear which ports should be blacklisted
   and Franklin must not interfere with some ports.  Default: True
@@ -105,33 +105,32 @@ import traceback
 import fcntl
 import protocol
 
-config = fhs.init(packagename = 'franklin', config = {
-		'port': '8000',	# Port to listen on.
-		'address': '',	# Address to listen on.  Mainly intended for RPi, which cannot handle IPv6 and needs 0.0.0.0 here to force IPv4.
-		'whitelist': r'', # Which serial ports to attempt detecting on. Ports that are both whitelisted and blacklisted are not included.
-		'blacklist': r'/dev/(input/.*|ptmx|console|tty(printk|(GS)?\d*))$', # Which serial ports to refuse detecting on.
-		'add-blacklist': r'$',	# Which serial ports to additionally refuse detecting on.  Used to add ports to the list without losing the defaults.
-		'autodetect': True,	# Whether new machines are autodetected on new ports, and after flashing.
-		'predetect': 'stty -F $PORT raw 115200 -echo -echoe -echok -echoke -echonl -echoprt',	# What to do to a port before detecting a machine.
-		'controller': '/usr/lib/franklin/controller.py --dev "$PORT"',	# How to start a controller subprocess
-		'allow-system': '^$',	# Which commands are allowed through system comments in G-Code.
-		'admin': '',	# Admin password.
-		'expert': '',	# Expert password.
-		'user': '',	# User password.
-		'remote': '',	# Remote password.
-		'done': '',	# Program to run when a job is done.
-		'log': '',	# Enable logging to a given logfile.
-		'tls': 'False',	# Whether TLS is used on the network connection.  If using Apache's virtual proxy method, this must be False, because Apache handles the encryption.
-		'arc': False,	# Whether arc detection in G-Code is enabled.  This is False by default, because it is broken.
-	})
+fhs.option('port', 'Port to listen on', default = '8000')
+fhs.option('address', 'Address to listen on. Set to 0.0.0.0 to force IPv4 only', default = '')
+fhs.option('whitelist', 'If set, only allow serial ports that match this regular expression', default = '')
+fhs.option('blacklist', 'Disallow serial ports that match this regular expression', default = r'/dev/(input/.*|ptmx|console|tty(printk|(GS)?\d*))$')
+fhs.option('add-blacklist', 'Also disallow serial ports that match this regular expression', default = r'^$')
+fhs.option('noautodetect', 'Do not autodetect machines on new serial ports', argtype = bool)
+fhs.option('predetect', 'Run this command prior to detecting a machine on a serial port', default = 'stty -F $PORT raw 115200 -echo -echoe -echok -echoke -echonl -echoprt')
+fhs.option('controller', 'Run this command to handle a controller on a serial port', default = '/usr/lib/franklin/controller.py --dev "$PORT"')
+fhs.option('allow-system', 'Only allow system commands that match this regular expression', default = '^$')
+fhs.option('admin', 'Admin password', default = '')
+fhs.option('expert', 'Expert user password', default = '')
+fhs.option('user', 'Local user password', default = '')
+fhs.option('remote', 'Remote user password', default = '')
+fhs.option('done', 'Run this command when a job is done', default = '')
+fhs.option('log', 'Enable logging to a given logfile')
+fhs.option('tls', 'Enable TLS. It is recommended to let Apache handle this', argtype = bool)
+config = fhs.init(packagename = 'franklin')
 # }}}
 
 # Global variables. {{{
 httpd = None
 ports = {}
-autodetect = config['autodetect']
-tls = config['tls'].lower() == 'true'
+autodetect = not config['noautodetect']
+tls = config['tls']
 machines = {}
+log('whitelist: %s' % config['whitelist'])
 # }}}
 
 class Server(websocketd.RPChttpd): # {{{
@@ -757,7 +756,7 @@ def detect(port): # {{{
 	broadcast(None, 'port_state', port, 1)
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
-		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', '-', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', '-', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 		machines[port] = Machine(port, process, run_id)
 		ports[port] = port
 		return False
@@ -877,7 +876,7 @@ def detect(port): # {{{
 				# Close detect port so it doesn't interfere.
 				machine.close()
 				#log('machines: %s' % repr(tuple(machines.keys())))
-				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid if uuid is not None else '', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid if uuid is not None else '', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 				new_machine = Machine(port, process, run_id, send = False)
 				def finish():
 					log('finish detect %s' % repr(uuid))
@@ -937,7 +936,7 @@ except OSError:
 def create_machine(uuid = None): # {{{
 	if uuid is None:
 		uuid = protocol.new_uuid()
-	process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()) + (('--arc', 'False') if not config['arc'] else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+	process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
 	machines[uuid] = Machine(None, process, None)
 	return uuid
 # }}}

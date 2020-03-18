@@ -35,8 +35,8 @@
 
 // Extruder and follower type data.
 struct ExtruderAxisData {
-	double offset[3];
-	ExtruderAxisData() : offset{0,0,0} {}
+	double offset[6];
+	ExtruderAxisData() : offset{0,0,0,0,0,0} {}
 };
 struct FollowerMotorData {
 	int space, motor;

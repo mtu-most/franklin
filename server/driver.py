@@ -61,13 +61,9 @@ record_format = '=Bi' + 'd' * 11 + 'q' # type, tool, X[3], h[3], Jg, tf, v0, E, 
 type_names = []
 # }}}
 
-config = fhs.init(packagename = 'franklin', config = { # {{{
-	'allow-system': None,
-	'uuid': None,
-	'local': False,
-	'arc': True
-	})
-# }}}
+fhs.option('allow-system', 'Regular expression of allowed system commands', default = '')
+fhs.option('uuid', 'Machine uuid')
+config = fhs.init(packagename = 'franklin')
 
 # Load space type modules {{{
 modulepath = fhs.read_data(os.path.join('type', 'types.txt'), opened = False)
