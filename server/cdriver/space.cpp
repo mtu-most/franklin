@@ -86,6 +86,7 @@ void Space::setup_nums(int na, int nm) { // {{{
 			new_motors[m]->last_v = NAN;
 			new_motors[m]->target_pos = NAN;
 			new_motors[m]->settings.current_pos = 0;
+			new_motors[m]->settings.hw_pos = 0;
 			new_motors[m]->history = setup_motor_history();
 			new_motors[m]->type_data = NULL;
 			ARCH_NEW_MOTOR(id, m, new_motors);

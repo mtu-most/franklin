@@ -229,6 +229,7 @@ Motor_History *setup_motor_history() {
 	Motor_History *ret = new Motor_History[FRAGMENTS_PER_BUFFER];
 	for (int f = 0; f < FRAGMENTS_PER_BUFFER; ++f) {
 		ret[f].current_pos = 0;
+		ret[f].hw_pos = 0;
 	}
 	return ret;
 }

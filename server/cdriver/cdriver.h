@@ -38,7 +38,7 @@
 #include <sys/timerfd.h>
 #include <string>
 
-#define PROTOCOL_VERSION ((uint32_t)6)	// Required version response in BEGIN.
+#define PROTOCOL_VERSION ((uint32_t)7)	// Required version response in BEGIN.
 #define BASE_FDS 3
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
@@ -167,7 +167,8 @@ struct Resume {
 };
 
 struct Motor_History {
-	double current_pos;	// Current position of motor (in steps), and (cast to int) what the hardware currently thinks.
+	double current_pos;	// Current position of motor (in steps).
+	int hw_pos;	// What the hardware currently thinks is the current position.
 };
 
 struct Axis_History {

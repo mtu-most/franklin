@@ -135,7 +135,7 @@ void packet()
 		uint8_t fpb = 0;
 		// TIME_PER_ISR is the time that is spent in a single ISR.
 		// Set full_phase_bits so that it is as high as possible given that limit.
-		while (time_per_sample / TIME_PER_ISR >= uint16_t(1) << fpb)
+		while (fpb < 8 && time_per_sample / TIME_PER_ISR >= uint16_t(1) << fpb)
 			fpb += 1;
 		fpb -= 1;
 		cli();

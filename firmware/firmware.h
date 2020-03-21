@@ -28,7 +28,7 @@
 
 #define ID_SIZE 8	// Number of bytes in machineid; 8.
 #define UUID_SIZE 16	// Number of bytes in uuid; 16.
-#define PROTOCOL_VERSION 6
+#define PROTOCOL_VERSION 7
 
 #define ADC_INTERVAL 1000	// Delay 1 ms between ADC measurements.
 
@@ -320,7 +320,7 @@ struct Motor
 	volatile int32_t current_pos;
 	uint8_t step_pin;
 	uint8_t dir_pin;
-	volatile uint8_t steps_current;
+	volatile uint16_t steps_current;
 	uint8_t limit_min_pin;
 	uint8_t limit_max_pin;
 	uint8_t follow;

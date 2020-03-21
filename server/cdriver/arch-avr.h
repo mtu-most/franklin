@@ -318,22 +318,21 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 	int mi = 0;
 	for (int ts = 0; ts < NUM_SPACES; mi += spaces[ts++].num_motors) {
 		for (int tm = 0; tm < spaces[ts].num_motors; ++tm) {
-			double old = spaces[ts].motor[tm]->settings.current_pos;
-			double p = 0;
+			int old_hw = spaces[ts].motor[tm]->settings.hw_pos;
+			int p = 0;
 			for (int i = 0; i < 4; ++i) {
 				p += int(uint8_t(command[offset + 4 * (tm + mi) + i])) << (i * 8);
 			}
-			p /= spaces[ts].motor[tm]->steps_per_unit;
 			if (spaces[ts].motor[tm]->dir_pin.inverted())
 				p *= -1;
-			p -= avr_pos_offset[tm + mi];
 			if (check) {
-				if (arch_round_pos(ts, tm, old) != arch_round_pos(ts, tm, p)) {
+				if (old_hw != p) {
 					if (ts != 2) {	// followers are expected to go out of sync all the time.
-						debug("WARNING: position for %d %d out of sync!  old = %f, new = %f (difference = %f), offset = %f", ts, tm, old, p, p - old, avr_pos_offset[tm + mi]);
+						debug("WARNING: position for %d %d out of sync!  old = %d, new = %d (difference = %d), offset = %f", ts, tm, old_hw, p, p - old_hw, avr_pos_offset[tm + mi]);
 						have_error += 1;
 					}
-					spaces[ts].motor[tm]->settings.current_pos = p;
+					spaces[ts].motor[tm]->settings.current_pos = p / spaces[ts].motor[tm]->steps_per_unit - avr_pos_offset[tm + mi];
+					spaces[ts].motor[tm]->settings.hw_pos = p;
 				}
 				//else {
 					//debug("Check: position for %d %d in sync, old = %f, new = %f offset = %f", ts, tm, old, p, avr_pos_offset[tm + mi]);
@@ -341,9 +340,11 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 			}
 			else {
 				// Motor positions were unknown; no check, just update position.
-				if (arch_round_pos(ts, tm, old) != arch_round_pos(ts, tm, p)) {
-					cpdebug(ts, tm, "update current pos from %f to %f", spaces[ts].motor[tm]->settings.current_pos, p);
-					spaces[ts].motor[tm]->settings.current_pos = p;
+				if (old_hw != p) {
+					double new_pos = p / spaces[ts].motor[tm]->steps_per_unit - avr_pos_offset[tm + mi];
+					cpdebug(ts, tm, "update current pos from %f to %f", spaces[ts].motor[tm]->settings.current_pos, new_pos);
+					spaces[ts].motor[tm]->settings.current_pos = new_pos;
+					spaces[ts].motor[tm]->settings.hw_pos = p;
 				}
 			}
 		}
@@ -549,6 +550,7 @@ bool hwpacket(int len) { // {{{
 				RESET(spaces[s].motor[m]->dir_pin);
 				RESET(spaces[s].motor[m]->enable_pin);
 				spaces[s].motor[m]->settings.current_pos = 0;
+				spaces[s].motor[m]->settings.hw_pos = 0;
 			}
 		}
 		for (int m = 0; m < NUM_MOTORS; ++m)
@@ -1243,6 +1245,7 @@ void arch_invertpos(int s, int m) { // {{{
 		mi += spaces[st].num_motors;
 	if (mi + m >= NUM_MOTORS)
 		return;
+	spaces[s].motor[m]->settings.hw_pos *= -1;
 	if (std::isnan(spaces[s].motor[m]->settings.current_pos))
 		return;
 	avr_pos_offset[mi + m] -= 2 * (spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi + m]);

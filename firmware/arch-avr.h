@@ -765,7 +765,7 @@ static inline int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { 
 ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	asm volatile (
 		// Naked ISR, so all registers must be saved.
-		"\t"	"push 16"			"\n"
+		"\t"	"push 16"			"\n"	// step_state
 		"\t"	"in 16, __SREG__"		"\n"
 		"\t"	"push 16"			"\n"
 		// If step_state < 2: return.
@@ -777,24 +777,24 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"rjmp isr_underrun"		"\n"
 	"1:\t"						"\n"
 		// Enable interrupts, so the uart doesn't overrun.
-		"\t"	"push 27"			"\n"
+		"\t"	"push 27"			"\n"	// 0 or temporary value
 		"\t"	"clr 27"			"\n"
 		"\t"	"sts %[timsk], 27"		"\n"
 		"\t"	"sei"				"\n"
 
 		// Save all registers that are used.
-		"\t"	"push 0"			"\n"
-		"\t"	"push 1"			"\n"
-		"\t"	"push 17"			"\n"
-		"\t"	"push 20"			"\n"
-		"\t"	"push 21"			"\n"
-		"\t"	"push 24"			"\n"
-		"\t"	"push 25"			"\n"
-		"\t"	"push 26"			"\n"
-		"\t"	"push 28"			"\n"
-		"\t"	"push 29"			"\n"
-		"\t"	"push 30"			"\n"
-		"\t"	"push 31"			"\n"
+		"\t"	"push 0"			"\n"	// temporary value
+		"\t"	"push 1"			"\n"	// temporary value
+		"\t"	"push 17"			"\n"	// move phase
+		"\t"	"push 20"			"\n"	// motor flags
+		"\t"	"push 21"			"\n"	// temporary value
+		"\t"	"push 24"			"\n"	// temporary value
+		"\t"	"push 25"			"\n"	// temporary value
+		"\t"	"push 26"			"\n"	// temporary value
+		"\t"	"push 28"			"\n"	// motor pointer L
+		"\t"	"push 29"			"\n"	// motor pointer H
+		"\t"	"push 30"			"\n"	// buffer pointer L
+		"\t"	"push 31"			"\n"	// buffer pointer H
 		// move_phase += 1;
 		"\t"	"lds 17, %[move_phase]"		"\n"
 		"\t"	"inc 17"			"\n"
@@ -849,16 +849,33 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"rjmp 2f"			"\n"
 	"1:\t"		"com 0"				"\n"
 		"\t"	"and 21, 0"			"\n"
-		"\t"	"neg 24"			"\n"
 		"\t"	"set"				"\n"
 	"2:\t"						"\n"
 		// Set direction (x is port register).
 		"\t"	"st x, 21"			"\n"
 		// }}}
 
-		/* Compute steps.  <24(abs numsteps) <17(move_phase) <y(28,29)(motor) >0(steps) {{{ */
+		// Convert encoded sample into value r24 -> r24,25
+		"\t"	"clr 25"			"\n"
+		"\t"	"lsl 24"			"\n"
+	"1:\t"						"\n"
+		"\t"	"lsl 24"			"\n"
+		"\t"	"brcc 1f"			"\n"
+		"\t"	"inc 25"			"\n"
+		"\t"	"rjmp 1b"			"\n"
+	"1:\t"						"\n"
+		"\t"	"lsr 25"			"\n"
+		"\t"	"ror 24"			"\n"
+		"\t"	"lsr 25"			"\n"
+		"\t"	"ror 24"			"\n"
+
+		/* Compute steps.  <24,25(abs numsteps) <17(move_phase) <y(28,29)(motor) >0,1(steps) {{{ */
 		/* steps target = b.sample * move_phase / full_phase - m.steps_current; */
-		"\t"	"mul 24, 17"			"\n"	// r0:r1 = r24*r17
+		"\t"	"mul 25, 17"			"\n"	// r0:r1 = r24*r17
+		"\t"	"mov 26, 0"			"\n"
+		"\t"	"mul 24, 17"			"\n"
+		"\t"	"add 1, 26"			"\n"	// r0,1 is the decoded number of steps to take at full phase.
+
 		"\t"	"lds 25, %[full_phase_bits]"	"\n"
 		"\t"	"tst 25"			"\n"
 		"\t"	"rjmp 2f"			"\n"
@@ -866,12 +883,17 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"ror 0"				"\n"
 		"\t"	"dec 25"			"\n"
 	"2:\t"		"brne 1b"			"\n"
-		// r0 = (r24 * r17) >> full_phase_bits
+		// r0,1 = (r24 * r17) >> full_phase_bits
 
 		"\t"	"ldd 24, y + %[steps_current]"	"\n"
+		"\t"	"ldd 25, y + %[steps_current] + 1"	"\n"
 		"\t"	"std y + %[steps_current], 0"	"\n"	// motor[m].steps_current += steps_target;
+		"\t"	"std y + %[steps_current] + 1, 1"	"\n"
 		"\t"	"sub 0, 24"			"\n"
+		"\t"	"sbc 1, 25"			"\n"
 		/* If no steps: continue. */
+		"\t"	"brne 1f"			"\n"
+		"\t"	"tst 0"				"\n"
 		"\t"	"brne 1f"			"\n"
 		"\t"	"clr 27"			"\n"
 		"\t"	"rjmp isr_action_continue"	"\n"
@@ -883,11 +905,10 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"brts 1f"				"\n"
 		"\t"	"add 25, 0"				"\n"
 		"\t"	"std y + %[current_pos], 25"		"\n"
-		"\t"	"brcc 2f"				"\n"
 		"\t"	"ldd 25, y + %[current_pos] + 1"	"\n"
-		"\t"	"inc 25"				"\n"
+		"\t"	"adc 25, 1"				"\n"
 		"\t"	"std y + %[current_pos] + 1, 25"	"\n"
-		"\t"	"brne 2f"				"\n"
+		"\t"	"brcc 2f"				"\n"
 		"\t"	"ldd 25, y + %[current_pos] + 2"	"\n"
 		"\t"	"inc 25"				"\n"
 		"\t"	"std y + %[current_pos] + 2, 25"	"\n"
@@ -898,9 +919,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"rjmp 2f"				"\n"
 	"1:\t"		"sub 25, 0"				"\n"
 		"\t"	"std y + %[current_pos], 25"		"\n"
-		"\t"	"brcc 2f"				"\n"
 		"\t"	"ldd 25, y + %[current_pos] + 1"	"\n"
-		"\t"	"subi 25, 1"				"\n"
+		"\t"	"sub 25, 1"				"\n"
 		"\t"	"std y + %[current_pos] + 1, 25"	"\n"
 		"\t"	"brcc 2f"				"\n"
 		"\t"	"ldd 25, y + %[current_pos] + 2"	"\n"
@@ -911,39 +931,39 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"subi 25, 1"				"\n"
 		"\t"	"std y + %[current_pos] + 3, 25"	"\n"
 	"2:\t"
+		"\t"	"movw 24, 0"				"\n"
 
-		/* Set up step set and reset values. >x(26,27)(port) >25(value for on) >1(value for off)*/
+		/* Set up step set and reset values. >x(26,27)(port) >1(value for on) >0(value for off)*/
 		"\t"	"ldd 26, y + %[step_port]"	"\n"
 		"\t"	"ldd 27, y + %[step_port] + 1"	"\n"
-		"\t"	"ldd 24, y + %[step_bitmask]"	"\n"
-		"\t"	"ld 25, x"			"\n"
-		"\t"	"mov 1, 25"			"\n"
-		"\t"	"or 25, 24"			"\n"
-		"\t"	"com 24"			"\n"
-		"\t"	"and 1, 24"			"\n"
+		"\t"	"ldd 21, y + %[step_bitmask]"	"\n"
+		"\t"	"ld 0, x"			"\n"
+		"\t"	"mov 1, 0"			"\n"
+		"\t"	"or 1, 21"			"\n"
+		"\t"	"com 21"			"\n"
+		"\t"	"and 0, 21"			"\n"
 		"\t"	"sbrs 20, %[step_invert_bit]"	"\n"
 		"\t"	"rjmp 1f"			"\n"
-		/* Swap contents of 25 and 1. */
-		"\t"	"eor 25, 1"			"\n"
-		"\t"	"eor 1, 25"			"\n"
-		"\t"	"eor 25, 1"			"\n"
+		/* Swap contents of 0 and 1. */
+		"\t"	"eor 0, 1"			"\n"
+		"\t"	"eor 1, 0"			"\n"
+		"\t"	"eor 0, 1"			"\n"
 	"1:\t"						"\n"
 		ADD_DIR_DELAY
-		// Send pulses. <0(abs numsteps) <x(26,27)(port) <25(value for on) <1(value for off) Delay of 1 μs is required according to a4988 datasheet.  At 16MHz, that's 16 clock cycles.
-		"\t"	"tst 0"				"\n"
+		// Send pulses. <24,25(abs numsteps) <x(26,27)(port) <1(value for on) <0(value for off) Delay of 1 μs is required according to a4988 datasheet.  At 16MHz, that's 16 clock cycles.
+		"\t"	"sbiw 24, 0"			"\n"
 	"2:\t"		"breq 3f"			"\n"	// 1	3
 		"\t"	"nop"				"\n"	// 1	4
-		"\t"	"ldi 24, 3 + %[delay]"		"\n"	// 1	5
+		"\t"	"ldi 21, 3 + %[delay]"		"\n"	// 1	5
 		"\t"	"nop"				"\n"	// 1	6
-	"1:\t"		"dec 24"			"\n"	// n	n+6
+	"1:\t"		"dec 21"			"\n"	// n	n+6
 		"\t"	"brne 1b"			"\n"	// 2n-1	3n+5
-		"\t"	"st x, 25"			"\n"	// 2	3n+7=16 => n=3
-		"\t"	"ldi 24, 4 + %[delay]"		"\n"	// 1	1
-	"1:\t"		"dec 24"			"\n"	// m	m+1
+		"\t"	"st x, 1"			"\n"	// 2	3n+7=16 => n=3
+		"\t"	"ldi 21, 4 + %[delay]"		"\n"	// 1	1
+	"1:\t"		"dec 21"			"\n"	// m	m+1
 		"\t"	"brne 1b"			"\n"	// 2m-1	3m
-		"\t"	"dec 0"				"\n"	// 1	3m+1
-		"\t"	"nop"				"\n"	// 1	3m+2
-		"\t"	"st x, 1"			"\n"	// 2	3m+4=16 => n=4
+		"\t"	"sbiw 24, 1"			"\n"	// 2	3m+2
+		"\t"	"st x, 1"			"\n"	// 2	3m+4=16 => m=4
 		"\t"	"rjmp 2b"			"\n"	// 2	2
 	"3:\t"		"clr 27"			"\n"	// r27 is 0 again.
 		ADD_DIR_DELAY

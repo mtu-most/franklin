@@ -372,7 +372,7 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	if (probing && steps)
 		steps = s;
 	else {
-		int max = 0x78;	// Don't use 0x7f, because limiting isn't accurate.
+		int max = 0x1c0 * 0xf0;	// Don't use 0xff, because limiting isn't accurate.
 		if (abs(steps) > max) {
 			warning("overflow %d from cp %f dist %f steps/mm %f dt %f s %d max %d", steps, mtr->settings.current_pos, distance, mtr->steps_per_unit, dt, s, max);
 			steps = max * s;
@@ -479,8 +479,15 @@ static void do_steps(double old_factor) { // {{{
 					target -= adjust / mtr.steps_per_unit;
 					mtr.target_pos = target;
 				}
+				// Encode bits.
+				int sign = (diff < 0) ? -1 : 1;
+				int count = sign * diff >> 6;
+				int head = ((1 << count) - 1) << (7 - count);
+				int value = (sign < 0 ? 0x80 : 0) | head | (((sign * diff) >> count) & 0x3f);
 				//debug("sending %d %d steps %d at %d", s, m, diff, current_fragment_pos);
-				DATA_SET(s, m, diff);
+				DATA_SET(s, m, value);
+				int sent = (sign * diff) & ~((1 << count) - 1);
+				mtr.settings.hw_pos += sign * sent;
 			}
 			//debug("new cp: %d %d %f %d", s, m, target, current_fragment_pos);
 			if (!single) {
@@ -690,6 +697,7 @@ void store_settings() { // {{{
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->active = false;
 			sp.motor[m]->history[current_fragment].current_pos = sp.motor[m]->settings.current_pos;
+			sp.motor[m]->history[current_fragment].hw_pos = sp.motor[m]->settings.hw_pos;
 			cpdebug(s, m, "store");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
@@ -733,6 +741,7 @@ void restore_settings() { // {{{
 		for (int m = 0; m < sp.num_motors; ++m) {
 			sp.motor[m]->active = false;
 			sp.motor[m]->settings.current_pos = sp.motor[m]->history[current_fragment].current_pos;
+			sp.motor[m]->settings.hw_pos = sp.motor[m]->history[current_fragment].hw_pos;
 			cpdebug(s, m, "restore");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
