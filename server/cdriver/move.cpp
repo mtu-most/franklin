@@ -453,38 +453,39 @@ static void do_steps(double old_factor) { // {{{
 					//debug("activating motor %d %d", s, m);
 				}
 				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
-				if (diff > 0x7f) {
-					warning("Error on line %d: %d %d trying to send more than 127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, diff, rounded_cp, rounded_new_cp, settings.hwtime);
+				int max_steps = 0x1ff;
+				if (diff > max_steps) {
+					warning("Error on line %d: %d %d trying to send more than 0x1ff steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, diff, rounded_cp, rounded_new_cp, settings.hwtime);
 					debug_abort();
-					int adjust = diff - 0x7f;
+					int adjust = diff - max_steps;
 					if (settings.hwtime_step > settings.hwtime)
 						settings.hwtime = 0;
 					else
 						settings.hwtime -= settings.hwtime_step;
 					factor = old_factor;
-					diff = 0x7f;
+					diff = max_steps;
 					target -= adjust / mtr.steps_per_unit;
 					mtr.target_pos = target;
 				}
-				if (diff < -0x7f) {
-					warning("Error on line %d: %d %d trying to send more than -127 steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, -diff, rounded_cp, rounded_new_cp, settings.hwtime);
+				if (diff < -max_steps) {
+					warning("Error on line %d: %d %d trying to send more than -0x1ff steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, -diff, rounded_cp, rounded_new_cp, settings.hwtime);
 					debug_abort();
-					int adjust = diff + 0x7f;
+					int adjust = diff + max_steps;
 					if (settings.hwtime_step > settings.hwtime)
 						settings.hwtime = 0;
 					else
 						settings.hwtime -= settings.hwtime_step;
 					factor = old_factor;
-					diff = -0x7f;
+					diff = -max_steps;
 					target -= adjust / mtr.steps_per_unit;
 					mtr.target_pos = target;
 				}
 				// Encode bits.
 				int sign = (diff < 0) ? -1 : 1;
-				int count = sign * diff >> 6;
+				int count = (sign * diff) >> 6;
 				int head = ((1 << count) - 1) << (7 - count);
-				int value = (sign < 0 ? 0x80 : 0) | head | (((sign * diff) >> count) & 0x3f);
-				//debug("sending %d %d steps %d at %d", s, m, diff, current_fragment_pos);
+				int value = (sign < 0 ? 0x80 : 0) | head | (((sign * diff) & 0x3f) >> count);
+				//debug("sending %d %d steps %x (coded to %x) at %d", s, m, diff, value, current_fragment_pos);
 				DATA_SET(s, m, value);
 				int sent = (sign * diff) & ~((1 << count) - 1);
 				mtr.settings.hw_pos += sign * sent;

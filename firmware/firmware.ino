@@ -204,9 +204,10 @@ int main(void) {
 		}
 		arch_tick();
 		//debug("!%x %x %x %x.", enabled_pins, timeout_time, dt, last_active);
-		if (debug_value != debug_value1) {
+		if (debug_value != debug_value1 || debug_value2 != debug_value3) {
 			debug_value1 = debug_value;
-			debug("!%x.", debug_value);
+			debug_value3 = debug_value2;
+			debug("!%x.%x;", debug_value, debug_value2);
 		}
 	}
 }

@@ -525,8 +525,10 @@ bool hwpacket(int len) { // {{{
 		// Firmware resets motor positions to 0 after homing.
 		int m0 = 0;
 		for (int s = 0; s < NUM_SPACES; ++s) {
-			for (int m = 0; m < spaces[s].num_motors; ++m)
+			for (int m = 0; m < spaces[s].num_motors; ++m) {
 				avr_pos_offset[m0 + m] = -spaces[s].motor[m]->settings.current_pos;
+				spaces[s].motor[m]->settings.hw_pos = 0;
+			}
 			m0 += spaces[s].num_motors;
 		}
 		avr_write_ack("homed");
@@ -1338,7 +1340,7 @@ bool arch_send_fragment() { // {{{
 				avr_buffer[0] = single ? HWC_MOVE_SINGLE : HWC_MOVE;
 				avr_buffer[1] = mi + m;
 				for (int i = 0; i < cfp; ++i) {
-					int value = (spaces[s].motor[m]->dir_pin.inverted() ? -1 : 1) * spaces[s].motor[m]->avr_data.buffer[i];
+					int value = (spaces[s].motor[m]->dir_pin.inverted() ? 0x80 : 0) ^ spaces[s].motor[m]->avr_data.buffer[i];
 					avr_buffer[2 + i] = value;
 				}
 				if (prepare_packet(avr_buffer, 2 + cfp)) {

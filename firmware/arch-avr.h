@@ -25,8 +25,8 @@
 // Defines and includes.  {{{
 // Note: When changing this, also change max in cdriver/space.cpp
 #ifdef FAST_ISR
-// 75 is for a 16MHz crystal.
-#define TIME_PER_ISR int(75 * 16e6 / F_CPU)
+// 100 is for a 16MHz crystal.
+#define TIME_PER_ISR int(100 * 16e6 / F_CPU)
 #ifndef STEPS_DELAY // {{{
 #define STEPS_DELAY 5	// Extra delay for steps, in units of 6 clock pulses.
 #endif // }}}
@@ -871,19 +871,22 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 
 		/* Compute steps.  <24,25(abs numsteps) <17(move_phase) <y(28,29)(motor) >0,1(steps) {{{ */
 		/* steps target = b.sample * move_phase / full_phase - m.steps_current; */
+		"\t"	"clr 21"			"\n"
 		"\t"	"mul 25, 17"			"\n"	// r0:r1 = r24*r17
-		"\t"	"mov 26, 0"			"\n"
+		"\t"	"movw 26, 0"			"\n"
 		"\t"	"mul 24, 17"			"\n"
-		"\t"	"add 1, 26"			"\n"	// r0,1 is the decoded number of steps to take at full phase.
+		"\t"	"add 1, 26"			"\n"
+		"\t"	"adc 27, 21"			"\n"	// r0,1,27 is the decoded number of steps to take at full phase.
 
 		"\t"	"lds 25, %[full_phase_bits]"	"\n"
 		"\t"	"tst 25"			"\n"
 		"\t"	"rjmp 2f"			"\n"
-	"1:\t"		"lsr 1"				"\n"	// r0:r1 >>= full_phase_bits
+	"1:\t"		"lsr 27"			"\n"	// r0,1,27 >>= full_phase_bits
+		"\t"	"ror 1"				"\n"
 		"\t"	"ror 0"				"\n"
 		"\t"	"dec 25"			"\n"
 	"2:\t"		"brne 1b"			"\n"
-		// r0,1 = (r24 * r17) >> full_phase_bits
+		// r0,1 = (r24 * r17) >> full_phase_bits	(r27 is always zero after the shifts)
 
 		"\t"	"ldd 24, y + %[steps_current]"	"\n"
 		"\t"	"ldd 25, y + %[steps_current] + 1"	"\n"
@@ -891,9 +894,8 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"std y + %[steps_current] + 1, 1"	"\n"
 		"\t"	"sub 0, 24"			"\n"
 		"\t"	"sbc 1, 25"			"\n"
+
 		/* If no steps: continue. */
-		"\t"	"brne 1f"			"\n"
-		"\t"	"tst 0"				"\n"
 		"\t"	"brne 1f"			"\n"
 		"\t"	"clr 27"			"\n"
 		"\t"	"rjmp isr_action_continue"	"\n"
@@ -920,7 +922,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	"1:\t"		"sub 25, 0"				"\n"
 		"\t"	"std y + %[current_pos], 25"		"\n"
 		"\t"	"ldd 25, y + %[current_pos] + 1"	"\n"
-		"\t"	"sub 25, 1"				"\n"
+		"\t"	"sbc 25, 1"				"\n"
 		"\t"	"std y + %[current_pos] + 1, 25"	"\n"
 		"\t"	"brcc 2f"				"\n"
 		"\t"	"ldd 25, y + %[current_pos] + 2"	"\n"
@@ -963,7 +965,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 	"1:\t"		"dec 21"			"\n"	// m	m+1
 		"\t"	"brne 1b"			"\n"	// 2m-1	3m
 		"\t"	"sbiw 24, 1"			"\n"	// 2	3m+2
-		"\t"	"st x, 1"			"\n"	// 2	3m+4=16 => m=4
+		"\t"	"st x, 0"			"\n"	// 2	3m+4=16 => m=4
 		"\t"	"rjmp 2b"			"\n"	// 2	2
 	"3:\t"		"clr 27"			"\n"	// r27 is 0 again.
 		ADD_DIR_DELAY
@@ -1058,7 +1060,9 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 			[motor_size] "" (sizeof(Motor)),
 			[timsk] "M" (_SFR_MEM_ADDR(TIMSK1)),
 			[state_non_move] "M" (NUM_NON_MOVING_STATES),
-			[delay] "M" (STEPS_DELAY)
+			[delay] "M" (STEPS_DELAY),
+			[debug] "" (&debug_value),
+			[debug2] "" (&debug_value2)
 		);
 
 	asm volatile (
@@ -1089,6 +1093,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"ldi 28, lo8(%[motor])"		"\n"
 		"\t"	"ldi 29, hi8(%[motor])"		"\n"
 	"1:\t"		"std y + %[steps_current], 27"	"\n"
+		"\t"	"std y + %[steps_current] + 1, 27"	"\n"
 		"\t"	"adiw 28, %[motor_size]"	"\n"
 		"\t"	"dec 17"			"\n"
 		"\t"	"brne 1b"			"\n"

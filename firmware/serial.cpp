@@ -550,7 +550,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		} // }}}
 		// This is pretty much always true, so make it the least important (nothing below this will ever be sent).
 		if (adcreply_ready) { // {{{
-			senddebug("adc");
+			//senddebug("adc");
 			//debug("adcreply %x %d", adcreply[1], adcreply[0]);
 			for (uint8_t i = 0; i < adcreply_ready; ++i) {
 				BUFFER_CHECK(pending_packet[ff_out], i);

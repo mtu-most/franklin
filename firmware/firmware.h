@@ -87,7 +87,7 @@ template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 #define fabs abs
 
 // Volatile variables which are used by interrupt handlers.
-EXTERN volatile uint16_t debug_value, debug_value1;
+EXTERN volatile uint16_t debug_value, debug_value1, debug_value2, debug_value3;
 EXTERN volatile uint8_t move_phase, full_phase, full_phase_bits;
 EXTERN volatile bool serial_overflow;
 EXTERN volatile uint8_t *serial_buffer_head;

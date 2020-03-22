@@ -132,7 +132,7 @@ void packet()
 		}
 		pin_flags = command(9);
 		timeout_time = read_16(10);
-		uint8_t fpb = 0;
+		uint8_t fpb = 1;
 		// TIME_PER_ISR is the time that is spent in a single ISR.
 		// Set full_phase_bits so that it is as high as possible given that limit.
 		while (fpb < 8 && time_per_sample / TIME_PER_ISR >= uint16_t(1) << fpb)
