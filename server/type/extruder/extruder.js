@@ -12,7 +12,7 @@ function extruder_set_value(ui, id, value, reply) { // {{{
 } // }}}
 
 function extruder_update(ui, index) { // {{{
-	for (var a = 0; a < ui.machine.spaces[0].axis.length; ++a) {
+	for (var a = 0; a < ui.machine.spaces[1].axis.length; ++a) {
 		update_float(ui, [['module', [index, a, 'axis'], 'extruder'], 'dx']);
 		update_float(ui, [['module', [index, a, 'axis'], 'extruder'], 'dy']);
 		update_float(ui, [['module', [index, a, 'axis'], 'extruder'], 'dz']);
@@ -35,7 +35,7 @@ function Extruder(ui, space, axis) { // {{{
 		div.Add(Float(ui, [['module', [space, axis, 'axis'], 'extruder'], e[i][0]], e[i][1], 1));
 		e[i] = div;
 	}
-	return make_tablerow(ui, motor_name(ui, space, motor), e, ['rowtitle2'], undefined, TYPE_EXTRUDER, space);
+	return make_tablerow(ui, axis_name(ui, space, axis), e, ['rowtitle2'], undefined, TYPE_EXTRUDER, space);
 } // }}}
 
 function setup_extruder(desc, pos, top) { // {{{
@@ -45,7 +45,7 @@ function setup_extruder(desc, pos, top) { // {{{
 	ret.Add([make_table(ui).AddMultipleTitles([
 		'Extruder',
 		UnitTitle(ui, 'dx'),
-		UnitTitle(ui, 'dy')
+		UnitTitle(ui, 'dy'),
 		UnitTitle(ui, 'dz')
 	], [
 		'htitle3',
