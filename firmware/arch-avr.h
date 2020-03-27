@@ -665,7 +665,7 @@ static inline void arch_set_speed(uint16_t us_per_sample) { // {{{
 		uint32_t c = us_per_sample;
 		c *= F_CPU / 1000000;
 		timer1_top = c >> full_phase_bits;
-		//debug("%d us, top=%d", us_per_sample, c);
+		//debug("%x us, top=%x:%x, fpb=%d", us_per_sample, int((c >> 16) & 0xffff), int(c & 0xffff), full_phase_bits);
 		// Set TOP.
 		ICR1H = (timer1_top >> 8) & 0xff;
 		ICR1L = timer1_top & 0xff;

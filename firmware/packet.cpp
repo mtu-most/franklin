@@ -329,8 +329,8 @@ void packet()
 			}
 			else if (int8_t(command(5 + m)) == -1) {
 				// Fill both sample 0 and 1, because the interrupt handler may change current_sample at any time.
-				buffer[current_fragment][m][0] = -1;
-				buffer[current_fragment][m][1] = -1;
+				buffer[current_fragment][m][0] = 0x81;
+				buffer[current_fragment][m][1] = 0x81;
 				homers += 1;
 				motor[m].intflags |= Motor::ACTIVE;
 				motor[m].steps_current = 0;
