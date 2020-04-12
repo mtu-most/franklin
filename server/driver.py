@@ -2637,7 +2637,7 @@ class Machine: # {{{
 	# Temp {{{
 	def get_temp(self, temp): # {{{
 		ret = {}
-		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time'):
+		for key in ('name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time', 'value'):
 			ret[key] = getattr(self.temps[temp], key)
 		return ret
 	# }}}
