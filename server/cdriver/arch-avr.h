@@ -313,6 +313,21 @@ double arch_round_pos(int s, int m, double pos) { // {{{
 	return round((pos + avr_pos_offset[mi + m]) * spaces[s].motor[m]->steps_per_unit) / spaces[s].motor[m]->steps_per_unit - avr_pos_offset[mi + m];
 } // }}}
 
+int arch_pos2hw(int s, int m, double pos) {
+	int mi = 0;
+	for (int ts = 0; ts < s; ++ts)
+		mi += spaces[ts].num_motors;
+	return (pos + avr_pos_offset[m + mi]) * spaces[s].motor[m]->steps_per_unit;
+}
+
+double arch_hw2pos(int s, int m, int hw) {
+	int mi = 0;
+	for (int ts = 0; ts < s; ++ts)
+		mi += spaces[ts].num_motors;
+	return hw / spaces[s].motor[m]->steps_per_unit - avr_pos_offset[m + mi];
+}
+
+
 void avr_get_current_pos(int offset, bool check) { // {{{
 	static int have_error = 0;
 	int mi = 0;
@@ -1340,7 +1355,7 @@ bool arch_send_fragment() { // {{{
 				avr_buffer[0] = single ? HWC_MOVE_SINGLE : HWC_MOVE;
 				avr_buffer[1] = mi + m;
 				for (int i = 0; i < cfp; ++i) {
-					int value = (spaces[s].motor[m]->dir_pin.inverted() ? 0x80 : 0) ^ spaces[s].motor[m]->avr_data.buffer[i];
+					int value = spaces[s].motor[m]->avr_data.buffer[i];
 					avr_buffer[2 + i] = value;
 				}
 				if (prepare_packet(avr_buffer, 2 + cfp)) {

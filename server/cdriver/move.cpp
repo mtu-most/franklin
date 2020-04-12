@@ -444,18 +444,18 @@ static void do_steps(double old_factor) { // {{{
 				continue;
 			}
 			cpdebug(s, m, "ccp3 stopping %d target %f frag %d", stopping, target, current_fragment);
-			double rounded_cp = arch_round_pos(s, m, mtr.settings.current_pos);
-			double rounded_new_cp = arch_round_pos(s, m, target);
-			if (rounded_cp != rounded_new_cp) {
+			int current_hw = mtr.settings.hw_pos;
+			int new_hw = arch_pos2hw(s, m, target);
+			if (current_hw != new_hw) {
 				if (!mtr.active) {
 					mtr.active = true;
 					num_active_motors += 1;
 					//debug("activating motor %d %d", s, m);
 				}
-				int diff = round((rounded_new_cp - rounded_cp) * mtr.steps_per_unit);
+				int diff = new_hw - current_hw;
 				int max_steps = 0x1ff;
 				if (diff > max_steps) {
-					warning("Error on line %d: %d %d trying to send more than 0x1ff steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, diff, rounded_cp, rounded_new_cp, settings.hwtime);
+					warning("Error on line %d: %d %d trying to send more than 0x1ff steps: %x  from %x to %x (time %d)", settings.gcode_line, s, m, diff, current_hw, new_hw, settings.hwtime);
 					debug_abort();
 					int adjust = diff - max_steps;
 					if (settings.hwtime_step > settings.hwtime)
@@ -468,7 +468,7 @@ static void do_steps(double old_factor) { // {{{
 					mtr.target_pos = target;
 				}
 				if (diff < -max_steps) {
-					warning("Error on line %d: %d %d trying to send more than -0x1ff steps: %d  from %f to %f (time %d)", settings.gcode_line, s, m, -diff, rounded_cp, rounded_new_cp, settings.hwtime);
+					warning("Error on line %d: %d %d trying to send more than -0x1ff steps: %x  from %x to %x (time %d)", settings.gcode_line, s, m, -diff, current_hw, new_hw, settings.hwtime);
 					debug_abort();
 					int adjust = diff + max_steps;
 					if (settings.hwtime_step > settings.hwtime)
@@ -482,12 +482,14 @@ static void do_steps(double old_factor) { // {{{
 				}
 				// Encode bits.
 				int sign = (diff < 0) ? -1 : 1;
-				int count = (sign * diff) >> 6;
+				int hwsign = ((diff < 0) ^ spaces[s].motor[m]->dir_pin.inverted()) ? -1 : 1;
+				diff = abs(diff);
+				int count = diff >> 6;
 				int head = ((1 << count) - 1) << (7 - count);
-				int value = (sign < 0 ? 0x80 : 0) | head | (((sign * diff) & 0x3f) >> count);
-				//debug("sending %d %d steps %x (coded to %x) at %d", s, m, diff, value, current_fragment_pos);
-				DATA_SET(s, m, value);
-				int sent = (sign * diff) & ~((1 << count) - 1);
+				int value = (hwsign < 0 ? 0x80 : 0) | head | ((diff & 0x3f) >> count);
+				mdebug("sending %d %d steps %d*%x (coded to %x) at %d", s, m, hwsign, diff, value, current_fragment_pos);
+				DATA_SET(s, m, value != 0x80 ? value : 0);	// Send 0 instead of -0, because 0x80 is special.
+				int sent = diff & ~((1 << count) - 1);
 				mtr.settings.hw_pos += sign * sent;
 			}
 			//debug("new cp: %d %d %f %d", s, m, target, current_fragment_pos);
@@ -574,9 +576,9 @@ static void apply_tick() { // {{{
 		mdebug("apply tick called, but not moving");
 		return;
 	}
+	settings.hwtime += settings.hwtime_step;
 	// This loop is normally only run once, but when a move is complete it is rerun for the next move.
 	while (!stopping && !discarding && !discard_pending && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2)) {
-		settings.hwtime += settings.hwtime_step;
 		//debug("tick time %d step %d frag %d pos %d", settings.hwtime, settings.hwtime_step, current_fragment, current_fragment_pos);
 		double t = settings.hwtime / 1e6;
 		double target_factor;	// Factor of current move that should be completed at this time.
@@ -658,8 +660,6 @@ static void apply_tick() { // {{{
 			return;
 		}
 		mdebug("try again");
-		// Next loop the time is incremented again, but in this case that shouldn't happen, so compensate.
-		settings.hwtime -= settings.hwtime_step;
 	}
 	//if (spaces[0].num_axes >= 2)
 		//debug("move z %d %d %f %f %f", current_fragment, current_fragment_pos, spaces[0].axis[2]->current, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);

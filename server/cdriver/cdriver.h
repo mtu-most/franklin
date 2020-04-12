@@ -508,6 +508,8 @@ void arch_invertpos(int s, int m);
 void arch_stop(bool fake = false);
 void arch_home();
 bool arch_running();
+int arch_pos2hw(int s, int m, double pos);
+double arch_hw2pos(int s, int m, int hw);
 double arch_round_pos(int s, int m, double pos);
 //void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin = ~0, bool heater_invert = false, int heater_adctemp = 0, int heater_limit_l = ~0, int heater_limit_h = ~0, int fan_pin = ~0, bool fan_invert = false, int fan_adctemp = 0, int fan_limit_l = ~0, int fan_limit_h = ~0, double hold_time = 0);
 void arch_start_move(int extra);
