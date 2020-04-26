@@ -2316,6 +2316,9 @@ class Machine: # {{{
 			log('unable to unlink %s' % filename)
 		self._refresh_queue()
 	# }}}
+	def list_jobs(self): # {{{
+		return self.jobqueue
+	# }}}
 	@delayed
 	def user_queue_run(self, id, name, paused = False): # {{{
 		'''Start a new job.
