@@ -2316,7 +2316,7 @@ class Machine: # {{{
 			log('unable to unlink %s' % filename)
 		self._refresh_queue()
 	# }}}
-	def list_jobs(self): # {{{
+	def queue_list(self): # {{{
 		return self.jobqueue
 	# }}}
 	@delayed
