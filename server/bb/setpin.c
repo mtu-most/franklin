@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 	printf("current: %x\n", padmap[(0x800 + pad_offset[pin]) / 4]);
-	if (argc >= 2) {
+	if (argc > 2) {
 		int mode = strtol(argv[2], NULL, 0);
 		int hack[2];
 		if (pipe(hack)) {
