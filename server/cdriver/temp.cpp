@@ -84,8 +84,8 @@ void Temp::save() {
 	shmem->floats[10] = limit[1][1];
 	shmem->floats[11] = hold_time;
 	shmem->floats[12] = P;
-	shmem->floats[12] = I;
-	shmem->floats[12] = D;
+	shmem->floats[13] = I;
+	shmem->floats[14] = D;
 }
 
 double Temp::fromadc(int32_t adc) {
@@ -237,20 +237,25 @@ void handle_temp(int id, int temp) { // {{{
 		}
 	}
 	// Update PID (only if hold_time == 0).
-	if (temps[id].hold_time == 0) {
-		double delta = new_value - temps[id].target[0];
-		double dt = (now - temps[id].last_PID) / 1000;
+	if (temps[id].hold_time == 0 && now != temps[id].last_PID) {
+		double delta = temps[id].target[0] - new_value;
+		double dt = (now - temps[id].last_PID) / 1000.;
 		temps[id].last_PID = now;
-		double out = temps[id].P * delta + temps[id].I_state + temps[id].D * (new_value - old_value) / dt;
+		double part_P = temps[id].P * delta;
+		double part_D = temps[id].D * (new_value - old_value) / dt;
+		double out = part_P + temps[id].I_state + part_D;
 		// Adjust I_state with the correction that was required.
 		temps[id].I_state += temps[id].I * (out - temps[id].I_state) * dt;
-		if (temps[id].I_state < 0)
+		if (std::isnan(temps[id].I_state) || temps[id].I_state < 0)
 			temps[id].I_state = 0;
 		else if (temps[id].I_state > 1)
 			temps[id].I_state = 1;
-		if (out <= 0)
+		if (!(out > 0)) {	// Use inverse check so NaN is treated as "off".
+			//debug("reset P %f I %f D %f dt %f out %f", part_P, temps[id].I_state, part_D, dt, out);
 			RESET(temps[id].power_pin[0]);
+		}
 		else {
+			//debug("set P %f I %f D %f dt %f out %f", part_P, temps[id].I_state, part_D, dt, out);
 			SET(temps[id].power_pin[0]);
 			arch_set_duty(temps[id].power_pin[0], out >= 1 ? 1 : out);
 		}

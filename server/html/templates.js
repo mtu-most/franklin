@@ -264,7 +264,7 @@ function Pins_space(ui, space, motor) {
 
 // Temp. {{{
 function Temp_setup(ui, num) {
-	var e = [Name(ui, 'temp', num), ['fan_temp', 0, 1], Id(ui, [['temp', num], 'bed']), ['P', 0, 1e-3], ['I', 0, 1], ['D', 0, 1e-3]];
+	var e = [Name(ui, 'temp', num), ['fan_temp', 0, 1], Id(ui, [['temp', num], 'bed']), ['P', 0, 1e-3], ['I', 0, 1e-3], ['D', 0, 1e-3]];
 	for (var i = 1; i < e.length; ++i) {
 		if (i == 2)
 			continue;
@@ -887,9 +887,9 @@ function setup_temp(desc, pos, top) { // {{{
 		'Name',
 		'Fan Temp (°C)',
 		'Bed',
-		'P',
-		'I',
-		'D',
+		'P (10¯³/K)',
+		'I (10¯³/s)',
+		'D (10¯³s/K))',
 	], [
 		'htitle6',
 		'title6',

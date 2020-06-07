@@ -663,6 +663,7 @@ void RESET(Pin_t _pin) { // {{{
 	//debug("reset %d", _pin.pin);
 	if (avr_pins[_pin.pin].state == 0)
 		return;
+	//debug("resetting pin %d", _pin.pin);
 	avr_pins[_pin.pin].state = 0;
 	if (_pin.inverted())
 		avr_setup_pin(_pin.pin, CTRL_SET, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset, 0);
@@ -677,6 +678,7 @@ void SET(Pin_t _pin) { // {{{
 	if (avr_pins[_pin.pin].state == 1)
 		return;
 	avr_pins[_pin.pin].state = 1;
+	//debug("setting pin %d", _pin.pin);
 	if (_pin.inverted())
 		avr_setup_pin(_pin.pin, CTRL_RESET, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset, 0);
 	else
@@ -747,6 +749,7 @@ void arch_set_duty(Pin_t _pin, double duty) { // {{{
 		hwduty = 0x7fff;
 	}
 	if (hwduty != avr_pins[_pin.pin].duty) {
+		//debug("updating duty for %d to %d", _pin.pin, hwduty);
 		avr_pins[_pin.pin].duty = hwduty;
 		avr_send_pin(_pin);
 	}

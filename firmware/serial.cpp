@@ -490,19 +490,6 @@ void try_send_next() { // Call send_packet if we can. {{{
 			//debug_dump();
 			continue;
 		} // }}}
-		if (reply_ready) { // {{{
-			senddebug("reply");
-			sdebug2("reply %x %d", reply[1], reply[0]);
-			for (uint8_t i = 0; i < reply_ready; ++i) {
-				BUFFER_CHECK(reply, i);
-				BUFFER_CHECK(pending_packet[ff_out], i);
-				pending_packet[ff_out][i] = reply[i];
-			}
-			prepare_packet(reply_ready);
-			reply_ready = 0;
-			send_packet();
-			continue;
-		} // }}}
 		if (home_step_time > 0 && homers == 0 && step_state == STEP_STATE_STOP) { // {{{
 			senddebug("homed");
 			pending_packet[ff_out][0] = CMD_HOMED;
@@ -546,6 +533,19 @@ void try_send_next() { // Call send_packet if we can. {{{
 				send_packet();
 				break;
 			}
+			continue;
+		} // }}}
+		if (reply_ready) { // {{{
+			senddebug("reply");
+			sdebug2("reply %x %d", reply[1], reply[0]);
+			for (uint8_t i = 0; i < reply_ready; ++i) {
+				BUFFER_CHECK(reply, i);
+				BUFFER_CHECK(pending_packet[ff_out], i);
+				pending_packet[ff_out][i] = reply[i];
+			}
+			prepare_packet(reply_ready);
+			reply_ready = 0;
+			send_packet();
 			continue;
 		} // }}}
 		// This is pretty much always true, so make it the least important (nothing below this will ever be sent).

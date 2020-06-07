@@ -1111,6 +1111,9 @@ function temp_update(uuid, index) { // {{{
 	//update_float(p, [['temp', index], 'radiation']);
 	//update_float(p, [['temp', index], 'power']);
 	update_float(p, [['temp', index], 'hold_time']);
+	update_float(p, [['temp', index], 'P']);
+	update_float(p, [['temp', index], 'I']);
+	update_float(p, [['temp', index], 'D']);
 	update_float(p, [['temp', index], 'value', 'settemp']);
 } // }}}
 
