@@ -27,13 +27,6 @@ void Temp::load(int id) {
 	beta = shmem->floats[4];
 	K = exp(logRc - beta / Tc);
 	//debug("K %f R0 %f R1 %f logRc %f Tc %f beta %f", K, R0, R1, logRc, Tc, beta);
-	/*
-	core_C = shmem->floats[0];
-	shell_C = shmem->floats[0];
-	transfer = shmem->floats[0];
-	radiation = shmem->floats[0];
-	power = shmem->floats[0];
-	*/
 	if (power_pin[1].valid() && power_pin[1].write() != shmem->ints[2])
 		arch_set_duty(power_pin[1], 1);
 	power_pin[0].read(shmem->ints[1]);
@@ -57,6 +50,11 @@ void Temp::load(int id) {
 	}
 	last_change_time = millis();
 	hold_time = shmem->floats[11];
+	P = shmem->floats[12];
+	I = shmem->floats[13];
+	D = shmem->floats[14];
+	I_state = 0;
+	last_PID = millis();
 	if (old_pin != thermistor_pin.write() && old_valid)
 		arch_setup_temp(~0, old_pin_pin, false);
 	if (thermistor_pin.valid()) {
@@ -85,13 +83,9 @@ void Temp::save() {
 	shmem->floats[9] = limit[1][0];
 	shmem->floats[10] = limit[1][1];
 	shmem->floats[11] = hold_time;
-	/*
-	shmem->floats[0] = core_C;
-	shmem->floats[0] = shell_C;
-	shmem->floats[0] = transfer;
-	shmem->floats[0] = radiation;
-	shmem->floats[0] = power;
-	*/
+	shmem->floats[12] = P;
+	shmem->floats[12] = I;
+	shmem->floats[12] = D;
 }
 
 double Temp::fromadc(int32_t adc) {
@@ -137,13 +131,6 @@ void Temp::init() {
 	logRc = NAN;
 	Tc = 20 + 273.15;
 	beta = NAN;
-	/*
-	core_C = NAN;
-	shell_C = NAN;
-	transfer = NAN;
-	radiation = NAN;
-	power = NAN;
-	*/
 	thermistor_pin.init();
 	min_alarm = NAN;
 	max_alarm = NAN;
@@ -166,6 +153,10 @@ void Temp::init() {
 	K = NAN;
 	last_value = -1;
 	hold_time = 0;
+	P = INFINITY;
+	I = 0;
+	D = 0;
+	last_PID = millis();
 }
 
 void Temp::free() {
@@ -182,13 +173,6 @@ void Temp::copy(Temp &dst) {
 	dst.logRc = logRc;
 	dst.Tc = Tc;
 	dst.beta = beta;
-	/*
-	dst.core_C = core_C;
-	dst.shell_C = shell_C;
-	dst.transfer = transfer;
-	dst.radiation = radiation;
-	dst.power = power;
-	*/
 	for (int i = 0; i < 2; ++i) {
 		dst.power_pin[i].read(power_pin[i].write());
 		dst.target[i] = target[i];
@@ -209,12 +193,23 @@ void Temp::copy(Temp &dst) {
 	dst.time_on = time_on;
 	dst.K = K;
 	dst.last_value = last_value;
+	dst.hold_time = hold_time;
+	dst.P = P;
+	dst.I = I;
+	dst.D = D;
+	dst.last_PID = last_PID;
 }
 
 void handle_temp(int id, int temp) { // {{{
+	int now = millis();
+	double old_value = temps[id].fromadc(temps[id].last_value);
+	double new_value = temps[id].fromadc(temp);
+	// Update current value.
 	temps[id].last_value = temp;
+	// Store value if recording.
 	if (store_adc)
-		fprintf(store_adc, "%d %d %f %d\n", millis(), id, temps[id].fromadc(temp), temp);
+		fprintf(store_adc, "%d %d %f %d\n", now, id, new_value, temp);
+	// Reply to python driver if this temperature was requested.
 	if (requested_temp < num_temps && temps[requested_temp].thermistor_pin.pin == temps[id].thermistor_pin.pin) {
 		//debug("replying temp");
 		shmem->floats[0] = temps[requested_temp].fromadc(temp);
@@ -241,43 +236,23 @@ void handle_temp(int id, int temp) { // {{{
 			send_to_parent(CMD_TEMPCB);
 		}
 	}
-	/*
-	// TODO: Make this work and decide on units.
-	// We have model settings.
-	int32_t dt = current_time - temps[id].last_temp_time;
-	if (dt == 0)
-		return;
-	temps[id].last_temp_time = current_time;
-	// Heater and core/shell transfer.
-	if (temps[id].is_on)
-		temps[id].core_T += temps[id].power / temps[id].core_C * dt;
-	double Q = temps[id].transfer * (temps[id].core_T - temps[id].shell_T) * dt;
-	temps[id].core_T -= Q / temps[id].core_C;
-	temps[id].shell_T += Q / temps[id].shell_C;
-	if (temps[id].is_on)
-		temps[id].core_T += temps[id].power / temps[id].core_C * dt / 2;
-	// Set shell to measured value.
-	temps[id].shell_T = temp;
-	// Add energy if required.
-	double E = temps[id].core_T * temps[id].core_C + temps[id].shell_T * temps[id].shell_C;
-	double T = E / (temps[id].core_C + temps[id].shell_C);
-	// Set the pin to correct value.
-	if (T < temps[id].target) {
-		if (!temps[id].is_on) {
-			SET(temps[id].power_pin);
-			temps[id].is_on = true;
-			++temps_busy;
-		}
-		else
-			temps[id].time_on += current_time - temps[id].last_temp_time;
-	}
-	else {
-		if (temps[id].is_on) {
-			RESET(temps[id].power_pin);
-			temps[id].is_on = false;
-			temps[id].time_on += current_time - temps[id].last_temp_time;
-			--temps_busy;
+	// Update PID (only if hold_time == 0).
+	if (temps[id].hold_time == 0) {
+		double delta = new_value - temps[id].target[0];
+		double dt = (now - temps[id].last_PID) / 1000;
+		temps[id].last_PID = now;
+		double out = temps[id].P * delta + temps[id].I_state + temps[id].D * (new_value - old_value) / dt;
+		// Adjust I_state with the correction that was required.
+		temps[id].I_state += temps[id].I * (out - temps[id].I_state) * dt;
+		if (temps[id].I_state < 0)
+			temps[id].I_state = 0;
+		else if (temps[id].I_state > 1)
+			temps[id].I_state = 1;
+		if (out <= 0)
+			RESET(temps[id].power_pin[0]);
+		else {
+			SET(temps[id].power_pin[0]);
+			arch_set_duty(temps[id].power_pin[0], out >= 1 ? 1 : out);
 		}
 	}
-	*/
 } // }}}

@@ -129,6 +129,8 @@ struct Temp {
 	int32_t time_on;		// Time that the heater has been on since last reading.  [μs]
 	bool is_on[2];			// If the heater is currently on.
 	double hold_time;		// Minimum time to hold value after change.
+	double P, I, D, I_state;	// PID controller values.
+	int32_t last_PID;		// last time (as millis()) that PID was updated.
 	unsigned long last_change_time;	// millis() when value was last changed.
 	double K;			// Thermistor constant; kept in memory for performance.
 	int32_t last_value;		// last measured value.

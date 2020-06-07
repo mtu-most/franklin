@@ -1526,7 +1526,7 @@ class Machine: # {{{
 			self.fan_temp -= C0
 			self.fan_pin ^= 0x200
 		def write(self):
-			attrnames = ('R0', 'R1', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time')
+			attrnames = ('R0', 'R1', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time', 'P', 'I', 'D')
 			data = {n: getattr(self, n) for n in attrnames}
 			try:
 				data['logRc'] = math.log(self.Rc)

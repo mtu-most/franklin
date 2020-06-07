@@ -264,13 +264,15 @@ function Pins_space(ui, space, motor) {
 
 // Temp. {{{
 function Temp_setup(ui, num) {
-	var e = [Name(ui, 'temp', num), ['fan_temp', 0, 1], Id(ui, [['temp', num], 'bed'])];
-	for (var i = 1; i < e.length - 1; ++i) {
+	var e = [Name(ui, 'temp', num), ['fan_temp', 0, 1], Id(ui, [['temp', num], 'bed']), ['P', 0, 1e-3], ['I', 0, 1], ['D', 0, 1e-3]];
+	for (var i = 1; i < e.length; ++i) {
+		if (i == 2)
+			continue;
 		var div = Create('div');
 		div.Add(Float(ui, [['temp', num], e[i][0]], e[i][1], e[i][2]));
 		e[i] = div;
 	}
-	return make_tablerow(ui, temp_name(ui, num), e, ['rowtitle3']);
+	return make_tablerow(ui, temp_name(ui, num), e, ['rowtitle6']);
 }
 
 function Temp_limits(ui, num) {
@@ -884,17 +886,23 @@ function setup_temp(desc, pos, top) { // {{{
 		'Temp Settings',
 		'Name',
 		'Fan Temp (°C)',
-		'Bed'
+		'Bed',
+		'P',
+		'I',
+		'D',
 	], [
-		'htitle3',
-		'title3',
-		'title3',
-		'title3'
+		'htitle6',
+		'title6',
+		'title6',
+		'title6'
 	], [
 		null,
 		'Name of the temperature control',
 		'Temerature above which the cooling is turned on.',
-		'Whether this Temp is the heated bed, used by G-code commands M140 and M190.'
+		'Whether this Temp is the heated bed, used by G-code commands M140 and M190.',
+		'Proportional weight for PID control.',
+		'Integrated weight for PID control.',
+		'Differential weight for PID control'
 	]).AddMultiple(ui, 'temp', Temp_setup)]);
 	ret.Add([make_table(ui).AddMultipleTitles([
 		'Temp Limits',
@@ -938,7 +946,7 @@ function setup_temp(desc, pos, top) { // {{{
 		'Calibrated resistance of the thermistor.  Normally 100 for extruders, 10 for the heated bed.  Or, if β is NaN, the scale for plotting the value on the temperature graph.',
 		'Temperature at which the thermistor has value Rc.  Normally 20.  Or, if β is NaN, the offset for plotting the value on the temperature graph.',
 		"Temperature dependence of the thermistor.  Normally around 4000.  It can be found in the thermistor's data sheet.  Or, if NaN, the value of this sensor is ax+b with x the measured ADC value.",
-		'Minimum time to keep the heater and fan pins at their values after a change.'
+		'Minimum time to keep the heater and fan pins at their values after a change. If this is not zero, the PID controls are deactivated.'
 	]).AddMultiple(ui, 'temp', Temp_hardware)]);
 	var e = ret.AddElement('div').AddText('Temp Scale Minimum:');
 	e.Add(Float(ui, [null, 'temp_scale_min'], 0, 1));

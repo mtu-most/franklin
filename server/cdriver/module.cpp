@@ -569,7 +569,7 @@ static PyObject *read_temp(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (!PyArg_ParseTuple(args, "i", &shmem->ints[0]))
 		return NULL;
 	send_to_child(CMD_READ_TEMP);
-	return Py_BuildValue("{si,si,si,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd}",
+	return Py_BuildValue("{si,si,si,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd}",
 			"heater_pin", shmem->ints[1],
 			"fan_pin", shmem->ints[2],
 			"thermistor_pin", shmem->ints[3],
@@ -584,7 +584,10 @@ static PyObject *read_temp(PyObject *Py_UNUSED(self), PyObject *args) {
 			"heater_limit_h", shmem->floats[8],
 			"fan_limit_l", shmem->floats[9],
 			"fan_limit_h", shmem->floats[10],
-			"hold_time", shmem->floats[11]);
+			"hold_time", shmem->floats[11],
+			"P", shmem->floats[12],
+			"I", shmem->floats[13],
+			"D", shmem->floats[14]);
 }
 
 static PyObject *write_temp(PyObject *Py_UNUSED(self), PyObject *args) {
@@ -608,6 +611,9 @@ static PyObject *write_temp(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_float(9, "fan_limit_l", dict);
 	set_float(10, "fan_limit_h", dict);
 	set_float(11, "hold_time", dict);
+	set_float(12, "P", dict);
+	set_float(13, "I", dict);
+	set_float(14, "D", dict);
 	send_to_child(CMD_WRITE_TEMP);
 	return assert_empty_dict(dict, "write_temp");
 }
