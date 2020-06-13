@@ -278,15 +278,15 @@ void next_move(int32_t start_time) { // {{{
 			check_a += da * da;
 		}
 		if (check_x > 1e-2) {
-			warning("Warning: final x %f,%f,%f != start x %f,%f,%f", final_x[0], final_x[1], final_x[2], spaces[0].axis[0]->settings.source + settings.unitg[0] * settings.x0g + settings.unith[0] * settings.x0h, spaces[0].axis[1]->settings.source + settings.unitg[1] * settings.x0g + settings.unith[1] * settings.x0h, spaces[0].axis[2]->settings.source + settings.unitg[2] * settings.x0g + settings.unith[2] * settings.x0h);
+			warning("Warning: %d final x %f,%f,%f != start x %f,%f,%f", settings.gcode_line, final_x[0], final_x[1], final_x[2], spaces[0].axis[0]->settings.source + settings.unitg[0] * settings.x0g + settings.unith[0] * settings.x0h, spaces[0].axis[1]->settings.source + settings.unitg[1] * settings.x0g + settings.unith[1] * settings.x0h, spaces[0].axis[2]->settings.source + settings.unitg[2] * settings.x0g + settings.unith[2] * settings.x0h);
 			debug_abort();
 		}
 		if (check_v > 1e-2) {
-			warning("Warning: final v %f,%f,%f != start v %f,%f,%f", final_v[0], final_v[1], final_v[2], settings.v0g * settings.unitg[0] + settings.v0h * settings.unith[0], settings.v0g * settings.unitg[1] + settings.v0h * settings.unith[1], settings.v0g * settings.unitg[2] + settings.v0h * settings.unith[2]);
+			warning("Warning: %d final v %f,%f,%f != start v %f,%f,%f", settings.gcode_line, final_v[0], final_v[1], final_v[2], settings.v0g * settings.unitg[0] + settings.v0h * settings.unith[0], settings.v0g * settings.unitg[1] + settings.v0h * settings.unith[1], settings.v0g * settings.unitg[2] + settings.v0h * settings.unith[2]);
 			debug_abort();
 		}
 		if (check_a > 1e2) {
-			warning("Warning: final a %f,%f,%f != start a %f,%f,%f", final_a[0], final_a[1], final_a[2], settings.a0g * settings.unitg[0] + settings.a0h * settings.unith[0], settings.a0g * settings.unitg[1] + settings.a0h * settings.unith[1], settings.a0g * settings.unitg[2] + settings.a0h * settings.unith[2]);
+			warning("Warning: %d final a %f,%f,%f != start a %f,%f,%f", settings.gcode_line, final_a[0], final_a[1], final_a[2], settings.a0g * settings.unitg[0] + settings.a0h * settings.unith[0], settings.a0g * settings.unitg[1] + settings.a0h * settings.unith[1], settings.a0g * settings.unitg[2] + settings.a0h * settings.unith[2]);
 			debug_abort();
 		}
 	}

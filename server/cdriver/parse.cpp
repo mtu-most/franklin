@@ -1116,7 +1116,7 @@ void Parser::flush_pending(bool finish) { // {{{
 		double max_v_J = std::pow(max_J * P0->x0 * P0->x0 * sq / 2, 1. / 3);
 		double max_v_a = std::sqrt(max_a * -P0->x0 * sq / 2);
 		if (fabs(s) < 1e-10)
-			P0->v1 = min(P0->f, P1->f);
+			P0->v1 = 0;
 		else
 			P0->v1 = min(min(min(max_v_J, max_v_a), P0->f), P1->f);
 		//debug("setting v1 for %f,%f,%f to %f using x0=%f sq=%f f0=%f f1=%f max_J=%f max_a=%f", P0->x, P0->y, P0->z, P0->v1, P0->x0, sq, P0->f, P1->f, max_J, max_a);
