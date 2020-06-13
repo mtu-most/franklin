@@ -237,7 +237,7 @@ void handle_temp(int id, int temp) { // {{{
 		}
 	}
 	// Update PID (only if hold_time == 0).
-	if (temps[id].hold_time == 0 && now != temps[id].last_PID) {
+	if (temps[id].hold_time == 0 && now >= temps[id].last_PID + 200) {
 		double delta = temps[id].target[0] - new_value;
 		double dt = (now - temps[id].last_PID) / 1000.;
 		temps[id].last_PID = now;
