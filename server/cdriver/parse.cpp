@@ -29,7 +29,14 @@
 // }}}
 
 //#define pdebug(format, ...) debug("%4d " format, P1->gcode_line, ##__VA_ARGS__)
+#ifndef pdebug
 #define pdebug(...)
+#endif
+
+//#define flushdebug debug
+#ifndef flushdebug
+#define flushdebug(...)
+#endif
 
 static double const C0 = 273.15; // 0 degrees celsius in kelvin.
 
@@ -286,6 +293,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 						r = (std::isnan(pos[2]) ? 0 : pos[2]);
 				}
 				if ((estep != 0) ^ extruding) {
+					flushdebug("flushing because E start/stop in line");
 					flush_pending();
 					extruding = (estep != 0);
 				}
@@ -299,6 +307,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				if (!controlled || (std::isnan(X) && std::isnan(Y) && std::isnan(Z))) {
 					if (handle_pattern)
 						parse_error(errors, "Warning: not handling pattern because position is unknown", lineno);
+					flushdebug("flushing because position is unknown or non-position move");
 					flush_pending();
 					add_record(lineno, RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], NAN, NAN, current_f[code == 0 ? 0 : 1], epos.at(current_tool));
 					reset_pending_pos();
@@ -316,10 +325,14 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 							dist += (pos[i] - oldpos[i]) * (pos[i] - oldpos[i]);
 					}
 					dist = std::sqrt(dist);
-					if (dist == 0)
+					if (dist == 0) {
+						flushdebug("flushing because dist == 0");
 						flush_pending();
-					else if (s_stop < dist / 20)
+					}
+					else if (s_stop < dist / 20) {
+						flushdebug("partial flush because dist is long");
 						flush_pending(false);
+					}
 					if (handle_pattern && code == 1)
 						pending.back().pattern = pattern_data;
 					pattern_data.clear();
@@ -327,6 +340,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				else {
 					if (std::isnan(oldpos[2]))
 						oldpos[2] = r;
+					flushdebug("flushing for G81");
 					flush_pending();
 					// Only support OLD_Z (G90) retract mode; don't support repeats(L).
 					// goto x, y
@@ -394,6 +408,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				else
 					estep = 0;
 				if ((estep != 0) ^ extruding) {
+					flushdebug("flushing because E start/stop in arc");
 					flush_pending();
 					extruding = (estep != 0);
 				}
@@ -533,6 +548,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					else if (arg.type == 'P')
 						t = arg.num / 1000;
 				}
+				flushdebug("flushing for G4");
 				flush_pending();
 				add_record(lineno, RUN_WAIT, 0, t);
 				last_time += t;
@@ -562,6 +578,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		case 28:
 			// Park.
 			epos.at(current_tool) = 0;
+			flushdebug("flushing for G28");
 			flush_pending();
 			add_record(lineno, RUN_PARK);
 			for (unsigned i = 0; i < 6; ++i)
@@ -570,6 +587,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			break;
 		case 64:
 		{
+			flushdebug("flushing for G64 (max dev)");
 			flush_pending();
 			bool specified = false;
 			for (auto arg: command) {
@@ -602,6 +620,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				auto &cepos = epos.at(current_tool);
 				if (cepos != arg.num) {
 					epos.at(current_tool) = arg.num;
+					flushdebug("flushing for G92 (set pos)");
 					flush_pending();
 					add_record(lineno, RUN_SETPOS, current_tool, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, arg.num);
 					reset_pending_pos();
@@ -629,6 +648,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		switch (code) {
 		case 0:
 			// Request confirmation.
+			flushdebug("flushing for M0");
 			flush_pending();
 			add_record(lineno, RUN_CONFIRM, add_string(message), tool_changed ? 1 : 0);
 			tool_changed = false;
@@ -637,16 +657,19 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			return false;
 		case 3:
 			// Spindle on, clockwise.
+			flushdebug("flushing for M2/M3");
 			flush_pending();
 			add_record(lineno, RUN_GPIO, -3, std::isnan(s) ? spindle_speed : s);
 			break;
 		case 4:
 			// Spindle on, counterclockwise.
+			flushdebug("flushing for M4");
 			flush_pending();
 			add_record(lineno, RUN_GPIO, -3, std::isnan(s) ? spindle_speed : s);
 			break;
 		case 5:
 			// Spindle off.
+			flushdebug("flushing for M5");
 			flush_pending();
 			add_record(lineno, RUN_GPIO, -3, 0);
 			break;
@@ -654,6 +677,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			// Coolant off.  Ignore.
 			break;
 		case 42:
+			flushdebug("flushing for M42");
 			flush_pending();
 			{
 				// Initialize these to avoid warning; they always get new values if used.
@@ -686,6 +710,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			// fall through.
 		case 104:
 			// Set extruder temperature.
+			flushdebug("flushing for M104");
 			flush_pending();
 			{
 				double t = 0;
@@ -705,11 +730,13 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			break;
 		case 106:
 			// Fan on.
+			flushdebug("flushing for M106");
 			flush_pending();
 			add_record(lineno, RUN_GPIO, -2, std::isnan(s) ? 1 : s);
 			break;
 		case 107:
 			// Fan off.
+			flushdebug("flushing for M107");
 			flush_pending();
 			add_record(lineno, RUN_GPIO, -2, 0);
 			break;
@@ -718,6 +745,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			// fall through.
 		case 109:
 			// Set extruder or bed temperature and wait for it to heat up.
+			flushdebug("flushing for M109");
 			flush_pending();
 			{
 				double t = 0;
@@ -737,6 +765,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			break;
 		case 116:
 			// Wait for all temperatures to reach their target.
+			flushdebug("flushing for M116");
 			flush_pending();
 			add_record(lineno, RUN_WAITTEMP, -2);
 			break;
@@ -758,6 +787,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 		}
 		current_tool = code;
 		// Make full stop between tools.
+		flushdebug("flushing for tool change");
 		flush_pending();
 		// Apply new offset.
 		pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], INFINITY, epos.at(current_tool)));
@@ -932,6 +962,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 			message = comment.substr(4);
 		if (comment.substr(0, 7) == "SYSTEM:") {
 			int s = add_string(comment.substr(7));
+			flushdebug("flushing for system");
 			flush_pending();
 			add_record(lineno, RUN_SYSTEM, s);
 		}
@@ -1015,6 +1046,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 		}
 	}
 	// Write final data.
+	flushdebug("flushing for EOF");
 	flush_pending();
 	// Strings.
 	for (auto str: strings)
@@ -1035,7 +1067,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 } // }}}
 
 void Parser::flush_pending(bool finish) { // {{{
-	//debug("flushing size %d finish %d", pending.size(), finish);
+	flushdebug("flushing size %d finish %d", pending.size(), finish);
 	if (finish) {
 		pending.push_back(pending.back());
 		auto &f = pending.back();
@@ -1115,8 +1147,10 @@ void Parser::flush_pending(bool finish) { // {{{
 		double sq = std::sqrt(s * s + 1);
 		double max_v_J = std::pow(max_J * P0->x0 * P0->x0 * sq / 2, 1. / 3);
 		double max_v_a = std::sqrt(max_a * -P0->x0 * sq / 2);
-		if (fabs(s) < 1e-10)
+		if (fabs(s) < 1e-10) {
+			pdebug("setting v1 = 0 because s < epsilon");
 			P0->v1 = 0;
+		}
 		else
 			P0->v1 = min(min(min(max_v_J, max_v_a), P0->f), P1->f);
 		//debug("setting v1 for %f,%f,%f to %f using x0=%f sq=%f f0=%f f1=%f max_J=%f max_a=%f", P0->x, P0->y, P0->z, P0->v1, P0->x0, sq, P0->f, P1->f, max_J, max_a);
@@ -1131,10 +1165,14 @@ void Parser::flush_pending(bool finish) { // {{{
 		// Check if v0/v2 should be lowered.
 		double v0 = compute_max_v(P0->length + P0->x0, P0->v1, max_J, max_a);
 		double v2 = compute_max_v(P1->length + P0->x0, P0->v1, max_J, max_a);
-		if (v2 < P1->f)
+		pdebug("check v2 f %f l %f x0 %f v1 %f v2 %f", P1->f, P1->length, P0->x0, P0->v1, v2);
+		if (v2 < P1->f) {
+			pdebug("limit v2 from %f to %f", P1->f, v2);
 			P1->f = v2;
+		}
 		if (v0 < P0->f) {
 			if (P0 != pending.begin()) {
+				pdebug("back tracking set v0 from %f to %f", P0->f, v0);
 				P0->f = v0;
 				--P0;
 				--P1;

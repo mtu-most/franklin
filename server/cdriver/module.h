@@ -243,7 +243,8 @@ static inline double compute_max_v(double x, double v, double max_J, double max_
 	if ((s - x) * (s - x) > 1e-5)
 		fprintf(stderr, "Warning: max v %f + %f does not fit in requested distance %f != %f with max a,J=%f, %f (%s)\n", v, ret, x, s, max_a, max_J, have_max_a ? "+" : "-");
 	// Return 5% less so it still fits on segment with possible rounding errors.
-	return v + ret * .95;
+	double result = v + ret * .95;
+	return std::isnan(result) ? 0 : result;
 }
 
 #ifdef MODULE
