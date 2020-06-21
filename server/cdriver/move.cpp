@@ -565,20 +565,26 @@ static double set_targets(double factor) { // {{{
 static void apply_tick() { // {{{
 	// Move motors to position for next time tick.
 	// If it exceeds limits, adjust hwtime so that it's acceptable.
-	//debug("tick");
+	mdebug("tick");
 	if (current_fragment_pos >= SAMPLES_PER_FRAGMENT) {
 		// Fragment is already full. This shouldn't normally happen.
-		mdebug("aborting apply_tick, because fragment is already full.");
+		debug("aborting apply_tick, because fragment is already full.");
 		return;
 	}
 	// Check for move.
 	if (!computing_move) {
-		mdebug("apply tick called, but not moving");
+		debug("apply tick called, but not moving");
 		return;
 	}
 	settings.hwtime += settings.hwtime_step;
-	// This loop is normally only run once, but when a move is complete it is rerun for the next move.
-	while (!stopping && !discarding && !discard_pending && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2)) {
+	while (true) {
+		// This loop is normally only run once, but when a move is complete it is rerun for the next move.
+		int empty_fragments = (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
+		if (stopping || discarding || discard_pending || empty_fragments <= (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2)) {
+			// Abort attempt to fill buffer. Adjust time so next call it will retry current time.
+			settings.hwtime -= settings.hwtime_step;
+			break;
+		}
 		//debug("tick time %d step %d frag %d pos %d", settings.hwtime, settings.hwtime_step, current_fragment, current_fragment_pos);
 		double t = settings.hwtime / 1e6;
 		double target_factor;	// Factor of current move that should be completed at this time.
@@ -635,7 +641,7 @@ static void apply_tick() { // {{{
 				return;
 			}
 		}
-		//debug("next segment");
+		mdebug("next segment");
 		// Set new sources for all axes.
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
@@ -661,6 +667,7 @@ static void apply_tick() { // {{{
 		}
 		mdebug("try again");
 	}
+	mdebug("tick done");
 	//if (spaces[0].num_axes >= 2)
 		//debug("move z %d %d %f %f %f", current_fragment, current_fragment_pos, spaces[0].axis[2]->current, spaces[0].motor[0]->settings.current_pos, spaces[0].motor[0]->settings.current_pos + avr_pos_offset[0]);
 } // }}}
