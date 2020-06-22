@@ -18,6 +18,7 @@
 MODULES = python-fhs python-network python-websocketd
 
 install-all: build
+	sudo a2enmod proxy proxy_html proxy_http proxy_wstunnel
 	sudo dpkg -i $(wildcard $(patsubst %,/tmp/python3-%*.deb,$(subst python-,,$(MODULES))) /tmp/franklin*.deb)
 
 # This target is meant for producing release packages for Athena.
