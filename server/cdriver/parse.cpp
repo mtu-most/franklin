@@ -728,6 +728,9 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				add_record(lineno, RUN_SETTEMP, have_t ? t : e, s + C0);
 			}
 			break;
+		case 105:
+			// Report current temperature. Makes no sense in G-Code, but some slicers insist on including this, so this shouldn't give a warning.
+			break;
 		case 106:
 			// Fan on.
 			flushdebug("flushing for M106");
