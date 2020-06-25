@@ -392,7 +392,8 @@ void settemp(int which, double target) {
 		return;
 	}
 	temps[which].target[0] = target;
-	temps[which].adctarget[0] = temps[which].toadc(target, MAXINT);
+	// Set target. Add 10% if hold_time == 0 and PID is set up.
+	temps[which].adctarget[0] = temps[which].toadc(target, MAXINT) * (temps[which].hold_time > 0 && !std::isinf(temps[which].P) ? 1 : 1.10);
 	//debug("adc target %d from %f", temps[which].adctarget[0], temps[which].target[0]);
 	if (temps[which].adctarget[0] >= MAXINT) {
 		// main loop doesn't handle it anymore, so it isn't disabled there.

@@ -151,7 +151,7 @@ static const Timer_data timer_data[] = {
 	volatile uint8_t *avr_input; \
 	uint8_t avr_bitmask; \
 	bool avr_on; \
-	int16_t avr_target;
+	int32_t avr_target;
 
 #define ARCH_MOTOR \
 	volatile uint16_t step_port, dir_port; \
@@ -1369,17 +1369,22 @@ inline void arch_outputs() { // {{{
 		if ((pin[p].state & 0x3) != CTRL_SET)
 			continue;
 		if (pin[p].avr_on)
-			pin[p].avr_target -= interval;
-		pin[p].avr_target += (interval * (int32_t(pin[p].duty) + 1)) >> 15;
+			pin[p].avr_target -= uint32_t(interval) << 15;
+		pin[p].avr_target += interval * (uint32_t(pin[p].duty) + 1);
 		if (pin[p].avr_target < 0) {
+			//if (pin[p].avr_on)
+			//	debug("pin %d off target %x:%x duty %x interval %x", p, uint16_t(pin[p].avr_target >> 16), uint16_t(pin[p].avr_target), pin[p].duty, interval);
 			*pin[p].avr_output &= ~pin[p].avr_bitmask;
 			pin[p].avr_on = false;
 		}
 		else {
+			//if (!pin[p].avr_on)
+			//	debug("pin %d on target %x:%x duty %x interval %x", p, uint16_t(pin[p].avr_target >> 16), uint16_t(pin[p].avr_target), pin[p].duty, interval);
 			*pin[p].avr_output |= pin[p].avr_bitmask;
 			pin[p].avr_on = true;
 		}
 	}
+	//debug("pin 4 state %x target %x:%x duty %x", pin[4].state, uint16_t(pin[4].avr_target >> 16), uint16_t(pin[4].avr_target), pin[4].duty);
 } // }}}
 // }}}
 #endif

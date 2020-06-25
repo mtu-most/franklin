@@ -264,7 +264,7 @@ function Pins_space(ui, space, motor) {
 
 // Temp. {{{
 function Temp_setup(ui, num) {
-	var e = [Name(ui, 'temp', num), ['fan_temp', 0, 1], Id(ui, [['temp', num], 'bed']), ['P', 0, 1e-3], ['I', 0, 1e-3], ['D', 0, 1e-3]];
+	var e = [Name(ui, 'temp', num), ['fan_temp', 0, 1], Id(ui, [['temp', num], 'bed']), ['P', 0, 1e-2], ['I', 0, 1], ['D', 0, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		if (i == 2)
 			continue;
@@ -887,9 +887,9 @@ function setup_temp(desc, pos, top) { // {{{
 		'Name',
 		'Fan Temp (°C)',
 		'Bed',
-		'P (10¯³/K)',
-		'I (10¯³/s)',
-		'D (10¯³s/K))',
+		'P (%/K)',
+		'I (s)',
+		'D (s))',
 	], [
 		'htitle6',
 		'title6',
@@ -900,9 +900,9 @@ function setup_temp(desc, pos, top) { // {{{
 		'Name of the temperature control',
 		'Temerature above which the cooling is turned on.',
 		'Whether this Temp is the heated bed, used by G-code commands M140 and M190.',
-		'Proportional weight for PID control.',
-		'Integrated weight for PID control.',
-		'Differential weight for PID control'
+		'Proportional weight for PID control. The proportional part is P * error. P is also used as scaling factor for I and D.',
+		'Integrated weight for PID control. The buffer is incremented with P * error * dt / I every step.',
+		'Differential weight for PID control. The differential part is P * D * error / dt.'
 	]).AddMultiple(ui, 'temp', Temp_setup)]);
 	ret.Add([make_table(ui).AddMultipleTitles([
 		'Temp Limits',

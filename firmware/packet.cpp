@@ -174,6 +174,7 @@ void packet()
 			return;
 		}
 		uint8_t value = command(2);
+		// Update reset state of the pin.
 		pin[p].set_state((pin[p].state & ~0xc) | (value & 0xc));
 		pin[p].duty = command(3) | (command(4) << 8);
 		pin[p].motor = command(5);
@@ -271,7 +272,7 @@ void packet()
 			// If the pin is changed, and the old one was active, deactivate it.
 			bool changed = adc[a].linked[i] != command(2 + i);
 			if (changed && ~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
-				//debug("unset for change adc %d %d: %d", a, i, adc[a].linked[i]);
+				//debug("unset for change adc %d link %d: pin %d", a, i, adc[a].linked[i]);
 				pin[adc[a].linked[i]].num_temps -= 1;
 				UNSET(adc[a].linked[i]);
 			}
@@ -279,14 +280,15 @@ void packet()
 			adc[a].limit[i][0] = read_16(4 + 2 * i);
 			adc[a].limit[i][1] = read_16(8 + 2 * i);
 			adc[a].value[i] = read_16(12 + 2 * i);
-			if (changed && ~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
-				pin[adc[a].linked[i]].num_temps += 1;
+			if (~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
+				if (changed)
+					pin[adc[a].linked[i]].num_temps += 1;
 				if (adc[a].is_on[i]) {
-					//debug("set for change adc %d %d: %d %d %x", a, i, adc[a].linked[i], adc[a].is_on[i], adc[a].value[i]);
+					//debug("set for change adc %d link %d: pin %d on %d value %x", a, i, adc[a].linked[i], adc[a].is_on[i], adc[a].value[i]);
 					SET(adc[a].linked[i]);
 				}
 				else {
-					//debug("reset for change adc %d %d: %d %d %x", a, i, adc[a].linked[i], adc[a].is_on[i], adc[a].value[i]);
+					//debug("reset for change adc %d link %d: pin %d on %d value %x", a, i, adc[a].linked[i], adc[a].is_on[i], adc[a].value[i]);
 					RESET(adc[a].linked[i]);
 				}
 			}

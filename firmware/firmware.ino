@@ -58,6 +58,7 @@ static void handle_adc() {
 			bool higher = value >= treshold;
 			//debug("limits %d %d %x %x %x %x", adc_current, n, adc[adc_current].limit[n][0], adc[adc_current].limit[n][1], value, adc[adc_current].value[n]);
 			if (value < (adc[adc_current].limit[n][0] & 0x3fff)) {
+				// Below lower limit: force heater to be ON or fan to be OFF. (Fan is inverted.)
 				if (adc[adc_current].limit[n][0] & 0x4000) {
 					//debug("limit l0 %d %d", adc_current, n);
 					higher = true;
@@ -68,6 +69,7 @@ static void handle_adc() {
 				}
 			}
 			else if (value >= (adc[adc_current].limit[n][1] & 0x3fff)) {
+				// Above upper limit: force heater to be OFF or fan to be ON. (Fan is inverted.)
 				if (adc[adc_current].limit[n][1] & 0x4000) {
 					//debug("limit h0 %d %d", adc_current, n);
 					higher = true;

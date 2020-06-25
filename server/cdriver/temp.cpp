@@ -46,7 +46,6 @@ void Temp::load(int id) {
 		int adc_i = std::isnan(beta) && R0 >= 0 ? 0 : 1;
 		adclimit[i][adc_i] = toadc(limit[i][0], adc_i * MAXINT);
 		adclimit[i][1 - adc_i] = toadc(limit[i][1], (1 - adc_i) * MAXINT);
-		SET_OUTPUT(power_pin[i]);
 	}
 	last_change_time = millis();
 	hold_time = shmem->floats[11];
@@ -238,14 +237,14 @@ void handle_temp(int id, int temp) { // {{{
 	}
 	// Update PID (only if hold_time == 0).
 	if (temps[id].hold_time == 0 && now >= temps[id].last_PID + 200) {
-		double delta = temps[id].target[0] - new_value;
+		double error = temps[id].target[0] - new_value;
 		double dt = (now - temps[id].last_PID) / 1000.;
 		temps[id].last_PID = now;
-		double part_P = temps[id].P * delta;
-		double part_D = temps[id].D * (new_value - old_value) / dt;
-		double out = part_P + temps[id].I_state + part_D;
+		double part_P = temps[id].P * error;
+		double part_D = temps[id].P * temps[id].D * (new_value - old_value) / dt;
+		double out = part_P + temps[id].I_state - part_D;
 		// Adjust I_state with the correction that was required.
-		temps[id].I_state += temps[id].I * (out - temps[id].I_state) * dt;
+		temps[id].I_state += temps[id].P / temps[id].I * error * dt;
 		if (std::isnan(temps[id].I_state) || temps[id].I_state < 0)
 			temps[id].I_state = 0;
 		else if (temps[id].I_state > 1)

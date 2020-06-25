@@ -663,7 +663,7 @@ void RESET(Pin_t _pin) { // {{{
 	//debug("reset %d", _pin.pin);
 	if (avr_pins[_pin.pin].state == 0)
 		return;
-	//debug("resetting pin %d", _pin.pin);
+	//debug("resetting pin %d inverted: %d", _pin.pin, _pin.inverted());
 	avr_pins[_pin.pin].state = 0;
 	if (_pin.inverted())
 		avr_setup_pin(_pin.pin, CTRL_SET, avr_pins[_pin.pin].reset < 2 ? 1 - avr_pins[_pin.pin].reset : avr_pins[_pin.pin].reset, 0);
@@ -1153,7 +1153,7 @@ void arch_setup_temp(int id, int thermistor_pin, bool active, int heater_pin, bo
 	}
 	// Make sure the controls for the heater and fan have been sent, otherwise they override this.
 	try_send_control();
-	while (out_busy >= 3) {
+	while (out_busy >= 3 || avr_control_queue_length > 0) {
 		serial_wait();
 		try_send_control();
 	}
