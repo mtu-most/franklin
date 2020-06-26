@@ -60,29 +60,29 @@ static void handle_adc() {
 			if (value < (adc[adc_current].limit[n][0] & 0x3fff)) {
 				// Below lower limit: force heater to be ON or fan to be OFF. (Fan is inverted.)
 				if (adc[adc_current].limit[n][0] & 0x4000) {
-					//debug("limit l0 %d %d", adc_current, n);
+					//debug("limit l0 %d %d invert %d", adc_current, n, invert);
 					higher = true;
 				}
 				else {
-					//debug("limit l1 %d %d", adc_current, n);
+					//debug("limit l1 %d %d invert %d", adc_current, n, invert);
 					higher = false;
 				}
 			}
 			else if (value >= (adc[adc_current].limit[n][1] & 0x3fff)) {
 				// Above upper limit: force heater to be OFF or fan to be ON. (Fan is inverted.)
 				if (adc[adc_current].limit[n][1] & 0x4000) {
-					//debug("limit h0 %d %d", adc_current, n);
+					//debug("limit h0 %d %d invert %d", adc_current, n, invert);
 					higher = true;
 				}
 				else {
-					//debug("limit h1 %d %d", adc_current, n);
+					//debug("limit h1 %d %d invert %d", adc_current, n, invert);
 					higher = false;
 				}
 			}
 			//debug("adc test diff %d hold %d current %d %d higher %d invert %d", int(now - adc[adc_current].last_change), adc[adc_current].hold_time, adc_current, n, higher, invert);
 			if (invert ^ higher) {
 				if (adc[adc_current].is_on[n]) {
-					//debug("switch off");
+					//debug("switch off %d %d value %x treshold %x higher %d invert %d", adc_current, n, value, treshold, higher, invert);
 					adc[adc_current].last_change = now;
 					if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS)
 						RESET(adc[adc_current].linked[n]);
@@ -97,7 +97,7 @@ static void handle_adc() {
 			else {
 				//debug("adc set %d %d %d", n, value, adc[adc_current].value[n]);
 				if (!adc[adc_current].is_on[n]) {
-					//debug("switch on");
+					//debug("switch on %d %d value %x treshold %x higher %d invert %d", adc_current, n, value, treshold, higher, invert);
 					if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS)
 						SET(adc[adc_current].linked[n]);
 					adc[adc_current].last_change = now;

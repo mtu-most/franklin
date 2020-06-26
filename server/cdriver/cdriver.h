@@ -157,7 +157,7 @@ struct History {
 	int32_t hwtime, end_time;
 	int hwtime_step;
 	double run_time;
-	int gcode_line;
+	int64_t gcode_line;
 	int64_t current_restore;
 	uint8_t pattern[PATTERN_MAX];
 	int pattern_size;	// in bytes; each bit in the pattern is a pulse.

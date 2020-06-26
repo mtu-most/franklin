@@ -261,9 +261,9 @@ void next_move(int32_t start_time) { // {{{
 	}
 
 	// Info for 3-D robot
-	mdebug("move ln %d, from=(%.2f,%.2f,%.2f) (current %.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
+	mdebug("move ln %lld, from=(%.2f,%.2f,%.2f) (current %.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
 	// Info for 2-D robot
-	mdebug("move ln %d, from=(%.2f,%.2f) (current %.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
+	mdebug("move ln %lld, from=(%.2f,%.2f) (current %.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
 	// Short info for 2-D robot
 	mdebug("move (%.2f,%.2f) -> (%.2f,%.2f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, queue[q].target[0], queue[q].target[1]);
 
@@ -278,15 +278,15 @@ void next_move(int32_t start_time) { // {{{
 			check_a += da * da;
 		}
 		if (check_x > 1e-2) {
-			warning("Warning: %d final x %f,%f,%f != start x %f,%f,%f", settings.gcode_line, final_x[0], final_x[1], final_x[2], spaces[0].axis[0]->settings.source + settings.unitg[0] * settings.x0g + settings.unith[0] * settings.x0h, spaces[0].axis[1]->settings.source + settings.unitg[1] * settings.x0g + settings.unith[1] * settings.x0h, spaces[0].axis[2]->settings.source + settings.unitg[2] * settings.x0g + settings.unith[2] * settings.x0h);
+			warning("Warning: %lld final x %f,%f,%f != start x %f,%f,%f", settings.gcode_line, final_x[0], final_x[1], final_x[2], spaces[0].axis[0]->settings.source + settings.unitg[0] * settings.x0g + settings.unith[0] * settings.x0h, spaces[0].axis[1]->settings.source + settings.unitg[1] * settings.x0g + settings.unith[1] * settings.x0h, spaces[0].axis[2]->settings.source + settings.unitg[2] * settings.x0g + settings.unith[2] * settings.x0h);
 			debug_abort();
 		}
 		if (check_v > 1e-2) {
-			warning("Warning: %d final v %f,%f,%f != start v %f,%f,%f", settings.gcode_line, final_v[0], final_v[1], final_v[2], settings.v0g * settings.unitg[0] + settings.v0h * settings.unith[0], settings.v0g * settings.unitg[1] + settings.v0h * settings.unith[1], settings.v0g * settings.unitg[2] + settings.v0h * settings.unith[2]);
+			warning("Warning: %lld final v %f,%f,%f != start v %f,%f,%f", settings.gcode_line, final_v[0], final_v[1], final_v[2], settings.v0g * settings.unitg[0] + settings.v0h * settings.unith[0], settings.v0g * settings.unitg[1] + settings.v0h * settings.unith[1], settings.v0g * settings.unitg[2] + settings.v0h * settings.unith[2]);
 			debug_abort();
 		}
 		if (check_a > 1e2) {
-			warning("Warning: %d final a %f,%f,%f != start a %f,%f,%f", settings.gcode_line, final_a[0], final_a[1], final_a[2], settings.a0g * settings.unitg[0] + settings.a0h * settings.unith[0], settings.a0g * settings.unitg[1] + settings.a0h * settings.unith[1], settings.a0g * settings.unitg[2] + settings.a0h * settings.unith[2]);
+			warning("Warning: %lld final a %f,%f,%f != start a %f,%f,%f", settings.gcode_line, final_a[0], final_a[1], final_a[2], settings.a0g * settings.unitg[0] + settings.a0h * settings.unith[0], settings.a0g * settings.unitg[1] + settings.a0h * settings.unith[1], settings.a0g * settings.unitg[2] + settings.a0h * settings.unith[2]);
 			debug_abort();
 		}
 	}
@@ -355,14 +355,14 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	}
 	// Limit v.
 	if (v > limit_mtr->limit_v * (1 + 1e-5)) {
-		warning("line %d motor %d %d v %f limit %f dist %f dt %f current %f factor %f", settings.gcode_line, sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, factor);
+		warning("line %lld motor %d %d v %f limit %f dist %f dt %f current %f factor %f", settings.gcode_line, sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, factor);
 		distance = (s * limit_mtr->limit_v) * dt;
 		v = std::fabs(distance / dt);
 	}
 	// Limit a+.
 	double limit_dv = limit_mtr->limit_a * dt;
 	if (v - mtr->last_v * s > limit_dv * (1 + 1e-5)) {
-		warning("line %d a+ %d %d target v %f limit dv %f last v %f s %d current %f factor %f", settings.gcode_line, sp, mt, target_v, limit_dv, mtr->last_v, s, mtr->settings.current_pos, factor);
+		warning("line %lld a+ %d %d target v %f limit dv %f last v %f s %d current %f factor %f", settings.gcode_line, sp, mt, target_v, limit_dv, mtr->last_v, s, mtr->settings.current_pos, factor);
 		distance = (limit_dv * s + mtr->last_v) * dt;
 		v = std::fabs(distance / dt);
 	}
@@ -455,7 +455,7 @@ static void do_steps(double old_factor) { // {{{
 				int diff = new_hw - current_hw;
 				int max_steps = 0x1ff;
 				if (diff > max_steps) {
-					warning("Error on line %d: %d %d trying to send more than 0x1ff steps: %x  from %x to %x (time %d)", settings.gcode_line, s, m, diff, current_hw, new_hw, settings.hwtime);
+					warning("Error on line %lld: %d %d trying to send more than 0x1ff steps: %x  from %x to %x (time %d)", settings.gcode_line, s, m, diff, current_hw, new_hw, settings.hwtime);
 					debug_abort();
 					int adjust = diff - max_steps;
 					if (settings.hwtime_step > settings.hwtime)
@@ -468,7 +468,7 @@ static void do_steps(double old_factor) { // {{{
 					mtr.target_pos = target;
 				}
 				if (diff < -max_steps) {
-					warning("Error on line %d: %d %d trying to send more than -0x1ff steps: %x  from %x to %x (time %d)", settings.gcode_line, s, m, -diff, current_hw, new_hw, settings.hwtime);
+					warning("Error on line %lld: %d %d trying to send more than -0x1ff steps: %x  from %x to %x (time %d)", settings.gcode_line, s, m, -diff, current_hw, new_hw, settings.hwtime);
 					debug_abort();
 					int adjust = diff + max_steps;
 					if (settings.hwtime_step > settings.hwtime)
@@ -698,6 +698,7 @@ void store_settings() { // {{{
 	history[current_fragment].current_restore = settings.current_restore;
 	history[current_fragment].run_time = settings.run_time;
 	history[current_fragment].pattern_size = settings.pattern_size;
+	history[current_fragment].gcode_line = settings.gcode_line;
 	for (int i = 0; i < PATTERN_MAX; ++i)
 		history[current_fragment].pattern[i] = settings.pattern[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -742,6 +743,7 @@ void restore_settings() { // {{{
 	settings.current_restore = history[current_fragment].current_restore;
 	settings.run_time = history[current_fragment].run_time;
 	settings.pattern_size = history[current_fragment].pattern_size;
+	settings.gcode_line = history[current_fragment].gcode_line;
 	for (int i = 0; i < PATTERN_MAX; ++i)
 		settings.pattern[i] = history[current_fragment].pattern[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -1119,7 +1121,7 @@ int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], boo
 		move.v0 = max_v;
 		move.tool = 0;
 		move.e = spaces[1].num_axes > 0 ? spaces[1].axis[0]->current : 0;
-		move.gcode_line = -1;
+		move.gcode_line = 0;
 		move.time = 0;
 		double start[3];
 		if (s > 1e-5) {

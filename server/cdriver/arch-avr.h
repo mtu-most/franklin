@@ -511,6 +511,7 @@ bool hwpacket(int len) { // {{{
 		}
 		else
 			avr_write_ack("done");
+		//debug("fragment done for %d gcode line %lld", running_fragment, history[running_fragment].gcode_line);
 		running_fragment = (running_fragment + command[offset + 1]) % FRAGMENTS_PER_BUFFER;
 		//debug("running -> %x", running_fragment);
 		if ((current_fragment + discarding + (transmitting_fragment ? 1 : 0)) % FRAGMENTS_PER_BUFFER == running_fragment && command[0] == HWC_DONE) {
