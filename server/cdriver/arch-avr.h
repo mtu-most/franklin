@@ -511,7 +511,7 @@ bool hwpacket(int len) { // {{{
 		}
 		else
 			avr_write_ack("done");
-		//debug("fragment done for %d gcode line %lld", running_fragment, history[running_fragment].gcode_line);
+		//debug("fragment done for gcode line %" LONGFMT, history[running_fragment].gcode_line);
 		running_fragment = (running_fragment + command[offset + 1]) % FRAGMENTS_PER_BUFFER;
 		//debug("running -> %x", running_fragment);
 		if ((current_fragment + discarding + (transmitting_fragment ? 1 : 0)) % FRAGMENTS_PER_BUFFER == running_fragment && command[0] == HWC_DONE) {
@@ -1269,7 +1269,7 @@ void arch_invertpos(int s, int m) { // {{{
 	spaces[s].motor[m]->settings.hw_pos *= -1;
 	if (std::isnan(spaces[s].motor[m]->settings.current_pos))
 		return;
-	avr_pos_offset[mi + m] -= 2 * (spaces[s].motor[m]->settings.current_pos + avr_pos_offset[mi + m]);
+	avr_pos_offset[mi + m] = -2 * spaces[s].motor[m]->settings.current_pos - avr_pos_offset[mi + m];
 } // }}}
 
 void arch_stop(bool fake) { // {{{

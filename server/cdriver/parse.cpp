@@ -257,7 +257,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					else if (arg.type == 'R')
 						R = arg.num;
 					else
-						parse_error(errors, "%lld: ignoring invalid parameter %c: %s", lineno, arg.type, line.c_str());
+						parse_error(errors, "%" LONGFMT ": ignoring invalid parameter %c: %s", lineno, arg.type, line.c_str());
 				}
 				if (!std::isnan(F)) {
 					current_f[code == 0 ? 0 : 1] = F * unit / 60;
@@ -306,7 +306,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				handle_coordinate(C, 5, &controlled, rel);
 				if (!controlled || (std::isnan(X) && std::isnan(Y) && std::isnan(Z))) {
 					if (handle_pattern)
-						parse_error(errors, "%lld: Warning: not handling pattern because position is unknown", lineno);
+						parse_error(errors, "%" LONGFMT ": Warning: not handling pattern because position is unknown", lineno);
 					flushdebug("flushing because position is unknown or non-position move");
 					flush_pending();
 					add_record(lineno, RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], NAN, NAN, current_f[code == 0 ? 0 : 1], epos.at(current_tool));
@@ -386,7 +386,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					else if (arg.type == 'F')
 						F = arg.num;
 					else
-						parse_error(errors, "%lld: ignoring invalid arc parameter %c: %s", lineno, arg.type, line.c_str());
+						parse_error(errors, "%" LONGFMT ": ignoring invalid arc parameter %c: %s", lineno, arg.type, line.c_str());
 				}
 				if (!std::isnan(F)) {
 					current_f[1] = F * unit / 60;
@@ -484,7 +484,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				}
 			}
 			// TODO: This is broken, so it is disabled. It should be fixed and enabled.
-			//parse_error(errors, "%lld: Arc commands (G2/G3) are disabled at the moment", lineno);
+			//parse_error(errors, "%" LONGFMT ": Arc commands (G2/G3) are disabled at the moment", lineno);
 			break;
 			{
 				modetype = type;
@@ -515,7 +515,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					else if (arg.type == 'K')
 						K = arg.num;
 					else
-						parse_error(errors, "%lld: ignoring invalid arc parameter %c: %s", lineno, arg.type, line.c_str());
+						parse_error(errors, "%" LONGFMT ": ignoring invalid arc parameter %c: %s", lineno, arg.type, line.c_str());
 				}
 				if (!std::isnan(F)) {
 					current_f[1] = F * unit / 60;
@@ -592,7 +592,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			bool specified = false;
 			for (auto arg: command) {
 				if (arg.type != 'P') {
-					parse_error(errors, "%lld: ignoring %c argument for G64", lineno, arg.type);
+					parse_error(errors, "%" LONGFMT ": ignoring %c argument for G64", lineno, arg.type);
 					continue;
 				}
 				max_dev = arg.num;
@@ -614,7 +614,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			// Set position.  Only supported for extruders.
 			for (auto arg: command) {
 				if (arg.type != 'E') {
-					parse_error(errors, "%lld: Not setting position for unsupported type %c", lineno, arg.type);
+					parse_error(errors, "%" LONGFMT ": Not setting position for unsupported type %c", lineno, arg.type);
 					continue;
 				}
 				auto &cepos = epos.at(current_tool);
@@ -632,7 +632,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			break;
 		default:
 			// Command was not handled: complain.
-			parse_error(errors, "%lld: Invalid command %c%d.", lineno, type, code);
+			parse_error(errors, "%" LONGFMT ": Invalid command %c%d.", lineno, type, code);
 			break;
 		}
 	} // }}}
@@ -690,7 +690,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					}
 				}
 				if (!have_p || std::isnan(s)) {
-					parse_error(errors, "%lld: M42 needs both P and S arguments.", lineno);
+					parse_error(errors, "%" LONGFMT ": M42 needs both P and S arguments.", lineno);
 					break;
 				}
 				add_record(lineno, RUN_GPIO, p, s);
@@ -722,7 +722,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					}
 				}
 				if (std::isnan(s)) {
-					parse_error(errors, "%lld: M104 needs S argument.", lineno);
+					parse_error(errors, "%" LONGFMT ": M104 needs S argument.", lineno);
 					break;
 				}
 				add_record(lineno, RUN_SETTEMP, have_t ? t : e, s + C0);
@@ -774,7 +774,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			break;
 		default:
 			// Command was not handled: complain.
-			parse_error(errors, "%lld: Invalid command %c%d.", lineno, type, code);
+			parse_error(errors, "%" LONGFMT ": Invalid command %c%d.", lineno, type, code);
 			break;
 		}
 	} // }}}
@@ -797,7 +797,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 	} // }}}
 	else {
 		// Command was not handled: complain.
-		parse_error(errors, "%lld: Invalid command %c%d.", lineno, type, code);
+		parse_error(errors, "%" LONGFMT ": Invalid command %c%d.", lineno, type, code);
 	}
 	command.clear();
 	return true;
@@ -828,7 +828,7 @@ void Parser::read_space() { // {{{
 
 int Parser::read_int(double *power, int *sign) { // {{{
 	if (linepos >= line.size()) {
-		parse_error(errors, "%lld: int requested at end of line", lineno);
+		parse_error(errors, "%" LONGFMT ": int requested at end of line", lineno);
 		return 0;
 	}
 	int s = 1;
@@ -839,7 +839,7 @@ int Parser::read_int(double *power, int *sign) { // {{{
 	case '+':
 		linepos += 1;
 		if (linepos >= line.size()) {
-			parse_error(errors, "%lld: int requested at end of line", lineno);
+			parse_error(errors, "%" LONGFMT ": int requested at end of line", lineno);
 			return 0;
 		}
 		break;
@@ -1029,7 +1029,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 			}
 			if (type == 0) {
 				if (modetype == 0) {
-					parse_error(errors, "%lld: G-Code must have only G, M, T, S, or D-commands until first mode-command: %s", lineno, line.c_str());
+					parse_error(errors, "%" LONGFMT ": G-Code must have only G, M, T, S, or D-commands until first mode-command: %s", lineno, line.c_str());
 					break;
 				}
 				type = modetype;
@@ -1043,7 +1043,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 			break;
 		if (type != 0) {
 			if (!pattern_data.empty() && (type != 'G' || num != 1))
-				parse_error(errors, "%lld: Warning: ignoring pattern comment because command is not G1", lineno);
+				parse_error(errors, "%" LONGFMT ": Warning: ignoring pattern comment because command is not G1", lineno);
 			if (!handle_command(!pattern_data.empty()))
 				break;
 		}
@@ -1236,7 +1236,7 @@ void Parser::flush_pending(bool finish) { // {{{
 
 				pdebug("part 1 s,t: cv %f,%f rs %f,%f ca %f,%f re %f,%f curve %f,%f", s_const_v, t_const_v, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_curve, t_curve);
 				if (s_const_v < -1e-2) {
-					parse_error(errors, "%lld: Error: const v part is negative: %f", P0->gcode_line, s_const_v);
+					parse_error(errors, "%" LONGFMT ": Error: const v part is negative: %f", P0->gcode_line, s_const_v);
 					//abort();
 				}
 
@@ -1308,7 +1308,7 @@ void Parser::flush_pending(bool finish) { // {{{
 
 				pdebug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
 				if (s_const_v < -1e-2) {
-					parse_error(errors, "%lld: Error: const v2 is negative: %f, len %f %f", P0->gcode_line, s_const_v, P0->length, P1->length);
+					parse_error(errors, "%" LONGFMT ": Error: const v2 is negative: %f, len %f %f", P0->gcode_line, s_const_v, P0->length, P1->length);
 					pdebug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
 					//abort();
 				}

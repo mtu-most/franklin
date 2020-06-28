@@ -2390,6 +2390,9 @@ class Machine: # {{{
 		cdriver.force_disconnect()
 		self._close(False)
 	# }}}
+	def motors2xyz(self, motors): # {{{
+		return cdriver.motors2xyz(*motors)
+	# }}}
 	# Commands for handling the toolpath.
 	def tp_get_position(self): # {{{
 		'''Get current toolpath position.

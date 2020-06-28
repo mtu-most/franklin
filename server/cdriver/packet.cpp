@@ -367,7 +367,7 @@ void request(int req) {
 		shmem->floats[3] = run_find_pos(const_cast<const double *>(shmem->floats));
 		break;
 	CASE(CMD_MOTORS2XYZ)
-		spaces[shmem->ints[0]].motors2xyz(const_cast<const double *>(shmem->floats), const_cast<double *>(&shmem->floats[shmem->ints[1]]));
+		spaces[0].motors2xyz(const_cast<const double *>(shmem->floats), const_cast<double *>(&shmem->floats[shmem->ints[0]]));
 		break;
 	default:
 		debug("unknown packet received: %x", req);

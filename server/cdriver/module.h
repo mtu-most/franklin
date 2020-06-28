@@ -21,6 +21,7 @@
 #include <cmath>
 #include <cstdio>
 #include <stdint.h>
+#include <cinttypes>
 
 // EXTERN is defined in exactly one file; the variables are defined in that file.
 #ifndef EXTERN
@@ -30,6 +31,8 @@
 #define ID_SIZE 8
 #define UUID_SIZE 16
 #define NUM_SPACES 3
+
+#define LONGFMT PRId64
 
 #define PATTERN_MAX int(9 * sizeof(double))
 

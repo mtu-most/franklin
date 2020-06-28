@@ -754,21 +754,20 @@ static PyObject *tp_findpos(PyObject *Py_UNUSED(self), PyObject *args) {
 
 static PyObject *motors2xyz(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
-	shmem->ints[1] = PyTuple_Size(args) - 1;
-	if (shmem->ints[1] < 0) {
-		PyErr_SetString(PyExc_ValueError, "motors2xyz needs space as first argument");
+	int num = PyTuple_Size(args);
+	if (num <= 0) {
+		PyErr_SetString(PyExc_ValueError, "motors2xyz needs motor positions as arguments");
 		return NULL;
 	}
-	PyObject *value = PyTuple_GetItem(args, 0);
-	shmem->ints[0] = PyLong_AsLong(value);
-	for (int i = 0; i < shmem->ints[1]; ++i) {
-		value = PyTuple_GetItem(args, i + 1);
+	shmem->ints[0] = num;
+	for (int i = 0; i < num; ++i) {
+		PyObject *value = PyTuple_GetItem(args, i);
 		shmem->floats[i] = PyFloat_AsDouble(value);
 	}
 	send_to_child(CMD_MOTORS2XYZ);
-	value = PyTuple_New(shmem->ints[0]);
-	for (int i = 0; i < shmem->ints[0]; ++i) {
-		PyObject *f = PyFloat_FromDouble(shmem->floats[shmem->ints[1] + i]);
+	PyObject *value = PyTuple_New(num);
+	for (int i = 0; i < num; ++i) {
+		PyObject *f = PyFloat_FromDouble(shmem->floats[num + i]);
 		PyTuple_SET_ITEM(value, i, f);
 	}
 	return value;
