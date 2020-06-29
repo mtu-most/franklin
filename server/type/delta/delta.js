@@ -1,39 +1,13 @@
 var TYPE_DELTA = 'delta';
 
-function delta_get_value(ui, id) { // {{{
-	if (typeof id[0][1] == 'number')
-		return ui.machine.spaces[id[0][1]]['delta_' + id[1]];
-	return ui.machine.spaces[id[0][1][0]].motor[id[0][1][1]]['delta_' + id[1]];
-} // }}}
-
-function delta_set_value(ui, id, value, reply) { // {{{
-	if (typeof id[0][1] == 'number') {
-		// [['module', 0, 'delta'], 'angle']
-		ui.machine.call('set_space', [id[0][1]], {module: {type: 'delta', angle: value}}, reply);
-	}
-	else if (id[0][1][1] === null) {
-		// [['module', [0, null], 'delta'], 'radius']
-		var o = {type: 'delta'};
-		o[id[1]] = value;
-		for (var n = 0; n < spaces[id[0][1][0]].num_motors; ++n)
-			ui.machine.call('set_motor', [id[0][1][0], n], {module: o}, reply);
-	}
-	else {
-		// [['module', [0, 1], 'delta'], 'radius']
-		var o = {type: 'delta'};
-		o[id[1]] = value;
-		ui.machine.call('set_motor', [id[0][1]], {module: o}, reply);
-	}
-} // }}}
-
 function delta_update(ui, index) { // {{{
 	for (var d = 0; d < 3; ++d) {
-		update_float(ui, [['module', [index, d], 'delta'], 'axis_min']);
-		update_float(ui, [['module', [index, d], 'delta'], 'axis_max']);
-		update_float(ui, [['module', [index, d], 'delta'], 'rodlength']);
-		update_float(ui, [['module', [index, d], 'delta'], 'radius']);
+		update_float(ui, [['motor', [index, d]], [TYPE_DELTA, 'axis_min']]);
+		update_float(ui, [['motor', [index, d]], [TYPE_DELTA, 'axis_max']]);
+		update_float(ui, [['motor', [index, d]], [TYPE_DELTA, 'rodlength']]);
+		update_float(ui, [['motor', [index, d]], [TYPE_DELTA, 'radius']]);
 	}
-	update_float(ui, [['module', index, 'delta'], 'angle']);
+	update_float(ui, [['space', index], ['delta', 'angle']]);
 } // }}}
 
 function delta_draw(ui, context) { // {{{
@@ -124,7 +98,7 @@ function Delta(ui, space, motor) { // {{{
 	var e = [['axis_min', 1], ['axis_max', 1], ['rodlength', 3], ['radius', 3]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float(ui, [['module', [space, motor], 'delta'], e[i][0]], e[i][1], 1));
+		div.Add(Float(ui, [['motor', [space, motor]], [TYPE_DELTA, e[i][0]]], e[i][1], 1));
 		e[i] = div;
 	}
 	return make_tablerow(ui, motor_name(ui, space, motor), e, ['rowtitle4'], undefined, TYPE_DELTA, space);
@@ -134,7 +108,7 @@ function Delta_space(ui, num) { // {{{
 	if (num != 0)
 		return null;
 	var div = Create('div');
-	div.Add(Float(ui, [['module', num, 'delta'], 'angle'], 2, Math.PI / 180));
+	div.Add(Float(ui, [['space', num], [TYPE_DELTA, 'angle']], 2, Math.PI / 180));
 	return make_tablerow(ui, space_name(ui, num), [div], ['rowtitle1'], undefined, TYPE_DELTA, num);
 } // }}}
 
@@ -179,8 +153,6 @@ AddEvent('setup', function () {
 	space_types[TYPE_DELTA] = 'Delta';
 	type_info[TYPE_DELTA] = {
 		name: 'Delta',
-		get_value: delta_get_value,
-		set_value: delta_set_value,
 		update: delta_update,
 		draw: delta_draw,
 		load: delta_load,
@@ -190,5 +162,4 @@ AddEvent('setup', function () {
 	ui_modules['Delta Setup'] = setup_delta;
 });
 
-// TODO: set_value id parsing
 // vim: set foldmethod=marker :

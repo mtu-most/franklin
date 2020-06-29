@@ -211,17 +211,12 @@ function make_id(ui, id, extra) { // {{{
 	// [null, 'num_temps']
 	// [['space', 1], 'num_axes']
 	// [['axis', [0, 1]], 'offset']
-	// [['motor', [0, 1]], 'delta_radius']
-	if (!(ui instanceof Element))
-		console.error(ui);
-	var ret = ui ? ui.machine.uuid.replace(/[^a-zA-Z0-9_]/g, '') : '';
+	// [['motor', [0, 1]], 'dir_pin']
+	// [['motor', [0, 1]], ['delta', 'radius']]
+	console.assert(ui instanceof Element, 'ui is not a DOM Element', ui);
+	var ret = ui.machine.uuid.replace(/[^a-zA-Z0-9_]/g, '');
 	if (id[0] !== null) {
-		if (typeof id[0][0] == 'string')
-			ret += '_' + id[0][0];
-		else {
-			ret += '_' + id[0][0][0];
-			ret += '_' + id[0][0][1];
-		}
+		ret += '_' + id[0][0];
 		if (typeof id[0][1] == 'number')
 			ret += '_' + String(id[0][1]);
 		else if (id[0][1] !== null) {
@@ -229,76 +224,57 @@ function make_id(ui, id, extra) { // {{{
 			ret += '_' + String(id[0][1][1]);
 		}
 	}
-	ret += '_' + id[1];
+	if (typeof id[1] == 'string')
+		ret += '_' + id[1];
+	else {
+		ret += '_' + id[1][0];
+		ret += '_' + id[1][1];
+	}
 	if (extra !== null && extra !== undefined)
 		ret += '_' + String(extra);
 	return ret;
 } // }}}
 
 function set_value(ui, id, value, reply, arg) { // {{{
+	var set = function(idx) {
+		if (typeof id[1] != 'string') {
+			// This is a module property.
+			var obj = {type: id[1][0]};
+			obj[id[1][1]] = value;
+			ui.machine.call('set_' + id[0][0], [idx], {module: obj}, reply);
+			// Old code; remove if the above works.
+			//type_info[id[0][2]].set_value(ui, id, value, reply);
+		}
+		else {
+			var obj = {};
+			obj[id[1]] = value;
+			ui.machine.call('set_' + id[0][0], [idx], obj, reply);
+		}
+	};
 	//console.info('setting value for', id, 'to', value);
 	if (id.length == 2 || id[2] === undefined) {
-		var obj = {};
-		obj[id[1]] = value;
 		if (id[0] === null) {
 			// [null, 'num_temps']
+			var obj = {};
+			obj[id[1]] = value;
 			ui.machine.call('set_globals', [], obj, reply);
 		}
 		else {
-			if (id[0][0] == 'module') {
-				type_info[id[0][2]].set_value(ui, id, value, reply);
-			}
-			else if (id[0][1] === null) {
+			if (id[0][1] === null) {
 				// [['space', null], 'num_axes']
 				for (var n = 0; n < ui.machine['num_' + type2plural[id[0][0]]]; ++n)
-					ui.machine.call('set_' + id[0][0], [n], obj, reply);
+					set(n);
 			}
 			else if (typeof id[0][1] != 'number' && id[0][1][1] == null) {
 				// [['axis', [0, null]], 'park_pos']
 				// [['motor', [0, null]], 'home_pos']
-				if ((id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_') && (id[0][0] != 'motor' || id[1].substr(0, 9) != 'follower_')) {
-					for (var n = 0; n < ui.machine.spaces[id[0][1][0]]['num_' + type2plural[id[0][0]]]; ++n)
-						ui.machine.call('set_' + id[0][0], [[id[0][1][0], n]], obj, reply);
-				}
-				else if (id[1][0] == 'e') {
-					// extruder
-					obj = {};	// obj was wrong in this case.
-					obj[id[1].substr(9)] = value;
-					var o = {};
-					for (var n = 0; n < ui.machine.spaces[id[0][1][0]].num_axes; ++n)
-						o[n] = obj;
-					ui.machine.call('set_space', [id[0][1][0]], {extruder: o}, reply);
-				}
-				else {
-					// follower
-					obj = {};	// obj was wrong in this case.
-					obj[id[1].substr(9)] = value;
-					var o = {};
-					for (var n = 0; n < ui.machine.spaces[id[0][1][0]].num_axes; ++n)
-						o[n] = obj;
-					ui.machine.call('set_motor', [id[0][1][0]], {follower: o}, reply);
-				}
-			}
-			else if ((id[0][0] != 'axis' || id[1].substr(0, 9) != 'extruder_') && (id[0][0] != 'motor' || id[1].substr(0, 9) != 'follower_')) {
-				// [['space', 1], 'num_axes']
-				// [['axis', [0, 1]], 'offset']
-				ui.machine.call('set_' + id[0][0], [id[0][1]], obj, reply);
-			}
-			else if (id[0][0] == 'motor') {
-				// [['motor', [0, 1]], 'follower_motor']
-				obj = {};	// obj was wrong in this case.
-				obj[id[1].substr(9)] = value;
-				var o = {};
-				o[id[0][1][1]] = obj;
-				ui.machine.call('set_space', [id[0][1][0]], {follower: o}, reply);
+				for (var n = 0; n < ui.machine.spaces[id[0][1][0]]['num_' + type2plural[id[0][0]]]; ++n)
+					set([id[0][1][0], n]);
 			}
 			else {
-				// [['motor', [0, 1]], 'extruder_dx']
-				obj = {};	// obj was wrong in this case.
-				obj[id[1].substr(9)] = value;
-				var o = {};
-				o[id[0][1][1]] = obj;
-				ui.machine.call('set_space', [id[0][1][0]], {extruder: o}, reply);
+				// [['space', 1], 'num_axes']
+				// [['axis', [0, 1]], 'offset']
+				set(id[0][1]);
 			}
 		}
 	}
@@ -326,14 +302,19 @@ function set_value(ui, id, value, reply, arg) { // {{{
 
 function get_value(ui, id) { // {{{
 	if (id[0] === null)
+		// [null, 'num_temps']
 		return ui.machine[id[1]];
-	if (id[0][0] == 'module')
-		return type_info[id[0][2]].get_value(ui, id);
-	if (id[0][0] == 'axis')
-		return ui.machine.spaces[id[0][1][0]].axis[id[0][1][1]][id[1]];
-	if (id[0][0] == 'motor')
-		return ui.machine.spaces[id[0][1][0]].motor[id[0][1][1]][id[1]];
-	return ui.machine[type2plural[id[0][0]]][id[0][1]][id[1]];
+	var key = (typeof id[1] == 'string' ? id[1] : id[1][0] + '_' + id[1][1]);
+	if (id[0][0] == 'axis' || id[0][0] == 'motor') {
+		// [['axis', [0, 1]], 'offset']
+		// [['motor', [0, 1]], 'home_pos']
+		var part = id[0][0];
+		var space = id[0][1][0];
+		var num = id[0][1][1];
+		return ui.machine.spaces[space][part][num][key];
+	}
+	// [['space', 1], 'num_axes']
+	return ui.machine[type2plural[id[0][0]]][id[0][1]][key];
 } // }}}
 
 function get_elements(ui, id, extra) { // {{{

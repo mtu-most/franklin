@@ -1,16 +1,5 @@
 var TYPE_FOLLOWER = 'follower';
 
-function follower_get_value(ui, id) { // {{{
-	return ui.machine.spaces[id[0][1][0]].motor[id[0][1][1]]['follower_' + id[1]];
-} // }}}
-
-function follower_set_value(ui, id, value, reply) { // {{{
-	// [['module', [0, 1], 'follower'], 'spacemotor']
-	var o = {type: 'follower'};
-	o[id[1]] = value;
-	ui.machine.call('set_motor', [id[0][1]], {module: o}, reply);
-} // }}}
-
 function follower_update(ui, index) { // {{{
 	for (var m = 0; m < ui.machine.spaces[index].motor.length; ++m) {
 		var selects = get_elements(p, [['motor', [index, m]], 'spacemotor']);
@@ -27,7 +16,7 @@ function follower_mload(machine, index, m, data) { // {{{
 function Follower(ui, space, motor) { // {{{
 	if (space != 2)
 		return null;
-	var e = MotorSelect(ui, [['module', [space, motor], TYPE_FOLLOWER], 'spacemotor']);
+	var e = MotorSelect(ui, [['motor', [space, motor]], [TYPE_FOLLOWER, 'spacemotor']]);
 	return make_tablerow(ui, motor_name(ui, space, motor), [e], ['rowtitle1'], undefined, TYPE_FOLLOWER, space);
 } // }}}
 
@@ -53,8 +42,6 @@ AddEvent('setup', function () {
 	space_types[TYPE_FOLLOWER] = 'Follower';
 	type_info[TYPE_FOLLOWER] = {
 		name: 'Follower',
-		get_value: follower_get_value,
-		set_value: follower_set_value,
 		update: follower_update,
 		draw: function() { return [0, 0, [0, 0], function() {}]; },
 		load: function() {},

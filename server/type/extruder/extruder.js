@@ -1,21 +1,10 @@
 var TYPE_EXTRUDER = 'extruder';
 
-function extruder_get_value(ui, id) { // {{{
-	return ui.machine.spaces[id[0][1][0]].axis[id[0][1][1]]['extruder_' + id[1]];
-} // }}}
-
-function extruder_set_value(ui, id, value, reply) { // {{{
-	// [['module', [0, 1, 'axis'], 'extruder'], 'dx']
-	var o = {type: 'extruder'};
-	o[id[1]] = value;
-	ui.machine.call('set_axis', [[id[0][1][0], id[0][1][1]]], {module: o}, reply);
-} // }}}
-
 function extruder_update(ui, index) { // {{{
 	for (var a = 0; a < ui.machine.spaces[1].axis.length; ++a) {
-		update_float(ui, [['module', [index, a, 'axis'], 'extruder'], 'dx']);
-		update_float(ui, [['module', [index, a, 'axis'], 'extruder'], 'dy']);
-		update_float(ui, [['module', [index, a, 'axis'], 'extruder'], 'dz']);
+		update_float(ui, [['axis', [index, a]], [TYPE_EXTRUDER, 'dx']]);
+		update_float(ui, [['axis', [index, a]], [TYPE_EXTRUDER, 'dy']]);
+		update_float(ui, [['axis', [index, a]], [TYPE_EXTRUDER, 'dz']]);
 	}
 } // }}}
 
@@ -32,7 +21,7 @@ function Extruder(ui, space, axis) { // {{{
 	var e = [['dx', 1], ['dy', 1], ['dz', 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float(ui, [['module', [space, axis, 'axis'], 'extruder'], e[i][0]], e[i][1], 1));
+		div.Add(Float(ui, [['axis', [space, axis]], [TYPE_EXTRUDER, e[i][0]]], e[i][1], 1));
 		e[i] = div;
 	}
 	return make_tablerow(ui, axis_name(ui, space, axis), e, ['rowtitle2'], undefined, TYPE_EXTRUDER, space);
@@ -65,8 +54,6 @@ AddEvent('setup', function () {
 	space_types[TYPE_EXTRUDER] = 'Extruder';
 	type_info[TYPE_EXTRUDER] = {
 		name: 'Extruder',
-		get_value: extruder_get_value,
-		set_value: extruder_set_value,
 		update: extruder_update,
 		draw: null,	// This should never be called.
 		aload: extruder_aload

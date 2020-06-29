@@ -1,18 +1,7 @@
 var TYPE_POLAR = 'polar';
 
-function polar_get_value(ui, id) { // {{{
-	return ui.machine.spaces[id[0][1]]['polar_' + id[1]];
-} // }}}
-
-function polar_set_value(ui, id, value, reply) { // {{{
-	// [['module', 0, 'polar'], 'max_r']
-	var o = {type: 'polar'};
-	o[id[1]] = value;
-	ui.machine.call('set_space', id[0][1], {module: o}, reply);
-} // }}}
-
 function polar_update(ui, index) { // {{{
-	update_float(ui, [['module', index, 'polar'], 'max_r']);
+	update_float(ui, [['space', index], [TYPE_POLAR, 'max_r']]);
 } // }}}
 
 function polar_draw(ui, context) { // {{{
@@ -34,7 +23,7 @@ function polar_load(machine, s, m, data) { // {{{
 
 // UI modules. {{{
 function Polar(ui, space) { // {{{
-	var f = Float(ui, [['module', space, 'polar'], 'max_r'], 1, 1);
+	var f = Float(ui, [['space', space], [TYPE_POLAR, 'max_r']], 1, 1);
 	return make_tablerow(ui, space_name(ui, space), f, ['rowtitle1'], undefined, TYPE_POLAR, space);
 } // }}}
 
@@ -60,8 +49,6 @@ AddEvent('setup', function () {
 	space_types[TYPE_POLAR] = 'Polar';
 	type_info[TYPE_POLAR] = {
 		name: 'Polar',
-		get_value: polar_get_value,
-		set_value: polar_set_value,
 		update: polar_update,
 		draw: polar_draw,
 		load: polar_load

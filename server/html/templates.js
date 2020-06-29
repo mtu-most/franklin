@@ -213,18 +213,6 @@ function Id(ui, obj) { // {{{
 
 
 // Space. {{{
-function Extruder(ui, space, axis) {
-	if (space != 1)
-		return null;
-	var e = ['extruder_dx', 'extruder_dy', 'extruder_dz'];
-	for (var i = 0; i < e.length; ++i) {
-		var div = Create('div');
-		div.Add(Float(ui, [['axis', [space, axis]], e[i]], 1, 1e-3));
-		e[i] = div;
-	}
-	return make_tablerow(ui, axis_name(ui, space, axis), e, ['rowtitle3'], undefined, TYPE_EXTRUDER, space);
-}
-
 function Axis(ui, space, axis) {
 	if (space != 0 && axis === null)
 		return null;
@@ -856,28 +844,6 @@ function setup_motor(desc, pos, top) { // {{{
 	pins.AddMultiple(ui, 'motor', Pins_space, false);
 	return [ret, pos];
 } // }}}
-function setup_extruder(desc, pos, top) { // {{{
-	var ui = top.data;
-	var ret = Create('div', 'setup expert');
-	ret.AddElement('div').AddText('Number of extruders:').Add(Float(ui, [['space', 1], 'num_axes'], 0));
-	ret.Add([make_table(ui).AddMultipleTitles([
-		'Extruder',
-		'Offset X',
-		'Offset Y',
-		'Offset Z'
-	], [
-		'htitle3',
-		'title3',
-		'title3',
-		'title3'
-	], [
-		null,
-		'Offset in X direction when this extruder is in use.  Set to 0 for the first extruder.',
-		'Offset in Y direction when this extruder is in use.  Set to 0 for the first extruder.',
-		'Offset in Z direction when this extruder is in use.  Set to 0 for the first extruder.'
-	]).AddMultiple(ui, 'axis', Extruder, false)]);
-	return [ret, pos];
-} // }}}
 function setup_temp(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
@@ -1019,7 +985,6 @@ ui_modules = { // {{{
 	'Cartesian Setup': setup_cartesian,
 	'Axis Setup': setup_axis,
 	'Motor Setup': setup_motor,
-	'Extruder Setup': setup_extruder,
 	'Temp Setup': setup_temp,
 	'Gpio Setup': setup_gpio,
 	'Type Setup': setup_type,

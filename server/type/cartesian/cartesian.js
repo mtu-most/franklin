@@ -13,8 +13,6 @@ AddEvent('setup', function () {
 	space_types[TYPE_CARTESIAN] = 'Cartesian';
 	type_info[TYPE_CARTESIAN] = {
 		name: 'Cartesian',
-		get_value: function() {},
-		set_value: function() {},
 		update: function() {},
 		draw: cartesian_draw,
 		load: function() {},

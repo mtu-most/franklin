@@ -1,20 +1,9 @@
 var TYPE_DRAWBOT = 'drawbot';
 
-function drawbot_get_value(ui, id) { // {{{
-	return ui.machine.spaces[id[0][1][0]].motor[id[0][1][1]]['drawbot_' + id[1]];
-} // }}}
-
-function drawbot_set_value(ui, id, value, reply) { // {{{
-	// [['module', [0, 1, 'motor'], 'drawbot'], 'x']
-	var o = {type: 'drawbot'};
-	o[id[1]] = value;
-	ui.machine.call('set_motor', [[id[0][1][0], id[0][1][1]]], {module: o}, reply);
-} // }}}
-
 function drawbot_update(ui, index) { // {{{
 	for (var m = 0; m < ui.machine.spaces[0].motor.length; ++m) {
-		update_float(ui, [['module', [index, m, 'motor'], 'drawbot'], 'x']);
-		update_float(ui, [['module', [index, m, 'motor'], 'drawbot'], 'y']);
+		update_float(ui, [['motor', [index, m]], [TYPE_DRAWBOT, 'x']]);
+		update_float(ui, [['motor', [index, m]], [TYPE_DRAWBOT, 'y']]);
 	}
 } // }}}
 
@@ -58,7 +47,7 @@ function Drawbot(ui, space, motor) { // {{{
 	var e = [['x', 1], ['y', 1]];
 	for (var i = 0; i < e.length; ++i) {
 		var div = Create('div');
-		div.Add(Float(ui, [['module', [space, motor, 'motor'], 'drawbot'], e[i][0]], e[i][1], 1));
+		div.Add(Float(ui, [['motor', [space, motor]], [TYPE_DRAWBOT, e[i][0]]], e[i][1], 1));
 		e[i] = div;
 	}
 	return make_tablerow(ui, motor_name(ui, space, motor), e, ['rowtitle2'], undefined, TYPE_DRAWBOT, space);
@@ -89,8 +78,6 @@ AddEvent('setup', function () {
 	space_types[TYPE_DRAWBOT] = 'Drawbot';
 	type_info[TYPE_DRAWBOT] = {
 		name: 'Drawbot',
-		get_value: drawbot_get_value,
-		set_value: drawbot_set_value,
 		update: drawbot_update,
 		draw: drawbot_draw,
 		mload: drawbot_mload
