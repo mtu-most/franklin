@@ -48,14 +48,21 @@ void setup()
 	while (f) {
 		char buffer[PATH_MAX];
 		f.getline(buffer, PATH_MAX);
-		if (buffer[0] != '\0' && buffer[0] != '#')
+		if (buffer[0] != '\0' && buffer[0] != '#') {
 			types.push_back(buffer);
+			for (auto i = types.back().begin(); i != types.back().end(); ++i) {
+				if (*i >= 'A' && *i <= 'Z')
+					*i = *i - 'A' + 'a';
+				else if (!(*i >= 'a' && *i <= 'z') && !(*i >= '0' && *i <= '9'))
+					*i = '_';
+			}
+		}
 	}
 	num_space_types = types.size();
 	space_types = new SpaceType[num_space_types];
 	int type_id = 0;
 	for (auto i: types) {
-		std::string filename = typepath + i + "/" + i + ".so";
+		std::string filename = typepath + i + "/module.so";
 		void *handle = dlopen(filename.c_str(), RTLD_NOW | RTLD_LOCAL | RTLD_DEEPBIND);
 		*(void **)(&space_types[type_id].check_position) = load_sym(handle, "check_position", *(void **)&space_types[0].check_position);
 		*(void **)(&space_types[type_id].load_space) = load_sym(handle, "load_space", *(void **)&space_types[0].load_space);
@@ -79,7 +86,7 @@ void setup()
 			debug("Error loading type module %s: %s", filename.c_str(), error);
 			abort();
 		}
-		debug("finished loading type module %s", filename.c_str());
+		//debug("finished loading type module %s", filename.c_str());
 		type_id += 1;
 	}
 	// Initialize volatile variables.

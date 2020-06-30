@@ -374,8 +374,12 @@ function _setup_connection() {
 	rpc.call('get_role', [], {}, function(r) {
 		role = r;
 		document.getElementById('container').AddClass('role_' + role);
-		trigger_update(null, 'connect', true);
-		rpc.call('set_monitor', [true], {}, null);
+		rpc.call('get_typeinfo', [], {}, function(info) {
+			// Generate type setup ui modules.
+			console.log(info);
+			trigger_update(null, 'connect', true);
+			rpc.call('set_monitor', [true], {}, null);
+		});
 	});
 }
 // }}}

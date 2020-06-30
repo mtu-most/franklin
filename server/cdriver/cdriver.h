@@ -472,7 +472,7 @@ void buffer_refill();
 void store_settings();
 void restore_settings();
 void reset_pos(Space *s);
-EXTERN int current_int, current_float;
+EXTERN int current_int, current_float, current_string;
 
 // globals.cpp
 bool globals_load();

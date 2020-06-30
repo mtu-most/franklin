@@ -1,7 +1,7 @@
-cartesian
-extruder
-follower
-delta
-polar
-h-bot
-drawbot
+Cartesian
+Extruder
+Follower
+Delta
+Polar
+H-Bot
+Drawbot

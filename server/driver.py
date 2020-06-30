@@ -69,68 +69,125 @@ config = fhs.init(packagename = 'franklin')
 modulepath = fhs.read_data(os.path.join('type', 'types.txt'), opened = False)
 moduledir = os.path.dirname(modulepath)
 typeinfo = {}
-#typeinfo['polar'] = {
-#		'space': [('radius', 0.)],
+#typeinfo['h_bot'] = {
+#		'title': 'H-Bot',
+#		'name': (['r', None], ['θ', '°'], ['z', None]),	// Axis names and units. None means default units.
+#		'min-axes': 3
+#		'space': [{
+#			'name': 'radius',
+#			'unit': None,	# None means default units.
+#			'default': 0.,
+#			'digits': 2,
+#			'scale': 1.,
+#			'help': 'Rotation of the machine'}
+#		],
 #		'axis': [],
 #		'motor': [],
-#		'name': (['r', None], ['θ', '°'], ['z', None])
 #	}
 
 # Config file format:
-#name=r
-#name=θ
-#unit=°
-#name=z
-#[space]
-#radius = 0.
-#radius = 0.00
-#radius = 0.00e3
+'''
+# Global values must be specified before any parameters.
+# This is the default. Set to different value to allow using a comma as part of the name or unit.
+seperator = ,
+motor-names = r,θ,z
+# Values which are not specified use the system default unit (normally mm).
+motor-units = ,°,
+
+# Define a parameter. This is for a property that has one instance.
+# All possible paramters are specified here. Only help is required.
+# Everything else has sensible defaults.
+# Type can be float (the default), int, string, or motor.
+# For the motor type, unit, default, digits and scale are ignored.
+[space]
+name = Angle
+help = Rotation of the machine.
+unit = °
+type = float
+default = 0
+digits = 2
+scale = 1000
+
+# More space parameters can follow. Every parameter definition starts with a name.
+
+[motor]
+name = radius
+help = Distance from the center to this apex.
+default = 125
+digits = 1
+
+[axis]
+name = offset
+help = ...
+'''
 
 # If a value contains only [-0-9], it is an int; otherwise it is a float. 'inf' and 'nan' are supported.
 # Digits are counted and used for displaying in the interface.
-# Exponent is parsed and used for displaying in the interface.
+# Scale is parsed and used for displaying in the interface; default value is also multiplied by it.
 
-# tabs are required; spaces are part of the name.
 for m in open(modulepath):
-	module = m.strip()
+	#log('reading info for type ' + m.strip())
+	separator = ','
+	title = m.strip()
+	module = re.sub('[^a-z0-9]', '_', title.lower())
 	with open(os.path.join(moduledir, module, module + os.extsep + 'ini')) as f:
 		section = None
-		ret = {'space': [], 'axis': [], 'motor': [], 'name': [], 'min-axes': None}
+		ret = {'title': title, 'space': [], 'axis': [], 'motor': [], 'name': [], 'min-axes': None}
 		for ln in f:
 			if ln.strip() == '' or ln.strip().startswith('#'):
 				continue
-			r = re.match(r'^\s*(?:\[(space|axis|motor)\]|(\w+)\s*=\s*(.*?))\s*$', ln)
+			r = re.match(r'^\s*(?:\[(space|axis|motor)\]|(separator|min-axes|motor-names|motor-units|name|help|unit|type|default|digits|scale)\s*=\s*(.*?))\s*$', ln)
 			assert r is not None
 			# 1: space|axis|motor		new section
-			# 2: name|unit|axes		key
+			# 2: [^=]+?				key
 			# 3: .*?			value
 			if r.group(1) is not None:
 				# New section.
 				section = r.group(1)
 				continue
 			key = r.group(2)
-			value = r.group(3)
+			value = r.group(3).strip()
 			if section is None:
-				if key == 'name':
-					ret['name'].append([value, None])
-				elif key == 'unit':
-					assert len(name) > 0
-					assert name[-1][1] is None
-					name[-1][1] = value
-				elif key == 'axes':
+				if key == 'separator':
+					assert len(value) > 0
+					separator = value
+				elif key == 'motor-names':
+					names = value.split(separator)
+					if len(ret['name']) < len(names):
+						ret['name'] += [[None, None] for _ in range(len(names) - len(ret['name']))]
+					for m in range(len(names)):
+						ret['name'][m][0] = names[m].strip()
+				elif key == 'motor-units':
+					units = value.split(separator)
+					if len(ret['name']) < len(units):
+						ret['name'] += [[None, None] for _ in range(len(units) - len(ret['name']))]
+					for m in range(len(units)):
+						ret['name'][m][1] = units[m].strip()
+				elif key == 'min-axes':
 					assert ret['min-axes'] is None
 					ret['min-axes'] = int(value)
 				else:
-					raise AssertionError('this should not be reached')
+					raise AssertionError('Invalid key in global section')
 			else:
-				if re.match(r'^[-0-9]+$', value):
-					ret[section].append((key, int(value), 0, 0))
+				if key == 'name':
+					assert len(ret[section]) == 0 or 'help' in ret[section][-1]
+					ret[section].append({'unit': None, 'type': 'float', 'default': 0, 'digits': 0, 'scale': 1})
+				assert len(ret[section]) > 0
+				if key in ('name', 'help', 'unit', 'type'):
+					if key == 'type':
+						assert value in ('int', 'float', 'motor', 'string')
+					ret[section][-1][key] = value
+				elif key == 'digits':
+					ret[section][-1][key] = int(value)
+				elif key == 'scale':
+					ret[section][-1][key] = float(value)
+				elif key == 'default':
+					if re.match(r'^[-0-9]+$', value):
+						ret[section][-1][key] = int(value)
+					else:
+						ret[section][-1][key] = float(value)
 				else:
-					r = re.match(r'-?[0-9]*\.?([0-9]*)(?:e(-?[0-9]+))?', value)
-					assert r is not None
-					digits = len(r.group(1))
-					exponent = 0 if r.group(2) is None else int(r.group(2))
-					ret[section].append((key, float(value), digits, exponent))
+					raise AssertionError('Invalid key in section %s' % section)
 	typeinfo[module] = ret
 	type_names.append(module)
 # }}}
@@ -1318,31 +1375,42 @@ class Machine: # {{{
 			self.id = id
 			self.axis = []
 			self.motor = []
-			self.module = {key: value for key, value, digits, exponent in typeinfo[self.type]['space']}
+			self.module = {item['name']: item['default'] for item in typeinfo[self.type]['space']}
 			self.extruder = []
 			self.follower = []
 		def parse_info(self, data, info):
 			'''Decode data from cdriver
-			data is ([ints], [floats])'''
+			data is ([ints], [floats], [strings])'''
 			int_num = 0
 			float_num = 0
+			string_num = 0
 			ret = {}
-			for key, value, digits, exponent in info:
-				if isinstance(value, int):
-					ret[key] = data[0][int_num]
-					int_num += 1
-				else:
-					ret[key] = data[1][float_num]
+			for item in info:
+				if item['type'] == 'float':
+					ret[item['name']] = data[1][float_num]
 					float_num += 1
+				elif item['type'] == 'string':
+					ret[item['name']] = data[2][string_num]
+					string_num += 1
+				else:
+					ret[item['name']] = data[0][int_num]
+					int_num += 1
 			return ret
 		def build_module_data(self, data, info):
-			'''Prepare data for sending to cdriver'''
+			'''Prepare data for sending to cdriver
+			data is a single list, in the order of info'''
 			ret = []
-			for key, value, digits, exponent in info:
-				if key in data:
-					ret.append(type(value)(data[key]))
+			for item in info:
+				if item['name'] in data:
+					value = data[item['name']]
 				else:
-					ret.append(value)
+					value = item['default']
+				if item['type'] == 'float':
+					ret.append(float(value))
+				elif item['type'] == 'string':
+					ret.append(str(value))
+				else:
+					ret.append(int(value))
 			return ret
 		def read(self):
 			self.read_info()
@@ -1383,24 +1451,24 @@ class Machine: # {{{
 				for i in range(len(self.axis), num_axes):
 					self.axis.append({'name': nm(i), 'park': float('nan'), 'park_order': 0, 'min': float('nan'), 'max': float('nan'), 'home_pos2': float('nan')})
 					if old_type == self.type:
-						self.axis[i]['module'] = {key: value for key, value, digits, exponent in typeinfo[self.type]['axis']}
+						self.axis[i]['module'] = {item['name']: item['default'] for item in typeinfo[self.type]['axis']}
 			else:
 				while len(self.axis) > num_axes:
 					self.axis.pop(-1)
 			if old_type != self.type:
 				for a, axis in enumerate(self.axis):
-					self.axis[a]['module'] = {key: value for key, value, digits, exponent in typeinfo[self.type]['axis']}
+					self.axis[a]['module'] = {item['name']: item['default'] for item in typeinfo[self.type]['axis']}
 			if num_motors > len(self.motor):
 				for i in range(len(self.motor), num_motors):
 					self.motor.append({'step_pin': 0, 'dir_pin': 0, 'enable_pin': 0, 'limit_min_pin': 0, 'limit_max_pin': 0, 'steps_per_unit': 100., 'home_pos': 0., 'limit_v': float('inf'), 'limit_a': float('inf'), 'home_order': 0, 'unit': self.machine.unit_name})
 					if old_type == self.type:
-						self.motor[i]['module'] = {key: value for key, value, digits, exponent in typeinfo[self.type]['motor']}
+						self.motor[i]['module'] = {item['name']: item['default'] for item in typeinfo[self.type]['motor']}
 			else:
 				while len(self.motor) > num_motors:
 					self.motor.pop(-1)
 			if old_type != self.type:
 				for m, motor in enumerate(self.motor):
-					self.motor[m]['module'] = {key: value for key, value, digits, exponent in typeinfo[self.type]['motor']}
+					self.motor[m]['module'] = {item['name']: item['default'] for item in typeinfo[self.type]['motor']}
 			module_data = data.pop('module')
 			self.module = self.parse_info(module_data, typeinfo[self.type]['space'])
 		def read_axis(self, a):
@@ -1606,6 +1674,9 @@ class Machine: # {{{
 		if not self.name:
 			self.name = self.uuid
 		return self.uuid
+	# }}}
+	def get_typeinfo(self): # {{{
+		return typeinfo
 	# }}}
 	def expert_die(self, reason): # {{{
 		'''Kill this machine, including all files on disk.
@@ -2564,7 +2635,7 @@ class Machine: # {{{
 			num_axes = len(self.spaces[space].axis)
 		num_motors = num_axes
 		if old_type != self.spaces[space].type or not hasattr(self.spaces[space], 'module'):
-			self.spaces[space].module = {key: value for key, value, digits, exponent in typeinfo[self.spaces[space].type]['space']}
+			self.spaces[space].module = {item['name']: item['default'] for item in typeinfo[self.spaces[space].type]['space']}
 		if 'module' in ka:
 			module_data = ka.pop('module')
 			assert module_data.pop('type') == self.spaces[space].type
@@ -2592,7 +2663,7 @@ class Machine: # {{{
 			self.multipliers[axis] = ka.pop('multiplier')
 			self.expert_set_motor((space, axis), readback, update)
 		if 'module' not in self.spaces[space].axis[axis]:
-			self.spaces[space].axis[axis]['module'] = {key: value for key, value, digits, exponent in typeinfo[self.spaces[space].type]['axis']}
+			self.spaces[space].axis[axis]['module'] = {item['name']: item['default'] for item in typeinfo[self.spaces[space].type]['axis']}
 		if 'module' in ka:
 			module_data = ka.pop('module')
 			assert module_data.pop('type') == self.spaces[space].type
@@ -2623,7 +2694,7 @@ class Machine: # {{{
 			self.spaces[space].motor[motor]['unit'] = ka.pop('unit')
 		if 'module' not in self.spaces[space].motor[motor]:
 			log('new module')
-			self.spaces[space].motor[motor]['module'] = {key: value for key, value, digits, exponent in typeinfo[self.spaces[space].type]['motor']}
+			self.spaces[space].motor[motor]['module'] = {item['name']: item['default'] for item in typeinfo[self.spaces[space].type]['motor']}
 		if 'module' in ka:
 			module_data = ka.pop('module')
 			assert module_data.pop('type') == self.spaces[space].type

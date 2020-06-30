@@ -23,11 +23,11 @@
 	void free_motor(Space *s, int m)
 
 static inline void save_int(int value) {
-	shmem->ints[102 + current_int++] = value;
+	shmem->ints[100 + current_int++] = value;
 }
 
 static inline int load_int() {
-	return shmem->ints[102 + current_int++];
+	return shmem->ints[100 + current_int++];
 }
 
 static inline void save_float(double value) {
@@ -36,6 +36,14 @@ static inline void save_float(double value) {
 
 static inline double load_float() {
 	return shmem->floats[100 + current_float++];
+}
+
+static inline void save_string(const char *value) {
+	strncpy(const_cast <char *>(shmem->strs[0 + current_string++]), value, PATH_MAX);
+}
+
+static inline void load_string(char *target) {
+	strncpy(target, const_cast <char *>(shmem->strs[0 + current_string++]), PATH_MAX);
 }
 
 extern "C" {

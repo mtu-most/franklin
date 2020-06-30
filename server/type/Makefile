@@ -1,5 +1,5 @@
-modules := $(shell cat types.txt)
-targets := $(shell sed -E 's/^\s*(.*?)\s*$$/\1\/\1.so/' < types.txt)
+modules := $(shell tr '[:upper:]' '[:lower:]' < types.txt | tr -c '[:alnum:]\n' '[_*]')
+targets := $(patsubst %,%/module.so,${modules})
 
 all: ${targets} html
 
@@ -15,10 +15,10 @@ install:
 clean:
 	rm -f ${targets}
 
-%.so: %.o Makefile ../cdriver/cdriver.h ../cdriver/franklin-module.h ../cdriver/arch-avr.h ../cdriver/module.h
+%/module.so: %/module.o Makefile ../cdriver/cdriver.h ../cdriver/franklin-module.h ../cdriver/arch-avr.h ../cdriver/module.h
 	g++ -ggdb3 -Wall -Wextra -shared -fPIC $< -o $@
 	mkdir -p ../html/type
-	ln -sf ../../type/$(patsubst %.o,%.js,$<) ../html/type/
+	ln -sf ../../type/$(shell echo '$<' | sed -E 's#(.*)/module.o#\1/\1.js#g') ../html/type/
 
-%.o: %.cpp Makefile
+%/module.o: %/module.cpp Makefile
 	g++ -c -Wall -Wextra -ggdb3 -I../cdriver -DARCH_INCLUDE='"arch-avr.h"' -fPIC $< -o $@

@@ -153,6 +153,7 @@ void Space::load_info() { // {{{
 	setup_nums(shmem->ints[2], shmem->ints[3]);
 	current_int = 0;
 	current_float = 0;
+	current_string = 0;
 	space_types[type].load_space(this);
 	if (t != type) {
 		for (int a = 0; a < num_axes; ++a)
@@ -160,8 +161,8 @@ void Space::load_info() { // {{{
 		for (int m = 0; m < num_motors; ++m)
 			space_types[type].init_motor(this, m);
 	}
-	if (current_int != shmem->ints[100] || current_float != shmem->ints[101]) {
-		debug("Warning: load_space (for type %d) did not use correct number of parameters: ints/floats given = %d/%d, used = %d/%d", type, shmem->ints[100], shmem->ints[101], current_int, current_float);
+	if (current_int != shmem->ints[99] || current_float != shmem->ints[98] || current_string != shmem->ints[97]) {
+		debug("Warning: load_space (for type %d) did not use correct number of parameters: ints/floats/strings given = %d/%d/%d, used = %d/%d/%d", type, shmem->ints[99], shmem->ints[98], shmem->ints[97], current_int, current_float, current_string);
 	}
 	if (id != 2)
 		reset_pos(this);
@@ -192,9 +193,10 @@ void Space::load_axis(int a) { // {{{
 	axis[a]->max_pos = shmem->floats[2];
 	current_int = 0;
 	current_float = 0;
+	current_string = 0;
 	space_types[type].load_axis(this, a);
-	if (current_int != shmem->ints[100] || current_float != shmem->ints[101]) {
-		debug("Warning: load_axis (for type %d, axis %d) did not use correct number of parameters: ints/floats given = %d/%d, used = %d/%d", type, a, shmem->ints[100], shmem->ints[101], current_int, current_float);
+	if (current_int != shmem->ints[99] || current_float != shmem->ints[98] || current_string != shmem->ints[97]) {
+		debug("Warning: load_axis (for type %d, axis %d) did not use correct number of parameters: ints/floats/strings given = %d/%d/%d, used = %d/%d/%d", type, a, shmem->ints[99], shmem->ints[98], shmem->ints[97], current_int, current_float, current_string);
 	}
 } // }}}
 
@@ -220,9 +222,10 @@ void Space::load_motor(int m) { // {{{
 	motor[m]->limit_a = shmem->floats[3];
 	current_int = 0;
 	current_float = 0;
+	current_string = 0;
 	space_types[type].load_motor(this, m);
-	if (current_int != shmem->ints[100] || current_float != shmem->ints[101]) {
-		debug("Warning: load_motor (for type %d, motor %d) did not use correct number of parameters: ints/floats given = %d/%d, used = %d/%d", type, m, shmem->ints[100], shmem->ints[101], current_int, current_float);
+	if (current_int != shmem->ints[99] || current_float != shmem->ints[98] || current_string != shmem->ints[97]) {
+		debug("Warning: load_motor (for type %d, axis %d) did not use correct number of parameters: ints/floats/strings given = %d/%d/%d, used = %d/%d/%d", type, m, shmem->ints[99], shmem->ints[98], shmem->ints[97], current_int, current_float, current_string);
 	}
 	arch_motors_change();
 	SET_OUTPUT(motor[m]->enable_pin);
@@ -271,9 +274,11 @@ void Space::save_info() { // {{{
 	shmem->ints[3] = num_motors;
 	current_int = 0;
 	current_float = 0;
+	current_string = 0;
 	space_types[type].save_space(this);
-	shmem->ints[100] = current_int;
-	shmem->ints[101] = current_float;
+	shmem->ints[99] = current_int;
+	shmem->ints[98] = current_float;
+	shmem->ints[97] = current_string;
 } // }}}
 
 void Space::save_axis(int a) { // {{{
@@ -283,9 +288,11 @@ void Space::save_axis(int a) { // {{{
 	shmem->floats[2] = axis[a]->max_pos;
 	current_int = 0;
 	current_float = 0;
+	current_string = 0;
 	space_types[type].save_axis(this, a);
-	shmem->ints[100] = current_int;
-	shmem->ints[101] = current_float;
+	shmem->ints[99] = current_int;
+	shmem->ints[98] = current_float;
+	shmem->ints[97] = current_string;
 } // }}}
 
 void Space::save_motor(int m) { // {{{
@@ -301,9 +308,11 @@ void Space::save_motor(int m) { // {{{
 	shmem->floats[3] = motor[m]->limit_a;
 	current_int = 0;
 	current_float = 0;
+	current_string = 0;
 	space_types[type].save_motor(this, m);
-	shmem->ints[100] = current_int;
-	shmem->ints[101] = current_float;
+	shmem->ints[99] = current_int;
+	shmem->ints[98] = current_float;
+	shmem->ints[97] = current_string;
 } // }}}
 
 void Space::init(int space_id) { // {{{

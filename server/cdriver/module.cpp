@@ -399,14 +399,18 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 }
 
 static PyObject *read_module_data() {
-	int num_int = shmem->ints[100];
-	int num_float = shmem->ints[101];
+	int num_int = shmem->ints[99];
+	int num_float = shmem->ints[98];
+	int num_string = shmem->ints[97];
 	PyObject *ints = PyTuple_New(num_int);
 	for (int i = 0; i < num_int; ++i)
-		PyTuple_SET_ITEM(ints, i, PyLong_FromLong(shmem->ints[102 + i]));
+		PyTuple_SET_ITEM(ints, i, PyLong_FromLong(shmem->ints[100 + i]));
 	PyObject *floats = PyTuple_New(num_float);
 	for (int i = 0; i < num_float; ++i)
 		PyTuple_SET_ITEM(floats, i, PyFloat_FromDouble(shmem->floats[100 + i]));
+	PyObject *strings = PyTuple_New(num_string);
+	for (int i = 0; i < num_string; ++i)
+		PyTuple_SET_ITEM(strings, i, PyBytes_FromString(const_cast <char *>(shmem->strs[i])));
 	PyObject *ret = Py_BuildValue("OO", ints, floats);
 	Py_DECREF(ints);
 	Py_DECREF(floats);
@@ -488,8 +492,9 @@ static PyObject *read_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 static void write_module_data(PyObject *module) {
 	// Write module data from module object into shmem at offset.
 	// Steals reference to module.
-	int int_index = 102;
+	int int_index = 100;
 	int float_index = 100;
+	int string_index = 0;
 	int num = PySequence_Size(module);
 	if (num < 0) {
 		abort();
@@ -499,14 +504,18 @@ static void write_module_data(PyObject *module) {
 		if (PyLong_Check(value)) {
 			shmem->ints[int_index++] = PyLong_AsLong(value);
 		}
-		else {
-			assert_type(Float, value);
+		else if (PyFloat_Check(value)) {
 			shmem->floats[float_index++] = PyFloat_AsDouble(value);
+		}
+		else {
+			assert_type(Bytes, value);
+			strncpy(const_cast <char *>(shmem->strs[string_index++]), PyBytes_AsString(value), PATH_MAX);
 		}
 		Py_DECREF(value);
 	}
-	shmem->ints[100] = int_index - 102;
-	shmem->ints[101] = float_index - 100;
+	shmem->ints[99] = int_index - 100;
+	shmem->ints[98] = float_index - 100;
+	shmem->ints[97] = string_index - 0;
 	Py_DECREF(module);
 }
 
