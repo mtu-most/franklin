@@ -403,14 +403,17 @@ static PyObject *read_module_data() {
 	int num_float = shmem->ints[98];
 	int num_string = shmem->ints[97];
 	PyObject *ints = PyTuple_New(num_int);
-	for (int i = 0; i < num_int; ++i)
+	for (int i = 0; i < num_int; ++i) {
 		PyTuple_SET_ITEM(ints, i, PyLong_FromLong(shmem->ints[100 + i]));
+	}
 	PyObject *floats = PyTuple_New(num_float);
-	for (int i = 0; i < num_float; ++i)
+	for (int i = 0; i < num_float; ++i) {
 		PyTuple_SET_ITEM(floats, i, PyFloat_FromDouble(shmem->floats[100 + i]));
+	}
 	PyObject *strings = PyTuple_New(num_string);
-	for (int i = 0; i < num_string; ++i)
+	for (int i = 0; i < num_string; ++i) {
 		PyTuple_SET_ITEM(strings, i, PyBytes_FromString(const_cast <char *>(shmem->strs[i])));
+	}
 	PyObject *ret = Py_BuildValue("OO", ints, floats);
 	Py_DECREF(ints);
 	Py_DECREF(floats);
@@ -632,12 +635,11 @@ static PyObject *read_gpio(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (!PyArg_ParseTuple(args, "i", &shmem->ints[0]))
 		return NULL;
 	send_to_child(CMD_READ_GPIO);
-	return Py_BuildValue("{si,si,si,si,si,sd}",
+	return Py_BuildValue("{si,si,si,si,sd}",
 			"pin", shmem->ints[1],
 			"state", shmem->ints[2],
-			"space", shmem->ints[3],
-			"motor", shmem->ints[4],
-			"ticks", shmem->ints[5],
+			"leader", shmem->ints[3],
+			"ticks", shmem->ints[4],
 			"duty", shmem->floats[0]);
 }
 
@@ -649,9 +651,8 @@ static PyObject *write_gpio(PyObject *Py_UNUSED(self), PyObject *args) {
 	send_to_child(CMD_READ_GPIO);
 	set_int(1, "pin", dict);
 	set_int(2, "state", dict);
-	set_int(3, "space", dict);
-	set_int(4, "motor", dict);
-	set_int(5, "ticks", dict);
+	set_int(3, "leader", dict);
+	set_int(4, "ticks", dict);
 	set_float(0, "duty", dict);
 	send_to_child(CMD_WRITE_GPIO);
 	return assert_empty_dict(dict, "write_gpio");

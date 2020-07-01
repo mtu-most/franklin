@@ -129,8 +129,7 @@ function MotorSelect(ui, obj, className) { // {{{
 		var option = select.options[select.selectedIndex];
 		if (option === undefined)
 			return;
-		var spacemotor = option.spacemotor || [-1, -1];
-		ui.machine.call('set_' + obj[0][0], [obj[0][1]], {space: spacemotor[0], motor: spacemotor[1]});
+		ui.machine.call('set_' + obj[0][0], [obj[0][1]], {leader: option.leader});
 	});
 	update_motorselect(select);
 	return select;
@@ -320,7 +319,7 @@ function Gpio(ui, num) {
 		e.preventDefault();
 		return false;
 	});
-	var motor_select = MotorSelect(ui, [['gpio', num], 'spacemotor']);
+	var motor_select = MotorSelect(ui, [['gpio', num], 'leader']);
 	return make_tablerow(ui, gpio_name(ui, num), [Name(ui, 'gpio', num), reset, Float(ui, [['gpio', num], 'duty'], 0, 1e-2), Id(ui, [['gpio', num], 'fan']), Id(ui, [['gpio', num], 'spindle']), motor_select, Float(ui, [['gpio', num], 'ticks'], 0, 1)], ['rowtitle7']);
 }
 

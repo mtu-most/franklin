@@ -398,32 +398,16 @@ function floatkey(event, element) { // {{{
 		}
 		if (element.obj[0] !== null && typeof element.obj[0][1] != 'number' && element.obj[0][1][1] === null) {
 			// Update a series of axes or motors.
-			if (element.obj[0][0] == 'module') {
-				var type = type_info[element.obj[0][2]];
-				for (var n = 0; n < element.ui.machine.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][1][2]]]; ++n) {
-					var obj = [[element.obj[0][0], [element.obj[0][1][0], n, element.obj[0][1][2]], element.obj[0][2]], element.obj[1]];
-					var value;
-					if (set)
-						value = amount;
-					else if (element.obj.length == 2)
-						value = type.get_value(element.ui, obj) / element.factor + amount;
-					else
-						continue;
-					type_info[element.obj[0][2]].set_value(element.ui, obj, element.factor * value);
-				}
-			}
-			else {
-				for (var n = 0; n < element.ui.machine.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][0]]]; ++n) {
-					var obj = [[element.obj[0][0], [element.obj[0][1][0], n]], element.obj[1]];
-					var value;
-					if (set)
-						value = amount;
-					else if (element.obj.length == 2)
-						value = get_value(element.ui, obj) / element.factor + amount;
-					else
-						continue;
-					set_value(element.ui, obj, element.factor * value);
-				}
+			for (var n = 0; n < element.ui.machine.spaces[element.obj[0][1][0]]['num_' + type2plural[element.obj[0][0]]]; ++n) {
+				var obj = [[element.obj[0][0], [element.obj[0][1][0], n]], element.obj[1]];
+				var value;
+				if (set)
+					value = amount;
+				else if (element.obj.length == 2)
+					value = get_value(element.ui, obj) / element.factor + amount;
+				else
+					continue;
+				set_value(element.ui, obj, element.factor * value);
 			}
 			return;
 		}
@@ -441,13 +425,12 @@ function floatkey(event, element) { // {{{
 	};
 	// Element types:
 	// [null, 'max_v']
-	// [['module', ...], ...]
 	// [['space', null], 'num_axes']
 	// [['axis', [0, null]], 'offset']
 	// [['space', 1], 'num_axes']
 	// [['axis', [0, 1]], 'offset']
-	// [['motor', [0, 1]], 'follower_motor']
-	if ((element.obj[0] === null && element.obj[1] != 'zoffset') || (element.obj[0] !== null && element.obj[0][0] != 'module' && element.obj[0][0] != 'space' && element.obj[0][0] != 'axis' && element.obj[0][0] != 'motor') || element.obj[1] == 'current') {
+	// [['motor', [0, 1]], ['follower', 'motor']]
+	if ((element.obj[0] === null && element.obj[1] != 'zoffset') || (element.obj[0] !== null && element.obj[0][0] != 'space' && element.obj[0][0] != 'axis' && element.obj[0][0] != 'motor') || element.obj[1] == 'current') {
 		finish();
 	}
 	else {
@@ -563,18 +546,18 @@ function download_probemap(ui) { // {{{
 function update_motorselect(select, new_space, new_motor) {
 	var current;
 	if (new_motor === undefined)
-		current = (select.selectedIndex && select.options[select.selectedIndex] && select.options[select.selectedIndex].spacemotor) || null;
+		current = (select.selectedIndex && select.options[select.selectedIndex] && select.options[select.selectedIndex].leader) || null;
 	else
-		current = [new_space, new_motor];
+		current = new_space | (new_motor << 4);
 	select.ClearAll();
 	var opt = select.AddElement('option').AddText('None');
-	opt.spacemotor = null;
+	opt.leader = null;
 	for (var s = 0; s < select.ui.machine.spaces.length; ++s) {
 		for (var m = 0; m < select.ui.machine.spaces[s].motor.length; ++m) {
 			opt = select.AddElement('option');
-			opt.spacemotor = [s, m];
+			opt.leader = s | (m << 4);
 			opt.AddText(select.ui.machine.spaces[s].motor[m].name);
-			if (opt.spacemotor == current || (opt.spacemotor !== null && current !== null && opt.spacemotor[0] == current[0] && opt.spacemotor[1] == current[1])) {
+			if (opt.leader == current) {
 				select.selectedIndex = select.options.length - 1;
 			}
 		}
@@ -619,7 +602,112 @@ function audio_del(ui, select) { // {{{
 // }}}
 
 // Non-update events. {{{
-function connect(ui, connected) { // {{{
+function connect(ui, connected, ui_info) { // {{{
+	// Generate ui code for type modules.
+	for (var type in ui_info) {
+		var setup_type = function(type) {
+			window['TYPE_' + type.toUpperCase()] = type;
+			var t = ui_info[type];
+			space_types[type] = t.title;
+			ui_modules[t.title + ' Setup'] = function(desc, pos, top) {
+				var ui = top.data;
+				var ret = Create('div', 'setup expert');
+				if (type != 'follower' && type != 'extruder')
+					ret.update = function() { this.hide(ui.machine.spaces[0].type != type); };
+				var mktable = function(part, part_name) {
+					var titles = [[t.title], ['htitle' + t[part].length], [null]];
+					for (var i = 0; i < t[part].length; ++i) {
+						var p = t[part][i];
+						if (p.unit !== null)
+							titles[0].push(p.title + ' (' + p.unit + ')');
+						else
+							titles[0].push(UnitTitle(ui, p.title));
+						titles[1].push('title' + t[part].length);
+						titles[2].push(p.help);
+					}
+					ret.Add([make_table(ui).AddMultipleTitles(titles[0], titles[1], titles[2]).AddMultiple(ui, part, function(ui, space, item) {
+						var component = (item === undefined ? [part, space] : [part, [space, item]]);
+						row = [];
+						for (var i = 0; i < t[part].length; ++i) {
+							var div;
+							if (t[part][i].type == 'int' || t[part][i].type == 'float') {
+								div = Create('div');
+								div.Add(Float(ui, [component, [type, t.name]], t.digits, t.scale));
+							}
+							else if (t[part][i].type == 'motor') {
+								div = MotorSelect(ui, [component, [type, t[part][i].name]]);
+							}
+							else if (t[part][i].type == 'string') {
+								// TODO
+								console.info('string properties are not implemented yet');
+							}
+							else
+								console.error('unsupported type', t[part][i].type, 'for module parameter (this should not happen)', t, part, i);
+							row.push(div);
+						}
+						return make_tablerow(ui, part_name(ui, space, item), row, ['rowtitle' + t[part].length], undefined, type, space);
+					}, false)]);
+				};
+				if (t.space.length > 0) {
+					mktable('space', space_name);
+				}
+				if (t.axis.length > 0) {
+					mktable('axis', axis_name);
+				}
+				if (t.motor.length > 0) {
+					mktable('motor', motor_name);
+				}
+				return [ret, pos];
+			};
+			return {
+				name: t.title,
+				update: function(ui, index) {
+					for (var i = 0; i < t.space.length; ++i) {
+						var p = t.space[i];
+						if (p.type == 'int' || p.type == 'float')
+							update_float(ui, [['space', index], [type, p.name]]);
+					}
+					for (var i = 0; i < t.axis.length; ++i) {
+						var p = t.axis[i];
+						if (p.type == 'int' || p.type == 'float') {
+							for (var n = 0; n < ui.machine.spaces[index].axis.length; ++n)
+								update_float(ui, [['axis', [index, n]], [type, p.name]]);
+						}
+					}
+					for (var i = 0; i < t.motor.length; ++i) {
+						var p = t.motor[i];
+						if (p.type == 'int' || p.type == 'float') {
+							for (var n = 0; n < ui.machine.spaces[index].motor.length; ++n)
+								update_float(ui, [['motor', [index, n]], [type, p.name]]);
+						}
+					}
+				},
+				load: function(machine, index, data) {
+					for (var i = 0; i < t.space.length; ++i) {
+						var p = t.space[i];
+						machines[machine].spaces[index][type + '_' + p.name] = data[p.name];
+					}
+				},
+				aload: function(machine, index, a, data) {
+					for (var i = 0; i < t.axis.length; ++i) {
+						var p = t.axis[i];
+						machines[machine].spaces[index].axis[a][type + '_' + p.name] = data[p.name];
+					}
+				},
+				mload: function(machine, index, m, data) {
+					for (var i = 0; i < t.motor.length; ++i) {
+						var p = t.motor[i];
+						machines[machine].spaces[index].motor[m][type + '_' + p.name] = data[p.name];
+					}
+				}
+			};
+		};
+		type_info[type] = setup_type(type);
+		if (window[type + '_draw'] !== undefined)
+			type_info[type].draw = window[type + '_draw'];
+		else
+			type_info[type].draw = function() {};
+	}
 	if (ui)
 		ui.bin.update();
 	if (connected)
@@ -1017,9 +1105,9 @@ function space_update(uuid, index, nums_changed) { // {{{
 		set_name(p, 'motorunit', index, m, p.machine.spaces[index].motor[m].unit);
 		if (index == 2) {
 			var me = p.machine.spaces[index].motor[m];
-			var selects = get_elements(p, [['motor', [index, m]], 'spacemotor']);
+			var selects = get_elements(p, [['motor', [index, m]], [TYPE_FOLLOWER, 'leader']]);
 			for (var s = 0; s < selects.length; ++s)
-				update_motorselect(s, me.follower_space, me.follower_motor);
+				update_motorselect(s, me.follower_leader);
 		}
 	}
 	var info = type_info[p.machine.spaces[index].type];
@@ -1117,10 +1205,10 @@ function gpio_update(uuid, index) { // {{{
 		e[i].selectedIndex = machines[uuid].gpios[index].reset;
 	update_float(p, [['gpio', index], 'duty']);
 	update_float(p, [['gpio', index], 'ticks']);
-	var selects = get_elements(p, [['gpio', index], 'spacemotor']);
+	var selects = get_elements(p, [['gpio', index], 'leader']);
 	var me = machines[uuid].gpios[index];
 	for (var s = 0; s < selects.length; ++s)
-		update_motorselect(selects[s], me.space, me.motor);
+		update_motorselect(selects[s], me.leader);
 } // }}}
 // }}}
 

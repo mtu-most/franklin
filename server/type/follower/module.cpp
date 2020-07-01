@@ -22,13 +22,13 @@
 UseMotor(FollowerMotorData);
 
 void load_motor(Space *s, int m) {
-	myMotor(s, m).space = load_int();
-	myMotor(s, m).motor = load_int();
+	int leader = load_int();
+	myMotor(s, m).space = leader & 0xf;
+	myMotor(s, m).motor = leader >> 4;
 }
 
 void save_motor(Space *s, int m) {
-	save_int(myMotor(s, m).space);
-	save_int(myMotor(s, m).motor);
+	save_int(myMotor(s, m).space | (myMotor(s, m).motor << 4));
 }
 
 void xyz2motors(Space *s) {

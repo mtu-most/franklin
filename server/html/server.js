@@ -242,7 +242,7 @@ function _setup_updater() {
 					pin: 0,
 					state: 3,
 					reset: 3,
-					spacemotor: null,
+					leader: null,
 				});
 			}
 			machines[machine].gpios.length = machines[machine].num_gpios;
@@ -307,15 +307,6 @@ function _setup_updater() {
 						info.mload(machine, index, m, values[3][m][12]);
 				}
 			}
-			else {
-				if (machines[machine].spaces[index].type == TYPE_EXTRUDER) {
-					for (var i = 0; i < machines[machine].spaces[index].axis.length; ++i) {
-						machines[machine].spaces[index].axis[i].extruder_dx = values[5][i][0];
-						machines[machine].spaces[index].axis[i].extruder_dy = values[5][i][1];
-						machines[machine].spaces[index].axis[i].extruder_dz = values[5][i][2];
-					}
-				}
-			}
 			trigger_update(machine, 'space_update', index, nums_changed);
 		},
 		temp_update: function(machine, index, values) {
@@ -375,9 +366,7 @@ function _setup_connection() {
 		role = r;
 		document.getElementById('container').AddClass('role_' + role);
 		rpc.call('get_typeinfo', [], {}, function(info) {
-			// Generate type setup ui modules.
-			console.log(info);
-			trigger_update(null, 'connect', true);
+			trigger_update(null, 'connect', true, info);
 			rpc.call('set_monitor', [true], {}, null);
 		});
 	});

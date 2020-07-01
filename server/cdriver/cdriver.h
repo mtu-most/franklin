@@ -278,7 +278,7 @@ EXTERN int current_extruder;
 struct Gpio {
 	Pin_t pin;
 	uint8_t state, reset;
-	int space, motor;
+	int leader;
 	int ticks;
 	double duty;
 	bool changed, value;
