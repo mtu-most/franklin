@@ -609,56 +609,58 @@ function connect(ui, connected, ui_info) { // {{{
 			window['TYPE_' + type.toUpperCase()] = type;
 			var t = ui_info[type];
 			space_types[type] = t.title;
-			ui_modules[t.title + ' Setup'] = function(desc, pos, top) {
-				var ui = top.data;
-				var ret = Create('div', 'setup expert');
-				if (type != 'follower' && type != 'extruder')
-					ret.update = function() { this.hide(ui.machine.spaces[0].type != type); };
-				var mktable = function(part, part_name, all) {
-					var titles = [[t.title], ['htitle' + t[part].length], [null]];
-					for (var i = 0; i < t[part].length; ++i) {
-						var p = t[part][i];
-						if (p.unit !== null)
-							titles[0].push(p.title + ' (' + p.unit + ')');
-						else
-							titles[0].push(UnitTitle(ui, p.title));
-						titles[1].push('title' + t[part].length);
-						titles[2].push(p.help);
-					}
-					ret.Add([make_table(ui).AddMultipleTitles(titles[0], titles[1], titles[2]).AddMultiple(ui, part, function(ui, space, item) {
-						var component = (item === undefined ? [part, space] : [part, [space, item]]);
-						row = [];
+			if (t.space.length > 0 || t.axis.length > 0 || t.motor.length > 0) {
+				ui_modules[t.title + ' Setup'] = function(desc, pos, top) {
+					var ui = top.data;
+					var ret = Create('div', 'setup expert');
+					if (type != 'follower' && type != 'extruder')
+						ret.update = function() { this.hide(ui.machine.spaces[0].type != type); };
+					var mktable = function(part, part_name, all) {
+						var titles = [[t.title], ['htitle' + t[part].length], [null]];
 						for (var i = 0; i < t[part].length; ++i) {
-							var div;
-							if (t[part][i].type == 'int' || t[part][i].type == 'float') {
-								div = Create('div');
-								div.Add(Float(ui, [component, [type, t[part][i].name]], t[part][i].digits, t[part][i].scale));
-							}
-							else if (t[part][i].type == 'motor') {
-								div = MotorSelect(ui, [component, [type, t[part][i].name]]);
-							}
-							else if (t[part][i].type == 'string') {
-								// TODO
-								console.info('string properties are not implemented yet');
-							}
+							var p = t[part][i];
+							if (p.unit !== null)
+								titles[0].push(p.title + ' (' + p.unit + ')');
 							else
-								console.error('unsupported type', t[part][i].type, 'for module parameter (this should not happen)', t, part, i);
-							row.push(div);
+								titles[0].push(UnitTitle(ui, p.title));
+							titles[1].push('title' + t[part].length);
+							titles[2].push(p.help);
 						}
-						return make_tablerow(ui, part_name(ui, space, item), row, ['rowtitle' + t[part].length], undefined, type, space);
-					}, all)]);
+						ret.Add([make_table(ui).AddMultipleTitles(titles[0], titles[1], titles[2]).AddMultiple(ui, part, function(ui, space, item) {
+							var component = (item === undefined ? [part, space] : [part, [space, item]]);
+							row = [];
+							for (var i = 0; i < t[part].length; ++i) {
+								var div;
+								if (t[part][i].type == 'int' || t[part][i].type == 'float') {
+									div = Create('div');
+									div.Add(Float(ui, [component, [type, t[part][i].name]], t[part][i].digits, t[part][i].scale));
+								}
+								else if (t[part][i].type == 'motor') {
+									div = MotorSelect(ui, [component, [type, t[part][i].name]]);
+								}
+								else if (t[part][i].type == 'string') {
+									// TODO
+									console.info('string properties are not implemented yet');
+								}
+								else
+									console.error('unsupported type', t[part][i].type, 'for module parameter (this should not happen)', t, part, i);
+								row.push(div);
+							}
+							return make_tablerow(ui, part_name(ui, space, item), row, ['rowtitle' + t[part].length], undefined, type, space);
+						}, all)]);
+					};
+					if (t.space.length > 0) {
+						mktable('space', space_name, false);
+					}
+					if (t.axis.length > 0) {
+						mktable('axis', axis_name, true);
+					}
+					if (t.motor.length > 0) {
+						mktable('motor', motor_name, true);
+					}
+					return [ret, pos];
 				};
-				if (t.space.length > 0) {
-					mktable('space', space_name, false);
-				}
-				if (t.axis.length > 0) {
-					mktable('axis', axis_name, true);
-				}
-				if (t.motor.length > 0) {
-					mktable('motor', motor_name, true);
-				}
-				return [ret, pos];
-			};
+			}
 			return {
 				name: t.title,
 				update: function(ui, index) {

@@ -729,6 +729,7 @@ function setup_type(desc, pos, top) { // {{{
 	button.obj = select;
 	button.AddEvent('click', function() { set_value(ui, [['space', 0], 'type'], this.obj.options[this.obj.selectedIndex].type_name); });
 	ret.AddElement('span').AddClass(make_id(ui, [['space', 0], 'type']));
+	ret.AddElement('div').AddText('Number of axes:').Add(Float(ui, [['space', 0], 'num_axes'], 0));
 	return [ret, pos];
 } // }}}
 function setup_globals(desc, pos, top) { // {{{
@@ -773,12 +774,6 @@ function setup_globals(desc, pos, top) { // {{{
 	pins.Add(Pin(ui, 'SPI SS', [null, 'spiss_pin'], 2));
 	pins.Add(Pin(ui, 'pattern step', [null, 'pattern_step_pin'], 1));
 	pins.Add(Pin(ui, 'pattern dir', [null, 'pattern_dir_pin'], 1));
-	return [ret, pos];
-} // }}}
-function setup_cartesian(desc, pos, top) { // {{{
-	var ui = top.data;
-	var ret = Create('div', 'setup expert');
-	ret.AddElement('div').AddText('Number of axes:').Add(Float(ui, [['space', 0], 'num_axes'], 0));
 	return [ret, pos];
 } // }}}
 function setup_axis(desc, pos, top) { // {{{
@@ -981,7 +976,6 @@ ui_modules = { // {{{
 	'Globals Setup': setup_globals,
 	'Profile Setup': setup_profile,
 	'Probe Setup': setup_probe,
-	'Cartesian Setup': setup_cartesian,
 	'Axis Setup': setup_axis,
 	'Motor Setup': setup_motor,
 	'Temp Setup': setup_temp,
