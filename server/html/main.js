@@ -614,7 +614,7 @@ function connect(ui, connected, ui_info) { // {{{
 				var ret = Create('div', 'setup expert');
 				if (type != 'follower' && type != 'extruder')
 					ret.update = function() { this.hide(ui.machine.spaces[0].type != type); };
-				var mktable = function(part, part_name) {
+				var mktable = function(part, part_name, all) {
 					var titles = [[t.title], ['htitle' + t[part].length], [null]];
 					for (var i = 0; i < t[part].length; ++i) {
 						var p = t[part][i];
@@ -632,7 +632,7 @@ function connect(ui, connected, ui_info) { // {{{
 							var div;
 							if (t[part][i].type == 'int' || t[part][i].type == 'float') {
 								div = Create('div');
-								div.Add(Float(ui, [component, [type, t.name]], t.digits, t.scale));
+								div.Add(Float(ui, [component, [type, t[part][i].name]], t[part][i].digits, t[part][i].scale));
 							}
 							else if (t[part][i].type == 'motor') {
 								div = MotorSelect(ui, [component, [type, t[part][i].name]]);
@@ -646,16 +646,16 @@ function connect(ui, connected, ui_info) { // {{{
 							row.push(div);
 						}
 						return make_tablerow(ui, part_name(ui, space, item), row, ['rowtitle' + t[part].length], undefined, type, space);
-					}, false)]);
+					}, all)]);
 				};
 				if (t.space.length > 0) {
-					mktable('space', space_name);
+					mktable('space', space_name, false);
 				}
 				if (t.axis.length > 0) {
-					mktable('axis', axis_name);
+					mktable('axis', axis_name, true);
 				}
 				if (t.motor.length > 0) {
-					mktable('motor', motor_name);
+					mktable('motor', motor_name, true);
 				}
 				return [ret, pos];
 			};

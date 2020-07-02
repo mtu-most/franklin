@@ -75,6 +75,7 @@ typeinfo = {}
 #		'min-axes': 3
 #		'space': [{
 #			'name': 'radius',
+#			'title': Radius',
 #			'unit': None,	# None means default units.
 #			'type': 'float',
 #			'default': 0.,
@@ -96,7 +97,7 @@ motor-names = r,θ,z
 motor-units = ,°,
 
 # Define a parameter. This is for a property that has one instance.
-# All possible paramters are specified here. Only help is required.
+# All possible paramters are specified here. Only title and help are required.
 # Everything else has sensible defaults.
 # Type can be float (the default), int, string, or motor.
 # For the motor type, unit, default, digits and scale are ignored.
@@ -112,13 +113,13 @@ scale = 1000
 # More space parameters can follow. Every parameter definition starts with a name.
 
 [motor]
-name = radius
+title = Radius
 help = Distance from the center to this apex.
 default = 125
 digits = 1
 
 [axis]
-name = offset
+title = Offset
 help = ...
 '''
 
@@ -137,10 +138,10 @@ for m in open(modulepath):
 		for ln in f:
 			if ln.strip() == '' or ln.strip().startswith('#'):
 				continue
-			r = re.match(r'^\s*(?:\[(space|axis|motor)\]|(separator|min-axes|motor-names|motor-units|name|help|unit|type|default|digits|scale)\s*=\s*(.*?))\s*$', ln)
+			r = re.match(r'^\s*(?:\[(space|axis|motor)\]|(separator|min-axes|motor-names|motor-units|title|name|help|unit|type|default|digits|scale)\s*=\s*(.*?))\s*$', ln)
 			assert r is not None
 			# 1: space|axis|motor		new section
-			# 2: [^=]+?				key
+			# 2: separator|...|scale	key
 			# 3: .*?			value
 			if r.group(1) is not None:
 				# New section.
@@ -170,11 +171,11 @@ for m in open(modulepath):
 				else:
 					raise AssertionError('Invalid key in global section')
 			else:
-				if key == 'name':
+				if key == 'title':
 					assert len(ret[section]) == 0 or 'help' in ret[section][-1]
-					ret[section].append({'unit': None, 'type': 'float', 'default': 0, 'digits': 0, 'scale': 1})
+					ret[section].append({'unit': None, 'type': 'float', 'default': 0, 'digits': 0, 'scale': 1, 'name': value.lower()})
 				assert len(ret[section]) > 0
-				if key in ('name', 'help', 'unit', 'type'):
+				if key in ('name', 'title', 'help', 'unit', 'type'):
 					if key == 'type':
 						assert value in ('int', 'float', 'motor', 'string')
 					ret[section][-1][key] = value

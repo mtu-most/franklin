@@ -13,12 +13,13 @@ install:
 	for m in ${modules} ; do install -m 644 -t ${DESTDIR}/usr/lib/franklin/html/type/ -D $$m/$$m.js ; done
 
 clean:
-	rm -f ${targets}
+	rm -f ${targets} ../html/type/*.js
 
+%/module.so: js = $(shell echo '$<' | sed -E 's#(.*)/module.o#\1/\1.js#g')
 %/module.so: %/module.o Makefile ../cdriver/cdriver.h ../cdriver/franklin-module.h ../cdriver/arch-avr.h ../cdriver/module.h
 	g++ -ggdb3 -Wall -Wextra -shared -fPIC $< -o $@
 	mkdir -p ../html/type
-	ln -sf ../../type/$(shell echo '$<' | sed -E 's#(.*)/module.o#\1/\1.js#g') ../html/type/
+	test ! -f '${js}' || ln -sf '../../type/${js}' ../html/type/
 
 %/module.o: %/module.cpp Makefile
 	g++ -c -Wall -Wextra -ggdb3 -I../cdriver -DARCH_INCLUDE='"arch-avr.h"' -fPIC $< -o $@

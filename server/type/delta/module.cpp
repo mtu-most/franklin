@@ -159,9 +159,10 @@ static void update(Space *s) {
 	y[1] = myMotor(s, 1).radius * sin330;
 	x[2] = 0;
 	y[2] = myMotor(s, 2).radius * sin90;
+	double angle = mySpace(s).angle * M_PI / 180;
 	for (uint8_t m = 0; m < 3; ++m) {
-		myMotor(s, m).x = x[m] * cos(mySpace(s).angle) - y[m] * sin(mySpace(s).angle);
-		myMotor(s, m).y = y[m] * cos(mySpace(s).angle) + x[m] * sin(mySpace(s).angle);
+		myMotor(s, m).x = x[m] * cos(angle) - y[m] * sin(angle);
+		myMotor(s, m).y = y[m] * cos(angle) + x[m] * sin(angle);
 		myMotor(s, m).z = sqrt(myMotor(s, m).rodlength * myMotor(s, m).rodlength - myMotor(s, m).radius * myMotor(s, m).radius);
 	}
 }

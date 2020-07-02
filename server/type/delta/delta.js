@@ -38,7 +38,7 @@ function delta_draw(ui, context) {
 	}
 	outline = function(ui, c) {
 		c.save(); // Rotate the outline.
-		c.rotate(ui.machine.spaces[0].delta_angle);
+		c.rotate(ui.machine.spaces[0].delta_angle * Math.PI / 180);
 		c.beginPath();
 		c.moveTo(intersects[0][0][0], intersects[0][0][1]);
 		for (var a = 0; a < 3; ++a) {
@@ -55,7 +55,7 @@ function delta_draw(ui, context) {
 			c.beginPath();
 			c.save(); // Print axis name.
 			c.translate(origin[a][0] + dy[a] * 10 - w / 2, origin[a][1] - dx[a] * 10);
-			c.rotate(-ui.machine.spaces[0].delta_angle);
+			c.rotate(-ui.machine.spaces[0].delta_angle * Math.PI / 180);
 			c.scale(1, -1);
 			c.fillText(name, 0, 0);
 			c.restore();
