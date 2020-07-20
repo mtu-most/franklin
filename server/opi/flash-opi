@@ -1,0 +1,36 @@
+#!/bin/bash
+# flash-bb-O4 - Flash new firmware to Melzi over Athena bridgeboard (version 2, ttyO4) while preserving bootloader and EEPROM contents for Franklin
+# Copyright 2014 Michigan Technological University
+# Author: Bas Wijnen <wijnen@debian.org>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+tmp=`tempfile`
+
+cd "`dirname "$0"`"
+
+config="${1:-/usr/lib/franklin/opi/avrdude.conf}"
+hex="${2:-/usr/lib/franklin/firmware/atmega1284p-12MHz.hex}"
+
+# Unexport the programmer pins, just in case.
+for pin in 7 14 15 16 ; do
+	echo $pin > /sys/class/gpio/unexport 2>/dev/null
+done
+
+rom="`avrdude -q -q -C +"${config}" -c athenapi -p atmega1284p -U eeprom:r:-:d`"
+avrdude -q -q -C +"${config}" -c athenapi -p atmega1284p -U lfuse:w:0xf7:m -U hfuse:w:0xd9:m -U efuse:w:0xff:m
+avrdude -q -q -C +"${config}" -c athenapi -p atmega1284p -U flash:w:"${hex}":i
+#sed -e '/^:..00..00/d' < /usr/share/arduino/hardware/mighty-1284p/bootloaders/optiboot/optiboot_atmega1284p.hex > "$tmp"
+#avrdude -q -q -C +"${config}" -c athenapi -p atmega1284p -U flash:w:"$tmp":i
+avrdude -q -q -C +"${config}" -c athenapi -p atmega1284p -U eeprom:w:$rom:m

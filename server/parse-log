@@ -1,0 +1,91 @@
+#!/usr/bin/python3
+
+machine = 'minerva:8000'
+
+import sys
+import re
+import websocketd
+
+mac = websocketd.RPC(machine)
+
+# Prepare some values.
+pos = [mac.get_motor(0, i)['home_pos'] for i in range(3)] + [0]
+pos0 = pos[:]
+motor = [(0, i) for i in range(3)] + [(1, 0)]
+spmm = [mac.get_motor(*m)['steps_per_unit'] * (-1 if mac.get_motor(*m)['dir_pin'] & 0x200 else 1) for m in motor]
+check = []
+
+data = []
+
+def decode(code):
+	num = int(code, 16)
+	count = 0
+	sign = -1 if num & 0x80 else 1
+	num &= 0x7f
+	while num & 0x40:
+		count += 1
+		num <<= 1
+		num &= 0x7f
+	return sign * (num | (count << 6))
+
+def parsepos(code):
+	ret = []
+	for m in range(4):
+		p = 0
+		for i in range(4):
+			p += code[4 * m + i] << (8 * i)
+		if p & (1 << 31):
+			p -= 1 << 32
+		ret.append(p / spmm[m] + pos0[m])
+	return ret
+
+# Read until first "start-move".
+for ln in sys.stdin:
+	if re.match('recv: homed  ', ln):
+		break
+
+# Read all data.
+while True:
+	current_move = [None] * 4
+	l = None
+	for ln in sys.stdin:
+		if ln.strip() == '':
+			break
+		r = re.match('recv: underrun  .. 04 .. .. (.*?)\s*\*', ln)
+		if r is not None:
+			check.append([None, parsepos([int(x, 16) for x in r.group(1).split()])])
+			continue
+		if re.match('send ...: start-move', ln):
+			break
+		r = re.match('send ...: move  .. (..) (.*?)\s*/', ln)
+		if r is None:
+			continue
+		target = int(r.group(1), 16)
+		assert current_move[target] is None
+		assert 0 <= target <= 3
+		current_move[target] = [decode(x) for x in r.group(2).split()]
+		if l is None:
+			l = len(current_move[target])
+		assert len(current_move[target]) == l
+	else:
+		break
+	if l is None:
+		continue
+	for i in range(4):
+		if current_move[i] is None:
+			current_move[i] = [0] * l
+	data.extend(zip(*current_move))
+	if len(check) > 0 and check[-1][0] is None:
+		check[-1][0] = len(data)
+
+for p, d in enumerate(data):
+	if len(check) > 0 and check[0][0] == p:
+		c = check.pop(0)
+		sys.stderr.write('\ndiff %.2f %.2f %.2f %.2f pos %s check %s\n' % (tuple(c[1][i] - pos[i] for i in range(4)) + (pos, c[1])))
+	for i, c in enumerate(d):
+		pos[i] += c / spmm[i]
+	data[p] += tuple(pos)
+	data[p] += tuple(mac.motors2xyz(pos[:3]))
+	print('\t'.join('%f' % x for x in data[p]))
+	sys.stderr.write('\r%d/%d' % (p, len(data)))
+sys.stderr.write('\n')

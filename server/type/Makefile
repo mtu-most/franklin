@@ -8,9 +8,9 @@ html:
 
 install:
 	install -m 644 -t ${DESTDIR}/usr/lib/franklin/type/ -D types.txt
-	for m in ${modules} ; do install -t ${DESTDIR}/usr/lib/franklin/type/$$m/ -D $$m/$$m.so ; done
+	for m in ${modules} ; do install -t ${DESTDIR}/usr/lib/franklin/type/$$m/ -D $$m/module.so ; done
 	for m in ${modules} ; do install -m 644 -t ${DESTDIR}/usr/lib/franklin/type/$$m/ -D $$m/$$m.ini ; done
-	for m in ${modules} ; do install -m 644 -t ${DESTDIR}/usr/lib/franklin/html/type/ -D $$m/$$m.js ; done
+	for m in ${modules} ; do if [ -f $$m/$$m.js ] ; then install -m 644 -t ${DESTDIR}/usr/lib/franklin/html/type/ -D $$m/$$m.js ; fi ; done
 
 clean:
 	rm -f ${targets} ../html/type/*.js

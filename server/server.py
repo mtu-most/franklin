@@ -285,6 +285,8 @@ class Connection: # {{{
 			return ('sudo', fhs.read_data(os.path.join('bb', 'flash-bb-0'), opened = False), fhs.read_data(os.path.join('bb', 'avrdude.conf'), opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p' + os.extsep + 'hex'), opened = False))
 		if board == 'bb4melzi ':
 			return ('sudo', fhs.read_data(os.path.join('bb', 'flash-bb-4'), opened = False), fhs.read_data(os.path.join('bb', 'avrdude.conf'), opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p' + os.extsep + 'hex'), opened = False))
+		if board == 'opi ':
+			return ('sudo', fhs.read_data(os.path.join('opi', 'flash-opi'), opened = False), fhs.read_data(os.path.join('opi', 'avrdude.conf'), opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p-12MHz' + os.extsep + 'hex'), opened = False))
 		boards = read_boards()
 		if board not in boards:
 			raise ValueError('board type not supported')
@@ -464,6 +466,8 @@ def upload_options(port): # {{{
 		ret += [('bbbmelzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v1)')]
 	elif port in ('/dev/ttyS4', '/dev/ttyO4'):
 		ret += [('bb4melzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v2)')]
+	elif port  == '/dev/ttyS2':
+		ret += [('opi ', 'Athena on OrangePi Zero (atmega1284p at 12MHz)')]
 	boards = read_boards()
 	ret += list((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
 	ret.sort(key = lambda x: (boards[x[0]]['build.mcu'] if x[0] in boards else '', x[1]))

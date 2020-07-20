@@ -80,6 +80,16 @@ CPPFLAGS += -DNUM_MOTORS=10 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16
 AVRDUDE_OPTS = -q -q -D
 
 else
+ifeq (${TARGET}, atmega1284p-12MHz)
+BOARD_TAG = mighty_opt
+ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
+BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
+CPPFLAGS += -DNUM_MOTORS=10 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
+AVRDUDE_OPTS = -q -q -D
+F_CPU = 12000000
+OBJDIR = build-atmega1284p-12MHz
+
+else
 ifeq (${TARGET}, atmega1280)
 BOARD_TAG = mega
 CPPFLAGS += -DNUM_MOTORS=8 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=8
@@ -116,6 +126,7 @@ AVRDUDE_OPTS = -q -q -D
 
 else
 $(error Invalid TARGET)
+endif
 endif
 endif
 endif
