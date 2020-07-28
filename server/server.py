@@ -466,7 +466,7 @@ def upload_options(port): # {{{
 		ret += [('bbbmelzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v1)')]
 	elif port in ('/dev/ttyS4', '/dev/ttyO4'):
 		ret += [('bb4melzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v2)')]
-	elif port  == '/dev/ttyS2':
+	elif port  == '/dev/ttyS1':
 		ret += [('opi ', 'Athena on OrangePi Zero (atmega1284p at 12MHz)')]
 	boards = read_boards()
 	ret += list((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
