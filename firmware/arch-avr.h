@@ -653,6 +653,8 @@ static inline void update_timer1_pwm() { // {{{
 			p.oc[0] = value & 0xff;
 			//debug("set timer1 pin %d:%d to %d for %d with top %d (%x %x) ocr1b %x %x", i, tp, (int)value, pin[tp].duty, timer1_top, ICR1H, ICR1L, OCR1BH, OCR1BL);
 		}
+		//else
+			//debug("full power for timer1 pin %d:%d", i, tp);
 	}
 } // }}}
 
@@ -1367,6 +1369,9 @@ inline void arch_outputs() { // {{{
 	avr_outputs_last = now;
 	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
 		if ((pin[p].state & 0x3) != CTRL_SET)
+			continue;
+		int timer = pgm_read_byte(digital_pin_to_timer_PGM + p);
+		if (timer != NOT_ON_TIMER)
 			continue;
 		if (pin[p].avr_on)
 			pin[p].avr_target -= uint32_t(interval) << 15;

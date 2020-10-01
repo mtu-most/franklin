@@ -1650,11 +1650,15 @@ class Machine: # {{{
 			attrnames = ('pin', 'duty', 'leader', 'ticks')
 			data = {n: getattr(self, n) for n in attrnames}
 			data['state'] = self.state | (self.reset << 2)
+			if data['leader'] is None:
+				data['leader'] = -1
 			cdriver.write_gpio(self.id, data)
 		def export(self):
 			attrnames = ('name', 'pin', 'state', 'reset', 'duty', 'leader', 'ticks')
 			attrs = {n: getattr(self, n) for n in attrnames}
 			attrs['value'] = self.value if self.state >= 2 else self.state == 1
+			if attrs['leader'] < 0:
+				attrs['leader'] = None
 			return attrs
 		def export_settings(self):
 			ret = '[gpio %d]\r\n' % self.id

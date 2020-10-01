@@ -179,21 +179,20 @@ void packet()
 		pin[p].duty = command(3) | (command(4) << 8);
 		pin[p].motor = command(5);
 		pin[p].ticks = command(6);
-		if (pin[p].num_temps == 0) {
-			switch (CONTROL_CURRENT(value)) {
-			case CTRL_RESET:
-				RESET(p);
-				break;
-			case CTRL_SET:
-				SET(p);
-				break;
-			case CTRL_UNSET:
-				UNSET(p);
-				break;
-			case CTRL_INPUT:
-				SET_INPUT(p);
-				break;
-			}
+		//debug("control pin %d state %x duty %x motor %d ticks %d", p, pin[p].state, pin[p].duty, pin[p].motor, pin[p].ticks);
+		switch (CONTROL_CURRENT(value)) {
+		case CTRL_RESET:
+			RESET(p);
+			break;
+		case CTRL_SET:
+			SET(p);
+			break;
+		case CTRL_UNSET:
+			UNSET(p);
+			break;
+		case CTRL_INPUT:
+			SET_INPUT(p);
+			break;
 		}
 		write_ack();
 		return;

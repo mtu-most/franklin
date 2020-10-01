@@ -245,10 +245,10 @@ void handle_temp(int id, int temp) { // {{{
 		double out = part_P + temps[id].I_state - part_D;
 		// Adjust I_state with the correction that was required.
 		temps[id].I_state += temps[id].P / temps[id].I * error * dt;
-		if (std::isnan(temps[id].I_state) || temps[id].I_state < 0)
-			temps[id].I_state = 0;
-		else if (temps[id].I_state > 1)
-			temps[id].I_state = 1;
+		if (std::isnan(temps[id].I_state) || temps[id].I_state < -1)
+			temps[id].I_state = -1;
+		else if (temps[id].I_state > 2)
+			temps[id].I_state = 2;
 		if (!(out > 0)) {	// Use inverse check so NaN is treated as "off".
 			//debug("reset P %f I %f D %f dt %f out %f", part_P, temps[id].I_state, part_D, dt, out);
 			RESET(temps[id].power_pin[0]);

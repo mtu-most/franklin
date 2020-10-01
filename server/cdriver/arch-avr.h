@@ -774,6 +774,7 @@ void arch_set_pin_motor(Pin_t _pin, int s, int m, int ticks) { // {{{
 		avr_pins[_pin.pin].ticks = ticks;
 		avr_send_pin(_pin);
 	}
+	//debug("set motor for pin %d to %d", _pin.pin, m);
 } // }}}
 // }}}
 
