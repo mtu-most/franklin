@@ -154,11 +154,12 @@ struct Temp {
 struct History {
 	double unitg[3], unith[3];
 	double Jg, Jh, a0g, a0h, v0g, v0h, x0g, x0h;
-	int32_t hwtime, end_time;
+	int32_t hwtime, end_time, adjust_start_time, adjust_time;
 	int hwtime_step;
 	double run_time;
 	int64_t gcode_line;
 	int64_t current_restore;
+	double adjust;	// adjustment factor; runs from 1 to 0.
 	uint8_t pattern[PATTERN_MAX];
 	int pattern_size;	// in bytes; each bit in the pattern is a pulse.
 };
@@ -169,13 +170,14 @@ struct Resume {
 };
 
 struct Motor_History {
-	double current_pos;	// Current position of motor (in steps).
+	double current_pos;	// Current position of motor.
 	int hw_pos;	// What the hardware currently thinks is the current position.
 };
 
 struct Axis_History {
 	double source;	// Source position of current movement of axis, or current position if there is no movement.
 	double endpos;
+	double adjust;	// Full length adjustment vector component.
 };
 
 struct Axis {
@@ -303,7 +305,7 @@ static int const FULL_COMMAND_SIZE = COMMAND_SIZE + (COMMAND_SIZE + 2) / 3;
 
 // Globals
 EXTERN double max_deviation;
-EXTERN double max_v, max_a, max_J;
+EXTERN double max_v, max_a, max_J, adjust_speed;
 EXTERN uint8_t num_extruders;
 EXTERN int num_temps;
 EXTERN int num_gpios;

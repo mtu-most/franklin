@@ -194,10 +194,12 @@ void next_move(int32_t start_time) { // {{{
 	// }}}
 	// Reset time. {{{
 	if (computing_move) {
+		settings.adjust_start_time -= start_time;
 		settings.hwtime -= start_time;
 		//debug("time -= %d, now %d", start_time, settings.hwtime);
 	}
 	else {
+		settings.adjust_start_time -= settings.hwtime;
 		settings.hwtime = 0;
 	}
 	// }}}
@@ -572,11 +574,14 @@ static void apply_tick() { // {{{
 		return;
 	}
 	// Check for move.
-	if (!computing_move) {
+	if (!(computing_move || settings.adjust > 0)) {
 		debug("apply tick called, but not moving");
 		return;
 	}
 	settings.hwtime += settings.hwtime_step;
+	if (settings.adjust > 0) {
+		settings.adjust = 1 - ((settings.hwtime - settings.adjust_start_time) * 1. / settings.adjust_time);
+	}
 	while (true) {
 		// This loop is normally only run once, but when a move is complete it is rerun for the next move.
 		int empty_fragments = (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
@@ -695,10 +700,13 @@ void store_settings() { // {{{
 	history[current_fragment].hwtime = settings.hwtime;
 	history[current_fragment].hwtime_step = settings.hwtime_step;
 	history[current_fragment].end_time = settings.end_time;
+	history[current_fragment].adjust_start_time = settings.adjust_start_time;
+	history[current_fragment].adjust_time = settings.adjust_time;
 	history[current_fragment].current_restore = settings.current_restore;
 	history[current_fragment].run_time = settings.run_time;
 	history[current_fragment].pattern_size = settings.pattern_size;
 	history[current_fragment].gcode_line = settings.gcode_line;
+	history[current_fragment].adjust = settings.adjust;
 	for (int i = 0; i < PATTERN_MAX; ++i)
 		history[current_fragment].pattern[i] = settings.pattern[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -713,6 +721,7 @@ void store_settings() { // {{{
 			//debug("setting history %d of source for %d %d to %f", current_fragment, s, a, sp.axis[a]->settings.source);
 			sp.axis[a]->history[current_fragment].source = sp.axis[a]->settings.source;
 			sp.axis[a]->history[current_fragment].endpos = sp.axis[a]->settings.endpos;
+			sp.axis[a]->history[current_fragment].adjust = sp.axis[a]->settings.adjust;
 		}
 	}
 	pattern.active = false;
@@ -739,11 +748,14 @@ void restore_settings() { // {{{
 	settings.x0h = history[current_fragment].x0h;
 	settings.hwtime = history[current_fragment].hwtime;
 	settings.hwtime_step = history[current_fragment].hwtime_step;
+	settings.adjust_start_time = history[current_fragment].adjust_start_time;
+	settings.adjust_time = history[current_fragment].adjust_time;
 	settings.end_time = history[current_fragment].end_time;
 	settings.current_restore = history[current_fragment].current_restore;
 	settings.run_time = history[current_fragment].run_time;
 	settings.pattern_size = history[current_fragment].pattern_size;
 	settings.gcode_line = history[current_fragment].gcode_line;
+	settings.adjust = history[current_fragment].adjust;
 	for (int i = 0; i < PATTERN_MAX; ++i)
 		settings.pattern[i] = history[current_fragment].pattern[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -758,6 +770,7 @@ void restore_settings() { // {{{
 			mdebug("setting source for %d %d to history %d of %f", s, a, current_fragment, sp.axis[a]->history[current_fragment].source);
 			sp.axis[a]->settings.source = sp.axis[a]->history[current_fragment].source;
 			sp.axis[a]->settings.endpos = sp.axis[a]->history[current_fragment].endpos;
+			sp.axis[a]->settings.adjust = sp.axis[a]->history[current_fragment].adjust;
 		}
 	}
 	pattern.active = false;
@@ -771,8 +784,8 @@ void buffer_refill() { // {{{
 		mdebug("no refill because prepare or no buffer yet");
 		return;
 	}
-	if (!computing_move || refilling || stopping || discarding != 0) {
-		mdebug("no refill due to block: not computing %d refilling %d stopping %d discarding %d", !computing_move, refilling, stopping, discarding);
+	if (!(computing_move || settings.adjust > 0) || refilling || stopping || discarding != 0) {
+		mdebug("no refill due to block: not computing %d adjust %f refilling %d stopping %d discarding %d", !computing_move, settings.adjust, refilling, stopping, discarding);
 		return;
 	}
 	refilling = true;
@@ -783,7 +796,7 @@ void buffer_refill() { // {{{
 	}*/
 	mdebug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
-	while (computing_move && !aborting && !stopping && discarding == 0 && !discard_pending && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
+	while ((computing_move || settings.adjust > 0) && !aborting && !stopping && discarding == 0 && !discard_pending && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
 		mdebug("refill %d %d %f", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings.current_pos);
 		// fill fragment until full.
 		apply_tick();
@@ -798,7 +811,7 @@ void buffer_refill() { // {{{
 		refilling = false;
 		return;
 	}
-	if (!computing_move && current_fragment_pos > 0) {
+	if (!(computing_move || settings.adjust > 0) && current_fragment_pos > 0) {
 		mdebug("sending because move ended");
 		send_fragment();
 	}
@@ -847,6 +860,7 @@ void abort_move(int pos) { // {{{
 	queue_full = false;
 	// Copy settings back to previous fragment.
 	current_fragment_pos = 0;
+	settings.adjust = 0;
 	store_settings();
 	computing_move = false;
 	for (int s = 0; s < NUM_SPACES; ++s) {

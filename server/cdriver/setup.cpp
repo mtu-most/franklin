@@ -125,7 +125,7 @@ void setup()
 	//debug("current_fragment = running_fragment; %d %p", current_fragment, &current_fragment);
 	current_fragment_pos = 0;
 	num_active_motors = 0;
-	default_hwtime_step = 15000;
+	default_hwtime_step = 25000;
 	min_hwtime_step = 10000;
 	settings.hwtime_step = default_hwtime_step;
 	feedrate = 1;
@@ -133,6 +133,7 @@ void setup()
 	max_v = 100;
 	max_a = 10000;
 	max_J = 10000;
+	adjust_speed = 1;
 	targetx = 0;
 	targety = 0;
 	zoffset = 0;

@@ -1471,6 +1471,16 @@ void arch_do_discard() { // {{{
 		debug("prepare packet failed for discard");
 		discarding = 0;
 	}
+	double motors[spaces[0].num_motors];
+	double xyz[spaces[0].num_axes];
+	for (int m = 0; m < spaces[0].num_motors; ++m)
+		motors[m] = spaces[0].motor[m]->settings.current_pos;
+	spaces[0].motors2xyz(motors, xyz);
+	for (int a = 0; a < spaces[0].num_axes; ++a) {
+		spaces[0].axis[a]->current = xyz[a];
+		debug("discard position %d: %f", a, xyz[a]);
+	}
+	settings.adjust = 0;
 } // }}}
 
 void arch_discard() { // {{{

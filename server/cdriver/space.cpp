@@ -111,6 +111,12 @@ void Space::xyz2motors() {
 		motor[a]->target_pos = axis[a]->target;
 	// Override with type computations.
 	space_types[type].xyz2motors(this);
+	if (settings.adjust > 0) {
+		for (int a = 0; a < num_axes; ++a) {
+			debug("adjusting %d %d target %f with %f factor %f", id, a, axis[a]->target, axis[a]->settings.adjust, settings.adjust);
+			axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
+		}
+	}
 }
 
 void Space::motors2xyz(const double *motors, double *xyz) {
@@ -170,17 +176,31 @@ void Space::load_info() { // {{{
 } // }}}
 
 void reset_pos(Space *s) { // {{{
+	// Don't do anything for followers.
+	if (s->id == 2)
+		return;
 	double motors[s->num_motors];
 	double xyz[s->num_axes];
 	for (int m = 0; m < s->num_motors; ++m)
 		motors[m] = s->motor[m]->settings.current_pos;
 	s->motors2xyz(motors, xyz);
+	double len2 = 0;
 	for (int a = 0; a < s->num_axes; ++a) {
+		s->axis[a]->settings.adjust = s->axis[a]->current - xyz[a];
 		s->axis[a]->current = xyz[a];
+		len2 += s->axis[a]->settings.adjust * s->axis[a]->settings.adjust;
 		if (!computing_move) {
 			s->axis[a]->settings.source = xyz[a];
 			//debug("setting axis %d %d source to %f for reset pos", s->id, a, s->axis[a]->settings.source);
 		}
+	}
+	if (computing_move) {
+		if (s->id == 0) {
+			settings.adjust_start_time = settings.hwtime;
+			settings.adjust_time = int(sqrt(len2) / adjust_speed * 1e6);
+			settings.adjust = 1;
+		}
+		debug("adjusting move time=%d x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
 	}
 	discard_finals();
 } // }}}
@@ -324,5 +344,6 @@ void Space::init(int space_id) { // {{{
 	motor = NULL;
 	axis = NULL;
 	history = NULL;
+	settings.adjust = 0;
 	space_types[type].init_space(this);
 } // }}}
