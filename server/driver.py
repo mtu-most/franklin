@@ -647,6 +647,7 @@ class Machine: # {{{
 		data = cdriver.read_globals()
 		num_temps = data.pop('num_temps')
 		num_gpios = data.pop('num_gpios')
+		#log('read globals:', data)
 		for k in data:
 			setattr(self, k, data[k])
 		while len(self.temps) < num_temps:
@@ -1503,6 +1504,7 @@ class Machine: # {{{
 				for k in data.keys():
 					data[k] = self.axis[axis][k]
 			data['module'] = self.build_module_data(self.axis[axis]['module'], typeinfo[self.type]['axis'])
+			#log('write space axis', self.id, axis, data, type_names.index(self.type))
 			cdriver.write_space_axis(self.id, axis, data, type_names.index(self.type))
 		def write_motor(self, motor):
 			if self.id == 2:
@@ -2196,7 +2198,7 @@ class Machine: # {{{
 						#log('pin imported as {} for {}'.format(value, key))
 					elif key == 'leader':
 						value = None if value == '-' else int(value)
-					elif key.startswith('num') or key == 'ticks' or key.endswith('_id'):
+					elif key.startswith('num') or key.endswith('order') or key.endswith('_id') or key in ('ticks', 'timeout'):
 						value = int(value)
 					else:
 						value = float(value)

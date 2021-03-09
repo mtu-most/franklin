@@ -305,7 +305,7 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
 	max_J = shmem->floats[4];
-	return Py_BuildValue("{si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,sd,sd,sd,sd,sd,sd,sd,sd}",
+	return Py_BuildValue("{si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,sd,sd,sd,sd,sd,sd,sd,sd,sd}",
 			"queue_length", shmem->ints[0],
 			"num_pins", shmem->ints[1],
 			"num_temps", shmem->ints[2],
