@@ -23,7 +23,7 @@
 
 // Number of buffers to fill before sending START_MOVE.  Lower number makes it
 // start faster, but may cause buffer underruns.
-#define MIN_BUFFER_FILL 1
+#define MIN_BUFFER_FILL 6
 
 // If set to 0, the debug buffer commands are disabled.
 #define DEBUG_BUFFER_LENGTH 0
