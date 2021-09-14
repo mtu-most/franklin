@@ -91,7 +91,6 @@
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
-#include <EEPROM.h>
 
 struct Timer_data {
 	volatile uint8_t *mode, *oc;
@@ -497,6 +496,62 @@ static inline int16_t adc_get(uint8_t pin_) { // {{{
 } // }}}
 // }}}
 
+// EEPROM. {{{
+inline static uint8_t EEPROM_read(uint16_t addr) {
+	uint8_t value;
+	asm volatile (
+		"\t"	"cli"				"\n"
+		"1:\t"	"sbic %[eecr], %[eepe_bit]"	"\n"
+		"\t"	"rjmp 1b"			"\n"
+		"\t"	"out %[eearl], %[addrl]"	"\n"
+		"\t"	"out %[eearh], %[addrh]"	"\n"
+		"\t"	"in %[data], %[eedr]"		"\n"
+		"\t"	"sei"				"\n"
+		:
+		[data] "=r" (value)
+		:
+		[eecr] "M" (_SFR_IO_ADDR(EECR)),
+		[eepe_bit] "" (EEPE),
+		[addrl] "r" (addr & 0xff),
+		[addrh] "r" (addr >> 8),
+		[eearl] "M" (_SFR_IO_ADDR(EEARL)),
+		[eearh] "M" (_SFR_IO_ADDR(EEARH)),
+		[eedr] "M" (_SFR_IO_ADDR(EEDR))
+	);
+	return value;
+}
+
+inline static void EEPROM_write(uint16_t addr, uint8_t value) {
+	asm volatile (
+		"\t"	"cli"				"\n"
+		"1:\t"	"in __tmp_reg__, %[spmcsr]"	"\n"
+		"\t"	"sbrc __tmp_reg__, %[spmen]"	"\n"
+		"\t"	"rjmp 1b"			"\n"
+		"1:\t"	"sbic %[eecr], %[eepe_bit]"	"\n"
+		"\t"	"rjmp 1b"			"\n"
+		"\t"	"out %[eearl], %[addrl]"	"\n"
+		"\t"	"out %[eearh], %[addrh]"	"\n"
+		"\t"	"out %[eedr], %[data]"		"\n"
+		"\t"	"out %[eecr], %[eempe]"		"\n"
+		"\t"	"out %[eecr], %[eepe]"		"\n"
+		"\t"	"sei"				"\n"
+		::
+		[eecr] "M" (_SFR_IO_ADDR(EECR)),
+		[eepe_bit] "" (EEPE),
+		[spmcsr] "M" (_SFR_IO_ADDR(SPMCSR)),
+		[spmen] "" (SPMEN),
+		[addrl] "r" (addr & 0xff),
+		[addrh] "r" (addr >> 8),
+		[eearl] "M" (_SFR_IO_ADDR(EEARL)),
+		[eearh] "M" (_SFR_IO_ADDR(EEARH)),
+		[data] "r" (value),
+		[eedr] "M" (_SFR_IO_ADDR(EEDR)),
+		[eempe] "r" (1 << EEMPE),
+		[eepe] "r" ((1 << EEMPE) | (1 << EEPE))
+	);
+}
+// }}}
+
 // Watchdog and reset. {{{
 static inline void arch_watchdog_enable() { // {{{
 #ifdef WATCHDOG
@@ -611,7 +666,7 @@ static inline void arch_setup_start() { // {{{
 		machineid[1 + i] = 0;
 	// Initialize uuid from EEPROM.
 	for (uint8_t i = 0; i < UUID_SIZE; ++i)
-		machineid[1 + ID_SIZE + i] = EEPROM.read(i);
+		machineid[1 + ID_SIZE + i] = EEPROM_read(i);
 } // }}}
 
 static inline void arch_setup_end() { // {{{

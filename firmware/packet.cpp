@@ -84,7 +84,7 @@ void packet()
 		cmddebug("CMD_SET_UUID");
 		for (uint8_t i = 0; i < UUID_SIZE; ++i) {
 			machineid[1 + ID_SIZE + i] = command(1 + i);
-			EEPROM.write(i, machineid[1 + ID_SIZE + i]);
+			EEPROM_write(i, machineid[1 + ID_SIZE + i]);
 		}
 		write_ack();
 		return;

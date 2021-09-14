@@ -80,81 +80,81 @@ struct Run_Record {
 
 enum Command {
 	// from host
-	CMD_SET_UUID,	// 22 bytes: uuid.
-	CMD_GET_UUID,	// 0.  Reply: UUID.
-	CMD_MOVE,	// 1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
-	CMD_PARSE_GCODE,// 2 byte: in filename length, in filename, out filename
-	CMD_RUN,	// n byte: filename.
-	CMD_SLEEP,	// 1 byte: which channel (b0-6); on/off (b7 = 1/0).
-	CMD_SETTEMP,	// 1 byte: which channel; 4 bytes: target [°C].
-	CMD_WAITTEMP,	// 1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [°C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
-	CMD_TEMP_VALUE,	// 1 byte: which channel.  Reply: TEMP. [°C]
-	CMD_POWER_VALUE,	// 1 byte: which channel.  Reply: POWER. [μs, μs]
-	CMD_SETPOS,	// 1 byte: which channel; 4 bytes: pos.
-	CMD_GETPOS,	// 1 byte: which channel.  Reply: POS. [steps, mm]
-	CMD_READ_GLOBALS,
-	CMD_WRITE_GLOBALS,
-	CMD_READ_SPACE_INFO,	// 1 byte: which channel.  Reply: DATA.
-	CMD_READ_SPACE_AXIS,	// 1 byte: which channel.  Reply: DATA.
-	CMD_READ_SPACE_MOTOR,	// 1 byte: which channel; n bytes: data.
-	CMD_WRITE_SPACE_INFO,	// 1 byte: which channel.  Reply: DATA.
-	CMD_WRITE_SPACE_AXIS,	// 1 byte: which channel; n bytes: data.
-	CMD_WRITE_SPACE_MOTOR,	// 1 byte: which channel; n bytes: data.
-	CMD_READ_TEMP,	// 1 byte: which channel.  Reply: DATA.
-	CMD_WRITE_TEMP,	// 1 byte: which channel; n bytes: data.
-	CMD_READ_GPIO,	// 1 byte: which channel.  Reply: DATA.
-	CMD_WRITE_GPIO,	// 1 byte: which channel; n bytes: data.
-	CMD_QUEUED,	// 1 byte: 0: query queue length; 1: stop and query queue length.  Reply: QUEUE.
-	CMD_PIN_VALUE,	// 1 byte: which channel. Reply: GPIO.
-	CMD_HOME,	// 1 byte: homing space; n bytes: homing type (0=pos, 1=neg, 3=no)
-	CMD_FORCE_DISCONNECT,	// 0
-	CMD_CONNECT,	// 8 byte: run ID, n bytes: port name (0-terminated)
-	CMD_RECONNECT,	// n bytes: port name (0-terminated)
-	CMD_PAUSE,
-	CMD_RESUME,
-	CMD_UNPAUSE,
-	CMD_GET_TIME,
-	CMD_SPI,
-	CMD_ADJUST_PROBE,	// 3 doubles: probe position.
-	CMD_TP_GETPOS,
-	CMD_TP_SETPOS,	// 1 double: new toolpath position.
-	CMD_TP_FINDPOS,	// 3 doubles: search position or NaN.
-	CMD_MOTORS2XYZ,	// 1 byte: which space, n doubles: motor positions.  Reply: m times XYZ.
+	CMD_SET_UUID,		// 00	22 bytes: uuid.
+	CMD_GET_UUID,		// 01	0.  Reply: UUID.
+	CMD_MOVE,		// 02	1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
+	CMD_PARSE_GCODE,	// 03	2 byte: in filename length, in filename, out filename
+	CMD_RUN,		// 04	n byte: filename.
+	CMD_SLEEP,		// 05	1 byte: which channel (b0-6); on/off (b7 = 1/0).
+	CMD_SETTEMP,		// 06	1 byte: which channel; 4 bytes: target [°C].
+	CMD_WAITTEMP,		// 07	1 byte: which channel; 4 bytes: lower limit; 4 bytes: upper limit [°C].  Reply (later): TEMPCB.  Disable with WAITTEMP (NAN, NAN).
+	CMD_TEMP_VALUE,		// 08	1 byte: which channel.  Reply: TEMP. [°C]
+	CMD_POWER_VALUE,	// 09	1 byte: which channel.  Reply: POWER. [μs, μs]
+	CMD_SETPOS,		// 0a	1 byte: which channel; 4 bytes: pos.
+	CMD_GETPOS,		// 0b	1 byte: which channel.  Reply: POS. [steps, mm]
+	CMD_READ_GLOBALS,	// 0c
+	CMD_WRITE_GLOBALS,	// 0d
+	CMD_READ_SPACE_INFO,	// 0e	1 byte: which channel.  Reply: DATA.
+	CMD_READ_SPACE_AXIS,	// 0f	1 byte: which channel.  Reply: DATA.
+	CMD_READ_SPACE_MOTOR,	// 10	1 byte: which channel; n bytes: data.
+	CMD_WRITE_SPACE_INFO,	// 11	1 byte: which channel.  Reply: DATA.
+	CMD_WRITE_SPACE_AXIS,	// 12	1 byte: which channel; n bytes: data.
+	CMD_WRITE_SPACE_MOTOR,	// 13	1 byte: which channel; n bytes: data.
+	CMD_READ_TEMP,		// 14	1 byte: which channel.  Reply: DATA.
+	CMD_WRITE_TEMP,		// 15	1 byte: which channel; n bytes: data.
+	CMD_READ_GPIO,		// 16	1 byte: which channel.  Reply: DATA.
+	CMD_WRITE_GPIO,		// 17	1 byte: which channel; n bytes: data.
+	CMD_QUEUED,		// 18	1 byte: 0: query queue length; 1: stop and query queue length.  Reply: QUEUE.
+	CMD_PIN_VALUE,		// 19	1 byte: which channel. Reply: GPIO.
+	CMD_HOME,		// 1a	1 byte: homing space; n bytes: homing type (0=pos, 1=neg, 3=no)
+	CMD_FORCE_DISCONNECT,	// 1b	0
+	CMD_CONNECT,		// 1c	8 byte: run ID, n bytes: port name (0-terminated)
+	CMD_RECONNECT,		// 1d	n bytes: port name (0-terminated)
+	CMD_PAUSE,		// 1e
+	CMD_RESUME,		// 1f
+	CMD_UNPAUSE,		// 20
+	CMD_GET_TIME,		// 21
+	CMD_SPI,		// 22
+	CMD_ADJUST_PROBE,	// 23	3 doubles: probe position.
+	CMD_TP_GETPOS,		// 24
+	CMD_TP_SETPOS,		// 25	1 double: new toolpath position.
+	CMD_TP_FINDPOS,		// 26	3 doubles: search position or NaN.
+	CMD_MOTORS2XYZ,		// 27	1 byte: which space, n doubles: motor positions.  Reply: m times XYZ.
 };
 
 enum InterruptCommand {
-	CMD_LIMIT,	// 1 byte: which channel.
-	CMD_FILE_DONE,
-	CMD_MOVECB,	// 1 byte: number of movecb events.
-	CMD_HOMED,	// 0
-	CMD_TIMEOUT,	// 0
-	CMD_PINCHANGE,	// 1 byte: pin, 1 byte: current value.
-	CMD_PINNAME,
-	CMD_DISCONNECT,	// 0
-	CMD_UPDATE_PIN,
-	CMD_UPDATE_TEMP,
-	CMD_CONFIRM,
-	CMD_PARKWAIT,
-	CMD_CONNECTED,
-	CMD_TEMPCB,	// 1 byte: which channel.  Byte storage for which needs to be sent.
-	CMD_MESSAGE,
+	CMD_LIMIT,		// 00	1 byte: which channel.
+	CMD_FILE_DONE,		// 01
+	CMD_MOVECB,		// 02	1 byte: number of movecb events.
+	CMD_HOMED,		// 03	0
+	CMD_TIMEOUT,		// 04	0
+	CMD_PINCHANGE,		// 05	1 byte: pin, 1 byte: current value.
+	CMD_PINNAME,		// 06
+	CMD_DISCONNECT,		// 07	0
+	CMD_UPDATE_PIN,		// 08
+	CMD_UPDATE_TEMP,	// 09
+	CMD_CONFIRM,		// 0a
+	CMD_PARKWAIT,		// 0b
+	CMD_CONNECTED,		// 0c
+	CMD_TEMPCB,		// 0d	1 byte: which channel.  Byte storage for which needs to be sent.
+	CMD_MESSAGE,		// 0e
 };
 
 enum RunType {
-	RUN_SYSTEM,
-	RUN_POLY3PLUS,
-	RUN_POLY3MINUS,
-	RUN_POLY2,
-	RUN_ARC,
-	RUN_GOTO,
-	RUN_GPIO,
-	RUN_SETTEMP,
-	RUN_WAITTEMP,
-	RUN_SETPOS,
-	RUN_WAIT,
-	RUN_CONFIRM,
-	RUN_PARK,
-	RUN_PATTERN,
+	RUN_SYSTEM,		// 00
+	RUN_POLY3PLUS,		// 01
+	RUN_POLY3MINUS,		// 02
+	RUN_POLY2,		// 03
+	RUN_ARC,		// 04
+	RUN_GOTO,		// 05
+	RUN_GPIO,		// 06
+	RUN_SETTEMP,		// 07
+	RUN_WAITTEMP,		// 08
+	RUN_SETPOS,		// 09
+	RUN_WAIT,		// 0a
+	RUN_CONFIRM,		// 0b
+	RUN_PARK,		// 0c
+	RUN_PATTERN,		// 0d
 };
 
 #ifndef PATH_MAX

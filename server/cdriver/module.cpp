@@ -863,7 +863,7 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 	return ret;
 }
 
-PyObject *init_module(PyObject *Py_UNUSED(self), PyObject *args) {
+static PyObject *init_module(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	char const *cdriver;
 	char const *typepath;

@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-MONITOR_PORT ?= /dev/ttyACM* /dev/ttyUSB*
+MONITOR_PORT ?= $(firstword $(wildcard /dev/ttyACM* /dev/ttyUSB*))
 RESET_CMD=:
 TARGET ?= atmega1284p
 #TARGET ?= ramps
@@ -27,14 +27,14 @@ CPPFLAGS = -g -Wformat -Werror=format-security -D_FORTIFY_SOURCE=2 -Wshadow -fno
 EXTRA_FLAGS = --param=ssp-buffer-size=4
 
 ifeq (${TARGET}, sim)
-SOURCES = arch-avr.h arch-sim.h firmware.h firmware.ino packet.cpp serial.cpp setup.cpp timer.cpp
+SOURCES = arch-avr.h arch-sim.h firmware.h firmware.cpp packet.cpp serial.cpp setup.cpp timer.cpp
 CPPFLAGS += -DARCH_INCLUDE=\"arch-sim.h\" -DBBB
 CPPFLAGS += -DNUM_MOTORS=5 -DFRAGMENTS_PER_MOTOR_BITS=3 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=9
 build-sim/sim.elf: $(patsubst %.cpp,build-sim/%.o,$(filter %.cpp,$(SOURCES) firmware.cpp))
 	g++ $(CPPFLAGS) $(LDFLAGS) $^ -o $@ $(LIBS)
 build-sim/%.o: %.cpp $(filter %.h,$(SOURCES)) Makefile build-sim/stamp
 	g++ $(CPPFLAGS) -c $< -o $@
-build-sim/%.o: %.ino $(filter %.h,$(SOURCES)) Makefile build-sim/stamp
+build-sim/%.o: %.cpp $(filter %.h,$(SOURCES)) Makefile build-sim/stamp
 	g++ $(CPPFLAGS) -xc++ -c $< -o $@
 build-sim/stamp:
 	mkdir -p build-sim
@@ -46,25 +46,6 @@ CPPFLAGS += -DARCH_INCLUDE=\"arch-avr.h\" -DWATCHDOG
 ARDUINO_LIBS = EEPROM
 AVRDUDE_CONF = /etc/avrdude.conf
 
-# To avoid loading HardwareSerial.cpp, disable the core.
-NO_CORE = true
-# All these are for some reason not parsed when NO_CORE is set.
-VARIANT = $(call PARSE_BOARD,$(BOARD_TAG),build.variant)
-MCU   = $(call PARSE_BOARD,$(BOARD_TAG),build.mcu)
-F_CPU = $(call PARSE_BOARD,$(BOARD_TAG),build.f_cpu)
-AVRDUDE_ARD_PROGRAMMER = $(call PARSE_BOARD,$(BOARD_TAG),upload.protocol)
-AVRDUDE_ARD_BAUDRATE = $(call PARSE_BOARD,$(BOARD_TAG),upload.speed)
-ISP_LOCK_FUSE_PRE = $(call PARSE_BOARD,$(BOARD_TAG),bootloader.unlock_bits)
-ISP_HIGH_FUSE = $(call PARSE_BOARD,$(BOARD_TAG),bootloader.high_fuses)
-ISP_LOW_FUSE = $(call PARSE_BOARD,$(BOARD_TAG),bootloader.low_fuses)
-ISP_EXT_FUSE = $(call PARSE_BOARD,$(BOARD_TAG),bootloader.extended_fuses)
-BOOTLOADER_PATH = $(call PARSE_BOARD,$(BOARD_TAG),bootloader.path)
-BOOTLOADER_FILE = $(call PARSE_BOARD,$(BOARD_TAG),bootloader.file)
-ISP_LOCK_FUSE_POST = $(call PARSE_BOARD,$(BOARD_TAG),bootloader.lock_bits)
-HEX_MAXIMUM_SIZE  = $(call PARSE_BOARD,$(BOARD_TAG),upload.maximum_size)
-# Avoid including Arduino.h
-ARDUINO_HEADER = firmware.h
-
 ifeq (${TARGET}, atmega328p)
 BOARD_TAG = uno
 CPPFLAGS += -DNUM_MOTORS=2 -DFRAGMENTS_PER_MOTOR_BITS=3 -DBYTES_PER_FRAGMENT=4 -DSERIAL_SIZE_BITS=8
@@ -75,7 +56,6 @@ else
 ifeq (${TARGET}, atmega1284p)
 BOARD_TAG = mighty_opt
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
-BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
 CPPFLAGS += -DNUM_MOTORS=10 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
 AVRDUDE_OPTS = -q -q -D
 
@@ -83,7 +63,6 @@ else
 ifeq (${TARGET}, atmega1284p-12MHz)
 BOARD_TAG = mighty_opt
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
-BOARDS_TXT = /usr/share/arduino/hardware/mighty-1284p/boards.txt
 CPPFLAGS += -DNUM_MOTORS=10 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
 AVRDUDE_OPTS = -q -q -D
 F_CPU = 12000000
@@ -105,7 +84,6 @@ else
 ifeq (${TARGET}, atmega1281)
 BOARD_TAG = 1281
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/MegaCore/variants
-BOARDS_TXT = /usr/share/arduino/hardware/MegaCore/boards.txt
 CPPFLAGS += -DNUM_MOTORS=8 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=8
 AVRDUDE_OPTS = -q -q -D
 
@@ -113,7 +91,6 @@ else
 ifeq (${TARGET}, atmega644p)
 BOARD_TAG = atmega644p
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/sanguino/variants
-BOARDS_TXT = /usr/share/arduino/hardware/sanguino/boards.txt
 CPPFLAGS += -DNUM_MOTORS=4 -DFRAGMENTS_PER_MOTOR_BITS=3 -DBYTES_PER_FRAGMENT=8 -DSERIAL_SIZE_BITS=9 -DNO_DEBUG
 AVRDUDE_OPTS = -q -q -D
 
@@ -134,5 +111,47 @@ endif
 endif
 endif
 endif
-include /usr/share/arduino/Arduino.mk
+
+# This used to include Arduino.mk, but that doesn't work with the new arduino files.
+# So it's reimplemented here (with less functionality).
+
+ALL_BOARDS = $(wildcard /usr/share/arduino/hardware/*/boards.txt /usr/share/arduino/hardware/*/*/boards.txt)
+get = $(shell grep '^${BOARD_TAG}.${1}=' ${ALL_BOARDS} | cut -f2 -d=)
+
+MCU ?= $(call get,build.mcu)
+F_CPU ?= $(call get,build.f_cpu)
+VARIANT ?= $(call get,build.variant)
+SPEED ?= $(call get,upload.speed)
+PROTOCOL ?= $(call get,upload.protocol)
+PINDIR ?= $(firstword $(wildcard /usr/share/arduino/hardware/*/variants/${VARIANT} /usr/share/arduino/hardware/*/*/variants/${VARIANT}))
+
+ALL_SOURCES = arch-avr.h firmware.h packet.cpp serial.cpp setup.cpp timer.cpp firmware.cpp
+SOURCES = $(filter %.cpp,${ALL_SOURCES})
+OTHER_SOURCES = $(filter-out %.cpp,${ALL_SOURCES})
+OBJS = $(patsubst %.cpp,build-${BOARD_TAG}/%.o,${SOURCES})
+
+all: build-${BOARD_TAG}/${MCU}.hex
+
+clean:
+	rm -r build-${BOARD_TAG}/
+
+upload: build-${BOARD_TAG}/${MCU}.hex Makefile
+	avrdude ${AVRDUDE_OPTS} -c ${PROTOCOL} -b ${SPEED} -p ${MCU} -P ${MONITOR_PORT} -U flash:w:$<:i
+
+build-${BOARD_TAG}/%.hex: build-${BOARD_TAG}/%.elf build-${BOARD_TAG}/%.sizeok Makefile
+	avr-objcopy -O ihex -R .eeprom $< $@
+build-${BOARD_TAG}/${MCU}.elf: ${OBJS} Makefile
+	avr-g++ -mmcu=${MCU} ${LDFLAGS} ${OBJS} ${LDADD} -o $@
+	avr-size --format=avr --mcu=${MCU} $@
+build-${BOARD_TAG}/%.o: %.cpp ${OTHER_SOURCES} build-${BOARD_TAG}/stamp
+	avr-g++ -mmcu=${MCU} -I ${PINDIR} -DF_CPU=${F_CPU} ${CPPFLAGS} ${CXXFLAGS} $< -o $@ -c
+build-${BOARD_TAG}/stamp:
+	mkdir -p build-${BOARD_TAG}
+	touch $@
+build-${BOARD_TAG}/%.sizeok: build-${BOARD_TAG}/%.elf Makefile
+	[ "`avr-size --format=avr --mcu=${MCU} $< | grep -E '\d\d\d(\.\d*)?%'`" = "" ]
+	touch $@
+
+.PHONY: all clean upload
+.PRECIOUS: build-${BOARD_TAG}/stamp build-${BOARD_TAG}/${MCU}.sizeok
 endif

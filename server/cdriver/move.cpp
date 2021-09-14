@@ -20,8 +20,8 @@
 
 #include "cdriver.h"
 
-//#define mdebug(...) debug(__VA_ARGS__)
-//#define debug_abort() abort()
+#define mdebug(...) debug(__VA_ARGS__)
+#define debug_abort() abort()
 
 #ifndef mdebug
 #define mdebug(...) do {} while (0)
