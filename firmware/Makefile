@@ -75,12 +75,12 @@ CPPFLAGS += -DNUM_MOTORS=8 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 
 AVRDUDE_OPTS = -q -q -D
 
 else
-ifeq (${TARGET}, atmega2560)
-BOARD_TAG = mega2560
-CPPFLAGS += -DNUM_MOTORS=8 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=8
-AVRDUDE_OPTS = -q -q -D
+#ifeq (${TARGET}, atmega2560)
+#BOARD_TAG = mega2560
+#CPPFLAGS += -DNUM_MOTORS=8 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=8
+#AVRDUDE_OPTS = -q -q -D
 
-else
+#else
 ifeq (${TARGET}, atmega1281)
 BOARD_TAG = 1281
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/MegaCore/variants
@@ -107,7 +107,7 @@ endif
 endif
 endif
 endif
-endif
+#endif
 endif
 endif
 endif
@@ -116,42 +116,47 @@ endif
 # So it's reimplemented here (with less functionality).
 
 ALL_BOARDS = $(wildcard /usr/share/arduino/hardware/*/boards.txt /usr/share/arduino/hardware/*/*/boards.txt)
-get = $(shell grep '^${BOARD_TAG}.${1}=' ${ALL_BOARDS} | cut -f2 -d=)
+BOARDSDIR = $(patsubst %/boards.txt,%,$(firstword $(shell grep -E '^${BOARD_TAG}(\.menu\..*)?\.build\.mcu=' ${ALL_BOARDS} | cut -f1 -d:)))
+get = $(firstword $(shell grep -E '^${BOARD_TAG}(\.menu\..*)?\.${1}=' ${BOARDSDIR}/boards.txt | cut -f2 -d=))
 
 MCU ?= $(call get,build.mcu)
 F_CPU ?= $(call get,build.f_cpu)
 VARIANT ?= $(call get,build.variant)
 SPEED ?= $(call get,upload.speed)
 PROTOCOL ?= $(call get,upload.protocol)
-PINDIR ?= $(firstword $(wildcard /usr/share/arduino/hardware/*/variants/${VARIANT} /usr/share/arduino/hardware/*/*/variants/${VARIANT}))
+PINDIR ?= ${BOARDSDIR}/variants/${VARIANT}
+OBJDIR ?= build-${MCU}
 
 ALL_SOURCES = arch-avr.h firmware.h packet.cpp serial.cpp setup.cpp timer.cpp firmware.cpp
 SOURCES = $(filter %.cpp,${ALL_SOURCES})
 OTHER_SOURCES = $(filter-out %.cpp,${ALL_SOURCES})
-OBJS = $(patsubst %.cpp,build-${BOARD_TAG}/%.o,${SOURCES})
+OBJS = $(patsubst %.cpp,${OBJDIR}/%.o,${SOURCES})
 
-all: build-${BOARD_TAG}/${MCU}.hex
+all: ${OBJDIR}/${MCU}.hex
+
+print:
+	echo ${BOARDSDIR} ${BOARD_TAG} ${OBJDIR}
 
 clean:
-	rm -r build-${BOARD_TAG}/
+	rm -rf ${OBJDIR}/
 
-upload: build-${BOARD_TAG}/${MCU}.hex Makefile
+upload: ${OBJDIR}/${MCU}.hex Makefile
 	avrdude ${AVRDUDE_OPTS} -c ${PROTOCOL} -b ${SPEED} -p ${MCU} -P ${MONITOR_PORT} -U flash:w:$<:i
 
-build-${BOARD_TAG}/%.hex: build-${BOARD_TAG}/%.elf build-${BOARD_TAG}/%.sizeok Makefile
+${OBJDIR}/%.hex: ${OBJDIR}/%.elf ${OBJDIR}/%.sizeok Makefile
 	avr-objcopy -O ihex -R .eeprom $< $@
-build-${BOARD_TAG}/${MCU}.elf: ${OBJS} Makefile
+${OBJDIR}/${MCU}.elf: ${OBJS} Makefile
 	avr-g++ -mmcu=${MCU} ${LDFLAGS} ${OBJS} ${LDADD} -o $@
 	avr-size --format=avr --mcu=${MCU} $@
-build-${BOARD_TAG}/%.o: %.cpp ${OTHER_SOURCES} build-${BOARD_TAG}/stamp
+${OBJDIR}/%.o: %.cpp ${OTHER_SOURCES} ${OBJDIR}/stamp
 	avr-g++ -mmcu=${MCU} -I ${PINDIR} -DF_CPU=${F_CPU} ${CPPFLAGS} ${CXXFLAGS} $< -o $@ -c
-build-${BOARD_TAG}/stamp:
-	mkdir -p build-${BOARD_TAG}
+${OBJDIR}/stamp:
+	mkdir -p ${OBJDIR}
 	touch $@
-build-${BOARD_TAG}/%.sizeok: build-${BOARD_TAG}/%.elf Makefile
+${OBJDIR}/%.sizeok: ${OBJDIR}/%.elf Makefile
 	[ "`avr-size --format=avr --mcu=${MCU} $< | grep -E '\d\d\d(\.\d*)?%'`" = "" ]
 	touch $@
 
 .PHONY: all clean upload
-.PRECIOUS: build-${BOARD_TAG}/stamp build-${BOARD_TAG}/${MCU}.sizeok
+.PRECIOUS: ${OBJDIR}/stamp ${OBJDIR}/${MCU}.sizeok
 endif

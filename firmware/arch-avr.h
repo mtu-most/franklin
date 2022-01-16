@@ -86,11 +86,11 @@
 // }}}
 
 #include <stdio.h>
-#include <pins_arduino.h>
 #include <avr/wdt.h>
 #include <avr/io.h>
 #include <avr/pgmspace.h>
 #include <avr/interrupt.h>
+#include <pins_arduino.h>
 
 struct Timer_data {
 	volatile uint8_t *mode, *oc;
