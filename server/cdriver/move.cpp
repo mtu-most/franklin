@@ -20,8 +20,8 @@
 
 #include "cdriver.h"
 
-#define mdebug(...) debug(__VA_ARGS__)
-#define debug_abort() abort()
+//#define mdebug(...) debug(__VA_ARGS__)
+//#define debug_abort() abort()
 
 #ifndef mdebug
 #define mdebug(...) do {} while (0)
@@ -779,13 +779,13 @@ void restore_settings() { // {{{
 
 void buffer_refill() { // {{{
 	// Try to fill the buffer. This is called at any time that the buffer may be refillable.
-	mdebug("refill");
+	//mdebug("refill");
 	if (aborting || preparing || FRAGMENTS_PER_BUFFER == 0) {
 		mdebug("no refill because prepare or no buffer yet");
 		return;
 	}
 	if (!(computing_move || settings.adjust > 0) || refilling || stopping || discarding != 0) {
-		mdebug("no refill due to block: not computing %d adjust %f refilling %d stopping %d discarding %d", !computing_move, settings.adjust, refilling, stopping, discarding);
+		//mdebug("no refill due to block: not computing %d adjust %f refilling %d stopping %d discarding %d", !computing_move, settings.adjust, refilling, stopping, discarding);
 		return;
 	}
 	refilling = true;

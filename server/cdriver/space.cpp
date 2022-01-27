@@ -105,7 +105,7 @@ void Space::setup_nums(int na, int nm) { // {{{
 	}
 } // }}}
 
-void Space::xyz2motors() {
+void Space::xyz2motors() { // {{{
 	// Set default values.
 	for (int a = 0; a < num_axes; ++a)
 		motor[a]->target_pos = axis[a]->target;
@@ -117,15 +117,15 @@ void Space::xyz2motors() {
 			axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
 		}
 	}
-}
+} // }}}
 
-void Space::motors2xyz(const double *motors, double *xyz) {
+void Space::motors2xyz(const double *motors, double *xyz) { // {{{
 	// Set default values.
 	for (int a = 0; a < num_axes; ++a)
 		xyz[a] = motors[a];
 	// Override with type computations.
 	space_types[type].motors2xyz(this, motors, xyz);
-}
+} // }}}
 
 void Space::load_info() { // {{{
 	loaddebug("loading space %d", id);
