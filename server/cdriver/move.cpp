@@ -159,8 +159,10 @@ void next_move(int32_t start_time) { // {{{
 					continue;
 				}
 				reset_pos(&sp);
-				for (int aa = 0; aa < sp.num_axes; ++aa)
+				for (int aa = 0; aa < sp.num_axes; ++aa) {
+					mdebug("settings source for %d %d to %.2f for non-move after reset", s, aa, sp.axis[aa]->current);
 					sp.axis[aa]->settings.source = sp.axis[aa]->current;
+				}
 				break;
 			}
 			else
@@ -263,11 +265,15 @@ void next_move(int32_t start_time) { // {{{
 	}
 
 	// Info for 3-D robot
-	mdebug("move ln %" LONGFMT ", from=(%.2f,%.2f,%.2f) (current %.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
+	if (spaces[0].num_axes >= 3)
+		mdebug("move ln %" LONGFMT ", from=(%.2f,%.2f,%.2f) (current %.2f,%.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[2]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, spaces[0].axis[2]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
 	// Info for 2-D robot
-	mdebug("move ln %" LONGFMT ", from=(%.2f,%.2f) (current %.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
+	else if (spaces[0].num_axes >= 2)
+		mdebug("move ln %" LONGFMT ", from=(%.2f,%.2f) (current %.2f,%.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, spaces[0].axis[0]->current, spaces[0].axis[1]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
+	else if (spaces[0].num_axes >= 1)
+		mdebug("move ln %" LONGFMT ", from=%.2f (current %.2f) target=(%.2f,%.2f,%.2f), g=(%.2f,%.2f,%.2f) h=(%.2f,%.2f,%.2f), e=%.2f, Jg=%.2f a0g=%.2f v0g=%.2f x0g=%.2f end time=%.4f, single=%d, Jh=%.2f, a0h=%.2f, v0h=%.2f, x0h=%.2f", settings.gcode_line, spaces[0].axis[0]->settings.source, spaces[0].axis[0]->current, queue[q].target[0], queue[q].target[1], queue[q].target[2], settings.unitg[0], settings.unitg[1], settings.unitg[2], settings.unith[0], settings.unith[1], settings.unith[2], queue[q].e, settings.Jg, settings.a0g, settings.v0g, settings.x0g, settings.end_time / 1e6, queue[q].single, settings.Jh, settings.a0h, settings.v0h, settings.x0h);
 	// Short info for 2-D robot
-	mdebug("move (%.2f,%.2f) -> (%.2f,%.2f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, queue[q].target[0], queue[q].target[1]);
+	//mdebug("move (%.2f,%.2f) -> (%.2f,%.2f)", spaces[0].axis[0]->settings.source, spaces[0].axis[1]->settings.source, queue[q].target[0], queue[q].target[1]);
 
 	if (spaces[0].num_axes >= 3) {
 		double check_x = 0, check_v = 0, check_a = 0;
@@ -308,8 +314,10 @@ void next_move(int32_t start_time) { // {{{
 			settings.hwtime_step = min_hwtime_step;
 	}
 	settings.pattern_size = queue[q].pattern_size;
-	for (int a = 0; a < min(6, spaces[0].num_axes); ++a)
+	for (int a = 0; a < min(6, spaces[0].num_axes); ++a) {
+		mdebug("setting endpos %d %d to target %f", 0, a, queue[q].target[a]);
 		spaces[0].axis[a]->settings.endpos = queue[q].target[a];
+	}
 	settings.current_restore = queue[q].current_restore;
 	store_settings();
 	if (settings.hwtime_step != last_hwtime_step)
@@ -652,7 +660,7 @@ static void apply_tick() { // {{{
 			Space &sp = spaces[s];
 			for (int a = 0; a < sp.num_axes; ++a) {
 				auto ax = sp.axis[a];
-				mdebug("setting source for %d %d to target %f", s, a, ax->target);
+				mdebug("setting source for %d %d to endpos %f (target is %f)", s, a, ax->settings.endpos, ax->target);
 				ax->settings.source = ax->settings.endpos;
 			}
 		}
@@ -718,7 +726,7 @@ void store_settings() { // {{{
 			cpdebug(s, m, "store");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
-			//debug("setting history %d of source for %d %d to %f", current_fragment, s, a, sp.axis[a]->settings.source);
+			mdebug("setting history %d of source for %d %d to %f", current_fragment, s, a, sp.axis[a]->settings.source);
 			sp.axis[a]->history[current_fragment].source = sp.axis[a]->settings.source;
 			sp.axis[a]->history[current_fragment].endpos = sp.axis[a]->settings.endpos;
 			sp.axis[a]->history[current_fragment].adjust = sp.axis[a]->settings.adjust;
@@ -991,6 +999,7 @@ static int queue_speed_change(int q, int tool, double x[3], double unitv[3], dou
 		double extra = (old_v + dv_ramp * s) * t_max_a + max_a * s / 2 * t_max_a * t_max_a;
 		for (int i = 0; i < 3; ++i)
 			target[i] += unitv[i] * extra;
+		mdebug("ramps+ old v %f new v %f t_ramp %f s %d max J %f", old_v, new_v, t_ramp, s, max_J);
 		q = add_to_queue(q, -1, 0, tool, x, t_max_a, old_v + dv_ramp * s, max_a * s, NAN, target, 0);
 		extra = new_v * t_ramp - max_J * s / 6 * t_ramp3;
 		for (int i = 0; i < 3; ++i)
@@ -1008,7 +1017,7 @@ static int queue_speed_change(int q, int tool, double x[3], double unitv[3], dou
 			target[0][i] = x[i] + unitv[i] * (s * max_J / 6 * t_ramp3 + old_v * t_ramp);
 			target[1][i] = x[i] + unitv[i] * (s * max_J * t_ramp3 + 2 * old_v * t_ramp);
 		}
-		//debug("ramps old v %f new v %f t_ramp %f s %d max J %f", old_v, new_v, t_ramp, s, max_J);
+		mdebug("ramps old v %f new v %f t_ramp %f s %d max J %f", old_v, new_v, t_ramp, s, max_J);
 		q = add_to_queue(q, -1, 0, tool, x, t_ramp, old_v, 0, NAN, target[0], max_J * s);
 		q = add_to_queue(q, -1, 0, tool, x, t_ramp, new_v, 0, NAN, target[1], -max_J * s, NULL, 0, true);
 	}
@@ -1062,6 +1071,7 @@ bool compute_current_pos(double x[3], double v[3], double a[3], bool store) { //
 			double src = spaces[s].axis[i]->settings.source;
 			double dst = spaces[s].axis[i]->settings.endpos;
 			spaces[s].axis[i]->current = src + factor * (dst - src);
+			mdebug("setting axis %d source to %f for discard", i, spaces[s].axis[i]->current);
 			spaces[s].axis[i]->settings.source = spaces[s].axis[i]->current;
 			spaces[s].axis[i]->settings.endpos = spaces[s].axis[i]->current;
 		}
@@ -1214,11 +1224,10 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	for (int a = 0; a < 3; ++a) {
 		if (a >= spaces[0].num_axes)
 			break;
-		double pos = x[a];
-		if (std::isnan(pos))
+		if (std::isnan(x[a]))
 			continue;
 		if (std::isnan(move->target[a]))
-			target[a] = pos - (a == 2 ? zoffset : 0);
+			target[a] = x[a];
 		else
 			target[a] = (relative ? x[a] : 0) + move->target[a];
 		spaces[0].axis[a]->last_target = target[a];
@@ -1341,7 +1350,7 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		if (spaces[0].num_axes <= a)
 			break;
 		//debug("prepare move, pos[%d]: %f -> %f", a, pos, move->target[a]);
-		double d = target[a] + (a == 2 ? zoffset : 0) - x[a];
+		double d = target[a] - x[a];
 		unit[a] = d;
 		if (std::isnan(dist))
 			dist = d * d;
@@ -1470,6 +1479,8 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 		double subtarget[3];
 		for (int i = 0; i < 3; ++i)
 			subtarget[i] = X[i] + unit[i] * s[part];
+		if (spaces[0].num_axes >= 3)
+			mdebug("adding to queue: X2=%.2f target2=%.2f", X[2], subtarget[2]);
 		q = add_to_queue(q, move->gcode_line, move->time, move->tool, X, t[part], v0[part], a0[part], e0 + (move->e - e0) * current_s / dist, subtarget, J[part], NULL, 0, reverse[part]);
 	}
 	queue_end = q;

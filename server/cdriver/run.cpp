@@ -242,7 +242,7 @@ void run_file_fill_queue(bool move_allowed) {
 					queue[queue_end].v0 = r.v0;
 					double x = r.X[0] * run_file_cosa - r.X[1] * run_file_sina + run_file_refx;
 					double y = r.X[1] * run_file_cosa + r.X[0] * run_file_sina + run_file_refy;
-					double z = r.X[2];
+					double z = r.X[2] + zoffset;
 					//debug("line %d: %f %f %f", run_file_current, x, y, z);
 					queue[queue_end].target[0] = x;
 					queue[queue_end].target[1] = y;
@@ -297,7 +297,7 @@ void run_file_fill_queue(bool move_allowed) {
 					move.tool = r.tool;
 					move.target[0] = r.X[0];
 					move.target[1] = r.X[1];
-					move.target[2] = r.X[2];
+					move.target[2] = handle_probe(r.X[0], r.X[1], r.X[2] + zoffset);
 					move.e = r.E;
 					move.time = r.time;
 					//debug("run goto %f,%f,%f tool %d E %f v %f", r.X[0], r.X[1], r.X[2], r.tool, r.E, r.v0);

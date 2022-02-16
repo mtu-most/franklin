@@ -59,6 +59,7 @@ void request(int req) {
 		//debug("moving to (%f,%f,%f), tool %d e %f v %f", shmem->move.target[0], shmem->move.target[1], shmem->move.target[2], shmem->move.tool, shmem->move.e, shmem->move.v0);
 		last_active = millis();
 		initialized = true;
+		shmem->move.target[2] += zoffset;
 		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move), true);
 		delayed_reply();
 		buffer_refill();
@@ -179,8 +180,10 @@ void request(int req) {
 		}
 		if (std::isnan(spaces[shmem->ints[0]].axis[shmem->ints[1]]->current)) {
 			reset_pos(&spaces[shmem->ints[0]]);
-			for (int a = 0; a < spaces[shmem->ints[0]].num_axes; ++a)
+			for (int a = 0; a < spaces[shmem->ints[0]].num_axes; ++a) {
+				//debug("setting %d %d source to %f for non-NaN.", shmem->ints[0], a, spaces[shmem->ints[0]].axis[a]->current);
 				spaces[shmem->ints[0]].axis[a]->settings.source = spaces[shmem->ints[0]].axis[a]->current;
+			}
 		}
 		shmem->floats[0] = spaces[shmem->ints[0]].axis[shmem->ints[1]]->current;
 		//debug("getpos %d %d %f", shmem->ints[0], shmem->ints[1], shmem->floats[0]);
@@ -458,6 +461,7 @@ void setpos(int which, int t, double f, bool reset) {
 	if (reset) {
 		reset_pos(&spaces[which]);
 		for (int a = 0; a < spaces[which].num_axes; ++a) {
+			//debug("setting source and endpos %d %d to %f for setpos", which, a, spaces[which].axis[a]->current);
 			spaces[which].axis[a]->settings.source = spaces[which].axis[a]->current;
 			spaces[which].axis[a]->settings.endpos = spaces[which].axis[a]->current;
 		}
