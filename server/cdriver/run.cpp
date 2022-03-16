@@ -301,7 +301,7 @@ void run_file_fill_queue(bool move_allowed) {
 					move.e = r.E;
 					move.time = r.time;
 					//debug("run goto %f,%f,%f tool %d E %f v %f", r.X[0], r.X[1], r.X[2], r.tool, r.E, r.v0);
-					queue_end = go_to(false, &move, false, true);
+					queue_end = go_to(false, &move, true);
 					for (int i = 0; i < 3; ++i) {
 						if (!std::isnan(r.X[i]))
 							lastpos[i] = r.X[i];

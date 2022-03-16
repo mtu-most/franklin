@@ -138,11 +138,6 @@ void next_move(int32_t start_time) { // {{{
 	single = queue[q].single;
 	settings.gcode_line = queue[q].gcode_line;
 
-	if (queue[q].cb) {
-		//debug("pending cb for move");
-		cb_pending = true;
-	}
-
 	// Make sure machine state is good. {{{
 	// If the source is unknown, determine it from current_pos.
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -921,7 +916,6 @@ static double s_dv(double v1, double v2) { // {{{
 } // }}}
 
 static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double pos[3], double tf, double v0, double a0, double e, double target[3], double Jg, double *h = NULL, double Jh = 0, bool reverse = false) { // {{{
-	queue[q].cb = false;
 	queue[q].probe = false;
 	queue[q].single = false;
 	queue[q].reverse = reverse;
@@ -1153,14 +1147,14 @@ int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], boo
 				start[i] = target_x[i] + target_v[i] / len_target_v * s;
 				move.target[i] = start[i];
 			}
-			q = go_to(false, &move, false, true);
+			q = go_to(false, &move, true);
 			mul(unitg, unitg, -1);
 			q = queue_speed_change(q, -1, start, unitg, 0, len_target_v);
 		}
 		else {
 			for (int i = 0; i < 3; ++i)
 				move.target[i] = target_x[i];
-			q = go_to(false, &move, false, true);
+			q = go_to(false, &move, true);
 		}
 		if (lena > 1e-5)
 			q = add_to_queue(q, -1, 0, tool, target_x, t, len_target_v, 0, NAN, x, Jg, h, Jh, false);
@@ -1208,7 +1202,7 @@ void do_resume() { // {{{
 	buffer_refill();
 } // }}}
 
-int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { // {{{
+int go_to(bool relative, MoveCommand const *move, bool queue_only) { // {{{
 	mdebug("goto (%.2f,%.2f,%.2f) %s at speed %.2f, e %.2f", move->target[0], move->target[1], move->target[2], relative ? "rel" : "abs", move->v0, move->e);
 	mdebug("new queue for goto");
 	queue_start = 0;
@@ -1422,11 +1416,6 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	if (std::isnan(dist) || dist < 1e-10) {
 		// No moves requested.
 		//debug("not moving, because dist is %f", dist);
-		if (cb) {
-			mdebug("pending cb for goto");
-			cb_pending = true;
-		}
-		//debug("adding 1 move cb for manual move");
 		queue_end = q;
 		return queue_only ? 0 : 1;
 	}
@@ -1485,10 +1474,6 @@ int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only) { //
 	}
 	queue_end = q;
 
-	if (cb) {
-		queue[q - 1].cb = true;
-		//debug("adding cb for queue %d", q - 1);
-	}
 #if 0
 	debug("goto dir=%f,%f,%f, dist=%f, tool=%d e=%f single=%d", unit[0], unit[1], unit[2], dist, tool, move->e, move->single);
 	debug("goto s %f,%f,%f,%f,%f,%f,%f", s[0], s[1], s[2], s[3], s[4], s[5], s[6]);

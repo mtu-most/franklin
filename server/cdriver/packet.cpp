@@ -58,9 +58,10 @@ void request(int req) {
 			break;
 		//debug("moving to (%f,%f,%f), tool %d e %f v %f", shmem->move.target[0], shmem->move.target[1], shmem->move.target[2], shmem->move.tool, shmem->move.e, shmem->move.v0);
 		last_active = millis();
+		cb_pending = true;
 		initialized = true;
 		shmem->move.target[2] += zoffset;
-		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move), true);
+		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move));
 		delayed_reply();
 		buffer_refill();
 		return;

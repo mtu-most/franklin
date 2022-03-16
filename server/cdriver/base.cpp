@@ -22,8 +22,8 @@
 #include "cdriver.h"
 #include <execinfo.h>
 
-//#define cdebug debug
-#define cdebug(...) do {} while (0)
+#define cdebug debug
+//#define cdebug(...) do {} while (0)
 
 #ifdef SERIAL
 // Only for connections that can fail.
@@ -142,6 +142,7 @@ static void handle_pending_events() { // {{{
 		num_file_done_events -=1;
 		return;
 	}
+	cdebug("pending %d", cb_pending);
 	if (cb_pending && !arch_running()) {
 		cdebug("sending movecb");
 		prepare_interrupt();

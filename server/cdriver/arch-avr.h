@@ -466,16 +466,18 @@ bool hwpacket(int len) { // {{{
 		}
 		if (!avr_running) {
 			debug("unexpected underrun?");
-			//abort();
+			abort();
 		}
 		avr_running = false;
 		if (computing_move) {
-			//debug("underrun %d %d %d", sending_fragment, current_fragment, running_fragment);
+			debug("slowness underrun %d %d %d", sending_fragment, current_fragment, running_fragment);
+			abort();
 			if (!sending_fragment && discarding == 0 && (current_fragment - (running_fragment + command[2] + command[3]) + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 1)
 				arch_start_move(command[2]);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
 		else {
+			cb_pending = true;
 			// Only overwrite current position if the new value is correct.
 			//debug("underrun ok current=%d running=%d computing_move=%d sending=%d pending=%d transmitting=%d", current_fragment, running_fragment, computing_move, sending_fragment, command[3], transmitting_fragment);
 			if (!sending_fragment && !transmitting_fragment && discarding == 0 && current_fragment_pos == 0) {

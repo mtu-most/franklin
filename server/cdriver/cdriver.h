@@ -403,7 +403,7 @@ bool compute_current_pos(double x[3], double v[3], double a[3], bool store);
 int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], bool resuming = false);
 void smooth_stop(int q, double x[3], double v[3]);
 void do_resume();
-int go_to(bool relative, MoveCommand const *move, bool cb, bool queue_only = false);
+int go_to(bool relative, MoveCommand const *move, bool queue_only = false);
 void settemp(int which, double target);
 void waittemp(int which, double mintemp, double maxtemp);
 void setpos(int which, int t, double f, bool reset);

@@ -974,6 +974,7 @@ except:
 # }}}
 
 log('Franklin server is running')
+print('Franklin server is running')
 websocketd.fgloop()
 
 
