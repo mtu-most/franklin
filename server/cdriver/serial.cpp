@@ -23,7 +23,7 @@
 // Nothing in this file is useful if there serial ports are not used for communicating.
 #ifdef SERIAL
 
-#define DEBUG_DATA
+//#define DEBUG_DATA
 //#define DEBUG_SERIAL
 //#define DEBUG_FF
 

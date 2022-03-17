@@ -365,7 +365,7 @@ void avr_get_current_pos(int offset, bool check) { // {{{
 		}
 	}
 	if (have_error > 0) {
-		//abort();
+		abort();
 	}
 } // }}}
 
@@ -471,7 +471,7 @@ bool hwpacket(int len) { // {{{
 		avr_running = false;
 		if (computing_move) {
 			debug("slowness underrun %d %d %d", sending_fragment, current_fragment, running_fragment);
-			abort();
+			//abort();
 			if (!sending_fragment && discarding == 0 && (current_fragment - (running_fragment + command[2] + command[3]) + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 1)
 				arch_start_move(command[2]);
 			// Buffer is too slow with refilling; this will fix itself.
@@ -1457,11 +1457,12 @@ static void avr_discard_done() { // {{{
 } // }}}
 
 void arch_do_discard() { // {{{
+	// Send a pending discard instruction to the firmware.
 	discard_pending = false;
-	while (out_busy >= 3)
-		serial_wait();
 	if (discarding == 0)
 		return;
+	while (out_busy >= 3)
+		serial_wait();
 	//debug("discard send");
 	avr_buffer[0] = HWC_DISCARD;
 	avr_buffer[1] = discarding;
@@ -1480,7 +1481,7 @@ void arch_do_discard() { // {{{
 	spaces[0].motors2xyz(motors, xyz);
 	for (int a = 0; a < spaces[0].num_axes; ++a) {
 		spaces[0].axis[a]->current = xyz[a];
-		debug("discard position %d: %f", a, xyz[a]);
+		//debug("discard position %d: %f", a, xyz[a]);
 	}
 	settings.adjust = 0;
 } // }}}
@@ -1489,23 +1490,34 @@ void arch_discard() { // {{{
 	// Discard much of the buffer, so the upcoming change will be used almost immediately.
 	if (!avr_running || stopping || avr_homing || !computing_move || discarding != 0)
 		return;
-	//debug("discard start current = %d, sending = %d", current_fragment, sending_fragment);
+	//debug("discard start current = %d, running = %d, sending = %d", current_fragment, running_fragment, sending_fragment);
 	discard_pending = true;
+	// Clear the queue; it will be refilled immediately with the appropriate commands.
 	queue_start = 0;
 	queue_end = 0;
 	queue_full = false;
+	// Clear final target of current move.
 	discard_finals();
+	// Compute fragments in buffer; if there are enough, discard some.
 	int fragments = (current_fragment + (transmitting_fragment ? 1 : 0) - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
-	if (fragments <= 3)
+	if (fragments <= 3) {
+		discard_pending = false;
 		return;
+	}
 	discarding = fragments - 3;
+	// Discard the fragments and reload old state as current.
 	current_fragment = (current_fragment - discarding + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER;
 	restore_settings();
-	// We're in the middle of a move again, so make sure the computation is restarted.
+	// run_file_current was incremented; restore it for recomputation.
+	if (settings.run_file_current > 0)
+		settings.run_file_current -= 1;
+	// Send instruction to firmware. If this is not done here, it is done later.
 	if (connected && !avr_filling)
 		arch_do_discard();
+	// We're in the middle of a move again, so make sure the computation is restarted.
 	computing_move = true;
 	buffer_refill();
+	//debug("discard end current = %d, running = %d, sending = %d", current_fragment, running_fragment, sending_fragment);
 } // }}}
 
 void arch_send_spi(int bits, const uint8_t *data) { // {{{

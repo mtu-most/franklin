@@ -87,7 +87,7 @@ void next_move(int32_t start_time) { // {{{
 	if (queue_start == queue_end && !queue_full) {
 		if (resume_pending) {
 			memcpy(&settings, &resume.settings, sizeof(History));
-			run_file_current = settings.current_restore;
+			settings.run_file_current = settings.current_restore;
 			factor = (settings.hwtime / 1e6) / (settings.end_time / 1e6);
 			if (factor < 0)
 				factor = 0;
@@ -710,6 +710,7 @@ void store_settings() { // {{{
 	history[current_fragment].pattern_size = settings.pattern_size;
 	history[current_fragment].gcode_line = settings.gcode_line;
 	history[current_fragment].adjust = settings.adjust;
+	history[current_fragment].run_file_current = settings.run_file_current;
 	for (int i = 0; i < PATTERN_MAX; ++i)
 		history[current_fragment].pattern[i] = settings.pattern[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -721,7 +722,7 @@ void store_settings() { // {{{
 			cpdebug(s, m, "store");
 		}
 		for (int a = 0; a < sp.num_axes; ++a) {
-			mdebug("setting history %d of source for %d %d to %f", current_fragment, s, a, sp.axis[a]->settings.source);
+			mdebug("setting history %d of source for %d %d to %f; current is %f", current_fragment, s, a, sp.axis[a]->settings.source, sp.axis[a]->current);
 			sp.axis[a]->history[current_fragment].source = sp.axis[a]->settings.source;
 			sp.axis[a]->history[current_fragment].endpos = sp.axis[a]->settings.endpos;
 			sp.axis[a]->history[current_fragment].adjust = sp.axis[a]->settings.adjust;
@@ -759,6 +760,7 @@ void restore_settings() { // {{{
 	settings.pattern_size = history[current_fragment].pattern_size;
 	settings.gcode_line = history[current_fragment].gcode_line;
 	settings.adjust = history[current_fragment].adjust;
+	settings.run_file_current = history[current_fragment].run_file_current;
 	for (int i = 0; i < PATTERN_MAX; ++i)
 		settings.pattern[i] = history[current_fragment].pattern[i];
 	for (int s = 0; s < NUM_SPACES; ++s) {
@@ -1142,6 +1144,7 @@ int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], boo
 		move.gcode_line = 0;
 		move.time = 0;
 		double start[3];
+		mdebug("go to resuming");
 		if (s > 1e-5) {
 			for (int i = 0; i < 3; ++i) {
 				start[i] = target_x[i] + target_v[i] / len_target_v * s;

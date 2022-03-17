@@ -113,7 +113,7 @@ void Space::xyz2motors() { // {{{
 	space_types[type].xyz2motors(this);
 	if (settings.adjust > 0) {
 		for (int a = 0; a < num_axes; ++a) {
-			debug("adjusting %d %d target %f with %f factor %f", id, a, axis[a]->target, axis[a]->settings.adjust, settings.adjust);
+			//debug("adjusting %d %d target %f with %f factor %f", id, a, axis[a]->target, axis[a]->settings.adjust, settings.adjust);
 			axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
 		}
 	}
@@ -200,7 +200,7 @@ void reset_pos(Space *s) { // {{{
 			settings.adjust_time = int(sqrt(len2) / adjust_speed * 1e6);
 			settings.adjust = 1;
 		}
-		debug("adjusting move time=%d x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
+		//debug("adjusting move time=%d x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
 	}
 	discard_finals();
 } // }}}
@@ -268,7 +268,7 @@ void Space::load_motor(int m) { // {{{
 			double diff = motor[m]->home_pos - old_home_pos * old_steps_per_unit / motor[m]->steps_per_unit;
 			if (!std::isnan(diff)) {
 				motor[m]->settings.current_pos += diff;
-				//debug("load motor %d %d new home %f add %f", id, m, motor[m]->home_pos, diff);
+				loaddebug("load motor %d %d new home %f add %f", id, m, motor[m]->home_pos, diff);
 				// adjusting the arch pos is not affected by steps/unit.
 				arch_addpos(id, m, motor[m]->home_pos - old_home_pos);
 			}

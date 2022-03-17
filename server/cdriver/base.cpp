@@ -22,8 +22,8 @@
 #include "cdriver.h"
 #include <execinfo.h>
 
-#define cdebug debug
-//#define cdebug(...) do {} while (0)
+//#define cdebug debug
+#define cdebug(...) do {} while (0)
 
 #ifdef SERIAL
 // Only for connections that can fail.

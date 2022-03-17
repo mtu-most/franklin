@@ -56,6 +56,9 @@ void request(int req) {
 		// Ignore move while stopping.
 		if (stopping)
 			break;
+		// Ignore move while running.
+		if (run_file_map != NULL && !pausing)
+			break;
 		//debug("moving to (%f,%f,%f), tool %d e %f v %f", shmem->move.target[0], shmem->move.target[1], shmem->move.target[2], shmem->move.tool, shmem->move.e, shmem->move.v0);
 		last_active = millis();
 		cb_pending = true;
@@ -356,7 +359,7 @@ void request(int req) {
 	{
 		int ipos = int(shmem->floats[0]);
 		arch_discard();
-		run_file_current = ipos;
+		settings.run_file_current = ipos;
 		// Hack to force TP_GETPOS to return the same value; this is only called when paused, so it does no harm.
 		history[running_fragment].current_restore = ipos;
 		for (int s = 0; s < NUM_SPACES; ++s) {

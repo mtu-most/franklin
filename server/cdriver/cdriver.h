@@ -160,6 +160,7 @@ struct History {
 	int64_t gcode_line;
 	int64_t current_restore;
 	double adjust;	// adjustment factor; runs from 1 to 0.
+	int64_t run_file_current;
 	uint8_t pattern[PATTERN_MAX];
 	int pattern_size;	// in bytes; each bit in the pattern is a pulse.
 };
@@ -438,7 +439,6 @@ void abort_run_file();
 void run_file_fill_queue(bool move_allowed = true);
 void run_adjust_probe(double x, double y, double z);
 double run_find_pos(const double pos[3]);
-EXTERN int64_t run_file_current;
 EXTERN std::string probe_file_name;
 EXTERN off_t probe_file_size;
 EXTERN ProbeFile *probe_file_map;
@@ -447,7 +447,7 @@ EXTERN off_t run_file_size;
 EXTERN Run_Record *run_file_map;
 EXTERN int run_file_num_strings;
 EXTERN off_t run_file_first_string;
-EXTERN int run_file_num_records;
+EXTERN int64_t run_file_num_records;
 EXTERN int run_file_wait;
 EXTERN struct itimerspec run_file_timer;
 EXTERN double run_file_refx;
