@@ -504,6 +504,7 @@ void arch_setup_end();
 void arch_connect(char const *run_id, char const *port);
 void arch_motors_change();
 void arch_addpos(int s, int m, double diff);
+void arch_change_steps_per_unit(int s, int m, double factor);
 void arch_invertpos(int s, int m);
 void arch_stop(bool fake = false);
 void arch_home();

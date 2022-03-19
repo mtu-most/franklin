@@ -277,11 +277,17 @@ void Space::load_motor(int m) { // {{{
 		//debug("busy %d old pos %f pos %f old steps %f steps %f", motors_busy, old_home_pos, motor[m]->home_pos, old_steps_per_unit, motor[m]->steps_per_unit);
 		if (motors_busy && (old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !std::isnan(old_home_pos)) {
 			double diff = motor[m]->home_pos - old_home_pos * old_steps_per_unit / motor[m]->steps_per_unit;
+			double factor = old_steps_per_unit / motor[m]->steps_per_unit;
 			if (!std::isnan(diff)) {
-				motor[m]->settings.current_pos += diff;
+				if (factor != 1) {
+					motor[m]->settings.current_pos *= factor;
+					arch_change_steps_per_unit(id, m, factor);
+				}
+				if (diff != 0) {
+					motor[m]->settings.current_pos += diff;
+					arch_addpos(id, m, diff);
+				}
 				loaddebug("load motor %d %d new home %f add %f", id, m, motor[m]->home_pos, diff);
-				// adjusting the arch pos is not affected by steps/unit.
-				arch_addpos(id, m, motor[m]->home_pos - old_home_pos);
 			}
 		}
 		reset_pos(this);

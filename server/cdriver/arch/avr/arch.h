@@ -155,6 +155,7 @@ int arch_fds();
 int arch_tick();
 void arch_reconnect(const char *port);
 void arch_addpos(int s, int m, double diff);
+void arch_change_steps_per_unit(int s, int m, double factor);
 void arch_invertpos(int s, int m);
 void arch_stop(bool fake);
 void avr_stop2();

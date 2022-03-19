@@ -1052,6 +1052,23 @@ void arch_addpos(int s, int m, double diff) { // {{{
 	cpdebug(s, m, "arch addpos diff %f offset %f pos %f", diff, avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
 } // }}}
 
+void arch_change_steps_per_unit(int s, int m, double factor) { // {{{
+	if (s >= NUM_SPACES)
+		return;
+	int mi = 0;
+	for (uint8_t st = 0; st < s; ++st)
+		mi += spaces[st].num_motors;
+	if (mi + m >= NUM_MOTORS)
+		return;
+	if (!std::isnan(factor))
+		avr_pos_offset[mi + m] *= factor;
+	else {
+		debug("Error: change_steps_per_unit called with NaN argument");
+		abort();
+	}
+	cpdebug(s, m, "arch change_steps_per_unit factor %f offset %f pos %f", factor, avr_pos_offset[mi], spaces[s].motor[m]->settings.current_pos);
+} // }}}
+
 void arch_invertpos(int s, int m) { // {{{
 	if (s >= NUM_SPACES)
 		return;
