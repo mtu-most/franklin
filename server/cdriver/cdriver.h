@@ -199,7 +199,7 @@ struct Axis {
 	void *type_data;
 };
 
-#include "arch.h"
+#include "arch-host.h"
 
 struct Motor {
 	Motor_History *history;

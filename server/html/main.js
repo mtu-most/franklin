@@ -32,7 +32,7 @@ var new_tab, new_page;
 // General supporting functions. {{{
 var reading_temps = false;
 function timed_update() { // {{{
-	if (reading_temps || selected_machine === null || selected_machine === undefined || machines[selected_machine].ui.disabling)
+	if (reading_temps || selected_machine === null || selected_machine === undefined || machines[selected_machine] === undefined || machines[selected_machine].ui.disabling)
 		return;
 	reading_temps = true;
 	var read = function(ui, num) {
@@ -1607,7 +1607,6 @@ function set_file(ui, id, element, action) { // {{{
 		// Return value is filename, error list.
 		var response = this.responseText.split('\n', 2);
 		var filename = response[0];
-		console.info(response[1]);
 		var errors = JSON.parse(response[1]);
 		if (errors.length > 0) {
 			var msg = '';

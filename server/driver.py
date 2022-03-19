@@ -357,7 +357,7 @@ class Machine: # {{{
 		self.connected = False
 		self.uuid = config['uuid']
 		# Break string in parts to avoid fold markers.
-		self.user_interface = '{Dv2m(Blocker:){Dv2m(No Connection:){dv3m{dv3m{dv3m[0:*Controls:{Dh60%{Dv12m{Dv5m{dh11m(Job Control:)(Buttons:)}(Position:)}{Dh85%(XY Map:)(Z Map:)}}{Dv4m(Abort:){Dv6m(Multipliers:){Dv2m(Gpios:){Dv9m(Temps:)(Temp Graph:)}}' + '}}' + '}Setup:{Dv2m(Save Profile:)[0:*Profile:(Profile Setup:)Probe:(Probe Setup:)Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dv3m(Type Setup:){Dh50%(Cartesian Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}' + '}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)]}](Confirmation:)}(Message:)}(State:)}}' + '}'
+		self.user_interface = '{Dv2m(Blocker:){Dv2m(No Connection:){dv3m{dv3m{dv3m[0:*Controls:{Dh57.1%{Dv18.9m{Dv8.8m{dh17m(Job Control:)(Buttons:)}(Position:)}{Dh85%(XY Map:)(Z Map:)}}{Dv4.4m(Abort:){Dv8.3m(Multipliers:){Dv3.6m(Gpios:){Dv7.4m(Temps:)(Temp Graph:)}}' + '}}' + '}Setup:{Dv2m(Save Profile:)[2:Profile:(Profile Setup:)Probe:(Probe Setup:)*Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dv3m(Type Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)]}](Confirmation:)}(Message:)}(State:)}}' + '}'
 		self.pin_names = []
 		self.allow_system = allow_system
 		self.probemap = None
@@ -1564,7 +1564,8 @@ class Machine: # {{{
 				ret += '[axis %d %d]\r\n' % (self.id, i)
 				ret += 'name = %s\r\n' % a['name']
 				if self.id == 0:
-					ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('park', 'park_order', 'home_pos2')])
+					ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('park', 'home_pos2')])
+					ret += 'park_order = %d\r\n' % a['park_order']
 					if self.machine.home_phase is None:
 						ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('min', 'max')])
 					else:
@@ -2008,6 +2009,7 @@ class Machine: # {{{
 	def benjamin_audio_add_POST(self, filename, name): # {{{
 		with open(filename, 'rb') as f:
 			self._audio_add(f, name)
+		return filename + '\n' + json.dumps([])
 	# }}}
 	def benjamin_audio_del(self, name): # {{{
 		assert name in self.audioqueue
@@ -2190,7 +2192,7 @@ class Machine: # {{{
 							# Avoid errors when empty.
 							continue
 						value = [[int(x[0]), x[1:]] for x in value.split(',')]
-					elif 'name' in key or key in ('user_interface', 'type'):
+					elif 'name' in key or key in ('user_interface', 'type', 'unit'):
 						pass	# Keep strings as they are.
 					elif key == 'spi_setup':
 						value = self._unmangle_spi(value)
@@ -2284,7 +2286,8 @@ class Machine: # {{{
 		'''Import settings using a POST request.
 		Note that this function can only be called using POST; not with the regular websockets system.
 		'''
-		return ', '.join('%s (%s)' % (msg, ln) for ln, msg in self.expert_import_settings(open(filename).read(), name))
+		errors = ['%s (%s)' % (msg, ln) for ln, msg in self.expert_import_settings(open(filename).read(), name)]
+		return filename + '\n' + json.dumps(errors)
 	# }}}
 	@delayed
 	def user_gcode_run(self, id, code, paused = False): # {{{
@@ -2386,7 +2389,8 @@ class Machine: # {{{
 		'''
 		with open(filename) as f:
 			self.probemap = json.loads(f.read().strip())
-		return '' if self._check_probemap() else 'Invalid probemap'
+		errors = [''] if self._check_probemap() else ['Invalid probemap']
+		return filename + '\n' + json.dumps(errors)
 	# }}}
 	def queue_remove(self, name, audio = False): # {{{
 		'''Remove an entry from the queue.

@@ -85,6 +85,7 @@ void packet()
 		for (uint8_t i = 0; i < UUID_SIZE; ++i) {
 			machineid[1 + ID_SIZE + i] = command(1 + i);
 			EEPROM_write(i, machineid[1 + ID_SIZE + i]);
+			debug("EEPROM write %d %d", i, machineid[1 + ID_SIZE + i]);
 		}
 		write_ack();
 		return;
@@ -301,7 +302,7 @@ void packet()
 			adc_phase = PREPARING;
 			adc_current = a;
 			adc_next = a;
-			adc_start(a);
+			arch_adc_start(a);
 		}
 		write_ack();
 		return;

@@ -34,7 +34,7 @@ module/build/stamp: module/module.cpp module/module.h module/parse.cpp module/se
 	touch $@
 
 SOURCES = \
-	arch/${TARGET_ARCH}/arch.cpp \
+	arch/${TARGET_ARCH}/arch-host.cpp \
 	base.cpp \
 	debug.cpp \
 	globals.cpp \
@@ -50,7 +50,7 @@ SOURCES = \
 OBJS = $(patsubst %.cpp,build/%.o,${SOURCES})
 
 HEADERS = \
-	arch/${TARGET_ARCH}/arch.h \
+	arch/${TARGET_ARCH}/arch-host.h \
 	cdriver.h \
 	configuration.h \
 	module/module.h

@@ -812,7 +812,7 @@ def detect(port): # {{{
 				except IOError:
 					continue
 				id[0] += data
-				#log('incomplete id: ' + id[0])
+				#log('incomplete id: ', id[0])
 				if len(id[0]) < 34:
 					if len(id[0]) > 0 and id[0][0] == protocol.single['CONTROLLER'][0]:
 						# This is a controller. Spawn the process, then cancel this detection.

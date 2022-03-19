@@ -18,158 +18,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// This is not an include quard.  This file is included twice; the first time the first part of the file is used, the second time the second part.
-#ifndef _ARCH_AVR_H
-#define _ARCH_AVR_H
-
-// Defines and includes.  {{{
-// Note: When changing this, also change max in cdriver/space.cpp
-#ifdef FAST_ISR
-// 100 is for a 16MHz crystal.
-#define TIME_PER_ISR int(100 * 16e6 / F_CPU)
-#ifndef STEPS_DELAY // {{{
-#define STEPS_DELAY 5	// Extra delay for steps, in units of 6 clock pulses.
-#endif // }}}
-#ifndef ADD_DIR_DELAY // {{{
-#if 1
-#define ADD_DIR_DELAY
-#else
-#define ADD_DIR_DELAY \
-		"\t"	"ldi 18, 40"	"\n" \
-	"1:\t"		"dec 18"	"\n" \
-		"\t"	"brne 1b"	"\n"
-#endif
-#endif // }}}
-#else
-#define TIME_PER_ISR 500
-#endif
-#define BAUD 115200
-
-//#define pindebug debug
-#define pindebug(...) do {} while (0)
-
-// Define things that pins_arduino.h needs from Arduino.h (which shouldn't be included). {{{
-#define ARDUINO_MAIN
-#define NOT_A_PIN 0
-#define NOT_A_PORT 0
-#define NOT_ON_TIMER 0xff
-#define PA 1
-#define PB 2
-#define PC 3
-#define PD 4
-#define PE 5
-#define PF 6
-#define PG 7
-#define PH 8
-#define PJ 10
-#define PK 11
-#define PL 12
-#define TIMER0 0
-#define TIMER0A 0
-#define TIMER0B 1
-#define TIMER1A 2
-#define TIMER1B 3
-#define TIMER1C 4
-#define TIMER2  5
-#define TIMER2A 5
-#define TIMER2B 6
-#define TIMER3A 7
-#define TIMER3B 8
-#define TIMER3C 9
-#define TIMER4A 10
-#define TIMER4B 11
-#define TIMER4C 12
-#define TIMER4D NOT_ON_TIMER	// Not supported.
-#define TIMER5A 13
-#define TIMER5B 14
-#define TIMER5C 15
-// }}}
-
-#include <stdio.h>
-#include <avr/wdt.h>
-#include <avr/io.h>
-#include <avr/pgmspace.h>
-#include <avr/interrupt.h>
-#include <pins_arduino.h>
-
-struct Timer_data {
-	volatile uint8_t *mode, *oc;
-	uint8_t mode_mask;
-	uint8_t num;
-	char part;
-	Timer_data(volatile uint8_t *mode_, volatile uint8_t *oc_, uint8_t mode_mask_, uint8_t num_, char part_) : mode(mode_), oc(oc_), mode_mask(mode_mask_), num(num_), part(part_) {}
-};
-inline bool timer_is_16bit(int t) {
-	return t != TIMER0 && t != TIMER2;
-}
-static const Timer_data timer_data[] = {
-	Timer_data(&TCCR0A, &OCR0A, 2 << 6, 0, 'A'),
-	Timer_data(&TCCR0A, &OCR0B, 2 << 4, 0, 'B'),
-
-	Timer_data(&TCCR1A, &OCR1AL, 2 << 6, 1, 'A'),
-	Timer_data(&TCCR1A, &OCR1BL, 2 << 4, 1, 'B'),
-#ifdef OCR1C
-	Timer_data(&TCCR1A, &OCR1CL, 2 << 2, 1, 'C'),
-#else
-	Timer_data(NULL, NULL, 0, 0, 'x'),
-#endif
-
-	Timer_data(&TCCR2A, &OCR2A, 2 << 6, 2, 'A'),
-	Timer_data(&TCCR2A, &OCR2B, 2 << 4, 2, 'B'),
-
-#ifdef TCCR3A
-	Timer_data(&TCCR3A, &OCR3AL, 2 << 6, 3, 'A'),
-	Timer_data(&TCCR3A, &OCR3BL, 2 << 4, 3, 'B'),
-#ifdef OCR3C
-	Timer_data(&TCCR3A, &OCR3CL, 2 << 2, 3, 'C'),
-#else
-	Timer_data(NULL, NULL, 0, 0, 'x'),
-#endif
-#endif
-#ifdef TCCR4A
-	Timer_data(&TCCR4A, &OCR4AL, 2 << 6, 4, 'A'),
-	Timer_data(&TCCR4A, &OCR4BL, 2 << 4, 4, 'B'),
-	Timer_data(&TCCR4A, &OCR4CL, 2 << 2, 4, 'C'),
-#endif
-#ifdef TCCR5A
-	Timer_data(&TCCR5A, &OCR5AL, 2 << 6, 5, 'A'),
-	Timer_data(&TCCR5A, &OCR5BL, 2 << 4, 5, 'B'),
-	Timer_data(&TCCR5A, &OCR5CL, 2 << 2, 5, 'C'),
-#endif
-};
-
-#ifdef F
-#undef F
-#endif
-#define F(x) &(x)
-#define L "l"
-
-#define ARCH_PIN_DATA \
-	volatile uint8_t *avr_mode; \
-	volatile uint8_t *avr_output; \
-	volatile uint8_t *avr_input; \
-	uint8_t avr_bitmask; \
-	bool avr_on; \
-	int32_t avr_target;
-
-#define ARCH_MOTOR \
-	volatile uint16_t step_port, dir_port; \
-	volatile uint8_t step_bitmask, dir_bitmask;
-// }}}
-
-static inline void arch_disable_isr() { // {{{
-	TIMSK1 = 0;
-} // }}}
-
-static inline void arch_enable_isr() { // {{{
-	TIMSK1 = 1 << OCIE1A;
-} // }}}
-
-static inline void arch_set_speed(uint16_t us_per_sample);
-static inline void arch_serial_write(uint8_t data);
-
-// Everything before this line is used at the start of firmware.h; everything after it at the end.
-#else
+#include "firmware.h"
 
 #ifdef __cplusplus
 // Defined by arduino: NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS
@@ -189,10 +38,7 @@ static inline void arch_serial_write(uint8_t data);
 #endif
 #endif
 #endif
-EXTERN volatile int8_t avr_last_serial;
-EXTERN int8_t avr_which_serial;
 extern volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6];
-#ifdef DEFINE_VARIABLES
 #define ONEPORT(p) {&UDR ## p, &UCSR ## p ## A, &UCSR ## p ## B, &UCSR ## p ## C, &UBRR ## p ## H, &UBRR ## p ## L}
 volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6] = {
 #ifdef UDR3
@@ -209,10 +55,9 @@ volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6] = {
 #endif
 #endif
 };
-#endif
 // }}}
 
-static inline void arch_serial_write(uint8_t data) { // {{{
+void arch_serial_write(uint8_t data) { // {{{
 	if (avr_which_serial < 0)
 		return;
 	while (~*avr_serial_ports[avr_which_serial][1] & (1 << UDRE0)) {}
@@ -225,7 +70,7 @@ static inline void arch_serial_flush() { // {{{
 	while (~*avr_serial_ports[avr_which_serial][1] & (1 << TXC0)) {}
 } // }}}
 
-static inline void arch_claim_serial() { // {{{
+void arch_claim_serial() { // {{{
 	if (avr_which_serial == avr_last_serial)
 		return;
 	avr_which_serial = avr_last_serial;
@@ -236,7 +81,7 @@ static inline void arch_claim_serial() { // {{{
 			*avr_serial_ports[i][2] = 0;
 	}
 } // }}}
-#ifdef DEFINE_VARIABLES
+
 // Serial input ISR. {{{
 /* 16 MHz, 1Mbit: 16 cycles/bit; 160 cycles/byte. */
 #define avr_serial_input(which, status, data) \
@@ -328,20 +173,16 @@ ISR(USART3_RX_vect, ISR_NAKED) { // {{{
 	avr_serial_input(3, UCSR3A, UDR3);
 } // }}}
 #endif
-#endif
 // }}}
 
 // Debugging. {{{
 #ifndef NO_DEBUG
-#define AVR_DEBUG_BITS 5
-EXTERN volatile int avr_debug[1 << AVR_DEBUG_BITS];
-EXTERN volatile int avr_debug_ptr;
-static inline void debug_add(int i) { // {{{
+void debug_add(int i) { // {{{
 	avr_debug[avr_debug_ptr] = i;
 	avr_debug_ptr = (avr_debug_ptr + 1) & ((1 << AVR_DEBUG_BITS) - 1);
 } // }}}
 
-static inline void debug_dump() { // {{{
+void debug_dump() { // {{{
 	debug("Debug dump (most recent last):");
 	for (int i = 0; i < 1 << AVR_DEBUG_BITS; ++i)
 		debug("%x", avr_debug[(avr_debug_ptr + i) & ((1 << AVR_DEBUG_BITS) - 1)]);
@@ -371,7 +212,7 @@ static inline void avr_print_num(int32_t num, int base) { // {{{
 	}
 } // }}}
 
-static inline void debug(char const *fmt, ...) { // {{{
+void debug(char const *fmt, ...) { // {{{
 #if DEBUG_BUFFER_LENGTH > 0
 	buffered_debug_flush();
 #endif
@@ -450,10 +291,9 @@ static inline void debug(char const *fmt, ...) { // {{{
 // }}}
 
 // ADC. {{{
-EXTERN uint8_t avr_adc_last_pin;
 #define AVR_ADCSRA_BASE	((1 << ADEN) | 7)	// Prescaler set to 128.
 
-static inline void adc_start(uint8_t adcpin) { // {{{
+void arch_adc_start(uint8_t adcpin) { // {{{
 	// Mostly copied from /usr/share/arduino/hardware/arduino/cores/arduino/wiring_analog.c.
 #if defined(ADCSRB) && defined(MUX5)
 	// the MUX5 bit of ADCSRB selects whether we're reading from channels
@@ -470,10 +310,10 @@ static inline void adc_start(uint8_t adcpin) { // {{{
 	avr_adc_last_pin = adcpin;
 } // }}}
 
-static inline bool adc_ready(uint8_t pin_) { // {{{
+bool adc_ready(uint8_t pin_) { // {{{
 	if (pin_ != avr_adc_last_pin) {
 		adc_phase = PREPARING;
-		adc_start(pin_);
+		arch_adc_start(pin_);
 		return false;
 	}
 	if (bit_is_set(ADCSRA, ADSC))
@@ -486,7 +326,7 @@ static inline bool adc_ready(uint8_t pin_) { // {{{
 	return true;
 } // }}}
 
-static inline int16_t adc_get(uint8_t pin_) { // {{{
+int16_t adc_get(uint8_t pin_) { // {{{
 	(void)&pin_;
 	int16_t low = uint8_t(ADCL);
 	int16_t high = uint8_t(ADCH);
@@ -497,7 +337,7 @@ static inline int16_t adc_get(uint8_t pin_) { // {{{
 // }}}
 
 // EEPROM. {{{
-inline static uint8_t EEPROM_read(uint16_t addr) {
+uint8_t EEPROM_read(uint16_t addr) {
 	uint8_t value;
 	asm volatile (
 		"\t"	"cli"				"\n"
@@ -505,6 +345,7 @@ inline static uint8_t EEPROM_read(uint16_t addr) {
 		"\t"	"rjmp 1b"			"\n"
 		"\t"	"out %[eearl], %[addrl]"	"\n"
 		"\t"	"out %[eearh], %[addrh]"	"\n"
+		"\t"	"sbi %[eecr], 0"		"\n"
 		"\t"	"in %[data], %[eedr]"		"\n"
 		"\t"	"sei"				"\n"
 		:
@@ -521,7 +362,7 @@ inline static uint8_t EEPROM_read(uint16_t addr) {
 	return value;
 }
 
-inline static void EEPROM_write(uint16_t addr, uint8_t value) {
+void EEPROM_write(uint16_t addr, uint8_t value) {
 	asm volatile (
 		"\t"	"cli"				"\n"
 		"1:\t"	"in __tmp_reg__, %[spmcsr]"	"\n"
@@ -553,7 +394,7 @@ inline static void EEPROM_write(uint16_t addr, uint8_t value) {
 // }}}
 
 // Watchdog and reset. {{{
-static inline void arch_watchdog_enable() { // {{{
+void arch_watchdog_enable() { // {{{
 #ifdef WATCHDOG
 	wdt_reset();
 	wdt_enable(WDTO_4S);
@@ -563,12 +404,6 @@ static inline void arch_watchdog_enable() { // {{{
 static inline void arch_watchdog_disable() { // {{{
 #ifdef WATCHDOG
 	wdt_disable();
-#endif
-} // }}}
-
-static inline void arch_watchdog_reset() { // {{{
-#ifdef WATCHDOG
-	wdt_reset();
 #endif
 } // }}}
 
@@ -582,12 +417,8 @@ static inline void arch_reset() { // {{{
 // }}}
 
 // Setup. {{{
-EXTERN volatile uint32_t avr_time_h, avr_seconds_h, avr_seconds;
-EXTERN int timer1_pins[3];
-EXTERN int num_timer1_pins;
-EXTERN uint16_t timer1_top;
 
-static inline void arch_setup_start() { // {{{
+void arch_setup_start() { // {{{
 	cli();
 	for (uint8_t pin_no = 0; pin_no < NUM_DIGITAL_PINS; ++pin_no) {
 		uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
@@ -669,13 +500,7 @@ static inline void arch_setup_start() { // {{{
 		machineid[1 + ID_SIZE + i] = EEPROM_read(i);
 } // }}}
 
-static inline void arch_setup_end() { // {{{
-} // }}}
-
-static inline void arch_tick() { // {{{
-} // }}}
-
-static inline void arch_msetup(uint8_t m) { // {{{
+void arch_msetup(uint8_t m) { // {{{
 	if (motor[m].step_pin < NUM_DIGITAL_PINS) {
 		motor[m].step_port = int(pin[motor[m].step_pin].avr_output);
 		motor[m].step_bitmask = pin[motor[m].step_pin].avr_bitmask;
@@ -694,7 +519,7 @@ static inline void arch_msetup(uint8_t m) { // {{{
 	}
 } // }}}
 
-static inline void update_timer1_pwm() { // {{{
+void update_timer1_pwm() { // {{{
 	for (int i = 0; i < num_timer1_pins; ++i) {
 		// OC / top = duty / 0x7fff
 		int tp = timer1_pins[i];
@@ -713,7 +538,7 @@ static inline void update_timer1_pwm() { // {{{
 	}
 } // }}}
 
-static inline void arch_set_speed(uint16_t us_per_sample) { // {{{
+void arch_set_speed(uint16_t us_per_sample) { // {{{
 	if (us_per_sample == 0) {
 		TIMSK1 = 0;
 		step_state = STEP_STATE_STOP;
@@ -736,12 +561,12 @@ static inline void arch_set_speed(uint16_t us_per_sample) { // {{{
 	}
 } // }}}
 
-static inline void arch_spi_start() { // {{{
+void arch_spi_start() { // {{{
 	SET_OUTPUT(MOSI);
 	RESET(SCK);
 } // }}}
 
-static inline void arch_spi_send(uint8_t data, uint8_t bits) { // {{{
+void arch_spi_send(uint8_t data, uint8_t bits) { // {{{
 	arch_spi_start();
 	while (bits > 0) {
 		if (data & 0x80)
@@ -755,12 +580,12 @@ static inline void arch_spi_send(uint8_t data, uint8_t bits) { // {{{
 	}
 } // }}}
 
-static inline void arch_spi_stop() { // {{{
+void arch_spi_stop() { // {{{
 	UNSET(MOSI);
 	UNSET(SCK);
 } // }}}
 
-static inline int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { // {{{
+int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { // {{{
 	char const *extra;
 	switch (pin_) {
 		case MOSI:
@@ -816,7 +641,6 @@ static inline int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { 
 
 // }}}
 
-#ifdef DEFINE_VARIABLES
 #define offsetof(type, field) __builtin_offsetof(type, field)
 #ifdef FAST_ISR
 ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
@@ -1312,111 +1136,10 @@ ISR(TIMER0_OVF_vect) { // {{{
 		avr_seconds += 1e3;
 	}
 } // }}}
-#endif
-
-static inline uint16_t millis() { // {{{
-	cli();
-	uint8_t l = TCNT0;
-	uint32_t h = avr_time_h;
-	if (TIFR0 & (1 << TOV0)) {
-		l = TCNT0;
-		h += 0x100;
-	}
-	sei();
-	// There are 125/8 timer ticks/ms, so divide the timer ticks by 125/8 to get ms.
-	return ((h | l) << 3) / 125;
-} // }}}
-
-static inline uint16_t seconds() { // {{{
-	return avr_seconds + (avr_time_h >> 8) / 15625;
-} // }}}
 // }}}
 
 // Pin control. {{{
-inline void SET_OUTPUT(uint8_t pin_no) { // {{{
-	if ((pin[pin_no].state & 0x3) == CTRL_SET || (pin[pin_no].state & 0x3) == CTRL_RESET)
-		return;
-	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
-	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
-	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
-	pindebug("output pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
-} // }}}
-
-inline void SET_INPUT(uint8_t pin_no) { // {{{
-	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
-	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
-	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_INPUT | CTRL_NOTIFY);
-	pindebug("input pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
-} // }}}
-
-inline void UNSET(uint8_t pin_no) { // {{{
-	int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_no);
-	if (timer != NOT_ON_TIMER) {
-		Timer_data const *data = &timer_data[timer];
-		*data->mode &= ~data->mode_mask;
-		//debug("unset pin %d, OC%d%c mode to %x", pin_no, data->num, data->part, *data->mode);
-	}
-	*pin[pin_no].avr_mode &= ~pin[pin_no].avr_bitmask;
-	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
-	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_UNSET);
-	pindebug("unset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
-} // }}}
-
-inline void SET(uint8_t pin_no) { // {{{
-	int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_no);
-	if (timer != NOT_ON_TIMER) {
-		Timer_data const *data = &timer_data[timer];
-		if (pin[pin_no].duty < 0x7fff) {
-			*data->mode |= data->mode_mask;
-			//debug("set pin %d, OC%d%c mode to %x", pin_no, data->num, data->part, *data->mode);
-			if (data->num == 1)
-				update_timer1_pwm();
-			else {
-				if (timer_is_16bit(data->num)) {
-					data->oc[1] = (pin[pin_no].duty >> 8) & 0xff;
-					data->oc[0] = pin[pin_no].duty & 0xff;
-				}
-				else {
-					*data->oc = (pin[pin_no].duty >> 7) & 0xff;
-				}
-			}
-		}
-		else {
-			*data->mode &= ~data->mode_mask;
-			//debug("set2 pin %d, OC%d%c mode to %x", pin_no, data->num, data->part, *data->mode);
-		}
-	}
-	else if ((pin[pin_no].state & 0x3) == CTRL_SET)
-		return;
-	pin[pin_no].avr_on = true;
-	pin[pin_no].avr_target = 0;
-	*pin[pin_no].avr_output |= pin[pin_no].avr_bitmask;
-	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
-	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_SET);
-	pindebug("set pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
-} // }}}
-
-inline void RESET(uint8_t pin_no) { // {{{
-	if ((pin[pin_no].state & 0x3) == CTRL_RESET)
-		return;
-	int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_no);
-	if (timer != NOT_ON_TIMER) {
-		Timer_data const *data = &timer_data[timer];
-		*data->mode &= ~data->mode_mask;
-		//debug("reset pin %d, OC%d%c mode to %x", pin_no, data->num, data->part, *data->mode);
-	}
-	*pin[pin_no].avr_output &= ~pin[pin_no].avr_bitmask;
-	*pin[pin_no].avr_mode |= pin[pin_no].avr_bitmask;
-	pin[pin_no].set_state((pin[pin_no].state & ~0x3) | CTRL_RESET);
-	pindebug("reset pin %d %x %x %x", pin_no, int(pin[pin_no].avr_output), int(pin[pin_no].avr_mode), pin[pin_no].avr_bitmask);
-} // }}}
-
-inline bool GET(uint8_t pin_no) { // {{{
-	return *pin[pin_no].avr_input & pin[pin_no].avr_bitmask;
-} // }}}
-
-EXTERN uint8_t avr_outputs_last;
-inline void arch_outputs() { // {{{
+void arch_outputs() { // {{{
 	uint8_t now = TCNT0;
 	int16_t interval = (now - avr_outputs_last) & 0xff;
 	if (interval <= 0)
@@ -1447,5 +1170,4 @@ inline void arch_outputs() { // {{{
 	//debug("pin 4 state %x target %x:%x duty %x", pin[4].state, uint16_t(pin[4].avr_target >> 16), uint16_t(pin[4].avr_target), pin[4].duty);
 } // }}}
 // }}}
-#endif
 #endif

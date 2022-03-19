@@ -1,7 +1,7 @@
-/* firmware.h - declarations for Franklin
+/* firmware.h - declarations for Franklin {{{
  * vim: set foldmethod=marker :
  * Copyright 2014-2016 Michigan Technological University
- * Copyright 2016 Bas Wijnen <wijnen@debian.org>
+ * Copyright 2016-2022 Bas Wijnen <wijnen@debian.org>
  * Author: Bas Wijnen <wijnen@debian.org>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -16,15 +16,22 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+ * }}} */
 
 #ifndef _FIRMWARE_H
 #define _FIRMWARE_H
 
+// Defines and includes. {{{
 #define FAST_ISR
 
+// Exactly one file defines EXTERN as empty, which leads to the data to be defined.
+#ifndef EXTERN
+#define EXTERN extern
+#endif
+
 #include <stdarg.h>
-#include ARCH_INCLUDE
+#include <stdint.h>
+#include "arch-firmware-defs.h"
 
 #define ID_SIZE 8	// Number of bytes in machineid; 8.
 #define UUID_SIZE 16	// Number of bytes in uuid; 16.
@@ -48,13 +55,6 @@
 #define MAXLONG (int32_t(uint32_t(~0) >> 1))
 #define MAXINT (int(unsigned(~0) >> 1))
 
-// Exactly one file defines EXTERN as empty, which leads to the data to be defined.
-#ifndef EXTERN
-#define EXTERN extern
-#else
-#define DEFINE_VARIABLES
-#endif
-
 #define BUFFER_CHECK(buffer, index) do { \
 	int _i = (index); \
 	if (_i < 0 || _i >= int(sizeof(buffer) / sizeof((buffer)[0]))) \
@@ -68,25 +68,26 @@
 #define SERIAL_BUFFER_SIZE (1 << SERIAL_SIZE_BITS)
 #define SERIAL_MASK (SERIAL_BUFFER_SIZE - 1)
 #define FRAGMENTS_PER_MOTOR_MASK ((1 << FRAGMENTS_PER_MOTOR_BITS) - 1)
+// }}}
 
 #ifndef NO_DEBUG
-static inline void debug(char const *fmt, ...);
-static inline void debug_add(int i);
-static inline void debug_dump();
+void debug(char const *fmt, ...);
+void debug_add(int i);
+void debug_dump();
 #else
-static inline void debug(char const *fmt, ...) { (void)&fmt; }
-static inline void debug_add(int i) { (void)&i; }
-static inline void debug_dump() {}
+void debug(char const *fmt, ...) { (void)&fmt; }
+void debug_add(int i) { (void)&i; }
+void debug_dump() {}
 #endif
 
-static inline void arch_msetup(uint8_t m);
+void arch_msetup(uint8_t m);
 
 template <typename _A, typename _B> _A min(_A a, _B b) { return a < b ? a : b; }
 template <typename _A, typename _B> _A max(_A a, _B b) { return a > b ? a : b; }
 template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 #define fabs abs
 
-// Volatile variables which are used by interrupt handlers.
+// Volatile variables which are used by interrupt handlers. {{{
 EXTERN volatile uint16_t debug_value, debug_value1, debug_value2, debug_value3;
 EXTERN volatile uint8_t move_phase, full_phase, full_phase_bits;
 EXTERN volatile bool serial_overflow;
@@ -101,7 +102,9 @@ EXTERN volatile uint8_t current_len;		// Copy of settings[current_fragment].len,
 EXTERN volatile uint8_t step_state;		// 0: disabled; 1: Waiting for limit switch check; 2: Waiting for step; 3: free running.
 EXTERN volatile int8_t (*volatile current_buffer)[NUM_MOTORS][BYTES_PER_FRAGMENT];
 EXTERN volatile uint8_t last_fragment;	// Fragment that is currently being filled.
+// }}}
 
+// Other variables. {{{
 EXTERN uint8_t machineid[1 + ID_SIZE + UUID_SIZE + (1 + ID_SIZE + UUID_SIZE + 2) / 3];
 EXTERN int16_t command_end;
 EXTERN bool had_data;
@@ -121,8 +124,10 @@ EXTERN uint8_t led_pin, stop_pin, probe_pin, pin_flags;
 EXTERN uint8_t spiss_pin;
 EXTERN uint16_t timeout_time, last_active;
 EXTERN uint8_t enabled_pins;
+// }}}
 
-enum SingleByteCommands {	// See serial.cpp for computation of command values.
+enum SingleByteCommands { // {{{
+	// See serial.cpp for computation of command values.
 	CMD_NACK0 = 0xf0,	// Incorrect packet; please resend.
 	CMD_NACK1 = 0x91,	// Incorrect packet; please resend.
 	CMD_NACK2 = 0xa2,	// Incorrect packet; please resend.
@@ -139,9 +144,9 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values.
 	CMD_DEBUG = 0xdd,	// Debug message; a nul-terminated message follows (no checksum; no resend).
 	CMD_STARTUP = 0xee,	// Starting up.
 	CMD_STALLACK = 0x8f	// Clear stall.
-};
+}; // }}}
 
-enum Control {
+enum Control { // {{{
 	// Control is 0x0000rrcc, with R=read request, r=reset value, c=current value.
 	CTRL_RESET,
 	CTRL_SET,
@@ -155,6 +160,7 @@ enum Control {
 #define CONTROL_RESET(x) (((x) >> 2) & 0x3)
 #define CONTROL_VALUE(x) (bool((x) & CTRL_VALUE))
 #define CONTROL_EVENT(x) (bool((x) & CTRL_EVENT))
+// }}}
 EXTERN uint8_t pin_events;
 
 inline void SET_OUTPUT(uint8_t pin_no);
@@ -164,7 +170,126 @@ inline void SET(uint8_t pin_no);
 inline void RESET(uint8_t pin_no);
 inline bool GET(uint8_t pin_no);
 
-struct Pin_t {
+enum Command { // {{{
+	// from host
+	CMD_BEGIN = 0x00,	// 0
+	CMD_PING,	// 1:code
+	CMD_SET_UUID,	// 16: UUID
+	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin, 1:stop_pin 1:probe_pin 1:pin_flags 2:timeout
+	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
+	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:follow, 1:flags
+	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:limits, 4:values	(including flags)
+	CMD_HOME,	// 4:us/step, {1:dir}*
+
+	CMD_START_MOVE,	// 1:num_samples, 1:num_moving_motors
+	CMD_START_PROBE,// 1:num_samples, 1:num_moving_motors
+	CMD_MOVE,	// 1:which, *:samples
+	CMD_MOVE_SINGLE,// 1:which, *:samples
+	CMD_PATTERN,	// 1:which, *:samples
+	CMD_START,	// 0 start moving.
+	CMD_STOP,	// 0 stop moving.
+	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.
+	CMD_DISCARD,	// 1:num_fragments
+	CMD_GETPIN,	// 1:pin
+	CMD_SPI,	// 1:size, size: data.
+	CMD_PINNAME,	// 1:pin (0-127: digital, 128-255: analog)
+}; // }}}
+
+enum RCommand { // {{{
+	// to host
+		// responses to host requests; only one active at a time.
+	CMD_READY = 0x10,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:fragments/motor, 1:bytes/fragment, 2:time/isr
+	CMD_PONG,	// 1:code
+	CMD_HOMED,	// {4:motor_pos}*
+	CMD_PIN,	// 1:state
+	CMD_STOPPED,	// 1:fragment_pos, {4:motor_pos}*
+	CMD_NAMED_PIN,	// 1:length, n:name
+
+		// asynchronous events.
+	CMD_DONE,	// 1:num
+	CMD_UNDERRUN,	// 1:num
+	CMD_ADC,	// 1:which, 2:adc reading
+	CMD_LIMIT,	// 1:which, 1:pos, {4:motor_pos}*
+	CMD_TIMEOUT,	// 0
+	CMD_PINCHANGE,	// 1:which, 1: state
+}; // }}}
+
+static inline uint8_t command(int16_t pos) { // {{{
+	//debug("cmd %x = %x (%x + %x & %x)", (serial_buffer_tail + pos) & SERIAL_MASK, serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK], serial_buffer_tail, pos, SERIAL_MASK);
+	return *(volatile uint8_t *)(((uint16_t(serial_buffer_tail) + pos) & SERIAL_MASK) | uint16_t(serial_buffer));
+} // }}}
+
+static inline int16_t minpacketlen() { // {{{
+	switch (command(0) & 0x1f) {
+	case CMD_BEGIN:
+		return 2;
+	case CMD_PING:
+		return 2;
+	case CMD_SET_UUID:
+		return 1 + UUID_SIZE;
+	case CMD_SETUP:
+		return 13;
+	case CMD_CONTROL:
+		return 7;
+	case CMD_MSETUP:
+		return 8;
+	case CMD_ASETUP:
+		return 18;
+	case CMD_HOME:
+		return 5;
+	case CMD_START_MOVE:
+		return 3;
+	case CMD_START_PROBE:
+		return 3;
+	case CMD_MOVE:
+		return 3;
+	case CMD_MOVE_SINGLE:
+		return 3;
+	case CMD_START:
+		return 1;
+	case CMD_STOP:
+		return 1;
+	case CMD_ABORT:
+		return 1;
+	case CMD_DISCARD:
+		return 2;
+	case CMD_GETPIN:
+		return 2;
+	case CMD_SPI:
+		return 2;
+	case CMD_PINNAME:
+		return 2;
+	default:
+		debug("invalid command passed to minpacketlen: %x", command(0));
+		return 1;
+	};
+} // }}}
+
+struct Settings { // {{{
+	uint8_t flags;
+	uint8_t len;
+	enum {
+		PROBING = 1
+	};
+}; // }}}
+
+struct Adc { // {{{
+	uint8_t linked[2];
+	int16_t value[2];	// bit 15 in [0] set => invalid; bit 14 set => linked inverted.
+	int16_t limit[2][2];
+	bool is_on[2];
+	uint16_t hold_time;
+	unsigned long last_change;
+	void disable();
+}; // }}}
+
+enum AdcPhase { // {{{
+	INACTIVE,	// No ADCs need to be measured.
+	PREPARING,	// Measuring an Adc the first time.
+	MEASURING	// Measuring an Adc the second time.
+}; // }}}
+
+struct Pin_t { // {{{
 	uint8_t state;
 	uint16_t duty;
 	uint8_t num_temps;
@@ -217,106 +342,9 @@ struct Pin_t {
 		//debug("new enabled: %d %d %d", old_enabled_pins, enabled_pins, old_state, new_state);
 	}
 	ARCH_PIN_DATA
-};
-EXTERN Pin_t pin[NUM_DIGITAL_PINS];
+}; // }}}
 
-enum Command {
-	// from host
-	CMD_BEGIN = 0x00,	// 0
-	CMD_PING,	// 1:code
-	CMD_SET_UUID,	// 16: UUID
-	CMD_SETUP,	// 1:active_motors, 4:us/sample, 1:led_pin, 1:stop_pin 1:probe_pin 1:pin_flags 2:timeout
-	CMD_CONTROL,	// 1:num_commands, {1: command, 1: arg}
-	CMD_MSETUP,	// 1:motor, 1:step_pin, 1:dir_pin, 1:limit_min_pin, 1:limit_max_pin, 1:follow, 1:flags
-	CMD_ASETUP,	// 1:adc, 2:linked_pins, 4:limits, 4:values	(including flags)
-	CMD_HOME,	// 4:us/step, {1:dir}*
-
-	CMD_START_MOVE,	// 1:num_samples, 1:num_moving_motors
-	CMD_START_PROBE,// 1:num_samples, 1:num_moving_motors
-	CMD_MOVE,	// 1:which, *:samples
-	CMD_MOVE_SINGLE,// 1:which, *:samples
-	CMD_PATTERN,	// 1:which, *:samples
-	CMD_START,	// 0 start moving.
-	CMD_STOP,	// 0 stop moving.
-	CMD_ABORT,	// 0 stop moving and set all pins to their reset state.
-	CMD_DISCARD,	// 1:num_fragments
-	CMD_GETPIN,	// 1:pin
-	CMD_SPI,	// 1:size, size: data.
-	CMD_PINNAME,	// 1:pin (0-127: digital, 128-255: analog)
-};
-
-enum RCommand {
-	// to host
-		// responses to host requests; only one active at a time.
-	CMD_READY = 0x10,	// 1:packetlen, 4:version, 1:num_dpins, 1:num_adc, 1:num_motors, 1:fragments/motor, 1:bytes/fragment, 2:time/isr
-	CMD_PONG,	// 1:code
-	CMD_HOMED,	// {4:motor_pos}*
-	CMD_PIN,	// 1:state
-	CMD_STOPPED,	// 1:fragment_pos, {4:motor_pos}*
-	CMD_NAMED_PIN,	// 1:length, n:name
-
-		// asynchronous events.
-	CMD_DONE,	// 1:num
-	CMD_UNDERRUN,	// 1:num
-	CMD_ADC,	// 1:which, 2:adc reading
-	CMD_LIMIT,	// 1:which, 1:pos, {4:motor_pos}*
-	CMD_TIMEOUT,	// 0
-	CMD_PINCHANGE,	// 1:which, 1: state
-};
-
-static inline uint8_t command(int16_t pos) {
-	//debug("cmd %x = %x (%x + %x & %x)", (serial_buffer_tail + pos) & SERIAL_MASK, serial_buffer[(serial_buffer_tail + pos) & SERIAL_MASK], serial_buffer_tail, pos, SERIAL_MASK);
-	return *(volatile uint8_t *)(((uint16_t(serial_buffer_tail) + pos) & SERIAL_MASK) | uint16_t(serial_buffer));
-}
-
-static inline int16_t minpacketlen() {
-	switch (command(0) & 0x1f) {
-	case CMD_BEGIN:
-		return 2;
-	case CMD_PING:
-		return 2;
-	case CMD_SET_UUID:
-		return 1 + UUID_SIZE;
-	case CMD_SETUP:
-		return 13;
-	case CMD_CONTROL:
-		return 7;
-	case CMD_MSETUP:
-		return 8;
-	case CMD_ASETUP:
-		return 18;
-	case CMD_HOME:
-		return 5;
-	case CMD_START_MOVE:
-		return 3;
-	case CMD_START_PROBE:
-		return 3;
-	case CMD_MOVE:
-		return 3;
-	case CMD_MOVE_SINGLE:
-		return 3;
-	case CMD_START:
-		return 1;
-	case CMD_STOP:
-		return 1;
-	case CMD_ABORT:
-		return 1;
-	case CMD_DISCARD:
-		return 2;
-	case CMD_GETPIN:
-		return 2;
-	case CMD_SPI:
-		return 2;
-	case CMD_PINNAME:
-		return 2;
-	default:
-		debug("invalid command passed to minpacketlen: %x", command(0));
-		return 1;
-	};
-}
-
-struct Motor
-{
+struct Motor { // {{{
 	volatile int32_t current_pos;
 	uint8_t step_pin;
 	uint8_t dir_pin;
@@ -381,62 +409,30 @@ struct Motor
 		follow = ~0;
 		arch_msetup(m);
 	}
-};
+}; // }}}
 
+EXTERN Pin_t pin[NUM_DIGITAL_PINS];
 EXTERN Motor motor[NUM_MOTORS];
 EXTERN int stopping;	// number of switch which has been hit, or active_motors for a probe hit and -1 for none.
 EXTERN uint32_t home_step_time;
 EXTERN uint8_t homers;
 
-struct Settings {
-	uint8_t flags;
-	uint8_t len;
-	enum {
-		PROBING = 1
-	};
-};
-
 // Step states.  The non-moving states must be first.
 #define STATE_DECAY 2
-enum StepState {
+enum StepState { // {{{
 	STEP_STATE_STOP,	// Not running.
 	STEP_STATE_WAIT,	// Waiting for a probe before continuing as RUN
 	STEP_STATE_PROBE,	// Waiting for a probe before continuing as SINGLE
 	STEP_STATE_NEXT = STATE_DECAY + STEP_STATE_WAIT,	// Running a sample, then move to PROBE; reset to RUN when limits are checked.
 	STEP_STATE_SINGLE = STATE_DECAY + STEP_STATE_PROBE,	// Running a single step, then fall back to PROBE.
 	STEP_STATE_RUN = STATE_DECAY + STEP_STATE_NEXT,		// Running a sample, then move to NEXT.
-};
+}; // }}}
 #define NUM_NON_MOVING_STATES 3
 EXTERN Settings settings[1 << FRAGMENTS_PER_MOTOR_BITS];
 EXTERN uint8_t notified_current_fragment;
 
 EXTERN uint8_t limit_fragment_pos;
 EXTERN uint8_t last_len;	// copy of settings[last_fragment].len, for when current_fragment changes during a fill.
-
-struct Adc {
-	uint8_t linked[2];
-	int16_t value[2];	// bit 15 in [0] set => invalid; bit 14 set => linked inverted.
-	int16_t limit[2][2];
-	bool is_on[2];
-	uint16_t hold_time;
-	unsigned long last_change;
-	void disable() {
-		if (value[0] & 0x8000)
-			return;
-		for (uint8_t i = 0; i < 2; ++i) {
-			if (linked[i] >= NUM_DIGITAL_PINS)
-				continue;
-			UNSET(linked[i]);
-			linked[i] = ~0;
-		}
-	}
-};
-
-enum AdcPhase {
-	INACTIVE,	// No ADCs need to be measured.
-	PREPARING,	// Measuring an Adc the first time.
-	MEASURING	// Measuring an Adc the second time.
-};
 
 EXTERN Adc adc[NUM_ANALOG_INPUTS];
 EXTERN uint8_t adc_current, adc_next;
@@ -463,7 +459,7 @@ void setup();
 // firmware.ino
 void loop();	// Do stuff which needs doing: moving motors and adjusting heaters.
 
-static inline void write_current_pos(uint8_t offset) {
+static inline void write_current_pos(uint8_t offset) { // {{{
 	cli();
 	for (uint8_t m = 0; m < active_motors; ++m) {
 		BUFFER_CHECK(pending_packet[ff_out], offset + 4 * m);
@@ -471,9 +467,9 @@ static inline void write_current_pos(uint8_t offset) {
 		*reinterpret_cast <int32_t *>(&pending_packet[ff_out][offset + 4 * m]) = motor[m].current_pos;
 	}
 	sei();
-}
+} // }}}
 
-static inline void SLOW_ISR() {
+static inline void SLOW_ISR() { // {{{
 #ifndef FAST_ISR
 	if (step_state < NUM_NON_MOVING_STATES)
 		return;
@@ -548,8 +544,8 @@ static inline void SLOW_ISR() {
 	if (step_state != STEP_STATE_STOP)
 		arch_enable_isr();
 #endif
-}
+} // }}}
 
-#include ARCH_INCLUDE
+#include "arch-firmware.h"
 
 #endif

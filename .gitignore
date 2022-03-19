@@ -20,6 +20,7 @@ zipdir
 server/cdriver.cpython-*
 server/html/type
 server/type/*/*.so
-server/cdriver/arch.cpp
-server/cdriver/arch.h
 server/cdriver/module/build/
+firmware/build/
+server/cdriver/arch-host.cpp
+server/cdriver/arch-host.h

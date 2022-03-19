@@ -118,6 +118,17 @@ static void handle_adc() {
 	adc_ready(adc_current);
 }
 
+void Adc::disable() {
+	if (value[0] & 0x8000)
+		return;
+	for (uint8_t i = 0; i < 2; ++i) {
+		if (linked[i] >= NUM_DIGITAL_PINS)
+			continue;
+		UNSET(linked[i]);
+		linked[i] = ~0;
+	}
+}
+
 static void handle_led() {
 	uint16_t timing = 1000 / (50 * (led_fast + 1));
 	uint16_t current_time = millis();
