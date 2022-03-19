@@ -30,8 +30,8 @@ print('parking')
 p.park()
 
 print('changing steps per unit')
-current = p.get_motor(0, 0)['home_pos']
-p.set_motor((0, 0), home_pos = current - 30)
+current = p.get_motor(0, 0)['steps_per_unit']
+p.set_motor((0, 0), steps_per_unit = current - 30)
 
 print('running job in background')
 p.queue_run.event(jobname)
@@ -41,7 +41,7 @@ print('waiting')
 time.sleep(3)
 
 print('restoring steps per unit')
-p.set_motor((0, 0), home_pos = current)
+p.set_motor((0, 0), steps_per_unit = current)
 
 print('wait for completion')
 p.wait_for_cb()
