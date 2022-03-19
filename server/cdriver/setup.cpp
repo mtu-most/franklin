@@ -119,9 +119,8 @@ void setup()
 	refilling = false;
 	running_fragment = 0;
 	current_fragment = running_fragment;
-	queue_start = 0;
-	queue_end = 0;
-	queue_full = false;
+	settings.queue_start = 0;
+	settings.queue_end = 0;
 	//debug("current_fragment = running_fragment; %d %p", current_fragment, &current_fragment);
 	current_fragment_pos = 0;
 	num_active_motors = 0;

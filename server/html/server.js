@@ -145,6 +145,7 @@ function _setup_updater() {
 					max_v: 0,
 					max_a: 0,
 					max_J: 0,
+					adjust_speed: 1,
 					targetx: 0,
 					targety: 0,
 					targetangle: 0,

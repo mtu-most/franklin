@@ -8,7 +8,7 @@ all:
 	$(MAKE) -C bb
 	$(MAKE) -C opi
 	rm cdriver.cpython* || :
-	ln -s cdriver/build/lib*/cdriver.cpython* .
+	ln -s cdriver/module/build/lib*/cdriver.cpython* .
 
 install:
 	$(MAKE) -C firmware install
@@ -20,7 +20,7 @@ install:
 	install -t ${DESTDIR}/usr/lib/franklin/ -D {server,driver,control}.py
 	install -m 644 -t ${DESTDIR}/usr/lib/franklin/ -D protocol.py
 	install -t ${DESTDIR}/usr/lib/franklin/ -D control-wrap
-	install -t ${DESTDIR}/usr/lib/franklin/ -D cdriver/build/lib.*/cdriver.cpython*
+	install -t ${DESTDIR}/usr/lib/franklin/ -D cdriver/module/build/lib.*/cdriver.cpython*
 	install -m 644 -t ${DESTDIR}/etc/apache2/conf-available -D franklin.conf
 
 clean:

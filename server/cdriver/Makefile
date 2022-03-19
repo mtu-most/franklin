@@ -23,15 +23,18 @@ LDFLAGS ?= -Wall -Wextra -Wformat -Werror ${CXXFLAGS}
 LDFLAGS += -export-dynamic -fPIC -rdynamic
 LIBS ?=
 LIBS += -ldl
+TARGET_ARCH ?= avr
 
-CPPFLAGS += -DARCH_INCLUDE='"arch-avr.h"'
+CPPFLAGS += -Iarch/${TARGET_ARCH}
 
-all: module franklin-cdriver
+all: module/build/stamp franklin-cdriver
 
-module:
-	python3 setup.py build
+module/build/stamp: module/module.cpp module/module.h module/parse.cpp module/setup.py Makefile
+	cd module && python3 setup.py build
+	touch $@
 
 SOURCES = \
+	arch/${TARGET_ARCH}/arch.cpp \
 	base.cpp \
 	debug.cpp \
 	globals.cpp \
@@ -47,10 +50,10 @@ SOURCES = \
 OBJS = $(patsubst %.cpp,build/%.o,${SOURCES})
 
 HEADERS = \
-	arch-avr.h \
+	arch/${TARGET_ARCH}/arch.h \
 	cdriver.h \
 	configuration.h \
-	module.h
+	module/module.h
 
 DEPENDS = \
 	  Makefile
@@ -59,7 +62,10 @@ franklin-cdriver: ${OBJS} ${HEADERS} ${DEPENDS}
 	g++ ${LDFLAGS} ${OBJS} -o $@ ${LIBS}
 
 build/%.o: %.cpp ${HEADERS} ${DEPENDS}
+	mkdir -p $(dir $@)
 	g++ -std=c++11 -c ${CPPFLAGS} ${CXXFLAGS} $< -o $@
 
 clean:
-	rm -rf build franklin-cdriver
+	rm -rf build module/build franklin-cdriver
+
+.PHONY: clean

@@ -106,16 +106,24 @@ void Space::setup_nums(int na, int nm) { // {{{
 } // }}}
 
 void Space::xyz2motors() { // {{{
+	double orig_target[num_axes];
+	// Apply adjustment to targets.
+	if (settings.adjust > 0) {
+		for (int a = 0; a < num_axes; ++a) {
+			orig_target[a] = axis[a]->target;
+			//debug("adjusting %d %d target %f with %f to %f factor %f", id, a, axis[a]->target, axis[a]->settings.adjust, axis[a]->target - axis[a]->settings.adjust * settings.adjust, settings.adjust);
+			axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
+		}
+	}
 	// Set default values.
 	for (int a = 0; a < num_axes; ++a)
 		motor[a]->target_pos = axis[a]->target;
 	// Override with type computations.
 	space_types[type].xyz2motors(this);
+	// Restore targets.
 	if (settings.adjust > 0) {
-		for (int a = 0; a < num_axes; ++a) {
-			//debug("adjusting %d %d target %f with %f factor %f", id, a, axis[a]->target, axis[a]->settings.adjust, settings.adjust);
-			axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
-		}
+		for (int a = 0; a < num_axes; ++a)
+			axis[a]->target = orig_target[a];
 	}
 } // }}}
 
@@ -183,6 +191,8 @@ void reset_pos(Space *s) { // {{{
 	double xyz[s->num_axes];
 	for (int m = 0; m < s->num_motors; ++m)
 		motors[m] = s->motor[m]->settings.current_pos;
+	// Avoid duplicate adjustments.
+	settings.adjust = 0;
 	s->motors2xyz(motors, xyz);
 	double len2 = 0;
 	for (int a = 0; a < s->num_axes; ++a) {
@@ -200,7 +210,7 @@ void reset_pos(Space *s) { // {{{
 			settings.adjust_time = int(sqrt(len2) / adjust_speed * 1e6);
 			settings.adjust = 1;
 		}
-		//debug("adjusting move time=%d x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
+		//debug("adjusting move time=%f x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time / 1e6, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
 	}
 	discard_finals();
 } // }}}
@@ -264,6 +274,7 @@ void Space::load_motor(int m) { // {{{
 		arch_invertpos(id, m);
 	if (!std::isnan(motor[m]->home_pos)) {
 		// Axes with a limit switch.
+		//debug("busy %d old pos %f pos %f old steps %f steps %f", motors_busy, old_home_pos, motor[m]->home_pos, old_steps_per_unit, motor[m]->steps_per_unit);
 		if (motors_busy && (old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !std::isnan(old_home_pos)) {
 			double diff = motor[m]->home_pos - old_home_pos * old_steps_per_unit / motor[m]->steps_per_unit;
 			if (!std::isnan(diff)) {
@@ -277,8 +288,10 @@ void Space::load_motor(int m) { // {{{
 	}
 	else if (!std::isnan(motor[m]->settings.current_pos)) {
 		// Motors without a limit switch: adjust motor position to match axes.
-		for (int a = 0; a < num_axes; ++a)
+		for (int a = 0; a < num_axes; ++a) {
 			axis[a]->target = axis[a]->current;
+			//debug("resetting axis without switch");
+		}
 		xyz2motors();
 		double diff = motor[m]->target_pos - motor[m]->settings.current_pos;
 		if (!std::isnan(diff)) {

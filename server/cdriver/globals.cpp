@@ -27,8 +27,8 @@
 
 bool globals_load() {
 	bool change_hw = false;
-	int nt = shmem->ints[2];
-	int ng = shmem->ints[3];
+	int nt = shmem->ints[1];
+	int ng = shmem->ints[2];
 	// Free the old memory and initialize the new memory.
 	ldebug("num temps %d->%d", num_temps, nt);
 	if (nt != num_temps) {
@@ -57,36 +57,36 @@ bool globals_load() {
 	}
 	ldebug("new done");
 	int p = led_pin.write();
-	led_pin.read(shmem->ints[4]);
+	led_pin.read(shmem->ints[3]);
 	if (p != led_pin.write())
 		change_hw = true;
 	p = stop_pin.write();
-	stop_pin.read(shmem->ints[5]);
+	stop_pin.read(shmem->ints[4]);
 	if (p != stop_pin.write())
 		change_hw = true;
 	p = probe_pin.write();
-	probe_pin.read(shmem->ints[6]);
+	probe_pin.read(shmem->ints[5]);
 	if (p != probe_pin.write())
 		change_hw = true;
 	p = spiss_pin.write();
-	spiss_pin.read(shmem->ints[7]);
+	spiss_pin.read(shmem->ints[6]);
 	if (p != spiss_pin.write())
 		change_hw = true;
 	p = pattern.step_pin.write();
-	pattern.step_pin.read(shmem->ints[8]);
+	pattern.step_pin.read(shmem->ints[7]);
 	if (p != pattern.step_pin.write())
 		change_hw = true;
 	p = pattern.dir_pin.write();
-	pattern.dir_pin.read(shmem->ints[9]);
+	pattern.dir_pin.read(shmem->ints[8]);
 	if (p != pattern.dir_pin.write())
 		change_hw = true;
 	int t = timeout;
-	timeout = shmem->ints[10];
+	timeout = shmem->ints[9];
 	if (t != timeout)
 		change_hw = true;
-	bed_id = shmem->ints[11];
-	fan_id = shmem->ints[12];
-	spindle_id = shmem->ints[13];
+	bed_id = shmem->ints[10];
+	fan_id = shmem->ints[11];
+	spindle_id = shmem->ints[12];
 	feedrate = shmem->floats[0];
 	if (std::isnan(feedrate) || std::isinf(feedrate) || feedrate <= 0)
 		feedrate = 1;
@@ -94,12 +94,13 @@ bool globals_load() {
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
 	max_J = shmem->floats[4];
-	current_extruder = shmem->ints[14];
-	targetx = shmem->floats[5];
-	targety = shmem->floats[6];
-	targetangle = shmem->floats[7];
-	zoffset = shmem->floats[8];
-	bool store = shmem->ints[15];
+	adjust_speed = shmem->floats[5];
+	current_extruder = shmem->ints[13];
+	targetx = shmem->floats[6];
+	targety = shmem->floats[7];
+	targetangle = shmem->floats[8];
+	zoffset = shmem->floats[9];
+	bool store = shmem->ints[14];
 	if (store && !store_adc) {
 		store_adc = fopen("/tmp/franklin-adc-dump", "a");
 	}
@@ -114,29 +115,29 @@ bool globals_load() {
 }
 
 void globals_save() {
-	shmem->ints[0] = QUEUE_LENGTH;
-	shmem->ints[1] = NUM_PINS;
-	shmem->ints[2] = num_temps;
-	shmem->ints[3] = num_gpios;
-	shmem->ints[4] = led_pin.write();
-	shmem->ints[5] = stop_pin.write();
-	shmem->ints[6] = probe_pin.write();
-	shmem->ints[7] = spiss_pin.write();
-	shmem->ints[8] = pattern.step_pin.write();
-	shmem->ints[9] = pattern.dir_pin.write();
-	shmem->ints[10] = timeout;
-	shmem->ints[11] = bed_id;
-	shmem->ints[12] = fan_id;
-	shmem->ints[13] = spindle_id;
-	shmem->ints[14] = current_extruder;
-	shmem->ints[15] = store_adc != NULL;
+	shmem->ints[0] = NUM_PINS;
+	shmem->ints[1] = num_temps;
+	shmem->ints[2] = num_gpios;
+	shmem->ints[3] = led_pin.write();
+	shmem->ints[4] = stop_pin.write();
+	shmem->ints[5] = probe_pin.write();
+	shmem->ints[6] = spiss_pin.write();
+	shmem->ints[7] = pattern.step_pin.write();
+	shmem->ints[8] = pattern.dir_pin.write();
+	shmem->ints[9] = timeout;
+	shmem->ints[10] = bed_id;
+	shmem->ints[11] = fan_id;
+	shmem->ints[12] = spindle_id;
+	shmem->ints[13] = current_extruder;
+	shmem->ints[14] = store_adc != NULL;
 	shmem->floats[0] = feedrate;
 	shmem->floats[1] = max_deviation;
 	shmem->floats[2] = max_v;
 	shmem->floats[3] = max_a;
 	shmem->floats[4] = max_J;
-	shmem->floats[5] = targetx;
-	shmem->floats[6] = targety;
-	shmem->floats[7] = targetangle;
-	shmem->floats[8] = zoffset;
+	shmem->floats[5] = adjust_speed;
+	shmem->floats[6] = targetx;
+	shmem->floats[7] = targety;
+	shmem->floats[8] = targetangle;
+	shmem->floats[9] = zoffset;
 }

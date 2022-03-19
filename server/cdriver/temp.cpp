@@ -226,7 +226,8 @@ void handle_temp(int id, int temp) { // {{{
 		temps[id].adcmax_alarm = MAXINT;
 		if (run_file_wait) {
 			run_file_wait -= 1;
-			run_file_fill_queue();
+			if (run_file_wait == 0)
+				run_file_next_command(settings.hwtime);
 			buffer_refill();
 		}
 		else {

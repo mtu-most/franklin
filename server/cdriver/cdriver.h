@@ -23,11 +23,9 @@
 // Exactly one file defines EXTERN as empty, which leads to the data to be defined.
 #ifndef EXTERN
 #define EXTERN extern
-#else
-#define DEFINE_VARIABLES
 #endif
 
-#include "module.h"
+#include "module/module.h"
 #include "configuration.h"
 #include <cstdio>
 #include <cmath>
@@ -43,8 +41,6 @@
 
 #define MAXLONG (int32_t((uint32_t(1) << 31) - 1))
 #define MAXINT MAXLONG
-
-#include ARCH_INCLUDE
 
 #define debug(...) do { buffered_debug_flush(); fprintf(stderr, "#"); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); fflush(stderr); } while (0)
 
@@ -94,6 +90,14 @@ enum SingleByteCommands {	// See serial.cpp for computation of command values. {
 extern SingleByteCommands cmd_ack[4];
 extern SingleByteCommands cmd_nack[4];
 extern SingleByteCommands cmd_stall[4];
+
+struct Serial_t {
+	virtual void write(char c) = 0;
+	virtual int read() = 0;
+	virtual int readBytes (char *target, int len) = 0;
+	virtual void flush() = 0;
+	virtual int available() = 0;
+};
 
 // All temperatures are stored in Kelvin, but communicated in °C.
 struct Temp {
@@ -159,6 +163,7 @@ struct History {
 	double run_time;
 	int64_t gcode_line;
 	int64_t current_restore;
+	int queue_start, queue_end;
 	double adjust;	// adjustment factor; runs from 1 to 0.
 	int64_t run_file_current;
 	uint8_t pattern[PATTERN_MAX];
@@ -193,6 +198,8 @@ struct Axis {
 	double resume_start, resume_end;	// Position to reset to when resuming.
 	void *type_data;
 };
+
+#include "arch.h"
 
 struct Motor {
 	Motor_History *history;
@@ -293,14 +300,6 @@ struct Gpio {
 	void copy(Gpio &dst);
 };
 
-struct Serial_t {
-	virtual void write(char c) = 0;
-	virtual int read() = 0;
-	virtual int readBytes (char *target, int len) = 0;
-	virtual void flush() = 0;
-	virtual int available() = 0;
-};
-
 #define COMMAND_SIZE 256
 static int const FULL_COMMAND_SIZE = COMMAND_SIZE + (COMMAND_SIZE + 2) / 3;
 
@@ -328,13 +327,11 @@ EXTERN Gpio *gpios;
 EXTERN Pattern pattern;
 EXTERN FILE *store_adc;
 EXTERN uint8_t temps_busy;
-EXTERN MoveCommand queue[QUEUE_LENGTH];
+EXTERN MoveCommand queue[10];
 EXTERN int default_hwtime_step, min_hwtime_step;
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
-EXTERN int queue_start, queue_end;
-EXTERN bool queue_full;
 EXTERN bool probing, single;
 EXTERN bool motors_busy;
 EXTERN int out_busy;
@@ -425,6 +422,7 @@ EXTERN uint8_t ff_out;	// Index of next out-packet that will be sent.
 // move.cpp
 void next_move(int32_t start_time);
 void abort_move(int pos);
+void discard();
 void discard_finals();
 
 // run.cpp
@@ -436,7 +434,7 @@ struct ProbeFile {
 } __attribute__((__packed__));
 void run_file(char const *name, char const *probe_name, bool start, double sina, double cosa);
 void abort_run_file();
-void run_file_fill_queue(bool move_allowed = true);
+void run_file_next_command(int32_t start_time);
 void run_adjust_probe(double x, double y, double z);
 double run_find_pos(const double pos[3]);
 EXTERN std::string probe_file_name;
@@ -486,8 +484,6 @@ void disconnect(bool notify, char const *reason, ...);
 int32_t utime();
 int32_t millis();
 EXTERN bool interrupt_pending;
-
-#include ARCH_INCLUDE
 
 // ===============
 // Arch interface.

@@ -99,9 +99,8 @@ static void try_pending() {
 		arch_stop();
 	}
 	if (out_busy < 3 && discard_pending)
-		arch_do_discard();
+		arch_discard();
 	if (!sending_fragment && !stopping && arch_running()) {
-		run_file_fill_queue();
 		buffer_refill();
 	}
 }

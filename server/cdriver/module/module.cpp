@@ -305,32 +305,32 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
 	max_J = shmem->floats[4];
-	return Py_BuildValue("{si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,sd,sd,sd,sd,sd,sd,sd,sd,sd}",
-			"queue_length", shmem->ints[0],
-			"num_pins", shmem->ints[1],
-			"num_temps", shmem->ints[2],
-			"num_gpios", shmem->ints[3],
-			"led_pin", shmem->ints[4],
-			"stop_pin", shmem->ints[5],
-			"probe_pin", shmem->ints[6],
-			"spiss_pin", shmem->ints[7],
-			"pattern_step_pin", shmem->ints[8],
-			"pattern_dir_pin", shmem->ints[9],
-			"timeout", shmem->ints[10],
-			"bed_id", shmem->ints[11],
-			"fan_id", shmem->ints[12],
-			"spindle_id", shmem->ints[13],
-			"current_extruder", shmem->ints[14],
-			"store_adc", shmem->ints[15],
+	return Py_BuildValue("{si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,sd,sd,sd,sd,sd,sd,sd,sd,sd}",
+			"num_pins", shmem->ints[0],
+			"num_temps", shmem->ints[1],
+			"num_gpios", shmem->ints[2],
+			"led_pin", shmem->ints[3],
+			"stop_pin", shmem->ints[4],
+			"probe_pin", shmem->ints[5],
+			"spiss_pin", shmem->ints[6],
+			"pattern_step_pin", shmem->ints[7],
+			"pattern_dir_pin", shmem->ints[8],
+			"timeout", shmem->ints[9],
+			"bed_id", shmem->ints[10],
+			"fan_id", shmem->ints[11],
+			"spindle_id", shmem->ints[12],
+			"current_extruder", shmem->ints[13],
+			"store_adc", shmem->ints[14],
 			"feedrate", shmem->floats[0],
 			"max_deviation", shmem->floats[1],
 			"max_v", shmem->floats[2],
 			"max_a", shmem->floats[3],
 			"max_J", shmem->floats[4],
-			"targetx", shmem->floats[5],
-			"targety", shmem->floats[6],
-			"targetangle", shmem->floats[7],
-			"zoffset", shmem->floats[8]);
+			"adjust_speed", shmem->floats[5],
+			"targetx", shmem->floats[6],
+			"targety", shmem->floats[7],
+			"targetangle", shmem->floats[8],
+			"zoffset", shmem->floats[9]);
 }
 
 static void set_int(int num, char const *name, PyObject *dict) {
@@ -371,29 +371,30 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (!PyArg_ParseTuple(args, "O!", &PyDict_Type, &dict))
 		return NULL;
 	send_to_child(CMD_READ_GLOBALS);
-	set_int(2, "num_temps", dict);
-	set_int(3, "num_gpios", dict);
-	set_int(4, "led_pin", dict);
-	set_int(5, "stop_pin", dict);
-	set_int(6, "probe_pin", dict);
-	set_int(7, "spiss_pin", dict);
-	set_int(8, "pattern_step_pin", dict);
-	set_int(9, "pattern_dir_pin", dict);
-	set_int(10, "timeout", dict);
-	set_int(11, "bed_id", dict);
-	set_int(12, "fan_id", dict);
-	set_int(13, "spindle_id", dict);
-	set_int(14, "current_extruder", dict);
-	set_int(15, "store_adc", dict);
+	set_int(1, "num_temps", dict);
+	set_int(2, "num_gpios", dict);
+	set_int(3, "led_pin", dict);
+	set_int(4, "stop_pin", dict);
+	set_int(5, "probe_pin", dict);
+	set_int(6, "spiss_pin", dict);
+	set_int(7, "pattern_step_pin", dict);
+	set_int(8, "pattern_dir_pin", dict);
+	set_int(9, "timeout", dict);
+	set_int(10, "bed_id", dict);
+	set_int(11, "fan_id", dict);
+	set_int(12, "spindle_id", dict);
+	set_int(13, "current_extruder", dict);
+	set_int(14, "store_adc", dict);
 	set_float(0, "feedrate", dict);
 	set_float(1, "max_deviation", dict);
 	set_float(2, "max_v", dict);
 	set_float(3, "max_a", dict);
 	set_float(4, "max_J", dict);
-	set_float(5, "targetx", dict);
-	set_float(6, "targety", dict);
-	set_float(7, "targetangle", dict);
-	set_float(8, "zoffset", dict);
+	set_float(5, "adjust_speed", dict);
+	set_float(6, "targetx", dict);
+	set_float(7, "targety", dict);
+	set_float(8, "targetangle", dict);
+	set_float(9, "zoffset", dict);
 	send_to_child(CMD_WRITE_GLOBALS);
 	return assert_empty_dict(dict, "write_globals");
 }

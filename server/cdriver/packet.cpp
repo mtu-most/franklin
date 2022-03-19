@@ -24,8 +24,13 @@ static void get_cb(bool value) {
 	delayed_reply();
 }
 
-#define CASE(x) case x: //debug("request " # x " current fragment pos = %d", current_fragment_pos);
-#define CASE2(x) case x: //debug("request " # x);
+#if 0
+#define CASE(x) case x: debug("request " # x " current fragment pos = %d", current_fragment_pos);
+#define CASE2(x) case x: debug("request " # x);
+#else
+#define CASE(x) case x:
+#define CASE2(x) case x:
+#endif
 
 void request(int req) {
 	switch (req) {
@@ -61,10 +66,11 @@ void request(int req) {
 			break;
 		//debug("moving to (%f,%f,%f), tool %d e %f v %f", shmem->move.target[0], shmem->move.target[1], shmem->move.target[2], shmem->move.tool, shmem->move.e, shmem->move.v0);
 		last_active = millis();
-		cb_pending = true;
 		initialized = true;
 		shmem->move.target[2] += zoffset;
 		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move));
+		if (!computing_move)
+			cb_pending = true;
 		delayed_reply();
 		buffer_refill();
 		return;
@@ -200,7 +206,7 @@ void request(int req) {
 		globals_save();
 		break;
 	CASE(CMD_WRITE_GLOBALS)
-		arch_discard();
+		discard();
 		globals_load();
 		break;
 	CASE(CMD_READ_SPACE_INFO)
@@ -233,7 +239,7 @@ void request(int req) {
 			abort();
 			return;
 		}
-		arch_discard();
+		discard();
 		spaces[shmem->ints[0]].load_info();
 		break;
 	CASE(CMD_WRITE_SPACE_AXIS)
@@ -242,7 +248,7 @@ void request(int req) {
 			abort();
 			return;
 		}
-		arch_discard();
+		discard();
 		spaces[shmem->ints[0]].load_axis(shmem->ints[1]);
 		break;
 	CASE(CMD_WRITE_SPACE_MOTOR)
@@ -251,7 +257,7 @@ void request(int req) {
 			abort();
 			return;
 		}
-		arch_discard();
+		discard();
 		spaces[shmem->ints[0]].load_motor(shmem->ints[1]);
 		break;
 	CASE(CMD_READ_TEMP)
@@ -288,7 +294,7 @@ void request(int req) {
 		break;
 	CASE(CMD_QUEUED)
 		last_active = millis();
-		shmem->ints[1] = queue_full ? QUEUE_LENGTH : (queue_end - queue_start + QUEUE_LENGTH) % QUEUE_LENGTH;
+		shmem->ints[1] = settings.queue_end - settings.queue_start;
 		break;
 	CASE(CMD_HOME)
 		arch_home();
@@ -337,7 +343,6 @@ void request(int req) {
 			do_resume();
 		if (run_file_wait > 0)
 			run_file_wait -= 1;
-		run_file_fill_queue();
 		buffer_refill();
 		break;
 	CASE(CMD_UNPAUSE)
@@ -358,7 +363,7 @@ void request(int req) {
 	CASE(CMD_TP_SETPOS)
 	{
 		int ipos = int(shmem->floats[0]);
-		arch_discard();
+		discard();
 		settings.run_file_current = ipos;
 		// Hack to force TP_GETPOS to return the same value; this is only called when paused, so it does no harm.
 		history[running_fragment].current_restore = ipos;

@@ -765,6 +765,10 @@ function setup_globals(desc, pos, top) { // {{{
 	e.Add(Float(ui, [null, 'max_J'], 2, 1e3));
 	e.AddText(' ×10³ ').Add(add_name(ui, 'unit', 0, 0));
 	e.AddText('/s³');
+	e = ret.AddElement('div').AddText('Adjust Speed');
+	e.Add(Float(ui, [null, 'adjust_speed'], 2, 1));
+	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
+	e.AddText('/s');
 	var pins = ret.Add(make_table(ui));
 	// Add dummy first child instead of a title row.
 	pins.Add(document.createComment(''));

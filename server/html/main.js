@@ -935,6 +935,7 @@ function globals_update(uuid, ui_configure, nums_changed) { // {{{
 	update_float(p, [null, 'max_v']);
 	update_float(p, [null, 'max_a']);
 	update_float(p, [null, 'max_J']);
+	update_float(p, [null, 'adjust_speed']);
 	update_float(p, [null, 'targetx']);
 	update_float(p, [null, 'targety']);
 	update_float(p, [null, 'targetangle']);

@@ -18,9 +18,6 @@
  */
 
 // ========================== Compile time settings. ==========================
-// Maximum number of move commands in the queue.
-#define QUEUE_LENGTH 200
-
 // Number of buffers to fill before sending START_MOVE.  Lower number makes it
 // start faster, but may cause buffer underruns.
 #define MIN_BUFFER_FILL 6

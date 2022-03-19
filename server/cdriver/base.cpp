@@ -154,7 +154,6 @@ static void handle_pending_events() { // {{{
 		stopping = 0;
 	}
 	buffer_refill();
-	run_file_fill_queue();
 } // }}}
 
 int main(int argc, char **argv) { // {{{
