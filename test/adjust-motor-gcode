@@ -1,0 +1,50 @@
+#!/usr/bin/python3
+
+'''Change settings while running a job
+
+This test homes the machine, sends a new job, runs that job and adjust motor
+settings while it's running.
+'''
+
+import fhs
+import websocketd
+import time
+
+fhs.option('port', 'Port for connecting to Franklin', default = 'localhost:8000')
+config = fhs.init(help = 'Automatic testing script for Franklin', version = '0.1', contact = 'Bas Wijnen <wijnen@debian.org>', packagename = 'franklin-test')
+
+p = websocketd.RPC(config['port'])
+
+jobname = 'auto-test-job'
+if jobname in p.queue_list():
+	p.queue_remove(jobname)
+
+print('Adding job to queue')
+p.queue_add('''\
+G1 X0 Y0 Z150
+G1 Z20 F600
+G1 Z150
+''', jobname)
+
+print('parking')
+p.park()
+
+print('changing steps per unit')
+current = p.get_motor(0, 0)['home_pos']
+p.set_motor((0, 0), home_pos = current - 30)
+
+print('running job in background')
+p.queue_run.event(jobname)
+
+print('waiting')
+# Wait so the code is no longer in a goto operation, but in a regular move.
+time.sleep(3)
+
+print('restoring steps per unit')
+p.set_motor((0, 0), home_pos = current)
+
+print('wait for completion')
+p.wait_for_cb()
+
+print('parking')
+p.park()

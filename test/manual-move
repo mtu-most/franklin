@@ -1,0 +1,22 @@
+#!/usr/bin/python3
+
+'''Manual movement test
+
+This test homes the machine, then moves the tool around. The commands it sends
+are just like what the web interface would send when the user manually makes
+the moves.
+'''
+
+import fhs
+import websocketd
+
+fhs.option('port', 'Port for connecting to Franklin', default = 'localhost:8000')
+config = fhs.init(help = 'Automatic testing script for Franklin', version = '0.1', contact = 'Bas Wijnen <wijnen@debian.org>', packagename = 'franklin-test')
+
+p = websocketd.RPC(config['port'])
+
+p.park()
+p.line((10, 10, 10))
+p.line((20, 20, 20), v = 10)
+p.line((0, 0, 50), v = 100)
+p.park()
