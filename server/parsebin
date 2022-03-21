@@ -38,7 +38,7 @@ file = open(config['src'], 'rb')
 def warn(msg):
 	sys.stderr.write('%d: ' % n + msg + '\n')
 
-cmds = ['system', 'poly3+', 'poly3-', 'poly2', 'arc', 'goto', 'gpio', 'set T', 'wait T', 'setpos', 'wait', 'confirm', 'park', 'pattern']
+cmds = ['system', 'poly3+', 'poly3-', 'poly2', 'arc', 'abc', 'goto', 'gpio', 'set T', 'wait T', 'setpos', 'wait', 'confirm', 'park', 'pattern']
 def mkcmd(t):
 	if t < len(cmds):
 		return cmds[t]
@@ -91,6 +91,7 @@ while True:
 	s = file.read(datasize)
 	if len(s) != datasize:
 		break
+	#print('pos:', pos)
 	t, T, X, Y, Z, h0, h1, h2, Jg, tf, v0, E, time, line = struct.unpack(dataformat, s)
 	if not math.isnan(config['z']) and Z != config['z']:
 		n += 1
@@ -113,16 +114,20 @@ while True:
 		current_a = (0, 0, 0)
 	elif mkcmd(t) == 'poly3+':
 		# poly3plus.
-		if math.isnan(pos[0]) or math.isnan(pos[1]):
-			warn('poly3plus with NaN x or y position')
+		if math.isnan(pos[0]) or math.isnan(pos[1]) or any(math.isnan(c) for c in (h0, h1, h2)):
+			warn('poly3plus with NaN x or y position, or h vector')
 		else:
 			g = tuple(x - pos[i] for i, x in enumerate((X, Y, Z)))
 			leng = sum(x ** 2 for x in g) ** .5
 			Jh = sum(x ** 2 for x in (h0, h1, h2)) ** .5
-			unitg = tuple(x / leng for x in g)
+			unitg = (0, 0, 0) if leng == 0 else tuple(x / leng for x in g)
 			unith = (0, 0, 0) if Jh == 0 else tuple(x / Jh for x in (h0, h1, h2))
-			fg = Jg / 6 * tf ** 3 + v0 * tf
-			fh = Jh / 6 * tf ** 3
+			try:
+				fg = Jg / 6 * tf ** 3 + v0 * tf
+				fh = Jh / 6 * tf ** 3
+			except:
+				fg = 0
+				fh = 0
 			newpos = tuple(fg * unitg[i] + fh * unith[i] + pos[i] for i in range(3))
 			cross = tuple(current_v[(i + 1) % 3] * v0 * unitg[(i + 2) % 3] - current_v[(i + 2) % 3] * v0 * unitg[(i + 1) % 3] for i in range(3))
 			if sum(c ** 2 for c in cross) > 1e-4:
@@ -147,7 +152,7 @@ while True:
 		g = tuple(x - pos[i] for i, x in enumerate((X, Y, Z)))
 		leng = sum(x ** 2 for x in g) ** .5
 		Jh = sum(x ** 2 for x in (h0, h1, h2)) ** .5
-		unitg = tuple(x / leng for x in g)
+		unitg = (0, 0, 0) if leng == 0 else tuple(x / leng for x in g)
 		unith = (0, 0, 0) if Jh == 0 else tuple(x / Jh for x in (h0, h1, h2))
 		fg = Jg / 6 * tf ** 3 + v0 * tf
 		fh = Jh / 6 * tf ** 3

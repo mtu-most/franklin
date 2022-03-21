@@ -1,3 +1,4 @@
+TARGET_ARCH ?= avr
 modules := $(shell tr '[:upper:]' '[:lower:]' < types.txt | tr -c '[:alnum:]\n' '[_*]')
 targets := $(patsubst %,%/module.so,${modules})
 
@@ -16,10 +17,10 @@ clean:
 	rm -f ${targets} ../html/type/*.js
 
 %/module.so: js = $(shell echo '$<' | sed -E 's#(.*)/module.o#\1/\1.js#g')
-%/module.so: %/module.o Makefile ../cdriver/cdriver.h ../cdriver/franklin-module.h ../cdriver/arch-avr.h ../cdriver/module.h
+%/module.so: %/module.o Makefile ../cdriver/cdriver.h ../cdriver/franklin-module.h ../../arch/${TARGET_ARCH}/arch-host.h ../cdriver/module/module.h
 	g++ -ggdb3 -Wall -Wextra -shared -fPIC $< -o $@
 	mkdir -p ../html/type
 	test ! -f '${js}' || ln -sf '../../type/${js}' ../html/type/
 
 %/module.o: %/module.cpp Makefile
-	g++ -c -Wall -Wextra -ggdb3 -I../cdriver -DARCH_INCLUDE='"arch-avr.h"' -fPIC $< -o $@
+	g++ -c -Wall -Wextra -ggdb3 -I../cdriver -I../../arch/${TARGET_ARCH} -fPIC $< -o $@

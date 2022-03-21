@@ -874,7 +874,7 @@ def detect(port): # {{{
 				machines[uuid].port = port
 				ports[port] = uuid
 				log('connecting %s to port %s' % (uuid, port))
-				machines[uuid].call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: None)
+				machines[uuid].call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: print('Machine %s connected on port %s' % (uuid, port)))
 			else:
 				log('accepting unknown machine on port %s' % port)
 				# Close detect port so it doesn't interfere.
@@ -887,7 +887,7 @@ def detect(port): # {{{
 					ports[port] = uuid
 					machines[uuid] = new_machine
 					log('connecting new machine %s to port %s' % (uuid, port))
-					new_machine.call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: None)
+					new_machine.call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: print('New machine %s connected on port %s' % (uuid, port)))
 				if uuid is None:
 					def prefinish(success, uuid):
 						assert success

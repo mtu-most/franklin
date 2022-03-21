@@ -1,5 +1,4 @@
 __pycache__/
-firmware/build-*
 server/cdriver/franklin-cdriver
 server/cdriver/bbb_pru.bin
 server/cdriver/build
@@ -22,5 +21,4 @@ server/html/type
 server/type/*/*.so
 server/cdriver/module/build/
 firmware/build/
-server/cdriver/arch-host.cpp
-server/cdriver/arch-host.h
+server/cdriver/copy-*

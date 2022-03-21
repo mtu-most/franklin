@@ -1,5 +1,5 @@
 /* parse.cpp - Parsing G-Code for Franklin.
- * Copyright 2017-2018 Bas Wijnen <wijnen@debian.org> {{{
+ * Copyright 2017-2022 Bas Wijnen <wijnen@debian.org> {{{
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -30,7 +30,7 @@
 
 //#define pdebug(format, ...) debug("%4lld " format, P1->gcode_line, ##__VA_ARGS__)
 #ifndef pdebug
-#define pdebug(...)
+#define pdebug(...) do {} while(0)
 #endif
 
 //#define flushdebug debug
@@ -51,13 +51,20 @@ struct Parser { // {{{
 	struct Record { // {{{
 		bool arc;
 		int tool;
-		double x, y, z, a, b, c, f, e;
-		double e0, a0, b0, c0;
-		double center[3];
-		double normal[3];
+		double pos[6];
+		double f, e;
+		double e0;
+		double center[6];
+		double normal[6];
 		double time;
 		std::string pattern;
-		Record(int64_t gcode_line, bool arc_, int tl, double x_, double y_, double z_, double a_, double b_, double c_, double f_, double e_, double cx = NAN, double cy = NAN, double cz = NAN, double nx = NAN, double ny = NAN, double nz = NAN) : arc(arc_), tool(tl), x(x_), y(y_), z(z_), a(a_), b(b_), c(c_), f(f_), e(e_), gcode_line(gcode_line) {
+		Record(int64_t gcode_line, bool arc_, int tl, double x, double y, double z, double a, double b, double c, double f_, double e_, double cx = NAN, double cy = NAN, double cz = NAN, double nx = NAN, double ny = NAN, double nz = NAN) : arc(arc_), tool(tl), f(f_), e(e_), gcode_line(gcode_line) {
+			pos[0] = x;
+			pos[1] = y;
+			pos[2] = z;
+			pos[3] = a;
+			pos[4] = b;
+			pos[5] = c;
 			center[0] = cx;
 			center[1] = cy;
 			center[2] = cz;
@@ -66,12 +73,12 @@ struct Parser { // {{{
 			normal[2] = nz;
 		}
 		// Helper variables for computing the move.
-		double s[3];	// Vector to this point.
+		double s[6];	// Vector to this point.
 		double length;	// Half of length of segment to this point.
-		double unit[3];	// Unit vector along s.
-		double from[3];	// Position halfway between previous point and here.
-		double n[3];	// Vector normal to this and next segment.
-		double nnAL[3], nnLK[3];	// Normal to segment and normal, for AL and LK.
+		double unit[6];	// Unit vector along s.
+		double from[6];	// Position halfway between previous point and here.
+		double n[6];	// Vector normal to this and next segment.
+		double nnAL[6], nnLK[6];	// Normal to segment and normal, for AL and LK.
 		double theta;	// Angle between this and next segment.
 		double x0;	// length of half curve.
 		double v1;	// speed at corner.
@@ -91,7 +98,7 @@ struct Parser { // {{{
 	int modecode;
 	double modenum;
 	std::string message;
-	double bbox[6];
+	double bbox[2][6];
 	std::vector <std::string> strings;
 	std::list <unsigned> stringmap;
 	double unit;
@@ -109,7 +116,7 @@ struct Parser { // {{{
 	int64_t lineno;
 	std::string line;
 	unsigned linepos;
-	double arc_normal[3];
+	double arc_normal[6];
 	double last_time;
 	std::list <Chunk> command;
 	double max_dev;
@@ -127,6 +134,7 @@ struct Parser { // {{{
 	void handle_coordinate(double value, int index, bool *controlled, bool rel);
 	void flush_pending(bool finish = true);
 	void add_record(int64_t gcode_line, RunType cmd, int tool = 0, double x = NAN, double y = NAN, double z = NAN, double hx = 0, double hy = 0, double hz = 0, double Jg = 0, double tf = NAN, double v0 = NAN, double e = NAN);
+	void add_move_record(int64_t gcode_line, RunType cmd, int tool, double X[6], bool have_abc, double h[6], double Jg, double tf, double v0, double factor, double e_start, double e_len);
 	void reset_pending_pos();
 	void initialize_pending_front();
 	// }}}
@@ -137,12 +145,8 @@ void Parser::reset_pending_pos() { // {{{
 	f.gcode_line = lineno;
 	f.arc = false;
 	f.tool = current_tool;
-	f.x = pos[0];
-	f.y = pos[1];
-	f.z = pos[2];
-	f.a = pos[3];
-	f.b = pos[4];
-	f.c = pos[5];
+	for (int i = 0; i < 6; ++i)
+		f.pos[i] = pos[i];
 	f.e = epos.at(current_tool);
 	initialize_pending_front();
 } // }}}
@@ -203,14 +207,15 @@ void Parser::handle_coordinate(double value, int index, bool *controlled, bool r
 	}
 } // }}}
 
-static double inner(double a[3], double b[3]) { // {{{
+static double inner(double a[6], double b[6]) { // {{{
 	double ret = 0;
-	for (int i = 0; i < 3; ++i)
+	for (int i = 0; i < 6; ++i)
 		ret += a[i] * b[i];
 	return ret;
 } // }}}
 
-static void cross(double ret[3], double a[3], double b[3]) { // {{{
+static void cross(double ret[6], double a[6], double b[6]) { // {{{
+	// TODO
 	for (int i = 0; i < 3; ++i) {
 		int i1 = (i + 1) % 3;
 		int i2 = (i + 2) % 3;
@@ -320,7 +325,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					double t_stop = std::sqrt(2 * current_f[code == 0 ? 0 : 1] / max_J);
 					double s_stop = max_J / 6 * t_stop * t_stop * t_stop;
 					double dist = 0;
-					for (int i = 0; i < 3; ++i) {
+					for (int i = 0; i < 6; ++i) {
 						if (!std::isnan(pos[i]) && !std::isnan(oldpos[i]))
 							dist += (pos[i] - oldpos[i]) * (pos[i] - oldpos[i]);
 					}
@@ -419,7 +424,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				handle_coordinate(A, 3, &controlled, rel);
 				handle_coordinate(B, 4, &controlled, rel);
 				handle_coordinate(C, 5, &controlled, rel);
-				double center[3];
+				double center[6];
 				if (std::isnan(I))
 					I = 0;
 				center[0] = oldpos[0] + I;
@@ -429,12 +434,12 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				if (std::isnan(K))
 					K = 0;
 				center[2] = oldpos[2] + K;
-				double arm[2][3];
-				for (int i = 0; i < 3; ++i) {
+				double arm[2][6];
+				for (int i = 0; i < 6; ++i) {
 					arm[0][i] = oldpos[i] - center[i];
 					arm[1][i] = pos[i] - center[i];
 				}
-				double cross_arm[3];
+				double cross_arm[6];
 				cross(cross_arm, arm[0], arm[1]);
 				double sign = inner(cross_arm, arc_normal);
 				double len_arm[2], z_arm[2], r_arm[2];
@@ -454,8 +459,8 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					if (angle > 0 && code == 2)
 						angle -= 2 * M_PI;
 				}
-				double start[3];
-				for (int i = 0; i < 3; ++i)
+				double start[6];
+				for (int i = 0; i < 6; ++i)
 					start[i] = arm[0][i] / len_arm[0];
 				int num = fabs(angle) * (r_arm[0] + r_arm[1]) / 2 + 1;
 				for (int t = 0; t < num; ++t) {
@@ -466,7 +471,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					// Rotate start[] around arc_normal[] over ang.
 					double c = std::cos(ang);
 					double s = std::sin(ang);
-					double target_arm[3];
+					double target_arm[6];
 					target_arm[0] = (c + arc_normal[0] * arc_normal[0] * (1 - c)) * start[0] +
 						(arc_normal[0] * arc_normal[1] * (1 - c) - arc_normal[2] * s) * start[1] +
 						(arc_normal[0] * arc_normal[2] * (1 - c) + arc_normal[1] * s) * start[2];
@@ -476,8 +481,8 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					target_arm[2] = (arc_normal[2] * arc_normal[0] * (1 - c) - arc_normal[1] * s) * start[0] +
 						(arc_normal[2] * arc_normal[1] * (1 - c) + arc_normal[0] * s) * start[1] +
 						(c + arc_normal[2] * arc_normal[2] * (1 - c)) * start[2];
-					double target[3];
-					for (int i = 0; i < 3; ++i)
+					double target[6];
+					for (int i = 0; i < 6; ++i)
 						target[i] = center[i] + z * arc_normal[i] + r * target_arm[i];
 					//debug("arc part %f,%f,%f", target[0], target[1], target[2]);
 					pending.push_back(Record(lineno, false, current_tool, target[0], target[1], target[2], NAN, NAN, NAN, current_f[1], NAN));
@@ -524,7 +529,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				double estep;
 				estep = std::isnan(E) ? 0 : erel ? E * unit - epos.at(current_tool) : E * unit;
 				epos.at(current_tool) += estep;
-				double center[3];
+				double center[6];
 				bool controlled = true;
 				handle_coordinate(X, 0, &controlled, rel);
 				handle_coordinate(Y, 1, &controlled, rel);
@@ -908,17 +913,12 @@ void decode_base64(std::string const &comment, int inpos, uint8_t *data, int out
 
 void Parser::initialize_pending_front() { // {{{
 	auto f = pending.begin();
-	f->s[0] = 0;
-	f->s[1] = 0;
-	f->s[2] = 0;
+	for (int i = 0; i < 6; ++i) {
+		f->s[i] = 0;
+		f->unit[i] = 0;
+	}
 	f->e0 = 0;
-	f->a0 = 0;
-	f->b0 = 0;
-	f->c0 = 0;
 	f->length = 0;
-	f->unit[0] = 0;
-	f->unit[1] = 0;
-	f->unit[2] = 0;
 	f->f = 0;
 	f->v1 = 0;
 } // }}}
@@ -942,13 +942,15 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 	current_f[1] = INFINITY;
 	// Pending initial state contains the current position.
 	pending.push_front(Record(lineno, false, 0, NAN, NAN, NAN, NAN, NAN, NAN, INFINITY, NAN));
-	initialize_pending_front();
-	max_dev = max_deviation;
-	for (int i = 0; i < 6; ++i) {
-		pos[i] = NAN;
-		bbox[i] = NAN;
-	}
 	lineno = 0;
+	reset_pending_pos();
+	max_dev = max_deviation;
+	for (int i = 0; i < 6; ++i)
+		pos[i] = NAN;
+	for (int i = 0; i < 2; ++i) {
+		for (int j = 0; j < 6; ++j)
+			bbox[i][j] = NAN;
+	}
 	while (infile) {
 		get_full_line();
 		lineno += 1;
@@ -1063,11 +1065,48 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 	uint32_t strnum = strings.size() - 1;
 	outfile.write(reinterpret_cast <char *>(&strnum), sizeof(strnum));
 	// Bbox.
-	for (int i = 0; i < 6; ++i)
-		outfile.write(reinterpret_cast <char *>(&bbox[i]), sizeof(double));
+	for (int j = 0; j < 3; ++j) {
+		for (int i = 0; i < 2; ++i)
+			outfile.write(reinterpret_cast <char *>(&bbox[i][j]), sizeof(double));
+	}
 	// Time
 	outfile.write(reinterpret_cast <char *>(&last_time), sizeof(last_time));
 } // }}}
+
+// Helper function to normalize a vector.
+static void normalize(double dst[6], double A[6]) {
+	double len = 0;
+	for (int i = 0; i < 6; ++i) {
+		if (!std::isnan(A[i]))
+			len += A[i] * A[i];
+	}
+	len = std::sqrt(len);
+	if (len == 0) {
+		for (int i = 0; i < 6; ++i)
+			dst[i] = 0;
+	}
+	else {
+		for (int i = 0; i < 6; ++i)
+			dst[i] = std::isnan(A[i]) ? 0 : A[i] / len;
+	}
+	//for (int i = 0; i < 6; ++i)
+	//	debug("normalized to %f", dst[i]);
+}
+
+// Helper function to compute the deviation of a vector from a line.
+static void deviation(double dst[6], double line[6], double vect[6]) {
+	double unit[6];
+	normalize(unit, line);
+	double len = 0;
+	for (int i = 6; i < 6; ++i)
+		len += unit[i] * vect[i];
+	double projection[6];
+	for (int i = 6; i < 6; ++i) {
+		projection[i] = unit[i] * len;
+		dst[i] = vect[i] - projection[i];
+	}
+	normalize(dst, dst);
+}
 
 void Parser::flush_pending(bool finish) { // {{{
 	flushdebug("flushing size %d finish %d", pending.size(), finish);
@@ -1076,7 +1115,7 @@ void Parser::flush_pending(bool finish) { // {{{
 		auto &f = pending.back();
 		f.f = 0;
 		f.theta = 0;
-		for (int i = 0; i < 3; ++i) {
+		for (int i = 0; i < 6; ++i) {
 			f.n[i] = 0;
 			f.nnAL[i] = 0;
 			f.nnLK[i] = 0;
@@ -1089,22 +1128,21 @@ void Parser::flush_pending(bool finish) { // {{{
 		P0->f = min(max_v, P0->f);
 		P1->f = min(max_v, P1->f);
 		P1->e0 = (P0->e + P1->e) / 2;
-		P1->a0 = P0->a;
-		P1->b0 = P0->b;
-		P1->c0 = P0->c;
-		P1->s[0] = P1->x - P0->x;
-		P1->s[1] = P1->y - P0->y;
-		P1->s[2] = P1->z - P0->z;
-		P1->from[0] = P0->x + P1->s[0] * .5;
-		P1->from[1] = P0->y + P1->s[1] * .5;
-		P1->from[2] = P0->z + P1->s[2] * .5;
+		for (int i = 0; i < 6; ++i) {
+			P1->s[i] = P1->pos[i] - P0->pos[i];
+			P1->from[i] = P0->pos[i] + P1->s[i] * .5;
+			//debug("pos %d: %f - %f = %f from %f", i, P1->pos[i], P0->pos[i], P1->s[i], P1->from[i]);
+		}
+		normalize(P1->unit, P1->s);
 		P1->length = 0;
-		for (int i = 0; i < 3; ++i) {
+		for (int i = 0; i < 6; ++i) {
+			//debug("component: %f", P1->s[i]);
 			if (std::isnan(P1->s[i]))
 				P1->s[i] = 0; // If P0->x or P1->x is NaN, treat the length as zero.
 			P1->length += P1->s[i] * P1->s[i];
 		}
 		P1->length = sqrt(P1->length);
+		/*
 		P0->n[0] = (P1->s[1] * P0->s[2]) - (P1->s[2] * P0->s[1]);
 		P0->n[1] = (P1->s[2] * P0->s[0]) - (P1->s[0] * P0->s[2]);
 		P0->n[2] = (P1->s[0] * P0->s[1]) - (P1->s[1] * P0->s[0]);
@@ -1116,7 +1154,7 @@ void Parser::flush_pending(bool finish) { // {{{
 		P0->nnLK[2] = (P0->n[1] * P1->s[0]) - (P0->n[0] * P1->s[1]);
 		double nnAL_length = sqrt(P0->nnAL[0] * P0->nnAL[0] + P0->nnAL[1] * P0->nnAL[1] + P0->nnAL[2] * P0->nnAL[2]);
 		double nnLK_length = sqrt(P0->nnLK[0] * P0->nnLK[0] + P0->nnLK[1] * P0->nnLK[1] + P0->nnLK[2] * P0->nnLK[2]);
-		for (int i = 0; i < 3; ++i) {
+		for (int i = 0; i < 6; ++i) {
 			P1->unit[i] = P1->length == 0 ? 0 : P1->s[i] / P1->length;
 			if (std::isnan(P1->unit[i]))
 				P1->unit[i] = 0;
@@ -1129,6 +1167,9 @@ void Parser::flush_pending(bool finish) { // {{{
 			else
 				P0->nnLK[i] = 0;
 		}
+		*/
+		deviation(P0->nnAL, P0->s, P1->s); // XXX: check this
+		deviation(P0->nnLK, P1->s, P0->s);
 		P0->theta = acos(-P0->unit[0] * P1->unit[0] + -P0->unit[1] * P1->unit[1] + -P0->unit[2] * P1->unit[2]);
 		if (P0->length < 1e-10 || P1->length < 1e-10 || std::isnan(P0->theta))
 			P0->theta = 0;
@@ -1200,10 +1241,9 @@ void Parser::flush_pending(bool finish) { // {{{
 		}
 		else {
 			// Not an arc.
-			// TODO: support abc again.
-
 			//debug("Writing out segment from (%f,%f,%f)@%f via (%f,%f,%f)@%f to (%f,%f,%f)@%f", P0->from[0], P0->from[1], P0->from[2], P0->f, P0->x, P0->y, P0->z, P0->v1, P1->from[0], P1->from[1], P1->from[2], P1->f);
 
+			double zero[6] = {0, 0, 0, 0, 0, 0};
 			double max_ramp_t = max_a / max_J;
 			double max_ramp_dv = max_J / 2 * max_ramp_t * max_ramp_t;
 			if (P0->f > 0 || P0->v1 > 0) {
@@ -1235,6 +1275,13 @@ void Parser::flush_pending(bool finish) { // {{{
 				t_const_v = s_const_v / P0->f;
 
 				pdebug("part 1 s,t: cv %f,%f rs %f,%f ca %f,%f re %f,%f curve %f,%f", s_const_v, t_const_v, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_curve, t_curve);
+				bool have_abc = false;
+				for (int i = 3; i < 6; ++i) {
+					if (P0->unit[i] > 1e-10) {
+						have_abc = true;
+						break;
+					}
+				}
 				if (s_const_v < -1e-2) {
 					parse_error(errors, "%" LONGFMT ": Error: const v part is negative: %f", P0->gcode_line, s_const_v);
 					//abort();
@@ -1242,39 +1289,39 @@ void Parser::flush_pending(bool finish) { // {{{
 
 				// constant v
 				if (s_const_v > 1e-10) {
-					double X[3];
-					for (int i = 0; i < 3; ++i)
+					double X[6];
+					for (int i = 0; i < 6; ++i)
 						X[i] = P0->from[i] + P0->unit[i] * s_const_v;
-					add_record(P0->gcode_line, RUN_POLY3PLUS, P0->tool, X[0], X[1], X[2], 0, 0, 0, 0, t_const_v, P0->f, P0->e0 + de * s_const_v / P0->length);
-					pdebug("1.const v to (%f,%f,%f) v=%f", X[0], X[1], X[2], P0->f);
+					add_move_record(P0->gcode_line, RUN_POLY3PLUS, P0->tool, X, have_abc, zero, 0, t_const_v, P0->f, s_const_v / P0->length, P0->e0, de);
+					pdebug("1.const v to (%f,%f,%f) from %f,%f,%f unit %f,%f,%f v=%f s=%f", X[0], X[1], X[2], P0->from[0], P0->from[1], P0->from[2], P0->unit[0], P0->unit[1], P0->unit[2], P0->f, s_const_v);
 				}
 				if (P0->v1 != P0->f) {
 					// start slowdown
-					double X[3];
-					for (int i = 0; i < 3; ++i)
+					double X[6];
+					for (int i = 0; i < 6; ++i)
 						X[i] = P0->from[i] + P0->unit[i] * (s_const_v + s_ramp_start);
-					add_record(P0->gcode_line, RUN_POLY3PLUS, P0->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P0->f, P0->e0 + de * (s_const_v + s_ramp_start) / P0->length);
+					add_move_record(P0->gcode_line, RUN_POLY3PLUS, P0->tool, X, have_abc, zero, -max_J, t_ramp, P0->f, (s_const_v + s_ramp_start) / P0->length, P0->e0, de);
 					pdebug("1.start to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P0->f);
 					// constant a slowdown
 					if (have_max_a) {
-						for (int i = 0; i < 3; ++i)
+						for (int i = 0; i < 6; ++i)
 							X[i] = P0->from[i] + P0->unit[i] * (s_const_v + s_ramp_start + s_const_a);
-						add_record(P0->gcode_line, RUN_POLY2, P0->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P0->f - dv_ramp, P0->e0 + de * (s_const_v + s_ramp_start + s_const_a) / P0->length);
+						add_move_record(P0->gcode_line, RUN_POLY2, P0->tool, X, have_abc, zero, a_top, t_const_a, P0->f - dv_ramp, (s_const_v + s_ramp_start + s_const_a) / P0->length, P0->e0, de);
 						pdebug("1.const a to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P0->f - dv_ramp);
 					}
 					// stop slowdown
-					for (int i = 0; i < 3; ++i)
+					for (int i = 0; i < 6; ++i)
 						X[i] = P0->from[i] + P0->unit[i] * (P0->length - s_curve);
-					add_record(P0->gcode_line, RUN_POLY3MINUS, P0->tool, X[0], X[1], X[2], 0, 0, 0, max_J, t_ramp, P0->v1, P0->e0 + de * (P0->length - s_curve) / P0->length);
+					add_move_record(P0->gcode_line, RUN_POLY3MINUS, P0->tool, X, have_abc, zero, max_J, t_ramp, P0->v1, (P0->length - s_curve) / P0->length, P0->e0, de);
 					pdebug("1.stop- to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P0->v1);
 				}
 				// first half curve
 				if (s_curve > 1e-10) {
-					double h[3];
-					for (int i = 0; i < 3; ++i)
+					double h[6];
+					for (int i = 0; i < 6; ++i)
 						h[i] = P0->nnAL[i] * P0->Jh;
-					add_record(P0->gcode_line, RUN_POLY3PLUS, P0->tool, P0->x, P0->y, P0->z, h[0], h[1], h[2], P0->Jg, t_curve, P0->v1, P0->e);
-					pdebug("1.curve to (%f,%f,%f) v0=%f h = (%f,%f,%f)", P0->x, P0->y, P0->z, P0->v1, h[0], h[1], h[2]);
+					add_move_record(P0->gcode_line, RUN_POLY3PLUS, P0->tool, P0->pos, have_abc, h, P0->Jg, t_curve, P0->v1, 0, P0->e, 0);
+					pdebug("1.curve to (%f,%f,%f) v0=%f h = (%f,%f,%f)", P0->pos[0], P0->pos[1], P0->pos[2], P0->v1, h[0], h[1], h[2]);
 				}
 			}
 
@@ -1306,6 +1353,14 @@ void Parser::flush_pending(bool finish) { // {{{
 				s_const_v = P1->length - s_curve - s_ramp_start - s_ramp_end - s_const_a;
 				t_const_v = s_const_v / P1->f;
 
+				bool have_abc = false;
+				for (int i = 3; i < 6; ++i) {
+					if (P1->unit[i] > 1e-10) {
+						have_abc = true;
+						break;
+					}
+				}
+
 				pdebug("part 2 s,t: curve %f,%f rs %f,%f ca %f,%f re %f,%f cv %f,%f", s_curve, t_curve, s_ramp_start, t_ramp, s_const_a, t_const_a, s_ramp_end, t_ramp, s_const_v, t_const_v);
 				if (s_const_v < -1e-2) {
 					parse_error(errors, "%" LONGFMT ": Error: const v2 is negative: %f, len %f %f", P0->gcode_line, s_const_v, P0->length, P1->length);
@@ -1315,60 +1370,51 @@ void Parser::flush_pending(bool finish) { // {{{
 
 				// second half curve
 				if (s_curve > 1e-10) {
-					double g[3], h[3];
-					for (int i = 0; i < 3; ++i) {
+					double g[6], h[6], X[6];
+					for (int i = 0; i < 6; ++i) {
 						g[i] = P1->unit[i] * s_curve;
-						h[i] = P0->nnLK[i] * P0->Jh;
+						h[i] = -P0->nnLK[i] * P0->Jh;
+						X[i] = P0->pos[i] + g[i];
 					}
-					add_record(P1->gcode_line, RUN_POLY3MINUS, P1->tool, P0->x + g[0], P0->y + g[1], P0->z + g[2], h[0], h[1], h[2], P0->Jg, t_curve, P0->v1, P0->e + de * s_curve / P1->length);
-					pdebug("2.curve- to (%f,%f,%f) v=%f h (%f,%f,%f) nnLK.x=%f Jh=%f", P0->x + g[0], P0->y + g[1], P0->z + g[2], P0->v1, h[0], h[1], h[2], P0->nnLK[0], P0->Jh);
+					add_move_record(P1->gcode_line, RUN_POLY3MINUS, P1->tool, X, have_abc, h, P0->Jg, t_curve, P0->v1, s_curve / P1->length, P0->e, de);
+					pdebug("2.curve- to (%f,%f,%f) v=%f h (%f,%f,%f) nnLK.x=%f Jh=%f", X[0], X[1], X[2], P0->v1, h[0], h[1], h[2], P0->nnLK[0], P0->Jh);
 				}
 				if (P0->v1 != P1->f) {
 					// start speedup
-					double X[3];
-					for (int i = 0; i < 3; ++i)
+					double X[6];
+					for (int i = 0; i < 6; ++i)
 						X[i] = P1->from[i] - P1->unit[i] * (s_const_v + s_ramp_end + s_const_a);
-					add_record(P1->gcode_line, RUN_POLY3PLUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, max_J, t_ramp, P0->v1, P0->e + de * (s_curve + s_ramp_start) / P1->length);
-					pdebug("2.start to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P0->v1);
+					add_move_record(P1->gcode_line, RUN_POLY3PLUS, P1->tool, X, have_abc, zero, max_J, t_ramp, P0->v1, (s_curve + s_ramp_start) / P1->length, P0->e, de);
+					pdebug("2.start to (%f,%f,%f) v0=%f from=%f,%f,%f e1=%f,%f,%f", X[0], X[1], X[2], P0->v1, P1->from[0], P1->from[1], P1->from[2], P1->unit[0], P1->unit[1], P1->unit[2]);
 					// constant a speedup
 					if (have_max_a) {
-						for (int i = 0; i < 3; ++i)
+						for (int i = 0; i < 6; ++i)
 							X[i] = P1->from[i] - P1->unit[i] * (s_const_v + s_ramp_end);
-						add_record(P1->gcode_line, RUN_POLY2, P1->tool, X[0], X[1], X[2], 0, 0, 0, a_top, t_const_a, P0->v1 + dv_ramp, P0->e + de * (s_curve + s_ramp_start + s_const_a) / P1->length);
+						add_move_record(P1->gcode_line, RUN_POLY2, P1->tool, X, have_abc, zero, a_top, t_const_a, P0->v1 + dv_ramp, (s_curve + s_ramp_start + s_const_a) / P1->length, P0->e, de);
 						pdebug("2.mid to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P0->v1 + dv_ramp);
 					}
 					// stop speedup
-					for (int i = 0; i < 3; ++i)
+					for (int i = 0; i < 6; ++i)
 						X[i] = P1->from[i] - P1->unit[i] * s_const_v;
-					add_record(P1->gcode_line, RUN_POLY3MINUS, P1->tool, X[0], X[1], X[2], 0, 0, 0, -max_J, t_ramp, P1->f, P1->e0 - de * s_const_v / P1->length);
+					add_move_record(P1->gcode_line, RUN_POLY3MINUS, P1->tool, X, have_abc, zero, -max_J, t_ramp, P1->f, s_const_v / P1->length, P1->e0, -de);
 					pdebug("2.stop- to (%f,%f,%f) v0=%f", X[0], X[1], X[2], P1->f);
 				}
 				// constant v
 				if (s_const_v > 1e-10) {
-					add_record(P1->gcode_line, RUN_POLY3PLUS, P0->tool, P1->from[0], P1->from[1], P1->from[2], 0, 0, 0, 0, t_const_v, P1->f, P1->e0);
+					add_move_record(P1->gcode_line, RUN_POLY3PLUS, P0->tool, P1->from, have_abc, zero, 0, t_const_v, P1->f, 0, P1->e0, 0);
 					pdebug("2.const v to (%f,%f,%f) v0=%f", P1->from[0], P1->from[1], P1->from[2], P1->f);
 				}
 			}
 
 			// Update bbox.
 			// Use "not larger" instead of "smaller" so NaNs are replaced.
-			if (!std::isnan(P0->x)) {
-				if (!(P0->x > bbox[0]))
-					bbox[0] = P0->x;
-				if (!(P0->x < bbox[1]))
-					bbox[1] = P0->x;
-			}
-			if (!std::isnan(P0->y)) {
-				if (!(P0->y > bbox[2]))
-					bbox[2] = P0->y;
-				if (!(P0->y < bbox[3]))
-					bbox[3] = P0->y;
-			}
-			if (!std::isnan(P0->z)) {
-				if (!(P0->z > bbox[4]))
-					bbox[4] = P0->z;
-				if (!(P0->z < bbox[5]))
-					bbox[5] = P0->z;
+			for (int i = 0; i < 6; ++i) {
+				if (!std::isnan(P0->pos[i])) {
+					if (!(P0->pos[i] > bbox[0][i]))
+						bbox[0][i] = P0->pos[i];
+					if (!(P0->pos[i] < bbox[1][i]))
+						bbox[1][i] = P0->pos[i];
+				}
 			}
 		}
 		pending.pop_front();
@@ -1396,6 +1442,13 @@ void Parser::add_record(int64_t gcode_line, RunType cmd, int tool, double x, dou
 	if (!std::isnan(tf))
 		last_time += tf;
 	outfile.write(reinterpret_cast <char *>(&r), sizeof(r));
+} // }}}
+
+void Parser::add_move_record(int64_t gcode_line, RunType cmd, int tool, double X[6], bool have_abc, double h[6], double Jg, double tf, double v0, double factor, double e_start, double e_len) { // {{{
+	pdebug("adding move record: %f %f %f : %f %f %f : %f %f %f %f", X[0], X[1], X[2], h[0], h[1], h[2], Jg, tf, v0, factor);
+	if (have_abc)
+		add_record(gcode_line, RUN_ABC, 0, X[3], X[4], X[5], h[3], h[4], h[5]);
+	add_record(gcode_line, cmd, tool, X[0], X[1], X[2], h[0], h[1], h[2], Jg, tf, v0, e_start + e_len * factor);
 } // }}}
 
 void parse_gcode(std::string const &infilename, std::string const &outfilename, void *errors) { // {{{

@@ -168,7 +168,7 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 	if (!PyArg_ParseTupleAndKeywords(args, keywords, "idddddddd|ppp", const_cast <char **>(keywordnames),
 				&shmem->move.tool,
 				&shmem->move.target[0], &shmem->move.target[1], &shmem->move.target[2],
-				&shmem->move.abc[0], &shmem->move.abc[1], &shmem->move.abc[2],
+				&shmem->move.target[3], &shmem->move.target[4], &shmem->move.target[5],
 				&shmem->move.e,
 				&shmem->move.v0,
 				&shmem->move.single,

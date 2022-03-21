@@ -46,6 +46,7 @@ static double probe_adjust;
 
 static int pattern_size;
 static uint8_t current_pattern[PATTERN_MAX];
+static double pending_abc[3], pending_abc_h[3];
 
 void run_file(char const *name, char const *probename, bool start, double sina, double cosa) {
 	rundebug("run file %d %f %f", start, sina, cosa);
@@ -203,13 +204,13 @@ static double handle_probe(double ox, double oy, double z) {
 
 void run_file_next_command(int32_t start_time) {
 	static bool lock = false;
-	if (pausing || lock) {
+	if (pausing || lock || resume_pending) {
 		next_move(start_time);
 		return;
 	}
 	lock = true;
 	rundebug("run queue, current = %" LONGFMT "/%" LONGFMT " wait = %d q = %d %d", settings.run_file_current, run_file_num_records, run_file_wait, settings.queue_end, settings.queue_start);
-	double lastpos[3] = {0, 0, 0};
+	double lastpos[6] = {0, 0, 0, 0, 0, 0};
 	bool moving = false;
 	while (!pausing	// We are running.
 			&& run_file_map	// There is a file to run.
@@ -218,9 +219,9 @@ void run_file_next_command(int32_t start_time) {
 			&& !run_file_wait) {	// We are not waiting for something else (temperature or confirm).
 		Run_Record &r = run_file_map[settings.run_file_current];
 		int t = r.type;
-		if (t != RUN_POLY3PLUS && t != RUN_POLY3MINUS && t != RUN_POLY2 && t != RUN_PATTERN && (arch_running() || settings.queue_end != settings.queue_start || moving || sending_fragment || transmitting_fragment))
+		if (!(t == RUN_POLY3PLUS || t == RUN_POLY3MINUS || t == RUN_POLY2 || t == RUN_ABC || t == RUN_PATTERN) && (arch_running() || computing_move || settings.queue_end != settings.queue_start || moving || sending_fragment || transmitting_fragment))
 			break;
-		rundebug("running %" LONGFMT ": %d %d", settings.run_file_current, r.type, r.tool);
+		rundebug("running %" LONGFMT ": %d %d running %d moving %d", settings.run_file_current, r.type, r.tool, arch_running(), moving);
 		switch (r.type) {
 			case RUN_SYSTEM:
 			{
@@ -230,13 +231,20 @@ void run_file_next_command(int32_t start_time) {
 				debug("Done running system command, return = %d", ret);
 				break;
 			}
+			case RUN_ABC:
+			{
+				for (int i = 0; i < 3; ++i) {
+					pending_abc[i] = r.X[i];
+					pending_abc_h[i] = r.h[i];
+				}
+				break;
+			}
 			case RUN_POLY3PLUS:
 			case RUN_POLY3MINUS:
 			case RUN_POLY2:
 			{
 				settings.queue_start = 0;
 				settings.queue_end = 0;
-				queue[settings.queue_end].current_restore = settings.run_file_current + 1;
 				queue[settings.queue_end].reverse = r.type == RUN_POLY3MINUS;
 				queue[settings.queue_end].single = false;
 				queue[settings.queue_end].probe = false;
@@ -254,15 +262,22 @@ void run_file_next_command(int32_t start_time) {
 					double d = queue[settings.queue_end].target[i] - lastpos[i];
 					if (!std::isnan(d))
 						distg += d * d;
+					d = pending_abc[i] - lastpos[3 + i];
+					if (!std::isnan(d))
+						distg += d * d;
 					if (!std::isnan(r.h[i]))
 						disth += r.h[i] * r.h[i];
-					queue[settings.queue_end].abc[i] = 0;
+					if (!std::isnan(pending_abc_h[i]))
+						disth += pending_abc_h[i] * pending_abc_h[i];
+					queue[settings.queue_end].target[3 + i] = pending_abc[i];
+					pending_abc[i] = NAN;
+					pending_abc_h[i] = NAN;
 				}
 				distg = std::sqrt(distg);
 				disth = std::sqrt(disth);
-				for (int i = 0; i < 3; ++i) {
+				for (int i = 0; i < 6; ++i) {
 					queue[settings.queue_end].unitg[i] = distg < 1e-10 ? 0 : (queue[settings.queue_end].target[i] - lastpos[i]) / distg;
-					queue[settings.queue_end].unith[i] = disth < 1e-10 ? 0 : r.h[i] / disth;
+					queue[settings.queue_end].unith[i] = disth < 1e-10 ? 0 : (i < 3 ? r.h[i]: pending_abc_h[i - 3]) / disth;
 				}
 				queue[settings.queue_end].Jg = (r.type == RUN_POLY2 ? 0 : r.Jg);
 				queue[settings.queue_end].Jh = disth;
@@ -276,7 +291,7 @@ void run_file_next_command(int32_t start_time) {
 				if (pattern_size > 0)
 					memcpy(queue[settings.queue_end].pattern, current_pattern, pattern_size);
 				pattern_size = 0;
-				for (int i = 0; i < 3; ++i)
+				for (int i = 0; i < 6; ++i)
 					lastpos[i] = queue[settings.queue_end].target[i];
 				settings.queue_end += 1;
 				moving = true;
@@ -290,8 +305,14 @@ void run_file_next_command(int32_t start_time) {
 			}
 			case RUN_GOTO:
 			{
+				// Goto commands need to wait for an underrun.
+				for (int i = 0; i < 3; ++i) {
+					if (!std::isnan(r.X[i]))
+						lastpos[i] = r.X[i];
+					if (!std::isnan(pending_abc[i]))
+						lastpos[3 + i] = pending_abc[i];
+				}
 				MoveCommand move;
-				move.current_restore = settings.run_file_current + 1;
 				move.cb = false;
 				move.probe = false;
 				move.single = false;
@@ -301,21 +322,21 @@ void run_file_next_command(int32_t start_time) {
 				move.target[0] = r.X[0];
 				move.target[1] = r.X[1];
 				move.target[2] = handle_probe(r.X[0], r.X[1], r.X[2] + zoffset);
+				for (int i = 0; i < 3; ++i) {
+					move.target[3 + i] = pending_abc[i];
+					pending_abc[i] = NAN;
+				}
 				move.e = r.E;
 				move.time = r.time;
 				move.gcode_line = r.gcode_line;
 				rundebug("run goto %f,%f,%f tool %d E %f v %f", r.X[0], r.X[1], r.X[2], r.tool, r.E, r.v0);
 				settings.queue_end = go_to(false, &move, true);
-				for (int i = 0; i < 3; ++i) {
-					if (!std::isnan(r.X[i]))
-						lastpos[i] = r.X[i];
-				}
 				moving = true;
 				break;
 			}
 			case RUN_PATTERN:
 			{
-				pattern_size = r.tool;
+				pattern_size = max(0, min(r.tool, PATTERN_MAX));
 				memcpy(current_pattern, &r.X[0], pattern_size);
 				break;
 			}

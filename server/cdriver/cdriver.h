@@ -156,13 +156,12 @@ struct Temp {
 // int32_t end_time: time when current segment is completed.
 // int hwtime_step: time difference for each step.
 struct History {
-	double unitg[3], unith[3];
+	double unitg[6], unith[6];
 	double Jg, Jh, a0g, a0h, v0g, v0h, x0g, x0h;
 	int32_t hwtime, end_time, adjust_start_time, adjust_time;
 	int hwtime_step;
 	double run_time;
 	int64_t gcode_line;
-	int64_t current_restore;
 	int queue_start, queue_end;
 	double adjust;	// adjustment factor; runs from 1 to 0.
 	int64_t run_file_current;
@@ -171,7 +170,7 @@ struct History {
 };
 
 struct Resume {
-	double x[3], v[3], a[3];
+	double x[6], v[6], a[6];
 	History settings;
 };
 
@@ -346,7 +345,7 @@ EXTERN Resume resume;
 EXTERN bool pausing, resume_pending;
 EXTERN History *history;
 EXTERN History settings;
-EXTERN double final_x[3], final_v[3], final_a[3];	// For checking that the segments fit.
+EXTERN double final_x[6], final_v[6], final_a[6];	// For checking that the segments fit.
 EXTERN bool computing_move;	// True as long as steps are sent to firmware.
 EXTERN bool aborting, preparing;
 EXTERN int first_fragment;
@@ -397,9 +396,9 @@ void debug_dump();
 
 // packet.cpp
 void request(int req);
-bool compute_current_pos(double x[3], double v[3], double a[3], bool store);
-int prepare_retarget(int q, int tool, double x[3], double v[3], double a[3], bool resuming = false);
-void smooth_stop(int q, double x[3], double v[3]);
+bool compute_current_pos(double x[6], double v[6], double a[6], bool store);
+int prepare_retarget(int q, int tool, double x[6], double v[6], double a[6], bool resuming = false);
+void smooth_stop(int q, double x[6], double v[6]);
 void do_resume();
 int go_to(bool relative, MoveCommand const *move, bool queue_only = false);
 void settemp(int which, double target);

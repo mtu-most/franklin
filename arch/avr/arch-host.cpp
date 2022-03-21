@@ -18,7 +18,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * }}} */
 
-#include "../../cdriver.h"
+#include "cdriver.h"
 
 // Serial port communication. {{{
 int hwpacketsize(int len, int *available) { // {{{
@@ -171,6 +171,12 @@ bool hwpacket(int len) { // {{{
 		fprintf(stderr, "\n");
 	}
 #endif
+	// Only used for underrun and done; initialized for done, overwritten by underrun. {{{
+	bool sent_ack = false;
+	int offset = 0;
+	int done_count = command[1];
+	int remaining_count = command[2];
+	// }}}
 	switch (command[0]) {
 	case HWC_LIMIT: // {{{
 	{
@@ -248,6 +254,9 @@ bool hwpacket(int len) { // {{{
 	} // }}}
 	case HWC_UNDERRUN: // {{{
 	{
+		offset = 1;
+		done_count = command[2];
+		remaining_count = command[3];
 		if (host_block) {
 			// STOP was sent; ignore UNDERRUN.
 			avr_write_ack("stopped underrun");
@@ -262,20 +271,24 @@ bool hwpacket(int len) { // {{{
 		if (computing_move) {
 			debug("slowness underrun %d %d %d", sending_fragment, current_fragment, running_fragment);
 			//abort();
-			if (!sending_fragment && discarding == 0 && (current_fragment - (running_fragment + command[2] + command[3]) + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 1)
-				arch_start_move(command[2]);
+			avr_write_ack("slowness underrun");
+			if (!sending_fragment && discarding == 0 && (current_fragment - (running_fragment + done_count + remaining_count) + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > 1)
+				arch_start_move(done_count);
 			// Buffer is too slow with refilling; this will fix itself.
 		}
 		else {
 			cb_pending = true;
 			// Only overwrite current position if the new value is correct.
-			//debug("underrun ok current=%d running=%d computing_move=%d sending=%d pending=%d transmitting=%d", current_fragment, running_fragment, computing_move, sending_fragment, command[3], transmitting_fragment);
+			//debug("underrun ok current=%d running=%d computing_move=%d sending=%d pending=%d transmitting=%d", current_fragment, running_fragment, computing_move, sending_fragment, remaining_count, transmitting_fragment);
 			if (!sending_fragment && !transmitting_fragment && discarding == 0 && current_fragment_pos == 0) {
-				if (command[3] == 0) {
+				if (remaining_count == 0) {
 					avr_get_current_pos(4, true);
+					avr_write_ack("expected underrun");
+					sent_ack = true;
 					// An expected underrun during a job is the end of a goto operation and the next command should be sent.
 					run_file_next_command(settings.hwtime);
 					buffer_refill();
+					// FIXME: this can trigger a repeat request, which is handled as a new request because write_ack() is not called yet.
 				}
 			}
 			//debug("underrun check %d %d %d", sending_fragment, current_fragment, running_fragment);
@@ -287,30 +300,32 @@ bool hwpacket(int len) { // {{{
 		if (host_block) {
 			// STOP was sent; ignore DONE.
 			//debug("done during stop");
-			avr_write_ack("stopped done");
+			if (!sent_ack)
+				avr_write_ack("stopped done");
 			return false;
 		}
-		int offset = command[0] == HWC_UNDERRUN ? 1 : 0;
-		//debug("done: %d pending %d sending %d current %d running %d", command[offset + 1], command[offset + 2], sending_fragment, current_fragment, running_fragment);
+		//debug("done: %d pending %d sending %d current %d running %d", done_count, remaining_count, sending_fragment, current_fragment, running_fragment);
 		if (FRAGMENTS_PER_BUFFER == 0) {
 			//debug("Done received while fragments per buffer is zero");
-			avr_write_ack("invalid done");
+			if (!sent_ack)
+				avr_write_ack("invalid done");
 			return false;
 		}
 		first_fragment = -1;
-		if ((current_fragment + discarding - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER + 1 < command[offset + 1] + command[offset + 2]) {
-			debug("Done count %d+%d higher than busy fragments %d+%d+1; clipping", command[offset + 1], command[offset + 2], (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER, discarding);
-			avr_write_ack("invalid done");
-			//abort();
+		if ((current_fragment + discarding - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER + 1 < done_count + remaining_count) {
+			debug("Done count %d+%d higher than busy fragments %d+%d+1; clipping", done_count, remaining_count, (current_fragment - running_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER, discarding);
+			if (!sent_ack)
+				avr_write_ack("invalid done");
+			abort();
 		}
-		else
+		else if (!sent_ack)
 			avr_write_ack("done");
 		//debug("fragment done for gcode line %" LONGFMT, history[running_fragment].gcode_line);
-		running_fragment = (running_fragment + command[offset + 1]) % FRAGMENTS_PER_BUFFER;
+		running_fragment = (running_fragment + done_count) % FRAGMENTS_PER_BUFFER;
 		//debug("running -> %x", running_fragment);
-		if ((current_fragment + discarding + (transmitting_fragment ? 1 : 0)) % FRAGMENTS_PER_BUFFER == running_fragment && command[0] == HWC_DONE) {
+		if ((current_fragment + discarding + (transmitting_fragment ? 1 : 0)) % FRAGMENTS_PER_BUFFER == running_fragment && offset == 0) {
 			debug("Done received, but should be underrun (current: %d discarding: %d running: %d sending: %d transmitting %d)", current_fragment, discarding, running_fragment, sending_fragment, transmitting_fragment);
-			//abort();
+			abort();
 		}
 		if (out_busy < 3)
 			buffer_refill();

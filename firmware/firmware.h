@@ -75,9 +75,9 @@ void debug(char const *fmt, ...);
 void debug_add(int i);
 void debug_dump();
 #else
-void debug(char const *fmt, ...) { (void)&fmt; }
-void debug_add(int i) { (void)&i; }
-void debug_dump() {}
+static inline void debug(char const *fmt, ...) { (void)&fmt; }
+static inline void debug_add(int i) { (void)&i; }
+static inline void debug_dump() {}
 #endif
 
 void arch_msetup(uint8_t m);

@@ -25,7 +25,7 @@ LIBS ?=
 LIBS += -ldl
 TARGET_ARCH ?= avr
 
-CPPFLAGS += -Iarch/${TARGET_ARCH}
+CPPFLAGS += -Iarch/${TARGET_ARCH} -I.
 
 all: module/build/stamp franklin-cdriver
 

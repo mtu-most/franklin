@@ -51,10 +51,9 @@ struct MoveCommand {
 	int probe, single, reverse;
 	double a0, v0;
 	int tool;	// Negative value means follower ~tool.
-	double target[3];
-	double unitg[3];
-	double unith[3];
-	double abc[3];
+	double target[6];
+	double unitg[6];
+	double unith[6];
 	double Jg, Jh;
 	double tf;
 	double e;
@@ -146,15 +145,16 @@ enum RunType {
 	RUN_POLY3MINUS,		// 02
 	RUN_POLY2,		// 03
 	RUN_ARC,		// 04
-	RUN_GOTO,		// 05
-	RUN_GPIO,		// 06
-	RUN_SETTEMP,		// 07
-	RUN_WAITTEMP,		// 08
-	RUN_SETPOS,		// 09
-	RUN_WAIT,		// 0a
-	RUN_CONFIRM,		// 0b
-	RUN_PARK,		// 0c
-	RUN_PATTERN,		// 0d
+	RUN_ABC,		// 05
+	RUN_GOTO,		// 06
+	RUN_GPIO,		// 07
+	RUN_SETTEMP,		// 08
+	RUN_WAITTEMP,		// 09
+	RUN_SETPOS,		// 0a
+	RUN_WAIT,		// 0b
+	RUN_CONFIRM,		// 0c
+	RUN_PARK,		// 0d
+	RUN_PATTERN,		// 0e
 };
 
 #ifndef PATH_MAX

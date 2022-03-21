@@ -317,10 +317,10 @@ void request(int req) {
 		if (run_file_map)
 			run_file_wait += 1;
 		// Store resume info.
-		double x[3], v[3], a[3];
+		double x[6], v[6], a[6];
 		bool done = compute_current_pos(x, v, a, store);
 		if (store) {
-			for (int i = 0; i < 3; ++i) {
+			for (int i = 0; i < 6; ++i) {
 				resume.x[i] = x[i];
 				resume.v[i] = v[i];
 				resume.a[i] = a[i];
@@ -337,12 +337,12 @@ void request(int req) {
 		break;
 	}
 	CASE(CMD_RESUME)
-		if (computing_move || !run_file_map)
+		if (!run_file_map)
+			break;
+		if (computing_move)
 			break;
 		if (pausing)
 			do_resume();
-		if (run_file_wait > 0)
-			run_file_wait -= 1;
 		buffer_refill();
 		break;
 	CASE(CMD_UNPAUSE)
@@ -358,7 +358,7 @@ void request(int req) {
 		run_adjust_probe(shmem->floats[0], shmem->floats[1], shmem->floats[2]);
 		break;
 	CASE2(CMD_TP_GETPOS)
-		shmem->floats[0] = history[running_fragment].current_restore + (history[running_fragment].hwtime / 1e6) / (history[running_fragment].end_time / 1e6);
+		shmem->floats[0] = history[running_fragment].run_file_current + (history[running_fragment].hwtime / 1e6) / (history[running_fragment].end_time / 1e6);
 		break;
 	CASE(CMD_TP_SETPOS)
 	{
@@ -366,7 +366,7 @@ void request(int req) {
 		discard();
 		settings.run_file_current = ipos;
 		// Hack to force TP_GETPOS to return the same value; this is only called when paused, so it does no harm.
-		history[running_fragment].current_restore = ipos;
+		history[running_fragment].run_file_current = ipos;
 		for (int s = 0; s < NUM_SPACES; ++s) {
 			Space &sp = spaces[s];
 			for (int a = 0; a < sp.num_axes; ++a)
