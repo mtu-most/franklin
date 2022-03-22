@@ -1721,18 +1721,15 @@ function redraw_canvas(ui) { // {{{
 				outline = data[3];
 			}
 			else {
-				switch (ui.machine.spaces[0].type) { // Define geometry-specific options, including outline. {{{
-				case TYPE_CARTESIAN:
-					var xaxis = ui.machine.spaces[0].axis[0];
-					var yaxis = ui.machine.spaces[0].axis[1];
-					machinewidth = xaxis.max - xaxis.min + .010;
-					machineheight = yaxis.max - yaxis.min + .010;
-					center = [(xaxis.min + xaxis.max) / 2, (yaxis.min + yaxis.max) / 2];
-					outline = function(ui, c) {
-						// Rectangle is always drawn; nothing else to do here.
-					};
-					break;
-				} // }}}
+				// Use TYPE_CARTESIAN type
+				var xaxis = ui.machine.spaces[0].axis[0];
+				var yaxis = ui.machine.spaces[0].axis[1];
+				machinewidth = xaxis.max - xaxis.min + .010;
+				machineheight = yaxis.max - yaxis.min + .010;
+				center = [(xaxis.min + xaxis.max) / 2, (yaxis.min + yaxis.max) / 2];
+				outline = function(ui, c) {
+					// Rectangle is always drawn; nothing else to do here.
+				};
 			}
 			// Prepare canvas. {{{
 			var factor = Math.max(machinewidth, machineheight);
@@ -1819,27 +1816,19 @@ function redraw_canvas(ui) { // {{{
 			c.rotate(ui.machine.targetangle);
 			for (var i = 0; i < ui.tp_context[1].length; ++i) {
 				r = ui.tp_context[1][i];
-				switch (r[0]) {
-					case 'PREARC':
-						center = [r[2], r[3], r[4]];
-						normal = [r[5], r[6], r[7]];
-						continue;
-					case 'ARC':
-						if (current_pos === null)
-							break;
-						if (center === null)
-							break;
-						// TODO: implement this.  Workaround: fall through.
-					case 'LINE':
+				switch (r.type) {
+					case 'POLY3PLUS':
+					case 'POLY3MINUS':
+					case 'POLY2':
 						if (current_pos === null || isNaN(current_pos[0]) || isNaN(current_pos[1]))
 							break;
 						c.beginPath();
 						c.moveTo(current_pos[0], current_pos[1]);
-						c.lineTo(r[2], r[3]);
+						c.lineTo(r.X[0], r.X[1]);
 						c.strokeStyle = i + ui.tp_context[0] >= ui.machine.tppos ? '#00f' : '#f00';
 						c.stroke();
 				}
-				current_pos = [r[2], r[3], r[4]];
+				current_pos = r.X;
 			}
 			c.restore(); // }}}
 
