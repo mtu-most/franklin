@@ -1089,22 +1089,24 @@ static void normalize(double dst[6], double A[6]) {
 		for (int i = 0; i < 6; ++i)
 			dst[i] = std::isnan(A[i]) ? 0 : A[i] / len;
 	}
-	//for (int i = 0; i < 6; ++i)
-	//	debug("normalized to %f", dst[i]);
+	//debug("normalized to %f,%f,%f", dst[0], dst[1], dst[2]);
 }
 
 // Helper function to compute the deviation of a vector from a line.
 static void deviation(double dst[6], double line[6], double vect[6]) {
+	//debug("deviation %f,%f,%f -> %f,%f,%f", line[0], line[1], line[2], vect[0], vect[1], vect[2]);
 	double unit[6];
 	normalize(unit, line);
 	double len = 0;
-	for (int i = 6; i < 6; ++i)
+	for (int i = 0; i < 6; ++i)
 		len += unit[i] * vect[i];
+	//debug("unit %f,%f,%f len %f", unit[0], unit[1], unit[2], len);
 	double projection[6];
-	for (int i = 6; i < 6; ++i) {
+	for (int i = 0; i < 6; ++i) {
 		projection[i] = unit[i] * len;
 		dst[i] = vect[i] - projection[i];
 	}
+	//debug("dst %f,%f,%f projection %f,%f,%f", dst[0], dst[1], dst[2], projection[0], projection[1], projection[2]);
 	normalize(dst, dst);
 }
 
@@ -1209,7 +1211,7 @@ void Parser::flush_pending(bool finish) { // {{{
 		// Check if v0/v2 should be lowered.
 		double v0 = compute_max_v(P0->length + P0->x0, P0->v1, max_J, max_a);
 		double v2 = compute_max_v(P1->length + P0->x0, P0->v1, max_J, max_a);
-		pdebug("check v2 f %f l %f x0 %f v1 %f v2 %f", P1->f, P1->length, P0->x0, P0->v1, v2);
+		pdebug("check v2 f %f l %f x0 %f v1 %f v2 %f Jg %f Jh %f", P1->f, P1->length, P0->x0, P0->v1, v2, P0->Jg, P0->Jh);
 		if (v2 < P1->f) {
 			pdebug("limit v2 from %f to %f", P1->f, v2);
 			P1->f = v2;
@@ -1241,7 +1243,7 @@ void Parser::flush_pending(bool finish) { // {{{
 		}
 		else {
 			// Not an arc.
-			//debug("Writing out segment from (%f,%f,%f)@%f via (%f,%f,%f)@%f to (%f,%f,%f)@%f", P0->from[0], P0->from[1], P0->from[2], P0->f, P0->x, P0->y, P0->z, P0->v1, P1->from[0], P1->from[1], P1->from[2], P1->f);
+			//debug("Writing out segment from (%f,%f,%f)@%f via (%f,%f,%f)@%f to (%f,%f,%f)@%f", P0->from[0], P0->from[1], P0->from[2], P0->f, P0->pos[0], P0->pos[1], P0->pos[2], P0->v1, P1->from[0], P1->from[1], P1->from[2], P1->f);
 
 			double zero[6] = {0, 0, 0, 0, 0, 0};
 			double max_ramp_t = max_a / max_J;
@@ -1445,7 +1447,7 @@ void Parser::add_record(int64_t gcode_line, RunType cmd, int tool, double x, dou
 } // }}}
 
 void Parser::add_move_record(int64_t gcode_line, RunType cmd, int tool, double X[6], bool have_abc, double h[6], double Jg, double tf, double v0, double factor, double e_start, double e_len) { // {{{
-	pdebug("adding move record: %f %f %f : %f %f %f : %f %f %f %f", X[0], X[1], X[2], h[0], h[1], h[2], Jg, tf, v0, factor);
+	flushdebug("adding move record: %f %f %f : %f %f %f : %f %f %f %f", X[0], X[1], X[2], h[0], h[1], h[2], Jg, tf, v0, factor);
 	if (have_abc)
 		add_record(gcode_line, RUN_ABC, 0, X[3], X[4], X[5], h[3], h[4], h[5]);
 	add_record(gcode_line, cmd, tool, X[0], X[1], X[2], h[0], h[1], h[2], Jg, tf, v0, e_start + e_len * factor);

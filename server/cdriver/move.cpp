@@ -21,7 +21,7 @@
 #include "cdriver.h"
 
 //#define mdebug(...) debug(__VA_ARGS__)
-#define debug_abort() abort()
+//#define debug_abort() abort()
 
 #ifndef mdebug
 #define mdebug(...) do {} while (0)
@@ -267,13 +267,15 @@ void next_move(int32_t start_time) { // {{{
 	int const na = spaces[0].num_axes;
 	double check_x = 0, check_v = 0, check_a = 0;
 	for (int i = 0; i < 6; ++i) {
-		if (i >= na)
-			break;
-		double dx = spaces[0].axis[i]->settings.source + settings.unitg[i] * settings.x0g + settings.unith[i] * settings.x0h - final_x[i];
+		if (i < na) {
+			double dx = spaces[0].axis[i]->settings.source + settings.unitg[i] * settings.x0g + settings.unith[i] * settings.x0h - final_x[i];
+			check_x += dx * dx;
+		}
+
 		double dv = settings.v0g * settings.unitg[i] + settings.v0h * settings.unith[i] - final_v[i];
-		double da = settings.a0g * settings.unitg[i] + settings.a0h * settings.unith[i] - final_a[i];
-		check_x += dx * dx;
 		check_v += dv * dv;
+
+		double da = settings.a0g * settings.unitg[i] + settings.a0h * settings.unith[i] - final_a[i];
 		check_a += da * da;
 	}
 	if (check_x > 1e-2) {

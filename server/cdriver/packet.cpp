@@ -62,7 +62,7 @@ void request(int req) {
 		if (stopping)
 			break;
 		// Ignore move while running.
-		if (run_file_map != NULL && !pausing)
+		if (run_file_map != NULL && !pausing && !parkwaiting)
 			break;
 		//debug("moving to (%f,%f,%f), tool %d e %f v %f", shmem->move.target[0], shmem->move.target[1], shmem->move.target[2], shmem->move.tool, shmem->move.e, shmem->move.v0);
 		last_active = millis();
@@ -76,8 +76,9 @@ void request(int req) {
 		return;
 	CASE(CMD_RUN)
 		last_active = millis();
-		run_file(const_cast<const char *>(shmem->strs[0]), const_cast<const char *>(shmem->strs[1]), shmem->ints[0], shmem->floats[0], shmem->floats[1]);
-		break;
+		if (!run_file(const_cast<const char *>(shmem->strs[0]), const_cast<const char *>(shmem->strs[1]), shmem->ints[0], shmem->floats[0], shmem->floats[1]))
+			delayed_reply();
+		return;
 	CASE(CMD_SLEEP)
 		last_active = millis();
 		if (shmem->ints[0]) {
@@ -339,10 +340,16 @@ void request(int req) {
 	CASE(CMD_RESUME)
 		if (!run_file_map)
 			break;
-		if (computing_move)
+		else if (computing_move)
 			break;
-		if (pausing)
+		else if (pausing)
 			do_resume();
+		else if (parkwaiting) {
+			parkwaiting = false;
+			if (run_file_wait > 0)
+				run_file_wait -= 1;
+			run_file_next_command(settings.hwtime);
+		}
 		buffer_refill();
 		break;
 	CASE(CMD_UNPAUSE)

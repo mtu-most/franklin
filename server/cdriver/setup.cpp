@@ -164,6 +164,7 @@ void setup()
 	for (int s = 0; s < NUM_SPACES; ++s)
 		spaces[s].init(s);
 	pausing = false;
+	parkwaiting = false;
 	resume_pending = false;
 	arch_setup_end();
 }

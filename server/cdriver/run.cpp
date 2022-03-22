@@ -48,11 +48,11 @@ static int pattern_size;
 static uint8_t current_pattern[PATTERN_MAX];
 static double pending_abc[3], pending_abc_h[3];
 
-void run_file(char const *name, char const *probename, bool start, double sina, double cosa) {
+bool run_file(char const *name, char const *probename, bool start, double sina, double cosa) {
 	rundebug("run file %d %f %f", start, sina, cosa);
 	abort_run_file();
 	if (name[0] == '\0')
-		return;
+		return false;
 	run_file_name = name;
 	probe_file_name = probename;
 	settings.run_time = 0;
@@ -62,19 +62,19 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 		probe_fd = open(probe_file_name.c_str(), O_RDONLY);
 		if (probe_fd < 0) {
 			debug("Failed to open probe file '%s': %s", probe_file_name.c_str(), strerror(errno));
-			return;
+			return false;
 		}
 		struct stat stat;
 		if (fstat(probe_fd, &stat) < 0) {
 			debug("Failed to stat probe file '%s': %s", probe_file_name.c_str(), strerror(errno));
 			close(probe_fd);
-			return;
+			return false;
 		}
 		probe_file_size = stat.st_size;
 		if (probe_file_size < 0 || unsigned(probe_file_size) < sizeof(ProbeFile)) {
 			debug("Probe file too short");
 			close(probe_fd);
-			return;
+			return false;
 		}
 	}
 	int fd = open(run_file_name.c_str(), O_RDONLY);
@@ -82,7 +82,7 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 		debug("Failed to open run file '%s': %s", run_file_name.c_str(), strerror(errno));
 		if (probename[0] != '\0')
 			close(probe_fd);
-		return;
+		return false;
 	}
 	struct stat stat;
 	if (fstat(fd, &stat) < 0) {
@@ -90,7 +90,7 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 		close(fd);
 		if (probename[0] != '\0')
 			close(probe_fd);
-		return;
+		return false;
 	}
 	run_file_size = stat.st_size;
 	run_file_map = reinterpret_cast<Run_Record *>(mmap(NULL, run_file_size, PROT_READ, MAP_SHARED, fd, 0));
@@ -104,11 +104,12 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 			munmap(run_file_map, run_file_size);
 			probe_file_map = NULL;
 			run_file_map = NULL;
-			return;
+			return false;
 		}
 	}
 	else
 		probe_file_map = NULL;
+	delayed_reply();
 	// File format:
 	// records
 	// strings
@@ -134,11 +135,13 @@ void run_file(char const *name, char const *probename, bool start, double sina, 
 	run_file_refy = targety;
 	probe_adjust = 0;
 	pausing = false;
+	parkwaiting = false;
 	resume_pending = false;
 	//debug("run target %f %f", targetx, targety);
 	run_file_sina = sina;
 	run_file_cosa = cosa;
 	run_file_next_command(settings.hwtime);
+	return true;
 }
 
 void abort_run_file() {
@@ -204,7 +207,7 @@ static double handle_probe(double ox, double oy, double z) {
 
 void run_file_next_command(int32_t start_time) {
 	static bool lock = false;
-	if (pausing || lock || resume_pending) {
+	if (pausing || parkwaiting || lock || resume_pending) {
 		next_move(start_time);
 		return;
 	}
@@ -212,14 +215,14 @@ void run_file_next_command(int32_t start_time) {
 	rundebug("run queue, current = %" LONGFMT "/%" LONGFMT " wait = %d q = %d %d", settings.run_file_current, run_file_num_records, run_file_wait, settings.queue_end, settings.queue_start);
 	double lastpos[6] = {0, 0, 0, 0, 0, 0};
 	bool moving = false;
-	while (!pausing	// We are running.
+	while (!pausing	&& !parkwaiting // We are running.
 			&& run_file_map	// There is a file to run.
 			&& settings.queue_end == settings.queue_start	// The queue is empty
 			&& settings.run_file_current < run_file_num_records	// There are records to send.
-			&& !run_file_wait) {	// We are not waiting for something else (temperature or confirm).
+			&& !run_file_wait) {	// We are not waiting for something else (delay, temperature or confirm).
 		Run_Record &r = run_file_map[settings.run_file_current];
 		int t = r.type;
-		if (!(t == RUN_POLY3PLUS || t == RUN_POLY3MINUS || t == RUN_POLY2 || t == RUN_ABC || t == RUN_PATTERN) && (arch_running() || computing_move || settings.queue_end != settings.queue_start || moving || sending_fragment || transmitting_fragment))
+		if (!(t == RUN_POLY3PLUS || t == RUN_POLY3MINUS || t == RUN_POLY2 || t == RUN_ARC || t == RUN_ABC || t == RUN_PATTERN) && (arch_running() || computing_move || settings.queue_end != settings.queue_start || moving || sending_fragment || transmitting_fragment))
 			break;
 		rundebug("running %" LONGFMT ": %d %d running %d moving %d", settings.run_file_current, r.type, r.tool, arch_running(), moving);
 		switch (r.type) {
@@ -302,6 +305,8 @@ void run_file_next_command(int32_t start_time) {
 				// TODO.
 				debug("G2/G3 are currently not supported");
 				abort();
+				moving = true;
+				break;
 			}
 			case RUN_GOTO:
 			{
@@ -441,8 +446,8 @@ void run_file_next_command(int32_t start_time) {
 				break;
 			}
 			case RUN_PARK:
-				compute_current_pos(resume.x, resume.v, resume.a, false);
 				run_file_wait += 1;
+				parkwaiting = true;
 				prepare_interrupt();
 				send_to_parent(CMD_PARKWAIT);
 				moving = true;

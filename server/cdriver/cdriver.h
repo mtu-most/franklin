@@ -342,7 +342,7 @@ EXTERN int32_t last_active;
 EXTERN int32_t last_micros;
 EXTERN int16_t led_phase;
 EXTERN Resume resume;
-EXTERN bool pausing, resume_pending;
+EXTERN bool pausing, resume_pending, parkwaiting;
 EXTERN History *history;
 EXTERN History settings;
 EXTERN double final_x[6], final_v[6], final_a[6];	// For checking that the segments fit.
@@ -431,7 +431,7 @@ struct ProbeFile {
 	double angle;
 	double sample[0];
 } __attribute__((__packed__));
-void run_file(char const *name, char const *probe_name, bool start, double sina, double cosa);
+bool run_file(char const *name, char const *probe_name, bool start, double sina, double cosa);
 void abort_run_file();
 void run_file_next_command(int32_t start_time);
 void run_adjust_probe(double x, double y, double z);
