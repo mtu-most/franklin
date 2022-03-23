@@ -65,6 +65,7 @@ ARDUINO_VAR_PATH = /usr/share/arduino/hardware/mighty-1284p/variants
 CPPFLAGS += -DNUM_MOTORS=10 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=10
 F_CPU = 12000000
 OBJDIR = build/atmega1284p-12MHz
+EXTRA = -12MHz
 
 else
 ifeq (${TARGET}, atmega1280)
@@ -72,11 +73,11 @@ BOARD_TAG = mega
 CPPFLAGS += -DNUM_MOTORS=8 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=8
 
 else
-#ifeq (${TARGET}, atmega2560)
-#BOARD_TAG = mega2560
-#CPPFLAGS += -DNUM_MOTORS=8 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=8
+ifeq (${TARGET}, atmega2560)
+BOARD_TAG = mega
+CPPFLAGS += -DNUM_MOTORS=8 -DFRAGMENTS_PER_MOTOR_BITS=4 -DBYTES_PER_FRAGMENT=16 -DSERIAL_SIZE_BITS=8
 
-#else
+else
 ifeq (${TARGET}, atmega1281)
 BOARD_TAG = 1281
 ARDUINO_VAR_PATH = /usr/share/arduino/hardware/MegaCore/variants
@@ -100,7 +101,7 @@ endif
 endif
 endif
 endif
-#endif
+endif
 endif
 endif
 endif
@@ -119,6 +120,7 @@ SPEED ?= $(call get,upload.speed)
 PROTOCOL ?= $(call get,upload.protocol)
 PINDIR ?= ${BOARDSDIR}/variants/${VARIANT}
 OBJDIR ?= build/${MCU}
+EXTRA ?=
 
 ALL_SOURCES = \
 	      arch/${TARGET_ARCH}/arch-firmware-defs.h \
@@ -134,7 +136,7 @@ SOURCES = $(filter %.cpp,${ALL_SOURCES})
 OTHER_SOURCES = $(filter-out %.cpp,${ALL_SOURCES})
 OBJS = $(patsubst %.cpp,${OBJDIR}/%.o,${SOURCES})
 
-all: ${OBJDIR}/${MCU}.hex
+all: ${OBJDIR}/${MCU}${EXTRA}.hex
 
 print:
 	echo ${BOARDSDIR} ${BOARD_TAG} ${OBJDIR}
@@ -147,7 +149,7 @@ upload: ${OBJDIR}/${MCU}.hex Makefile
 
 ${OBJDIR}/%.hex: ${OBJDIR}/%.elf ${OBJDIR}/%.sizeok Makefile
 	avr-objcopy -O ihex -R .eeprom $< $@
-${OBJDIR}/${MCU}.elf: ${OBJS} Makefile
+${OBJDIR}/${MCU}${EXTRA}.elf: ${OBJS} Makefile
 	avr-g++ -mmcu=${MCU} ${LDFLAGS} ${OBJS} ${LDADD} -o $@
 	avr-size --format=avr --mcu=${MCU} $@
 ${OBJDIR}/%.o: %.cpp ${OTHER_SOURCES}
