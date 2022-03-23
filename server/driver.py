@@ -589,6 +589,8 @@ class Machine: # {{{
 					self._send(id, 'return', None)
 				del self.gpio_waits[cmd['pin']]
 		elif cmd['type'] == 'homed':
+			for i in range(len(self.homed_pos)):
+				self.homed_pos[i] += cmd['position'][i]
 			call_queue.append((self._do_home, [True]))
 		elif cmd['type'] == 'disconnect':
 			self._broadcast(None, 'message', 'Machine disconnected. Reason: ' + ('unknown' if len(cmd['reason']) == 0 else cmd['reason']))
@@ -881,6 +883,7 @@ class Machine: # {{{
 			# If it is currently moving, doing the things below without pausing causes stall responses.
 			self.user_pause(True, False)[1](None)
 			self.user_sleep(False)
+			self.homed_pos = [-self.spaces[0].get_current_pos(m)[1] for m in range(len(self.spaces[0].motor))]
 			for l in self.limits:
 				l.clear()
 			gpio_motors = set()
@@ -981,7 +984,12 @@ class Machine: # {{{
 						#log('hit limit %s %s current %s' % (self.limits[0], self.limits[2], current))
 						# A limit was hit. Find out which one and start single moves if so needed.
 						for m in self.limits[0]:
+							# Complete recording of move until limit switch (was started when homing began).
+							self.homed_pos[m] += self.spaces[0].get_current_pos(m)[1]
+							# Set new position.
 							self.user_set_axis_pos(0, m, self.spaces[0].motor[m]['home_pos'])
+							# Start recording move away from limit switch (finished when HOMED is received).
+							self.homed_pos[m] -= self.spaces[0].get_current_pos(m)[1]
 							if m in current:
 								if len(current[m]['followers']) > 0:
 									self.home_order['single'] = current[m]['followers']
@@ -1143,7 +1151,7 @@ class Machine: # {{{
 			# Move within bounds.
 			target = {}
 			for i, a in enumerate(self.spaces[0].axis):
-				current = self.spaces[0].get_current_pos(i)
+				current = self.spaces[0].get_current_pos(i)[0]
 				offset = (0 if i != 2 else self.zoffset)
 				if current > a['max'] - offset:
 					target[i] = a['max'] - offset
@@ -1159,8 +1167,9 @@ class Machine: # {{{
 			self.home_phase = None
 			self.position_valid = True
 			if self.home_id is not None:
-				self._send(self.home_id, 'return', self.home_return)
-				self.home_return = None
+				orig_motor_pos = [m['home_pos'] - self.homed_pos[i] for i, m in enumerate(self.spaces[0].motor)]
+				orig_pos = self.motors2xyz(orig_motor_pos)
+				self._send(self.home_id, 'return', orig_pos)
 			if self.home_done_cb is not None:
 				call_queue.append((self.home_done_cb, []))
 				self.home_done_cb = None
@@ -1232,7 +1241,7 @@ class Machine: # {{{
 			# Record result
 			if good:
 				log('Warning: probe did not hit anything')
-			z = self.spaces[0].get_current_pos(2)
+			z = self.spaces[0].get_current_pos(2)[0]
 			p[2][y][x].append(z + self.zoffset)
 			if len(p[2][y][x]) >= self.num_probes:
 				p[2][y][x].sort()
@@ -1957,7 +1966,6 @@ class Machine: # {{{
 			return
 		self.home_phase = 'start'
 		self.home_id = id
-		self.home_return = None
 		self.home_speed = speed
 		self.home_done_cb = cb
 		self._do_home()
@@ -2312,7 +2320,7 @@ class Machine: # {{{
 			self._send(self.confirmer, 'return', False)
 		self.confirmer = id
 		self.confirm_id += 1
-		self.confirm_axes = [[s.get_current_pos(a) for a in range(len(s.axis))] for s in self.spaces]
+		self.confirm_axes = [[s.get_current_pos(a)[0] for a in range(len(s.axis))] for s in self.spaces]
 		self.confirm_message = message
 		self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
 		for c in self.confirm_waits:
@@ -2597,9 +2605,18 @@ class Machine: # {{{
 			log('request for invalid axis position %d %d' % (space, axis))
 			return float('nan')
 		if axis is None:
-			return [self.spaces[space].get_current_pos(a) for a in range(len(self.spaces[space].axis))]
+			return [self.spaces[space].get_current_pos(a)[0] for a in range(len(self.spaces[space].axis))]
 		else:
-			return self.spaces[space].get_current_pos(axis)
+			return self.spaces[space].get_current_pos(axis)[0]
+	# }}}
+	def get_motor_pos(self, space, motor = None): # {{{
+		if space >= len(self.spaces) or (motor is not None and motor >= len(self.spaces[space].motor)):
+			log('request for invalid motor position %d %d' % (space, motor))
+			return float('nan')
+		if motor is None:
+			return [self.spaces[space].get_current_pos(m)[1] for m in range(len(self.spaces[space].motor))]
+		else:
+			return self.spaces[space].get_current_pos(motor)[1]
 	# }}}
 	def user_set_axis_pos(self, space, axis, pos): # {{{
 		if space >= len(self.spaces) or (axis is not None and axis >= len(self.spaces[space].axis)):

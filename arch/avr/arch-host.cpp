@@ -226,7 +226,7 @@ bool hwpacket(int len) { // {{{
 		prepare_interrupt();
 		shmem->interrupt_ints[0] = s;
 		shmem->interrupt_ints[1] = m;
-		shmem->interrupt_float = pos;
+		shmem->interrupt_floats[0] = pos;
 		send_to_parent(CMD_LIMIT);
 		//debug("limit done");
 		return false;
@@ -357,6 +357,13 @@ bool hwpacket(int len) { // {{{
 		}
 		avr_write_ack("homed");
 		prepare_interrupt();
+		m0 = 0;
+		for (int s = 0; s < NUM_SPACES; ++s) {
+			for (int m = 0; m < spaces[s].num_motors; ++m)
+				shmem->interrupt_floats[m0 + m] = spaces[s].motor[m]->settings.current_pos;
+			m0 += spaces[s].num_motors;
+		}
+		shmem->interrupt_ints[0] = m0;
 		send_to_parent(CMD_HOMED);
 		return false;
 	} // }}}

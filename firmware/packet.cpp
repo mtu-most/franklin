@@ -58,6 +58,8 @@ void packet()
 		arch_set_speed(0);
 		homers = 0;
 		home_step_time = 0;
+		for (uint8_t m = 0; m < NUM_MOTORS; ++m)
+			motor[m].current_pos = 0;
 		reply[0] = CMD_READY;
 		reply[1] = 13;
 		*reinterpret_cast <uint32_t *>(&reply[2]) = PROTOCOL_VERSION;

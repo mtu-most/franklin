@@ -382,7 +382,7 @@ void run_file_next_command(int32_t start_time) {
 				settemp(tool, r.X[0]);
 				prepare_interrupt();
 				shmem->interrupt_ints[0] = tool;
-				shmem->interrupt_float = r.X[0];
+				shmem->interrupt_floats[0] = r.X[0];
 				send_to_parent(CMD_UPDATE_TEMP);
 				break;
 			}

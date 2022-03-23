@@ -197,6 +197,7 @@ void request(int req) {
 			}
 		}
 		shmem->floats[0] = spaces[shmem->ints[0]].axis[shmem->ints[1]]->current;
+		shmem->floats[1] = spaces[shmem->ints[0]].motor[shmem->ints[1]]->settings.current_pos;
 		//debug("getpos %d %d %f", shmem->ints[0], shmem->ints[1], shmem->floats[0]);
 		if (shmem->ints[0] == 0) {
 			if (shmem->ints[1] == 2)

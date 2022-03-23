@@ -345,6 +345,7 @@ void Space::save_motor(int m) { // {{{
 	shmem->floats[1] = motor[m]->home_pos;
 	shmem->floats[2] = motor[m]->limit_v;
 	shmem->floats[3] = motor[m]->limit_a;
+	shmem->floats[4] = motor[m]->settings.current_pos;
 	current_int = 0;
 	current_float = 0;
 	current_string = 0;

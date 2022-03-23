@@ -292,7 +292,10 @@ static PyObject *getpos(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (!PyArg_ParseTuple(args, "ii", &shmem->ints[0], &shmem->ints[1]))
 		return NULL;
 	send_to_child(CMD_GETPOS);
-	return PyFloat_FromDouble(shmem->floats[0]);
+	PyObject *ret = PyTuple_New(2);
+	for (int i = 0; i < 2; ++i)
+		PyTuple_SET_ITEM(ret, i, PyFloat_FromDouble(shmem->floats[i]));
+	return ret;
 }
 
 static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
@@ -477,7 +480,7 @@ static PyObject *read_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 		return NULL;
 	send_to_child(CMD_READ_SPACE_MOTOR);
 	PyObject *module_data = read_module_data();
-	return Py_BuildValue("{si,si,si,si,si,si,sd,sd,sd,sd,sO}",
+	return Py_BuildValue("{si,si,si,si,si,si,sd,sd,sd,sd,sd,sO}",
 			"step_pin", shmem->ints[2],
 			"dir_pin", shmem->ints[3],
 			"enable_pin", shmem->ints[4],
@@ -488,6 +491,7 @@ static PyObject *read_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 			"home_pos", shmem->floats[1],
 			"limit_v", shmem->floats[2],
 			"limit_a", shmem->floats[3],
+			"current_pos", shmem->floats[4],
 			"module", module_data);
 }
 
@@ -807,7 +811,7 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 	}
 	switch (c) {
 	case CMD_LIMIT:
-		ret = Py_BuildValue("{ss,si,si,sd}", "type", "limit", "space", shmem->interrupt_ints[0], "motor", shmem->interrupt_ints[1], "pos", shmem->interrupt_float);
+		ret = Py_BuildValue("{ss,si,si,sd}", "type", "limit", "space", shmem->interrupt_ints[0], "motor", shmem->interrupt_ints[1], "pos", shmem->interrupt_floats[0]);
 		break;
 	case CMD_FILE_DONE:
 		ret = Py_BuildValue("{ss}", "type", "file-done");
@@ -816,8 +820,15 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		ret = Py_BuildValue("{ss}", "type", "move-cb");
 		break;
 	case CMD_HOMED:
-		ret = Py_BuildValue("{ss}", "type", "homed");
+	{
+		int n = shmem->interrupt_ints[0];
+		PyObject *pos = PyTuple_New(n);
+		for (int i = 0; i < n; ++i)
+			PyTuple_SET_ITEM(pos, i, PyFloat_FromDouble(shmem->interrupt_floats[i]));
+		ret = Py_BuildValue("{ss,sO}", "type", "homed", "position", pos);
+		Py_DECREF(pos);
 		break;
+	}
 	case CMD_TIMEOUT:
 		ret = Py_BuildValue("{ss}", "type", "timeout");
 		break;
@@ -835,7 +846,7 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		ret = Py_BuildValue("{ss,si,si}", "type", "update-pin", "pin", shmem->interrupt_ints[0], "state", shmem->interrupt_ints[1]);
 		break;
 	case CMD_UPDATE_TEMP:
-		ret = Py_BuildValue("{ss,si,sd}", "type", "update-temp", "temp", shmem->interrupt_ints[0], "value", shmem->interrupt_float);
+		ret = Py_BuildValue("{ss,si,sd}", "type", "update-temp", "temp", shmem->interrupt_ints[0], "value", shmem->interrupt_floats[0]);
 		break;
 	case CMD_CONFIRM:
 		ret = Py_BuildValue("{ss,si,ss#}", "type", "confirm", "tool-changed", shmem->interrupt_ints[0], "message", shmem->interrupt_str, shmem->interrupt_ints[1]);

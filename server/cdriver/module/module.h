@@ -167,7 +167,7 @@ struct SharedMemory {
 	volatile double floats[500];
 	volatile MoveCommand move;
 	volatile int interrupt_ints[2];
-	volatile float interrupt_float;
+	volatile float interrupt_floats[500];
 	volatile char interrupt_str[PATH_MAX + 1];
 };
 
