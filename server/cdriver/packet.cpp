@@ -404,6 +404,19 @@ void delayed_reply() {
 	}
 }
 
+void waittemp(int which, double mintemp, double maxtemp) {
+	if (which >= num_temps)
+	{
+		debug("Waiting for invalid temp %d", which);
+		//abort();
+		return;
+	}
+	temps[which].min_alarm = mintemp;
+	temps[which].max_alarm = maxtemp;
+	temps[which].adcmin_alarm = temps[which].toadc(temps[which].min_alarm, -1);
+	temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm, MAXINT);
+}
+
 void settemp(int which, double target) {
 	if (which < 0 || which >= num_temps)
 	{
@@ -444,19 +457,8 @@ void settemp(int which, double target) {
 		int lhf = temps[which].adclimit[1][1];
 		arch_setup_temp(which, temps[which].thermistor_pin.pin, true, temps[which].power_pin[0].valid() ? temps[which].power_pin[0].pin : ~0, temps[which].power_pin[0].inverted(), temps[which].adctarget[0], llh, lhh, temps[which].power_pin[1].valid() ? temps[which].power_pin[1].pin : ~0, temps[which].power_pin[1].inverted(), temps[which].adctarget[1], llf, lhf, temps[which].hold_time);
 	}
-}
-
-void waittemp(int which, double mintemp, double maxtemp) {
-	if (which >= num_temps)
-	{
-		debug("Waiting for invalid temp %d", which);
-		//abort();
-		return;
-	}
-	temps[which].min_alarm = mintemp;
-	temps[which].max_alarm = maxtemp;
-	temps[which].adcmin_alarm = temps[which].toadc(temps[which].min_alarm, -1);
-	temps[which].adcmax_alarm = temps[which].toadc(temps[which].max_alarm, MAXINT);
+	if (!std::isnan(temps[which].min_alarm))
+		waittemp(which, temps[which].target[0], temps[which].max_alarm);
 }
 
 void setpos(int which, int t, double f, bool reset) {

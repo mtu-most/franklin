@@ -191,8 +191,6 @@ void reset_pos(Space *s) { // {{{
 	double xyz[s->num_axes];
 	for (int m = 0; m < s->num_motors; ++m)
 		motors[m] = s->motor[m]->settings.current_pos;
-	// Avoid duplicate adjustments.
-	settings.adjust = 0;
 	s->motors2xyz(motors, xyz);
 	double len2 = 0;
 	for (int a = 0; a < s->num_axes; ++a) {
@@ -205,12 +203,30 @@ void reset_pos(Space *s) { // {{{
 		}
 	}
 	if (computing_move) {
-		if (s->id == 0) {
+		int dt = int(sqrt(len2) / adjust_speed * 1e6);
+		int remaining = settings.adjust_time * settings.adjust;
+		if (dt > remaining) {
+			// Apply current adjustment to other spaces and restart adjustment.
+			for (int other = 0; other < 2; ++other) {
+				if (&spaces[other] == s)
+					continue;
+				for (int a = 0; a < spaces[other].num_axes; ++a)
+					spaces[other].axis[a]->settings.adjust *= settings.adjust;
+			}
 			settings.adjust_start_time = settings.hwtime;
-			settings.adjust_time = int(sqrt(len2) / adjust_speed * 1e6);
+			settings.adjust_time = dt;
 			settings.adjust = 1;
 		}
-		//debug("adjusting move time=%f x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time / 1e6, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
+		else {
+			// Otherwise use existing timing; compensate for completed adjustement.
+			for (int a = 0; a < s->num_axes; ++a)
+				s->axis[a]->settings.adjust /= settings.adjust;
+		}
+		debug("adjusting move time=%f x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time / 1e6, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
+	}
+	else {
+		// No adjustment when not moving.
+		settings.adjust = 0;
 	}
 	discard_finals();
 } // }}}
@@ -275,7 +291,7 @@ void Space::load_motor(int m) { // {{{
 	if (!std::isnan(motor[m]->home_pos)) {
 		// Axes with a limit switch.
 		//debug("busy %d old pos %f pos %f old steps %f steps %f", motors_busy, old_home_pos, motor[m]->home_pos, old_steps_per_unit, motor[m]->steps_per_unit);
-		if (motors_busy && (old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !std::isnan(old_home_pos)) {
+		if ((old_home_pos != motor[m]->home_pos || old_steps_per_unit != motor[m]->steps_per_unit) && !std::isnan(old_home_pos)) {
 			double diff = motor[m]->home_pos - old_home_pos * old_steps_per_unit / motor[m]->steps_per_unit;
 			double factor = old_steps_per_unit / motor[m]->steps_per_unit;
 			if (!std::isnan(diff)) {

@@ -489,7 +489,8 @@ static void do_steps(double old_factor) { // {{{
 				int value = (hwsign < 0 ? 0x80 : 0) | head | ((diff & 0x3f) >> count);
 				mdebug("sending %d %d steps %d*%x (coded to %x) at %d", s, m, hwsign, diff, value, current_fragment_pos);
 				DATA_SET(s, m, value != 0x80 ? value : 0);	// Send 0 instead of -0, because 0x80 is special.
-				int sent = diff & ~((1 << count) - 1);
+				// When count == 7, an extra bit is shifted out so the computation fails. There's no mantissa in that case, so the replacement is a constant.
+				int sent = diff >= 0x1c0 ? 0x1c0 : diff & ~((1 << count) - 1);
 				mtr.settings.hw_pos += sign * sent;
 			}
 			//debug("new cp: %d %d %f %d", s, m, target, current_fragment_pos);

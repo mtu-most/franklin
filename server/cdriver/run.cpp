@@ -398,6 +398,7 @@ void run_file_next_command(int32_t start_time) {
 							waittemp(i, temps[i].min_alarm, temps[i].max_alarm);
 						}
 					}
+					moving = true;
 					break;
 				}
 				if (tool < 0 || tool >= num_temps) {
