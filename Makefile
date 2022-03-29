@@ -89,8 +89,8 @@ clean: $(addprefix clean-,$(MODULES))
 	rm -f $(addprefix module-,$(MODULES))
 
 rundeps = python3-serial, avrdude, adduser, lsb-base, apache2
-franklindeps = debhelper, python3-all, dh-python, gcc-avr, arduino-mighty-1284p, arduino-mk, closure-linter, python3-all-dev
-depdeps = doxygen, doxypy, libjs-jquery, graphviz, openssl
+franklindeps = debhelper, python3-all, dh-python, gcc-avr, arduino-mighty-1284p, arduino-mk, python3-all-dev
+depdeps = doxygen, doxypy | python3-doxypy, libjs-jquery, graphviz, openssl
 basedeps:
 	deps=`dpkg-checkbuilddeps 2>&1 -d 'devscripts, git, wget, sudo, fakeroot, ${rundeps}, ${franklindeps}, ${depdeps}'`; deps="$${deps##*:}"; if [ "$${deps}" ]; then echo "Installing $$deps"; sudo apt install $$deps ; fi
 	dpkg-checkbuilddeps
