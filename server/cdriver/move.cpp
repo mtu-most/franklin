@@ -279,15 +279,15 @@ void next_move(int32_t start_time) { // {{{
 		check_a += da * da;
 	}
 	if (check_x > 1e-2) {
-		warning("Warning: %" LONGFMT " final x %f,%f,%f != start x %f,%f,%f", settings.gcode_line, final_x[0], final_x[1], final_x[2], na > 0 ? spaces[0].axis[0]->settings.source + settings.unitg[0] * settings.x0g + settings.unith[0] * settings.x0h : NAN, na > 1 ? spaces[0].axis[1]->settings.source + settings.unitg[1] * settings.x0g + settings.unith[1] * settings.x0h : NAN, na > 2 ? spaces[0].axis[2]->settings.source + settings.unitg[2] * settings.x0g + settings.unith[2] * settings.x0h : NAN);
+		warning("Warning: %" LONGFMT " (%" LONGFMT ") final x %f,%f,%f != start x %f,%f,%f", settings.gcode_line, settings.run_file_current, final_x[0], final_x[1], final_x[2], na > 0 ? spaces[0].axis[0]->settings.source + settings.unitg[0] * settings.x0g + settings.unith[0] * settings.x0h : NAN, na > 1 ? spaces[0].axis[1]->settings.source + settings.unitg[1] * settings.x0g + settings.unith[1] * settings.x0h : NAN, na > 2 ? spaces[0].axis[2]->settings.source + settings.unitg[2] * settings.x0g + settings.unith[2] * settings.x0h : NAN);
 		debug_abort();
 	}
 	if (check_v > 1e-2) {
-		warning("Warning: %" LONGFMT " final v %f,%f,%f != start v %f,%f,%f", settings.gcode_line, final_v[0], final_v[1], final_v[2], na > 0 ? settings.v0g * settings.unitg[0] + settings.v0h * settings.unith[0] : NAN, na > 1 ? settings.v0g * settings.unitg[1] + settings.v0h * settings.unith[1] : NAN, na > 2 ? settings.v0g * settings.unitg[2] + settings.v0h * settings.unith[2] : NAN);
+		warning("Warning: %" LONGFMT " (%" LONGFMT ") final v %f,%f,%f != start v %f,%f,%f", settings.gcode_line, settings.run_file_current, final_v[0], final_v[1], final_v[2], na > 0 ? settings.v0g * settings.unitg[0] + settings.v0h * settings.unith[0] : NAN, na > 1 ? settings.v0g * settings.unitg[1] + settings.v0h * settings.unith[1] : NAN, na > 2 ? settings.v0g * settings.unitg[2] + settings.v0h * settings.unith[2] : NAN);
 		debug_abort();
 	}
 	if (check_a > 1e2) {
-		warning("Warning: %" LONGFMT " final a %f,%f,%f != start a %f,%f,%f", settings.gcode_line, final_a[0], final_a[1], final_a[2], na > 0 ? settings.a0g * settings.unitg[0] + settings.a0h * settings.unith[0] : NAN, na > 1 ? settings.a0g * settings.unitg[1] + settings.a0h * settings.unith[1] : NAN, na > 2 ? settings.a0g * settings.unitg[2] + settings.a0h * settings.unith[2] : NAN);
+		warning("Warning: %" LONGFMT " (%" LONGFMT ") final a %f,%f,%f != start a %f,%f,%f", settings.gcode_line, settings.run_file_current, final_a[0], final_a[1], final_a[2], na > 0 ? settings.a0g * settings.unitg[0] + settings.a0h * settings.unith[0] : NAN, na > 1 ? settings.a0g * settings.unitg[1] + settings.a0h * settings.unith[1] : NAN, na > 2 ? settings.a0g * settings.unitg[2] + settings.a0h * settings.unith[2] : NAN);
 		debug_abort();
 	}
 	if (queue[q].tool >= 0 && queue[q].tool < spaces[1].num_axes && !std::isnan(queue[q].e)) {
