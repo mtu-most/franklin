@@ -131,13 +131,10 @@ bool run_file(char const *name, char const *probename, bool start, double sina, 
 	run_file_wait = start ? 0 : 1;
 	run_file_timer.it_interval.tv_sec = 0;
 	run_file_timer.it_interval.tv_nsec = 0;
-	run_file_refx = targetx;
-	run_file_refy = targety;
 	probe_adjust = 0;
 	pausing = false;
 	parkwaiting = false;
 	resume_pending = false;
-	//debug("run target %f %f", targetx, targety);
 	run_file_sina = sina;
 	run_file_cosa = cosa;
 	run_file_next_command(settings.hwtime);
@@ -253,9 +250,9 @@ void run_file_next_command(int32_t start_time) {
 				queue[settings.queue_end].probe = false;
 				queue[settings.queue_end].a0 = (r.type == RUN_POLY2 ? r.Jg : 0);
 				queue[settings.queue_end].v0 = r.v0;
-				double x = r.X[0] * run_file_cosa - r.X[1] * run_file_sina + run_file_refx;
-				double y = r.X[1] * run_file_cosa + r.X[0] * run_file_sina + run_file_refy;
-				double z = r.X[2] + zoffset;
+				double x = r.X[0] * run_file_cosa - r.X[1] * run_file_sina;
+				double y = r.X[1] * run_file_cosa + r.X[0] * run_file_sina;
+				double z = r.X[2];
 				//debug("line %d: %f %f %f", settings.run_file_current, x, y, z);
 				queue[settings.queue_end].target[0] = x;
 				queue[settings.queue_end].target[1] = y;
@@ -324,9 +321,9 @@ void run_file_next_command(int32_t start_time) {
 				move.pattern_size = 0;
 				move.v0 = r.v0;
 				move.tool = r.tool;
-				move.target[0] = r.X[0];
-				move.target[1] = r.X[1];
-				move.target[2] = handle_probe(r.X[0], r.X[1], r.X[2] + zoffset);
+				move.target[0] = r.X[0] * run_file_cosa - r.X[1] * run_file_sina;
+				move.target[1] = r.X[1] * run_file_cosa + r.X[0] * run_file_sina;
+				move.target[2] = handle_probe(r.X[0], r.X[1], r.X[2]);
 				for (int i = 0; i < 3; ++i) {
 					move.target[3 + i] = pending_abc[i];
 					pending_abc[i] = NAN;

@@ -191,6 +191,7 @@ struct Axis {
 	double park;		// Park position; not used by the firmware, but stored for use by the host.
 	uint8_t park_order;
 	double min_pos, max_pos;
+	double offset;	// Live adjustable offset.
 	double current;
 	double target;	// Target position for this tick.
 	double last_target; // Used when retargeting to a position with NaN components.
@@ -315,7 +316,7 @@ EXTERN uint16_t timeout;
 EXTERN int bed_id, fan_id, spindle_id;
 //EXTERN double room_T;	//[°C]
 EXTERN double feedrate;		// Multiplication factor for f values, used at start of move.
-EXTERN double targetx, targety, targetangle, zoffset;	// Offset for axis 2 of space 0.
+EXTERN double targetangle;
 // Other variables.
 EXTERN Serial_t *serialdev;
 EXTERN unsigned char command[FULL_COMMAND_SIZE];
@@ -447,9 +448,6 @@ EXTERN off_t run_file_first_string;
 EXTERN int64_t run_file_num_records;
 EXTERN int run_file_wait;
 EXTERN struct itimerspec run_file_timer;
-EXTERN double run_file_refx;
-EXTERN double run_file_refy;
-EXTERN double run_file_refz;
 EXTERN double run_file_sina;
 EXTERN double run_file_cosa;
 

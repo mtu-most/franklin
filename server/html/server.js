@@ -146,10 +146,7 @@ function _setup_updater() {
 					max_a: 0,
 					max_J: 0,
 					adjust_speed: 1,
-					targetx: 0,
-					targety: 0,
 					targetangle: 0,
-					zoffset: 0,
 					store_adc: false,
 					temp_scale_min: 0,
 					temp_scale_max: 0,
@@ -273,7 +270,8 @@ function _setup_updater() {
 					park_order: values[2][a][2],
 					min: values[2][a][3],
 					max: values[2][a][4],
-					home_pos2: values[2][a][5]
+					offset: values[2][a][5],
+					home_pos2: values[2][a][6]
 				});
 			}
 			for (var m = 0; m < machines[machine].spaces[index].num_motors; ++m) {

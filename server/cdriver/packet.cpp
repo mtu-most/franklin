@@ -67,7 +67,6 @@ void request(int req) {
 		//debug("moving to (%f,%f,%f), tool %d e %f v %f", shmem->move.target[0], shmem->move.target[1], shmem->move.target[2], shmem->move.tool, shmem->move.e, shmem->move.v0);
 		last_active = millis();
 		initialized = true;
-		shmem->move.target[2] += zoffset;
 		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move));
 		if (!computing_move)
 			cb_pending = true;
@@ -199,10 +198,6 @@ void request(int req) {
 		shmem->floats[0] = spaces[shmem->ints[0]].axis[shmem->ints[1]]->current;
 		shmem->floats[1] = spaces[shmem->ints[0]].motor[shmem->ints[1]]->settings.current_pos;
 		//debug("getpos %d %d %f", shmem->ints[0], shmem->ints[1], shmem->floats[0]);
-		if (shmem->ints[0] == 0) {
-			if (shmem->ints[1] == 2)
-				shmem->floats[0] -= zoffset;
-		}
 		break;
 	CASE(CMD_READ_GLOBALS)
 		globals_save();

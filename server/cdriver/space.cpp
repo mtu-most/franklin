@@ -108,12 +108,12 @@ void Space::setup_nums(int na, int nm) { // {{{
 void Space::xyz2motors() { // {{{
 	double orig_target[num_axes];
 	// Apply adjustment to targets.
-	if (settings.adjust > 0) {
-		for (int a = 0; a < num_axes; ++a) {
-			orig_target[a] = axis[a]->target;
-			//debug("adjusting %d %d target %f with %f to %f factor %f", id, a, axis[a]->target, axis[a]->settings.adjust, axis[a]->target - axis[a]->settings.adjust * settings.adjust, settings.adjust);
-			axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
-		}
+	for (int a = 0; a < num_axes; ++a) {
+		orig_target[a] = axis[a]->target;
+		// Apply offset.
+		axis[a]->target += axis[a]->offset;
+		//debug("adjusting %d %d target %f with %f to %f factor %f", id, a, axis[a]->target, axis[a]->settings.adjust, axis[a]->target - axis[a]->settings.adjust * settings.adjust, settings.adjust);
+		axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
 	}
 	// Set default values.
 	for (int a = 0; a < num_axes; ++a)
@@ -121,10 +121,8 @@ void Space::xyz2motors() { // {{{
 	// Override with type computations.
 	space_types[type].xyz2motors(this);
 	// Restore targets.
-	if (settings.adjust > 0) {
-		for (int a = 0; a < num_axes; ++a)
-			axis[a]->target = orig_target[a];
-	}
+	for (int a = 0; a < num_axes; ++a)
+		axis[a]->target = orig_target[a];
 } // }}}
 
 void Space::motors2xyz(const double *motors, double *xyz) { // {{{
@@ -133,6 +131,8 @@ void Space::motors2xyz(const double *motors, double *xyz) { // {{{
 		xyz[a] = motors[a];
 	// Override with type computations.
 	space_types[type].motors2xyz(this, motors, xyz);
+	for (int a = 0; a < num_axes; ++a)
+		xyz[a] -= axis[a]->offset;
 } // }}}
 
 void Space::load_info() { // {{{
@@ -196,6 +196,7 @@ void reset_pos(Space *s) { // {{{
 	for (int a = 0; a < s->num_axes; ++a) {
 		s->axis[a]->settings.adjust = s->axis[a]->current - xyz[a];
 		s->axis[a]->current = xyz[a];
+		//debug("current pos for %d %d is now %f with offset %f", s->id, a, xyz[a], s->axis[a]->offset);
 		len2 += s->axis[a]->settings.adjust * s->axis[a]->settings.adjust;
 		if (!computing_move) {
 			s->axis[a]->settings.source = xyz[a];
@@ -237,6 +238,7 @@ void Space::load_axis(int a) { // {{{
 	axis[a]->park = shmem->floats[0];
 	axis[a]->min_pos = shmem->floats[1];
 	axis[a]->max_pos = shmem->floats[2];
+	axis[a]->offset = shmem->floats[3];
 	current_int = 0;
 	current_float = 0;
 	current_string = 0;
@@ -244,6 +246,7 @@ void Space::load_axis(int a) { // {{{
 	if (current_int != shmem->ints[99] || current_float != shmem->ints[98] || current_string != shmem->ints[97]) {
 		debug("Warning: load_axis (for type %d, axis %d) did not use correct number of parameters: ints/floats/strings given = %d/%d/%d, used = %d/%d/%d", type, a, shmem->ints[99], shmem->ints[98], shmem->ints[97], current_int, current_float, current_string);
 	}
+	reset_pos(this);
 } // }}}
 
 void Space::load_motor(int m) { // {{{
@@ -341,6 +344,7 @@ void Space::save_axis(int a) { // {{{
 	shmem->floats[0] = axis[a]->park;
 	shmem->floats[1] = axis[a]->min_pos;
 	shmem->floats[2] = axis[a]->max_pos;
+	shmem->floats[3] = axis[a]->offset;
 	current_int = 0;
 	current_float = 0;
 	current_string = 0;

@@ -412,10 +412,7 @@ class Machine: # {{{
 		self.movecb = []
 		self.tempcb = []
 		self.alarms = set()
-		self.targetx = 0.
-		self.targety = 0.
 		self.targetangle = 0.
-		self.zoffset = 0.
 		self.store_adc = False
 		self.temp_scale_min = 0
 		self.temp_scale_max = 250
@@ -456,10 +453,6 @@ class Machine: # {{{
 		self.max_J = 10000
 		self.adjust_speed = 1
 		self.current_extruder = 0
-		self.targetx = 0.
-		self.targety = 0.
-		self.targetangle = 0.
-		self.zoffset = 0.
 		# Other things don't need to be initialized, because num_* == 0.
 		# Fill job queue.
 		self.jobqueue = {}
@@ -673,7 +666,7 @@ class Machine: # {{{
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
 		data = {'num_temps': nt, 'num_gpios': ng}
-		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'timeout', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'current_extruder', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc')})
+		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'timeout', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'current_extruder', 'targetangle', 'store_adc')})
 		#log('writing globals: %s' % repr(data))
 		cdriver.write_globals(data)
 		self._read_globals(update = True)
@@ -704,7 +697,7 @@ class Machine: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		attrnames = ('name', 'profile', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'temp_scale_min', 'temp_scale_max', 'probemap', 'connected')
+		attrnames = ('name', 'profile', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'targetangle', 'store_adc', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'temp_scale_min', 'temp_scale_max', 'probemap', 'connected')
 		attrs = {n: getattr(self, n) for n in attrnames}
 		attrs['num_temps'] = len(self.temps)
 		attrs['num_gpios'] = len(self.gpios)
@@ -1139,8 +1132,7 @@ class Machine: # {{{
 			target = {}
 			for i, a in enumerate(self.spaces[0].axis):
 				if not math.isnan(a['home_pos2']):
-					offset = (0 if i != 2 else self.zoffset)
-					target[i] = a['home_pos2'] - offset
+					target[i] = a['home_pos2'] - a['offset']
 			self.home_phase = 'home2'
 			if len(target) > 0:
 				self.movecb.append(self.home_cb)
@@ -1152,11 +1144,10 @@ class Machine: # {{{
 			target = {}
 			for i, a in enumerate(self.spaces[0].axis):
 				current = self.spaces[0].get_current_pos(i)[0]
-				offset = (0 if i != 2 else self.zoffset)
-				if current > a['max'] - offset:
-					target[i] = a['max'] - offset
-				elif current < a['min'] - offset:
-					target[i] = a['min'] - offset
+				if current > a['max'] - a['offset']:
+					target[i] = a['max'] - a['offset']
+				elif current < a['min'] - a['offset']:
+					target[i] = a['min'] - a['offset']
 			self.home_phase = 'finish'
 			if len(target) > 0:
 				self.movecb.append(self.home_cb)
@@ -1180,7 +1171,7 @@ class Machine: # {{{
 		if good is None:
 			return
 		pos = self.get_axis_pos(0)
-		cdriver.adjust_probe(pos[0], pos[1], pos[2] + self.zoffset)
+		cdriver.adjust_probe(*(pos[a] + self.spaces[0].axis[a].offset for a in range(3)))
 		self.probe_cb = lambda good: self.user_request_confirmation("Continue?")[1](False) if good is not None else None
 		self.movecb.append(self.probe_cb)
 		self.user_line({2: self.probe_safe_dist}, relative = True)[1](None)
@@ -1242,7 +1233,7 @@ class Machine: # {{{
 			if good:
 				log('Warning: probe did not hit anything')
 			z = self.spaces[0].get_current_pos(2)[0]
-			p[2][y][x].append(z + self.zoffset)
+			p[2][y][x].append(z + self.spaces[0].axis[2].offset)	# XXX check if x, y need offset.
 			if len(p[2][y][x]) >= self.num_probes:
 				p[2][y][x].sort()
 				trash = self.num_probes // 3
@@ -1464,7 +1455,7 @@ class Machine: # {{{
 					else:
 						return 'follower %d' % i
 				for i in range(len(self.axis), num_axes):
-					self.axis.append({'name': nm(i), 'park': float('nan'), 'park_order': 0, 'min': float('nan'), 'max': float('nan'), 'home_pos2': float('nan')})
+					self.axis.append({'name': nm(i), 'park': float('nan'), 'park_order': 0, 'min': float('nan'), 'max': float('nan'), 'offset': 0., 'home_pos2': float('nan')})
 					if old_type == self.type:
 						self.axis[i]['module'] = {item['name']: item['default'] for item in typeinfo[self.type]['axis']}
 			else:
@@ -1509,7 +1500,7 @@ class Machine: # {{{
 			data['module'] = self.build_module_data(self.module, typeinfo[self.type]['space'])
 			cdriver.write_space_info(self.id, data)
 		def write_axis(self, axis):
-			data = {'park_order': 0, 'park': float('nan'), 'min': float('-inf'), 'max': float('inf')}
+			data = {'park_order': 0, 'park': float('nan'), 'min': float('-inf'), 'max': float('inf'), 'offset': 0.}
 			if self.id == 0:
 				for k in data.keys():
 					data[k] = self.axis[axis][k]
@@ -1540,7 +1531,7 @@ class Machine: # {{{
 		def get_current_pos(self, axis):
 			#log('getting current pos %d %d' % (self.id, axis))
 			if not self.machine.connected:
-				return float('nan')
+				return (float('nan'), float('nan'))
 			return cdriver.getpos(self.id, axis)
 		def motor_name(self, i):
 			if i < len(typeinfo[self.type]['name']):
@@ -1551,7 +1542,7 @@ class Machine: # {{{
 				return self.axis[i]['name']
 			return 'motor %d' % i
 		def export(self):
-			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max'], a['home_pos2']] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['steps_per_unit'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order'], m['unit']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.machine.multipliers]
+			std = [self.name, self.type, [[a['name'], a['park'], a['park_order'], a['min'], a['max'], a['offset'], a['home_pos2']] for a in self.axis], [[self.motor_name(i), m['step_pin'], m['dir_pin'], m['enable_pin'], m['limit_min_pin'], m['limit_max_pin'], m['steps_per_unit'], m['home_pos'], m['limit_v'], m['limit_a'], m['home_order'], m['unit']] for i, m in enumerate(self.motor)], None if self.id != 1 else self.machine.multipliers]
 			for a, data in enumerate(std[2]):
 				data.append(self.axis[a]['module'])
 			for m, data in enumerate(std[3]):
@@ -1573,7 +1564,7 @@ class Machine: # {{{
 				ret += '[axis %d %d]\r\n' % (self.id, i)
 				ret += 'name = %s\r\n' % a['name']
 				if self.id == 0:
-					ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('park', 'home_pos2')])
+					ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('park', 'offset', 'home_pos2')])
 					ret += 'park_order = %d\r\n' % a['park_order']
 					if self.machine.home_phase is None:
 						ret += ''.join(['%s = %f\r\n' % (x, a[x]) for x in ('min', 'max')])
@@ -2005,7 +1996,7 @@ class Machine: # {{{
 			return
 		#log('not done parking: ' + repr((next_order)))
 		self.movecb.append(lambda done: self.user_park(cb, order = next_order + 1, aborted = not done)[1](id))
-		self.user_line([a['park'] - (0 if ai != 2 else self.zoffset) if a['park_order'] == next_order else float('nan') for ai, a in enumerate(self.spaces[0].axis)])[1](None)
+		self.user_line([a['park'] - a['offset'] if a['park_order'] == next_order else float('nan') for ai, a in enumerate(self.spaces[0].axis)])[1](None)
 	# }}}
 	@delayed
 	def benjamin_audio_play(self, id, name, motor = 2): # {{{
@@ -2136,7 +2127,7 @@ class Machine: # {{{
 				'space': {'type', 'num_axes'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time', 'P', 'I', 'D'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty', 'leader', 'ticks'},
-				'axis': {'name', 'park', 'park_order', 'min', 'max', 'home_pos2'},
+				'axis': {'name', 'park', 'park_order', 'min', 'max', 'offset', 'home_pos2'},
 				'motor': {'step_pin', 'dir_pin', 'enable_pin', 'limit_min_pin', 'limit_max_pin', 'steps_per_unit', 'home_pos', 'limit_v', 'limit_a', 'home_order', 'unit'},
 				'extruder': {'dx', 'dy', 'dz'},
 				'follower': {'leader'}
@@ -2555,7 +2546,7 @@ class Machine: # {{{
 	def get_globals(self): # {{{
 		#log('getting globals')
 		ret = {'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probemap', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed'):
+		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetangle', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probemap', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed'):
 			ret[key] = getattr(self, key)
 		return ret
 	# }}}
@@ -2583,16 +2574,17 @@ class Machine: # {{{
 		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'timeout'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
-		for key in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'feedrate', 'targetx', 'targety', 'targetangle', 'zoffset', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed'):
+		for key in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'feedrate', 'targetangle', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed'):
 			if key in ka:
 				setattr(self, key, float(ka.pop(key)))
 		self._write_globals(nt, ng, update = update)
-		#log('remaining ka: %s' % repr(ka))
+		if len(ka) > 0:
+			log('Warning: unrecognized keyword arguments ignored: %s' % repr(ka))
 		assert len(ka) == 0
 	# }}}
 	def user_set_globals(self, update = True, **ka): # {{{
 		real_ka = {}
-		for key in ('feedrate', 'targetx', 'targety', 'targetangle', 'zoffset'):
+		for key in ('feedrate', 'targetangle'):
 			if key in ka:
 				real_ka[key] = ka.pop(key)
 		assert len(ka) == 0
@@ -2635,7 +2627,7 @@ class Machine: # {{{
 		if space == 1:
 			ret['multiplier'] = self.multipliers[axis]
 		if space == 0:
-			for key in ('park', 'park_order', 'min', 'max', 'home_pos2'):
+			for key in ('park', 'park_order', 'min', 'max', 'offset', 'home_pos2'):
 				ret[key] = self.spaces[space].axis[axis][key]
 		ret['module'] = {'type': self.spaces[space].type}
 		ret['module'].update(self.spaces[space].axis[axis]['module'])
@@ -2687,7 +2679,7 @@ class Machine: # {{{
 		if 'name' in ka:
 			self.spaces[space].axis[axis]['name'] = ka.pop('name')
 		if space == 0:
-			for key in ('park', 'park_order', 'min', 'max', 'home_pos2'):
+			for key in ('park', 'park_order', 'min', 'max', 'offset', 'home_pos2'):
 				if key in ka:
 					self.spaces[space].axis[axis][key] = ka.pop(key)
 		if space == 1 and 'multiplier' in ka and axis < len(self.spaces[space].motor):

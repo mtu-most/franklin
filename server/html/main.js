@@ -430,11 +430,11 @@ function floatkey(event, element) { // {{{
 	// [['space', 1], 'num_axes']
 	// [['axis', [0, 1]], 'offset']
 	// [['motor', [0, 1]], ['follower', 'motor']]
-	if ((element.obj[0] === null && element.obj[1] != 'zoffset') || (element.obj[0] !== null && element.obj[0][0] != 'space' && element.obj[0][0] != 'axis' && element.obj[0][0] != 'motor') || element.obj[1] == 'current') {
+	if (element.obj[0] === null || (element.obj[0] !== null && element.obj[0][0] != 'space' && element.obj[0][0] != 'axis' && element.obj[0][0] != 'motor') || element.obj[1] == 'current') {
 		finish();
 	}
 	else {
-		space = element.obj[1] == 'zoffset' ? 0 : typeof element.obj[0][1] == 'number' ? element.obj[0][1] : element.obj[0][1][0];
+		space = typeof element.obj[0][1] == 'number' ? element.obj[0][1] : element.obj[0][1][0];
 		element.ui.machine.call('get_axis_pos', [space], {}, function(pos) {
 			finish();
 			if (space == 0) {
@@ -526,6 +526,7 @@ function probe(ui) { // {{{
 		if (!(bbox[3] > one[3]))
 			bbox[3] = one[3];
 	}
+	// FIXME: target[xy] no longer exists.
 	ui.machine.call('probe', [[ui.machine.targetx, ui.machine.targety, bbox[0] - ui.machine.probe_offset, bbox[2] - ui.machine.probe_offset, bbox[1] - bbox[0] + 2 * ui.machine.probe_offset, bbox[3] - bbox[2] + 2 * ui.machine.probe_offset]], {});
 } // }}}
 
@@ -936,10 +937,7 @@ function globals_update(uuid, ui_configure, nums_changed) { // {{{
 	update_float(p, [null, 'max_a']);
 	update_float(p, [null, 'max_J']);
 	update_float(p, [null, 'adjust_speed']);
-	update_float(p, [null, 'targetx']);
-	update_float(p, [null, 'targety']);
 	update_float(p, [null, 'targetangle']);
-	update_float(p, [null, 'zoffset']);
 	update_checkbox(p, [null, 'store_adc']);
 	update_checkbox(p, [null, 'park_after_job']);
 	update_checkbox(p, [null, 'sleep_after_job']);
@@ -1086,6 +1084,7 @@ function space_update(uuid, index, nums_changed) { // {{{
 			update_float(p, [['axis', [index, a]], 'park_order']);
 			update_float(p, [['axis', [index, a]], 'min']);
 			update_float(p, [['axis', [index, a]], 'max']);
+			update_float(p, [['axis', [index, a]], 'offset']);
 			update_float(p, [['axis', [index, a]], 'home_pos2']);
 		}
 		if (index == 1)
@@ -1812,7 +1811,7 @@ function redraw_canvas(ui) { // {{{
 			var current_pos = null;
 			var center = null;
 			var normal = null;
-			c.translate(ui.machine.targetx, ui.machine.targety);
+			c.translate(ui.machine.spaces[0].axis[0].offset, ui.machine.spaces[0].axis[1].offset);
 			c.rotate(ui.machine.targetangle);
 			for (var i = 0; i < ui.tp_context[1].length; ++i) {
 				r = ui.tp_context[1][i];
@@ -1841,7 +1840,7 @@ function redraw_canvas(ui) { // {{{
 			// }}}
 
 			c.save(); // Draw bounding box and context at target position. {{{
-			c.translate(ui.machine.targetx, ui.machine.targety);
+			c.translate(ui.machine.spaces[0].axis[0].offset, ui.machine.spaces[0].axis[1].offset);
 			c.rotate(ui.machine.targetangle);
 
 			c.beginPath();
@@ -1890,15 +1889,11 @@ function redraw_canvas(ui) { // {{{
 	}
 
 	if (ui.machine.spaces[0].axis.length != 2) { // Draw Z {{{
-		var zaxis, zoffset;
-		if (ui.machine.spaces[0].axis.length >= 3) {
+		var zaxis;
+		if (ui.machine.spaces[0].axis.length >= 3)
 			zaxis = ui.machine.spaces[0].axis[2];
-			zoffset = ui.machine.zoffset;
-		}
-		else {
+		else
 			zaxis = ui.machine.spaces[0].axis[0];
-			zoffset = 0;
-		}
 		var zcanvasses = get_elements(ui, [null, 'zmap']);
 		for (canvas_nr = 0; canvas_nr < zcanvasses.length; ++canvas_nr) {
 			zcanvas = zcanvasses[canvas_nr];
@@ -1924,9 +1919,9 @@ function redraw_canvas(ui) { // {{{
 
 			// Draw current position.
 			zc.beginPath();
-			zc.moveTo(0, zaxis.current + zoffset);
-			zc.lineTo(-d, zaxis.current - d + zoffset);
-			zc.lineTo(-d, zaxis.current + d + zoffset);
+			zc.moveTo(0, zaxis.current + zaxis.offset);
+			zc.lineTo(-d, zaxis.current - d + zaxis.offset);
+			zc.lineTo(-d, zaxis.current + d + zaxis.offset);
 			zc.closePath();
 			zc.fillStyle = '#44f';
 			zc.fill();
@@ -1996,8 +1991,8 @@ function xydown(ui, e) { // {{{
 		});
 	}
 	else {
-		drag[0][1] = ui.machine.targetx;
-		drag[1][1] = ui.machine.targety;
+		drag[0][1] = ui.machine.spaces[0].axis[0].offset;
+		drag[1][1] = ui.machine.spaces[0].axis[1].offset;
 	}
 	return false;
 }
@@ -2014,7 +2009,11 @@ function xyup(ui, e) { // {{{
 	}
 	else if (e.buttons & 4) {
 		drag[3] += 1;
-		ui.machine.call('set_globals', [], {'targetx': pos[0], 'targety': pos[1]}, function() { drag[3] -= 1; });
+		ui.machine.call('set_axis', [0, 0], {'offset': pos[0]}, function() {
+			ui.machine.call('set_axis', [0, 1], {'offset': pos[1]}, function() {
+				drag[3] -= 1;
+			});
+		});
 	}
 	return false;
 }
@@ -2104,7 +2103,8 @@ function keypress(event) { // {{{
 		var target = [[-amount, 0], [0, amount], [amount, 0], [0, -amount]][event.keyCode - 37];
 		ui.machine.call('line', [target], {relative: true}, function() {
 			if (event.altKey) {
-				ui.machine.call('set_globals', [], {'targetx': ui.machine.targetx + target[0], 'targety': ui.machine.targety + target[1]});
+				ui.machine.call('set_axis', [0, 0], {'offset': ui.machine.spaces[0].axis[0].offset + target[0]});
+				ui.machine.call('set_axis', [0, 1], {'offset': ui.machine.spaces[0].axis[1].offset + target[1]});
 			}
 			else
 				update_canvas_and_spans(ui);
@@ -2127,8 +2127,8 @@ function keypress(event) { // {{{
 			[minx, maxy], [(minx + maxx) / 2, maxy], [maxx, maxy]][event.charCode - 48];
 		var posx = Math.cos(ui.machine.targetangle) * pos[0] - Math.sin(ui.machine.targetangle) * pos[1];
 		var posy = Math.cos(ui.machine.targetangle) * pos[1] + Math.sin(ui.machine.targetangle) * pos[0];
-		posx += ui.machine.targetx;
-		posy += ui.machine.targety;
+		posx += ui.machine.spaces[0].axis[0].offset;
+		posy += ui.machine.spaces[0].axis[1].offset;
 		ui.machine.call('line', [[posx, posy]], {}, function() { update_canvas_and_spans(ui); });
 		event.preventDefault();
 	}
@@ -2136,12 +2136,12 @@ function keypress(event) { // {{{
 
 function update_angle(ui, value) { // {{{
 	ui.machine.call('get_axis_pos', [0], {}, function(pos) {
-		pos[0] -= ui.machine.targetx;
-		pos[1] -= ui.machine.targety;
+		pos[0] -= ui.machine.spaces[0].axis[0].offset;
+		pos[1] -= ui.machine.spaces[0].axis[1].offset;
 		var posx = Math.cos(ui.machine.targetangle) * pos[0] + Math.sin(ui.machine.targetangle) * pos[1];
 		var posy = Math.cos(ui.machine.targetangle) * pos[1] - Math.sin(ui.machine.targetangle) * pos[0];
-		pos[0] = Math.cos(value) * posx - Math.sin(value) * posy + ui.machine.targetx;
-		pos[1] = Math.cos(value) * posy + Math.sin(value) * posx + ui.machine.targety;
+		pos[0] = Math.cos(value) * posx - Math.sin(value) * posy + ui.machine.spaces[0].axis[0].offset;
+		pos[1] = Math.cos(value) * posy + Math.sin(value) * posx + ui.machine.spaces[0].axis[1].offset;
 		set_value(ui, [null, 'targetangle'], value);
 		ui.machine.call('line', [[pos[0], pos[1]]], {}, function() {
 			update_canvas_and_spans(ui);

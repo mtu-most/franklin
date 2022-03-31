@@ -400,7 +400,7 @@ static double move_axes(Space *s) { // {{{
 	//*
 	for (int m = 0; m < s->num_motors; ++m) {
 		//if (s->id == 0 && m == 0)
-		//	debug("check move %d %d time %f target %f current %f", s->id, m, settings.hwtime / 1e6, s->motor[m]->settings.target_pos, s->motor[m]->settings.current_pos);
+		//debug("check move %d %d time %f target %f current %f", s->id, m, settings.hwtime / 1e6, s->motor[m]->target_pos, s->motor[m]->settings.current_pos);
 		double distance = std::fabs(s->motor[m]->target_pos - s->motor[m]->settings.current_pos);
 		Motor *limit_mtr;
 		if (single || s->id != 2)

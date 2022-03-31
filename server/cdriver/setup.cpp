@@ -133,9 +133,7 @@ void setup()
 	max_a = 10000;
 	max_J = 10000;
 	adjust_speed = 1;
-	targetx = 0;
-	targety = 0;
-	zoffset = 0;
+	targetangle = 0;
 	aborting = false;
 	computing_move = false;
 	stopping = 0;

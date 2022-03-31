@@ -215,7 +215,7 @@ function Id(ui, obj) { // {{{
 function Axis(ui, space, axis) {
 	if (space != 0 && axis === null)
 		return null;
-	var e = [Name(ui, 'axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['min', 1, 1], ['max', 1, 1], ['home_pos2', 1, 1]];
+	var e = [Name(ui, 'axis', [space, axis]), ['park', 1, 1], ['park_order', 0, 1], ['min', 1, 1], ['max', 1, 1], ['offset', 1, 1], ['home_pos2', 1, 1]];
 	for (var i = 1; i < e.length; ++i) {
 		var div = Create('div');
 		if (space == 0)
@@ -450,13 +450,14 @@ function Position(desc, pos, top) { // {{{
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
 	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
-		ui.machine.call('set_globals', [], {'targetx': ui.machine.spaces[0].axis[0].current, 'targety': ui.machine.spaces[0].axis[1].current});
+		ui.machine.call('set_axis', [[0, 0]], {'offset': ui.machine.spaces[0].axis[0].current});
+		ui.machine.call('set_axis', [[0, 1]], {'offset': ui.machine.spaces[0].axis[1].current});
 	});
 	b.type = 'button';
-	t.Add(make_tablerow(ui, 'Target:', [
-		Float(ui, [null, 'targetx'], 2, 1),
-		Float(ui, [null, 'targety'], 2, 1),
-		Float(ui, [null, 'zoffset'], 2, 1),
+	t.Add(make_tablerow(ui, 'Offset:', [
+		Float(ui, [['axis', [0, 0]], 'offset'], 2, 1),
+		Float(ui, [['axis', [0, 1]], 'offset'], 2, 1),
+		Float(ui, [['axis', [0, 2]], 'offset'], 2, 1),
 		b,
 		['Angle:', Float(ui, [null, 'targetangle'], 1, Math.PI / 180, '', function(v) { update_angle(ui, v); }), '°']
 	], ['', '', '', '', '', '']));

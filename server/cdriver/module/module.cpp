@@ -57,7 +57,6 @@ static PyObject *assert_empty_dict(PyObject *dict, char const *src) {
 		debug("Warning: dict for %s contained unused keys:", src);
 		print_dict(dict);
 	}
-	Py_DECREF(dict);
 	Py_RETURN_NONE;
 }
 
@@ -308,32 +307,33 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
 	max_J = shmem->floats[4];
-	return Py_BuildValue("{si,si,si,si,si,si,si,si,si,si,si,si,si,si,si,sd,sd,sd,sd,sd,sd,sd,sd,sd}",
+	return Py_BuildValue("{si,si,si : si,si,si,si,si,si : si,si,si,si,si,si : sd,sd,sd,sd,sd,sd,sd}",
+
 			"num_pins", shmem->ints[0],
 			"num_temps", shmem->ints[1],
 			"num_gpios", shmem->ints[2],
+
 			"led_pin", shmem->ints[3],
 			"stop_pin", shmem->ints[4],
 			"probe_pin", shmem->ints[5],
 			"spiss_pin", shmem->ints[6],
 			"pattern_step_pin", shmem->ints[7],
 			"pattern_dir_pin", shmem->ints[8],
+
 			"timeout", shmem->ints[9],
 			"bed_id", shmem->ints[10],
 			"fan_id", shmem->ints[11],
 			"spindle_id", shmem->ints[12],
 			"current_extruder", shmem->ints[13],
 			"store_adc", shmem->ints[14],
+
 			"feedrate", shmem->floats[0],
 			"max_deviation", shmem->floats[1],
 			"max_v", shmem->floats[2],
 			"max_a", shmem->floats[3],
 			"max_J", shmem->floats[4],
 			"adjust_speed", shmem->floats[5],
-			"targetx", shmem->floats[6],
-			"targety", shmem->floats[7],
-			"targetangle", shmem->floats[8],
-			"zoffset", shmem->floats[9]);
+			"targetangle", shmem->floats[6]);
 }
 
 static void set_int(int num, char const *name, PyObject *dict) {
@@ -349,8 +349,10 @@ static void set_int(int num, char const *name, PyObject *dict) {
 
 static void set_float(int num, char const *name, PyObject *dict) {
 	PyObject *value = PyMapping_GetItemString(dict, name);
-	if (!value)
+	if (!value) {
+		debug("not setting value for %s, which is not in the dict", name);
 		return;
+	}
 	PyMapping_DelItemString(dict, name);
 	shmem->floats[num] = PyFloat_AsDouble(value);
 	Py_DECREF(value);
@@ -394,10 +396,7 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_float(3, "max_a", dict);
 	set_float(4, "max_J", dict);
 	set_float(5, "adjust_speed", dict);
-	set_float(6, "targetx", dict);
-	set_float(7, "targety", dict);
-	set_float(8, "targetangle", dict);
-	set_float(9, "zoffset", dict);
+	set_float(6, "targetangle", dict);
 	send_to_child(CMD_WRITE_GLOBALS);
 	return assert_empty_dict(dict, "write_globals");
 }
@@ -465,11 +464,12 @@ static PyObject *read_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 		//for (int a = 0; a < num_extruders; ++a)
 		//	debug("extruder %d/%d: %.2f,%.2f,%.2f", a, num_extruders, extruder_data[a].offset[0], extruder_data[a].offset[1], extruder_data[a].offset[2]);
 	}
-	return Py_BuildValue("{si,sd,sd,sd,sO}",
+	return Py_BuildValue("{si,sd,sd,sd,sd,sO}",
 			"park_order", shmem->ints[2],
 			"park", shmem->floats[0],
 			"min", shmem->floats[1],
 			"max", shmem->floats[2],
+			"offset", shmem->floats[3],
 			"module", module_data);
 }
 
@@ -480,18 +480,22 @@ static PyObject *read_space_motor(PyObject *Py_UNUSED(self), PyObject *args) {
 		return NULL;
 	send_to_child(CMD_READ_SPACE_MOTOR);
 	PyObject *module_data = read_module_data();
-	return Py_BuildValue("{si,si,si,si,si,si,sd,sd,sd,sd,sd,sO}",
+	return Py_BuildValue("{si,si,si,si,si : si,sd,sd,sd,sd : sd : sO}",
+
 			"step_pin", shmem->ints[2],
 			"dir_pin", shmem->ints[3],
 			"enable_pin", shmem->ints[4],
 			"limit_min_pin", shmem->ints[5],
 			"limit_max_pin", shmem->ints[6],
+
 			"home_order", shmem->ints[7],
 			"steps_per_unit", shmem->floats[0],
 			"home_pos", shmem->floats[1],
 			"limit_v", shmem->floats[2],
 			"limit_a", shmem->floats[3],
+
 			"current_pos", shmem->floats[4],
+
 			"module", module_data);
 }
 
@@ -552,6 +556,7 @@ static PyObject *write_space_axis(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_float(0, "park", dict);
 	set_float(1, "min", dict);
 	set_float(2, "max", dict);
+	set_float(3, "offset", dict);
 	PyObject *module = get_object("module", dict);
 	write_module_data(module);
 	send_to_child(CMD_WRITE_SPACE_AXIS);
@@ -586,21 +591,25 @@ static PyObject *read_temp(PyObject *Py_UNUSED(self), PyObject *args) {
 	if (!PyArg_ParseTuple(args, "i", &shmem->ints[0]))
 		return NULL;
 	send_to_child(CMD_READ_TEMP);
-	return Py_BuildValue("{si,si,si,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd,sd}",
+	return Py_BuildValue("{si,si,si : sd,sd,sd,sd,sd : sd,sd,sd,sd,sd,sd : sd,sd,sd,sd}",
+
 			"heater_pin", shmem->ints[1],
 			"fan_pin", shmem->ints[2],
 			"thermistor_pin", shmem->ints[3],
+
 			"R0", shmem->floats[0],
 			"R1", shmem->floats[1],
 			"logRc", shmem->floats[2],
 			"Tc", shmem->floats[3],
 			"beta", shmem->floats[4],
+
 			"fan_temp", shmem->floats[5],
 			"fan_duty", shmem->floats[6],
 			"heater_limit_l", shmem->floats[7],
 			"heater_limit_h", shmem->floats[8],
 			"fan_limit_l", shmem->floats[9],
 			"fan_limit_h", shmem->floats[10],
+
 			"hold_time", shmem->floats[11],
 			"P", shmem->floats[12],
 			"I", shmem->floats[13],
@@ -811,7 +820,10 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 	}
 	switch (c) {
 	case CMD_LIMIT:
-		ret = Py_BuildValue("{ss,si,si,sd}", "type", "limit", "space", shmem->interrupt_ints[0], "motor", shmem->interrupt_ints[1], "pos", shmem->interrupt_floats[0]);
+		ret = Py_BuildValue("{ss,si,si,sd}",
+				"type", "limit",
+				"space", shmem->interrupt_ints[0],
+				"motor", shmem->interrupt_ints[1], "pos", shmem->interrupt_floats[0]);
 		break;
 	case CMD_FILE_DONE:
 		ret = Py_BuildValue("{ss}", "type", "file-done");
@@ -825,7 +837,9 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		PyObject *pos = PyTuple_New(n);
 		for (int i = 0; i < n; ++i)
 			PyTuple_SET_ITEM(pos, i, PyFloat_FromDouble(shmem->interrupt_floats[i]));
-		ret = Py_BuildValue("{ss,sO}", "type", "homed", "position", pos);
+		ret = Py_BuildValue("{ss,sO}",
+				"type", "homed",
+				"position", pos);
 		Py_DECREF(pos);
 		break;
 	}
@@ -833,23 +847,41 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		ret = Py_BuildValue("{ss}", "type", "timeout");
 		break;
 	case CMD_PINCHANGE:
-		ret = Py_BuildValue("{ss,si,si}", "type", "pinchange", "pin", shmem->interrupt_ints[0], "state", shmem->interrupt_ints[1]);
+		ret = Py_BuildValue("{ss,si,si}",
+				"type", "pinchange",
+				"pin", shmem->interrupt_ints[0],
+				"state", shmem->interrupt_ints[1]);
 		break;
 	case CMD_PINNAME:
 		//debug("name for pin %d: %x %s %d", shmem->interrupt_ints[0], shmem->interrupt_str[0], &shmem->interrupt_str[1], shmem->interrupt_ints[1]);
-		ret = Py_BuildValue("{ss,si,si,sy#}", "type", "pinname", "pin", shmem->interrupt_ints[0], "mode", shmem->interrupt_str[0], "name", &shmem->interrupt_str[1], shmem->interrupt_ints[1]);
+		ret = Py_BuildValue("{ss,si,si,sy#}",
+				"type", "pinname",
+				"pin", shmem->interrupt_ints[0],
+				"mode", shmem->interrupt_str[0],
+				"name", &shmem->interrupt_str[1], shmem->interrupt_ints[1]);
 		break;
 	case CMD_DISCONNECT:
-		ret = Py_BuildValue("{ss,ss}", "type", "disconnect", "reason", shmem->interrupt_str);
+		ret = Py_BuildValue("{ss,ss}",
+				"type", "disconnect",
+				"reason", shmem->interrupt_str);
 		break;
 	case CMD_UPDATE_PIN:
-		ret = Py_BuildValue("{ss,si,si}", "type", "update-pin", "pin", shmem->interrupt_ints[0], "state", shmem->interrupt_ints[1]);
+		ret = Py_BuildValue("{ss,si,si}",
+				"type", "update-pin",
+				"pin", shmem->interrupt_ints[0],
+				"state", shmem->interrupt_ints[1]);
 		break;
 	case CMD_UPDATE_TEMP:
-		ret = Py_BuildValue("{ss,si,sd}", "type", "update-temp", "temp", shmem->interrupt_ints[0], "value", shmem->interrupt_floats[0]);
+		ret = Py_BuildValue("{ss,si,sd}",
+				"type", "update-temp",
+				"temp", shmem->interrupt_ints[0],
+				"value", shmem->interrupt_floats[0]);
 		break;
 	case CMD_CONFIRM:
-		ret = Py_BuildValue("{ss,si,ss#}", "type", "confirm", "tool-changed", shmem->interrupt_ints[0], "message", shmem->interrupt_str, shmem->interrupt_ints[1]);
+		ret = Py_BuildValue("{ss,si,ss#}",
+				"type", "confirm",
+				"tool-changed", shmem->interrupt_ints[0],
+				"message", shmem->interrupt_str, shmem->interrupt_ints[1]);
 		break;
 	case CMD_PARKWAIT:
 		ret = Py_BuildValue("{ss}", "type", "park");
@@ -858,7 +890,9 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 		ret = Py_BuildValue("{ss}", "type", "connected");
 		break;
 	case CMD_TEMPCB:
-		ret = Py_BuildValue("{ss,si}", "type", "temp-cb", "temp", shmem->interrupt_ints[0]);
+		ret = Py_BuildValue("{ss,si}",
+				"type", "temp-cb",
+				"temp", shmem->interrupt_ints[0]);
 		break;
 	case CMD_MESSAGE:
 		ret = Py_BuildValue("{ss}", "message", shmem->interrupt_str[0]);
