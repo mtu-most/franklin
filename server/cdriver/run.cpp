@@ -42,73 +42,32 @@ struct String {
 
 static String *strings;
 
-static double probe_adjust;
-
 static int pattern_size;
 static uint8_t current_pattern[PATTERN_MAX];
 static double pending_abc[3], pending_abc_h[3];
 
-bool run_file(char const *name, char const *probename, bool start, double sina, double cosa) {
+bool run_file(char const *name, bool start, double sina, double cosa) {
 	rundebug("run file %d %f %f", start, sina, cosa);
 	abort_run_file();
 	if (name[0] == '\0')
 		return false;
 	run_file_name = name;
-	probe_file_name = probename;
 	settings.run_time = 0;
 	settings.run_file_current = 0;
-	int probe_fd = -1;
-	if (probename[0] != '\0') {
-		probe_fd = open(probe_file_name.c_str(), O_RDONLY);
-		if (probe_fd < 0) {
-			debug("Failed to open probe file '%s': %s", probe_file_name.c_str(), strerror(errno));
-			return false;
-		}
-		struct stat stat;
-		if (fstat(probe_fd, &stat) < 0) {
-			debug("Failed to stat probe file '%s': %s", probe_file_name.c_str(), strerror(errno));
-			close(probe_fd);
-			return false;
-		}
-		probe_file_size = stat.st_size;
-		if (probe_file_size < 0 || unsigned(probe_file_size) < sizeof(ProbeFile)) {
-			debug("Probe file too short");
-			close(probe_fd);
-			return false;
-		}
-	}
 	int fd = open(run_file_name.c_str(), O_RDONLY);
 	if (fd < 0) {
 		debug("Failed to open run file '%s': %s", run_file_name.c_str(), strerror(errno));
-		if (probename[0] != '\0')
-			close(probe_fd);
 		return false;
 	}
 	struct stat stat;
 	if (fstat(fd, &stat) < 0) {
 		debug("Failed to stat run file '%s': %s", run_file_name.c_str(), strerror(errno));
 		close(fd);
-		if (probename[0] != '\0')
-			close(probe_fd);
 		return false;
 	}
 	run_file_size = stat.st_size;
 	run_file_map = reinterpret_cast<Run_Record *>(mmap(NULL, run_file_size, PROT_READ, MAP_SHARED, fd, 0));
 	close(fd);
-	if (probename[0] != '\0') {
-		probe_file_map = reinterpret_cast<ProbeFile *>(mmap(NULL, probe_file_size, PROT_READ, MAP_SHARED, probe_fd, 0));
-		close(probe_fd);
-		if (((probe_file_map->nx + 1) * (probe_file_map->ny + 1)) * sizeof(double) + sizeof(ProbeFile) != unsigned(probe_file_size)) {
-			debug("Invalid probe file size %ld != %ld", probe_file_size, ((probe_file_map->nx + 1) * (probe_file_map->ny + 1)) * sizeof(double) + sizeof(ProbeFile));
-			munmap(probe_file_map, probe_file_size);
-			munmap(run_file_map, run_file_size);
-			probe_file_map = NULL;
-			run_file_map = NULL;
-			return false;
-		}
-	}
-	else
-		probe_file_map = NULL;
 	delayed_reply();
 	// File format:
 	// records
@@ -131,7 +90,6 @@ bool run_file(char const *name, char const *probename, bool start, double sina, 
 	run_file_wait = start ? 0 : 1;
 	run_file_timer.it_interval.tv_sec = 0;
 	run_file_timer.it_interval.tv_nsec = 0;
-	probe_adjust = 0;
 	pausing = false;
 	parkwaiting = false;
 	resume_pending = false;
@@ -146,60 +104,8 @@ void abort_run_file() {
 		return;
 	munmap(run_file_map, run_file_size);
 	run_file_map = NULL;
-	if (probe_file_map) {
-		munmap(probe_file_map, probe_file_size);
-		probe_file_map = NULL;
-	}
 	delete[] strings;
 	strings = NULL;
-}
-
-static double handle_probe(double ox, double oy, double z) {
-	ProbeFile *&p = probe_file_map;
-	if (!p)
-		return z + probe_adjust;
-	if (std::isnan(ox) || std::isnan(oy) || std::isnan(z))
-		return NAN;
-	ox -= p->targetx;
-	oy -= p->targety;
-	double x = ox * p->cosa + oy * p->sina;
-	double y = oy * p->cosa - ox * p->sina;
-	x -= p->x0;
-	y -= p->y0;
-	int ix, iy;
-	if (p->w == 0 || p->nx == 0) {
-		x = 0;
-		ix = 0;
-	}
-	else {
-		x /= p->w / p->nx;
-		if (x < 0)
-			x = 0;
-		ix = floor(x);
-		if (x >= p->nx) {
-			x = p->nx;
-			ix = floor(x) - 1;
-		}
-	}
-	if (p->h == 0 || p->ny == 0) {
-		y = 0;
-		iy = 0;
-	}
-	else {
-		y /= p->h / p->ny;
-		if (y < 0)
-			y = 0;
-		iy = floor(y);
-		if (y >= p->ny) {
-			y = p->ny;
-			iy = floor(y) - 1;
-		}
-	}
-	double fx = x - ix;
-	double fy = y - iy;
-	double l = p->sample[iy * (p->nx + 1) + ix] * (1 - fy) + p->sample[(iy + 1) * (p->nx + 1) + ix] * fy;
-	double r = p->sample[iy * (p->nx + 1) + (ix + 1)] * (1 - fy) + p->sample[(iy + 1) * (p->nx + 1) + (ix + 1)] * fy;
-	return z + l * (1 - fx) + r * fx + probe_adjust;
 }
 
 void run_file_next_command(int32_t start_time) {
@@ -256,7 +162,7 @@ void run_file_next_command(int32_t start_time) {
 				//debug("line %d: %f %f %f", settings.run_file_current, x, y, z);
 				queue[settings.queue_end].target[0] = x;
 				queue[settings.queue_end].target[1] = y;
-				queue[settings.queue_end].target[2] = handle_probe(x, y, z);
+				queue[settings.queue_end].target[2] = z;
 				double distg = 0, disth = 0;
 				for (int i = 0; i < 3; ++i) {
 					double d = queue[settings.queue_end].target[i] - lastpos[i];
@@ -323,7 +229,7 @@ void run_file_next_command(int32_t start_time) {
 				move.tool = r.tool;
 				move.target[0] = r.X[0] * run_file_cosa - r.X[1] * run_file_sina;
 				move.target[1] = r.X[1] * run_file_cosa + r.X[0] * run_file_sina;
-				move.target[2] = handle_probe(r.X[0], r.X[1], r.X[2]);
+				move.target[2] = r.X[2];
 				for (int i = 0; i < 3; ++i) {
 					move.target[3 + i] = pending_abc[i];
 					pending_abc[i] = NAN;
@@ -467,12 +373,6 @@ void run_file_next_command(int32_t start_time) {
 	}
 	next_move(start_time);
 	lock = false;
-}
-
-void run_adjust_probe(double x, double y, double z) {
-	probe_adjust = 0;
-	double probe_z = handle_probe(x, y, 0);
-	probe_adjust = z - probe_z;
 }
 
 double run_find_pos(const double pos[3]) {

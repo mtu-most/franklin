@@ -114,11 +114,12 @@ enum Command {
 	CMD_UNPAUSE,		// 20
 	CMD_GET_TIME,		// 21
 	CMD_SPI,		// 22
-	CMD_ADJUST_PROBE,	// 23	3 doubles: probe position.
-	CMD_TP_GETPOS,		// 24
-	CMD_TP_SETPOS,		// 25	1 double: new toolpath position.
-	CMD_TP_FINDPOS,		// 26	3 doubles: search position or NaN.
-	CMD_MOTORS2XYZ,		// 27	1 byte: which space, n doubles: motor positions.  Reply: m times XYZ.
+	CMD_TP_GETPOS,		// 23
+	CMD_TP_SETPOS,		// 24	1 double: new toolpath position.
+	CMD_TP_FINDPOS,		// 25	3 doubles: search position or NaN.
+	CMD_MOTORS2XYZ,		// 26	1 byte: which space, n doubles: motor positions.  Reply: m times XYZ.
+	CMD_WRITE_PROBE_MAP,	// 27	int: first_index, num_x, num_y; float: origin_x, origin_y, stepsize_x, stepsize_y, values[first_index:first_index + 400] or fewer.
+	CMD_READ_PROBE_MAP,	// 28	int: first_index. Returns int: first_index, num_x, num_y; float: origin_x, origin_y, stepsize_x, stepsize_y, values[first_index:first_index + 400] or fewer.
 };
 
 enum InterruptCommand {

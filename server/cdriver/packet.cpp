@@ -75,7 +75,7 @@ void request(int req) {
 		return;
 	CASE(CMD_RUN)
 		last_active = millis();
-		if (!run_file(const_cast<const char *>(shmem->strs[0]), const_cast<const char *>(shmem->strs[1]), shmem->ints[0], shmem->floats[0], shmem->floats[1]))
+		if (!run_file(const_cast<const char *>(shmem->strs[0]), shmem->ints[0], shmem->floats[0], shmem->floats[1]))
 			delayed_reply();
 		return;
 	CASE(CMD_SLEEP)
@@ -357,9 +357,6 @@ void request(int req) {
 	CASE(CMD_SPI)
 		arch_send_spi(shmem->ints[0], reinterpret_cast<const uint8_t *>(const_cast<const char *>(shmem->strs[0])));
 		break;
-	CASE(CMD_ADJUST_PROBE)
-		run_adjust_probe(shmem->floats[0], shmem->floats[1], shmem->floats[2]);
-		break;
 	CASE2(CMD_TP_GETPOS)
 		shmem->floats[0] = history[running_fragment].run_file_current + (history[running_fragment].hwtime / 1e6) / (history[running_fragment].end_time / 1e6);
 		break;
@@ -384,6 +381,43 @@ void request(int req) {
 	CASE(CMD_MOTORS2XYZ)
 		spaces[0].motors2xyz(const_cast<const double *>(shmem->floats), const_cast<double *>(&shmem->floats[shmem->ints[0]]));
 		break;
+	CASE(CMD_WRITE_PROBE_MAP)
+	{
+		if (shmem->ints[1] != probe_nx || shmem->ints[2] != probe_ny) {
+			// Size changed; reallocate storage.
+			if (probe_data)
+				delete[] probe_data;
+			probe_nx = shmem->ints[1];
+			probe_ny = shmem->ints[2];
+			if (probe_nx * probe_ny > 0)
+				probe_data = new double[probe_nx * probe_ny];
+			else
+				probe_data = NULL;
+		}
+		int base = shmem->ints[0];
+		for (int n = base; n < base + 400 && n < probe_nx * probe_ny; ++n) {
+			int y = n / probe_nx;
+			int x = n % probe_nx;
+			probe_data[y * probe_nx + x] = shmem->floats[100 + n - base];
+		}
+		break;
+	}
+	CASE(CMD_READ_PROBE_MAP)
+	{
+		int base = shmem->ints[0];
+		shmem->ints[1] = probe_nx;
+		shmem->ints[2] = probe_ny;
+		shmem->floats[0] = probe_origin[0];
+		shmem->floats[1] = probe_origin[1];
+		shmem->floats[2] = probe_step[0];
+		shmem->floats[3] = probe_step[1];
+		for (int n = base; n < base + 400 && n < probe_nx * probe_ny; ++n) {
+			int y = n / probe_nx;
+			int x = n % probe_nx;
+			shmem->floats[100 + n - base] = probe_data[y * probe_nx + x];
+		}
+		break;
+	}
 	default:
 		debug("unknown packet received: %x", req);
 	}

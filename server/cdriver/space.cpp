@@ -115,6 +115,24 @@ void Space::xyz2motors() { // {{{
 		//debug("adjusting %d %d target %f with %f to %f factor %f", id, a, axis[a]->target, axis[a]->settings.adjust, axis[a]->target - axis[a]->settings.adjust * settings.adjust, settings.adjust);
 		axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
 	}
+	// Use probe.
+	if (probe_enable && id == 0 && num_axes >= 3) {
+		// Get target position.
+		double x = axis[0]->target;
+		double y = axis[1]->target;
+		// Convert to probe map coordinates.
+		x -= probe_origin[0];
+		y -= probe_origin[1];
+		x /= probe_step[0];
+		y /= probe_step[1];
+		// Only adjust when the position is in the map.
+		if (x >= 0 && y >= 0 && x <= probe_nx && y <= probe_ny) {
+			// Use closest probe point.
+			// Don't interpolate; instead send a more detailed map if needed.
+			double adjust = probe_data[int(std::round(y)) * probe_nx + int(std::round(x))];
+			axis[2]->target += adjust;
+		}
+	}
 	// Set default values.
 	for (int a = 0; a < num_axes; ++a)
 		motor[a]->target_pos = axis[a]->target;

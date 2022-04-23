@@ -942,6 +942,7 @@ function globals_update(uuid, ui_configure, nums_changed) { // {{{
 	update_checkbox(p, [null, 'park_after_job']);
 	update_checkbox(p, [null, 'sleep_after_job']);
 	update_checkbox(p, [null, 'cool_after_job']);
+	update_checkbox(p, [null, 'probe_enable']);
 	update_str(p, [null, 'spi_setup']);
 	update_float(p, [null, 'temp_scale_min']);
 	update_float(p, [null, 'temp_scale_max']);

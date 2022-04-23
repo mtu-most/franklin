@@ -312,8 +312,11 @@ EXTERN int num_gpios;
 EXTERN uint32_t protocol_version;
 EXTERN int num_subfragments_bits;
 EXTERN Pin_t led_pin, stop_pin, probe_pin, spiss_pin;
-EXTERN uint16_t timeout;
+EXTERN double timeout;
 EXTERN int bed_id, fan_id, spindle_id;
+EXTERN bool probe_enable;
+EXTERN int probe_nx, probe_ny;
+EXTERN double probe_origin[2], probe_step[2], *probe_data;
 //EXTERN double room_T;	//[°C]
 EXTERN double feedrate;		// Multiplication factor for f values, used at start of move.
 EXTERN double targetangle;
@@ -426,20 +429,10 @@ void discard();
 void discard_finals();
 
 // run.cpp
-struct ProbeFile {
-	double targetx, targety, x0, y0, w, h, sina, cosa;
-	unsigned long nx, ny;
-	double angle;
-	double sample[0];
-} __attribute__((__packed__));
-bool run_file(char const *name, char const *probe_name, bool start, double sina, double cosa);
+bool run_file(char const *name, bool start, double sina, double cosa);
 void abort_run_file();
 void run_file_next_command(int32_t start_time);
-void run_adjust_probe(double x, double y, double z);
 double run_find_pos(const double pos[3]);
-EXTERN std::string probe_file_name;
-EXTERN off_t probe_file_size;
-EXTERN ProbeFile *probe_file_map;
 EXTERN std::string run_file_name;
 EXTERN off_t run_file_size;
 EXTERN Run_Record *run_file_map;

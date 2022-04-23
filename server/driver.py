@@ -50,6 +50,7 @@ import random
 import errno
 import shutil
 import cdriver
+import numpy
 # }}}
 
 # Constants {{{
@@ -296,26 +297,6 @@ class Machine: # {{{
 			return
 		gcode = os.path.join(spool, 'gcode')
 		audio = os.path.join(spool, 'audio')
-		probe = fhs.read_spool(os.path.join(self.uuid, 'probe' + os.extsep + 'bin'), text = False)
-		if probe is not None:
-			try:
-				# Map = [[targetx, targety, x0, y0, w, h], [nx, ny], [[...], [...], ...]]
-				size = struct.calcsize('@ddddddddLLd')
-				targetx, targety, x0, y0, w, h, sina, cosa, nx, ny, self.targetangle = struct.unpack('@ddddddddLLd', probe.read(size))
-				self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
-				sina, cosa = self.gcode_angle
-				limits = [targetx, targety, x0, y0, w, h]
-				nums = [nx, ny, self.targetangle]
-				if not (0 < nx < 1000 and 0 < ny < 1000):
-					raise ValueError('probe map too large; probably invalid')
-				probes = [[None for x in range(nx + 1)] for y in range(ny + 1)]
-				for y in range(ny + 1):
-					for x in range(nx + 1):
-						probes[y][x] = struct.unpack('@d', probe.read(struct.calcsize('@d')))[0]
-				self.probemap = [limits, nums, probes]
-			except:
-				log('Failed to load probe map')
-			self._globals_update()
 		if os.path.isdir(gcode):
 			self.jobqueue = {}
 			for filename in os.listdir(gcode):
@@ -360,7 +341,6 @@ class Machine: # {{{
 		self.user_interface = '{Dv2m(Blocker:){Dv2m(No Connection:){dv3m{dv3m{dv3m[0:*Controls:{Dh57.1%{Dv18.9m{Dv8.8m{dh17m(Job Control:)(Buttons:)}(Position:)}{Dh85%(XY Map:)(Z Map:)}}{Dv4.4m(Abort:){Dv8.3m(Multipliers:){Dv3.6m(Gpios:){Dv7.4m(Temps:)(Temp Graph:)}}' + '}}' + '}Setup:{Dv2m(Save Profile:)[2:Profile:(Profile Setup:)Probe:(Probe Setup:)*Globals:(Globals Setup:)Axes:(Axis Setup:)Motors:(Motor Setup:)Type:{Dv3m(Type Setup:){Dh50%(Delta Setup:)(Polar Setup:)}}Extruder:(Extruder Setup:)Follower:(Follower Setup:)GPIO:(Gpio Setup:)Temps:(Temp Setup:)]}](Confirmation:)}(Message:)}(State:)}}' + '}'
 		self.pin_names = []
 		self.allow_system = allow_system
-		self.probemap = None
 		self.job_current = None
 		self.job_id = None
 		self.confirm_id = 0
@@ -369,14 +349,11 @@ class Machine: # {{{
 		self.confirmer = None
 		self.position_valid = False
 		self.probing = False
-		self.probe_pending = False
 		self.parking = False
 		self.home_phase = None
 		self.home_order = None
 		self.home_target = None
 		self.home_cb = self._do_home
-		self.probe_cb = None
-		self.probe_speed = 3.
 		self.gcode_file = False
 		self.gcode_map = None
 		self.gcode_id = None
@@ -391,10 +368,15 @@ class Machine: # {{{
 		self.bed_id = -1
 		self.fan_id = -1
 		self.spindle_id = -1
+		self.probe_enable = False
+		self.probe_points = []
+		self.probemap = None
+		self.probe_pending = False
+		self.probe_cb = None
+		self.probe_speed = 3.
 		self.probe_dist = 1000
 		self.probe_offset = 0
 		self.probe_safe_dist = 10
-		self.num_probes = 1
 		self.unit_name = 'mm'
 		self.park_after_job = True
 		self.sleep_after_job = True
@@ -404,7 +386,6 @@ class Machine: # {{{
 		self.spaces = [self.Space(self, i) for i in range(NUM_SPACES)]
 		self.temps = []
 		self.gpios = []
-		self.probe_time_dist = [float('nan'), float('nan')]
 		self.sending = False
 		self.paused = False
 		self.limits = [{} for s in self.spaces]
@@ -442,7 +423,7 @@ class Machine: # {{{
 		self.spiss_pin = 0
 		self.pattern_step_pin = 0
 		self.pattern_dir_pin = 0
-		self.timeout = 0
+		self.timeout = float('inf')
 		self.bed_id = -1
 		self.fan_id = -1
 		self.spindle_id = -1
@@ -598,7 +579,7 @@ class Machine: # {{{
 			self.gpios[cmd['pin']].state = cmd['state']
 			call_queue.append((self._gpio_update, (cmd['pin'],)))
 		elif cmd['type'] == 'confirm':
-			if cmd['tool-changed'] and self.probemap is not None:
+			if cmd['tool-changed'] and self.probemap is not None and self.probe_enable:
 				self.probe_pending = True
 			call_queue.append((self.user_request_confirmation(cmd['message'] or 'Continue?')[1], (False,)))
 		elif cmd['type'] == 'park':
@@ -666,7 +647,7 @@ class Machine: # {{{
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
 		data = {'num_temps': nt, 'num_gpios': ng}
-		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'timeout', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'current_extruder', 'targetangle', 'store_adc')})
+		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_enable', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout', 'current_extruder', 'targetangle', 'store_adc')})
 		#log('writing globals: %s' % repr(data))
 		cdriver.write_globals(data)
 		self._read_globals(update = True)
@@ -697,7 +678,7 @@ class Machine: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		attrnames = ('name', 'profile', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'targetangle', 'store_adc', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'temp_scale_min', 'temp_scale_max', 'probemap', 'connected')
+		attrnames = ('name', 'profile', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'probe_enable', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout', 'targetangle', 'store_adc', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'temp_scale_min', 'temp_scale_max', 'probe_points', 'connected')
 		attrs = {n: getattr(self, n) for n in attrnames}
 		attrs['num_temps'] = len(self.temps)
 		attrs['num_gpios'] = len(self.gpios)
@@ -1183,126 +1164,6 @@ class Machine: # {{{
 		z_low = self.spaces[0].axis[2]['min']
 		self.user_line({2: z_low}, f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)[1](None)
 	# }}}
-	def _do_probe(self, id, x, y, z, phase = 0, good = True): # {{{
-		#log('probe %d %s' % (phase, good))
-		# Map = [[x0, y0, x1, y1], [nx, ny, angle], [[...], [...], ...]]
-		if good is None:
-			# This means the probe has been aborted.
-			#log('abort probe')
-			self.probing = False
-			if id is not None:
-				self._send(id, 'error', 'aborted')
-			#self._job_done(False, 'Probe aborted')
-			return
-		self.probing = True
-		if not self.position_valid:
-			self.user_home(cb = lambda: self._do_probe(id, x, y, z, phase, True))[1](None)
-			return
-		p = self.probemap
-		if phase == 0:
-			if y > p[1][1]:
-				# Done.
-				self.probing = False
-				self._check_probemap()
-				if id is not None:
-					self._send(id, 'return', p)
-				for y, c in enumerate(p[2]):
-					for x, o in enumerate(c):
-						log('map %f %f %f' % (p[0][0] + p[0][2] * x / p[1][0], p[0][1] + p[0][3] * y / p[1][1], o))
-					sys.stderr.write('\n')
-				return
-			# Goto x,y
-			self.probe_cb = lambda good: self._do_probe(id, x, y, z, 1, good)
-			self.movecb.append(self.probe_cb)
-			px = p[0][2] + p[0][4] * x / p[1][0]
-			py = p[0][3] + p[0][5] * y / p[1][1]
-			log(repr((p, px, py, x, y, self.gcode_angle)))
-			self.user_line([p[0][0] + px * self.gcode_angle[1] - py * self.gcode_angle[0], p[0][1] + py * self.gcode_angle[1] + px * self.gcode_angle[0]])[1](None)
-		elif phase == 1:
-			# Probe
-			self.probe_cb = lambda good: self._do_probe(id, x, y, z, 2, good)
-			if self._pin_valid(self.probe_pin):
-				self.movecb.append(self.probe_cb)
-				z_low = self.spaces[0].axis[2]['min']
-				self.user_line({2: z_low}, f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)[1](None)
-			else:
-				#log('confirm probe')
-				self.user_request_confirmation('Please move the tool to the surface')[1](False)
-		else:
-			# Record result
-			if good:
-				log('Warning: probe did not hit anything')
-			z = self.spaces[0].get_current_pos(2)[0]
-			p[2][y][x].append(z + self.spaces[0].axis[2].offset)	# XXX check if x, y need offset.
-			if len(p[2][y][x]) >= self.num_probes:
-				p[2][y][x].sort()
-				trash = self.num_probes // 3
-				if trash == 0:
-					p[2][y][x] = sum(p[2][y][x]) / len(p[2][y][x])
-				else:
-					p[2][y][x] = sum(p[2][y][x][trash:-trash]) / (len(p[2][y][x]) - 2 * trash)
-				if y & 1:
-					x -= 1
-					if x < 0:
-						x = 0
-						y += 1
-				else:
-					x += 1
-					if x > p[1][0]:
-						x = p[1][0]
-						y += 1
-			z += self.probe_safe_dist
-			self.probe_cb = lambda good: self._do_probe(id, x, y, z, 0, good)
-			self.movecb.append(self.probe_cb)
-			# Retract
-			self.user_line({2: z})[1](None)
-	# }}}
-	def _check_probemap(self): # {{{
-		'''Check the probemap, and save it if it is valid; discard it otherwise.
-		@returns: True if the probemap is valid, False otherwise.'''
-		if not isinstance(self.probemap, (list, tuple)) or len(self.probemap) != 3:
-			log('probemap check failed: not a list of length 3')
-			self.probemap = None
-			self._globals_update()
-			return False
-		limits, nums, probes = self.probemap
-		if not isinstance(limits, (list, tuple)) or not isinstance(nums, (list, tuple)) or len(limits) != 6 or len(nums) != 3:
-			log('probemap check failed: first lists are not length 6 and 3')
-			self.probemap = None
-			self._globals_update()
-			return False
-		if not all(isinstance(e, (float, int)) and not math.isnan(e) for e in limits):
-			log('probemap check failed: limits must be numbers')
-			self.probemap = None
-			self._globals_update()
-			return False
-		if not all(isinstance(e, t) and not math.isnan(e) for e, t in zip(nums, (int, int, (float, int)))):
-			log('probemap check failed: nums and angle must be numbers')
-			self.probemap = None
-			self._globals_update()
-			return False
-		nx, ny, angle = nums
-		if len(probes) != ny + 1 or not all(isinstance(e, (list, tuple)) and len(e) == nx + 1 for e in probes):
-			log('probemap check failed: probe map is incorrect size')
-			self.probemap = None
-			self._globals_update()
-			return False
-		if not all(all(isinstance(e, (float, int)) and not math.isnan(e) for e in f) for f in probes):
-			log('probemap check failed: probe points must all be numbers')
-			self.probemap = None
-			self._globals_update()
-			return False
-		with fhs.write_spool(os.path.join(self.uuid, 'probe' + os.extsep + 'bin'), text = False) as probemap_file:
-			# Map = [[x, y, w, h], [nx, ny], [[...], [...], ...]]
-			sina, cosa = self.gcode_angle
-			targetx, targety, x0, y0, w, h = self.probemap[0]
-			probemap_file.write(struct.pack('@ddddddddLLd', targetx, targety, x0, y0, w, h, sina, cosa, *self.probemap[1]))
-			for y in range(self.probemap[1][1] + 1):
-				for x in range(self.probemap[1][0] + 1):
-					probemap_file.write(struct.pack('@d', self.probemap[2][y][x]))
-		self._globals_update()
-		return True
-	# }}}
 	def _gcode_run(self, src, abort = True, paused = False): # {{{
 		if self.parking:
 			return
@@ -1338,13 +1199,9 @@ class Machine: # {{{
 			self.gcode_strings.append(self.gcode_map[first_string + pos:first_string + pos + sizes[x]].decode('utf-8', 'replace'))
 			pos += sizes[x]
 		self.gcode_num_records = first_string / struct.calcsize(record_format)
-		if self.probemap is None:
-			encoded_probemap_filename = b''
-		else:
-			encoded_probemap_filename = fhs.read_spool(os.path.join(self.uuid, 'probe' + os.extsep + 'bin'), text = False, opened = False).encode('utf-8')
 		self.gcode_file = True
 		log('running %s %f %f' % (filename, self.gcode_angle[0], self.gcode_angle[1]))
-		cdriver.run_file(filename.encode('utf-8'), encoded_probemap_filename, 1 if not paused and self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1])
+		cdriver.run_file(filename.encode('utf-8'), 1 if not paused and self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1])
 		self.paused = paused
 		self._globals_update()
 	# }}}
@@ -1708,36 +1565,6 @@ class Machine: # {{{
 		return (WAIT, WAIT)
 	# }}}
 	@delayed
-	def user_probe(self, id, area, speed = 3.): # {{{
-		'''Run a probing routine.
-		This moves over the given area and probes a grid of points less
-		than max_probe_distance apart.
-		If the probe pin is valid, it will be used for the probe.
-		If it is invalid, a confirmation is required for every point.
-		'''
-		if area is None:
-			try:
-				fhs.remove_spool(os.path.join(self.uuid, 'probe' + os.extsep + 'bin'))
-			except:
-				log('Failed to remove probe file.')
-				traceback.print_exc()
-			self.probemap = None
-			self._globals_update()
-			if id is not None:
-				self._send(id, 'return', None)
-			return
-		if len(self.spaces[0].axis) < 3 or not self.probe_safe_dist > 0:
-			if id is not None:
-				self._send(id, 'return', None)
-			return
-		log(repr(area))
-		density = [int(area[t + 4] / self.probe_dist) + 1 for t in range(2)] + [self.targetangle]
-		self.probemap = [area, density, [[[] for x in range(density[0] + 1)] for y in range(density[1] + 1)]]
-		self.gcode_angle = math.sin(self.targetangle), math.cos(self.targetangle)
-		self.probe_speed = speed
-		self._do_probe(id, 0, 0, self.get_axis_pos(0, 2))
-	# }}}
-	@delayed
 	def user_line(self, id, moves = (), e = None, tool = None, v = None, relative = False, probe = False, single = False, force = False): # {{{
 		'''Move the tool in a straight line; return when done.
 		'''
@@ -2089,8 +1916,8 @@ class Machine: # {{{
 		message += 'unit_name = %s\r\n' % self.unit_name
 		message += 'spi_setup = %s\r\n' % self._mangle_spi()
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin')])
-		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'timeout')])
-		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed')])
+		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'probe_enable')])
+		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout')])
 		message += 'user_interface = %s\r\n' % self.user_interface
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings()
@@ -2123,7 +1950,7 @@ class Machine: # {{{
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'follower': set()}
 		keys = {
-				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed'},
+				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'probe_enable', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout'},
 				'space': {'type', 'num_axes'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time', 'P', 'I', 'D'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty', 'leader', 'ticks'},
@@ -2200,7 +2027,7 @@ class Machine: # {{{
 						#log('pin imported as {} for {}'.format(value, key))
 					elif key == 'leader':
 						value = None if value == '-' else int(value)
-					elif key.startswith('num') or key.endswith('order') or key.endswith('_id') or key in ('ticks', 'timeout'):
+					elif key.startswith('num') or key.endswith('order') or key.endswith('_id') or key in ('ticks', 'probe_enable'):
 						value = int(value)
 					else:
 						value = float(value)
@@ -2353,14 +2180,14 @@ class Machine: # {{{
 		if id not in (False, None):
 			self._send(id, 'return', success)
 		else:
-			if self.probing:
+			if self.probing: # FIXME: remove this?
 				call_queue.append((self.probe_cb, [False if success else None]))
 			else:
 				if not success:
 					self.probe_pending = False
 					self._job_done(False, 'aborted by failed confirmation')
 				else:
-					if self.probe_pending and self._pin_valid(self.probe_pin):
+					if self.probe_enable and self.probe_pending and self._pin_valid(self.probe_pin):
 						self.probe_pending = False
 						call_queue.append((self._one_probe, []))
 					else:
@@ -2381,15 +2208,6 @@ class Machine: # {{{
 		Note that this function can only be called using POST; not with the regular websockets system.
 		'''
 		return self._queue_add(filename, name)
-	# }}}
-	def probe_add_POST(self, filename, name): # {{{
-		'''Set probe map using a POST request.
-		Note that this function can only be called using POST; not with the regular websockets system.
-		'''
-		with open(filename) as f:
-			self.probemap = json.loads(f.read().strip())
-		errors = [''] if self._check_probemap() else ['Invalid probemap']
-		return filename + '\n' + json.dumps(errors)
 	# }}}
 	def queue_remove(self, name, audio = False): # {{{
 		'''Remove an entry from the queue.
@@ -2416,11 +2234,6 @@ class Machine: # {{{
 	def user_queue_run(self, id, name, paused = False): # {{{
 		'''Start a new job.
 		'''
-		if self.probing:
-			log('ignoring run request while probe is in progress')
-			if id is not None:
-				self._send(id, 'return', None)
-			return
 		if self.job_current is not None and not self.paused:
 			log('ignoring run request while job is in progress: %s ' % repr(self.job_current) + str(self.paused))
 			if id is not None:
@@ -2546,7 +2359,7 @@ class Machine: # {{{
 	def get_globals(self): # {{{
 		#log('getting globals')
 		ret = {'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'timeout', 'feedrate', 'targetangle', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probemap', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed'):
+		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'probe_enable', 'feedrate', 'targetangle', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probe_points', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout'):
 			ret[key] = getattr(self, key)
 		return ret
 	# }}}
@@ -2561,9 +2374,6 @@ class Machine: # {{{
 			if name != self.name:
 				self.name = name
 				self.admin_set_default_profile(self.default_profile)
-		if 'probemap' in ka:
-			self.probemap = ka.pop('probemap')
-			self._check_probemap()
 		for key in ('unit_name', 'user_interface', 'pin_names'):
 			if key in ka:
 				setattr(self, key, ka.pop(key))
@@ -2571,12 +2381,47 @@ class Machine: # {{{
 			self.spi_setup = self._unmangle_spi(ka.pop('spi_setup'))
 			if self.spi_setup:
 				self._spi_send(self.spi_setup)
-		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'timeout'):
+		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'probe_enable'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
-		for key in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'feedrate', 'targetangle', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed'):
+		for key in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'feedrate', 'targetangle', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout'):
 			if key in ka:
 				setattr(self, key, float(ka.pop(key)))
+		if 'probe_points' in ka:
+			self.probe_points = ka.pop('probe_points')
+			# Build probe map.
+			points = numpy.array(self.probe_points, dtype = float)	# points = [[x, y, z], ...], so points[0,:] is the first point, points[:,0] is all x coordinates.
+			mean = numpy.mean(points[:, 2])
+			points[:, 2] -= mean
+			bbox = numpy.array([numpy.min(points, 0), numpy.max(points, 0)])
+			# determine number of points on map grid
+			grid = numpy.array(numpy.ceil((bbox[1] - bbox[0]) / self.probe_dist), dtype = int)
+			# For each point on the grid, we need to find the weights of all probe points based on their distance.
+			# Then using those weights, we compute the offset.
+			# Computation for single grid point g using probe points p:
+			# dists = [sum((p[c] - g[c]) ** 2 for c in range(2)) ** .5 for p in probe_points]
+			# weights = [1 / d ** 2 for d in dists]
+			# total = sum(weights, 0)
+			# infs = isinf(total)
+			# numinf = sum(infs)
+			# if numinf > 0:
+			#	return sum(weights * infs) / numinf
+			# return sum(p[2] * w for p in probe_points) / total
+			x = numpy.linspace(bbox[0][0], bbox[1][0], grid[0]).reshape((-1, 1, 1))
+			y = numpy.linspace(bbox[0][1], bbox[1][1], grid[1]).reshape((1, -1, 1))
+			dx = points[:, 0].reshape((1, 1, -1)) - x
+			dy = points[:, 1].reshape((1, 1, -1)) - y
+			dists = (dx ** 2 + dy ** 2) ** .5
+			infs = dists == 0
+			numinf = numpy.sum(infs, 2)
+			dists[infs] = 1	# Avoid divide by zero warnings; value is forced to sample later.
+			weights = 1 / (dists ** 2)
+			total = numpy.sum(weights, 2)
+			map_data = numpy.sum(points[:, 2].reshape((1, 1, -1)) * weights, 2) / total
+			have_inf = numinf > 0
+			map_data[have_inf] = numpy.sum(points[:, 2] * infs, 2)[have_inf]
+			self.probe_map = {'origin': tuple(bbox[0, :2]), 'step': tuple(grid[:2]), 'data': tuple(tuple(d) for d in map_data)}
+			cdriver.write_probe_map(self.probe_map)
 		self._write_globals(nt, ng, update = update)
 		if len(ka) > 0:
 			log('Warning: unrecognized keyword arguments ignored: %s' % repr(ka))

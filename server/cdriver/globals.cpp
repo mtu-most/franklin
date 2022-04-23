@@ -80,10 +80,7 @@ bool globals_load() {
 	pattern.dir_pin.read(shmem->ints[8]);
 	if (p != pattern.dir_pin.write())
 		change_hw = true;
-	int t = timeout;
-	timeout = shmem->ints[9];
-	if (t != timeout)
-		change_hw = true;
+	probe_enable = shmem->ints[9];
 	bed_id = shmem->ints[10];
 	fan_id = shmem->ints[11];
 	spindle_id = shmem->ints[12];
@@ -97,6 +94,10 @@ bool globals_load() {
 	adjust_speed = shmem->floats[5];
 	current_extruder = shmem->ints[13];
 	targetangle = shmem->floats[6];
+	double t = timeout;
+	timeout = shmem->floats[7];
+	if (t != timeout)
+		change_hw = true;
 	bool store = shmem->ints[14];
 	if (store && !store_adc) {
 		store_adc = fopen("/tmp/franklin-adc-dump", "a");
@@ -121,7 +122,7 @@ void globals_save() {
 	shmem->ints[6] = spiss_pin.write();
 	shmem->ints[7] = pattern.step_pin.write();
 	shmem->ints[8] = pattern.dir_pin.write();
-	shmem->ints[9] = timeout;
+	shmem->ints[9] = probe_enable;
 	shmem->ints[10] = bed_id;
 	shmem->ints[11] = fan_id;
 	shmem->ints[12] = spindle_id;
@@ -134,4 +135,5 @@ void globals_save() {
 	shmem->floats[4] = max_J;
 	shmem->floats[5] = adjust_speed;
 	shmem->floats[6] = targetangle;
+	shmem->floats[7] = timeout;
 }

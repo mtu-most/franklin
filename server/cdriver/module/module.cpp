@@ -220,12 +220,11 @@ static PyObject *parse_gcode(PyObject *Py_UNUSED(self), PyObject *args) {
 static PyObject *run_file(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	// Run commands from a file.
-	const char *file = "", *probe = "";
+	const char *file = "";
 	shmem->ints[0] = 0;
-	if (!PyArg_ParseTuple(args, "|yypdd", &file, &probe, &shmem->ints[0], &shmem->floats[0], &shmem->floats[1]))
+	if (!PyArg_ParseTuple(args, "|ypdd", &file, &shmem->ints[0], &shmem->floats[0], &shmem->floats[1]))
 		return NULL;
 	strncpy(const_cast <char *> (shmem->strs[0]), file, PATH_MAX);
-	strncpy(const_cast <char *> (shmem->strs[1]), probe, PATH_MAX);
 	//debug("running file %s", file);
 	send_to_child(CMD_RUN);
 	Py_RETURN_NONE;
@@ -307,7 +306,7 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
 	max_J = shmem->floats[4];
-	return Py_BuildValue("{si,si,si : si,si,si,si,si,si : si,si,si,si,si,si : sd,sd,sd,sd,sd,sd,sd}",
+	return Py_BuildValue("{si,si,si : si,si,si,si,si,si : si,si,si,si,si,si : sd,sd,sd,sd,sd,sd,sd,sd}",
 
 			"num_pins", shmem->ints[0],
 			"num_temps", shmem->ints[1],
@@ -320,7 +319,7 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 			"pattern_step_pin", shmem->ints[7],
 			"pattern_dir_pin", shmem->ints[8],
 
-			"timeout", shmem->ints[9],
+			"probe_enable", shmem->ints[9],
 			"bed_id", shmem->ints[10],
 			"fan_id", shmem->ints[11],
 			"spindle_id", shmem->ints[12],
@@ -333,7 +332,8 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 			"max_a", shmem->floats[3],
 			"max_J", shmem->floats[4],
 			"adjust_speed", shmem->floats[5],
-			"targetangle", shmem->floats[6]);
+			"targetangle", shmem->floats[6],
+			"timeout", shmem->floats[7]);
 }
 
 static void set_int(int num, char const *name, PyObject *dict) {
@@ -384,7 +384,7 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_int(6, "spiss_pin", dict);
 	set_int(7, "pattern_step_pin", dict);
 	set_int(8, "pattern_dir_pin", dict);
-	set_int(9, "timeout", dict);
+	set_int(9, "probe_enable", dict);
 	set_int(10, "bed_id", dict);
 	set_int(11, "fan_id", dict);
 	set_int(12, "spindle_id", dict);
@@ -397,6 +397,7 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_float(4, "max_J", dict);
 	set_float(5, "adjust_speed", dict);
 	set_float(6, "targetangle", dict);
+	set_float(7, "timeout", dict);
 	send_to_child(CMD_WRITE_GLOBALS);
 	return assert_empty_dict(dict, "write_globals");
 }
@@ -744,14 +745,6 @@ static PyObject *spi(PyObject *Py_UNUSED(self), PyObject *args) {
 	Py_RETURN_NONE;
 }
 
-static PyObject *adjust_probe(PyObject *Py_UNUSED(self), PyObject *args) {
-	FUNCTION_START;
-	if (!PyArg_ParseTuple(args, "ddd", &shmem->floats[0], &shmem->floats[1], &shmem->floats[2]))
-		return NULL;
-	send_to_child(CMD_ADJUST_PROBE);
-	Py_RETURN_NONE;
-}
-
 static PyObject *tp_getpos(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
 	if (!PyArg_ParseTuple(args, ""))
@@ -795,6 +788,135 @@ static PyObject *motors2xyz(PyObject *Py_UNUSED(self), PyObject *args) {
 		PyTuple_SET_ITEM(value, i, f);
 	}
 	return value;
+}
+
+static PyObject *read_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
+	FUNCTION_START;
+	if (!PyArg_ParseTuple(args, ""))
+		return NULL;
+	int index = 0;
+	shmem->ints[0] = index;
+	send_to_child(CMD_READ_PROBE_MAP);
+	int nx = shmem->ints[1];
+	int ny = shmem->ints[2];
+	int num = nx * ny;
+	PyObject *data = PyTuple_New(ny);
+	PyObject *rows[ny];
+	for (int y = 0; y < ny; ++y) {
+		rows[y] = PyTuple_New(nx);
+		PyTuple_SET_ITEM(data, y, rows[y]);
+	}
+	while (index < num) {
+		for (int i = 0; i < 400; ++i) {
+			if (index + i >= num)
+				break;
+			PyObject *f = PyFloat_FromDouble(shmem->floats[100 + i]);
+			PyTuple_SET_ITEM(rows[(index + i) / nx], (index + i) % nx, f);
+		}
+		index += 400;
+		if (index >= num)
+			break;
+		shmem->ints[0] = index;
+		send_to_child(CMD_READ_PROBE_MAP);
+	}
+	PyObject *ret = Py_BuildValue("{s(dd),s(dd),sO}",
+		"origin", shmem->floats[0], shmem->floats[1],
+		"step", shmem->floats[2], shmem->floats[3],
+		"data", data);
+	Py_DECREF(data);
+	return ret;
+}
+
+static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
+	FUNCTION_START;
+	PyObject *dict;
+	if (!PyArg_ParseTuple(args, "O!", &PyDict_Type, &dict))
+		return NULL;
+	// Parse origin and step. {{{
+	PyObject *originobj = PyDict_GetItemString(dict, "origin");
+	PyObject *stepobj = PyDict_GetItemString(dict, "step");
+	if (!originobj || !stepobj) {
+		PyErr_SetString(PyExc_ValueError, "origin and step must be present in the argument dict");
+		return NULL;
+	}
+	if (!PyTuple_Check(originobj) || !PyTuple_Check(stepobj)) {
+		PyErr_SetString(PyExc_TypeError, "origin and step must be tuples");
+		return NULL;
+	}
+	if (PyTuple_Size(originobj) != 2 || PyTuple_Size(stepobj) != 2) {
+		PyErr_SetString(PyExc_ValueError, "origin and step must be tuples of size 2");
+		return NULL;
+	}
+	double origin[2], step[2];
+	for (int c = 0; c < 2; ++c) {
+		PyObject *v = PyTuple_GetItem(originobj, c);
+		if (!v)
+			return NULL;
+		origin[c] = PyFloat_AsDouble(v);
+		if (PyErr_Occurred())
+			return NULL;
+
+		v = PyTuple_GetItem(stepobj, c);
+		if (!v)
+			return NULL;
+		step[c] = PyFloat_AsDouble(v);
+		if (PyErr_Occurred())
+			return NULL;
+	}
+	// }}}
+
+	// Parse data and send to child. {{{
+	PyObject *data = PyDict_GetItemString(dict, "data");
+	if (!PyTuple_Check(data)) {
+		PyErr_SetString(PyExc_TypeError, "Data must be a tuple");
+		return NULL;
+	}
+	int ny = PyTuple_Size(data);
+	shmem->ints[0] = 0;
+	shmem->ints[1] = 0;	// Initial 0 for empty tuple, updated when rows are parsed.
+	shmem->ints[2] = ny;
+	shmem->floats[0] = origin[0];
+	shmem->floats[1] = origin[0];
+	shmem->floats[2] = step[0];
+	shmem->floats[3] = step[0];
+	int index = 0;
+	int base = 0;
+	for (int y = 0; y < ny; ++y) {
+		PyObject *current = PyTuple_GetItem(data, y);
+		if (!PyTuple_Check(current)) {
+			PyErr_SetString(PyExc_TypeError, "data must be tuple of tuples");
+			return NULL;
+		}
+		int nx = PyTuple_Size(current);
+		if (nx == 0) {
+			PyErr_SetString(PyExc_ValueError, "Empty tuple in data");
+			return NULL;
+		}
+		if (shmem->ints[1] != 0 && shmem->ints[1] != nx) {
+			PyErr_SetString(PyExc_ValueError, "All tuples in data must be the same size");
+			return NULL;
+		}
+		shmem->ints[1] = nx;
+		for (int x = 0; x < nx; ++x) {
+			PyObject *obj = PyTuple_GetItem(current, x);
+			shmem->floats[100 + index] = PyFloat_AsDouble(obj);
+			if (PyErr_Occurred())
+				return NULL;
+			if (index >= 400) {
+				shmem->ints[1] = base;
+				send_to_child(CMD_WRITE_PROBE_MAP);
+				index = 0;
+				base += 400;
+			}
+		}
+	}
+	if (index > 0) {
+		shmem->ints[1] = base;
+		send_to_child(CMD_WRITE_PROBE_MAP);
+	}
+	// }}}
+
+	Py_RETURN_NONE;
 }
 
 static PyObject *fileno(PyObject *Py_UNUSED(self), PyObject *args) {
@@ -1021,11 +1143,12 @@ static PyMethodDef Methods[] = {
 	{"unpause", unpause, METH_VARARGS, "Discard resume information."},
 	{"get_time", get_time, METH_VARARGS, "Get estimate for remaining time."},
 	{"spi", spi, METH_VARARGS, "Send SPI command."},
-	{"adjust_probe", adjust_probe, METH_VARARGS, "Change offset for probe."},
 	{"tp_getpos", tp_getpos, METH_VARARGS, "Get current position in toolpath."},
 	{"tp_setpos", tp_setpos, METH_VARARGS, "Set position in toolpath."},
 	{"tp_findpos", tp_findpos, METH_VARARGS, "Find position in toolpath closest to a point."},
 	{"motors2xyz", motors2xyz, METH_VARARGS, "Convert motor positions to tool position."},
+	{"read_probe_map", read_probe_map, METH_VARARGS, "Read current probe map."},
+	{"write_probe_map", write_probe_map, METH_VARARGS, "Write current probe map."},
 	{"fileno", fileno, METH_VARARGS, "Get file descriptor which will signal asynchronous events."},
 	{"get_interrupt", get_interrupt, METH_VARARGS, "Read and parse interrupt from chlid process."},
 	{"init", init_module, METH_VARARGS, "Initialize module and start child process."},
@@ -1045,3 +1168,5 @@ extern "C" {
 		return PyModule_Create(&Module);
 	}
 }
+
+// vim: set foldmethod=marker :

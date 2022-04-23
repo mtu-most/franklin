@@ -525,6 +525,9 @@ function Multipliers(desc, pos, top) { // {{{
 	var e = ret.AddElement('div').AddText('Feedrate: ');
 	e.Add(Float(ui, [null, 'feedrate'], 0, 1e-2));
 	e.AddText(' %');
+	var l = e.AddElement('label');
+	l.Add(Checkbox(ui, [null, 'enable_probe']));
+	l.AddText('Enable Probe');
 	ret.AddMultiple(ui, 'axis', function(ui, space, axis, obj) {
 		if (space != 1)
 			return null;
