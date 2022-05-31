@@ -18,7 +18,7 @@ clean:
 
 %/module.so: js = $(shell echo '$<' | sed -E 's#(.*)/module.o#\1/\1.js#g')
 %/module.so: %/module.o Makefile ../cdriver/cdriver.h ../cdriver/franklin-module.h ../../arch/${TARGET_ARCH}/arch-host.h ../cdriver/module/module.h
-	g++ -ggdb3 -Wall -Wextra -shared -fPIC $< -o $@
+	g++ -ggdb3 -Wall -Wextra -shared -fPIC -flinker-output=dyn $< -o $@
 	mkdir -p ../html/type
 	test ! -f '${js}' || ln -sf '../../type/${js}' ../html/type/
 

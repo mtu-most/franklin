@@ -1,12 +1,13 @@
-franklin (0.2-1) UNRELEASED; urgency=medium
+franklin (0.2-2) UNRELEASED; urgency=medium
 
-  * Update standards version to 4.3.0.
+  * Update standards version to 4.6.1.
   * Update copyright format link to https.
   * Add remote user type.
   * Escalate privileges to highest user without new password; use password from
     less privileged user.
+  * Change user to _franklin.
 
- -- Bas Wijnen <wijnen@debian.org>  Thu, 24 Jan 2019 11:00:25 +0100
+ -- Bas Wijnen <wijnen@debian.org>  Tue, 31 May 2022 20:13:04 +0000
 
 franklin (0.1-1) unstable; urgency=medium
 

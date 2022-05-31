@@ -1,5 +1,6 @@
 # Makefile - build rules for Franklin
 # Copyright 2015 Michigan Technological University
+# Copyright 2016-2022 Bas Wijnen
 # Author: Bas Wijnen <wijnen@debian.org>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -15,85 +16,50 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-MODULES = python-fhs python-network python-websocketd
+# This Makefile has 3 goals:
+# 1. Provide "make install" for Debian package build.
+# 2. Build and install Debian package through "make".
+# 3. Build code for non-Debian systems through "make franklin".
 
-install-all: build
-	sudo a2enmod proxy proxy_html proxy_http proxy_wstunnel
-	sudo dpkg -i $(wildcard $(patsubst %,/tmp/python3-%*.deb,$(subst python-,,$(MODULES))) /tmp/franklin*.deb)
+# Note that "make franklin" does not run the service.
 
-# This target is meant for producing release packages for Athena.
-# Some preparations are required to make ti work:
-# - A beaglebone must be attached to a USB port, and accessible on the address given below.
-# - It must have a user with password as given below.
-# - All build dependencies must be installed on it. (Note that some come from backports or jessie (or newer).)
-# - DEBFULLNAME and DEBEMAIL should be set.
-# - On the host system, FRANKLIN_PASSPHRASE must be set and the secret key given below must be available.
-BB ?= debian@192.168.7.2
-BB_PASS ?= reprap
-UPGRADE_KEY ?= 46BEB154
-SSHPASS ?= sshpass -p'${BB_PASS}'
-zip: armhf
-	cd zipdir && for f in * ; do echo "$$FRANKLIN_PASSPHRASE" | gpg --local-user $(UPGRADE_KEY) --passphrase-fd 0 --sign $$f ; rm $$f ; done
-	changelog="`dpkg-parsechangelog`" && name="`echo "$$changelog" | grep '^Source: ' | cut -b9-`" && fullversion="`echo "$$changelog" | grep '^Version: ' | cut -b10-`" && version="$${fullversion%-*}" && rm -f $$name-$$version.zip && cd zipdir && zip ../$$name-$$version.zip *
+# Default rule.
+package:
 
-armhf:
-	test ! -d zipdir || rm -r zipdir
-	mkdir zipdir
-	$(SSHPASS) ssh $(BB) sudo ip route del default || true
-	$(SSHPASS) ssh $(BB) sudo ip route add default via 192.168.7.1
-	$(SSHPASS) ssh $(BB) sudo ntpdate -u time.mtu.edu
-	$(SSHPASS) ssh $(BB) rm -rf franklin '/tmp/*.{dsc,changes,tar.gz,tar.xz,deb}'
-	cd zipdir && git clone .. franklin
-	tar cf - -C zipdir franklin | $(SSHPASS) ssh $(BB) tar xf -
-	rm -rf zipdir/franklin
-	$(SSHPASS) ssh $(BB) git -C franklin remote set-url origin https://github.com/mtu-most/franklin
-	$(SSHPASS) ssh $(BB) make -C franklin build
-	$(SSHPASS) scp $(BB):/tmp/*deb zipdir/
-	test ! "$$DINSTALL" -o ! "$$DINSTALL_DIR" -o ! "$$DINSTALL_INCOMING" || $(SSHPASS) scp $(BB):'/tmp/*.{dsc,changes,tar.gz,tar.xz,deb}' "$$DINSTALL_INCOMING" ; cd "$$DINSTALL_DIR" && $$DINSTALL && $$DINSTALL
-
-bb: armhf
-	rm -r zipdir
-
-install:
-	# Note: This target is called by debhelper to install files into the package.
-	# build (below) is not supposed to be called before it.
-	make -C server install
-	make -C util install
-
-build: basedeps mkdeb $(addprefix module-,$(MODULES))
-	git pull
-	git submodule foreach git pull
-	git submodule foreach ../mkdeb $(MKDEB_ARG)
-	./mkdeb $(MKDEB_ARG)
+# Dependencies to be installed.
+rundeps = python3-serial, avrdude, adduser, lsb-base, apache2
+franklindeps = debhelper, python3-all, dh-python, gcc-avr, arduino-mighty-1284p, arduino-mk, python3-all-dev, python3-network, python3-websocketd, python3-fhs
+depends:
+	depends=`dpkg-checkbuilddeps 2>&1 -d 'devscripts, git, wget, sudo, fakeroot, ${rundeps}, ${franklindeps}'`; depends="$${depends##*:}"; if [ "$${depends}" ]; then echo "Installing $$depends"; sudo apt install $$depends ; fi
+	dpkg-checkbuilddeps
 
 mkdeb:
+	# Get mkdeb to build Debian package.
 	wget https://people.debian.org/~wijnen/mkdeb
 	chmod a+x mkdeb
 
-module-%: base = $(patsubst module-%,%,$@)
-module-%:
-	git submodule add https://github.com/wijnen/$(base)
-	touch $@
+package: depends mkdeb
+	# Build and install the Debian package.
+	git pull
+	sudo a2enmod proxy proxy_html proxy_http proxy_wstunnel
+	./mkdeb $(MKDEB_ARG)
+	sudo dpkg -i $(wildcard /tmp/franklin*.deb)
 
-clean-%: base = $(patsubst clean-%,%,$@)
-clean-%:
-	git submodule deinit -f $(base) || :
-	rm -rf $(base) || :
-	git rm -f $(base) || :
-	rm -rf .git/modules/$(base)
+install:
+	# Note: This target is called by debhelper to install files into the Debian package.
+	make -C server install
+	make -C util install
 
-clean: $(addprefix clean-,$(MODULES))
-	git rm -f .gitmodules || :
-	rm -f mkdeb .gitmodules
-	rm -rf zipdir
-	rm -f $(addprefix module-,$(MODULES))
+franklin:
+	# Compile everything, but don't install or set up a service.
+	pip install -r requirements.txt
+	cd server/html && rm -f builders.js rpc.js && python3 -m websocketd copy
+	make -C server
+	make -C util
 
-rundeps = python3-serial, avrdude, adduser, lsb-base, apache2
-franklindeps = debhelper, python3-all, dh-python, gcc-avr, arduino-mighty-1284p, arduino-mk, python3-all-dev
-depdeps = doxygen, doxypy | python3-doxypy, libjs-jquery, graphviz, openssl
-basedeps:
-	deps=`dpkg-checkbuilddeps 2>&1 -d 'devscripts, git, wget, sudo, fakeroot, ${rundeps}, ${franklindeps}, ${depdeps}'`; deps="$${deps##*:}"; if [ "$${deps}" ]; then echo "Installing $$deps"; sudo apt install $$deps ; fi
-	dpkg-checkbuilddeps
+clean:
+	rm -f mkdeb
+	make -C server clean
+	make -C util clean
 
-.PHONY: install build clean zip bb basedeps
-	
+.PHONY: install-all install build clean depends

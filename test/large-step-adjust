@@ -1,0 +1,22 @@
+#!/usr/bin/python3
+
+'''Manual movement test
+
+This test homes the machine, then moves the tool and adjust motor settings
+during the move.
+'''
+
+import fhs
+import websocketd
+import time
+
+fhs.option('port', 'Port for connecting to Franklin', default = 'localhost:8000')
+config = fhs.init(help = 'Automatic testing script for Franklin', version = '0.1', contact = 'Bas Wijnen <wijnen@debian.org>', packagename = 'franklin-test')
+
+p = websocketd.RPC(config['port'])
+
+p.home()
+p.set_motor((0, 2), steps_per_unit = 800)
+p.abort()
+p.set_motor((0, 2), steps_per_unit = 100)
+p.home()

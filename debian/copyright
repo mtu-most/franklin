@@ -6,7 +6,7 @@ Source: https://github.com/mtu-most/franklin
 Files: *
 Copyright:
 	Copyright 2014-2016 Michigan Technological University
-	Copyright 2016-2018 Bas Wijnen <wijnen@debian.org>
+	Copyright 2016-2022 Bas Wijnen <wijnen@debian.org>
 License: AGPL-3+
  This program is free software: you can redistribute it and/or modify
  it under the terms of the GNU Affero General Public License as

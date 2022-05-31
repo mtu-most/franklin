@@ -7,22 +7,26 @@ fi
 # Clean spool directory, because files are likely not valid anymore.
 rm -rf /var/spool/franklin/*
 
+# Remove obsolete user.
+userdel franklin3d > /dev/null 2> /dev/null || :
+groupdel franklin3d > /dev/null 2> /dev/null || :
+
 # Create server user.
-if ! getent passwd franklin3d >/dev/null; then
-	adduser --disabled-password --quiet --system \
+if ! getent passwd _franklin >/dev/null; then
+	adduser --force-badname --disabled-password --quiet --system \
 		--home /var/cache/franklin --no-create-home \
-		--gecos "3-D printer server" --group franklin3d
+		--gecos "3-D printer server" --group _franklin
 fi
 
 # Add user to the dialout group to use the serial ports.
 if getent group dialout >/dev/null ; then
-	adduser --quiet franklin3d dialout
+	adduser --quiet _franklin dialout
 fi
 
 # Set permissions on directory for audio and log files
 for dir in `find /var/cache/franklin` /var/log/franklin /var/lib/franklin /var/spool/franklin ; do
 	if ! dpkg-statoverride --list $dir >/dev/null; then
-		chown franklin3d:franklin3d $dir
+		chown _franklin:_franklin $dir
 	fi
 done
 

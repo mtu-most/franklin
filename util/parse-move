@@ -1,0 +1,49 @@
+#!/usr/bin/python3
+
+''' Parse data like this:
+send (3): start-move  68 01 03		/ f0
+send (0): move  0a 00 09		/ 60
+send (1): move  2a 01 88		/ f8
+recv: done  16 01 01		* d0
+send (2): move  4a 02 81		/ 20
+'''
+
+import sys
+import re
+
+def decode(d):
+	sign = -1 if d & 0x80 else 1
+	count = 0
+	while d & 0x40:
+		count += 1
+		d <<= 1
+	return sign * ((count << 6) + (d & 0x3f))
+
+steps = []
+for ln in sys.stdin:
+	r = re.match(r'^send \(.\): (start-)?move  (.*?)\s*/.*$', ln)
+	if r is None:
+		continue
+	g = r.groups()
+	data = [int(x, 16) for x in g[1].split()]
+	if g[0] is not None:
+		assert len(data) == 3
+		state = data[2]
+		steps.append([[0] * data[1] for _ in range(4)])
+		continue
+	if len(steps) == 0:
+		continue
+	m = data[1]
+	assert len(data) - 2 == len(steps[-1][m])
+	for i, d in enumerate(data[2:]):
+		steps[-1][m][i] = decode(d)
+
+motors = []
+current = [0., 0., 0.]
+for s in steps:
+	for i in range(len(s[0])):
+		for m in range(3):
+			current[m] += s[m][i]
+		motors.append(current[:])
+
+print(motors)
