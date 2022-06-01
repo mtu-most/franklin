@@ -58,7 +58,9 @@ franklin:
 	make -C util
 
 clean:
+	# This target is used by the Debian package, but can also be called manually.
 	rm -f mkdeb
+	make -C firmware clean
 	make -C server clean
 	make -C util clean
 

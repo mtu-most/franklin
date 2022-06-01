@@ -10,91 +10,13 @@
 # Description:		Allow browser and python clients to control a 3-D printer
 ### END INIT INFO
 
-# The defaults below can be overridden in this file.
-CONFIG_FILE=/etc/default/franklin
-
-# All the commented values below are the defaults.  If the variables are given a value (even if empty), they will be passed to the server.
-
-# Port to listen for browser requests.
-#PORT=8000
-
-# Address to listen on.  Set to 0.0.0.0 to disable IPv6 (needed on Raspberry Pi).
-#ADDRESS=
-
-# Use SSL connections.
-#TLS=False
-
-# Location of log file or directory.  Set to /var/log/franklin to enable logging in the default location.
-#LOG=
-
-# The server keeps a list of serial ports on the system.  If this is set to
-# yes, it tries to connect to a printer on any new port (and at startup, on any
-# port).
-#AUTODETECT=True
-
-# System command to run before trying to detect a printer.
-#PREDETECT='stty -F "$PORT" raw 115200'
-
-# System command to run when a controller is found.
-#CONTROLLER='/usr/lib/franklin/controller.py --dev "$PORT"'
-
-# Regular expression of serial ports to use.
-#WHITELIST=''
-
-# Regular expression of serial ports to ignore.
-#BLACKLIST='/dev/(input/.*|ptmx|console|tty(printk|(GS)?\d*))$'
-#ADD_BLACKLIST='$'
-
-# Allowed system commands.  This must be a regular expressing.  Use '.*' for
-# allowing everything.  Only do this if everyone who can reach the page
-# is trusted!
-#ALLOW_SYSTEM='$'
-
-# Required credentials for different roles.
-#REMOTEPWD=''
-#USERPWD=''
-#EXPERTPWD=''
-#ADMINPWD=''
-
-# Command to run in a shell when a print is done (finished or aborted).
-# May contain the following (including the square brackets), which will be
-# replaced:
-# [[STATE]]	replaced with 'completed' or 'aborted' (without quotes)
-# [[REASON]]	replaced with the reason that printing stopped
-# This could be set to something like
-# 'echo "your print was [[STATE]]: [[REASON]]" | mail -s "print [[STATE]] - [[REASON]]" your@mail.address.example.com'
-#DONE=''
-
-# File for storing the pid.  You probably don't need to change this.
-PIDFILE=/run/franklin.pid
-
-# End of variable list.
-
-if test -r $CONFIG_FILE; then
-	. $CONFIG_FILE
-fi
-
+# File for storing the pid.
 NAME=franklin
 DESC="Server for RepRap 3-D printers"
-DAEMON=/usr/bin/franklin
+DAEMON=/usr/lib/franklin/start-franklin
+PIDFILE=/run/franklin.pid
 ARGS=(--quiet --make-pidfile --pidfile "$PIDFILE" --chuid _franklin:_franklin)
-START_ARGS=("${ARGS[@]}" --background --oknodo --start --startas "$DAEMON" -- --system)
-if [ x"$AUTODETECT" = xFalse ] ; then	START_ARGS+=(--noautodetect) ; fi
-if [ -v PREDETECT ] ; then	START_ARGS+=(--predetect="$PREDETECT") ; fi
-if [ -v CONTROLLER ] ; then	START_ARGS+=(--controller="$CONTROLLER") ; fi
-if [ -v PORT ] ; then		START_ARGS+=(--port="$PORT") ; fi
-if [ -v ADDRESS ] ; then	START_ARGS+=(--address="$ADDRESS") ; fi
-if [ x"$TLS" = xTrue ] ; then	START_ARGS+=(--tls) ; fi
-if [ -v LOG ] ; then		START_ARGS+=(--log="$LOG") ; fi
-if [ -v WHITELIST ] ; then	START_ARGS+=(--whitelist="$WHITELIST") ; fi
-if [ -v BLACKLIST ] ; then	START_ARGS+=(--blacklist="$BLACKLIST") ; fi
-if [ -v ADD_BLACKLIST ] ; then	START_ARGS+=(--add-blacklist="$ADD_BLACKLIST") ; fi
-if [ -v ALLOW_SYSTEM ] ; then	START_ARGS+=(--allow-system="$ALLOW_SYSTEM") ; fi
-if [ -v REMOTEPWD ] ; then	START_ARGS+=(--remote="$REMOTEPWD") ; fi
-if [ -v USERPWD ] ; then	START_ARGS+=(--user="$USERPWD") ; fi
-if [ -v EXPERTPWD ] ; then	START_ARGS+=(--expert="$EXPERTPWD") ; fi
-if [ -v ADMINPWD ] ; then	START_ARGS+=(--admin="$ADMINPWD") ; fi
-if [ -v DONE ] ; then		START_ARGS+=(--done="$DONE") ; fi
+START_ARGS=("${ARGS[@]}" --background --oknodo --start --startas "$DAEMON")
 STOP_ARGS=("${ARGS[@]}" --oknodo --stop)
 
 if test ! -x "$DAEMON"; then

@@ -13,10 +13,3 @@ override_dh_auto_build:
 
 override_dh_python3:
 	dh_python3 --no-ext-rename
-
-override_dh_auto_clean:
-	dh_auto_clean
-	rm -f *.pyc *.pyo
-	rm -rf firmware/build-*
-	$(MAKE) -C server clean
-	$(MAKE) -C util clean

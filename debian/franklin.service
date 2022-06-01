@@ -1,0 +1,15 @@
+[Unit]
+Description=Franklin CNC control
+After=network.target
+
+[Service]
+Type=simple
+Restart=always
+User=_franklin
+Group=_franklin
+ExecStartPre=!mkdir -p /run/franklin
+ExecStartPre=!chown ${USER}:_franklin /run/franklin
+ExecStart=/usr/lib/franklin/start-franklin
+
+[Install]
+WantedBy=multi-user.target
