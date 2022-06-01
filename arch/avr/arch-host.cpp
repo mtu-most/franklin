@@ -914,6 +914,7 @@ void avr_connect2() { // {{{
 		avr_pins[i].state = avr_pins[i].reset;
 		avr_pins[i].duty = 0x7fff;
 		avr_pins[i].motor = 0xff;
+		avr_pins[i].ticks = 1;
 		avr_in_control_queue[i] = false;
 	}
 	avr_adc_id = new int[NUM_ANALOG_INPUTS];

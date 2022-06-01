@@ -119,10 +119,6 @@ struct Temp {
 	// Volatile variables.
 	double target[2], limit[2][2];			// target and limit temperature; NAN to disable. [K]
 	int32_t adctarget[2], adclimit[2][2];		// target and limit temperature in adc counts; -1 for disabled. [adccounts]
-	int32_t adclast;		// last measured temperature. [adccounts]
-	/*
-	double core_T, shell_T;	// current temperatures. [K]
-	*/
 	uint8_t following_gpios;	// linked list of gpios monitoring this temp.
 	double min_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]
 	double max_alarm;		// NAN, or the temperature at which to trigger the callback.  [K]

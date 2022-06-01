@@ -69,8 +69,9 @@ void Gpio::init() {
 	pin.init();
 	state = 3;
 	reset = 3;
-	duty = 1;
+	leader = -1;
 	ticks = 1;
+	duty = 1;
 	changed = false;
 	value = false;
 }

@@ -47,11 +47,17 @@ void Space::setup_nums(int na, int nm) { // {{{
 			new_axes[a]->park_order = 0;
 			new_axes[a]->min_pos = -INFINITY;
 			new_axes[a]->max_pos = INFINITY;
-			new_axes[a]->type_data = NULL;
+			new_axes[a]->offset = 0;
 			new_axes[a]->current = NAN;
+			new_axes[a]->target = NAN;
+			new_axes[a]->last_target = NAN;
+			new_axes[a]->resume_start = NAN;
+			new_axes[a]->resume_end = NAN;
 			new_axes[a]->settings.source = NAN;
 			new_axes[a]->settings.endpos = NAN;
+			new_axes[a]->settings.adjust = NAN;
 			new_axes[a]->history = setup_axis_history();
+			new_axes[a]->type_data = NULL;
 		}
 		for (int a = na; a < old_na; ++a) {
 			space_types[type].free_axis(this, a);
@@ -73,18 +79,16 @@ void Space::setup_nums(int na, int nm) { // {{{
 			new_motors[m]->step_pin.init();
 			new_motors[m]->dir_pin.init();
 			new_motors[m]->enable_pin.init();
+			new_motors[m]->steps_per_unit = 100;
 			new_motors[m]->limit_min_pin.init();
 			new_motors[m]->limit_max_pin.init();
-			new_motors[m]->steps_per_unit = 100;
-			new_motors[m]->limit_v = INFINITY;
-			new_motors[m]->limit_a = INFINITY;
 			new_motors[m]->home_pos = NAN;
-			new_motors[m]->home_order = 0;
+			new_motors[m]->active = false;
 			new_motors[m]->limit_v = INFINITY;
 			new_motors[m]->limit_a = INFINITY;
-			new_motors[m]->active = false;
-			new_motors[m]->last_v = NAN;
+			new_motors[m]->home_order = 0;
 			new_motors[m]->target_pos = NAN;
+			new_motors[m]->last_v = NAN;
 			new_motors[m]->settings.current_pos = 0;
 			new_motors[m]->settings.hw_pos = 0;
 			new_motors[m]->history = setup_motor_history();
@@ -241,7 +245,8 @@ void reset_pos(Space *s) { // {{{
 			for (int a = 0; a < s->num_axes; ++a)
 				s->axis[a]->settings.adjust /= settings.adjust;
 		}
-		debug("adjusting move time=%f x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time / 1e6, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
+		if (s->id == 0)
+			debug("adjusting move time=%f x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time / 1e6, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
 	}
 	else {
 		// No adjustment when not moving.
@@ -394,14 +399,12 @@ void Space::save_motor(int m) { // {{{
 } // }}}
 
 void Space::init(int space_id) { // {{{
-	type = space_id;
-	id = space_id;
 	type_data = NULL;
-	num_axes = 0;
-	num_motors = 0;
 	motor = NULL;
 	axis = NULL;
-	history = NULL;
-	settings.adjust = 0;
+	id = space_id;
+	type = space_id;
+	num_axes = 0;
+	num_motors = 0;
 	space_types[type].init_space(this);
 } // }}}

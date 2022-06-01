@@ -1,0 +1,36 @@
+#!/usr/bin/python3
+
+'''Send g-code
+'''
+
+import fhs
+import websocketd
+import time
+
+fhs.option('port', 'Port for connecting to Franklin', default = 'localhost:8000')
+fhs.option('no-home', "Don't home while paused", argtype = bool)
+config = fhs.init(help = 'Automatic testing script for Franklin', version = '0.1', contact = 'Bas Wijnen <wijnen@debian.org>', packagename = 'franklin-test')
+
+p = websocketd.RPC(config['port'])
+
+jobname = 'auto-test-job'
+if jobname in p.queue_list():
+	p.queue_remove(jobname)
+
+print('Adding job to queue')
+p.queue_add('''\
+G1 X0 Y0 Z150
+G1 Z20 F600
+G1 Z150
+''', jobname)
+
+p.park()
+p.queue_run.event(jobname)
+time.sleep(3)
+p.pause()
+if config['no-home']:
+	p.line((50, 50, 100))
+else:
+	p.home()
+p.pause(False)
+p.wait_for_cb()

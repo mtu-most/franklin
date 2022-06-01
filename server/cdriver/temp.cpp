@@ -128,14 +128,15 @@ void Temp::init() {
 	R0 = NAN;
 	R1 = INFINITY;
 	logRc = NAN;
-	Tc = 20 + 273.15;
 	beta = NAN;
+	Tc = 20 + 273.15;
+	fan_duty = 1;
 	thermistor_pin.init();
+	following_gpios = ~0;
 	min_alarm = NAN;
 	max_alarm = NAN;
 	adcmin_alarm = -1;
 	adcmax_alarm = MAXINT;
-	fan_duty = 1;
 	for (int i = 0; i < 2; ++i) {
 		power_pin[i].init();
 		target[i] = NAN;
@@ -146,16 +147,17 @@ void Temp::init() {
 		adclimit[i][1] = 0;
 		is_on[i] = false;
 	}
-	following_gpios = ~0;
 	last_temp_time = utime();
 	time_on = 0;
-	K = NAN;
-	last_value = -1;
 	hold_time = 0;
 	P = INFINITY;
 	I = 0;
 	D = 0;
+	I_state = 0;
 	last_PID = millis();
+	last_change_time = last_PID;
+	K = NAN;
+	last_value = -1;
 }
 
 void Temp::free() {

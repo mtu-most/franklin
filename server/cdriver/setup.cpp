@@ -156,6 +156,8 @@ void setup()
 	temps = NULL;
 	num_gpios = 0;
 	gpios = NULL;
+	history = NULL;
+	settings.adjust = 0;
 	pattern.step_pin.read(0);
 	pattern.dir_pin.read(0);
 	pattern.active = false;
