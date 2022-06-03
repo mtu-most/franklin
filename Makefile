@@ -28,7 +28,7 @@ package:
 
 # Dependencies to be installed.
 rundeps = python3-serial, avrdude, adduser, lsb-base, apache2
-franklindeps = debhelper, python3-all, dh-python, gcc-avr, arduino-mighty-1284p, arduino-mk, python3-all-dev, python3-network, python3-websocketd, python3-fhs
+franklindeps = debhelper, python3-all, dh-python, gcc-avr, arduino-mighty-1284p, arduino-mk, python3-all-dev, python3-network, python3-websocketd, python3-fhs, python3-numpy
 depends:
 	depends=`dpkg-checkbuilddeps 2>&1 -d 'devscripts, git, wget, sudo, fakeroot, ${rundeps}, ${franklindeps}'`; depends="$${depends##*:}"; if [ "$${depends}" ]; then echo "Installing $$depends"; sudo apt install $$depends ; fi
 	dpkg-checkbuilddeps

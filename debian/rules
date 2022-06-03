@@ -11,5 +11,11 @@ override_dh_auto_build:
 	${MAKE} -C server
 	${MAKE} -C util
 
+SUDOERS = debian/franklin/etc/sudoers.d
+override_dh_auto_install:
+	dh_auto_install
+	mkdir -p ${SUDOERS}
+	cp debian/franklin.sudoers ${SUDOERS}/franklin
+
 override_dh_python3:
 	dh_python3 --no-ext-rename

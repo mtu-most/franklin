@@ -7,6 +7,8 @@ franklin (0.2-2) UNRELEASED; urgency=medium
     less privileged user.
   * Change user to _franklin.
   * Use systemd unit file instead of init script.
+  * Add dependency on python3-numpy.
+  * Give sudo rights to _franklin user.
 
  -- Bas Wijnen <wijnen@debian.org>  Tue, 31 May 2022 20:13:04 +0000
 

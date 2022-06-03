@@ -7,7 +7,7 @@ Standards-Version: 4.6.1
 
 Package: franklin
 Architecture: any
-Depends: ${misc:Depends}, ${shlibs:Depends}, ${python3:Depends}, python3-websocketd, python3-network, python3-serial, avrdude (>= 6.1), python3-fhs, adduser, arduino-mighty-1284p (>= 1), lsb-base (>= 3.0-6), apache2 | httpd
+Depends: ${misc:Depends}, ${shlibs:Depends}, ${python3:Depends}, python3-websocketd, python3-network, python3-serial, avrdude (>= 6.1), python3-fhs, python3-numpy, adduser, arduino-mighty-1284p (>= 1), lsb-base (>= 3.0-6), apache2 | httpd
 Description: server for controlling RepRap 3-D robot
  3-D robots such as 3-D printers need firmware and host software to work.  This
  package contains both.  The following hardware is currently supported:
