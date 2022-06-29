@@ -34,5 +34,9 @@ done
 
 if [ -e /usr/share/apache2/apache2-maintscript-helper ] ; then
 	. /usr/share/apache2/apache2-maintscript-helper
-	apache2_invoke enconf franklin	|| exit $?
+	apache2_invoke enmod proxy		|| exit $?
+	apache2_invoke enmod proxy_http		|| exit $?
+	apache2_invoke enmod proxy_html		|| exit $?
+	apache2_invoke enmod proxy_wstunnel	|| exit $?
+	apache2_invoke enconf franklin		|| exit $?
 fi

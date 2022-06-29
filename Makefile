@@ -41,7 +41,6 @@ mkdeb:
 package: depends mkdeb
 	# Build and install the Debian package.
 	git pull
-	sudo a2enmod proxy proxy_html proxy_http proxy_wstunnel
 	./mkdeb $(MKDEB_ARG)
 	sudo dpkg -i $(wildcard /tmp/franklin*.deb)
 
