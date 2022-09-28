@@ -27,9 +27,11 @@
 #define cmddebug(...) do {} while (0)
 #endif
 
+#ifndef NO_ADC
 static uint16_t read_16(int pos) {
 	return command(pos) | (command(pos + 1) << 8);
 }
+#endif
 
 static uint32_t read_32(int pos) {
 	uint32_t ret = 0;
@@ -40,7 +42,9 @@ static uint32_t read_32(int pos) {
 
 void packet()
 {
+#ifndef NO_TIMEOUT
 	last_active = seconds();
+#endif
 	switch (command(0))
 	{
 	case CMD_BEGIN:	// begin: request response
@@ -52,8 +56,10 @@ void packet()
 			machineid[1 + i] = command(2 + i);
 		// Because this is a new connection: reset active_motors and all ADC pins.
 		active_motors = 0;
-		for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
+#ifndef NO_ADC
+		for (uint8_t a = 0; a <= ADC_LAST_PIN; ++a)
 			adc[a].disable();
+#endif
 		filling = 0;
 		arch_set_speed(0);
 		homers = 0;
@@ -63,8 +69,12 @@ void packet()
 		reply[0] = CMD_READY;
 		reply[1] = 13;
 		*reinterpret_cast <uint32_t *>(&reply[2]) = PROTOCOL_VERSION;
-		reply[6] = NUM_DIGITAL_PINS;
-		reply[7] = NUM_ANALOG_INPUTS;
+		reply[6] = GPIO_LAST_PIN + 1;
+#ifndef NO_ADC
+		reply[7] = ADC_LAST_PIN + 1;
+#else
+		reply[7] = 0;
+#endif
 		reply[8] = NUM_MOTORS;
 		reply[9] = 1 << FRAGMENTS_PER_MOTOR_BITS;
 		reply[10] = BYTES_PER_FRAGMENT;
@@ -109,32 +119,37 @@ void packet()
 		time_per_sample = read_32(2);
 		if (time_per_sample <= 0)
 			debug("invalid time per sample: %d", time_per_sample);
-		uint8_t p = led_pin;
+		uint8_t p;
+#ifndef NO_LED
+		p = led_pin;
 		led_pin = command(6);
 		if (p != led_pin) {
-			if (p < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(p))
 				UNSET(p);
-			if (led_pin < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(led_pin))
 				SET_OUTPUT(led_pin);
 		}
+#endif
 		p = stop_pin;
 		stop_pin = command(7);
 		if (p != stop_pin) {
-			if (p < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(p))
 				UNSET(p);
-			if (stop_pin < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(stop_pin))
 				SET_INPUT(stop_pin);
 		}
 		p = probe_pin;
 		probe_pin = command(8);
 		if (p != probe_pin) {
-			if (p < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(p))
 				UNSET(p);
-			if (probe_pin < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(probe_pin))
 				SET_INPUT(probe_pin);
 		}
 		pin_flags = command(9);
+#ifndef NO_TIMEOUT
 		timeout_time = read_16(10);
+#endif
 		uint8_t fpb = 1;
 		// TIME_PER_ISR is the time that is spent in a single ISR.
 		// Set full_phase_bits so that it is as high as possible given that limit.
@@ -146,24 +161,26 @@ void packet()
 		full_phase = 1 << full_phase_bits;
 		sei();
 		//debug("time per sample: %d μs, full phase bits: %d", time_per_sample, fpb);
+#ifndef NO_SPI
 		p = spiss_pin;
 		spiss_pin = command(12);
 		if (p != spiss_pin) {
-			if ((p < NUM_DIGITAL_PINS) ^ (spiss_pin < NUM_DIGITAL_PINS)) {
-				if (spiss_pin < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(p) ^ Gpio::check_pin(spiss_pin)) {
+				if (Gpio::check_pin(spiss_pin))
 					arch_spi_start();
 				else
 					arch_spi_stop();
 			}
-			if (p < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(p))
 				UNSET(p);
-			if (spiss_pin < NUM_DIGITAL_PINS) {
+			if (Gpio::check_pin(spiss_pin)) {
 				if (pin_flags & 8)
 					SET(spiss_pin);
 				else
 					RESET(spiss_pin);
 			}
 		}
+#endif
 		write_ack();
 		return;
 	}
@@ -171,18 +188,20 @@ void packet()
 	{
 		cmddebug("CMD_CONTROL");
 		uint8_t p = command(1);
-		if (p >= NUM_DIGITAL_PINS) {
+		if (!Gpio::check_pin(p)) {
 			debug("invalid pin in control: %d", p);
 			write_stall();
 			return;
 		}
 		uint8_t value = command(2);
 		// Update reset state of the pin.
-		pin[p].set_state((pin[p].state & ~0xc) | (value & 0xc));
-		pin[p].duty = command(3) | (command(4) << 8);
-		pin[p].motor = command(5);
-		pin[p].ticks = command(6);
-		//debug("control pin %d state %x duty %x motor %d ticks %d", p, pin[p].state, pin[p].duty, pin[p].motor, pin[p].ticks);
+		pin[p - GPIO_FIRST_PIN].set_state((pin[p - GPIO_FIRST_PIN].state & ~0xc) | (value & 0xc));
+		pin[p - GPIO_FIRST_PIN].duty = command(3) | (command(4) << 8);
+#ifndef NO_PIN_MOTOR
+		pin[p - GPIO_FIRST_PIN].motor = command(5);
+		pin[p - GPIO_FIRST_PIN].ticks = command(6);
+#endif
+		//debug("control pin %d state %x duty %x motor %d ticks %d", p, pin[p - GPIO_FIRST_PIN].state, pin[p - GPIO_FIRST_PIN].duty, pin[p - GPIO_FIRST_PIN].motor, pin[p - GPIO_FIRST_PIN].ticks);
 		switch (CONTROL_CURRENT(value)) {
 		case CTRL_RESET:
 			RESET(p);
@@ -218,7 +237,9 @@ void packet()
 		motor[m].dir_pin = command(3);
 		motor[m].limit_min_pin = command(4);
 		motor[m].limit_max_pin = command(5);
+#ifndef NO_FOLLOWER
 		motor[m].follow = command(6);
+#endif
 		uint8_t const intmask = Motor::INVERT_STEP | Motor::PATTERN;
 		uint8_t const mask = Motor::INVERT_LIMIT_MIN | Motor::INVERT_LIMIT_MAX;
 		cli();
@@ -230,9 +251,9 @@ void packet()
 		sei();
 		if (step != motor[m].step_pin || (flags & Motor::INVERT_STEP) != (motor[m].intflags & Motor::INVERT_STEP)) {
 			//debug("new step for %d", m);
-			if (step < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(step))
 				UNSET(step);
-			if (motor[m].step_pin < NUM_DIGITAL_PINS) {
+			if (Gpio::check_pin(motor[m].step_pin)) {
 				if (motor[m].intflags & Motor::INVERT_STEP)
 					SET(motor[m].step_pin);
 				else
@@ -241,23 +262,23 @@ void packet()
 		}
 		if (dir != motor[m].dir_pin) {
 			//debug("new dir for %d", m);
-			if (dir < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(dir))
 				UNSET(dir);
-			if (motor[m].dir_pin < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(motor[m].dir_pin))
 				RESET(motor[m].dir_pin);
 		}
 		if (limit_min != motor[m].limit_min_pin) {
 			//debug("new limit_min for %d", m);
-			if (limit_min < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(limit_min))
 				UNSET(limit_min);
-			if (motor[m].limit_min_pin < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(motor[m].limit_min_pin))
 				SET_INPUT(motor[m].limit_min_pin);
 		}
 		if (limit_max != motor[m].limit_max_pin) {
 			//debug("new limit_max for %d", m);
-			if (limit_max < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(limit_max))
 				UNSET(limit_max);
-			if (motor[m].limit_max_pin < NUM_DIGITAL_PINS)
+			if (Gpio::check_pin(motor[m].limit_max_pin))
 				SET_INPUT(motor[m].limit_max_pin);
 		}
 		write_ack();
@@ -266,8 +287,9 @@ void packet()
 	case CMD_ASETUP:
 	{
 		cmddebug("CMD_ASETUP");
+#ifndef NO_ADC
 		uint8_t a = command(1);
-		if (a >= NUM_ANALOG_INPUTS) {
+		if (a > ADC_LAST_PIN) {
 			debug("ASETUP called for invalid adc %d", a);
 			write_stall();
 			return;
@@ -275,18 +297,20 @@ void packet()
 		for (uint8_t i = 0; i < 2; ++i) {
 			// If the pin is changed, and the old one was active, deactivate it.
 			bool changed = adc[a].linked[i] != command(2 + i);
-			if (changed && ~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
+			if (changed && ~adc[a].value[0] & 0x8000 && Gpio::check_pin(adc[a].linked[i])) {
 				//debug("unset for change adc %d link %d: pin %d", a, i, adc[a].linked[i]);
-				pin[adc[a].linked[i]].num_temps -= 1;
+				pin[adc[a].linked[i] - GPIO_FIRST_PIN].num_temps -= 1;
 				UNSET(adc[a].linked[i]);
 			}
 			adc[a].linked[i] = command(2 + i);
+#ifndef NO_TEMP_LIMIT
 			adc[a].limit[i][0] = read_16(4 + 2 * i);
 			adc[a].limit[i][1] = read_16(8 + 2 * i);
+#endif
 			adc[a].value[i] = read_16(12 + 2 * i);
-			if (~adc[a].value[0] & 0x8000 && adc[a].linked[i] < NUM_DIGITAL_PINS) {
+			if (~adc[a].value[0] & 0x8000 && Gpio::check_pin(adc[a].linked[i])) {
 				if (changed)
-					pin[adc[a].linked[i]].num_temps += 1;
+					pin[adc[a].linked[i] - GPIO_FIRST_PIN].num_temps += 1;
 				if (adc[a].is_on[i]) {
 					//debug("set for change adc %d link %d: pin %d on %d value %x", a, i, adc[a].linked[i], adc[a].is_on[i], adc[a].value[i]);
 					SET(adc[a].linked[i]);
@@ -298,8 +322,10 @@ void packet()
 			}
 			//debug("adc %d link %d pin %d value %x", a, i, adc[a].linked[i], adc[a].value[i]);
 		}
+#ifndef NO_TEMP_HOLD
 		adc[a].last_change = millis();
 		adc[a].hold_time = read_16(16);
+#endif
 		if (adc_phase == INACTIVE && ~adc[a].value[0] & 0x8000) {
 			adc_phase = PREPARING;
 			adc_current = a;
@@ -307,6 +333,9 @@ void packet()
 			arch_adc_start(a);
 		}
 		write_ack();
+#else
+		write_stall();
+#endif
 		return;
 	}
 	case CMD_HOME:
@@ -449,6 +478,7 @@ void packet()
 			write_stall();
 			return;
 		}
+#ifndef NO_FOLLOWER
 		if (command(0) != CMD_MOVE_SINGLE) {
 			for (uint8_t f = 0; f < active_motors; ++f) {
 				if ((motor[f].follow & 0x7f) == m) {
@@ -461,6 +491,7 @@ void packet()
 				}
 			}
 		}
+#endif
 		filling -= 1;
 		if (filling == 0) {
 			//debug("filled %d; current %d notified %d", last_fragment, current_fragment, notified_current_fragment);
@@ -509,8 +540,10 @@ void packet()
 	case CMD_ABORT:
 	{
 		cmddebug("CMD_ABORT");
-		for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
-			switch (CONTROL_RESET(pin[p].state)) {
+		for (uint8_t p = 0; p <= GPIO_LAST_PIN; ++p) {
+			if (!Gpio::check_pin(p))
+				continue;
+			switch (CONTROL_RESET(pin[p - GPIO_FIRST_PIN].state)) {
 			case CTRL_RESET:
 				RESET(p);
 				break;
@@ -571,7 +604,7 @@ void packet()
 	case CMD_GETPIN:
 	{
 		cmddebug("CMD_GETPIN");
-		if (command(1) >= NUM_DIGITAL_PINS) {
+		if (!Gpio::check_pin(command(1))) {
 			debug("invalid pin %02x for GETPIN", uint8_t(command(1)));
 			write_stall();
 			return;
@@ -585,6 +618,7 @@ void packet()
 	case CMD_SPI:
 	{
 		cmddebug("CMD_SPI");
+#ifndef NO_SPI
 		uint8_t bits = command(1);
 		if (pin_flags & 8)
 			RESET(spiss_pin);
@@ -598,6 +632,7 @@ void packet()
 			SET(spiss_pin);
 		else
 			RESET(spiss_pin);
+#endif
 		write_ack();
 		return;
 	}

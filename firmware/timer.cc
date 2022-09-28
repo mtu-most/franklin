@@ -28,10 +28,12 @@ void handle_motors() {
 	sei();
 	if (state == STEP_STATE_STOP)
 		return;
+#ifndef NO_TIMEOUT
 	last_active = seconds();
+#endif
 	// Check probe.
 	bool probed;
-	if (settings[cf].flags & Settings::PROBING && probe_pin < NUM_DIGITAL_PINS) {
+	if (settings[cf].flags & Settings::PROBING && Gpio::check_pin(probe_pin)) {
 		if (state == STEP_STATE_RUN || state == STEP_STATE_NEXT || state == STEP_STATE_WAIT) {
 			// Probing, but state is set to run; fix that.
 			cli();
@@ -56,7 +58,7 @@ void handle_motors() {
 	else
 		probed = true;	// If we didn't need to probe; don't block later on.
 	if (stopping < 0) {
-		if (stop_pin < NUM_DIGITAL_PINS && GET(stop_pin) ^ bool(pin_flags & 4)) {
+		if (Gpio::check_pin(stop_pin) && GET(stop_pin) ^ bool(pin_flags & 4)) {
 			step_state = STEP_STATE_STOP;
 			stopping = active_motors;
 		}
@@ -71,7 +73,7 @@ void handle_motors() {
 					if (value == 0)
 						continue;
 					uint8_t limit_pin = value < 0 ? motor[m].limit_min_pin : motor[m].limit_max_pin;
-					if (limit_pin < NUM_DIGITAL_PINS) {
+					if (Gpio::check_pin(limit_pin)) {
 						bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MIN : Motor::INVERT_LIMIT_MAX);
 						if (GET(limit_pin) ^ inverted) {
 							step_state = STEP_STATE_STOP;
@@ -103,7 +105,7 @@ void handle_motors() {
 				int8_t value = buffer[cf][m][cs];
 				uint8_t limit_pin = (value < 0 ? motor[m].limit_max_pin : motor[m].limit_min_pin);
 				bool inverted = motor[m].flags & (value < 0 ? Motor::INVERT_LIMIT_MAX : Motor::INVERT_LIMIT_MIN);
-				if (limit_pin < NUM_DIGITAL_PINS && GET(limit_pin) ^ inverted) {
+				if (Gpio::check_pin(limit_pin) && GET(limit_pin) ^ inverted) {
 					// Limit pin still triggered; continue moving.
 					continue;
 				}

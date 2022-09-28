@@ -119,8 +119,8 @@ void Space::xyz2motors() { // {{{
 		//debug("adjusting %d %d target %f with %f to %f factor %f", id, a, axis[a]->target, axis[a]->settings.adjust, axis[a]->target - axis[a]->settings.adjust * settings.adjust, settings.adjust);
 		axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
 	}
-	// Use probe.
-	if (probe_enable && id == 0 && num_axes >= 3) {
+	// Use probe, if enabled, possible and available.
+	if (probe_enable && id == 0 && num_axes >= 3 && probe_nx > 0 && probe_ny > 0) {
 		// Get target position.
 		double x = axis[0]->target;
 		double y = axis[1]->target;
@@ -129,13 +129,19 @@ void Space::xyz2motors() { // {{{
 		y -= probe_origin[1];
 		x /= probe_step[0];
 		y /= probe_step[1];
-		// Only adjust when the position is in the map.
-		if (x >= 0 && y >= 0 && x <= probe_nx && y <= probe_ny) {
-			// Use closest probe point.
-			// Don't interpolate; instead send a more detailed map if needed.
-			double adjust = probe_data[int(std::round(y)) * probe_nx + int(std::round(x))];
-			axis[2]->target += adjust;
-		}
+		// For points outside the map, use the edge of the map.
+		if (x < 0)
+			x = 0;
+		if (y < 0)
+			y = 0;
+		if (x >= probe_nx)
+			x = probe_nx - 1;
+		if (y >= probe_ny)
+			y = probe_ny - 1;
+		// Use closest probe point.
+		// Don't interpolate; instead send a more detailed map if needed.
+		double adjust = probe_data[int(std::round(y)) * probe_nx + int(std::round(x))];
+		axis[2]->target += adjust;
 	}
 	// Set default values.
 	for (int a = 0; a < num_axes; ++a)

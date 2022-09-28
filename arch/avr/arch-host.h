@@ -1,4 +1,4 @@
-/* arch-avr.h - avr-specific parts for Franklin {{{
+/* arch-host.h - avr-specific parts for Franklin {{{
  * vim: set foldmethod=marker :
  * Copyright 2014-2016 Michigan Technological University
  * Copyright 2016-2022 Bas Wijnen <wijnen@debian.org>

@@ -19,11 +19,15 @@
  */
 
 #include "firmware.h"
+
+#ifndef NO_ADC
 static uint8_t next_adc(uint8_t old) {
-	for (uint8_t a = 1; a <= NUM_ANALOG_INPUTS; ++a) {
+	for (uint8_t a = 1; a <= ADC_LAST_PIN; ++a) {
 		uint8_t n = old + a;
-		while (n >= NUM_ANALOG_INPUTS)
-			n -= NUM_ANALOG_INPUTS;
+		while (n > ADC_LAST_PIN)
+			n -= ADC_LAST_PIN;
+		if (!(ADC_PIN_MASK & (1 << n)))
+			continue;
 		if (adc[n].value[0] & 0x8000)
 			// Invalid pin.
 			continue;
@@ -50,13 +54,17 @@ static void handle_adc() {
 		adc_next = next_adc(adc_next);
 	}
 	// Adjust heater and fan.
+#ifndef NO_TEMP_HOLD
 	unsigned long now = millis();
-	if (unsigned(now - adc[adc_current].last_change) >= adc[adc_current].hold_time) {
+	if (unsigned(now - adc[adc_current].last_change) >= adc[adc_current].hold_time)
+#endif
+	{
 		for (uint8_t n = 0; n < 2; ++n) {
 			bool invert = (adc[adc_current].value[n] & 0x4000) == 0;
 			int16_t treshold = adc[adc_current].value[n] & 0x3fff;
 			bool higher = value >= treshold;
 			//debug("limits %d %d %x %x %x %x", adc_current, n, adc[adc_current].limit[n][0], adc[adc_current].limit[n][1], value, adc[adc_current].value[n]);
+#ifndef NO_TEMP_LIMIT
 			if (value < (adc[adc_current].limit[n][0] & 0x3fff)) {
 				// Below lower limit: force heater to be ON or fan to be OFF. (Fan is inverted.)
 				if (adc[adc_current].limit[n][0] & 0x4000) {
@@ -79,15 +87,20 @@ static void handle_adc() {
 					higher = false;
 				}
 			}
+#endif
 			//debug("adc test diff %d hold %d current %d %d higher %d invert %d", int(now - adc[adc_current].last_change), adc[adc_current].hold_time, adc_current, n, higher, invert);
 			if (invert ^ higher) {
 				if (adc[adc_current].is_on[n]) {
 					//debug("switch off %d %d value %x treshold %x higher %d invert %d", adc_current, n, value, treshold, higher, invert);
+#ifndef NO_TEMP_HOLD
 					adc[adc_current].last_change = now;
-					if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS)
+#endif
+					if (Gpio::check_pin(adc[adc_current].linked[n]))
 						RESET(adc[adc_current].linked[n]);
+#ifndef NO_LED
 					if (n == 0)
 						led_fast -= 1;
+#endif
 					adc[adc_current].is_on[n] = false;
 				}
 				else {
@@ -98,11 +111,15 @@ static void handle_adc() {
 				//debug("adc set %d %d %d", n, value, adc[adc_current].value[n]);
 				if (!adc[adc_current].is_on[n]) {
 					//debug("switch on %d %d value %x treshold %x higher %d invert %d", adc_current, n, value, treshold, higher, invert);
-					if (adc[adc_current].linked[n] < NUM_DIGITAL_PINS)
+					if (Gpio::check_pin(adc[adc_current].linked[n]))
 						SET(adc[adc_current].linked[n]);
+#ifndef NO_TEMP_HOLD
 					adc[adc_current].last_change = now;
+#endif
+#ifndef NO_LED
 					if (n == 0)
 						led_fast += 1;
+#endif
 					adc[adc_current].is_on[n] = true;
 				}
 				else {
@@ -118,17 +135,19 @@ static void handle_adc() {
 	adc_ready(adc_current);
 }
 
-void Adc::disable() {
+void AdcData::disable() {
 	if (value[0] & 0x8000)
 		return;
 	for (uint8_t i = 0; i < 2; ++i) {
-		if (linked[i] >= NUM_DIGITAL_PINS)
+		if (!Gpio::check_pin(linked[i]))
 			continue;
 		UNSET(linked[i]);
 		linked[i] = ~0;
 	}
 }
+#endif
 
+#ifndef NO_LED
 static void handle_led() {
 	uint16_t timing = 1000 / (50 * (led_fast + 1));
 	uint16_t current_time = millis();
@@ -148,26 +167,31 @@ static void handle_led() {
 	else
 		RESET(led_pin);
 }
+#endif
 
 static void handle_pins() {
-	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
-		if (pin[p].motor < active_motors) {
-			pin[p].duty = (motor[pin[p].motor].current_pos * pin[p].ticks) & 0x7fff;	// TODO: reset duty on home.
-			if (CONTROL_CURRENT(pin[p].state) == CTRL_SET)
+	for (uint8_t p = 0; p <= GPIO_LAST_PIN; ++p) {
+		if (!Gpio::check_pin(p))
+			continue;
+#ifndef NO_PIN_MOTOR
+		if (pin[p - GPIO_FIRST_PIN].motor < active_motors) {
+			pin[p - GPIO_FIRST_PIN].duty = (motor[pin[p - GPIO_FIRST_PIN].motor].current_pos * pin[p - GPIO_FIRST_PIN].ticks) & 0x7fff;	// TODO: reset duty on home.
+			if (CONTROL_CURRENT(pin[p - GPIO_FIRST_PIN].state) == CTRL_SET)
 				SET(p);
 		}
-		if (!(pin[p].state & CTRL_NOTIFY))
+#endif
+		if (!(pin[p - GPIO_FIRST_PIN].state & CTRL_NOTIFY))
 			continue;
 		bool new_state = GET(p);
-		if (new_state == pin[p].value())
+		if (new_state == pin[p - GPIO_FIRST_PIN].value())
 			continue;
-		//debug("read pin %d, old %d new %d", p, new_state, pin[p].value());
+		//debug("read pin %d, old %d new %d", p, new_state, pin[p - GPIO_FIRST_PIN].value());
 		if (new_state)
-			pin[p].state |= CTRL_VALUE;
+			pin[p - GPIO_FIRST_PIN].state |= CTRL_VALUE;
 		else
-			pin[p].state &= ~CTRL_VALUE;
-		if (!pin[p].event()) {
-			pin[p].state |= CTRL_EVENT;
+			pin[p - GPIO_FIRST_PIN].state &= ~CTRL_VALUE;
+		if (!pin[p - GPIO_FIRST_PIN].event()) {
+			pin[p - GPIO_FIRST_PIN].state |= CTRL_EVENT;
 			pin_events += 1;
 		}
 	}
@@ -178,11 +202,15 @@ int main(void) {
 	while (true) {
 		// Handle all periodic things.
 		// LED
-		if (led_pin < NUM_DIGITAL_PINS)
+#ifndef NO_LED
+		if (led_pin <= GPIO_LAST_PIN)
 			handle_led();	// heartbeat.
+#endif
 		handle_motors();
 		// ADC
+#ifndef NO_ADC
 		handle_adc();
+#endif
 		handle_motors();
 		// Serial
 		serial();
@@ -197,6 +225,7 @@ int main(void) {
 		arch_outputs();
 		handle_motors();
 		// Timeout.
+#ifndef NO_TIMEOUT
 		uint16_t dt = seconds() - last_active;
 		if (enabled_pins > 0 && step_state == STEP_STATE_STOP && timeout_time > 0 && timeout_time <= dt) {
 			// Disable LED and probe.
@@ -207,20 +236,25 @@ int main(void) {
 				motor[m].disable(m);
 			active_motors = 0;
 			// Disable adcs.
-			for (uint8_t a = 0; a < NUM_ANALOG_INPUTS; ++a)
+			for (uint8_t a = 0; a < ADC_NUM_PINS; ++a)
 				adc[a].disable();
 			// Disable pins.
-			for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p)
-				pin[p].disable(p);
+			for (uint8_t p = 0; p <= GPIO_LAST_PIN; ++p) {
+				if (Gpio::check_pin(p))
+					pin[p - GPIO_FIRST_PIN].disable(p);
+			}
 			//debug("timeout");
 			timeout = true;
 		}
+#endif
 		arch_tick();
 		//debug("!%x %x %x %x.", enabled_pins, timeout_time, dt, last_active);
+#ifndef NO_DEBUG
 		if (debug_value != debug_value1 || debug_value2 != debug_value3) {
 			debug_value1 = debug_value;
 			debug_value3 = debug_value2;
 			debug("!%x.%x;", debug_value, debug_value2);
 		}
+#endif
 	}
 }

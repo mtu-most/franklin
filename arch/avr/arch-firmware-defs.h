@@ -21,6 +21,11 @@
 #ifndef _ARCH_AVR_DEFS_H
 #define _ARCH_AVR_DEFS_H
 
+#define INFO_ENABLE
+#define NO_main
+
+#include <avr-ll.hh>
+
 // Defines and includes.
 // Note: When changing this, also change max in cdriver/space.cpp
 #ifdef FAST_ISR
@@ -45,116 +50,17 @@
 #define BAUD 115200
 
 #define ARCH_PIN_DATA \
-	volatile uint8_t *avr_mode; \
-	volatile uint8_t *avr_output; \
-	volatile uint8_t *avr_input; \
-	uint8_t avr_bitmask; \
 	bool avr_on; \
 	int32_t avr_target;
 
 #define ARCH_MOTOR \
-	volatile uint16_t step_port, dir_port; \
+	volatile uint8_t *step_port; \
+	volatile uint8_t *dir_port; \
 	volatile uint8_t step_bitmask, dir_bitmask;
-
-// Define things that pins_arduino.h needs from Arduino.h (which shouldn't be included). {{{
-#define ARDUINO_MAIN
-#define NOT_A_PIN 0
-#define NOT_A_PORT 0
-#define NOT_ON_TIMER 0xff
-#define PA 1
-#define PB 2
-#define PC 3
-#define PD 4
-#define PE 5
-#define PF 6
-#define PG 7
-#define PH 8
-#define PJ 10
-#define PK 11
-#define PL 12
-#define TIMER0 0
-#define TIMER0A 0
-#define TIMER0B 1
-#define TIMER1A 2
-#define TIMER1B 3
-#define TIMER1C 4
-#define TIMER2  5
-#define TIMER2A 5
-#define TIMER2B 6
-#define TIMER3A 7
-#define TIMER3B 8
-#define TIMER3C 9
-#define TIMER4A 10
-#define TIMER4B 11
-#define TIMER4C 12
-#define TIMER4D NOT_ON_TIMER   // Not supported.
-#define TIMER5A 13
-#define TIMER5B 14
-#define TIMER5C 15
-
-#include <stdio.h>
-#include <avr/wdt.h>
-#include <avr/io.h>
-#include <avr/pgmspace.h>
-#include <avr/interrupt.h>
-
-struct Timer_data {
-	volatile uint8_t *mode, *oc;
-	uint8_t mode_mask;
-	uint8_t num;
-	char part;
-	Timer_data(volatile uint8_t *mode_, volatile uint8_t *oc_, uint8_t mode_mask_, uint8_t num_, char part_) : mode(mode_), oc(oc_), mode_mask(mode_mask_), num(num_), part(part_) {}
-};
-inline bool timer_is_16bit(int t) {
-	return t != TIMER0 && t != TIMER2;
-}
-static const Timer_data timer_data[] = {
-	Timer_data(&TCCR0A, &OCR0A, 2 << 6, 0, 'A'),
-	Timer_data(&TCCR0A, &OCR0B, 2 << 4, 0, 'B'),
-
-	Timer_data(&TCCR1A, &OCR1AL, 2 << 6, 1, 'A'),
-	Timer_data(&TCCR1A, &OCR1BL, 2 << 4, 1, 'B'),
-#ifdef OCR1C
-	Timer_data(&TCCR1A, &OCR1CL, 2 << 2, 1, 'C'),
-#else
-	Timer_data(NULL, NULL, 0, 0, 'x'),
-#endif
-
-	Timer_data(&TCCR2A, &OCR2A, 2 << 6, 2, 'A'),
-	Timer_data(&TCCR2A, &OCR2B, 2 << 4, 2, 'B'),
-
-#ifdef TCCR3A
-	Timer_data(&TCCR3A, &OCR3AL, 2 << 6, 3, 'A'),
-	Timer_data(&TCCR3A, &OCR3BL, 2 << 4, 3, 'B'),
-#ifdef OCR3C
-	Timer_data(&TCCR3A, &OCR3CL, 2 << 2, 3, 'C'),
-#else
-	Timer_data(NULL, NULL, 0, 0, 'x'),
-#endif
-#endif
-#ifdef TCCR4A
-	Timer_data(&TCCR4A, &OCR4AL, 2 << 6, 4, 'A'),
-	Timer_data(&TCCR4A, &OCR4BL, 2 << 4, 4, 'B'),
-	Timer_data(&TCCR4A, &OCR4CL, 2 << 2, 4, 'C'),
-#endif
-#ifdef TCCR5A
-	Timer_data(&TCCR5A, &OCR5AL, 2 << 6, 5, 'A'),
-	Timer_data(&TCCR5A, &OCR5BL, 2 << 4, 5, 'B'),
-	Timer_data(&TCCR5A, &OCR5CL, 2 << 2, 5, 'C'),
-#endif
-};
-
-#ifdef F
-#undef F
-#endif
-#define F(x) &(x)
-#define L "l"
-
-#include <pins_arduino.h>
 
 static inline void arch_watchdog_reset() { // {{{
 #ifdef WATCHDOG
-	wdt_reset();
+	Wdt::reset();
 #endif
 } // }}}
 static inline void arch_setup_end() { // {{{

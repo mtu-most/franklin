@@ -1,4 +1,4 @@
-/* arch-avr.cpp - avr-specific parts for Franklin {{{
+/* arch-host.cpp - avr-specific parts for Franklin {{{
  * vim: set foldmethod=marker :
  * Copyright 2014-2016 Michigan Technological University
  * Copyright 2016-2022 Bas Wijnen <wijnen@debian.org>
@@ -853,7 +853,9 @@ static void avr_connect4() { // {{{
 	avr_pin_name_len[avr_next_pin_name] = command[1];
 	avr_pin_name[avr_next_pin_name] = new char[command[1] + 1];
 	memcpy(&avr_pin_name[avr_next_pin_name][1], &command[2], command[1]);
-	if (avr_next_pin_name < NUM_DIGITAL_PINS)
+	if (command[1] == 0)
+		avr_pin_name[avr_next_pin_name][0] = 0;
+	else if (avr_next_pin_name < NUM_DIGITAL_PINS)
 		avr_pin_name[avr_next_pin_name][0] = 7;
 	else
 		avr_pin_name[avr_next_pin_name][0] = 8;

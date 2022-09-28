@@ -917,8 +917,8 @@ static double s_dv(double v1, double v2) { // {{{
 	}
 } // }}}
 
-static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double pos[6], double tf, double v0, double a0, double e, double target[6], double Jg, double *h = NULL, double Jh = 0, bool reverse = false) { // {{{
-	queue[q].probe = false;
+static int add_to_queue(int q, int64_t gcode_line, int time, int tool, double pos[6], double tf, double v0, double a0, double e, double target[6], double Jg, double *h = NULL, double Jh = 0, bool reverse = false, bool probing = false) { // {{{
+	queue[q].probe = probing;
 	queue[q].single = false;
 	queue[q].reverse = reverse;
 	queue[q].tool = tool;
@@ -1461,7 +1461,7 @@ int go_to(bool relative, MoveCommand const *move, bool queue_only) { // {{{
 			subtarget[i] = X[i] + unit[i] * s[part];
 		if (spaces[0].num_axes >= 3)
 			mdebug("adding to queue: X2=%.2f target2=%.2f", X[2], subtarget[2]);
-		q = add_to_queue(q, move->gcode_line, move->time, move->tool, X, t[part], v0[part], a0[part], e0 + (move->e - e0) * current_s / dist, subtarget, J[part], NULL, 0, reverse[part]);
+		q = add_to_queue(q, move->gcode_line, move->time, move->tool, X, t[part], v0[part], a0[part], e0 + (move->e - e0) * current_s / dist, subtarget, J[part], NULL, 0, reverse[part], move->probe);
 	}
 	settings.queue_end = q;
 

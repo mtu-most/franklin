@@ -2,7 +2,7 @@ Source: franklin
 Section: electronics
 Priority: optional
 Maintainer: Bas Wijnen <wijnen@debian.org>
-Build-Depends: debhelper (>= 10), python3-all, dh-python, gcc-avr, arduino-mighty-1284p (>= 1), python3-all-dev
+Build-Depends: debhelper (>= 10), python3-all, dh-python, gcc-avr, python3-all-dev, avr-libc
 Standards-Version: 4.6.1
 
 Package: franklin

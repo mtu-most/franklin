@@ -1534,6 +1534,8 @@ class Machine: # {{{
 	# }}}
 	# }}}
 	# Useful commands.  {{{
+
+	# Setup and shutdown.
 	def admin_reset_uuid(self): # {{{
 		uuid = protocol.new_uuid(string = False)
 		cdriver.set_uuid(bytes(uuid))
@@ -1564,6 +1566,28 @@ class Machine: # {{{
 				log('Could not remove %s' % dirname)
 		return (WAIT, WAIT)
 	# }}}
+	def send_machine(self, target): # {{{
+		'''Return all settings about a machine.
+		'''
+		self.initialized = True
+		self._broadcast(target, 'new_machine', [self.queue_length])
+		self._globals_update(target)
+		for i, s in enumerate(self.spaces):
+			self._space_update(i, target)
+		for i, t in enumerate(self.temps):
+			self._temp_update(i, target)
+		for i, g in enumerate(self.gpios):
+			self._gpio_update(i, target)
+		self._refresh_queue(target)
+		if self.confirmer is not None:
+			self._broadcast(target, 'confirm', self.confirm_id, self.confirm_message)
+	# }}}
+	def admin_disconnect(self, reason = None): # {{{
+		cdriver.force_disconnect()
+		self._close(False)
+	# }}}
+
+	# Normal operation.
 	@delayed
 	def user_line(self, id, moves = (), e = None, tool = None, v = None, relative = False, probe = False, single = False, force = False): # {{{
 		'''Move the tool in a straight line; return when done.
@@ -1673,63 +1697,6 @@ class Machine: # {{{
 		'''
 		return cdriver.pin_value(pin)
 	# }}}
-	def user_load(self, profile = None, update = True): # {{{
-		'''Load a profile.
-		'''
-		filenames = fhs.read_data(os.path.join(self.uuid, 'profiles', ((profile and profile.strip()) or self.profile) + os.extsep + 'ini'), opened = False, multiple = True)
-		if profile and self.profile != profile.strip():
-			#log('setting profile to %s' % profile.strip())
-			self.profile = profile.strip()
-			if update:
-				self._globals_update()
-		if len(filenames) > 0:
-			with open(filenames[0]) as f:
-				log('loading profile {}'.format(filenames[0]))
-				self.expert_import_settings(f.read(), update = update)
-		else:
-			log('not loading nonexistent profile')
-	# }}}
-	def admin_save(self, profile = None): # {{{
-		'''Save a profile.
-		If the profile name is not given, it saves the current profile.
-		'''
-		if profile and self.profile != profile.strip():
-			log('setting profile to %s' % profile.strip())
-			self.profile = profile.strip()
-			self._globals_update()
-		with fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini')) as f:
-			f.write(self.export_settings())
-	# }}}
-	def list_profiles(self): # {{{
-		'''Get a list of all available profiles.
-		'''
-		dirnames = fhs.read_data(os.path.join(self.uuid, 'profiles'), dir = True, multiple = True, opened = False)
-		ret = []
-		for d in dirnames:
-			for f in os.listdir(d):
-				name = os.path.splitext(f)[0].strip()
-				if name not in ret:
-					ret.append(name)
-		ret.sort()
-		return ret
-	# }}}
-	def admin_remove_profile(self, profile): # {{{
-		'''Remove a profile.
-		'''
-		filename = fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'), opened = False)
-		if os.path.exists(filename):
-			os.unlink(filename)
-			return True
-		return False
-	# }}}
-	def admin_set_default_profile(self, profile): # {{{
-		'''Set a profile as default.
-		'''
-		self.default_profile = profile
-		with fhs.write_data(os.path.join(self.uuid, 'info' + os.extsep + 'txt')) as f:
-			f.write(self.name + '\n')
-			f.write(profile + '\n')
-	# }}}
 	def user_abort(self): # {{{
 		'''Abort the current job.
 		'''
@@ -1825,29 +1792,6 @@ class Machine: # {{{
 		self.movecb.append(lambda done: self.user_park(cb, order = next_order + 1, aborted = not done)[1](id))
 		self.user_line([a['park'] - a['offset'] if a['park_order'] == next_order else float('nan') for ai, a in enumerate(self.spaces[0].axis)])[1](None)
 	# }}}
-	@delayed
-	def benjamin_audio_play(self, id, name, motor = 2): # {{{
-		self.audio_id = id
-		self.user_sleep(False)
-		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
-		cdriver.run_file(filename.encode('utf-8'), b'', 1, 0, 0, motor)
-	# }}}
-	def benjamin_audio_add_POST(self, filename, name): # {{{
-		with open(filename, 'rb') as f:
-			self._audio_add(f, name)
-		return filename + '\n' + json.dumps([])
-	# }}}
-	def benjamin_audio_del(self, name): # {{{
-		assert name in self.audioqueue
-		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
-		os.unlink(filename)
-		del self.audioqueue[name]
-		self._broadcast(None, 'audioqueue', tuple(self.audioqueue.keys()))
-	# }}}
-	def audio_list(self): # {{{
-		return self.audioqueue
-	# }}}
-	@delayed
 	def wait_for_cb(self, id): # {{{
 		'''Block until the move queue is empty.
 		'''
@@ -1904,6 +1848,167 @@ class Machine: # {{{
 		'''Return whether the position of the motors is known.
 		'''
 		return self.position_valid
+	# }}}
+	@delayed
+	def user_gcode_run(self, id, code, paused = False): # {{{
+		'''Run a string of g-code.
+		'''
+		with fhs.write_temp(text = False) as f:
+			f.write(code)
+			f.seek(0)
+			self.gcode_id = id
+			# Break this in two, otherwise tail recursion may destroy f before call is done?
+			ret = self._gcode_run(f.filename, paused = paused)
+			return ret
+	# }}}
+	@delayed
+	def user_request_confirmation(self, id, message): # {{{
+		'''Wait for confirmation.
+		The return value is True if confirmation is given, False if
+		not.
+		'''
+		# Abort pending confirmation, if any.
+		if self.confirmer not in (False, None):
+			self._send(self.confirmer, 'return', False)
+		self.confirmer = id
+		self.confirm_id += 1
+		self.confirm_axes = [[s.get_current_pos(a)[0] for a in range(len(s.axis))] for s in self.spaces]
+		self.confirm_message = message
+		self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
+		for c in self.confirm_waits:
+			self._send(c, 'return', (self.confirm_id, self.confirm_message))
+		self.confirm_waits.clear()
+	# }}}
+	def get_confirm_id(self): # {{{
+		'''Return id of current confirmation request, if any.
+		'''
+		return self.confirm_id, self.confirm_message
+	# }}}
+	@delayed
+	def wait_confirm(self, id, pending = True): # {{{
+		'''Block until confirmation is requested.
+		If pending is False, ignore the current request, if any.
+		'''
+		if pending and self.confirmer is not None:
+			self._send(id, 'return', (self.confirm_id, self.confirm_message))
+			return
+		self.confirm_waits.add(id)
+	# }}}
+	def user_confirm(self, confirm_id, success = True): # {{{
+		'''Respond to a confirmation request.
+		If confirm_id is not None, it must be equal to the current id
+		or the confirmation is ignored.
+		Success is passed to the requester.  If it is requested by
+		g-code, passing False will abort the job.
+		'''
+		if confirm_id not in (self.confirm_id, None) or self.confirm_axes is None:
+			# Confirmation was already sent, or never reguested.
+			#log('no confirm %s' % repr((confirm_id, self.confirm_id)))
+			return False
+		id = self.confirmer
+		self.confirmer = None
+		self.confirm_message = None
+		self._broadcast(None, 'confirm', None)
+		self._reset_extruders(self.confirm_axes)
+		self.confirm_axes = None
+		if id not in (False, None):
+			self._send(id, 'return', success)
+		else:
+			if self.probing: # FIXME: remove this?
+				call_queue.append((self.probe_cb, [False if success else None]))
+			else:
+				if not success:
+					self.probe_pending = False
+					self._job_done(False, 'aborted by failed confirmation')
+				else:
+					if self.probe_enable and self.probe_pending and self._pin_valid(self.probe_pin):
+						self.probe_pending = False
+						call_queue.append((self._one_probe, []))
+					else:
+						self.probe_pending = False
+						cdriver.resume()
+		return True
+	# }}}
+	def get_machine_state(self): # {{{
+		'''Return current machine state.
+		Return value is a tuple of a human readable string describing
+		the state, NaN or the elapsed time, NaN or the total time for
+		the current job.
+		Note that the times are computed from the requested speeds.
+		These are generally too low, because they don't account for
+		acceleration and velocity limits.
+		'''
+		pos = self.tp_get_position()
+		context = self.tp_get_context(position = pos[0])
+		if self.paused:
+			state = 'Paused'
+		elif self.gcode_file:
+			state = 'Running'
+		else:
+			return 'Idle', float('nan'), float('nan'), pos[0], pos[1], context
+		return state, cdriver.get_time(), self.total_time / self.feedrate, pos[0], pos[1], context
+	# }}}
+	def motors2xyz(self, motors): # {{{
+		return cdriver.motors2xyz(*motors)
+	# }}}
+
+	# Profile management.
+	def user_load(self, profile = None, update = True): # {{{
+		'''Load a profile.
+		'''
+		filenames = fhs.read_data(os.path.join(self.uuid, 'profiles', ((profile and profile.strip()) or self.profile) + os.extsep + 'ini'), opened = False, multiple = True)
+		if profile and self.profile != profile.strip():
+			#log('setting profile to %s' % profile.strip())
+			self.profile = profile.strip()
+			if update:
+				self._globals_update()
+		if len(filenames) > 0:
+			with open(filenames[0]) as f:
+				log('loading profile {}'.format(filenames[0]))
+				self.expert_import_settings(f.read(), update = update)
+		else:
+			log('not loading nonexistent profile')
+	# }}}
+	def admin_save(self, profile = None): # {{{
+		'''Save a profile.
+		If the profile name is not given, it saves the current profile.
+		'''
+		if profile and self.profile != profile.strip():
+			log('setting profile to %s' % profile.strip())
+			self.profile = profile.strip()
+			self._globals_update()
+		with fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini')) as f:
+			f.write(self.export_settings())
+	# }}}
+	def list_profiles(self): # {{{
+		'''Get a list of all available profiles.
+		'''
+		dirnames = fhs.read_data(os.path.join(self.uuid, 'profiles'), dir = True, multiple = True, opened = False)
+		ret = []
+		for d in dirnames:
+			for f in os.listdir(d):
+				name = os.path.splitext(f)[0].strip()
+				if name not in ret:
+					ret.append(name)
+		ret.sort()
+		return ret
+	# }}}
+	def admin_remove_profile(self, profile): # {{{
+		'''Remove a profile.
+		'''
+		filename = fhs.write_data(os.path.join(self.uuid, 'profiles', (profile.strip() or self.profile) + os.extsep + 'ini'), opened = False)
+		if os.path.exists(filename):
+			os.unlink(filename)
+			return True
+		return False
+	# }}}
+	def admin_set_default_profile(self, profile): # {{{
+		'''Set a profile as default.
+		'''
+		self.default_profile = profile
+		with fhs.write_data(os.path.join(self.uuid, 'info' + os.extsep + 'txt')) as f:
+			f.write(self.name + '\n')
+			f.write(profile + '\n')
 	# }}}
 	def export_settings(self): # {{{
 		'''Export the current settings.
@@ -2115,86 +2220,33 @@ class Machine: # {{{
 		errors = ['%s (%s)' % (msg, ln) for ln, msg in self.expert_import_settings(open(filename).read(), name)]
 		return filename + '\n' + json.dumps(errors)
 	# }}}
+
+	# Audio (currently not working).
 	@delayed
-	def user_gcode_run(self, id, code, paused = False): # {{{
-		'''Run a string of g-code.
-		'''
-		with fhs.write_temp(text = False) as f:
-			f.write(code)
-			f.seek(0)
-			self.gcode_id = id
-			# Break this in two, otherwise tail recursion may destroy f before call is done?
-			ret = self._gcode_run(f.filename, paused = paused)
-			return ret
+	def benjamin_audio_play(self, id, name, motor = 2): # {{{
+		self.audio_id = id
+		self.user_sleep(False)
+		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
+		cdriver.run_file(filename.encode('utf-8'), b'', 1, 0, 0, motor)
 	# }}}
-	@delayed
-	def user_request_confirmation(self, id, message): # {{{
-		'''Wait for confirmation.
-		The return value is True if confirmation is given, False if
-		not.
-		'''
-		# Abort pending confirmation, if any.
-		if self.confirmer not in (False, None):
-			self._send(self.confirmer, 'return', False)
-		self.confirmer = id
-		self.confirm_id += 1
-		self.confirm_axes = [[s.get_current_pos(a)[0] for a in range(len(s.axis))] for s in self.spaces]
-		self.confirm_message = message
-		self._broadcast(None, 'confirm', self.confirm_id, self.confirm_message)
-		for c in self.confirm_waits:
-			self._send(c, 'return', (self.confirm_id, self.confirm_message))
-		self.confirm_waits.clear()
+	def benjamin_audio_add_POST(self, filename, name): # {{{
+		with open(filename, 'rb') as f:
+			self._audio_add(f, name)
+		return filename + '\n' + json.dumps([])
 	# }}}
-	def get_confirm_id(self): # {{{
-		'''Return id of current confirmation request, if any.
-		'''
-		return self.confirm_id, self.confirm_message
+	def benjamin_audio_del(self, name): # {{{
+		assert name in self.audioqueue
+		filename = fhs.read_spool(os.path.join(self.uuid, 'audio', name + os.extsep + 'bin'), opened = False)
+		os.unlink(filename)
+		del self.audioqueue[name]
+		self._broadcast(None, 'audioqueue', tuple(self.audioqueue.keys()))
+	# }}}
+	def audio_list(self): # {{{
+		return self.audioqueue
 	# }}}
 	@delayed
-	def wait_confirm(self, id, pending = True): # {{{
-		'''Block until confirmation is requested.
-		If pending is False, ignore the current request, if any.
-		'''
-		if pending and self.confirmer is not None:
-			self._send(id, 'return', (self.confirm_id, self.confirm_message))
-			return
-		self.confirm_waits.add(id)
-	# }}}
-	def user_confirm(self, confirm_id, success = True): # {{{
-		'''Respond to a confirmation request.
-		If confirm_id is not None, it must be equal to the current id
-		or the confirmation is ignored.
-		Success is passed to the requester.  If it is requested by
-		g-code, passing False will abort the job.
-		'''
-		if confirm_id not in (self.confirm_id, None) or self.confirm_axes is None:
-			# Confirmation was already sent, or never reguested.
-			#log('no confirm %s' % repr((confirm_id, self.confirm_id)))
-			return False
-		id = self.confirmer
-		self.confirmer = None
-		self.confirm_message = None
-		self._broadcast(None, 'confirm', None)
-		self._reset_extruders(self.confirm_axes)
-		self.confirm_axes = None
-		if id not in (False, None):
-			self._send(id, 'return', success)
-		else:
-			if self.probing: # FIXME: remove this?
-				call_queue.append((self.probe_cb, [False if success else None]))
-			else:
-				if not success:
-					self.probe_pending = False
-					self._job_done(False, 'aborted by failed confirmation')
-				else:
-					if self.probe_enable and self.probe_pending and self._pin_valid(self.probe_pin):
-						self.probe_pending = False
-						call_queue.append((self._one_probe, []))
-					else:
-						self.probe_pending = False
-						cdriver.resume()
-		return True
-	# }}}
+
+	# Queue management.
 	def queue_add(self, data, name): # {{{
 		'''Add code to the queue as a string.
 		'''
@@ -2257,48 +2309,7 @@ class Machine: # {{{
 		elif id is not None:
 			self._send(id, 'return', None)
 	# }}}
-	def get_machine_state(self): # {{{
-		'''Return current machine state.
-		Return value is a tuple of a human readable string describing
-		the state, NaN or the elapsed time, NaN or the total time for
-		the current job.
-		Note that the times are computed from the requested speeds.
-		These are generally too low, because they don't account for
-		acceleration and velocity limits.
-		'''
-		pos = self.tp_get_position()
-		context = self.tp_get_context(position = pos[0])
-		if self.paused:
-			state = 'Paused'
-		elif self.gcode_file:
-			state = 'Running'
-		else:
-			return 'Idle', float('nan'), float('nan'), pos[0], pos[1], context
-		return state, cdriver.get_time(), self.total_time / self.feedrate, pos[0], pos[1], context
-	# }}}
-	def send_machine(self, target): # {{{
-		'''Return all settings about a machine.
-		'''
-		self.initialized = True
-		self._broadcast(target, 'new_machine', [self.queue_length])
-		self._globals_update(target)
-		for i, s in enumerate(self.spaces):
-			self._space_update(i, target)
-		for i, t in enumerate(self.temps):
-			self._temp_update(i, target)
-		for i, g in enumerate(self.gpios):
-			self._gpio_update(i, target)
-		self._refresh_queue(target)
-		if self.confirmer is not None:
-			self._broadcast(target, 'confirm', self.confirm_id, self.confirm_message)
-	# }}}
-	def admin_disconnect(self, reason = None): # {{{
-		cdriver.force_disconnect()
-		self._close(False)
-	# }}}
-	def motors2xyz(self, motors): # {{{
-		return cdriver.motors2xyz(*motors)
-	# }}}
+
 	# Commands for handling the toolpath.
 	def tp_get_position(self): # {{{
 		'''Get current toolpath position.

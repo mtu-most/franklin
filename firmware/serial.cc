@@ -48,7 +48,7 @@ static bool had_stall = true;
 static uint16_t last_millis;
 
 // Parity masks for decoding.
-static const uint8_t MASK[5][4] = {
+static const uint8_t MASK[5][4] PROGMEM = {
 	{0xc0, 0xc3, 0xff, 0x09},
 	{0x38, 0x3a, 0x7e, 0x13},
 	{0x26, 0xb5, 0xb9, 0x23},
@@ -120,7 +120,7 @@ void serial() { // {{{
 		{
 			// Command not finished; ignore it and wait for next.
 			arch_watchdog_reset();
-			debug("fail %d %x %ld %ld", command_end, command(0), F(last_millis), F(milliseconds));
+			debug("fail %d %x %ld %ld", command_end, command(0), &(last_millis), &(milliseconds));
 			clear_overflow();
 			return;
 		}
@@ -287,11 +287,11 @@ void serial() { // {{{
 		}
 		for (uint8_t bit = 0; bit < 5; ++bit)
 		{
-			uint8_t check = sum & MASK[bit][3];
+			uint8_t check = sum & pgm_read_byte(&MASK[bit][3]);
 			for (uint8_t p = 0; p < 3; ++p) {
 				int16_t pos = 3 * t + p;
 				if ((fulllen != 1 || (pos != 1 && pos != 2)) && ((fulllen != 2 && (fulllen != 4 || t != 1)) || pos != fulllen + t))
-					check ^= command(3 * t + p) & MASK[bit][p];
+					check ^= command(3 * t + p) & pgm_read_byte(&MASK[bit][p]);
 			}
 			check ^= check >> 4;
 			check ^= check >> 2;
@@ -382,9 +382,9 @@ static int16_t prepare_packet(int16_t len, uint8_t *packet = 0)
 		{
 			uint8_t check = 0;
 			for (uint8_t p = 0; p < 3; ++p) {
-				check ^= packet[3 * t + p] & MASK[bit][p];
+				check ^= packet[3 * t + p] & pgm_read_byte(&MASK[bit][p]);
 			}
-			check ^= sum & MASK[bit][3];
+			check ^= sum & pgm_read_byte(&MASK[bit][3]);
 			check ^= check >> 4;
 			check ^= check >> 2;
 			check ^= check >> 1;
@@ -427,6 +427,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 		return;
 	} // }}}
 	while (out_busy < 3) {
+#ifndef NO_TIMEOUT
 		if (timeout) { // {{{
 			senddebug("timeout");
 			pending_packet[ff_out][0] = CMD_TIMEOUT;
@@ -435,6 +436,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			send_packet();
 			continue;
 		} // }}}
+#endif
 		uint8_t cf = current_fragment;
 		if (notified_current_fragment != cf) { // {{{
 			senddebug("done/underrun");
@@ -522,13 +524,15 @@ void try_send_next() { // Call send_packet if we can. {{{
 		} // }}}
 		if (pin_events > 0) { // {{{
 			senddebug("pin");
-			for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
-				if (!pin[p].event())
+			for (uint8_t p = 0; p <= GPIO_LAST_PIN; ++p) {
+				if (!Gpio::check_pin(p))
+					continue;
+				if (!pin[p - GPIO_FIRST_PIN].event())
 					continue;
 				pending_packet[ff_out][0] = CMD_PINCHANGE;
 				pending_packet[ff_out][1] = p;
-				pending_packet[ff_out][2] = pin[p].state & CTRL_VALUE ? 1 : 0;
-				pin[p].clear_event();
+				pending_packet[ff_out][2] = pin[p - GPIO_FIRST_PIN].state & CTRL_VALUE ? 1 : 0;
+				pin[p - GPIO_FIRST_PIN].clear_event();
 				prepare_packet(3);
 				send_packet();
 				break;
@@ -549,6 +553,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			continue;
 		} // }}}
 		// This is pretty much always true, so make it the least important (nothing below this will ever be sent).
+#ifndef NO_ADC
 		if (adcreply_ready) { // {{{
 			//senddebug("adc");
 			//debug("adcreply %x %d", adcreply[1], adcreply[0]);
@@ -562,6 +567,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			send_packet();
 			continue;
 		} // }}}
+#endif
 		sdebug("Nothing to send %d %d", cf, notified_current_fragment);
 		return;
 	}

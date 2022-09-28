@@ -1,7 +1,7 @@
-/* arch-avr.h - avr specific parts for Franklin
+/* arch-firmware.cpp - avr specific parts for Franklin
  * vim: set foldmethod=marker :
  * Copyright 2014-2016 Michigan Technological University
- * Copyright 2016 Bas Wijnen <wijnen@debian.org>
+ * Copyright 2016-2022 Bas Wijnen <wijnen@debian.org>
  * Author: Bas Wijnen <wijnen@debian.org>
  *
  * This program is free software: you can redistribute it and/or modify
@@ -18,10 +18,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "firmware.h"
+// Enable ADC pin info (for this file only).
+#define INFO_ENABLE_ADC
 
-#ifdef __cplusplus
-// Defined by arduino: NUM_DIGITAL_PINS, NUM_ANALOG_INPUTS
+#include "../../firmware/firmware.h"
 
 // Serial communication. {{{
 // Variables. {{{
@@ -38,47 +38,61 @@
 #endif
 #endif
 #endif
-extern volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6];
-#define ONEPORT(p) {&UDR ## p, &UCSR ## p ## A, &UCSR ## p ## B, &UCSR ## p ## C, &UBRR ## p ## H, &UBRR ## p ## L}
-volatile uint8_t *const avr_serial_ports[NUM_SERIAL_PORTS][6] = {
-#ifdef UDR3
-	ONEPORT(0), ONEPORT(1), ONEPORT(2), ONEPORT(3)
-#else
-#ifdef UDR2
-	ONEPORT(0), ONEPORT(1), ONEPORT(2)
-#else
+struct SerialInfo {
+	volatile uint8_t *udr;
+	volatile uint8_t *ucsra;
+	volatile uint8_t *ucsrb;
+	volatile uint8_t *ucsrc;
+	volatile uint8_t *ubrrh;
+	volatile uint8_t *ubrrl;
+	uint8_t tx_pin;
+	uint8_t rx_pin;
+};
+#define ONEPORT(p) {udr: &UDR ## p, ucsra: &UCSR ## p ## A, ucsrb: &UCSR ## p ## B, ucsrc: &UCSR ## p ## C, ubrrh: &UBRR ## p ## H, ubrrl: &UBRR ## p ## L, tx_pin: TXD ## p ## _PIN, rx_pin: RXD ## p ## _PIN}
+static SerialInfo const avr_serial_ports[NUM_SERIAL_PORTS] PROGMEM = {
+#ifdef UDR0
+	ONEPORT(0),
+#endif
 #ifdef UDR1
-	ONEPORT(0), ONEPORT(1)
-#else
-	ONEPORT(0)
+	ONEPORT(1),
 #endif
+#ifdef UDR2
+	ONEPORT(2),
 #endif
+#ifdef UDR3
+	ONEPORT(3),
 #endif
 };
+
+static volatile uint8_t *avr_ucsra;
+static volatile uint8_t *avr_udr;
 // }}}
 
 void arch_serial_write(uint8_t data) { // {{{
 	if (avr_which_serial < 0)
 		return;
-	while (~*avr_serial_ports[avr_which_serial][1] & (1 << UDRE0)) {}
-	*avr_serial_ports[avr_which_serial][0] = data;
+	while (~*avr_ucsra & (1 << UDRE0)) {}
+	*avr_udr = data;
 } // }}}
 
 static inline void arch_serial_flush() { // {{{
 	if (avr_which_serial < 0)
 		return;
-	while (~*avr_serial_ports[avr_which_serial][1] & (1 << TXC0)) {}
+	while (~*avr_ucsra & (1 << TXC0)) {}
 } // }}}
 
 void arch_claim_serial() { // {{{
 	if (avr_which_serial == avr_last_serial)
 		return;
 	avr_which_serial = avr_last_serial;
+	avr_ucsra = reinterpret_cast <volatile uint8_t *> (pgm_read_ptr(&avr_serial_ports[avr_which_serial].ucsra));
+	avr_udr = reinterpret_cast <volatile uint8_t *> (pgm_read_ptr(&avr_serial_ports[avr_which_serial].udr));
 	for (uint8_t i = 0; i < NUM_SERIAL_PORTS; ++i) {
+		volatile uint8_t *ucsrb = reinterpret_cast <volatile uint8_t *> (pgm_read_ptr(&avr_serial_ports[i].ucsrb));
 		if (i == avr_which_serial)
-			*avr_serial_ports[i][2] = (1 << RXCIE0) | (1 << RXEN0) | (1 << TXEN0);
+			*ucsrb = (1 << RXCIE0) | (1 << RXEN0) | (1 << TXEN0);
 		else
-			*avr_serial_ports[i][2] = 0;
+			*ucsrb = 0;
 	}
 } // }}}
 
@@ -147,18 +161,26 @@ void arch_claim_serial() { // {{{
 			[ucsra] "" (_SFR_MEM_ADDR(status)), \
 			[udr] "" (_SFR_MEM_ADDR(data)), \
 			[statusmask] "M" ((1 << FE0) | (1 << DOR0)), \
-			[serialmask] "M" (SERIAL_MASK >> 8), \
-			[port] "M" (which) \
+			[serialmask] "M" (SERIAL_MASK >> 8) \
 	)
 // }}}
 
+#ifdef UDR0
 ISR(USART0_RX_vect, ISR_NAKED) { // {{{
 	avr_serial_input(0, UCSR0A, UDR0);
 } // }}}
+#endif
 
 #ifdef UDR1
 ISR(USART1_RX_vect, ISR_NAKED) { // {{{
-	avr_serial_input(1, UCSR1A, UDR1);
+	avr_serial_input(
+// Only for atmega32u4: UDR0 does not exist, but UDR1 does. No other ports exist.
+#ifdef UDR0
+			1,
+#else
+			0,
+#endif
+			UCSR1A, UDR1);
 } // }}}
 #endif
 
@@ -290,6 +312,7 @@ void debug(char const *fmt, ...) { // {{{
 #endif
 // }}}
 
+#ifndef NO_ADC
 // ADC. {{{
 #define AVR_ADCSRA_BASE	((1 << ADEN) | 7)	// Prescaler set to 128.
 
@@ -335,6 +358,7 @@ int16_t adc_get(uint8_t pin_) { // {{{
 	return ret;
 } // }}}
 // }}}
+#endif
 
 // EEPROM. {{{
 uint8_t EEPROM_read(uint16_t addr) {
@@ -396,14 +420,14 @@ void EEPROM_write(uint16_t addr, uint8_t value) {
 // Watchdog and reset. {{{
 void arch_watchdog_enable() { // {{{
 #ifdef WATCHDOG
-	wdt_reset();
-	wdt_enable(WDTO_4S);
+	Wdt::reset();
+	Wdt::enable(true, true, 8);
 #endif
 } // }}}
 
 static inline void arch_watchdog_disable() { // {{{
 #ifdef WATCHDOG
-	wdt_disable();
+	Wdt::disable();
 #endif
 } // }}}
 
@@ -411,7 +435,7 @@ static inline void arch_reset() { // {{{
 	// Warning: this may not work with all bootloaders.
 	// The problem is that the bootloader must disable or reset the watchdog timer.
 	// If it doesn't, it will continue resetting the device.
-	wdt_enable(WDTO_15MS);	// As short as possible.
+	Wdt::enable(false, true, 0);	// no interrupt, reset, As short as possible.
 	while(1) {}
 } // }}}
 // }}}
@@ -420,17 +444,11 @@ static inline void arch_reset() { // {{{
 
 void arch_setup_start() { // {{{
 	cli();
-	for (uint8_t pin_no = 0; pin_no < NUM_DIGITAL_PINS; ++pin_no) {
-		uint8_t port = pgm_read_word(digital_pin_to_port_PGM + pin_no);
-		pin[pin_no].avr_mode = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_mode_PGM + port));
-		pin[pin_no].avr_output = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_output_PGM + port));
-		pin[pin_no].avr_input = reinterpret_cast <volatile uint8_t *>(pgm_read_word(port_to_input_PGM + port));
-		pin[pin_no].avr_bitmask = pgm_read_word(digital_pin_to_bit_mask_PGM + pin_no);
-		pin[pin_no].avr_on = false;
-		pin[pin_no].avr_target = 0;
-		int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_no);
-		if (timer != NOT_ON_TIMER && timer_data[timer].num == 1)
-			timer1_pins[num_timer1_pins++] = pin_no;
+	for (uint8_t pin_no = GPIO_FIRST_PIN; pin_no < GPIO_LAST_PIN; ++pin_no) {
+		if (!Gpio::check_pin(pin_no))
+			continue;
+		pin[pin_no - GPIO_FIRST_PIN].avr_on = false;
+		pin[pin_no - GPIO_FIRST_PIN].avr_target = 0;
 	}
 	avr_time_h = 0;
 	avr_seconds_h = 0;
@@ -439,13 +457,13 @@ void arch_setup_start() { // {{{
 	// Serial ports.
 	avr_last_serial = -1;
 	avr_which_serial = -1;
-	int const ubrr = F_CPU / (8. * BAUD) - .5;
+	int const ubrr = int(F_CPU / (8. * BAUD) - .5);
 	for (uint8_t i = 0; i < NUM_SERIAL_PORTS; ++i) {
-		*avr_serial_ports[i][1] = 1 << U2X0;	// ucsra
-		*avr_serial_ports[i][2] = (1 << RXCIE0) | (1 << RXEN0);	// ucsrb
-		*avr_serial_ports[i][3] = 6;	// ucsrc
-		*avr_serial_ports[i][4] = ubrr >> 8;	// ubrrh
-		*avr_serial_ports[i][5] = ubrr & 0xff;	// ubrrl 1:1M; 16:115k2
+		*reinterpret_cast <volatile uint8_t *> (pgm_read_ptr(&avr_serial_ports[i].ucsra)) = 1 << U2X0;
+		*reinterpret_cast <volatile uint8_t *> (pgm_read_ptr(&avr_serial_ports[i].ucsrb)) = (1 << RXCIE0) | (1 << RXEN0);
+		*reinterpret_cast <volatile uint8_t *> (pgm_read_ptr(&avr_serial_ports[i].ucsrc)) = 6;
+		*reinterpret_cast <volatile uint8_t *> (pgm_read_ptr(&avr_serial_ports[i].ubrrh)) = ubrr >> 8;
+		*reinterpret_cast <volatile uint8_t *> (pgm_read_ptr(&avr_serial_ports[i].ubrrl)) = ubrr & 0xff;	// 1:1M; 16:115k2
 	}
 	// Setup timer1 for microsecond counting.
 	TCCR1A = 0x02;
@@ -489,7 +507,9 @@ void arch_setup_start() { // {{{
 	TCNT5L = 0;
 #endif
 	// Setup ADC.
+#ifndef NO_ADC
 	ADCSRA = AVR_ADCSRA_BASE;
+#endif
 	// Enable interrupts.
 	sei();
 	// machineid will be filled by CMD_BEGIN.  Initialize it to 0.
@@ -501,37 +521,149 @@ void arch_setup_start() { // {{{
 } // }}}
 
 void arch_msetup(uint8_t m) { // {{{
-	if (motor[m].step_pin < NUM_DIGITAL_PINS) {
-		motor[m].step_port = int(pin[motor[m].step_pin].avr_output);
-		motor[m].step_bitmask = pin[motor[m].step_pin].avr_bitmask;
+	if (motor[m].step_pin <= GPIO_LAST_PIN) {
+		motor[m].step_port = &Gpio::PORT(motor[m].step_pin >> 3);
+		motor[m].step_bitmask = _BV(motor[m].step_pin & 7);
 	}
 	else {
 		motor[m].step_port = 0;	// This will access r0, which is harmless because bitmask is 0.
 		motor[m].step_bitmask = 0;
 	}
-	if (motor[m].dir_pin < NUM_DIGITAL_PINS) {
-		motor[m].dir_port = int(pin[motor[m].dir_pin].avr_output);
-		motor[m].dir_bitmask = pin[motor[m].dir_pin].avr_bitmask;
+	if (motor[m].dir_pin <= GPIO_LAST_PIN) {
+		motor[m].dir_port = &Gpio::PORT(motor[m].dir_pin >> 3);
+		motor[m].dir_bitmask = _BV(motor[m].dir_pin & 7);
 	}
 	else {
 		motor[m].dir_port = 0;	// This will access r0, which is harmless because bitmask is 0.
 		motor[m].dir_bitmask = 0;
 	}
+	//debug("motor %x step: %x->%x:%x/%x, dir %x:%x/%x", m, motor[m].step_pin, motor[m].step_pin >> 3, motor[m].step_port, motor[m].step_bitmask, motor[m].dir_pin, motor[m].dir_port, motor[m].dir_bitmask);
 } // }}}
 
+uint8_t timer_pins[] = {
+#ifdef OC1A_PIN
+	OC1A_PIN,
+#endif
+#ifdef OC1B_PIN
+	OC1B_PIN,
+#endif
+#ifdef OC1C_PIN
+	OC1C_PIN,
+#endif
+
+#ifdef OC0A_PIN
+	OC0A_PIN,
+#endif
+#ifdef OC0B_PIN
+	OC0B_PIN,
+#endif
+
+#ifdef OC2A_PIN
+	OC2A_PIN,
+#endif
+#ifdef OC2B_PIN
+	OC2B_PIN,
+#endif
+
+#ifdef OC3A_PIN
+	OC3A_PIN,
+#endif
+#ifdef OC3B_PIN
+	OC3B_PIN,
+#endif
+#ifdef OC3C_PIN
+	OC3C_PIN,
+#endif
+
+#ifdef OC4A_PIN
+	OC4A_PIN,
+#endif
+#ifdef OC4B_PIN
+	OC4B_PIN,
+#endif
+#ifdef OC4C_PIN
+	OC4C_PIN,
+#endif
+
+#ifdef OC5A_PIN
+	OC5A_PIN,
+#endif
+#ifdef OC5B_PIN
+	OC5B_PIN,
+#endif
+#ifdef OC5C_PIN
+	OC5C_PIN,
+#endif
+};
+
+Timer_data const timer_data[] PROGMEM = {
+// Timer1 pins must be first in this list.
+	TIMER_DATA(&TCCR1A, &OCR1AL, 2 << 6, true, 1, 0)
+#ifdef OC1B_PIN
+	, TIMER_DATA(&TCCR1A, &OCR1BL, 2 << 4, true, 1, 1)
+#endif
+#ifdef OC1C_PIN
+	, TIMER_DATA(&TCCR1A, &OCR1CL, 2 << 2, true, 1, 2)
+#endif
+
+#ifdef OC0A_PIN
+	, TIMER_DATA(&TCCR0A, &OCR0A, 2 << 6, false, 0, 0)
+#endif
+#ifdef OC0B_PIN
+	, TIMER_DATA(&TCCR0A, &OCR0B, 2 << 4, false, 0, 1)
+#endif
+
+#ifdef OC2A_PIN
+	, TIMER_DATA(&TCCR2A, &OCR2A, 2 << 6, false, 2, 0)
+#endif
+#ifdef OC2B_PIN
+	, TIMER_DATA(&TCCR2A, &OCR2B, 2 << 4, false, 2, 1)
+#endif
+
+#ifdef OC3A_PIN
+	, TIMER_DATA(&TCCR3A, &OCR3AL, 2 << 6, true, 3, 0)
+#endif
+#ifdef OC3B_PIN
+	, TIMER_DATA(&TCCR3A, &OCR3BL, 2 << 4, true, 3, 1)
+#endif
+#ifdef OC3C_PIN
+	, TIMER_DATA(&TCCR3A, &OCR3CL, 2 << 2, true, 3, 2)
+#endif
+
+#ifdef OC4A_PIN
+	, TIMER_DATA(&TCCR4A, &OCR4AL, 2 << 6, true, 4, 0)
+#endif
+#ifdef OC4B_PIN
+	, TIMER_DATA(&TCCR4A, &OCR4BL, 2 << 4, true, 4, 1)
+#endif
+#ifdef OC4C_PIN
+	, TIMER_DATA(&TCCR4A, &OCR4CL, 2 << 2, true, 4, 2)
+#endif
+
+#ifdef OC5A_PIN
+	, TIMER_DATA(&TCCR5A, &OCR5AL, 2 << 6, true, 5, 0)
+#endif
+#ifdef OC5B_PIN
+	, TIMER_DATA(&TCCR5A, &OCR5BL, 2 << 4, true, 5, 1)
+#endif
+#ifdef OC5C_PIN
+	, TIMER_DATA(&TCCR5A, &OCR5CL, 2 << 2, true, 5, 2)
+#endif
+};
+
 void update_timer1_pwm() { // {{{
-	for (int i = 0; i < num_timer1_pins; ++i) {
+	for (uint8_t i = 0;; ++i) {
+		Timer_data const *data = &timer_data[i];
+		if (pgm_read_byte(&data->num) != 1)
+			break;
 		// OC / top = duty / 0x7fff
-		int tp = timer1_pins[i];
-		uint32_t value = pin[tp].duty;
+		uint32_t value = pin[timer_pins[i] - GPIO_FIRST_PIN].duty;
 		if (value < 0x7fff) {
-			int timer = pgm_read_byte(digital_pin_to_timer_PGM + tp);
-			Timer_data const &p = timer_data[timer];
 			value *= timer1_top;
 			value >>= 15;
-			p.oc[1] = (value >> 8) & 0xff;
-			p.oc[0] = value & 0xff;
-			//debug("set timer1 pin %d:%d to %d for %d with top %d (%x %x) ocr1b %x %x", i, tp, (int)value, pin[tp].duty, timer1_top, ICR1H, ICR1L, OCR1BH, OCR1BL);
+			(reinterpret_cast <volatile uint16_t *> (pgm_read_ptr(&data->oc)))[1] = (value >> 8) & 0xff;
+			(reinterpret_cast <volatile uint16_t *> (pgm_read_ptr(&data->oc)))[0] = value & 0xff;
+			//debug("set timer1 pin %d:%d to %d for %d with top %d (%x %x) ocr1b %x %x", i, tp, (int)value, pin[tp - GPIO_FIRST_PIN].duty, timer1_top, ICR1H, ICR1L, OCR1BH, OCR1BL);
 		}
 		//else
 			//debug("full power for timer1 pin %d:%d", i, tp);
@@ -561,82 +693,84 @@ void arch_set_speed(uint16_t us_per_sample) { // {{{
 	}
 } // }}}
 
+#ifndef NO_SPI
 void arch_spi_start() { // {{{
-	SET_OUTPUT(MOSI);
-	RESET(SCK);
+	SET_OUTPUT(MOSI_PIN);
+	RESET(SCK_PIN);
 } // }}}
 
 void arch_spi_send(uint8_t data, uint8_t bits) { // {{{
 	arch_spi_start();
 	while (bits > 0) {
 		if (data & 0x80)
-			SET(MOSI);
+			SET(MOSI_PIN);
 		else
-			RESET(MOSI);
-		SET(SCK);
-		RESET(SCK);
+			RESET(MOSI_PIN);
+		SET(SCK_PIN);
+		RESET(SCK_PIN);
 		data <<= 1;
 		bits -= 1;
 	}
 } // }}}
 
 void arch_spi_stop() { // {{{
-	UNSET(MOSI);
-	UNSET(SCK);
+	UNSET(MOSI_PIN);
+	UNSET(SCK_PIN);
 } // }}}
+#endif
 
 int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { // {{{
-	char const *extra;
-	switch (pin_) {
-		case MOSI:
-			extra = "; MOSI";
-			break;
-		case MISO:
-			extra = "; MISO";
-			break;
-		case SCK:
-			extra = "; SCK";
-			break;
-		case SDA:
-			extra = "; SDA";
-			break;
-		case SCL:
-			extra = "; SCL";
-			break;
-		default:
-			extra = "";
-			break;
-	}
+	char *b = buffer_;
 	if (digital) {
-		int port = 'A' - 1 + pgm_read_byte(digital_pin_to_port_PGM + pin_);
-		int b = pgm_read_byte(digital_pin_to_bit_mask_PGM + pin_);
-		int bit = b & 0xf0
-			? b & 0xc0
-				? b & 0x80 ? 7 : 6
-				: b & 0x20 ? 5 : 4
-			: b & 0x0c
-				? b & 0x08 ? 3 : 2
-				: b & 0x02 ? 1 : 0;
-		if (pin_ >= A0)
-			return sprintf(buffer_, "D%d/P%c%d (A%d%s)", pin_, port, bit, pin_ - A0, extra);
-		else {
-			int timer = pgm_read_byte(digital_pin_to_timer_PGM + pin_);
-			if (timer == NOT_ON_TIMER) {
-				if (extra[0] != '\0')
-					return sprintf(buffer_, "D%d/P%c%d (%s)", pin_, port, bit, &extra[2]);
-				else
-					return sprintf(buffer_, "D%d/P%c%d", pin_, port, bit);
-			}
-			else
-				return sprintf(buffer_, "D%d/P%c%d (PWM%d%c%s)", pin_, port, bit, timer_data[timer].num, timer_data[timer].part, extra);
+
+		// Skip pins that are in use.
+		if (!Gpio::check_pin(pin_)
+			|| (avr_which_serial >= 0 && (
+				pin_ == pgm_read_byte(&avr_serial_ports[avr_which_serial].tx_pin)
+				|| pin_ == pgm_read_byte(&avr_serial_ports[avr_which_serial].rx_pin)
+			))
+#if !defined(USE_RESET_PIN) && defined(RESET_PIN)
+			|| pin_ == RESET_PIN
+#endif
+#if !defined(USE_XTAL_PINS) && defined(XTAL1_PIN)
+			|| pin_ == XTAL1_PIN
+#endif
+#if !defined(USE_XTAL_PINS) && defined(XTAL2_PIN)
+			|| pin_ == XTAL2_PIN
+#endif
+				) {
+			buffer_[0] = '\0';
+			return 0;
+		}
+
+		Timer_data const *data = get_timer(pin_);
+		*b++ = 'P';
+		*b++ = 'A' + (pin_ >> 3);
+		*b++ = '0' + (pin_ & 7);
+		if (data) {
+			*b++ = '/';
+			*b++ = 'O';
+			*b++ = 'C';
+			*b++ = '0' + pgm_read_byte(&data->num);
+			*b++ = 'A' + pgm_read_byte(&data->part);
 		}
 	}
 	else {
-		if (pin_ + A0 < NUM_DIGITAL_PINS)
-			return sprintf(buffer_, "A%d (D%d)", pin_, pin_ + A0);
-		else
-			return sprintf(buffer_, "A%d", pin_);
+		uint8_t d_pin = Info::get_id(Info::first_adc_pin() + pin_);
+		*b++ = 'A';
+		if (pin_ >= 10) {
+			*b++ = '1';
+			pin_ -= 10;
+		}
+		*b++ = '0' + pin_;
+		if (Gpio::check_pin(d_pin)) {
+			*b++ = '/';
+			*b++ = 'P';
+			*b++ = 'A' + (d_pin >> 3);
+			*b++ = '0' + (d_pin & 7);
+		}
 	}
+	return b - buffer_;
 } // }}}
 
 // }}}
@@ -711,8 +845,10 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		"\t"	"rjmp isr_action_continue"	"\n"
 		// }}}
 		// If pattern: skip normal movement.
+#ifndef NO_PATTERN
 		"\t"	"sbrc 20, %[patternbit]"	"\n"
 		"\t"	"rjmp isr_action_pattern"	"\n"
+#endif
 
 		// Load value in 24.
 		"\t"	"ld 24, z"			"\n"
@@ -852,6 +988,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		ADD_DIR_DELAY
 		"\t"	"rjmp isr_action_continue"	"\n"
 		//*/
+#ifndef NO_PATTERN
 	"isr_action_pattern:"				"\n"
 		// Step pin is set every ISR, but it changes max 8 times per sample.
 		"\t"	"dec 17"			"\n"
@@ -914,7 +1051,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 		// Restore variables.
 		"\t"	"clr 27"			"\n"
 		"\t"	"lds 17, %[move_phase]"		"\n"
-
+#endif
 		::
 			[current_buffer] "" (&current_buffer),
 			[full_phase_bits] "" (&full_phase_bits),
@@ -932,7 +1069,9 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 			[steps_current] "I" (offsetof(Motor, steps_current)),
 			[flags] "I" (offsetof(Motor, intflags)),
 			[activebit] "I" (Motor::ACTIVE_BIT),
+#ifndef NO_PATTERN
 			[patternbit] "I" (Motor::PATTERN_BIT),
+#endif
 			[current_step_bit] "M" (Motor::CURRENT_STEP_BIT),
 			[current_step] "M" (Motor::CURRENT_STEP),
 			[current_dir_bit] "M" (Motor::CURRENT_DIR_BIT),
@@ -941,9 +1080,7 @@ ISR(TIMER1_COMPA_vect, ISR_NAKED) { // {{{
 			[motor_size] "" (sizeof(Motor)),
 			[timsk] "M" (_SFR_MEM_ADDR(TIMSK1)),
 			[state_non_move] "M" (NUM_NON_MOVING_STATES),
-			[delay] "M" (STEPS_DELAY),
-			[debug] "" (&debug_value),
-			[debug2] "" (&debug_value2)
+			[delay] "M" (STEPS_DELAY)
 		);
 
 	asm volatile (
@@ -1133,7 +1270,7 @@ ISR(TIMER0_OVF_vect) { // {{{
 	uint32_t top = uint32_t(15625) << 11;
 	while (avr_time_h > top) {
 		avr_time_h -= top;
-		avr_seconds += 1e3;
+		avr_seconds += 1000;
 	}
 } // }}}
 // }}}
@@ -1145,29 +1282,27 @@ void arch_outputs() { // {{{
 	if (interval <= 0)
 		return;
 	avr_outputs_last = now;
-	for (uint8_t p = 0; p < NUM_DIGITAL_PINS; ++p) {
-		if ((pin[p].state & 0x3) != CTRL_SET)
+	for (uint8_t p = GPIO_FIRST_PIN; p <= GPIO_LAST_PIN; ++p) {
+		if ((pin[p - GPIO_FIRST_PIN].state & 0x3) != CTRL_SET)
 			continue;
-		int timer = pgm_read_byte(digital_pin_to_timer_PGM + p);
-		if (timer != NOT_ON_TIMER)
+		if (get_timer(p))
 			continue;
-		if (pin[p].avr_on)
-			pin[p].avr_target -= uint32_t(interval) << 15;
-		pin[p].avr_target += interval * (uint32_t(pin[p].duty) + 1);
-		if (pin[p].avr_target < 0) {
-			//if (pin[p].avr_on)
-			//	debug("pin %d off target %x:%x duty %x interval %x", p, uint16_t(pin[p].avr_target >> 16), uint16_t(pin[p].avr_target), pin[p].duty, interval);
-			*pin[p].avr_output &= ~pin[p].avr_bitmask;
-			pin[p].avr_on = false;
+		if (pin[p - GPIO_FIRST_PIN].avr_on)
+			pin[p - GPIO_FIRST_PIN].avr_target -= uint32_t(interval) << 15;
+		pin[p - GPIO_FIRST_PIN].avr_target += interval * (uint32_t(pin[p - GPIO_FIRST_PIN].duty) + 1);
+		if (pin[p - GPIO_FIRST_PIN].avr_target < 0) {
+			//if (pin[p - GPIO_FIRST_PIN].avr_on)
+			//	debug("pin %d off target %x:%x duty %x interval %x", p, uint16_t(pin[p - GPIO_FIRST_PIN].avr_target >> 16), uint16_t(pin[p - GPIO_FIRST_PIN].avr_target), pin[p - GPIO_FIRST_PIN].duty, interval);
+			Gpio::PORT(p >> 3) &= ~_BV(p & 7);
+			pin[p - GPIO_FIRST_PIN].avr_on = false;
 		}
 		else {
-			//if (!pin[p].avr_on)
-			//	debug("pin %d on target %x:%x duty %x interval %x", p, uint16_t(pin[p].avr_target >> 16), uint16_t(pin[p].avr_target), pin[p].duty, interval);
-			*pin[p].avr_output |= pin[p].avr_bitmask;
-			pin[p].avr_on = true;
+			//if (!pin[p - GPIO_FIRST_PIN].avr_on)
+			//	debug("pin %d on target %x:%x duty %x interval %x", p, uint16_t(pin[p - GPIO_FIRST_PIN].avr_target >> 16), uint16_t(pin[p - GPIO_FIRST_PIN].avr_target), pin[p - GPIO_FIRST_PIN].duty, interval);
+			Gpio::PORT(p >> 3) |= _BV(p & 7);
+			pin[p - GPIO_FIRST_PIN].avr_on = true;
 		}
 	}
-	//debug("pin 4 state %x target %x:%x duty %x", pin[4].state, uint16_t(pin[4].avr_target >> 16), uint16_t(pin[4].avr_target), pin[4].duty);
+	//debug("pin 4 state %x target %x:%x duty %x", pin[4 - GPIO_FIRST_PIN].state, uint16_t(pin[4 - GPIO_FIRST_PIN].avr_target >> 16), uint16_t(pin[4 - GPIO_FIRST_PIN].avr_target), pin[4 - GPIO_FIRST_PIN].duty);
 } // }}}
 // }}}
-#endif

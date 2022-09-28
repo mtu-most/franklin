@@ -154,7 +154,7 @@ void request(int req) {
 			break;
 		}
 		int32_t t = utime();
-		if (temps[shmem->ints[0]].is_on) {
+		if (temps[shmem->ints[0]].is_on[0]) {
 			// This causes an insignificant error in the model, but when using this you probably aren't using the model anyway, and besides you won't notice the error even if you do.
 			temps[shmem->ints[0]].time_on += t - temps[shmem->ints[0]].last_temp_time;
 			temps[shmem->ints[0]].last_temp_time = t;
@@ -395,6 +395,8 @@ void request(int req) {
 				probe_data = NULL;
 		}
 		int base = shmem->ints[0];
+		// shmem->floats is 500 elements; we start at 100, so only 400 can be sent at a time.
+		// This is handled by the Python driver; user code does not see this.
 		for (int n = base; n < base + 400 && n < probe_nx * probe_ny; ++n) {
 			int y = n / probe_nx;
 			int x = n % probe_nx;

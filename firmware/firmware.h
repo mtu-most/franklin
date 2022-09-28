@@ -88,7 +88,9 @@ template <typename _A> _A abs(_A a) { return a > 0 ? a : -a; }
 #define fabs abs
 
 // Volatile variables which are used by interrupt handlers. {{{
+#ifndef NO_DEBUG
 EXTERN volatile uint16_t debug_value, debug_value1, debug_value2, debug_value3;
+#endif
 EXTERN volatile uint8_t move_phase, full_phase, full_phase_bits;
 EXTERN volatile bool serial_overflow;
 EXTERN volatile uint8_t *serial_buffer_head;
@@ -108,21 +110,33 @@ EXTERN volatile uint8_t last_fragment;	// Fragment that is currently being fille
 EXTERN uint8_t machineid[1 + ID_SIZE + UUID_SIZE + (1 + ID_SIZE + UUID_SIZE + 2) / 3];
 EXTERN int16_t command_end;
 EXTERN bool had_data;
-EXTERN uint8_t reply[MAX_REPLY_LEN], adcreply[6];
+EXTERN uint8_t reply[MAX_REPLY_LEN];
+#ifndef NO_ADC
+EXTERN uint8_t adcreply[6];
+EXTERN uint8_t adcreply_ready;
+#endif
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN uint8_t out_busy;
-EXTERN uint8_t reply_ready, adcreply_ready;
+EXTERN uint8_t reply_ready;
+#ifndef NO_TIMEOUT
 EXTERN bool timeout;
+EXTERN uint16_t timeout_time, last_active;
+#endif
 EXTERN uint8_t ff_in;
 EXTERN uint8_t ff_out;
 EXTERN uint8_t pending_packet[4][REPLY_BUFFER_SIZE];
 EXTERN int16_t pending_len[4];
 EXTERN uint8_t filling;
+#ifndef NO_LED
+EXTERN uint8_t led_pin;
 EXTERN uint8_t led_fast;
-EXTERN uint16_t led_last, led_phase, time_per_sample;
-EXTERN uint8_t led_pin, stop_pin, probe_pin, pin_flags;
+EXTERN uint16_t led_last, led_phase;
+#endif
+EXTERN uint16_t time_per_sample;
+EXTERN uint8_t stop_pin, probe_pin, pin_flags;
+#ifndef NO_SPI
 EXTERN uint8_t spiss_pin;
-EXTERN uint16_t timeout_time, last_active;
+#endif
 EXTERN uint8_t enabled_pins;
 // }}}
 
@@ -273,13 +287,17 @@ struct Settings { // {{{
 	};
 }; // }}}
 
-struct Adc { // {{{
+struct AdcData { // {{{
 	uint8_t linked[2];
 	int16_t value[2];	// bit 15 in [0] set => invalid; bit 14 set => linked inverted.
+#ifndef NO_TEMP_LIMIT
 	int16_t limit[2][2];
+#endif
 	bool is_on[2];
+#ifndef NO_TEMP_HOLD
 	uint16_t hold_time;
 	unsigned long last_change;
+#endif
 	void disable();
 }; // }}}
 
@@ -293,8 +311,10 @@ struct Pin_t { // {{{
 	uint8_t state;
 	uint16_t duty;
 	uint8_t num_temps;
+#ifndef NO_PIN_MOTOR
 	uint8_t motor;
 	uint8_t ticks;
+#endif
 	bool value() {
 		return CONTROL_VALUE(state);
 	}
@@ -351,7 +371,9 @@ struct Motor { // {{{
 	volatile uint16_t steps_current;
 	uint8_t limit_min_pin;
 	uint8_t limit_max_pin;
+#ifndef NO_FOLLOWER
 	uint8_t follow;
+#endif
 	volatile uint8_t intflags;	// Flags that are used by the interrupt handler.
 	uint8_t flags;	// Flags that are not used by the interrupt handler.
 	ARCH_MOTOR
@@ -385,7 +407,9 @@ struct Motor { // {{{
 		dir_pin = ~0;
 		limit_min_pin = ~0;
 		limit_max_pin = ~0;
+#ifndef NO_FOLLOWER
 		follow = ~0;
+#endif
 		arch_msetup(m);
 	}
 	void disable(uint8_t m) {
@@ -394,24 +418,26 @@ struct Motor { // {{{
 		flags = 0;
 		current_pos = 0;
 		steps_current = 0;
-		if (step_pin < NUM_DIGITAL_PINS)
+		if (Gpio::check_pin(step_pin))
 			UNSET(step_pin);
-		if (dir_pin < NUM_DIGITAL_PINS)
+		if (Gpio::check_pin(dir_pin))
 			UNSET(dir_pin);
-		if (limit_min_pin < NUM_DIGITAL_PINS)
+		if (Gpio::check_pin(limit_min_pin))
 			UNSET(limit_min_pin);
-		if (limit_max_pin < NUM_DIGITAL_PINS)
+		if (Gpio::check_pin(limit_max_pin))
 			UNSET(limit_max_pin);
 		step_pin = ~0;
 		dir_pin = ~0;
 		limit_min_pin = ~0;
 		limit_max_pin = ~0;
+#ifndef NO_FOLLOWER
 		follow = ~0;
+#endif
 		arch_msetup(m);
 	}
 }; // }}}
 
-EXTERN Pin_t pin[NUM_DIGITAL_PINS];
+EXTERN Pin_t pin[GPIO_LAST_PIN - GPIO_FIRST_PIN + 1];
 EXTERN Motor motor[NUM_MOTORS];
 EXTERN int stopping;	// number of switch which has been hit, or active_motors for a probe hit and -1 for none.
 EXTERN uint32_t home_step_time;
@@ -434,9 +460,11 @@ EXTERN uint8_t notified_current_fragment;
 EXTERN uint8_t limit_fragment_pos;
 EXTERN uint8_t last_len;	// copy of settings[last_fragment].len, for when current_fragment changes during a fill.
 
-EXTERN Adc adc[NUM_ANALOG_INPUTS];
+#ifndef NO_ADC
+EXTERN AdcData adc[ADC_LAST_PIN + 1];
 EXTERN uint8_t adc_current, adc_next;
 EXTERN AdcPhase adc_phase;
+#endif
 
 // timer.cpp
 void do_steps();
