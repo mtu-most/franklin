@@ -270,10 +270,29 @@ void run_file_next_command(int32_t start_time) {
 			case RUN_GPIO:
 			{
 				int tool = r.tool;
-				if (tool == -2)
+				if (tool == -2) {
+					// Ignore undefined fan.
 					tool = fan_id != 255 ? fan_id : -1;
-				else if (tool == -3)
-					tool = spindle_id != 255 ? spindle_id : -1;
+				}
+				else if (tool == -3) {
+					if (spindle_id == 255) {
+						// Use confirm for undefined spindle.
+						int len = 0;
+						char const *msg = r.X[0] ? "Please start the spindle." : "Please stop the spindle";
+						len = min(int(strlen(msg)), PATH_MAX);
+						memcpy(const_cast<char *>(shmem->interrupt_str), msg, len);
+						run_file_wait += 1;
+						prepare_interrupt();
+						shmem->interrupt_ints[0] = 0;
+						shmem->interrupt_ints[1] = len;
+						send_to_parent(CMD_CONFIRM);
+						confirming = true;
+						moving = true;
+						break;
+					}
+					else
+						tool = spindle_id;
+				}
 				if (tool < 0 || tool >= num_gpios) {
 					if (tool != -1)
 						debug("cannot set invalid gpio %d", tool);
