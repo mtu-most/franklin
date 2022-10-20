@@ -124,6 +124,147 @@ fhs.option('tls', 'Enable TLS. It is recommended to let Apache handle this', arg
 config = fhs.init(packagename = 'franklin')
 # }}}
 
+# Load space type modules {{{
+modulepath = fhs.read_data(os.path.join('type', 'types.txt'), opened = False)
+moduledir = os.path.dirname(modulepath)
+typeinfo = {}
+typenames = []
+#typeinfo['h_bot'] = {
+#		'title': 'H-Bot',
+#		'name': (['r', None], ['θ', '°'], ['z', None]),	// Axis names and units. None means default units.
+#		'min-axes': 3
+#		'space': [{
+#			'name': 'radius',
+#			'title': Radius',
+#			'unit': None,	# None means default units.
+#			'type': 'float',
+#			'default': 0.,
+#			'digits': 2,
+#			'scale': 1.,
+#			'help': 'Rotation of the machine'}
+#		],
+#		'axis': [],
+#		'motor': [],
+#	}
+
+# Config file format:
+'''
+# Global values must be specified before any parameters.
+# This is the default. Set to different value to allow using a comma as part of the name or unit.
+seperator = ,
+motor-names = r,θ,z
+# Values which are not specified use the system default unit (normally mm).
+motor-units = ,°,
+
+# Define a parameter. This is for a property that has one instance.
+# All possible paramters are specified here. Only title and help are required.
+# Everything else has sensible defaults.
+# Type can be float (the default), int, string, or motor.
+# For the motor type, unit, default, digits and scale are ignored.
+[space]
+name = Angle
+help = Rotation of the machine.
+unit = °
+type = float
+default = 0
+digits = 2
+scale = 1000
+
+# More space parameters can follow. Every parameter definition starts with a name.
+
+[motor]
+title = Radius
+help = Distance from the center to this apex.
+default = 125
+digits = 1
+
+[axis]
+title = Offset
+help = ...
+'''
+
+# If a value contains only [-0-9], it is an int; otherwise it is a float. 'inf' and 'nan' are supported.
+# Digits are counted and used for displaying in the interface.
+# Scale is parsed and used for displaying in the interface; default value is also multiplied by it.
+
+for m in open(modulepath):
+	#log('reading info for type ' + m.strip())
+	separator = ','
+	title = m.strip()
+	module = re.sub('[^a-z0-9]', '_', title.lower())
+	with open(os.path.join(moduledir, module, module + os.extsep + 'ini')) as f:
+		section = None
+		ret = {'title': title, 'space': [], 'axis': [], 'motor': [], 'name': [], 'min-axes': None}
+		for ln in f:
+			if ln.strip() == '' or ln.strip().startswith('#'):
+				continue
+			r = re.match(r'^\s*(?:\[(space|axis|motor)\]|(separator|min-axes|motor-names|motor-units|title|name|help|unit|type|default|digits|scale)\s*=\s*(.*?))\s*$', ln)
+			assert r is not None
+			# 1: space|axis|motor		new section
+			# 2: separator|...|scale	key
+			# 3: .*?			value
+			if r.group(1) is not None:
+				# New section.
+				section = r.group(1)
+				continue
+			key = r.group(2)
+			value = r.group(3).strip()
+			if section is None:
+				if key == 'separator':
+					assert len(value) > 0
+					separator = value
+				elif key == 'motor-names':
+					names = value.split(separator)
+					if len(ret['name']) < len(names):
+						ret['name'] += [[None, None] for _ in range(len(names) - len(ret['name']))]
+					for m in range(len(names)):
+						ret['name'][m][0] = names[m].strip()
+				elif key == 'motor-units':
+					units = value.split(separator)
+					if len(ret['name']) < len(units):
+						ret['name'] += [[None, None] for _ in range(len(units) - len(ret['name']))]
+					for m in range(len(units)):
+						ret['name'][m][1] = units[m].strip()
+				elif key == 'min-axes':
+					assert ret['min-axes'] is None
+					ret['min-axes'] = int(value)
+				else:
+					raise AssertionError('Invalid key in global section')
+			else:
+				if key == 'title':
+					assert len(ret[section]) == 0 or 'help' in ret[section][-1]
+					ret[section].append({'unit': None, 'type': 'float', 'default': 0, 'digits': 0, 'scale': 1, 'name': value.lower()})
+				assert len(ret[section]) > 0
+				if key in ('name', 'title', 'help', 'unit', 'type'):
+					if key == 'type':
+						assert value in ('int', 'float', 'motor', 'string')
+					ret[section][-1][key] = value
+				elif key == 'digits':
+					ret[section][-1][key] = int(value)
+				elif key == 'scale':
+					ret[section][-1][key] = float(value)
+				elif key == 'default':
+					if re.match(r'^[-0-9]+$', value):
+						ret[section][-1][key] = int(value)
+					else:
+						ret[section][-1][key] = float(value)
+				else:
+					raise AssertionError('Invalid key in section %s' % section)
+	typeinfo[module] = ret
+	typenames.append(module)
+# }}}
+
+def start_driver(uuid):
+	return subprocess.Popen((
+		fhs.read_data('driver.py', opened = False),
+		'--uuid', uuid if uuid is not None else '',
+		'--allow-system', config['allow-system'],
+		'--moduledir', moduledir,
+		'--typenames', '\t'.join(typenames),
+		'--typeinfo', json.dumps(typeinfo),
+		) + (('--system',) if fhs.is_system else ()),
+			 stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+
 # Global variables. {{{
 httpd = None
 ports = {}
@@ -265,6 +406,9 @@ class Connection: # {{{
 	# }}}
 	def get_machines(self): # {{{
 		return tuple(machines.keys())
+	# }}}
+	def get_typeinfo(self): # {{{
+		return typeinfo
 	# }}}
 	def detect(self, port): # {{{
 		return detect(port)
@@ -760,7 +904,7 @@ def detect(port): # {{{
 	broadcast(None, 'port_state', port, 1)
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
-		process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', '-', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+		process = start_driver('-')
 		machines[port] = Machine(port, process, run_id)
 		ports[port] = port
 		return False
@@ -880,7 +1024,7 @@ def detect(port): # {{{
 				# Close detect port so it doesn't interfere.
 				machine.close()
 				#log('machines: %s' % repr(tuple(machines.keys())))
-				process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid if uuid is not None else '', '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+				process = start_driver(uuid)
 				new_machine = Machine(port, process, run_id, send = False)
 				def finish():
 					log('finish detect %s' % repr(uuid))
@@ -940,7 +1084,7 @@ except OSError:
 def create_machine(uuid = None): # {{{
 	if uuid is None:
 		uuid = protocol.new_uuid()
-	process = subprocess.Popen((fhs.read_data('driver.py', opened = False), '--uuid', uuid, '--allow-system', config['allow-system']) + (('--system',) if fhs.is_system else ()), stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+	process = start_driver(uuid)
 	machines[uuid] = Machine(None, process, None)
 	return uuid
 # }}}

@@ -58,144 +58,18 @@ C0 = 273.15	# Conversion between K and °C
 WAIT = object()	# Sentinel for blocking functions.
 NUM_SPACES = 3	# Position, extruders, followers
 record_format = '=Bi' + 'd' * 11 + 'q' # type, tool, X[3], h[3], Jg, tf, v0, E, time, line
-# Space types
-type_names = []
 # }}}
 
 fhs.option('allow-system', 'Regular expression of allowed system commands', default = '')
 fhs.option('uuid', 'Machine uuid')
+fhs.option('moduledir', 'Directory with space type modules')
+fhs.option('typeinfo', 'json-encoded space type information')
+fhs.option('typenames', 'tab-separated list of space type modules')
 config = fhs.init(packagename = 'franklin')
+typeinfo = json.loads(config['typeinfo'])
+type_names = config['typenames'].split('\t')
 
-# Load space type modules {{{
-modulepath = fhs.read_data(os.path.join('type', 'types.txt'), opened = False)
-moduledir = os.path.dirname(modulepath)
-typeinfo = {}
-#typeinfo['h_bot'] = {
-#		'title': 'H-Bot',
-#		'name': (['r', None], ['θ', '°'], ['z', None]),	// Axis names and units. None means default units.
-#		'min-axes': 3
-#		'space': [{
-#			'name': 'radius',
-#			'title': Radius',
-#			'unit': None,	# None means default units.
-#			'type': 'float',
-#			'default': 0.,
-#			'digits': 2,
-#			'scale': 1.,
-#			'help': 'Rotation of the machine'}
-#		],
-#		'axis': [],
-#		'motor': [],
-#	}
-
-# Config file format:
-'''
-# Global values must be specified before any parameters.
-# This is the default. Set to different value to allow using a comma as part of the name or unit.
-seperator = ,
-motor-names = r,θ,z
-# Values which are not specified use the system default unit (normally mm).
-motor-units = ,°,
-
-# Define a parameter. This is for a property that has one instance.
-# All possible paramters are specified here. Only title and help are required.
-# Everything else has sensible defaults.
-# Type can be float (the default), int, string, or motor.
-# For the motor type, unit, default, digits and scale are ignored.
-[space]
-name = Angle
-help = Rotation of the machine.
-unit = °
-type = float
-default = 0
-digits = 2
-scale = 1000
-
-# More space parameters can follow. Every parameter definition starts with a name.
-
-[motor]
-title = Radius
-help = Distance from the center to this apex.
-default = 125
-digits = 1
-
-[axis]
-title = Offset
-help = ...
-'''
-
-# If a value contains only [-0-9], it is an int; otherwise it is a float. 'inf' and 'nan' are supported.
-# Digits are counted and used for displaying in the interface.
-# Scale is parsed and used for displaying in the interface; default value is also multiplied by it.
-
-for m in open(modulepath):
-	#log('reading info for type ' + m.strip())
-	separator = ','
-	title = m.strip()
-	module = re.sub('[^a-z0-9]', '_', title.lower())
-	with open(os.path.join(moduledir, module, module + os.extsep + 'ini')) as f:
-		section = None
-		ret = {'title': title, 'space': [], 'axis': [], 'motor': [], 'name': [], 'min-axes': None}
-		for ln in f:
-			if ln.strip() == '' or ln.strip().startswith('#'):
-				continue
-			r = re.match(r'^\s*(?:\[(space|axis|motor)\]|(separator|min-axes|motor-names|motor-units|title|name|help|unit|type|default|digits|scale)\s*=\s*(.*?))\s*$', ln)
-			assert r is not None
-			# 1: space|axis|motor		new section
-			# 2: separator|...|scale	key
-			# 3: .*?			value
-			if r.group(1) is not None:
-				# New section.
-				section = r.group(1)
-				continue
-			key = r.group(2)
-			value = r.group(3).strip()
-			if section is None:
-				if key == 'separator':
-					assert len(value) > 0
-					separator = value
-				elif key == 'motor-names':
-					names = value.split(separator)
-					if len(ret['name']) < len(names):
-						ret['name'] += [[None, None] for _ in range(len(names) - len(ret['name']))]
-					for m in range(len(names)):
-						ret['name'][m][0] = names[m].strip()
-				elif key == 'motor-units':
-					units = value.split(separator)
-					if len(ret['name']) < len(units):
-						ret['name'] += [[None, None] for _ in range(len(units) - len(ret['name']))]
-					for m in range(len(units)):
-						ret['name'][m][1] = units[m].strip()
-				elif key == 'min-axes':
-					assert ret['min-axes'] is None
-					ret['min-axes'] = int(value)
-				else:
-					raise AssertionError('Invalid key in global section')
-			else:
-				if key == 'title':
-					assert len(ret[section]) == 0 or 'help' in ret[section][-1]
-					ret[section].append({'unit': None, 'type': 'float', 'default': 0, 'digits': 0, 'scale': 1, 'name': value.lower()})
-				assert len(ret[section]) > 0
-				if key in ('name', 'title', 'help', 'unit', 'type'):
-					if key == 'type':
-						assert value in ('int', 'float', 'motor', 'string')
-					ret[section][-1][key] = value
-				elif key == 'digits':
-					ret[section][-1][key] = int(value)
-				elif key == 'scale':
-					ret[section][-1][key] = float(value)
-				elif key == 'default':
-					if re.match(r'^[-0-9]+$', value):
-						ret[section][-1][key] = int(value)
-					else:
-						ret[section][-1][key] = float(value)
-				else:
-					raise AssertionError('Invalid key in section %s' % section)
-	typeinfo[module] = ret
-	type_names.append(module)
-# }}}
-
-cdriver.init(fhs.read_data('franklin-cdriver', opened = False).encode('utf-8'), (moduledir + os.sep).encode('utf-8'))
+cdriver.init(fhs.read_data('franklin-cdriver', opened = False).encode('utf-8'), (config['moduledir'] + os.sep).encode('utf-8'))
 
 # Enable code trace. {{{
 if False:
@@ -1576,9 +1450,6 @@ class Machine: # {{{
 		if not self.name:
 			self.name = self.uuid
 		return self.uuid
-	# }}}
-	def get_typeinfo(self): # {{{
-		return typeinfo
 	# }}}
 	def expert_die(self, reason): # {{{
 		'''Kill this machine, including all files on disk.
