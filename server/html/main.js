@@ -203,7 +203,7 @@ AddEvent('load', function() { // {{{
 	type_info = {};
 	var setup_event = new Event('setup');
 	window.dispatchEvent(setup_event);
-	window.AddEvent('keypress', keypress);
+	window.AddEvent('keydown', keydown);
 	setInterval(timed_update, 400);
 }); // }}}
 
@@ -512,38 +512,6 @@ function upload(ports, firmwares) { // {{{
 	rpc.call('upload', [port, firmware], {}, function(ret) { alert('upload done: ' + ret);});
 } // }}}
 
-function probe(ui) { // {{{
-	var bbox = [NaN, NaN, NaN, NaN];
-	var queues = get_elements(ui, [null, 'queue']);
-	for (var q = 0; q < queues.length; ++q) {
-		var one = get_queue(ui, queues[q])[1];
-		if (!(bbox[0] < one[0]))
-			bbox[0] = one[0];
-		if (!(bbox[1] > one[1]))
-			bbox[1] = one[1];
-		if (!(bbox[2] < one[2]))
-			bbox[2] = one[2];
-		if (!(bbox[3] > one[3]))
-			bbox[3] = one[3];
-	}
-	// FIXME: target[xy] no longer exists.
-	ui.machine.call('probe', [[ui.machine.targetx, ui.machine.targety, bbox[0] - ui.machine.probe_offset, bbox[2] - ui.machine.probe_offset, bbox[1] - bbox[0] + 2 * ui.machine.probe_offset, bbox[3] - bbox[2] + 2 * ui.machine.probe_offset]], {});
-} // }}}
-
-function del_probe(ui) { // {{{
-	ui.machine.call('probe', [null], {});
-} // }}}
-
-function download_probemap(ui) { // {{{
-	var data = JSON.stringify(ui.machine.probemap);
-	var a = Create('a');
-	a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(data);
-	a.download = 'probe.map';
-	var event = document.createEvent('MouseEvents');
-	event.initEvent('click', true, true);
-	a.dispatchEvent(event);
-} // }}}
-
 function update_motorselect(select, new_space, new_motor) {
 	var current;
 	if (new_motor === undefined)
@@ -604,6 +572,12 @@ function audio_del(ui, select) { // {{{
 
 // Non-update events. {{{
 function connect(ui, connected, ui_info) { // {{{
+	// Connection with server is established.
+
+	// Note: this is about the network connection to the websocket server.
+	// It has nothing to do with the connection status of the machines that
+	// the server controls.
+
 	// Generate ui code for type modules.
 	for (var type in ui_info) {
 		var setup_type = function(type) {
@@ -711,10 +685,6 @@ function connect(ui, connected, ui_info) { // {{{
 		else
 			type_info[type].draw = function() {};
 	}
-	if (ui)
-		ui.bin.update();
-	if (connected)
-		select_machine(ui);
 } // }}}
 
 function autodetect() { // {{{
@@ -778,7 +748,7 @@ function new_machine(uuid) { // {{{
 	labels_element.insertBefore(machines[uuid].label, new_tab);
 	machines_element.Add(p);
 	globals_update(uuid, false);
-	if (selected_machine === null || !selected_machine.connected)
+	if (selected_machine === null || !machines[selected_machine].connected)
 		select_machine(p);
 } // }}}
 
@@ -888,7 +858,7 @@ function audioqueue(uuid) { // {{{
 // }}}
 
 // Update events(from server). {{{
-function globals_update(uuid, ui_configure, nums_changed) { // {{{
+function globals_update(uuid, ui_configure, nums_changed, newly_connected) { // {{{
 	var p = machines[uuid].ui;
 	if (p.updating_globals)
 		return;
@@ -928,8 +898,11 @@ function globals_update(uuid, ui_configure, nums_changed) { // {{{
 	update_pin(p, [null, 'probe_pin']);
 	update_pin(p, [null, 'spiss_pin']);
 	update_float(p, [null, 'probe_dist']);
-	update_float(p, [null, 'probe_offset']);
-	update_float(p, [null, 'probe_safe_dist']);
+	update_float(p, [null, 'probe_height']);
+	update_float(p, [null, 'probe_depth']);
+	update_float(p, [null, 'probe_speed_scale']);
+	update_float(p, [null, 'probe_z']);
+	update_float(p, [null, 'probe_speed']);
 	update_float(p, [null, 'timeout']);
 	update_float(p, [null, 'feedrate']);
 	update_float(p, [null, 'max_deviation']);
@@ -1035,6 +1008,8 @@ function globals_update(uuid, ui_configure, nums_changed) { // {{{
 	update_canvas_and_spans(p);
 	if (!ui_configure && p.bin !== undefined)
 		p.bin.update();
+	if (newly_connected)
+		select_machine(p);
 	p.updating_globals = false;
 } // }}}
 
@@ -1738,9 +1713,6 @@ function redraw_canvas(ui) { // {{{
 			canvas.height = canvas.clientHeight;
 			// }}}
 
-			var b = ui.bbox;
-			var true_pos = [ui.machine.spaces[0].axis[0].current, ui.machine.spaces[0].axis[1].current];
-
 			c.save(); // Use machine coordinates for canvas. {{{
 			// Clear canvas.
 			c.clearRect(0, 0, canvas.width, canvas.width);
@@ -1782,31 +1754,6 @@ function redraw_canvas(ui) { // {{{
 			c.fillStyle = '#888';
 			c.fill();
 			// }}}
-			// Draw probe map. {{{
-			if (ui.machine.probemap !== null) {
-				var limits = ui.machine.probemap[0];
-				var nums = ui.machine.probemap[1];
-				var map = ui.machine.probemap[2];
-				var dx = limits[4] / nums[0];
-				var dy = limits[5] / nums[1];
-				var sina = Math.sin(nums[2]);
-				var cosa = Math.cos(nums[2]);
-				var size = (dx > dy ? dy : dx) / 4;
-				c.beginPath();
-				for (var y = 0; y <= nums[1]; ++y) {
-					for (var x = 0; x <= nums[0]; ++x) {
-						var px = limits[0] + (dx * x + limits[2]) * cosa - (dy * y + limits[3]) * sina;
-						var py = limits[1] + (dy * y + limits[3]) * cosa + (dx * x + limits[2]) * sina;
-						c.moveTo(px - size, py - size);
-						c.lineTo(px + size, py + size);
-						c.moveTo(px - size, py + size);
-						c.lineTo(px + size, py - size);
-					}
-				}
-				c.strokeStyle = '#aaa';
-				c.stroke();
-			}
-			// }}}
 
 			c.save(); // Draw context. {{{
 			var current_pos = null;
@@ -1833,6 +1780,7 @@ function redraw_canvas(ui) { // {{{
 			c.restore(); // }}}
 
 			// Draw current location. {{{
+			var true_pos = [ui.machine.spaces[0].axis[0].current + ui.machine.spaces[0].axis[0].offset, ui.machine.spaces[0].axis[1].current + ui.machine.spaces[0].axis[1].offset];
 			c.beginPath();
 			c.fillStyle = '#44f';
 			c.moveTo(true_pos[0] + 3, true_pos[1]);
@@ -1845,6 +1793,8 @@ function redraw_canvas(ui) { // {{{
 			c.rotate(ui.machine.targetangle);
 
 			c.beginPath();
+			start_move(ui);
+			var b = ui.bbox;
 			if (b) {
 				for (var i = 0; i < b.length; ++i) {
 					if (b[i][0] != b[i][1] && b[i][2] != b[i][3]) {
@@ -2010,8 +1960,8 @@ function xyup(ui, e) { // {{{
 	}
 	else if (e.buttons & 4) {
 		drag[3] += 1;
-		ui.machine.call('set_axis', [0, 0], {'offset': pos[0]}, function() {
-			ui.machine.call('set_axis', [0, 1], {'offset': pos[1]}, function() {
+		ui.machine.call('set_axis', [[0, 0]], {'offset': pos[0]}, function() {
+			ui.machine.call('set_axis', [[0, 1]], {'offset': pos[1]}, function() {
 				drag[3] -= 1;
 			});
 		});
@@ -2093,7 +2043,7 @@ function zmove(ui, e) { // {{{
 }
 // }}}
 
-function keypress(event) { // {{{
+function keydown(event) { // {{{
 	if (selected_machine === null)
 		return;
 	var ui = machines[selected_machine].ui;
@@ -2104,15 +2054,15 @@ function keypress(event) { // {{{
 		var target = [[-amount, 0], [0, amount], [amount, 0], [0, -amount]][event.keyCode - 37];
 		ui.machine.call('line', [target], {relative: true}, function() {
 			if (event.altKey) {
-				ui.machine.call('set_axis', [0, 0], {'offset': ui.machine.spaces[0].axis[0].offset + target[0]});
-				ui.machine.call('set_axis', [0, 1], {'offset': ui.machine.spaces[0].axis[1].offset + target[1]});
+				ui.machine.call('set_axis', [[0, 0]], {'offset': ui.machine.spaces[0].axis[0].offset + target[0]});
+				ui.machine.call('set_axis', [[0, 1]], {'offset': ui.machine.spaces[0].axis[1].offset + target[1]});
 			}
 			else
 				update_canvas_and_spans(ui);
 		});
 		event.preventDefault();
 	}
-	else if (event.charCode >= 48 && event.charCode <= 57 && event.ctrlKey) {
+	else if (event.keyCode >= 96 && event.keyCode <= 105 && event.ctrlKey) {
 		if (ui.bbox.length != 1) {
 			event.preventDefault();
 			alert('Moving to bounding box positions is only supported with exactly one job selector');
@@ -2125,11 +2075,9 @@ function keypress(event) { // {{{
 		var pos = [[0, 0],
 			[minx, miny], [(minx + maxx) / 2, miny], [maxx, miny],
 			[minx, (miny + maxy) / 2], [(minx + maxx) / 2, (miny + maxy) / 2], [maxx, (miny + maxy) / 2],
-			[minx, maxy], [(minx + maxx) / 2, maxy], [maxx, maxy]][event.charCode - 48];
+			[minx, maxy], [(minx + maxx) / 2, maxy], [maxx, maxy]][event.keyCode - 96];
 		var posx = Math.cos(ui.machine.targetangle) * pos[0] - Math.sin(ui.machine.targetangle) * pos[1];
 		var posy = Math.cos(ui.machine.targetangle) * pos[1] + Math.sin(ui.machine.targetangle) * pos[0];
-		posx += ui.machine.spaces[0].axis[0].offset;
-		posy += ui.machine.spaces[0].axis[1].offset;
 		ui.machine.call('line', [[posx, posy]], {}, function() { update_canvas_and_spans(ui); });
 		event.preventDefault();
 	}

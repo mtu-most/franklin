@@ -24,7 +24,7 @@
 #define INFO_ENABLE
 #define NO_main
 
-#include <avr-ll.hh>
+#include <amat.hh>
 
 // Defines and includes.
 // Note: When changing this, also change max in cdriver/space.cpp
@@ -49,9 +49,13 @@
 #endif
 #define BAUD 115200
 
+#ifndef NO_PWM
 #define ARCH_PIN_DATA \
 	bool avr_on; \
 	int32_t avr_target;
+#else
+#define ARCH_PIN_DATA
+#endif
 
 #define ARCH_MOTOR \
 	volatile uint8_t *step_port; \

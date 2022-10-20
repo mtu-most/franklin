@@ -27,18 +27,17 @@ import sys
 scale = 30
 offset = 12 * scale
 
-fhs.option('src', 'source file')
 fhs.option('svg', 'generate svg output', argtype = bool)
 fhs.option('z', 'parse this layer only', default = float('nan'))
 fhs.option('offset', 'offset per layer', default = 0.0)
 config = fhs.init()
 
-file = open(config['src'], 'rb')
+file = open(sys.argv[1], 'rb')
 
 def warn(msg):
 	sys.stderr.write('%d: ' % n + msg + '\n')
 
-cmds = ['system', 'poly3+', 'poly3-', 'poly2', 'arc', 'abc', 'goto', 'gpio', 'set T', 'wait T', 'setpos', 'wait', 'confirm', 'park', 'pattern']
+cmds = ['system', 'poly3+', 'poly3-', 'poly2', 'arc', 'abc', 'goto', 'gpio', 'set T', 'wait T', 'setpos', 'wait', 'confirm', 'park', 'pattern', 'clearp', 'storep', 'usep', 'adjustp']
 def mkcmd(t):
 	if t < len(cmds):
 		return cmds[t]
@@ -58,7 +57,7 @@ numstrings = footer[0]
 bbox = footer[1:-1]
 jobtime = footer[-1]
 strings = []
-lenformat = 'l' * numstrings
+lenformat = '=' + 'l' * numstrings
 lensize = struct.calcsize(lenformat)
 file.seek(-footersize - lensize, 2)
 stringlengths = struct.unpack(lenformat, file.read(lensize))
@@ -71,7 +70,7 @@ file.seek(0, 0)
 minutes = jobtime // 60
 seconds = jobtime - minutes * 60
 
-numrecords = fullsize // datasize
+num_records = fullsize // datasize
 assert fullsize % datasize == 0
 
 n = 0
@@ -86,11 +85,10 @@ else:
 		print('# String %d: %s' % (i, s))
 	print('#  n command tool          X          Y          Z      h[0]      h[1]      h[2]       Jg      tf     v0       E      time line')
 
-while True:
+for record in range(num_records):
 	extra = ''
 	s = file.read(datasize)
-	if len(s) != datasize:
-		break
+	assert len(s) == datasize
 	#print('pos:', pos)
 	t, T, X, Y, Z, h0, h1, h2, Jg, tf, v0, E, time, line = struct.unpack(dataformat, s)
 	if not math.isnan(config['z']) and Z != config['z']:

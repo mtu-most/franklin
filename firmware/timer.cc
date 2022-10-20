@@ -47,7 +47,7 @@ void handle_motors() {
 		if (state == STEP_STATE_PROBE) {
 			if (GET(probe_pin) ^ bool(pin_flags & 2)) {
 				step_state = STEP_STATE_STOP;
-				stopping = active_motors;
+				stopping = active_motors + 1;
 			}
 			probed = true;
 		}

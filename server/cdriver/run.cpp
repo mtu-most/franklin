@@ -90,8 +90,9 @@ bool run_file(char const *name, bool start, double sina, double cosa) {
 	run_file_wait = start ? 0 : 1;
 	run_file_timer.it_interval.tv_sec = 0;
 	run_file_timer.it_interval.tv_nsec = 0;
-	pausing = false;
+	pausing = run_file_wait > 0;
 	parkwaiting = false;
+	confirming = false;
 	resume_pending = false;
 	run_file_sina = sina;
 	run_file_cosa = cosa;
@@ -110,7 +111,7 @@ void abort_run_file() {
 
 void run_file_next_command(int32_t start_time) {
 	static bool lock = false;
-	if (pausing || parkwaiting || lock || resume_pending) {
+	if (pausing || parkwaiting || confirming || lock || resume_pending) {
 		next_move(start_time);
 		return;
 	}
@@ -118,15 +119,16 @@ void run_file_next_command(int32_t start_time) {
 	rundebug("run queue, current = %" LONGFMT "/%" LONGFMT " wait = %d q = %d %d", settings.run_file_current, run_file_num_records, run_file_wait, settings.queue_end, settings.queue_start);
 	double lastpos[6] = {0, 0, 0, 0, 0, 0};
 	bool moving = false;
-	while (!pausing	&& !parkwaiting // We are running.
-			&& run_file_map	// There is a file to run.
+	while (run_file_map	// There is a file to run.
 			&& settings.queue_end == settings.queue_start	// The queue is empty
 			&& settings.run_file_current < run_file_num_records	// There are records to send.
-			&& !run_file_wait) {	// We are not waiting for something else (delay, temperature or confirm).
+			&& !run_file_wait) {	// We are not waiting (park, pause, delay, temperature or confirm).
 		Run_Record &r = run_file_map[settings.run_file_current];
 		int t = r.type;
-		if (!(t == RUN_POLY3PLUS || t == RUN_POLY3MINUS || t == RUN_POLY2 || t == RUN_ARC || t == RUN_ABC || t == RUN_PATTERN) && (arch_running() || computing_move || settings.queue_end != settings.queue_start || moving || sending_fragment || transmitting_fragment))
+		if (!(t == RUN_POLY3PLUS || t == RUN_POLY3MINUS || t == RUN_POLY2 || t == RUN_ARC || t == RUN_ABC || t == RUN_PATTERN) && (arch_running() || computing_move || settings.queue_end != settings.queue_start || moving || sending_fragment || transmitting_fragment)) {
+			rundebug("breaking %" LONGFMT ": %d %d running %d moving %d queue end %d", settings.run_file_current, r.type, r.tool, arch_running(), moving, settings.queue_end);
 			break;
+		}
 		rundebug("running %" LONGFMT ": %d %d running %d moving %d", settings.run_file_current, r.type, r.tool, arch_running(), moving);
 		switch (r.type) {
 			case RUN_SYSTEM:
@@ -213,6 +215,7 @@ void run_file_next_command(int32_t start_time) {
 			}
 			case RUN_GOTO:
 			{
+				rundebug("run goto, Jg %f, probepin %d", r.Jg, probe_pin.valid());
 				// Goto commands need to wait for an underrun.
 				for (int i = 0; i < 3; ++i) {
 					if (!std::isnan(r.X[i]))
@@ -220,16 +223,31 @@ void run_file_next_command(int32_t start_time) {
 					if (!std::isnan(pending_abc[i]))
 						lastpos[3 + i] = pending_abc[i];
 				}
+				if (r.Jg == 1 && !probe_pin.valid()) {
+					// Probe without pin: make it RUN_CONFIRM instead.
+					const char *msg = "Please move probe to the surface";
+					strcpy(const_cast<char *>(shmem->interrupt_str), msg);
+					run_file_wait += 1;
+					rundebug("preparing");
+					prepare_interrupt();
+					rundebug("sending");
+					shmem->interrupt_ints[0] = 0;
+					shmem->interrupt_ints[1] = strlen(msg);
+					send_to_parent(CMD_CONFIRM);
+					confirming = true;
+					moving = true;
+					break;
+				}
 				MoveCommand move;
 				move.cb = false;
-				move.probe = false;
+				move.probe = r.Jg == 1;
 				move.single = false;
 				move.pattern_size = 0;
 				move.v0 = r.v0;
 				move.tool = r.tool;
 				move.target[0] = r.X[0] * run_file_cosa - r.X[1] * run_file_sina;
 				move.target[1] = r.X[1] * run_file_cosa + r.X[0] * run_file_sina;
-				move.target[2] = r.X[2];
+				move.target[2] = r.X[2] + (r.Jg != 0 && spaces[0].num_axes >= 3 ? spaces[0].axis[2]->current : 0);
 				for (int i = 0; i < 3; ++i) {
 					move.target[3 + i] = pending_abc[i];
 					pending_abc[i] = NAN;
@@ -239,7 +257,8 @@ void run_file_next_command(int32_t start_time) {
 				move.gcode_line = r.gcode_line;
 				rundebug("run goto %f,%f,%f tool %d E %f v %f", r.X[0], r.X[1], r.X[2], r.tool, r.E, r.v0);
 				settings.queue_end = go_to(false, &move, true);
-				moving = true;
+				if (settings.queue_end > 0)
+					moving = true;
 				break;
 			}
 			case RUN_PATTERN:
@@ -330,6 +349,7 @@ void run_file_next_command(int32_t start_time) {
 				break;
 			case RUN_WAIT:
 				if (r.X[0] > 0) {
+					rundebug("waiting for %f seconds", r.X[0]);
 					run_file_timer.it_value.tv_sec = r.X[0];
 					run_file_timer.it_value.tv_nsec = (r.X[0] - run_file_timer.it_value.tv_sec) * 1e9;
 					run_file_wait += 1;
@@ -339,13 +359,17 @@ void run_file_next_command(int32_t start_time) {
 				break;
 			case RUN_CONFIRM:
 			{
-				int len = min(strings[r.tool].len, PATH_MAX);
-				memcpy(const_cast<char *>(shmem->interrupt_str), &reinterpret_cast<char const *>(run_file_map)[run_file_first_string + strings[r.tool].start], len);
+				int len = 0;
+				if (r.tool >= 0) {
+					len = min(strings[r.tool].len, PATH_MAX);
+					memcpy(const_cast<char *>(shmem->interrupt_str), &reinterpret_cast<char const *>(run_file_map)[run_file_first_string + strings[r.tool].start], len);
+				}
 				run_file_wait += 1;
 				prepare_interrupt();
 				shmem->interrupt_ints[0] = r.X[0] ? 1 : 0;
 				shmem->interrupt_ints[1] = len;
 				send_to_parent(CMD_CONFIRM);
+				confirming = true;
 				moving = true;
 				break;
 			}
@@ -356,13 +380,37 @@ void run_file_next_command(int32_t start_time) {
 				send_to_parent(CMD_PARKWAIT);
 				moving = true;
 				break;
+			case RUN_CLEAR_PROBES:
+				prepare_interrupt();
+				send_to_parent(CMD_CLEAR_PROBES);
+				break;
+			case RUN_STORE_PROBE:
+				prepare_interrupt();
+				shmem->interrupt_ints[0] = spaces[0].num_axes;
+				for (int a = 0; a < spaces[0].num_axes; ++a)
+					shmem->interrupt_floats[a] = spaces[0].axis[a]->settings.source;
+				send_to_parent(CMD_STORE_PROBE);
+				break;
+			case RUN_USE_PROBES:
+				prepare_interrupt();
+				send_to_parent(CMD_USE_PROBES);
+				break;
+			case RUN_ADJUST_PROBE:
+				probe_z += spaces[0].axis[2]->settings.source;
+				reset_pos(&spaces[0]);
+				//debug("new probe_z: %f", probe_z);
+				prepare_interrupt();
+				shmem->interrupt_floats[0] = probe_z;
+				shmem->interrupt_floats[1] = space_types[spaces[0].type].probe_speed(&spaces[0]);
+				send_to_parent(CMD_UPDATE);
+				break;
 			default:
 				debug("Invalid record type %d in %s", r.type, run_file_name.c_str());
 				break;
 		}
 		settings.run_file_current += 1;
 	}
-	rundebug("run queue done");
+	rundebug("run queue done, queue %d %d run %ld/%ld pause %d parkwait %d filewait %d", settings.queue_start, settings.queue_end, settings.run_file_current, run_file_num_records, pausing, parkwaiting, run_file_wait);
 	if (run_file_map && settings.run_file_current >= run_file_num_records && !run_file_wait && settings.queue_start == settings.queue_end) {
 		// Done.
 		//debug("done running file");

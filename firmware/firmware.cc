@@ -222,7 +222,9 @@ int main(void) {
 		handle_pins();
 		handle_motors();
 		// Handle PWM of outputs.
+#ifndef NO_PWM
 		arch_outputs();
+#endif
 		handle_motors();
 		// Timeout.
 #ifndef NO_TIMEOUT

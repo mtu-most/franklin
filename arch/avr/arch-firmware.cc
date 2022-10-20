@@ -447,8 +447,10 @@ void arch_setup_start() { // {{{
 	for (uint8_t pin_no = GPIO_FIRST_PIN; pin_no < GPIO_LAST_PIN; ++pin_no) {
 		if (!Gpio::check_pin(pin_no))
 			continue;
+#ifndef NO_PWM
 		pin[pin_no - GPIO_FIRST_PIN].avr_on = false;
 		pin[pin_no - GPIO_FIRST_PIN].avr_target = 0;
+#endif
 	}
 	avr_time_h = 0;
 	avr_seconds_h = 0;
@@ -596,6 +598,7 @@ uint8_t timer_pins[] = {
 #endif
 };
 
+#ifndef NO_PWM
 Timer_data const timer_data[] PROGMEM = {
 // Timer1 pins must be first in this list.
 	TIMER_DATA(&TCCR1A, &OCR1AL, 2 << 6, true, 1, 0)
@@ -669,6 +672,7 @@ void update_timer1_pwm() { // {{{
 			//debug("full power for timer1 pin %d:%d", i, tp);
 	}
 } // }}}
+#endif
 
 void arch_set_speed(uint16_t us_per_sample) { // {{{
 	if (us_per_sample == 0) {
@@ -686,7 +690,9 @@ void arch_set_speed(uint16_t us_per_sample) { // {{{
 		// Clear counter.
 		TCNT1H = 0;
 		TCNT1L = 0;
+#ifndef NO_PWM
 		update_timer1_pwm();
+#endif
 		// Clear and enable interrupt.
 		TIFR1 = 1 << OCF1A;
 		TIMSK1 = 1 << OCIE1A;
@@ -743,10 +749,11 @@ int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { // {{{
 			return 0;
 		}
 
-		Timer_data const *data = get_timer(pin_);
 		*b++ = 'P';
 		*b++ = 'A' + (pin_ >> 3);
 		*b++ = '0' + (pin_ & 7);
+#ifndef NO_PWM
+		Timer_data const *data = get_timer(pin_);
 		if (data) {
 			*b++ = '/';
 			*b++ = 'O';
@@ -754,6 +761,7 @@ int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { // {{{
 			*b++ = '0' + pgm_read_byte(&data->num);
 			*b++ = 'A' + pgm_read_byte(&data->part);
 		}
+#endif
 	}
 	else {
 		uint8_t d_pin = Info::get_id(Info::first_adc_pin() + pin_);
@@ -1276,6 +1284,7 @@ ISR(TIMER0_OVF_vect) { // {{{
 // }}}
 
 // Pin control. {{{
+#ifndef NO_PWM
 void arch_outputs() { // {{{
 	uint8_t now = TCNT0;
 	int16_t interval = (now - avr_outputs_last) & 0xff;
@@ -1305,4 +1314,5 @@ void arch_outputs() { // {{{
 	}
 	//debug("pin 4 state %x target %x:%x duty %x", pin[4 - GPIO_FIRST_PIN].state, uint16_t(pin[4 - GPIO_FIRST_PIN].avr_target >> 16), uint16_t(pin[4 - GPIO_FIRST_PIN].avr_target), pin[4 - GPIO_FIRST_PIN].duty);
 } // }}}
+#endif
 // }}}

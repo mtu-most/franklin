@@ -309,8 +309,9 @@ enum AdcPhase { // {{{
 
 struct Pin_t { // {{{
 	uint8_t state;
+#ifndef NO_PWM
 	uint16_t duty;
-	uint8_t num_temps;
+#endif
 #ifndef NO_PIN_MOTOR
 	uint8_t motor;
 	uint8_t ticks;

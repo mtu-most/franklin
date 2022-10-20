@@ -163,8 +163,9 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 	shmem->move.probe = false;
 	shmem->move.pattern_size = 0;
 	shmem->ints[0] = 0;
-	const char *keywordnames[] = {"tool", "x", "y", "z", "a", "b", "c", "e", "v", "single", "probe", "relative", NULL};
-	if (!PyArg_ParseTupleAndKeywords(args, keywords, "idddddddd|ppp", const_cast <char **>(keywordnames),
+	shmem->ints[1] = 0;
+	const char *keywordnames[] = {"tool", "x", "y", "z", "a", "b", "c", "e", "v", "single", "probe", "unprobe", "relative", NULL};
+	if (!PyArg_ParseTupleAndKeywords(args, keywords, "idddddddd|pppp", const_cast <char **>(keywordnames),
 				&shmem->move.tool,
 				&shmem->move.target[0], &shmem->move.target[1], &shmem->move.target[2],
 				&shmem->move.target[3], &shmem->move.target[4], &shmem->move.target[5],
@@ -172,6 +173,7 @@ static PyObject *move(PyObject *Py_UNUSED(self), PyObject *args, PyObject *keywo
 				&shmem->move.v0,
 				&shmem->move.single,
 				&shmem->move.probe,
+				&shmem->ints[1],
 				&shmem->ints[0]))
 		return NULL;
 	if (std::isnan(shmem->move.v0))
@@ -306,7 +308,11 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
 	max_J = shmem->floats[4];
-	return Py_BuildValue("{si,si,si : si,si,si,si,si,si : si,si,si,si,si,si : sd,sd,sd,sd,sd,sd,sd,sd}",
+	probe_height = shmem->floats[6];
+	probe_depth = shmem->floats[7];
+	probe_speed_scale = shmem->floats[11];
+	probe_speed = shmem->floats[12];
+	return Py_BuildValue("{si,si,si : si,si,si,si,si,si : si,si,si,si,si : sd,sd,sd,sd,sd,sd,sd,sd}",
 
 			"num_pins", shmem->ints[0],
 			"num_temps", shmem->ints[1],
@@ -319,21 +325,25 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 			"pattern_step_pin", shmem->ints[7],
 			"pattern_dir_pin", shmem->ints[8],
 
-			"probe_enable", shmem->ints[9],
-			"bed_id", shmem->ints[10],
-			"fan_id", shmem->ints[11],
-			"spindle_id", shmem->ints[12],
-			"current_extruder", shmem->ints[13],
-			"store_adc", shmem->ints[14],
+			"bed_id", shmem->ints[9],
+			"fan_id", shmem->ints[10],
+			"spindle_id", shmem->ints[11],
+			"current_extruder", shmem->ints[12],
+			"store_adc", shmem->ints[13],
 
 			"feedrate", shmem->floats[0],
 			"max_deviation", shmem->floats[1],
 			"max_v", shmem->floats[2],
 			"max_a", shmem->floats[3],
 			"max_J", shmem->floats[4],
-			"adjust_speed", shmem->floats[5],
-			"targetangle", shmem->floats[6],
-			"timeout", shmem->floats[7]);
+			"probe_z", shmem->floats[5],
+			"probe_height", shmem->floats[6],
+			"probe_depth", shmem->floats[7],
+			"adjust_speed", shmem->floats[8],
+			"targetangle", shmem->floats[9],
+			"timeout", shmem->floats[10],
+			"probe_speed_scale", shmem->floats[11],
+			"probe_speed", shmem->floats[12]);
 }
 
 static void set_int(int num, char const *name, PyObject *dict) {
@@ -384,20 +394,23 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_int(6, "spiss_pin", dict);
 	set_int(7, "pattern_step_pin", dict);
 	set_int(8, "pattern_dir_pin", dict);
-	set_int(9, "probe_enable", dict);
-	set_int(10, "bed_id", dict);
-	set_int(11, "fan_id", dict);
-	set_int(12, "spindle_id", dict);
-	set_int(13, "current_extruder", dict);
-	set_int(14, "store_adc", dict);
+	set_int(9, "bed_id", dict);
+	set_int(10, "fan_id", dict);
+	set_int(11, "spindle_id", dict);
+	set_int(12, "current_extruder", dict);
+	set_int(13, "store_adc", dict);
 	set_float(0, "feedrate", dict);
 	set_float(1, "max_deviation", dict);
 	set_float(2, "max_v", dict);
 	set_float(3, "max_a", dict);
 	set_float(4, "max_J", dict);
-	set_float(5, "adjust_speed", dict);
-	set_float(6, "targetangle", dict);
-	set_float(7, "timeout", dict);
+	set_float(5, "probe_z", dict);
+	set_float(6, "probe_height", dict);
+	set_float(7, "probe_depth", dict);
+	set_float(8, "adjust_speed", dict);
+	set_float(9, "targetangle", dict);
+	set_float(10, "timeout", dict);
+	set_float(11, "probe_speed_scale", dict);
 	send_to_child(CMD_WRITE_GLOBALS);
 	return assert_empty_dict(dict, "write_globals");
 }
@@ -819,9 +832,10 @@ static PyObject *read_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 		shmem->ints[0] = index;
 		send_to_child(CMD_READ_PROBE_MAP);
 	}
-	PyObject *ret = Py_BuildValue("{s(dd),s(dd),sO}",
+	PyObject *ret = Py_BuildValue("{s(dd),s(dd),sd,sO}",
 		"origin", shmem->floats[0], shmem->floats[1],
 		"step", shmem->floats[2], shmem->floats[3],
+		"z", shmem->floats[4],
 		"data", data);
 	Py_DECREF(data);
 	return ret;
@@ -832,11 +846,12 @@ static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 	PyObject *dict;
 	if (!PyArg_ParseTuple(args, "O!", &PyDict_Type, &dict))
 		return NULL;
-	// Parse origin and step. {{{
+	// Parse z, origin and step. {{{
+	PyObject *zobj = PyDict_GetItemString(dict, "z");
 	PyObject *originobj = PyDict_GetItemString(dict, "origin");
 	PyObject *stepobj = PyDict_GetItemString(dict, "step");
-	if (!originobj || !stepobj) {
-		PyErr_SetString(PyExc_ValueError, "origin and step must be present in the argument dict");
+	if (!zobj || !originobj || !stepobj) {
+		PyErr_SetString(PyExc_ValueError, "z, origin and step must be present in the argument dict");
 		return NULL;
 	}
 	if (!PyTuple_Check(originobj) || !PyTuple_Check(stepobj)) {
@@ -847,7 +862,8 @@ static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 		PyErr_SetString(PyExc_ValueError, "origin and step must be tuples of size 2");
 		return NULL;
 	}
-	double origin[2], step[2];
+	double z, origin[2], step[2];
+	z = PyFloat_AsDouble(zobj);
 	for (int c = 0; c < 2; ++c) {
 		PyObject *v = PyTuple_GetItem(originobj, c);
 		if (!v)
@@ -879,6 +895,7 @@ static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 	shmem->floats[1] = origin[0];
 	shmem->floats[2] = step[0];
 	shmem->floats[3] = step[0];
+	shmem->floats[4] = z;
 	int index = 0;
 	int base = 0;
 	for (int y = 0; y < ny; ++y) {
@@ -899,7 +916,7 @@ static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 		shmem->ints[1] = nx;
 		for (int x = 0; x < nx; ++x) {
 			PyObject *obj = PyTuple_GetItem(current, x);
-			shmem->floats[100 + index] = PyFloat_AsDouble(obj);
+			shmem->floats[100 + index++] = PyFloat_AsDouble(obj);
 			if (PyErr_Occurred())
 				return NULL;
 			if (index >= 400) {
@@ -910,12 +927,20 @@ static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 			}
 		}
 	}
-	if (index > 0) {
+	if (ny == 0 || index > 0) {
 		shmem->ints[1] = base;
 		send_to_child(CMD_WRITE_PROBE_MAP);
 	}
 	// }}}
 
+	Py_RETURN_NONE;
+}
+
+static PyObject *adjust_probe(PyObject *Py_UNUSED(self), PyObject *args) {
+	FUNCTION_START;
+	if (!PyArg_ParseTuple(args, "d", &shmem->floats[0]))
+		return NULL;
+	send_to_child(CMD_ADJUST_PROBE);
 	Py_RETURN_NONE;
 }
 
@@ -1016,9 +1041,34 @@ static PyObject *get_interrupt(PyObject *Py_UNUSED(self), PyObject *args) {
 				"type", "temp-cb",
 				"temp", shmem->interrupt_ints[0]);
 		break;
-	case CMD_MESSAGE:
-		ret = Py_BuildValue("{ss}", "message", shmem->interrupt_str[0]);
+	case CMD_CLEAR_PROBES:
+		ret = Py_BuildValue("{ss}", "type", "clear-probes");
 		break;
+	case CMD_STORE_PROBE:
+	{
+		int n = shmem->interrupt_ints[0];
+		PyObject *pos = PyTuple_New(n);
+		for (int i = 0; i < n; ++i)
+			PyTuple_SET_ITEM(pos, i, PyFloat_FromDouble(shmem->interrupt_floats[i]));
+		ret = Py_BuildValue("{ss,sO}",
+				"type", "store-probe",
+				"pos", pos);
+		Py_DECREF(pos);
+		break;
+	}
+	case CMD_USE_PROBES:
+		ret = Py_BuildValue("{ss}", "type", "use-probes");
+		break;
+	case CMD_UPDATE:
+	{
+		double probe_z = shmem->interrupt_floats[0];
+		probe_speed = shmem->interrupt_floats[1];
+		ret = Py_BuildValue("{ss,sd,sd}",
+				"type", "update",
+				"probe_z", probe_z,
+				"probe_speed", probe_speed);
+		break;
+	}
 	default:
 		PyErr_Format(PyExc_AssertionError, "Interrupt returned unexpected code 0x{x}", c);
 		ret = NULL;
@@ -1149,6 +1199,7 @@ static PyMethodDef Methods[] = {
 	{"motors2xyz", motors2xyz, METH_VARARGS, "Convert motor positions to tool position."},
 	{"read_probe_map", read_probe_map, METH_VARARGS, "Read current probe map."},
 	{"write_probe_map", write_probe_map, METH_VARARGS, "Write current probe map."},
+	{"adjust_probe", adjust_probe, METH_VARARGS, "Adjust z for current probed tool."},
 	{"fileno", fileno, METH_VARARGS, "Get file descriptor which will signal asynchronous events."},
 	{"get_interrupt", get_interrupt, METH_VARARGS, "Read and parse interrupt from chlid process."},
 	{"init", init_module, METH_VARARGS, "Initialize module and start child process."},

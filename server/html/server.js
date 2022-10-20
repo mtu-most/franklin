@@ -214,6 +214,7 @@ function _setup_updater() {
 			machines[machine].ui_update |= machines[machine].user_interface != values.user_interface;
 			var old_num_temps = machines[machine].num_temps;
 			var old_num_gpios = machines[machine].num_gpios;
+			var old_connected = machines[machine].connected;
 			for (var v in values)
 				machines[machine][v] = values[v];
 			var nums_changed = machines[machine].num_temps != old_num_temps || machines[machine].num_gpios != old_num_gpios;
@@ -245,7 +246,7 @@ function _setup_updater() {
 				});
 			}
 			machines[machine].gpios.length = machines[machine].num_gpios;
-			trigger_update(machine, 'globals_update', machines[machine].ui_update, nums_changed);
+			trigger_update(machine, 'globals_update', machines[machine].ui_update, nums_changed, machines[machine].connected && !old_connected);
 		},
 		space_update: function(machine, index, values) {
 			var nums_changed = false;

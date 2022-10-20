@@ -109,6 +109,31 @@ void Space::setup_nums(int na, int nm) { // {{{
 	}
 } // }}}
 
+double probe_value(int space, double x, double y) {
+	if (space != 0 || spaces[space].num_axes < 3 || probe_nx <= 0 || probe_ny <= 0 || std::isnan(x) || std::isnan(y))
+		return 0;
+	// Convert to probe map coordinates.
+	x -= probe_origin[0];
+	y -= probe_origin[1];
+	x /= probe_step[0];
+	y /= probe_step[1];
+	// For points outside the map, use the edge of the map.
+	if (x < 0)
+		x = 0;
+	if (y < 0)
+		y = 0;
+	if (x > probe_nx - 1)
+		x = probe_nx - 1;
+	if (y > probe_ny - 1)
+		y = probe_ny - 1;
+	// Use closest probe point.
+	// Don't interpolate; instead send a more detailed map if needed.
+	//debug("probe adjust: x %f y %f nx %d ny %d pz %f", x, y, probe_nx, probe_ny, probe_z);
+	double adjust = probe_data[int(std::round(y)) * probe_nx + int(std::round(x))] + probe_z;
+	//debug("adjust: %f (probe z: %f)", adjust, probe_z);
+	return adjust;
+}
+
 void Space::xyz2motors() { // {{{
 	double orig_target[num_axes];
 	// Apply adjustment to targets.
@@ -120,29 +145,9 @@ void Space::xyz2motors() { // {{{
 		axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
 	}
 	// Use probe, if enabled, possible and available.
-	if (probe_enable && id == 0 && num_axes >= 3 && probe_nx > 0 && probe_ny > 0) {
-		// Get target position.
-		double x = axis[0]->target;
-		double y = axis[1]->target;
-		// Convert to probe map coordinates.
-		x -= probe_origin[0];
-		y -= probe_origin[1];
-		x /= probe_step[0];
-		y /= probe_step[1];
-		// For points outside the map, use the edge of the map.
-		if (x < 0)
-			x = 0;
-		if (y < 0)
-			y = 0;
-		if (x >= probe_nx)
-			x = probe_nx - 1;
-		if (y >= probe_ny)
-			y = probe_ny - 1;
-		// Use closest probe point.
-		// Don't interpolate; instead send a more detailed map if needed.
-		double adjust = probe_data[int(std::round(y)) * probe_nx + int(std::round(x))];
-		axis[2]->target += adjust;
-	}
+	//debug("id %d num axes %d nx %d ny %d", id, num_axes, probe_nx, probe_ny);
+	if (num_axes >= 3)
+		axis[2]->target += probe_value(id, axis[0]->target, axis[1]->target);
 	// Set default values.
 	for (int a = 0; a < num_axes; ++a)
 		motor[a]->target_pos = axis[a]->target;
@@ -161,6 +166,8 @@ void Space::motors2xyz(const double *motors, double *xyz) { // {{{
 	space_types[type].motors2xyz(this, motors, xyz);
 	for (int a = 0; a < num_axes; ++a)
 		xyz[a] -= axis[a]->offset;
+	if (num_axes >= 3)
+		xyz[2] -= probe_value(id, xyz[0], xyz[1]);
 } // }}}
 
 void Space::load_info() { // {{{

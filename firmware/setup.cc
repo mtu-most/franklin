@@ -32,7 +32,9 @@ void setup()
 	arch_setup_start();
 	enabled_pins = GPIO_LAST_PIN + 1;
 	for (uint8_t p = 0; p <= GPIO_LAST_PIN; ++p) {
+#ifndef NO_PWM
 		pin[p - GPIO_FIRST_PIN].duty = 0x7fff;
+#endif
 #ifndef NO_PIN_MOTOR
 		pin[p - GPIO_FIRST_PIN].motor = 0xff;
 #endif

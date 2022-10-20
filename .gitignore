@@ -15,6 +15,7 @@ __pycache__/
 /server/html/type
 /server/type/*/*.so
 /server/cdriver/module/build/
+/server/firmware/*.hex
 /firmware/build/
 /firmware/*.hex
 /server/cdriver/copy-*

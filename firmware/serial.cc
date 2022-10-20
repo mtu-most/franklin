@@ -474,7 +474,7 @@ void try_send_next() { // Call send_packet if we can. {{{
 			send_packet();
 			continue;
 		} // }}}
-		if (stopping >= 0 && (stopping == active_motors || (stopping < active_motors && motor[stopping].flags & Motor::LIMIT))) { // {{{
+		if (stopping >= 0 && (stopping == active_motors || stopping == active_motors + 1 || (stopping < active_motors && motor[stopping].flags & Motor::LIMIT))) { // {{{
 			senddebug("limit");
 			sdebug2("limit %d", stopping);
 			pending_packet[ff_out][0] = CMD_LIMIT;

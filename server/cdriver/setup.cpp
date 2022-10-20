@@ -132,6 +132,9 @@ void setup()
 	max_v = 100;
 	max_a = 10000;
 	max_J = 10000;
+	probe_height = 3;
+	probe_depth = -10;
+	probe_speed_scale = 1;
 	adjust_speed = 1;
 	targetangle = 0;
 	aborting = false;
@@ -165,6 +168,7 @@ void setup()
 		spaces[s].init(s);
 	pausing = false;
 	parkwaiting = false;
+	confirming = false;
 	resume_pending = false;
 	arch_setup_end();
 }

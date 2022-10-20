@@ -62,12 +62,12 @@ void request(int req) {
 		if (stopping)
 			break;
 		// Ignore move while running.
-		if (run_file_map != NULL && !pausing && !parkwaiting)
+		if (run_file_map != NULL && !pausing && !parkwaiting && !confirming)
 			break;
 		//debug("moving to (%f,%f,%f), tool %d e %f v %f", shmem->move.target[0], shmem->move.target[1], shmem->move.target[2], shmem->move.tool, shmem->move.e, shmem->move.v0);
 		last_active = millis();
 		initialized = true;
-		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move));
+		shmem->ints[1] = go_to(shmem->ints[0], const_cast <MoveCommand const *>(&shmem->move), false, shmem->ints[1]);
 		if (!computing_move)
 			cb_pending = true;
 		delayed_reply();
@@ -311,7 +311,7 @@ void request(int req) {
 			break;
 		bool store = !pausing && run_file_wait == 0;
 		pausing = true;
-		if (run_file_map)
+		if (run_file_map && store)
 			run_file_wait += 1;
 		// Store resume info.
 		double x[6], v[6], a[6];
@@ -340,11 +340,21 @@ void request(int req) {
 			break;
 		else if (pausing)
 			do_resume();
-		else if (parkwaiting) {
-			parkwaiting = false;
-			if (run_file_wait > 0)
-				run_file_wait -= 1;
+		else if (parkwaiting || confirming) {
+			delayed_reply();
+			if (parkwaiting) {
+				parkwaiting = false;
+				if (run_file_wait > 0)
+					run_file_wait -= 1;
+			}
+			if (confirming) {
+				confirming = false;
+				if (run_file_wait > 0)
+					run_file_wait -= 1;
+			}
 			run_file_next_command(settings.hwtime);
+			buffer_refill();
+			return;
 		}
 		buffer_refill();
 		break;
@@ -383,6 +393,12 @@ void request(int req) {
 		break;
 	CASE(CMD_WRITE_PROBE_MAP)
 	{
+		//debug("writing probe map");
+		probe_origin[0] = shmem->floats[0];
+		probe_origin[1] = shmem->floats[1];
+		probe_step[0] = shmem->floats[2];
+		probe_step[1] = shmem->floats[3];
+		probe_z = shmem->floats[4];
 		if (shmem->ints[1] != probe_nx || shmem->ints[2] != probe_ny) {
 			// Size changed; reallocate storage.
 			if (probe_data)
@@ -402,6 +418,7 @@ void request(int req) {
 			int x = n % probe_nx;
 			probe_data[y * probe_nx + x] = shmem->floats[100 + n - base];
 		}
+		reset_pos(&spaces[0]);
 		break;
 	}
 	CASE(CMD_READ_PROBE_MAP)
@@ -413,6 +430,7 @@ void request(int req) {
 		shmem->floats[1] = probe_origin[1];
 		shmem->floats[2] = probe_step[0];
 		shmem->floats[3] = probe_step[1];
+		shmem->floats[4] = probe_z;
 		for (int n = base; n < base + 400 && n < probe_nx * probe_ny; ++n) {
 			int y = n / probe_nx;
 			int x = n % probe_nx;
@@ -420,6 +438,10 @@ void request(int req) {
 		}
 		break;
 	}
+	CASE(CMD_ADJUST_PROBE)
+		probe_z = shmem->floats[0];
+		reset_pos(&spaces[0]);
+		break;
 	default:
 		debug("unknown packet received: %x", req);
 	}
@@ -456,8 +478,8 @@ void settemp(int which, double target) {
 		return;
 	}
 	temps[which].target[0] = target;
-	// Set target. Add 10% if hold_time == 0 and PID is set up.
-	temps[which].adctarget[0] = temps[which].toadc(target * (temps[which].hold_time > 0 && !std::isinf(temps[which].P) ? 1 : 1.02), MAXINT);
+	// Set target. Add 5% if PID is enabled.
+	temps[which].adctarget[0] = temps[which].toadc(target * (std::isinf(temps[which].P) ? 1 : 1.05), MAXINT);
 	//debug("adc target %d from %f", temps[which].adctarget[0], temps[which].target[0]);
 	if (temps[which].adctarget[0] >= MAXINT) {
 		// main loop doesn't handle it anymore, so it isn't disabled there.

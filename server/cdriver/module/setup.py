@@ -1,4 +1,4 @@
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
 
 # Supported values for target: avr, multicore
 # Supported variants for multicore: pine64, orangepizero

@@ -368,15 +368,9 @@ class Machine: # {{{
 		self.bed_id = -1
 		self.fan_id = -1
 		self.spindle_id = -1
-		self.probe_enable = False
 		self.probe_points = []
-		self.probemap = None
-		self.probe_pending = False
-		self.probe_cb = None
-		self.probe_speed = 3.
-		self.probe_dist = 1000
-		self.probe_offset = 0
-		self.probe_safe_dist = 10
+		self.probe_dist = 1
+		self.probe_map = None
 		self.unit_name = 'mm'
 		self.park_after_job = True
 		self.sleep_after_job = True
@@ -432,6 +426,11 @@ class Machine: # {{{
 		self.max_v = 100
 		self.max_a = 10000
 		self.max_J = 10000
+		self.probe_z = 0
+		self.probe_speed = 1
+		self.probe_height = 3
+		self.probe_depth = -10
+		self.probe_speed_scale = 1
 		self.adjust_speed = 1
 		self.current_extruder = 0
 		# Other things don't need to be initialized, because num_* == 0.
@@ -536,7 +535,13 @@ class Machine: # {{{
 		elif cmd['type'] == 'limit':
 			if self.home_phase is None:
 				if not 0 <= cmd['space'] < NUM_SPACES or not 0 <= cmd['motor'] < len(self.spaces[cmd['space']].motor):
-					button = 'the emergency stop button'
+					if cmd['motor'] == 0:
+						button = 'the emergency stop button'
+					else:
+						assert cmd['motor'] == 1
+						self._trigger_movewaits(False)
+						# Abort by probe is not an error and should not be shown in a message.
+						return
 				else:
 					button = 'the limit switch for motor %s' % self.spaces[cmd['space']].motor_name(cmd['motor'])
 				log('Move stopped because %s was hit.' % button)
@@ -579,8 +584,6 @@ class Machine: # {{{
 			self.gpios[cmd['pin']].state = cmd['state']
 			call_queue.append((self._gpio_update, (cmd['pin'],)))
 		elif cmd['type'] == 'confirm':
-			if cmd['tool-changed'] and self.probemap is not None and self.probe_enable:
-				self.probe_pending = True
 			call_queue.append((self.user_request_confirmation(cmd['message'] or 'Continue?')[1], (False,)))
 		elif cmd['type'] == 'park':
 			call_queue.append((self.user_park(cb = cdriver.resume)[1], (None,)))
@@ -616,8 +619,21 @@ class Machine: # {{{
 				self.connected = True
 				self._globals_update()
 			call_queue.append((sync, ()))
+		elif cmd['type'] == 'clear-probes':
+			self.probe_map = None
+			self.probe_points = []
+		elif cmd['type'] == 'store-probe':
+			self.probe_points.append(cmd['pos'])
+			# Don't update probe map, because it's a waste of cpu power.
+		elif cmd['type'] == 'use-probes':
+			self._build_probe_map()
+			self._globals_update()
+		elif cmd['type'] == 'update':
+			self.probe_z = cmd['probe_z']
+			self.probe_speed = cmd['probe_speed']
+			self._globals_update()
 		else:
-			log('unexpected packet %02x' % cmd)
+			log('unexpected packet %02s' % cmd)
 			raise AssertionError('Received unknown interrupt packet type')
 	# }}}
 	def _read_globals(self, update = True): # {{{
@@ -647,7 +663,7 @@ class Machine: # {{{
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
 		data = {'num_temps': nt, 'num_gpios': ng}
-		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_enable', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout', 'current_extruder', 'targetangle', 'store_adc')})
+		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_z', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout', 'current_extruder', 'targetangle', 'store_adc')})
 		#log('writing globals: %s' % repr(data))
 		cdriver.write_globals(data)
 		self._read_globals(update = True)
@@ -678,7 +694,7 @@ class Machine: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		attrnames = ('name', 'profile', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'probe_enable', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout', 'targetangle', 'store_adc', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'temp_scale_min', 'temp_scale_max', 'probe_points', 'connected')
+		attrnames = ('name', 'profile', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_speed', 'probe_speed_scale', 'probe_z', 'probe_height', 'probe_depth', 'adjust_speed', 'timeout', 'targetangle', 'store_adc', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'temp_scale_min', 'temp_scale_max', 'probe_points', 'probe_dist', 'connected')
 		attrs = {n: getattr(self, n) for n in attrnames}
 		attrs['num_temps'] = len(self.temps)
 		attrs['num_gpios'] = len(self.gpios)
@@ -752,10 +768,6 @@ class Machine: # {{{
 				self.movecb.remove(self.home_cb)
 				if self.home_id is not None:
 					self._send(self.home_id, 'return', None)
-		if self.probe_cb in self.movecb:
-			#log('killing prober')
-			self.movecb.remove(self.probe_cb)
-			self.probe_cb(None)
 		self._globals_update()
 	# }}}
 	def _finish_done(self): # {{{
@@ -921,13 +933,13 @@ class Machine: # {{{
 				if len(target[1]) == 1:
 					# move position and single extruder.
 					self.movecb.append(self.home_cb)
-					self.user_line(target[0], tool = target[1].keys()[0], e = target[1].values()[0], force = True)[1](None)
+					self.user_line(target[0], tool = target[1].keys()[0], e = target[1].values()[0], force = True, unprobe = True)[1](None)
 					# Immediately fall through to main-limit.
 					return
 				else:
 					# move position.
 					self.movecb.append(self.home_cb)
-					self.user_line(target[0], force = True)[1](None)
+					self.user_line(target[0], force = True, unprobe = True)[1](None)
 					# move each extruder.
 					if len(target[1]) > 0:
 						self.home_phase = 'gpio'
@@ -939,7 +951,7 @@ class Machine: # {{{
 			if len(self.home_gpio) == 0:
 				self.home_phase = 'main-limit-start'
 			self.movecb.append(self.home_cb)
-			self.user_line(tool = m, e = self.spaces[1].motor[m]['home_pos'], force = True)[1](None)
+			self.user_line(tool = m, e = self.spaces[1].motor[m]['home_pos'], force = True, unprobe = True)[1](None)
 			return
 		while True:	# Allow code below to repeat from here.
 			if self.home_phase == 'main-limit-start':
@@ -995,7 +1007,7 @@ class Machine: # {{{
 						self.home_target = {m: dist if current[m]['positive'] else -dist for m in current}
 						if len(self.home_target) > 0:
 							self.movecb.append(self.home_cb)
-							self.user_line(self.home_target, v = home_v * len(self.home_target) ** .5, single = False, force = True, relative = True)[1](None)
+							self.user_line(self.home_target, v = home_v * len(self.home_target) ** .5, single = False, force = True, relative = True, unprobe = True)[1](None)
 							return
 						else:
 							# Done with this phase.
@@ -1024,9 +1036,9 @@ class Machine: # {{{
 					target_obj = self.home_order['single'][target]
 					self.movecb.append(self.home_cb)
 					if target[0] == 0:
-						self.user_line({target[1]: self.home_target[target[1]]}, relative = True, force = True, single = True)[1](None)
+						self.user_line({target[1]: self.home_target[target[1]]}, relative = True, force = True, single = True, unprobe = True)[1](None)
 					else:
-						self.user_line(e = self.home_target[target_obj['leader']], tool = ~target[1], relative = False, force = True, single = True)[1](None)
+						self.user_line(e = self.home_target[target_obj['leader']], tool = ~target[1], relative = False, force = True, single = True, unprobe = True)[1](None)
 					return
 				# Done with these followers, clean up and move on.
 				self.home_phase = 'main-limit'
@@ -1083,9 +1095,9 @@ class Machine: # {{{
 				self.movecb.append(self.home_cb)
 				#log('m={}'.format(m))
 				if m[0] == 0:
-					self.user_line({m[1]: target}, relative = False, force = True, single = True)[1](None)
+					self.user_line({m[1]: target}, relative = False, force = True, single = True, unprobe = True)[1](None)
 				else:
-					self.user_line(tool = ~target[1], e = target, relative = False, force = True, single = True)[1](None)
+					self.user_line(tool = ~target[1], e = target, relative = False, force = True, single = True, unprobe = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 'opposite':
@@ -1096,9 +1108,9 @@ class Machine: # {{{
 				m = self.home_order['leader'][0][1].pop(0)
 				self.movecb.append(self.home_cb)
 				if m[0] == 0:
-					self.user_line({m[1]: target}, relative = False, force = True, single = True)[1](None)
+					self.user_line({m[1]: target}, relative = False, force = True, single = True, unprobe = True)[1](None)
 				else:
-					self.user_line(tool = ~target[1], e = target, relative = False, force = True, single = True)[1](None)
+					self.user_line(tool = ~target[1], e = target, relative = False, force = True, single = True, unprobe = True)[1](None)
 				return
 			# Move to opposite followers
 			# for m in self.home_order['opposite']: TODO
@@ -1117,7 +1129,7 @@ class Machine: # {{{
 			self.home_phase = 'home2'
 			if len(target) > 0:
 				self.movecb.append(self.home_cb)
-				self.user_line(target, force = True)[1](None)
+				self.user_line(target, force = True, unprobe = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 'home2':
@@ -1132,7 +1144,7 @@ class Machine: # {{{
 			self.home_phase = 'finish'
 			if len(target) > 0:
 				self.movecb.append(self.home_cb)
-				self.user_line(target, force = True)[1](None)
+				self.user_line(target, force = True, unprobe = True)[1](None)
 				return
 			# Fall through.
 		if self.home_phase == 'finish':
@@ -1147,22 +1159,6 @@ class Machine: # {{{
 				self.home_done_cb = None
 			return
 		log('Internal error: invalid home phase %s' % self.home_phase)
-	# }}}
-	def _handle_one_probe(self, good): # {{{
-		if good is None:
-			return
-		pos = self.get_axis_pos(0)
-		cdriver.adjust_probe(*(pos[a] + self.spaces[0].axis[a].offset for a in range(3)))
-		self.probe_cb = lambda good: self.user_request_confirmation("Continue?")[1](False) if good is not None else None
-		self.movecb.append(self.probe_cb)
-		self.user_line({2: self.probe_safe_dist}, relative = True)[1](None)
-	# }}}
-	def _one_probe(self): # {{{
-		self.probe_cb = self._handle_one_probe
-		self.movecb.append(self.probe_cb)
-		z = self.get_axis_pos(0, 2)
-		z_low = self.spaces[0].axis[2]['min']
-		self.user_line({2: z_low}, f0 = float(self.probe_speed) / (z - z_low) if z > z_low else float('inf'), probe = True)[1](None)
 	# }}}
 	def _gcode_run(self, src, abort = True, paused = False): # {{{
 		if self.parking:
@@ -1200,6 +1196,8 @@ class Machine: # {{{
 			pos += sizes[x]
 		self.gcode_num_records = first_string / struct.calcsize(record_format)
 		self.gcode_file = True
+		self.probe_map = {'z': 0, 'origin': (0, 0), 'step': (1, 1), 'data': ()}
+		cdriver.write_probe_map(self.probe_map)
 		log('running %s %f %f' % (filename, self.gcode_angle[0], self.gcode_angle[1]))
 		cdriver.run_file(filename.encode('utf-8'), 1 if not paused and self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1])
 		self.paused = paused
@@ -1214,6 +1212,41 @@ class Machine: # {{{
 	# }}}
 	def _pin_valid(self, pin):	# {{{
 		return (pin & 0x100) != 0
+	# }}}
+	def _build_probe_map(self): # {{{
+		# Build probe map.
+		points = numpy.array(self.probe_points, dtype = float)	# points = [[x, y, z], ...], so points[0,:] is the first point, points[:,0] is all x coordinates.
+		mean = numpy.mean(points[:, 2])
+		points[:, 2] -= mean
+		bbox = numpy.array([numpy.min(points, 0), numpy.max(points, 0)])
+		# determine number of points on map grid
+		grid = numpy.array(numpy.ceil((bbox[1] - bbox[0]) / self.probe_dist), dtype = int)
+		# For each point on the grid, we need to find the weights of all probe points based on their distance.
+		# Then using those weights, we compute the offset.
+		# Computation for single grid point g using probe points p:
+		# dists = [sum((p[c] - g[c]) ** 2 for c in range(2)) ** .5 for p in probe_points]
+		# weights = [1 / d ** 2 for d in dists]
+		# total = sum(weights, 0)
+		# infs = isinf(total)
+		# numinf = sum(infs)
+		# if numinf > 0:
+		#	return sum(weights * infs) / numinf
+		# return sum(p[2] * w for p in probe_points) / total
+		x = numpy.linspace(bbox[0][0], bbox[1][0], grid[0] + 1).reshape((-1, 1, 1))
+		y = numpy.linspace(bbox[0][1], bbox[1][1], grid[1] + 1).reshape((1, -1, 1))
+		dx = points[:, 0].reshape((1, 1, -1)) - x
+		dy = points[:, 1].reshape((1, 1, -1)) - y
+		dists = (dx ** 2 + dy ** 2) ** .5
+		infs = dists == 0
+		numinf = numpy.sum(infs, 2)
+		dists[infs] = 1	# Avoid divide by zero warnings; value is forced to sample later.
+		weights = 1 / (dists ** 2)
+		total = numpy.sum(weights, 2)
+		map_data = numpy.sum(points[:, 2].reshape((1, 1, -1)) * weights, 2) / total
+		have_inf = numinf > 0
+		map_data[have_inf] = numpy.sum(points[:, 2] * infs, 2)[have_inf]
+		self.probe_map = {'z': mean, 'origin': tuple(bbox[0, :2]), 'step': (int(grid[0]), int(grid[1])), 'data': tuple(tuple(d) for d in map_data)}
+		cdriver.write_probe_map(self.probe_map)
 	# }}}
 	def _spi_send(self, data): # {{{
 		for bits, p in data:
@@ -1589,7 +1622,7 @@ class Machine: # {{{
 
 	# Normal operation.
 	@delayed
-	def user_line(self, id, moves = (), e = None, tool = None, v = None, relative = False, probe = False, single = False, force = False): # {{{
+	def user_line(self, id, moves = (), e = None, tool = None, v = None, relative = False, probe = False, single = False, unprobe = False, force = False): # {{{
 		'''Move the tool in a straight line; return when done.
 		'''
 		if not force and self.home_phase is not None:
@@ -1621,15 +1654,17 @@ class Machine: # {{{
 			v = self.max_v
 		self.moving = True
 		#log('move to ' + repr(moves))
-		cdriver.move(*([self.current_extruder] + moves + [e, v]), single = single, probe = probe, relative = relative)
+		cdriver.move(*([self.current_extruder] + moves + [e, v]), single = single, probe = probe, unprobe = unprobe, relative = relative)
 		if id is not None:
 			self.wait_for_cb()[1](id)
 	# }}}
 	def user_move_target(self, dx, dy): # {{{
 		'''Move the target position.
 		Using this function avoids a round trip to the driver.
+		It also does not require expert permissions.
 		'''
-		self.user_set_globals(targetx = self.targetx + dx, targety = self.targety + dy)
+		self.expert_set_axis((0, 0), offset = self.get_axis(0, 0)['offset'] + dx)
+		self.expert_set_axis((0, 1), offset = self.get_axis(0, 1)['offset'] + dy)
 	# }}}
 	def user_sleep(self, sleeping = True, update = True, force = False): # {{{
 		'''Put motors to sleep, or wake them up.
@@ -1790,8 +1825,9 @@ class Machine: # {{{
 			return
 		#log('not done parking: ' + repr((next_order)))
 		self.movecb.append(lambda done: self.user_park(cb, order = next_order + 1, aborted = not done)[1](id))
-		self.user_line([a['park'] - a['offset'] if a['park_order'] == next_order else float('nan') for ai, a in enumerate(self.spaces[0].axis)])[1](None)
+		self.user_line([a['park'] - a['offset'] if a['park_order'] == next_order else float('nan') for ai, a in enumerate(self.spaces[0].axis)], unprobe = True)[1](None)
 	# }}}
+	@delayed
 	def wait_for_cb(self, id): # {{{
 		'''Block until the move queue is empty.
 		'''
@@ -1914,19 +1950,10 @@ class Machine: # {{{
 		if id not in (False, None):
 			self._send(id, 'return', success)
 		else:
-			if self.probing: # FIXME: remove this?
-				call_queue.append((self.probe_cb, [False if success else None]))
+			if success:
+				cdriver.resume()
 			else:
-				if not success:
-					self.probe_pending = False
-					self._job_done(False, 'aborted by failed confirmation')
-				else:
-					if self.probe_enable and self.probe_pending and self._pin_valid(self.probe_pin):
-						self.probe_pending = False
-						call_queue.append((self._one_probe, []))
-					else:
-						self.probe_pending = False
-						cdriver.resume()
+				self._job_done(False, 'aborted by failed confirmation')
 		return True
 	# }}}
 	def get_machine_state(self): # {{{
@@ -2021,8 +2048,8 @@ class Machine: # {{{
 		message += 'unit_name = %s\r\n' % self.unit_name
 		message += 'spi_setup = %s\r\n' % self._mangle_spi()
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin')])
-		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'probe_enable')])
-		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout')])
+		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job')])
+		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout')])
 		message += 'user_interface = %s\r\n' % self.user_interface
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings()
@@ -2055,7 +2082,7 @@ class Machine: # {{{
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'follower': set()}
 		keys = {
-				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'probe_enable', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout'},
+				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout', 'probe_dist'},
 				'space': {'type', 'num_axes'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time', 'P', 'I', 'D'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty', 'leader', 'ticks'},
@@ -2132,7 +2159,7 @@ class Machine: # {{{
 						#log('pin imported as {} for {}'.format(value, key))
 					elif key == 'leader':
 						value = None if value == '-' else int(value)
-					elif key.startswith('num') or key.endswith('order') or key.endswith('_id') or key in ('ticks', 'probe_enable'):
+					elif key.startswith('num') or key.endswith('order') or key.endswith('_id') or key == 'ticks':
 						value = int(value)
 					else:
 						value = float(value)
@@ -2370,9 +2397,13 @@ class Machine: # {{{
 	def get_globals(self): # {{{
 		#log('getting globals')
 		ret = {'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'probe_dist', 'probe_offset', 'probe_safe_dist', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'probe_enable', 'feedrate', 'targetangle', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probe_points', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout'):
+		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'feedrate', 'targetangle', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probe_points', 'probe_dist', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_speed', 'probe_speed_scale', 'probe_z', 'probe_height', 'probe_depth', 'adjust_speed', 'timeout'):
 			ret[key] = getattr(self, key)
 		return ret
+	# }}}
+	def get_probe_map(self): # {{{
+		#log('getting probe map')
+		return self.probe_map
 	# }}}
 	def expert_set_globals(self, update = True, **ka): # {{{
 		#log('setting variables with %s' % repr(ka))
@@ -2392,47 +2423,15 @@ class Machine: # {{{
 			self.spi_setup = self._unmangle_spi(ka.pop('spi_setup'))
 			if self.spi_setup:
 				self._spi_send(self.spi_setup)
-		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'probe_enable'):
+		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
-		for key in ('probe_dist', 'probe_offset', 'probe_safe_dist', 'feedrate', 'targetangle', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'adjust_speed', 'timeout'):
+		for key in ('feedrate', 'targetangle', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_z', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout', 'probe_dist'):
 			if key in ka:
 				setattr(self, key, float(ka.pop(key)))
 		if 'probe_points' in ka:
 			self.probe_points = ka.pop('probe_points')
-			# Build probe map.
-			points = numpy.array(self.probe_points, dtype = float)	# points = [[x, y, z], ...], so points[0,:] is the first point, points[:,0] is all x coordinates.
-			mean = numpy.mean(points[:, 2])
-			points[:, 2] -= mean
-			bbox = numpy.array([numpy.min(points, 0), numpy.max(points, 0)])
-			# determine number of points on map grid
-			grid = numpy.array(numpy.ceil((bbox[1] - bbox[0]) / self.probe_dist), dtype = int)
-			# For each point on the grid, we need to find the weights of all probe points based on their distance.
-			# Then using those weights, we compute the offset.
-			# Computation for single grid point g using probe points p:
-			# dists = [sum((p[c] - g[c]) ** 2 for c in range(2)) ** .5 for p in probe_points]
-			# weights = [1 / d ** 2 for d in dists]
-			# total = sum(weights, 0)
-			# infs = isinf(total)
-			# numinf = sum(infs)
-			# if numinf > 0:
-			#	return sum(weights * infs) / numinf
-			# return sum(p[2] * w for p in probe_points) / total
-			x = numpy.linspace(bbox[0][0], bbox[1][0], grid[0]).reshape((-1, 1, 1))
-			y = numpy.linspace(bbox[0][1], bbox[1][1], grid[1]).reshape((1, -1, 1))
-			dx = points[:, 0].reshape((1, 1, -1)) - x
-			dy = points[:, 1].reshape((1, 1, -1)) - y
-			dists = (dx ** 2 + dy ** 2) ** .5
-			infs = dists == 0
-			numinf = numpy.sum(infs, 2)
-			dists[infs] = 1	# Avoid divide by zero warnings; value is forced to sample later.
-			weights = 1 / (dists ** 2)
-			total = numpy.sum(weights, 2)
-			map_data = numpy.sum(points[:, 2].reshape((1, 1, -1)) * weights, 2) / total
-			have_inf = numinf > 0
-			map_data[have_inf] = numpy.sum(points[:, 2] * infs, 2)[have_inf]
-			self.probe_map = {'origin': tuple(bbox[0, :2]), 'step': tuple(grid[:2]), 'data': tuple(tuple(d) for d in map_data)}
-			cdriver.write_probe_map(self.probe_map)
+			self._build_probe_map()
 		self._write_globals(nt, ng, update = update)
 		if len(ka) > 0:
 			log('Warning: unrecognized keyword arguments ignored: %s' % repr(ka))
@@ -2681,6 +2680,7 @@ while True: # {{{
 		#log('calling %s' % repr((f, a)))
 		f(*a)
 	fds = [sys.stdin, fd]
+	#log('waiting for event')
 	found = select.select(fds, [], fds, None)
 	if sys.stdin in found[0] or sys.stdin in found[2]:
 		#log('command')

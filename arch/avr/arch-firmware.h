@@ -57,6 +57,7 @@ void arch_spi_stop();
 void arch_adc_start(uint8_t adcpin);
 int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_);
 
+#ifndef NO_PWM
 struct Timer_data {
 	volatile uint8_t *tccra, *oc;
 	uint8_t tccra_mask;
@@ -130,6 +131,7 @@ static Timer_data const *get_timer(uint8_t pin_no) {
 	}
 	return nullptr;
 }
+#endif
 
 static inline uint16_t millis() { // {{{
 	cli();
@@ -163,10 +165,12 @@ inline void SET_INPUT(uint8_t pin_no) { // {{{
 } // }}}
 
 inline void UNSET(uint8_t pin_no) { // {{{
+#ifndef NO_PWM
 	Timer_data const *data = get_timer(pin_no);
 	if (data != nullptr) {
 		*reinterpret_cast <volatile uint8_t *> (pgm_read_ptr(&data->tccra)) &= ~pgm_read_byte(&data->tccra_mask);
 	}
+#endif
 	Gpio::DDR(pin_no >> 3) &= ~_BV(pin_no & 7);
 	Gpio::PORT(pin_no >> 3) &= ~_BV(pin_no & 7);
 	pin[pin_no - GPIO_FIRST_PIN].set_state((pin[pin_no - GPIO_FIRST_PIN].state & ~0x3) | CTRL_UNSET);
@@ -190,6 +194,7 @@ inline static bool is_oc1_pin(uint8_t pin_no) { // {{{
 } // }}}
 
 inline void SET(uint8_t pin_no) { // {{{
+#ifndef NO_PWM
 	Timer_data const *data = get_timer(pin_no);
 	if (data != nullptr) {
 		if (pin[pin_no - GPIO_FIRST_PIN].duty < 0x7fff) {
@@ -212,10 +217,14 @@ inline void SET(uint8_t pin_no) { // {{{
 			*reg &= ~mask;
 		}
 	}
-	else if ((pin[pin_no - GPIO_FIRST_PIN].state & 0x3) == CTRL_SET)
-		return;
+	else
+#endif
+		if ((pin[pin_no - GPIO_FIRST_PIN].state & 0x3) == CTRL_SET)
+			return;
+#ifndef NO_PWM
 	pin[pin_no - GPIO_FIRST_PIN].avr_on = true;
 	pin[pin_no - GPIO_FIRST_PIN].avr_target = 0;
+#endif
 	Gpio::PORT(pin_no >> 3) |= _BV(pin_no & 7);
 	Gpio::DDR(pin_no >> 3) |= _BV(pin_no & 7);
 	pin[pin_no - GPIO_FIRST_PIN].set_state((pin[pin_no - GPIO_FIRST_PIN].state & ~0x3) | CTRL_SET);
@@ -224,12 +233,14 @@ inline void SET(uint8_t pin_no) { // {{{
 inline void RESET(uint8_t pin_no) { // {{{
 	if ((pin[pin_no - GPIO_FIRST_PIN].state & 0x3) == CTRL_RESET)
 		return;
+#ifndef NO_PWM
 	Timer_data const *data = get_timer(pin_no);
 	if (data != nullptr) {
 		volatile uint8_t *reg = reinterpret_cast <volatile uint8_t *> (pgm_read_ptr(&data->tccra));
 		uint8_t mask = pgm_read_byte(&data->tccra_mask);
 		*reg &= ~mask;
 	}
+#endif
 	Gpio::PORT(pin_no >> 3) &= ~_BV(pin_no & 7);
 	Gpio::DDR(pin_no >> 3) |= _BV(pin_no & 7);
 	pin[pin_no - GPIO_FIRST_PIN].set_state((pin[pin_no - GPIO_FIRST_PIN].state & ~0x3) | CTRL_RESET);

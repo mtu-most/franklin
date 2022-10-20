@@ -1,7 +1,7 @@
 # Makefile - build rules for Franklin
-# vim: set foldmethod=marker :
+# Copyright and license {{{
 # Copyright 2014-2016 Michigan Technological University
-# Copyright 2016 Bas Wijnen <wijnen@debian.org>
+# Copyright 2016-2022 Bas Wijnen <wijnen@debian.org>
 # Copyright 2017 Lorin Edwin Parker <lorin.parker@hive13.org>
 # Author: Bas Wijnen <wijnen@debian.org>
 #
@@ -17,24 +17,38 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# }}}
 
 ifndef MCU
 MCU = atmega1284p
+#MCU = atmega168
 endif
 
-ifeq (${MCU}, atmega328p)
+ifeq (${MCU}, atmega168) # {{{
 F_CPU ?= 16000000
 PROTOCOL ?= arduino
-BAUD ?= 57600
+BAUD ?= 19200
 
-EXTRA_CPPFLAGS ?= -DNO_DEBUG -DNO_ADC -DNO_FOLLOWER -DNO_PIN_MOTOR -DNO_TEMP_HOLD -DNO_TEMP_LIMIT -DNO_SPI -DNO_PATTERN -DNO_TIMEOUT -DNO_LED
+EXTRA_CPPFLAGS ?= -DNO_DEBUG -DNO_ADC -DNO_FOLLOWER -DNO_PIN_MOTOR -DNO_TEMP_HOLD -DNO_TEMP_LIMIT -DNO_SPI -DNO_PATTERN -DNO_TIMEOUT -DNO_LED -DNO_PWM
 NUM_MOTORS ?= 1
 FRAGMENTS_PER_MOTOR_BITS ?= 1
 BYTES_PER_FRAGMENT ?= 2
 SERIAL_SIZE_BITS ?= 7	# Minimum: 7 (with minimal fragment size)
-endif
+endif # }}}
 
-ifeq (${MCU}, atmega1284p)
+ifeq (${MCU}, atmega328p) # {{{
+F_CPU ?= 16000000
+PROTOCOL ?= arduino
+BAUD ?= 57600
+
+EXTRA_CPPFLAGS ?= -DNO_DEBUG -DNO_ADC -DNO_FOLLOWER -DNO_PIN_MOTOR -DNO_TEMP_HOLD -DNO_TEMP_LIMIT -DNO_SPI -DNO_PATTERN -DNO_TIMEOUT -DNO_LED -DNO_PWM
+NUM_MOTORS ?= 1
+FRAGMENTS_PER_MOTOR_BITS ?= 1
+BYTES_PER_FRAGMENT ?= 2
+SERIAL_SIZE_BITS ?= 7	# Minimum: 7 (with minimal fragment size)
+endif # }}}
+
+ifeq (${MCU}, atmega1284p) # {{{
 F_CPU ?= 16000000
 PROTOCOL ?= arduino
 BAUD ?= 115200
@@ -43,7 +57,7 @@ NUM_MOTORS ?= 8
 FRAGMENTS_PER_MOTOR_BITS ?= 4
 BYTES_PER_FRAGMENT ?= 16
 SERIAL_SIZE_BITS ?= 10	# Minimum: 7 (with minimal fragment size)
-endif
+endif # }}}
 
 TARGET_ARCH ?= avr
 
@@ -72,4 +86,6 @@ franklin_SOURCES = \
 	      timer.cc \
 	      firmware.cc
 
-include avr-ll.mk
+include amat.mk
+
+# vim: set foldmethod=marker :

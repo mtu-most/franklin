@@ -21,7 +21,7 @@
 #include "cdriver.h"
 
 //#define mdebug(...) debug(__VA_ARGS__)
-//#define debug_abort() abort()
+#define debug_abort() abort()
 
 #ifndef mdebug
 #define mdebug(...) do {} while (0)
@@ -82,7 +82,6 @@ void next_move(int32_t start_time) { // {{{
 		return;
 	}
 	//debug("next move, computing=%d, start time=%d, current time=%d, queue %d -> %d", computing_move, start_time, settings.hwtime, settings.queue_start, settings.queue_end);
-	probing = false;
 	factor = 0;
 	if (settings.queue_start == settings.queue_end) {
 		if (resume_pending) {
@@ -131,6 +130,7 @@ void next_move(int32_t start_time) { // {{{
 	// Set everything up for running queue[settings.queue_start].
 	int q = settings.queue_start;
 	single = queue[q].single;
+	probing = queue[q].probe;
 	settings.gcode_line = queue[q].gcode_line;
 
 	// Make sure machine state is good. {{{
@@ -381,7 +381,7 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 	if (abs(steps) < abs(targetsteps)) {
 		distance = arch_round_pos(sp, mt, mtr->settings.current_pos) + (steps + s * .5) / mtr->steps_per_unit - mtr->settings.current_pos;
 		v = std::fabs(distance / dt);
-		warning("new distance = %f, old = %f", distance, orig_distance);
+		//warning("new distance = %f, old = %f", distance, orig_distance);
 	}
 	//debug("=============");
 	double f = distance / orig_distance;
@@ -798,7 +798,7 @@ void buffer_refill() { // {{{
 		debug("sending because data pending frag=%d pos=%d", current_fragment, current_fragment_pos);
 		send_fragment();
 	}*/
-	mdebug("refill start %d %d %d", running_fragment, current_fragment, sending_fragment);
+	mdebug("refill start running %d current %d sending %d computing %d aborting %d stopping %d discarding %d discard_pending %d", running_fragment, current_fragment, sending_fragment, computing_move, aborting, stopping, discarding, discard_pending);
 	// Keep one free fragment, because we want to be able to rewind and use the buffer before the one currently active.
 	while ((computing_move || settings.adjust > 0) && !aborting && !stopping && discarding == 0 && !discard_pending && (running_fragment - 1 - current_fragment + FRAGMENTS_PER_BUFFER) % FRAGMENTS_PER_BUFFER > (FRAGMENTS_PER_BUFFER > 4 ? 4 : FRAGMENTS_PER_BUFFER - 2) && !sending_fragment) {
 		mdebug("refill %d %d %f", current_fragment, current_fragment_pos, spaces[0].motor[0]->settings.current_pos);
@@ -843,19 +843,25 @@ void abort_move(int pos) { // {{{
 		}
 	}
 	restore_settings();
-	for (int i = 0; i < 6; ++i) {
-		final_x[i] = NAN;
-		final_v[i] = 0;
-		final_a[i] = 0;
-	}
 	//debug("free abort reset");
 	current_fragment_pos = 0;
 	computing_move = true;
+	for (int s = 0; s < NUM_SPACES; ++s) {
+		Space &sp = spaces[s];
+		for (int a = 0; a < sp.num_axes; ++a) {
+			sp.axis[a]->current = sp.axis[a]->settings.source;
+		}
+	}
 	while (computing_move && current_fragment_pos < unsigned(pos)) {
 		mdebug("abort reconstruct %d %d", current_fragment_pos, pos);
 		apply_tick();
 	}
 	mdebug("done reconstructing");
+	for (int i = 0; i < 6; ++i) {
+		final_x[i] = NAN;
+		final_v[i] = 0;
+		final_a[i] = 0;
+	}
 	if (spaces[0].num_axes > 0)
 		cpdebug(0, 0, "ending hwpos %f", arch_round_pos(0, 0, spaces[0].motor[0]->settings.current_pos) + avr_pos_offset[0]);
 	// Flush queue.
@@ -865,6 +871,7 @@ void abort_move(int pos) { // {{{
 	current_fragment_pos = 0;
 	settings.adjust = 0;
 	store_settings();
+	//debug("no compute because abort");
 	computing_move = false;
 	for (int s = 0; s < NUM_SPACES; ++s) {
 		Space &sp = spaces[s];
@@ -1140,6 +1147,7 @@ int prepare_retarget(int q, int tool, double x[6], double v[6], double a[6], boo
 		double s = s_dv(0, len_target_v);
 		MoveCommand move;
 		move.single = 0;
+		move.probe = false;
 		move.v0 = max_v;
 		move.tool = 0;
 		move.e = spaces[1].num_axes > 0 ? spaces[1].axis[0]->current : 0;
@@ -1197,18 +1205,18 @@ void smooth_stop(int q, double x[6], double v[6]) { // {{{
 } // }}}
 
 void do_resume() { // {{{
+	if (pausing && run_file_wait > 0)
+		run_file_wait -= 1;
 	pausing = false;
 	resume_pending = true;
 	mdebug("new queue for resume");
 	settings.queue_start = 0;
 	settings.queue_end = prepare_retarget(0, -1, resume.x, resume.v, resume.a, true);
-	if (run_file_wait > 0)
-		run_file_wait -= 1;
 	next_move(settings.hwtime);
 	buffer_refill();
 } // }}}
 
-int go_to(bool relative, MoveCommand const *move, bool queue_only) { // {{{
+int go_to(bool relative, MoveCommand const *move, bool queue_only, bool unprobe) { // {{{
 	mdebug("goto (%.2f,%.2f,%.2f) %s at speed %.2f, e %.2f", move->target[0], move->target[1], move->target[2], relative ? "rel" : "abs", move->v0, move->e);
 	mdebug("new queue for goto");
 	settings.queue_start = 0;
@@ -1232,6 +1240,8 @@ int go_to(bool relative, MoveCommand const *move, bool queue_only) { // {{{
 			target[a] = (relative ? x[a] : 0) + move->target[a];
 		spaces[0].axis[a]->last_target = target[a];
 	}
+	if (unprobe)
+		target[2] -= probe_value(0, target[0], target[1]);
 	if (computing_move) {
 		// Reset target of current move to given values.
 		double v[6], a[6];

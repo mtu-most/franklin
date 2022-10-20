@@ -80,10 +80,9 @@ bool globals_load() {
 	pattern.dir_pin.read(shmem->ints[8]);
 	if (p != pattern.dir_pin.write())
 		change_hw = true;
-	probe_enable = shmem->ints[9];
-	bed_id = shmem->ints[10];
-	fan_id = shmem->ints[11];
-	spindle_id = shmem->ints[12];
+	bed_id = shmem->ints[9];
+	fan_id = shmem->ints[10];
+	spindle_id = shmem->ints[11];
 	feedrate = shmem->floats[0];
 	if (std::isnan(feedrate) || std::isinf(feedrate) || feedrate <= 0)
 		feedrate = 1;
@@ -91,14 +90,18 @@ bool globals_load() {
 	max_v = shmem->floats[2];
 	max_a = shmem->floats[3];
 	max_J = shmem->floats[4];
-	adjust_speed = shmem->floats[5];
-	current_extruder = shmem->ints[13];
-	targetangle = shmem->floats[6];
+	probe_z = shmem->floats[5];
+	probe_height = shmem->floats[6];
+	probe_depth = shmem->floats[7];
+	adjust_speed = shmem->floats[8];
+	current_extruder = shmem->ints[12];
+	targetangle = shmem->floats[9];
 	double t = timeout;
-	timeout = shmem->floats[7];
+	timeout = shmem->floats[10];
+	probe_speed_scale = shmem->floats[11];
 	if (t != timeout)
 		change_hw = true;
-	bool store = shmem->ints[14];
+	bool store = shmem->ints[13];
 	if (store && !store_adc) {
 		store_adc = fopen("/tmp/franklin-adc-dump", "a");
 	}
@@ -109,6 +112,7 @@ bool globals_load() {
 	ldebug("all done");
 	if (change_hw)
 		arch_motors_change();
+	reset_pos(&spaces[0]);
 	return true;
 }
 
@@ -122,18 +126,22 @@ void globals_save() {
 	shmem->ints[6] = spiss_pin.write();
 	shmem->ints[7] = pattern.step_pin.write();
 	shmem->ints[8] = pattern.dir_pin.write();
-	shmem->ints[9] = probe_enable;
-	shmem->ints[10] = bed_id;
-	shmem->ints[11] = fan_id;
-	shmem->ints[12] = spindle_id;
-	shmem->ints[13] = current_extruder;
-	shmem->ints[14] = store_adc != NULL;
+	shmem->ints[9] = bed_id;
+	shmem->ints[10] = fan_id;
+	shmem->ints[11] = spindle_id;
+	shmem->ints[12] = current_extruder;
+	shmem->ints[13] = store_adc != NULL;
 	shmem->floats[0] = feedrate;
 	shmem->floats[1] = max_deviation;
 	shmem->floats[2] = max_v;
 	shmem->floats[3] = max_a;
 	shmem->floats[4] = max_J;
-	shmem->floats[5] = adjust_speed;
-	shmem->floats[6] = targetangle;
-	shmem->floats[7] = timeout;
+	shmem->floats[5] = probe_z;
+	shmem->floats[6] = probe_height;
+	shmem->floats[7] = probe_depth;
+	shmem->floats[8] = adjust_speed;
+	shmem->floats[9] = targetangle;
+	shmem->floats[10] = timeout;
+	shmem->floats[11] = probe_speed_scale;
+	shmem->floats[12] = space_types[spaces[0].type].probe_speed(&spaces[0]);
 }

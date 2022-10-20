@@ -152,6 +152,8 @@ static void handle_pending_events() { // {{{
 	}
 	if (stopping == 1) {
 		stopping = 0;
+		if (probing)
+			run_file_next_command(settings.hwtime);
 	}
 	buffer_refill();
 } // }}}
@@ -212,9 +214,13 @@ int main(int argc, char **argv) { // {{{
 		//debug("poll values in %d pri %d err %d hup %d nval %d out %d", POLLIN, POLLPRI, POLLERR, POLLHUP, POLLNVAL, POLLOUT);
 		cdebug("poll return %d %d %d (pending %d)", pollfds[0].revents, pollfds[1].revents, pollfds[2].revents, interrupt_pending);
 		if (pollfds[0].revents) {
+			// Timer expired; resume job.
 			timerfd_settime(pollfds[0].fd, 0, &zero, NULL);
-			if (run_file_wait > 0)
+			if (run_file_wait > 0) {
 				run_file_wait -= 1;
+				if (run_file_wait == 0)
+					run_file_next_command(settings.hwtime);
+			}
 		}
 		if (pollfds[2].revents)
 			handle_interrupt_reply();

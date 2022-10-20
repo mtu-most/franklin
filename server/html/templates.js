@@ -450,8 +450,8 @@ function Position(desc, pos, top) { // {{{
 	], ['', '', '', '', '', '']));
 	// Target position buttons.
 	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
-		ui.machine.call('set_axis', [[0, 0]], {'offset': ui.machine.spaces[0].axis[0].current});
-		ui.machine.call('set_axis', [[0, 1]], {'offset': ui.machine.spaces[0].axis[1].current});
+		ui.machine.call('set_axis', [[0, 0]], {'offset': ui.machine.spaces[0].axis[0].offset + ui.machine.spaces[0].axis[0].current});
+		ui.machine.call('set_axis', [[0, 1]], {'offset': ui.machine.spaces[0].axis[1].offset + ui.machine.spaces[0].axis[1].current});
 	});
 	b.type = 'button';
 	t.Add(make_tablerow(ui, 'Offset:', [
@@ -714,14 +714,22 @@ function setup_profile(desc, pos, top) { // {{{
 function setup_probe(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
+
 	var e = ret.AddElement('div').AddText('Max Probe Distance:');
 	e.Add(Float(ui, [null, 'probe_dist'], 0, 1));
-	e = ret.AddElement('div').AddText('Probe Border Offset:');
-	e.Add(Float(ui, [null, 'probe_offset'], 0, 1));
 	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
-	e = ret.AddElement('div').AddText('Probe Safe Retract Distance:');
-	e.Add(Float(ui, [null, 'probe_safe_dist'], 0, 1));
+
+	e = ret.AddElement('div').AddText('Probe Safe Height:');
+	e.Add(Float(ui, [null, 'probe_height'], 0, 1));
 	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
+
+	e = ret.AddElement('div').AddText('Probe Max Depth:');
+	e.Add(Float(ui, [null, 'probe_depth'], 0, 1));
+	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
+
+	e = ret.AddElement('div').AddText('Probe Speed Scale:');
+	e.Add(Float(ui, [null, 'probe_speed_scale'], 0, 1));
+
 	return [ret, pos];
 } // }}}
 function setup_type(desc, pos, top) { // {{{

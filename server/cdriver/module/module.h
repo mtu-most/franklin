@@ -78,7 +78,7 @@ struct Run_Record {
 } __attribute__((__packed__));
 
 enum Command {
-	// from host
+	// from host.
 	CMD_SET_UUID,		// 00	22 bytes: uuid.
 	CMD_GET_UUID,		// 01	0.  Reply: UUID.
 	CMD_MOVE,		// 02	1-2 byte: which channels (depending on number of extruders); channel * 4 byte: values [fraction/s], [mm].  Reply (later): MOVECB.
@@ -120,9 +120,11 @@ enum Command {
 	CMD_MOTORS2XYZ,		// 26	1 byte: which space, n doubles: motor positions.  Reply: m times XYZ.
 	CMD_WRITE_PROBE_MAP,	// 27	int: first_index, num_x, num_y; float: origin_x, origin_y, stepsize_x, stepsize_y, values[first_index:first_index + 400] or fewer.
 	CMD_READ_PROBE_MAP,	// 28	int: first_index. Returns int: first_index, num_x, num_y; float: origin_x, origin_y, stepsize_x, stepsize_y, values[first_index:first_index + 400] or fewer.
+	CMD_ADJUST_PROBE,	// 29	float: new probe_z value.
 };
 
 enum InterruptCommand {
+	// To host.
 	CMD_LIMIT,		// 00	1 byte: which channel.
 	CMD_FILE_DONE,		// 01
 	CMD_MOVECB,		// 02	1 byte: number of movecb events.
@@ -137,7 +139,10 @@ enum InterruptCommand {
 	CMD_PARKWAIT,		// 0b
 	CMD_CONNECTED,		// 0c
 	CMD_TEMPCB,		// 0d	1 byte: which channel.  Byte storage for which needs to be sent.
-	CMD_MESSAGE,		// 0e
+	CMD_CLEAR_PROBES,	// 0e
+	CMD_STORE_PROBE,	// 0f
+	CMD_USE_PROBES,		// 10
+	CMD_UPDATE,		// 11	float: probe_z, probe_speed
 };
 
 enum RunType {
@@ -156,6 +161,10 @@ enum RunType {
 	RUN_CONFIRM,		// 0c
 	RUN_PARK,		// 0d
 	RUN_PATTERN,		// 0e
+	RUN_CLEAR_PROBES,	// 0f
+	RUN_STORE_PROBE,	// 10
+	RUN_USE_PROBES,		// 11
+	RUN_ADJUST_PROBE,	// 12
 };
 
 #ifndef PATH_MAX
@@ -261,6 +270,7 @@ extern "C" {
 	// Globals
 	EXTERN double max_deviation;
 	EXTERN double max_v, max_a, max_J;
+	EXTERN double probe_height, probe_depth, probe_speed, probe_speed_scale;
 	EXTERN int num_extruders;
 	EXTERN ExtruderAxisData *extruder_data;
 

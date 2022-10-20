@@ -310,9 +310,8 @@ EXTERN int num_subfragments_bits;
 EXTERN Pin_t led_pin, stop_pin, probe_pin, spiss_pin;
 EXTERN double timeout;
 EXTERN int bed_id, fan_id, spindle_id;
-EXTERN bool probe_enable;
 EXTERN int probe_nx, probe_ny;
-EXTERN double probe_origin[2], probe_step[2], *probe_data;
+EXTERN double probe_z, probe_depth, probe_height, probe_origin[2], probe_step[2], *probe_data, probe_speed_scale;
 //EXTERN double room_T;	//[°C]
 EXTERN double feedrate;		// Multiplication factor for f values, used at start of move.
 EXTERN double targetangle;
@@ -342,7 +341,7 @@ EXTERN int32_t last_active;
 EXTERN int32_t last_micros;
 EXTERN int16_t led_phase;
 EXTERN Resume resume;
-EXTERN bool pausing, resume_pending, parkwaiting;
+EXTERN bool pausing, resume_pending, parkwaiting, confirming;
 EXTERN History *history;
 EXTERN History settings;
 EXTERN double final_x[6], final_v[6], final_a[6];	// For checking that the segments fit.
@@ -400,7 +399,7 @@ bool compute_current_pos(double x[6], double v[6], double a[6], bool store);
 int prepare_retarget(int q, int tool, double x[6], double v[6], double a[6], bool resuming = false);
 void smooth_stop(int q, double x[6], double v[6]);
 void do_resume();
-int go_to(bool relative, MoveCommand const *move, bool queue_only = false);
+int go_to(bool relative, MoveCommand const *move, bool queue_only = false, bool unprobe = false);
 void settemp(int which, double target);
 void waittemp(int which, double mintemp, double maxtemp);
 void setpos(int which, int t, double f, bool reset);
@@ -454,6 +453,7 @@ EXTERN bool connected;
 void handle_temp(int id, int temp);
 
 // space.cpp
+double probe_value(int space, double x, double y);
 void buffer_refill();
 void store_settings();
 void restore_settings();

@@ -39,23 +39,28 @@ single = {
 	# Note: The following code is invalid for a regular single command, because it doesn't have bit 7 set. For controllers, that's a feature, because it's what replies look like.
 	# Also, this means it can be 2 bits different from all of Franklin's single byte commands.
 	'CONTROLLER': b'\x07',	# Reply to ID request: this is a controller, not a machine running Franklin.
-	}
+}
 
 parsed = {
-	'SYSTEM': 0,
-	'POLY3PLUS': 1,
-	'POLY3MINUS': 2,
-	'POLY2': 3,
-	'ARC': 4,
-	'GOTO': 5,
-	'GPIO': 6,
-	'SETTEMP': 7,
-	'WAITTEMP': 8,
-	'SETPOS': 9,
-	'WAIT': 10,
-	'CONFIRM': 11,
-	'PARK': 12,
-	'PATTERN': 13,
+	'SYSTEM': 0x00,
+	'POLY3PLUS': 0x01,
+	'POLY3MINUS': 0x02,
+	'POLY2': 0x03,
+	'ARC': 0x04,
+	'ABC': 0x05,
+	'GOTO': 0x06,
+	'GPIO': 0x07,
+	'SETTEMP': 0x08,
+	'WAITTEMP': 0x09,
+	'SETPOS': 0x0a,
+	'WAIT': 0x0b,
+	'CONFIRM': 0x0c,
+	'PARK': 0x0d,
+	'PATTERN': 0x0e,
+	'CLEAR_PROBE': 0x0f,
+	'STORE_PROBE': 0x10,
+	'USE_PROBES': 0x11,
+	'ADJUST_PROBE': 0x12,
 }
 
 mask = [[0xc0, 0xc3, 0xff, 0x09],

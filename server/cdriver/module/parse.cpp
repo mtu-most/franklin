@@ -112,6 +112,7 @@ struct Parser { // {{{
 	bool extruding;
 	double current_f[2];
 	bool tool_changed;
+	bool first_probe;
 	std::list <Record> pending;
 	int64_t lineno;
 	std::string line;
@@ -120,6 +121,7 @@ struct Parser { // {{{
 	double last_time;
 	std::list <Chunk> command;
 	double max_dev;
+	bool using_probes;
 	std::string pattern_data;
 	// }}}
 	// Member functions. {{{
@@ -233,13 +235,14 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 	//debug("handling %c%d", type, code);
 	if (type == 'G') { // {{{
 		switch (code) {
-		case 1:
-		case 81:
+		case 1: // Controlled move.
+		case 81: // Drill.
 			modetype = type;
 			modecode = code;
 			modenum = num;
 			// fall through.
-		case 0:
+		case 0:	// Fast move.
+		case 30: // Probe.
 			{
 				double X = NAN, Y = NAN, Z = NAN, A = NAN, B = NAN, C = NAN, E = NAN, F = NAN, R = NAN;
 				for (auto arg: command) {
@@ -309,13 +312,62 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				handle_coordinate(A, 3, &controlled, rel);
 				handle_coordinate(B, 4, &controlled, rel);
 				handle_coordinate(C, 5, &controlled, rel);
-				if (!controlled || (std::isnan(X) && std::isnan(Y) && std::isnan(Z))) {
+				if (code == 81) {
+					double z = pos[2];
+					if (std::isnan(oldpos[2]))
+						oldpos[2] = r;
+					flushdebug("flushing for G81");
+					flush_pending();
+					// Only support OLD_Z (G90) retract mode; don't support repeats(L).
+					// goto x, y
+					if (controlled) {
+						pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
+						pos[2] = oldpos[2];
+					}
+					else {
+						flush_pending();
+						add_record(lineno, RUN_GOTO, current_tool, pos[0], pos[1], oldpos[2], pos[3], pos[4], pos[5], 0, NAN, INFINITY, epos.at(current_tool));
+						pos[2] = oldpos[2];
+						reset_pending_pos();
+						controlled = true;
+					}
+					// goto r
+					if (r != pos[2]) {
+						pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], r, NAN, NAN, NAN, INFINITY, NAN));
+						pos[2] = r;
+					}
+					// goto z
+					if (z != pos[2]) {
+						pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], z, NAN, NAN, NAN, current_f[1], NAN));
+						pos[2] = z;
+					}
+					if (oldpos[2] != pos[2]) {
+						// go back to old z
+						pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
+						pos[2] = oldpos[2];
+					}
+					break;
+				}
+				if (!controlled || code == 30 || (std::isnan(X) && std::isnan(Y) && std::isnan(Z))) {
 					if (handle_pattern)
 						parse_error(errors, "%" LONGFMT ": Warning: not handling pattern because position is unknown", lineno);
 					flushdebug("flushing because position is unknown or non-position move");
 					flush_pending();
-					add_record(lineno, RUN_GOTO, current_tool, pos[0], pos[1], pos[2], pos[3], pos[4], pos[5], NAN, NAN, current_f[code == 0 ? 0 : 1], epos.at(current_tool));
+					double z1 = pos[2];
+					double z = (code == 30 ? NAN : pos[2]);	// Probe moves to z on second move.
+					if (!std::isnan(pos[0]) || !std::isnan(pos[1]) || !std::isnan(z) || !std::isnan(pos[3]) || !std::isnan(pos[4]) || !std::isnan(pos[5]) || !std::isnan(epos.at(current_tool)))
+						add_record(lineno, RUN_GOTO, current_tool, pos[0], pos[1], z, pos[3], pos[4], pos[5], 0, NAN, current_f[code == 0 ? 0 : 1], epos.at(current_tool));
 					reset_pending_pos();
+					if (code == 30) {
+						if (first_probe)
+							add_record(lineno, RUN_CLEAR_PROBES);
+						first_probe = false;
+						if (std::isnan(z1))
+							z1 = probe_depth;
+						add_record(lineno, RUN_GOTO, current_tool, NAN, NAN, z1, NAN, NAN, NAN, 1, NAN, probe_speed_scale * probe_speed, NAN);
+						add_record(lineno, RUN_STORE_PROBE);
+						add_record(lineno, RUN_GOTO, current_tool, NAN, NAN, probe_height, NAN, NAN, NAN, 2, NAN, current_f[code == 0 ? 0 : 1], NAN);
+					}
 					break;
 				}
 				if (code != 81) {
@@ -341,25 +393,6 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 					if (handle_pattern && code == 1)
 						pending.back().pattern = pattern_data;
 					pattern_data.clear();
-				}
-				else {
-					if (std::isnan(oldpos[2]))
-						oldpos[2] = r;
-					flushdebug("flushing for G81");
-					flush_pending();
-					// Only support OLD_Z (G90) retract mode; don't support repeats(L).
-					// goto x, y
-					pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
-					// goto r
-					pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], r, NAN, NAN, NAN, INFINITY, NAN));
-					// goto z
-					if (pos[2] != r) {
-						pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], pos[2], NAN, NAN, NAN, current_f[1], NAN));
-					}
-					// go back to old z
-					pending.push_back(Record(lineno, false, current_tool, pos[0], pos[1], oldpos[2], NAN, NAN, NAN, INFINITY, NAN));
-					// update pos[2].
-					pos[2] = oldpos[2];
 				}
 			}
 			break;
@@ -590,6 +623,17 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 				pos[i] = NAN;
 			reset_pending_pos();
 			break;
+		case 29:
+			// Finish probing; use stored values.
+			flushdebug("flushing for G29");
+			flush_pending();
+			add_record(lineno, RUN_USE_PROBES);
+			using_probes = true;
+			// Current position will have changed.
+			for (unsigned i = 0; i < 6; ++i)
+				pos[i] = NAN;
+			reset_pending_pos();
+			break;
 		case 64:
 		{
 			flushdebug("flushing for G64 (max dev)");
@@ -655,8 +699,17 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 			// Request confirmation.
 			flushdebug("flushing for M0");
 			flush_pending();
-			add_record(lineno, RUN_CONFIRM, add_string(message), tool_changed ? 1 : 0);
-			tool_changed = false;
+			add_record(lineno, RUN_CONFIRM, add_string(message));
+			if (tool_changed) {
+				tool_changed = false;
+				// Probe.
+				if (using_probes) {
+					add_record(lineno, RUN_GOTO, current_tool, NAN, NAN, probe_depth, NAN, NAN, NAN, 1, NAN, probe_speed_scale * probe_speed, NAN);
+					add_record(lineno, RUN_ADJUST_PROBE);
+					add_record(lineno, RUN_GOTO, current_tool, NAN, NAN, probe_height, NAN, NAN, NAN, 2, NAN, current_f[0], NAN);
+				}
+				reset_pending_pos();
+			}
 			break;
 		case 2:
 			return false;
@@ -810,7 +863,7 @@ bool Parser::handle_command(bool handle_pattern) { // {{{
 
 int Parser::add_string(std::string const &str) { // {{{
 	if (str.size() == 0)
-		return 0;
+		return -1;
 	auto found = std::find(strings.begin(), strings.end(), str);
 	if (found != strings.end())
 		return found - strings.begin();
@@ -925,15 +978,17 @@ void Parser::initialize_pending_front() { // {{{
 
 Parser::Parser(std::string const &infilename, std::string const &outfilename, void *errors) // {{{
 		: infile(infilename.c_str()), outfile(outfilename.c_str(), std::ios::binary), errors(errors) {
-	strings.push_back("");
 	modetype = 0;
 	unit = 1;
 	rel = false;
 	erel = false;
+	spindle_speed = 1;
 	current_tool = 0;
 	extruding = false;
 	tool_changed = false;
+	first_probe = true;
 	last_time = 0;
+	using_probes = false;
 	arc_normal[0] = 0;
 	arc_normal[1] = 0;
 	arc_normal[2] = 1;
@@ -965,6 +1020,8 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 		}
 		if (comment.substr(0, 4) == "MSG,")
 			message = comment.substr(4);
+		else
+			message = std::string();
 		if (comment.substr(0, 7) == "SYSTEM:") {
 			int s = add_string(comment.substr(7));
 			flushdebug("flushing for system");
@@ -1062,7 +1119,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 		outfile.write(reinterpret_cast <char *>(&bin), sizeof(bin));
 	}
 	// Number of strings.
-	uint32_t strnum = strings.size() - 1;
+	uint32_t strnum = strings.size();
 	outfile.write(reinterpret_cast <char *>(&strnum), sizeof(strnum));
 	// Bbox.
 	for (int j = 0; j < 3; ++j) {
@@ -1074,7 +1131,7 @@ Parser::Parser(std::string const &infilename, std::string const &outfilename, vo
 } // }}}
 
 // Helper function to normalize a vector.
-static void normalize(double dst[6], double A[6]) {
+static void normalize(double dst[6], double A[6]) { // {{{
 	double len = 0;
 	for (int i = 0; i < 6; ++i) {
 		if (!std::isnan(A[i]))
@@ -1090,10 +1147,10 @@ static void normalize(double dst[6], double A[6]) {
 			dst[i] = std::isnan(A[i]) ? 0 : A[i] / len;
 	}
 	//debug("normalized to %f,%f,%f", dst[0], dst[1], dst[2]);
-}
+} // }}}
 
 // Helper function to compute the deviation of a vector from a line.
-static void deviation(double dst[6], double line[6], double vect[6]) {
+static void deviation(double dst[6], double line[6], double vect[6]) { // {{{
 	//debug("deviation %f,%f,%f -> %f,%f,%f", line[0], line[1], line[2], vect[0], vect[1], vect[2]);
 	double unit[6];
 	normalize(unit, line);
@@ -1108,7 +1165,7 @@ static void deviation(double dst[6], double line[6], double vect[6]) {
 	}
 	//debug("dst %f,%f,%f projection %f,%f,%f", dst[0], dst[1], dst[2], projection[0], projection[1], projection[2]);
 	normalize(dst, dst);
-}
+} // }}}
 
 void Parser::flush_pending(bool finish) { // {{{
 	flushdebug("flushing size %d finish %d", pending.size(), finish);

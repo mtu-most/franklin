@@ -176,12 +176,13 @@ bool hwpacket(int len) { // {{{
 	int offset = 0;
 	int done_count = command[1];
 	int remaining_count = command[2];
+	bool next_run_command = false;
 	// }}}
 	switch (command[0]) {
 	case HWC_LIMIT: // {{{
 	{
 		uint8_t which = command[2];
-		if (which > NUM_MOTORS) {
+		if (which > NUM_MOTORS + 1) {
 			if (initialized) {
 				debug("cdriver: Invalid limit for avr motor %d", which);
 				abort();
@@ -198,11 +199,13 @@ bool hwpacket(int len) { // {{{
 		double pos;
 		int s, m = -1;
 		if (which >= avr_active_motors) {
+			// Emergency stop.
 			s = -1;
-			m = -1;
+			m = (which == avr_active_motors ? 0 : 1);
 			pos = NAN;
 		}
 		else {
+			// Limit switch.
 			for (s = 0; s < NUM_SPACES; ++s) {
 				if (which < spaces[s].num_motors) {
 					m = which;
@@ -286,9 +289,8 @@ bool hwpacket(int len) { // {{{
 					avr_write_ack("expected underrun");
 					sent_ack = true;
 					// An expected underrun during a job is the end of a goto operation and the next command should be sent.
-					run_file_next_command(settings.hwtime);
-					buffer_refill();
-					// FIXME: this can trigger a repeat request, which is handled as a new request because write_ack() is not called yet.
+					// But this can trigger a repeat request, which is handled as a new request because write_ack() is not called yet.
+					next_run_command = true;
 				}
 			}
 			//debug("underrun check %d %d %d", sending_fragment, current_fragment, running_fragment);
@@ -321,12 +323,16 @@ bool hwpacket(int len) { // {{{
 		else if (!sent_ack)
 			avr_write_ack("done");
 		//debug("fragment done for gcode line %" LONGFMT, history[running_fragment].gcode_line);
+		if (running_fragment == current_fragment)
+			abort();
 		running_fragment = (running_fragment + done_count) % FRAGMENTS_PER_BUFFER;
 		//debug("running -> %x", running_fragment);
 		if ((current_fragment + discarding + (transmitting_fragment ? 1 : 0)) % FRAGMENTS_PER_BUFFER == running_fragment && offset == 0) {
 			debug("Done received, but should be underrun (current: %d discarding: %d running: %d sending: %d transmitting %d)", current_fragment, discarding, running_fragment, sending_fragment, transmitting_fragment);
 			abort();
 		}
+		if (next_run_command)
+			run_file_next_command(settings.hwtime);
 		if (out_busy < 3)
 			buffer_refill();
 		//else
@@ -884,6 +890,8 @@ static void avr_connect3() { // {{{
 	avr_buffer[0] = HWC_PINNAME;
 	avr_buffer[1] = avr_next_pin_name < NUM_DIGITAL_PINS ? avr_next_pin_name : (avr_next_pin_name - NUM_DIGITAL_PINS) | 0x80;
 	wait_for_reply[expected_replies++] = avr_connect4;
+	while (out_busy >= 3)
+		serial_wait();
 	prepare_packet(avr_buffer, 2);
 	avr_send();
 } // }}}

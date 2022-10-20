@@ -93,6 +93,12 @@ void free_motor(Space *s, int m) { // {{{
 } // }}}
 
 double probe_speed(Space *s) { // {{{
+	// Return value: mm/second
+	// hwtime_step: μs/tick
+	// steps_per_unit: steps/mm
+	// Condition: 1 step/tick
+	//
+	// 1 [step/tick] / hwtime_step [μs/tick] * 1e6 [μs/s] / steps_per_unit [steps/mm] = [mm/s]
 	if (s->num_motors >= 3)
 		return 1e6 / settings.hwtime_step / s->motor[2]->steps_per_unit;
 	return INFINITY;

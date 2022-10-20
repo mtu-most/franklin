@@ -196,7 +196,9 @@ void packet()
 		uint8_t value = command(2);
 		// Update reset state of the pin.
 		pin[p - GPIO_FIRST_PIN].set_state((pin[p - GPIO_FIRST_PIN].state & ~0xc) | (value & 0xc));
+#ifndef NO_PWM
 		pin[p - GPIO_FIRST_PIN].duty = command(3) | (command(4) << 8);
+#endif
 #ifndef NO_PIN_MOTOR
 		pin[p - GPIO_FIRST_PIN].motor = command(5);
 		pin[p - GPIO_FIRST_PIN].ticks = command(6);
@@ -299,7 +301,6 @@ void packet()
 			bool changed = adc[a].linked[i] != command(2 + i);
 			if (changed && ~adc[a].value[0] & 0x8000 && Gpio::check_pin(adc[a].linked[i])) {
 				//debug("unset for change adc %d link %d: pin %d", a, i, adc[a].linked[i]);
-				pin[adc[a].linked[i] - GPIO_FIRST_PIN].num_temps -= 1;
 				UNSET(adc[a].linked[i]);
 			}
 			adc[a].linked[i] = command(2 + i);
@@ -309,8 +310,6 @@ void packet()
 #endif
 			adc[a].value[i] = read_16(12 + 2 * i);
 			if (~adc[a].value[0] & 0x8000 && Gpio::check_pin(adc[a].linked[i])) {
-				if (changed)
-					pin[adc[a].linked[i] - GPIO_FIRST_PIN].num_temps += 1;
 				if (adc[a].is_on[i]) {
 					//debug("set for change adc %d link %d: pin %d on %d value %x", a, i, adc[a].linked[i], adc[a].is_on[i], adc[a].value[i]);
 					SET(adc[a].linked[i]);
