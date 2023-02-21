@@ -1,9 +1,9 @@
 # Not a bug; module does not use libc so is not linked against it. Tag may be removed soon anyway.
-franklin: library-not-linked-against-libc usr/lib/franklin/type/drawbot/module.so
-franklin: library-not-linked-against-libc usr/lib/franklin/type/extruder/module.so
-franklin: library-not-linked-against-libc usr/lib/franklin/type/polar/module.so
+franklin: library-not-linked-against-libc [usr/lib/franklin/type/drawbot/module.so]
+franklin: library-not-linked-against-libc [usr/lib/franklin/type/extruder/module.so]
+franklin: library-not-linked-against-libc [usr/lib/franklin/type/polar/module.so]
 
 # Not a bug; these modules are so simple they don't link to anything.
-franklin: shared-library-lacks-prerequisites usr/lib/franklin/type/cartesian/module.so
-franklin: shared-library-lacks-prerequisites usr/lib/franklin/type/h_bot/module.so
+franklin: shared-library-lacks-prerequisites [usr/lib/franklin/type/cartesian/module.so]
+franklin: shared-library-lacks-prerequisites [usr/lib/franklin/type/h_bot/module.so]
 

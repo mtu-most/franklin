@@ -10,10 +10,9 @@ all:
 
 install:
 	for mcu in ${MCUS} ; do \
-		for freq in ${FREQS} ; do \
-			install -m 644 -D -t ${DESTDIR}/usr/lib/franklin/firmware/ ../../firmware/build/franklin_$$mcu_$$freq.hex ; \
-		done \
+		install -m 644 -D -t ${DESTDIR}/usr/lib/franklin/firmware/ ../../firmware/build/franklin_$${mcu}_16000000.hex ; \
 	done
+	install -m 644 -D -t ${DESTDIR}/usr/lib/franklin/firmware/ ../../firmware/build/franklin_atmega1284p_12000000.hex ; \
 
 clean:
 	$(MAKE) -C ../../firmware clean

@@ -1,3 +1,4 @@
+"use strict";
 /* main.js - clientside functions for Franklin {{{
  * vim: set foldmethod=marker :
  * Copyright 2014 Michigan Technological University
@@ -193,7 +194,7 @@ function timed_update() { // {{{
 	read(null, 0);
 } // }}}
 
-AddEvent('load', function() { // {{{
+window.AddEvent('load', function() { // {{{
 	labels_element = document.getElementById('labels');
 	machines_element = document.getElementById('machines');
 	new_tab = document.getElementById('new_label');
@@ -603,7 +604,7 @@ function connect(ui, connected, ui_info) { // {{{
 						}
 						ret.Add([make_table(ui).AddMultipleTitles(titles[0], titles[1], titles[2]).AddMultiple(ui, part, function(ui, space, item) {
 							var component = (item === undefined ? [part, space] : [part, [space, item]]);
-							row = [];
+							var row = [];
 							for (var i = 0; i < t[part].length; ++i) {
 								var div;
 								if (t[part][i].type == 'int' || t[part][i].type == 'float') {
@@ -1847,7 +1848,7 @@ function redraw_canvas(ui) { // {{{
 			zaxis = ui.machine.spaces[0].axis[0];
 		var zcanvasses = get_elements(ui, [null, 'zmap']);
 		for (canvas_nr = 0; canvas_nr < zcanvasses.length; ++canvas_nr) {
-			zcanvas = zcanvasses[canvas_nr];
+			var zcanvas = zcanvasses[canvas_nr];
 			var zc = zcanvas.getContext('2d');
 			var zratio = .15 / .85;
 			zcanvas.width = zcanvas.clientWidth;
