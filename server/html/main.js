@@ -552,7 +552,7 @@ function queue_del(ui, select) { // {{{
 // }}}
 
 function queue_run(ui, select) { // {{{
-	ui.machine.call('queue_run', [get_queue(ui, select)[0]], kwargs = {paused: false});	// TODO: implement "start paused" again.
+	ui.machine.call('queue_run', [get_queue(ui, select)[0]], {paused: false});	// TODO: implement "start paused" again.
 }
 // }}}
 
@@ -1763,7 +1763,7 @@ function redraw_canvas(ui) { // {{{
 			c.translate(ui.machine.spaces[0].axis[0].offset, ui.machine.spaces[0].axis[1].offset);
 			c.rotate(ui.machine.targetangle);
 			for (var i = 0; i < ui.tp_context[1].length; ++i) {
-				r = ui.tp_context[1][i];
+				var r = ui.tp_context[1][i];
 				switch (r.type) {
 					case 'POLY3PLUS':
 					case 'POLY3MINUS':

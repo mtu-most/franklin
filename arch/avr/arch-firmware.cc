@@ -48,7 +48,7 @@ struct SerialInfo {
 	uint8_t tx_pin;
 	uint8_t rx_pin;
 };
-#define ONEPORT(p) {udr: &UDR ## p, ucsra: &UCSR ## p ## A, ucsrb: &UCSR ## p ## B, ucsrc: &UCSR ## p ## C, ubrrh: &UBRR ## p ## H, ubrrl: &UBRR ## p ## L, tx_pin: TXD ## p ## _PIN, rx_pin: RXD ## p ## _PIN}
+#define ONEPORT(p) {udr: &UDR ## p, ucsra: &UCSR ## p ## A, ucsrb: &UCSR ## p ## B, ucsrc: &UCSR ## p ## C, ubrrh: &UBRR ## p ## H, ubrrl: &UBRR ## p ## L, tx_pin: PIN_TXD ## p, rx_pin: PIN_RXD ## p}
 static SerialInfo const avr_serial_ports[NUM_SERIAL_PORTS] PROGMEM = {
 #ifdef UDR0
 	ONEPORT(0),
@@ -543,58 +543,58 @@ void arch_msetup(uint8_t m) { // {{{
 } // }}}
 
 uint8_t timer_pins[] = {
-#ifdef OC1A_PIN
-	OC1A_PIN,
+#ifdef PIN_OC1A
+	PIN_OC1A,
 #endif
-#ifdef OC1B_PIN
-	OC1B_PIN,
+#ifdef PIN_OC1B
+	PIN_OC1B,
 #endif
-#ifdef OC1C_PIN
-	OC1C_PIN,
-#endif
-
-#ifdef OC0A_PIN
-	OC0A_PIN,
-#endif
-#ifdef OC0B_PIN
-	OC0B_PIN,
+#ifdef PIN_OC1C
+	PIN_OC1C,
 #endif
 
-#ifdef OC2A_PIN
-	OC2A_PIN,
+#ifdef PIN_OC0A
+	PIN_OC0A,
 #endif
-#ifdef OC2B_PIN
-	OC2B_PIN,
-#endif
-
-#ifdef OC3A_PIN
-	OC3A_PIN,
-#endif
-#ifdef OC3B_PIN
-	OC3B_PIN,
-#endif
-#ifdef OC3C_PIN
-	OC3C_PIN,
+#ifdef PIN_OC0B
+	PIN_OC0B,
 #endif
 
-#ifdef OC4A_PIN
-	OC4A_PIN,
+#ifdef PIN_OC2A
+	PIN_OC2A,
 #endif
-#ifdef OC4B_PIN
-	OC4B_PIN,
-#endif
-#ifdef OC4C_PIN
-	OC4C_PIN,
+#ifdef PIN_OC2B
+	PIN_OC2B,
 #endif
 
-#ifdef OC5A_PIN
-	OC5A_PIN,
+#ifdef PIN_OC3A
+	PIN_OC3A,
 #endif
-#ifdef OC5B_PIN
-	OC5B_PIN,
+#ifdef PIN_OC3B
+	PIN_OC3B,
 #endif
-#ifdef OC5C_PIN
-	OC5C_PIN,
+#ifdef PIN_OC3C
+	PIN_OC3C,
+#endif
+
+#ifdef PIN_OC4A
+	PIN_OC4A,
+#endif
+#ifdef PIN_OC4B
+	PIN_OC4B,
+#endif
+#ifdef PIN_OC4C
+	PIN_OC4C,
+#endif
+
+#ifdef PIN_OC5A
+	PIN_OC5A,
+#endif
+#ifdef PIN_OC5B
+	PIN_OC5B,
+#endif
+#ifdef PIN_OC5C
+	PIN_OC5C,
 #endif
 };
 
@@ -602,54 +602,54 @@ uint8_t timer_pins[] = {
 Timer_data const timer_data[] PROGMEM = {
 // Timer1 pins must be first in this list.
 	TIMER_DATA(&TCCR1A, &OCR1AL, 2 << 6, true, 1, 0)
-#ifdef OC1B_PIN
+#ifdef PIN_OC1B
 	, TIMER_DATA(&TCCR1A, &OCR1BL, 2 << 4, true, 1, 1)
 #endif
-#ifdef OC1C_PIN
+#ifdef PIN_OC1C
 	, TIMER_DATA(&TCCR1A, &OCR1CL, 2 << 2, true, 1, 2)
 #endif
 
-#ifdef OC0A_PIN
+#ifdef PIN_OC0A
 	, TIMER_DATA(&TCCR0A, &OCR0A, 2 << 6, false, 0, 0)
 #endif
-#ifdef OC0B_PIN
+#ifdef PIN_OC0B
 	, TIMER_DATA(&TCCR0A, &OCR0B, 2 << 4, false, 0, 1)
 #endif
 
-#ifdef OC2A_PIN
+#ifdef PIN_OC2A
 	, TIMER_DATA(&TCCR2A, &OCR2A, 2 << 6, false, 2, 0)
 #endif
-#ifdef OC2B_PIN
+#ifdef PIN_OC2B
 	, TIMER_DATA(&TCCR2A, &OCR2B, 2 << 4, false, 2, 1)
 #endif
 
-#ifdef OC3A_PIN
+#ifdef PIN_OC3A
 	, TIMER_DATA(&TCCR3A, &OCR3AL, 2 << 6, true, 3, 0)
 #endif
-#ifdef OC3B_PIN
+#ifdef PIN_OC3B
 	, TIMER_DATA(&TCCR3A, &OCR3BL, 2 << 4, true, 3, 1)
 #endif
-#ifdef OC3C_PIN
+#ifdef PIN_OC3C
 	, TIMER_DATA(&TCCR3A, &OCR3CL, 2 << 2, true, 3, 2)
 #endif
 
-#ifdef OC4A_PIN
+#ifdef PIN_OC4A
 	, TIMER_DATA(&TCCR4A, &OCR4AL, 2 << 6, true, 4, 0)
 #endif
-#ifdef OC4B_PIN
+#ifdef PIN_OC4B
 	, TIMER_DATA(&TCCR4A, &OCR4BL, 2 << 4, true, 4, 1)
 #endif
-#ifdef OC4C_PIN
+#ifdef PIN_OC4C
 	, TIMER_DATA(&TCCR4A, &OCR4CL, 2 << 2, true, 4, 2)
 #endif
 
-#ifdef OC5A_PIN
+#ifdef PIN_OC5A
 	, TIMER_DATA(&TCCR5A, &OCR5AL, 2 << 6, true, 5, 0)
 #endif
-#ifdef OC5B_PIN
+#ifdef PIN_OC5B
 	, TIMER_DATA(&TCCR5A, &OCR5BL, 2 << 4, true, 5, 1)
 #endif
-#ifdef OC5C_PIN
+#ifdef PIN_OC5C
 	, TIMER_DATA(&TCCR5A, &OCR5CL, 2 << 2, true, 5, 2)
 #endif
 };
@@ -701,27 +701,27 @@ void arch_set_speed(uint16_t us_per_sample) { // {{{
 
 #ifndef NO_SPI
 void arch_spi_start() { // {{{
-	SET_OUTPUT(MOSI_PIN);
-	RESET(SCK_PIN);
+	SET_OUTPUT(PIN_MOSI);
+	RESET(PIN_SCK);
 } // }}}
 
 void arch_spi_send(uint8_t data, uint8_t bits) { // {{{
 	arch_spi_start();
 	while (bits > 0) {
 		if (data & 0x80)
-			SET(MOSI_PIN);
+			SET(PIN_MOSI);
 		else
-			RESET(MOSI_PIN);
-		SET(SCK_PIN);
-		RESET(SCK_PIN);
+			RESET(PIN_MOSI);
+		SET(PIN_SCK);
+		RESET(PIN_SCK);
 		data <<= 1;
 		bits -= 1;
 	}
 } // }}}
 
 void arch_spi_stop() { // {{{
-	UNSET(MOSI_PIN);
-	UNSET(SCK_PIN);
+	UNSET(PIN_MOSI);
+	UNSET(PIN_SCK);
 } // }}}
 #endif
 
@@ -735,14 +735,14 @@ int8_t arch_pin_name(char *buffer_, bool digital, uint8_t pin_) { // {{{
 				pin_ == pgm_read_byte(&avr_serial_ports[avr_which_serial].tx_pin)
 				|| pin_ == pgm_read_byte(&avr_serial_ports[avr_which_serial].rx_pin)
 			))
-#if !defined(USE_RESET_PIN) && defined(RESET_PIN)
-			|| pin_ == RESET_PIN
+#if !defined(USE_RESET_PIN) && defined(PIN_RESET)
+			|| pin_ == PIN_RESET
 #endif
-#if !defined(USE_XTAL_PINS) && defined(XTAL1_PIN)
-			|| pin_ == XTAL1_PIN
+#if !defined(USE_XTAL_PINS) && defined(PIN_XTAL1)
+			|| pin_ == PIN_XTAL1
 #endif
-#if !defined(USE_XTAL_PINS) && defined(XTAL2_PIN)
-			|| pin_ == XTAL2_PIN
+#if !defined(USE_XTAL_PINS) && defined(PIN_XTAL2)
+			|| pin_ == PIN_XTAL2
 #endif
 				) {
 			buffer_[0] = '\0';

@@ -69,57 +69,57 @@ struct Timer_data {
 extern uint8_t timer_pins[];
 extern Timer_data const timer_data[] PROGMEM;
 uint8_t const num_timer_pins = 0
-#ifdef OC1A_PIN
+#ifdef PIN_OC1A
 	+1
 #endif
-#ifdef OC1B_PIN
+#ifdef PIN_OC1B
 	+1
 #endif
-#ifdef OC1C_PIN
-	+1
-#endif
-
-#ifdef OC0A_PIN
-	+1
-#endif
-#ifdef OC0B_PIN
+#ifdef PIN_OC1C
 	+1
 #endif
 
-#ifdef OC2A_PIN
+#ifdef PIN_OC0A
 	+1
 #endif
-#ifdef OC2B_PIN
-	+1
-#endif
-
-#ifdef OC3A_PIN
-	+1
-#endif
-#ifdef OC3B_PIN
-	+1
-#endif
-#ifdef OC3C_PIN
+#ifdef PIN_OC0B
 	+1
 #endif
 
-#ifdef OC4A_PIN
+#ifdef PIN_OC2A
 	+1
 #endif
-#ifdef OC4B_PIN
-	+1
-#endif
-#ifdef OC4C_PIN
+#ifdef PIN_OC2B
 	+1
 #endif
 
-#ifdef OC5A_PIN
+#ifdef PIN_OC3A
 	+1
 #endif
-#ifdef OC5B_PIN
+#ifdef PIN_OC3B
 	+1
 #endif
-#ifdef OC5C_PIN
+#ifdef PIN_OC3C
+	+1
+#endif
+
+#ifdef PIN_OC4A
+	+1
+#endif
+#ifdef PIN_OC4B
+	+1
+#endif
+#ifdef PIN_OC4C
+	+1
+#endif
+
+#ifdef PIN_OC5A
+	+1
+#endif
+#ifdef PIN_OC5B
+	+1
+#endif
+#ifdef PIN_OC5C
 	+1
 #endif
 	;
@@ -178,14 +178,14 @@ inline void UNSET(uint8_t pin_no) { // {{{
 
 inline static bool is_oc1_pin(uint8_t pin_no) { // {{{
 	switch (pin_no) {
-#ifdef OC1A_PIN
-	case OC1A_PIN:
+#ifdef PIN_OC1A
+	case PIN_OC1A:
 #endif
-#ifdef OC1B_PIN
-	case OC1B_PIN:
+#ifdef PIN_OC1B
+	case PIN_OC1B:
 #endif
-#ifdef OC1C_PIN
-	case OC1C_PIN:
+#ifdef PIN_OC1C
+	case PIN_OC1C:
 #endif
 		return true;
 	default:

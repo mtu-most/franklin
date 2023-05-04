@@ -354,14 +354,14 @@ static void check_distance(int sp, int mt, Motor *mtr, Motor *limit_mtr, double 
 		mtr->last_v = 0;
 	}
 	// Limit v.
-	if (v > limit_mtr->limit_v * (1 + 1e-5)) {
+	if (v > limit_mtr->limit_v * (1 + 1e-3)) {
 		warning("line %" LONGFMT " motor %d %d v %f limit %f dist %f dt %f current %f factor %f", settings.gcode_line, sp, mt, v, limit_mtr->limit_v, distance, dt, mtr->settings.current_pos, factor);
 		distance = (s * limit_mtr->limit_v) * dt;
 		v = std::fabs(distance / dt);
 	}
 	// Limit a+.
 	double limit_dv = limit_mtr->limit_a * dt;
-	if (v - mtr->last_v * s > limit_dv * (1 + 1e-5)) {
+	if (v - mtr->last_v * s > limit_dv * (1 + 1e-3)) {
 		warning("line %" LONGFMT " a+ %d %d target v %f limit dv %f last v %f s %d current %f factor %f", settings.gcode_line, sp, mt, target_v, limit_dv, mtr->last_v, s, mtr->settings.current_pos, factor);
 		distance = (limit_dv * s + mtr->last_v) * dt;
 		v = std::fabs(distance / dt);
