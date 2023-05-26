@@ -139,16 +139,20 @@ void Space::xyz2motors() { // {{{
 	// Apply adjustment to targets.
 	for (int a = 0; a < num_axes; ++a) {
 		orig_target[a] = axis[a]->target;
+		// If no target is given, make it the current position.
+		if (std::isnan(axis[a]->target))
+			axis[a]->target = axis[a]->current;
 		// Apply offset.
 		axis[a]->target += axis[a]->offset;
 		//debug("adjusting %d %d target %f with %f to %f factor %f", id, a, axis[a]->target, axis[a]->settings.adjust, axis[a]->target - axis[a]->settings.adjust * settings.adjust, settings.adjust);
 		axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
+		//debug("targets %d %d orig %f offsetted %f current %f", id, a, orig_target[a], axis[a]->target, axis[a]->current);
 	}
 	// Use probe, if enabled, possible and available.
 	//debug("id %d num axes %d nx %d ny %d", id, num_axes, probe_nx, probe_ny);
 	if (num_axes >= 3)
 		axis[2]->target += probe_value(id, axis[0]->target, axis[1]->target);
-	// Set default values.
+	// Set default values: motor positions are equal to axis positions.
 	for (int a = 0; a < num_axes; ++a)
 		motor[a]->target_pos = axis[a]->target;
 	// Override with type computations.
@@ -168,6 +172,8 @@ void Space::motors2xyz(const double *motors, double *xyz) { // {{{
 		xyz[a] -= axis[a]->offset;
 	if (num_axes >= 3)
 		xyz[2] -= probe_value(id, xyz[0], xyz[1]);
+	//for (int a = 0; a < num_axes; ++a)
+	//	debug("reconstructed for %d %d: motor %f -> axis %f; offset %f", id, a, motors[a], xyz[a], axis[a]->offset);
 } // }}}
 
 void Space::load_info() { // {{{
@@ -258,8 +264,8 @@ void reset_pos(Space *s) { // {{{
 			for (int a = 0; a < s->num_axes; ++a)
 				s->axis[a]->settings.adjust /= settings.adjust;
 		}
-		if (s->id == 0)
-			debug("adjusting move time=%f x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time / 1e6, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
+		//if (s->id == 0)
+		//	debug("adjusting move time=%f x=%f+%f y=%f+%f z=%f+%f", settings.adjust_time / 1e6, s->axis[0]->current, s->axis[0]->settings.adjust, s->axis[1]->current, s->axis[1]->settings.adjust, s->axis[2]->current, s->axis[2]->settings.adjust);
 	}
 	else {
 		// No adjustment when not moving.

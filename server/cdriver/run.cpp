@@ -364,7 +364,7 @@ void run_file_next_command(int32_t start_time) {
 					debug("Not setting position of invalid extruder %d", r.tool);
 					break;
 				}
-				setpos(1, r.tool, r.E, true);
+				setpos(1, r.tool, r.E - spaces[1].axis[r.tool]->offset, true);
 				break;
 			case RUN_WAIT:
 				if (r.X[0] > 0) {

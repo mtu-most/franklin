@@ -112,13 +112,6 @@ static void intersect_spheres(double A[3], double B[3], double len_AC, double le
 }
 
 void xyz2motors(Space *s) {
-	if (std::isnan(s->axis[0]->target) || std::isnan(s->axis[1]->target) || std::isnan(s->axis[2]->target)) {
-		// Fill up missing targets.
-		for (uint8_t aa = 0; aa < 3; ++aa) {
-			if (std::isnan(s->axis[aa]->target))
-				s->axis[aa]->target = s->axis[aa]->current;
-		}
-	}
 	for (uint8_t m = 0; m < 3; ++m)
 		s->motor[m]->target_pos = delta_to_axis(s, m);
 }

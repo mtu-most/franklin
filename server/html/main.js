@@ -435,7 +435,7 @@ function floatkey(event, element) { // {{{
 		finish();
 	}
 	else {
-		space = typeof element.obj[0][1] == 'number' ? element.obj[0][1] : element.obj[0][1][0];
+		var space = typeof element.obj[0][1] == 'number' ? element.obj[0][1] : element.obj[0][1][0];
 		element.ui.machine.call('get_axis_pos', [space], {}, function(pos) {
 			finish();
 			if (space == 0) {
