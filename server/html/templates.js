@@ -430,13 +430,12 @@ function ZMap(desc, pos, top) { // {{{
 function Position(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div');
-	// Current position buttons.
+	// Current position (XYZ).
 	var t = ret.Add(make_table(ui).AddMultipleTitles([
 		'',
 		[add_name(ui, 'axis', 0, 0), ' (', add_name(ui, 'unit', 0, 0), ')'],
 		[add_name(ui, 'axis', 0, 1), ' (', add_name(ui, 'unit', 0, 0), ')'],
 		[add_name(ui, 'axis', 0, 2), ' (', add_name(ui, 'unit', 0, 0), ')'],
-		'',
 		'',
 		''
 	], ['', '', '', '', '', ''], null), 'maptable');
@@ -448,6 +447,17 @@ function Position(desc, pos, top) { // {{{
 		Float(ui, [['axis', [0, 2]], 'current'], 2, 1, '', function(v) { ui.machine.call('line', [{2: v}], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
 		b
 	], ['', '', '', '', '', '']));
+	// Current position (ABC).
+	if (ui.machine.spaces[0].axis.length >= 4) {
+		// TODO: This code requires a page reload when the number of axes is changed.
+		var num_axes = ui.machine.spaces[0].axis.length;
+		t.Add(make_tablerow(ui, '', [
+			Float(ui, [['axis', [0, 3]], 'current'], 2, 1, '', function(v) { ui.machine.call('line', [{3: v}], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); }),
+			(num_axes < 5 ? '' : Float(ui, [['axis', [0, 4]], 'current'], 2, 1, '', function(v) { ui.machine.call('line', [{4: v}], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); })),
+			(num_axes < 6 ? '' : Float(ui, [['axis', [0, 5]], 'current'], 2, 1, '', function(v) { ui.machine.call('line', [{5: v}], {}); ui.machine.call('wait_for_cb', [], {}, function() { update_canvas_and_spans(ui); }); })),
+			''
+		], ['', '', '', '', '', '']));
+	}
 	// Target position buttons.
 	var b = Create('button').AddText('Use Current').AddEvent('click', function() {
 		ui.machine.call('set_axis', [[0, 0]], {'offset': ui.machine.spaces[0].axis[0].offset + ui.machine.spaces[0].axis[0].current});

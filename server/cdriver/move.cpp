@@ -502,7 +502,7 @@ static void do_steps(double old_factor) { // {{{
 					spaces[2].motor[mm]->settings.current_pos += target - mtr.settings.current_pos;
 				}
 			}
-			fcpdebug(s, m, "setting current pos to %f", target);
+			cpdebug(s, m, "setting current pos to %f", target);
 			mtr.settings.current_pos = target;
 		}
 	}
