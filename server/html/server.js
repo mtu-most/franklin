@@ -75,8 +75,8 @@ function _setup_updater() {
 			all_ports.splice(all_ports.indexOf(port), 1);
 			delete all_firmwares[port];
 		},
-		port_state: function(port, state) {
-			trigger_update(null, 'port_state', port, state);
+		port_state: function(port, state, uuid) {
+			trigger_update(null, 'port_state', port, state, uuid);
 		},
 		reset: function(machine) {
 			trigger_update(machine, 'reset');

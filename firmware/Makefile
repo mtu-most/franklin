@@ -59,6 +59,17 @@ BYTES_PER_FRAGMENT ?= 16
 SERIAL_SIZE_BITS ?= 10	# Minimum: 7 (with minimal fragment size)
 endif # }}}
 
+ifeq (${MCU}, atmega2560) # {{{
+F_CPU ?= 16000000
+PROTOCOL ?= wiring
+BAUD ?= 115200
+
+NUM_MOTORS ?= 6
+FRAGMENTS_PER_MOTOR_BITS ?= 4
+BYTES_PER_FRAGMENT ?= 16
+SERIAL_SIZE_BITS ?= 9	# Minimum: 7 (with minimal fragment size)
+endif # }}}
+
 TARGET_ARCH ?= avr
 
 #AVRDUDE_CONF = /etc/avrdude.conf

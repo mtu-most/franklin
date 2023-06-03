@@ -7,7 +7,7 @@ __pycache__/
 /server/html/builders.js
 /server/html/rpc.js
 /server/html/check.stamp
-/server/bb/setpin
+/server/avrdude/setpin
 /util/joystick.py
 /util/c457a-ui.gui
 /mkdeb

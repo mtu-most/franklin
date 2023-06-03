@@ -1,6 +1,7 @@
 #!/bin/bash
-# flash-bb-O4 - Flash new firmware to Melzi over Athena bridgeboard (version 2, ttyO4) while preserving bootloader and EEPROM contents for Franklin
+# flash-bb-0 - Flash new firmware to Melzi over Athena bridgeboard while preserving bootloader and EEPROM contents for Franklin
 # Copyright 2014 Michigan Technological University
+# Copyright 2020-2023 Bas Wijnen <wijnen@debian.org>
 # Author: Bas Wijnen <wijnen@debian.org>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -22,13 +23,13 @@ cd "`dirname "$0"`"
 
 fini() {
 	rm "$tmp"
-	./setpin 30 0x2e >/dev/null
-	./setpin 31 0xe >/dev/null
+	./setpin 42 0x30 >/dev/null
+	./setpin 43 0x00 >/dev/null
 }
 
 trap fini EXIT
 
-config="${1:-/usr/lib/franklin/bb/avrdude.conf}"
+config="${1:-/usr/lib/franklin/avrdude/avrdude.conf}"
 hex="${2:-/usr/lib/franklin/firmware/atmega1284p.hex}"
 
 # Unexport the programmer pins, just in case.
@@ -36,10 +37,12 @@ for pin in 30 31 50 60 ; do
 	echo $pin > /sys/class/gpio/unexport 2>/dev/null
 done
 
-./setpin 30 0x37 >/dev/null
-./setpin 31 0x37 >/dev/null
-rom="`avrdude -q -q -C +"${config}" -c bbbmelziO4 -p atmega1284p -U eeprom:r:-:d`"
-avrdude -q -q -C +"${config}" -c bbbmelziO4 -p atmega1284p -U flash:w:"${hex}":i
+./setpin 42 0x0f >/dev/null
+./setpin 43 0x0f >/dev/null
+
+rom="`avrdude -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U eeprom:r:-:d`"
+avrdude -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U flash:w:"${hex}":i
 sed -e '/^:..00..00/d' < /usr/share/arduino/hardware/mighty-1284p/bootloaders/optiboot/optiboot_atmega1284p.hex > "$tmp"
-avrdude -D -q -q -C +"${config}" -c bbbmelziO4 -p atmega1284p -U flash:w:"$tmp":i
-avrdude -q -q -C +"${config}" -c bbbmelziO4 -p atmega1284p -U eeprom:w:$rom:m
+avrdude -D -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U flash:w:"$tmp":i
+avrdude -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U eeprom:w:$rom:m
+

@@ -36,14 +36,58 @@ function timed_update() { // {{{
 	if (reading_temps || selected_machine === null || selected_machine === undefined || machines[selected_machine] === undefined || machines[selected_machine].ui.disabling)
 		return;
 	reading_temps = true;
-	var read = function(ui, num) {
-		if (selected_machine === null || selected_machine === undefined || !machines[selected_machine] || machines[selected_machine].ui.disabling) {
-			reading_temps = false;
-			return;
-		}
+	var read = function(ui, num, space) {
 		if (ui === null)
 			ui = machines[selected_machine].ui;
 		if (ui !== machines[selected_machine].ui) {
+			reading_temps = false;
+			return;
+		}
+		if (space === undefined)
+			space = 0;
+		if (space < 2) {	// Ignore follower positions.
+			ui.machine.call('get_axis_pos', [space], {}, function(x) {
+				//dbg('update ' + space + ',' + axis + ':' + x);
+				if (!machines[ui.machine.uuid])
+					return;
+				for (var i = 0; i < x.length; ++i) {
+					if (ui.machine.spaces[space].axis[i]) {
+						ui.machine.spaces[space].axis[i].current = x[i];
+						update_float(ui, [['axis', [space, i]], 'current']);
+					}
+				}
+				read(ui, num, space + 1);
+			});
+			return;
+		}
+		if (space == 2) {
+			ui.machine.call('get_machine_state', [], {}, function(state) {
+				if (!machines[ui.machine.uuid])
+					return;
+				var e = get_elements(ui, [null, 'machinestate']);
+				if (isNaN(state[1])) {
+					for (var i = 0; i < e.length; ++i)
+						e[i].ClearAll().AddText('State: ' + state[0]);
+				}
+				else {
+					var remaining = display_time(state[2] - state[1]);
+					for (var i = 0; i < e.length; ++i)
+						e[i].ClearAll().AddText('State: ' + state[0] + ' - Time: ' + display_time(state[1]) + '/' + display_time(state[2]) + ' - Remaining: ' + remaining);
+					update_state(ui, get_value(ui, [null, 'status']), remaining);
+				}
+				update_float(ui, [null, 'targetangle']);
+				ui.machine.tppos = state[3];
+				ui.tp_context = state[5];
+				update_float(ui, [null, 'tppos']);
+				e = get_elements(ui, [null, 'tpmax']);
+				for (var i = 0; i < e.length; ++i)
+					e[i].ClearAll().AddText(state[4]);
+				redraw_canvas(ui);
+				read(ui, num, space + 1);
+			});
+		}
+		start_move(ui);
+		if (selected_machine === null || selected_machine === undefined || !machines[selected_machine] || machines[selected_machine].ui.disabling) {
 			reading_temps = false;
 			return;
 		}
@@ -691,12 +735,16 @@ function connect(ui, connected, ui_info) { // {{{
 function autodetect() { // {{{
 } // }}}
 
-function new_port(dummy, port) { // {{{
+function new_port(none, port) { // {{{
 	var ports = document.getElementById('ports');
-	var new_port = ports.AddElement('option').AddText(port);
-	new_port.value = port;
-	if (ports.options.length == 1)
-		port_changed();
+	if (ports.list === undefined)
+		ports.list = {};
+	var new_port = {};
+	ports.list[port] = new_port;
+	new_port.tr = ports.AddElement('tr');
+	new_port.tr.AddElement('td').AddText(port);
+	new_port.state = new_port.tr.AddElement('td').AddText('new');
+	new_port.actions = new_port.tr.AddElement('td');
 } // }}}
 
 function disable_buttons(state) { // {{{
@@ -706,12 +754,74 @@ function disable_buttons(state) { // {{{
 	}
 } // }}}
 
-function port_state(ui, port, state) { // {{{
-	// 0: No ui.
-	// 1: Detecting.
-	// 2: Running.
-	// 3: Flashing.
-	// TODO
+function port_state(none, port, state, uuid) { // {{{
+	var ports = document.getElementById('ports');
+	if (ports.list === undefined || ports.list[port] === undefined) {
+		// This can happen at boot time; the port state will be sent again when the port is defined.
+		return;
+	}
+	ports.list[port].state.ClearAll().AddText(state);
+	var actions = ports.list[port].actions.ClearAll();
+	switch (state) {
+	case 'disconnected':
+		var button = actions.AddElement('button').AddText('detect');
+		button.type = 'button';
+		button.AddEvent('click', function() {
+			rpc.call('detect', [port]);
+		});
+		var label = actions.AddElement('label');
+		button = label.AddElement('input');
+		label.AddText('upload');
+		var details = actions.AddElement('div');
+		details.style.display = 'none';
+		button.type = 'checkbox';
+		button.details = details;
+		button.AddEvent('change', function() { this.details.style.display = this.checked ? '' : 'none'; });
+		var table = details.AddElement('table');
+
+		var tr = table.AddElement('tr');
+		tr.AddElement('th').AddText('Firmware');
+		var firmware = tr.AddElement('td').AddElement('select');
+		for (var f = 0; f < all_firmwares[port].firmware.length; ++f)
+			firmware.AddElement('option').AddText(all_firmwares[port].firmware[f]).value = all_firmwares[port].firmware[f];
+
+		tr = table.AddElement('tr');
+		tr.AddElement('th').AddText('Programmer');
+		var programmer = tr.AddElement('td').AddElement('select');
+		for (var p = 0; p < all_firmwares[port].programmer.length; ++p)
+			programmer.AddElement('option').AddText(all_firmwares[port].programmer[p]).value = all_firmwares[port].programmer[p];
+
+		tr = table.AddElement('tr');
+		tr.AddElement('th').AddText('Speed');
+		var baud = tr.AddElement('td').AddElement('select');
+		for (var b = 0; b < all_firmwares[port].baud.length; ++b)
+			baud.AddElement('option').AddText(all_firmwares[port].baud[b]).value = all_firmwares[port].baud[b];
+
+		tr = table.AddElement('tr');
+		var td = tr.AddElement('td');
+		td.colSpan = 2;
+		button = td.AddElement('button').AddText('Go');
+		button.baud = baud;
+		button.programmer = programmer;
+		button.firmware = firmware;
+		button.port = port;
+		button.type = 'button';
+		button.AddEvent('click', function() {
+			var f = this.firmware.options[this.firmware.selectedIndex].value;
+			var p = this.programmer.options[this.programmer.selectedIndex].value;
+			var b = this.baud.options[this.baud.selectedIndex].value;
+			rpc.call('upload', [], {port: this.port, firmware: f, programmer: p, baud: b}, function(ret) { alert('upload done: ' + ret); });
+		});
+		break;
+	case 'active':
+		ports.list[port].state.AddText(': ' + machines[uuid].name);
+		var button = actions.AddElement('button').AddText('disconnect');
+		button.type = 'button';
+		button.AddEvent('click', function() {
+			rpc.call('disable', [uuid]);
+		});
+		break;
+	}
 	return;
 	/*
 	for (var t = 0; t < 2; ++t) {	// Set class for Label and NoMachine.
@@ -776,6 +886,8 @@ function del_machine(uuid) { // {{{
 } // }}}
 
 function del_port(uuid, port) { // {{{
+	var ports = document.getElementById('ports');
+	ports.removeChild(ports.list[port].tr);
 	for (var p in machines) {
 		var ports = get_elements(machines[p].ui, [null, 'ports']);
 		for (var p = 0; p < ports.length; ++p) {
@@ -1629,50 +1741,20 @@ function display_time(t) { // {{{
 }
 // }}}
 
-function update_canvas_and_spans(ui, space) { // {{{
+function update_canvas_and_spans(ui) { // {{{
 	// The machine may have disappeared.
 	if (!machines[ui.machine.uuid])
 		return;
-	if (space === undefined)
-		space = 0;
-	if (space < 2) {	// Ignore follower positions.
-		ui.machine.call('get_axis_pos', [space], {}, function(x) {
-			//dbg('update ' + space + ',' + axis + ':' + x);
-			if (!machines[ui.machine.uuid])
-				return;
-			for (var i = 0; i < x.length; ++i) {
-				if (ui.machine.spaces[space].axis[i]) {
-					ui.machine.spaces[space].axis[i].current = x[i];
-					update_float(ui, [['axis', [space, i]], 'current']);
-				}
+	for (var space = 0; space < 2; ++space) {
+		for (var i = 0; i < ui.machine.spaces[space].axis.length; ++i) {
+			if (ui.machine.spaces[space].axis[i]) {
+				update_float(ui, [['axis', [space, i]], 'current']);
 			}
-			update_canvas_and_spans(ui, space + 1);
-		});
-		return;
+		}
 	}
-	ui.machine.call('get_machine_state', [], {}, function(state) {
-		if (!machines[ui.machine.uuid])
-			return;
-		var e = get_elements(ui, [null, 'machinestate']);
-		if (isNaN(state[1])) {
-			for (var i = 0; i < e.length; ++i)
-				e[i].ClearAll().AddText('State: ' + state[0]);
-		}
-		else {
-			var remaining = display_time(state[2] - state[1]);
-			for (var i = 0; i < e.length; ++i)
-				e[i].ClearAll().AddText('State: ' + state[0] + ' - Time: ' + display_time(state[1]) + '/' + display_time(state[2]) + ' - Remaining: ' + remaining);
-			update_state(ui, get_value(ui, [null, 'status']), remaining);
-		}
-		update_float(ui, [null, 'targetangle']);
-		ui.machine.tppos = state[3];
-		ui.tp_context = state[5];
-		update_float(ui, [null, 'tppos']);
-		e = get_elements(ui, [null, 'tpmax']);
-		for (var i = 0; i < e.length; ++i)
-			e[i].ClearAll().AddText(state[4]);
-		redraw_canvas(ui);
-	});
+	update_float(ui, [null, 'targetangle']);
+	update_float(ui, [null, 'tppos']);
+	redraw_canvas(ui);
 }
 // }}}
 
@@ -1794,7 +1876,6 @@ function redraw_canvas(ui) { // {{{
 			c.rotate(ui.machine.targetangle);
 
 			c.beginPath();
-			start_move(ui);
 			var b = ui.bbox;
 			if (b) {
 				for (var i = 0; i < b.length; ++i) {

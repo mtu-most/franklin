@@ -1,4 +1,4 @@
-MCUS = atmega1284p atmega328p atmega168
+MCUS = atmega1284p atmega328p atmega168 atmega2560
 
 all:
 	for mcu in ${MCUS} ; do \
@@ -10,9 +10,9 @@ all:
 
 install:
 	for mcu in ${MCUS} ; do \
-		install -m 644 -D -t ${DESTDIR}/usr/lib/franklin/firmware/ ../../firmware/build/franklin_$${mcu}_16000000.hex ; \
+		install -m 644 -D -t ${DESTDIR}/usr/lib/franklin/firmware/ ../../firmware/franklin_$${mcu}_16000000.hex ; \
 	done
-	install -m 644 -D -t ${DESTDIR}/usr/lib/franklin/firmware/ ../../firmware/build/franklin_atmega1284p_12000000.hex ; \
+	install -m 644 -D -t ${DESTDIR}/usr/lib/franklin/firmware/ ../../firmware/franklin_atmega1284p_12000000.hex ; \
 
 clean:
 	$(MAKE) -C ../../firmware clean

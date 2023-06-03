@@ -1,6 +1,7 @@
 #!/bin/bash
-# flash-bbb - Flash new firmware to Melzi over Athena bridgeboard while preserving bootloader and EEPROM contents for Franklin
+# flash-opi - Flash new firmware to Melzi over AthenaII board while preserving bootloader and EEPROM contents for Franklin
 # Copyright 2014 Michigan Technological University
+# Copyright 2020-2023 Bas Wijnen <wijnen@debian.org>
 # Author: Bas Wijnen <wijnen@debian.org>
 #
 # This program is free software: you can redistribute it and/or modify
@@ -20,28 +21,17 @@ tmp=`tempfile`
 
 cd "`dirname "$0"`"
 
-fini() {
-	rm "$tmp"
-	./setpin 42 0x30 >/dev/null
-	./setpin 43 0x00 >/dev/null
-}
-
-trap fini EXIT
-
-config="${1:-/usr/lib/franklin/bb/avrdude.conf}"
-hex="${2:-/usr/lib/franklin/firmware/atmega1284p.hex}"
+config="${1:-/usr/lib/franklin/avrdude/avrdude.conf}"
+hex="${2:-/usr/lib/franklin/firmware/atmega1284p-12MHz.hex}"
 
 # Unexport the programmer pins, just in case.
-for pin in 30 31 50 60 ; do
+for pin in 7 14 15 16 ; do
 	echo $pin > /sys/class/gpio/unexport 2>/dev/null
 done
 
-./setpin 42 0x0f >/dev/null
-./setpin 43 0x0f >/dev/null
-
-rom="`avrdude -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U eeprom:r:-:d`"
-avrdude -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U flash:w:"${hex}":i
-sed -e '/^:..00..00/d' < /usr/share/arduino/hardware/mighty-1284p/bootloaders/optiboot/optiboot_atmega1284p.hex > "$tmp"
-avrdude -D -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U flash:w:"$tmp":i
-avrdude -q -q -C +"${config}" -c bbbmelzi -p atmega1284p -U eeprom:w:$rom:m
-
+rom="`avrdude -q -q -C +"${config}" -c athenapi -p atmega1284p -U eeprom:r:-:d`"
+avrdude -q -q -C +"${config}" -c athenapi -p atmega1284p -U lfuse:w:0xf7:m -U hfuse:w:0xd9:m -U efuse:w:0xff:m
+avrdude -q -q -C +"${config}" -c athenapi -p atmega1284p -U flash:w:"${hex}":i
+#sed -e '/^:..00..00/d' < /usr/share/arduino/hardware/mighty-1284p/bootloaders/optiboot/optiboot_atmega1284p.hex > "$tmp"
+#avrdude -q -q -C +"${config}" -c athenapi -p atmega1284p -U flash:w:"$tmp":i
+avrdude -q -q -C +"${config}" -c athenapi -p atmega1284p -U eeprom:w:$rom:m

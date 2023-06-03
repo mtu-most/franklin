@@ -124,6 +124,14 @@ fhs.option('tls', 'Enable TLS. It is recommended to let Apache handle this', arg
 config = fhs.init(packagename = 'franklin')
 # }}}
 
+# Constants {{{
+custom_programmer = [
+	{'name': 'Melzi from BeagleBone (atmega1284p@16MHz, bridgeboard v1)', 'command': 'flash-bb-0', 'ports': ('/dev/ttyS0', '/dev/ttyO0')},
+	{'name': 'Melzi from BeagleBone (atmega1284p@16MHz, bridgeboard v2)', 'command': 'flash-bb-4', 'ports': ('/dev/ttyS4', '/dev/ttyO4')},
+	{'name': 'AthenaII (atmega1284p@12MHz)', 'command': 'flash-opi', 'ports': ('/dev/ttyS1',)},
+]
+# }}}
+
 # Load space type modules {{{
 modulepath = fhs.read_data(os.path.join('type', 'types.txt'), opened = False)
 moduledir = os.path.dirname(modulepath)
@@ -254,7 +262,7 @@ for m in open(modulepath):
 	typenames.append(module)
 # }}}
 
-def start_driver(uuid):
+def start_driver(uuid): # {{{
 	return subprocess.Popen((
 		fhs.read_data('driver.py', opened = False),
 		'--uuid', uuid if uuid is not None else '',
@@ -264,6 +272,7 @@ def start_driver(uuid):
 		'--typeinfo', json.dumps(typeinfo),
 		) + (('--system',) if fhs.is_system else ()),
 			 stdin = subprocess.PIPE, stdout = subprocess.PIPE, close_fds = True)
+# }}}
 
 # Global variables. {{{
 httpd = None
@@ -424,22 +433,23 @@ class Connection: # {{{
 		assert machine in machines
 		machines[machine].remove_machine()
 	# }}}
-	def _get_command(self, board, port): # {{{
-		if board == 'bbbmelzi ':
-			return ('sudo', fhs.read_data(os.path.join('bb', 'flash-bb-0'), opened = False), fhs.read_data(os.path.join('bb', 'avrdude.conf'), opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p' + os.extsep + 'hex'), opened = False))
-		if board == 'bb4melzi ':
-			return ('sudo', fhs.read_data(os.path.join('bb', 'flash-bb-4'), opened = False), fhs.read_data(os.path.join('bb', 'avrdude.conf'), opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p' + os.extsep + 'hex'), opened = False))
-		if board == 'opi ':
-			return ('sudo', fhs.read_data(os.path.join('opi', 'flash-opi'), opened = False), fhs.read_data(os.path.join('opi', 'avrdude.conf'), opened = False), fhs.read_data(os.path.join('firmware', 'atmega1284p-12MHz' + os.extsep + 'hex'), opened = False))
-		boards = read_boards()
-		if board not in boards:
-			raise ValueError('board type not supported')
-		filename = fhs.read_data(os.path.join('firmware', boards[board]['build.mcu'] + os.extsep + 'hex'), opened = False)
+	def _get_command(self, port, firmware, programmer, baud): # {{{
+		m = re.match('^(.+)@(\d+)MHz$', firmware)
+		if m is None:
+			raise ValueError('Invalid firmware %s' % firmware)
+		mcu = m.group(1)
+		f_cpu = int(m.group(2) + '0' * 6)
+		assert '/' not in mcu
+		assert isinstance(f_cpu, int)
+		filename = fhs.read_data(os.path.join('firmware', 'franklin_%s_%d.hex' % (mcu, f_cpu)), opened = False)
 		if filename is None:
 			raise NotImplementedError('Firmware is not available')
-		return ('avrdude', '-D', '-q', '-q', '-p', boards[board]['build.mcu'], '-C', '/etc/avrdude.conf', '-b', boards[board]['upload.speed'], '-c', boards[board]['upload.protocol'], '-P', port, '-U', 'flash:w:' + filename + ':i')
+		for p in custom_programmer:
+			if programmer == p['name']:
+				return ('sudo', fhs.read_data(os.path.join('avrdude', p['command']), opened = False), fhs.read_data(os.path.join('avrdude', 'avrdude.conf'), opened = False), filename)
+		return ('avrdude', '-D', '-q', '-q', '-p', mcu, '-C', '/etc/avrdude.conf', '-b', baud, '-c', programmer, '-P', port, '-U', 'flash:w:' + filename + ':i')
 	# }}}
-	def upload(self, port, board): # {{{
+	def upload(self, port, firmware, programmer, baud): # {{{
 		wake = (yield)
 		assert self.socket.data['role'] in ('benjamin', 'admin')
 		assert port in ports
@@ -449,36 +459,34 @@ class Connection: # {{{
 			# Waking the generator kills the process.
 			wake('Aborted')
 		ports[port] = cancel
-		command = self._get_command(board, port)
+		command = self._get_command(port, firmware, programmer, baud)
 		data = ['']
 		log('Flashing firmware: ' + ' '.join(command))
-		broadcast(None, 'port_state', port, 3)
+		broadcast(None, 'port_state', port, 'uploading')
 		process = subprocess.Popen(command, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, close_fds = True)
 		def output():
 			d = ''
 			try:
 				d = process.stdout.read().decode('utf-8')
 			except:
-				data[0] += '\nError writing %s firmware: ' % board + traceback.format_exc()
+				data[0] += '\nError writing %s firmware: ' % firmware + traceback.format_exc()
 				log(repr(data[0]))
 				wake(data[0])
 				return False
 			if d != '':
-				#broadcast(None, 'message', port, '\n'.join(data[0].split('\n')[-4:]))
 				data[0] += d
 				return True
 			wake(data[0])
 			return False
 		def error():
-			data[0] += '\nError writing %s firmware: ' % board
+			data[0] += '\nError writing %s firmware: ' % firmware
 			log(repr(data[0]))
 			wake(data[0])
 			return False
 		fl = fcntl.fcntl(process.stdout.fileno(), fcntl.F_GETFL)
 		fcntl.fcntl(process.stdout.fileno(), fcntl.F_SETFL, fl | os.O_NONBLOCK)
 		websocketd.add_read(process.stdout, output, error)
-		broadcast(None, 'uploading', port, 'uploading firmware for %s' % board)
-		#broadcast(None, 'message', port, '')
+		broadcast(None, 'uploading', port, 'uploading firmware for %s' % firmware)
 		d = (yield)
 		try:
 			process.kill()	# In case it wasn't dead yet.
@@ -489,15 +497,14 @@ class Connection: # {{{
 		except:
 			pass
 		broadcast(None, 'uploading', port, None)
-		#broadcast(None, 'message', port, '')
-		broadcast(None, 'port_state', port, 0)
+		broadcast(None, 'port_state', port, 'disconnected')
 		ports[port] = None
 		if autodetect:
 			websocketd.call(None, detect, port)
 		if d:
-			return 'firmware upload for %s: ' % board + d
+			return 'firmware upload for %s: ' % firmware + d
 		else:
-			return 'firmware for %s successfully uploaded' % board
+			return 'firmware for %s successfully uploaded' % firmware
 	# }}}
 	def upload_options(self, port): # {{{
 		return upload_options(port)
@@ -509,16 +516,25 @@ class Connection: # {{{
 		if value:
 			self.socket.initialized = False
 			self.socket.autodetect.event(autodetect)
-			for p in ports:
-				self.socket.new_port.event(p, self.upload_options(p))
-				if ports[p] is None:
-					self.socket.port_state.event(p, 0)
-				elif not isinstance(ports[p], str):	# TODO: distinguish initial detect from flashing.
-					self.socket.port_state.event(p, 3)
-				else:
-					self.socket.port_state.event(p, 2)
-			for p in machines:
-				machines[p].call('send_machine', [self.socket.data['role'], self.id], {}, lambda success, data: None)
+			# Use a list for todo, so it can be changed from inside send_port.
+			todo = [len(machines)]
+			def send_port(success, data):
+				todo[0] -= 1
+				if todo[0] > 0:
+					return
+				for p in ports:
+					self.socket.new_port.event(p, self.upload_options(p))
+					if ports[p] is None:
+						self.socket.port_state.event(p, 'disconnected')
+					elif not isinstance(ports[p], str):	# TODO: distinguish initial detect from flashing.
+						self.socket.port_state.event(p, 'detecting or uploading')
+					else:
+						self.socket.port_state.event(p, 'active', ports[p])
+			if todo[0] > 0:
+				for p in machines:
+					machines[p].call('send_machine', [self.socket.data['role'], self.id], {}, send_port)
+			else:
+				send_port(None, None)
 			self.socket.initialized = True
 		self.socket.monitor = value
 	# }}}
@@ -563,58 +579,25 @@ class Connection: # {{{
 	# }}}
 # }}}
 
-def read_boards(): # {{{
-	boards = {}
-	for d in fhs.read_data('hardware', packagename = 'arduino', dir = True, multiple = True):
-		for board in os.listdir(d):
-			boards_txt = os.path.join(d, board, 'boards' + os.extsep + 'txt')
-			if not os.path.exists(boards_txt):
-				continue
-			with open(boards_txt) as b:
-				for line in b:
-					if line.startswith('#') or line.strip() == '':
-						continue
-					parse = re.match('([^.=]+)\.([^=]+)=(.*)$', line.strip())
-					if parse is None:
-						log('Warning: invalid line in %s: %s' % (boards_txt, line.strip()))
-						continue
-					tag, option, value = parse.groups()
-					if tag not in boards:
-						boards[tag] = {}
-					if option in boards[tag]:
-						if boards[tag][option] != value:
-							log('%s: duplicate tag %s.%s with different value (%s != %s); using %s' % (boards_txt, tag, option, value, boards[tag][option], boards[tag][option]))
-							continue
-					boards[tag][option] = value
-	for tag in tuple(boards.keys()):
-		if 'name' not in boards[tag]:
-			boards[tag]['name'] = tag
-		if any(x not in boards[tag] for x in ('upload.protocol', 'upload.speed', 'build.mcu', 'upload.maximum_size')):
-			#log('skipping %s because hardware information is incomplete (%s)' % (boards[tag]['name'], repr(boards[tag])))
-			del boards[tag]
-			continue
-		if int(boards[tag]['upload.maximum_size']) < 30000:
-			# Not enough memory; don't complain about skipping this board.
-			del boards[tag]
-			continue
-		if fhs.read_data(os.path.join('firmware', boards[tag]['build.mcu'] + os.extsep + 'hex'), opened = False) is None:
-			#log('skipping %s because firmware for %s is not installed' % (boards[tag]['name'], boards[tag]['build.mcu']))
-			del boards[tag]
-			continue
-	return boards
-# }}}
-
 def upload_options(port): # {{{
-	ret = []
-	if port in ('/dev/ttyS0', '/dev/ttyO0'):
-		ret += [('bbbmelzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v1)')]
-	elif port in ('/dev/ttyS4', '/dev/ttyO4'):
-		ret += [('bb4melzi ', 'Melzi from BeagleBone (atmega1284p, bridgeboard v2)')]
-	elif port  == '/dev/ttyS1':
-		ret += [('opi ', 'Athena on OrangePi Zero (atmega1284p at 12MHz)')]
-	boards = read_boards()
-	ret += list((tag, '%s (%s, %s, %d baud)' % (boards[tag]['name'], boards[tag]['build.mcu'], boards[tag]['upload.protocol'], int(boards[tag]['upload.speed']))) for tag in boards)
-	ret.sort(key = lambda x: (boards[x[0]]['build.mcu'] if x[0] in boards else '', x[1]))
+	ret = {}
+	d = fhs.read_data('firmware', dir = True)
+	ret['firmware'] = []
+	for f in os.listdir(d):
+		base, ext = os.path.splitext(f)
+		if ext != os.extsep + 'hex':
+			continue
+		m = re.match('^franklin_(.+)_(\d+)0{6}$', base)
+		if m is None:
+			continue
+		ret['firmware'].append(m.group(1) + '@' + m.group(2) + 'MHz')
+	ret['programmer'] = ['arduino', 'wiring', 'stk500v1', 'avr109']
+	ret['baud'] = [115200, 57600, 19200]
+
+	for p in custom_programmer:
+		if port in p['ports']:
+			ret['programmer'].append(p['name'])
+
 	return ret
 # }}}
 
@@ -647,7 +630,7 @@ class Machine: # {{{
 		'''
 		if port is not None:
 			self.detecting = True
-			broadcast(None, 'port_state', port, 1)
+			broadcast(None, 'port_state', port, 'detecting')
 		self.name = None
 		self.uuid = None
 		self.port = port
@@ -669,7 +652,7 @@ class Machine: # {{{
 			else:
 				assert self.uuid == vars['uuid']
 			self.detecting = False
-			self.call('send_machine', ['admin', None], {}, lambda success, data: broadcast(None, 'port_state', port, 2))
+			self.call('send_machine', ['admin', None], {}, lambda success, data: broadcast(None, 'port_state', port, 'active', self.uuid))
 			if cb is not None:
 				cb()
 		if send:
@@ -758,7 +741,7 @@ class Machine: # {{{
 				elif data[1] == 'disconnect':
 					port = self.port
 					ports[self.port] = None
-					broadcast(None, 'port_state', port, 0)
+					broadcast(None, 'port_state', port, 'disconnected')
 					#if autodetect:
 					#	websocketd.call(None, detect, port)
 				elif data[1] == 'error':
@@ -838,7 +821,7 @@ def disable(uuid, reason): # {{{
 	port = p.port
 	ports[port] = None
 	p.port = None
-	broadcast(None, 'port_state', port, 0)
+	broadcast(None, 'port_state', port, 'disconnected')
 # }}}
 
 class Admin_Connection: # {{{
@@ -883,7 +866,7 @@ def add_port(port): # {{{
 		return
 	ports[port] = None
 	broadcast(None, 'new_port', port, upload_options(port))
-	broadcast(None, 'port_state', port, 0)
+	broadcast(None, 'port_state', port, 'disconnected')
 	if autodetect:
 		websocketd.call(None, detect, port)
 # }}}
@@ -901,7 +884,7 @@ def detect(port): # {{{
 			# This should never happen.
 			log('BUG: port is not in detectable state. Please report this.')
 			return
-	broadcast(None, 'port_state', port, 1)
+	broadcast(None, 'port_state', port, 'detecting')
 	if port == '-' or port.startswith('!'):
 		run_id = nextid()
 		process = start_driver('-')
@@ -937,7 +920,7 @@ def detect(port): # {{{
 				machine.close()
 				log('Timeout waiting for machine on port %s; giving up.' % port)
 				ports[port] = None
-				broadcast(None, 'port_state', port, 0)
+				broadcast(None, 'port_state', port, 'disconnected')
 				return
 			if not id[2]:
 				machine.write(protocol.single['ID'])
@@ -963,7 +946,7 @@ def detect(port): # {{{
 						websocketd.remove_timeout(timeout_handle[0])
 						machine.close()
 						ports[port] = None
-						broadcast(None, 'port_state', port, 0)
+						broadcast(None, 'port_state', port, 'disconnected')
 						log('Starting controller driver on ' + port)
 						env = os.environ.copy()
 						env['PORT'] = port
@@ -1008,8 +991,13 @@ def detect(port): # {{{
 					def close_port(success, data):
 						log('reconnect complete; closing server port')
 						machine.close()
-					p.call('reconnect', ['admin', port], {}, lambda success, ret: (ports[port].call('send_machine', ['admin', None], {}, close_port) if success else close_port()))
-					broadcast(None, 'port_state', port, 2)
+						broadcast(None, 'port_state', port, 'active', ports[port])
+					def finish_reconnect(success, data):
+						if success:
+							ports[port].call('send_machine', ['admin', None], {}, close_port)
+						else:
+							machine.close()
+					p.call('reconnect', ['admin', port], {}, finish_reconnect)
 					return False
 			run_id = nextid()
 			# Find uuid or create new Machine object.
@@ -1017,8 +1005,12 @@ def detect(port): # {{{
 				log('accepting known machine on port %s (uuid %s)' % (port, uuid))
 				machines[uuid].port = port
 				ports[port] = uuid
+				def finish_connect(success, data):
+					assert success
+					print('Machine %s connected on port %s' % (uuid, port))
+					broadcast(None, 'port_state', port, 'active', ports[port])
 				log('connecting %s to port %s' % (uuid, port))
-				machines[uuid].call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: print('Machine %s connected on port %s' % (uuid, port)))
+				machines[uuid].call('connect', ['admin', port, [chr(x) for x in run_id]], {}, finish_connect)
 			else:
 				log('accepting unknown machine on port %s' % port)
 				# Close detect port so it doesn't interfere.
@@ -1030,8 +1022,12 @@ def detect(port): # {{{
 					log('finish detect %s' % repr(uuid))
 					ports[port] = uuid
 					machines[uuid] = new_machine
+					def finish_new_connect(success, data):
+						assert success
+						print('New machine %s connected on port %s' % (uuid, port))
+						broadcast(None, 'port_state', port, 'active', ports[port])
 					log('connecting new machine %s to port %s' % (uuid, port))
-					new_machine.call('connect', ['admin', port, [chr(x) for x in run_id]], {}, lambda success, ret: print('New machine %s connected on port %s' % (uuid, port)))
+					new_machine.call('connect', ['admin', port, [chr(x) for x in run_id]], {}, finish_new_connect)
 				if uuid is None:
 					def prefinish(success, uuid):
 						assert success
@@ -1046,7 +1042,7 @@ def detect(port): # {{{
 			websocketd.remove_timeout(timeout_handle[0])
 			machine.close()
 			ports[port] = None
-			broadcast(None, 'port_state', port, 0)
+			broadcast(None, 'port_state', port, 'disconnected')
 			return False
 		machine.write(protocol.single['ID'])
 		timeout_handle = [websocketd.add_timeout(time.time() + .5, timeout)]
@@ -1070,6 +1066,7 @@ def _disconnect(socket, data):
 	del Connection.connections[socket.connection.id]
 try:
 	httpd = Server(config['port'], Connection, disconnect_cb = _disconnect, httpdirs = fhs.read_data('html', dir = True, multiple = True), address = config['address'], log = config['log'], tls = tls)
+	httpd.handle_ext('ico', 'image/png')
 	udevsocket = fhs.write_runtime('udev.socket', packagename = 'franklin', opened = False)
 	os.makedirs(os.path.dirname(udevsocket), exist_ok = True)
 	if os.path.exists(udevsocket):
@@ -1119,7 +1116,13 @@ except:
 
 log('Franklin server is running')
 print('Franklin server is running')
-websocketd.fgloop()
+while True:
+	try:
+		websocketd.fgloop()
+	except KeyboardInterrupt:
+		break
+	except:
+		traceback.print_exc()
 
 
 '''
