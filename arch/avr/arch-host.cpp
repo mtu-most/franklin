@@ -1324,7 +1324,7 @@ void arch_discard() { // {{{
 	double xyz[spaces[0].num_axes];
 	for (int m = 0; m < spaces[0].num_motors; ++m)
 		motors[m] = spaces[0].motor[m]->settings.current_pos;
-	spaces[0].motors2xyz(motors, xyz);
+	spaces[0].motors2xyz(motors, xyz, false);
 	for (int a = 0; a < spaces[0].num_axes; ++a) {
 		spaces[0].axis[a]->current = xyz[a];
 		//debug("discard position %d: %f", a, xyz[a]);

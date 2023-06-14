@@ -109,14 +109,18 @@ void Space::setup_nums(int na, int nm) { // {{{
 	}
 } // }}}
 
-double probe_value(int space, double x, double y) {
+// Find (compute) value for probe at given position.
+// x,y are regular coordinates including offset.
+double probe_value(int space, double x, double y) { // {{{
 	if (space != 0 || spaces[space].num_axes < 3 || probe_nx <= 0 || probe_ny <= 0 || std::isnan(x) || std::isnan(y))
 		return 0;
-	// Convert to probe map coordinates.
-	x -= probe_origin[0];
-	y -= probe_origin[1];
-	x /= probe_step[0];
-	y /= probe_step[1];
+	// Convert to probe map coordinates. (Note: probe map is stored without offset.)
+	x -= probe_origin[0] + spaces[0].axis[0]->offset;
+	y -= probe_origin[1] + spaces[0].axis[1]->offset;
+	x /= probe_size[0];
+	y /= probe_size[1];
+	x *= probe_nx;
+	y *= probe_ny;
 	// For points outside the map, use the edge of the map.
 	if (x < 0)
 		x = 0;
@@ -132,8 +136,10 @@ double probe_value(int space, double x, double y) {
 	double adjust = probe_data[int(std::round(y)) * probe_nx + int(std::round(x))] + probe_z;
 	//debug("adjust: %f (probe z: %f)", adjust, probe_z);
 	return adjust;
-}
+} // }}}
 
+// Convert axis positions (xyzabc) to motor positions (uvwabc/...).
+// The axis positions are adjusted using offset, adjust and probe settings before letting the hardware type convert them.
 void Space::xyz2motors() { // {{{
 	double orig_target[num_axes];
 	// Apply adjustment to targets.
@@ -150,7 +156,7 @@ void Space::xyz2motors() { // {{{
 	}
 	// Use probe, if enabled, possible and available.
 	//debug("id %d num axes %d nx %d ny %d", id, num_axes, probe_nx, probe_ny);
-	if (num_axes >= 3)
+	if (use_probes && id == 0 && num_axes >= 3)
 		axis[2]->target += probe_value(id, axis[0]->target, axis[1]->target);
 	// Set default values: motor positions are equal to axis positions.
 	for (int a = 0; a < num_axes; ++a)
@@ -162,16 +168,24 @@ void Space::xyz2motors() { // {{{
 		axis[a]->target = orig_target[a];
 } // }}}
 
-void Space::motors2xyz(const double *motors, double *xyz) { // {{{
+// Convert motor positions (uvwabc/...) to axis positions (xyzabc).
+// Unless raw is true, the axis positions are adjusted using offset, adjust and probe settings before returning them.
+void Space::motors2xyz(const double *motors, double *xyz, bool raw) { // {{{
 	// Set default values.
 	for (int a = 0; a < num_axes; ++a)
 		xyz[a] = motors[a];
 	// Override with type computations.
 	space_types[type].motors2xyz(this, motors, xyz);
-	for (int a = 0; a < num_axes; ++a)
-		xyz[a] -= axis[a]->offset;
-	if (num_axes >= 3)
-		xyz[2] -= probe_value(id, xyz[0], xyz[1]);
+	if (!raw) {
+		if (use_probes && id == 0 && num_axes >= 3)
+			xyz[2] -= probe_value(id, xyz[0], xyz[1]);
+		for (int a = 0; a < num_axes; ++a) {
+			if (settings.adjust != 0)
+				xyz[a] += axis[a]->settings.adjust * settings.adjust;
+			if (axis[a]->offset != 0)
+				xyz[a] -= axis[a]->offset;
+		}
+	}
 	//for (int a = 0; a < num_axes; ++a)
 	//	debug("reconstructed for %d %d: motor %f -> axis %f; offset %f", id, a, motors[a], xyz[a], axis[a]->offset);
 } // }}}
@@ -232,7 +246,7 @@ void reset_pos(Space *s) { // {{{
 	double xyz[s->num_axes];
 	for (int m = 0; m < s->num_motors; ++m)
 		motors[m] = s->motor[m]->settings.current_pos;
-	s->motors2xyz(motors, xyz);
+	s->motors2xyz(motors, xyz, false);
 	double len2 = 0;
 	for (int a = 0; a < s->num_axes; ++a) {
 		s->axis[a]->settings.adjust = s->axis[a]->current - xyz[a];

@@ -389,15 +389,15 @@ void request(int req) {
 		shmem->floats[3] = run_find_pos(const_cast<const double *>(shmem->floats));
 		break;
 	CASE(CMD_MOTORS2XYZ)
-		spaces[0].motors2xyz(const_cast<const double *>(shmem->floats), const_cast<double *>(&shmem->floats[shmem->ints[0]]));
+		spaces[0].motors2xyz(const_cast<const double *>(shmem->floats), const_cast<double *>(&shmem->floats[shmem->ints[0]]), shmem->ints[1]);
 		break;
 	CASE(CMD_WRITE_PROBE_MAP)
 	{
 		//debug("writing probe map");
 		probe_origin[0] = shmem->floats[0];
 		probe_origin[1] = shmem->floats[1];
-		probe_step[0] = shmem->floats[2];
-		probe_step[1] = shmem->floats[3];
+		probe_size[0] = shmem->floats[2];
+		probe_size[1] = shmem->floats[3];
 		probe_z = shmem->floats[4];
 		if (shmem->ints[1] != probe_nx || shmem->ints[2] != probe_ny) {
 			// Size changed; reallocate storage.
@@ -428,8 +428,8 @@ void request(int req) {
 		shmem->ints[2] = probe_ny;
 		shmem->floats[0] = probe_origin[0];
 		shmem->floats[1] = probe_origin[1];
-		shmem->floats[2] = probe_step[0];
-		shmem->floats[3] = probe_step[1];
+		shmem->floats[2] = probe_size[0];
+		shmem->floats[3] = probe_size[1];
 		shmem->floats[4] = probe_z;
 		for (int n = base; n < base + 400 && n < probe_nx * probe_ny; ++n) {
 			int y = n / probe_nx;

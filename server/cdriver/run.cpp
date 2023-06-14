@@ -151,6 +151,10 @@ void run_file_next_command(int32_t start_time) {
 			case RUN_POLY3MINUS:
 			case RUN_POLY2:
 			{
+				if (probe_nx > 0 && probe_ny > 0 && !use_probes) {
+					use_probes = true;
+					reset_pos(&spaces[0]);
+				}
 				settings.queue_start = 0;
 				settings.queue_end = 0;
 				queue[settings.queue_end].reverse = r.type == RUN_POLY3MINUS;
@@ -407,7 +411,7 @@ void run_file_next_command(int32_t start_time) {
 				prepare_interrupt();
 				shmem->interrupt_ints[0] = spaces[0].num_axes;
 				for (int a = 0; a < spaces[0].num_axes; ++a)
-					shmem->interrupt_floats[a] = spaces[0].axis[a]->settings.source;
+					shmem->interrupt_floats[a] = spaces[0].axis[a]->settings.source + spaces[0].axis[a]->offset;
 				send_to_parent(CMD_STORE_PROBE);
 				break;
 			case RUN_USE_PROBES:

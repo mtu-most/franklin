@@ -273,7 +273,7 @@ struct Space {
 	void init(int space_id);
 	void setup_nums(int na, int nm);
 	void xyz2motors();
-	void motors2xyz(const double *motors, double *xyz);
+	void motors2xyz(const double *motors, double *xyz, bool raw);
 	ARCH_SPACE
 };
 
@@ -311,7 +311,8 @@ EXTERN Pin_t led_pin, stop_pin, probe_pin, spiss_pin;
 EXTERN double timeout;
 EXTERN int bed_id, fan_id, spindle_id;
 EXTERN int probe_nx, probe_ny;
-EXTERN double probe_z, probe_depth, probe_height, probe_origin[2], probe_step[2], *probe_data, probe_speed_scale;
+EXTERN double probe_z, probe_depth, probe_height, probe_origin[2], probe_size[2], *probe_data, probe_speed_scale;
+EXTERN bool use_probes;	// Whether probemap should be used to correct current move (probe_z is always used, if defined).
 //EXTERN double room_T;	//[°C]
 EXTERN double feedrate;		// Multiplication factor for f values, used at start of move.
 EXTERN double targetangle;
@@ -330,7 +331,8 @@ EXTERN int default_hwtime_step, min_hwtime_step;
 EXTERN uint8_t which_autosleep;		// which autosleep message to send (0: none, 1: motor, 2: temp, 3: both)
 EXTERN uint8_t ping;			// bitmask of waiting ping replies.
 EXTERN bool initialized;
-EXTERN bool probing, single;
+EXTERN bool probing;	// Whether the current movement is a probe.
+EXTERN bool single;	// Whether the current movement is a single move (with decoupled followers).
 EXTERN bool motors_busy;
 EXTERN int out_busy;
 EXTERN int32_t out_time;

@@ -12,10 +12,15 @@ override_dh_auto_build:
 	${MAKE} -C util
 
 SUDOERS = debian/franklin/etc/sudoers.d
+VERSIONDIR = debian/franklin/usr/lib/franklin
 override_dh_auto_install:
 	dh_auto_install
 	mkdir -p ${SUDOERS}
 	cp debian/franklin.sudoers ${SUDOERS}/franklin
+	mkdir -p ${VERSIONDIR}
+	dpkg-parsechangelog -S Source > ${VERSIONDIR}/franklin-version.txt
+	dpkg-parsechangelog -S Version >> ${VERSIONDIR}/franklin-version.txt
+	dpkg-parsechangelog -S Distribution >> ${VERSIONDIR}/franklin-version.txt
 
 override_dh_python3:
 	dh_python3 --no-ext-rename

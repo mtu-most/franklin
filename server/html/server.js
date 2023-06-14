@@ -30,6 +30,7 @@ var is_autodetect;
 var blacklist;
 var audio_list;
 var role;
+var version;
 
 var TYPE_CARTESIAN = 'cartesian';
 var TYPE_EXTRUDER = 'extruder';
@@ -363,12 +364,15 @@ function setup() {
 }
 
 function _setup_connection() {
-	rpc.call('get_role', [], {}, function(r) {
-		role = r;
-		document.getElementById('container').AddClass('role_' + role);
-		rpc.call('get_typeinfo', [], {}, function(info) {
-			trigger_update(null, 'connect', true, info);
-			rpc.call('set_monitor', [true], {}, null);
+	rpc.call('get_version', [], {}, function(v) {
+		version = v;
+		rpc.call('get_role', [], {}, function(r) {
+			role = r;
+			document.getElementById('container').AddClass('role_' + role);
+			rpc.call('get_typeinfo', [], {}, function(info) {
+				trigger_update(null, 'connect', true, info);
+				rpc.call('set_monitor', [true], {}, null);
+			});
 		});
 	});
 }

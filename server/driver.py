@@ -1026,7 +1026,7 @@ class Machine: # {{{
 			self.position_valid = True
 			if self.home_id is not None:
 				orig_motor_pos = [m['home_pos'] - self.homed_pos[i] for i, m in enumerate(self.spaces[0].motor)]
-				orig_pos = self.motors2xyz(orig_motor_pos)
+				orig_pos = self.motors2xyz(orig_motor_pos, False)
 				self._send(self.home_id, 'return', orig_pos)
 			if self.home_done_cb is not None:
 				call_queue.append((self.home_done_cb, []))
@@ -1070,7 +1070,7 @@ class Machine: # {{{
 			pos += sizes[x]
 		self.gcode_num_records = first_string / struct.calcsize(record_format)
 		self.gcode_file = True
-		self.probe_map = {'z': 0, 'origin': (0, 0), 'step': (1, 1), 'data': ()}
+		self.probe_map = {'z': 0, 'origin': (0, 0), 'size': (0, 0), 'data': ()}
 		cdriver.write_probe_map(self.probe_map)
 		log('running %s %f %f' % (filename, self.gcode_angle[0], self.gcode_angle[1]))
 		cdriver.run_file(filename.encode('utf-8'), 1 if not paused and self.confirmer is None else 0, self.gcode_angle[0], self.gcode_angle[1])
@@ -1095,6 +1095,7 @@ class Machine: # {{{
 		bbox = numpy.array([numpy.min(points, 0), numpy.max(points, 0)])
 		# determine number of points on map grid
 		grid = numpy.array(numpy.ceil((bbox[1] - bbox[0]) / self.probe_dist), dtype = int)
+		#log('bbox', bbox, 'grid', grid)
 		# For each point on the grid, we need to find the weights of all probe points based on their distance.
 		# Then using those weights, we compute the offset.
 		# Computation for single grid point g using probe points p:
@@ -1119,7 +1120,7 @@ class Machine: # {{{
 		map_data = numpy.sum(points[:, 2].reshape((1, 1, -1)) * weights, 2) / total
 		have_inf = numinf > 0
 		map_data[have_inf] = numpy.sum(points[:, 2] * infs, 2)[have_inf]
-		self.probe_map = {'z': mean, 'origin': tuple(bbox[0, :2]), 'step': (int(grid[0]), int(grid[1])), 'data': tuple(tuple(d) for d in map_data)}
+		self.probe_map = {'z': mean, 'origin': tuple(bbox[0, :2]), 'size': tuple(bbox[1, :2] - bbox[0, :2]), 'data': tuple(tuple(d) for d in map_data)}
 		cdriver.write_probe_map(self.probe_map)
 	# }}}
 	def _spi_send(self, data): # {{{
@@ -1678,7 +1679,7 @@ class Machine: # {{{
 			return
 		next_order = None
 		topark = [a['park_order'] for a in self.spaces[0].axis if not math.isnan(a['park']) and a['park_order'] >= order]
-		if len(topark) > 0 and (next_order is None or min(topark) > next_order):
+		if len(topark) > 0:
 			next_order = min(topark)
 		if next_order is None:
 			#log('done parking; cb = %s' % repr(cb))
@@ -1696,7 +1697,7 @@ class Machine: # {{{
 			return
 		#log('not done parking: ' + repr((next_order)))
 		self.movecb.append(lambda done: self.user_park(cb, order = next_order + 1, aborted = not done)[1](id))
-		self.user_line([a['park'] - a['offset'] if a['park_order'] == next_order else float('nan') for ai, a in enumerate(self.spaces[0].axis)], unprobe = True)[1](None)
+		self.user_line([a['park'] - a['offset'] if a['park_order'] == next_order else float('nan') for a in self.spaces[0].axis], unprobe = True)[1](None)
 	# }}}
 	@delayed
 	def wait_for_cb(self, id): # {{{
@@ -1846,8 +1847,8 @@ class Machine: # {{{
 			return 'Idle', float('nan'), float('nan'), pos[0], pos[1], context
 		return state, cdriver.get_time(), self.total_time / self.feedrate, pos[0], pos[1], context
 	# }}}
-	def motors2xyz(self, motors): # {{{
-		return cdriver.motors2xyz(*motors)
+	def motors2xyz(self, motors, raw = False): # {{{
+		return cdriver.motors2xyz(motors, raw)
 	# }}}
 
 	# Profile management.

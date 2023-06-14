@@ -419,6 +419,9 @@ class Connection: # {{{
 	def get_typeinfo(self): # {{{
 		return typeinfo
 	# }}}
+	def get_version(self): # {{{
+		return version
+	# }}}
 	def detect(self, port): # {{{
 		return detect(port)
 	# }}}
@@ -1086,8 +1089,22 @@ def create_machine(uuid = None): # {{{
 	return uuid
 # }}}
 
+# Read version. {{{
+versionfile = os.path.join(os.path.dirname(os.path.realpath(sys.argv[0])), 'franklin-version' + os.extsep + 'txt')
+if not os.path.exists(versionfile):
+	# Not a release; get version from git if present.
+	try:
+		version = 'git ' + subprocess.run(('git', 'log', '^HEAD^', 'HEAD'), capture_output = True, close_fds = True, check = True).stdout.decode('utf-8', 'replace')
+	except subprocess.CalledProcessError:
+		version = 'Unreleased; executable timestamp: ' + time.ctime(os.stat(sys.argv[0]).st_mtime)
+else:
+	with open(versionfile) as f:
+		version = f.read()
+version = version.strip().replace('\n', '; ')
+# }}}
+
 # Start known machine drivers.
-for d in fhs.read_data('.', dir = True, opened = False, multiple = True):
+for d in fhs.read_data('.', dir = True, opened = False, multiple = True): # {{{
 	for uuid in os.listdir(d):
 		if uuid in machines:
 			continue
@@ -1095,6 +1112,7 @@ for d in fhs.read_data('.', dir = True, opened = False, multiple = True):
 			continue
 		log('starting machine %s' % uuid)
 		create_machine(uuid = uuid)
+# }}}
 
 # Detect serial ports. {{{
 # Assume a GNU/Linux system; if you have something else, you need to come up with a way to iterate over all your serial ports and implement it here.  Patches welcome, especially if they are platform-independent.

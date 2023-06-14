@@ -1220,6 +1220,10 @@ void do_resume() { // {{{
 int go_to(bool relative, MoveCommand const *move, bool queue_only, bool unprobe) { // {{{
 	mdebug("goto (%.2f,%.2f,%.2f) %s at speed %.2f, e %.2f", move->target[0], move->target[1], move->target[2], relative ? "rel" : "abs", move->v0, move->e);
 	mdebug("new queue for goto");
+	if (use_probes != !unprobe && !computing_move) {
+		use_probes = !unprobe;
+		reset_pos(&spaces[0]);
+	}
 	settings.queue_start = 0;
 	int q = 0;
 	double x[6];
@@ -1241,9 +1245,7 @@ int go_to(bool relative, MoveCommand const *move, bool queue_only, bool unprobe)
 			target[a] = (relative ? x[a] : 0) + move->target[a];
 		spaces[0].axis[a]->last_target = target[a];
 	}
-	if (unprobe)
-		target[2] -= probe_value(0, target[0], target[1]);
-	if (computing_move) {
+	if (computing_move) { // {{{
 		// Reset target of current move to given values.
 		double v[6], a[6];
 		compute_current_pos(x, v, a, false);
@@ -1347,7 +1349,7 @@ int go_to(bool relative, MoveCommand const *move, bool queue_only, bool unprobe)
 			}
 		}
 		//debug("retarget fall through to regular goto");
-	}
+	} // }}}
 	// This is a manual move or the start of a job; set hwtime step to default.
 	mdebug("goto (%.2f,%.2f,%.2f)->(%.2f,%.2f,%.2f) at speed %.2f, e %.2f->%.2f", x[0], x[1], x[2], target[0], target[1], target[2], move->v0, move->tool >= 0 && move->tool < spaces[1].num_axes ? spaces[1].axis[move->tool]->current : 0, move->e);
 	settings.hwtime_step = default_hwtime_step;

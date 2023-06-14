@@ -677,6 +677,7 @@ function save_profile(desc, pos, top) { // {{{
 function setup_profile(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
+	ret.AddElement('div').AddText('Franklin Version: ' + version);
 	var e = ret.AddElement('div').AddText('Machine UUID:');
 	ret.uuid = e.AddElement('span').AddText(ui.machine.uuid);
 	ret.uuid.AddClass(make_id(ui, [null, 'uuid']));

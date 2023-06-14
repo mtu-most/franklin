@@ -784,14 +784,18 @@ static PyObject *tp_findpos(PyObject *Py_UNUSED(self), PyObject *args) {
 
 static PyObject *motors2xyz(PyObject *Py_UNUSED(self), PyObject *args) {
 	FUNCTION_START;
-	int num = PyTuple_Size(args);
+	PyObject *motors;
+	shmem->ints[1] = false;
+	if (!PyArg_ParseTuple(args, "O|p", &motors, &shmem->ints[1]))
+		return NULL;
+	int num = PySequence_Size(motors);
 	if (num <= 0) {
 		PyErr_SetString(PyExc_ValueError, "motors2xyz needs motor positions as arguments");
 		return NULL;
 	}
 	shmem->ints[0] = num;
 	for (int i = 0; i < num; ++i) {
-		PyObject *value = PyTuple_GetItem(args, i);
+		PyObject *value = PySequence_GetItem(motors, i);
 		shmem->floats[i] = PyFloat_AsDouble(value);
 	}
 	send_to_child(CMD_MOTORS2XYZ);
@@ -832,9 +836,9 @@ static PyObject *read_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 		shmem->ints[0] = index;
 		send_to_child(CMD_READ_PROBE_MAP);
 	}
-	PyObject *ret = Py_BuildValue("{s(dd),s(dd),sd,sO}",
+	PyObject *ret = Py_BuildValue("{s(dd),s(dd),sd,sO,s(dd)}",
 		"origin", shmem->floats[0], shmem->floats[1],
-		"step", shmem->floats[2], shmem->floats[3],
+		"size", shmem->floats[2], shmem->floats[3],
 		"z", shmem->floats[4],
 		"data", data);
 	Py_DECREF(data);
@@ -846,23 +850,23 @@ static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 	PyObject *dict;
 	if (!PyArg_ParseTuple(args, "O!", &PyDict_Type, &dict))
 		return NULL;
-	// Parse z, origin and step. {{{
+	// Parse z, origin and size. {{{
 	PyObject *zobj = PyDict_GetItemString(dict, "z");
 	PyObject *originobj = PyDict_GetItemString(dict, "origin");
-	PyObject *stepobj = PyDict_GetItemString(dict, "step");
-	if (!zobj || !originobj || !stepobj) {
-		PyErr_SetString(PyExc_ValueError, "z, origin and step must be present in the argument dict");
+	PyObject *sizeobj = PyDict_GetItemString(dict, "size");
+	if (!zobj || !originobj || !sizeobj) {
+		PyErr_SetString(PyExc_ValueError, "z, origin and size must be present in the argument dict");
 		return NULL;
 	}
-	if (!PyTuple_Check(originobj) || !PyTuple_Check(stepobj)) {
-		PyErr_SetString(PyExc_TypeError, "origin and step must be tuples");
+	if (!PyTuple_Check(originobj) || !PyTuple_Check(sizeobj)) {
+		PyErr_SetString(PyExc_TypeError, "origin and size must be tuples");
 		return NULL;
 	}
-	if (PyTuple_Size(originobj) != 2 || PyTuple_Size(stepobj) != 2) {
-		PyErr_SetString(PyExc_ValueError, "origin and step must be tuples of size 2");
+	if (PyTuple_Size(originobj) != 2 || PyTuple_Size(sizeobj) != 2) {
+		PyErr_SetString(PyExc_ValueError, "origin and size must be tuples of size 2");
 		return NULL;
 	}
-	double z, origin[2], step[2];
+	double z, origin[2], size[2];
 	z = PyFloat_AsDouble(zobj);
 	for (int c = 0; c < 2; ++c) {
 		PyObject *v = PyTuple_GetItem(originobj, c);
@@ -872,10 +876,10 @@ static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 		if (PyErr_Occurred())
 			return NULL;
 
-		v = PyTuple_GetItem(stepobj, c);
+		v = PyTuple_GetItem(sizeobj, c);
 		if (!v)
 			return NULL;
-		step[c] = PyFloat_AsDouble(v);
+		size[c] = PyFloat_AsDouble(v);
 		if (PyErr_Occurred())
 			return NULL;
 	}
@@ -887,14 +891,14 @@ static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 		PyErr_SetString(PyExc_TypeError, "Data must be a tuple");
 		return NULL;
 	}
-	int ny = PyTuple_Size(data);
-	shmem->ints[0] = 0;
-	shmem->ints[1] = 0;	// Initial 0 for empty tuple, updated when rows are parsed.
-	shmem->ints[2] = ny;
+	long ny = PyTuple_Size(data);
+	shmem->ints[0] = 0;	// Base: index of first point in this packet (flat array addressing).
+	shmem->ints[1] = 0;	// nx: Initial 0 for empty tuple, updated when rows are parsed.
+	shmem->ints[2] = ny;	// ny.
 	shmem->floats[0] = origin[0];
 	shmem->floats[1] = origin[0];
-	shmem->floats[2] = step[0];
-	shmem->floats[3] = step[0];
+	shmem->floats[2] = size[0];
+	shmem->floats[3] = size[0];
 	shmem->floats[4] = z;
 	int index = 0;
 	int base = 0;
@@ -920,7 +924,7 @@ static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 			if (PyErr_Occurred())
 				return NULL;
 			if (index >= 400) {
-				shmem->ints[1] = base;
+				shmem->ints[0] = base;
 				send_to_child(CMD_WRITE_PROBE_MAP);
 				index = 0;
 				base += 400;
@@ -928,7 +932,7 @@ static PyObject *write_probe_map(PyObject *Py_UNUSED(self), PyObject *args) {
 		}
 	}
 	if (ny == 0 || index > 0) {
-		shmem->ints[1] = base;
+		shmem->ints[0] = base;
 		send_to_child(CMD_WRITE_PROBE_MAP);
 	}
 	// }}}
