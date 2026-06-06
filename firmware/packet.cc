@@ -557,8 +557,8 @@ void packet()
 				break;
 			}
 		}
-		// Fall through.
 	}
+		// Fall through.
 	case CMD_STOP:
 	{
 		cmddebug("CMD_STOP");

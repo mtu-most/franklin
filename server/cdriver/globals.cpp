@@ -25,6 +25,19 @@
 #define ldebug(...) do {} while(0)
 #endif
 
+#define X_ROTATION_MATRIX(angle) {{1, 0, 0}, {0, cos(angle * 2 * M_PI), sin(angle * 2 * M_PI)}, {0, -sin(angle * 2 * M_PI), cos(angle * 2 * M_PI)}}
+#define Z_ROTATION_MATRIX(angle) {{cos(angle * 2 * M_PI), sin(angle * 2 * M_PI), 0}, {-sin(angle * 2 * M_PI), cos(angle * 2 * M_PI), 0}, {0, 0, 1}}
+
+static void matrix_multiply(double target[3][3], double A[3][3], double B[3][3]) {
+	for (int r = 0; r < 3; ++r) {
+		for (int c = 0; c < 3; ++c) {
+			target[r][c] = 0;
+			for (int t = 0; t < 3; ++t)
+				target[r][c] += A[r][t] * B[t][c];
+		}
+	}
+}
+
 bool globals_load() {
 	bool change_hw = false;
 	int nt = shmem->ints[1];
@@ -99,6 +112,18 @@ bool globals_load() {
 	double t = timeout;
 	timeout = shmem->floats[10];
 	probe_speed_scale = shmem->floats[11];
+	bed_tilt_direction = shmem->floats[12];
+	bed_tilt_angle = shmem->floats[13];
+	// Compute bed tilt matrix.
+	double z_rotation[3][3] = Z_ROTATION_MATRIX(bed_tilt_direction);
+	double x_rotation[3][3] = X_ROTATION_MATRIX(bed_tilt_angle);
+	double z_unrotation[3][3] = Z_ROTATION_MATRIX(-bed_tilt_direction);
+	double x_unrotation[3][3] = X_ROTATION_MATRIX(-bed_tilt_angle);
+	double tmp_matrix[3][3];
+	matrix_multiply(tmp_matrix, z_rotation, x_rotation);
+	matrix_multiply(bed_tilt_matrix, tmp_matrix, z_unrotation);
+	matrix_multiply(tmp_matrix, z_unrotation, x_unrotation);
+	matrix_multiply(bed_untilt_matrix, tmp_matrix, z_rotation);
 	if (t != timeout)
 		change_hw = true;
 	bool store = shmem->ints[13];
@@ -143,5 +168,7 @@ void globals_save() {
 	shmem->floats[9] = targetangle;
 	shmem->floats[10] = timeout;
 	shmem->floats[11] = probe_speed_scale;
-	shmem->floats[12] = space_types[spaces[0].type].probe_speed(&spaces[0]);
+	shmem->floats[12] = bed_tilt_direction;
+	shmem->floats[13] = bed_tilt_angle;
+	shmem->floats[14] = space_types[spaces[0].type].probe_speed(&spaces[0]);
 }

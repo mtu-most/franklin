@@ -312,7 +312,7 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	probe_depth = shmem->floats[7];
 	probe_speed_scale = shmem->floats[11];
 	probe_speed = shmem->floats[12];
-	return Py_BuildValue("{si,si,si : si,si,si,si,si,si : si,si,si,si,si : sd,sd,sd,sd,sd,sd,sd,sd}",
+	return Py_BuildValue("{si,si,si : si,si,si,si,si,si : si,si,si,si,si : sd,sd,sd,sd,sd,sd,sd,sd,sd,sd}",
 
 			"num_pins", shmem->ints[0],
 			"num_temps", shmem->ints[1],
@@ -343,7 +343,9 @@ static PyObject *read_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 			"targetangle", shmem->floats[9],
 			"timeout", shmem->floats[10],
 			"probe_speed_scale", shmem->floats[11],
-			"probe_speed", shmem->floats[12]);
+			"bed_tilt_direction", shmem->floats[12],
+			"bed_tilt_angle", shmem->floats[13],
+			"probe_speed", shmem->floats[14]);
 }
 
 static void set_int(int num, char const *name, PyObject *dict) {
@@ -411,6 +413,8 @@ static PyObject *write_globals(PyObject *Py_UNUSED(self), PyObject *args) {
 	set_float(9, "targetangle", dict);
 	set_float(10, "timeout", dict);
 	set_float(11, "probe_speed_scale", dict);
+	set_float(12, "bed_tilt_direction", dict);
+	set_float(13, "bed_tilt_angle", dict);
 	send_to_child(CMD_WRITE_GLOBALS);
 	return assert_empty_dict(dict, "write_globals");
 }

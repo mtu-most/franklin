@@ -475,7 +475,13 @@ function floatkey(event, element) { // {{{
 	// [['space', 1], 'num_axes']
 	// [['axis', [0, 1]], 'offset']
 	// [['motor', [0, 1]], ['follower', 'motor']]
-	if (element.obj[0] === null || (element.obj[0] !== null && element.obj[0][0] != 'space' && element.obj[0][0] != 'axis' && element.obj[0][0] != 'motor') || element.obj[1] == 'current') {
+	if (element.obj[0] === null && element.obj[1].substr(0, 9) == 'bed_tilt_') {
+		element.ui.machine.call('get_axis_pos', [0], {}, function(pos) {
+			finish();
+			element.ui.machine.call('line', [pos], {});
+		});
+	}
+	else if (element.obj[0] === null || (element.obj[0][0] != 'space' && element.obj[0][0] != 'axis' && element.obj[0][0] != 'motor') || element.obj[1] == 'current') {
 		finish();
 	}
 	else {
@@ -1024,6 +1030,8 @@ function globals_update(uuid, ui_configure, nums_changed, newly_connected) { // 
 	update_float(p, [null, 'max_J']);
 	update_float(p, [null, 'adjust_speed']);
 	update_float(p, [null, 'targetangle']);
+	update_float(p, [null, 'bed_tilt_direction']);
+	update_float(p, [null, 'bed_tilt_angle']);
 	update_checkbox(p, [null, 'store_adc']);
 	update_checkbox(p, [null, 'park_after_job']);
 	update_checkbox(p, [null, 'sleep_after_job']);
@@ -1640,8 +1648,18 @@ function make_table(ui) { // {{{
 	return t;
 } // }}}
 
+// Add a table row. Parameters:
+// ui: User Interface object.
+// title: title column (first column, will be put inside th element).
+// cells: array of contents. Each cell is an element, or an array of items to Add().
+// classes: [title class, cells class] or [title class, [cell class, cell class, ...]].
+// id: ui id for the tr, and with number added, for each cell. If undefined, on ids are set.
+// onlytype: if set to a machine type name, hide table unless machine is configured to be that type.
+// index: if onlytype is used, the index for which to show this or undefined for all.
 function make_tablerow(ui, title, cells, classes, id, onlytype, index) { // {{{
 	var ret = document.createElement('tr');
+	if (classes === undefined)
+		classes = [undefined, undefined];
 	if (id)
 		ret.AddClass(make_id(ui, id));
 	ret.AddElement('th', classes[0]).Add(title);
@@ -1649,7 +1667,7 @@ function make_tablerow(ui, title, cells, classes, id, onlytype, index) { // {{{
 		var current_cell;
 		if (!classes[1])
 			current_cell = ret.AddElement('td');
-		else if (classes[1] == 'string')
+		else if (typeof classes[1] == 'string')
 			current_cell = ret.AddElement('td', classes[1]);
 		else
 			current_cell = ret.AddElement('td', classes[1][cell]);

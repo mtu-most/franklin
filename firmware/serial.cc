@@ -142,10 +142,13 @@ void serial() { // {{{
 		{
 		case CMD_ACK3:
 			which += 1;
+			// Fall through.
 		case CMD_ACK2:
 			which += 1;
+			// Fall through.
 		case CMD_ACK1:
 			which += 1;
+			// Fall through.
 		case CMD_ACK0:
 		{
 			// Ack: everything was ok; flip the flipflop.
@@ -172,10 +175,13 @@ void serial() { // {{{
 		}
 		case CMD_NACK3:
 			which += 1;
+			// Fall through.
 		case CMD_NACK2:
 			which += 1;
+			// Fall through.
 		case CMD_NACK1:
 			which += 1;
+			// Fall through.
 		case CMD_NACK0:
 		{
 			arch_claim_serial();

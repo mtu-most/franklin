@@ -148,6 +148,8 @@ function _setup_updater() {
 					max_J: 0,
 					adjust_speed: 1,
 					timeout: Infinity,
+					bed_tilt_direction: 0,
+					bed_tilt_angle: 0,
 					targetangle: 0,
 					store_adc: false,
 					temp_scale_min: 0,

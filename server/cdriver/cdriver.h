@@ -310,6 +310,10 @@ EXTERN int num_subfragments_bits;
 EXTERN Pin_t led_pin, stop_pin, probe_pin, spiss_pin;
 EXTERN double timeout;
 EXTERN int bed_id, fan_id, spindle_id;
+EXTERN double bed_tilt_direction;	// Angle in tau for tilt direction (0 means tilt around positive X axis; 0.25 means around positive Y axis).
+EXTERN double bed_tilt_angle;		// Angle in tau for tilt amount.
+EXTERN double bed_tilt_matrix[3][3];	// Matrix for appying bed tilt to a coordinate.
+EXTERN double bed_untilt_matrix[3][3];	// Matrix for removing bed tilt from a coordinate.
 EXTERN int probe_nx, probe_ny;
 EXTERN double probe_z, probe_depth, probe_height, probe_origin[2], probe_size[2], *probe_data, probe_speed_scale;
 EXTERN bool use_probes;	// Whether probemap should be used to correct current move (probe_z is always used, if defined).

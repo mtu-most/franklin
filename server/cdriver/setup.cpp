@@ -150,6 +150,8 @@ void setup()
 	cb_pending = false;
 	which_autosleep = 0;
 	timeout = 0;
+	bed_tilt_direction = 0;
+	bed_tilt_angle = 0;
 	bed_id = 255;
 	fan_id = 255;
 	spindle_id = 255;

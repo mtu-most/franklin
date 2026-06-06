@@ -97,7 +97,6 @@ import websocketd
 from websocketd import log
 import fhs
 import subprocess
-import crypt
 import time
 import serial
 import json
@@ -437,7 +436,7 @@ class Connection: # {{{
 		machines[machine].remove_machine()
 	# }}}
 	def _get_command(self, port, firmware, programmer, baud): # {{{
-		m = re.match('^(.+)@(\d+)MHz$', firmware)
+		m = re.match(r'^(.+)@(\d+)MHz$', firmware)
 		if m is None:
 			raise ValueError('Invalid firmware %s' % firmware)
 		mcu = m.group(1)
@@ -590,7 +589,7 @@ def upload_options(port): # {{{
 		base, ext = os.path.splitext(f)
 		if ext != os.extsep + 'hex':
 			continue
-		m = re.match('^franklin_(.+)_(\d+)0{6}$', base)
+		m = re.match(r'^franklin_(.+)_(\d+)0{6}$', base)
 		if m is None:
 			continue
 		ret['firmware'].append(m.group(1) + '@' + m.group(2) + 'MHz')

@@ -758,40 +758,34 @@ function setup_type(desc, pos, top) { // {{{
 function setup_globals(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
-	var e = ret.AddElement('div').AddText('Timeout:');
-	e.Add(Float(ui, [null, 'timeout'], 0, 60));
-	e.AddText(' min');
-	e = ret.AddElement('div').AddText('After Job Completion:');
-	var l = e.AddElement('label');
-	l.Add(Checkbox(ui, [null, 'park_after_job']));
-	l.AddText('Park');
-	l = e.AddElement('label');
-	l.Add(Checkbox(ui, [null, 'sleep_after_job']));
-	l.AddText('Sleep');
-	l = e.AddElement('label');
-	l.Add(Checkbox(ui, [null, 'cool_after_job']));
-	l.AddText('Cool');
-	e = ret.AddElement('div').AddText('SPI setup:');
-	e.Add(Str(ui, [null, 'spi_setup']));
-	e = ret.AddElement('div').AddText('Max Deviation:');
-	e.Add(Float(ui, [null, 'max_deviation'], 2, 1));
-	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
-	e = ret.AddElement('div').AddText('Max v');
-	e.Add(Float(ui, [null, 'max_v'], 2, 1));
-	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
-	e.AddText('/s');
-	e = ret.AddElement('div').AddText('Max a');
-	e.Add(Float(ui, [null, 'max_a'], 2, 1e3));
-	e.AddText(' ×10³ ').Add(add_name(ui, 'unit', 0, 0));
-	e.AddText('/s²');
-	e = ret.AddElement('div').AddText('Max J');
-	e.Add(Float(ui, [null, 'max_J'], 2, 1e3));
-	e.AddText(' ×10³ ').Add(add_name(ui, 'unit', 0, 0));
-	e.AddText('/s³');
-	e = ret.AddElement('div').AddText('Adjust Speed');
-	e.Add(Float(ui, [null, 'adjust_speed'], 2, 1));
-	e.AddText(' ').Add(add_name(ui, 'unit', 0, 0));
-	e.AddText('/s');
+
+	var globals = ret.Add(make_table(ui));
+
+	globals.Add(make_tablerow(ui, 'Timeout', [[Float(ui, [null, 'timeout'], 0, 60), ' min']], ['rowtitle1']));
+
+	var park = Create('label');
+	park.Add(Checkbox(ui, [null, 'park_after_job']));
+	park.AddText('Park');
+	var sleep = Create('label');
+	sleep.Add(Checkbox(ui, [null, 'sleep_after_job']));
+	sleep.AddText('Sleep');
+	var cool = Create('label');
+	cool.Add(Checkbox(ui, [null, 'cool_after_job']));
+	cool.AddText('Cool');
+	globals.Add(make_tablerow(ui, 'After Job Completion', [[park, sleep, cool]], ['rowtitle1']));
+
+	globals.Add(make_tablerow(ui, 'SPI setup', [Str(ui, [null, 'spi_setup'])], ['rowtitle1']));
+
+	globals.Add(make_tablerow(ui, 'Max Deviation', [[Float(ui, [null, 'max_deviation'], 2, 1), ' ', add_name(ui, 'unit', 0, 0)]], ['rowtitle1']));
+
+	globals.Add(make_tablerow(ui, 'Max v', [[Float(ui, [null, 'max_v'], 2, 1), ' ', add_name(ui, 'unit', 0, 0), '/s']], ['rowtitle1']));
+
+	globals.Add(make_tablerow(ui, 'Max a', [[Float(ui, [null, 'max_a'], 2, 1e3), ' ×10³ ', add_name(ui, 'unit', 0, 0), '/s²']], ['rowtitle1']));
+
+	globals.Add(make_tablerow(ui, 'Max J', [[Float(ui, [null, 'max_J'], 2, 1e3), ' ×10³ ', add_name(ui, 'unit', 0, 0), '/s³']], ['rowtitle1']));
+
+	globals.Add(make_tablerow(ui, 'Adjusting Speed', [[Float(ui, [null, 'adjust_speed'], 2, 1), ' ', add_name(ui, 'unit', 0, 0), '/s']], ['rowtitle1']));
+
 	var pins = ret.Add(make_table(ui));
 	// Add dummy first child instead of a title row.
 	pins.Add(document.createComment(''));
@@ -806,6 +800,11 @@ function setup_globals(desc, pos, top) { // {{{
 function setup_axis(desc, pos, top) { // {{{
 	var ui = top.data;
 	var ret = Create('div', 'setup expert');
+
+	var tilt = ret.Add(make_table(ui));
+	tilt.Add(make_tablerow(ui, 'Bed Tilt Direction', [[Float(ui, [null, 'bed_tilt_direction'], 1, 1 / 360), '°']], ['rowtitle1']));
+	tilt.Add(make_tablerow(ui, 'Bed Tilt Angle', [[Float(ui, [null, 'bed_tilt_angle'], 2, 1 / 360), '°']], ['rowtitle1']));
+
 	ret.Add([make_table(ui).AddMultipleTitles([
 		'Axes',
 		'Name',
@@ -813,15 +812,17 @@ function setup_axis(desc, pos, top) { // {{{
 		'Park Order',
 		UnitTitle(ui, 'Min'),
 		UnitTitle(ui, 'Max'),
+		UnitTitle(ui, 'Offset'),
 		UnitTitle(ui, '2nd Home Pos')
 	], [
-		'htitle6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6',
-		'title6'
+		'htitle7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7',
+		'title7'
 	], [
 		null,
 		'Name of the axis',
@@ -829,6 +830,7 @@ function setup_axis(desc, pos, top) { // {{{
 		'Order when parking.  Equal order parks simultaneously; lower order parks first.',
 		'Minimum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to -Infinity for x and y.',
 		'Maximum position that the axis is allowed to go to.  For non-Cartesian, this is normally set to Infinity for x and y.',
+		'Displacement of origin.',
 		'Position to move to after hitting limit switches, before moving in range of limits.'
 	]).AddMultiple(ui, 'axis', Axis)]);
 	return [ret, pos];

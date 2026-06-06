@@ -138,6 +138,14 @@ double probe_value(int space, double x, double y) { // {{{
 	return adjust;
 } // }}}
 
+static void matrix_apply(double result[3], double matrix[3][3], double target[3]) { // {{{
+	for (int r = 0; r < 3; ++r) {
+		result[r] = 0;
+		for (int t = 0; t < 3; ++t)
+			result[r] += target[t] * matrix[r][t];
+	}
+} // }}}
+
 // Convert axis positions (xyzabc) to motor positions (uvwabc/...).
 // The axis positions are adjusted using offset, adjust and probe settings before letting the hardware type convert them.
 void Space::xyz2motors() { // {{{
@@ -154,6 +162,16 @@ void Space::xyz2motors() { // {{{
 		axis[a]->target -= axis[a]->settings.adjust * settings.adjust;
 		//debug("targets %d %d orig %f offsetted %f current %f", id, a, orig_target[a], axis[a]->target, axis[a]->current);
 	}
+	if (id == 0 && num_axes >= 3) {
+		// Adjust for bed tilt.
+		double tilted[3];
+		double target[3];
+		for (int t = 0; t < 3; ++t)
+			target[t] = axis[t]->target;
+		matrix_apply(tilted, bed_tilt_matrix, target);
+		for (int t = 0; t < 3; ++t)
+			axis[t]->target = tilted[t];
+	}
 	// Use probe, if enabled, possible and available.
 	//debug("id %d num axes %d nx %d ny %d", id, num_axes, probe_nx, probe_ny);
 	if (use_probes && id == 0 && num_axes >= 3)
@@ -169,7 +187,7 @@ void Space::xyz2motors() { // {{{
 } // }}}
 
 // Convert motor positions (uvwabc/...) to axis positions (xyzabc).
-// Unless raw is true, the axis positions are adjusted using offset, adjust and probe settings before returning them.
+// Unless raw is true, the axis positions are adjusted using offset, adjust, tilt and probe settings before returning them.
 void Space::motors2xyz(const double *motors, double *xyz, bool raw) { // {{{
 	// Set default values.
 	for (int a = 0; a < num_axes; ++a)
@@ -179,6 +197,13 @@ void Space::motors2xyz(const double *motors, double *xyz, bool raw) { // {{{
 	if (!raw) {
 		if (use_probes && id == 0 && num_axes >= 3)
 			xyz[2] -= probe_value(id, xyz[0], xyz[1]);
+		if (id == 0 && num_axes >= 3) {
+			// Adjust for bed tilt.
+			double untilted[3];
+			matrix_apply(untilted, bed_untilt_matrix, xyz);
+			for (int t = 0; t < 3; ++t)
+				xyz[t] = untilted[t];
+		}
 		for (int a = 0; a < num_axes; ++a) {
 			if (settings.adjust != 0)
 				xyz[a] += axis[a]->settings.adjust * settings.adjust;

@@ -292,6 +292,8 @@ class Machine: # {{{
 		self.pattern_step_pin = 0
 		self.pattern_dir_pin = 0
 		self.timeout = float('inf')
+		self.bed_tilt_direction = 0
+		self.bed_tilt_angle = 0
 		self.bed_id = -1
 		self.fan_id = -1
 		self.spindle_id = -1
@@ -537,7 +539,7 @@ class Machine: # {{{
 		dt = nt - len(self.temps)
 		dg = ng - len(self.gpios)
 		data = {'num_temps': nt, 'num_gpios': ng}
-		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_z', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout', 'current_extruder', 'targetangle', 'store_adc')})
+		data.update({x:getattr(self, x) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_z', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout', 'bed_tilt_direction', 'bed_tilt_angle', 'current_extruder', 'targetangle', 'store_adc')})
 		#log('writing globals: %s' % repr(data))
 		cdriver.write_globals(data)
 		self._read_globals(update = True)
@@ -568,7 +570,7 @@ class Machine: # {{{
 	def _globals_update(self, target = None): # {{{
 		if not self.initialized:
 			return
-		attrnames = ('name', 'profile', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_speed', 'probe_speed_scale', 'probe_z', 'probe_height', 'probe_depth', 'adjust_speed', 'timeout', 'targetangle', 'store_adc', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'temp_scale_min', 'temp_scale_max', 'probe_points', 'probe_dist', 'connected')
+		attrnames = ('name', 'profile', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'feedrate', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_speed', 'probe_speed_scale', 'probe_z', 'probe_height', 'probe_depth', 'adjust_speed', 'timeout', 'bed_tilt_direction', 'bed_tilt_angle', 'targetangle', 'store_adc', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'temp_scale_min', 'temp_scale_max', 'probe_points', 'probe_dist', 'connected')
 		attrs = {n: getattr(self, n) for n in attrnames}
 		attrs['num_temps'] = len(self.temps)
 		attrs['num_gpios'] = len(self.gpios)
@@ -634,6 +636,7 @@ class Machine: # {{{
 			#log('killing homer')
 			self.home_phase = None
 			self.expert_set_space(0, type = self.home_orig_type, module = self.home_orig_module[0])
+			self.expert_set_globals(bed_tilt_angle = self.home_orig_tilt)
 			for a, ax in enumerate(self.spaces[0].axis):
 				self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1], module = self.home_orig_module[1][a])
 			for m, mtr in enumerate(self.spaces[0].motor):
@@ -761,6 +764,8 @@ class Machine: # {{{
 				self.expert_set_axis((0, a), min = float('-inf'), max = float('inf'))
 			self.home_orig_type = self.spaces[0].type
 			self.home_orig_module = [self.get_space(0)['module'], [self.get_axis(0, a)['module'] for a in range(len(self.spaces[0].axis))], [self.get_motor(0, m)['module'] for m in range(len(self.spaces[0].motor))]]
+			self.home_orig_tilt = self.bed_tilt_angle
+			self.expert_set_globals(bed_tilt_angle = 0)
 			self.expert_set_space(0, type = type_names[0])
 			self.home_order = {'standard': {}, 'opposite': [], 'homing': {}, 'single': []}
 			followers_used = {'standard': set(), 'opposite': []}
@@ -992,6 +997,7 @@ class Machine: # {{{
 
 			# Reset space type and move to pos2.
 			self.expert_set_space(0, type = self.home_orig_type, module = self.home_orig_module[0])
+			self.expert_set_globals(bed_tilt_angle = self.home_orig_tilt)
 			for a, ax in enumerate(self.spaces[0].axis):
 				self.expert_set_axis((0, a), min = self.home_limits[a][0], max = self.home_limits[a][1], module = self.home_orig_module[1][a])
 			for m, mtr in enumerate(self.spaces[0].motor):
@@ -1092,7 +1098,7 @@ class Machine: # {{{
 		points = numpy.array(self.probe_points, dtype = float)	# points = [[x, y, z], ...], so points[0,:] is the first point, points[:,0] is all x coordinates.
 		mean = numpy.mean(points[:, 2])
 		points[:, 2] -= mean
-		bbox = numpy.array([numpy.min(points, 0), numpy.max(points, 0)])
+		bbox = numpy.array([numpy.min(points, 0), numpy.max(points, 0)])	# [[minx, miny, minz], [maxx, maxy, maxz]].
 		# determine number of points on map grid
 		grid = numpy.array(numpy.ceil((bbox[1] - bbox[0]) / self.probe_dist), dtype = int)
 		#log('bbox', bbox, 'grid', grid)
@@ -1850,6 +1856,24 @@ class Machine: # {{{
 	def motors2xyz(self, motors, raw = False): # {{{
 		return cdriver.motors2xyz(motors, raw)
 	# }}}
+	def probe_points_to_tilt(self): # {{{
+		'''Fit plane to probe points and compensate for it using bed tilt settings.'''
+		# This is taken from https://math.stackexchange.com/questions/99299/best-fitting-plane-given-a-set-of-points
+		points = numpy.array(self.probe_points).transpose()
+		centroid = numpy.mean(points, axis=1, keepdims=True)
+		points -= centroid
+		svd = numpy.linalg.svd(points)
+		left = svd[0]
+		normal = left[:, -1]
+		# bed_tilt_direction is the direction of the normal in the XY-plane.
+		# bed_tilt_angle is the angle between the normal and the Z axis.
+		if normal[2] < 0:
+			normal = -normal
+		direction = math.atan2(normal[1], normal[0]) / math.tau
+		angle = math.acos(normal[2] / numpy.dot(normal, normal)) / math.tau
+		self.expert_set_globals(bed_tilt_direction = direction, bed_tilt_angle = angle)
+		return direction, angle
+	# }}}
 
 	# Profile management.
 	def user_load(self, profile = None, update = True): # {{{
@@ -1921,7 +1945,9 @@ class Machine: # {{{
 		message += 'spi_setup = %s\r\n' % self._mangle_spi()
 		message += ''.join(['%s = %s\r\n' % (x, write_pin(getattr(self, x))) for x in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin')])
 		message += ''.join(['%s = %d\r\n' % (x, getattr(self, x)) for x in ('bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job')])
-		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout')])
+		message += ''.join(['%s = %f\r\n' % (x, getattr(self, x)) for x in ('probe_dist', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout', 'bed_tilt_direction')])
+		bed_tilt_angle = self.bed_tilt_angle if self.home_phase is None else self.home_orig_tilt
+		message += 'bed_tilt_angle = %f\r\n' % bed_tilt_angle
 		message += 'user_interface = %s\r\n' % self.user_interface
 		for i, s in enumerate(self.spaces):
 			message += s.export_settings()
@@ -1954,7 +1980,7 @@ class Machine: # {{{
 		globals_changed = True
 		changed = {'space': set(), 'temp': set(), 'gpio': set(), 'axis': set(), 'motor': set(), 'extruder': set(), 'follower': set()}
 		keys = {
-				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout', 'probe_dist'},
+				'general': {'num_temps', 'num_gpios', 'user_interface', 'pin_names', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'temp_scale_min', 'temp_scale_max', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout', 'bed_tilt_direction', 'bed_tilt_angle', 'probe_dist'},
 				'space': {'type', 'num_axes'},
 				'temp': {'name', 'R0', 'R1', 'Rc', 'Tc', 'beta', 'heater_pin', 'fan_pin', 'thermistor_pin', 'fan_temp', 'fan_duty', 'heater_limit_l', 'heater_limit_h', 'fan_limit_l', 'fan_limit_h', 'hold_time', 'P', 'I', 'D'},
 				'gpio': {'name', 'pin', 'state', 'reset', 'duty', 'leader', 'ticks'},
@@ -2269,7 +2295,7 @@ class Machine: # {{{
 	def get_globals(self): # {{{
 		#log('getting globals')
 		ret = {'num_temps': len(self.temps), 'num_gpios': len(self.gpios)}
-		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'feedrate', 'targetangle', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probe_points', 'probe_dist', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_speed', 'probe_speed_scale', 'probe_z', 'probe_height', 'probe_depth', 'adjust_speed', 'timeout'):
+		for key in ('name', 'user_interface', 'pin_names', 'uuid', 'queue_length', 'num_pins', 'led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'unit_name', 'feedrate', 'targetangle', 'store_adc', 'temp_scale_min', 'temp_scale_max', 'probe_points', 'probe_dist', 'paused', 'park_after_job', 'sleep_after_job', 'cool_after_job', 'spi_setup', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_speed', 'probe_speed_scale', 'probe_z', 'probe_height', 'probe_depth', 'adjust_speed', 'timeout', 'bed_tilt_direction', 'bed_tilt_angle'):
 			ret[key] = getattr(self, key)
 		return ret
 	# }}}
@@ -2298,7 +2324,7 @@ class Machine: # {{{
 		for key in ('led_pin', 'stop_pin', 'probe_pin', 'spiss_pin', 'pattern_step_pin', 'pattern_dir_pin', 'bed_id', 'fan_id', 'spindle_id', 'park_after_job', 'sleep_after_job', 'cool_after_job'):
 			if key in ka:
 				setattr(self, key, int(ka.pop(key)))
-		for key in ('feedrate', 'targetangle', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_z', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout', 'probe_dist'):
+		for key in ('feedrate', 'targetangle', 'temp_scale_min', 'temp_scale_max', 'max_deviation', 'max_v', 'max_a', 'max_J', 'probe_z', 'probe_height', 'probe_depth', 'probe_speed_scale', 'adjust_speed', 'timeout', 'probe_dist', 'bed_tilt_direction', 'bed_tilt_angle'):
 			if key in ka:
 				setattr(self, key, float(ka.pop(key)))
 		if 'probe_points' in ka:
