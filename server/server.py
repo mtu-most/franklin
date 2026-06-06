@@ -1131,8 +1131,8 @@ except:
 # }}}
 # }}}
 
-log('Franklin server is running')
-print('Franklin server is running')
+log('Franklin server is running on port ', config['port'])
+print('Franklin server is running on port ', config['port'])
 while True:
 	try:
 		websocketd.fgloop()

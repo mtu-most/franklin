@@ -736,39 +736,53 @@ class Machine: # {{{
 		Finish up.
 		'''
 
-		#log('home %s %s %s' % (self.home_phase, repr(self.home_order), done))
+		log('home phase %s order %s done %s' % (self.home_phase, repr(self.home_order), done))
 		home_v = 50 / self.feedrate
 		if self.home_phase is None:
 			#log('_do_home ignored because home_phase is None')
 			return
-		if self.home_phase == 'start':
+		if self.home_phase == 'start': # Set up homing plan. {{{
 			# Initial call; start homing.
 			# If it is currently moving, doing the things below without pausing causes stall responses.
 			self.user_pause(True, False)[1](None)
 			self.user_sleep(False)
+
+			# Store original position.
 			self.homed_pos = [-self.spaces[0].get_current_pos(m)[1] for m in range(len(self.spaces[0].motor))]
+
 			for l in self.limits:
 				l.clear()
+
+			# Make list of gpio motors. {{{
 			gpio_motors = set()
 			for g, gpio in enumerate(self.gpios):
 				space = gpio.leader & 0xf
 				motor = gpio.leader >> 4
 				if 0 <= space <= 1 and 0 <= motor < len(self.spaces[space].motor):
 					gpio_motors.add((space, motor))
-			# Set all extruders to 0, except those which have a gpio linked to them (those are moved to the position later).
+			# }}}
+
+			# Set all extruders to 0, except those which have a gpio linked to them (those are moved to the position later). {{{
 			for i, e in enumerate(self.spaces[1].axis):
 				if (1, i) not in gpio_motors:
 					self.user_set_axis_pos(1, i, 0)
-			self.home_limits = [(a['min'], a['max']) for a in self.spaces[0].axis]
-			for a, ax in enumerate(self.spaces[0].axis):
-				self.expert_set_axis((0, a), min = float('-inf'), max = float('inf'))
+			# }}}
+
+			# Reset type during homing. {{{
 			self.home_orig_type = self.spaces[0].type
 			self.home_orig_module = [self.get_space(0)['module'], [self.get_axis(0, a)['module'] for a in range(len(self.spaces[0].axis))], [self.get_motor(0, m)['module'] for m in range(len(self.spaces[0].motor))]]
 			self.home_orig_tilt = self.bed_tilt_angle
 			self.expert_set_globals(bed_tilt_angle = 0)
 			self.expert_set_space(0, type = type_names[0])
+			# }}}
+			# Reset limits during homing. {{{
+			self.home_limits = [(a['min'], a['max']) for a in self.spaces[0].axis]
+			for a, ax in enumerate(self.spaces[0].axis):
+				self.expert_set_axis((0, a), min = float('-inf'), max = float('inf'))
+			# }}}
 			self.home_order = {'standard': {}, 'opposite': [], 'homing': {}, 'single': []}
 			followers_used = {'standard': set(), 'opposite': []}
+			# Fill self.home_order['standard'] and self.home_order['opposite']. {{{
 			for m, mtr in enumerate(self.spaces[0].motor):
 				can_use_pos = self._pin_valid(mtr['limit_max_pin'])
 				can_use_neg = self._pin_valid(mtr['limit_min_pin'])
@@ -776,36 +790,62 @@ class Machine: # {{{
 					# gpio_motors is a list of motors that should move to their home position without a limit switch, so remove motors with a limit switch from the list.
 					if (0, m) in gpio_motors:
 						gpio_motors.remove((0, m))
+
+					# home_order defines all motors that need to be homed. Value consists of:
+					# home_order['standard'] = {<order id>: {<space0-motor-id>: {'motor': (0, m), 'positive': <true-if-pos-switch>, 'followers': {(2, fm): finfo} } } }
+					# In this, finfo = {'leader': <space0-motor-id>, 'motor': (2, fm), 'min': <true-if-min-switch-available>, 'max': <true-if-max-switch-available>, 'positive': <true-if-max-switch-used>}
+					if mtr['home_order'] not in self.home_order['standard']:
+						self.home_order['standard'][mtr['home_order']] = {}
+
+					# Find all followers of this motor. {{{
 					followers = []
 					for fm, fmtr in enumerate(self.spaces[2].motor):
 						if self.spaces[2].follower[fm]['leader'] == m << 4:
 							followers.append({'leader': m, 'motor': (2, fm), 'min': self._pin_valid(fmtr['limit_min_pin']), 'max': self._pin_valid(fmtr['limit_max_pin'])})
+					# }}}
+
+					# Determine which limit switch to use. {{{
 					if not can_use_neg:
+						# Only positive limit switch is available.
 						use_pos = True
 					elif not can_use_pos:
+						# Only negative limit switch is available.
 						use_pos = False
 					else:
+						# Both limit switches are available: use the one with most followers; use positive switch if they are equal.
 						num_pos = sum(f['max'] for f in followers)
 						num_neg = sum(f['min'] for f in followers)
 						use_pos = num_pos >= num_neg
-					if mtr['home_order'] not in self.home_order['standard']:
-						self.home_order['standard'][mtr['home_order']] = {}
-					# Use f.update() or f to add the field to the dict, but also use the dict as the expression.
-					use_followers = {f['motor']: f.update({'positive': use_pos}) or f for f in followers if f['max' if use_pos else 'min']}
+					# }}}
+
+					# Match followers to home operation if they have the same limit switch. {{{
+					use_followers = {}
+					for f in followers:
+						if not f['max' if use_pos else 'min']:
+							continue
+						f.update({'positive': use_pos})
+						use_followers[f['motor']] = f
+					# }}}
+
 					self.home_order['standard'][mtr['home_order']][m] = {'motor': (0, m), 'positive': use_pos, 'followers': use_followers}
 					followers_used['standard'].update(use_followers[f]['motor'][1] for f in use_followers)
+
+					# Add followers with "wrong" limit switch to opposite list. {{{
 					for f in followers:
 						if f['motor'][1] in followers_used['standard']:
 							continue
 						if any(self._pin_valid(f[limit]) for limit in ('limit_min_pin', 'limit_max_pin')):
 							self.home_order['opposite'].append({'motor': f['motor'], 'positive': self._pin_valid(f['limit_max_pin']), 'leader': m})
 							followers_used['opposite'].append(f['motor'][1])
+					# }}}
 				else:
-					if (0, m) not in gpio_motors:
+					# No limit switch: simply set position to home position (if available).
+					if not math.isnan(mtr['home_pos']) and (0, m) not in gpio_motors:
 						self.user_set_axis_pos(0, m, mtr['home_pos'])
+			# }}}
 			self.home_phase = 'main-limit-start'
 			if len(gpio_motors) > 0:
-				# Move motors with a gpio follower to their home position.
+				# Move motors with a gpio follower to their home position. {{{
 				target = [{}, {}]
 				for s, m in gpio_motors:
 					target[s][m] = self.spaces[s].motor[m]['home_pos']
@@ -813,8 +853,7 @@ class Machine: # {{{
 					# move position and single extruder.
 					self.movecb.append(self.home_cb)
 					self.user_line(target[0], tool = target[1].keys()[0], e = target[1].values()[0], force = True, unprobe = True)[1](None)
-					# Immediately fall through to main-limit.
-					return
+					# continue at main-limit-start after callback.
 				else:
 					# move position.
 					self.movecb.append(self.home_cb)
@@ -823,81 +862,90 @@ class Machine: # {{{
 					if len(target[1]) > 0:
 						self.home_phase = 'gpio'
 						self.home_gpio = target[1]
-					return
-			# Fall through (to main-limit).
-		if self.home_phase == 'gpio':
+				# }}}
+				return
+			# Fall through (to main-limit-start).
+		# }}}
+		if self.home_phase == 'gpio': # Move gpio-motor extruders (only used if there is more than 1). {{{
+			# There are multiple gpio-motors to home. Move next one.
 			m = self.home_gpio.pop()
 			if len(self.home_gpio) == 0:
 				self.home_phase = 'main-limit-start'
 			self.movecb.append(self.home_cb)
 			self.user_line(tool = m, e = self.spaces[1].motor[m]['home_pos'], force = True, unprobe = True)[1](None)
 			return
+		# }}}
 		while True:	# Allow code below to repeat from here.
-			if self.home_phase == 'main-limit-start':
-				done = False	# Fake incomplete move to avoid aborting home.
+			if self.home_phase == 'main-limit-start': # {{{
+				done = None	# Fake incomplete move to avoid aborting home.
 				self.home_phase = 'main-limit'
-			if self.home_phase == 'main-limit':
+			# }}}
+			if self.home_phase == 'main-limit': # {{{
 				# Find out what the situation is. Which motors should still be moved, and should we now move all or a single motor?
-				if len(self.home_order['standard']) > 0:
-					current = self.home_order['standard'][min(self.home_order['standard'])]
-					if done is True:
-						# We moved dist and still didn't arrive at any switch. Give up.
-						log('Warning: limits were not hit during home: {}'.format(current))
-						# No targets left to move to.
-						self.home_phase = 'calibrate'
-					elif done is False:
-						#log('hit limit %s %s current %s' % (self.limits[0], self.limits[2], current))
-						# A limit was hit. Find out which one and start single moves if so needed.
-						for m in self.limits[0]:
-							# Complete recording of move until limit switch (was started when homing began).
-							self.homed_pos[m] += self.spaces[0].get_current_pos(m)[1]
-							# Set new position.
-							self.user_set_axis_pos(0, m, self.spaces[0].motor[m]['home_pos'])
-							# Start recording move away from limit switch (finished when HOMED is received).
-							self.homed_pos[m] -= self.spaces[0].get_current_pos(m)[1]
-							if m in current:
-								if len(current[m]['followers']) > 0:
-									self.home_order['single'] = current[m]['followers']
-									self.home_order['leader'] = m
-									self.home_phase = 'follow-limit'
-									#log('leader hit first; single = {}'.format(self.home_order['single']))
-								#else:
-									#log('solo hit')
-								self.home_order['homing'][(0, m)] = current.pop(m)
-						self.limits[0].clear()
-						for fm in self.limits[2]:
-							self.user_set_axis_pos(2, fm, self.spaces[2].motor[fm]['home_pos'])
-							for m in current:
-								if (2, fm) in current[m]['followers']:
-									self.home_order['homing'][(2, fm)] = current[m]['followers'][(2, fm)]
-									self.home_order['single'] = {(0, m): current[m]}
-									self.home_order['single'].update(current[m]['followers'])
-									self.home_order['leader'] = m
-									self.home_order['homing'][(2, fm)] = self.home_order['single'].pop((2, fm))
-									self.home_phase = 'follow-limit'
-									#log('follower hit first; single = {}'.format(self.home_order['single']))
-						self.limits[2].clear()
-					else:
-						# This is the first time we are here. Start the move.
-						pass
-					# If the home phase is still 'main-limit', move all motors.
-					if self.home_phase == 'main-limit':
-						dist = 10000 #TODO: use better value.
-						self.home_target = {m: dist if current[m]['positive'] else -dist for m in current}
-						if len(self.home_target) > 0:
-							self.movecb.append(self.home_cb)
-							self.user_line(self.home_target, v = home_v * len(self.home_target) ** .5, single = False, force = True, relative = True, unprobe = True)[1](None)
-							return
-						else:
-							# Done with this phase.
-							self.home_phase = 'calibrate'
-							break
-				else:
+				if len(self.home_order['standard']) == 0:
 					# No targets left to move to.
 					self.home_phase = 'calibrate'
 					break
+				# Move next set in home order. {{{
+				current_order = min(self.home_order['standard'])
+				current = self.home_order['standard'][current_order]
+				if done is True:
+					# We moved dist and still didn't arrive at any switch. Give up.
+					log('Warning: limits were not hit during home: {}'.format(current))
+					del self.home_order['standard'][current_order]
+					continue
+				elif done is False:
+					#log('hit limit %s %s current %s' % (self.limits[0], self.limits[2], current))
+					# A limit was hit. Find out which one and start single moves if so needed.
+					for m in self.limits[0]:
+						# Complete recording of move until limit switch (was started when homing began).
+						self.homed_pos[m] += self.spaces[0].get_current_pos(m)[1]
+						# Set new position.
+						self.user_set_axis_pos(0, m, self.spaces[0].motor[m]['home_pos'])
+						# Start recording move away from limit switch (finished when HOMED is received).
+						self.homed_pos[m] -= self.spaces[0].get_current_pos(m)[1]
+						if m in current:
+							if len(current[m]['followers']) > 0:
+								self.home_order['single'] = current[m]['followers']
+								self.home_order['leader'] = m
+								self.home_phase = 'follow-limit'
+								#log('leader hit first; single = {}'.format(self.home_order['single']))
+							#else:
+								#log('solo hit')
+							self.home_order['homing'][(0, m)] = current.pop(m)
+					self.limits[0].clear()
+					for fm in self.limits[2]:
+						self.user_set_axis_pos(2, fm, self.spaces[2].motor[fm]['home_pos'])
+						for m in current:
+							if (2, fm) in current[m]['followers']:
+								self.home_order['homing'][(2, fm)] = current[m]['followers'][(2, fm)]
+								self.home_order['single'] = {(0, m): current[m]}
+								self.home_order['single'].update(current[m]['followers'])
+								self.home_order['leader'] = m
+								self.home_order['homing'][(2, fm)] = self.home_order['single'].pop((2, fm))
+								self.home_phase = 'follow-limit'
+								#log('follower hit first; single = {}'.format(self.home_order['single']))
+					self.limits[2].clear()
+				else:
+					# This is the first time we are here. Start the move.
+					pass
+				# If the home phase is still 'main-limit', move all motors.
+				if self.home_phase == 'main-limit':
+					dist = 10000 #TODO: use better value.
+					self.home_target = {m: dist if current[m]['positive'] else -dist for m in current}
+					log('target', self.home_target)
+					if len(self.home_target) > 0:
+						self.movecb.append(self.home_cb)
+						self.user_line(self.home_target, v = home_v * len(self.home_target) ** .5, single = False, force = True, relative = True, unprobe = True)[1](None)
+						return
+					else:
+						# Done with this step; possibly do more home order passes.
+						del self.home_order['standard'][current_order]
+						continue
+				# }}}
 				# Fall through.
-			if self.home_phase == 'follow-limit':
+			# }}}
+			if self.home_phase == 'follow-limit': # {{{
 				for m in self.limits[0]:
 					self.user_set_axis_pos(0, m, self.spaces[0].motor[m]['home_pos'])
 					if (0, m) in self.home_order['single']:
@@ -922,8 +970,9 @@ class Machine: # {{{
 				# Done with these followers, clean up and move on.
 				self.home_phase = 'main-limit'
 				continue	# Restart at phase 'main-limit'.
+			# }}}
 			break
-		if self.home_phase == 'calibrate':
+		if self.home_phase == 'calibrate': # {{{
 			# Move all motors away from their switches
 			data = []
 			num = 0
@@ -945,7 +994,8 @@ class Machine: # {{{
 				cdriver.home(*data)
 				return
 			# Fall through.
-		if self.home_phase == 'synchronize':
+		# }}}
+		if self.home_phase == 'synchronize': # {{{
 			# Homing finished; set motor positions.
 			self.home_order['sync'] = {}
 			for s, m in self.home_order['homing']:
@@ -963,7 +1013,8 @@ class Machine: # {{{
 					self.home_order['sync'][leader][None] = min(self.home_order['sync'][leader][x]['home_pos'] for x in self.home_order['sync'][leader])
 				else:
 					self.home_order['sync'][leader][None] = max(self.home_order['sync'][leader][x]['home_pos'] for x in self.home_order['sync'][leader])
-			self.home_order['leader'] = [[l, list(x for x in self.home_order['sync'][l] if x is not None and self.home_order['sync'][l][x]['home_pos'] != self.home_order['sync'][l][None])] for l in list(self.home_order['sync'])]
+			# Use not (.. == ..) to get the correct result when home pos is NaN.
+			self.home_order['leader'] = [[l, list(x for x in self.home_order['sync'][l] if x is not None and not (self.home_order['sync'][l][x]['home_pos'] == self.home_order['sync'][l][None]))] for l in list(self.home_order['sync'])]
 			#log('cleanup: {}'.format(self.home_order['leader']))
 			while len(self.home_order['leader']) > 0 and len(self.home_order['leader'][0][1]) == 0:
 				self.home_order['leader'].pop(0)
@@ -979,11 +1030,12 @@ class Machine: # {{{
 					self.user_line(tool = ~target[1], e = target, relative = False, force = True, single = True, unprobe = True)[1](None)
 				return
 			# Fall through.
-		if self.home_phase == 'opposite':
+		# }}}
+		if self.home_phase == 'opposite': # {{{
 			while len(self.home_order['leader']) > 0 and len(self.home_order['leader'][0][1]) == 0:
 				self.home_order['leader'].pop(0)
 			if len(self.home_order['leader']) > 0:
-				target = self.home_order['sync'][self.home_order['leader']][0][0]
+				target = self.home_order['sync'][self.home_order['leader'][0][0]][None]
 				m = self.home_order['leader'][0][1].pop(0)
 				self.movecb.append(self.home_cb)
 				if m[0] == 0:
@@ -1012,7 +1064,8 @@ class Machine: # {{{
 				self.user_line(target, force = True, unprobe = True)[1](None)
 				return
 			# Fall through.
-		if self.home_phase == 'home2':
+		# }}}
+		if self.home_phase == 'home2': # {{{
 			# Move within bounds.
 			target = {}
 			for i, a in enumerate(self.spaces[0].axis):
@@ -1027,7 +1080,8 @@ class Machine: # {{{
 				self.user_line(target, force = True, unprobe = True)[1](None)
 				return
 			# Fall through.
-		if self.home_phase == 'finish':
+		# }}}
+		if self.home_phase == 'finish': # {{{
 			self.home_phase = None
 			self.position_valid = True
 			if self.home_id is not None:
@@ -1038,6 +1092,7 @@ class Machine: # {{{
 				call_queue.append((self.home_done_cb, []))
 				self.home_done_cb = None
 			return
+		# }}}
 		log('Internal error: invalid home phase %s' % self.home_phase)
 	# }}}
 	def _gcode_run(self, src, abort = True, paused = False): # {{{
@@ -1531,7 +1586,7 @@ class Machine: # {{{
 		elif v is None or not 0 < v <= self.max_v:
 			v = self.max_v
 		self.moving = True
-		#log('move to ' + repr(moves))
+		log('move to ' + repr(moves))
 		cdriver.move(*([self.current_extruder] + moves + [e, v]), single = single, probe = probe, unprobe = unprobe, relative = relative)
 		if id is not None:
 			self.wait_for_cb()[1](id)

@@ -320,6 +320,8 @@ void Space::load_axis(int a) { // {{{
 	axis[a]->min_pos = shmem->floats[1];
 	axis[a]->max_pos = shmem->floats[2];
 	axis[a]->offset = shmem->floats[3];
+	if (std::isnan(axis[a]->offset))
+		axis[a]->offset = 0;
 	current_int = 0;
 	current_float = 0;
 	current_string = 0;

@@ -527,6 +527,9 @@ void setpos(int which, int t, double f, bool reset) {
 	double old = spaces[which].motor[t]->settings.current_pos;
 	if (std::isnan(old))
 		old = 0;
+	// Refuse to set pos to NaN.
+	if (std::isnan(f))
+		f = old;
 	spaces[which].motor[t]->settings.current_pos = f;
 	arch_addpos(which, t, f - old);
 	//arch_stop();
